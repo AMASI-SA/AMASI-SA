@@ -1,5 +1,77 @@
 # Operational provider statement reconciliation
 
+## A4 preserved and fresh CI started, 2026-11-15 19:48 UTC
+
+Source A4 is `1bd44b6f186de8b40877fde686b5d2d7aab52805`, sole direct parent J4
+`c626af288d3823694b4f1d0efcc3670e4ee74d81`, tree
+`d5a0fb81302e84dea26a43ec5d090646a9de24f1`. DraftPR1950:
+https://github.com/AMASI-SA/AMASI-SA/pull/1950, branch
+`codex/provider-statement-release-r4-20261115`. Remote tree, exact parent and
+clean source alignment were verified. Fresh source CI started at19:47UTC.
+
+Independent staged-source review passed:33 provider paths match A3 and45 prior
+production paths match J4 in both blob and mode, disjoint, with only the intended
+STATUS replacement. Root's final staged check and exact remote-tree comparison
+include that replacement. The fresh combined local run passed402 tests and116
+subtests; no runtime source correction was needed. A4's new CI, official candidate
+and B4 remain pending. PR1948 retains its actual publication continuation.
+
+The isolated artifact-audit helper was also independently reviewed: it requires
+an explicit exact clean B/M checkout, byte equality with its tracked intent,
+official `load_release_intent` and `verify_release_intent_git`, both ZIP digests,
+regular-member hashes/modes, official frontend/proof/backend identity checks,
+and unchanged source after inspection. It is scratch verification tooling, not
+application source or a build. No artifact execution or B/M acceptance is claimed
+from its static review; GitHub provenance and package proofs remain separate.
+
+## R4 source integration on actual Ready predecessor, 2026-11-15 19:46 UTC
+
+PR1948 merged normally at19:42:58Z as current production J4
+`c626af288d3823694b4f1d0efcc3670e4ee74d81`. Root and an independent reviewer
+read the actual Git objects: ordered parents are J3
+`742b1032113730961597ea413665409d9c213f7b` and B1948
+`dd1f29970506f9db2454cdf3b708818b399ee620`; the exact B/J4 tree is
+`8b35611f0e66945a323b2365d7c6d456668d8b2e`. B1948's sole parent is source
+`d8a7ce0352bbe2f8858b349a32f2127c7e202343`.
+
+PR1948's new operator handoff records a direct read of the prior PR1947 official
+receipt with `verified:true`, three checks and matching identities, followed by
+fresh `active:false`. That owner now controls PR1948's publication continuation;
+its M push gates and original-workspace acceptance are in progress. Root has
+not taken over the shared workspace or inferred PR1948 live publication from
+the Git merge. The older PR1947 ACTIVE paragraphs below are historical.
+
+Root created isolated `codex/provider-statement-release-r4-20261115` on actual
+J4 and transferred only A3's provider source delta. All33 non-STATUS provider
+source/test/fixture blobs remain identical to accepted A3. All45 production
+paths changed since J2 (24 advertising,20 Ready/notification, and the current
+intent) remain identical to J4, with no path overlap. No runtime fix or extra
+feature was introduced. The inherited J4 intent remains blob
+`82a6c610fdf5d18b9ed115ab75a6c1e3c535ade5`, SHA256
+`b767e8fe721a7031517745b1b64e7d68690f440f4f6b9f8d34935f8d81d1a680`.
+Its prior runtime is
+`rg5-507b99021ed912e77780f15eaf183e0cd72f0012fbaa7e1af3cade593195324f`.
+
+A fresh combined local run exited0: **402 passed,116 subtests passed**, with
+two existing Pydantic warnings, in40.58seconds (42.965seconds wrapper time).
+It ran the prior383 provider/payment/refund/settlement/source-lifetime and
+advertising cases together with the19 new settled-detail recovery cases. This
+exercises the newly combined native payment/refund evidence seam; no new test
+or application-code alteration was needed. The isolated real-Mongo cases remain
+actual CI gates and are not claimed as local passes. The private local log and
+receipt are outside the repository; no merchant data was used.
+
+A3 and its successful20-workflow/CI-candidate evidence remain immutable and
+historical. DraftPR1949 must not be merged on its obsolete predecessor. Next:
+preserve a single clean A4 with direct parent J4, run fresh exact-A4 CI, validate
+its unchanged official external candidate, and freeze an intent-only B4. Require
+all exact-B4 checks and Host20/24 artifact/package proof. Keep the candidate
+isolated behind PR1948's actual completed publication/verification handoff, then
+recheck current production before normal merge and exact-M gates. Original-host
+rehearsal, prepare/prepublish, authorized publication, three deployed probes and
+live saved-statement/table acceptance remain mandatory. No provider-feature
+publication, live source refresh or original-statement use has occurred yet.
+
 ## A3 CI and frozen external candidate accepted, 2026-11-15 19:30 UTC
 
 All 20 exact-A3 workflows succeeded on first attempt. Operational Backend:
