@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/salla-webhook-release-evidence-20261115",
   "base_commit": "9afb38cf0dc0d8e8cd887f2c2cdb4a6be5a7ca68",
-  "status": "PR1935 normal merged with exact B tree; merge push gates and original-workspace rehearsal pending",
+  "status": "Merged release and all three production push gates accepted; original-workspace execution authorized and ready",
   "requested_behavior": [
     "Repair the blocking verified webhook path and duplicate processing identified by platform support",
     "One scheduled refresh at 10:00 Asia/Riyadh over a fixed preceding 24-hour window",
@@ -124,7 +124,22 @@
     "current_guard_checked_at": "2026-11-15T13:23:00Z",
     "merge_commit": "331b7917b3c01d064ee2a17affb4714f3a296331",
     "merge_tree": "62632e21efa7d1ed1e6f42740d1e73321e947c1d",
-    "merge_push_gates": "pending"
+    "merge_push_gates": {
+      "success": 3,
+      "failed": 0,
+      "pending": 0,
+      "attempt": 1,
+      "runs": [
+        43718779139,
+        43718778489,
+        43718778537
+      ]
+    },
+    "merge_package_proofs_match_B": true,
+    "merge_proof_artifacts": [
+      14163432991,
+      14162919976
+    ]
   },
   "continuation": {
     "ledger": "Issue #1006 has reached 2500 comments; use this status document and the task PR as the durable fallback",
@@ -164,7 +179,7 @@
   },
   "release_branch": "codex/salla-webhook-recovery-release-20261115",
   "evidence_only": true,
-  "checkpoint_at": "2026-11-15T13:25:00Z",
+  "checkpoint_at": "2026-11-15T13:31:00Z",
   "production_source_branch_changed": true,
   "production_runtime_changed": false,
   "operator": {
@@ -174,7 +189,7 @@
     "base": "9afb38cf0dc0d8e8cd887f2c2cdb4a6be5a7ca68",
     "merge": "331b7917b3c01d064ee2a17affb4714f3a296331",
     "evidence_directory": "/tmp/salla-webhook-release-1935/original",
-    "review": "pending independent constant-only comparison",
+    "review": "PASS: independent exact six-constant comparison and normalized AST equality",
     "executed": false
   }
 }
