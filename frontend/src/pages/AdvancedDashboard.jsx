@@ -1092,6 +1092,7 @@ export default function AdvancedDashboard() {
         <div dir="ltr" className="dashboard-columns grid min-w-0 grid-cols-1 items-start gap-4 min-[1280px]:grid-cols-[minmax(420px,460px)_minmax(0,1fr)]">
             <aside dir="rtl" className="min-w-0 space-y-4">
                 <DashboardAdsSpendCard collapsible fromDate={filters.from} toDate={filters.to}
+                    executiveSnapshot={visibleData} salesFilters={filters}
                     snapshot={visiblePlatformSpend} onSnapshot={receivePlatformSpend} beginSnapshotRead={beginPlatformRead} />
                 <TopProductsCard rows={topProducts.data?.product_cost_v2?.product_rows} summary={topProducts.data?.product_cost_v2} filters={filters} loading={topProducts.loading} error={topProducts.error} onRefresh={topProducts.refresh} />
                 {ABANDONED_CARTS_DASHBOARD_AUTO_SYNC ? <AbandonedCartsCard carts={carts} summary={cartSummary} />

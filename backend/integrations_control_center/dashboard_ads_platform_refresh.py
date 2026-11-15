@@ -175,13 +175,18 @@ async def _refresh_meta_hourly(db: Any, user_id: str, day: date) -> dict[str, An
     }
 
 
-async def _refresh_tiktok_hourly(db: Any, user_id: str, day: date) -> dict[str, Any]:
+async def _refresh_tiktok_hourly(
+    db: Any, user_id: str, day: date, *, account_ids: list[str] | None = None,
+) -> dict[str, Any]:
     if not tiktok_oauth_configured() or not tiktok.tiktok_reporting_enabled():
         return {"provider": TIKTOK_PROVIDER_ID, "status": "skipped", "reason": "disabled"}
     observed_at = _iso()
     await ensure_platform_hourly_indexes(db)
     access_token = await tiktok._credential(db, user_id)
     accounts = await tiktok._accounts(db, user_id)
+    if account_ids is not None:
+        requested_ids = {value.strip() for value in account_ids if isinstance(value, str) and value.strip()}
+        accounts = [account for account in accounts if account["ad_account_id"] in requested_ids]
     saved = 0
     errors: list[dict[str, Any]] = []
     async with httpx.AsyncClient(timeout=30.0) as client:

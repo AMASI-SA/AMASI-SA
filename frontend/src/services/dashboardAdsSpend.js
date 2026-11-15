@@ -209,6 +209,7 @@ function normalizeSnapchatAccounts(rows, from, to) {
                     if (index === null || safeDate(point?.date) !== day) return;
                     if (points.has(index)) {
                         points.get(index).spend_sar = null;
+                        points.get(index).spend_native = null;
                         points.get(index).status = "unknown_incomplete";
                         return;
                     }
@@ -216,6 +217,7 @@ function normalizeSnapchatAccounts(rows, from, to) {
                     points.set(index, { date: day, hour_index: index,
                         hour: HOUR_RE.test(point.hour || "") ? point.hour : String(index).padStart(2, "0") + ":00",
                         spend_sar: available && validHourStates.has(status) ? knownAmount(point.spend_sar) : null,
+                        spend_native: available && currency && validHourStates.has(status) ? knownAmount(point.spend_native) : null,
                         status: available ? status : status === "future" ? "future" : "unknown_incomplete" });
                 });
                 hourly[day] = [...points.values()].sort((a, b) => a.hour_index - b.hour_index);

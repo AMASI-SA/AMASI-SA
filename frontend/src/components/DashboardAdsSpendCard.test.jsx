@@ -523,7 +523,7 @@ function independentAccountMarkup(data, fromDate = "2026-10-26", toDate = fromDa
 test("independent USD card and curve remain when Saudi evidence is unknown", () => {
     const host = independentAccountMarkup(independentAccountData());
     expect(host.querySelector('[data-testid="dashboard-ads-provider-snapchat"]')).toBeNull();
-    expect(host.querySelector('[data-testid="dashboard-snapchat-account-USD.A"]').textContent).toContain("21.69 USD");
+    expect(host.querySelector('[data-testid="dashboard-snapchat-account-USD.A"]').textContent).toContain("USD 21.69");
     expect(host.querySelector('[data-testid="dashboard-snapchat-account-USD.A"]').textContent).toContain("81.32 ر.س");
     expect(host.querySelector('[data-testid="dashboard-snapchat-account-__proto__"]').textContent).toContain("غير مكتملة");
     expect(host.textContent).not.toContain("999");
@@ -541,7 +541,8 @@ test("Saudi observed zero has its own curve, native currency and source hint", (
     data.providers.snapchat.accounts[1].quality.reason_codes = ["snapchat_operational_no_activity_observed"];
     const host = independentAccountMarkup(data);
     const row = host.querySelector('[data-testid="dashboard-snapchat-account-__proto__"]');
-    expect(row.textContent).toContain("0.00 SAR");
+    expect(row.textContent).toContain("0.00 ر.س");
+    expect(row.textContent).not.toContain("0.00 SAR");
     expect(row.querySelector('[data-testid="dashboard-snapchat-account-no-activity-hint"]')).not.toBeNull();
     expect(host.querySelector('[data-testid="dashboard-snapchat-account-USD.A"] time').dateTime).toBe("2026-10-25T21:00:00Z");
     const lines = mockAccountChartLines.filter((line) => typeof line.dataKey === "function");

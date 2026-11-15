@@ -1,0 +1,83 @@
+{
+  "task_id": "dashboard-ads-account-table-20261115",
+  "status": "implemented_pending_ci_review",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/dashboard-ads-compact-table-v2-20261115",
+  "source_base": "db0d2c365f6cc13728cc5d8c334fb9880497fbe8",
+  "scope": "Keep the existing Dashboard ads card width and chart; move account spend, Salla sales, Salla orders and CPA into a compact table. The row-wide hover will contain Riyadh morning/afternoon cards and a daily summary, excluding operating costs.",
+  "completed": [
+    "Removed the separate provider tiles and placed a compact five-row account table beneath the existing chart without changing the Dashboard grid/card width.",
+    "Kept spend, Salla sales, Salla orders and weighted CPA; native USD and SAR share one small-text cell.",
+    "Added a row-wide hover dialog with Riyadh morning and afternoon cards, a daily summary, pointer/touch/keyboard support and empty not-started periods.",
+    "Reused the existing filtered order cohort, captured product pricing evidence and already-loaded merchant settings; no additional order/settings/provider reads on hover.",
+    "Profit subtracts ad spend, products, shipping and payment fees only. Missing account, time, cost or spending evidence remains explicitly incomplete.",
+    "Preserved native Snapchat hourly amounts and reconciled half-day spending with daily/native totals while allowing only proven rounding differences.",
+    "Fixed the existing TikTok scheduler to store native hourly reports; account-local source days are scoped to authorized accounts that cover the Riyadh day. Daily facts survive hourly failures.",
+    "Integrated current Production Salla recovery changes from the base branch without changing them; no release or production operation was performed.",
+    "Scoped account IDs, cost capture, precise timestamp hydration and account_results to the executive card snapshot. The full dashboard and period-summary retain their existing response and work contracts; frozen historical gate/oracle unchanged."
+  ],
+  "verification": [
+    {
+      "name": "Focused backend workflow suites",
+      "result": "277 passed and 5 source-contract subtests passed after the executive-only compatibility fix; exit 0",
+      "command": "PYTHONPATH=/workspace/scratch/684791183fd2/test-deps:backend /workspace/scratch/dda3993bde7e/mezan-venv/bin/python -m pytest -q --tb=short <the 14 backend test files in prod-dashboard-four-platform-spend-v1.yml>",
+      "environment_note": "An isolated socksio 1.0.0 test dependency satisfies the managed HTTP proxy; no proxy or test guard was disabled."
+    },
+    {
+      "name": "Focused frontend workflow suites",
+      "result": "8 suites / 240 tests passed; exit 0",
+      "command": "CI=true python -B scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend test --watchAll=false --runInBand --runTestsByPath <the 8 frontend test files in prod-dashboard-four-platform-spend-v1.yml>"
+    },
+    {
+      "name": "Independent frontend integration review",
+      "result": "No material findings; account/period identity, null handling, stale filters, financial formula and row interaction reviewed."
+    },
+    {
+      "name": "Independent TikTok scheduler review",
+      "result": "Mixed-timezone account/day overreach found and fixed; 16 focused tests independently passed, with no material remaining finding."
+    },
+    {
+      "name": "Historical source parity",
+      "result": "Restored Git objects 0abf4517afd10e9e331fc10dbbca1c60b981c505 and 2a7740359451a538be8df373266c4c92ca1a57c8. Existing full guards pass, with only the exact three reviewed optional collector hooks erased for comparison."
+    },
+    {
+      "name": "GitHub frontend tests and production build",
+      "result": "Passed on implementation commit 8ab1087a0a9ca8156f17adc01d6f83a02fda13c6, workflow 43738524826, job 132886382064."
+    },
+    {
+      "name": "Focused backend CI environment",
+      "result": "Resolved missing mongomock_motor using the existing pinned pair and explicit immutable baseline fetches. Focused CI workflow 43739465561 passed backend 272 + 5 subtests, frontend 240 tests and production frontend build on d19edd19. No guard was weakened."
+    },
+    {
+      "name": "Release source membership review",
+      "result": "All three new backend helpers are tracked and automatically included by the governed runtime source manifest policy; no critical-files list change is required."
+    },
+    {
+      "name": "Interactive preview",
+      "result": "Self-contained HTML from actual frontend components with synthetic fixtures. Functional DOM verification passed: 5 rows, 5 columns, 5 chart paths, two hover periods, not_started afternoon at 03:00 and zero network requests. Existing CSS remains in the deliverable; the synthetic DOM check omits CSS due to jsdom selector limitations. No browser pixel-layout verification claimed."
+    },
+    {
+      "name": "Browser visual review",
+      "result": "Blocked: the browser URL policy rejected observation after the initial local preview connection failed. No bypass or alternate browser surface was used. Do not claim screenshot or live visual verification."
+    },
+    {
+      "name": "Legacy dashboard compatibility",
+      "result": "The exact runtime gate on d19edd19 identified added account_results/account_ids in the full endpoint. The fixed implementation opts in exclusively from cards/executive. Narrow regressions passed 95 tests plus 5 subtests; the complete focused backend run passed 277 tests plus 5 subtests. Independent source/cache review found no material issue. Frozen gate/oracle unchanged; awaiting new-head real Mongo runtime comparison."
+    },
+    {
+      "name": "Candidate source history",
+      "result": "Readiness rejected the upstream merge history touching the release intent, despite identical intent bytes. A new linear task branch starts from db0d2c365f6cc13728cc5d8c334fb9880497fbe8 and carries the reviewed implementation tree. Prior branch/PR #1943 remains recoverable; no guard or intent content was changed."
+    }
+  ],
+  "incomplete": [
+    "Inspect exact-head CI on the new linear task branch, especially frozen dashboard runtime parity and candidate release readiness. Production merge/publish requires separately authorized governed release preparation."
+  ],
+  "production_changed": false,
+  "release_guard": "No lease created; no publish, provider write, accounting write, or production operation performed.",
+  "pr_state": "A replacement draft PR for the linear task branch is recorded in the final GitHub handoff. Prior PR #1943 preserves the earlier checkpoint.",
+  "continuation_ledger": "Issue #1006 is at its comment cap; preserve this task status and the draft PR as the recoverable handoff.",
+  "next_safe_action": "Inspect the final handoff for the current branch SHA/PR and CI results. Review the delivered interactive preview. Do not create a release lease, merge or publish without the separate authorization required by AGENTS.md.",
+  "previous_remote_checkpoint": "d19edd19dcfe4408e753597a09d0f7cef8d1fcdc",
+  "source_checkpoint_record": "The PR body/continuation record carries the exact full source commit SHA after this status document is committed.",
+  "previous_pr_url": "https://github.com/AMASI-SA/AMASI-SA/pull/1943"
+}
