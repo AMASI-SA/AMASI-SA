@@ -15,6 +15,9 @@ from fastapi import HTTPException
 import mobile_order_refresh as mobile
 import order_engine.routes as orders
 import order_engine.salla_refresh as source_refresh
+# The production wrapper mounts this exact core router first, then appends
+# disjoint workspace routes. Its refresh handler and auth are unchanged.
+from order_engine import _original_make_order_engine_router as make_order_engine_router
 import operational_atomic
 import preparation_refresh_recovery as recovery
 import preparation_piece_operations as pieces
@@ -131,7 +134,7 @@ class ExplicitRefreshContractTests(unittest.IsolatedAsyncioTestCase):
             with self.subTest(live=live):
                 db = SimpleNamespace(users=SimpleNamespace(find_one=AsyncMock(return_value=live)))
                 app = FastAPI()
-                app.include_router(orders.make_order_engine_router(db, lambda: owner))
+                app.include_router(make_order_engine_router(db, lambda: owner))
                 with patch.object(orders, "refresh_order_from_salla", AsyncMock(return_value=deepcopy(FRESH))), \
                         patch.object(direct, "reconcile_direct_preparation_after_review", AsyncMock()) as reconcile:
                     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://synthetic") as client:
@@ -178,7 +181,7 @@ class PreparationRefreshRecoveryIntegrationTests(unittest.IsolatedAsyncioTestCas
             replacement.start()
             self.patches.append(replacement)
             self.addCleanup(replacement.stop)
-        self.app.include_router(orders.make_order_engine_router(self.db, lambda: self.actor))
+        self.app.include_router(make_order_engine_router(self.db, lambda: self.actor))
 
     async def provider(self, db, owner, method, path, **kwargs):
         self.assertEqual(method, "GET", "explicit recovery must never dispatch a provider status")
@@ -426,12 +429,63 @@ class PreparationRefreshRecoveryIntegrationTests(unittest.IsolatedAsyncioTestCas
     async def test_repeated_explicit_refresh_preserves_approval_and_single_event(self):
         path = await self.assert_surface_recovers("orders")
         operation = await self.db[direct.OPERATIONS].find_one({"order_number": self.number})
+        before_status_revision = (await self.workflow())["preparation_status_revision"]
         response = await self.client.post(path)
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.json()["preparation_status_sync"]["state"], "sent")
         self.assertEqual(await self.db[direct.OPERATIONS].find_one({"order_number": self.number}), operation)
         self.assertEqual(await self.db[direct.EVENTS].count_documents({"event_type": "order_moved_to_in_progress"}), 1)
+        self.assertEqual((await self.workflow())["preparation_status_revision"], before_status_revision)
+        self.assertEqual(await self.snapshot(), self.after_source,
+                         "confirmed continuation may serialize its owner, not rewrite business records")
         await self.assert_recovery_scope()
+
+    async def assert_confirmed_refresh_race(self, *, target):
+        path = await self.assert_surface_recovers("orders")
+        before_status_revision = (await self.workflow())["preparation_status_revision"]
+        concurrent_snapshot = None
+
+        async def concurrent_transition():
+            nonlocal concurrent_snapshot
+            # Prove this request has reached the already-confirmed fast path's
+            # pre-read state; the first-reviewed transition cannot catch this bug.
+            self.assertEqual(self.after_source["workflow"]["stage"], "in_progress")
+            self.assertEqual(self.after_source["workflow"]["salla_status_sync_state"], "sent")
+            self.assertEqual(self.after_source["source"]["order_status"], "قيد التنفيذ")
+            self.assertEqual(self.after_source["source"]["order_status_slug"], "in_progress")
+            selector = {"user_id": "owner", "order_number": self.number}
+            if target == "source":
+                await self.db.unified_orders.update_one(selector, {"$set": {
+                    "order_status": "cancelled", "order_status_slug": "cancelled",
+                    "raw_by_source.salla_direct.status": {"slug": "cancelled", "name": "cancelled"},
+                    "raw_by_source.salla_direct.status_slug": "cancelled",
+                }})
+            else:
+                await self.db[direct.WORKFLOWS].update_one(selector, {"$set": {"stage": "completed"}})
+            concurrent_snapshot = await self.snapshot()
+
+        self.readback_hook = concurrent_transition
+        response = await self.client.post(path)
+        self.assertEqual(response.status_code, 200, response.text)
+        result = response.json()
+        self.assertTrue(result["ok"] and result["updated"])
+        self.assertEqual(result["preparation_status_sync"]["state"], "pending")
+        self.assertNotIn("current_stage", result)
+        workflow = await self.workflow()
+        self.assertEqual(workflow["stage"], "completed" if target == "workflow" else "in_progress")
+        self.assertEqual(workflow["preparation_status_revision"], before_status_revision)
+        self.assertEqual(await self.db[direct.EVENTS].count_documents({"event_type": "order_moved_to_in_progress"}), 1)
+        source = await self.db.unified_orders.find_one({"user_id": "owner", "order_number": self.number})
+        self.assertEqual(source["order_status_slug"], "cancelled" if target == "source" else "in_progress")
+        self.assertEqual(await self.snapshot(), concurrent_snapshot,
+                         "pending recovery must preserve the concurrent transition, not restore an older snapshot")
+        await self.assert_recovery_scope()
+
+    async def test_confirmed_refresh_source_race_returns_pending(self):
+        await self.assert_confirmed_refresh_race(target="source")
+
+    async def test_confirmed_refresh_workflow_race_returns_pending(self):
+        await self.assert_confirmed_refresh_race(target="workflow")
 
     async def test_completed_source_refresh_stays_successful_with_recovery_pending(self):
         await self.prepare()

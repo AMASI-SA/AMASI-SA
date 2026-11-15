@@ -194,10 +194,22 @@ async def reconcile_direct_preparation_after_review(db, *, user_id: str, order_n
             validate_current=lambda current: _provider_allowed(current, internal_id=internal_id, number=order_number))
         if state != "sent":
             return {**result, "preparation_status_sync": {**evidence, "reason": reason}}
-        if (workflow.get("stage") == "in_progress" and workflow.get("salla_status_sync_state") == "sent"
-                and source.get("order_status_slug") == "in_progress"
-                and source.get("order_status") == "قيد التنفيذ"
-                and ((source.get("raw_by_source") or {}).get("salla_direct") or {}).get("status") == confirmed.get("status")):
+        def confirmed_locally(current_workflow, current_source):
+            return (current_workflow.get("stage") == "in_progress"
+                and current_workflow.get("salla_status_sync_state") == "sent"
+                and current_source.get("order_status_slug") == "in_progress"
+                and current_source.get("order_status") == "قيد التنفيذ"
+                and ((current_source.get("raw_by_source") or {}).get("salla_direct") or {}).get("status") == confirmed.get("status"))
+
+        if confirmed_locally(workflow, source):
+            async def confirm_existing(scoped):
+                latest = await current_scope(scoped)
+                current_source = await scoped.unified_orders.find_one(selector) or {}
+                if not confirmed_locally(latest, current_source):
+                    raise HTTPException(409, detail={"code": "preparation_status_scope_changed"})
+            # Provider I/O can outlive a concurrent cancellation/completion.
+            # Revalidate even the no-op path without rewriting business state.
+            await operational_owner(db, user_id, confirm_existing)
             return {**result, "preparation_status_sync": {"state": "sent", "retry_post": False}, "current_stage": "in_progress"}
 
         async def finish(scoped):
