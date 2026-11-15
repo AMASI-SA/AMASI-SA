@@ -1,0 +1,12 @@
+{
+  "source_git_sha": "1accaa42e132ca1232ce86b3122971b48169ca81",
+  "source_base_git_sha": "2589f440106a7c5d463ee03eac3617d113319673",
+  "source_tree": "be16191c9c2498a942fa7974455c6c24e6fac005",
+  "candidate_parser_pass": true,
+  "git_rederived_backend_and_control_manifests_match": true,
+  "six_reviewed_blobs_unchanged": true,
+  "worktree_clean": true,
+  "validation_environment": "fresh tracked-source local clone, bytecode generation disabled",
+  "runtime_release_id": "rg5-255b2b13ed893324729b31c21409fa1be3be98d8c536485f712424d70bab4b4e",
+  "intent_sha256": "0d90b88def88e0c84d595376d050e80f3e18493bf9ca71284382af1af8754899"
+}

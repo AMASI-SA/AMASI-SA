@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "kind": "independent_candidate_admissibility_review",
+  "reviewer": "verify_ready_fix",
+  "recorded_at": "2026-11-15T23:35:41.291804+00:00",
+  "scope": "read-only exact source topology, official candidate parser, identity and source manifests; no build, install, live call, or production change",
+  "validation_clone": "/workspace/scratch/3b6d796532bb/ready1955-candidate-validation-clone",
+  "source_git_sha": "1accaa42e132ca1232ce86b3122971b48169ca81",
+  "source_base_git_sha": "2589f440106a7c5d463ee03eac3617d113319673",
+  "source_tree": "be16191c9c2498a942fa7974455c6c24e6fac005",
+  "source_sole_parent": "2589f440106a7c5d463ee03eac3617d113319673",
+  "changed_path_count": 7,
+  "six_code_test_workflow_blobs_preserved_from_A2": true,
+  "only_A2_to_A3_content_difference": "docs/operations/READY-REFRESH-RECOVERY-20261116/STATUS.md",
+  "inherited_intent_blob": "9d9d986ff35aa0ea6a1e7837f7d29cdf3c6e90df",
+  "intent_full_history_changes_after_base": 0,
+  "official_resolver_result": "2589f440106a7c5d463ee03eac3617d113319673",
+  "official_candidate_parser": {
+    "function": "scripts.emergent_deployment_adapter.load_candidate_release_intent",
+    "result": "accepted",
+    "process_exit_code": 0,
+    "tool_chunk_id": "c55752",
+    "python_no_bytecode": true,
+    "expected_absent_source_A_identity_diagnostic": true
+  },
+  "candidate_path": "/workspace/scratch/3b6d796532bb/ready1955-release-evidence/candidate-release-intent-v5.json",
+  "candidate_sha256": "0d90b88def88e0c84d595376d050e80f3e18493bf9ca71284382af1af8754899",
+  "candidate_git_blob": "bf8f2ac59543bbde3e1c73fa0a43a768ca9a7f22",
+  "runtime_release_id": "rg5-255b2b13ed893324729b31c21409fa1be3be98d8c536485f712424d70bab4b4e",
+  "candidate_schema_version": 2,
+  "frontend_source_count": 1195,
+  "backend_source_count": 1232,
+  "control_source_count": 298,
+  "frontend_artifact_tree_sha256": "8017e720f266ed5d6b0141d83312512e8052396c7da65e22557dce1c8fe79fcb",
+  "frontend_source_tree_sha256": "54556d4f63cb029079e79cb06188e0f5da74d2bc90eaa48f3918f3ced0ef6fb0",
+  "clean_before_and_after": true,
+  "previous_shared_checkout_attempt": {
+    "result": "rejected",
+    "reason": "pre-existing backend/__pycache__ violates source manifest; no removal or validation relaxation"
+  },
+  "acceptance_boundary": "Candidate A3 admissibility and identity only. No claim all exact-head CI gates, fresh B Host20/24 rehearsals, merge, lease, or live publication accepted.",
+  "base_publication_requirement": {
+    "candidate_build": "Code proves reviewed Git P-to-J pair and J-to-A transition; no live J publication probe. Isolated candidate CI can proceed.",
+    "production_coordination": "AGENTS requires fresh active:false before /app changes or rehearsal; preserve pending PR1951 owner operation and obtain completion/handoff before overlapping shared-workspace/production work. Merge is not deployment.",
+    "actual_predecessor_gate": "GitHub push before SHA must equal J or be between J and A; not a live-runtime predecessor check."
+  },
+  "private_order_files_read": false,
+  "repository_or_production_mutations": false
+}
