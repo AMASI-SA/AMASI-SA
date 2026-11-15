@@ -276,7 +276,7 @@
   },
   "release_branch": "codex/salla-webhook-recovery-release-20261115",
   "evidence_only": true,
-  "checkpoint_at": "2026-11-15T17:08:45Z",
+  "checkpoint_at": "2026-11-15T17:11:20Z",
   "production_source_branch_changed": true,
   "production_runtime_changed": true,
   "operator": {
@@ -1982,7 +1982,16 @@
             "sha256": "a2a3e8355b4b255ab5d592f2b876e908413177e6abb437540b00a03c6c150983"
           }
         },
-        "publication_summary_sha256": "6ea7c110033f458583668bc0242b609a6287397d58d20f940fe234bb7b8dba43"
+        "publication_summary_sha256": "6ea7c110033f458583668bc0242b609a6287397d58d20f940fe234bb7b8dba43",
+        "actual_receipts_independent_review": {
+          "result": "PASS",
+          "sha256": "92663b72a100b1e6b0df0094b102cd470d63bf7e35692f6af9684de19c683c8c"
+        },
+        "verify_runner": {
+          "sha256": "e54c60ab757ff625c599f12025e0d2a27c25adec2a3d43e544d44692ebacdb11",
+          "bytes": 779,
+          "started": false
+        }
       },
       "official_verify": {
         "verified": true,

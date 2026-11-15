@@ -1,0 +1,77 @@
+{
+  "acceptance_limit": "No deployed-completion, final official verification or functional recovery acceptance is claimed by this publishing-phase receipt review. No /app, browser or production calls were made.",
+  "identity": {
+    "deployment_M": "db0d2c365f6cc13728cc5d8c334fb9880497fbe8",
+    "operator_sha256": "08ac374769bb93d3eba1f60a753838be6775462af4bae82b07220a15967e83cd",
+    "runtime": "rg5-41884037a1555abb570d35f23b2a81edc8c24e1135035a37aabee30c2d16e8e7",
+    "source_A": "9b91e88c049166f111905c80a4c1fa07a96b51bd",
+    "tree": "ff7e1e334bd755f844d0903d5fdba45541509854"
+  },
+  "input": {
+    "bytes": 7518,
+    "captured_at": "2026-11-15T17:07:41.245692+00:00",
+    "path": "/workspace/shared/salla-release-1945-publication-summary.json",
+    "sha256": "6ea7c110033f458583668bc0242b609a6287397d58d20f940fe234bb7b8dba43"
+  },
+  "original": {
+    "accepted_packages_stdout": {
+      "bytes": 1278,
+      "sha256": "381878cf3b8a30dde15d80014a1751df166b7ce420b9e4b84da6c347cab77f4f"
+    },
+    "append_only_before_and_after_bytes": 53664,
+    "continuity_before_after_equal": true,
+    "exit_code": 0,
+    "finished_at": "2026-11-15T17:04:50.241926+00:00",
+    "functional_acceptance_hold": "authenticated_owner_binding_recovery_and_worker_completion_pending",
+    "quarantine_before_after_equal": true,
+    "receipt_file_count": 28,
+    "reconstructed_exact_operator_pins": {
+      "bytes": 1165,
+      "sha256": "2d43e53a6d5bc246329ecf3bbfe7410f51632a502fe80a3b00337bcdf8231a97"
+    },
+    "reconstructed_exported_result": {
+      "bytes": 776,
+      "sha256": "b7d57a42b13e166e195f423d5d10535e9e914abc28c3419572174ee02cb3bdf0"
+    },
+    "stderr_bytes": 0,
+    "three_status_receipts_match_expected_inactive_under_mutex": true,
+    "three_untracked_snapshot_records_equal": true,
+    "untracked_count": 120
+  },
+  "prepare": {
+    "actor": "codex-salla-incident-recovery-1945",
+    "exit_code": 0,
+    "identity_matches": true,
+    "prepared_at": "2026-11-15T17:05:37.834805+00:00",
+    "raw_bytes": 571454,
+    "raw_sha256": "cc49aad836424d3c1a127a8baa338b4c85efa47f09e503ab69f51a2b7e1927ba",
+    "stderr_bytes": 0
+  },
+  "prepublish": {
+    "at": "2026-11-15T17:06:30.529952+00:00",
+    "exit_code": 0,
+    "identity_matches": true,
+    "protocol_version": 5,
+    "raw_bytes": 333,
+    "raw_sha256": "957e44d04396d1204c4c7369b829ba6c8c8fab22408c1a92b2caf1f41265c420",
+    "ready_to_publish": true,
+    "stderr_bytes": 0
+  },
+  "preserved_prelaunch_failure": {
+    "actual_operator_runner_pid": 115245,
+    "outer_launcher_pid": 114844,
+    "recorded_before_operator_launch": true,
+    "stderr_bytes": 353,
+    "stderr_sha256": "6266330034d7a6bc8acffe2bb3223aa05a343c56ccee93fa41f413338b4f002f"
+  },
+  "publication": {
+    "exported_state": "Publishing...",
+    "submission_count": 1,
+    "submitted_at": "2026-11-15T17:07:08.325Z"
+  },
+  "result": "PASS: independently reviewed exported original-rehearsal, prepare, prepublish and single-submission receipt metadata",
+  "review_method": "The earlier read-only review hashed the exported summary, checked the exact complete28-name manifest, reconstructed expected pin/result JSON using the reviewed historical serializer, matched accepted package proof, compared preservation records and verified identity/time ordering. This report records those completed checks without rerunning them.",
+  "reviewer": "review_release_continuation",
+  "schema_version": 1,
+  "written_at_utc": "2026-11-15T17:11:15.303807+00:00"
+}
