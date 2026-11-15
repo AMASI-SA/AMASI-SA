@@ -201,3 +201,21 @@ The implementation policy and local regressions remain documented in source A's 
 - Production changed by this follow-up: no. No provider refresh, production document write, receipt/Ready action, shared /app source change, merge or publication by this task since the prior1933release.
 - Next safe steps: await fresh exact-A gates and reviewed candidate, freeze intent-only B, complete B clean-clone rehearsal gates; recheck concurrent PR1935 runtime/guard state and production branch; normal merge; original-workspace rehearsal preserving unrelated files; prepare/prepublish/one authorized publication; three official probes; ordinary revalidation and live Ready state check. A piece lacking supplier receipt must stay blocked.
 - Issue1006 is full. This evidence-only STATUS and PR1937 provide continuity; do not merge the evidence branch into the release.
+
+
+## Source accepted; intent-only B — 2026-11-15 13:43 UTC
+
+All **11 source-A workflows succeeded** on35ff50421f4a0fcf47c30537f099d1199241d7c7. Independent artifact audit confirmed828review,329Android,124source-snapshot and1acceptance-guard cases, all with zero skips/failures/errors. Exactly19new detail-proof tests and7real-Mongo option-currency tests executed successfully. Stock4513, G47 and OperationalBalance acceptance also passed. Scope-only workflow job skips are not test skips.
+
+Root and independent reviewer both validated the candidate with the official parser in a clean checkout. The full backend runtime manifest includes the new helper and existing proof module at their reviewed hashes.
+
+- B: bf088a392c0c1d0b68397935175b626274a6cb8a
+- B tree: c9352dd3369a61d75f28f9959cf398647a86e9b0
+- Parent/source A:35ff50421f4a0fcf47c30537f099d1199241d7c7
+- The only A→B path is release/release-intent-v5.json.
+- Intent Git blob:73908cfd0ccdfc0dd630868913a2108c11b2894e
+- Intent SHA256:da8f8da015d25f42beecfa96d59d2e3bcd2157e3158e4cea5624d9d3bae0e755
+- Runtime:rg5-ffa2c17861d44906353f8ff3818bc42ad16660da73d670ff1398e463e4b6fc67
+- Exact-B readiness run43720453281 and other gates are running, including both Host20/24clean-clone rehearsals. An additional TikTok workflow reports a branch-selection skip; inspect the selector separately from required tests.
+
+No merge, shared source change, lease preparation or publication by this task. A fresh official guard read at about13:41UTC still reported active:false. PR1935's publication is being followed separately; its active execution must finish before advancing production source. Next: verify B gates and byte-identical package artifacts, then fresh shared guard/base/runtime checks before normal merge.
