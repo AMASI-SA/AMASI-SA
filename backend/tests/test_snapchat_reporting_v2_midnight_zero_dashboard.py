@@ -198,6 +198,7 @@ async def test_four_platform_route_forwards_partial_and_counts_snapchat_once(mon
 
     monkeypatch.setattr(routes, "load_unified_marketing_dashboard_spend", AsyncMock(return_value=snap))
     monkeypatch.setattr(routes, "load_google_dashboard_spend", AsyncMock(return_value=google))
+    monkeypatch.setattr(routes, "_native_tiktok_spend", AsyncMock(return_value={"active": False, "account_ids": []}))
     monkeypatch.setattr(routes, "load_dashboard_unified_shadow", AsyncMock(return_value={}))
     monkeypatch.setattr(routes, "_daily_spend", daily)
     monkeypatch.setattr(routes, "_hourly_spend", hourly)
