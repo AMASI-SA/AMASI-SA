@@ -150,8 +150,12 @@ async def shipping_quote(db, owner, kind, identity, at, order_number):
 
 def attach_returns(state, sources):
     """Feed platform refunds through the same provider projection, never a bank debit."""
-    for case in state.get('customer_returns', []):
-        if case['status'] != 'refunded' or case['refund_source_type'] != 'provider':
+    from operational_provider_statement_reconciliation import (fact_backed_employee_refund,
+        statement_refund_cases, guard_statement_refund_sources)
+    guard_statement_refund_sources(state, sources)
+    for case in [*state.get('customer_returns', []), *statement_refund_cases(state)]:
+        fact_backed = fact_backed_employee_refund(state, case)
+        if (case['status'] != 'refunded' and not fact_backed) or case.get('refund_source_type') != 'provider':
             continue
         order = next((o for o in sources.get('orders', []) if o['id'] == case['order_id']), None)
         if order is None:

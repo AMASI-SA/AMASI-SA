@@ -2,11 +2,13 @@
 from collections import defaultdict
 from decimal import Decimal
 
-from operational_configured_provider_fees import cash, configured_terms, estimate_fee, number
+from operational_configured_provider_fees import cash, configured_terms, estimate_fee_details, number
 from operational_fee_methods import fee_rail
 from operational_payment_evidence import DIAGNOSTICS
 from operational_provider_balance_sar import sar_amount
 from operational_provider_report_coverage import PLATFORMS
+from operational_provider_statement_fees import (prepare_statement_fee_context, resolve_statement_fees,
+    select_statement_average_profile, statement_average_summary, statement_average_source_summary)
 
 ZERO = Decimal(0)
 PENDING_SAMPLE_LIMIT = 20
@@ -16,6 +18,13 @@ PENDING_MESSAGES = {
     "provider_historical_capture_review_required": "إثبات طلب سابق يحتاج مطابقة الرصيد الافتتاحي والحوالات المسجلة.",
     "provider_settled_capture_review_required": "إثبات المدفوع يحتاج مطابقة توزيع التسويات المسجلة على الطلب.",
     "provider_balance_sar_unavailable": "المبلغ مثبت بعملته الأصلية؛ يلزم سعر تحويل موثق لهذا الطلب لعرضه بالريال.",
+    "provider_fee_average_estimate": "العمولة تقديرية من كشف المنصة؛ نسبة العمولة المتغيرة قبل الضريبة، والرسم الثابت والضريبة منفصلان. يستبدلها دليل مطابق.",
+    "provider_statement_fee_review_required": "رسوم الكشف أو توزيعها على الدفع والاسترجاع تحتاج مراجعة؛ لم تُضف رسوم غير مؤكدة.",
+    "provider_statement_fee_currency_conflict": "عملة رسوم الكشف لا تطابق أصل العملية المثبت.",
+    "provider_statement_fee_evidence_changed": "تغير دليل العملية منذ قبول الكشف؛ أعد مراجعة المطابقة.",
+    "provider_statement_fee_principal_unconfirmed": "أصل الدفع أو الاسترجاع المرتبط برسوم الكشف غير مكتمل في اللقطة الحالية.",
+    "provider_statement_fee_settlement_conflict": "رسوم الكشف تتداخل مع تسوية مسجلة أو تختلف عنها؛ يلزم تحديد الجزء المغطى لمنع التكرار.",
+    "provider_statement_refund_alias_review": "ظهر مرجع استرجاع من المصدر يحتاج ربطًا بالدليل المعتمد؛ حُفظ الأصل وأُوقف صافي هذا الطلب حتى المطابقة.",
 }
 
 
@@ -144,6 +153,7 @@ def _records(state, obligations, valuations):
                                  "gross": max(paid, captured[oid, provider]), "method": methods.get(provider),
                                  "paid_proven": True,
                                  "payment": pricing.get(provider, {}), "created_at": source.get("created_at"),
+                                 "split_payment": bool(split),
                                  "observed_at": source.get("updated_at"),
                                  "fx": fx, "unresolved_split_fees": bool(
                                      split and len(legs[provider]) != 1 and methods.get(provider) is None)}
@@ -183,6 +193,7 @@ def _records(state, obligations, valuations):
             for key in ('refunded_at', 'executed_at') if source_refunds.get(event['id'], {}).get(key)}}
             for event in row['refund_events']]
         row["native_gross"] = native_paid
+        row["native_currency"] = original_currency
         row["native_refunded"] = row["refunded"]
         basis = valuations.get(identity)
         fx = row["fx"]
@@ -192,6 +203,7 @@ def _records(state, obligations, valuations):
             if paid == native_paid and paid and sar and fx.get("basis") in {"salla_order_fx", "salla_list_paid"}:
                 basis = {"native_paid": str(paid), "sar_paid": str(sar)}
         if original_currency != "SAR" and basis:
+            row["fee_fx_basis"] = basis
             row.update(currency="SAR", gross=sar_amount(native_paid, basis), refunded=sar_amount(row["refunded"], basis))
             cumulative = previous = ZERO
             converted = []
@@ -211,6 +223,20 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
     settings = state.get("engine", {}).get("provider_fee_inputs", {}).get("settings", {})
     policies = state.get("engine", {}).get("provider_fee_inputs", {}).get("policies", [])
     source_mode = state.get('engine', {}).get('provider_fee_inputs', {}).get('source_mode', 'legacy_settings')
+    statement_context = prepare_statement_fee_context(state)
+    average_blocked = set()
+    alias_held = set()
+    for issue in state.get("engine", {}).get("issues", []):
+        if issue.get("code") == "provider_statement_refund_alias_review":
+            oid = str(issue.get("order_id") or str(issue.get("source_id") or "").removeprefix("provider:"))
+            alias_held.add((oid, issue.get("provider")))
+        if issue.get("code") in {"provider_fee_estimate_unavailable", "provider_payment_plan_required",
+                                "provider_payment_method_required_for_fee", "provider_fee_policy_incomplete_or_ambiguous",
+                                "provider_net_balance_incomplete"}:
+            continue
+        source_id = str(issue.get("source_id") or "")
+        if issue.get("scope") == "provider_payment" or source_id.startswith("provider:"):
+            average_blocked.add(source_id.removeprefix("provider:"))
     groups = {}
     resolved = set()
 
@@ -219,6 +245,14 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
             "orders": set(), "gross": ZERO, "fees": ZERO, "refunded": ZERO, "remaining_fees": ZERO,
             "complete": True, "fees_complete": True, "held_orders": 0, "opening": ZERO, "settled": ZERO,
             "known_gross": ZERO, "known_fees": ZERO, "known_net": ZERO,
+            "actual_statement_fees": ZERO, "actual_settlement_fees": ZERO,
+            "estimated_fees": ZERO, "average_estimated_fees": ZERO,
+            "average_variable_fees": ZERO, "average_fixed_fees": ZERO, "average_vat_fees": ZERO,
+            "_average_fixed_complete": True, "_average_vat_complete": True, "_average_complete": True,
+            "_average_profiles": {}, "_average_fixed_bases": set(), "_average_operations_bases": set(),
+            "_source_average_scopes": {},
+            "average_estimated_orders": set(), "plan_estimated_orders": set(),
+            "statement_evidence_as_of": None, "_statement_evidence_stamp": None, "_fee_bases": set(),
             "paid_orders": set(), "paid_orders_complete": True,
             "confirmed_orders": set(), "net_confirmed_orders": set(),
             "_pending": defaultdict(set), "_order_numbers": {}, "_held": set(),
@@ -231,9 +265,32 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
         if order_number:
             total["_order_numbers"][oid] = str(order_number)
 
+    def average_components(total, row, profile, components):
+        if profile is None or components is None:
+            return
+        total["_fee_bases"].add("average_estimate")
+        total["average_estimated_orders"].add(row["order_id"])
+        total["_average_profiles"][profile["profile_id"]] = statement_average_summary(profile)
+        total["_average_fixed_bases"].add(components["fixed_basis"])
+        total["_average_operations_bases"].add(components["operations_basis"])
+        total["average_variable_fees"] += components["variable"]
+        for field, component, complete in (("average_fixed_fees", "fixed", "_average_fixed_complete"),
+                                            ("average_vat_fees", "vat", "_average_vat_complete")):
+            if components[component] is None:
+                total[complete] = False
+            else:
+                total[field] += components[component]
+        total["_average_complete"] = total["_average_complete"] and components["fee"] is not None
+        pending(total, row["order_id"], "provider_fee_average_estimate", row.get("order_number"))
+
     for identity, row in records.items():
         currency, provider = row["currency"], row["provider"]
         total = group(currency, provider)
+        account = (row.get("payment") or {}).get("merchant_account")
+        source_scope = row["native_currency"], type(account).__name__, str(account)
+        if source_scope not in total["_source_average_scopes"]:
+            total["_source_average_scopes"][source_scope] = statement_average_source_summary(
+                state, provider, row["native_currency"], payment=row.get("payment"))
         if row["gross"] > 0:
             total["orders"].add(row["order_id"])
             if row["paid_proven"]:
@@ -249,7 +306,8 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
         claim = claims.get(identity)
         original = (claim.get("native_balance") or claim) if claim else {}
         held = (not claim or claim["currency"] != currency or claim.get("incomplete")
-                or row["native_gross"] > Decimal(original.get("confirmed", "0")) + row["native_refunded"])
+                or row["native_gross"] > Decimal(original.get("confirmed", "0")) + row["native_refunded"]
+                or (row["order_id"], provider) in alias_held)
         if held and row["gross"]:
             total["complete"] = False
             total["_held"].add(row["order_id"])
@@ -257,6 +315,21 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
             total["confirmed_orders"].add(row["order_id"])
         projection = details.get("provider_reports", {}).get(identity)
         fee = None
+        fee_basis = "unavailable"
+        estimate = {}
+        profile = select_statement_average_profile(state, provider, row["native_currency"], payment=row.get("payment"))
+        applied = allocated[identity]["gross"]
+        operations, operations_basis = None, "unavailable"
+        captures = statement_context["captures"][row["order_id"], provider]
+        if captures and sum(captures.values(), ZERO) == row["native_gross"]:
+            operations, operations_basis = len(captures), "capture_facts"
+        elif (not captures and not row.get("split_payment") and not applied
+                and not statement_context["events"].get((row["order_id"], provider))
+                and (row.get("payment") or {}).get("provider") == provider
+                and statement_context["pages"].get((row["order_id"], provider)) == row["native_gross"] > ZERO):
+            # Cost-only assumption for a proved single-provider paid order.
+            # It never asserts an actual capture count or confirms net money.
+            operations, operations_basis = 1, "one_provider_order_estimate"
         if projection and not held:
             fee = number(projection.get("estimated_fees_original", projection.get("estimated_fees")))
             # Only paid captures belong in the current balance. Future fees stay
@@ -264,27 +337,84 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
             projected_gross = number(projection.get("gross"))
             if projected_gross and row["gross"] < projected_gross:
                 fee = None
+            if fee is not None:
+                fee_basis = "plan_estimate"
         if fee is None and not row.get("unresolved_split_fees"):
-            fee = estimate_fee(settings, provider, row["gross"], method=row["method"], refunded=row["refunded"],
+            estimate = estimate_fee_details(settings, provider, row["gross"], method=row["method"], refunded=row["refunded"],
                 policies=policies, payment=row.get("payment"), created_at=row.get("created_at"),
                 observed_at=row.get("observed_at"), refunds=row.get('refund_events'), source_mode=source_mode,
-                as_of=state.get('engine', {}).get('as_of'), currency=currency)
+                as_of=state.get('engine', {}).get('as_of'), currency=currency,
+                native_currency=row["native_currency"], native_gross=row["native_gross"],
+                fee_fx_basis=row.get("fee_fx_basis"), started_at=state.get("started_at"),
+                average_profile=profile, operations=operations, operations_basis=operations_basis,
+                paid_proven=bool(not held and row["paid_proven"] and row["order_id"] not in average_blocked
+                                 and identity.removeprefix("provider:") not in average_blocked))
+            fee, fee_basis = estimate["fee"], estimate["basis"]
         retained_uncaptured = (claim and claim.get("direction") == "payable"
                                and Decimal(claim.get("expected", "0")) > 0 and row["gross"] == 0)
         if row["gross"] == 0 and not retained_uncaptured:
             fee = ZERO
         if retained_uncaptured:
             fee = None
-        applied = allocated[identity]["gross"]
+        if (row["order_id"], provider) in alias_held:
+            fee = None
         fully_settled = not held and row["gross"] > 0 and applied >= row["gross"]
         if row["refunded"] and applied > 0 and not fully_settled:
             # A refund overlapping a partial payout needs an actual fee-credit
             # allocation. The reduced principal cannot establish that split.
             fee = None
+        if fee_basis == "average_estimate" and applied > 0 and not fully_settled:
+            # An allocation has no capture IDs. Neither its fee nor fixed
+            # component can safely be apportioned over assumed operations.
+            fee, fee_basis, estimate = None, "unavailable", {}
+            pending(total, row["order_id"], "provider_statement_fee_settlement_conflict", row.get("order_number"))
         if fee is None and fully_settled:
             # The allocation proves its full cash/fee split. A missing estimate
             # cannot turn an entirely settled actual fee back into uncertainty.
             fee = ZERO
+            fee_basis = "actual_settlement"
+        statement = None if held else resolve_statement_fees(state, identity, row, context=statement_context,
+            applied=applied, allocated_fee=allocated[identity]["fees"], estimate=fee, estimate_basis=fee_basis,
+            average_profile=profile, average_components=estimate.get("components"))
+        if statement is not None:
+            accepted = statement_context["latest"].get((row["order_id"], provider))
+            if accepted and (total["_statement_evidence_stamp"] is None or accepted[0] > total["_statement_evidence_stamp"]):
+                total["_statement_evidence_stamp"], total["statement_evidence_as_of"] = accepted
+            if not statement["complete"]:
+                if statement["average_used"]:
+                    average_components(total, row, profile, statement["components"])
+                total["complete"] = total["fees_complete"] = False
+                pending(total, row["order_id"], statement["issue"], row.get("order_number"))
+                if statement["evidenced"]:
+                    total["known_fees"] += statement["actual"]
+                    total["actual_statement_fees"] += statement["actual"]
+                    total["_fees_available"] = True
+                    total["_fee_bases"].add("actual_statement")
+                continue
+            remaining = statement["actual"] + statement["estimated"]
+            average = statement["average"]
+            average_used = statement["average_used"]
+            estimated = statement["estimated"]
+            if statement["evidenced"] and not applied:
+                total["_fee_bases"].add("actual_statement")
+                total["actual_statement_fees"] += statement["actual"]
+            if estimated or average_used:
+                total["_fee_bases"].add("average_estimate" if average_used else "plan_estimate")
+            if average_used:
+                average_components(total, row, profile, statement["components"])
+            fee = remaining
+        else:
+            covered = ZERO
+            if fee is not None and not held and row["gross"] > 0 and applied > 0:
+                covered = cash(fee * min(applied, row["gross"]) / row["gross"])
+            remaining = max(fee - covered, ZERO) if fee is not None else None
+            average = remaining or ZERO if fee_basis == "average_estimate" else ZERO
+            average_used = fee_basis == "average_estimate" and not fully_settled
+            estimated = remaining or ZERO if fee_basis in {"average_estimate", "plan_estimate"} else ZERO
+            if average_used and not held:
+                average_components(total, row, profile, estimate.get("components"))
+            if not held and fee is not None and row["gross"] > 0 and (remaining or not fully_settled):
+                total["_fee_bases"].add(fee_basis)
         if fee is None:
             total["complete"] = total["fees_complete"] = False
             pending(total, row["order_id"], "provider_fee_estimate_unavailable", row.get("order_number"))
@@ -292,16 +422,19 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
         if not held and row["paid_proven"]:
             resolved.add(identity)
             total["_net_available"] = total["_fees_available"] = True
-            if row["gross"] > 0:
+            if row["gross"] > 0 and not average_used:
                 total["net_confirmed_orders"].add(row["order_id"])
-        covered = ZERO
-        if not held and row["gross"] > 0 and applied > 0:
-            covered = cash(fee * min(applied, row["gross"]) / row["gross"])
-        remaining = max(fee - covered, ZERO)
         total["fees"] += remaining
         if not held:
             total["remaining_fees"] += remaining
             total["known_fees"] += remaining
+            total["estimated_fees"] += estimated
+            total["average_estimated_fees"] += average
+            if average_used:
+                total["average_estimated_orders"].add(row["order_id"])
+                pending(total, row["order_id"], "provider_fee_average_estimate", row.get("order_number"))
+            elif estimated:
+                total["plan_estimated_orders"].add(row["order_id"])
 
     # Preserve reasons and unique order identities, including orders whose
     # native payment failed normalization before a claim could be created.
@@ -440,6 +573,41 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
     for (currency, provider), total in sorted(groups.items()):
         total["fees"] += actual_fees[currency, provider]
         total["known_fees"] += actual_fees[currency, provider]
+        total["actual_settlement_fees"] = actual_fees[currency, provider]
+        if actual_fees[currency, provider] or settled_cash[currency, provider]:
+            total["_fee_bases"].add("actual_settlement")
+        bases = total["_fee_bases"] - {"unavailable"}
+        total["fee_basis_sources"] = sorted(bases)
+        total["fee_basis"] = next(iter(bases)) if len(bases) == 1 else "mixed" if bases else "unavailable"
+        has_estimate = bool(bases & {"plan_estimate", "average_estimate"})
+        has_actual = bool(bases & {"actual_statement", "actual_settlement"})
+        total["fee_status"] = ("review" if not total["fees_complete"] else
+                               "mixed" if has_estimate and has_actual else
+                               "estimated" if has_estimate else "confirmed" if has_actual else "unavailable")
+        total["average_estimated_orders"] = len(total["average_estimated_orders"])
+        total["plan_estimated_orders"] = len(total["plan_estimated_orders"])
+        total["average_fee_profiles"] = [total["_average_profiles"][key] for key in sorted(total["_average_profiles"])]
+        source_profiles, source_issues = {}, defaultdict(int)
+        for source in total["_source_average_scopes"].values():
+            if source["available"]:
+                source_profiles[source["profile_id"]] = source
+            else:
+                source_issues[source["native_currency"], source["reason_code"]] += 1
+        total["source_average_profiles"] = [source_profiles[key] for key in sorted(source_profiles)]
+        total["source_average_issues"] = [{"native_currency": native, "reason_code": reason, "scopes": count}
+            for (native, reason), count in sorted(source_issues.items())]
+        if not total["_source_average_scopes"]:
+            total["source_average_issues"] = [{"native_currency": None, "reason_code": "source_scope_unproven", "scopes": 0}]
+        total["source_average_status"] = ("available" if source_profiles and not source_issues else
+                                          "partial" if source_profiles else "unavailable")
+        total["average_fixed_bases"] = sorted(total["_average_fixed_bases"])
+        total["average_operations_bases"] = sorted(total["_average_operations_bases"])
+        if not total["_average_fixed_complete"]:
+            total["average_fixed_fees"] = None
+        if not total["_average_vat_complete"]:
+            total["average_vat_fees"] = None
+        if not total["_average_complete"]:
+            total["estimated_fees"] = total["average_estimated_fees"] = None
         total["known_net"] -= total["_excluded_net"]
         pending_ids = set().union(*total["_pending"].values())
         samples = sorted(pending_ids)
