@@ -1,6 +1,6 @@
 {
   "task": "EXECUTIVE-PROFIT-SPEND-BASIS-20261115",
-  "updated_at_utc": "2026-11-15 14:56:44 UTC",
+  "updated_at_utc": "2026-11-15 15:01:51 UTC",
   "repository": "AMASI-SA/AMASI-SA",
   "pull_request": 1936,
   "source_branch": "codex/executive-profit-release-20261115",
@@ -428,24 +428,26 @@
     "frontend_package_files": 1472
   },
   "shared_workspace_last_read": {
-    "active_lease": true,
-    "actor": "codex-salla-webhook-recovery-1935",
-    "deployment_git_sha": "331b7917b3c01d064ee2a17affb4714f3a296331",
-    "source_git_sha": "8c11053b602f8f56a1facbaee09779f2896b0ada",
-    "release_id": "rg5-8c765a3025bcafa7098d2fbdffe572d5582ecfe52c4be96f8c254ecd498d79f0",
-    "prepared_at": "2026-11-15T13:57:01.652551+00:00",
-    "observed_at_utc": "2026-11-15 14:03:39 UTC",
-    "note": "Other owner active; original rehearsal not executed. Must wait for owner; never clear or reuse this lease.",
-    "official_guard_observed_at_utc": "2026-11-15T14:24:00Z",
+    "official_guard_observed_at_utc": "2026-11-15T14:59:24Z",
     "official_guard_status": {
       "active": false,
       "actor": null,
-      "deployment_git_sha": null
+      "deployment_git_sha": null,
+      "source_git_sha": null,
+      "prepared_at": null
     },
-    "observation": "Root's own browser terminal status command returned after the preceding owner's verification lock released. No /app source change or owned lease.",
-    "source_observed_at_utc": "2026-11-15T14:53:00Z",
-    "head": "331b7917b3c01d064ee2a17affb4714f3a296331",
-    "root_action": "Read-only git rev-parse HEAD in own terminal; no /app source mutation."
+    "source_observed_at_utc": "2026-11-15T15:01:09Z",
+    "head": "d7facb0ff4e2e30edbabf012b3865155d5902a85",
+    "owner_rehearsal_directory": "/tmp/salla-webhook-release-1940/original",
+    "completed_receipts_observed": [
+      "fetch.json",
+      "fast-forward.json",
+      "status-before-build.json",
+      "untracked-after-sync.json"
+    ],
+    "adapter_started": true,
+    "adapter_result_not_yet_observed": true,
+    "root_action": "Read-only original HEAD and task-evidence filenames from own terminal; owner performs rehearsal. No /app source mutation, lease or publication by profit task."
   },
   "B_independent_artifact_review": {
     "passed": true,
@@ -649,7 +651,7 @@
     "recovery_limit": "Code analysis: MAX_ATTEMPTS=8; exhausted quarantined events are excluded from ordinary claims. No live quarantine query or event replay performed by this task. Owner must separately track functional recovery.",
     "pr": 1940,
     "url": "https://github.com/AMASI-SA/AMASI-SA/pull/1940",
-    "state": "All exact successor A/B/M gates passed; owner original rehearsal and publication pending",
+    "state": "Owner original workspace fast-forwarded to combined M; governed adapter rehearsal in progress",
     "source_commit": "a6c5bc5763fdca144b44473285d37130eb8213e9",
     "source_tree": "e4cd5f6f07aa8e3d94ce729231b21db41faf619e",
     "sole_parent": "a2a8218f858547f4d9d094d29998a93b09bf59ae",
