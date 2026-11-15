@@ -1,5 +1,52 @@
 # Operational provider statement reconciliation
 
+## Live deployment hold, 2026-11-15 17:53 UTC
+
+The deployment-ready candidate remains immutable B2
+`7453469d7e1f79a66af553cf00ed547a0e8caf2d` in PR #1946. The verified handoff
+below was preserved at evidence commit
+`bb8327d7c11d8489bff278bb7e2eb129c7b78782`; this evidence-only branch is not
+the release source. No further application or intent changes were made.
+
+Root observed the other operation's first platform publication `c75a275`
+complete and its guard subsequently inactive at 17:31:09Z. A fresh full inactive
+status at 17:39:53Z was exactly `active:false`, without an incomplete lease
+directory. This is only the first stage of PR #1945's documented sequence.
+The management UI still showed that first publication when read again; no
+second maintenance-flag closure completion was observed.
+
+At 17:53:08Z the primary production ref still pointed to J2
+`db0d2c365f6cc13728cc5d8c334fb9880497fbe8`. PR #1945's coordination body,
+last updated 17:13:58Z, still reserved the complete recovery and same-source
+flag-off sequence. Its conversation/review comments were empty. The recorded
+evidence branch remained at `58ba4f2f831afc7d126eb8da180985d37755139f`, a
+checkpoint predating the first guard closure. No documented recovery completion,
+`enabled=false`, and final cleanup verification handoff was found.
+
+Root reopened the live provider report read-only and confirmed that Tabby fees
+remain unavailable. This is a fresh baseline, not a successful deployment or
+statement binding. The owner session works; no source-refresh control was used.
+The supplied original remains available privately and must not be committed.
+
+**Production changed by this task: no.** No merge, shared `/app` source or
+service change, local release rehearsal there, lease, publication, statement
+binding or live financial write has occurred. Only read-only guard status was
+run in root's own terminal; other terminals, the unsaved editor, unrelated files
+and the external preview runtime were preserved.
+
+The remaining external dependency is the other release owner's complete
+handoff, not another code or calculation change. On resumption, first read
+PR #1945 and the actual production ref, and require a new full inactive guard
+status. Do not infer completion from the first inactive interval or clear or
+take over another operation. Once handed off, recheck B2, merge #1946 normally,
+verify exact B2 tree at M, inspect M push gates, run the official preserving
+adapter/retained verification, prepare/prepublish and publish once. Complete
+all three live probes and inactive lease before explicitly using the saved
+Tabby original. Then inspect live fees and genuine remaining review items.
+Do not repeat completed verification merely while waiting for that handoff.
+No publication by this task has occurred. The precise command contract is in
+AGENTS.md and docs/PRODUCTION_RELEASE_PROTOCOL.md.
+
 ## Verified B2 release handoff, 2026-11-15 17:19 UTC
 
 This section is an evidence-only continuation checkpoint. Its branch
