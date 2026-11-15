@@ -1,6 +1,6 @@
 {
   "task": "EXECUTIVE-PROFIT-SPEND-BASIS-20261115",
-  "updated_at_utc": "2026-11-15 15:20:36 UTC",
+  "updated_at_utc": "2026-11-15 15:42:24 UTC",
   "repository": "AMASI-SA/AMASI-SA",
   "pull_request": 1936,
   "source_branch": "codex/executive-profit-release-20261115",
@@ -213,7 +213,7 @@
   "merge_commit": "a2a8218f858547f4d9d094d29998a93b09bf59ae",
   "production_changed": true,
   "lease_created": false,
-  "next_action": "Preserve owner lease during official three-probe verification. Wait for its successful completion and inactive status, perform final read-only closure check and leave dashboard deliverable. Profit UI is accepted; separate Salla incident recovery remains owner scope and no recovery is claimed.",
+  "next_action": "Profit repair complete: approved source merged, combined successor published, live executive profit/CPA/ROAS and arithmetic accepted, official three-probe verification passed and matching owner lease closed. Separate Salla incident recovery remains its owner's scope; no recovery data mutation or completeness claim by this task.",
   "B_workflows": [
     {
       "id": 43720779455,
@@ -645,18 +645,18 @@
     "reported_problem": "Installed cart/order reconciliation wrapper does not accept the strict processing keyword passed by the durable dispatcher; natural webhook work retries before capture.",
     "same_salla_source_in_M": true,
     "profit_source_changes_do_not_overlap": true,
-    "owner_fix_state": "Owner preparing focused forwarding fix and production-composition regression on a separate branch.",
+    "owner_fix_state": "Combined corrective successor PR1940 published and release-verified; prior exhausted-event recovery is separate PR1942",
     "root_independently_read_current_pr": true,
     "root_and_independent_source_review": "Confirmed exact M signature mismatch; both default and strict keyword calls raise before capture; Salla subtree unchanged by profit M.",
     "recovery_limit": "Code analysis: MAX_ATTEMPTS=8; exhausted quarantined events are excluded from ordinary claims. No live quarantine query or event replay performed by this task. Owner must separately track functional recovery.",
     "pr": 1940,
     "url": "https://github.com/AMASI-SA/AMASI-SA/pull/1940",
-    "state": "Combined runtime published; root actual profit UI, arithmetic and health acceptance PASS; owner official verification running",
+    "state": "Combined runtime published, official three-probe verification PASS and guard inactive; actual profit UI and arithmetic accepted",
     "source_commit": "a6c5bc5763fdca144b44473285d37130eb8213e9",
     "source_tree": "e4cd5f6f07aa8e3d94ce729231b21db41faf619e",
     "sole_parent": "a2a8218f858547f4d9d094d29998a93b09bf59ae",
     "profit_six_blobs_verified_unchanged": true,
-    "root_and_independent_targeted_review": "PASS; complete strict/default forwarding and production-order regression; real-Mongo CI execution review pending",
+    "root_and_independent_targeted_review": "PASS; complete strict/default forwarding and production-order regression; actual real-Mongo CI execution independently reviewed and passed",
     "current_source_ci": {
       "total": 12,
       "success": 12,
@@ -1121,11 +1121,39 @@
         "status": "Building your website... / Publishing..."
       },
       "succeeded_observed": true,
-      "official_verify_pending": true,
+      "official_verify_pending": false,
       "profit_live_acceptance_pending": false,
       "version": "5d52cf3",
       "root_finish_display": "Deployment finished Nov15 06:14 PM Asia/Riyadh",
-      "official_verify_started_by_owner": true
+      "official_verify_started_by_owner": true,
+      "official_verification": {
+        "evidence_source": "Independent agent read-only inspection of actual original-environment receipts and one fresh official status",
+        "observed_at_utc": "2026-11-15T15:40:18Z",
+        "verify_receipt_path": "/tmp/salla-webhook-release-1940/verify.json",
+        "exit_receipt_path": "/tmp/salla-webhook-release-1940/verify.exit",
+        "exit_code": 0,
+        "verifier_process_absent": true,
+        "verified": true,
+        "checks": 3,
+        "protocol_version": 5,
+        "source_git_sha": "a6c5bc5763fdca144b44473285d37130eb8213e9",
+        "deployment_git_sha": "d7facb0ff4e2e30edbabf012b3865155d5902a85",
+        "release_id": "rg5-f33cd3537f17e7a25804236a8b4ad0680c73618af6d3cddabc75fe8486f8d93a",
+        "recorded_status_path": "/tmp/salla-webhook-release-1940/status-after-verify.json",
+        "recorded_status_active": false,
+        "fresh_status": {
+          "observed_at_utc": "2026-11-15T15:41:02.845151Z",
+          "command": "PYTHONDONTWRITEBYTECODE=1 python -B scripts/production_release_guard.py status",
+          "exit_code": 0,
+          "active": false,
+          "actor": null,
+          "source_git_sha": null,
+          "deployment_git_sha": null,
+          "release_id": null
+        },
+        "root_or_reviewer_competing_release_operation": false
+      },
+      "lease_closed": true
     }
   },
   "profit_code_blobs": {
@@ -1146,6 +1174,33 @@
       "critical_file_hashes_match": true,
       "frontend_build_verified": true,
       "source_and_runtime_exact_match": true
+    },
+    "official_verification": {
+      "evidence_source": "Independent agent read-only inspection of actual original-environment receipts and one fresh official status",
+      "observed_at_utc": "2026-11-15T15:40:18Z",
+      "verify_receipt_path": "/tmp/salla-webhook-release-1940/verify.json",
+      "exit_receipt_path": "/tmp/salla-webhook-release-1940/verify.exit",
+      "exit_code": 0,
+      "verifier_process_absent": true,
+      "verified": true,
+      "checks": 3,
+      "protocol_version": 5,
+      "source_git_sha": "a6c5bc5763fdca144b44473285d37130eb8213e9",
+      "deployment_git_sha": "d7facb0ff4e2e30edbabf012b3865155d5902a85",
+      "release_id": "rg5-f33cd3537f17e7a25804236a8b4ad0680c73618af6d3cddabc75fe8486f8d93a",
+      "recorded_status_path": "/tmp/salla-webhook-release-1940/status-after-verify.json",
+      "recorded_status_active": false,
+      "fresh_status": {
+        "observed_at_utc": "2026-11-15T15:41:02.845151Z",
+        "command": "PYTHONDONTWRITEBYTECODE=1 python -B scripts/production_release_guard.py status",
+        "exit_code": 0,
+        "active": false,
+        "actor": null,
+        "source_git_sha": null,
+        "deployment_git_sha": null,
+        "release_id": null
+      },
+      "root_or_reviewer_competing_release_operation": false
     }
   },
   "live_acceptance": {
@@ -1167,6 +1222,19 @@
       "margin_matches": true
     },
     "private_business_figures_not_recorded": true,
-    "customer_data_not_recorded": true
-  }
+    "customer_data_not_recorded": true,
+    "result": "PASS",
+    "dashboard_marked_deliverable": true
+  },
+  "remaining_data_freshness_limitation": {
+    "source": "Owner PR1940 checkpoint 2026-11-15T15:31:04Z",
+    "post_cutover_order_processing_reported_restored": true,
+    "old_incident_events_remain_quarantined": true,
+    "recovery_pr": 1942,
+    "production_recovery_grant_not_claimed": true,
+    "scope": "Separate from restored profit rendering and canonical spend basis; reported profit uses currently available records."
+  },
+  "completed_at_utc": "2026-11-15 15:42:24 UTC",
+  "task_complete": true,
+  "local_final_worktree_clean": true
 }
