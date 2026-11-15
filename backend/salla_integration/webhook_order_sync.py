@@ -6,6 +6,8 @@ module never calls Qoyod and never performs outbound Salla API requests.
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -16,6 +18,32 @@ from salla_shipping import (
 
 from .sync import _salla_order_to_doc
 from .store_scope import is_attribution_pilot_store
+
+
+_EXPECTED_WEBHOOK_OWNER: ContextVar[Optional[str]] = ContextVar(
+    "salla_expected_webhook_owner", default=None,
+)
+
+
+class WebhookOwnerChanged(RuntimeError):
+    """A deferred event must not move to a newly bound merchant owner."""
+
+
+@contextmanager
+def verified_webhook_owner(user_id: Optional[str]):
+    token = _EXPECTED_WEBHOOK_OWNER.set(user_id)
+    try:
+        yield
+    finally:
+        _EXPECTED_WEBHOOK_OWNER.reset(token)
+
+
+def enforce_verified_webhook_owner(user_id: Optional[str]) -> Optional[str]:
+    """Apply the worker's pinned tenant to every downstream owner resolver."""
+    expected = _EXPECTED_WEBHOOK_OWNER.get()
+    if expected is not None and user_id != expected:
+        raise WebhookOwnerChanged("salla_webhook_owner_changed")
+    return user_id
 
 
 def _text(value: Any) -> Optional[str]:
@@ -78,6 +106,7 @@ def _merchant_values(merchant_id: Optional[str]) -> list[Any]:
 
 async def _resolve_user_id(db: Any, merchant_id: Optional[str]) -> Optional[str]:
     values = _merchant_values(merchant_id)
+    user_id = None
     if values:
         doc = await db.salla_integrations.find_one(
             {"store_id": {"$in": values}},
@@ -85,9 +114,7 @@ async def _resolve_user_id(db: Any, merchant_id: Optional[str]) -> Optional[str]
             sort=[("updated_at", -1)],
         )
         user_id = _text((doc or {}).get("user_id"))
-        if user_id:
-            return user_id
-    return None
+    return enforce_verified_webhook_owner(user_id)
 
 
 def _event_data(event_body: dict[str, Any]) -> dict[str, Any]:
@@ -546,7 +573,7 @@ async def sync_order_from_verified_webhook(
             "attempted": True,
             "synced": False,
             "reason": "order_webhook_persist_failed",
-            "error": str(exc)[:500],
+            "error_type": type(exc).__name__,
             "no_salla_api_calls": True,
             "no_qoyod_calls": True,
         }

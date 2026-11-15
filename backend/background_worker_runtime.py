@@ -27,18 +27,19 @@ async def start_tasks(db, *, wake_event=None, assembly_wake_event=None):
         from salla_integration.shipping_label_inbox import start_worker as labels
         from salla_integration.payment_update_inbox import start_worker as payments
         from salla_integration.cost_option_recovery import start_worker as cost_options
+        from salla_integration.webhook_inbox import start_worker as webhook_events
         from operational_push import run as push
         for name, factory in (
             ('qoyod-followup', followup_loop), ('qoyod-manual-send-jobs', manual_sends),
             ('salla-token-maintenance', salla_token_maintenance_loop),
-            ('salla-orders-12h', salla_reconciliation),
+            ('salla-daily-refresh', salla_reconciliation),
             ('operational-push', push),
         ):
             tasks.append(asyncio.create_task(factory(db), name=name))
         task = await delivery(db, wake_event=assembly_wake_event)
         if task is not None:
             tasks.append(task)
-        for start in (review, labels, payments, cost_options):
+        for start in (review, labels, payments, cost_options, webhook_events):
             task = await start(db)
             if task is not None:
                 tasks.append(task)

@@ -123,6 +123,9 @@ async def test_canonical_runtime_boots_against_empty_isolated_database_and_drain
         assert row['jobs']['campaign-ai-shadow-jobs'] is True
         assert 'operational-balances' not in row['jobs']
         assert row['jobs']['salla-cost-options'] is True
+        assert row['jobs']['salla-webhook-inbox'] is True
+        assert row['jobs']['salla-daily-refresh'] is True
+        assert 'salla-orders-12h' not in row['jobs']
         assert await db.qoyod_manual_auto_runs.count_documents({}) == 0
         assert await db.qoyod_auto_cycles.count_documents({}) == 0
     finally:
