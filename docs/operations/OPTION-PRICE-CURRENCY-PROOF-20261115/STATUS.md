@@ -1,5 +1,13 @@
 # Option-price currency recovery: release handoff
 
+## Continuation 2026-11-15 — scoped production access approved
+
+Automatic approval review rejected the initial secure browser credential request because prior fix/deploy permission did not explicitly authorize transmitting the live production MongoDB connection credential to mongoview.emergent.host. The request did not run and no credential was disclosed. The blocker and its reason were explained to the user. The user then explicitly replied that they approve this production Database Manager access. This is authorization for the secure credential entry and the task-scoped diagnosis; it is not authorization to reveal credentials in model-visible tools or mutate order/financial data.
+
+An independent source audit prepared the bounded read plan below. Begin with the owner-scoped unified order and component lifecycle, then settings/plan and the exact workflow-linked immutable operation only as necessary. Preserve types and timestamp zones; identify the first rejecting guard before changing code. The existing production release remains verified but the requested Ready outcome remains locked. No source patch or production mutation has been performed in this continuation.
+
+Next: re-inspect the existing Database Manager form and use browserAuth for MongoDB URL. Do not read/copy the credential through ordinary tools. Verify the live production database, then follow READ_ONLY_DIAGNOSTIC_PLAN.md. The empty access form screenshot is retained as production-database-access.jpg (SHA256 f4e362095cd51821e6c0a322ccd36bcf5f8e9cca42d854f76add10149f294fee).
+
 ## Continuation 2026-11-15 — Emergent authentication renewed
 
 Secure browser authentication completed and the target Emergent domain visibly showed the existing Salla Analytics published project. Manage/Overview still shows the 100th publish, 2e2ec44, and latest deployment finished Nov 15 at 04:44 AM. No republish or rollback was requested.
