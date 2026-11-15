@@ -1,3 +1,31 @@
+# Completed: published and live provider UI accepted — 2026-11-15 21:34 UTC
+
+PR #1950 is normally merged as M `236a428364bc8163a684795ed1be87e237476f18`, with exact accepted B4 tree and ordered parents [J4, B4]. The accepted source remains A4 `1bd44b6f186de8b40877fde686b5d2d7aab52805`; runtime `rg5-58ace8c534fca5cd31d89a58bc9fd7746a79e25681660f8c32b3eded55a74117`.
+
+## Publication completed
+
+- One authorized platform publication completed as version `3e5bbfb`, observed Nov 16, 00:11 Riyadh.
+- The reviewed single-attempt wrapper ran the official verifier once, without retry or interruption, from 21:11:46.922055 to 21:24:46.205037 UTC.
+- Official result: `verified: true`, `checks: 3`, exact source/deployment/runtime identities, exit 0, empty stderr.
+- Official after-status was exactly `active: false`, observed at 21:24:46.307617 UTC. This release lane is closed.
+- Raw verifier stdout SHA256: `6465f1d28e4804acd7fa8f686e62489c9a26ffea1a71ba972d61e27dcbf3b109`.
+- After-status SHA256: `595219792dd54a38a8ace80a6a7fc33b928ea74f0dd1bdfac6a2b708dbe0dd1e`.
+- Private original-host receipts remain under `/tmp/provider1950-publication-20261115/`. The complete technical final receipt and sanitized UI acceptance are in `publication-final-observed.json` beside this file.
+
+All earlier exact-A4/B4/M CI and artifact acceptance, original-workspace configured rehearsal, preservation checks, and package proof remain accepted. No further release verification, lease clearing, source changes, or publication are needed.
+
+## Live UI accepted
+
+Root used the intended saved original Tabby workbook exactly once through the deployed native statement page. The UI reported success and persisted its statement/history, matching result and separated variable-rate, fixed-mean, VAT and source metadata. A fresh read of the matching result preserved the same values. A subsequent provider-table GET showed the corresponding saved source/date, accepted actual fees, and use of the average for eligible unmatched fees. The distinct review count decreased, and the review dialog displayed remaining reason text.
+
+Incomplete fixed-count or tax evidence remains explicitly incomplete. A numeric known-fee subtotal does not certify a complete estimated total or final receivable. Statement-row counts and distinct order-review counts are different sets. No missing-payment/refund confirmation or source-refresh control was used. Bank receipt is not asserted. The saved financial snapshot remained unchanged. An initial post-boot page-read error recovered with one ordinary GET.
+
+This completes the operational provider intake, saved-original reuse, actual-fee and average-display acceptance. Remaining financial reconciliation items require their own source evidence and explicit decisions; they are not a release blocker. Advertising merchant settings are a separate source and outside this acceptance.
+
+No merchant filename, workbook, amounts, customer identifiers, or financial screenshots are included in this repository checkpoint. This evidence-only branch must not be merged or deployed.
+
+---
+
 # Original rehearsal and owned publication — 2026-11-15 21:07 UTC
 
 Root read original-host rehearsal result`ok:true` at20:57:55.473239Z, receiptSHA256`58ac0aec258d90020f588601cd0c74f79b7fca14a1cbb4ce52bc2e18984424c6`. Original /app is exactM/accepted tree and tracked-clean. Configured adapter and package commands exited0; package stdout exact1278-byte proofSHA256`ce75761983cf60abad1e6954850943e9e21d6422a64fb293b3c2f89220c01185`. Required metadata for all120 platform entries preserved (bookkeeping55566→55692bytes; no private content or byte/prefix claim). Rehearsal exited without active lease.

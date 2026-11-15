@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "pr": 1950,
+  "repository": "AMASI-SA/AMASI-SA",
+  "observed_by": "root via original-host terminal and authorized production UI",
+  "official_verification": {
+    "active_lease": false,
+    "actor": "chatgpt-provider1950-20261115-root",
+    "boot_started_at_observations": [
+      "2026-11-15T21:10:40.386671+00:00",
+      "2026-11-15T21:10:40.991263+00:00"
+    ],
+    "checks": 3,
+    "deployment_git_sha": "236a428364bc8163a684795ed1be87e237476f18",
+    "evidence_directory": "/tmp/provider1950-publication-20261115",
+    "finished_at": "2026-11-15T21:24:46.307994+00:00",
+    "inactive_observed_at": "2026-11-15T21:24:46.307617+00:00",
+    "ok": true,
+    "platform_completed_at": "2026-11-16T00:11:00+03:00",
+    "platform_version": "3e5bbfb",
+    "prepare_sha256": "4dfc93e25e8926926cf9458c964c1a46c12daed422c6fe774361a86c6de81c2c",
+    "prepared_at": "2026-11-15T20:59:27.875265+00:00",
+    "release_id": "rg5-58ace8c534fca5cd31d89a58bc9fd7746a79e25681660f8c32b3eded55a74117",
+    "source_git_sha": "1bd44b6f186de8b40877fde686b5d2d7aab52805",
+    "status_after_sha256": "595219792dd54a38a8ace80a6a7fc33b928ea74f0dd1bdfac6a2b708dbe0dd1e",
+    "status_before_sha256": "930b64c50c8532f084d0b8a3503143e7606033ba2b57ca5ce78de3c481712b2e",
+    "verified": true,
+    "verify_finished_at": "2026-11-15T21:24:46.205037+00:00",
+    "verify_started_at": "2026-11-15T21:11:46.922055+00:00",
+    "verify_stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "verify_stdout_sha256": "6465f1d28e4804acd7fa8f686e62489c9a26ffea1a71ba972d61e27dcbf3b109",
+    "wrapper_started_at": "2026-11-15T21:11:46.802065+00:00"
+  },
+  "live_ui_acceptance": {
+    "original_saved_statement_used_once": true,
+    "success_message_observed": true,
+    "immutable_statement_history_visible": true,
+    "fresh_get_preserved_profile_and_review": true,
+    "provider_table_get_shows_saved_profile_and_source_date": true,
+    "variable_percentage_excludes_vat_fixed_and_payout": true,
+    "fixed_source_mean_and_tax_displayed_separately": true,
+    "actual_fee_column_populated": true,
+    "average_applied_to_eligible_orders": true,
+    "review_count_decreased": true,
+    "estimation_remains_explicitly_incomplete_where_evidence_is_missing": true,
+    "review_modal_has_reason_text": true,
+    "financial_source_snapshot_unchanged": true,
+    "source_refresh_clicked": false,
+    "unrecorded_payment_or_refund_confirmations_clicked": false,
+    "merchant_data_omitted": true
+  },
+  "completion_scope": "Published operational provider statement intake, original-file reuse, actual fee substitution and saved-average presentation. Remaining reconciliation cases are explicit review, not a claim of complete balances or bank receipt."
+}
