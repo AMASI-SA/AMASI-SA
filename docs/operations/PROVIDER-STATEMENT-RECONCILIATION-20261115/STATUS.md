@@ -1,5 +1,49 @@
 # Operational provider statement reconciliation
 
+## A3 CI and frozen external candidate accepted, 2026-11-15 19:30 UTC
+
+All 20 exact-A3 workflows succeeded on first attempt. Operational Backend:
+4953 passed plus 16 source-contract cases and18 subtests. Frontend:883 passed
+across54 suites. Actual isolated-Mongo integration, stock, existing operational
+browser/mobile/visibility, security and CodeQL gates succeeded. The dedicated
+new statement-page live UI acceptance remains pending publication.
+
+Readiness run43751947147, producer job132927617520, completed all16 recorded
+steps successfully. Artifact14176777615 is bound to exact A3 and contains one
+regular unencrypted `release-intent-v5.json` member. The archive is381907bytes,
+SHA256 `12719ec08d803ba254a61c815e294c623b4d17710d2e7df635f5a1a254c0bf61`.
+The candidate is1322033bytes, SHA256
+`95830ac89e46aab892934977482c4b378ab95e9299b82aa54032dd291d157632`.
+
+Root and an independent reviewer each accepted those unchanged external bytes
+using the official `load_candidate_release_intent` in clean A3/J3. Independent
+GitHub provenance, upload log and archive digest/member checks agreed. Candidate
+runtime is `rg5-950102146f906a5a8e45be6cbd924ecf7945b451c05807cb79887c74d1f52b0d`;
+Frontend artifact tree is
+`8869a888503abc401cdb9973fb9000538184b180657ed9dc04faed584796dc3b`.
+Build-meta SHA256 is
+`b16abbe79ba50d0bf197916d43698d3cbfde7cb3af59de654bf7a9a129f270e6`,478742bytes;
+proof SHA256 is `50b4021b0ec4613660e6f2e88c3d2d3f2df1754265460afd4d55c4f70371a4a9`,
+1521bytes, two equal builds with retained pass2. Toolchain is Node22.23.2,
+Yarn1.22.22 and Vite8.2.4. This validates a source candidate on J3; it is not
+shared-host materialization or deployed verification. Local HEAD/source and both
+candidate/archive bytes remained unchanged after official validation.
+
+PR1947's latest declared handoff remains active. PR1948's B has now passed all
+its applicable workflows and is queued next; its owner reports seeing the prior
+platform completion at22:23 Riyadh but still observing PR1947's active guard.
+Root did not take over that lease or move production/shared source. No B3 is
+frozen and the source-only DraftPR1949 must not be merged. If PR1948 advances
+production as queued, preserve A3 and create a new source/intent pair on the
+actual predecessor, with fresh combined-source and release proof.
+
+Independent prospective review found PR1948's20 source paths disjoint from our
+33 non-STATUS paths, with no frontend/provider fee changes or financial
+integration blocker. The shared canonical Salla order seam was inspected;
+component revalidation remains metadata-only and does not write provider
+principal/fee state. Existing native/refund guards remain in force. This static
+review is not a substitute for CI on the future combined source.
+
 ## R3 source preserved; shared publication remains owned, 2026-11-15 19:21 UTC
 
 Source A3 is `0fb8250a61336e9179675b2dc9ab502d3c494379`, direct parent J3
