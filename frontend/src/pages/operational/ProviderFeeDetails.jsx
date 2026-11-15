@@ -174,7 +174,8 @@ function ProviderRowExplanations({ row, currency }) {
             {Number.isSafeInteger(row.estimated_fee_unidentified_orders) && row.estimated_fee_unidentified_orders > 0 && <p className="ofp-provider-detail-note">طلبات لم يكتمل دليل رسومها الفردي: <bdi dir="ltr">{formatPositionCount(row.estimated_fee_unidentified_orders)}</bdi>.</p>}
         </section>
         {Number.isSafeInteger(row.average_estimated_orders) && row.average_estimated_orders > 0 && <section>
-            <h5>التقدير المستخدم من متوسط الكشف</h5>
+            <h5>مكونات تقدير المتوسط</h5>
+            <p className="ofp-provider-detail-note">هذه المكونات تخص محاولات التقدير، وقد تشمل طلبات غير مكتملة الرسوم أو لم تُخصم رسومها من الرصيد. لا تمثل تفصيلًا يُجمع للحصول على المجموع التقديري المعلوم.</p>
             <dl className="ofp-provider-facts">
                 <div><dt>الطلبات التي استُخدم لها المتوسط</dt><dd><bdi dir="ltr">{formatPositionCount(row.average_estimated_orders)}</bdi></dd></div>
                 <div><dt>العمولة المتغيرة التقديرية</dt><dd><Amount value={row.average_variable_fees} currency={currency} /></dd></div>

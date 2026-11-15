@@ -87,6 +87,20 @@ test.each(["missing", "source_conflict", "mixed"])("%s VAT is not converted to z
     expect(tax).toMatch(/غير موثقة|تعارض|متعددة/);
 });
 
+test("attempted estimate components are not presented as an additive breakdown of the known subtotal", async () => {
+    const row = provider({ estimated_fees: "8.34", estimated_fees_complete: false, average_estimated_orders: 2,
+        average_variable_fees: "12.00", average_fixed_fees: "1.00", average_vat_fees: null,
+        average_fee_profiles: [source()] });
+    await render(<ProviderFeeExplanations rows={[row]} currency="SAR" />);
+    const heading = [...host.querySelectorAll("h5")].find(item => item.textContent === "مكونات تقدير المتوسط");
+    expect(heading).toBeDefined();
+    expect(heading.closest("section").textContent).toContain("قد تشمل طلبات غير مكتملة الرسوم أو لم تُخصم رسومها من الرصيد");
+    expect(heading.closest("section").textContent).toContain("لا تمثل تفصيلًا يُجمع للحصول على المجموع التقديري المعلوم");
+    expect(facts("العمولات التقديرية المعلومة")[0].textContent).toContain("8.34 SAR · جزئي");
+    expect(facts("العمولة المتغيرة التقديرية")[0].textContent).toContain("12.00 SAR");
+    expect(facts("الضريبة التقديرية")[0].textContent).toBe("غير متاح");
+});
+
 test("partial-estimate explanations use their own counts and human reasons, not all pending estimates", async () => {
     const row = provider({ estimated_fees_complete: false, estimated_fee_incomplete_orders: 2,
         estimated_fee_calculated_orders: 283, pending_orders: 283, estimated_fee_unidentified_orders: 1,
