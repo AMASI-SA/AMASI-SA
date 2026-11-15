@@ -203,3 +203,54 @@ def test_evidence_over_storage_budget_is_rejected_without_silent_truncation(monk
 def test_duplicate_financial_headers_are_not_silently_first_wins(provider, headers, duplicate):
     with pytest.raises(ValueError, match='statement_header_ambiguous'):
         normalize_statement(content(workbook(provider, headers=[*headers, duplicate])))
+
+
+def test_tabby_plain_note_footer_is_not_a_financial_event():
+    note = [None] * len(TABBY)
+    note[TABBY.index('Order Number')] = 'Note: fees are reported separately.'
+    result = normalize_statement(content(workbook(rows=[sale(), note])))
+    assert len(result['rows']) == 1
+    assert result['rows'][0]['event_type'] == 'sale'
+
+
+def test_tabby_note_text_with_financial_cells_remains_visible_for_review():
+    row = sale(**{'Order Number': 'Note: disputed adjustment', 'Type': None})
+    result = normalize_statement(content(workbook(rows=[row])))
+    assert len(result['rows']) == 1
+    assert 'statement_event_unsupported' in result['rows'][0]['blockers']
+
+
+@pytest.mark.parametrize('provider,variable,fixed,vat', [
+    ('tabby', '6.99', '1.00', '0.15'),
+    ('tamara', '4.20', '1.50', None),
+    ('salla', None, None, None),
+])
+def test_source_fee_components_stay_separate_from_tax_and_transfer(provider, variable, fixed, vat):
+    row = normalize_statement(content(workbook(provider)))['rows'][0]
+    assert row['fee_variable_net'] == variable
+    assert row['fee_fixed_net'] == fixed
+    assert row['fee_vat_rate'] == vat
+    assert row['blockers'] == []
+
+
+def test_missing_source_fixed_fee_is_not_inferred_as_zero_or_one():
+    row = sale(**{'Fixed Fee': None})
+    result = normalize_statement(content(workbook(rows=[row])))['rows'][0]
+    assert result['fee_fixed_net'] is None
+    assert result['fee_variable_net'] == '6.99'
+    assert 'statement_amount_missing' in result['blockers']
+
+
+@pytest.mark.parametrize('raw,expected', [('15%', '0.15'), (None, None), ('invalid', None), (15, None)])
+def test_vat_rate_preserves_explicit_units_without_inventing_a_rate(raw, expected):
+    row = normalize_statement(content(workbook(rows=[sale(**{'VAT Rate': raw})])))['rows'][0]
+    assert row['fee_vat_rate'] == expected
+    assert row['fee_total'] == '9.19' and row['blockers'] == []
+    assert bool(row['fee_component_issues']) == (expected is None)
+
+
+def test_tamara_declared_components_must_equal_native_total_fee():
+    wb = workbook('tamara')
+    wb.active.cell(4, TAMARA.index('Tamara Variable Fees') + 1, 10)
+    row = normalize_statement(content(wb))['rows'][0]
+    assert 'statement_fee_component_mismatch' in row['blockers']

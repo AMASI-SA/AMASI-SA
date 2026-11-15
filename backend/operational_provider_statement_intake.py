@@ -75,6 +75,27 @@ def _currency(value):
     return None
 
 
+def _vat_fraction(value, issues):
+    """Retain a declared fractional or explicit-percent rate, not an inferred tax."""
+    if value in (None, ''):
+        issues.append('statement_tax_rate_missing')
+        return None
+    try:
+        if isinstance(value, bool):
+            raise ValueError()
+        raw = str(value).strip()
+        percentage = raw.endswith('%')
+        number = Decimal(raw[:-1] if percentage else raw)
+        if percentage:
+            number /= 100
+        if not number.is_finite() or not ZERO <= number <= 1:
+            raise ValueError()
+        return format(number, 'f')
+    except (ValueError, InvalidOperation):
+        issues.append('statement_tax_rate_invalid')
+        return None
+
+
 def _day(value):
     if isinstance(value, datetime):
         return value.date().isoformat()
@@ -134,10 +155,17 @@ def _normalize_row(provider, raw, cols, position, *, statement_ref, salla_curren
     get = lambda field: _cell(raw, cols, field)
     blocks = []
     installments = None
+    variable_net = fixed_net = vat_rate = None
+    component_issues = []
     if provider == 'tabby':
         order = _reference(get('order_number'))
         payout = any(str(v or '').strip().lower().startswith('payout fee') for v in raw[:10])
         source_type = str(get('event_type') or '').strip().lower()
+        # Native exports end with a single-cell explanatory note. Skip only
+        # that non-financial footer; a note beside any event/amount stays visible.
+        if (not payout and not source_type and order and order.lower().startswith('note:')
+                and sum(_text(value) is not None for value in raw) == 1):
+            return None
         if not payout and not source_type and (not order or order.lower() in {'total', 'grand total', 'subtotal'}):
             return None
         kind = ('settlement_fee' if payout else 'sale' if source_type == 'sale'
@@ -150,6 +178,10 @@ def _normalize_row(provider, raw, cols, position, *, statement_ref, salla_curren
         account = _text(get('merchant_code'))
         if not payout:
             components = [_amount(get(k), blocks) for k in ('refundable_commission', 'non_refundable_commission', 'fixed_fee')]
+            fixed_net = components[2]
+            if all(value is not None for value in components[:2]):
+                variable_net = format(sum(map(Decimal, components[:2]), ZERO), '.2f')
+            vat_rate = _vat_fraction(get('vat_rate'), component_issues)
             if fee is not None and all(v is not None for v in components) and sum(map(Decimal, components), ZERO) != Decimal(fee):
                 blocks.append('statement_fee_component_mismatch')
         deduction = _amount(get('total_deduction'), blocks) if get('total_deduction') is not None else None
@@ -166,6 +198,13 @@ def _normalize_row(provider, raw, cols, position, *, statement_ref, salla_curren
                 else 'canceled_fee' if source_type in {'canceled', 'cancelled', 'cancel'} else 'unsupported')
         principal = '0.00' if kind == 'canceled_fee' else _amount(get('event_amount'), blocks)
         fee, tax, net = (_amount(get(k), blocks) for k in ('total_fees', 'vat', 'total_payable'))
+        variable_net = _amount(get('variable_fees'), component_issues)
+        fixed_net = _amount(get('fixed_fees'), component_issues)
+        # This native format gives VAT money, but no explicit VAT rate.
+        component_issues.append('statement_tax_rate_missing')
+        if (fee is not None and variable_net is not None and fixed_net is not None
+                and Decimal(variable_net) + Decimal(fixed_net) != Decimal(fee)):
+            blocks.append('statement_fee_component_mismatch')
         ccy = _currency(get('currency'))
         stamp = _day(get('event_date'))
         provider_order = _reference(get('tamara_order_id'))
@@ -195,6 +234,7 @@ def _normalize_row(provider, raw, cols, position, *, statement_ref, salla_curren
         ccy, stamp = salla_currency, None
         method = 'wallet_recharge' if wallet else normalize_payment_method(source_method)
         plan, account, provider_order, event_reference, deduction = None, None, None, None, None
+        component_issues.append('statement_fee_components_unavailable')
 
     if not ccy and kind != 'settlement_fee':
         blocks.append('statement_currency_missing')
@@ -223,6 +263,8 @@ def _normalize_row(provider, raw, cols, position, *, statement_ref, salla_curren
             blocks.append('statement_deduction_mismatch')
         if kind == 'sale' and (Decimal(fee) < 0 or Decimal(tax) < 0):
             blocks.append('statement_fee_sign_invalid')
+    if kind == 'sale' and any(value is not None and Decimal(value) < 0 for value in (variable_net, fixed_net)):
+        blocks.append('statement_fee_sign_invalid')
     result = {
         'id': f'row:{position}', 'source_row': position, 'provider': provider,
         'order_number': None if kind == 'settlement_fee' else order,
@@ -231,6 +273,8 @@ def _normalize_row(provider, raw, cols, position, *, statement_ref, salla_curren
         'date_precision': 'day' if stamp else None, 'native_currency': ccy,
         'principal_amount': format(abs(signed_principal), '.2f') if signed_principal is not None else None,
         'fee_net': fee, 'fee_vat': tax, 'fee_total': total, 'transferred_amount': net,
+        'fee_variable_net': variable_net, 'fee_fixed_net': fixed_net, 'fee_vat_rate': vat_rate,
+        'fee_component_issues': sorted(set(component_issues)),
         'payment_method': method, 'plan_id': plan, 'installments': installments, 'merchant_account': account,
         'statement_reference': statement_ref, 'blockers': sorted(set(blocks)),
     }
@@ -262,6 +306,15 @@ def normalize_statement(content: bytes) -> dict:
         else:
             parser = tabby if provider == 'tabby' else tamara
             header_index, cols = parser._find_header_row(raw_rows)
+            if provider == 'tamara':
+                # The native percentage header precedes the money header;
+                # a substring match would read 7% as a fee of 7 currency units.
+                cols = dict(cols)
+                cols.pop('variable_fees', None)
+                for index, label in enumerate(raw_rows[header_index]):
+                    if str(label or '').strip().lower() == 'tamara variable fees':
+                        cols['variable_fees'] = index
+                        break
             preamble = parser._read_preamble(raw_rows, header_index)
             ref, source_ccy = preamble.get('statement_id') or None, None
         _unique_headers(raw_rows[header_index], cols)

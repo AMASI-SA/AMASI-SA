@@ -8,9 +8,12 @@
   Mezan 2 operational, detect the format, replace provisional fees with matched
   actual evidence, compare employee payment/refund records, and show discrepancies
   for explicit review and confirmation.
-- Tabby unknown-plan provisional estimate is 9.1% including fee tax. It is not a
-  contractual rate, does not apply to other providers, and cannot resolve missing
-  payment or refund proof. Known valid pricing and actual evidence have priority.
+- Latest owner direction supersedes the interim rounded inclusive fallback:
+  calculate a source-derived **variable commission percentage before VAT**.
+  Exclude native fixed charges and payout fees from that percentage. Show the
+  fixed component and explicit or configured VAT separately. Each provider and
+  native currency keep their own source profile; unknown components remain
+  incomplete. Known valid pricing and actual evidence have priority.
 - Production changed: **no**. No release lease, live financial mutation, source
   refresh, bank posting, deployment or publication was performed for this task.
 - Issue #1006 has reached GitHub's 2,500-comment limit. This task document and the
@@ -123,3 +126,35 @@ replay, external duplicate proof, full-day cutoff containment, refreshing an
 approved refund, and preserving the old direct-debit compensation behavior.
 Then run the integrated backend/frontend checks and update the Draft PR. No
 merge, release intent, lease, live refresh or deployment has been performed.
+
+## Latest preserved checkpoint and active owner clarification
+
+The accepted-fee checkpoint is remotely preserved at
+`5db8012236a770581515293d8ca9fbca1a38a702` (tree
+`ae4d89594dcd00a835d121635dbc1ffc34f6557e`). The first save was stopped; after
+the owner said to continue, the GitHub connector preserved the exact verified
+tree and the local branch was aligned without discarding ongoing edits.
+
+The owner then clarified that the average percentage must exclude VAT, payout
+fees and the fixed per-transaction charge. The source variable and fixed amounts
+must be retained independently. An explicitly estimated fixed amount per sale
+can be derived from the source as a separate component when the plan is missing;
+it must never be presented as an actual fixed charge. Do not infer a variable
+percentage from a format that does not separate its fixed fees. This work is
+still being integrated, and supersedes the previous inclusive-average design.
+
+Root verified the original privately supplied workbook read-only with the
+strict intake. Its data stays outside Git. A plain single-cell note footer was
+incorrectly classified as an event; a failing synthetic regression established
+the defect, and the narrow correction now skips only nonfinancial note rows.
+New source-component tests also exposed the legacy Tamara header map reading the
+percentage column as fee money. The new operational reader now requires the
+exact money header, without changing the legacy importer.
+
+Fresh intake verification: **41 passed**, exit 0. The connected service owner
+has a synthetic authenticated XLSX upload/confirm/replay test and is completing
+native refund alias linkage, order-specific holds, metadata-only history and
+compact receipts. The frontend's updated focused suite most recently passed
+158 cases. Browser fixture build succeeded; local browser launch hit a runtime
+socket restriction, and a supported alternate UI channel is being checked.
+These are progress results, not final integrated acceptance or deployment.
