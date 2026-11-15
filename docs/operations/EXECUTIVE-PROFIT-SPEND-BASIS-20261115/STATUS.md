@@ -1,4 +1,4 @@
-# Current operational checkpoint — 2026-11-15 14:48:14 UTC
+# Current operational checkpoint — 2026-11-15 14:56:44 UTC
 
 The profit fix is merged as `a2a8218f858547f4d9d094d29998a93b09bf59ae`; its complete source, B, and actual-M gates passed. **The profit fix is not published or live-verified yet.** The pinned original operator remains staged and unexecuted. This task has not changed shared `/app`, created a lease, or published.
 
@@ -11,6 +11,8 @@ PR #1940 merged normally at 14:42:09 UTC as `d7facb0ff4e2e30edbabf012b3865155d59
 The Salla owner controls the successor release. Follow that reviewed descendant through its own A/B/M and original-workspace protocol instead of publishing the obsolete M. Do not run this task's staged M operator blindly. Quarantined rows do not automatically resume; bounded data recovery remains outside this profit task. Issue #1006 is full; this status, PR #1936 and `release-evidence.json` on the evidence branch are the recoverable continuation. Never merge the evidence branch into the frozen source release.
 
 Next: verify exact successor gates and publication evidence, then live executive net-profit visibility and canonical spend basis. Production changed by this task: no.
+
+The owner's successor operator at evidence commit `41438cc78b4cfe02ca30c9f7d35273d6fea3c59e` passed independent review. Operator SHA256 `21e6d2e65fd816e10c3033bd18669403095b09fe2d6ce9fe4985845773fa9fd4`, 11,434 bytes; expected package proof exactly `9d22c541d4697d7e23c0e8a21f09af2da69cf22010f7e4ec80dc18089136030e`. It pins original J to combined M, uses the official mutex/lease rejection/ff-only checks, preserves untracked files and prior evidence, and disables bytecode writes. The owner executes it. Root's read-only original HEAD check around 14:53 UTC still showed J; no source mutation by this task.
 
 Historical source checkpoint follows.
 

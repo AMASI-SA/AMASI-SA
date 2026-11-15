@@ -1,6 +1,6 @@
 {
   "task": "EXECUTIVE-PROFIT-SPEND-BASIS-20261115",
-  "updated_at_utc": "2026-11-15 14:48:14 UTC",
+  "updated_at_utc": "2026-11-15 14:56:44 UTC",
   "repository": "AMASI-SA/AMASI-SA",
   "pull_request": 1936,
   "source_branch": "codex/executive-profit-release-20261115",
@@ -442,7 +442,10 @@
       "actor": null,
       "deployment_git_sha": null
     },
-    "observation": "Root's own browser terminal status command returned after the preceding owner's verification lock released. No /app source change or owned lease."
+    "observation": "Root's own browser terminal status command returned after the preceding owner's verification lock released. No /app source change or owned lease.",
+    "source_observed_at_utc": "2026-11-15T14:53:00Z",
+    "head": "331b7917b3c01d064ee2a17affb4714f3a296331",
+    "root_action": "Read-only git rev-parse HEAD in own terminal; no /app source mutation."
   },
   "B_independent_artifact_review": {
     "passed": true,
@@ -1070,7 +1073,17 @@
         "head_sha": "d7facb0ff4e2e30edbabf012b3865155d5902a85"
       }
     ],
-    "M_all_gates_passed": true
+    "M_all_gates_passed": true,
+    "original_operator_review": {
+      "commit": "41438cc78b4cfe02ca30c9f7d35273d6fea3c59e",
+      "branch": "codex/salla-webhook-release-evidence-20261115",
+      "path": "docs/operations/SALLA-WEBHOOK-RECOVERY-20261115/operators/original_release_1940.py",
+      "operator_sha256": "21e6d2e65fd816e10c3033bd18669403095b09fe2d6ce9fe4985845773fa9fd4",
+      "bytes": 11434,
+      "package_proof_sha256": "9d22c541d4697d7e23c0e8a21f09af2da69cf22010f7e4ec80dc18089136030e",
+      "independent_review": "PASS; exact J-to-M pins, official operation mutex, no existing lease, clean source, pinned remote and ff-only, untracked/evidence/cache-quarantine preservation, no bytecode writes, no publish or data repair",
+      "owner_executes": true
+    }
   },
   "profit_code_blobs": {
     ".github/workflows/prod-dashboard-four-platform-spend-v1.yml": "f67a5092054a9c6b7798895c0b5cffd097cac4c6",
