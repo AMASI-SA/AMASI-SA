@@ -1,0 +1,18 @@
+{
+  "source_sha": "bf088a392c0c1d0b68397935175b626274a6cb8a",
+  "run_id": 43720453328,
+  "job_id": 132833188225,
+  "attempt": 2,
+  "artifact_id": 14164702622,
+  "sha256": "6306496ac2683177117e3718a71bfa4c9c3fd3f4f8467db41a9d236af9b56e66",
+  "cases": 4513,
+  "skipped": 0,
+  "failures": 0,
+  "errors": 0,
+  "previous_failure_case": [
+    {
+      "name": "test_four_thousand_distinct_diagnostics_avoid_repeated_whole_list_work",
+      "passed": true
+    }
+  ]
+}

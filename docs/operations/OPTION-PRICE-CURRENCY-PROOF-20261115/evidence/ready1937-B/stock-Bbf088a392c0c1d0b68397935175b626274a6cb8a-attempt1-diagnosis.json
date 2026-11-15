@@ -1,0 +1,52 @@
+{
+  "files": [
+    {
+      "file": "eligibility-backend.xml",
+      "cases": 4513,
+      "skipped": 0,
+      "failures": 1,
+      "errors": 0,
+      "failed_cases": [
+        {
+          "classname": "tests.test_operational_balance_issue_index",
+          "name": "test_four_thousand_distinct_diagnostics_avoid_repeated_whole_list_work",
+          "message": "AssertionError: (0.20772451000000558, 0.3235978860000017)\nassert 0.3235978860000017 < (0.20772451000000558 * 0.65)"
+        }
+      ]
+    }
+  ],
+  "required_suites": [],
+  "source_sha": "bf088a392c0c1d0b68397935175b626274a6cb8a",
+  "run_id": 43720453328,
+  "job_id": 132831092564,
+  "run_attempt": 1,
+  "artifact_id": 14164366480,
+  "artifact_sha256": "244272b89dd18312b39ce31cd39bf4910d719b55dcfcacfaa3690d01a1d338ff",
+  "comparison": {
+    "source_A": "35ff50421f4a0fcf47c30537f099d1199241d7c7",
+    "source_B": "bf088a392c0c1d0b68397935175b626274a6cb8a",
+    "identical_backend_tree": "b2be96a97dc63be59d960851ae42fd7a04988fcc",
+    "identical_github_tree": "03b8fd209cfea738da5ad013099461a454561bb2",
+    "test_blob": "12bd98a39b1d91b67feff7c592d828cef794f73d",
+    "index_blob": "872611390c2b4ae3cee4a84cd55e7aac9a9c9ab5",
+    "balance_sources_blob": "56b7a4edcb02fc44f12c5386bd4ac48c4a5de618",
+    "checkpoint_blob": "5798c4cece3a670c9a30fedb541230703c960696",
+    "prior_source": "8c11053b602f8f56a1facbaee09779f2896b0ada",
+    "prior_run": 43716272025,
+    "prior_failure_job": 132818382359,
+    "prior_attempt1_conclusion": "failure",
+    "prior_attempt2_conclusion": "success",
+    "prior_selected_blobs_identical": true,
+    "failing_test": "tests/test_operational_balance_issue_index.py::test_four_thousand_distinct_diagnostics_avoid_repeated_whole_list_work",
+    "assertion": "new_cpu < old_cpu * 0.65",
+    "B_old_cpu": 0.20772451000000558,
+    "B_new_cpu": 0.3235978860000017,
+    "prior_old_cpu": 0.34302137099999186,
+    "prior_new_cpu": 0.34725050900000554,
+    "output_equality_assertion_before_ratio_passed": true,
+    "diagnostic_limit": "The logs establish a recurring CPU-ratio benchmark failure with identical tested files. They do not identify a specific GC, threading, or host cause.",
+    "prior_attempt2_job_id": 132820787654,
+    "prior_attempt2_passed_cases": 4513,
+    "prior_attempt2_no_skips_gate_passed": true
+  }
+}

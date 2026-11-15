@@ -1,0 +1,53 @@
+{
+  "deployment_git_sha": "bf088a392c0c1d0b68397935175b626274a6cb8a",
+  "generated_member_names_bytes_modes_identical": true,
+  "hosts": {
+    "20.20.2": {
+      "backend_package_file_count": 1221,
+      "backend_package_tree_sha256": "f851729dd62309892fb69c7b357e320942de236c20fe7c09b4447c46d50f1b0b",
+      "directory_count": 3,
+      "directory_mode": "0755",
+      "file_count": 293,
+      "file_mode": "0644",
+      "frontend_package_file_count": 1472,
+      "frontend_package_tree_sha256": "2cb49015eabc0027d447a39e66b720936dc018345453d5b476b1aef251e51a17",
+      "identity_sha256": "7a92b5e39ccb1dc630e6c2af92c79067c4ef788b54fb505238c78e944d78a3e9",
+      "member_count": 296,
+      "metadata_sha256": "aa5eddb321577c1c6c7fbc5a0dcd4a09461ef648380e1d7c6df70ac525c44e41",
+      "official_frontend_and_reproducibility_parsers": "passed",
+      "official_runtime_identity_validator": "passed",
+      "package_boundary_path": "/workspace/scratch/5ce5f8c6856e/ready-b-host-audit-current-source/host-20.20.2/mezan-package-boundary-v5.json",
+      "package_boundary_sha256": "944261ddfd6a423de27d2bff328bc3c82287881c0ddefe5e0977ea7fd7c6ed86",
+      "reproducibility_proof_sha256": "b8ced783c1b9cf65bf931476ea8d86fc2bca1892f0b28c65ad9817ce6a7e255b",
+      "tar_bytes": 2979419,
+      "tar_sha256": "8b1a5a3f2ecbfcca4e73cf12edc52bc05f9647737c0e1ffbb6de1e83d5d2de69"
+    },
+    "24.19.0": {
+      "backend_package_file_count": 1221,
+      "backend_package_tree_sha256": "f851729dd62309892fb69c7b357e320942de236c20fe7c09b4447c46d50f1b0b",
+      "directory_count": 3,
+      "directory_mode": "0755",
+      "file_count": 293,
+      "file_mode": "0644",
+      "frontend_package_file_count": 1472,
+      "frontend_package_tree_sha256": "2cb49015eabc0027d447a39e66b720936dc018345453d5b476b1aef251e51a17",
+      "identity_sha256": "7a92b5e39ccb1dc630e6c2af92c79067c4ef788b54fb505238c78e944d78a3e9",
+      "member_count": 296,
+      "metadata_sha256": "aa5eddb321577c1c6c7fbc5a0dcd4a09461ef648380e1d7c6df70ac525c44e41",
+      "official_frontend_and_reproducibility_parsers": "passed",
+      "official_runtime_identity_validator": "passed",
+      "package_boundary_path": "/workspace/scratch/5ce5f8c6856e/ready-b-host-audit-current-source/host-24.19.0/mezan-package-boundary-v5.json",
+      "package_boundary_sha256": "944261ddfd6a423de27d2bff328bc3c82287881c0ddefe5e0977ea7fd7c6ed86",
+      "reproducibility_proof_sha256": "b8ced783c1b9cf65bf931476ea8d86fc2bca1892f0b28c65ad9817ce6a7e255b",
+      "tar_bytes": 2979420,
+      "tar_sha256": "2930a19b3d6ae1e972d1e888b5725aa72a631750a3ebd3c76c456259426229d4"
+    }
+  },
+  "intent_sha256": "da8f8da015d25f42beecfa96d59d2e3bcd2157e3158e4cea5624d9d3bae0e755",
+  "package_boundary_bytes_identical": true,
+  "release_id": "rg5-ffa2c17861d44906353f8ff3818bc42ad16660da73d670ff1398e463e4b6fc67",
+  "retained_archive_directory": "/workspace/scratch/5ce5f8c6856e/ready-b-host-audit-current-source",
+  "source_base_git_sha": "331b7917b3c01d064ee2a17affb4714f3a296331",
+  "source_git_sha": "35ff50421f4a0fcf47c30537f099d1199241d7c7",
+  "verdict": "passed"
+}

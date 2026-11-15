@@ -1,0 +1,17 @@
+{
+  "ok": true,
+  "source": "35ff50421f4a0fcf47c30537f099d1199241d7c7",
+  "B": "bf088a392c0c1d0b68397935175b626274a6cb8a",
+  "generated_file_count": 293,
+  "all_file_bytes_and_modes_identical": true,
+  "official_backend_identity_valid": true,
+  "official_frontend_build_and_proof_valid": true,
+  "package_proof_sha256": "944261ddfd6a423de27d2bff328bc3c82287881c0ddefe5e0977ea7fd7c6ed86",
+  "runtime_id": "rg5-ffa2c17861d44906353f8ff3818bc42ad16660da73d670ff1398e463e4b6fc67",
+  "artifact_ids": [
+    14164113892,
+    14164233031,
+    14164436871,
+    14164576518
+  ]
+}

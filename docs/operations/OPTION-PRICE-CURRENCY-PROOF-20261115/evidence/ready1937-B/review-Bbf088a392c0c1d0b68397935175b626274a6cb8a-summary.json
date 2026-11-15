@@ -1,0 +1,88 @@
+{
+  "files": [
+    {
+      "file": "review-acceptance-guard.xml",
+      "cases": 1,
+      "skipped": 0,
+      "failures": 0,
+      "errors": 0,
+      "failed_cases": []
+    },
+    {
+      "file": "review-completion.xml",
+      "cases": 828,
+      "skipped": 0,
+      "failures": 0,
+      "errors": 0,
+      "failed_cases": []
+    },
+    {
+      "file": "android-operations.xml",
+      "cases": 329,
+      "skipped": 0,
+      "failures": 0,
+      "errors": 0,
+      "failed_cases": []
+    },
+    {
+      "file": "source-snapshot.xml",
+      "cases": 124,
+      "skipped": 0,
+      "failures": 0,
+      "errors": 0,
+      "failed_cases": []
+    }
+  ],
+  "required_suites": [
+    {
+      "suite": "test_component_source_detail_recovery.SettledDetailProofTests",
+      "cases": 19,
+      "skipped": 0,
+      "failures": 0,
+      "errors": 0,
+      "test_names": [
+        "test_accepted_clock_and_settled_expiry_use_explicit_semantic_projections",
+        "test_canonical_financial_facts_are_checked_independently_of_raw_source",
+        "test_canonical_item_identity_and_customization_are_not_replaced_from_raw",
+        "test_catalog_prices_cannot_cross_between_free_and_nonzero",
+        "test_catalog_prices_require_precise_numeric_currency_envelopes",
+        "test_catalog_reference_drift_does_not_relax_the_option_exchange_proof",
+        "test_contract_money_changes_are_rejected_at_one_native_minor_unit",
+        "test_display_defaults_and_image_aliases_are_narrowly_bound",
+        "test_empty_delivery_enrichment_never_hides_content_or_type_changes",
+        "test_enrichment_can_be_proven_when_catalog_prices_remain_approved",
+        "test_existing_source_balance_display_projection_remains_supported",
+        "test_inactive_expiry_cannot_be_inferred_from_nonzero_or_boolean_values",
+        "test_mapper_fallbacks_do_not_replace_explicit_approved_line_money",
+        "test_payment_aliases_must_equal_the_settled_native_evidence",
+        "test_payment_waiting_state_or_open_collection_link_is_not_inactive_expiry",
+        "test_product_selection_customization_and_unknown_fields_remain_guarded",
+        "test_settled_detail_enrichment_preserves_the_approved_contract_without_writes",
+        "test_settled_dto_cannot_hide_native_refund_or_balance_conflicts",
+        "test_source_clock_requires_its_exact_shape_and_accepted_instant"
+      ]
+    },
+    {
+      "suite": "test_component_option_currency_integration.OptionPriceCurrencyTests",
+      "cases": 7,
+      "skipped": 0,
+      "failures": 0,
+      "errors": 0,
+      "test_names": [
+        "test_cancel_or_authoritative_refresh_requirement_cannot_clear_pending",
+        "test_existing_pending_dry_run_is_read_only_then_only_received_pieces_become_eligible",
+        "test_existing_zero_currency_lineage_can_advance_to_paid_currency_proof",
+        "test_financial_choice_quantity_fx_or_metadata_change_stays_pending",
+        "test_refresh_proves_three_paid_seven_zero_options_and_preserves_business_state",
+        "test_repeated_currency_switches_keep_original_approval_and_do_not_repeat_work",
+        "test_stale_revision_and_superseded_approval_cannot_clear_pending"
+      ]
+    }
+  ],
+  "source_sha": "bf088a392c0c1d0b68397935175b626274a6cb8a",
+  "tree_sha": "c9352dd3369a61d75f28f9959cf398647a86e9b0",
+  "run_id": 43720453342,
+  "job_id": 132831092432,
+  "artifact_id": 14164706968,
+  "artifact_sha256": "3ca07f39381ef344cf4c6e488287cc37e7c2127de4ad8bc9a2f061f96789360f"
+}

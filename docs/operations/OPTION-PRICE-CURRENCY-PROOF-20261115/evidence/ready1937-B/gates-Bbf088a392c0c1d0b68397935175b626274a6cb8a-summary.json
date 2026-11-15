@@ -1,0 +1,214 @@
+{
+  "observed_at": "2026-11-15 13:57:59 UTC",
+  "head_sha": "bf088a392c0c1d0b68397935175b626274a6cb8a",
+  "tree_sha": "c9352dd3369a61d75f28f9959cf398647a86e9b0",
+  "pr": 1937,
+  "runs": [
+    {
+      "id": 43720453431,
+      "name": "TikTok Creator Release Candidate",
+      "head_sha": "bf088a392c0c1d0b68397935175b626274a6cb8a",
+      "status": "completed",
+      "conclusion": "skipped",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43720453431"
+    },
+    {
+      "id": 43720453321,
+      "name": "Snapchat Direct Active Publication",
+      "head_sha": "bf088a392c0c1d0b68397935175b626274a6cb8a",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43720453321"
+    },
+    {
+      "id": 43720453484,
+      "name": "Snapchat Settings Management V2",
+      "head_sha": "bf088a392c0c1d0b68397935175b626274a6cb8a",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43720453484"
+    },
+    {
+      "id": 43720453292,
+      "name": "Qoyod Payment Freshness",
+      "head_sha": "bf088a392c0c1d0b68397935175b626274a6cb8a",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43720453292"
+    },
+    {
+      "id": 43720453308,
+      "name": "Build20 component category contract (no deployment)",
+      "head_sha": "bf088a392c0c1d0b68397935175b626274a6cb8a",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43720453308"
+    },
+    {
+      "id": 43720453306,
+      "name": "Security Gate",
+      "head_sha": "bf088a392c0c1d0b68397935175b626274a6cb8a",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43720453306"
+    },
+    {
+      "id": 43720453281,
+      "name": "Mezan Release Readiness",
+      "head_sha": "bf088a392c0c1d0b68397935175b626274a6cb8a",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43720453281"
+    },
+    {
+      "id": 43720453419,
+      "name": "G47 Focused Integration",
+      "head_sha": "bf088a392c0c1d0b68397935175b626274a6cb8a",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43720453419"
+    },
+    {
+      "id": 43720453280,
+      "name": "Operational Balance Web",
+      "head_sha": "bf088a392c0c1d0b68397935175b626274a6cb8a",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43720453280"
+    },
+    {
+      "id": 43720453293,
+      "name": "CodeQL",
+      "head_sha": "bf088a392c0c1d0b68397935175b626274a6cb8a",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43720453293"
+    },
+    {
+      "id": 43720453342,
+      "name": "Review Completion Resumable",
+      "head_sha": "bf088a392c0c1d0b68397935175b626274a6cb8a",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43720453342"
+    },
+    {
+      "id": 43720453328,
+      "name": "Operational Stock Eligibility",
+      "head_sha": "bf088a392c0c1d0b68397935175b626274a6cb8a",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 2,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43720453328"
+    }
+  ],
+  "required_success_count": 11,
+  "optional_skipped_workflow": {
+    "id": 43720453431,
+    "condition": "github.head_ref == 'codex/tiktok-content-ci-20261011'"
+  },
+  "review": {
+    "run": 43720453342,
+    "job": 132831092432,
+    "artifact": 14164706968,
+    "sha256": "3ca07f39381ef344cf4c6e488287cc37e7c2127de4ad8bc9a2f061f96789360f",
+    "case_counts": [
+      828,
+      329,
+      124,
+      1
+    ],
+    "required_detail_cases": 19,
+    "required_option_mongo_cases": 7,
+    "skips": 0,
+    "failures": 0,
+    "errors": 0,
+    "verification": "Finished job log plus digest-verified retained XML parsed independently"
+  },
+  "stock": {
+    "run": 43720453328,
+    "attempt1": {
+      "job": 132831092564,
+      "artifact": 14164366480,
+      "sha256": "244272b89dd18312b39ce31cd39bf4910d719b55dcfcacfaa3690d01a1d338ff",
+      "cases": 4513,
+      "failures": 1,
+      "skips": 0,
+      "errors": 0
+    },
+    "attempt2": {
+      "job": 132833188225,
+      "artifact": 14164702622,
+      "sha256": "6306496ac2683177117e3718a71bfa4c9c3fd3f4f8467db41a9d236af9b56e66",
+      "cases": 4513,
+      "failures": 0,
+      "skips": 0,
+      "errors": 0
+    },
+    "rerun_requested_by": "root",
+    "source_unchanged": true
+  },
+  "other_log_counts": {
+    "G47": {
+      "salla": 228,
+      "g47": 331,
+      "cost": 436,
+      "ui": 140,
+      "skips": 0
+    },
+    "operational_balance": {
+      "backend": 4799,
+      "shipping_contracts": 16,
+      "worker": 4,
+      "frontend": 783,
+      "browser": 14
+    },
+    "Build20": 64,
+    "Qoyod": 164,
+    "release_preflight": 156,
+    "frontend_build_contracts": 57,
+    "host_engine_contracts": [
+      10,
+      10
+    ],
+    "security": {
+      "frontend_contracts": 50,
+      "braces_compatibility": 764,
+      "frontend": 3802,
+      "backend_runs": [
+        88,
+        26,
+        83,
+        216,
+        57
+      ],
+      "deselected": 1
+    }
+  },
+  "identity": {
+    "merge_sha": "e604d2199c82550e6f0f1a91882fe7ac642372ec",
+    "merge_tree_equals_B": true,
+    "pr_observed": {
+      "head": "bf088a392c0c1d0b68397935175b626274a6cb8a",
+      "base": "331b7917b3c01d064ee2a17affb4714f3a296331",
+      "state": "open",
+      "draft": true,
+      "merge": "e604d2199c82550e6f0f1a91882fe7ac642372ec"
+    }
+  },
+  "limitations": [
+    "Host rehearsal artifact byte audit belongs to the separately assigned auditor; this report confirms its CI job success only.",
+    "The initial Stock CPU-ratio failure is preserved and is not treated as a passing attempt."
+  ]
+}
