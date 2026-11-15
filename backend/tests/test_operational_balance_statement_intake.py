@@ -71,6 +71,7 @@ def test_auto_detects_the_actual_columns_and_preserves_exact_fee_evidence(provid
     assert row['principal_amount'] == ('60.00' if provider == 'tamara' else '100.00')
     assert row['fee_total'] == {'tabby': '9.19', 'tamara': '6.56', 'salla': '3.45'}[provider]
     assert result['totals']['fee_total'] == row['fee_total']
+    assert row['installments'] == (4 if provider == 'tamara' else None)
 
 
 def test_tabby_plan_is_source_label_and_payout_is_never_a_customer_payment():
@@ -127,6 +128,9 @@ def test_salla_wallet_deduction_is_separate_from_customer_refund():
     ({'Total Deduction': 8}, 'statement_deduction_mismatch'),
     ({'Refundable Commission': 5}, 'statement_fee_component_mismatch'),
     ({'Type': 'chargeback'}, 'statement_event_unsupported'),
+    ({'Sale/Refund Date': 'not-a-date'}, 'statement_event_date_invalid'),
+    ({'Sale/Refund Date': None}, 'statement_event_date_missing'),
+    ({'Order Number': None}, 'statement_order_reference_missing'),
 ])
 def test_incomplete_or_conflicting_rows_are_reviewable_never_zero_filled(change, code):
     row = normalize_statement(content(workbook(rows=[sale(**change)])))['rows'][0]
@@ -139,6 +143,12 @@ def test_native_non_sar_currency_is_preserved_not_relabelled():
     result = normalize_statement(content(workbook(rows=[sale(Currency='AED')])))
     assert result['currency'] == 'AED'
     assert result['rows'][0]['native_currency'] == 'AED'
+
+
+def test_non_numeric_merchant_reference_is_retained_for_exact_owner_matching():
+    result = normalize_statement(content(workbook(rows=[sale(**{'Order Number': 'SYNTHETIC-A'})])))
+    assert result['rows'][0]['order_number'] == 'SYNTHETIC-A'
+    assert result['rows'][0]['blockers'] == []
 
 
 def test_salla_currency_is_not_assumed_when_headers_do_not_name_it():
@@ -178,3 +188,18 @@ def test_invalid_workbook_and_unknown_format_have_safe_errors():
     wb.active.append(['unrelated'])
     with pytest.raises(ValueError, match='statement_provider_unknown'):
         normalize_statement(content(wb))
+
+
+def test_evidence_over_storage_budget_is_rejected_without_silent_truncation(monkeypatch):
+    monkeypatch.setattr('operational_provider_statement_intake.MAX_EVIDENCE_BYTES', 100)
+    with pytest.raises(ValueError, match='statement_evidence_size_limit'):
+        normalize_statement(content(workbook()))
+
+
+@pytest.mark.parametrize('provider,headers,duplicate', [
+    ('tabby', TABBY, 'Currency'), ('tabby', TABBY, 'Total Fee'),
+    ('tamara', TAMARA, 'Merchant Order ID'), ('salla', SALLA, 'الضريبة'),
+])
+def test_duplicate_financial_headers_are_not_silently_first_wins(provider, headers, duplicate):
+    with pytest.raises(ValueError, match='statement_header_ambiguous'):
+        normalize_statement(content(workbook(provider, headers=[*headers, duplicate])))

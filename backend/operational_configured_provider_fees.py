@@ -8,6 +8,7 @@ from bnpl.settlements_service import _capture_fee_components
 from excel_parser import normalize_name, resolve_payment_setting
 from operational_fee_methods import fee_rail
 from operational_provider_fees import provider_projection
+from operational_provider_statement_fees import TABBY_AVERAGE_INCLUSIVE_RATE
 from payment_methods import KNOWN_PAYMENT_SUB_KEYS, normalize_payment_method
 
 CENT = Decimal(".01")
@@ -160,12 +161,65 @@ def estimate_fee(settings, provider, gross, *, method=None, refunded=ZERO, polic
     return max(total, ZERO)
 
 
+def estimate_fee_details(settings, provider, gross, *, paid_proven=False,
+                         native_currency=None, started_at=None, **kwargs):
+    """Keep the approved, VAT-inclusive missing-plan average visibly estimated."""
+    fee = estimate_fee(settings, provider, gross, **kwargs)
+    result = {"fee": fee, "basis": "plan_estimate" if fee is not None else "unavailable"}
+    payment = kwargs.get("payment") or {}
+    if (fee is not None or provider != "tabby" or not paid_proven
+            or native_currency != "SAR" or kwargs.get("currency", "SAR") != "SAR"
+            or payment.get("plan_id") not in (None, "") or payment.get("fee_plan_issue")
+            or number(gross) is None or number(gross) <= ZERO
+            or number(kwargs.get("refunded", ZERO)) != ZERO
+            or payment.get("refunds") or kwargs.get("refunds") or payment.get("cancellations")
+            or number(payment.get("cancelled", ZERO)) != ZERO):
+        return result
+    try:
+        created = datetime.fromisoformat(str(kwargs.get("created_at") or "").replace("Z", "+00:00"))
+        start = datetime.fromisoformat(str(started_at or "").replace("Z", "+00:00"))
+        as_of = datetime.fromisoformat(str(kwargs.get("as_of") or "").replace("Z", "+00:00"))
+        if any(value.tzinfo is None for value in (created, start, as_of)) or not start < created <= as_of:
+            return result
+        projection_args = {key: value for key, value in kwargs.items() if key != "policies"}
+        policies = kwargs.get("policies", ())
+        try:
+            configured_projection(policies, provider, number(gross), **projection_args)
+        except ValueError as exc:
+            if str(exc) != "provider_payment_plan_required":
+                return result
+        else:
+            return result
+        # A missing-plan error precedes whole-window and tariff validation.
+        # Every viable plan must independently pass those gates first.
+        dates = [_policy_day(row["captured_at"]) for row in payment.get("captures", [])]
+        if not dates:
+            dates = [_policy_day(created)]
+            if kwargs.get("observed_at"):
+                dates.append(_policy_day(kwargs["observed_at"]))
+        last = max(dates)
+        plans = {str(row["plan_id"]) for row in policies
+                 if row.get("provider") == "tabby" and row.get("currency") == "SAR"
+                 and row.get("status") == "active" and row.get("event_type", "capture") == "capture"
+                 and row.get("plan_id") not in (None, "")
+                 and _policy_day(row["effective_from"]) <= last
+                 and (not row.get("effective_to") or last <= _policy_day(row["effective_to"]))}
+        if not plans:
+            return result
+        for plan in sorted(plans):
+            configured_projection(policies, provider, number(gross),
+                **{**projection_args, "payment": {**payment, "plan_id": plan}})
+    except (ValueError, TypeError, KeyError, InvalidOperation, OverflowError):
+        return result
+    return {"fee": cash(number(gross) * TABBY_AVERAGE_INCLUSIVE_RATE), "basis": "average_estimate"}
+
+
 def refresh_provider_fee_inputs(state, sources):
     """Retain report inputs independently of whether a paid claim passed posting gates."""
     if "provider_fee_settings" not in sources:
         return
-    previous = state["engine"].get("provider_fee_inputs", {}).get("orders", {})
-    orders = deepcopy(previous)
+    previous = state["engine"].get("provider_fee_inputs", {})
+    orders = deepcopy(previous.get("orders", {}))
     for order in sources.get("orders", []):
         payment = order.get("payment") or {}
         valuation = order.get("customer_payment_sar") or {}
@@ -179,4 +233,5 @@ def refresh_provider_fee_inputs(state, sources):
         "settings": deepcopy(sources["provider_fee_settings"]), "orders": orders,
         "policies": deepcopy(sources.get("fee_policies", [])),
         "source_mode": sources.get("provider_fee_source_mode", "legacy_settings"),
+        **{key: deepcopy(previous[key]) for key in ("statement_events", "statement_evidence_as_of") if key in previous},
     }

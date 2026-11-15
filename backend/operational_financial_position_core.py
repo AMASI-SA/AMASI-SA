@@ -311,14 +311,42 @@ def _cost_tables(exposure, currency, obligations):
 
 
 def _provider_table(rows, issues):
+    from datetime import datetime, timedelta, timezone
+
+    basis_labels = {"actual_statement": "كشف مطابق", "actual_settlement": "تسوية مسجلة",
+                    "plan_estimate": "تعرفة محفوظة", "average_estimate": "متوسط تابي 9.1% شامل الضريبة"}
+    status_labels = {"confirmed": "فعلية مثبتة", "estimated": "تقديرية",
+                     "mixed": "فعلية وتقديرية", "review": "تحتاج مراجعة", "unavailable": "غير متاحة"}
+
+    def fee_metadata(row):
+        basis = " + ".join(basis_labels[key] for key in row.get("fee_basis_sources", []) if key in basis_labels)
+        basis = basis or basis_labels.get(row.get("fee_basis"), "غير متاح")
+        status = status_labels.get(row.get("fee_status"), "غير متاحة")
+        count = row.get("average_estimated_orders", 0)
+        date_label = "—"
+        try:
+            stamp = datetime.fromisoformat(str(row.get("statement_evidence_as_of") or "").replace("Z", "+00:00"))
+            if stamp.tzinfo is not None:
+                date_label = stamp.astimezone(timezone(timedelta(hours=3))).strftime("%Y-%m-%d %H:%M") + " (الرياض)"
+        except ValueError:
+            pass
+        return {"fee_status_label": status, "fee_basis_label": basis,
+                "fee_description": status + "؛ " + basis + (f"؛ طلبات المتوسط: {count}" if count else ""),
+                "actual_fees": _money((_number(row.get("actual_statement_fees")) or ZERO)
+                                      + (_number(row.get("actual_settlement_fees")) or ZERO)),
+                "statement_evidence_date_label": date_label}
+
     columns = [_column("name", "المنصة", "text"), _column("orders", "طلبات مدفوعة مثبتة", "count"),
                _column("gross", "المدفوع المثبت"), _column("fees", "العمولات المحتسبة مع ضريبتها"),
+               _column("actual_fees", "منها عمولات فعلية"), _column("estimated_fees", "منها عمولات تقديرية"),
+               _column("fee_description", "حالة العمولة ومصدرها", "text"),
+               _column("statement_evidence_date_label", "آخر قبول لدليل الرسوم", "text"),
                _column("refunded", "الاستردادات"), _column("net", "صافي محتسب متبقٍ لنا", role="receivable"),
                _column("pending_orders", "طلبات تحتاج مراجعة", "exceptions")]
     complete = all(row["complete"] for row in rows) and not any(
         str(issue.get("source_id", "")).startswith("provider:") or str(issue.get("code", "")).startswith("provider_")
         for issue in issues)
-    displayed = [{"id": row["provider"], **row,
+    displayed = [{"id": row["provider"], **row, **fee_metadata(row),
                   "orders": row.get("paid_orders", row.get("confirmed_orders", row["orders"])),
                   **{field: row.get("known_" + field, row.get(field)) for field in ("gross", "fees", "net")}}
                  for row in rows]
@@ -327,12 +355,14 @@ def _provider_table(rows, issues):
                   totals={"orders": (sum(row["orders"] for row in displayed if row["orders"] is not None)
                                      if not displayed or any(row["orders"] is not None for row in displayed) else None),
                           "pending_orders": len({item["order_id"] for row in rows for item in row.get("pending_order_details", [])})
-                              + sum(row.get("unidentified_pending_orders", 0) for row in rows)},
-                  notes=["الصافي يشمل الافتتاحي المدخل والتسويات المثبتة. تقدير العمولة يخص المدفوع بعد البداية فقط، والعمولة الفعلية تحل محل تقدير الجزء المسوّى.",
-                         "الصافي المحتسب يجمع المبالغ التي اكتمل مدفوعها ورسومها؛ الطلبات المعلقة لا تلغي هذا الجزء المثبت. اضغط عدد الطلبات لمراجعة الأرقام والأسباب.",
+                              + sum(row.get("unidentified_pending_orders", 0) for row in rows),
+                          "fee_description": "", "statement_evidence_date_label": ""},
+                  notes=["الصافي يشمل الافتتاحي المدخل والتسويات المثبتة. العمولة الفعلية تحل محل تقدير الجزء المطابق دون جمعهما مرتين.",
+                         "العمولات المحتسبة قد تجمع الفعلية والتقديرية؛ متوسط تابي 9.1% شامل الضريبة يخص المدفوع المثبت بعد البداية عند غياب الخطة فقط، ويبقى تقديريًا حتى مطابقته.",
+                         "تاريخ قبول دليل الرسوم مستقل عن تاريخ لقطة الأرصدة وتقرير الربح المحفوظ. اضغط عدد طلبات المراجعة لعرض الأرقام والأسباب.",
                          "المدفوع للمنصة مستقل عن وصول حوالتها إلى البنك؛ التحويل البنكي يثبت بتسوية منفصلة."])
     if not complete and not rows:
-        result["totals"].update(gross=None, fees=None, refunded=None, net=None)
+        result["totals"].update(gross=None, fees=None, actual_fees=None, estimated_fees=None, refunded=None, net=None)
     elif not complete:
         result["totals"].update({key: _money(_known_sum(row.get(key) for row in displayed))
                                 for key in ("gross", "fees", "refunded", "net")})

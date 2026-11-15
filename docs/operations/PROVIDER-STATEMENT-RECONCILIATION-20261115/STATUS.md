@@ -78,3 +78,48 @@ resolution/peer warnings. No lockfile or application dependency was changed.
 
 No customer records, uploaded merchant statements, credentials, environment
 values, or real financial examples are included in this branch or its tests.
+
+## Verified milestone: accepted fee projection
+
+The first remotely preserved checkpoint is
+`7ffde331d6c3b0f5417d91cd3adcf017b42e8645`, with Draft PR
+https://github.com/AMASI-SA/AMASI-SA/pull/1938. Normal Git push did not have
+credentials; the installed GitHub connector preserved the exact local tree,
+which was verified equal before aligning the local task HEAD. No credential
+probing or production change was used.
+
+The next checkpoint adds the fee-only accepted-event bridge, explicit Tabby
+average provenance and native-currency guard, retained evidence on refresh, and
+actual/estimated provider-table breakdown. Actual fees replace the same covered
+estimate. Duplicate, stale, partial-settlement and fixed-fee overlap stay under
+review instead of being counted twice. The provider-specific evidence timestamp
+does not change the saved source snapshot or profit period.
+
+Root independently reran the combined intake/fee/presentation gate (exit 0):
+
+```text
+PYTHONPATH=backend:backend/tests PYTHON_DOTENV_DISABLED=1 \
+  <isolated-python> -B -m pytest --noconftest --asyncio-mode=auto -q \
+  backend/tests/test_operational_balance_statement_intake.py \
+  backend/tests/test_operational_balance_statement_fees.py \
+  backend/tests/test_operational_balance_configured_provider_fees.py \
+  backend/tests/test_operational_balance_provider_known_subtotals.py \
+  backend/tests/test_operational_balance_financial_position.py --tb=short
+147 passed
+```
+
+The intake now has 30 synthetic cases, including ambiguous duplicate financial
+headers, retained missing order references, native installment metadata and the
+normalized-evidence storage budget. The dedicated fee suite has 34 cases.
+
+Frontend's first affected gate reports 148 tests passed across four suites. The
+frontend owner is completing the final period-bound request contract and a
+small desktop/mobile browser fixture. The reconciliation owner is implementing
+the narrow explicit missing-refund confirmation and its authenticated API
+contracts. Those ongoing slices are not claimed complete by this checkpoint.
+
+Next: finish and independently verify the missing-event writer, including
+replay, external duplicate proof, full-day cutoff containment, refreshing an
+approved refund, and preserving the old direct-debit compensation behavior.
+Then run the integrated backend/frontend checks and update the Draft PR. No
+merge, release intent, lease, live refresh or deployment has been performed.

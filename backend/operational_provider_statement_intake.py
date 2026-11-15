@@ -22,6 +22,7 @@ SCHEMA = 'operational_statement_v1'
 MAX_FILE_BYTES = 10 * 1024 * 1024
 MAX_ROWS = 10000
 MAX_SHEETS = 20
+MAX_EVIDENCE_BYTES = 8 * 1024 * 1024
 CENT = Decimal('.01')
 ZERO = Decimal(0)
 
@@ -95,6 +96,15 @@ def _cell(row, cols, field):
     return row[index] if index is not None and index < len(row) else None
 
 
+def _unique_headers(row, cols):
+    # Legacy maps select the first matching display column. Financial evidence
+    # cannot silently choose between two copies of the same source column.
+    labels = [salla._normalize_ar(re.sub(r'\s+', ' ', str(value or '').strip())).lower() for value in row]
+    counts = Counter(label for label in labels if label)
+    if any(counts[labels[index]] != 1 for index in cols.values()):
+        raise ValueError('statement_header_ambiguous')
+
+
 def _sniff(workbook):
     found = []
     if len(workbook.worksheets) > MAX_SHEETS:
@@ -123,12 +133,13 @@ def _sniff(workbook):
 def _normalize_row(provider, raw, cols, position, *, statement_ref, salla_currency=None):
     get = lambda field: _cell(raw, cols, field)
     blocks = []
+    installments = None
     if provider == 'tabby':
         order = _reference(get('order_number'))
         payout = any(str(v or '').strip().lower().startswith('payout fee') for v in raw[:10])
-        if not payout and (not order or not order.isdigit()):
-            return None
         source_type = str(get('event_type') or '').strip().lower()
+        if not payout and not source_type and (not order or order.lower() in {'total', 'grand total', 'subtotal'}):
+            return None
         kind = ('settlement_fee' if payout else 'sale' if source_type == 'sale'
                 else 'refund' if source_type in {'refund', 'partial refund'} else 'unsupported')
         principal = '0.00' if payout else _amount(get('order_amount'), blocks)
@@ -146,9 +157,11 @@ def _normalize_row(provider, raw, cols, position, *, statement_ref, salla_curren
             blocks.append('statement_deduction_missing')
     elif provider == 'tamara':
         order = _reference(get('merchant_order_id'))
-        if not order or order.lower() in {'total', 'credit total', 'subtotal'}:
+        if order and order.lower() in {'total', 'credit total', 'subtotal'}:
             return None
         source_type = str(get('event') or '').strip().lower()
+        if not order and not source_type and not get('tamara_order_id'):
+            return None
         kind = ('sale' if source_type in {'captured', 'capture'} else 'refund' if source_type in {'refunded', 'refund'}
                 else 'canceled_fee' if source_type in {'canceled', 'cancelled', 'cancel'} else 'unsupported')
         principal = '0.00' if kind == 'canceled_fee' else _amount(get('event_amount'), blocks)
@@ -159,10 +172,20 @@ def _normalize_row(provider, raw, cols, position, *, statement_ref, salla_curren
         # Tamara Order ID identifies the order, not each capture/refund event.
         event_reference = None
         plan, method, account = _text(get('payment_type')), 'tamara', None
+        count = get('installments')
+        if count not in (None, '') and not isinstance(count, bool):
+            try:
+                value = Decimal(str(count))
+                if value.is_finite() and 0 < value <= 120 and value == int(value):
+                    installments = int(value)
+            except (ValueError, InvalidOperation, OverflowError):
+                pass
         deduction = None
     else:
         order = _reference(get('order_number'))
-        if not order or order.lower() in {'total', 'الإجمالي', 'المجموع'}:
+        if order and order.lower() in {'total', 'الإجمالي', 'المجموع'}:
+            return None
+        if not order and get('gross_amount') is None and get('net_amount') is None:
             return None
         principal = _amount(get('gross_amount'), blocks)
         fee, tax, net = (_amount(get(k), blocks) for k in ('payment_fee', 'payment_vat', 'net_amount'))
@@ -175,6 +198,13 @@ def _normalize_row(provider, raw, cols, position, *, statement_ref, salla_curren
 
     if not ccy and kind != 'settlement_fee':
         blocks.append('statement_currency_missing')
+    if kind in {'sale', 'refund'}:
+        if not order:
+            blocks.append('statement_order_reference_missing')
+        elif len(order) > 160 or any(ord(ch) < 32 or ord(ch) == 127 for ch in order):
+            blocks.append('statement_order_reference_invalid')
+        if provider != 'salla' and stamp is None:
+            blocks.append('statement_event_date_invalid' if get('event_date') not in (None, '') else 'statement_event_date_missing')
     if kind == 'unsupported':
         blocks.append('statement_event_unsupported')
     if principal is not None:
@@ -201,7 +231,7 @@ def _normalize_row(provider, raw, cols, position, *, statement_ref, salla_curren
         'date_precision': 'day' if stamp else None, 'native_currency': ccy,
         'principal_amount': format(abs(signed_principal), '.2f') if signed_principal is not None else None,
         'fee_net': fee, 'fee_vat': tax, 'fee_total': total, 'transferred_amount': net,
-        'payment_method': method, 'plan_id': plan, 'merchant_account': account,
+        'payment_method': method, 'plan_id': plan, 'installments': installments, 'merchant_account': account,
         'statement_reference': statement_ref, 'blockers': sorted(set(blocks)),
     }
     return result
@@ -234,6 +264,7 @@ def normalize_statement(content: bytes) -> dict:
             header_index, cols = parser._find_header_row(raw_rows)
             preamble = parser._read_preamble(raw_rows, header_index)
             ref, source_ccy = preamble.get('statement_id') or None, None
+        _unique_headers(raw_rows[header_index], cols)
         rows = []
         for index, raw in enumerate(raw_rows[header_index + 1:], start=header_index + 2):
             if not any(value not in (None, '') for value in raw):
@@ -293,6 +324,8 @@ def normalize_statement(content: bytes) -> dict:
         result['fingerprint'] = _digest({**{k: result[k] for k in ('schema_version', 'provider', 'statement_reference', 'merchant_account', 'currency', 'statement_date')},
                                         'rows': sorted(row['row_fingerprint'] for row in rows)})
         result['file_hash'] = sha256(content).hexdigest()
+        if len(json.dumps(result, ensure_ascii=False, separators=(',', ':')).encode()) > MAX_EVIDENCE_BYTES:
+            raise ValueError('statement_evidence_size_limit')
         return result
     finally:
         workbook.close()
