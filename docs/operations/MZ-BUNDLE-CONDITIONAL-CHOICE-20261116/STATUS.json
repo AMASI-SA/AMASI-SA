@@ -1,7 +1,7 @@
 {
   "task_id": "MZ-BUNDLE-CONDITIONAL-CHOICE-20261116",
   "scope": "Implement conditional descriptive-option costing in current bundle estimates.",
-  "state": "ready_for_serialized_merge_and_publication",
+  "state": "all_gates_passed_waiting_for_other_owned_publication",
   "repository": "AMASI-SA/AMASI-SA",
   "task_branch": "codex/bundle-conditional-cost-integrated-20261116",
   "verified_milestone_commit": "ba19a270fb20ab45328f293e200728bebda6df4c",
@@ -150,8 +150,16 @@
   },
   "review": "independent_implementation_review_passed",
   "merge": "not_performed",
-  "release_guard": "No lease acquired. Isolated prior-candidate build started while inactive; no production files changed. Provider release merged concurrently and may claim original host.",
-  "deployment": "not_performed_for_this_case",
+  "release_guard": {
+    "active": true,
+    "owner": "chatgpt-provider1951-20261116-root",
+    "source_git_sha": "f7c5e110a074a242036233ea004d63c270a4daaa",
+    "deployment_git_sha": "2589f440106a7c5d463ee03eac3617d113319673",
+    "release_id": "rg5-79ac457d2b1bc4c417fb86d9f3d6dc10f7e613f3402018cb15f101f558cda9f6",
+    "prepared_at": "2026-11-15T23:45:16.349437+00:00",
+    "modified_by_this_task": false
+  },
+  "deployment": "Other provider publication started 16 Nov 02:48 Riyadh; our fix not merged/published yet.",
   "production_changed": "no",
   "incomplete_work": [
     "Obtain exact integrated-source CI candidate, freeze a fresh intent-only B, await inactive original-host lease, rehearse, normal merge, publish and verify."
@@ -167,7 +175,7 @@
     "Shared /app 120 untracked files and unsaved Untitled-1; another provider release is active in a different conversation. Recheck Production base and lease before changes."
   ],
   "ledger": "Issue #1006 was previously at its comment limit; dedicated task status serves as recoverable handoff without retrying that append.",
-  "next_safe_action": "Acquire the existing official operation mutex only after fresh inactive status. Assert exact J/clean branch/no lease; then merge PR1954 normally while fenced, require merged tree equals reviewed B, preserve unrelated files, materialize exact adapter and call unchanged official prepare checks after rehearsal. Verify merged-head CI, prepublish, publish once, wait explicit success and official three-probe verification.",
+  "next_safe_action": "Wait for the provider owner's explicit successful publication and official lease closure. Then rerun fresh inactive precondition and the immutable reviewed operator from a54633d678081d0ff6da62712eb51cf36067aa9f; read ready_for_merge before normally merging PR1954. Supply atomic merged-head.json, preserve exact B tree and run official checks; never reuse or clear provider lease.",
   "owner_clarification": {
     "source": "User clarification after diagnosis",
     "statement": "Selecting affirmative customization adds no amount.",
@@ -242,7 +250,7 @@
     "path": "docs/operations/MZ-BUNDLE-CONDITIONAL-CHOICE-20261116/release_operator.py",
     "sha256": "8b19bd6d2f193466ce26a5761cd75f6b0703fcb304a6796883bc926a699a8938",
     "bytes": 8166,
-    "state": "AST parsed and independent exact-file review passed; not executed",
+    "state": "Independent review passed. Runner stopped at fresh CLI inactive precondition because provider lease was active; operator itself was not started, no receipt directory created and no merge/source/cache/lease mutation performed.",
     "behavior": "Existing official mutex fences ready-for-merge through ff-only materialization and unchanged official prepare checks. Precisely inventoried ignored bytecode is preserved via atomic reversible move; no publish or lease removal.",
     "runner_requirements": [
       "Redirect operator stdout to receipt_path+'.log', outside initially empty receipt directory.",
