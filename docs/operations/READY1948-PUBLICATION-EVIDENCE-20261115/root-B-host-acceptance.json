@@ -1,0 +1,14 @@
+{
+  "verdict": "PASS_B_HOST_ARTIFACTS_ONLY",
+  "source": "d8a7ce0352bbe2f8858b349a32f2127c7e202343",
+  "B": "dd1f29970506f9db2454cdf3b708818b399ee620",
+  "runtime": "rg5-507b99021ed912e77780f15eaf183e0cd72f0012fbaa7e1af3cade593195324f",
+  "all_archive_members_byte_mode_equal": true,
+  "archive_file_count": 294,
+  "generated_file_count_excluding_intent": 293,
+  "official_frontend_identity_matches_intent": true,
+  "backend_identity_matches_intent": true,
+  "reproducibility_matches_intent": true,
+  "proof_sha256": "30899db8bab016f7a4fba67183f864a5da4ee71097b3829c2603a4c9419733b2",
+  "CI_and_original_rehearsal_and_live_acceptance_separate": true
+}

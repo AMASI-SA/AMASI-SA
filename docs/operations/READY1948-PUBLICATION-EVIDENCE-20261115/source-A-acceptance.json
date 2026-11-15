@@ -1,0 +1,218 @@
+{
+  "verdict": "PASS_FOR_SOURCE_A_CANDIDATE_ONLY",
+  "scope": "Independent source/candidate/artifact review; no B, merge, host release or production acceptance claimed.",
+  "source_A": "d8a7ce0352bbe2f8858b349a32f2127c7e202343",
+  "base_J": "742b1032113730961597ea413665409d9c213f7b",
+  "tree_A": "40056c95d05b859f4bae9b6a5c5c129f8a38d142",
+  "clone": "/workspace/scratch/3b6d796532bb/ready1948-independent-review",
+  "official_parser": {
+    "function": "scripts.emergent_deployment_adapter.load_candidate_release_intent",
+    "result": "PASS",
+    "exit_status": 0,
+    "candidate_path": "/workspace/scratch/3b6d796532bb/ready1948-review-evidence/release-intent-v5.json",
+    "candidate_artifact": 14176196461,
+    "candidate_zip_sha256": "50d92d1eebc0c9967846b85801f9a2479c7f9fdc7cd059ea5342785b05aeae80",
+    "intent_sha256": "b767e8fe721a7031517745b1b64e7d68690f440f4f6b9f8d34935f8d81d1a680",
+    "intent_git_blob": "82a6c610fdf5d18b9ed115ab75a6c1e3c535ade5",
+    "runtime": "rg5-507b99021ed912e77780f15eaf183e0cd72f0012fbaa7e1af3cade593195324f",
+    "manifest_counts": {
+      "backend": 1227,
+      "frontend": 1188,
+      "control": 292
+    },
+    "note": "Expected import warning about absent ignored backend/release_identity.json in clean source clone; parser returned PASS/exit0."
+  },
+  "source_preservation": {
+    "changed_paths": 20,
+    "donor_A": "cde04817905330835269fd94d7f3e660ab11558d",
+    "all20_blobs_equal": true,
+    "scope_paths_equal": true,
+    "intervening_production_overlap": false,
+    "inherited_intent_unchanged": true,
+    "clone_clean": true
+  },
+  "workflows": [
+    {
+      "id": 43750168038,
+      "name": "G47 Focused Integration",
+      "head_sha": "d8a7ce0352bbe2f8858b349a32f2127c7e202343",
+      "status": "completed",
+      "conclusion": "success",
+      "run_attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43750168038"
+    },
+    {
+      "id": 43750168035,
+      "name": "Operational Balance Web",
+      "head_sha": "d8a7ce0352bbe2f8858b349a32f2127c7e202343",
+      "status": "completed",
+      "conclusion": "success",
+      "run_attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43750168035"
+    },
+    {
+      "id": 43750168031,
+      "name": "CodeQL",
+      "head_sha": "d8a7ce0352bbe2f8858b349a32f2127c7e202343",
+      "status": "completed",
+      "conclusion": "success",
+      "run_attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43750168031"
+    },
+    {
+      "id": 43750167344,
+      "name": "Snapchat Direct Active Publication",
+      "head_sha": "d8a7ce0352bbe2f8858b349a32f2127c7e202343",
+      "status": "completed",
+      "conclusion": "success",
+      "run_attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43750167344"
+    },
+    {
+      "id": 43750167357,
+      "name": "Snapchat Settings Management V2",
+      "head_sha": "d8a7ce0352bbe2f8858b349a32f2127c7e202343",
+      "status": "completed",
+      "conclusion": "success",
+      "run_attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43750167357"
+    },
+    {
+      "id": 43750167375,
+      "name": "Qoyod Payment Freshness",
+      "head_sha": "d8a7ce0352bbe2f8858b349a32f2127c7e202343",
+      "status": "completed",
+      "conclusion": "success",
+      "run_attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43750167375"
+    },
+    {
+      "id": 43750167645,
+      "name": "Mobile Order Tracking",
+      "head_sha": "d8a7ce0352bbe2f8858b349a32f2127c7e202343",
+      "status": "completed",
+      "conclusion": "success",
+      "run_attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43750167645"
+    },
+    {
+      "id": 43750167434,
+      "name": "Mezan Release Readiness",
+      "head_sha": "d8a7ce0352bbe2f8858b349a32f2127c7e202343",
+      "status": "completed",
+      "conclusion": "success",
+      "run_attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43750167434"
+    },
+    {
+      "id": 43750167469,
+      "name": "Build20 component category contract (no deployment)",
+      "head_sha": "d8a7ce0352bbe2f8858b349a32f2127c7e202343",
+      "status": "completed",
+      "conclusion": "success",
+      "run_attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43750167469"
+    },
+    {
+      "id": 43750167559,
+      "name": "Assembly Mobile Settings",
+      "head_sha": "d8a7ce0352bbe2f8858b349a32f2127c7e202343",
+      "status": "completed",
+      "conclusion": "success",
+      "run_attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43750167559"
+    },
+    {
+      "id": 43750167377,
+      "name": "Security Gate",
+      "head_sha": "d8a7ce0352bbe2f8858b349a32f2127c7e202343",
+      "status": "completed",
+      "conclusion": "success",
+      "run_attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43750167377"
+    },
+    {
+      "id": 43750167581,
+      "name": "Operational Stock Eligibility",
+      "head_sha": "d8a7ce0352bbe2f8858b349a32f2127c7e202343",
+      "status": "completed",
+      "conclusion": "success",
+      "run_attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43750167581"
+    },
+    {
+      "id": 43750167385,
+      "name": "Review Completion Resumable",
+      "head_sha": "d8a7ce0352bbe2f8858b349a32f2127c7e202343",
+      "status": "completed",
+      "conclusion": "success",
+      "run_attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43750167385"
+    }
+  ],
+  "review_artifact": {
+    "id": 14176282714,
+    "zip_path": "/workspace/scratch/3b6d796532bb/ready1948-review-evidence/review14176282714.zip",
+    "sha256": "e73abc3645e9d7bf8315c72be70fc4cab55b4d674c20df4f86dfcfdb31147562",
+    "reports": [
+      {
+        "path": "/workspace/scratch/3b6d796532bb/ready1948-review-evidence/android-operations.xml",
+        "cases": 329,
+        "failure": 0,
+        "error": 0,
+        "skipped": 0,
+        "sha256": "58365337179ea3fda265d72f7a4e9fde697e446d50d9c8098202724ac5e43a13",
+        "detail_cases": 0,
+        "real_mongo_currency_cases": 0
+      },
+      {
+        "path": "/workspace/scratch/3b6d796532bb/ready1948-review-evidence/review-acceptance-guard.xml",
+        "cases": 1,
+        "failure": 0,
+        "error": 0,
+        "skipped": 0,
+        "sha256": "0962dd95540fe73248d5045a72f65ce9e632c87e27963bace927fa116ca858e3",
+        "detail_cases": 0,
+        "real_mongo_currency_cases": 0
+      },
+      {
+        "path": "/workspace/scratch/3b6d796532bb/ready1948-review-evidence/review-completion.xml",
+        "cases": 828,
+        "failure": 0,
+        "error": 0,
+        "skipped": 0,
+        "sha256": "b95947873fa19569d8d55d451fc96647b26c47b8694e2399b778016bb0b01596",
+        "detail_cases": 19,
+        "real_mongo_currency_cases": 7
+      },
+      {
+        "path": "/workspace/scratch/3b6d796532bb/ready1948-review-evidence/source-snapshot.xml",
+        "cases": 124,
+        "failure": 0,
+        "error": 0,
+        "skipped": 0,
+        "sha256": "43f51070d17bd65acf7792467fb5000e433e8112c944bc58850c021697aff8fe",
+        "detail_cases": 0,
+        "real_mongo_currency_cases": 0
+      }
+    ]
+  },
+  "stock": {
+    "artifact": 14176536032,
+    "sha256": "90e617b824732347eab8005bafa794bc4ca88c4373f5011e49e48ac66bce22ab",
+    "cases": 4513,
+    "failure": 0,
+    "error": 0,
+    "skipped": 0,
+    "attempt": 1
+  },
+  "notifications": {
+    "job": 132922151435,
+    "source": "d8a7ce0352bbe2f8858b349a32f2127c7e202343",
+    "passed": 252,
+    "subtests": 61,
+    "executed_no_skip_guard": "success",
+    "evidence": "complete finished GitHub job log; no XML artifact retained"
+  },
+  "operations_performed": "Read-only GitHub access, separate local clone, official candidate parser, downloaded archive/XML inspection. No source mutation, rerun, merge, lease or publish."
+}

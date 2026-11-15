@@ -1,0 +1,39 @@
+{
+  "recorded_at": "2026-11-15T19:29:33.605165+00:00",
+  "phase": "before_PR1948_publication",
+  "source": "authenticated live assembly UI",
+  "url": "https://mezansalla.com/fulfillment-v2?stage=ready_to_ship",
+  "order_number": "299781816",
+  "ready_summary": "0 of 5",
+  "rows": [
+    {
+      "sku": "AMS11509",
+      "supplier_received": true,
+      "ready_button_disabled": true,
+      "reason": "source acceptance reconciliation pending"
+    },
+    {
+      "sku": "AMS13255",
+      "supplier_received": true,
+      "ready_button_disabled": true,
+      "reason": "source acceptance reconciliation pending"
+    },
+    {
+      "sku": "AMS11549",
+      "supplier_received": false,
+      "ready_button_disabled": true,
+      "reason": "supplier receipt required"
+    },
+    {
+      "row": "packaging_1",
+      "ready_button_disabled": true,
+      "reason": "source acceptance reconciliation pending"
+    },
+    {
+      "row": "packaging_2",
+      "ready_button_disabled": true,
+      "reason": "source acceptance reconciliation pending"
+    }
+  ],
+  "operations": "search and read only; no refresh, receipt, Ready, label or financial action"
+}
