@@ -5,6 +5,21 @@ import { useAuth } from "../context/AuthContext";
 import api from "../lib/api";
 import SallaWebhookRecovery, { SallaWebhookRecoveryLink } from "./SallaWebhookRecovery";
 
+// Preserve the real router while exposing its declared CommonJS entry to Jest 27.
+jest.mock("react-router/dom", () => {
+    const { TextEncoder, TextDecoder } = require("util");
+    if (!global.TextEncoder) global.TextEncoder = TextEncoder;
+    if (!global.TextDecoder) global.TextDecoder = TextDecoder;
+    const path = require("path");
+    const packagePath = require.resolve("react-router/package.json");
+    let target = require(packagePath).exports["./dom"];
+    while (target && typeof target === "object") {
+        target = target.require || target.node || target.default;
+    }
+    if (typeof target !== "string") throw new Error("react-router/dom CommonJS export missing");
+    return require(path.resolve(path.dirname(packagePath), target));
+}, { virtual: true });
+
 jest.mock("../lib/api", () => ({ get: jest.fn(), post: jest.fn() }));
 jest.mock("../context/AuthContext", () => ({ useAuth: jest.fn() }));
 
