@@ -1,0 +1,18 @@
+{
+  "source_evidence_commit": "a022e81c1e8adf8fc081609115a5049cb741fad7",
+  "original_head": "236a428364bc8163a684795ed1be87e237476f18",
+  "tracked_clean": true,
+  "guard_inactive": true,
+  "unrelated_untracked_count": 120,
+  "executed_operator": false,
+  "operator": {
+    "path": "/tmp/provider1951-operator-20261116.py",
+    "sha256": "40479a58a63004bd6ba9b3257f775a5110eace755c20a05656dbc7143e5a1140",
+    "bytes": 18859
+  },
+  "proof": {
+    "path": "/tmp/expected-package-boundary-1951.json",
+    "sha256": "8bc0564eba0bbf3c4e7c45464c7324445b16d011df3ef1721459ca41f75f9747",
+    "bytes": 1278
+  }
+}
