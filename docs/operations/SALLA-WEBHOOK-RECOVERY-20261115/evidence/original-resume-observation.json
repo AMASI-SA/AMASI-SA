@@ -1,0 +1,49 @@
+{
+  "kind": "actual_original_environment_resume_observation",
+  "source": "Root readback through authenticated CodeServer terminal",
+  "result": {
+    "active_lease": false,
+    "append_only_after_bytes": 52460,
+    "append_only_before_bytes": 52374,
+    "finished_at": "2026-11-15T13:55:37.200442+00:00",
+    "merge": "331b7917b3c01d064ee2a17affb4714f3a296331",
+    "ok": true,
+    "original_attempt_preserved": true,
+    "package_proof_matches_accepted_B": true,
+    "quarantine_directory": "/app/.git/salla-webhook-release-1935-bytecode/backend-__pycache__",
+    "quarantined_cache_files": [
+      "frontend_build_identity.cpython-311.pyc",
+      "release_protocol_v5.cpython-311.pyc"
+    ],
+    "tree": "62632e21efa7d1ed1e6f42740d1e73321e947c1d",
+    "untracked_count": 120,
+    "untracked_preserved": true
+  },
+  "receipts": {
+    "adapter.json": {
+      "exit_code": 0,
+      "finished_at": "2026-11-15T13:55:34.322058+00:00",
+      "started_at": "2026-11-15T13:54:01.275705+00:00",
+      "stderr_sha256": "f9de9a5c904514893fea046115f3a8ce6346639f86ce2fae7c20dd6ea7532633",
+      "stdout_sha256": "b5fb51fb0567b03a7deac76750ebcae7d97af6b321b0ee9ced5183f60f3e68cc"
+    },
+    "packages.json": {
+      "exit_code": 0,
+      "finished_at": "2026-11-15T13:55:36.649958+00:00",
+      "started_at": "2026-11-15T13:55:34.322693+00:00",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_sha256": "9f763811000725857e83ab14d17fbac01426469a83e8e97b8aabbe62df3ee05a"
+    },
+    "status-after.json": {
+      "active": false,
+      "lease_directory_exists": false,
+      "observed_under_official_operation_mutex": true
+    }
+  },
+  "sha256": {
+    "original-receipts.json": "e88c523ce3829acb6f20ebb163cac8de0a474b3e883899975fe88c1fdd167655",
+    "packages.stdout": "9f763811000725857e83ab14d17fbac01426469a83e8e97b8aabbe62df3ee05a",
+    "quarantine.json": "a6afb6c7163731703d3a8f9cc4b1efad4c65fab323f202a37d632c19043715ce",
+    "result.json": "bc5abfab75b6f9855380470e950a481087746963947da5b58d55dae70987af25"
+  }
+}
