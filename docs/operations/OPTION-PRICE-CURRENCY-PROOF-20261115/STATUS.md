@@ -1,5 +1,13 @@
 # Option-price currency recovery: release handoff
 
+## Continuation 2026-11-15 — Emergent authentication renewed
+
+Secure browser authentication completed and the target Emergent domain visibly showed the existing Salla Analytics published project. Manage/Overview still shows the 100th publish, 2e2ec44, and latest deployment finished Nov 15 at 04:44 AM. No republish or rollback was requested.
+
+The legitimate View database action now opens the authenticated Emergent Database Manager, instead of the prior expired-token page. The manager distinguishes App Name access to preview from MongoDB URL access to live data. App Name access reported preview app starting up; no query or write ran. Production inspection requires the live connection credential entered through the supported secure browser credential request. No connection string was revealed, copied, logged, or read. Current user-visible Ready result remains locked as recorded below. No source patch, source refresh, receipt, Ready operation, lease change, or production mutation has occurred in this continuation.
+
+Next: secure entry of the live Database Manager credential; verify production selection; bounded read of this order's watermark, raw source clock, lifecycle, workflow and immutable approval to identify the first rejecting guard. Do not infer eligibility from preview or weaken a guard without the evidence.
+
 ## Continuation 2026-11-15 — fresh readback before authentication
 
 Production branch remains9afb38cf0dc0d8e8cd887f2c2cdb4a6be5a7ca68. A fresh ordinary browser GET /api/health confirms sourcefc5ff89f5794061bf62a7de283eedc9ecd4ec7c9 and runtimerg5-92ce2e87026743df6ed7cd3083940f596b3a562e1c608cc985df3dc7c15cabe3, with verified identity, critical hashes and frontend verification true. This is a read-only runtime observation, not a new official release verification or lease action.
