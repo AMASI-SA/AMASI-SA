@@ -1,0 +1,126 @@
+{
+  "acceptance_limit": "Candidate source proof only; all exact-head CI gates and reviewed B/M gates remain required before release.",
+  "artifact_id": 14167618845,
+  "artifact_zip_sha256": "18f5f8ef9079b948cbd6928ea694ad0e8d6587853141cf658ff5cb4de663a6ce",
+  "backend_runtime_source_summary": {
+    "added_count": 1,
+    "deleted_count": 0,
+    "file_count": 1220,
+    "manifest_sha256": "1bebdd01ddaa4c91baf65494ec1768cfcf192d149394f3102da6493d5da969d4",
+    "modified_count": 1,
+    "projection_tree_oid": "a8000d94f0ed0a3c69bf4081a5bfd22728a17c11",
+    "scope": "backend_runtime_package_v1",
+    "scope_tree_oid": "bacbe0ff936751282c6eeaee08f010c03ed55f58",
+    "source_base_git_sha": "d7facb0ff4e2e30edbabf012b3865155d5902a85",
+    "source_base_root_tree_oid": "d5bb8d88f7f04610dd6796648edebca24d025c1c",
+    "source_base_scope_tree_oid": "fb77c420697fc9abcb9446d57f2b4c505dd6331f",
+    "source_git_sha": "2896f97bb3ffe5c919ade61a4f60e551a7a49162",
+    "source_root_tree_oid": "eb6973e7b7b2569c9da27d60e489ee32fafa27ed",
+    "tombstone_count": 0,
+    "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "tree_sha256": "0620a3e16e51c8361a1f958b8eb2a67f383c8f6240f60c3be31d4fb9e7ca5ebc"
+  },
+  "candidate_bytes": 1312444,
+  "candidate_path": "/workspace/scratch/ce6ef737d6c9/release-evidence/incident-recovery-ci-2896/release-intent-v5.json",
+  "candidate_sha256": "ff7f91de77d2683063d45a3dcbd729f09bdaa2dcedcabf161675b5d14a2819c2",
+  "critical_file_git_blob_hashes": "PASS",
+  "critical_file_hashes": {
+    "frontend_build_identity.py": "7896dfa2c9b4fea8c426b47c5b75e331380c0a4a3f947028aa4f5afa101f9d87",
+    "integrations/qoyod_manual/routes.py": "e3950202ab1b465608124ef1d142f330038086d6f69d21418dc0be99e9fa64ce",
+    "integrations/qoyod_manual/send.py": "b8cfbece5ccec2b91c8c7c6f9643f6a912440a306ddc8607f714be608a4b005c",
+    "release_identity.py": "ee4c098266722c10f6d973927f25de3602081c4923f9992f1de85d71775fca4d",
+    "release_protocol_v5.py": "1961ac18a5363ec425ceec4f98f96f611d378b09e19380d4756bd6776987d8ef",
+    "server.py": "5fb5e4f09883c05c0c9851d5b488341642ba3330508cf83d786f70a83fb22ac5"
+  },
+  "deterministic_runtime_id": "PASS",
+  "frontend_artifact_tree_sha256": "7cd63bb1cd550a2601b09c5107b6e4ddba0c4b3eae435bfdfe80ddcb9934e977",
+  "frontend_build_metadata": {
+    "bytes": 475187,
+    "path": "build-meta.json",
+    "sha256": "3ef4b60c351c969535f4b41d09f38cc31c5336f9c1e21b1e282a336fe155f316"
+  },
+  "frontend_full_git_membership_blob_bytes_modes_hashes": "PASS",
+  "frontend_reproducibility_file": {
+    "bytes": 1521,
+    "path": "frontend/.release/reproducible-build.json",
+    "sha256": "fcf957a30d9d977690066f5cb535bead0b02211bd9fb7b53effbfb56fd328a98"
+  },
+  "frontend_source_summary": {
+    "file_count": 1184,
+    "git_tree_oid": "b9e83f8c39537fed5cdf545568d80bdf3a87eba6",
+    "scope": "git_head_frontend_tree_v1",
+    "tree_sha256": "ebd3d871ae7c11e7d7df8559ae388f6716e79061df7a45ce005111bc3b7401a6"
+  },
+  "git_j_to_a_backend_and_release_control_full_manifest": "PASS",
+  "official_candidate_loader": "PASS",
+  "package_source_pins": {
+    "backend/requirements.txt": {
+      "bytes": 2366,
+      "git_blob": "6bb7d5e914884deb58f04c3730d3ad6383a9050b",
+      "sha256": "2ce69692284860d7612378b81bbff479ad21cf19f92435289d8fa0686019614d"
+    },
+    "frontend/.nvmrc": {
+      "bytes": 8,
+      "git_blob": "c94711948a665d304dfc7016e1bebc497162b451",
+      "sha256": "08062faf0d7a2d22f5d7933c50e975dd1527034275597be7c1b3b9fd2b9d079a"
+    },
+    "frontend/package.json": {
+      "bytes": 3672,
+      "git_blob": "43dd6c845586e461cb9c5385e0c9ede94bfac731",
+      "sha256": "62a5d5bb28e0fc529a16b3d47b1f107e19ae40af8e0482d14d73b04400c7b32b"
+    },
+    "frontend/yarn.lock": {
+      "bytes": 543057,
+      "git_blob": "0fa31e6ff56ffc6ef29ca2e8b57d02f96e8ee562",
+      "sha256": "ade3795ddac57d89c236de42f3946160e04aa72abc87356b3b361954e06fefdc"
+    },
+    "scripts/emergent_deployment_adapter.py": {
+      "bytes": 73931,
+      "git_blob": "16c4c7c3ccf5ff845b2a9115b0d27f8282515556",
+      "sha256": "2e09999684b329045af3cb15290e3bee3b615b8e1d9a378e903977ba9f1a8287"
+    },
+    "scripts/frontend_release_toolchain.py": {
+      "bytes": 52209,
+      "git_blob": "24ec1b60656aafe4bf1514df06592d8c108335e2",
+      "sha256": "31583e3777ab2b899697085a34b9f55bb9fff9f79a82631468d28b1a7b24c80e"
+    },
+    "scripts/release_backend_requirements.lock": {
+      "bytes": 2366,
+      "git_blob": "6bb7d5e914884deb58f04c3730d3ad6383a9050b",
+      "sha256": "2ce69692284860d7612378b81bbff479ad21cf19f92435289d8fa0686019614d"
+    }
+  },
+  "readiness_run_id": 43729936613,
+  "release_control_source_summary": {
+    "added_count": 0,
+    "deleted_count": 0,
+    "file_count": 292,
+    "manifest_sha256": "cda3c448bbd6495dad98d000fcc5b4cfca2bbca31d5179b1ed9308380d7affc3",
+    "modified_count": 1,
+    "projection_tree_oid": "858757c0e091c69878a8f396e4cd051a8413e6d9",
+    "scope": "release_control_source_v1",
+    "scope_tree_oid": "858757c0e091c69878a8f396e4cd051a8413e6d9",
+    "source_base_git_sha": "d7facb0ff4e2e30edbabf012b3865155d5902a85",
+    "source_base_root_tree_oid": "d5bb8d88f7f04610dd6796648edebca24d025c1c",
+    "source_base_scope_tree_oid": "85500b8e7d2c07dc86d492922e6eb0c1510af000",
+    "source_git_sha": "2896f97bb3ffe5c919ade61a4f60e551a7a49162",
+    "source_root_tree_oid": "eb6973e7b7b2569c9da27d60e489ee32fafa27ed",
+    "tombstone_count": 0,
+    "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "tree_sha256": "4e2d9a1b6b3b0c7e26fc5c349c715981b00e1f0ce21224ae84af2774929aa84b"
+  },
+  "result": "PASS",
+  "root_tree_and_base_tree_binding": "PASS",
+  "runtime_release_id": "rg5-144ce747d2042279a6d9a86cb338a133bd0a7e05237f96b22331b905ce083cf3",
+  "source_base_git_sha": "d7facb0ff4e2e30edbabf012b3865155d5902a85",
+  "source_git_sha": "2896f97bb3ffe5c919ade61a4f60e551a7a49162",
+  "source_package_and_toolchain_pins": "PASS",
+  "source_tree_oid": "eb6973e7b7b2569c9da27d60e489ee32fafa27ed",
+  "source_worktree_clean_unchanged": "PASS",
+  "toolchain": {
+    "node": "22.23.2",
+    "vite": "8.2.4",
+    "yarn": "1.22.22"
+  },
+  "two_clean_builds_equal_retained_pass_2": "PASS"
+}

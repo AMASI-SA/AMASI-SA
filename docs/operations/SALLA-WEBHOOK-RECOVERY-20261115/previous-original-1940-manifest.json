@@ -1,0 +1,118 @@
+{
+  "directory": "/tmp/salla-webhook-release-1940/original",
+  "files": {
+    "adapter.json": {
+      "bytes": 300,
+      "sha256": "9376721eadb816826810ecade368f1b6b8c62b580b16e1c71a37fd9972f20471"
+    },
+    "adapter.started.json": {
+      "bytes": 122,
+      "sha256": "5f8841b1a5d0f1b6e2c0b796263609bcea848c5daefa5590b9a780b4777fb758"
+    },
+    "adapter.stderr": {
+      "bytes": 10248,
+      "sha256": "f9de9a5c904514893fea046115f3a8ce6346639f86ce2fae7c20dd6ea7532633"
+    },
+    "adapter.stdout": {
+      "bytes": 164754,
+      "sha256": "e5099135f1c8c42e4c4a78ecadba542301498fd39dae232641355bcaa79a28c7"
+    },
+    "continuity-after.json": {
+      "bytes": 1091,
+      "sha256": "45d7341550f0b1b89db191eff085f805d5a827e984ff3b96cc487994891bb901"
+    },
+    "continuity-before.json": {
+      "bytes": 1091,
+      "sha256": "45d7341550f0b1b89db191eff085f805d5a827e984ff3b96cc487994891bb901"
+    },
+    "fast-forward.json": {
+      "bytes": 300,
+      "sha256": "052dc69bed12727619efc34e6e7e9888dc07f69bdda7dda9859a8e42e4e98da1"
+    },
+    "fast-forward.started.json": {
+      "bytes": 171,
+      "sha256": "432b5bde436711aaf195fe9024abc16bf15a484adc05b7fee3a2bb543d14458c"
+    },
+    "fast-forward.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "fast-forward.stdout": {
+      "bytes": 1251,
+      "sha256": "be1b3826e5290e27f0ed2f509df565cb3c806a13cc74e8f8e8e3068fc8046eb6"
+    },
+    "fetch.json": {
+      "bytes": 300,
+      "sha256": "3c10492137f33d389b5f370c9a2a338ab67f5421d7274d04b0d35e6361ace0a3"
+    },
+    "fetch.started.json": {
+      "bytes": 161,
+      "sha256": "31ab09150219bad638c58c3a32c14c9985fd1a2fa96a7f54bb1474b7df3934aa"
+    },
+    "fetch.stderr": {
+      "bytes": 200,
+      "sha256": "545b5ccbb21301fafb364387e1f0c977ba18a518b0cbc43ce305d226fd146205"
+    },
+    "fetch.stdout": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "old-quarantine-after.json": {
+      "bytes": 807,
+      "sha256": "060fc70b3aede90c4c82905ae7f50d0e8c4c39e8f77187cd1e42b5bfce4cf8f0"
+    },
+    "old-quarantine-before.json": {
+      "bytes": 807,
+      "sha256": "060fc70b3aede90c4c82905ae7f50d0e8c4c39e8f77187cd1e42b5bfce4cf8f0"
+    },
+    "operator-pins.json": {
+      "bytes": 874,
+      "sha256": "6ca22eaa6241a4cf46db84730af32d276ca11a79d87fd96c1d3de605523e3ef5"
+    },
+    "packages.json": {
+      "bytes": 300,
+      "sha256": "fdfa9eb2172256f4b985df218366b98f2583979e1e4644f46160ee37c668b95d"
+    },
+    "packages.started.json": {
+      "bytes": 181,
+      "sha256": "2a84be1b7fd470f8f3eae916b05b1c46570f297498730fbd39608c83fb89f7b0"
+    },
+    "packages.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "packages.stdout": {
+      "bytes": 1278,
+      "sha256": "9d22c541d4697d7e23c0e8a21f09af2da69cf22010f7e4ec80dc18089136030e"
+    },
+    "result.json": {
+      "bytes": 658,
+      "sha256": "fce718813f7bdecff63732139abe5582f019ae24a3841cd270e21ab7b0a9c7e5"
+    },
+    "status-after.json": {
+      "bytes": 108,
+      "sha256": "2a9b41be0bb9d037f82764a3883d0f1673ece64da8151ad66ea904b37934b962"
+    },
+    "status-before-build.json": {
+      "bytes": 108,
+      "sha256": "2a9b41be0bb9d037f82764a3883d0f1673ece64da8151ad66ea904b37934b962"
+    },
+    "status-before.json": {
+      "bytes": 108,
+      "sha256": "2a9b41be0bb9d037f82764a3883d0f1673ece64da8151ad66ea904b37934b962"
+    },
+    "untracked-after-sync.json": {
+      "bytes": 31801,
+      "sha256": "5815e83623fb01111e51f72d1a28575107cf79d35c76ff4179ed45cb5bfb5442"
+    },
+    "untracked-after.json": {
+      "bytes": 31801,
+      "sha256": "5815e83623fb01111e51f72d1a28575107cf79d35c76ff4179ed45cb5bfb5442"
+    },
+    "untracked-before.json": {
+      "bytes": 31801,
+      "sha256": "5815e83623fb01111e51f72d1a28575107cf79d35c76ff4179ed45cb5bfb5442"
+    }
+  },
+  "schema_version": 1
+}

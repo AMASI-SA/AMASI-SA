@@ -1,0 +1,23 @@
+{
+  "acceptance_limit": "B intent validation only; Host20/24 complete package evidence and required exact-B CI are still pending.",
+  "accepted_A_candidate_bytes_unchanged": "PASS",
+  "candidate_bytes": 1312444,
+  "candidate_git_blob": "6458c54b6abbf2067fabea0803411732aa5c6e53",
+  "candidate_sha256": "ff7f91de77d2683063d45a3dcbd729f09bdaa2dcedcabf161675b5d14a2819c2",
+  "changed_paths": [
+    "release/release-intent-v5.json"
+  ],
+  "frontend_artifact_tree_sha256": "7cd63bb1cd550a2601b09c5107b6e4ddba0c4b3eae435bfdfe80ddcb9934e977",
+  "official_load_release_intent": "PASS",
+  "official_verify_release_intent_git": "PASS",
+  "parents": [
+    "2896f97bb3ffe5c919ade61a4f60e551a7a49162"
+  ],
+  "result": "PASS",
+  "reviewed_commit": "fff5e81d715c6109d6e7b84cb284ec6b32c38ac1",
+  "reviewed_tree_oid": "a8616930de7f98a43a509ff7dad287befd61ba5a",
+  "runtime_release_id": "rg5-144ce747d2042279a6d9a86cb338a133bd0a7e05237f96b22331b905ce083cf3",
+  "source_base_git_sha": "d7facb0ff4e2e30edbabf012b3865155d5902a85",
+  "source_git_sha": "2896f97bb3ffe5c919ade61a4f60e551a7a49162",
+  "worktree_clean_unchanged": "PASS"
+}

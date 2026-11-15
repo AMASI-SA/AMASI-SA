@@ -1,0 +1,85 @@
+{
+  "archive_sha256": "18f5f8ef9079b948cbd6928ea694ad0e8d6587853141cf658ff5cb4de663a6ce",
+  "candidate_bytes": 1312444,
+  "candidate_sha256": "ff7f91de77d2683063d45a3dcbd729f09bdaa2dcedcabf161675b5d14a2819c2",
+  "corrected_capture_wrapper_unchanged": true,
+  "freeze_advice": "WAIT for all16 exact-source gates",
+  "full_tracked_frontend_source": "PASS",
+  "manifests": {
+    "backend_runtime_source": {
+      "added_count": 1,
+      "deleted_count": 0,
+      "file_count": 1220,
+      "modified_count": 1,
+      "tombstone_count": 0,
+      "tree_sha256": "0620a3e16e51c8361a1f958b8eb2a67f383c8f6240f60c3be31d4fb9e7ca5ebc"
+    },
+    "frontend_source": {
+      "file_count": 1184,
+      "git_tree_oid": "b9e83f8c39537fed5cdf545568d80bdf3a87eba6",
+      "tree_sha256": "ebd3d871ae7c11e7d7df8559ae388f6716e79061df7a45ce005111bc3b7401a6"
+    },
+    "release_control_source": {
+      "added_count": 0,
+      "deleted_count": 0,
+      "file_count": 292,
+      "modified_count": 1,
+      "tombstone_count": 0,
+      "tree_sha256": "4e2d9a1b6b3b0c7e26fc5c349c715981b00e1f0ce21224ae84af2774929aa84b"
+    }
+  },
+  "official_candidate_loader": "PASS",
+  "previous_tracked_intent_unchanged": true,
+  "runtime": "rg5-144ce747d2042279a6d9a86cb338a133bd0a7e05237f96b22331b905ce083cf3",
+  "selected_bound_blobs": {
+    ".github/workflows/salla-webhook-recovery.yml": {
+      "bytes": 5253,
+      "git_blob": "e2e093e9b0d943da5ad2c3d8a176e88836735485",
+      "sha256": "c8d4c4c27dc00cf10753454330a91cd2b02e1e1085b1e1648c8e8f32cf6c5e2a"
+    },
+    "backend/salla_integration/cart_order_reconciliation.py": {
+      "bytes": 13453,
+      "git_blob": "c2400dbb522534db1198685919f9b7a6f925dfa7",
+      "sha256": "47d2a65c5db8d7f20ea5509a1e2e4d5e0ca7ac873cd921f02c650ba06580915c"
+    },
+    "backend/salla_integration/routes.py": {
+      "bytes": 44144,
+      "git_blob": "d240255c3147c2ff80fb179af62c458da767ab1c",
+      "sha256": "66b3657c4110ad3a74e935ca63d8fb57310f0a83998bce3d7d753a0435c85e56"
+    },
+    "backend/salla_integration/webhook_incident_recovery.py": {
+      "bytes": 21700,
+      "git_blob": "1a22c2ceb11fcb51623492aa6742c6479a164b01",
+      "sha256": "d05c3ba59135de0a58dbe59741b438081ca1ef11a2af688c9528554d8f38506b"
+    },
+    "frontend/src/App.js": {
+      "bytes": 36788,
+      "git_blob": "4118a4a774e2260ba0e441dbf54af690a84c03e1",
+      "sha256": "80d40267c5db3b428f453f3df71091011d294f5572325d8404dd68513028a20b"
+    },
+    "frontend/src/pages/SallaIntegration.jsx": {
+      "bytes": 61946,
+      "git_blob": "c906755dcd49dd6d4e074c93439ce31c6e753204",
+      "sha256": "55ae36ee93b99932b92da8f521ac399376d4f5be8aeff116796b2aa2408a08c6"
+    },
+    "frontend/src/pages/SallaWebhookRecovery.jsx": {
+      "bytes": 21415,
+      "git_blob": "8bf681c46a30c9c3c17026775b7efb8e14ec4395",
+      "sha256": "5b0b8978a16aedb59f435ccb843c9601e35b951b7777669dd43745dd6d172c4b"
+    },
+    "frontend/src/pages/SallaWebhookRecovery.test.jsx": {
+      "bytes": 16158,
+      "git_blob": "6993aec2cd3169f7424815075790aaf2cb6ecf09",
+      "sha256": "e59cd962ad6ec15254afceae8cfb380fc55ee7cebd42b58a74fc72cd908a37d2"
+    }
+  },
+  "separate_guard_git_manifests": "PASS",
+  "source_base_git_sha": "d7facb0ff4e2e30edbabf012b3865155d5902a85",
+  "source_git_sha": "2896f97bb3ffe5c919ade61a4f60e551a7a49162",
+  "source_tree": "eb6973e7b7b2569c9da27d60e489ee32fafa27ed",
+  "working_tree_clean_after": true,
+  "artifact_id": 14167618845,
+  "readiness_run_id": 43729936613,
+  "review_kind": "independent second reader of shared immutable artifact bytes",
+  "backend_test_git_sha256": "fe010ab0fd31f3a6d75945d2d4819d81fd63f6f169538923cd97efda7fe9af2d"
+}

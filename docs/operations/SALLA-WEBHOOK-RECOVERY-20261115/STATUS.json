@@ -76,7 +76,7 @@
     "protocol": 5,
     "prepared": true,
     "published": true,
-    "current_guard_active": true,
+    "current_guard_active": false,
     "shared_head": "331b7917b3c01d064ee2a17affb4714f3a296331",
     "shared_tracked_worktree_clean": true,
     "prior_lease_closed_by_owner": "PR1932 officially aborted 2026-11-15T01:14:02.965298+00:00; PR1933 then published and verified",
@@ -270,7 +270,7 @@
   },
   "release_branch": "codex/salla-webhook-recovery-release-20261115",
   "evidence_only": true,
-  "checkpoint_at": "2026-11-15 15:06:05 UTC",
+  "checkpoint_at": "2026-11-15T15:47:00Z",
   "production_source_branch_changed": true,
   "production_runtime_changed": true,
   "operator": {
@@ -382,14 +382,14 @@
     "import_order": "canonical server -> package attach_salla_routes -> install cart wrapper -> core route factory -> easy_mode import of patched capture",
     "test_gap": "existing ingress/paused HTTP tests import core route factory and easy_mode directly; empty canonical worker smoke never dispatches business event",
     "latest_queue": {
-      "generated_at": "2026-11-15T14:34:16.587869+00:00",
+      "generated_at": "2026-11-15T15:13:12.717181+00:00",
       "pending": 0,
       "processing": 0,
-      "retry": 13,
-      "quarantined": 10,
-      "backlog": 23,
+      "retry": 15,
+      "quarantined": 45,
+      "backlog": 60,
       "oldest_unfinished_at": "2026-11-15T14:10:37.125000+00:00",
-      "oldest_unfinished_age_seconds": 1419,
+      "oldest_unfinished_age_seconds": 3755,
       "expired_processing_count": 0
     },
     "first_seen_created_at": "2026-11-15T14:10:37.125000+00:00",
@@ -714,7 +714,7 @@
       "release_id": "rg5-f33cd3537f17e7a25804236a8b4ad0680c73618af6d3cddabc75fe8486f8d93a",
       "prepare_sha256": "3afa9df9aa927ee648ced9c7bd0685bf092da0e711851e9d7535f1c690192740"
     },
-    "published": false,
+    "published": true,
     "M_workflows": [
       {
         "id": 43725789566,
@@ -788,6 +788,138 @@
       },
       "prepublish_sha256": "adc8140dea81ea87d4ec87cee7a4df3eefde85c8c36e9f2b736a48e84c4e3b95",
       "one_submission": true
+    },
+    "platform_completion": {
+      "observed_at": "2026-11-15T15:15:00Z",
+      "ui": "Deployment finished Nov15 18:14 Riyadh",
+      "version": "5d52cf3",
+      "previous_version": "908dee3",
+      "screenshot": "/workspace/shared/salla-release-1940-deployed.jpg"
+    },
+    "verify_running": null,
+    "live_stability": {
+      "generated_at": "2026-11-15T15:30:40.253386+00:00",
+      "queue": {
+        "pending": 0,
+        "processing": 0,
+        "retry": 0,
+        "quarantined": 47,
+        "backlog": 47,
+        "expired_processing_count": 0
+      },
+      "orders": [
+        {
+          "event": "order.created",
+          "at": "2026-11-15T15:29:26.511000+00:00",
+          "order_number": "300241904",
+          "synced": true
+        },
+        {
+          "event": "order.updated",
+          "at": "2026-11-15T15:27:28.097000+00:00",
+          "order_number": "299139489",
+          "synced": true
+        },
+        {
+          "event": "order.status.updated",
+          "at": "2026-11-15T15:29:25.158000+00:00",
+          "order_number": "300241904",
+          "synced": true
+        }
+      ],
+      "backfill_complete": false
+    },
+    "maintenance": {
+      "pull_request": 1942,
+      "source": {
+        "sha": "2896f97bb3ffe5c919ade61a4f60e551a7a49162",
+        "tree": "eb6973e7b7b2569c9da27d60e489ee32fafa27ed",
+        "parent": "fce21070182f1f5d1f69d9112a78229f104300ec",
+        "base": "d7facb0ff4e2e30edbabf012b3865155d5902a85"
+      },
+      "first_candidate_rejected": {
+        "sha": "fce21070182f1f5d1f69d9112a78229f104300ec",
+        "tree": "71d64efa914713fb51eaad7aeabc53aa8e61bdf9",
+        "parent": "d7facb0ff4e2e30edbabf012b3865155d5902a85"
+      },
+      "new_frontend_test_hash": "e59cd962ad6ec15254afceae8cfb380fc55ee7cebd42b58a74fc72cd908a37d2",
+      "local_frontend_passed": 38,
+      "ci_frontend_passed": 3848,
+      "ci_frontend_suites": 403,
+      "ci_mongo_recovery_cases": 12,
+      "ci_salla_passed": 409,
+      "ci_salla_subtests": 19,
+      "ci_skipped": 0,
+      "source_gates_complete": true,
+      "production_data_changed": false,
+      "source_ci_report_sha256": "eafefabaa58d2e6b9557a1f1fe1e6dea99e875eedd8e62173728b39670a73c33",
+      "intent_commit": {
+        "sha": "fff5e81d715c6109d6e7b84cb284ec6b32c38ac1",
+        "tree": "a8616930de7f98a43a509ff7dad287befd61ba5a",
+        "parent": "2896f97bb3ffe5c919ade61a4f60e551a7a49162"
+      },
+      "candidate": {
+        "artifact_id": 14167618845,
+        "bytes": 1312444,
+        "sha256": "ff7f91de77d2683063d45a3dcbd729f09bdaa2dcedcabf161675b5d14a2819c2",
+        "archive_sha256": "18f5f8ef9079b948cbd6928ea694ad0e8d6587853141cf658ff5cb4de663a6ce",
+        "release_id": "rg5-144ce747d2042279a6d9a86cb338a133bd0a7e05237f96b22331b905ce083cf3",
+        "artifact_tree": "7cd63bb1cd550a2601b09c5107b6e4ddba0c4b3eae435bfdfe80ddcb9934e977",
+        "official_validation": "PASS",
+        "frontend_git_files": 1184,
+        "source": {
+          "sha": "2896f97bb3ffe5c919ade61a4f60e551a7a49162",
+          "tree": "eb6973e7b7b2569c9da27d60e489ee32fafa27ed",
+          "parent": "fce21070182f1f5d1f69d9112a78229f104300ec",
+          "base": "d7facb0ff4e2e30edbabf012b3865155d5902a85"
+        }
+      },
+      "next": "B CI and both host package artifacts, then normal merge + M gates + preserving actual rehearsal; no production grant yet",
+      "B_all_applicable_workflows_success": true,
+      "B_expected_unrelated_scope_skip": "TikTok Creator Release Candidate",
+      "B_package_acceptance": {
+        "accepted": true,
+        "proof_bytes": 1278,
+        "proof_sha256": "09d58d1afab57d3543d3697bc23897a986cd3c3d7bbc598b65f8cc74f1619e59",
+        "members": 297,
+        "files": 294,
+        "directories": 3,
+        "backend_identity_sha256": "3b915374d6bcd22d38d08eb8d692f781b7ce2d8d2db44557f6098e8ee8b9a6eb",
+        "frontend_package_files": 1475,
+        "backend_package_files": 1221,
+        "artifact_review_sha256": "a3b923410d5713674f877246a1bb39d89994fba2b811cd1fafa8eeae8d104b3d",
+        "readiness_run": 43730833080
+      },
+      "merge": "8f1b0ddb6408781e8677212bcb8cf2d51eab42f7",
+      "merge_tree": "a8616930de7f98a43a509ff7dad287befd61ba5a",
+      "M_gates": "pending",
+      "operator": {
+        "sha256": "b9cb6b3eedef177bff5dc7d78ea824875a6fc6ffc69a7ea1f72ad05c9c40bab1",
+        "independent_review": "PASS",
+        "root_review": "PASS",
+        "executed": false,
+        "previous_manifest_sha256": "ce9ba44e9e28d52a70912de3b8bc6922fbce588af5eafe8035ce1528b4237b90"
+      }
+    },
+    "official_verify": {
+      "verified": true,
+      "checks": 3,
+      "exit_code": 0,
+      "stderr_bytes": 0,
+      "source_git_sha": "a6c5bc5763fdca144b44473285d37130eb8213e9",
+      "deployment_git_sha": "d7facb0ff4e2e30edbabf012b3865155d5902a85",
+      "release_id": "rg5-f33cd3537f17e7a25804236a8b4ad0680c73618af6d3cddabc75fe8486f8d93a",
+      "verify_sha256": "988106b52adadfa096721f804adff7ff57526689f04cd58a452287378a5e327a",
+      "verify_bytes": 33299,
+      "fresh_status": {
+        "active": false
+      },
+      "boot_started_at_observations": [
+        "2026-11-15T15:14:11.450746+00:00",
+        "2026-11-15T15:18:44.129222+00:00"
+      ],
+      "business_live_sync_restored": true,
+      "incident_backfill_complete": false
     }
   }
 }
