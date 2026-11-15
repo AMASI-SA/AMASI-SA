@@ -1,0 +1,71 @@
+{
+  "result": {
+    "active_lease": false,
+    "bookkeeping_byte_prefix_proven": false,
+    "evidence_directory": "/tmp/provider1951-original-resume-20261116",
+    "finished_at": "2026-11-15T23:43:06.486531+00:00",
+    "generated_cache_copies_sha256_verified": true,
+    "intent_commit": "c4bddfc4adb012620a161549b42c875c40e0e5d0",
+    "lease_created": false,
+    "merge": "2589f440106a7c5d463ee03eac3617d113319673",
+    "ok": true,
+    "package_proof_matches_accepted_B": true,
+    "prior_evidence": "/tmp/provider1951-original-20261116",
+    "publication_performed": false,
+    "quarantine_directory": "/tmp/provider1951-original-resume-20261116/bytecode-quarantine/backend/__pycache__",
+    "quarantine_method": "explicit_cross_filesystem_copy_verify_then_remove",
+    "quarantined_bytes": 120563,
+    "quarantined_generated_files": 2,
+    "release_id": "rg5-79ac457d2b1bc4c417fb86d9f3d6dc10f7e613f3402018cb15f101f558cda9f6",
+    "source": "f7c5e110a074a242036233ea004d63c270a4daaa",
+    "tree": "d91e281aa9fc7e02ddab1a36989dc6c3bf0b68ec",
+    "unrelated_untracked_contents_read": false,
+    "untracked_byte_identity_proven": false,
+    "untracked_count": 120,
+    "untracked_metadata_preserved": true
+  },
+  "receipts": {
+    "result.json": {
+      "bytes": 1147,
+      "sha256": "5c488e012c60f2c9655bf27626e32275c46a1ec7f4adae055dd3819176cc82fe"
+    },
+    "quarantine-completed.json": {
+      "bytes": 1073,
+      "sha256": "f3dc646287278783b65eb6e3a53700587aac3a4db34a2e233e77e86a9f0e52ce"
+    },
+    "intent-preflight.json": {
+      "bytes": 300,
+      "sha256": "a3a64f04981a410e1422eb35bf20a3ba1594f7ceae7dae577a57900c5e6ee149"
+    },
+    "adapter.json": {
+      "bytes": 300,
+      "sha256": "6674c5be8df323a76e6aae7cb7c369319baa884617a9a737472ef043688764b7"
+    },
+    "packages.json": {
+      "bytes": 300,
+      "sha256": "cf115bf772bbe36dd7f68643ee19cf3304cc9afd1b24be63adb3af460fccc551"
+    },
+    "untracked-before.json": {
+      "bytes": 19442,
+      "sha256": "2bd6143ef6b64419bcf6014a6f7550360117593327612ccfa2a6c0f3b4ef6e2a"
+    },
+    "untracked-after.json": {
+      "bytes": 19442,
+      "sha256": "2bd6143ef6b64419bcf6014a6f7550360117593327612ccfa2a6c0f3b4ef6e2a"
+    },
+    "status-after.json": {
+      "bytes": 108,
+      "sha256": "2a9b41be0bb9d037f82764a3883d0f1673ece64da8151ad66ea904b37934b962"
+    }
+  },
+  "official_guard": {
+    "active": false
+  },
+  "adapter_exit": 0,
+  "packages_exit": 0,
+  "accepted_package_proof_sha256": "8bc0564eba0bbf3c4e7c45464c7324445b16d011df3ef1721459ca41f75f9747",
+  "resume_helper_sha256": "040131064e7d03607747339d0c7812636d3af3008e3d2bbdb68550acf132488b",
+  "root_and_independent_static_reviews_passed": true,
+  "independent_reported_receipt_review_passed": true,
+  "live_production_changed": false
+}

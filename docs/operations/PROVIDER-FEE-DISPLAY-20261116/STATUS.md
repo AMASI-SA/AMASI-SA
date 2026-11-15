@@ -1,4 +1,4 @@
-# Provider fee display repair — reviewed bounded recovery ready
+# Provider fee display repair — original rehearsal accepted; ready for publication
 
 Task `PROVIDER-FEE-DISPLAY-20261116`, repository AMASI-SA/AMASI-SA, PR https://github.com/AMASI-SA/AMASI-SA/pull/1951. This is the evidence-only branch; do not merge or deploy it.
 
@@ -40,11 +40,15 @@ The bound operator ran once. The ff-only update to M succeeded, source/tree/inte
 
 A separate resume helper is staged for static review only: `resume_original_release_1951.py`, 18,784 bytes, SHA256 `040131064e7d03607747339d0c7812636d3af3008e3d2bbdb68550acf132488b`. Root reviewed the complete helper and accepted the bounded behavior. The independently reconstructed 756-byte inventory exactly matches original SHA256 `449a2329eb6ad4aa463e6b03e669ccd245aaa4c7a939ed110addeb4912bf528d`; it is adjacent. The original cache device and /tmp device differ. Recovery therefore uses explicit exclusive copy, fsync, digest/metadata/member revalidation, then removal of only the two reviewed originals and their now-empty directory. Copies remain private outside /app. No validator, financial data, or source code changes are involved. Execute once only after independent static review acceptance; it requires exact M, prior pinned receipts, inactive official guard/mutex, preserved unrelated metadata, and the existing accepted package proof. It runs the unchanged official preflight/build/package checks. No lease or publication is performed by this helper.
 
+## Accepted original rehearsal
+
+The reviewed resume helper ran once and completed successfully at 2026-11-15T23:43:06.486531+00:00. The two generated cache files were durably preserved outside /app and their copies remain hash-verified. Official intent preflight passed, configured adapter build exited 0, and official package verification returned the exact accepted B proof bytes (SHA256 `8bc0564eba0bbf3c4e7c45464c7324445b16d011df3ef1721459ca41f75f9747`). Exact M/tree/intent/runtime remain unchanged; 120 unrelated untracked entries have identical before/after metadata. No byte-identity claim is made for unrelated contents. Original final result SHA256 `5c488e012c60f2c9655bf27626e32275c46a1ec7f4adae055dd3819176cc82fe`. Root observed the receipts and fresh official inactive status; independent receipt review accepted the reported evidence. See `original-rehearsal-acceptance.json` for hashes and preserved limits.
+
 ## Next safe actions
 
-1. Do not repeat the starting-J operator or reset source. Finish review of a separate once-only resume helper pinned to current M and the prior successful handoff/failed preflight receipts.
-2. Under the official mutex and fresh inactive/clean M checks, reversibly quarantine only the exact ignored cache directory after validating the reviewed inventory, filesystem and absence of tracked/symlink/non-bytecode members. Preserve its contents outside the governed source. No broad cleanup or source change is authorized by this recovery step.
-3. Run the same unchanged intent preflight, configured `yarn build`, and accepted package-proof/full metadata checks from M. Save a new receipt directory and checkpoint outcomes; do not create a lease until rehearsal succeeds.
-4. Then follow the existing official prepare/prepublish/publication/three-probe verification flow. Bind the verifier's exact `PREPARED_AT` from the actual receipt, and verify the live estimated commission and below-table explanations with a normal read.
+1. Do not rerun either rehearsal helper or change frozen source. The environment-only blocker is resolved and original rehearsal is accepted.
+2. Run official prepare once with actor `chatgpt-provider1951-20261116-root`; retain full prepare JSON privately at `/tmp/provider1951-publication-20261116/prepare.json`. Bind and independently review the exact prepare timestamp in the verifier outside governed source.
+3. Follow official prepublish, authorized platform Republish and new explicit platform success. Run the existing official verifier once without interruption and require three successful checks plus inactive guard.
+4. Verify the estimated commission and below-table explanations on a normal live page read; no financial refresh or statement reimport.
 
-Issue1006 remains at its known comment limit; this task ledger and PR provide continuity. Live Production changed: **no**; original source checkout changed to reviewed M only.
+Issue1006 remains at its known comment limit; this task ledger and PR provide continuity. Live Production changed: **no**; original source/build are ready at reviewed M. No lease exists yet.
