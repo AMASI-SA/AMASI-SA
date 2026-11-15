@@ -1,0 +1,18 @@
+{
+  "observed_at": "2026-11-15T20:25:18.737Z",
+  "provenance": "Fresh read-only assembly search after official verified:true/checks3 and guard active:false",
+  "url": "https://mezansalla.com/fulfillment-v2?stage=ready_to_ship",
+  "order_number": "299781816",
+  "platform_version": "1f931e6",
+  "ready_count": 0,
+  "total_rows": 5,
+  "reconciliation_pending_rows": 5,
+  "disabled_ready_buttons": 5,
+  "supplier_receipt_message_present": false,
+  "observed_skus": [
+    "AMS11509",
+    "AMS13255",
+    "AMS11549"
+  ],
+  "order_mutations_performed": false
+}

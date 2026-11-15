@@ -1,0 +1,42 @@
+{
+  "provenance": "Read from original CodeServer Terminal 2 via visible UI",
+  "receipts": {
+    "verify-receipt.json": {
+      "step": "verify",
+      "exit_code": 0,
+      "started_at": "2026-11-15T20:10:03.670506+00:00",
+      "finished_at": "2026-11-15T20:23:36.723262+00:00",
+      "stdout_sha256": "7b40a04835c0ad1c2aa33bb768e1678079ecc2b2be9487ac18f628233fd1e316",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "result": {
+        "verified": true,
+        "checks": 3,
+        "source_git_sha": "d8a7ce0352bbe2f8858b349a32f2127c7e202343",
+        "source_base_git_sha": "742b1032113730961597ea413665409d9c213f7b",
+        "git_sha": "d8a7ce0352bbe2f8858b349a32f2127c7e202343",
+        "deployment_git_sha": "c626af288d3823694b4f1d0efcc3670e4ee74d81",
+        "release_id": "rg5-507b99021ed912e77780f15eaf183e0cd72f0012fbaa7e1af3cade593195324f",
+        "protocol_version": 5,
+        "url": "https://mezansalla.com",
+        "boot_started_at": "2026-11-15T20:08:24.419837+00:00",
+        "boot_started_at_observations": [
+          "2026-11-15T20:08:24.419837+00:00",
+          "2026-11-15T20:08:48.171356+00:00"
+        ],
+        "frontend_artifact_tree_sha256": "b9fefbd327c53b9e1fe778f416ec1ea655ae0283fbc3d1919e9d058a24480ead"
+      },
+      "frontend_checked_request_count": 584
+    },
+    "status-after-verify-receipt.json": {
+      "step": "status-after-verify",
+      "exit_code": 0,
+      "started_at": "2026-11-15T20:24:19.267940+00:00",
+      "finished_at": "2026-11-15T20:24:19.368336+00:00",
+      "stdout_sha256": "595219792dd54a38a8ace80a6a7fc33b928ea74f0dd1bdfac6a2b708dbe0dd1e",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "result": {
+        "active": false
+      }
+    }
+  }
+}
