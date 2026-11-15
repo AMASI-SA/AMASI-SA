@@ -1,9 +1,9 @@
 {
   "task_id": "SALLA-WEBHOOK-RECOVERY-20261115",
   "repository": "AMASI-SA/AMASI-SA",
-  "branch": "codex/salla-webhook-recovery-release-20261115",
+  "branch": "codex/salla-webhook-release-evidence-20261115",
   "base_commit": "9afb38cf0dc0d8e8cd887f2c2cdb4a6be5a7ca68",
-  "status": "Fresh linear release source assembled on published PR1933; combined exact-source CI and v5 handoff pending",
+  "status": "Exact source A accepted; reviewed intent-only B frozen; exact-B gates and clean-clone rehearsals pending",
   "requested_behavior": [
     "Repair the blocking verified webhook path and duplicate processing identified by platform support",
     "One scheduled refresh at 10:00 Asia/Riyadh over a fixed preceding 24-hour window",
@@ -43,9 +43,32 @@
     "preexisting_failures": "Two optional marketing-attribution tests reproduced identically against original source: extra utm_content key and stale fixture missing the canonical source gate. No assertion or production change made for these unrelated baseline failures.",
     "diff_check": "passed",
     "final_remote_ci": {
-      "prior_source_commit": "5bf8772eac6fd48a5328a529c0c6b336a66db73f",
-      "prior_passed": 22,
-      "current_release_source": "pending exact-head validation; do not relabel old test receipts"
+      "source_commit": "8c11053b602f8f56a1facbaee09779f2896b0ada",
+      "required_workflows": 22,
+      "success": 22,
+      "first_attempt_success": 21,
+      "controlled_second_attempt_success": 1,
+      "stock_first_attempt": {
+        "run_id": 43716272025,
+        "job_id": 132818382359,
+        "passed": 4512,
+        "failed": 1,
+        "reason": "unchanged issue-index CPU ratio test; non-reproduced timing failure; exact cause unproven",
+        "old_cpu": 0.34302137099999186,
+        "new_cpu": 0.34725050900000554,
+        "artifact_id": 14162797194,
+        "artifact_sha256": "9cd0f78b8355e8c3edae541b28ea57c9e515c5a7267816ede6e8fd037ef2ee84"
+      },
+      "stock_second_attempt": {
+        "job_id": 132820787654,
+        "passed": 4513,
+        "subtests": 7,
+        "skipped": 0,
+        "failed": 0,
+        "artifact_id": 14163156543,
+        "artifact_sha256": "32e040d1fae49a379c6d2adb20cf43417cd78e752e952a3c16103a4edbd26623"
+      },
+      "source_or_assertion_changes": false
     }
   },
   "production_changed": false,
@@ -62,19 +85,29 @@
     "live_identity_verified": true,
     "live_frontend_verified": true,
     "blocker": null,
-    "recheck_requirement": "Fresh shared guard and production ref required again immediately before workspace mutation and publication"
+    "recheck_requirement": "Fresh shared guard and production ref required again immediately before workspace mutation and publication",
+    "source_commit": "8c11053b602f8f56a1facbaee09779f2896b0ada",
+    "source_tree": "28e38776f821b01f6909e8ef21f5b6c7001f49da",
+    "intent_commit": "443424812fbeaad6108f1f67094d94d30a2f0d28",
+    "intent_tree": "62632e21efa7d1ed1e6f42740d1e73321e947c1d",
+    "intent_sha256": "50624daf51b28d1a504a9d62c9a1e9355b0d6bf641c79d0151cb2152f2039012",
+    "expected_runtime": "rg5-8c765a3025bcafa7098d2fbdffe572d5582ecfe52c4be96f8c254ecd498d79f0",
+    "source_and_candidate_independent_review": "PASS",
+    "intent_only_B_independent_review": "PASS",
+    "B_CI": "pending",
+    "merged": false
   },
   "continuation": {
     "ledger": "Issue #1006 has reached 2500 comments; use this status document and the task PR as the durable fallback",
-    "next": "Validate this fresh single-parent source with the official candidate-transition parser and exact-source CI, obtain and independently review its governed candidate intent, create intent-only B, pass clean-clone rehearsal and exact-B gates, then normal merge and single authorized v5 publication with three official probes. Preserve PR1933 Ready/receipt diagnosis and unrelated workspace paths.",
+    "next": "Require all exact-B source checks and both clean-clone Host20/24 adapter rehearsals; independently compare generated outputs/package proof; recheck shared guard/current production base; normal merge preserving B tree; then original-workspace adapter rehearsal and authorized one-shot v5 publication with three official probes. No lease until rehearsal accepted.",
     "caveats": [
       "Queue recovery is at least once after process death between business write and queue settlement; existing source and outbox idempotency remain authoritative",
       "Do not invent updated_at_gt support: official Salla List Orders documentation and existing repository contract do not establish it",
       "Do not call Order Details from background reconciliation because the repository records that it may mark orders read"
     ]
   },
-  "last_remote_checkpoint": "bfd8daf052f1e2b368c9f06394c025322eeaa462",
-  "pull_request": "https://github.com/AMASI-SA/AMASI-SA/pull/1934",
+  "last_remote_checkpoint": "443424812fbeaad6108f1f67094d94d30a2f0d28",
+  "pull_request": "https://github.com/AMASI-SA/AMASI-SA/pull/1935",
   "provider_coverage": {
     "complete": false,
     "reason": "provider_modified_since_filter_unavailable",
@@ -99,5 +132,8 @@
     "source_paths_overlap": false,
     "approved_code_test_workflow_blobs_changed": false,
     "lineage": "New single-parent source directly on published J; old accepted branch is not rebased or force-updated. A two-parent merge was rejected because full-history intent provenance would fail."
-  }
+  },
+  "release_branch": "codex/salla-webhook-recovery-release-20261115",
+  "evidence_only": true,
+  "checkpoint_at": "2026-11-15T13:17:00Z"
 }
