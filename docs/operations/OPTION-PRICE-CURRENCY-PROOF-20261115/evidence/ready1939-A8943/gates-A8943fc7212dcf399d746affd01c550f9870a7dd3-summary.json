@@ -1,0 +1,227 @@
+{
+  "source_sha": "8943fc7212dcf399d746affd01c550f9870a7dd3",
+  "source_tree": "b2d89b165adef9650cffa2cfde82d515c2f44170",
+  "source_base": "a2a8218f858547f4d9d094d29998a93b09bf59ae",
+  "pr": 1939,
+  "observed_at": "2026-11-15 14:19:26 UTC",
+  "release_scope_status": "provenance_only_pending_notification_integration",
+  "runs": [
+    {
+      "id": 43722529443,
+      "name": "Snapchat Direct Active Publication",
+      "head_sha": "8943fc7212dcf399d746affd01c550f9870a7dd3",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43722529443"
+    },
+    {
+      "id": 43722529471,
+      "name": "Review Completion Resumable",
+      "head_sha": "8943fc7212dcf399d746affd01c550f9870a7dd3",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43722529471"
+    },
+    {
+      "id": 43722529385,
+      "name": "CodeQL",
+      "head_sha": "8943fc7212dcf399d746affd01c550f9870a7dd3",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43722529385"
+    },
+    {
+      "id": 43722529383,
+      "name": "Operational Balance Web",
+      "head_sha": "8943fc7212dcf399d746affd01c550f9870a7dd3",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43722529383"
+    },
+    {
+      "id": 43722529371,
+      "name": "Operational Stock Eligibility",
+      "head_sha": "8943fc7212dcf399d746affd01c550f9870a7dd3",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43722529371"
+    },
+    {
+      "id": 43722529339,
+      "name": "Security Gate",
+      "head_sha": "8943fc7212dcf399d746affd01c550f9870a7dd3",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43722529339"
+    },
+    {
+      "id": 43722529349,
+      "name": "G47 Focused Integration",
+      "head_sha": "8943fc7212dcf399d746affd01c550f9870a7dd3",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43722529349"
+    },
+    {
+      "id": 43722529347,
+      "name": "Snapchat Settings Management V2",
+      "head_sha": "8943fc7212dcf399d746affd01c550f9870a7dd3",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43722529347"
+    },
+    {
+      "id": 43722529352,
+      "name": "Build20 component category contract (no deployment)",
+      "head_sha": "8943fc7212dcf399d746affd01c550f9870a7dd3",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43722529352"
+    },
+    {
+      "id": 43722529396,
+      "name": "Qoyod Payment Freshness",
+      "head_sha": "8943fc7212dcf399d746affd01c550f9870a7dd3",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43722529396"
+    },
+    {
+      "id": 43722529344,
+      "name": "Mezan Release Readiness",
+      "head_sha": "8943fc7212dcf399d746affd01c550f9870a7dd3",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43722529344"
+    }
+  ],
+  "candidate": {
+    "run": 43722529344,
+    "job": 132837391394,
+    "artifact": 14165440045,
+    "zip_sha256": "1432d0f0039cc950305e82e77c2ae7bf1b84d633773d2c26ee8d3af7a5ad5a40",
+    "intent_sha256": "8746ba7a7f1451c4e6c6578b8b356c079edff0fa9d614e61c1b8863ab614876d",
+    "schema": 2,
+    "protocol": 5,
+    "frontend_two_passes_identical": true
+  },
+  "review": {
+    "run": 43722529471,
+    "job": 132837391615,
+    "artifact": 14165701526,
+    "sha256": "b034ef3d513a20d24d141de20dd02eb46ec38b71a931ef1ba22c2ece907dee13",
+    "results": {
+      "files": [
+        {
+          "file": "review-completion.xml",
+          "cases": 828,
+          "skipped": 0,
+          "failures": 0,
+          "errors": 0
+        },
+        {
+          "file": "android-operations.xml",
+          "cases": 329,
+          "skipped": 0,
+          "failures": 0,
+          "errors": 0
+        },
+        {
+          "file": "review-acceptance-guard.xml",
+          "cases": 1,
+          "skipped": 0,
+          "failures": 0,
+          "errors": 0
+        },
+        {
+          "file": "source-snapshot.xml",
+          "cases": 124,
+          "skipped": 0,
+          "failures": 0,
+          "errors": 0
+        }
+      ],
+      "required_suites": [
+        {
+          "suite": "test_component_source_detail_recovery.SettledDetailProofTests",
+          "cases": 19,
+          "skipped": 0,
+          "failures": 0,
+          "errors": 0
+        },
+        {
+          "suite": "test_component_option_currency_integration.OptionPriceCurrencyTests",
+          "cases": 7,
+          "skipped": 0,
+          "failures": 0,
+          "errors": 0
+        }
+      ]
+    }
+  },
+  "stock": {
+    "run": 43722529371,
+    "job": 132837391202,
+    "artifact": 14165121612,
+    "sha256": "88557301feef1d9ab4943440a89d24dc1553798341289a1c75addd40a04197ed",
+    "cases": 4513,
+    "skips": 0,
+    "failures": 0,
+    "errors": 0,
+    "attempt": 1
+  },
+  "other_log_counts": {
+    "G47": {
+      "salla": 228,
+      "g47": 331,
+      "cost": 436,
+      "ui": 140,
+      "skips": 0
+    },
+    "operational_balance": {
+      "backend": 4799,
+      "shipping_contracts": 16,
+      "worker": 4,
+      "frontend": 783,
+      "browser": 14
+    },
+    "Build20": 64,
+    "Qoyod": 164,
+    "release_preflight": 156,
+    "frontend_build_contracts": 57,
+    "host_engine_contracts": [
+      10,
+      10
+    ],
+    "security": {
+      "frontend_contracts": 50,
+      "braces_compatibility": 764,
+      "frontend": 3810,
+      "backend_runs": [
+        88,
+        26,
+        83,
+        216,
+        57
+      ],
+      "deselected": 1
+    }
+  },
+  "merge": {
+    "sha": "204c460c4791483a49c195de0f1a5d08992f39ca",
+    "tree_equals_source": true
+  },
+  "mutations_performed": [],
+  "scope_note": "This source was audited before the requested notification integration. The combined release requires its own successor source and fresh CI; no B freeze was performed."
+}

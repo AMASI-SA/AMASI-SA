@@ -1,0 +1,134 @@
+{
+  "sha": "ab7271046772e591034962c0990864a7208a335e",
+  "tree": "0870d4133f3d6fc5c07292a7dd182777892c400b",
+  "base": "a2a8218f858547f4d9d094d29998a93b09bf59ae",
+  "branch": "codex/ready-source-detail-integrated-20261115",
+  "parent": "8943fc7212dcf399d746affd01c550f9870a7dd3",
+  "notification_source": "ec13c2c6a495b36cf5f70795428267d567634f86",
+  "ready_entries": [
+    {
+      "path": ".github/workflows/review-completion-resumable.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6cdcd09310e52b2b20622462bf0115c29f39bc66"
+    },
+    {
+      "path": "backend/component_option_currency_recovery.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c00b100852219b40c0a0f2db646e0376c5c1c808"
+    },
+    {
+      "path": "backend/component_source_detail_recovery.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a32fc760a1fe47a942915d3a83749a50484a4d8f"
+    },
+    {
+      "path": "backend/tests/test_component_source_detail_recovery.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0cf296c32b125105084495ab3910e7a340b35e89"
+    }
+  ],
+  "notification_entries": [
+    {
+      "path": ".github/workflows/mobile-order-tracking.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ebedf670c8b362c0566224cb8ea5e78c25704066"
+    },
+    {
+      "path": "backend/mobile_app_request_context.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "743477f2bf01cfc38de7a51619a5c1580c3c1b46"
+    },
+    {
+      "path": "backend/operational_instruction_accounts.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "15fa2f56dbf049d069fdc3209f1374dc6d934ba3"
+    },
+    {
+      "path": "backend/operational_instruction_comments.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "87928e637979a53f9c6c7085fbca687f2844e713"
+    },
+    {
+      "path": "backend/operational_instruction_conversations.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "271b8147bcbf4fde600fc3b4a7b8e88943ba53e0"
+    },
+    {
+      "path": "backend/operational_instruction_notifications.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9bff93ac80d03482d887e3b0126d70a7f3d506ab"
+    },
+    {
+      "path": "backend/operational_instruction_progress.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "23177e403b3f4246816dda86dec251ac79d46496"
+    },
+    {
+      "path": "backend/operational_push.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "5b672448da8f616cf9e5bc7d61b5dfe40ff5515e"
+    },
+    {
+      "path": "backend/operational_push_preview.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a3f302d4247249cbb81e3e057a331705f5725a84"
+    },
+    {
+      "path": "backend/order_tracking_notes_routes.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e132fb164d834b0fbc0c090aecf8fc799df5e401"
+    },
+    {
+      "path": "backend/tests/test_instruction_account_scope.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b11fa65caa8222e3141b80f93fa457987cf29b8d"
+    },
+    {
+      "path": "backend/tests/test_instruction_conversations.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ee20cd3f7c29c8e4bc61180f77d039a6cc1fcab8"
+    },
+    {
+      "path": "backend/tests/test_operational_notification_preview_snapshot.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0fed162a84b4e4fe9952681dbada0d592ba2dacb"
+    },
+    {
+      "path": "backend/tests/test_operational_push_presentation.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ab1b35feb303b65356274042c6ba94c529b01eca"
+    },
+    {
+      "path": "backend/tests/test_operational_push_preview.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7244afff643a3019888222b7ddaeb8826d06d895"
+    },
+    {
+      "path": "docs/operations/NOTIFICATION-CONVERSATIONS-RECOVERY-20261114/STATUS.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1332eb06d7a5777354e99fca7145d490e497afe5"
+    }
+  ],
+  "independent_integration_review": "PASS",
+  "production_changed_by_followup": false
+}
