@@ -1,6 +1,6 @@
 {
   "task": "EXECUTIVE-PROFIT-SPEND-BASIS-20261115",
-  "updated_at_utc": "2026-11-15 13:48:42 UTC",
+  "updated_at_utc": "2026-11-15 13:56:53 UTC",
   "repository": "AMASI-SA/AMASI-SA",
   "pull_request": 1936,
   "source_branch": "codex/executive-profit-release-20261115",
@@ -213,5 +213,226 @@
   "merge_commit": null,
   "production_changed": false,
   "lease_created": false,
-  "next_action": "Require exact-B workflow gates and independent Host20/24 artifacts; then fresh-base normal merge, M gates, guarded original-workspace rehearsal, prepare/prepublish, authorized publication, three official probes, live profit-card verification."
+  "next_action": "Await independent B artifact review, normal merge expected B at unchanged reviewed base, actual-merge gates, guarded original-workspace rehearsal with matching package proof, prepare/prepublish, authorized publication and official/live-card verification.",
+  "B_workflows": [
+    {
+      "id": 43720779455,
+      "name": "Page and operational read performance",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720779372,
+      "name": "TikTok Creator Release Candidate",
+      "status": "completed",
+      "conclusion": "skipped"
+    },
+    {
+      "id": 43720779294,
+      "name": "Snapchat Direct Active Publication",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720779284,
+      "name": "Dashboard card cadence and catalogue admission",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720779327,
+      "name": "Campaign hover source coverage",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720779311,
+      "name": "Production Dashboard Platform Spend Hourly V1",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720779423,
+      "name": "Supplier embroidery and profit layout acceptance (PR only)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720779362,
+      "name": "Snapchat Settings Management V2",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720779343,
+      "name": "Production Campaign AI Decision V3 Extended",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720779341,
+      "name": "Google Ads full management",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720779355,
+      "name": "Sold product cost details",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720779375,
+      "name": "Production Dashboard Executive Four Platform Date V1",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720779464,
+      "name": "Snapchat Reporting V2 Shadow",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720779406,
+      "name": "Production Dashboard V2 Ad FX And Payment Fees",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720779349,
+      "name": "Security Gate",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720779397,
+      "name": "Background workers and two-hour Qoyod cycles",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720779322,
+      "name": "CodeQL",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720779459,
+      "name": "Mezan Release Readiness",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720779351,
+      "name": "G47 Focused Integration",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720779389,
+      "name": "Operational Stock Eligibility",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720779345,
+      "name": "Operational Balance Web",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720779204,
+      "name": "Qoyod Payment Freshness",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720779234,
+      "name": "Production Campaign AI Decision Intelligence V3",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720779243,
+      "name": "Production Dashboard Four Platform Spend V1",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720779233,
+      "name": "Production Dashboard Profit Date Race V1",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720779226,
+      "name": "Production Dashboard V2 Salla Ads Executive",
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ],
+  "B_gate_summary": {
+    "applicable_passed": 25,
+    "expected_unrelated_branch_workflow_skip": {
+      "run_id": 43720779372,
+      "workflow": "TikTok Creator Release Candidate",
+      "reason": "job restricted to codex/tiktok-content-ci-20261011"
+    },
+    "required_test_skips": 0
+  },
+  "B_artifacts": [
+    {
+      "id": 14164273678,
+      "name": "release-v5-generated-outputs-host-24.19.0",
+      "digest": "sha256:9fa6fa59523fb2ff4cffce1255d6a391a469aa9a1bd50963007a545850855dad",
+      "size_in_bytes": 2978527,
+      "run_id": 43720779459,
+      "head_sha": "499c32e61234bd30ce93f19c0603c334c8b6141a"
+    },
+    {
+      "id": 14164263605,
+      "name": "release-v5-clean-clone-evidence-host-24.19.0",
+      "digest": "sha256:64ccf483bb4187d962e4f9793f83105fc2839b60e1b5381451d8973539d3114f",
+      "size_in_bytes": 46003,
+      "run_id": 43720779459,
+      "head_sha": "499c32e61234bd30ce93f19c0603c334c8b6141a"
+    },
+    {
+      "id": 14164093257,
+      "name": "release-v5-clean-clone-evidence-host-20.20.2",
+      "digest": "sha256:f25016ca1d24b67c80ed63f79f64ebfbf254b30ed4997e25de29f335cf00f20f",
+      "size_in_bytes": 45998,
+      "run_id": 43720779459,
+      "head_sha": "499c32e61234bd30ce93f19c0603c334c8b6141a"
+    },
+    {
+      "id": 14164018521,
+      "name": "release-v5-generated-outputs-host-20.20.2",
+      "digest": "sha256:4f0bc73b749ff513fb827e12c538b0cae3076574790145d5c2f96f8da7e95caf",
+      "size_in_bytes": 2978231,
+      "run_id": 43720779459,
+      "head_sha": "499c32e61234bd30ce93f19c0603c334c8b6141a"
+    }
+  ],
+  "B_root_artifact_review": {
+    "passed": true,
+    "generated_regular_files": 293,
+    "all_bytes_and_modes_equal_across_hosts": true,
+    "intent_exact_bytes_match": true,
+    "local_frontend_build_and_proof_match": true,
+    "package_proof_sha256": "236ee498d5d7f13a2c24ed1af10bad4c5d45c36b83aca65b63c7e7ab99f133fd",
+    "package_proof_bytes": 1278,
+    "backend_identity_sha256": "db97835bddad970450c9c579197b0eb00b48ad752bb3d81ca219970849857904",
+    "backend_package_files": 1220,
+    "frontend_package_files": 1472
+  },
+  "shared_workspace_last_read": {
+    "head": "331b7917b3c01d064ee2a17affb4714f3a296331",
+    "branch": "hotfix/prod-snap-meta-final",
+    "tracked_clean": true,
+    "active_lease": false,
+    "observed_at_utc": "2026-11-15 13:56:53 UTC",
+    "note": "Read-only observation in independent Terminal3; not a reservation. Recheck under official operation mutex before mutation."
+  }
 }
