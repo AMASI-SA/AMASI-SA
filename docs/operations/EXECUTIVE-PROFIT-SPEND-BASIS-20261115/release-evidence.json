@@ -1,6 +1,6 @@
 {
   "task": "EXECUTIVE-PROFIT-SPEND-BASIS-20261115",
-  "updated_at_utc": "2026-11-15 13:56:53 UTC",
+  "updated_at_utc": "2026-11-15 13:59:56 UTC",
   "repository": "AMASI-SA/AMASI-SA",
   "pull_request": 1936,
   "source_branch": "codex/executive-profit-release-20261115",
@@ -210,10 +210,10 @@
   ],
   "intent_only_B_root_and_independent_review": "passed",
   "B_readiness_run": 43720779459,
-  "merge_commit": null,
+  "merge_commit": "a2a8218f858547f4d9d094d29998a93b09bf59ae",
   "production_changed": false,
   "lease_created": false,
-  "next_action": "Await independent B artifact review, normal merge expected B at unchanged reviewed base, actual-merge gates, guarded original-workspace rehearsal with matching package proof, prepare/prepublish, authorized publication and official/live-card verification.",
+  "next_action": "Require exact-M CodeQL, Security Gate and Release Readiness push gates including both adapter rehearsals; accept independent operator review; fresh inactive shared lease; retrieve pinned operator/proof outside /app; run guard-locked original rehearsal, then prepare/prepublish/publication/official probes/live-card verification.",
   "B_workflows": [
     {
       "id": 43720779455,
@@ -434,5 +434,57 @@
     "active_lease": false,
     "observed_at_utc": "2026-11-15 13:56:53 UTC",
     "note": "Read-only observation in independent Terminal3; not a reservation. Recheck under official operation mutex before mutation."
+  },
+  "B_independent_artifact_review": {
+    "passed": true,
+    "generated_regular_files": 293,
+    "directory_modes_matched": 3,
+    "archive_digests_verified": true,
+    "package_tree_hashes_independently_reconstructed": true,
+    "package_proof_sha256": "236ee498d5d7f13a2c24ed1af10bad4c5d45c36b83aca65b63c7e7ab99f133fd"
+  },
+  "merge_tree": "1f317b0abb89708de1a55be8e0628247419060ee",
+  "merge_parents": [
+    "331b7917b3c01d064ee2a17affb4714f3a296331",
+    "499c32e61234bd30ce93f19c0603c334c8b6141a"
+  ],
+  "merge_source_ancestor_verified": true,
+  "source_to_merge_diff": [
+    "release/release-intent-v5.json"
+  ],
+  "production_branch_changed": true,
+  "production_changed_note": "Repository production branch merged; live deployment has not changed by this task.",
+  "M_workflows": [
+    {
+      "id": 43721828337,
+      "name": "Security Gate",
+      "status": "in_progress",
+      "conclusion": null,
+      "event": "push",
+      "head_sha": "a2a8218f858547f4d9d094d29998a93b09bf59ae"
+    },
+    {
+      "id": 43721828382,
+      "name": "Mezan Release Readiness",
+      "status": "in_progress",
+      "conclusion": null,
+      "event": "push",
+      "head_sha": "a2a8218f858547f4d9d094d29998a93b09bf59ae"
+    },
+    {
+      "id": 43721828360,
+      "name": "CodeQL",
+      "status": "in_progress",
+      "conclusion": null,
+      "event": "push",
+      "head_sha": "a2a8218f858547f4d9d094d29998a93b09bf59ae"
+    }
+  ],
+  "operator": {
+    "path": "docs/operations/EXECUTIVE-PROFIT-SPEND-BASIS-20261115/operators/original_release_1936.py",
+    "sha256": "1cf90631ca0af815879975195181a630b441e5e8daece868be31bcaebbe95049",
+    "bytes": 7547,
+    "independent_review": "pending",
+    "executed": false
   }
 }

@@ -1,3 +1,13 @@
+# Current operational checkpoint — 2026-11-15 13:59:56 UTC
+
+PR #1936 is merged normally as `a2a8218f858547f4d9d094d29998a93b09bf59ae`, tree-identical to reviewed B. All 25 applicable B workflows and independent Host20/24 artifact reviews passed. Exact-M push CI is running. This task has not changed shared `/app`, created a lease, or published. The live production deployment remains pending.
+
+Current canonical evidence: `release-evidence.json` on `codex/executive-profit-evidence-20261115`. This branch contains evidence and an operator only; never merge it into the frozen source/intent release. The next safe action is the exact-M gate and operator review described there.
+
+The original source status below is retained as historical evidence; its pre-merge statements describe earlier checkpoints.
+
+---
+
 # Executive profit spending basis — 2026-11-15
 
 ## Scope and source
