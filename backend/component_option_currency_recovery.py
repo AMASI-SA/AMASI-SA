@@ -60,7 +60,7 @@ def _source_unknown(snapshot):
             if key.startswith("/source/")}
 
 
-def _restoration_evidence(raw, operation):
+def _restoration_evidence(raw, operation, *, order=None, previous=None):
     if not isinstance(raw, dict) or not isinstance(operation, dict):
         return None
     snapshot = operation.get("business_snapshot")
@@ -142,23 +142,39 @@ def _restoration_evidence(raw, operation):
                 changed_nonzero = True
             if _business_tree(option, KNOWN_NESTED) != old_node:
                 return None
-    # The component fingerprint alone omits financial facts. Reuse the exact
-    # approved source normalization to protect every amount, identity and unknown
-    # field; only the proven option envelopes have been restored in this copy.
+    # The component fingerprint alone omits financial facts. First retain the
+    # original exact-source proof. Detail hydration has a separate, bounded
+    # contract requiring the actual canonical DTO and accepted lifecycle.
     candidate = build_snapshot(
         {"raw_by_source": {"salla_direct": restored}}, {}, {}, identity=identity,
         schema_version=snapshot["schema_version"],
         normalization_version=snapshot["normalization_version"],
     )
+    detail_enrichment = None
     if (candidate["facts"]["source"] != snapshot["facts"]["source"]
             or _source_unknown(candidate) != _source_unknown(snapshot)):
-        return None
-    return restored, format(rate, "f"), exchange_hash, changed_nonzero
+        if order is None or not isinstance(previous, dict):
+            return None
+        from component_source_detail_recovery import restore_settled_detail_source
+        detail = restore_settled_detail_source(restored, operation, order, previous)
+        if detail is None:
+            return None
+        candidate = build_snapshot(
+            {"raw_by_source": {"salla_direct": detail["raw"]}}, {}, {}, identity=identity,
+            schema_version=snapshot["schema_version"],
+            normalization_version=snapshot["normalization_version"],
+        )
+        if (candidate["facts"]["source"] != detail["approved_source"]
+                or _source_unknown(candidate) != detail["approved_unknown"]):
+            return None
+        restored = detail["raw"]
+        detail_enrichment = detail["audit"]
+    return restored, format(rate, "f"), exchange_hash, changed_nonzero, detail_enrichment
 
 
-def _safe_evidence(raw, operation):
+def _safe_evidence(raw, operation, *, order=None, previous=None):
     try:
-        return _restoration_evidence(raw, operation)
+        return _restoration_evidence(raw, operation, order=order, previous=previous)
     except (HTTPException, DecimalException, TypeError, ValueError, OverflowError):
         return None
 
@@ -188,10 +204,10 @@ async def prove_option_price_currency_change(db, *, user_id, order_number, raw, 
             or operation.get("order_number") != order_number or operation.get("state") != "completed"
             or operation.get("completion_mode") != "mezan_local_v1" or operation.get("superseded_by")):
         return None
-    evidence = _safe_evidence(raw, operation)
+    evidence = _safe_evidence(raw, operation, order=order, previous=previous)
     if not evidence or not isinstance(previous, dict) or not previous.get("source_fingerprint"):
         return None
-    restored, rate, exchange_hash, changed_nonzero = evidence
+    restored, rate, exchange_hash, changed_nonzero, detail_enrichment = evidence
     restored_order = order.model_copy(update={"items": map_salla_order(restored).items})
     approved_fingerprint = component_order_fingerprint(restored_order)
     baseline = previous["source_fingerprint"]
@@ -222,4 +238,5 @@ async def prove_option_price_currency_change(db, *, user_id, order_number, raw, 
         "approved_fingerprint": approved_fingerprint, "previous_fingerprint": previous["source_fingerprint"],
         "reason": REASON, "proof_kind": PROOF_KIND, "exchange_rate_to_sar": rate,
         "exchange_rate_fingerprint": exchange_hash,
+        **({"detail_enrichment": detail_enrichment} if detail_enrichment else {}),
     }
