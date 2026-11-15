@@ -7,6 +7,7 @@ from fastapi import FastAPI, Request
 import pytest
 
 import operational_balance_sources as sources
+import operational_financial_activity_runtime as activity_runtime
 from operational_visible_report_read import run_visible_report_read
 from test_operational_balance_sources import DB, NOW, START, order, row
 from test_operational_balance_supplier_preview_lifetime import begin_request
@@ -19,6 +20,7 @@ def test_actual_source_conversion_stops_before_draining_rows_and_joins_on_discon
         heartbeat = False
         finished = False
         preparation_finished = Event()
+        cancellation_observed = Event()
         source_code = {
             'orders': 'canonical_salla_source_missing',
             'items': 'order_item_stable_identity_missing',
@@ -55,6 +57,13 @@ def test_actual_source_conversion_stops_before_draining_rows_and_joins_on_discon
             count += 1
             if count == 10:
                 loop.call_soon_threadsafe(disconnect)
+                if stage in {'employees', 'advertising', 'recurring'}:
+                    # Synchronize with the real HTTP cancellation instead of
+                    # racing the queued callback against a finite thread loop.
+                    stop = activity_runtime._STOP.get()
+                    assert stop is not None
+                    assert stop.wait(2), 'disconnect did not stop request-owned preparation'
+                    cancellation_observed.set()
 
         original_issue, original_usable = sources.issue, sources.usable
 
@@ -101,6 +110,7 @@ def test_actual_source_conversion_stops_before_draining_rows_and_joins_on_discon
         assert 10 <= count < total
         assert next(message['status'] for message in sent if message['type'] == 'http.response.start') == 499
         if stage in {'employees', 'advertising', 'recurring'}:
+            assert cancellation_observed.is_set()
             assert preparation_finished.is_set()
         observed_count = count
         await asyncio.sleep(0)

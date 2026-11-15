@@ -1422,7 +1422,9 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
         customer_tenders = out["customer_tender_coverage"] = new_coverage(start.isoformat(), now.isoformat())
         counted_order_ids, inspected_order_ids = set(), set()
         from operational_completed_shipping_admission import build_review_index
+        from operational_provider_statement_reconciliation import statement_refund_order_index, statement_refund_observation
         with refresh_stage('source_order_indexes'):
+            statement_refund_index = statement_refund_order_index(operational_state)
             completion_review_index = build_review_index(operational_state) if operational_state else None
             source_ids = Counter(str(r.get('id') or '') for r in raw_orders)
             source_numbers = Counter(str(r.get('reference_id') or r.get('order_number') or '') for r in raw_orders)
@@ -1624,6 +1626,10 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                 normalized_payment, payment_issues = normalize_operational_payment(
                     raw, order['currency'], total, created, now, owner=owner, order_number=order_number,
                     provider_order_id=identity, rows=txn_by_order.get(order_number, ()), source=source)
+                if identity in statement_refund_index:
+                    order['statement_refund_observation'] = statement_refund_observation(operational_state, raw,
+                        owner=owner, order_id=identity, order_number=order_number,
+                        transaction_rows=txn_by_order.get(order_number, ()), refund_index=statement_refund_index)
                 if (not normalized_payment and "provider_split:" + identity in
                         (operational_state or {}).get("engine", {}).get("facts", {})):
                     # Changing the order's payment method cannot turn a frozen split receipt into bank cash or COD.

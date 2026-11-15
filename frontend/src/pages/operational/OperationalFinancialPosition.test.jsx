@@ -375,6 +375,7 @@ test("owner review components mount only on their related page and do no shared 
     for (const [view, testId] of cases) {
         await navigate(view);
         expect(host.querySelector(`[data-testid="${testId}"]`)).not.toBeNull();
+        expect(Boolean(host.querySelector('a[href="/operational-balances/provider-statements"]'))).toBe(view === "providers");
         for (const id of ["provider-history", "purchase-review", "wallet-review"]) if (id !== testId) expect(host.querySelector(`[data-testid="${id}"]`)).toBeNull();
         if (!["couriers", "drivers"].includes(view)) expect(host.querySelector('[data-testid="completed-shipping"]')).toBeNull();
     }
