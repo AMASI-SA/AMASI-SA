@@ -889,10 +889,17 @@ export async function loadDashboardPeriodSnapshot({
         if (!isLatest(requestSequence) || !matchesRange(response)) return;
         const sameRangeSpend = platformSpend?.date_from === next.from
             && platformSpend?.date_to === (next.to || next.from) ? platformSpend : null;
-        if (sameRangeSpend && needsCanonicalDashboardSpendRefresh(response.data, sameRangeSpend)) {
+        const executiveBasisChanged = !refresh && endpoint === "/dashboard-v2/cards/executive"
+            && dashboardAvailableAmount(sameRangeSpend, {
+                fromDate: next.from, toDate: next.to || next.from,
+            }) !== null && !dashboardCanonicalSpendMatches(response.data, sameRangeSpend);
+        if (sameRangeSpend && (executiveBasisChanged
+            || needsCanonicalDashboardSpendRefresh(response.data, sameRangeSpend))) {
             // Recompute profit and fees on the backend after saved spend proof
-            // becomes available. Never derive them from a null prior base or
-            // request another native platform refresh solely for this read.
+            // becomes available or changes its amount/account basis. Retry only
+            // once within this admitted read, without another platform sync or
+            // client-side profit/fee arithmetic. A forced read may still join
+            // in-flight work; unmatched results retain the rendering gate.
             if (endpoint === "/dashboard-v2") query.set("_refresh", `${now()}-spend-recompute`);
             query.set("refresh", "true");
             response = await apiClient.get(`${endpoint}?${query.toString()}`, requestConfig());
