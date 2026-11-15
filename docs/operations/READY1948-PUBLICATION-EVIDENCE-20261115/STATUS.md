@@ -1,3 +1,17 @@
+# Latest outcome — Ready enabled (2026-11-16 Asia/Riyadh)
+
+**Current Ready button lock for order299781816 resolved by user confirmation.**
+
+The user returned the order to **قيد التنفيذ** and confirmed **زر جاهز اشتغل**. Independent Salla readback confirms `in_progress` with update time **00:39:55 Asia/Riyadh, 16 November2026**.
+
+No order/database/Ready/source/publication mutation was performed in this follow-up. The result establishes button availability, not that all five pieces were marked Ready or that the exact earlier refresh refusal was identified.
+
+See **USER-CONFIRMED-READY-ENABLED-20261116.md** and **user-confirmed-ready-enabled-20261116.json**. The current button-lock task can be closed. Historical diagnostic limits remain preserved below.
+
+---
+
+## Earlier checkpoints (historical)
+
 # Latest follow-up — production read diagnosis (2026-11-15 21:06 UTC)
 
 **Current Ready blocker identified; earlier failed refresh remains unresolved.**

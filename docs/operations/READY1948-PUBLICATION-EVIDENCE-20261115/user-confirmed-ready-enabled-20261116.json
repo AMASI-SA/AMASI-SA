@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "task": "Ready button follow-up for order299781816",
+  "recorded_at_utc": "2026-11-15T21:41:36Z",
+  "user_facing_date": "2026-11-16 Asia/Riyadh",
+  "order_reference": "299781816",
+  "salla_internal_id": "800420115",
+  "user_report": {
+    "returned_order_to_in_progress": true,
+    "ready_button_works": true,
+    "source": "Current conversation, user-authored messages"
+  },
+  "independent_salla_readback": {
+    "id": 800420115,
+    "reference_id": 299781816,
+    "status": "in_progress",
+    "updated_at": {
+      "date": "2026-11-16 00:39:55.000000",
+      "timezone_type": 3,
+      "timezone": "Asia/Riyadh"
+    }
+  },
+  "conclusion": {
+    "current_button_lock": "resolved by user confirmation after return to in_progress",
+    "all_five_pieces_marked_ready": "not established",
+    "prior_refresh_failure_predicate": "not established",
+    "global_nonrecurrence": "not established"
+  },
+  "actions_this_followup": {
+    "order_status_mutation": false,
+    "ready_action": false,
+    "database_mutation": false,
+    "source_code_change": false,
+    "new_publication": false
+  },
+  "review": "Independent reviewer accepted closure of the current button lock, with the stated evidence limits"
+}
