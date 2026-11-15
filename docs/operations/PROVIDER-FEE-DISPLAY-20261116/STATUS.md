@@ -1,4 +1,4 @@
-# Provider fee display repair — original rehearsal accepted; ready for publication
+# Provider fee display repair — owned publication lease prepared
 
 Task `PROVIDER-FEE-DISPLAY-20261116`, repository AMASI-SA/AMASI-SA, PR https://github.com/AMASI-SA/AMASI-SA/pull/1951. This is the evidence-only branch; do not merge or deploy it.
 
@@ -44,11 +44,17 @@ A separate resume helper is staged for static review only: `resume_original_rele
 
 The reviewed resume helper ran once and completed successfully at 2026-11-15T23:43:06.486531+00:00. The two generated cache files were durably preserved outside /app and their copies remain hash-verified. Official intent preflight passed, configured adapter build exited 0, and official package verification returned the exact accepted B proof bytes (SHA256 `8bc0564eba0bbf3c4e7c45464c7324445b16d011df3ef1721459ca41f75f9747`). Exact M/tree/intent/runtime remain unchanged; 120 unrelated untracked entries have identical before/after metadata. No byte-identity claim is made for unrelated contents. Original final result SHA256 `5c488e012c60f2c9655bf27626e32275c46a1ec7f4adae055dd3819176cc82fe`. Root observed the receipts and fresh official inactive status; independent receipt review accepted the reported evidence. See `original-rehearsal-acceptance.json` for hashes and preserved limits.
 
+## Official prepare and final verifier
+
+Official prepare ran once and exited 0. Owned actor `chatgpt-provider1951-20261116-root`, exact prepared_at `2026-11-15T23:45:16.349437+00:00`, exact A/J/M/runtime and protocol 5. Full private receipt is `/tmp/provider1951-publication-20261116/prepare.json`, SHA256 `e542d1c14b0252c52201adf57d4a59bf9a2cde4383c601f8880f2b8c90621643`. The owned release lease is now active. Original M/build remain unchanged.
+
+Final bound verifier `official_verify_1951.py`: 9,702 bytes, SHA256 `db3ee59f4c9b27717b6757b278aaef02d8208dba46cc61cfc949007f509b85d3`. Root and both independent static reviewers accepted exact pins and unchanged executable behavior. No verifier execution yet. Fresh Manage Overview still shows prior platform `3e5bbfb` (100th publish), so publication has not happened.
+
 ## Next safe actions
 
-1. Do not rerun either rehearsal helper or change frozen source. The environment-only blocker is resolved and original rehearsal is accepted.
-2. Run official prepare once with actor `chatgpt-provider1951-20261116-root`; retain full prepare JSON privately at `/tmp/provider1951-publication-20261116/prepare.json`. Bind and independently review the exact prepare timestamp in the verifier outside governed source.
-3. Follow official prepublish, authorized platform Republish and new explicit platform success. Run the existing official verifier once without interruption and require three successful checks plus inactive guard.
-4. Verify the estimated commission and below-table explanations on a normal live page read; no financial refresh or statement reimport.
+1. Transfer the exact bound verifier outside /app and verify its digest. Do not alter governed source or rerun preparation/rehearsal.
+2. Run official prepublish immediately before the authorized platform Republish. Observe a new explicit successful version and timestamp later than prepare.
+3. Run the bound verifier exactly once without timeout/interruption; require exact three successful official checks and inactive status. Preserve private receipts and checkpoint outcome.
+4. Verify the live estimated commission and below-table explanations with a normal page read; no financial refresh, statement reimport or financial writes.
 
-Issue1006 remains at its known comment limit; this task ledger and PR provide continuity. Live Production changed: **no**; original source/build are ready at reviewed M. No lease exists yet.
+Issue1006 remains at its known comment limit; this task ledger and PR provide continuity. Live Production changed: **no**. Owned publication lease is active; source/build ready at M.
