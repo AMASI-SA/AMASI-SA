@@ -1,6 +1,6 @@
 {
   "task": "EXECUTIVE-PROFIT-SPEND-BASIS-20261115",
-  "updated_at_utc": "2026-11-15 14:06:44 UTC",
+  "updated_at_utc": "2026-11-15 14:18:05 UTC",
   "repository": "AMASI-SA/AMASI-SA",
   "pull_request": 1936,
   "source_branch": "codex/executive-profit-release-20261115",
@@ -213,7 +213,7 @@
   "merge_commit": "a2a8218f858547f4d9d094d29998a93b09bf59ae",
   "production_changed": false,
   "lease_created": false,
-  "next_action": "Only shared environment coordination remains before original rehearsal: wait for J owner to close its active publication lease, require fresh official inactive status, then execute pinned reviewed operator for M. Preserve source/lease meanwhile. After matching rehearsal prepare/prepublish, one authorized M publication, official three probes and live profit-card verification.",
+  "next_action": "Wait for the J owner to finish identity verification and close its lease. Track that owner's focused Salla forwarding successor, verify it descends from M and retains this profit fix, then accept its governed source/intent/release gates and coordinate one current-source publication. Do not mutate or clear the other owner's lease and do not publish an obsolete source. Finally verify the live profit card.",
   "B_workflows": [
     {
       "id": 43720779455,
@@ -491,7 +491,8 @@
     "staged_in_original_workspace": true,
     "staging_location": "/tmp/executive-profit-release-1936/operator",
     "pinned_evidence_commit": "c2c82d6fdfa7ef8346d9ddb59d41458ccaa8888d",
-    "staged_sha256_verified": true
+    "staged_sha256_verified": true,
+    "execution_hold": "Do not execute the M-pinned operator while another lease is active or while a successor is being prepared for the known inherited Salla regression. Track the reviewed successor and preserve all profit-fix blobs."
   },
   "live_baseline": {
     "observed_at_utc": "2026-11-15 14:01:24 UTC",
@@ -614,5 +615,24 @@
       "conclusion": "success"
     }
   ],
-  "M_all_gates_passed": true
+  "M_all_gates_passed": true,
+  "other_owner_live_observation": {
+    "observed_at_utc": "2026-11-15 14:10 UTC",
+    "source_git_sha": "8c11053b602f8f56a1facbaee09779f2896b0ada",
+    "release_id": "rg5-8c765a3025bcafa7098d2fbdffe572d5582ecfe52c4be96f8c254ecd498d79f0",
+    "verified_identity_available": true,
+    "critical_file_hashes_match": true,
+    "frontend_build_verified": true,
+    "note": "Read-only public health observation; not our release and not the owner's official three-probe/lease-close acceptance."
+  },
+  "upstream_followup": {
+    "repository_pr": 1935,
+    "record_updated_at": "2026-11-15T14:15:22Z",
+    "owner_publication_version": "908dee3",
+    "reported_problem": "Installed cart/order reconciliation wrapper does not accept the strict processing keyword passed by the durable dispatcher; natural webhook work retries before capture.",
+    "same_salla_source_in_M": true,
+    "profit_source_changes_do_not_overlap": true,
+    "owner_fix_state": "Owner preparing focused forwarding fix and production-composition regression on a separate branch.",
+    "root_independently_read_current_pr": true
+  }
 }
