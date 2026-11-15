@@ -1,6 +1,6 @@
 {
   "task": "EXECUTIVE-PROFIT-SPEND-BASIS-20261115",
-  "updated_at_utc": "2026-11-15 14:34:41 UTC",
+  "updated_at_utc": "2026-11-15 14:43:14 UTC",
   "repository": "AMASI-SA/AMASI-SA",
   "pull_request": 1936,
   "source_branch": "codex/executive-profit-release-20261115",
@@ -213,7 +213,7 @@
   "merge_commit": "a2a8218f858547f4d9d094d29998a93b09bf59ae",
   "production_changed": false,
   "lease_created": false,
-  "next_action": "Track owner PR1940 exact source/intent/merge gates and guarded combined publication; verify current successor preserves all profit blobs, then inspect actual executive profit card. Do not execute the obsolete M-pinned operator or clear another owner's lease.",
+  "next_action": "Wait for owner exact actual-M gates, original preserving rehearsal and authorized combined publication; inspect live profit on published source a6c5bc5/runtime rg5-f33cd353... then final official verification and acceptance.",
   "B_workflows": [
     {
       "id": 43720779455,
@@ -499,7 +499,8 @@
     "staging_location": "/tmp/executive-profit-release-1936/operator",
     "pinned_evidence_commit": "c2c82d6fdfa7ef8346d9ddb59d41458ccaa8888d",
     "staged_sha256_verified": true,
-    "execution_hold": "Do not execute the M-pinned operator while another lease is active or while a successor is being prepared for the known inherited Salla regression. Track the reviewed successor and preserve all profit-fix blobs."
+    "execution_hold": "Do not execute the M-pinned operator while another lease is active or while a successor is being prepared for the known inherited Salla regression. Track the reviewed successor and preserve all profit-fix blobs.",
+    "status": "Superseded by combined successor; staged but never executed; do not execute original M-pinned operator"
   },
   "live_baseline": {
     "observed_at_utc": "2026-11-15 14:01:24 UTC",
@@ -645,7 +646,7 @@
     "recovery_limit": "Code analysis: MAX_ATTEMPTS=8; exhausted quarantined events are excluded from ordinary claims. No live quarantine query or event replay performed by this task. Owner must separately track functional recovery.",
     "pr": 1940,
     "url": "https://github.com/AMASI-SA/AMASI-SA/pull/1940",
-    "state": "Intent-only B frozen; exact-B gates and package rehearsals in progress; owner handles release",
+    "state": "Merged normally; exact actual-M push gates in progress; owner handles original rehearsal/publication",
     "source_commit": "a6c5bc5763fdca144b44473285d37130eb8213e9",
     "source_tree": "e4cd5f6f07aa8e3d94ce729231b21db41faf619e",
     "sole_parent": "a2a8218f858547f4d9d094d29998a93b09bf59ae",
@@ -795,8 +796,198 @@
       "frontend_source_tree_sha256": "db0c60ac3c54d9a25d283f15c8e6379d667c4c66ff0f2e52a6b3ff703016cdc5",
       "profit_six_blobs_unchanged": true,
       "readiness_run": 43724980285,
-      "parent_and_intent_only_diff_verified": true
-    }
+      "parent_and_intent_only_diff_verified": true,
+      "gates": {
+        "required_workflows": 12,
+        "executed_runs": 14,
+        "all_success": true,
+        "all_first_attempt": true,
+        "unrelated_selector_skip": 43724979880,
+        "runs": [
+          {
+            "id": 43725762547,
+            "name": "Snapchat Direct Active Publication",
+            "conclusion": "success",
+            "head_sha": "ac1443d46d6c172983dfe74479c6f96c40b0c4ec",
+            "run_attempt": 1
+          },
+          {
+            "id": 43725762612,
+            "name": "Snapchat Settings Management V2",
+            "conclusion": "success",
+            "head_sha": "ac1443d46d6c172983dfe74479c6f96c40b0c4ec",
+            "run_attempt": 1
+          },
+          {
+            "id": 43724979838,
+            "name": "Snapchat Settings Management V2",
+            "conclusion": "success",
+            "head_sha": "ac1443d46d6c172983dfe74479c6f96c40b0c4ec",
+            "run_attempt": 1
+          },
+          {
+            "id": 43724980005,
+            "name": "Snapchat Direct Active Publication",
+            "conclusion": "success",
+            "head_sha": "ac1443d46d6c172983dfe74479c6f96c40b0c4ec",
+            "run_attempt": 1
+          },
+          {
+            "id": 43724979935,
+            "name": "Qoyod Payment Freshness",
+            "conclusion": "success",
+            "head_sha": "ac1443d46d6c172983dfe74479c6f96c40b0c4ec",
+            "run_attempt": 1
+          },
+          {
+            "id": 43724979881,
+            "name": "Salla durable ingress and daily refresh",
+            "conclusion": "success",
+            "head_sha": "ac1443d46d6c172983dfe74479c6f96c40b0c4ec",
+            "run_attempt": 1
+          },
+          {
+            "id": 43724979997,
+            "name": "Background workers and two-hour Qoyod cycles",
+            "conclusion": "success",
+            "head_sha": "ac1443d46d6c172983dfe74479c6f96c40b0c4ec",
+            "run_attempt": 1
+          },
+          {
+            "id": 43724979857,
+            "name": "G47 Focused Integration",
+            "conclusion": "success",
+            "head_sha": "ac1443d46d6c172983dfe74479c6f96c40b0c4ec",
+            "run_attempt": 1
+          },
+          {
+            "id": 43724979852,
+            "name": "MZ2 Track F native shipping",
+            "conclusion": "success",
+            "head_sha": "ac1443d46d6c172983dfe74479c6f96c40b0c4ec",
+            "run_attempt": 1
+          },
+          {
+            "id": 43724980285,
+            "name": "Mezan Release Readiness",
+            "conclusion": "success",
+            "head_sha": "ac1443d46d6c172983dfe74479c6f96c40b0c4ec",
+            "run_attempt": 1
+          },
+          {
+            "id": 43724979843,
+            "name": "Security Gate",
+            "conclusion": "success",
+            "head_sha": "ac1443d46d6c172983dfe74479c6f96c40b0c4ec",
+            "run_attempt": 1
+          },
+          {
+            "id": 43724979830,
+            "name": "Operational Stock Eligibility",
+            "conclusion": "success",
+            "head_sha": "ac1443d46d6c172983dfe74479c6f96c40b0c4ec",
+            "run_attempt": 1
+          },
+          {
+            "id": 43724979886,
+            "name": "Operational Balance Web",
+            "conclusion": "success",
+            "head_sha": "ac1443d46d6c172983dfe74479c6f96c40b0c4ec",
+            "run_attempt": 1
+          },
+          {
+            "id": 43724979866,
+            "name": "CodeQL",
+            "conclusion": "success",
+            "head_sha": "ac1443d46d6c172983dfe74479c6f96c40b0c4ec",
+            "run_attempt": 1
+          }
+        ],
+        "readiness_jobs": [
+          {
+            "id": 132844846931,
+            "name": "Frontend build",
+            "conclusion": "success"
+          },
+          {
+            "id": 132844847102,
+            "name": "Host Node 20.20.2 engine and dispatcher contract",
+            "conclusion": "success"
+          },
+          {
+            "id": 132844847172,
+            "name": "Backend preflight",
+            "conclusion": "success"
+          },
+          {
+            "id": 132844847201,
+            "name": "Host Node 24.19.0 engine and dispatcher contract",
+            "conclusion": "success"
+          },
+          {
+            "id": 132845624934,
+            "name": "Emergent Host Node 20.20.2 clean-clone adapter rehearsal",
+            "conclusion": "success"
+          },
+          {
+            "id": 132845624956,
+            "name": "Emergent Host Node 24.19.0 clean-clone adapter rehearsal",
+            "conclusion": "success"
+          },
+          {
+            "id": 132846306296,
+            "name": "Emergent manual redeploy required",
+            "conclusion": "skipped"
+          }
+        ]
+      }
+    },
+    "merge": {
+      "sha": "d7facb0ff4e2e30edbabf012b3865155d5902a85",
+      "tree": "d5bb8d88f7f04610dd6796648edebca24d025c1c",
+      "parents": [
+        "a2a8218f858547f4d9d094d29998a93b09bf59ae",
+        "ac1443d46d6c172983dfe74479c6f96c40b0c4ec"
+      ],
+      "merged_at_utc": "2026-11-15T14:42:09Z",
+      "exact_B_tree": true,
+      "production_ref_verified": true
+    },
+    "owner_package_review": {
+      "pr": 1940,
+      "reviewed_at_utc": "2026-11-15T14:42:09Z",
+      "result": "Owner records independent byte/mode comparison of both Host20/24 archives and reconstructed boundaries PASS",
+      "proof_sha256": "9d22c541d4697d7e23c0e8a21f09af2da69cf22010f7e4ec80dc18089136030e",
+      "generated_files": 293,
+      "archive_members": 296,
+      "frontend_artifact_files": 289
+    },
+    "M_push_runs": [
+      {
+        "id": 43725789598,
+        "name": "CodeQL",
+        "status": "in_progress",
+        "conclusion": null,
+        "head_sha": "d7facb0ff4e2e30edbabf012b3865155d5902a85",
+        "event": "push"
+      },
+      {
+        "id": 43725789566,
+        "name": "Security Gate",
+        "status": "in_progress",
+        "conclusion": null,
+        "head_sha": "d7facb0ff4e2e30edbabf012b3865155d5902a85",
+        "event": "push"
+      },
+      {
+        "id": 43725789610,
+        "name": "Mezan Release Readiness",
+        "status": "in_progress",
+        "conclusion": null,
+        "head_sha": "d7facb0ff4e2e30edbabf012b3865155d5902a85",
+        "event": "push"
+      }
+    ]
   },
   "profit_code_blobs": {
     ".github/workflows/prod-dashboard-four-platform-spend-v1.yml": "f67a5092054a9c6b7798895c0b5cffd097cac4c6",
