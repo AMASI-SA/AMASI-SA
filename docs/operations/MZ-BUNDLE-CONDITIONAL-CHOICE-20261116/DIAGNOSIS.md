@@ -23,7 +23,7 @@ This case is separate from the previously completed sparse order-event ingestion
 
 Use the merged catalog visibility evidence and the shared proof rules for required-option validation in the current bundle estimator. Suppress a required custom-text missing-choice warning only when it is proven hidden by a valid parent selection. Preserve unknown results for missing, conflicting, invalid, removed, or cyclic condition evidence. Preserve explicit normalized visibility precedence. Do not infer not-required solely from required=false or absence. Do not change customer selections, globally zero service prices, alter frozen/actual cost authorities, or remove physical recipe components.
 
-The targeted regression should cover a normalized required text row with no visibility metadata, saved raw conditional visibility, an explicit valid declining parent selection, and no text row. The expected result is no phantom required service and a complete total when all base/component costs are otherwise complete. Missing/conflicting parent evidence must remain incomplete.
+The targeted regression should cover a normalized required text row with no visibility metadata, saved raw conditional visibility, an explicit valid declining parent selection, and no text row. The expected result is no phantom required service and a complete total when all base/component costs are otherwise complete. Missing/conflicting parent evidence must remain unresolved wherever a genuine cost dependency requires that decision.
 
 ## Verification
 
@@ -41,3 +41,11 @@ Production changed: no. PR/review/CI/merge/release guard: not started for this d
 The repository-wide Issue #1006 ledger had previously reached its comment limit; do not retry an append solely for this diagnostic checkpoint. This dedicated task branch and its STATUS.json are the recoverable handoff.
 
 Next safe action: explain the confirmed cause and correct expected classification to the user. Any implementation continuation must read this status, verify the recorded source against the current production head, follow code-work guidance, implement the narrowly scoped visibility correction and meaningful regression, and separately follow the repository release protocol before claiming a new deployment.
+
+## Owner clarification: selecting customization adds no amount
+
+The owner clarified after the diagnosis that selecting the affirmative customization answer adds no amount. This is a user-supplied business clarification, not a new live-data verification of every cost binding. A customer surcharge and an internal supplier/service cost are distinct; do not infer zero internal cost solely from a free customer option.
+
+The correction must also separate operational option completeness from financial cost completeness. A required catalog field or an affirmative answer cannot by itself create a service-cost row. Inspect the actual service bindings, component/recipe conditions, and mappings that could depend on the option. Where no financial dependency exists, customization text is an instruction for fulfillment and must not independently make the financial total incomplete. Missing necessary text may still require a separate operational warning. Where a real financial dependency exists, preserve the normal selected/not-selected/unknown cost rules.
+
+Before implementation, verify the actual affirmative-path cost dependencies. Add targeted coverage for a proven unpriced descriptive text option with affirmative and negative choices, while preserving incomplete results for genuinely unresolved cost-bearing dependencies. Do not change sale prices, supplier prices, or order selections as a workaround. This clarification changes only the diagnostic handoff; application source and Production remain unchanged.
