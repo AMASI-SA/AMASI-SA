@@ -1,19 +1,21 @@
 {
   "task_id": "MZ-BUNDLE-CONDITIONAL-CHOICE-20261116",
   "scope": "Implement conditional descriptive-option costing in current bundle estimates.",
-  "state": "wip_regression_reproduced",
+  "state": "implementation_verified_pending_ci",
   "repository": "AMASI-SA/AMASI-SA",
   "task_branch": "codex/bundle-conditional-cost-fix-20261116",
-  "verified_milestone_commit": "a9994e91813e8a719d7bba9ad78610f1050b5fab",
+  "verified_milestone_commit": "0fe5e3ec2c609572dc2d140d57b33a9546431ce6",
   "inspected_branch_head": "236a428364bc8163a684795ed1be87e237476f18",
   "observed_live_source": "1bd44b6f186de8b40877fde686b5d2d7aab52805",
   "changed_files": [
+    "backend/current_bundle_reporting_estimate.py",
     "backend/tests/test_current_bundle_cost_details.py",
     "backend/tests/test_campaign_hover_profit.py",
+    "docs/operations/MZ-BUNDLE-CONDITIONAL-CHOICE-20261116/DIAGNOSIS.md",
     "docs/operations/MZ-BUNDLE-CONDITIONAL-CHOICE-20261116/STATUS.json"
   ],
-  "application_code_changed": false,
-  "completed_behavior": "Confirmed that required root-option validation uses normalized rows lacking saved conditional visibility and creates an unresolved service cell before service-binding evaluation.",
+  "application_code_changed": true,
+  "completed_behavior": "Recognized fill-based fields without enum values no longer synthesize missing service costs from catalog requiredness. Real root option bindings use shared conditional-visibility and presence decisions from validated canonical IDs/markers. Required enums, recipe decisions, included-in-base policy, variant pricing, nested pairs and historical authorities remain protected. Invalid/conflicting/retired identities cannot be relabeled into a declined paid choice.",
   "verification": [
     {
       "command": "git status --short",
@@ -49,6 +51,26 @@
       "command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=backend:backend/tests <isolated-python> -B -m pytest --noconftest -p no:cacheprovider -q --tb=short backend/tests/test_current_bundle_cost_details.py",
       "exit_status": 1,
       "result": "RED baseline: 27 failed, 20 passed in 1.75s. Intended failures reproduce phantom required-text cost and unsupported actual text binding decisions. A subsequent alias-conflict test and hover cases are added but not yet executed."
+    },
+    {
+      "command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=backend:backend/tests <isolated-python> -B -m pytest --noconftest -p no:cacheprovider -q --tb=short backend/tests/test_current_bundle_cost_details.py backend/tests/test_report_option_identity.py backend/tests/test_report_raw_option_recovery.py",
+      "exit_status": 0,
+      "result": "Initial focused implementation: 108 passed in 4.19s."
+    },
+    {
+      "command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=backend:backend/tests <isolated-python> -B -m pytest --noconftest -p no:cacheprovider -q --tb=short backend/tests/test_current_bundle_cost_details.py::test_conflicting_explicit_text_value_aliases_cannot_be_canonicalized_away",
+      "exit_status": 1,
+      "result": "Reviewer-discovered conflict regression RED before correction; one failed because no exception was raised."
+    },
+    {
+      "command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=backend:backend/tests <isolated-python> -B -m pytest --noconftest -p no:cacheprovider -q --tb=short backend/tests/test_current_bundle_cost_details.py backend/tests/test_report_option_identity.py backend/tests/test_report_raw_option_recovery.py backend/tests/test_sold_product_cost_details.py backend/tests/test_sold_products_report_v2.py backend/tests/test_order_cost_authority.py backend/tests/test_dashboard_bundle_cost_authority.py backend/tests/test_campaign_hover_profit.py backend/tests/test_order_profitability_summary.py",
+      "exit_status": 0,
+      "result": "Final integrated affected suite: 231 passed in 11.97s; two existing unrelated Pydantic deprecation warnings."
+    },
+    {
+      "command": "Independent focused bundle and current/source financial parity review, plus git diff --check",
+      "exit_status": 0,
+      "result": "59 passed in 3.50s; both discovered identity-erasure classes fixed; no remaining concrete scoped blocker."
     }
   ],
   "verification_limits": [
@@ -56,13 +78,13 @@
   ],
   "pr": "not_created",
   "ci": "not_started_documentation_checkpoint",
-  "review": "independent_read_only_diagnosis_completed",
+  "review": "independent_implementation_review_passed",
   "merge": "not_performed",
   "release_guard": "not_acquired_or_modified",
   "deployment": "not_performed_for_this_case",
   "production_changed": "no",
   "incomplete_work": [
-    "Implement narrow fill-field financial validation and canonical real-binding resolution; run regressions and affected reports, independent review, then governed integration/release."
+    "Exact-source CI, governed source A/intent B rehearsal, normal integration and deployment verification."
   ],
   "risks": [
     "Preserve unresolved results for missing or conflicting decisions needed by actual cost-bearing dependencies.",
@@ -74,14 +96,15 @@
     "Existing shared workspace and unrelated production operations."
   ],
   "ledger": "Issue #1006 was previously at its comment limit; dedicated task status serves as recoverable handoff without retrying that append.",
-  "next_safe_action": "Implement in current_bundle_reporting_estimate.py. Preserve required enum/variant checks, real recipe guards, included-in-base policy and nested explicit-pair behavior. Capture validated identity/presence evidence without customer text; reject explicit value alias conflicts before normalization.",
+  "next_safe_action": "Open source-candidate PR against the freshly verified production base. Wait for exact-source checks and reviewed intent candidate, freeze an intent-only B, preserve A/B unchanged, complete original-host rehearsal and repository release verification. Record later evidence on a separate branch; do not append source/status commits after frozen intent.",
   "owner_clarification": {
     "source": "User clarification after diagnosis",
     "statement": "Selecting affirmative customization adds no amount.",
     "interpretation": "Required fields or affirmative choices cannot alone generate service cost. Do not conflate zero customer surcharge with zero internal cost.",
     "financial_rule": "A descriptive option with no actual service, component, recipe, or mapping cost dependency must not independently block cost completeness.",
     "operational_rule": "Missing necessary customization text may require a separate fulfillment warning.",
-    "verification_pending": "Verify affirmative-path financial dependencies before claiming zero internal customization cost."
+    "verification_pending": "No option cost bindings were observed for the incident product. The saved bundle definition changed externally after diagnosis; no original configuration was restored or altered."
   },
-  "live_observation": "Bounded saved reads confirmed no option-cost bindings for the incident product. Its bundle definition was changed externally after the original diagnostic snapshot; preserve current user configuration. No provider refresh or business-data write was performed."
+  "live_observation": "Bounded saved reads confirmed no option-cost bindings for the incident product. Its bundle definition was changed externally after the original diagnostic snapshot; preserve current user configuration. No provider refresh or business-data write was performed.",
+  "reviewed_estimator_sha256": "022f38f9505ea8e7476928ecc6ce4b75c631b2b46546b8428e8013650ae493c7"
 }

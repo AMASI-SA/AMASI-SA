@@ -1,6 +1,6 @@
 # Conditional custom-text option incorrectly blocks bundle cost
 
-## Scope and status
+## Initial diagnostic scope
 
 Read-only diagnosis of a bundle cost report that marks an unrequested conditional custom-text option as an unresolved service. No application code, test files, dependencies, live catalog settings, order selections, or provider data were changed. No new merge or deployment was performed for this diagnosis.
 
@@ -49,3 +49,9 @@ The owner clarified after the diagnosis that selecting the affirmative customiza
 The correction must also separate operational option completeness from financial cost completeness. A required catalog field or an affirmative answer cannot by itself create a service-cost row. Inspect the actual service bindings, component/recipe conditions, and mappings that could depend on the option. Where no financial dependency exists, customization text is an instruction for fulfillment and must not independently make the financial total incomplete. Missing necessary text may still require a separate operational warning. Where a real financial dependency exists, preserve the normal selected/not-selected/unknown cost rules.
 
 Before implementation, verify the actual affirmative-path cost dependencies. Add targeted coverage for a proven unpriced descriptive text option with affirmative and negative choices, while preserving incomplete results for genuinely unresolved cost-bearing dependencies. Do not change sale prices, supplier prices, or order selections as a workaround. This clarification changes only the diagnostic handoff; application source and Production remain unchanged.
+
+## Implemented correction
+
+The owner subsequently authorized implementation. Current bundle estimates now separate required fill-field instructions from actual financial dependencies. Root cost rules use the shared visibility resolver with validated canonical option/value identities and presence-only markers. Invalid explicit values, conflicting aliases, and retired saved identities cannot be relabeled into a current negative answer. Enum/size guards and existing recipe, variant, included-in-base, nested, and historical-cost boundaries remain intact. No additional provider call, database write, polling or scheduled work was added.
+
+The original synthetic regression failed before the change. The final combined affected costing/report/hover suite passed 231 cases, and an independent review passed 59 focused cases with no remaining scoped blocker. Source runtime merge and publication are still pending; see STATUS.json for exact commands and limits. The incident product configuration changed externally during this work and was preserved.

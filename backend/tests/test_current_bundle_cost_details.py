@@ -313,6 +313,64 @@ def test_conflicting_explicit_enum_value_aliases_cannot_be_canonicalized_away():
     assert args == before
 
 
+def test_conflicting_explicit_text_value_aliases_cannot_be_canonicalized_away():
+    args = conditional_message_bundle('yes')
+    args['item']['options_raw'].append({
+        'option_id': 'message', 'value_id': 'value-a',
+        'value': {'value_id': 'value-b', 'text': 'PRIVATE_FIXTURE_TEXT'},
+    })
+    args['options'] = {'p': [message_binding('filled')]}
+    before = deepcopy(args)
+    with pytest.raises(_Unresolved, match='conflict'):
+        _build_line_cost(**args)
+    assert args == before
+
+
+@pytest.mark.parametrize('identity', [
+    'invalid_explicit_parent_value', 'invalid_explicit_value_only',
+    'retired_catalog_value', 'retired_catalog_option',
+])
+def test_invalid_or_retired_identities_cannot_be_relabelled_to_waive_actual_text_cost(identity):
+    args = conditional_message_bundle('no')
+    catalog = args['products']['p']
+    if identity == 'invalid_explicit_parent_value':
+        args['item']['options_raw'][0]['value_id'] = 'retired-value'
+    elif identity == 'invalid_explicit_value_only':
+        args['item']['options_raw'] = [{'value_id': 'retired-value', 'value': 'No'}]
+    elif identity == 'retired_catalog_value':
+        catalog['raw_salla']['options'][0]['values'] = [
+            {'id': 'yes', 'name': 'Yes'}, {'id': 'retired-no', 'name': 'No'}]
+        args['item']['options_raw'][0]['value'] = {'id': 'retired-no', 'name': 'No'}
+    else:
+        catalog['raw_salla']['options'][0]['id'] = 'retired-parent'
+        args['item']['options_raw'] = [{
+            'id': 'retired-parent', 'name': 'Change message',
+            'value': {'id': 'no', 'name': 'No'},
+        }]
+    args['options'] = {'p': [message_binding('filled')]}
+    before = deepcopy(args)
+    with pytest.raises(_Unresolved):
+        _build_line_cost(**args)
+    assert args == before
+
+
+def test_unknown_checkout_row_ids_keep_unique_current_label_recovery():
+    args = conditional_message_bundle('no')
+    args['item']['options_raw'] = [{
+        'id': 'unknown-checkout-option-row', 'name': 'Change message',
+        'value': {'id': 'unknown-checkout-value-row', 'name': 'No'},
+    }]
+    args['options'] = {'p': [message_binding('filled')]}
+    result = message_cost(args)
+    assert result['line_total'] == 44
+    assert result['calculation_cost_available'] is True
+    assert result['missing_cost_reasons'] == []
+    actual = next(cell for cell in result['cost_detail_cells']
+                  if cell['key'] == 'root:option:message-work')
+    assert actual['status'] == 'not_required'
+    assert actual['unit_cost'] is None
+
+
 def test_unpriced_text_does_not_waive_an_unanswered_recipe_condition():
     args = conditional_message_bundle('no')
     args['products']['p']['options'].append({
