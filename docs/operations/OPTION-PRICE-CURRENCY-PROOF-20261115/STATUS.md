@@ -1,6 +1,19 @@
 # Option-price currency recovery: release handoff
 
-## Current checkpoint
+## Owner-authorized release takeover — 2026-11-15
+
+The owner explicitly transferred responsibility for the blocked release and requested its verified closure followed by this release: «ايش هي المحادثه الي حاجزه النشر تاكد من انه النشر تبعه اكتمل وصل الخادم فك النشر انت ونشرك». The later clarification preserves the goal: resolve Ready eligibility for otherwise eligible pieces, not only display a currency message.
+
+Fresh evidence:
+- /app status at2026-11-15T01:09:17.905978+00:00: active old actor codex-campaign-operating-period-1932, exact source af36682ec95e578764242001dccd16ef9e61c07b/deployment7ef45017e5221635ce3c80c3788f73d9c50b1e08/runtime rg5-3c726702879630f436b0b615a4e2d1dd85ff5889c45b43b1be477f84cb3043fe.
+- Latest prior-task evidence f3a8fad113f388c530103979fa71f10dfbded543 says prepare completed but prepublish/UI publication had not run.
+- Official read-only health helper at2026-11-15T01:10:09.584948+00:00 reports previous source fcb827f556c40bebd843d8c9d85fedc0b60cf8fa/runtime rg5-4a98965dc9ad5922b4dbd25e5c960360af8b09f8e5590cced0b87c8c8a0f07a2, ok and all identity flags true.
+- Fresh Emergent Manage still shows100th publish75ee080, latest finished Nov14 22:45, no running publication displayed and Republish enabled.
+- GitHub production ref still7ef45017e5221635ce3c80c3788f73d9c50b1e08; PR1933 still exact frozen B, Ready, mergeable, candidate merge tree equals B. All source changes in1932 are inherited in this candidate; none are reverted.
+
+Next: inspect existing old phase receipt, then use only the official fenced abort with exact old deployment SHA/release ID if no subsequent publication is present. Record aborted/unpublished rather than verified. Confirm inactive before normal merge1933, exact merged-tree and push-gate acceptance, original governed rehearsal and a new single publication lease. Do not rerun old1932 gate phases. No old lease has yet been closed in this checkpoint.
+
+## Previous completed checkpoint
 
 - Task: OPTION-PRICE-CURRENCY-PROOF-20261115.
 - Repository: AMASI-SA/AMASI-SA; PR https://github.com/AMASI-SA/AMASI-SA/pull/1933.
