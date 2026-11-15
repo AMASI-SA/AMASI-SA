@@ -46,7 +46,7 @@ The original51ee source failed one obsolete canonical-status fixture. Its failed
 
 ## Separate production blocker
 
-Read-only /app guard status rechecked after all B gates at approximately00:46UTC remains active:
+Read-only /app guard status rechecked after all B gates at 2026-11-15T00:59:10.449504+00:00 remains active:
 
 - Actor: codex-campaign-operating-period-1932.
 - Prepared: 2026-11-14T22:10:56.977380+00:00.
@@ -67,13 +67,16 @@ AGENTS.md prohibits changing /app with an active lease or clearing another conve
 - Merge/candidate tree equal:109a633c42a10f80414b16b873e052b257b2c377.
 - Seven exact-source workflows passed; two unchanged old-branch-only jobs skipped. Actual19/19 card tests, TypeScript, session, Android export and native printing passed.
 - One EAS build submitted: https://expo.dev/accounts/amasi-sa/projects/amasi/builds/5179cefb-8ef2-485e-beeb-f3ea6da25842 .
-- EAS authenticated details show full merged commit, Android internal distribution, version1.0.67/code82, profile mezan-web-assembly-pilot and production environment. Source directory frontend; auto-submit off. Build is in progress, not yet accepted as a signed APK.
-- Do not submit a duplicate build. After success, inspect actual APK signature/package/version/OTA and bind its download to that EAS provenance. Device UAT has not run.
+- EAS authenticated details show full merged commit, Android internal distribution, version1.0.67/code82, profile mezan-web-assembly-pilot and production environment. Source directory frontend; auto-submit off. The one build SUCCEEDED (20m21s build /20m28s total) and its actual downloaded signed APK is accepted.
+- Verified EAS download: https://expo.dev/artifacts/eas/bRTiM-56zxPkYsD1w9k1-onnT1E-JhWHbF8w6zH1GNE.apk . Artifact size115548426 bytes, SHA25687be820b972841c585d237b836eab380fa50aec69cc640422ad0da0e4813dc81.
+- Root APK verifier exited0:21 PASS,0 FAIL,0 PARTIAL. Its four SDK commands exited0. Package com.amasi.sa.mobile, version1.0.67/code82, native runtime1.0.67, OTA disabled/NEVER/0, non-debuggable/testOnly false. Valid existing signing certificate SHA256 ca6b376f14e01eadf611b0ea0208eab7c75576ac5ee51606d01df571f0d1ac54.
+- Independent reviewer checked the actual artifact hash/size, unchanged before/after hashes, report checks and command exits, embedded app config, verifier hash and GitHub merge/tree provenance without rerunning the verifier. Sanitized report SHA2561765367006661fcadbd45ba18ce874404a5503142dc188e5d4d7f261a79ddadc. No APK binary is committed.
+- No duplicate build, OTA update or store submission occurred. Physical-device install/UAT and push delivery were NOT_RUN. The APK message alone does not resolve a pending backend source snapshot.
 
 ## Next safe steps
 
 1. All B CI and actual clean-clone host artifact reviews are complete. Preserve frozen B and its accepted source; no optional retesting is needed absent a new change.
-2. Finish the single existing Android82 build, verify the downloaded APK and record its hash/signer and final result in mobile PR357.
+2. Android82 is complete and accepted as the signed internal APK. Preserve its single-build provenance; no further build or optional verification is needed.
 3. Recheck owner completion/cancellation and guard inactive before any main merge or /app change; read production ref again. If J moves, derive a new source/intent pair rather than reusing stale B.
 4. Once allowed, normal-merge PR1933 with expected B head and verify M tree equals B. Pass required push gates, then preserve unrelated /app files and perform the governed adapter rehearsal. Only then prepare this task's own lease, prepublish, publish once and verify three probes plus inactive status.
 5. After verified main deployment, read the affected order's fresh owner/revision inside the server, run the existing scoped revalidation dry run, apply only a fully proven eligible result with the same revision fence, and verify received pieces eligible while an unreceived piece remains blocked. No manual Ready or receipt mutation.
