@@ -1,0 +1,43 @@
+{
+  "task_id": "SALLA-WEBHOOK-RECOVERY-20261115",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/salla-webhook-durable-recovery-20261115",
+  "base_commit": "7ef45017e5221635ce3c80c3788f73d9c50b1e08",
+  "status": "WIP: durable webhook milestone; daily refresh integration under verification",
+  "requested_behavior": [
+    "Repair the blocking verified webhook path and duplicate processing identified by platform support",
+    "One scheduled refresh at 10:00 Asia/Riyadh over a fixed preceding 24-hour window",
+    "Update existing records only; preserve customer choices and accounting invariants"
+  ],
+  "implemented": [
+    "Encrypted durable inbox, majority+journal persistence before HTTP acknowledgement, stable atomic deduplication",
+    "Bounded background processing with global replica lease, heartbeat, backoff, crash recovery and tenant binding",
+    "Strict business failure propagation after sanitized audit persistence",
+    "Shared manual/scheduled synchronization exclusion is being integrated with legacy rollout leases"
+  ],
+  "verification": {
+    "queue_unit_and_real_mongo": "33 passed; includes actual child-process death and server-rejected write",
+    "http_ingress_and_manual_routes": "43 passed before final grouped-lease extension",
+    "privacy_and_cart_regressions": "41 passed",
+    "combined_webhook_gate": "206 passed, 1 test assertion awaiting adaptation to sanitized error diagnostics"
+  },
+  "production_changed": false,
+  "release": {
+    "protocol": 5,
+    "prepared": false,
+    "published": false,
+    "observed_active_owner": "codex-campaign-operating-period-1932",
+    "observed_lease_deployment_commit": "7ef45017e5221635ce3c80c3788f73d9c50b1e08",
+    "last_observed_live_source": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+    "blocker": "Shared /app release lease belongs to another operation. AGENTS.md requires its owner to close it; this task must not clear or reuse it."
+  },
+  "continuation": {
+    "ledger": "Issue #1006 has reached 2500 comments; use this status document and the task PR as the durable fallback",
+    "next": "Finish grouped-lease and documented provider-window tests, run the exact-source real-Mongo gate, checkpoint and review. Only start a release rehearsal after shared guard status is inactive.",
+    "caveats": [
+      "Queue recovery is at least once after process death between business write and queue settlement; existing source and outbox idempotency remain authoritative",
+      "Do not invent updated_at_gt support: official Salla List Orders documentation and existing repository contract do not establish it",
+      "Do not call Order Details from background reconciliation because the repository records that it may mark orders read"
+    ]
+  }
+}

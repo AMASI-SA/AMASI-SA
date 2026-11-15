@@ -6,6 +6,7 @@ canonical Mezan OS product catalog.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import re
@@ -352,13 +353,31 @@ def make_product_v2_router(db: Any, current_user: Callable[..., Any]) -> APIRout
 
     @router.post("/sync", status_code=status.HTTP_200_OK)
     async def sync_products_v2(user: dict = Depends(current_user)) -> dict[str, Any]:
+        from salla_integration.routes import (
+            _acquire_salla_sync_lease, _release_salla_sync_lease,
+            _MANUAL_SYNC_TIMEOUT_SECONDS,
+        )
+        user_id = str(user["id"])
+        lease_token, _ = await _acquire_salla_sync_lease(db, user_id)
+        if not lease_token:
+            raise HTTPException(status_code=409, detail={
+                "code": "SALLA_SYNC_ALREADY_RUNNING",
+                "message": "توجد مزامنة سلة قيد التنفيذ. انتظر اكتمالها ثم أعد المحاولة.",
+            })
         try:
-            return {"ok": True, **(await run_product_v2_sync(db, str(user["id"])))}
+            result = await asyncio.wait_for(
+                run_product_v2_sync(db, user_id), timeout=_MANUAL_SYNC_TIMEOUT_SECONDS,
+            )
+            return {"ok": True, **result}
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=504, detail={"code": "SALLA_SYNC_TIMEOUT"}) from None
         except SallaError as exc:
             raise HTTPException(
                 status_code=exc.status_code if exc.status_code != 200 else 400,
                 detail={"message": str(exc), "needs_reauth": exc.needs_reauth},
             ) from exc
+        finally:
+            await _release_salla_sync_lease(db, user_id, lease_token)
 
     @router.get("")
     async def list_products_v2(

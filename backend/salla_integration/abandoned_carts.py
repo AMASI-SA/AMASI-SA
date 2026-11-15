@@ -653,7 +653,8 @@ async def _owner_for_merchant(db: Any, merchant_id: str | None) -> str | None:
         {"store_id": store_selector},
         {"_id": 0, "user_id": 1},
     )
-    return _text((integration or {}).get("user_id"))
+    from .webhook_order_sync import enforce_verified_webhook_owner
+    return enforce_verified_webhook_owner(_text((integration or {}).get("user_id")))
 
 
 async def persist_abandoned_cart_event(
