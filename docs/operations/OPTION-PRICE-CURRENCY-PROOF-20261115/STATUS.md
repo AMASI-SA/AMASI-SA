@@ -1,17 +1,18 @@
 # Option-price currency recovery: release handoff
 
-## Owner-authorized release takeover — 2026-11-15
+## Current combined release — lease closed, PR1933 merged
 
-The owner explicitly transferred responsibility for the blocked release and requested its verified closure followed by this release: «ايش هي المحادثه الي حاجزه النشر تاكد من انه النشر تبعه اكتمل وصل الخادم فك النشر انت ونشرك». The later clarification preserves the goal: resolve Ready eligibility for otherwise eligible pieces, not only display a currency message.
+Owner authority: «ايش هي المحادثه الي حاجزه النشر تاكد من انه النشر تبعه اكتمل وصل الخادم فك النشر انت ونشرك», then explicit confirmation «نعم موافق اجمعهم وفك الحجز وادمج وانشر». Goal remains actual Ready eligibility for otherwise eligible pieces, including full source revalidation after deployment.
 
-Fresh evidence:
-- /app status at2026-11-15T01:09:17.905978+00:00: active old actor codex-campaign-operating-period-1932, exact source af36682ec95e578764242001dccd16ef9e61c07b/deployment7ef45017e5221635ce3c80c3788f73d9c50b1e08/runtime rg5-3c726702879630f436b0b615a4e2d1dd85ff5889c45b43b1be477f84cb3043fe.
-- Latest prior-task evidence f3a8fad113f388c530103979fa71f10dfbded543 says prepare completed but prepublish/UI publication had not run.
-- Official read-only health helper at2026-11-15T01:10:09.584948+00:00 reports previous source fcb827f556c40bebd843d8c9d85fedc0b60cf8fa/runtime rg5-4a98965dc9ad5922b4dbd25e5c960360af8b09f8e5590cced0b87c8c8a0f07a2, ok and all identity flags true.
-- Fresh Emergent Manage still shows100th publish75ee080, latest finished Nov14 22:45, no running publication displayed and Republish enabled.
-- GitHub production ref still7ef45017e5221635ce3c80c3788f73d9c50b1e08; PR1933 still exact frozen B, Ready, mergeable, candidate merge tree equals B. All source changes in1932 are inherited in this candidate; none are reverted.
+The prior PR1932 lease was **officially aborted**, not falsely verified, at2026-11-15T01:14:02.965298+00:00. Command exit0 returned aborted=true for deployment7ef45017e5221635ce3c80c3788f73d9c50b1e08/sourceaf36682ec95e578764242001dccd16ef9e61c07b/releaserg5-3c726702879630f436b0b615a4e2d1dd85ff5889c45b43b1be477f84cb3043fe. Immediate official status returned active=false. The bounded runner checked exact actor/identity and no concurrent named release process. Receipt: /tmp/option-ready-release-1933/abort-1932.json.
 
-Next: inspect existing old phase receipt, then use only the official fenced abort with exact old deployment SHA/release ID if no subsequent publication is present. Record aborted/unpublished rather than verified. Confirm inactive before normal merge1933, exact merged-tree and push-gate acceptance, original governed rehearsal and a new single publication lease. Do not rerun old1932 gate phases. No old lease has yet been closed in this checkpoint.
+Basis: latest prior-task durable checkpoint f3a8fad113f388c530103979fa71f10dfbded543 records prepare only; fresh live health at01:10:09UTC still served prior PR1929 source fcb827f556c40bebd843d8c9d85fedc0b60cf8fa/runtime rg5-4a98965dc9ad5922b4dbd25e5c960360af8b09f8e5590cced0b87c8c8a0f07a2 with all flags true. UI still showed100th publish75ee080 and no running publication. Historical /tmp/mezan-operating-period-original-iljwu1fd is no longer present, including known-successful prepare receipts; its absence is **not** evidence that later commands never ran. Current identity/UI/process evidence and explicit transferred authority support superseding the old lease.
+
+PR1933 normally merged as **9afb38cf0dc0d8e8cd887f2c2cdb4a6be5a7ca68**, parents [7ef45017e5221635ce3c80c3788f73d9c50b1e08,5165b3aaeece7022d178fa02df4654ac30cafea3]. Root fetched actual Git commit: tree exactly7a89d5e1bacf3a78b268a348e27fa3c998517c75, equal accepted B. All PR1932 campaign source remains inherited; no campaign files were removed or changed by this fix.
+
+Actual-M push gates underway: Readiness43662171036, Security43662171057, CodeQL43662171086. Do not infer their result from B. No new /app source update, original build, own prepare/prepublish, or UI publication has happened yet. Production branch changed=yes (merge); live runtime changed=no. No business/order/receipt/financial writes.
+
+Next: accept actual-M push gates; capture/preserve120 unrelated /app paths; fast-forward exact M; perform governed original adapter/package rehearsal with no active lease. Then prepare task's own lease, prepublish immediately before one authorized UI publication, require newer success event and official three-probe verify + inactive status. Finally scoped fresh-revision dry run/apply and Ready readback for the affected order.
 
 ## Previous completed checkpoint
 
