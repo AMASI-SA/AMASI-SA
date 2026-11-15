@@ -1,0 +1,75 @@
+{
+  "base_commit": "8f1b0ddb6408781e8677212bcb8cf2d51eab42f7",
+  "base_tree": "a8616930de7f98a43a509ff7dad287befd61ba5a",
+  "file_records": {
+    "backend/salla_integration/webhook_incident_recovery.py": {
+      "bytes": 22352,
+      "sha256": "32ac7fb3d9a4f9e4f477b5b9d9e2759f858da0a089809a4d37835b074d38f5b7"
+    },
+    "backend/tests/test_salla_webhook_incident_recovery.py": {
+      "bytes": 44140,
+      "sha256": "443e49a8f68dcd133bd73a58592206d8d440e2965d1ac9d6e7ee9c282479dfd3"
+    },
+    "docs/operations/SALLA-RECOVERY-OWNERSHIP-20261115/STATUS.json": {
+      "bytes": 8531,
+      "sha256": "668913e0ac81f47518f4e351d975314674d31fd42e43da437c09ccce38463f83"
+    }
+  },
+  "observed_at_utc": "2026-11-15T16:30:15.593773+00:00",
+  "primary_documentation": "https://www.mongodb.com/docs/manual/reference/bson-type-comparison-order/",
+  "repository": "AMASI-SA/AMASI-SA",
+  "result": "PASS for source checkpoint; release remains gated on exact-source CI and protocol v5",
+  "review": [
+    "Only _binding metadata projection and multi-record ranking behavior changed; singleton exact-owner path preserved.",
+    "Unfiltered canonical string/integer merchant aliases, descending updated_at and selected winner remain aligned with webhook_order_sync._resolve_user_id; no owner/status prefilter or fallback.",
+    "Multiple rows require datetime winner; datetime runner must be strictly older with timezone handling. Exact scalar string/null/missing runners are lower BSON ranks and are not parsed. Date ties, non-date winners and unsupported top-two shapes refuse.",
+    "Owner/runtime/flag gates, read-only config and dry-run, selected binding transaction write, full-row CAS, token/epoch global lease writes, once-only grant and final fresh binding check unchanged.",
+    "Tests cover canonical parity, scalar legacy BSON, singleton behavior, wrong/missing owners, ties, naive datetime codec, preserved historical records, binding promotion/new insertion races, and independent worker refusal after a late ownership change.",
+    "Residual insertion or promotion of a different document after final fresh read is explicit; global grant-level ownership serialization is not claimed."
+  ],
+  "reviewer": "review_release_continuation",
+  "reviewer_mutations": "Only this sanitized evidence report was written outside source; no tests, source edits, Git refs, PR metadata, /app, leases, production calls or deployment actions.",
+  "schema_version": 1,
+  "scope": "independent read-only final source/test review; no application or production execution",
+  "source_commit": "not yet checkpointed at this review",
+  "verification": {
+    "final_comment_only_delta": "Reversing only the clarified final-read race comment reproduces the exact tested module SHA; AST equality confirmed.",
+    "git_diff_check_exit_code": 0,
+    "local_results": {
+      "elapsed_seconds": 4.09,
+      "errors": 0,
+      "failures": 0,
+      "passed": 75,
+      "skipped": 16,
+      "subtests_passed": 30
+    },
+    "local_test_execution": "Author ran once; reviewer inspected the actual resulting XML without rerunning.",
+    "local_xml": {
+      "bytes": 19010,
+      "path": "/workspace/scratch/ce6ef737d6c9/release-evidence/salla-binding-recovery-local.xml",
+      "sha256": "f6da7164cbc0052546a32e5c9153d15fb44f1eef9608f77a5d2194d0263a24db"
+    },
+    "python_ast_parse": "PASS",
+    "release_gate": "All16 real Mongo cases must execute with zero skips on exact immutable source; local skips are not passing evidence.",
+    "required_real_mongo_cases": [
+      "test_batch_commit_preserves_identity_payload_history_and_grants_once",
+      "test_changed_current_owner_refuses_before_grant",
+      "test_concurrent_ingress_after_snapshot_aborts_prior_row_changes",
+      "test_concurrent_same_document_rebind_conflicts_and_rolls_back_grants",
+      "test_expiry_before_final_write_fence_rolls_back_entire_batch",
+      "test_historical_binding_updated_to_new_winner_aborts_snapshot_grants",
+      "test_live_worker_lease_is_never_overridden",
+      "test_newer_binding_committed_during_snapshot_is_seen_by_fresh_final_check",
+      "test_only_existing_worker_processes_grant_and_keeps_done_tombstone",
+      "test_owner_change_after_final_read_is_rejected_by_existing_worker",
+      "test_real_mongo_ambiguous_bson_ranks_never_select_a_convenient_owner",
+      "test_real_mongo_legacy_scalar_history_matches_canonical_owner_without_writes",
+      "test_real_query_excludes_every_nonincident_or_unsafe_state_and_never_writes",
+      "test_runtime_change_before_commit_rolls_back_entire_batch",
+      "test_stale_delivery_metadata_payload_or_extra_fields_refuse_whole_batch",
+      "test_successor_epoch_is_not_modified_or_released"
+    ],
+    "tested_module_sha256": "682cd41924edd33facbb77222d3b6820c48b6e961d0cd8937b7c99834adbbb7c"
+  },
+  "worktree": "/workspace/scratch/ce6ef737d6c9/salla-binding-recovery"
+}

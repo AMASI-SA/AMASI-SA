@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/salla-webhook-release-evidence-20261115",
   "base_commit": "9afb38cf0dc0d8e8cd887f2c2cdb4a6be5a7ca68",
-  "status": "PR1940 officially verified and new-order/status flow restored; PR1942 publication submitted once and currently building under root-owned exact prepared lease. No recovery grant yet.",
+  "status": "PR1942 officially verified with3checks and leaseclosed; bounded recovery remains blocked by overly strict binding uniqueness. PR1945 canonical-owner follow-up sourceA frozen, independently reviewed and in exact-source CI; all16 real-Mongo cases passed. No recovery grant yet.",
   "requested_behavior": [
     "Repair the blocking verified webhook path and duplicate processing identified by platform support",
     "One scheduled refresh at 10:00 Asia/Riyadh over a fixed preceding 24-hour window",
@@ -217,7 +217,7 @@
   },
   "continuation": {
     "ledger": "Issue #1006 has reached 2500 comments; use this status document and the task PR as the durable fallback",
-    "next": "Activate the default-disabled incident switch through normal platform configuration, prepare exact PR1942 M once, prepublish, publish once, and official verify. Then fixed-window metadata dry-run and bounded grant; disable maintenance and verify worker completion plus the seven reported order IDs.",
+    "next": "Complete PR1945 exact-A gates/candidate validation, intent-onlyB andbothHostproofs, normalM+M gates andpreserving1945operator afterfreshinactivecheck. Then publishverifiedbindingfollowup, reviewfixedwindowdryrunandapplyboundedgrant, verifysevenreportedorders andworkercompletion, andcloseLiveflagviaitsgovernedpublication.",
     "caveats": [
       "Queue recovery is at least once after process death between business write and queue settlement; existing source and outbox idempotency remain authoritative",
       "Do not invent updated_at_gt support: official Salla List Orders documentation and existing repository contract do not establish it",
@@ -239,6 +239,12 @@
       "base": "d7facb0ff4e2e30edbabf012b3865155d5902a85",
       "status": "PR1942 merged; all A/B/M gates passed; original /app preserving rehearsal succeeded. No production grant yet.",
       "latest_user_report": "Recent orders and status changes stopped in prior deployment; confirm supplied missing-order samples after corrected admission and bounded recovery"
+    },
+    "binding_metadata_support": {
+      "thread_id": "1a19e3869a6261da",
+      "sent_message_id": "1a1e007db03ebab0",
+      "purpose": "Read-only count/type/tie and same/different-owner boolean metadata; no identifiers, credentials, payloads or writes requested",
+      "reply_pending": true
     }
   },
   "last_remote_checkpoint": "443424812fbeaad6108f1f67094d94d30a2f0d28",
@@ -270,7 +276,7 @@
   },
   "release_branch": "codex/salla-webhook-recovery-release-20261115",
   "evidence_only": true,
-  "checkpoint_at": "2026-11-15T16:06:30Z",
+  "checkpoint_at": "2026-11-15T16:38:54Z",
   "production_source_branch_changed": true,
   "production_runtime_changed": true,
   "operator": {
@@ -895,7 +901,7 @@
           "base": "d7facb0ff4e2e30edbabf012b3865155d5902a85"
         }
       },
-      "next": "Wait for explicit platform completion; compare full lease to saved prepare then run official verification once. Keep fixed incident end15:20Z for dry-run classification; do not infer all51 quarantines are eligible. Disable Live maintenance flag after final grant and verify effective false.",
+      "next": "Complete PR1945 exact-A gates/candidate validation, intent-onlyB andbothHostproofs, normalM+M gates andpreserving1945operator afterfreshinactivecheck. Then publishverifiedbindingfollowup, reviewfixedwindowdryrunandapplyboundedgrant, verifysevenreportedorders andworkercompletion, andcloseLiveflagviaitsgovernedpublication.",
       "B_all_applicable_workflows_success": true,
       "B_expected_unrelated_scope_skip": "TikTok Creator Release Candidate",
       "B_package_acceptance": {
@@ -953,7 +959,7 @@
       "B_final_ci_report_sha256": "ad343f7ce061bb511337badff4ab284374f3bae9162e7a2fe5ae5b57a4b54391",
       "shared_app_changed": true,
       "prepared": true,
-      "published": false,
+      "published": true,
       "prepare": {
         "actor": "codex-salla-incident-recovery-1942",
         "prepared_at": "2026-11-15T16:02:36.468107+00:00",
@@ -1163,6 +1169,155 @@
           "bytes": 31801,
           "sha256": "703a3242cb2be51153aafce43325c2f9a0d7c82f71e33e6fcd76d47a4db74196"
         }
+      },
+      "platform_completion": {
+        "version": "0de8080",
+        "finished_riyadh": "2026-11-15 19:13",
+        "screenshot": "/workspace/shared/salla-release-1942-deployed.jpg"
+      },
+      "verify_running": false,
+      "functional_blocker": {
+        "at": "2026-11-15T16:15Z",
+        "observed_error": "merchant_binding_ambiguous",
+        "arabic": "تعذر تحديد ربط وحيد للمتجر. يلزم مراجعة ربط الحساب قبل الاستعادة.",
+        "config_loaded": false,
+        "dry_run_called": false,
+        "apply_called": false
+      },
+      "owner_scoped_live_orders": {
+        "observed_at": "2026-11-15T16:18:29.089Z",
+        "method": "authenticated GET /api/orders-v2/{order_number}",
+        "orders": [
+          {
+            "order_number": "300248922",
+            "created_at": "2026-11-15T16:06:52Z",
+            "status": "under_review",
+            "found": true
+          },
+          {
+            "order_number": "300245820",
+            "created_at": "2026-11-15T15:50:07Z",
+            "status": "under_review",
+            "found": true
+          },
+          {
+            "order_number": "300241904",
+            "created_at": "2026-11-15T15:29:22Z",
+            "status": "under_review",
+            "found": true
+          }
+        ]
+      },
+      "missing_order_baseline": {
+        "observed_at": "2026-11-15T16:07:23.873Z",
+        "method": "authenticated GET /api/orders-v2/{order_number}; source-proven local canonical read only",
+        "orders": [
+          {
+            "order_number": "300234303",
+            "error_code": "order_not_found",
+            "found": false
+          },
+          {
+            "order_number": "300234184",
+            "error_code": "order_not_found",
+            "found": false
+          },
+          {
+            "order_number": "300233862",
+            "error_code": "order_not_found",
+            "found": false
+          },
+          {
+            "order_number": "300233848",
+            "error_code": "order_not_found",
+            "found": false
+          },
+          {
+            "order_number": "300232242",
+            "error_code": "order_not_found",
+            "found": false
+          },
+          {
+            "order_number": "300231768",
+            "error_code": "order_not_found",
+            "found": false
+          },
+          {
+            "order_number": "300229347",
+            "error_code": "order_not_found",
+            "found": false
+          }
+        ]
+      },
+      "follow_up": {
+        "branch": "codex/salla-recovery-owner-bindings-20261115",
+        "base": "8f1b0ddb6408781e8677212bcb8cf2d51eab42f7",
+        "worktree": "/workspace/scratch/ce6ef737d6c9/salla-binding-recovery",
+        "status": "sourceA frozen; both independent reviewsPASS; rootreviewPASS; exact-source CIrunning; nointentB",
+        "A": {
+          "sha": "9b91e88c049166f111905c80a4c1fa07a96b51bd",
+          "tree": "bb79134858e4f472a97e33cec100ec4ddfe095f7",
+          "parent": "8f1b0ddb6408781e8677212bcb8cf2d51eab42f7",
+          "branch": "codex/salla-recovery-owner-bindings-20261115"
+        },
+        "pull_request": 1945,
+        "url": "https://github.com/AMASI-SA/AMASI-SA/pull/1945",
+        "source_hashes": [
+          {
+            "path": "backend/salla_integration/webhook_incident_recovery.py",
+            "sha256": "32ac7fb3d9a4f9e4f477b5b9d9e2759f858da0a089809a4d37835b074d38f5b7"
+          },
+          {
+            "path": "backend/tests/test_salla_webhook_incident_recovery.py",
+            "sha256": "443e49a8f68dcd133bd73a58592206d8d440e2965d1ac9d6e7ee9c282479dfd3"
+          },
+          {
+            "path": "docs/operations/SALLA-RECOVERY-OWNERSHIP-20261115/STATUS.json",
+            "sha256": "668913e0ac81f47518f4e351d975314674d31fd42e43da437c09ccce38463f83"
+          }
+        ],
+        "local_tests": {
+          "passed": 75,
+          "subtests": 30,
+          "mongo_skipped": 16,
+          "failures": 0,
+          "errors": 0
+        },
+        "A_salla_CI": {
+          "run": 43735976605,
+          "job": 132878549547,
+          "attempt": 1,
+          "passed": 419,
+          "subtests": 43,
+          "mongo_cases_passed": 16,
+          "skipped": 0,
+          "failures": 0,
+          "errors": 0,
+          "xml_sha256": "ef9a5365cb58e92fa70600f43596e383f352ea52d421112d2e4cb257b2bb80f2"
+        }
+      },
+      "official_verify": {
+        "verified": true,
+        "checks": 3,
+        "exit_code": 0,
+        "started_at": "2026-11-15T16:15:10.933769+00:00",
+        "finished_at": "2026-11-15T16:28:23.770443+00:00",
+        "raw_bytes": 33369,
+        "raw_sha256": "f4208087aff434a55ed5c6973f3f235dc571994e677ced6b1a0dd20fe8e1c51e",
+        "stderr_bytes": 0,
+        "source_git_sha": "2896f97bb3ffe5c919ade61a4f60e551a7a49162",
+        "deployment_git_sha": "8f1b0ddb6408781e8677212bcb8cf2d51eab42f7",
+        "release_id": "rg5-144ce747d2042279a6d9a86cb338a133bd0a7e05237f96b22331b905ce083cf3",
+        "status_after": {
+          "active": false,
+          "tracked_clean": true,
+          "actual_head": "8f1b0ddb6408781e8677212bcb8cf2d51eab42f7"
+        }
+      },
+      "original_manifest": {
+        "path": "/workspace/shared/previous-original-1942-manifest.json",
+        "raw_bytes": 3978,
+        "raw_sha256": "cb0377cdfb8d1135140ff5a772563fb9ef38d1c1539e52b76f0c62b5b997f7be"
       }
     },
     "official_verify": {

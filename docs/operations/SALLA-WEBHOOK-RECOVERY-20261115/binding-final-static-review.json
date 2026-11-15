@@ -1,0 +1,49 @@
+{
+  "base_commit": "8f1b0ddb6408781e8677212bcb8cf2d51eab42f7",
+  "decision": "No source/test blocker. Exact final bytes accepted for source checkpoint; runtime readiness still requires immutable exact-source CI.",
+  "execution_evidence": {
+    "all_skips_are_real_mongo_cases": true,
+    "author_local_result": "75 passed,16 explicitly skipped,30 subtests passed in4.09s. All skips are the16 replica-set cases because no approved local Mongo fixture exists. Zero failures or errors; skipped cases are not claimed as passing.",
+    "junit_errors": 0,
+    "junit_failures": 0,
+    "junit_path": "/workspace/scratch/ce6ef737d6c9/release-evidence/salla-binding-recovery-local.xml",
+    "junit_sha256": "f6da7164cbc0052546a32e5c9153d15fb44f1eef9608f77a5d2194d0263a24db",
+    "junit_skipped": 16,
+    "junit_testcase_count": 91,
+    "required_next_gate": "All16 IncidentRecoveryMongoTests must execute without skips under exact-source CI",
+    "tests_run_by_reviewer": false
+  },
+  "final_and_tested_module_AST_equal": true,
+  "final_delta_exactly_comment_only": true,
+  "no_source_edits_or_production_calls_by_reviewer": true,
+  "prior_reviewed_and_locally_tested_module_sha256": "682cd41924edd33facbb77222d3b6820c48b6e961d0cd8937b7c99834adbbb7c",
+  "result": "PASS_STATIC_REVIEW",
+  "reviewed_at": "2026-11-15T16:30:36.795987+00:00",
+  "reviewed_boundaries": [
+    "Same unfiltered merchant string/integer query and canonical descending updated_at order",
+    "Singleton compatibility; exact authenticated winning user_id required",
+    "Multiple rows require Date winner and strictly lower Date or exact scalar string/null/missing runner",
+    "Tied dates, arrays, invalid winners and unsupported competing rank shapes refuse",
+    "No owner/status prefilter, arbitrary tie-break, event reassignment or canonical dispatcher change",
+    "Merchant+owner inbox scope, complete-row CAS, once grant and global worker lease writes unchanged",
+    "Selected binding transaction write fence and final outside-snapshot winner-id check unchanged",
+    "Final comment accurately includes both insertion and promotion after the last fresh read; ordinary worker rechecks ownership"
+  ],
+  "reviewed_files": {
+    "backend/salla_integration/webhook_incident_recovery.py": {
+      "bytes": 22352,
+      "sha256": "32ac7fb3d9a4f9e4f477b5b9d9e2759f858da0a089809a4d37835b074d38f5b7"
+    },
+    "backend/tests/test_salla_webhook_incident_recovery.py": {
+      "bytes": 44140,
+      "sha256": "443e49a8f68dcd133bd73a58592206d8d440e2965d1ac9d6e7ee9c282479dfd3"
+    },
+    "docs/operations/SALLA-RECOVERY-OWNERSHIP-20261115/STATUS.json": {
+      "bytes": 8531,
+      "sha256": "668913e0ac81f47518f4e351d975314674d31fd42e43da437c09ccce38463f83"
+    }
+  },
+  "scope_limit": "Does not claim observed production binding shapes, successful live config, recovery grants, or final publication.",
+  "tests_unchanged": true,
+  "worktree": "/workspace/scratch/ce6ef737d6c9/salla-binding-recovery"
+}
