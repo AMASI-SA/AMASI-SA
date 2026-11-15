@@ -377,8 +377,12 @@ def install_verified_order_cart_reconciliation() -> None:
         event_body: dict[str, Any],
         *,
         known_events: Any,
+        raise_on_processing_error: bool = False,
     ) -> dict[str, Any]:
-        result = await current(db, event_body, known_events=known_events)
+        result = await current(
+            db, event_body, known_events=known_events,
+            raise_on_processing_error=raise_on_processing_error,
+        )
         event_name = _text(event_body.get("event")) or ""
         if event_name in _ORDER_EVENTS and (result.get("order_sync") or {}).get("synced"):
             try:

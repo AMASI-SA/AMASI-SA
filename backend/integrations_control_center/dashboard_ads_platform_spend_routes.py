@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, model_validator
 
 from dashboard_snapchat_spend import load_snapchat_dashboard_spend
+from dashboard_v2_ad_costs import apply_mezan_v2_ad_account_costs
 from unified_marketing.dashboard_shadow import (
     build_dashboard_unified_shadow,
     load_dashboard_unified_shadow,
@@ -143,15 +144,81 @@ async def _selected_account_ids(
     }
     if provider == SNAPCHAT_PROVIDER_ID:
         query["mezan_selected"] = True
+    if provider == TIKTOK_PROVIDER_ID:
+        query["connection_provenance"] = "api_connection"
     cursor = db.mezan_integration_accounts_v2.find(
         query,
         {"_id": 0, "external_account_id": 1, "ad_account_id": 1},
     )
     ids = {
         str(row.get("ad_account_id") or row.get("external_account_id") or "").strip()
-        for row in await _to_list(cursor, 250)
+        for row in await _to_list(cursor, 100 if provider == TIKTOK_PROVIDER_ID else 250)
     }
     return sorted(account_id for account_id in ids if account_id)
+
+
+async def _native_tiktok_spend(
+    db: Any, user_id: str, start: date, end: date,
+) -> dict[str, Any]:
+    """Use the executive reader's account scope and account FX for direct TikTok.
+
+    An active native account is authoritative for the whole requested range.
+    Missing account-days remain unknown; they never reactivate the old Make
+    bridge. Without native account authority the historical bridge is retained.
+    """
+    account_ids = await _selected_account_ids(db, user_id, TIKTOK_PROVIDER_ID)
+    if not account_ids:
+        return {"active": False, "account_ids": []}
+    dates = [day.isoformat() for day in _date_list(start, end)]
+    rows = await _to_list(db[TIKTOK_REPORTING_COLLECTION].find({
+        "user_id": user_id,
+        "provider": TIKTOK_PROVIDER_ID,
+        "ad_account_id": {"$in": account_ids},
+        "date": {"$gte": dates[0], "$lte": dates[-1]},
+    }, {"_id": 0}), MAX_DAILY_ROWS + 1)
+    truncated = len(rows) > MAX_DAILY_ROWS
+    costed = await apply_mezan_v2_ad_account_costs(
+        db, user_id, {"tiktok": rows[:MAX_DAILY_ROWS]},
+    )
+    known_by_day: dict[str, float] = defaultdict(float)
+    known_range_total = 0.0
+    observed: set[tuple[str, str]] = set()
+    invalid: set[tuple[str, str]] = set()
+    for row in costed["platform_rows"]["tiktok"]:
+        day = str(row.get("date") or "")[:10]
+        account_id = str(row.get("ad_account_id") or "")
+        key = (account_id, day)
+        source_amount = row.get("spend_native") if (
+            row.get("effective_spend_source") == "native_spend_x_account_rate"
+        ) else row.get("spend_sar")
+        amount = _number(row.get("effective_spend_sar"))
+        if _number(source_amount) is None or amount is None:
+            invalid.add(key)
+            continue
+        observed.add(key)
+        known_by_day[day] += amount
+        known_range_total += amount
+    complete_days = {
+        day for day in dates if not truncated
+        and all((account_id, day) in observed and (account_id, day) not in invalid
+                for account_id in account_ids)
+    }
+    available = len(complete_days) == len(dates)
+    # Round the selected range only once, as build_mezan_v2_ads does. Summing
+    # rounded daily display amounts can differ by a cent and hide profit again.
+    known_total = round(known_range_total, 2)
+    return {
+        "active": True,
+        "account_ids": account_ids,
+        "daily_sar": {day: round(known_by_day[day], 2) if day in complete_days else None
+                      for day in dates},
+        "total_sar": known_total if available else None,
+        "known_total_sar": known_total,
+        "amount_available": available,
+        "reason_codes": ([] if available else [
+            "tiktok_saved_rows_truncated" if truncated else "tiktok_saved_account_days_incomplete",
+        ]),
+    }
 
 
 async def _connection_states(db: Any, user_id: str) -> dict[str, dict[str, Any]]:
@@ -188,6 +255,7 @@ async def _daily_spend(
     snapchat: dict[str, Any],
     *,
     google: dict[str, Any] | None = None,
+    native_tiktok: dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, bool]]:
     dates = _date_list(start, end)
     by_date: dict[str, dict[str, Any]] = {
@@ -213,9 +281,15 @@ async def _daily_spend(
         by_date[day.isoformat()]["google"] = google["daily_sar"].get(day.isoformat())
     facts["google"] = (google["quality"]["amount_available"]
                        and google["quality"]["data_state"] != "not_required")
+    if native_tiktok is None:
+        native_tiktok = await _native_tiktok_spend(db, user_id, start, end)
+    if native_tiktok["active"]:
+        for day in dates:
+            by_date[day.isoformat()]["tiktok"] = native_tiktok["daily_sar"][day.isoformat()]
+        facts["tiktok"] = native_tiktok["amount_available"]
 
     for provider, collection_name in DAILY_COLLECTION_BY_PROVIDER.items():
-        if provider in {"snapchat", "google"}:
+        if provider in {"snapchat", "google"} or (provider == "tiktok" and native_tiktok["active"]):
             continue
         query: dict[str, Any] = {
             "user_id": user_id,
@@ -244,12 +318,11 @@ async def _daily_spend(
             for day_text in by_date:
                 by_date[day_text][provider] = round(totals.get(day_text, 0.0), 2)
 
-    # Make.com is the temporary TikTok transport until the merchant completes
-    # the direct Marketing API connection. The financial SSOT for that bridge
-    # is ad_account_ledger. While Make has a ledger amount for a date, keep it
-    # authoritative even if partial native reporting also exists. Native data
-    # remains the fallback for dates without Make rows, so the transition
-    # to direct TikTok can never double-count spend.
+    if native_tiktok["active"]:
+        return [by_date[day.isoformat()] for day in dates], facts
+
+    # Preserve the historical Make bridge only when no connected API account
+    # owns TikTok reporting. Partial unconnected native rows do not displace it.
     tiktok_accounts = await _to_list(
         db.counterparties.find(
             {
@@ -303,6 +376,7 @@ async def _hourly_spend(
     *,
     tiktok_daily_total: float | None = None,
     google_account_ids: list[str] | None = None,
+    tiktok_account_ids: list[str] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, bool], dict[str, str]]:
     local_start = datetime.combine(selected_date, time.min, tzinfo=RIYADH_TZ)
     local_end = local_start + timedelta(days=1)
@@ -345,6 +419,9 @@ async def _hourly_spend(
             if (google_account_id(row.get("ad_account_id")) not in google_account_ids
                     or row.get("source_mode") != GOOGLE_ADS_REPORTING_SOURCE_MODE):
                 continue
+        if provider == "tiktok" and tiktok_account_ids is not None:
+            if str(row.get("ad_account_id") or "") not in tiktok_account_ids:
+                continue
         point = _parse_utc(row.get("hour_start_utc"))
         spend = _number(row.get("spend_sar"))
         if point is None or spend is None:
@@ -363,7 +440,8 @@ async def _hourly_spend(
     # Show the exact total as one labelled marker at its latest update hour.
     # Native hourly facts remain authoritative once the direct API is live.
     tiktok_marker_hour: int | None = None
-    if not facts["tiktok"] and tiktok_daily_total is not None:
+    if (tiktok_account_ids is None and not facts["tiktok"]
+            and tiktok_daily_total is not None):
         make_rows = await _to_list(
             db.tiktok_ads_daily.find(
                 {"user_id": user_id, "date": selected_date.isoformat()},
@@ -469,7 +547,10 @@ async def build_dashboard_platform_spend(
         }
     google = await load_google_dashboard_spend(db, user_id, date_from=start, date_to=end)
     google_quality = google["quality"]
-    daily, daily_facts = await _daily_spend(db, user_id, start, end, snapchat, google=google)
+    native_tiktok = await _native_tiktok_spend(db, user_id, start, end)
+    daily, daily_facts = await _daily_spend(
+        db, user_id, start, end, snapchat, google=google, native_tiktok=native_tiktok,
+    )
     states = await _connection_states(db, user_id)
     single_day = start == end
     hourly: list[dict[str, Any]] = []
@@ -483,6 +564,7 @@ async def build_dashboard_platform_spend(
             snapchat,
             tiktok_daily_total=_number(daily[0].get("tiktok")),
             google_account_ids=google["account_ids"],
+            tiktok_account_ids=native_tiktok["account_ids"] if native_tiktok["active"] else None,
         )
 
     totals = {
@@ -500,6 +582,8 @@ async def build_dashboard_platform_spend(
     totals["google"] = (
         google["total_sar"] if google_quality["data_state"] != "not_required" else None
     )
+    if native_tiktok["active"]:
+        totals["tiktok"] = native_tiktok["total_sar"]
     provider_rows = {}
     for provider in FOUR_PLATFORM_KEYS:
         state = states.get(provider) or {}
@@ -558,6 +642,14 @@ async def build_dashboard_platform_spend(
                 "data_quality": google_quality["status"],
                 "known_total_sar": google["known_total_sar"],
             })
+        if provider == "tiktok" and native_tiktok["active"]:
+            provider_rows[provider].update({
+                "data_quality": "complete" if native_tiktok["amount_available"] else "incomplete",
+                "amount_available": native_tiktok["amount_available"],
+                "known_total_sar": native_tiktok["known_total_sar"],
+                "reason_codes": native_tiktok["reason_codes"],
+                "daily_source": "native_account_facts",
+            })
 
     known_total_sar = round(
         sum(value for value in totals.values() if value is not None), 2
@@ -568,6 +660,8 @@ async def build_dashboard_platform_spend(
         known_total_sar = round(known_total_sar + snapchat_known, 2)
     if totals["google"] is None:
         known_total_sar = round(known_total_sar + google["known_total_sar"], 2)
+    if native_tiktok["active"] and totals["tiktok"] is None:
+        known_total_sar = round(known_total_sar + native_tiktok["known_total_sar"], 2)
     snap_amount_complete = (
         (snapchat.get("quality") or {}).get("amount_complete") is True
     )
@@ -580,8 +674,9 @@ async def build_dashboard_platform_spend(
         and not snap_amount_complete
         and (snapchat.get("quality") or {}).get("provisional") is True
     )
-    amount_available = snap_amount_available and google_quality["amount_available"]
-    amount_complete = snap_amount_complete and google_quality["amount_complete"]
+    tiktok_available = not native_tiktok["active"] or native_tiktok["amount_available"]
+    amount_available = snap_amount_available and google_quality["amount_available"] and tiktok_available
+    amount_complete = snap_amount_complete and google_quality["amount_complete"] and tiktok_available
     provisional = (amount_available and not amount_complete
                    and (snap_amount_provisional or google_quality["provisional"]))
     total_sar = full_provider_total_sar if amount_available else None
@@ -616,7 +711,8 @@ async def build_dashboard_platform_spend(
             "snapchat": snapchat.get("source_contract")
             or "unified-marketing-data-v1:snapchat-v2:riyadh-dashboard-spend",
             "meta": META_REPORTING_COLLECTION,
-            "tiktok": TIKTOK_REPORTING_COLLECTION,
+            "tiktok": (TIKTOK_REPORTING_COLLECTION + ":connected_api_accounts:mezan2_account_cost_settings_v1"
+                       if native_tiktok["active"] else TIKTOK_REPORTING_COLLECTION),
             "google": google["source_contract"],
         },
         "source_only": True,

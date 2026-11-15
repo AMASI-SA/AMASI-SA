@@ -1,0 +1,59 @@
+{
+  "task_id": "SALLA-INCIDENT-RECOVERY-20261115",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/salla-incident-recovery-20261115",
+  "base_commit": "d7facb0ff4e2e30edbabf012b3865155d5902a85",
+  "status": "source_reviewed_ready_for_exact_source_ci",
+  "authorization": "User repeatedly requested completion of the root fix and explicitly reported that the last deployment stopped new Salla orders and status updates. Existing merge/deploy authorization persists.",
+  "problem": "The prior durable-ingress release retained verified events but its installed cart-reconciliation capture wrapper rejected the strict-processing keyword before business capture. PR1940 corrects that contract; events already quarantined after eight attempts require a bounded one-time retry grant.",
+  "prior_corrective_release": {
+    "pull_request": 1940,
+    "source_commit": "a6c5bc5763fdca144b44473285d37130eb8213e9",
+    "intent_commit": "ac1443d46d6c172983dfe74479c6f96c40b0c4ec",
+    "merge_commit": "d7facb0ff4e2e30edbabf012b3865155d5902a85",
+    "runtime": "rg5-f33cd3537f17e7a25804236a8b4ad0680c73618af6d3cddabc75fe8486f8d93a",
+    "state_at_source_preparation": "published version5d52cf3 at18:14 Riyadh; official exact-lease verification PID70379 running; lease remains owned by PR1940 until its verifier closes it",
+    "do_not_mutate_shared_app_or_lease": true
+  },
+  "requested_behavior_preserved": {
+    "realtime_new_orders_and_statuses": "immediate through the existing durable inbox worker",
+    "scheduled_reconciliation": "once daily at 10:00 Asia/Riyadh; preceding fixed24h; update existing only",
+    "preserve": ["customer choices", "costs", "accounting", "Ready gates", "other tasks and production commits"]
+  },
+  "maintenance_scope": {
+    "default_enabled": false,
+    "flag": "SALLA_WEBHOOK_INCIDENT_RECOVERY_ENABLED",
+    "merchant_id": "1673234356",
+    "incident_start": "2026-11-15T13:57:00Z",
+    "incident_start_basis": "Conservative lower bound before prior prepare13:57:01.652Z and publication observed submitted by13:58:40Z. Deployment-finish14:07 was not proof of first admission.",
+    "incident_end": "explicit reviewed cutover boundary, no later than current time and within24h of start",
+    "batch_max": 50,
+    "eligibility": "Exact current owner and merchant; quarantined; attempts integer8; attempt_limit; verified-before-enqueue; retained nonempty encrypted payload; no active claim/completion/prior incident grant; fixed incident window.",
+    "dry_run": "read-only metadata plan; no database writes, lease acquisition, index creation, payload disclosure or decryption",
+    "apply": "Explicit reviewed plan; exact runtime/hash/owner/row state; global worker token+epoch lease; all-or-nothing Mongo transaction; original row history preserved; permanent once-only incident grant; existing worker processes queued rows.",
+    "ownership_limit": "Exact current binding is transactionally write-fenced and a fresh outside-snapshot check rejects observed changes and ambiguous bindings. A new binding inserted after the final read is not globally serialized without changing canonical writers; the grant remains on the original tenant row and the existing worker independently rejects current-owner mismatch before dispatch.",
+    "progress": "Owner-scoped safe queue/grant counts and latest completion, explicit refresh only",
+    "no_production_data_changed": true
+  },
+  "verification": {
+    "independent_review": "PASS on exact final backend/frontend files; owner fence residual limit explicit; reviewer checked16MiB payload batch cap, stale-plan/lease and UI approval bindings",
+    "local_units": "81 passed,12 explicitly skipped because no local replica-set fixture,15 subtests passed; zero failures/errors. Exact-source CI must execute all12 real-Mongo cases and reject every skip.",
+    "local_junit_sha256": "5b3e1bbe5932740c286599fd9bf88d5d5e9931f3653003dba6d4d8bc4d915447",
+    "runtime_contract": "Actual accepted PR1940 Host20 identity bytes validated through official loader against frozen1940 backend; new maintenance runtime guard accepts the real verified field shape",
+    "local_frontend": "38 of38 focused interaction tests passed after the established real-router Jest conditional-export harness was added;0 skips,5.26 seconds. Production UI bytes and all original assertions unchanged. Exact-source full frontend Security Gate remains mandatory.",
+    "previous_candidate_failure": "First source fce21070182f1f5d1f69d9112a78229f104300ec is not accepted: Security Gate run43729425792/job132858370815 could not load the new test because Jest could not resolve react-router/dom.402 other suites and3810 tests passed. No rerun substituted for the source fix; retain the failed evidence and regenerate candidate/gates for the corrected source.",
+    "previous_candidate_mongo": "First source did execute409 tests plus19 subtests with0 skips, including all12 new real-Mongo transaction tests. This is evidence for that exact source only; corrected source must pass its own workflow.",
+    "frontend_harness_review": "Independent PASS: exactly15 added resolver/encoder lines following existing repository fixture; actual MemoryRouter and Link preserved; no skip/only/assertion removal. Corrected test SHA256e59cd962ad6ec15254afceae8cfb380fc55ee7cebd42b58a74fc72cd908a37d2.",
+    "required_real_mongo": "Existing Salla durable ingress CI replica-set fixture; new recovery cases required and every skip rejected",
+    "required_frontend": "Focused interaction tests plus existing full frontend CI",
+    "required_release": "New reviewed sourceA, generated exact intent-onlyB, both host package proofs, normal mergeM and actual-M gates, preserving original workspace rehearsal, fresh own lease, one publication, official exact-runtime verification",
+    "production_acceptance": "Granted events reach done with retained dedupe tombstones; observed new events continue processing; user's seven missing order IDs appear and statuses reflect authoritative event processing"
+  },
+  "user_reported_missing_order_ids": ["300234303", "300234184", "300233862", "300233848", "300232242", "300231768", "300229347"],
+  "platform_access": "Emergent support confirmed CodeServer preview and production databases are separate and recommended authenticated default-disabled in-app maintenance. No credentials or production database access were extracted.",
+  "continuation": {
+    "ledger": "Issue1006 is full; this task STATUS and its PR are the continuation record",
+    "next": "Freeze sourceA and run exact-source gates; never replace current PR1940 lease or package artifacts. Generate candidate intent from accepted exact A, then reviewed intent-onlyB and both host package proofs before merge/release.",
+    "completion_claimed": false
+  }
+}

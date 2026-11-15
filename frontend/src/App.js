@@ -37,6 +37,7 @@ const SettlementDashboard = lazy(() => import("./pages/SettlementDashboard"));
 const ProductPreparation = lazy(() => import("./pages/ProductPreparation"));
 const ImageCatalog = lazy(() => import("./pages/ImageCatalog"));
 const SallaIntegration = lazy(() => import("./pages/SallaIntegration"));
+const SallaWebhookRecovery = lazy(() => import("./pages/SallaWebhookRecovery"));
 const QoyodControlCenter = lazy(() => import("./pages/QoyodControlCenter"));
 const IntegrationPlaceholder = lazy(() => import("./pages/IntegrationPlaceholder"));
 const SallaSourceComparison = lazy(() => import("./pages/SallaSourceComparison"));
@@ -183,6 +184,7 @@ function AppRoutes() {
             <Route path="/product-preparation" element={<ProtectedRoute><Layout><ProductPreparation /></Layout></ProtectedRoute>} />
             <Route path="/image-catalog" element={<ProtectedRoute><Layout><ImageCatalog /></Layout></ProtectedRoute>} />
             <Route path="/settings/salla" element={<ProtectedRoute><Layout><SallaIntegration /></Layout></ProtectedRoute>} />
+            <Route path="/salla-webhook-recovery" element={<ProtectedRoute><Layout><SallaWebhookRecovery /></Layout></ProtectedRoute>} />
             <Route path="/salla-sources" element={<ProtectedRoute><Layout><SallaSourceComparison /></Layout></ProtectedRoute>} />
             <Route path="/payment-settlements" element={<ProtectedRoute><Layout><PaymentSettlements /></Layout></ProtectedRoute>} />
             <Route path="/shipping-accounts" element={<ProtectedRoute><Layout><LegacyRedirect oldLabel="حسابات الشحن الآجلة" replacement="/shipping/orders-ledger" replacementLabel="دفتر الشحن التفصيلي" reason="تم استبدالها بالنسخة المبنية على Ledger مباشرة." /></Layout></ProtectedRoute>} />

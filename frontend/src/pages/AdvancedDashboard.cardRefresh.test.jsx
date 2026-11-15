@@ -176,7 +176,7 @@ test("an older platform response stays rejected while the newer read is still pe
     expect(mockSpendCardProps.snapshot.known_total_sar).toBe(300);
 });
 
-test.each(["complete", "provisional"])("executive %s read never recalculates canonical profit or bank fees from the display snapshot", async (status) => {
+test.each(["complete", "provisional"])("executive %s mismatch gets one bounded read without client profit or fee arithmetic", async (status) => {
     const canonical = { totals: { total_sales: 1000, total_ads_cost: 100, net_profit: 797,
         ad_bank_commission_fees: 3, ads_spend_amount_available: true },
         ads_v2: { spend_quality: { status, amount_available: true, provisional: status === "provisional" },
@@ -195,7 +195,118 @@ test.each(["complete", "provisional"])("executive %s read never recalculates can
     expect(result.totals.net_profit).toBe(797);
     expect(result.totals.ad_bank_commission_fees).toBe(3);
     expect(result.dashboard_platform_spend).toBe(platform);
+    expect(apiClient.get).toHaveBeenCalledTimes(2);
+});
+
+test.each(["complete", "provisional"])("an admitted executive read restores %s profit from the newer server basis", async (status) => {
+    mockRenderRealSpendCard = true;
+    const quality = { status, amount_available: true, amount_complete: status === "complete",
+        provisional: status === "provisional" };
+    getDashboardAdsSpend.mockResolvedValue({ ...sharedSpend(200, { complete: true }), spend_quality: quality });
+    api.get.mockImplementation(async (url) => {
+        if (!url.startsWith(paths.executive)) return responseFor(url);
+        const refreshed = new URLSearchParams(url.split("?")[1]).get("refresh") === "true";
+        const spend = refreshed ? 200 : 100;
+        return { data: { totals: { total_sales: 1000, total_orders: 10, total_ads_cost: spend,
+            ads_spend_data_complete: status === "complete", ads_spend_amount_available: true,
+            ads_spend_provisional: status === "provisional", avg_cost_per_order: spend / 10,
+            overall_roas: 1000 / spend, net_profit: refreshed ? 594 : 697,
+            total_payment_fees: refreshed ? 6 : 3 },
+        ads_v2: { spend_quality: quality,
+            breakdown: { snapchat: 0, meta: 0, tiktok: 0, google_transitional: spend } },
+        snapshot: snapshot("executive") } };
+    });
+    await render();
+    expect(calls("executive")).toHaveLength(2);
+    const initial = new URLSearchParams(calls("executive")[0][0].split("?")[1]);
+    const refreshed = new URLSearchParams(calls("executive")[1][0].split("?")[1]);
+    expect(refreshed.get("refresh")).toBe("true");
+    refreshed.delete("refresh");
+    expect(refreshed.toString()).toBe(initial.toString());
+    const profit = host.querySelector('[data-testid="advanced-profit-summary"]');
+    expect(profit.textContent).not.toContain("بانتظار تحديث الملخص");
+    expect(profit.querySelector('[data-testid="advanced-profit-net-hero"]').textContent).toContain("594.00");
+    expect(profit.querySelector('[data-testid="advanced-profit-row-payment"]').textContent).toContain("6.00");
+    expect(profit.querySelector('[data-testid="advanced-profit-kpis"]').textContent).toContain("20.00");
+    expect(profit.querySelector('[data-testid="advanced-profit-kpis"]').textContent).toContain("5.00×");
+    expect(calls("top")).toHaveLength(1);
+    expect(calls("summary")).toHaveLength(1);
+    expect(api.post).not.toHaveBeenCalled();
+    expect(getDashboardAdsSpend.mock.calls.every(([args]) => args.refresh === false)).toBe(true);
+});
+
+test.each(["provider split", "native account basis"])("same-total %s changes refresh the executive calculation once", async (change) => {
+    const quality = { status: "provisional", amount_available: true, amount_complete: false, provisional: true };
+    const platform = { ...sharedSpend(200, { complete: true }), spend_quality: quality,
+        provider_totals_sar: { snapchat: 200, meta: 0, tiktok: 0, google: 0 },
+        providers: { snapchat: { accounts: [{ account_id: "synthetic-account", total_sar: 200,
+            total_native: 50, currency: "USD" }] } } };
+    const current = { totals: { total_ads_cost: 200, net_profit: 594, total_payment_fees: 6,
+        ads_spend_amount_available: true }, ads_v2: { spend_quality: quality,
+        breakdown: { snapchat: 200, meta: 0, tiktok: 0, google_transitional: 0 },
+        bank_commissions: { accounts: [{ provider: "snapchat_ads", external_account_id: "synthetic-account",
+            spend_sar: 200, spend_native: 50, native_currency: "USD" }] } } };
+    const stale = JSON.parse(JSON.stringify(current));
+    stale.totals.net_profit = 597;
+    stale.totals.total_payment_fees = 3;
+    if (change === "provider split") {
+        stale.ads_v2.breakdown.snapchat = 150;
+        stale.ads_v2.breakdown.meta = 50;
+    } else {
+        stale.ads_v2.bank_commissions.accounts[0].spend_native = 55;
+    }
+    const apiClient = { get: jest.fn().mockResolvedValueOnce({ data: stale }).mockResolvedValueOnce({ data: current }) };
+    const setData = jest.fn();
+    await loadDashboardPeriodSnapshot({
+        next: { from: "2026-11-11", to: "2026-11-11", payment_methods: ["mada"],
+            shipping_companies: ["carrier"], report_statuses: ["completed"] },
+        endpoint: paths.executive, apiClient, requestSequence: 1, isLatest: () => true,
+        setData, setLoading: jest.fn(), setLoadError: jest.fn(), platformSpendLoader: async () => platform,
+    });
+    expect(apiClient.get).toHaveBeenCalledTimes(2);
+    const initial = new URLSearchParams(apiClient.get.mock.calls[0][0].split("?")[1]);
+    const forced = new URLSearchParams(apiClient.get.mock.calls[1][0].split("?")[1]);
+    expect(forced.get("refresh")).toBe("true");
+    forced.delete("refresh");
+    expect(forced.toString()).toBe(initial.toString());
+    expect(initial.get("report_statuses")).toBe("completed");
+    expect(setData.mock.calls[0][0].totals).toBe(current.totals);
+    expect(setData.mock.calls[0][0].ads_v2).toBe(current.ads_v2);
+});
+
+test.each(["already forced", "previous period", "unavailable spend"])("%s does not add a mismatch-only executive retry", async (reason) => {
+    const platform = sharedSpend(200, { complete: reason !== "unavailable spend",
+        day: reason === "previous period" ? "2026-11-10" : "2026-11-11" });
+    const canonical = { totals: { total_ads_cost: 100, net_profit: 697, ads_spend_amount_available: true },
+        ads_v2: { spend_quality: { status: "complete", amount_available: true, amount_complete: true } } };
+    const apiClient = { get: jest.fn().mockResolvedValue({ data: canonical }) };
+    const setData = jest.fn();
+    await loadDashboardPeriodSnapshot({ next: { from: "2026-11-11", to: "2026-11-11" },
+        endpoint: paths.executive, refresh: reason === "already forced", apiClient,
+        requestSequence: 1, isLatest: () => true, setData, setLoading: jest.fn(), setLoadError: jest.fn(),
+        platformSpendLoader: async () => platform });
     expect(apiClient.get).toHaveBeenCalledTimes(1);
+    expect(setData.mock.calls[0][0].totals).toBe(canonical.totals);
+});
+
+test("a recomputed executive response cannot publish after its selected request becomes stale", async () => {
+    let latest = true;
+    let finishRefresh;
+    const canonical = { totals: { total_ads_cost: 100, ads_spend_amount_available: true },
+        ads_v2: { spend_quality: { status: "complete", amount_available: true, amount_complete: true } } };
+    const apiClient = { get: jest.fn().mockResolvedValueOnce({ data: canonical })
+        .mockImplementationOnce(() => new Promise((resolve) => { finishRefresh = resolve; })) };
+    const setData = jest.fn();
+    const loading = loadDashboardPeriodSnapshot({ next: { from: "2026-11-11", to: "2026-11-11" },
+        endpoint: paths.executive, apiClient, requestSequence: 1, isLatest: () => latest,
+        setData, setLoading: jest.fn(), setLoadError: jest.fn(),
+        platformSpendLoader: async () => sharedSpend(200, { complete: true }) });
+    await act(async () => { await Promise.resolve(); });
+    expect(apiClient.get).toHaveBeenCalledTimes(2);
+    latest = false;
+    finishRefresh({ data: { ...canonical, totals: { ...canonical.totals, total_ads_cost: 200 } } });
+    await loading;
+    expect(setData).not.toHaveBeenCalled();
 });
 
 test("older platform read cannot replace a newer same-period snapshot or its canonical complete total", async () => {
