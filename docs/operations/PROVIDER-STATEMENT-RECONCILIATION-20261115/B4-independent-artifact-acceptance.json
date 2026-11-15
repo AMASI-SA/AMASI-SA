@@ -1,0 +1,111 @@
+{
+  "status": "PASS_ARTIFACT_ACCEPTANCE",
+  "source_A": "1bd44b6f186de8b40877fde686b5d2d7aab52805",
+  "base_J": "c626af288d3823694b4f1d0efcc3670e4ee74d81",
+  "intent_B": "983cb9307a8a23d086bc6cb3df962683870b01e2",
+  "readiness_run": 43759102206,
+  "host_jobs": {
+    "20.20.2": 132950222005,
+    "24.19.0": 132950221952
+  },
+  "artifacts": [
+    {
+      "id": 14179383613,
+      "host": "24.19.0",
+      "kind": "generated",
+      "zip_bytes": 3006842,
+      "zip_sha256": "37cc048ff2deae0852021c071243257f5451b65b11b6a25e015d9a0e34678357",
+      "members": [
+        "mezan-generated-release-v5.tar.gz",
+        "mezan-generated-release-v5.sha256"
+      ],
+      "tar_bytes": 3009068,
+      "tar_sha256": "61d39f75fed0b594d39190e9269e348e4941dc0e8cdd000849e71c9763f8c9f0",
+      "tar_members": 299,
+      "regular_files": 296
+    },
+    {
+      "id": 14179053680,
+      "host": "20.20.2",
+      "kind": "generated",
+      "zip_bytes": 3009297,
+      "zip_sha256": "9ae25cbfe813f1eac1c4e0872d2ea100e76f9b3e60b04ef46b8ce16853f95b75",
+      "members": [
+        "mezan-generated-release-v5.sha256",
+        "mezan-generated-release-v5.tar.gz"
+      ],
+      "tar_bytes": 3011138,
+      "tar_sha256": "77772d116498e7b81ca7528efe019486ee6e7f43e5fdee73ec3a97a29335e5c9",
+      "tar_members": 299,
+      "regular_files": 296
+    },
+    {
+      "id": 14180120044,
+      "host": "24.19.0",
+      "kind": "evidence",
+      "zip_bytes": 46520,
+      "zip_sha256": "ba57e18bef0322dc67d72d8a03f2ec99cb5b02545b91be7ca16ba1f9e8413c2b",
+      "members": [
+        "mezan-adapter-build-v5.log",
+        "mezan-package-boundary-v5.json",
+        "mezan-adapter-environment-v5.json",
+        "mezan-governed-runtime.log"
+      ]
+    },
+    {
+      "id": 14179292883,
+      "host": "20.20.2",
+      "kind": "evidence",
+      "zip_bytes": 46522,
+      "zip_sha256": "ca1b1c9e7f0fce645fb0e8dcfb91a9c783ed139e4be97a9c519bfd686d127e78",
+      "members": [
+        "mezan-adapter-build-v5.log",
+        "mezan-package-boundary-v5.json",
+        "mezan-governed-runtime.log",
+        "mezan-adapter-environment-v5.json"
+      ]
+    }
+  ],
+  "regular_members_exact_bytes_modes_equal": true,
+  "regular_files": 296,
+  "complete_build_files_checked": 293,
+  "intent_sha256": "8ba08f1a55e872c80bbca60d2ae189c7b123032544ccbf4ab94806bbde8728fa",
+  "package_proof_bytes": 1278,
+  "package_proof_sha256": "ce75761983cf60abad1e6954850943e9e21d6422a64fb293b3c2f89220c01185",
+  "package_proof": {
+    "backend": {
+      "file_count": 1232,
+      "git_directory_present": false,
+      "health_verified": true,
+      "identity": {
+        "bytes": 442949,
+        "path": "release_identity.json",
+        "sha256": "3c1721f93f623d386652c9f9f70a948e9fc274ff8ecac49b621b553815c4cfc1"
+      },
+      "isolated_verified": true,
+      "package_tree_sha256": "a462ce8276ed68e00ada8ca7861479e147d7b1c0300da7281430926cd94c13db",
+      "runtime_root": "backend",
+      "sibling_frontend_present": false
+    },
+    "frontend": {
+      "artifact_tree_sha256": "8869a888503abc401cdb9973fb9000538184b180657ed9dc04faed584796dc3b",
+      "build_meta": {
+        "bytes": 478742,
+        "path": "build/build-meta.json",
+        "sha256": "149e6bafb75315b782f4ebef02037343ae892a65d0997b1cea470c4fc63ae929"
+      },
+      "content_type_contract": "application/json",
+      "file_count": 1486,
+      "isolated_runtime_artifact_verified": true,
+      "package_tree_sha256": "22a252350f8e2a871db314e4971fabd4f4f63ea300478288b97fe33996a854e8",
+      "runtime_root": "frontend",
+      "static_root": "frontend/build"
+    },
+    "kind": "mezan_release_package_boundary_proof_v1",
+    "release_id": "rg5-58ace8c534fca5cd31d89a58bc9fd7746a79e25681660f8c32b3eded55a74117",
+    "schema_version": 1,
+    "source_git_sha": "1bd44b6f186de8b40877fde686b5d2d7aab52805"
+  },
+  "package_trees_independently_rederived": true,
+  "all_required_ci": "pending separate final snapshot"
+}

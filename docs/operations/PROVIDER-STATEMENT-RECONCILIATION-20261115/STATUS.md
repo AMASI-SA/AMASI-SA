@@ -1,3 +1,17 @@
+# PR1950 exact B4 accepted — 2026-11-15 20:46 UTC
+
+Root and the independent reviewer accepted exact B4 `983cb9307a8a23d086bc6cb3df962683870b01e2`: 54 checks (44 success,10 intentional conditional skips), no failing/pending checks;24 workflows (23 success,1 out-of-scope TikTok skip). Readiness run43759102206 passed both actual Host20.20.2 and Host24.19.0 rehearsals. All296 regular generated TAR members match exact bytes and modes across hosts;293 build records, full source manifest, accepted intent/runtime/proof and both package trees independently verified. Root separately repeated safe-member, mode/byte and intent/runtime comparison successfully.
+
+The accepted package proof is1278 bytes/SHA256 `ce75761983cf60abad1e6954850943e9e21d6422a64fb293b3c2f89220c01185`. This evidence-only branch stores the exact proof and both review receipts.
+
+Root read and accepted the entire original-host rehearsal helper `original_release_1950.py`,16463 bytes/SHA256 `d8e8f49e24ec04b098d4dac2a09ad69648ae8391ce4fc7cb0106bb1b7668f5d6`. It requires fixed A4/B4/J4 identities, an explicit normal merge M with ordered parents[J4,B4]/exact B tree, inactive official guard and operation mutex, clean tracked source and120 untracked platform entries. It ff-only synchronizes, runs configured governed frontend yarn build with the public production origin, checks exact accepted package proof, preserves metadata and exits inactive. It never prepares or publishes. Metadata only is inspected for untracked files; the receipt does not claim byte or append-prefix proof. Only known stripped-env-name bookkeeping size/mtime may grow. No private file contents are read.
+
+Remaining: fresh production/original inactive readback; normal merge and exact-M push gates; run this pinned original-host rehearsal; own prepare/prepublish; single authorized publication; uninterrupted official3 deployed probes/inactive; explicit saved-original Tabby reuse and provider-table UI acceptance. No provider publication or financial change has happened yet.
+
+Evidence branch only: do not merge or deploy this checkpoint.
+
+---
+
 # Provider PR1950 publication evidence — do not deploy this branch
 
 This documentation-only branch preserves the continuation record. The deployment candidate remains the unchanged A4/B4 pair on PR1950. Never merge or deploy this evidence branch.
