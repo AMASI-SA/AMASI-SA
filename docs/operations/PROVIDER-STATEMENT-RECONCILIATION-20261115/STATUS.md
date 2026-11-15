@@ -1,3 +1,13 @@
+# Exact M accepted; original rehearsal running — 2026-11-15 20:57 UTC
+
+Normal merge M`236a428364bc8163a684795ed1be87e237476f18` has exact B4 tree`6967da090ac1301ca38bc8bc179758d7eaa91976` and ordered parents[J4,B4]. Root and independent reviewer verified current production ref. All3 exact-M push workflows and all11 checks succeeded on attempt1; no failed, skipped or pending checks. Both actual Host20/24 generated outputs match all296 accepted B regular members byte-for-byte and mode-for-mode. Root separately read both M proof files and compared them exactly to the accepted1278-byte proof.
+
+M acceptance receipts are included in this evidence-only commit. Original helper/proof transfer from prior evidencecommit`d857301de5dd949d33bb575d182950fbd60b8e6f` was hash-verified to `/tmp/provider1950-transfer-20261115/`. Fresh official guard was inactive before transfer. Root invoked the reviewed helper once with exactM and fresh `/tmp/provider1950-original-20261115`; it is running in root-owned Terminal16, with complete private stage receipts. No provider lease preparation or publication yet. Do not run a competing release while this operation is active.
+
+Next: require full successful original rehearsal/package proof/preservation; prepare own lease and prepublish; single authorized platform publication; official3-probe verification then inactive; saved Tabby original and UI acceptance. Live financial data and screenshots will not be added to this repository evidence.
+
+---
+
 # PR1950 exact B4 accepted — 2026-11-15 20:46 UTC
 
 Root and the independent reviewer accepted exact B4 `983cb9307a8a23d086bc6cb3df962683870b01e2`: 54 checks (44 success,10 intentional conditional skips), no failing/pending checks;24 workflows (23 success,1 out-of-scope TikTok skip). Readiness run43759102206 passed both actual Host20.20.2 and Host24.19.0 rehearsals. All296 regular generated TAR members match exact bytes and modes across hosts;293 build records, full source manifest, accepted intent/runtime/proof and both package trees independently verified. Root separately repeated safe-member, mode/byte and intent/runtime comparison successfully.
