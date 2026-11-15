@@ -1,6 +1,6 @@
 {
   "task": "EXECUTIVE-PROFIT-SPEND-BASIS-20261115",
-  "updated_at_utc": "2026-11-15T14:28:30Z",
+  "updated_at_utc": "2026-11-15 14:32:40 UTC",
   "repository": "AMASI-SA/AMASI-SA",
   "pull_request": 1936,
   "source_branch": "codex/executive-profit-release-20261115",
@@ -653,10 +653,137 @@
     "root_and_independent_targeted_review": "PASS; complete strict/default forwarding and production-order regression; real-Mongo CI execution review pending",
     "current_source_ci": {
       "total": 12,
-      "success": 8,
-      "in_progress": 4
+      "success": 12,
+      "in_progress": 0,
+      "all_first_attempt": true,
+      "verified_at_utc": "2026-11-15 14:32:40 UTC",
+      "runs": [
+        {
+          "id": 43724172051,
+          "name": "Snapchat Settings Management V2",
+          "event": "pull_request",
+          "head_sha": "a6c5bc5763fdca144b44473285d37130eb8213e9",
+          "run_attempt": 1,
+          "conclusion": "success"
+        },
+        {
+          "id": 43724172163,
+          "name": "Snapchat Direct Active Publication",
+          "event": "pull_request",
+          "head_sha": "a6c5bc5763fdca144b44473285d37130eb8213e9",
+          "run_attempt": 1,
+          "conclusion": "success"
+        },
+        {
+          "id": 43724172200,
+          "name": "Qoyod Payment Freshness",
+          "event": "pull_request",
+          "head_sha": "a6c5bc5763fdca144b44473285d37130eb8213e9",
+          "run_attempt": 1,
+          "conclusion": "success"
+        },
+        {
+          "id": 43724172185,
+          "name": "Salla durable ingress and daily refresh",
+          "event": "pull_request",
+          "head_sha": "a6c5bc5763fdca144b44473285d37130eb8213e9",
+          "run_attempt": 1,
+          "conclusion": "success"
+        },
+        {
+          "id": 43724172113,
+          "name": "Background workers and two-hour Qoyod cycles",
+          "event": "pull_request",
+          "head_sha": "a6c5bc5763fdca144b44473285d37130eb8213e9",
+          "run_attempt": 1,
+          "conclusion": "success"
+        },
+        {
+          "id": 43724172179,
+          "name": "Mezan Release Readiness",
+          "event": "pull_request",
+          "head_sha": "a6c5bc5763fdca144b44473285d37130eb8213e9",
+          "run_attempt": 1,
+          "conclusion": "success"
+        },
+        {
+          "id": 43724172119,
+          "name": "Security Gate",
+          "event": "pull_request",
+          "head_sha": "a6c5bc5763fdca144b44473285d37130eb8213e9",
+          "run_attempt": 1,
+          "conclusion": "success"
+        },
+        {
+          "id": 43724172067,
+          "name": "G47 Focused Integration",
+          "event": "pull_request",
+          "head_sha": "a6c5bc5763fdca144b44473285d37130eb8213e9",
+          "run_attempt": 1,
+          "conclusion": "success"
+        },
+        {
+          "id": 43724172061,
+          "name": "Operational Balance Web",
+          "event": "pull_request",
+          "head_sha": "a6c5bc5763fdca144b44473285d37130eb8213e9",
+          "run_attempt": 1,
+          "conclusion": "success"
+        },
+        {
+          "id": 43724172054,
+          "name": "MZ2 Track F native shipping",
+          "event": "pull_request",
+          "head_sha": "a6c5bc5763fdca144b44473285d37130eb8213e9",
+          "run_attempt": 1,
+          "conclusion": "success"
+        },
+        {
+          "id": 43724172082,
+          "name": "Operational Stock Eligibility",
+          "event": "pull_request",
+          "head_sha": "a6c5bc5763fdca144b44473285d37130eb8213e9",
+          "run_attempt": 1,
+          "conclusion": "success"
+        },
+        {
+          "id": 43724172049,
+          "name": "CodeQL",
+          "event": "pull_request",
+          "head_sha": "a6c5bc5763fdca144b44473285d37130eb8213e9",
+          "run_attempt": 1,
+          "conclusion": "success"
+        }
+      ]
     },
-    "quarantine_boundary": "Signature repair does not automatically recover exhausted rows. Bounded recovery remains the Salla owner's separately reviewed scope."
+    "quarantine_boundary": "Signature repair does not automatically recover exhausted rows. Bounded recovery remains the Salla owner's separately reviewed scope.",
+    "independent_ci_execution_review": {
+      "source_commit": "a6c5bc5763fdca144b44473285d37130eb8213e9",
+      "result": "PASS",
+      "salla": {
+        "run_id": 43724172185,
+        "job_id": 132842365538,
+        "artifact_id": 14165583047,
+        "passed": 355,
+        "skipped": 0,
+        "failures": 0,
+        "errors": 0,
+        "installed_composition_cases": 3
+      },
+      "background": {
+        "run_id": 43724172113,
+        "job_id": 132842365102,
+        "artifact_id": 14165068520,
+        "passed": 293,
+        "salla_preservation_passed": 88,
+        "skipped": 0,
+        "failures": 0,
+        "errors": 0,
+        "real_mongo_child_case": "test_canonical_runtime_boots_against_empty_isolated_database_and_drains",
+        "case_seconds": 11.944,
+        "assertions": "Queue done on attempt one; payload removed; one capture audit; duplicate suppressed."
+      }
+    }
   },
   "profit_code_blobs": {
     ".github/workflows/prod-dashboard-four-platform-spend-v1.yml": "f67a5092054a9c6b7798895c0b5cffd097cac4c6",
