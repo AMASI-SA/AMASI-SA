@@ -1,0 +1,217 @@
+{
+  "task": "EXECUTIVE-PROFIT-SPEND-BASIS-20261115",
+  "updated_at_utc": "2026-11-15 13:48:42 UTC",
+  "repository": "AMASI-SA/AMASI-SA",
+  "pull_request": 1936,
+  "source_branch": "codex/executive-profit-release-20261115",
+  "evidence_branch": "codex/executive-profit-evidence-20261115",
+  "note": "Evidence only. Never merge this branch into the immutable source/intent release.",
+  "authorization": "User explicitly approved upload, merge, publication to mezansalla.com and live verification on 2026-11-15.",
+  "base_commit": "331b7917b3c01d064ee2a17affb4714f3a296331",
+  "source_commit": "9ce7ea625290a7cbb473fd6a0b0472ddcf1f2611",
+  "source_tree": "e3b359fb4c2670bc06012384a2adde0651cef9d0",
+  "intent_commit": "499c32e61234bd30ce93f19c0603c334c8b6141a",
+  "intent_tree": "1f317b0abb89708de1a55be8e0628247419060ee",
+  "intent_sha256": "badd572601ea9b681326ee0f0c10ca589fe673ed3b0ca711290d8d02f62121f6",
+  "intent_blob_sha": "615b3dc315d96a9dc5dd0ab7e2ad679837ae82f2",
+  "runtime_release_id": "rg5-7a14272e6e6d3be5e9e0efada06254ebc70f50850dc2f5c2e50b5896aef05dff",
+  "source_candidate": {
+    "run_id": 43720031674,
+    "artifact_id": 14164411054,
+    "zip_sha256": "935ca2785bf6a7d38463815a34c90f9e929a798a132cd8d9cfaed767b3617679",
+    "root_official_loader_passed": true,
+    "independent_official_loader_passed": true,
+    "local_ci_build_and_proof_equal": true
+  },
+  "local_affected_tests": {
+    "backend_passed": 152,
+    "frontend_passed": 252,
+    "frontend_suites": 9,
+    "fixture_pair_passed": 2
+  },
+  "snapchat_ci": {
+    "run_id": 43720031596,
+    "job_id": 132829800654,
+    "passed": 561,
+    "skipped": 0,
+    "mongo_service": "7.0",
+    "conclusion": "success"
+  },
+  "source_workflows": [
+    {
+      "id": 43720031758,
+      "name": "Qoyod Payment Freshness",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720031719,
+      "name": "Campaign hover source coverage",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720031765,
+      "name": "Production Dashboard Profit Date Race V1",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720031681,
+      "name": "Production Campaign AI Decision V3 Extended",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720031584,
+      "name": "Production Campaign AI Decision Intelligence V3",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720031646,
+      "name": "Production Dashboard Executive Four Platform Date V1",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720031536,
+      "name": "Production Dashboard V2 Salla Ads Executive",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720031703,
+      "name": "Sold product cost details",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720031596,
+      "name": "Snapchat Reporting V2 Shadow",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720031662,
+      "name": "Dashboard card cadence and catalogue admission",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720031636,
+      "name": "Production Dashboard Four Platform Spend V1",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720031658,
+      "name": "Production Dashboard Platform Spend Hourly V1",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720031614,
+      "name": "Production Dashboard V2 Ad FX And Payment Fees",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720031565,
+      "name": "Snapchat Settings Management V2",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720031527,
+      "name": "Page and operational read performance",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720031526,
+      "name": "Supplier embroidery and profit layout acceptance (PR only)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720031642,
+      "name": "Snapchat Direct Active Publication",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720031674,
+      "name": "Mezan Release Readiness",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720031671,
+      "name": "Google Ads full management",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720031661,
+      "name": "Background workers and two-hour Qoyod cycles",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720031710,
+      "name": "Security Gate",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720031657,
+      "name": "G47 Focused Integration",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720031699,
+      "name": "Operational Balance Web",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720031654,
+      "name": "Operational Stock Eligibility",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43720031548,
+      "name": "CodeQL",
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ],
+  "prior_failures": [
+    {
+      "source": "33f9683125df1640cc72c5d4276ac85c370cfba7",
+      "run_id": 43719156396,
+      "job_id": 132827158905,
+      "classification": "Introduced test-fixture integration gap; corrected with one missing native TikTok saved-reader mock, assertions unchanged.",
+      "passed": 559,
+      "failed": 2
+    },
+    {
+      "source": "33f9683125df1640cc72c5d4276ac85c370cfba7",
+      "run_id": 43719156300,
+      "job_id": 132827158080,
+      "classification": "Unchanged advertising conversion disconnect test failed a scheduling-sensitive row-count assertion; no test or production threshold was modified. Success on final source is required and achieved.",
+      "passed": 4512,
+      "failed": 1,
+      "subtests_passed": 7
+    }
+  ],
+  "intent_only_B_root_and_independent_review": "passed",
+  "B_readiness_run": 43720779459,
+  "merge_commit": null,
+  "production_changed": false,
+  "lease_created": false,
+  "next_action": "Require exact-B workflow gates and independent Host20/24 artifacts; then fresh-base normal merge, M gates, guarded original-workspace rehearsal, prepare/prepublish, authorized publication, three official probes, live profit-card verification."
+}
