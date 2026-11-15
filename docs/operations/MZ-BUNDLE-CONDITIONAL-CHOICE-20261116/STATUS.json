@@ -1,7 +1,7 @@
 {
   "task_id": "MZ-BUNDLE-CONDITIONAL-CHOICE-20261116",
   "scope": "Implement conditional descriptive-option costing in current bundle estimates.",
-  "state": "integrated_B_original_host_rehearsal_passed_pending_CI",
+  "state": "ready_for_serialized_merge_and_publication",
   "repository": "AMASI-SA/AMASI-SA",
   "task_branch": "codex/bundle-conditional-cost-integrated-20261116",
   "verified_milestone_commit": "ba19a270fb20ab45328f293e200728bebda6df4c",
@@ -136,8 +136,16 @@
       "details_run_id": 43775111868,
       "security_run_id": 43775111963,
       "codeql_run_id": 43775111794,
-      "status": "running",
-      "snapshot": "Details, source coverage, backend preflight, dispatcher and frontend build passed. Integration and both clean-clone adapter jobs remained in progress."
+      "status": "all_applicable_checks_passed",
+      "snapshot": "Details, source coverage, backend preflight, dispatcher and frontend build passed. Integration and both clean-clone adapter jobs remained in progress.",
+      "check_summary": {
+        "total": 36,
+        "success": 26,
+        "skipped": 10,
+        "failed": 0,
+        "pending": 0
+      },
+      "mergeable_state": "clean"
     }
   },
   "review": "independent_implementation_review_passed",
@@ -159,7 +167,7 @@
     "Shared /app 120 untracked files and unsaved Untitled-1; another provider release is active in a different conversation. Recheck Production base and lease before changes."
   ],
   "ledger": "Issue #1006 was previously at its comment limit; dedicated task status serves as recoverable handoff without retrying that append.",
-  "next_safe_action": "Wait for exact-B applicable checks; confirm provider publication is finished and official lease inactive, recheck Production remains J2589, normally merge PR1954 preserving B tree. Rehearse/materialize merged M on original host under official mutex, then official prepare/prepublish, publish once and verify three probes. Preserve all unrelated /app files.",
+  "next_safe_action": "Acquire the existing official operation mutex only after fresh inactive status. Assert exact J/clean branch/no lease; then merge PR1954 normally while fenced, require merged tree equals reviewed B, preserve unrelated files, materialize exact adapter and call unchanged official prepare checks after rehearsal. Verify merged-head CI, prepublish, publish once, wait explicit success and official three-probe verification.",
   "owner_clarification": {
     "source": "User clarification after diagnosis",
     "statement": "Selecting affirmative customization adds no amount.",
@@ -223,5 +231,11 @@
     "frontend_isolated_runtime_artifact_verified": true,
     "lease_created": false,
     "production_files_modified": false
+  },
+  "publication_coordination": {
+    "latest_original_host_head": "2589f440106a7c5d463ee03eac3617d113319673",
+    "lease_observed_active": false,
+    "provider_release": "Merged and fully preserved in integrated source; its original rehearsal is blocked by two pre-existing ignored Python bytecode files, with no prepared lease or publication at the recorded checkpoint.",
+    "plan": "Consolidate already-reviewed provider source and bundle repair in one current release. Serialize the merge/host handoff under the official operation mutex, stop on any active lease or unexpected head, and preserve bytecode via bounded reversible quarantine if the observed exact inventory still matches. Do not clear or reuse any other owner's lease."
   }
 }
