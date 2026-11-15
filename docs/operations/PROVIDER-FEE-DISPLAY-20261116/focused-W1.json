@@ -1,0 +1,17 @@
+{
+  "source": "afc3a17784e020d9b1fe3751f4c4974ffc6a9941",
+  "elapsed_seconds": 23.9,
+  "backend": {
+    "exit_code": 0,
+    "tests": 124,
+    "warning": "Existing python_multipart pending deprecation",
+    "duration_seconds": 2.67
+  },
+  "frontend": {
+    "exit_code": 0,
+    "suites": 4,
+    "tests": 147,
+    "duration_seconds": 8.609
+  },
+  "original_private_receipt": "/tmp/provider-fee-display-focused-W1/receipt.json"
+}

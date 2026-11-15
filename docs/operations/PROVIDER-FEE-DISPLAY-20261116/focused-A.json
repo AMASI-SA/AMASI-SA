@@ -1,0 +1,13 @@
+{
+  "source": "f7c5e110a074a242036233ea004d63c270a4daaa",
+  "backend_identical_to_passing_W1": true,
+  "exit_code": 0,
+  "frontend": {
+    "tests": 151,
+    "suites": 4,
+    "duration_seconds": 7.149
+  },
+  "elapsed_seconds": 13.02,
+  "tracked_clean": true,
+  "original_private_receipt": "/tmp/provider-fee-display-focused-A/receipt.json"
+}
