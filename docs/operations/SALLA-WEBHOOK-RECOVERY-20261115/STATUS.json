@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/salla-webhook-release-evidence-20261115",
   "base_commit": "9afb38cf0dc0d8e8cd887f2c2cdb4a6be5a7ca68",
-  "status": "PR1942 verified and lease closed; PR1945 exact-A gates and exact-B package proofs accepted; final B gates pending; no incident grant yet",
+  "status": "PR1945 merged with exact accepted B tree; bound preservation operator independently accepted; M gates pending; zero recovery grants",
   "requested_behavior": [
     "Repair the blocking verified webhook path and duplicate processing identified by platform support",
     "One scheduled refresh at 10:00 Asia/Riyadh over a fixed preceding 24-hour window",
@@ -276,7 +276,7 @@
   },
   "release_branch": "codex/salla-webhook-recovery-release-20261115",
   "evidence_only": true,
-  "checkpoint_at": "2026-11-15T16:51:00Z",
+  "checkpoint_at": "2026-11-15T16:56:00Z",
   "production_source_branch_changed": true,
   "production_runtime_changed": true,
   "operator": {
@@ -1253,7 +1253,7 @@
         "branch": "codex/salla-recovery-owner-bindings-20261115",
         "base": "8f1b0ddb6408781e8677212bcb8cf2d51eab42f7",
         "worktree": "/workspace/scratch/ce6ef737d6c9/salla-binding-recovery",
-        "status": "A all applicable CI success; B frozen and complete both Host archives accepted; Stock/CodeQL gates pending",
+        "status": "PR1945 merged with exact accepted B tree; bound preservation operator independently accepted; M gates pending; zero recovery grants",
         "A": {
           "sha": "9b91e88c049166f111905c80a4c1fa07a96b51bd",
           "tree": "bb79134858e4f472a97e33cec100ec4ddfe095f7",
@@ -1462,7 +1462,28 @@
           "tracked_clean": true,
           "incomplete": null
         },
-        "next": "Accept remaining exact-B gates, fresh unchanged production tip, normal merge preserving exact B tree, M push gates and proof binding, independently reviewed bound original-workspace operator, inactive guard/rehearsal then prepare/prepublish/one publish/official verification. Validate owner config, fixed incident window and bounded grant, verify seven IDs, disable maintenance in governed follow-up publication."
+        "next": "Accept remaining exact-B gates, fresh unchanged production tip, normal merge preserving exact B tree, M push gates and proof binding, independently reviewed bound original-workspace operator, inactive guard/rehearsal then prepare/prepublish/one publish/official verification. Validate owner config, fixed incident window and bounded grant, verify seven IDs, disable maintenance in governed follow-up publication.",
+        "M": {
+          "sha": "db0d2c365f6cc13728cc5d8c334fb9880497fbe8",
+          "tree": "ff7e1e334bd755f844d0903d5fdba45541509854",
+          "parents": [
+            "8f1b0ddb6408781e8677212bcb8cf2d51eab42f7",
+            "3227ff58776ff1bf99621940816b8ff8ca0b0a4b"
+          ],
+          "root_local_verified": true,
+          "independent_git_api_verified": true
+        },
+        "B_all_gates_passed": true,
+        "operator": {
+          "sha256": "08ac374769bb93d3eba1f60a753838be6775462af4bae82b07220a15967e83cd",
+          "bytes": 23294,
+          "root_review": "PASS",
+          "independent_review": "PASS",
+          "independent_review_sha256": "283cb036b691bc716b99796a3bb12ac3e0caf4ee65626d58b17b48e721ac3a8d",
+          "executed": false
+        },
+        "B_ci_report_sha256": "80fb8ecd9703f220b9cefa4fce64c23f1d09bcac3af9b2854ebacd48b3e88d2e",
+        "M_binding_report_sha256": "c43c5c7ec9e673615652e7de2df9eba57f87bbe8f1c968cb39a94bb3b898f0b8"
       },
       "official_verify": {
         "verified": true,

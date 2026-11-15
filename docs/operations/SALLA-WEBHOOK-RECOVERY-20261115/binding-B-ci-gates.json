@@ -1,0 +1,338 @@
+{
+  "B_tree": "ff7e1e334bd755f844d0903d5fdba45541509854",
+  "accepted_packages": {
+    "independent_reviewer": "release_runtime_prerequisites",
+    "proof_bytes": 1278,
+    "proof_file": "accepted-package-boundary-v5.json",
+    "proof_sha256": "381878cf3b8a30dde15d80014a1751df166b7ce420b9e4b84da6c347cab77f4f",
+    "report": "B-independent-artifact-review.json",
+    "report_sha256": "89f2318a3b4c899c125b56036209b36e31454ada640924b1709347caaf06f901",
+    "runtime": "rg5-41884037a1555abb570d35f23b2a81edc8c24e1135035a37aabee30c2d16e8e7",
+    "scope": "Both Host20/24 jobs all21 steps success; complete297 generated members and independently reconstructed frontend/backend package trees match. Reviewer independently rehashed accepted small proof and peer report; no duplicate archive download.",
+    "source_A": "9b91e88c049166f111905c80a4c1fa07a96b51bd"
+  },
+  "applicable_workflow_count": 11,
+  "balance": {
+    "backend_job_id": 132881971652,
+    "passed": 4799,
+    "run_id": 43737089574,
+    "sanitized_log_excerpt": "2026-11-15T16:47:59.3964604Z 4799 passed, 8 warnings in 229.51s (0:03:49)\n2026-11-15T16:48:01.2535151Z 16 passed, 18 subtests passed in 0.31s\n",
+    "sanitized_log_excerpt_sha256": "905ab64df33dce17539aa9ea6f7d1d10b9231ae974deae9d389e69399e5bc4e8",
+    "shipping_subtests_passed": 18,
+    "shipping_tests_passed": 16
+  },
+  "check_summary": {
+    "conditional_skipped": 6,
+    "failed": 0,
+    "neutral": 0,
+    "pending": 0,
+    "success": 23,
+    "total": 29
+  },
+  "conditional_checks": [
+    {
+      "id": 132882857858,
+      "name": "Emergent manual redeploy required"
+    },
+    {
+      "id": 132882034746,
+      "name": "Publication backend and existing write guards"
+    },
+    {
+      "id": 132882033861,
+      "name": "Publication frontend and existing media flow"
+    },
+    {
+      "id": 132882027116,
+      "name": "Frontend Snapchat settings tests and build"
+    },
+    {
+      "id": 132882026783,
+      "name": "Backend settings and zero-write regressions"
+    },
+    {
+      "id": 132881973011,
+      "name": "reviewed-candidate"
+    }
+  ],
+  "coordination": {
+    "neighbor_PR1944": {
+      "draft": false,
+      "head": "2826c78f3a94d3af3f3fe67ac6e6658cbbb18285",
+      "merged": false,
+      "updated_at": "2026-11-15T16:51:02Z"
+    },
+    "note": "Competing same-base candidate observed ready; root notified immediately. No mutation to neighbor task.",
+    "observed_production_tip": "8f1b0ddb6408781e8677212bcb8cf2d51eab42f7"
+  },
+  "decision": "PASS: all exact-B applicable gates and reviewed package proof accepted; normal merge still requires fresh production tip and exact B tree equality",
+  "excluded_workflow": {
+    "id": 43737089591,
+    "name": "TikTok Creator Release Candidate",
+    "reason": "Explicit job condition restricts github.head_ref to codex/tiktok-content-ci-20261011; actual source condition read from .github/workflows/tiktok-content-release-candidate.yml"
+  },
+  "frontend": {
+    "job_id": 132881971634,
+    "passed_suites": 403,
+    "passed_tests": 3848,
+    "production_dependency_audit": {
+      "critical": 0,
+      "high": 0,
+      "info": 0,
+      "low": 0,
+      "moderate": 0
+    },
+    "recovery_suite": "SallaWebhookRecovery.test.jsx PASS",
+    "run_id": 43737089603,
+    "sanitized_log_excerpt": "2026-11-15T16:45:13.9933170Z PASS src/pages/SallaWebhookRecovery.test.jsx\n2026-11-15T16:46:27.3089699Z Test Suites: 403 passed, 403 total\n2026-11-15T16:46:27.3090331Z Tests:       3848 passed, 3848 total\n2026-11-15T16:46:28.6814497Z {\"type\":\"auditSummary\",\"data\":{\"vulnerabilities\":{\"info\":0,\"low\":0,\"moderate\":0,\"high\":0,\"critical\":0},\"dependencies\":409,\"devDependencies\":0,\"optionalDependencies\":0,\"totalDependencies\":409}}\n",
+    "sanitized_log_excerpt_sha256": "1de8e054caedd880d98f29eb2243f396c6af20b7d7dd4b864e1b19b9d83c9d47"
+  },
+  "intent_B": "3227ff58776ff1bf99621940816b8ff8ca0b0a4b",
+  "observed_at_utc": "2026-11-15 16:51:34 UTC",
+  "production_base_J": "8f1b0ddb6408781e8677212bcb8cf2d51eab42f7",
+  "pull_request": 1945,
+  "relation": {
+    "independent_evidence": "GitHub commit/tree and comparison APIs; independently hashed accepted candidate raw bytes produce the exact B Git blob",
+    "intent_bytes": 1312444,
+    "intent_git_blob": "e88c177419381dc8af2be87c8f99494671971177",
+    "intent_sha256": "fc151ac8b5c0faad002ca4773d510b6b16e6492ebb3bdf82b352fa1eaa4e5dc5",
+    "only_changed_path": "release/release-intent-v5.json",
+    "sole_parent": "9b91e88c049166f111905c80a4c1fa07a96b51bd"
+  },
+  "repository": "AMASI-SA/AMASI-SA",
+  "review_boundary": "No reruns/cancels, source edits, PR/ref writes, /app/lease/publication or production calls. Evidence only.",
+  "reviewer": "review_release_continuation",
+  "salla": {
+    "archive_bytes": 8660,
+    "archive_sha256": "27860ccdce8daeac56298de4626af34fd10fc71eb46c67d9e7a44bfc45b6094e",
+    "artifact_id": 14170821018,
+    "error_count": 0,
+    "failure_count": 0,
+    "job_id": 132881971270,
+    "members": [
+      "salla-recovery.txt",
+      "salla-recovery.xml",
+      "source.txt"
+    ],
+    "mongo_case_count": 16,
+    "mongo_cases": [
+      {
+        "classname": "tests.test_salla_webhook_incident_recovery.IncidentRecoveryMongoTests",
+        "name": "test_batch_commit_preserves_identity_payload_history_and_grants_once",
+        "result": "passed",
+        "time": "0.276"
+      },
+      {
+        "classname": "tests.test_salla_webhook_incident_recovery.IncidentRecoveryMongoTests",
+        "name": "test_changed_current_owner_refuses_before_grant",
+        "result": "passed",
+        "time": "0.240"
+      },
+      {
+        "classname": "tests.test_salla_webhook_incident_recovery.IncidentRecoveryMongoTests",
+        "name": "test_concurrent_ingress_after_snapshot_aborts_prior_row_changes",
+        "result": "passed",
+        "time": "0.260"
+      },
+      {
+        "classname": "tests.test_salla_webhook_incident_recovery.IncidentRecoveryMongoTests",
+        "name": "test_concurrent_same_document_rebind_conflicts_and_rolls_back_grants",
+        "result": "passed",
+        "time": "0.252"
+      },
+      {
+        "classname": "tests.test_salla_webhook_incident_recovery.IncidentRecoveryMongoTests",
+        "name": "test_expiry_before_final_write_fence_rolls_back_entire_batch",
+        "result": "passed",
+        "time": "0.255"
+      },
+      {
+        "classname": "tests.test_salla_webhook_incident_recovery.IncidentRecoveryMongoTests",
+        "name": "test_historical_binding_updated_to_new_winner_aborts_snapshot_grants",
+        "result": "passed",
+        "time": "0.262"
+      },
+      {
+        "classname": "tests.test_salla_webhook_incident_recovery.IncidentRecoveryMongoTests",
+        "name": "test_live_worker_lease_is_never_overridden",
+        "result": "passed",
+        "time": "0.244"
+      },
+      {
+        "classname": "tests.test_salla_webhook_incident_recovery.IncidentRecoveryMongoTests",
+        "name": "test_newer_binding_committed_during_snapshot_is_seen_by_fresh_final_check",
+        "result": "passed",
+        "time": "0.264"
+      },
+      {
+        "classname": "tests.test_salla_webhook_incident_recovery.IncidentRecoveryMongoTests",
+        "name": "test_only_existing_worker_processes_grant_and_keeps_done_tombstone",
+        "result": "passed",
+        "time": "0.282"
+      },
+      {
+        "classname": "tests.test_salla_webhook_incident_recovery.IncidentRecoveryMongoTests",
+        "name": "test_owner_change_after_final_read_is_rejected_by_existing_worker",
+        "result": "passed",
+        "time": "0.275"
+      },
+      {
+        "classname": "tests.test_salla_webhook_incident_recovery.IncidentRecoveryMongoTests",
+        "name": "test_real_mongo_ambiguous_bson_ranks_never_select_a_convenient_owner",
+        "result": "passed",
+        "time": "0.267"
+      },
+      {
+        "classname": "tests.test_salla_webhook_incident_recovery.IncidentRecoveryMongoTests",
+        "name": "test_real_mongo_legacy_scalar_history_matches_canonical_owner_without_writes",
+        "result": "passed",
+        "time": "0.290"
+      },
+      {
+        "classname": "tests.test_salla_webhook_incident_recovery.IncidentRecoveryMongoTests",
+        "name": "test_real_query_excludes_every_nonincident_or_unsafe_state_and_never_writes",
+        "result": "passed",
+        "time": "0.268"
+      },
+      {
+        "classname": "tests.test_salla_webhook_incident_recovery.IncidentRecoveryMongoTests",
+        "name": "test_runtime_change_before_commit_rolls_back_entire_batch",
+        "result": "passed",
+        "time": "0.252"
+      },
+      {
+        "classname": "tests.test_salla_webhook_incident_recovery.IncidentRecoveryMongoTests",
+        "name": "test_stale_delivery_metadata_payload_or_extra_fields_refuse_whole_batch",
+        "result": "passed",
+        "time": "0.318"
+      },
+      {
+        "classname": "tests.test_salla_webhook_incident_recovery.IncidentRecoveryMongoTests",
+        "name": "test_successor_epoch_is_not_modified_or_released",
+        "result": "passed",
+        "time": "0.248"
+      }
+    ],
+    "passed": 419,
+    "run_id": 43737089476,
+    "saved_directory": "/workspace/scratch/ce6ef737d6c9/release-evidence/binding-recovery-ci-3227",
+    "skipped_count": 0,
+    "source_path": "B-source.txt",
+    "source_txt": "3227ff58776ff1bf99621940816b8ff8ca0b0a4b\nff7e1e334bd755f844d0903d5fdba45541509854\n",
+    "source_txt_bytes": 82,
+    "source_txt_sha256": "202c5d87941c90099a4cb1728d613fc7557aff3daed2e898775efe2521d84e3e",
+    "subtests_passed": 43,
+    "suite_attributes": [
+      {
+        "errors": "0",
+        "failures": "0",
+        "hostname": "ip-10-0-129-0",
+        "name": "pytest",
+        "skipped": "0",
+        "tests": "462",
+        "time": "27.811",
+        "timestamp": "2026-11-15T16:44:16.554910+00:00"
+      }
+    ],
+    "testcase_count": 419,
+    "xml_bytes": 65738,
+    "xml_path": "B-salla-recovery.xml",
+    "xml_sha256": "3d52a7973d394468ad1b0387f72067d277968dfab7e6b96b4f23db2e56ef4b75"
+  },
+  "schema_version": 1,
+  "source_A": "9b91e88c049166f111905c80a4c1fa07a96b51bd",
+  "stock": {
+    "job_id": 132881971754,
+    "passed": 4513,
+    "run_id": 43737089540,
+    "sanitized_log_excerpt": "2026-11-15T16:50:27.4124704Z 4513 passed, 8 warnings, 7 subtests passed in 374.92s (0:06:14)\n",
+    "sanitized_log_excerpt_sha256": "83c0dc71a9977fde3dc7406d455a562f2c3fee47ef1b0f30bbb1d985c7677632",
+    "subtests_passed": 7
+  },
+  "workflows": [
+    {
+      "attempt": 1,
+      "conclusion": "success",
+      "id": 43737089473,
+      "name": "Snapchat Settings Management V2",
+      "status": "completed"
+    },
+    {
+      "attempt": 1,
+      "conclusion": "success",
+      "id": 43737089474,
+      "name": "G47 Focused Integration",
+      "status": "completed"
+    },
+    {
+      "attempt": 1,
+      "conclusion": "success",
+      "id": 43737089476,
+      "name": "Salla durable ingress and daily refresh",
+      "status": "completed"
+    },
+    {
+      "attempt": 1,
+      "conclusion": "success",
+      "id": 43737089479,
+      "name": "Mezan Release Readiness",
+      "status": "completed"
+    },
+    {
+      "attempt": 1,
+      "conclusion": "success",
+      "id": 43737089490,
+      "name": "Snapchat Direct Active Publication",
+      "status": "completed"
+    },
+    {
+      "attempt": 1,
+      "conclusion": "success",
+      "id": 43737089508,
+      "name": "MZ2 Track F native shipping",
+      "status": "completed"
+    },
+    {
+      "attempt": 1,
+      "conclusion": "success",
+      "id": 43737089540,
+      "name": "Operational Stock Eligibility",
+      "status": "completed"
+    },
+    {
+      "attempt": 1,
+      "conclusion": "success",
+      "id": 43737089574,
+      "name": "Operational Balance Web",
+      "status": "completed"
+    },
+    {
+      "attempt": 1,
+      "conclusion": "success",
+      "id": 43737089575,
+      "name": "CodeQL",
+      "status": "completed"
+    },
+    {
+      "attempt": 1,
+      "conclusion": "skipped",
+      "id": 43737089591,
+      "name": "TikTok Creator Release Candidate",
+      "status": "completed"
+    },
+    {
+      "attempt": 1,
+      "conclusion": "success",
+      "id": 43737089603,
+      "name": "Security Gate",
+      "status": "completed"
+    },
+    {
+      "attempt": 1,
+      "conclusion": "success",
+      "id": 43737089619,
+      "name": "Qoyod Payment Freshness",
+      "status": "completed"
+    }
+  ]
+}

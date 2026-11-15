@@ -1,0 +1,49 @@
+{
+  "accepted_inputs": {
+    "B_artifact_review_sha256": "89f2318a3b4c899c125b56036209b36e31454ada640924b1709347caaf06f901",
+    "M_intent_review_sha256": "c43c5c7ec9e673615652e7de2df9eba57f87bbe8f1c968cb39a94bb3b898f0b8"
+  },
+  "delta": "Exactly six UNBOUND assignment values plus the first docstring changed; reverse-delta reproduced the full reviewed draft hash.",
+  "observed_at_utc": "2026-11-15T16:55:53.390239+00:00",
+  "operator": {
+    "bytes": 23294,
+    "path": "/workspace/scratch/ce6ef737d6c9/release-evidence/operators/original_release_1945.py",
+    "sha256": "08ac374769bb93d3eba1f60a753838be6775462af4bae82b07220a15967e83cd"
+  },
+  "pins": {
+    "B_and_M_tree": "ff7e1e334bd755f844d0903d5fdba45541509854",
+    "accepted_package_proof_sha256": "381878cf3b8a30dde15d80014a1751df166b7ce420b9e4b84da6c347cab77f4f",
+    "base": "8f1b0ddb6408781e8677212bcb8cf2d51eab42f7",
+    "base_tree": "a8616930de7f98a43a509ff7dad287befd61ba5a",
+    "intent_B": "3227ff58776ff1bf99621940816b8ff8ca0b0a4b",
+    "intent_sha256": "fc151ac8b5c0faad002ca4773d510b6b16e6492ebb3bdf82b352fa1eaa4e5dc5",
+    "merge_M": "db0d2c365f6cc13728cc5d8c334fb9880497fbe8",
+    "runtime": "rg5-41884037a1555abb570d35f23b2a81edc8c24e1135035a37aabee30c2d16e8e7",
+    "source_A": "9b91e88c049166f111905c80a4c1fa07a96b51bd",
+    "source_tree": "bb79134858e4f472a97e33cec100ec4ddfe095f7"
+  },
+  "predecessor": {
+    "manifest_bytes": 3978,
+    "manifest_sha256": "cb0377cdfb8d1135140ff5a772563fb9ef38d1c1539e52b76f0c62b5b997f7be",
+    "original_helper_path": "/tmp/salla-webhook-release-1942/operator/original_release_1942.py",
+    "original_helper_sha256": "b9cb6b3eedef177bff5dc7d78ea824875a6fc6ffc69a7ea1f72ad05c9c40bab1",
+    "receipt_file_count": 28,
+    "validation": "Actual root-exported bytes independently hashed and parsed; successful3-check source2896/deployment8f1/runtime144ce and original120-path-preserving result match operator expectations.",
+    "verify_bytes": 33369,
+    "verify_sha256": "f4208087aff434a55ed5c6973f3f235dc571994e677ced6b1a0dd20fe8e1c51e"
+  },
+  "reconstructed_unbound_sha256": "5b0de60157b42f57ff6547666fe1bcecaf00f5503bb83443915d56ae9b34b759",
+  "result": "PASS: independent static review of final bound operator; execution remains conditioned on exact-M gates and fresh original-workspace guard/base checks",
+  "review_boundary": "No operator import/execution, tests, /app calls, source/ref writes or production actions by reviewer. Only this sanitized evidence report written.",
+  "reviewer": "review_release_continuation",
+  "schema_version": 1,
+  "static_checks": [
+    "AST parse passed; main first statement is assert_bound, before app access, helper loading or evidence writes.",
+    "Original1942 helper BUNDLE/HISTORY, original1940/1935/resume helper identities and historical receipt paths remain unchanged.",
+    "Complete28-file predecessor receipt manifest, command args/cwd/zero exits/stream hashes, exact result/proof and historical continuity links checked.",
+    "Same official operation mutex with inactive guard and fresh exact base/source checks; strict remote-M/normal parent/exact B-tree checks and ff-only update.",
+    "All120 unrelated paths, original receipt/bundle inventories, two-file cache quarantine and same-inode append-only bookkeeping prefix preserved before/after.",
+    "Once-only new evidence directory; governed build and python-B package verification; exact accepted new proof/runtime checks; no source bytecode.",
+    "No lease prepare, publication, configuration update, database operation or business repair inside the rehearsal."
+  ]
+}

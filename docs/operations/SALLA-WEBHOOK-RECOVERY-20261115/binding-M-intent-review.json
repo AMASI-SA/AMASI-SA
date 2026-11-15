@@ -1,0 +1,30 @@
+{
+  "A_to_M_changed_paths": [
+    "release/release-intent-v5.json"
+  ],
+  "B_to_M_changed_paths": [],
+  "acceptance_limit": "M source and official intent binding only; exact-M Readiness Host proof and required push gates remain separately required.",
+  "accepted_A_candidate_bytes_unchanged": "PASS",
+  "accepted_B_commit": "3227ff58776ff1bf99621940816b8ff8ca0b0a4b",
+  "accepted_B_package_proof_path": "/workspace/scratch/ce6ef737d6c9/release-evidence/binding-recovery-ci-3227/accepted-package-boundary-v5.json",
+  "accepted_B_package_proof_sha256": "381878cf3b8a30dde15d80014a1751df166b7ce420b9e4b84da6c347cab77f4f",
+  "accepted_B_proof_intent_binding": "PASS",
+  "candidate_bytes": 1312444,
+  "candidate_git_blob": "e88c177419381dc8af2be87c8f99494671971177",
+  "candidate_sha256": "fc151ac8b5c0faad002ca4773d510b6b16e6492ebb3bdf82b352fa1eaa4e5dc5",
+  "frontend_artifact_tree_sha256": "7cd63bb1cd550a2601b09c5107b6e4ddba0c4b3eae435bfdfe80ddcb9934e977",
+  "observed_at": "2026-11-15T16:53:48.782696+00:00",
+  "official_load_release_intent": "PASS",
+  "official_verify_release_intent_git": "PASS",
+  "ordered_parents": [
+    "8f1b0ddb6408781e8677212bcb8cf2d51eab42f7",
+    "3227ff58776ff1bf99621940816b8ff8ca0b0a4b"
+  ],
+  "result": "PASS",
+  "reviewed_commit": "db0d2c365f6cc13728cc5d8c334fb9880497fbe8",
+  "reviewed_tree_oid": "ff7e1e334bd755f844d0903d5fdba45541509854",
+  "runtime_release_id": "rg5-41884037a1555abb570d35f23b2a81edc8c24e1135035a37aabee30c2d16e8e7",
+  "source_base_git_sha": "8f1b0ddb6408781e8677212bcb8cf2d51eab42f7",
+  "source_git_sha": "9b91e88c049166f111905c80a4c1fa07a96b51bd",
+  "worktree_clean_unchanged": "PASS"
+}
