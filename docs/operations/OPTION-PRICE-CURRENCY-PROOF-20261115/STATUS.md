@@ -73,6 +73,8 @@ AGENTS.md prohibits changing /app with an active lease or clearing another conve
 - Independent reviewer checked the actual artifact hash/size, unchanged before/after hashes, report checks and command exits, embedded app config, verifier hash and GitHub merge/tree provenance without rerunning the verifier. Sanitized report SHA2561765367006661fcadbd45ba18ce874404a5503142dc188e5d4d7f261a79ddadc. No APK binary is committed.
 - No duplicate build, OTA update or store submission occurred. Physical-device install/UAT and push delivery were NOT_RUN. The APK message alone does not resolve a pending backend source snapshot.
 
+Mobile evidence checkpoint: [final mobile STATUS](https://github.com/AMASI-SA/amasi-mobile/blob/536cab6a216e3e8bc1983f391c89675877414587/docs/operations/ANDROID82-SOURCE-RECONCILIATION-20261115/STATUS.md), H536cab6a216e3e8bc1983f391c89675877414587, treea46c1add5f602575f3bfc444c9f6eb814630dddb, parent the immutable merge de2103e64ecf50d3397fd48ad09de6e11be633b1. It contains only STATUS, sanitized APK report, provenance and the verifier; no release-source or binary changes. Root read the immutable commit and status; the writer verified the four-file-only branch readback.
+
 ## Next safe steps
 
 1. All B CI and actual clean-clone host artifact reviews are complete. Preserve frozen B and its accepted source; no optional retesting is needed absent a new change.
