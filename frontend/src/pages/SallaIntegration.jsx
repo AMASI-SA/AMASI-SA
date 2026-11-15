@@ -8,6 +8,7 @@ import {
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import api from "../lib/api";
+import { SallaWebhookRecoveryLink } from "./SallaWebhookRecovery";
 import {
   isRecentServerDateTime,
   parseServerDateTime,
@@ -458,6 +459,7 @@ export default function SallaIntegration() {
                         </p>
                     </div>
                 </div>
+                <SallaWebhookRecoveryLink />
             </div>
 
             {/* Make/PDF/Excel safety banner */}

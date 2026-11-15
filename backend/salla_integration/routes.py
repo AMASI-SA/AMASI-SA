@@ -239,6 +239,8 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
     from server import current_user  # type: ignore  # circular by design
 
     router = APIRouter(prefix="/salla", tags=["salla"])
+    from .webhook_incident_recovery import make_incident_recovery_router
+    router.include_router(make_incident_recovery_router(db, current_user))
 
     async def run_orders_sync_background(
         *,
