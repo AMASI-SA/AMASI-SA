@@ -1,0 +1,10 @@
+{
+  "exit": 1,
+  "stdout": {
+    "displayed_estimated": null,
+    "known_estimated": "10.00"
+  },
+  "assertion": "known estimate is hidden",
+  "environment": "Original-host isolated exact-M checkout, Python 3.11.18, PYTHON_DOTENV_DISABLED=1",
+  "live_write": false
+}
