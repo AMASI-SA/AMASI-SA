@@ -225,3 +225,38 @@
 .ofp-order-review p + p { margin-top: 5px; }
 .ofp-pending-orders { color: #8a4b07; border: 1px solid #edc985; background: #fff8e8; padding: 6px 10px; border-radius: 8px; cursor: pointer; white-space: nowrap; }
 .ofp-pending-orders:focus-visible { outline: 3px solid #2563eb; outline-offset: 3px; }
+
+/* Provider cells remain short; the source evidence is readable below the table. */
+.ofp-provider-table .ofp-provider-rate { white-space: nowrap; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ofp-provider-fee-status { display: inline-block; white-space: nowrap; font-size: 12px; font-weight: 600; }
+.ofp-provider-needs-review { color: #805613; }
+.ofp-provider-partial { display: block; margin-top: 2px; color: #805613; font-size: 10px; font-weight: 600; }
+.ofp-provider-explanations { padding: 16px; border-top: 1px solid var(--ofp-line); background: #f8fafc; text-align: start; }
+.ofp-provider-explanations > h3 { margin: 0 0 10px; font-size: 16px; font-weight: 800; }
+.ofp-provider-table-notes { color: #465f7d; font-size: 12px; line-height: 1.8; }
+.ofp-provider-table-notes p { margin: 5px 0; }
+.ofp-provider-explanation { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--ofp-line); }
+.ofp-provider-explanation h4 { margin: 0 0 10px; font-size: 15px; font-weight: 800; }
+.ofp-provider-explanation h5 { margin: 10px 0 8px; font-size: 13px; font-weight: 700; }
+.ofp-provider-explanation section + section { margin-top: 16px; }
+.ofp-provider-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 18px; margin: 0; font-size: 12px; }
+.ofp-provider-facts > div { min-width: 0; }
+.ofp-provider-facts dt { color: #526579; }
+.ofp-provider-facts dd { margin: 2px 0 0; color: #182a35; font-weight: 600; overflow-wrap: anywhere; }
+.ofp-provider-facts dd span { font-weight: 400; }
+.ofp-provider-source-card { margin-top: 10px; padding: 10px 12px; border-inline-start: 3px solid #b7cadd; background: #fff; }
+.ofp-provider-source-card h5 { margin-top: 0; }
+.ofp-provider-source-use, .ofp-provider-detail-note, .ofp-provider-source-issues, .ofp-provider-legacy-description { margin: 6px 0; font-size: 12px; line-height: 1.8; overflow-wrap: anywhere; }
+.ofp-provider-source-use, .ofp-provider-detail-note { color: #526579; }
+.ofp-provider-source-issues { padding-inline-start: 20px; color: #805613; }
+.ofp-provider-other-currencies { margin-top: 14px; padding-top: 10px; border-top: 1px dashed #cbd5e1; }
+@media (max-width: 640px) {
+    .ofp-provider-explanations { padding: 12px; }
+    .ofp-provider-facts { grid-template-columns: minmax(0, 1fr); }
+}
+@media print {
+    .ofp-provider-explanations { background: #fff; padding: 10px 0; }
+    .ofp-provider-source-card, .ofp-provider-facts > div { break-inside: avoid; }
+    .ofp-provider-explanations h3, .ofp-provider-explanation h4, .ofp-provider-explanation h5 { break-after: avoid; }
+    .ofp-provider-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

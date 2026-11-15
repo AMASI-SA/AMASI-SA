@@ -230,3 +230,83 @@ test("real XLSX bytes preserve Arabic sheets, exact money text, currency and fil
     expect(allValues).not.toContain("USD");
     expect(allValues).not.toContain("9007199254740992");
 });
+
+function providerExportReport(rows, totals, extra = {}) {
+    const payload = report();
+    delete payload.currencies.SAR.deliveries;
+    payload.currencies.SAR.tables = [{ id: "providers", title: "منصات الدفع", complete: false,
+        totals_basis: "known_subtotals", columns: [
+            { key: "name", label: "المنصة", type: "text" },
+            { key: "estimated_fees", label: "منها عمولات تقديرية", type: "money" },
+            { key: "fee_description", label: "حالة العمولة ومصدرها", type: "text" },
+            { key: "source_average_description", label: "مصدر المتوسط المحفوظ", type: "text" },
+        ], rows, totals, ...extra }];
+    return payload;
+}
+
+const providerExport = payload => buildFinancialPositionWorkbook(payload, "SAR", {}, { view: "providers", title: "منصات الدفع" });
+const providerSheetRows = workbook => workbook.getWorksheet("1 منصات الدفع").getSheetValues().filter(Boolean);
+const estimateInformation = rows => rows.slice(rows.findIndex(row => row[1] === "اكتمال التقدير") + 2);
+
+test("provider export distinguishes complete provisional estimates, partial amounts, unavailable values and zero", () => {
+    const rows = [
+        { name: "تابي", estimated_fees: "255.43", estimated_fees_complete: false,
+            estimated_fee_calculated_orders: 283, estimated_fee_incomplete_orders: 2, pending_orders: 283,
+            fee_description: "فعلية وتقديرية؛ الدليل الكامل محفوظ.", source_average_description: "مرجع الكشف الأصلي ونسبته وتاريخه." },
+        { name: "تمارا", estimated_fees: "0.00", estimated_fees_complete: true, fee_status: "estimated",
+            estimated_fee_calculated_orders: 12, estimated_fee_incomplete_orders: 0, pending_orders: 12 },
+        { name: "سلة", estimated_fees: null, estimated_fees_complete: false,
+            estimated_fee_calculated_orders: 0, estimated_fee_incomplete_orders: 1 },
+        { name: "صفر جزئي", estimated_fees: "0.00", estimated_fees_complete: false,
+            estimated_fee_calculated_orders: 1, estimated_fee_incomplete_orders: 1 },
+        { name: "لقطة سابقة", estimated_fees: "1.23" },
+    ];
+    const payload = providerExportReport(rows, { estimated_fees: "256.66", estimated_fees_complete: false });
+    const original = JSON.stringify(payload);
+    const values = providerSheetRows(providerExport(payload)), info = estimateInformation(values);
+    const byName = name => info.find(row => row[1] === name);
+    expect(byName("تابي").slice(1, 6)).toEqual(["تابي", "255.43", "تقدير جزئي", "283", "2"]);
+    expect(byName("تمارا").slice(1, 6)).toEqual(["تمارا", "0.00", "تقدير مكتمل الحساب", "12", "0"]);
+    expect(byName("سلة").slice(1, 6)).toEqual(["سلة", "غير متاح", "غير متاح", "0", "1"]);
+    expect(byName("صفر جزئي").slice(1, 6)).toEqual(["صفر جزئي", "0.00", "تقدير جزئي", "1", "1"]);
+    expect(byName("لقطة سابقة").slice(1, 6)).toEqual(["لقطة سابقة", "1.23", "اكتمال التقدير غير موثق", "غير متاح", "غير متاح"]);
+    expect(byName("المجموع المعلوم").slice(1, 4)).toEqual(["المجموع المعلوم", "256.66", "تقدير جزئي"]);
+    const main = values.slice(0, values.findIndex(row => row[1] === "اكتمال التقدير"));
+    expect(main.find(row => row[1] === "المجموع المعلوم")[2]).toBe("256.66");
+    expect(main.some(row => row[1] === "الإجمالي")).toBe(false);
+    expect(main.find(row => row[1] === "تابي").slice(2, 5)).toEqual([
+        "255.43", rows[0].fee_description, rows[0].source_average_description,
+    ]);
+    expect(JSON.stringify(payload)).toBe(original);
+});
+
+test("provider total completeness remains explicit and a hidden footer is not invented", () => {
+    const row = { name: "تابي", estimated_fees: "0.00", estimated_fees_complete: true };
+    const payload = providerExportReport([row], { estimated_fees: "0.00", estimated_fees_complete: true }, { totals_basis: undefined });
+    const info = estimateInformation(providerSheetRows(providerExport(payload)));
+    expect(info.find(value => value[1] === "الإجمالي").slice(1, 4)).toEqual(["الإجمالي", "0.00", "تقدير مكتمل الحساب"]);
+    payload.currencies.SAR.tables[0].totals = { estimated_fees: null, estimated_fees_complete: true };
+    expect(estimateInformation(providerSheetRows(providerExport(payload))).find(value => value[1] === "الإجمالي").slice(1, 4))
+        .toEqual(["الإجمالي", "غير متاح", "غير متاح"]);
+    payload.currencies.SAR.tables[0].show_totals = false;
+    expect(providerSheetRows(providerExport(payload)).some(value => ["الإجمالي", "المجموع المعلوم"].includes(value[1]))).toBe(false);
+});
+
+test("provider completeness and exact subtotal text survive a real XLSX save and reload", async () => {
+    const exact = "9007199254740993.25";
+    const payload = providerExportReport([{ name: "تابي", estimated_fees: exact, estimated_fees_complete: false,
+        estimated_fee_calculated_orders: 283, estimated_fee_incomplete_orders: 1,
+        fee_description: "تفاصيل الدليل الأصلي", source_average_description: "مرجع المصدر وتاريخه" }],
+    { estimated_fees: exact, estimated_fees_complete: false });
+    const workbook = providerExport(payload), restored = new ExcelJS.Workbook();
+    await restored.xlsx.load(await workbook.xlsx.writeBuffer());
+    const values = providerSheetRows(restored), info = estimateInformation(values);
+    expect(info.find(row => row[1] === "تابي").slice(1, 6)).toEqual(["تابي", exact, "تقدير جزئي", "283", "1"]);
+    expect(info.find(row => row[1] === "المجموع المعلوم").slice(1, 4)).toEqual(["المجموع المعلوم", exact, "تقدير جزئي"]);
+    expect(JSON.stringify(values)).toContain("تفاصيل الدليل الأصلي");
+    expect(JSON.stringify(values)).toContain("مرجع المصدر وتاريخه");
+    restored.getWorksheet("1 منصات الدفع").eachRow(row => row.eachCell(cell => {
+        expect(cell.formula).toBeUndefined();
+        if (cell.value === exact) expect(typeof cell.value).toBe("string");
+    }));
+});

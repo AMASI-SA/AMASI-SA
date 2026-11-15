@@ -71,7 +71,7 @@ export function distinctPendingOrders(details = []) {
     return [...orders.values()];
 }
 
-export default function PendingOrdersDialog({ count, details, name = "هذه الجهة", confirmationControl }) {
+export default function PendingOrdersDialog({ count, details, name = "هذه الجهة", confirmationControl, countOnly = false }) {
     const { allowed = false, sessionScope, periodStart, recordedConfirmations = {}, onSaved } = confirmationControl || {};
     const contextKey = JSON.stringify([sessionScope || "", periodStart || ""]);
     const [opening, setOpening] = useState(null);
@@ -209,7 +209,7 @@ export default function PendingOrdersDialog({ count, details, name = "هذه ا�
     if (!Number.isSafeInteger(count) || count <= 0) return <bdi>{formatPositionCount(count)}</bdi>;
     return <>
         <button ref={triggerRef} type="button" className="ofp-pending-orders" onClick={() => setOpening(contextKey)} aria-label={`${count} طلبات غير مؤكدة — ${name}`}>
-            <bdi>{formatPositionCount(count)}</bdi> طلبات غير مؤكدة
+            <bdi>{formatPositionCount(count)}</bdi>{!countOnly && " طلبات غير مؤكدة"}
         </button>
         {open && createPortal(<dialog ref={dialogRef} className="ofp-order-review ofp-no-print" dir="rtl" role="dialog" aria-modal="true" aria-label={`طلبات غير مؤكدة — ${name}`}
             onCancel={event => { event.preventDefault(); close(); }} onClick={event => { if (event.target === event.currentTarget) close(); }}>

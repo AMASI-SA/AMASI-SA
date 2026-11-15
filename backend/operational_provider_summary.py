@@ -247,6 +247,8 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
             "known_gross": ZERO, "known_fees": ZERO, "known_net": ZERO,
             "actual_statement_fees": ZERO, "actual_settlement_fees": ZERO,
             "estimated_fees": ZERO, "average_estimated_fees": ZERO,
+            "_estimated_calculated_orders": set(), "_estimated_incomplete": defaultdict(set),
+            "_estimated_scope_incomplete": False,
             "average_variable_fees": ZERO, "average_fixed_fees": ZERO, "average_vat_fees": ZERO,
             "_average_fixed_complete": True, "_average_vat_complete": True, "_average_complete": True,
             "_average_profiles": {}, "_average_fixed_bases": set(), "_average_operations_bases": set(),
@@ -265,6 +267,13 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
         if order_number:
             total["_order_numbers"][oid] = str(order_number)
 
+    def incomplete_estimate(total, oid, code):
+        # Coverage metadata only: never change money, recognition or review IDs.
+        if code == "provider_fee_estimate_unavailable" and any(
+                oid in ids for ids in total["_estimated_incomplete"].values()):
+            return
+        total["_estimated_incomplete"][code].add(oid)
+
     def average_components(total, row, profile, components):
         if profile is None or components is None:
             return
@@ -281,6 +290,13 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
             else:
                 total[field] += components[component]
         total["_average_complete"] = total["_average_complete"] and components["fee"] is not None
+        if components["fee"] is None:
+            if components["fixed"] is None:
+                incomplete_estimate(total, row["order_id"], "provider_fee_operation_count_missing")
+            if components["vat_basis"] == "conflicting_policy":
+                incomplete_estimate(total, row["order_id"], "provider_fee_vat_rate_conflict")
+            elif components["vat_rate"] is None:
+                incomplete_estimate(total, row["order_id"], "provider_fee_vat_rate_missing")
         pending(total, row["order_id"], "provider_fee_average_estimate", row.get("order_number"))
 
     for identity, row in records.items():
@@ -311,6 +327,7 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
         if held and row["gross"]:
             total["complete"] = False
             total["_held"].add(row["order_id"])
+            incomplete_estimate(total, row["order_id"], "provider_balance_recognition_pending")
         elif row["gross"] > 0:
             total["confirmed_orders"].add(row["order_id"])
         projection = details.get("provider_reports", {}).get(identity)
@@ -368,6 +385,7 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
             # component can safely be apportioned over assumed operations.
             fee, fee_basis, estimate = None, "unavailable", {}
             pending(total, row["order_id"], "provider_statement_fee_settlement_conflict", row.get("order_number"))
+            incomplete_estimate(total, row["order_id"], "provider_statement_fee_settlement_conflict")
         if fee is None and fully_settled:
             # The allocation proves its full cash/fee split. A missing estimate
             # cannot turn an entirely settled actual fee back into uncertainty.
@@ -385,6 +403,7 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
                     average_components(total, row, profile, statement["components"])
                 total["complete"] = total["fees_complete"] = False
                 pending(total, row["order_id"], statement["issue"], row.get("order_number"))
+                incomplete_estimate(total, row["order_id"], statement["issue"])
                 if statement["evidenced"]:
                     total["known_fees"] += statement["actual"]
                     total["actual_statement_fees"] += statement["actual"]
@@ -418,6 +437,7 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
         if fee is None:
             total["complete"] = total["fees_complete"] = False
             pending(total, row["order_id"], "provider_fee_estimate_unavailable", row.get("order_number"))
+            incomplete_estimate(total, row["order_id"], "provider_fee_estimate_unavailable")
             continue
         if not held and row["paid_proven"]:
             resolved.add(identity)
@@ -430,6 +450,9 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
             total["known_fees"] += remaining
             total["estimated_fees"] += estimated
             total["average_estimated_fees"] += average
+            if (row["gross"] > ZERO and row["paid_proven"] and (average_used or estimated
+                    or (statement is None and fee_basis == "plan_estimate" and not fully_settled))):
+                total["_estimated_calculated_orders"].add(row["order_id"])
             if average_used:
                 total["average_estimated_orders"].add(row["order_id"])
                 pending(total, row["order_id"], "provider_fee_average_estimate", row.get("order_number"))
@@ -472,6 +495,7 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
             pending(total, oid, code, issue.get("order_number") or row.get("order_number"))
             if identity is None or not row.get("paid_proven"):
                 total["_gross_complete"] = total["fees_complete"] = False
+                incomplete_estimate(total, oid, code)
     for total in groups.values():
         explained = set().union(*(ids for code, ids in total["_pending"].items()
                                   if code != "provider_fee_estimate_unavailable"))
@@ -504,6 +528,7 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
                 source_ids = set()
                 if known and (not total["paid_orders"] or source.get("orders", 0) > len(total["paid_orders"])):
                     total["paid_orders_complete"] = False
+                    total["_estimated_scope_incomplete"] = True
             # Source orders include verified zero-paid orders. They are not
             # missing paid identities and must not become review exceptions.
             # The current source index contains every positive valued share;
@@ -519,6 +544,7 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
             for oid in source_ids - total["paid_orders"]:
                 source_order = individual.get(oid, {})
                 pending(total, oid, "provider_balance_recognition_pending", source_order.get("order_number"))
+                incomplete_estimate(total, oid, "provider_balance_recognition_pending")
             total["paid_orders"].update(source_ids)
             total["orders"].update(source_ids)
             if known is not None and known > total["gross"]:
@@ -526,12 +552,15 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
                 total["known_gross"] = known
                 total["_gross_available"] = True
                 total["complete"] = total["fees_complete"] = False
+                total["_estimated_scope_incomplete"] = True
             if paid is None:
                 total["_gross_complete"] = False
                 total["complete"] = total["fees_complete"] = False
+                total["_estimated_scope_incomplete"] = True
                 for row in records.values():
                     if row["provider"] == provider and row["currency"] != "SAR":
                         pending(total, row["order_id"], "provider_balance_sar_unavailable", row.get("order_number"))
+                        incomplete_estimate(total, row["order_id"], "provider_balance_sar_unavailable")
 
     # Unknown fees or conflicting recognition cannot turn gross principal into
     # known net. Remove only those claims (and their derived credits), retaining
@@ -602,6 +631,9 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
                                           "partial" if source_profiles else "unavailable")
         total["average_fixed_bases"] = sorted(total["_average_fixed_bases"])
         total["average_operations_bases"] = sorted(total["_average_operations_bases"])
+        # Preserve exactly the complete estimates already included in known_fees.
+        # Partial variable-only components never enter this subtotal or net money.
+        calculated_estimates = total["estimated_fees"]
         if not total["_average_fixed_complete"]:
             total["average_fixed_fees"] = None
         if not total["_average_vat_complete"]:
@@ -630,6 +662,21 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
             total["orders"] - known_orders - total.get("_source_zero_paid_orders", 0), 0)
         total["pending_orders"] += total["unidentified_pending_orders"]
         total["pending_details_complete"] = total["unidentified_pending_orders"] == 0
+        incomplete_ids = set().union(*total["_estimated_incomplete"].values())
+        total["estimated_fee_incomplete_orders"] = len(incomplete_ids)
+        total["estimated_fee_incomplete_reasons"] = [
+            {"code": code, "orders": len(ids)}
+            for code, ids in sorted(total["_estimated_incomplete"].items())]
+        total["estimated_fee_unidentified_orders"] = total["unidentified_pending_orders"]
+        total["estimated_fee_scope_incomplete"] = bool(total["_estimated_scope_incomplete"]
+            or total["estimated_fee_unidentified_orders"])
+        total["estimated_fees_complete"] = bool(total["fees_complete"] and total["_average_complete"]
+            and not incomplete_ids and not total["estimated_fee_scope_incomplete"])
+        total["estimated_fee_calculated_orders"] = len(total["_estimated_calculated_orders"])
+        total["known_estimated_fees_available"] = bool(total["estimated_fee_calculated_orders"]
+            or total["estimated_fees_complete"])
+        total["known_estimated_fees"] = (calculated_estimates
+            if total["known_estimated_fees_available"] else None)
         total["held_orders"] = len(total["_held"])
         total["paid_order_ids"] = sorted(total["paid_orders"])
         total["paid_orders"] = (len(total["paid_orders"]) if total["paid_orders"] or total["paid_orders_complete"] else None)
