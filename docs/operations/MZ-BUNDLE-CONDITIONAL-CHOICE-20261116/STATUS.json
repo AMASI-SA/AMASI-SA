@@ -1,14 +1,15 @@
 {
   "task_id": "MZ-BUNDLE-CONDITIONAL-CHOICE-20261116",
-  "scope": "Read-only diagnosis of conditional custom-text causing an incomplete current bundle cost.",
-  "state": "diagnosis_complete_fix_not_implemented",
+  "scope": "Implement conditional descriptive-option costing in current bundle estimates.",
+  "state": "wip_regression_reproduced",
   "repository": "AMASI-SA/AMASI-SA",
-  "task_branch": "codex/bundle-conditional-phrase-diagnosis-20261116",
-  "verified_milestone_commit": "b657cfe0162c166ea6d44d9475379b09e9f5b374",
+  "task_branch": "codex/bundle-conditional-cost-fix-20261116",
+  "verified_milestone_commit": "a9994e91813e8a719d7bba9ad78610f1050b5fab",
   "inspected_branch_head": "236a428364bc8163a684795ed1be87e237476f18",
   "observed_live_source": "1bd44b6f186de8b40877fde686b5d2d7aab52805",
   "changed_files": [
-    "docs/operations/MZ-BUNDLE-CONDITIONAL-CHOICE-20261116/DIAGNOSIS.md",
+    "backend/tests/test_current_bundle_cost_details.py",
+    "backend/tests/test_campaign_hover_profit.py",
     "docs/operations/MZ-BUNDLE-CONDITIONAL-CHOICE-20261116/STATUS.json"
   ],
   "application_code_changed": false,
@@ -43,10 +44,15 @@
     {
       "method": "Bounded saved-data reads and independent source review",
       "result": "Explicit declining customer answer, absent conditional text, preserved raw catalog visibility, and the generated report warning agree with the source trace. No provider refresh was requested."
+    },
+    {
+      "command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=backend:backend/tests <isolated-python> -B -m pytest --noconftest -p no:cacheprovider -q --tb=short backend/tests/test_current_bundle_cost_details.py",
+      "exit_status": 1,
+      "result": "RED baseline: 27 failed, 20 passed in 1.75s. Intended failures reproduce phantom required-text cost and unsupported actual text binding decisions. A subsequent alias-conflict test and hover cases are added but not yet executed."
     }
   ],
   "verification_limits": [
-    "No full estimator/integration-suite pass claimed; independent review could not import full module because pymongo was unavailable. No dependencies installed."
+    "Baseline synthetic tests use Python 3.12.14 with pinned repository CI packages in an isolated environment. Exact Python 3.11 CI remains pending."
   ],
   "pr": "not_created",
   "ci": "not_started_documentation_checkpoint",
@@ -56,7 +62,7 @@
   "deployment": "not_performed_for_this_case",
   "production_changed": "no",
   "incomplete_work": [
-    "Verify actual affirmative-path cost dependencies; implement the scoped visibility and financial-relevance correction with targeted regression coverage. Application changes are not started."
+    "Implement narrow fill-field financial validation and canonical real-binding resolution; run regressions and affected reports, independent review, then governed integration/release."
   ],
   "risks": [
     "Preserve unresolved results for missing or conflicting decisions needed by actual cost-bearing dependencies.",
@@ -68,7 +74,7 @@
     "Existing shared workspace and unrelated production operations."
   ],
   "ledger": "Issue #1006 was previously at its comment limit; dedicated task status serves as recoverable handoff without retrying that append.",
-  "next_safe_action": "For implementation continuation, read AGENTS.md and this status, verify the remote milestone and current production head, inspect actual affirmative-path financial dependencies, then separate descriptive required-option checks from cost completeness and use merged conditional visibility. Test real cost dependencies and both customization answers. Follow the release protocol before any claim of merge or publication.",
+  "next_safe_action": "Implement in current_bundle_reporting_estimate.py. Preserve required enum/variant checks, real recipe guards, included-in-base policy and nested explicit-pair behavior. Capture validated identity/presence evidence without customer text; reject explicit value alias conflicts before normalization.",
   "owner_clarification": {
     "source": "User clarification after diagnosis",
     "statement": "Selecting affirmative customization adds no amount.",
@@ -76,5 +82,6 @@
     "financial_rule": "A descriptive option with no actual service, component, recipe, or mapping cost dependency must not independently block cost completeness.",
     "operational_rule": "Missing necessary customization text may require a separate fulfillment warning.",
     "verification_pending": "Verify affirmative-path financial dependencies before claiming zero internal customization cost."
-  }
+  },
+  "live_observation": "Bounded saved reads confirmed no option-cost bindings for the incident product. Its bundle definition was changed externally after the original diagnostic snapshot; preserve current user configuration. No provider refresh or business-data write was performed."
 }
