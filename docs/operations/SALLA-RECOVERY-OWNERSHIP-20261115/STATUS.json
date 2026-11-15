@@ -1,0 +1,59 @@
+{
+  "task_id": "SALLA-RECOVERY-OWNERSHIP-20261115",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/salla-recovery-owner-bindings-20261115",
+  "base_commit": "8f1b0ddb6408781e8677212bcb8cf2d51eab42f7",
+  "base_tree": "a8616930de7f98a43a509ff7dad287befd61ba5a",
+  "source_commit": "pending_root_review_and_checkpoint",
+  "status": "focused_local_tests_passed_real_mongo_ci_required",
+  "authorization": "Existing user authorization to complete the root repair persists. Parent explicitly authorized only the isolated binding correction, focused tests and this status record; parent owns Git writes, release sequencing and any production actions.",
+  "problem": "The deployed maintenance config rejected every merchant with more than one matching integration document. Canonical webhook ownership instead selects the newest updated_at across string and integer store_id variants. The integration schema makes user_id unique, not store_id, so older records can legitimately belong to other owners. No maintenance plan or grant succeeded before this correction was prepared.",
+  "source_evidence": {
+    "canonical_owner": "backend/salla_integration/webhook_order_sync.py:_resolve_user_id uses the unfiltered merchant alias query and descending updated_at order, then enforces the worker's pinned owner.",
+    "indexes": "routes.py:ensure_salla_indexes requests unique user_id; webhook_inbox.py:ensure_indexes adds nonunique store_id/updated_at ordering.",
+    "timestamp_writers": "Authorization upsert, token refresh, needs-reauth, store-info updates and uninstall all write datetime.now(timezone.utc), directly or through service._now. Refresh locks and the maintenance fence do not modify updated_at.",
+    "bson_order": "https://www.mongodb.com/docs/manual/reference/bson-type-comparison-order/ documents Date above scalar String and Null, missing fields as Null, and descending array sorting by the largest element. Actual replica-set tests are required for these mixed-type cases."
+  },
+  "changed_files": [
+    "backend/salla_integration/webhook_incident_recovery.py",
+    "backend/tests/test_salla_webhook_incident_recovery.py",
+    "docs/operations/SALLA-RECOVERY-OWNERSHIP-20261115/STATUS.json"
+  ],
+  "behavior": {
+    "single_record": "Preserve existing exact-owner behavior, including missing or legacy string updated_at; no ordering choice exists.",
+    "multiple_records": "Use the unchanged unfiltered merchant string/integer query sorted by updated_at descending, limited to the top two. Require a real datetime winner; a datetime runner must be strictly older after UTC normalization. Exact scalar string or null/missing runners are known lower BSON ranks and are accepted without parsing. Refuse equal dates, non-date winners, arrays and unsupported ranking shapes. Require the winning user_id to exactly equal the authenticated owner; never fall back to a convenient caller-owned record.",
+    "read_only_planning": "Config and dry-run remain read-only. No integration cleanup, reconnect, token update, credential discovery, provider request, direct dispatch or manual synchronization was added.",
+    "transaction_preserved": "Existing selected-binding conditional write, fresh outside-snapshot selected-id/owner check, token+epoch worker lease fences, full-document row CAS, once-only grant history and atomic batch behavior remain unchanged.",
+    "ownership_limit": "The tool cannot globally serialize insertion or promotion of a different binding document after the final fresh read without changing canonical writers. Grants remain on the original tenant's rows, and the existing worker rechecks current ownership before business dispatch. A real-Mongo regression explicitly exercises this residual boundary; it must not be described as global grant-level ownership serialization.",
+    "existing_schedule_and_business_logic": "Unchanged: immediate durable handling of new orders/status events; daily 10:00 Asia/Riyadh reconciliation of the preceding24h updating existing records only; notification, accounting, customer-choice and capture-contract behavior."
+  },
+  "reviewed_file_hashes_sha256": {
+    "backend/salla_integration/webhook_incident_recovery.py": "32ac7fb3d9a4f9e4f477b5b9d9e2759f858da0a089809a4d37835b074d38f5b7",
+    "backend/tests/test_salla_webhook_incident_recovery.py": "443e49a8f68dcd133bd73a58592206d8d440e2965d1ac9d6e7ee9c282479dfd3",
+    "unchanged_backend/salla_integration/cart_order_reconciliation.py": "47d2a65c5db8d7f20ea5509a1e2e4d5e0ca7ac873cd921f02c650ba06580915c"
+  },
+  "verification": {
+    "local_command": "PYTHONDONTWRITEBYTECODE=1 PYTHON_DOTENV_DISABLED=1 PYTHONPATH=.:tests /workspace/scratch/ce6ef737d6c9/issue-index-verification-venv/bin/python -B -m pytest --noconftest -p no:cacheprovider -q --tb=short --asyncio-mode=auto tests/test_salla_webhook_incident_recovery.py tests/test_salla_webhook_inbox.py --junitxml=/workspace/scratch/ce6ef737d6c9/release-evidence/salla-binding-recovery-local.xml",
+    "local_working_directory": "backend",
+    "local_exit_status": 0,
+    "local_result": "75 passed,16 explicitly skipped,30 subtests passed in4.09s. All skips are the16 replica-set cases because no approved local Mongo fixture exists. Zero failures or errors; skipped cases are not claimed as passing.",
+    "local_junit_sha256": "f6da7164cbc0052546a32e5c9153d15fb44f1eef9608f77a5d2194d0263a24db",
+    "tested_module_sha256": "682cd41924edd33facbb77222d3b6820c48b6e961d0cd8937b7c99834adbbb7c",
+    "post_test_delta": "Only the existing final-owner-check comment and this status record were clarified to include both insertion and promotion of a different binding after the final read. Runtime and test code are unchanged from the successful focused run.",
+    "coverage": "Canonical-owner parity with older distinct-owner and same-owner history; integer/string merchant aliases; legacy text/null/missing ranking; singleton compatibility; newer or missing winning owner refusal; same-owner and three-way date ties; unsupported shapes; naive UTC codec; config/dry-run no writes; retained same-document transfer and new-winner insertion rollback; refreshed historical winner rollback; exact binding/token/history preservation; worker rejection of an ownership change after the final read.",
+    "real_mongo_required": "The existing .github/workflows/salla-webhook-recovery.yml explicitly runs this test module against its disposable Mongo7 replica set and rejects every skipped case. All16 IncidentRecoveryMongoTests must execute on the immutable new source; no local fallback, download or credential lookup is permitted.",
+    "independent_review": "Both independent peers found no source/test blocker on the tested runtime patch. One requested only clarification that the documented post-final-read residual includes promotion as well as insertion of a different binding document; this comment/status clarification changes no behavior. Final exact-byte acceptance is requested before the parent checkpoint.",
+    "release_required": "New exact-source gates and candidate intent, reviewed intent-only B, both host artifact/package proofs, normal merge and actual-merge gates, preserving original-workspace rehearsal only after the prior lease closes, and the official governed publication/verification sequence."
+  },
+  "production": {
+    "changed_by_this_task": false,
+    "predecessor_observation": "Parent observed PR1942 deployed version0de8080 at19:13 Riyadh and its official verifier running under the existing lease. Owner recovery config returned merchant_binding_ambiguous; no config/plan/grant succeeded and no business writes were performed by the recovery UI.",
+    "configuration_closure": "The Live maintenance switch remains a separately managed configuration. Parent must explicitly close it through the normal platform and governed release process after bounded recovery; source defaults remain disabled.",
+    "preserved": "Prior frozen source/intent/merge checkout, actual /app, production lease, integration records/tokens, queue rows, other tasks and unrelated paths remain untouched by this isolated implementation."
+  },
+  "continuation": {
+    "ledger": "Issue1006 is full; task STATUS and its future PR provide the continuation record.",
+    "next": "Parent independently reviews and checkpoints these three files, then runs exact-source CI including all16 Mongo cases before intent freeze. Do not claim production resolution from local tests or repeat the predecessor publication/operator.",
+    "completion_claimed": false
+  }
+}
