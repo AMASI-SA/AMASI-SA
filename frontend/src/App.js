@@ -132,6 +132,7 @@ import { Toaster } from "./components/ui/sonner";
 const OperationalBalances = lazy(() => import("./pages/operational/OperationalBalances"));
 const InventoryWorkspace = lazy(() => import("./pages/InventoryWorkspace"));
 const ProviderFeeSetup = lazy(() => import("./pages/operational/ProviderFeeSetup"));
+const ProviderStatements = lazy(() => import("./pages/operational/ProviderStatements"));
 const OperationalFinancialPosition = lazy(() => import("./pages/operational/OperationalFinancialPosition"));
 const OperationalDailyFinancialMovements = lazy(() => import("./pages/operational/DailyFinancialMovements"));
 const OperationalCustomerReturns = lazy(() => import("./pages/operational/CustomerReturns"));
@@ -153,6 +154,7 @@ function AppRoutes() {
             <Route path="/operational-balances" element={<ProtectedRoute><Layout><OperationalBalances /></Layout></ProtectedRoute>} />
             <Route path="/inventory-v2" element={<ProtectedRoute><Layout><InventoryWorkspace /></Layout></ProtectedRoute>} />
             <Route path="/operational-balances/provider-fees" element={<ProtectedRoute><Layout><ProviderFeeSetup /></Layout></ProtectedRoute>} />
+            <Route path="/operational-balances/provider-statements" element={<ProtectedRoute><Layout><ProviderStatements /></Layout></ProtectedRoute>} />
             <Route path="/operational-balances/financial-position" element={<ProtectedRoute><Layout><OperationalFinancialPosition /></Layout></ProtectedRoute>} />
             <Route path="/operational-balances/daily-movements" element={<ProtectedRoute><Layout><OperationalDailyFinancialMovements /></Layout></ProtectedRoute>} />
             <Route path="/operational-balances/customer-returns" element={<ProtectedRoute><Layout><OperationalCustomerReturns /></Layout></ProtectedRoute>} />

@@ -13,6 +13,19 @@ export const operationalApi = {
   supplierInvoiceReview: (config = {}) => data(api.get(`${base}/supplier-invoice-review`, config)),
   providerHistoryReviews: (config = {}) => data(api.get(`${base}/provider-history-reviews`, config)),
   approveProviderHistory: body => data(api.post(`${base}/provider-history-reviews/approve`, body)),
+  providerStatements: (config = {}) => data(api.get(`${base}/provider-statements`, {timeout: 30000, ...config})),
+  providerStatementSavedFiles: (config = {}) => data(api.get(`${base}/provider-statements/saved-files`, {timeout: 30000, ...config})),
+  useSavedProviderStatement: (id, body, config = {}) => data(api.post(`${base}/provider-statements/saved-files/${encodeURIComponent(id)}/use`, body, {timeout: 60000, ...config})),
+  providerStatementReview: (id, config = {}) => data(api.get(`${base}/provider-statements/${encodeURIComponent(id)}/review`, {timeout: 30000, ...config})),
+  uploadProviderStatement: (file, body, config = {}) => {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('request_id', body.request_id);
+    form.append('expected_session_scope', body.expected_session_scope);
+    form.append('expected_started_at', body.expected_started_at);
+    return data(api.post(`${base}/provider-statements/upload`, form, {timeout: 60000, ...config}));
+  },
+  confirmProviderStatement: (id, body, config = {}) => data(api.post(`${base}/provider-statements/${encodeURIComponent(id)}/confirm`, body, {timeout: 30000, ...config})),
   nativePurchaseCandidates: (id, config = {}) => data(api.get(`${base}/native-purchase-links/${encodeURIComponent(id)}/candidates`, config)),
   previewNativePurchaseLink: (body, config = {}) => data(api.post(`${base}/native-purchase-links/preview`, body, config)),
   approveNativePurchaseLink: body => data(api.post(`${base}/native-purchase-links/approve`, body)),
