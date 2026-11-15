@@ -112,6 +112,33 @@ class SyncComponentSnapshotTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(source["g47_salla_snapshot"]["component_pending"])
         self.assertEqual(source["raw_by_source"]["salla_direct"]["items"], payload["items"])
 
+    async def test_daily_existing_only_missing_order_cannot_create_snapshot_or_products(self):
+        payload = self.source_payload(status="in_progress")
+        before_orders = await self.db.unified_orders.count_documents({})
+        before_products = await self.db.products.count_documents({})
+        result = await sync._persist_sync_component_snapshot(
+            self.db, "owner", sync._salla_order_to_doc(payload), payload, existing_only=True)
+        self.assertTrue(result.get("skipped"), result)
+        self.assertFalse(result["created"])
+        self.assertEqual(await self.db.unified_orders.count_documents({}), before_orders)
+        self.assertEqual(await self.db.products.count_documents({}), before_products)
+
+    async def test_daily_existing_only_repeated_snapshot_is_noop_and_keeps_choices(self):
+        payload = await self.seed()
+        payload["updated_at"] = "2026-09-26T12:00:10+00:00"
+        with patch("accounting_shipping_native_observer.observe_delivery", AsyncMock()) as observer:
+            first = await sync._persist_sync_component_snapshot(
+                self.db, "owner", sync._salla_order_to_doc(payload), payload, existing_only=True)
+            self.assertFalse(first.get("created"), first)
+            before = await self.db.unified_orders.find_one({"user_id": "owner"})
+            self.assertTrue(before["qoyod_followup_dirty"])
+            second = await sync._persist_sync_component_snapshot(
+                self.db, "owner", sync._salla_order_to_doc(payload), payload, existing_only=True)
+            self.assertTrue(second.get("unchanged"), second)
+            self.assertEqual(await self.db.unified_orders.find_one({"user_id": "owner"}), before)
+            observer.assert_not_awaited()
+        await self.assert_inventory_unchanged()
+
     async def test_single_resync_cancellation_stays_blocked_without_stock_work(self):
         payload = await self.seed()
         payload.update(updated_at="2026-09-26T12:00:10+00:00", status={"slug": "canceled"})

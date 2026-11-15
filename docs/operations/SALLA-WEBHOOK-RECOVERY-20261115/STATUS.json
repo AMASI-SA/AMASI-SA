@@ -3,23 +3,44 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/salla-webhook-durable-recovery-20261115",
   "base_commit": "7ef45017e5221635ce3c80c3788f73d9c50b1e08",
-  "status": "WIP: durable webhook milestone; daily refresh integration under verification",
+  "status": "Implemented and independently reviewed; final source CI pending; production release held by another owner",
   "requested_behavior": [
     "Repair the blocking verified webhook path and duplicate processing identified by platform support",
     "One scheduled refresh at 10:00 Asia/Riyadh over a fixed preceding 24-hour window",
     "Update existing records only; preserve customer choices and accounting invariants"
   ],
   "implemented": [
-    "Encrypted durable inbox, majority+journal persistence before HTTP acknowledgement, stable atomic deduplication",
-    "Bounded background processing with global replica lease, heartbeat, backoff, crash recovery and tenant binding",
-    "Strict business failure propagation after sanitized audit persistence",
-    "Shared manual/scheduled synchronization exclusion is being integrated with legacy rollout leases"
+    "Encrypted durable inbox with majority+journal persistence before HTTP acknowledgement and atomic semantic deduplication",
+    "Bounded separate-process worker with replica lease, heartbeats, retry/backoff, crash recovery and pinned tenant binding",
+    "Strict core failure handling, safe diagnostics and recovery of failed CAPI local-outbox stage from current canonical state; optional shadow does not retry core",
+    "One admitted daily 10:00 Asia/Riyadh cycle, fixed preceding24h window, bounded within-cycle retries and no off-hours startup catch-up",
+    "Update-only existing orders/products with source and owner transaction fences, unchanged no-op and preserved customer choices/accounting projections",
+    "Grouped current/legacy synchronization leases shared by all manual order/product and daily paths",
+    "Owner-scoped unfinished queue counts/ages and count-only retry/quarantine diagnostics"
   ],
   "verification": {
-    "queue_unit_and_real_mongo": "33 passed; includes actual child-process death and server-rejected write",
-    "http_ingress_and_manual_routes": "43 passed before final grouped-lease extension",
-    "privacy_and_cart_regressions": "41 passed",
-    "combined_webhook_gate": "206 passed, 1 test assertion awaiting adaptation to sanitized error diagnostics"
+    "integrated_gate": {
+      "passed": 347,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration_seconds": 34.62,
+      "database": "disposable loopback Mongo7 replica",
+      "evidence": "evidence/integrated.xml"
+    },
+    "canonical_runtime_and_isolation": {
+      "passed": 8,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration_seconds": 15.28,
+      "evidence": "evidence/runtime-isolation.xml"
+    },
+    "independent_review": "HTTP/manual/scheduler and deferred-outbox boundaries reviewed; identified defects corrected with reproductions",
+    "additional_adjacent_checks": "187 scheduler/mapper/catalogue/option/product projection cases passed; 21 real Mongo snapshot cases are included in the integrated gate",
+    "preexisting_failures": "Two optional marketing-attribution tests reproduced identically against original source: extra utm_content key and stale fixture missing the canonical source gate. No assertion or production change made for these unrelated baseline failures.",
+    "diff_check": "passed",
+    "final_remote_ci": "pending after source checkpoint upload"
   },
   "production_changed": false,
   "release": {
@@ -29,15 +50,30 @@
     "observed_active_owner": "codex-campaign-operating-period-1932",
     "observed_lease_deployment_commit": "7ef45017e5221635ce3c80c3788f73d9c50b1e08",
     "last_observed_live_source": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
-    "blocker": "Shared /app release lease belongs to another operation. AGENTS.md requires its owner to close it; this task must not clear or reuse it."
+    "blocker": "Shared /app release lease belongs to another operation. AGENTS.md requires its owner to close it; this task must not clear or reuse it.",
+    "guard_rechecked_in_shared_terminal": "active; same PR1932 owner, token left untouched",
+    "last_readonly_health_check_utc": "2026-11-15T00:57:35.330865+00:00",
+    "last_readonly_health_http_status": 200,
+    "last_readonly_health_identity_verified": true
   },
   "continuation": {
     "ledger": "Issue #1006 has reached 2500 comments; use this status document and the task PR as the durable fallback",
-    "next": "Finish grouped-lease and documented provider-window tests, run the exact-source real-Mongo gate, checkpoint and review. Only start a release rehearsal after shared guard status is inactive.",
+    "next": "Inspect exact final PR head and CI. Leave production unchanged while the shared PR1932 lease is active. Its owner must finish/cancel; then reread production base and guard, integrate concurrent changes, perform protocol-v5 sourceA/intentB rehearsal and authorized single publication with official three-probe verification.",
     "caveats": [
       "Queue recovery is at least once after process death between business write and queue settlement; existing source and outbox idempotency remain authoritative",
       "Do not invent updated_at_gt support: official Salla List Orders documentation and existing repository contract do not establish it",
       "Do not call Order Details from background reconciliation because the repository records that it may mark orders read"
     ]
+  },
+  "last_remote_checkpoint": "bfd8daf052f1e2b368c9f06394c025322eeaa462",
+  "pull_request": "https://github.com/AMASI-SA/AMASI-SA/pull/1934",
+  "provider_coverage": {
+    "complete": false,
+    "reason": "provider_modified_since_filter_unavailable",
+    "discovery": "bounded recent creations plus verified local source activity",
+    "candidate_limit": 500,
+    "authority": "provider order-level updated_at inside the fixed24h window",
+    "unknown_timestamps": "counted and skipped; not converted into a full historical scan",
+    "daily_result": "partial coverage is reported and alone does not cause repeated synchronization"
   }
 }

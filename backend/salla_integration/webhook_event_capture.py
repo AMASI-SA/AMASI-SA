@@ -39,7 +39,7 @@ def _processing_retry_required(*results: Any) -> bool:
         "unhandled_exception", "order_webhook_persist_failed",
         "connected_salla_owner_not_found", "address_projection_failed",
         "customer_options_unavailable", "source_changed", "order_not_found",
-        "enqueue_failed", "shadow_capture_failed",
+        "enqueue_failed",
     }
     for result in results:
         if not isinstance(result, dict):
@@ -338,18 +338,54 @@ async def capture_unknown_event(
                 "error_type": type(exc).__name__,
             }
 
-    # Provider delivery is never performed inside the webhook.  This call only
-    # creates a hashed, idempotent outbox record when CAPI is explicitly enabled.
-    if not is_abandoned_cart_event and order_sync.get("synced"):
+    # A newer source can legitimately make the original snapshot stale between
+    # attempts. Preserve a previously failed outbox stage, but derive its retry
+    # from the current canonical source so an old active order cannot revive a
+    # purchase after cancellation. Ordinary stale deliveries remain no-ops.
+    retry_current_capi = False
+    if (raise_on_processing_error and not is_abandoned_cart_event
+            and order_sync.get("reason") == "stale_salla_snapshot"):
+        previous = await db.salla_webhook_event_captures.find_one(
+            {"merchant_id": merchant_id, "event": event_name or None, "event_hash": event_hash},
+            {"snapchat_capi.reason": 1},
+        )
+        retry_current_capi = ((previous or {}).get("snapchat_capi") or {}).get("reason") == "enqueue_failed"
+
+    # This creates/cancels only the existing idempotent local outbox. It never
+    # makes a provider request or enables an otherwise disabled integration.
+    if not is_abandoned_cart_event and (order_sync.get("synced") or retry_current_capi):
         try:
             from integrations_control_center.snapchat_capi_purchases import (
-                enqueue_snapchat_purchase_from_salla_event,
+                enqueue_snapchat_purchase_from_salla_event, cancel_pending_snapchat_purchase_event,
+                _status_eligible,
             )
-
-            snapchat_capi = await enqueue_snapchat_purchase_from_salla_event(
-                db,
-                event_body,
-            )
+            capi_event = event_body
+            current_ineligible = False
+            if retry_current_capi:
+                from .webhook_order_sync import _order_payload, _order_reference
+                owner = await _resolve_user_id(db, merchant_id)
+                reference = _order_reference(_order_payload(event_body))
+                if not owner or not reference:
+                    raise WebhookProcessingIncomplete("capi_current_source_unavailable")
+                current = await db.unified_orders.find_one(
+                    {"user_id": owner, "order_number": reference},
+                    {"raw_by_source.salla_direct": 1, "order_status": 1, "order_status_slug": 1},
+                )
+                raw = ((current or {}).get("raw_by_source") or {}).get("salla_direct")
+                if not isinstance(raw, dict) or _order_reference(raw) != reference:
+                    raise WebhookProcessingIncomplete("capi_current_source_unavailable")
+                # A separately fenced light-status observation can be newer
+                # than the archived full payload. Its cancellation still wins.
+                current_ineligible = not _status_eligible(current)
+                capi_event = {"event": "order.updated", "merchant": merchant_id, "data": raw}
+            if current_ineligible:
+                snapchat_capi = await cancel_pending_snapchat_purchase_event(
+                    db, user_id=owner, event_id=reference,
+                )
+            else:
+                snapchat_capi = await enqueue_snapchat_purchase_from_salla_event(db, capi_event)
+            if retry_current_capi:
+                snapchat_capi["recovered_from_current_source"] = True
         except Exception as exc:  # webhook acknowledgement remains independent
             log.warning("snapchat_capi.enqueue_failed error_type=%s", type(exc).__name__)
             snapchat_capi = {
@@ -394,7 +430,7 @@ async def capture_unknown_event(
         for result in (order_sync, shipment_sync, cart_sync, snapchat_capi, orders_v3_shadow)
     )
     retry_required = refund_retry_required or _processing_retry_required(
-        order_sync, shipment_sync, cart_sync, snapchat_capi, orders_v3_shadow,
+        order_sync, shipment_sync, cart_sync, snapchat_capi,
     )
     timings["total"] = round((time.monotonic() - started) * 1000)
     log.info("salla_webhook.processing duration_ms=%s retry_required=%s capture_hash=%s",

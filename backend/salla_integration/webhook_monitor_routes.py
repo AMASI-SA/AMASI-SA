@@ -99,6 +99,50 @@ async def _event_snapshot(db: Any, merchant_id: str | None) -> dict[str, dict[st
     return {str(row.get("_id") or ""): row for row in rows if row.get("_id")}
 
 
+async def _queue_snapshot(db: Any, *, user_id: str, merchant_id: str | None,
+                          now: datetime | None = None) -> dict[str, Any]:
+    """Count only this owner's unfinished jobs; never retrieve event payloads."""
+    states = ("pending", "processing", "retry", "quarantined")
+    summary = {**dict.fromkeys(states, 0), "backlog": 0,
+               "oldest_unfinished_at": None, "oldest_unfinished_age_seconds": 0,
+               "expired_processing_count": 0, "oldest_expired_processing_age_seconds": 0}
+    if not user_id or not merchant_id:
+        return summary
+    current = _as_utc(now) or datetime.now(timezone.utc)
+    expired = {"$and": [{"$eq": ["$state", "processing"]},
+                         {"$lte": ["$lease_until", current]}]}
+    from .webhook_inbox import COLLECTION
+    rows = await db[COLLECTION].aggregate([
+        {"$match": {"user_id": str(user_id), "merchant_id": str(merchant_id),
+                    "state": {"$in": list(states)}}},
+        {"$group": {"_id": "$state", "count": {"$sum": 1},
+                    "oldest_created_at": {"$min": "$created_at"},
+                    "expired_count": {"$sum": {"$cond": [expired, 1, 0]}},
+                    "oldest_expired_lease": {"$min": {"$cond": [expired, "$lease_until", None]}}}},
+    ]).to_list(length=len(states))
+    oldest = None
+    for row in rows:
+        state = row.get("_id")
+        if state not in states:
+            continue
+        summary[state] = _safe_int(row.get("count"))
+        summary["backlog"] += summary[state]
+        created = _as_utc(row.get("oldest_created_at"))
+        if created is not None and (oldest is None or created < oldest):
+            oldest = created
+        summary["expired_processing_count"] += _safe_int(row.get("expired_count"))
+        expired_at = _as_utc(row.get("oldest_expired_lease"))
+        if expired_at is not None:
+            summary["oldest_expired_processing_age_seconds"] = max(
+                summary["oldest_expired_processing_age_seconds"],
+                int((current - expired_at).total_seconds()),
+            )
+    summary["oldest_unfinished_at"] = oldest
+    if oldest is not None:
+        summary["oldest_unfinished_age_seconds"] = max(0, int((current - oldest).total_seconds()))
+    return summary
+
+
 def attach_salla_webhook_monitor_routes(api_router: APIRouter, db: Any) -> None:
     from server import current_user  # type: ignore  # circular by app bootstrap design
 
@@ -113,6 +157,7 @@ def attach_salla_webhook_monitor_routes(api_router: APIRouter, db: Any) -> None:
         merchant_id = str((integration or {}).get("store_id") or "").strip() or None
         snapshot = await _event_snapshot(db, merchant_id)
         now = datetime.now(timezone.utc)
+        queue = await _queue_snapshot(db, user_id=user["id"], merchant_id=merchant_id, now=now)
         recent_cutoff = now - timedelta(days=30)
 
         events: list[dict[str, Any]] = []
@@ -154,6 +199,7 @@ def attach_salla_webhook_monitor_routes(api_router: APIRouter, db: Any) -> None:
             "received_events": received_count,
             "total_monitored_events": len(events),
             "generated_at": now,
+            "queue": queue,
             "events": events,
         }
 

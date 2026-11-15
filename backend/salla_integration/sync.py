@@ -11,8 +11,9 @@ upserts into the existing `unified_orders` collection using
 Run modes
 ---------
     • Manual: triggered by the UI "Sync Now" button (routes.py).
-    • Scheduled: Amasi's background worker refreshes a rolling 24-hour
-      creation window every 12 hours, including authoritative order items.
+    • Scheduled: at 10:00 Asia/Riyadh, refresh existing orders with a proved
+      provider update in the previous 24 hours. Discovery is bounded to recent
+      creations and locally observed source changes; coverage is explicit.
 
 Sync log
 --------
@@ -144,6 +145,7 @@ async def _refresh_plan_b_status_snapshot(
     user_id: str,
     order_number: str,
     order_doc: dict,
+    *, allow_handoff_transition: bool = True,
 ) -> dict:
     """Upsert a read-only current-status snapshot for Plan B.
 
@@ -168,11 +170,11 @@ async def _refresh_plan_b_status_snapshot(
 
     carrier_handoff_transition = {
         "advanced": False,
-        "reason": "evaluation_failed",
+        "reason": "evaluation_failed" if allow_handoff_transition else "scheduled_refresh_only",
     }
     try:
-        carrier_handoff_transition = (
-            await advance_carrier_handoff_from_salla_status(
+        if allow_handoff_transition:
+            carrier_handoff_transition = await advance_carrier_handoff_from_salla_status(
                 db,
                 user_id=str(user_id),
                 order_number=order_number,
@@ -180,7 +182,6 @@ async def _refresh_plan_b_status_snapshot(
                 status_name=status_native,
                 source="mezan_orders_page_status_sync",
             )
-        )
     except Exception as exc:
         # Status snapshots must remain available even when the local
         # fulfillment workflow has not been initialized yet.
@@ -867,6 +868,170 @@ def _pagination_number(pagination: dict, keys: tuple[str, ...], *, minimum: int)
 
 
 # ── Public sync routines ──────────────────────────────────────────────────
+def _scheduled_order_changed_at(raw):
+    """Never substitute the creation/customer timestamp for the order clock."""
+    value = raw.get("updated_at")
+    zone = None
+    if isinstance(value, dict):
+        zone, value = value.get("timezone"), value.get("date")
+    try:
+        stamp = value if isinstance(value, datetime) else datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if stamp.tzinfo is None:
+            if not zone:
+                return None
+            stamp = stamp.replace(tzinfo=ZoneInfo(zone))
+        return stamp.astimezone(timezone.utc)
+    except (TypeError, ValueError, KeyError):
+        return None
+
+
+async def _run_existing_orders_refresh(db, user_id, *, refresh_window, log_id=None):
+    """Bounded refresh using documented list/reference filters, never Details.
+
+    Salla List Orders has no accepted modified-since filter. Discover recent
+    creations plus existing orders with locally verified source activity; old
+    unseen changes cannot be claimed as covered. Only a provider order-level
+    updated_at proves eligibility to write inside the fixed 24-hour window.
+    """
+    start, end = refresh_window
+    if start.tzinfo is None or end.tzinfo is None or end - start != timedelta(hours=24):
+        raise ValueError("scheduled refresh requires an aware 24-hour window")
+    start, end = start.astimezone(timezone.utc), end.astimezone(timezone.utc)
+    log_id = log_id or await create_sync_log(db, user_id, "orders")
+    limit = 500
+    counts = dict(created=0, updated=0, unchanged=0, skipped=0, missing_existing=0,
+                  incomplete_count=0, errors_count=0, pages_fetched=0, targeted_lookups=0)
+    seen, references = set(), set()
+    limited = False
+    exhausted = False
+    from resource_governor import governor, ResourcePressure
+
+    async def consume(rows, expected_reference=None):
+        nonlocal limited
+        for source_row in rows:
+            if governor.peek()[0] in {"blocked", "cancel"}:
+                raise ResourcePressure("resource_pressure")
+            try:
+                if not isinstance(source_row, dict):
+                    raise ValueError("invalid_scheduled_order_row")
+                identity = _str(source_row.get("id"))
+                reference = _str(source_row.get("reference_id") or source_row.get("order_number"))
+                if not identity or not reference or (expected_reference and reference != expected_reference):
+                    raise ValueError("scheduled_order_identity_unproven")
+                if identity in seen:
+                    continue
+                if len(seen) >= limit:
+                    limited = True
+                    return
+                seen.add(identity)
+                references.add(reference)
+                if not await db.unified_orders.find_one(
+                        {"user_id": user_id, "order_number": reference}, {"_id": 1}):
+                    counts["missing_existing"] += 1
+                    counts["skipped"] += 1
+                    continue
+                changed = _scheduled_order_changed_at(source_row)
+                if changed is None:
+                    counts["incomplete_count"] += 1
+                    counts["skipped"] += 1
+                    continue
+                if not start <= changed <= end:
+                    counts["skipped"] += 1
+                    continue
+                raw = dict(source_row)
+                raw["items"] = await _fetch_scheduled_order_items(db, user_id, identity)
+                raw = await _enrich_order_receiving_bank(db, user_id, raw)
+                doc = _salla_order_to_doc(raw)
+                result = await _persist_sync_component_snapshot(db, user_id, doc, raw, existing_only=True)
+                if result.get("blocked"):
+                    raise RuntimeError("scheduled_snapshot_blocked")
+                if result.get("skipped") or result.get("stale"):
+                    counts["skipped"] += 1
+                    continue
+                if result.get("unchanged"):
+                    counts["unchanged"] += 1
+                    continue
+                from .paid_sar_sync import observe_list_evidence
+                await observe_list_evidence(db, user_id, source_row)
+                await _refresh_plan_b_status_snapshot(db, user_id, reference, doc,
+                                                      allow_handoff_transition=False)
+                counts["updated"] += 1
+                await asyncio.sleep(0.25)
+            except Exception:
+                counts["errors_count"] += 1
+
+    try:
+        previous_total = None
+        # Only the documented creation-date list is paged, never all history.
+        for page in range(1, (limit // 30) + 2):
+            if governor.peek()[0] in {"blocked", "cancel"}:
+                raise ResourcePressure("resource_pressure")
+            response = await call_salla(db, user_id, "GET", "/orders", params={
+                "page": page, "per_page": 30, "format": "light",
+                "from_date": start.astimezone(ZoneInfo("Asia/Riyadh")).date().isoformat(),
+                "to_date": end.astimezone(ZoneInfo("Asia/Riyadh")).date().isoformat(),
+            })
+            if not isinstance(response, dict) or not isinstance(response.get("data"), list):
+                raise ValueError("invalid_scheduled_orders_page")
+            pagination = response.get("pagination") or {}
+            if not isinstance(pagination, dict):
+                raise ValueError("invalid_scheduled_orders_pagination")
+            total = _pagination_number(pagination, ("totalPages", "total_pages", "last_page"), minimum=0)
+            current = _pagination_number(pagination, ("currentPage", "current_page", "page"), minimum=1)
+            if (current is not None and current != page) or (page > 1 and total != previous_total):
+                raise ValueError("inconsistent_scheduled_orders_pagination")
+            previous_total = total
+            counts["pages_fetched"] += 1
+            if not response["data"]:
+                exhausted = not total or page > total
+                break
+            await consume(response["data"])
+            if limited:
+                break
+            if total is not None and page >= total:
+                exhausted = page == total
+                break
+            await asyncio.sleep(0.25)
+
+        cohort = await db.unified_orders.find({"user_id": user_id, "$or": [
+            {"salla_webhook_received_at": {"$gte": start, "$lte": end}},
+            {"g47_salla_snapshot.source_updated_at": {
+                "$gte": start.isoformat(timespec="microseconds"),
+                "$lte": end.isoformat(timespec="microseconds")}},
+        ]}, {"order_number": 1}).limit(limit + 1).to_list(limit + 1)
+        if len(cohort) > limit:
+            limited = True
+        for candidate in cohort[:limit]:
+            reference = _str(candidate.get("order_number"))
+            if not reference or reference in references:
+                continue
+            if len(seen) >= limit:
+                limited = True
+                break
+            if governor.peek()[0] in {"blocked", "cancel"}:
+                raise ResourcePressure("resource_pressure")
+            response = await call_salla(db, user_id, "GET", "/orders", params={
+                "reference_id": reference, "per_page": 30, "format": "light"})
+            counts["targeted_lookups"] += 1
+            rows = response.get("data") if isinstance(response, dict) else None
+            if not isinstance(rows, list) or len(rows) != 1:
+                counts["incomplete_count"] += 1
+                continue
+            await consume(rows, expected_reference=reference)
+            await asyncio.sleep(0.25)
+        result = {"log_id": log_id, **counts, "truncated": limited or not exhausted,
+                  "retryable": not limited, "mode": "update_only", "coverage_complete": False,
+                  "coverage_reason": "provider_modified_since_filter_unavailable",
+                  "discovery": "recent_creations_and_verified_local_source_activity",
+                  "window_clock": "provider_order_updated_at", "candidate_limit": limit}
+        await finish_sync_log(db, log_id, "partial", extra=result)
+        return result
+    except BaseException as exc:
+        await finish_sync_log(db, log_id, "interrupted" if isinstance(exc, asyncio.CancelledError) else "failed",
+                              extra={**counts, "last_error": type(exc).__name__})
+        raise
+
+
 async def run_orders_sync(
     db,
     user_id: str,
@@ -877,6 +1042,7 @@ async def run_orders_sync(
     log_id: Optional[str] = None,
     recover_marketing_attribution: bool = False,
     refresh_window: Optional[tuple[datetime, datetime]] = None,
+    existing_only: bool = False,
 ) -> dict:
     """Pull orders from Salla and upsert into unified_orders.
 
@@ -888,6 +1054,13 @@ async def run_orders_sync(
         N hours (uses the `updated_at_gt` filter). Convenient for cron-style
         incremental syncs.
     """
+    if type(existing_only) is not bool:
+        raise ValueError("existing_only must be boolean")
+    if existing_only:
+        if (not refresh_window or recover_marketing_attribution or from_date or to_date
+                or updated_since_hours):
+            raise ValueError("existing-only refresh requires a fixed refresh_window without import filters")
+        return await _run_existing_orders_refresh(db, user_id, refresh_window=refresh_window, log_id=log_id)
     if recover_marketing_attribution:
         if not from_date or not to_date:
             raise ValueError(
@@ -1662,7 +1835,15 @@ async def refresh_single_order_status(
     }
 
 
-async def _persist_sync_component_snapshot(db, user_id, doc, raw, *, authoritative_refresh=False):
+class _ScheduledSnapshotNoWrite(Exception):
+    def __init__(self, result):
+        super().__init__("scheduled_snapshot_no_write")
+        self.result = result
+
+
+async def _persist_sync_component_snapshot(
+    db, user_id, doc, raw, *, authoritative_refresh=False, existing_only=False,
+):
     """Keep provider payload and component watermark in one owner transaction.
 
     Sync reads must not reserve stock or advance preparation. Only an unchanged
@@ -1671,15 +1852,33 @@ async def _persist_sync_component_snapshot(db, user_id, doc, raw, *, authoritati
     """
     from fulfillment_v2_routes import persist_component_source_snapshot
 
-    async def persist(scoped):
-        return await upsert_order(scoped, user_id, doc["order_number"], doc,
-                                  source="salla_direct", raw=raw)
+    async def require_existing(scoped):
+        # This check joins the source/owner transaction, so a deletion after
+        # the cheap preflight cannot turn refresh into an order insertion.
+        if not await scoped.unified_orders.find_one(
+                {"user_id": user_id, "order_number": doc["order_number"]}, {"_id": 1}):
+            raise _ScheduledSnapshotNoWrite({"created": False, "skipped": True,
+                                            "reason": "existing_order_missing"})
 
-    return await persist_component_source_snapshot(
-        db, user_id=user_id, order_number=doc["order_number"], payload=raw,
-        persist=persist, authoritative_refresh=authoritative_refresh,
-        allow_delivery_observation=False,
-    )
+    async def persist(scoped):
+        result = await upsert_order(scoped, user_id, doc["order_number"], doc,
+                                   source="salla_direct", raw=raw,
+                                   **({"existing_only": True} if existing_only else {}))
+        if existing_only and (result.get("unchanged") or result.get("skipped")):
+            # Abort the enclosing transaction before advancing the watermark
+            # or appending another component/financial observation.
+            raise _ScheduledSnapshotNoWrite(result)
+        return result
+
+    try:
+        return await persist_component_source_snapshot(
+            db, user_id=user_id, order_number=doc["order_number"], payload=raw,
+            persist=persist, authoritative_refresh=authoritative_refresh,
+            allow_delivery_observation=False,
+            **({"before_persist": require_existing} if existing_only else {}),
+        )
+    except _ScheduledSnapshotNoWrite as exc:
+        return exc.result
 
 
 async def resync_single_order(db, user_id: str, order_number: str) -> dict:
@@ -2241,4 +2440,12 @@ async def ensure_sync_indexes(db) -> None:
     await db.salla_sync_logs.create_index([("user_id", 1), ("started_at", -1)])
     await db.salla_products.create_index(
         [("user_id", 1), ("product_id", 1)], unique=True
+    )
+    await db.unified_orders.create_index(
+        [("user_id", 1), ("salla_webhook_received_at", 1)],
+        name="salla_daily_owner_webhook_time",
+    )
+    await db.unified_orders.create_index(
+        [("user_id", 1), ("g47_salla_snapshot.source_updated_at", 1)],
+        name="salla_daily_owner_source_time",
     )

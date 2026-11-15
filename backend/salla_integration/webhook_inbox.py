@@ -413,6 +413,10 @@ async def start_worker(db: Any):
             except Exception:
                 log.warning("salla_webhook_inbox.worker_retry_required")
                 result = {}
+            if result.get("retry"):
+                log.warning("salla_webhook_inbox.retry_scheduled count=%d", result["retry"])
+            if result.get("quarantined"):
+                log.error("salla_webhook_inbox.quarantined count=%d", result["quarantined"])
             # Empty polling is a single indexed queue operation, not a scan or
             # provider refresh. Yield between full batches to existing jobs.
             await asyncio.sleep(0.1 if result.get("claimed") == 10 else IDLE_SECONDS)
