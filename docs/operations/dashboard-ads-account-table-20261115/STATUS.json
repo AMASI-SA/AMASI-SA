@@ -1,0 +1,30 @@
+{
+  "task_id": "dashboard-ads-account-table-20261115",
+  "status": "wip",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/dashboard-ads-compact-table-20261115",
+  "source_base": "8f1b0ddb6408781e8677212bcb8cf2d51eab42f7",
+  "scope": "Keep the existing Dashboard ads card width and chart; move account spend, Salla sales, Salla orders and CPA into a compact table. The row-wide hover will contain Riyadh morning/afternoon cards and a daily summary, excluding operating costs.",
+  "completed": [
+    "Compact account table beneath the existing chart; exact USD/SAR amounts share one spend cell.",
+    "Separate Snapchat accounts use proven account attribution with explicit incomplete states.",
+    "Pass the visible executive snapshot and active Salla filters to the card.",
+    "Initial local-only row hover with pointer, keyboard and touch interaction."
+  ],
+  "verification": [
+    {"name": "Existing frontend dashboard card, refresh, service and placement suites", "result": "153 tests passed before the latest hover component edits"},
+    {"name": "Initial display metrics helper", "result": "41 tests passed before the half-day extension"},
+    {"name": "Initial account attribution backend helper", "result": "15 tests passed before the cost and half-day extension"}
+  ],
+  "incomplete": [
+    "Request-local product, shipping and payment fee evidence for account and provider cohorts.",
+    "Riyadh 00:00-12:00 and 12:00-current-time hover cards; blank afternoon before noon.",
+    "Exact hourly spend completeness, daily profit, integrated tests and visual review.",
+    "Focused CI coverage and final independent review."
+  ],
+  "production_changed": false,
+  "release_guard": "No lease created; no publish, provider write, accounting write, or production operation performed.",
+  "pr_state": "Draft checkpoint pending",
+  "continuation_ledger": "Issue #1006 is at its comment cap; preserve this task status and the draft PR as the recoverable handoff.",
+  "next_safe_action": "Complete the request-local cost/half-day data projection and pure display helper, then connect the two cards inside the existing row hover. Keep the table columns unchanged."
+}

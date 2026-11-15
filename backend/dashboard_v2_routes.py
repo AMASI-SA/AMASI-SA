@@ -33,6 +33,7 @@ from dashboard_v2_ad_costs import (
     merge_ad_bank_fees_into_dashboard,
 )
 from dashboard_v2_ads_executive import build_salla_ads_executive_breakdown_cooperative
+from dashboard_ads_account_results import build_dashboard_ads_account_results
 from dashboard_snapchat_spend import load_snapchat_dashboard_spend
 from integrations_control_center.meta_oauth_security import META_PROVIDER_ID
 from integrations_control_center.snapchat_oauth_security import SNAPCHAT_PROVIDER_ID
@@ -1480,6 +1481,11 @@ async def build_mezan_v2_ads(
             )
         }
     provider_metrics["snapchat"].update({
+        "account_ids": [
+            str(account["account_id"])
+            for account in (snapchat.get("accounts") or [])
+            if account.get("account_id")
+        ],
         "data_state": snap_quality.get("data_state") or "unknown_incomplete",
         "coverage_complete": snap_quality.get("coverage_complete") is True,
         "amount_complete": amount_complete,
@@ -1903,6 +1909,11 @@ def make_dashboard_v2_router(
             ads["executive_breakdown"] = await build_salla_ads_executive_breakdown_cooperative(
                 orders,
                 ads,
+            )
+            ads["account_results"] = await build_dashboard_ads_account_results(
+                db, user_id, orders,
+                snapchat_account_ids=(ads.get("providers") or {}).get("snapchat", {}).get("account_ids") or [],
+                date_from=from_date, date_to=to_date,
             )
         recurring_total = _float(recurring.get("total"))
         operating_total = salary_total + recurring_total

@@ -1,4 +1,5 @@
 import DashboardPanel from "./DashboardPanel";
+import DashboardAdsAccountRow from "./DashboardAdsAccountRow";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ArrowsClockwise,
@@ -16,6 +17,7 @@ import {
     YAxis,
 } from "recharts";
 import { addDaysISO, todaySA } from "../lib/dates";
+import { buildDashboardAdsTableMetrics } from "../lib/dashboardAdsAccountResults";
 import {
     DASHBOARD_ADS_PROVIDERS,
     dashboardKnownIncompleteAmount,
@@ -160,7 +162,7 @@ function accountChartPoints(data, singleDay, accounts, from, to, ready) {
     });
     return [...points.values()].sort((a, b) => singleDay ? a.hour_index - b.hour_index : a.date.localeCompare(b.date));
 }
-function SnapchatAccountCard({ account, ready, color }) {
+function SnapchatAccountSpend({ account, ready }) {
     const available = ready && accountAvailable(account);
     const currency = typeof account.currency === "string" && /^[A-Z]{3}$/.test(account.currency) ? account.currency : null;
     const native = available && currency && hasKnownAmount(account.total_native) ? Number(account.total_native) : null;
@@ -169,28 +171,147 @@ function SnapchatAccountCard({ account, ready, color }) {
         ? account.quality.observed_at : null;
     const noActivity = provisional && Array.isArray(account.quality?.reason_codes)
         && account.quality.reason_codes.includes("snapchat_operational_no_activity_observed");
-    return <div className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2"
-        data-testid={"dashboard-snapchat-account-" + account.account_id}>
-        <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-600">
-            <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: color }} />
-            <span>{accountName(account)}</span>
-        </div>
-        <div className="mt-1 text-[11px] font-extrabold text-slate-900">
+    const foreignNative = native !== null && currency !== "SAR";
+    const hint = !available ? "غير مكتمل" : provisional ? "أولي" : "مكتمل";
+    return <div title={hint}>
+        <div className="font-bold text-slate-900">
             {!ready ? "بانتظار بيانات الفترة" : !available ? "بيانات غير مكتملة"
-                : native !== null ? native.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " " + currency
-                : money(account.total_sar)}
+                : <bdi dir="ltr" className="whitespace-nowrap tabular-nums">{foreignNative
+                    ? currency + " " + native.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                    : money(account.total_sar)}</bdi>}
         </div>
-        {available && native !== null && <div className="mt-0.5 text-[10px] font-bold text-slate-600">{money(account.total_sar)} بالريال السعودي</div>}
-        <div className="mt-0.5 text-[9px] font-semibold text-slate-500">{!available ? "غير مكتمل" : provisional ? "أولي" : "مكتمل"}</div>
-        {ready && observed && <time className="mt-1 block text-[9px] text-slate-500" dateTime={observed}>
+        {available && foreignNative && <bdi dir="ltr" className="block whitespace-nowrap text-[9px] font-medium tabular-nums text-slate-500">{money(account.total_sar)}</bdi>}
+        <span className="sr-only">{hint}</span>
+        {ready && observed && <time className="sr-only" dateTime={observed}>
             آخر رصد: {new Date(observed).toLocaleString("ar-SA", { timeZone: "Asia/Riyadh", hour: "2-digit", minute: "2-digit" })}
         </time>}
-        {available && account.quality?.reason_codes?.includes("snapchat_manual_spend_observation_stale") && <p className="mt-1 text-[9px] leading-4 text-amber-700">
+        {available && account.quality?.reason_codes?.includes("snapchat_manual_spend_observation_stale") && <p className="sr-only">
             هذه آخر قراءة محفوظة. اضغط تحديث لجلب صرف سناب الآن.
         </p>}
-        {noActivity && <p className="mt-1 text-[9px] leading-4 text-amber-700" data-testid="dashboard-snapchat-account-no-activity-hint">
+        {noActivity && <p className="sr-only" data-testid="dashboard-snapchat-account-no-activity-hint">
             لم يُرصد نشاط في هذا الحساب حتى آخر فحص. الأرقام أولية وقد تتأخر تقارير سناب.
         </p>}
+    </div>;
+}
+
+function providerStatus(data, provider, singleDay, availableSeries) {
+    const state = data?.providers?.[provider] || {};
+    if (provider === "snapchat" && state.connected) {
+        if (snapchatAmountIncomplete(state) || !hasAmount(data?.provider_totals_sar?.snapchat)) {
+            return hasKnownAmount(state.known_total_sar)
+                ? "بيانات الحسابات غير مكتملة" : "بانتظار اكتمال بيانات سناب";
+        }
+        if (singleDay && !availableSeries.snapchat) return "تفصيل سناب الساعي غير مكتمل";
+    }
+    if (singleDay && provider === "tiktok" && state.hourly_source === "make_daily_total_marker") {
+        return "إجمالي Make عند آخر تحديث";
+    }
+    if (singleDay && state.hourly_available) return "بيانات ساعية أصلية";
+    if (state.daily_available) return singleDay ? "إجمالي اليوم متاح" : "بيانات يومية أصلية";
+    return state.connected ? "بانتظار البيانات" : "غير متصل";
+}
+
+function SallaMetric({ value, known, integer = false }) {
+    const complete = hasKnownAmount(value);
+    const amount = complete ? value : hasKnownAmount(known) ? known : null;
+    if (amount === null) return <span className="text-slate-400">—</span>;
+    return <>
+        <bdi dir="ltr" className="block whitespace-nowrap tabular-nums">{Number(amount).toLocaleString("en-US", {
+            minimumFractionDigits: integer ? 0 : 2,
+            maximumFractionDigits: integer ? 0 : 2,
+        })}</bdi>
+        {!complete && <span className="block text-[8px] font-normal text-amber-700">المتاح</span>}
+    </>;
+}
+
+function SallaMetricCells({ stats = {} }) {
+    return <>
+        <td className="px-1 py-2 text-center"><SallaMetric value={stats.sales} known={stats.knownSales} /></td>
+        <td className="px-1 py-2 text-center"><SallaMetric value={stats.orders} known={stats.knownOrders} integer /></td>
+        <td className="px-1 py-2 text-center"><SallaMetric value={stats.cpa} /></td>
+    </>;
+}
+
+function AdsAccountResultsTable({ data, accounts, accountMode, ready, singleDay, availableSeries,
+    executiveSnapshot, salesFilters, fromDate, toDate, totalLabel }) {
+    const metrics = useMemo(() => buildDashboardAdsTableMetrics({
+        executiveSnapshot, spendSnapshot: data, fromDate, toDate,
+        snapchatAccounts: accountMode ? accounts : null,
+    }), [executiveSnapshot, data, fromDate, toDate, accountMode, accounts]);
+    const tableProviders = ["snapchat", "google", "tiktok", "meta"]
+        .filter((provider) => !accountMode || provider !== "snapchat");
+    const filtered = ["payment_methods", "shipping_companies", "report_statuses"]
+        .some((key) => Array.isArray(salesFilters?.[key])
+            ? salesFilters[key].some((value) => String(value).trim())
+            : Boolean(salesFilters?.[key]));
+    return <div className="mt-3 min-w-0" data-testid="dashboard-ads-account-results">
+        <div className="mb-2 text-[10px] font-extrabold text-slate-700">تفاصيل الحسابات</div>
+        <div className="overflow-hidden rounded-xl border border-slate-200">
+            <table dir="rtl" className="w-full table-fixed border-collapse text-[10px] leading-4 text-slate-800"
+                data-testid="dashboard-ads-account-table">
+                <caption className="sr-only">صرف الحسابات ومبيعات وطلبات سلة للفترة المحددة</caption>
+                <colgroup><col style={{ width: "27%" }} /><col style={{ width: "25%" }} />
+                    <col style={{ width: "18%" }} /><col style={{ width: "12%" }} /><col style={{ width: "18%" }} /></colgroup>
+                <thead className="bg-slate-50 text-[9px] font-bold text-slate-600"><tr>
+                    <th scope="col" className="px-1.5 py-2 text-right">المنصة / الحساب</th>
+                    <th scope="col" className="px-1 py-2 text-center">الصرف</th>
+                    <th scope="col" className="px-1 py-2 text-center">مبيعات سلة<span className="block text-[8px] font-normal">ر.س</span></th>
+                    <th scope="col" className="px-1 py-2 text-center">طلبات سلة</th>
+                    <th scope="col" className="px-1 py-2 text-center">متوسط تكلفة الطلب<span className="block text-[8px] font-normal">ر.س</span></th>
+                </tr></thead>
+                <tbody data-testid="dashboard-ads-provider-totals">
+                    {accountMode && accounts.map((account, index) => {
+                        const label = account.currency === "USD" ? "سناب الدولار" : account.currency === "SAR" ? "سناب السعودي" : "حساب سناب";
+                        const name = typeof account.display_name === "string" ? account.display_name.trim() : "";
+                        return <DashboardAdsAccountRow key={account.account_id} className="border-t border-slate-100"
+                            label={accountName(account)} stats={metrics.accounts.get(account.account_id)} fromDate={fromDate} toDate={toDate}
+                            data-testid={"dashboard-snapchat-account-" + account.account_id}>
+                            <th scope="row" className="px-1.5 py-2 text-right font-bold" title={accountName(account)}>
+                                <div className="flex min-w-0 items-center gap-1"><span className="h-1.5 w-1.5 shrink-0 rounded-full"
+                                    style={{ backgroundColor: ACCOUNT_COLORS[index % ACCOUNT_COLORS.length] }} />
+                                    <span className="truncate">{label}</span></div>
+                                {name && <span className="block truncate text-[8px] font-normal text-slate-500">{name}</span>}
+                            </th>
+                            <td className="px-1 py-2 text-center"><SnapchatAccountSpend account={account} ready={ready} /></td>
+                            <SallaMetricCells stats={metrics.accounts.get(account.account_id)} />
+                        </DashboardAdsAccountRow>;
+                    })}
+                    {tableProviders.map((provider) => {
+                        const meta = PROVIDER_META[provider];
+                        const state = data?.providers?.[provider] || {};
+                        const status = providerStatus(data, provider, singleDay, availableSeries);
+                        const noActivity = provider === "snapchat" && state.amount_available === true
+                            && state.provisional === true && hasAmount(data?.provider_totals_sar?.snapchat)
+                            && state.reason_codes?.includes("snapchat_operational_no_activity_observed");
+                        return <DashboardAdsAccountRow key={provider} className="border-t border-slate-100"
+                            label={meta.label} stats={metrics.providers[provider]} fromDate={fromDate} toDate={toDate}
+                            data-testid={`dashboard-ads-provider-${provider}`}>
+                            <th scope="row" className="px-1.5 py-2 text-right font-bold" title={status}>
+                                <div className="flex min-w-0 items-center gap-1"><span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: meta.stroke }} />
+                                    <span className="truncate">{provider === "google" ? "جوجل" : meta.label}</span></div>
+                                <span className="sr-only">{status}</span>
+                                {noActivity && <span className="sr-only" data-testid="dashboard-snapchat-no-activity-hint">لم يُرصد نشاط في أحد الحسابات حتى آخر فحص. الأرقام أولية وقد تتأخر تقارير سناب.</span>}
+                            </th>
+                            <td className="px-1 py-2 text-center font-bold" title={status}>
+                                <bdi dir="ltr">{providerValue(data, provider, Boolean(fromDate) && ready)}</bdi>
+                            </td>
+                            <SallaMetricCells stats={metrics.providers[provider]} />
+                        </DashboardAdsAccountRow>;
+                    })}
+                </tbody>
+                <tfoot className="border-t border-yellow-200 bg-yellow-50 font-bold"><tr data-testid="dashboard-ads-account-total">
+                    <th scope="row" className="px-1.5 py-2 text-right">الإجمالي</th>
+                    <td className="px-1 py-2 text-center"><bdi dir="ltr">{totalLabel}</bdi></td>
+                    <SallaMetricCells stats={metrics.total} />
+                </tr></tfoot>
+            </table>
+        </div>
+        <p className="mt-2 text-[9px] leading-4 text-slate-500">متوسط تكلفة الطلب = الصرف بالريال ÷ طلبات سلة.</p>
+        {filtered && <p className="text-[9px] leading-4 text-slate-500">طلبات ومبيعات سلة حسب الفلاتر؛ الصرف إجمالي الفترة.</p>}
+        {metrics.unassignedOrders > 0 && <p className="text-[9px] leading-4 text-amber-700" data-testid="dashboard-ads-unassigned-orders">
+            {metrics.unassignedOrders.toLocaleString("en-US")} طلبات سناب بلا حساب مؤكد؛ المعروض هو المتاح، ومتوسط التكلفة ينتظر اكتمال الإسناد.
+        </p>}
+        {metrics.pending && <p className="text-[9px] leading-4 text-slate-500" data-testid="dashboard-ads-results-pending">بانتظار بيانات سلة المطابقة للفترة.</p>}
     </div>;
 }
 
@@ -204,6 +325,8 @@ export function DashboardAdsSpendCardContent({
     onRefresh,
     refreshStatus = "",
     collapsible = false,
+    executiveSnapshot,
+    salesFilters,
 }) {
     const singleDay = isSingleDay(fromDate, toDate);
     const snapchatState = data?.providers?.snapchat || {};
@@ -301,69 +424,6 @@ export function DashboardAdsSpendCardContent({
                     </div>
                 </div>
 
-                <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4" data-testid="dashboard-ads-provider-totals">
-                    {accountMode && accounts.map((account, index) => <SnapchatAccountCard key={account.account_id}
-                        account={account} ready={accountRangeReady} color={ACCOUNT_COLORS[index % ACCOUNT_COLORS.length]} />)}
-                    {visibleProviders.map((provider) => {
-                        const meta = PROVIDER_META[provider];
-                        const state = data?.providers?.[provider] || {};
-                        const operationalNoActivityObserved = provider === "snapchat"
-                            && state.amount_available === true && state.provisional === true
-                            && hasAmount(data?.provider_totals_sar?.snapchat)
-                            && Array.isArray(state.reason_codes)
-                            && state.reason_codes.includes("snapchat_operational_no_activity_observed");
-                        return (
-                            <div
-                                key={provider}
-                                className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2"
-                                data-testid={`dashboard-ads-provider-${provider}`}
-                            >
-                                <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-600">
-                                    <span
-                                        className="h-2 w-2 rounded-full"
-                                        style={{ backgroundColor: meta.stroke }}
-                                    />
-                                    <span>{meta.label}</span>
-                                </div>
-                                <div className="mt-1 text-[11px] font-extrabold text-slate-900">
-                                    {providerValue(data, provider, Boolean(fromDate) && accountRangeReady)}
-                                </div>
-                                <div className="mt-0.5 text-[9px] font-semibold text-slate-400">
-                                    {provider === "snapchat" && state.connected && (
-                                        snapchatAmountIncomplete(state)
-                                        || !hasAmount(data?.provider_totals_sar?.snapchat)
-                                    )
-                                        ? hasKnownAmount(state.known_total_sar)
-                                            ? "بيانات الحسابات غير مكتملة"
-                                            : "بانتظار اكتمال بيانات سناب"
-                                        : provider === "snapchat" && state.connected && singleDay && !availableSeries.snapchat
-                                            ? "تفصيل سناب الساعي غير مكتمل"
-                                        : singleDay
-                                        ? provider === "tiktok"
-                                            && state.hourly_source === "make_daily_total_marker"
-                                            ? "إجمالي Make عند آخر تحديث"
-                                            : state.hourly_available
-                                            ? "بيانات ساعية أصلية"
-                                            : state.daily_available
-                                                ? "إجمالي اليوم متاح"
-                                                : state.connected
-                                                    ? "بانتظار البيانات"
-                                                    : "غير متصل"
-                                        : state.daily_available
-                                            ? "بيانات يومية أصلية"
-                                            : state.connected
-                                                ? "بانتظار البيانات"
-                                                : "غير متصل"}
-                                </div>
-                                {operationalNoActivityObserved && <p
-                                    className="mt-1 text-[9px] font-semibold leading-4 text-amber-700"
-                                    data-testid="dashboard-snapchat-no-activity-hint"
-                                >لم يُرصد نشاط في أحد الحسابات حتى آخر فحص. الأرقام أولية وقد تتأخر تقارير سناب.</p>}
-                            </div>
-                        );
-                    })}
-                </div>
-
                 {accountMode && accounts.length === 0 && <p className="mb-2 text-[10px] text-slate-500" data-testid="dashboard-snapchat-accounts-empty">لا توجد حسابات سناب مفعّلة لهذه الفترة</p>}
                 {accountMode && <p className="mb-2 text-[10px] font-semibold text-slate-500">جميع قيم الرسم بالريال السعودي، ولكل حساب سناب منحنى مستقل.</p>}
                 {singleDay && (
@@ -453,13 +513,17 @@ export function DashboardAdsSpendCardContent({
                         لا توجد صرفيات إعلانية أصلية ضمن التاريخ المحدد حتى الآن.
                     </div>
                 )}
+                <AdsAccountResultsTable data={data} accounts={accounts} accountMode={accountMode}
+                    ready={accountRangeReady} singleDay={singleDay} availableSeries={availableSeries}
+                    executiveSnapshot={executiveSnapshot} salesFilters={salesFilters}
+                    fromDate={fromDate} toDate={toDate} totalLabel={totalLabel} />
             </div>
         </DashboardPanel>
     );
 }
 
 export default function DashboardAdsSpendCard({ fromDate, toDate, collapsible = false,
-    snapshot, onSnapshot, beginSnapshotRead }) {
+    snapshot, onSnapshot, beginSnapshotRead, executiveSnapshot, salesFilters }) {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -583,6 +647,8 @@ export default function DashboardAdsSpendCard({ fromDate, toDate, collapsible = 
             error={error}
             onRefresh={refreshManually}
             refreshStatus={refreshStatus}
+            executiveSnapshot={executiveSnapshot}
+            salesFilters={salesFilters}
         />
     );
 }
