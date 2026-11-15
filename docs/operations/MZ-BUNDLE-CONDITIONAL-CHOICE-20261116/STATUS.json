@@ -1,0 +1,70 @@
+{
+  "task_id": "MZ-BUNDLE-CONDITIONAL-CHOICE-20261116",
+  "scope": "Read-only diagnosis of conditional custom-text causing an incomplete current bundle cost.",
+  "state": "diagnosis_complete_fix_not_implemented",
+  "repository": "AMASI-SA/AMASI-SA",
+  "task_branch": "codex/bundle-conditional-phrase-diagnosis-20261116",
+  "verified_milestone_commit": "f6a37d0232fce53dfd17389e9dd47525072a55d4",
+  "inspected_branch_head": "236a428364bc8163a684795ed1be87e237476f18",
+  "observed_live_source": "1bd44b6f186de8b40877fde686b5d2d7aab52805",
+  "changed_files": [
+    "docs/operations/MZ-BUNDLE-CONDITIONAL-CHOICE-20261116/DIAGNOSIS.md",
+    "docs/operations/MZ-BUNDLE-CONDITIONAL-CHOICE-20261116/STATUS.json"
+  ],
+  "application_code_changed": false,
+  "completed_behavior": "Confirmed that required root-option validation uses normalized rows lacking saved conditional visibility and creates an unresolved service cell before service-binding evaluation.",
+  "verification": [
+    {
+      "command": "git status --short",
+      "exit_status": 0,
+      "result": "Clean inspection checkout."
+    },
+    {
+      "command": "git log -1 --format='%H %s'",
+      "exit_status": 0,
+      "result": "Inspected head matches recorded branch head."
+    },
+    {
+      "command": "git diff --stat 1bd44b6f186de8b40877fde686b5d2d7aab52805 HEAD",
+      "exit_status": 0,
+      "result": "Only release/release-intent-v5.json differs; inspected runtime source matches live source."
+    },
+    {
+      "command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=backend python - (synthetic in-memory catalog_options/_option_visibility assertions)",
+      "exit_status": 0,
+      "result": {
+        "normalized_visibility_present": false,
+        "merged_visibility": "on_condition",
+        "declined_parent_visibility": false,
+        "missing_parent_visibility": null,
+        "input_unchanged": true
+      }
+    },
+    {
+      "method": "Bounded saved-data reads and independent source review",
+      "result": "Explicit declining customer answer, absent conditional text, preserved raw catalog visibility, and the generated report warning agree with the source trace. No provider refresh was requested."
+    }
+  ],
+  "verification_limits": [
+    "No full estimator/integration-suite pass claimed; independent review could not import full module because pymongo was unavailable. No dependencies installed."
+  ],
+  "pr": "not_created",
+  "ci": "not_started_documentation_checkpoint",
+  "review": "independent_read_only_diagnosis_completed",
+  "merge": "not_performed",
+  "release_guard": "not_acquired_or_modified",
+  "deployment": "not_performed_for_this_case",
+  "production_changed": "no",
+  "incomplete_work": [
+    "Narrowly scoped required-option visibility implementation and regression coverage are not started."
+  ],
+  "risks": [
+    "Never classify absent or conflicting parent evidence as not-required merely to hide the warning."
+  ],
+  "unrelated_work_preserved": [
+    "Prior completed missing-options ingestion repair and release.",
+    "Existing shared workspace and unrelated production operations."
+  ],
+  "ledger": "Issue #1006 was previously at its comment limit; dedicated task status serves as recoverable handoff without retrying that append.",
+  "next_safe_action": "Explain the confirmed diagnosis and correct expected result. For a subsequent implementation continuation, read AGENTS.md and this status, verify this remote milestone and current production head, then use merged conditional-visibility proof for root required-option validation with targeted regression coverage. Follow the existing release protocol before any claim of merge or publication."
+}
