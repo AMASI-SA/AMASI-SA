@@ -2,17 +2,20 @@
 
 ## Current integrated checkpoint (2026-11-15)
 
-Parent checkpoint: `5f0143f9efcd13357f6304296f95a4609d0316db`, tree
-`094d22f53da3c59427dd0e260a6237c51997e292`. The exact new remote SHA is recorded
+Parent checkpoint: `5e518936ad627cf3211ee748df4d47243b53fc83`, tree
+`6c5c8383a9f5d0746876194abe7ea208c7a5855a`. The exact new remote SHA is recorded
 in Draft PR https://github.com/AMASI-SA/AMASI-SA/pull/1938 after preserving this
 tree. Production base is still `331b7917b3c01d064ee2a17affb4714f3a296331`.
 
 The connected owner-only operational page, immutable intake, explicit matching,
 fee projection, employee-evidence upgrade and native-refund alias lifecycle are
-implemented. This checkpoint remains a Draft while one review finding is fixed:
-an already accepted refund's later native alias must remain linkable after a
-partial payout, even when its fee allocation requires review. The alias action
-must remain metadata-only; do not weaken fee validation or change principal.
+implemented. The independent review finding about a native refund alias after a
+partial payout is fixed. A failing HTTP regression established the blocked
+action before the fix; the canonical accepted refund proof is now checked before
+fee eligibility. Linking changes only its metadata, while the overlapping fee
+allocation remains under review. An independent source review approved this
+bounded correction, with no remaining finding in its reviewed scope. This is
+still a Draft pending the exact-head CI result and visual acceptance limitation.
 
 Latest averaging contract is implemented: source variable commission before VAT
 divided by the same sale principal, excluding fixed and payout charges. Preserve
@@ -33,10 +36,10 @@ refund references produce an order-specific hold while other orders can refresh.
 
 Fresh verification on the integrated source, actual exit 0:
 
-- Root combined backend gate: **279 passed in 21.60s**, covering intake,
+- Root combined backend gate: **280 passed in 25.91s**, covering intake,
   reconciliation/API, fees, configured tariffs, subtotals, financial-position
   mapping and the affected existing pure refund/payment contracts.
-- Service/API subset: **34 passed in 13.69s**, synthetic XLSX and
+- Service/API subset: **35 passed in 15.86s**, synthetic XLSX and
   `mongomock_motor`, including CAS/replay, source mutation, owner isolation,
   refund lifecycle, employee selection, metadata-only history and compact state.
 - Fee/presentation subset: **137 passed in 4.41s**.
@@ -89,11 +92,10 @@ blocked. Browser use was ended and the fixture server stopped. Do not retry via
 alternate surfaces, expose a new endpoint, or bypass permissions for this gate.
 The fixture build and component tests are not a substitute for visual acceptance.
 
-Next safe action: reproduce and narrowly fix the partial-payout/native-alias
-finding, independently review it, rerun the affected backend gate, preserve the
-new tree and inspect CI. Retain the explicit visual limitation. No merge, release
-intent, lease, production source refresh or deployment is authorized by this
-checkpoint. Production changed: **no**.
+Next safe action: preserve the final tree, inspect CI on that exact remote head
+and record the outcome in the Draft PR. Retain the explicit visual limitation.
+No merge, release intent, lease, production source refresh or deployment is
+authorized by this checkpoint. Production changed: **no**.
 
 The sections below preserve earlier milestones and are historical where they
 describe in-progress work or superseded inclusive-average behavior.

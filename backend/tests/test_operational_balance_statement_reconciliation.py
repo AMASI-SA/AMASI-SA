@@ -352,6 +352,55 @@ async def test_native_alias_link_keeps_native_timestamp_and_removes_only_order_h
 
 
 @pytest.mark.asyncio
+async def test_native_alias_after_partial_payout_links_metadata_but_keeps_fee_conflict_and_money():
+    from operational_provider_statement_fees import statement_event_issue
+    db, client = await client_for(with_policy(saved_state()))
+    async with client:
+        view = (await upload(client, refund_content(amount=20))).json()
+        url = BASE + '/' + view['statement']['id']
+        assert (await client.post(url + '/confirm', json=decision(view))).status_code == 200
+        before = await read(db, 'owner')
+        before['movements'].append({'id': 'partial-payout', 'kind': 'settlement', 'party_type': 'provider',
+            'party_id': 'tabby', 'currency': 'SAR', 'amount': '47.00', 'actual_fee_amount': '3.00',
+            'direction': 'incoming', 'bank_id': 'bank-one', 'bank_kind': 'bank',
+            'allocations': [{'obligation_id': 'provider:order-one', 'amount': '50.00'}]})
+        before['engine']['issues'] = [{'code': 'provider_statement_refund_alias_review',
+            'source_id': 'provider:order-one', 'order_id': 'order-one', 'provider': 'tabby'}]
+        before['revision'] += 1
+        await db[STATES].replace_one({'_id': 'owner'}, before)
+        event = next(iter(before[RECONCILIATION]['events'].values()))
+        assert statement_event_issue(before, event) == 'provider_statement_fee_settlement_conflict'
+        native = {'id': 'native-after-payout', 'amount': '20.00', 'currency': 'SAR',
+            'status': 'executed', 'refunded_at': '2026-11-03T12:00:00+00:00'}
+        await db.unified_orders.update_one({'user_id': 'owner'}, {'$set': {
+            'raw_by_source.salla_direct.payment_actions.refund_action.refunded_transactions': [native]}})
+        response = await client.get(url + '/review')
+        assert response.status_code == 200, response.text
+        fresh = response.json()
+        row = fresh['rows'][0]
+        assert row['allowed_actions'] == ['link_native_refund'], row
+        assert row.get('fee_evidence_applied') is not True
+        request = decision(fresh, request='link-native-after-payout')
+        result = await client.post(url + '/confirm', json=request)
+        assert result.status_code == 200, result.text
+        after = await read(db, 'owner')
+        for field in ('facts', 'obligations', 'provider_fee_inputs'):
+            assert after['engine'][field] == before['engine'][field]
+        for field in ('movements', 'openings'):
+            assert after[field] == before[field]
+        assert after[RECONCILIATION]['events'] == before[RECONCILIATION]['events']
+        assert statement_event_issue(after, event) == 'provider_statement_fee_settlement_conflict'
+        provider = next(item for item in report(after)['details']['provider_balances']['SAR'] if item['provider'] == 'tabby')
+        assert provider['fees_complete'] is False and provider['fee_status'] == 'review'
+        assert provider['actual_settlement_fees'] == '3.00'
+        assert report(after)['summary']['actual_liquidity'] == report(before)['summary']['actual_liquidity'] == '47.00'
+        assert not any(issue['code'] == 'provider_statement_refund_alias_review' for issue in after['engine']['issues'])
+        assert next(iter(after[RECONCILIATION]['refund_records'].values()))['native_aliases'][native['id']]['refunded_at'] == native['refunded_at']
+        assert (await client.post(url + '/confirm', json=request)).json()['replayed'] is True
+        assert await read(db, 'owner') == after
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('native', [
     {'payment_actions.refund_action.refunded_transactions': [{'id': 'native-refund', 'amount': 25}]},
     {'payment_actions.refund_action.refund_amount': 25},

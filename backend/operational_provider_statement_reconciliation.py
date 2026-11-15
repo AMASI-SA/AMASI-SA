@@ -478,6 +478,7 @@ def fact_backed_employee_refund(state, case):
 
 def _valid_refund_record(state, record):
     event = state.get(RECONCILIATION, {}).get('events', {}).get(record.get('event_key'))
+    fact = state.get('engine', {}).get('facts', {}).get(record.get('fact_key'))
     return (record.get('source') == 'provider_statement' and record.get('owner_id') == state.get('owner_id')
         and record.get('approved_by') == state.get('owner_id')
         and record.get('id') == digest([state.get('owner_id'), record.get('fact_key')])
@@ -485,8 +486,10 @@ def _valid_refund_record(state, record):
         and event.get('provider') == record.get('provider') and event.get('principal_amount') == record.get('amount')
         and event.get('source', {}).get('file_hash') == record.get('file_hash')
         and event.get('source', {}).get('row_fingerprint') == record.get('row_fingerprint')
-        and state.get('engine', {}).get('facts', {}).get(record.get('fact_key')) == {
-            'order_id': record.get('order_id'), 'amount': record.get('amount')})
+        and event.get('native_currency') == record.get('currency')
+        and fact == {'order_id': record.get('order_id'), 'amount': record.get('amount')}
+        and event.get('covered_event') == {'kind': 'fact', 'id': record.get('fact_key'),
+            'fingerprint': digest(fact), 'amount': record.get('amount'), 'financial_effect': 'fee_only'})
 
 
 def statement_refund_cases(state):
@@ -876,6 +879,34 @@ def _review(state, document, actor, external=None):
         exact = [item for item in equal if (not reference or item.get('reference') == reference)
                  and (not source.get('event_date') or not item.get('event_date') or source['event_date'] == item['event_date'])]
         auto = len(exact) == 1 and len(equal) == 1
+        # Linking an already-approved refund identity is independent of current
+        # fee allocation. A later partial payout may correctly withhold its fee
+        # credit, while this canonical principal proof still permits metadata
+        # linkage with no new fee or principal acceptance.
+        canonical_refunds = []
+        for item in equal:
+            event = _event(state, document, source, item, oid, 'owner_approved')
+            old = accepted.get(event['event_key'])
+            record = refund_records.get(event['event_key'])
+            if old and record and _event_terms(old) == _event_terms(event) and _valid_refund_record(state, record):
+                canonical_refunds.append((item['id'], old, record))
+        if len(canonical_refunds) == 1:
+            existing_id, old, record = canonical_refunds[0]
+            alias, needs_review = _native_alias_plan(state, record, external)
+            if needs_review:
+                row.update(status='different', can_confirm=alias is not None,
+                    allowed_actions=['link_native_refund'] if alias is not None else [],
+                    fee_evidence_applied=statement_event_issue(state, old, context=fee_context) is None)
+                _action(row, 'statement_native_alias_ready' if alias else 'statement_native_alias_review')
+                if alias:
+                    native = alias['event']
+                    row['existing'] = [item for item in row['existing'] if item['id'] == existing_id]
+                    row['native_alias'] = {'id': native['reference'], 'reference': native['reference'],
+                        'amount': native['amount'], 'native_currency': native['native_currency'],
+                        'event_date': _day(native['refunded_at']), 'source': alias['source']}
+                    proposals[row['id']] = {existing_id: {**old, '_native_alias_patch': alias,
+                        '_action': 'link_native_refund'}}
+                continue
         eligible = {}
         for item in equal:
             event = _event(state, document, source, item, oid, 'exact_match' if auto and item == exact[0] else 'owner_approved')
@@ -901,21 +932,6 @@ def _review(state, document, actor, external=None):
                     and old.get('source', {}).get('file_hash') == data['file_hash'] else 'already_confirmed',
                     can_confirm=False, allowed_actions=[], fee_evidence_applied=True)
                 _action(row, 'statement_confirmed')
-                record = refund_records.get(old['event_key'])
-                if record and _valid_refund_record(state, record):
-                    alias, needs_review = _native_alias_plan(state, record, external)
-                    if needs_review:
-                        row.update(status='different', can_confirm=alias is not None,
-                            allowed_actions=['link_native_refund'] if alias is not None else [])
-                        _action(row, 'statement_native_alias_ready' if alias else 'statement_native_alias_review')
-                        if alias:
-                            native = alias['event']
-                            row['existing'] = [item for item in row['existing'] if item['id'] == good[0][0]]
-                            row['native_alias'] = {'id': native['reference'], 'reference': native['reference'],
-                                'amount': native['amount'], 'native_currency': native['native_currency'],
-                                'event_date': _day(native['refunded_at']), 'source': alias['source']}
-                            proposals[row['id']] = {good[0][0]: {**old, '_native_alias_patch': alias,
-                                '_action': 'link_native_refund'}}
             else:
                 row.update(status='different', can_confirm=False, allowed_actions=[])
                 _action(row, 'statement_event_conflict')
