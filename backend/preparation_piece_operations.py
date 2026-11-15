@@ -3163,8 +3163,21 @@ async def _assembly_search(
         evidence is not None and evidence.ready_in_progress is True
         and (current_order is None or _assembly_in_progress(current_order))
     ) if plan else _assembly_in_progress(current_order)
-    from assembly_status_policy import source_status
-    canonical = await source_status(db, user_id, order_number)
+    source = await db["unified_orders"].find_one({
+        "user_id": user_id, "order_number": order_number,
+    }) or {}
+    canonical = canonical_status(source)
+    snapshot = source.get("g47_salla_snapshot") or {}
+    # Explain a source hold only when the remaining canonical status evidence
+    # is independently in progress. This projection is display-only; Ready
+    # still uses canonical_status(source), including both source fences.
+    source_reconciliation_pending = bool(
+        status_allowed
+        and (snapshot.get("component_pending") or snapshot.get("requires_authoritative_refresh"))
+        and canonical_status({**source, "g47_salla_snapshot": {
+            **snapshot, "component_pending": False, "requires_authoritative_refresh": False,
+        }}) == "in_progress"
+    )
     status_allowed = status_allowed and canonical == "in_progress"
     preparation_shortcut_enabled = await is_optional(db, user_id, FIELD_PREPARATION)
     # A reviewed physical piece is exceptional: it may start only if the
@@ -3215,6 +3228,7 @@ async def _assembly_search(
             current_order, workflow, approved_workflow=proven.get(order_number),
             virtual=virtual, received_physical=received_physical,
         )
+        source_hold_for_row = row_eligible and source_reconciliation_pending
         row_eligible = (
             row_eligible and status_allowed
             and not (received_physical and reviewed_physical_component_blocker)
@@ -3222,8 +3236,9 @@ async def _assembly_search(
         # Optional receipt removes only the employee custody prerequisite. It
         # does not manufacture a receipt or bypass supplier/service/hold checks.
         row["preparation_receipt_optional"] = preparation_shortcut_enabled
-        optional_ready = (preparation_shortcut_enabled and row_eligible and not virtual
-                          and assembly_direct_preparation_receipt_eligible(piece))
+        optional_piece_ready = (preparation_shortcut_enabled and not virtual
+                                and assembly_direct_preparation_receipt_eligible(piece))
+        optional_ready = row_eligible and optional_piece_ready
         row["can_receive_from_preparation"] = False
         row["preparation_employee_name_for_receipt"] = None
         if optional_ready:
@@ -3231,11 +3246,26 @@ async def _assembly_search(
             row["assembly_blocker_code"] = None
         if not row_eligible:
             row["can_mark_ready"] = False
+            source_hold_blocker = None
+            if source_hold_for_row:
+                # Keep outstanding supplier/employee custody or a stopped piece
+                # visible. Optional employee receipt alone is not an obstacle.
+                source_hold_blocker = row["assembly_blocker_code"]
+                if (not source_hold_blocker or optional_piece_ready
+                        or source_hold_blocker == "assembly_piece_already_ready"):
+                    source_hold_blocker = "assembly_source_reconciliation_pending"
             row["assembly_blocker_code"] = (
                 component_blocker
                 or (reviewed_physical_component_blocker if received_physical else None)
+                or source_hold_blocker
                 or "assembly_order_not_ready"
             )
+            if row["assembly_blocker_code"] == "assembly_source_reconciliation_pending":
+                row["assembly_blocker_message"] = (
+                    "بانتظار تحديث بيانات الطلب من سلة ومطابقتها مع النسخة المعتمدة"
+                    if snapshot.get("requires_authoritative_refresh")
+                    else "بانتظار مطابقة بيانات الطلب مع النسخة المعتمدة"
+                )
         elif (local_contract or workflow.get("source_additions_reviewed") is True) and row["assembly_ready"] and workflow.get("stage") in {"in_progress", "ready_to_ship"}:
             # An address correction may need a readiness retry after all pieces
             # were already assembled. The write path verifies consumed units.

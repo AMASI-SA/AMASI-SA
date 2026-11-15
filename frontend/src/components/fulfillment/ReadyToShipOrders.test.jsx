@@ -152,7 +152,10 @@ test("an unreceived supplier product remains visible with custody trace and a fr
     expect(markup).not.toContain('data-testid="mark-assembly-piece-ready"');
 });
 
-test("pressing frozen ready reports the unfinished product without submitting readiness", () => {
+test.each([
+    ["assembly_piece_supplier_receipt_required", "استلم المنتج من المورد أولًا، ثم من موظف التجهيز"],
+    ["assembly_source_reconciliation_pending", "بانتظار مطابقة بيانات الطلب مع النسخة المعتمدة"],
+])("pressing frozen ready for %s explains the blocker without submitting readiness", (code, reason) => {
     const previousActEnvironment = globalThis.IS_REACT_ACT_ENVIRONMENT;
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
     const container = document.createElement("div");
@@ -163,15 +166,29 @@ test("pressing frozen ready reports the unfinished product without submitting re
         piece_id: "pending-1",
         product_name: "لوحة جدارية",
         can_mark_ready: false,
-        assembly_blocker_code: "assembly_piece_supplier_receipt_required",
+        assembly_blocker_code: code,
     };
-    act(() => root.render(<AssemblyProductCard piece={piece} busy={false} onReady={onReady} onBlocked={onBlocked} />));
-    act(() => container.querySelector('[data-testid="mark-assembly-piece-ready-frozen"]').click());
-    expect(container.querySelector('[role="alert"]').textContent).toContain("المنتج لم يجهز بعد");
-    expect(onBlocked).toHaveBeenCalledWith(piece);
-    expect(onReady).not.toHaveBeenCalled();
-    act(() => root.unmount());
-    globalThis.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment;
+    try {
+        act(() => root.render(<AssemblyProductCard piece={piece} busy={false} onReady={onReady} onBlocked={onBlocked} />));
+        expect(container.textContent).toContain(reason);
+        const frozen = container.querySelector('[data-testid="mark-assembly-piece-ready-frozen"]');
+        expect(frozen.getAttribute("aria-disabled")).toBe("true");
+        expect(container.querySelector('[data-testid="mark-assembly-piece-ready"]')).toBeNull();
+        act(() => frozen.click());
+        const alertText = container.querySelector('[role="alert"]').textContent;
+        expect(alertText).toContain(reason);
+        if (code === "assembly_source_reconciliation_pending") {
+            expect(alertText).not.toContain("المنتج لم يجهز بعد");
+            expect(alertText.trim()).toBe(`${reason}.`);
+        } else {
+            expect(alertText).toContain("المنتج لم يجهز بعد");
+        }
+        expect(onBlocked).toHaveBeenCalledWith(piece);
+        expect(onReady).not.toHaveBeenCalled();
+    } finally {
+        act(() => root.unmount());
+        globalThis.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment;
+    }
 });
 
 test("non-executable order keeps its product and frozen ready button without submitting", () => {
@@ -354,7 +371,7 @@ describe("assembly opens current labels without issuing or confirming", () => {
 describe("assembly and current Salla completion are both required", () => {
     let container, root, popup;
     const { listReadyToShipOrders } = require("../../services/fulfillmentV2");
-    const { searchAssemblyOrder } = require("../../services/preparationWorkService");
+    const { searchAssemblyOrder, markAssemblyPieceReady } = require("../../services/preparationWorkService");
     beforeEach(() => {
         jest.clearAllMocks();
         globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -374,6 +391,19 @@ describe("assembly and current Salla completion are both required", () => {
         await act(async () => root.render(<ReadyToShipOrders />));
         await act(async () => container.querySelector("article button").click());
     }
+
+    test("source reconciliation explains both frozen-ready alerts without claiming unfinished preparation", async () => {
+        await search({ pieces: [{ piece_id: "source-pending", can_mark_ready: false, assembly_ready: false,
+            assembly_blocker_code: "assembly_source_reconciliation_pending" }] });
+        await act(async () => container.querySelector('[data-testid="mark-assembly-piece-ready-frozen"]').click());
+        const alerts = [...container.querySelectorAll('[role="alert"]')];
+        expect(alerts).toHaveLength(2);
+        for (const alert of alerts) {
+            expect(alert.textContent.trim()).toBe("بانتظار مطابقة بيانات الطلب مع النسخة المعتمدة.");
+        }
+        expect(markAssemblyPieceReady).not.toHaveBeenCalled();
+        expect(container.querySelector('[data-testid="mark-assembly-piece-ready"]')).toBeNull();
+    });
 
     test("Salla navigation remains visible when shipment and readiness are locked", async () => {
         const url = "https://s.salla.sa/orders/order/AbCd1234xyZ";
