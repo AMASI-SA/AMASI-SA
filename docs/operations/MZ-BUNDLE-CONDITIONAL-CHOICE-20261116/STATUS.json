@@ -237,5 +237,16 @@
     "lease_observed_active": false,
     "provider_release": "Merged and fully preserved in integrated source; its original rehearsal is blocked by two pre-existing ignored Python bytecode files, with no prepared lease or publication at the recorded checkpoint.",
     "plan": "Consolidate already-reviewed provider source and bundle repair in one current release. Serialize the merge/host handoff under the official operation mutex, stop on any active lease or unexpected head, and preserve bytecode via bounded reversible quarantine if the observed exact inventory still matches. Do not clear or reuse any other owner's lease."
+  },
+  "operator": {
+    "path": "docs/operations/MZ-BUNDLE-CONDITIONAL-CHOICE-20261116/release_operator.py",
+    "sha256": "8b19bd6d2f193466ce26a5761cd75f6b0703fcb304a6796883bc926a699a8938",
+    "bytes": 8166,
+    "state": "AST parsed and independent exact-file review passed; not executed",
+    "behavior": "Existing official mutex fences ready-for-merge through ff-only materialization and unchanged official prepare checks. Precisely inventoried ignored bytecode is preserved via atomic reversible move; no publish or lease removal.",
+    "runner_requirements": [
+      "Redirect operator stdout to receipt_path+'.log', outside initially empty receipt directory.",
+      "Write merged-head.json by atomic temporary sibling replacement."
+    ]
   }
 }
