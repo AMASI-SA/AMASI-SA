@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/salla-webhook-release-evidence-20261115",
   "base_commit": "9afb38cf0dc0d8e8cd887f2c2cdb4a6be5a7ca68",
-  "status": "Merged release and all three production push gates accepted; original-workspace execution authorized and ready",
+  "status": "Original workspace fast-forwarded to accepted M; adapter refused two generated backend bytecode cache files before governed build; preserved-cache resume under review",
   "requested_behavior": [
     "Repair the blocking verified webhook path and duplicate processing identified by platform support",
     "One scheduled refresh at 10:00 Asia/Riyadh over a fixed preceding 24-hour window",
@@ -77,14 +77,14 @@
     "prepared": false,
     "published": false,
     "current_guard_active": false,
-    "shared_head": "9afb38cf0dc0d8e8cd887f2c2cdb4a6be5a7ca68",
+    "shared_head": "331b7917b3c01d064ee2a17affb4714f3a296331",
     "shared_tracked_worktree_clean": true,
     "prior_lease_closed_by_owner": "PR1932 officially aborted 2026-11-15T01:14:02.965298+00:00; PR1933 then published and verified",
     "live_source_observed": "fc5ff89f5794061bf62a7de283eedc9ecd4ec7c9",
     "live_release_observed": "rg5-92ce2e87026743df6ed7cd3083940f596b3a562e1c608cc985df3dc7c15cabe3",
     "live_identity_verified": true,
     "live_frontend_verified": true,
-    "blocker": null,
+    "blocker": "Generated backend/__pycache__ contains two entries; original adapter package-minting validator correctly refuses it",
     "recheck_requirement": "Fresh shared guard and production ref required again immediately before workspace mutation and publication",
     "source_commit": "8c11053b602f8f56a1facbaee09779f2896b0ada",
     "source_tree": "28e38776f821b01f6909e8ef21f5b6c7001f49da",
@@ -143,7 +143,7 @@
   },
   "continuation": {
     "ledger": "Issue #1006 has reached 2500 comments; use this status document and the task PR as the durable fallback",
-    "next": "Require exact-merge Readiness/Security/CodeQL push gates; recheck actual shared guard/current base; run pinned original_release_1935.py with accepted package proof outside /app; require successful preservation/build/package comparison before prepare/prepublish/one authorized publication and three official probes.",
+    "next": "Inspect exact generated-cache metadata, review/checkpoint the preserving resume operator, require original receipt and untracked preservation checks under official operation lock, atomically quarantine only verified ignored cache directory outside /app, and rerun unchanged full adapter once from M. Use python -B / PYTHONDONTWRITEBYTECODE=1 for all Python operator invocations. No prepare or publish until original package proof matches accepted B.",
     "caveats": [
       "Queue recovery is at least once after process death between business write and queue settlement; existing source and outbox idempotency remain authoritative",
       "Do not invent updated_at_gt support: official Salla List Orders documentation and existing repository contract do not establish it",
@@ -179,7 +179,7 @@
   },
   "release_branch": "codex/salla-webhook-recovery-release-20261115",
   "evidence_only": true,
-  "checkpoint_at": "2026-11-15T13:31:00Z",
+  "checkpoint_at": "2026-11-15T13:38:00Z",
   "production_source_branch_changed": true,
   "production_runtime_changed": false,
   "operator": {
@@ -190,6 +190,9 @@
     "merge": "331b7917b3c01d064ee2a17affb4714f3a296331",
     "evidence_directory": "/tmp/salla-webhook-release-1935/original",
     "review": "PASS: independent exact six-constant comparison and normalized AST equality",
-    "executed": false
+    "executed": true,
+    "pid": 14501,
+    "result": "failed before governed toolchain install/build",
+    "failure": "Backend runtime source contains prepackaged bytecode: __pycache__"
   }
 }
