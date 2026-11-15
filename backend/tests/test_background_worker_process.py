@@ -96,6 +96,10 @@ async def test_web_ads_startup_cannot_launch_provider_work(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_canonical_runtime_boots_against_empty_isolated_database_and_drains(real_db, monkeypatch):
+    from cryptography.fernet import Fernet
+    import customer_identity
+    from salla_integration import webhook_inbox as inbox
+
     db, _ = real_db
     uri = os.environ['QOYOD_TEST_MONGO_URI']
     assert uri.startswith('mongodb://127.0.0.1:')
@@ -106,6 +110,18 @@ async def test_canonical_runtime_boots_against_empty_isolated_database_and_drain
     monkeypatch.setenv('EMAIL_OTP_FROM_EMAIL', 'test@example.invalid')
     monkeypatch.delenv('EMAIL_OTP_SMTP_USERNAME', raising=False)
     monkeypatch.delenv('EMAIL_OTP_SMTP_PASSWORD', raising=False)
+    monkeypatch.setenv('MEZAN_CUSTOMER_PII_ENC_KEY', Fernet.generate_key().decode())
+    monkeypatch.delenv('MEZAN_CUSTOMER_PII_ENC_KEY_OLD', raising=False)
+    monkeypatch.delenv('SALLA_TOKEN_ENC_KEY_OLD', raising=False)
+    monkeypatch.setattr(customer_identity, '_fernet', None)
+    monkeypatch.setenv('SALLA_ORDERS_V3_SHADOW_ENABLED', 'false')
+    monkeypatch.setenv('MEZAN_SNAPCHAT_CAPI_ENABLED', 'false')
+    await db.salla_integrations.insert_one({
+        'store_id': 'synthetic-runtime-store', 'user_id': 'synthetic-runtime-owner',
+    })
+    body = {'event': 'product.updated', 'merchant': 'synthetic-runtime-store',
+            'data': {'id': 'synthetic-product', 'name': 'Synthetic product'}}
+    receipt = await inbox.enqueue_verified_event(db, body)
     worker = ManagedWorker(restart_delay=2, shutdown_timeout=15)
     worker.start()
     try:
@@ -126,6 +142,29 @@ async def test_canonical_runtime_boots_against_empty_isolated_database_and_drain
         assert row['jobs']['salla-webhook-inbox'] is True
         assert row['jobs']['salla-daily-refresh'] is True
         assert 'salla-orders-12h' not in row['jobs']
+        # The real fresh child imports server and the installed capture wrapper.
+        # A heartbeat alone misses a dispatcher that rejects every queued event.
+        async with asyncio.timeout(20):
+            while True:
+                queued = await db[inbox.COLLECTION].find_one({'_id': receipt['job_id']})
+                assert queued['state'] not in {'retry', 'quarantined'}, (
+                    queued['state'], queued.get('last_error_code'))
+                if queued['state'] == 'done':
+                    break
+                await asyncio.sleep(.05)
+        assert queued['attempts'] == 1
+        assert 'payload_ciphertext' not in queued
+        audit = await db.salla_webhook_event_captures.find_one({
+            'merchant_id': body['merchant'], 'event': body['event'],
+        })
+        assert audit['verified_before_capture'] is True
+        assert audit['processing_retry_required'] is False
+        assert audit['delivery_count'] == 1
+        assert (await inbox.enqueue_verified_event(db, body))['duplicate'] is True
+        await asyncio.sleep(inbox.IDLE_SECONDS + .1)
+        assert await db.salla_webhook_event_captures.count_documents({}) == 1
+        assert (await db.salla_webhook_event_captures.find_one({}))['delivery_count'] == 1
+        assert await db.unified_orders.count_documents({}) == 0
         assert await db.qoyod_manual_auto_runs.count_documents({}) == 0
         assert await db.qoyod_auto_cycles.count_documents({}) == 0
     finally:
