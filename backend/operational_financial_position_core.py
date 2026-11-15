@@ -405,6 +405,8 @@ def _provider_table(rows, issues):
         for issue in issues)
     displayed = [{"id": row["provider"], **row, **fee_metadata(row),
                   "orders": row.get("paid_orders", row.get("confirmed_orders", row["orders"])),
+                  "estimated_fees": row.get("known_estimated_fees", row.get("estimated_fees")),
+                  "estimated_fees_complete": row.get("estimated_fees_complete", row.get("estimated_fees") is not None),
                   **{field: row.get("known_" + field, row.get(field)) for field in ("gross", "fees", "net")}}
                  for row in rows]
     result = _table("providers", "منصات الدفع", "fulfillment", columns, displayed,
@@ -413,6 +415,7 @@ def _provider_table(rows, issues):
                                      if not displayed or any(row["orders"] is not None for row in displayed) else None),
                           "pending_orders": len({item["order_id"] for row in rows for item in row.get("pending_order_details", [])})
                               + sum(row.get("unidentified_pending_orders", 0) for row in rows),
+                          "estimated_fees_complete": all(row["estimated_fees_complete"] for row in displayed),
                           "fee_description": "", "source_average_description": "", "statement_evidence_date_label": ""},
                   notes=["الصافي يشمل الافتتاحي المدخل والتسويات المثبتة. العمولة الفعلية تحل محل تقدير الجزء المطابق دون جمعهما مرتين.",
                          "العمولات المحتسبة قد تجمع الفعلية والتقديرية؛ متوسط العمولة المتغيرة مستخرج من الكشف قبل الضريبة ودون الرسم الثابت أو رسوم التحويل، وتعرض المكونات الأخرى منفصلة.",
@@ -422,9 +425,10 @@ def _provider_table(rows, issues):
                          "المدفوع للمنصة مستقل عن وصول حوالتها إلى البنك؛ التحويل البنكي يثبت بتسوية منفصلة."])
     if not complete and not rows:
         result["totals"].update(gross=None, fees=None, actual_fees=None, estimated_fees=None, refunded=None, net=None)
+        result["totals"]["estimated_fees_complete"] = False
     elif not complete:
         result["totals"].update({key: _money(_known_sum(row.get(key) for row in displayed))
-                                for key in ("gross", "fees", "refunded", "net")})
+                                for key in ("gross", "fees", "estimated_fees", "refunded", "net")})
         result["totals_basis"] = "known_subtotals"
     preparation_checkpoint()
     return result
