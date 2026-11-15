@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/salla-webhook-release-evidence-20261115",
   "base_commit": "9afb38cf0dc0d8e8cd887f2c2cdb4a6be5a7ca68",
-  "status": "PR1945 exact M all gates and package proofs accepted; original-workspace rehearsal next; seven incident orders still absent in fresh recheck",
+  "status": "PR1945 original rehearsal passed; root release lease prepared; prepublish and one publication next",
   "requested_behavior": [
     "Repair the blocking verified webhook path and duplicate processing identified by platform support",
     "One scheduled refresh at 10:00 Asia/Riyadh over a fixed preceding 24-hour window",
@@ -276,7 +276,7 @@
   },
   "release_branch": "codex/salla-webhook-recovery-release-20261115",
   "evidence_only": true,
-  "checkpoint_at": "2026-11-15T17:01:00Z",
+  "checkpoint_at": "2026-11-15T17:05:45Z",
   "production_source_branch_changed": true,
   "production_runtime_changed": true,
   "operator": {
@@ -1253,7 +1253,7 @@
         "branch": "codex/salla-recovery-owner-bindings-20261115",
         "base": "8f1b0ddb6408781e8677212bcb8cf2d51eab42f7",
         "worktree": "/workspace/scratch/ce6ef737d6c9/salla-binding-recovery",
-        "status": "PR1945 exact M all gates and package proofs accepted; original-workspace rehearsal next; seven incident orders still absent in fresh recheck",
+        "status": "PR1945 original rehearsal passed; root release lease prepared; prepublish and one publication next",
         "A": {
           "sha": "9b91e88c049166f111905c80a4c1fa07a96b51bd",
           "tree": "bb79134858e4f472a97e33cec100ec4ddfe095f7",
@@ -1480,7 +1480,7 @@
           "root_review": "PASS",
           "independent_review": "PASS",
           "independent_review_sha256": "283cb036b691bc716b99796a3bb12ac3e0caf4ee65626d58b17b48e721ac3a8d",
-          "executed": false
+          "executed": true
         },
         "B_ci_report_sha256": "80fb8ecd9703f220b9cefa4fce64c23f1d09bcac3af9b2854ebacd48b3e88d2e",
         "M_binding_report_sha256": "c43c5c7ec9e673615652e7de2df9eba57f87bbe8f1c968cb39a94bb3b898f0b8",
@@ -1760,6 +1760,66 @@
           "stale_created_options_only": true,
           "equal_version_and_both_unversioned_noncancellation_ordering_not_proven": true,
           "quarantined_payloads_not_inspected": true
+        },
+        "shared_app_changed": true,
+        "original_workspace_rehearsal": {
+          "active_lease": false,
+          "append_only_after_bytes": 53664,
+          "append_only_before_bytes": 53664,
+          "finished_at": "2026-11-15T17:04:50.228196+00:00",
+          "functional_acceptance_hold": "authenticated_owner_binding_recovery_and_worker_completion_pending",
+          "merge": "db0d2c365f6cc13728cc5d8c334fb9880497fbe8",
+          "ok": true,
+          "old_bytecode_quarantine_preserved": true,
+          "package_proof_matches_accepted_B": true,
+          "previous_release_evidence_preserved": true,
+          "release_id": "rg5-41884037a1555abb570d35f23b2a81edc8c24e1135035a37aabee30c2d16e8e7",
+          "scope": "original_workspace_governed_rehearsal",
+          "source_git_sha": "9b91e88c049166f111905c80a4c1fa07a96b51bd",
+          "tree": "ff7e1e334bd755f844d0903d5fdba45541509854",
+          "untracked_count": 120,
+          "untracked_preserved": true,
+          "completion": {
+            "exit_code": 0,
+            "finished_at": "2026-11-15T17:04:50.241926+00:00",
+            "started_at": "2026-11-15T17:03:42.757021+00:00",
+            "stderr_bytes": 0,
+            "stdout_bytes": 742,
+            "stdout_sha256": "f8db28f59d5557acac61768298eee33e41954d6f0333d05c7bf1cd5bee752a39"
+          }
+        },
+        "prepared": {
+          "actor": "codex-salla-incident-recovery-1945",
+          "deployment_git_sha": "db0d2c365f6cc13728cc5d8c334fb9880497fbe8",
+          "exit_code": 0,
+          "finished_at": "2026-11-15T17:05:38.890429+00:00",
+          "prepared_at": "2026-11-15T17:05:37.834805+00:00",
+          "raw_bytes": 571454,
+          "raw_sha256": "cc49aad836424d3c1a127a8baa338b4c85efa47f09e503ab69f51a2b7e1927ba",
+          "release_id": "rg5-41884037a1555abb570d35f23b2a81edc8c24e1135035a37aabee30c2d16e8e7",
+          "source_git_sha": "9b91e88c049166f111905c80a4c1fa07a96b51bd",
+          "started_at": "2026-11-15T17:05:36.124569+00:00",
+          "stderr_bytes": 0
+        },
+        "published": false,
+        "operator_start": {
+          "pid": 115245,
+          "started_at": "2026-11-15T17:03:42.713797+00:00",
+          "operator_sha256": "08ac374769bb93d3eba1f60a753838be6775462af4bae82b07220a15967e83cd",
+          "runner_sha256": "4d7ce042012409dbf8c623438f827d4e811259d93166e689ad09b3a26af28879",
+          "original_operator_invocations": 1,
+          "initial_outer_runner_failed_before_operator": true
+        },
+        "launcher_preflight_failure": {
+          "at": "2026-11-15T17:03Z",
+          "first_pid": 114844,
+          "runner_sha256": "ea8b95713cb3d7648d7239a9b353928831883de1adf1cced6a3dd71ce69a330b",
+          "error": "outer launcher Python syntax error before operator invocation",
+          "original_evidence_directory_existed": false,
+          "operator_stdout_existed": false,
+          "operator_stderr_existed": false,
+          "first_files_preserved": true,
+          "correction": "new run-original-v2.py AST parsed before launch; original immutable operator unchanged; fresh inactive guard and exact base rechecked"
         }
       },
       "official_verify": {
