@@ -1,6 +1,6 @@
 {
   "task": "EXECUTIVE-PROFIT-SPEND-BASIS-20261115",
-  "updated_at_utc": "2026-11-15 15:06:27 UTC",
+  "updated_at_utc": "2026-11-15 15:07:56 UTC",
   "repository": "AMASI-SA/AMASI-SA",
   "pull_request": 1936,
   "source_branch": "codex/executive-profit-release-20261115",
@@ -213,7 +213,7 @@
   "merge_commit": "a2a8218f858547f4d9d094d29998a93b09bf59ae",
   "production_changed": false,
   "lease_created": false,
-  "next_action": "Wait for owner exact actual-M gates, original preserving rehearsal and authorized combined publication; inspect live profit on published source a6c5bc5/runtime rg5-f33cd353... then final official verification and acceptance.",
+  "next_action": "Preserve the owner active lease and /app. Observe newer explicit deployment success, read exact live identity and actual profit card, then owner official three-probe completion and inactive guard. Do not start another publication, close the lease, or wait for separate quarantine recovery to claim only what is verified for this profit task.",
   "B_workflows": [
     {
       "id": 43720779455,
@@ -651,7 +651,7 @@
     "recovery_limit": "Code analysis: MAX_ATTEMPTS=8; exhausted quarantined events are excluded from ordinary claims. No live quarantine query or event replay performed by this task. Owner must separately track functional recovery.",
     "pr": 1940,
     "url": "https://github.com/AMASI-SA/AMASI-SA/pull/1940",
-    "state": "Original rehearsal passed; owner prepare/prepublish/publication next",
+    "state": "Owner single authorized combined publication in progress",
     "source_commit": "a6c5bc5763fdca144b44473285d37130eb8213e9",
     "source_tree": "e4cd5f6f07aa8e3d94ce729231b21db41faf619e",
     "sole_parent": "a2a8218f858547f4d9d094d29998a93b09bf59ae",
@@ -1105,6 +1105,24 @@
       "operator_pins_verified": true,
       "operator_sha256": "21e6d2e65fd816e10c3033bd18669403095b09fe2d6ce9fe4985845773fa9fd4",
       "package_proof_sha256": "9d22c541d4697d7e23c0e8a21f09af2da69cf22010f7e4ec80dc18089136030e"
+    },
+    "publication": {
+      "owner_actor": "codex-salla-capture-contract-recovery-1940",
+      "prepared_at_utc": "2026-11-15T15:03:23.434007Z",
+      "source_git_sha": "a6c5bc5763fdca144b44473285d37130eb8213e9",
+      "deployment_git_sha": "d7facb0ff4e2e30edbabf012b3865155d5902a85",
+      "runtime_release_id": "rg5-f33cd3537f17e7a25804236a8b4ad0680c73618af6d3cddabc75fe8486f8d93a",
+      "prepublish_ready": true,
+      "submission_count_reported": 1,
+      "owner_evidence_commit": "0ebbb1a66042f970dc57a5d272ae78d8c1d7a254",
+      "root_ui_observation": {
+        "deployment_started_display": "Nov 15, 06:05 PM",
+        "timezone": "Asia/Riyadh",
+        "status": "Building your website... / Publishing..."
+      },
+      "succeeded_observed": false,
+      "official_verify_pending": true,
+      "profit_live_acceptance_pending": true
     }
   },
   "profit_code_blobs": {

@@ -1,4 +1,4 @@
-# Current operational checkpoint — 2026-11-15 15:06:27 UTC
+# Current operational checkpoint — 2026-11-15 15:07:56 UTC
 
 The profit fix is merged as `a2a8218f858547f4d9d094d29998a93b09bf59ae`; its complete source, B, and actual-M gates passed. **The profit fix is not published or live-verified yet.** The pinned original operator remains staged and unexecuted. This task has not changed shared `/app`, created a lease, or published.
 
@@ -13,6 +13,8 @@ The Salla owner controls the successor release. Follow that reviewed descendant 
 Next: verify exact successor gates and publication evidence, then live executive net-profit visibility and canonical spend basis. Production changed by this task: no.
 
 The owner's successor operator at evidence commit `41438cc78b4cfe02ca30c9f7d35273d6fea3c59e` passed independent review. Operator SHA256 `21e6d2e65fd816e10c3033bd18669403095b09fe2d6ce9fe4985845773fa9fd4`, 11,434 bytes; expected package proof exactly `9d22c541d4697d7e23c0e8a21f09af2da69cf22010f7e4ec80dc18089136030e`. It pins original J to combined M, uses the official mutex/lease rejection/ff-only checks, preserves untracked files and prior evidence, and disables bytecode writes. The owner executes it. Root's read-only original HEAD check around 14:53 UTC still showed J; no source mutation by this task.
+
+**Combined publication is now in progress.** Owner prepared actor `codex-salla-capture-contract-recovery-1940` at 15:03:23.434007 UTC for the exact M/A/runtime above; prepublish explicitly passed. One Publish changes submission is recorded at owner checkpoint `0ebbb1a66042f970dc57a5d272ae78d8c1d7a254`. Root's own Emergent page directly displays new `Deployment Started Nov 15, 06:05 PM` Riyadh and `Building your website...`/Publishing. Earlier inactive observations are superseded. Preserve the owner lease and exact original source. No explicit deployment success or live profit acceptance has been observed yet. Root has not initiated a duplicate release or data recovery.
 
 Historical source checkpoint follows.
 
