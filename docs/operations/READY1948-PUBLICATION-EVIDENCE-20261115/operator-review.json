@@ -1,0 +1,21 @@
+{
+  "verdict": "ACCEPTED_STATIC_BOUND_BYTES_CONDITIONAL_ON_EXECUTION_GATES",
+  "independent_reviewer": "operator_review",
+  "script_sha256": "cf120e40b3431cfacb34459d424f851481d85ee2c55a33a3c241849ca20e68e5",
+  "proof_sha256": "30899db8bab016f7a4fba67183f864a5da4ee71097b3829c2603a4c9419733b2",
+  "base": "742b1032113730961597ea413665409d9c213f7b",
+  "source": "d8a7ce0352bbe2f8858b349a32f2127c7e202343",
+  "intent_B": "dd1f29970506f9db2454cdf3b708818b399ee620",
+  "merge": "c626af288d3823694b4f1d0efcc3670e4ee74d81",
+  "tree": "8b35611f0e66945a323b2365d7c6d456668d8b2e",
+  "evidence_directory": "/tmp/mezan-ready1948-original-20261115T1945",
+  "AST": "PASS",
+  "diff_from_reviewed_draft": "Only six expected bindings and prerequisite docstring",
+  "execution_prerequisites": [
+    "All required exact-M gates pass",
+    "Fresh official inactive guard and clean expected starting source",
+    "Exact accepted script and proof durably preserved and hash-matched after transfer",
+    "Bound evidence directory does not yet exist"
+  ],
+  "execution_performed": false
+}
