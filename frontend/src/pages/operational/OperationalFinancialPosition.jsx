@@ -15,6 +15,7 @@ import "./financialPosition.css";
 import NativePurchaseReview from "./NativePurchaseReview";
 import HistoricalShippingFeeReview from "./HistoricalShippingFeeReview";
 import ProviderHistoryReview from "./ProviderHistoryReview";
+import ProviderFeeExplanations, { ProviderFeeStatus, ProviderSourceAverage } from "./ProviderFeeDetails";
 import PaginatedReportTable from "./PaginatedReportTable";
 import CustomerWalletBalance from "./CustomerWalletBalance";
 import PendingOrdersDialog from "./PendingOrdersDialog";
@@ -57,24 +58,46 @@ function DataCell({ value, column }) {
     return positionText(value);
 }
 
-function ReportTable({ table, printing, confirmationControl }) {
-    const columns = table.columns || [];
+function ReportCell({ row, column, provider, currency, printing, confirmationControl, name }) {
+    if (provider) {
+        if (column.key === "fee_description") return <ProviderFeeStatus row={row} />;
+        if (column.key === "source_average_description") return <ProviderSourceAverage row={row} currency={currency} />;
+        if (column.key === "estimated_fees") return <><Money value={row.estimated_fees} />
+            {row.estimated_fees_complete === false && formatPositionMoney(row.estimated_fees) !== UNAVAILABLE
+                && <span className="ofp-provider-partial">جزئي</span>}</>;
+        if (column.type === "exceptions") return printing ? <DataCell value={row[column.key]} column={column} />
+            : <PendingOrdersDialog count={row[column.key]} details={row.pending_order_details} name={row.name || name}
+                confirmationControl={confirmationControl} countOnly />;
+    }
+    return column.type === "exceptions" && !printing
+        ? <PendingOrdersDialog count={row[column.key]} details={row.pending_order_details} name={row.name || name} confirmationControl={confirmationControl} />
+        : <DataCell value={row[column.key]} column={column} />;
+}
+
+function ReportTable({ table, printing, confirmationControl, currency }) {
+    const provider = table.id === "providers";
+    const providerHeadings = { fee_description: "حالة العمولة", source_average_description: "متوسط العمولة المتغيرة" };
+    const columns = (table.columns || []).filter(column => !provider || column.key !== "statement_evidence_date_label")
+        .map(column => provider && providerHeadings[column.key] ? { ...column, label: providerHeadings[column.key] } : column);
     return <article className={`ofp-table-card${["providers", "ads_currency_conversion", "customer_wallets"].includes(table.id) ? " ofp-table-wide" : ""}${table.kind === "forecast" ? " ofp-table-forecast" : ""}`} data-testid={`financial-table-${table.id}`}>
         <div className="ofp-table-title"><h3>{table.title}</h3>{table.complete !== true && <span className="ofp-status">غير مكتمل</span>}</div>
-        <PaginatedReportTable rows={table.rows || []} label={table.title} pageSize={table.id === "provider_collections_expected" ? 10 : 13} showAll={printing}>{rows => <div className="ofp-table-scroll"><table>
+        <PaginatedReportTable rows={table.rows || []} label={table.title} pageSize={table.id === "provider_collections_expected" ? 10 : 13} showAll={printing}>{rows => <><div className="ofp-table-scroll"><table className={provider ? "ofp-provider-table" : undefined}>
             <thead><tr>{columns.map(column => <th scope="col" key={column.key}>{column.label}</th>)}</tr></thead>
             <tbody>{rows.map((row, index) => <tr key={row.id || index}>{columns.map(column =>
-                <td key={column.key} className={column.type === "text" ? "ofp-label-cell" : "ofp-value-cell"}>{column.type === "exceptions" && !printing
-                    ? <PendingOrdersDialog count={row[column.key]} details={row.pending_order_details} name={row.name || table.title} confirmationControl={confirmationControl} />
-                    : <DataCell value={row[column.key]} column={column} />}</td>)}</tr>)}
+                <td key={column.key} className={column.type === "text" ? "ofp-label-cell" : "ofp-value-cell"}>
+                    <ReportCell row={row} column={column} provider={provider} currency={currency} printing={printing}
+                        confirmationControl={confirmationControl} name={table.title} /></td>)}</tr>)}
                 {!table.rows?.length && <tr><td className="ofp-empty-cell" colSpan={Math.max(columns.length, 1)}>{table.complete === true ? "لا توجد أرصدة مسجلة لهذا القسم." : "لم تتوفر بيانات مكتملة لهذا القسم."}</td></tr>}
             </tbody>
             {table.show_totals !== false && table.totals && Object.keys(table.totals).length > 0 && <tfoot><tr>{columns.map((column, index) => <td key={column.key}>
-                {index === 0 && column.type === "text" ? "الإجمالي" : <DataCell value={table.totals[column.key]} column={column} />}
+                {index === 0 && column.type === "text" ? provider && table.totals_basis === "known_subtotals" ? "المجموع المعلوم" : "الإجمالي"
+                    : provider && ["fee_description", "source_average_description"].includes(column.key) ? null
+                        : provider && column.key === "estimated_fees" ? <ReportCell row={table.totals} column={column} provider currency={currency} printing={printing} />
+                            : <DataCell value={table.totals[column.key]} column={column} />}
             </td>)}</tr></tfoot>}
-        </table></div>}</PaginatedReportTable>
+        </table></div>{provider && <ProviderFeeExplanations rows={rows} currency={currency} notes={table.notes} />}</>}</PaginatedReportTable>
         {table.unassigned_order_details?.length > 0 && <div className="ofp-no-print"><PendingOrdersDialog count={table.unassigned_order_details.length} details={table.unassigned_order_details} name="طلبات لم تثبت جهة توصيلها" confirmationControl={confirmationControl} /></div>}
-        <Notes items={table.notes} />
+        {!provider && <Notes items={table.notes} />}
     </article>;
 }
 
@@ -550,7 +573,7 @@ export default function OperationalFinancialPosition() {
                     <ReportWarnings report={report} data={data} />
                     {view !== "summary" && <section className="ofp-section" aria-labelledby="ofp-page-heading">
                         <SectionHeading id="ofp-page-heading" number="01" title={page.label}><span className="ofp-positive">لنا: مستحق للمنشأة</span><span className="ofp-negative">علينا: مستحق للغير</span></SectionHeading>
-                        <div className="ofp-table-grid">{tables.map(table => <ReportTable key={`${activeCurrency}:${table.id}`} table={table} printing={printing} confirmationControl={confirmationControl} />)}</div>
+                        <div className="ofp-table-grid">{tables.map(table => <ReportTable key={`${activeCurrency}:${table.id}`} table={table} printing={printing} confirmationControl={confirmationControl} currency={activeCurrency} />)}</div>
                         {data.deliveries && ["couriers", "drivers", "expected"].includes(view) && <DeliveryDetails key={activeCurrency} delivery={data.deliveries} filters={filters} onFiltersChange={setFilters} currency={activeCurrency} />}
                     </section>}
                     {view === "summary" && <section className="ofp-section" aria-labelledby="ofp-summary-heading">

@@ -53,6 +53,8 @@ def test_only_unknown_fee_has_no_known_net_zero_and_opening_is_independent():
     row = platform(state)
     assert row["known_gross"] == "100.00" and row["known_fees"] is None
     assert row["known_net"] is None and row["pending_orders"] == 1
+    assert row["known_estimated_fees"] is None and not row["known_estimated_fees_available"]
+    assert row["estimated_fee_incomplete_orders"] == 1 and not row["estimated_fees_complete"]
     opening(state, "opening", "provider", "120.00", party="tamara")
     assert platform(state)["known_net"] == "120.00"
 
@@ -65,6 +67,8 @@ def test_held_observation_does_not_offset_known_balance_or_opening_twice():
     assert row["known_gross"] == "150.00" and row["known_net"] == "110.00"
     assert row["known_fees"] == "10.00"
     assert row["confirmed_orders"] == 1 and row["pending_orders"] == row["held_orders"] == 1
+    assert row["known_estimated_fees"] == "10.00" and not row["estimated_fees_complete"]
+    assert row["estimated_fee_incomplete_orders"] == 1
     assert row["paid_orders"] == 2 and row["paid_order_ids"] == ["held", "one"]
     assert row["pending_order_ids"] == ["held"]
     assert not state["movements"] and state["openings"]["opening"]["amount"] == "20.00"
@@ -108,6 +112,20 @@ def test_expected_claim_with_no_paid_evidence_does_not_create_a_known_zero():
     row = platform(state, "salla")
     assert row["known_gross"] is None and row["known_fees"] is None and row["known_net"] is None
     assert row["pending_orders"] == 1 and row["confirmed_orders"] == 0
+
+
+def test_configured_zero_for_unproved_payment_is_not_a_calculated_estimate():
+    state, _ = paid_state("tamara", terms=settings(rate="0", fixed="0", vat="0"))
+    state["engine"]["provider_fee_inputs"]["orders"].clear()
+    state["engine"]["facts"].clear()
+    state["engine"]["obligations"]["provider:one"].update(confirmed="0.00", expected="90.00")
+    state["engine"]["issues"] = [{"source_id": "provider:one", "code": "provider_capture_evidence_missing"}]
+    before = deepcopy(state)
+    row = platform(state)
+    assert row["known_gross"] is None and row["known_fees"] is None and row["known_net"] is None
+    assert row["known_estimated_fees"] is None and not row["known_estimated_fees_available"]
+    assert row["estimated_fee_calculated_orders"] == 0 and not row["estimated_fees_complete"]
+    assert row["estimated_fee_incomplete_orders"] == 1 and state == before
 
 
 def test_all_pending_order_details_are_available_for_pagination():
@@ -208,6 +226,11 @@ def test_sar_aggregate_needs_individual_proof_index_to_count_paid_orders(identit
     assert row["known_gross"] == "100.00" and row["paid_orders"] == expected
     assert row["paid_orders_complete"] is (identities is not None)
     assert row["confirmed_orders"] == 0
+
+    assert row["known_estimated_fees"] is None and not row["known_estimated_fees_available"]
+    assert row["estimated_fee_scope_incomplete"] and not row["estimated_fees_complete"]
+    assert row["estimated_fee_incomplete_orders"] == (2 if identities is not None else 0)
+    assert row["estimated_fee_unidentified_orders"] == (0 if identities is not None else 2)
 
 
 def test_sar_source_count_index_tracks_positive_proved_payments_only():

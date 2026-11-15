@@ -4,8 +4,9 @@
 
 - Repository: `AMASI-SA/AMASI-SA`.
 - Task branch: `codex/ready-reconciliation-followup-20261116`.
-- Reviewed production base: `236a428364bc8163a684795ed1be87e237476f18`.
-- Base tree: `6967da090ac1301ca38bc8bc179758d7eaa91976`.
+- Current production base: `2589f440106a7c5d463ee03eac3617d113319673` (PR #1951).
+- Current base tree: `d91e281aa9fc7e02ddab1a36989dc6c3bf0b68ec`.
+- Original reviewed base: `236a428364bc8163a684795ed1be87e237476f18`.
 - Production changed by this task: **no**. No lease, publish, business-state repair, Ready click, receipt, service completion or provider status write has occurred.
 - First remote WIP checkpoint: `0037fb2beee3738ba878ca09e02fee9be37f0ee2`.
 - This is a source-work candidate, not a release or real-database acceptance result.
@@ -39,7 +40,9 @@ Independent review found a pre-existing stale-success branch newly reached by ex
 
 ## Remaining acceptance and review
 
-- Twelve named real-Mongo integration regressions are implemented; execution remains pending.
+- Original candidate `bbdca0dd2b3fcc8ceac3614f086e134776f9a21c` passed all 13 exact-head workflows. Review Completion Resumable run `43773103462` / job `132993189248` proved MongoDB 8.0.12 and 35 focused cases, 329 Android cases, 828 review/provider cases, 124 source-fence cases and one conflict guard, all without skipped/failure/error results.
+- Production advanced during release preparation. The successor source incorporates PR #1951's 17 changed files, including its release intent, without overlap with this task's seven paths. The original candidate's intent artifact is historical evidence only and must not be deployed against the new base.
+- Repeat exact-head CI and produce a fresh intent from the successor source before freezing intent-only B. No old A/B proof or shared lease may be reused.
 - Independent runtime review accepted the final stale-success correction; no remaining concrete runtime/auth/scope/provider-write finding was reported. This does not replace transaction execution.
 - Run the focused existing CI workflow with MongoDB 8.0.12 replica-set transactions, exact PR head and zero skips.
 - Local MongoDB 8.0.12 startup is blocked before `--version`: the official SHA256-verified binary requires `/sys/devices/system/cpu/possible`, which this execution environment does not expose. No server or database started; no system files were modified. This is a test-environment limitation, not a passing database gate.
@@ -49,4 +52,4 @@ Independent review found a pre-existing stale-success branch newly reached by ex
 
 Issue #1006 has reached GitHub's comment limit. Use this task document and the task Draft PR body as the recoverable continuation record; record the exact checkpoint SHA and CI URLs there after each material checkpoint. The previous publication-evidence branch remains independent and must not be merged as application source.
 
-Next safe action: checkpoint the candidate and open a Draft PR, then inspect exact-head CI and the final independent review. Continue the garment source-proof diagnosis without production mutation.
+Next safe action: checkpoint the successor source in Draft PR #1952 and inspect its fresh exact-head CI. Observe the live original Release Guard as inactive before any release rehearsal or original workspace modification; preserve the concurrent PR #1951 release. Continue the separate garment-source proof work without forcing its current guard open.

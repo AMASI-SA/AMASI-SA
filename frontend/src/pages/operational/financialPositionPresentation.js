@@ -126,6 +126,24 @@ function exportValue(value, type) {
     return positionText(value);
 }
 
+function providerEstimateStatus(row) {
+    if (formatPositionMoney(row.estimated_fees) === UNAVAILABLE) return UNAVAILABLE;
+    if (row.estimated_fees_complete === true) return "تقدير مكتمل الحساب";
+    if (row.estimated_fees_complete === false) return "تقدير جزئي";
+    return "اكتمال التقدير غير موثق";
+}
+
+function providerEstimateRows(table, totalLabel) {
+    if (table.id !== "providers" || !(table.columns || []).some(column => column.key === "estimated_fees")) return [];
+    const values = (row, name) => [name, exportValue(row.estimated_fees, "money"), providerEstimateStatus(row),
+        exportValue(row.estimated_fee_calculated_orders, "count"), exportValue(row.estimated_fee_incomplete_orders, "count")];
+    const rows = [[], ["اكتمال التقدير"],
+        ["المنصة", "المبلغ التقديري المعروض", "حالة الحساب", "طلبات محسوبة", "طلبات غير مكتملة"],
+        ...(table.rows || []).map(row => values(row, positionText(row.name)))];
+    if (table.show_totals !== false && table.totals && Object.keys(table.totals).length) rows.push(values(table.totals, totalLabel));
+    return rows;
+}
+
 function appendSheet(workbook, name, rows, widths = []) {
     const sheet = XLSX.utils.aoa_to_sheet(rows);
     sheet["!cols"] = widths.map(wch => ({ wch }));
@@ -176,6 +194,7 @@ export function buildFinancialPositionWorkbook(report, currency, filters = {}, {
 
     (data.tables || []).forEach((table, index) => {
         const columns = table.columns || [];
+        const totalLabel = table.id === "providers" && table.totals_basis === "known_subtotals" ? "المجموع المعلوم" : "الإجمالي";
         const rows = [
             [positionText(table.title), currency],
             ["حالة البيانات", table.complete === true ? "مكتملة" : "غير مكتملة"],
@@ -185,9 +204,16 @@ export function buildFinancialPositionWorkbook(report, currency, filters = {}, {
             ...(table.rows || []).map(row => columns.map(column => exportValue(row[column.key], column.type))),
         ];
         if (table.show_totals !== false && table.totals && Object.keys(table.totals).length) rows.push(columns.map((column, columnIndex) =>
-            columnIndex === 0 && column.type === "text" ? "الإجمالي" : exportValue(table.totals[column.key], column.type)));
+            columnIndex === 0 && column.type === "text" ? totalLabel : exportValue(table.totals[column.key], column.type)));
+        // Retain the original evidence columns and exact supplied money above.
+        // Completeness is explicit: provisional estimates can be fully computed.
+        const estimates = providerEstimateRows(table, totalLabel), estimateStart = rows.length + 1;
+        rows.push(...estimates);
         const title = `${index + 1} ${table.title || "قسم"}`.replace(/[\\/*?:[\]]/g, " ").slice(0, 31);
-        appendSheet(workbook, title, rows, columns.map(column => column.type === "text" ? 38 : 24));
+        const worksheet = appendSheet(workbook, title, rows, columns.map(column => column.type === "text" ? 38 : 24));
+        if (estimates.length) {
+            for (let row = estimateStart + 1; row <= rows.length; row += 1) worksheet.getRow(row).height = 36;
+        }
     });
 
     const exceptions = [];
