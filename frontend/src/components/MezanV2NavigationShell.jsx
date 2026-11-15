@@ -127,6 +127,7 @@ export default function MezanV2NavigationShell(props) {
                 ];
                 if (effectiveAccess.is_owner) {
                     items.push({ to: "/operational-balances/provider-fees", label: "رسوم طرق الدفع" });
+                    items.push({ to: "/operational-balances/provider-statements", label: "مطابقة كشوف منصات الدفع" });
                 }
                 sections.push({ id: "operational-balances", label: "الأرصدة التشغيلية", Icon: Receipt, items });
             }

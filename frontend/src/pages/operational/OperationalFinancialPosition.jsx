@@ -529,6 +529,7 @@ export default function OperationalFinancialPosition() {
                 {confirmationNotice && <p role="status" className="ofp-warning ofp-no-print">{confirmationNotice}</p>}
                 {data && user?.role === "owner" && view === "providers" && <div className="ofp-owner-controls ofp-no-print">
                     <a className="ofp-button" href="/operational-balances/provider-fees">مراجعة تعرفات منصات الدفع</a>
+                    <a className="ofp-button" href="/operational-balances/provider-statements">مطابقة كشوف منصات الدفع</a>
                     <ProviderHistoryReview key={"history" + scope + report.session_scope} sessionScope={report.session_scope} />
                 </div>}
                 {data && user?.role === "owner" && view === "suppliers" && <NativePurchaseReview key={scope + report.session_scope} sessionScope={report.session_scope} onRefresh={refresh} />}
