@@ -1,0 +1,33 @@
+{
+  "source_current": "2589f440106a7c5d463ee03eac3617d113319673",
+  "original_operator_exit": 1,
+  "stage": "intent-preflight",
+  "observed_at": "2026-11-15T23:28:21.532261+00:00",
+  "reason": "Backend runtime source contains prepackaged bytecode: __pycache__",
+  "ff_only_succeeded": true,
+  "tracked_clean": true,
+  "guard_active": false,
+  "adapter_started": false,
+  "publication_performed": false,
+  "original_evidence": "/tmp/provider1951-original-20261116",
+  "inventory": {
+    "path": "/tmp/provider1951-bytecode-inventory-20261116.json",
+    "sha256": "449a2329eb6ad4aa463e6b03e669ccd245aaa4c7a939ed110addeb4912bf528d",
+    "directories": [
+      "backend/__pycache__"
+    ],
+    "files": 2,
+    "bytes": 120563,
+    "only_ignored_untracked_regular_pyc": true,
+    "latest_mtime": "2026-11-15T22:43:10.950187+00:00"
+  },
+  "receipts": {
+    "fast-forward.json": "2c807c7ed7801abad8818393d1e4cd47a14a55620699c38b6a6d344097355bfd",
+    "fast-forward.stdout": "b7ece7e7efbd02bc45041deb134860baf732645cb3041f597f9e0e76ac766928",
+    "intent-preflight.json": "87ec907e5396429a8516f53b8bb29ca470ddbee619b39831b8fb63b83cc1c4f8",
+    "intent-preflight.stderr": "628bfcf9d18a1e939ca55afd565edf69b1a284d1342a858436c8d5067b1c3105",
+    "failed.json": "6494b83c42a8db546a55f76e17b3aeeef5c3c759a5bf05d9cbefb189009a914e",
+    "untracked-before.json": "d5b7cd62d608b95b56f1e31614c4da8e65fdd61809fb6328116ffc3567fe450c",
+    "untracked-after-sync.json": "d5b7cd62d608b95b56f1e31614c4da8e65fdd61809fb6328116ffc3567fe450c"
+  }
+}

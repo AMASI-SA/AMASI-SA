@@ -1,4 +1,4 @@
-# Provider fee display repair — merged M awaiting original rehearsal
+# Provider fee display repair — original M installed; rehearsal stopped before build
 
 Task `PROVIDER-FEE-DISPLAY-20261116`, repository AMASI-SA/AMASI-SA, PR https://github.com/AMASI-SA/AMASI-SA/pull/1951. This is the evidence-only branch; do not merge or deploy it.
 
@@ -27,16 +27,20 @@ Task `PROVIDER-FEE-DISPLAY-20261116`, repository AMASI-SA/AMASI-SA, PR https://g
 
 ## Preserved limits and original environment
 
-- Original `/app` remains baseline J, tracked-clean, guard inactive; 120 unrelated untracked entries are preserved. Changes/tests are in the isolated original checkout.
+- Original `/app` is now M `2589f440106a7c5d463ee03eac3617d113319673`, tracked-clean, official guard inactive; 120 unrelated untracked entries were preserved exactly across the successful ff-only update. The live site is still prior platform version `3e5bbfb`.
 - The narrowly scoped diagnostic owner lookup did not establish a unique target. Source provides no proof that shell configuration is production-bound; no saved financial state was read, scope was not broadened, and no financial data was written. No live incomplete-row predicate is claimed or used to weaken calculation eligibility.
-- Rehearsal helper is now bound to accepted A/B/M, source-parent map, intent/runtime and package proof; 18,859 bytes, SHA256 `40479a58a63004bd6ba9b3257f775a5110eace755c20a05656dbc7143e5a1140`. It is statically parsed and final independent byte/binding review passed. It has not been executed. Verifier is partially bound but `PREPARED_AT` remains None until the official prepare receipt exists; it must not run yet.
-- The production Git branch has advanced to reviewed M through the normal merge; original `/app` and the live deployed application have not changed yet. No new lease, deployment, source refresh, statement reimport, payment/refund confirmation or other financial write occurred. Live Production changed in this follow-up: **no**.
+- Rehearsal helper is now bound to accepted A/B/M, source-parent map, intent/runtime and package proof; 18,859 bytes, SHA256 `40479a58a63004bd6ba9b3257f775a5110eace755c20a05656dbc7143e5a1140`. It is statically parsed and final independent byte/binding review passed. It was executed once; see the stopped-at-preflight record below. Do not run this starting-J helper again. Verifier is partially bound but `PREPARED_AT` remains None until the official prepare receipt exists; it must not run yet.
+- The production Git branch has advanced to reviewed M through the normal merge; original `/app` has now advanced by the accepted ff-only handoff, while the live deployed application has not changed yet. No new lease, deployment, source refresh, statement reimport, payment/refund confirmation or other financial write occurred. Live Production changed in this follow-up: **no**.
+
+## Original rehearsal stop — retained evidence
+
+The bound operator ran once. The ff-only update to M succeeded, source/tree/intent and untracked metadata checks passed, but `intent-preflight` exited 1 before the adapter/build began. The official manifest validator rejected `backend/__pycache__`. Independent read-only inventory found exactly two ignored, untracked regular `.pyc` files (120,563 bytes total), last modified before this source handoff. Guard is inactive; no lease or publish occurred. A preceding old generated identity warning is not being treated as the primary failure. See `original-preflight-stop.json` for exact receipt and inventory hashes.
 
 ## Next safe actions
 
-1. Exact-M required CI and final bound-helper review have passed. The helper and package proof were staged from immutable evidence commit `a022e81c1e8adf8fc081609115a5049cb741fad7` with exact hash checks. Fresh staging observed original J, tracked clean, guard inactive and 120 unrelated untracked entries. The operator has not run. Execute the bound rehearsal once; no remaining pre-rehearsal gate.
-2. Observe fresh original guard inactive, exact starting J and clean tracked files. Execute the once-only bound original helper with `--merge 2589f440106a7c5d463ee03eac3617d113319673 --package-proof /tmp/expected-package-boundary-1951.json --evidence-directory /tmp/provider1951-original-20261116`. It performs ff-only update/configured-entry rehearsal under the official mutex, preserves unrelated metadata, and creates no lease or publication.
-3. Record successful rehearsal, then create the owned official prepare receipt. Bind/checkpoint the verifier's exact `PREPARED_AT` from that receipt, run prepublish immediately before the authorized UI publication, and observe newer explicit platform success.
-4. Run the single official three-probe verifier and require inactive status, then inspect the live estimated commission and below-table explanations with a fresh read. No financial refresh is needed.
+1. Do not repeat the starting-J operator or reset source. Finish review of a separate once-only resume helper pinned to current M and the prior successful handoff/failed preflight receipts.
+2. Under the official mutex and fresh inactive/clean M checks, reversibly quarantine only the exact ignored cache directory after validating the reviewed inventory, filesystem and absence of tracked/symlink/non-bytecode members. Preserve its contents outside the governed source. No broad cleanup or source change is authorized by this recovery step.
+3. Run the same unchanged intent preflight, configured `yarn build`, and accepted package-proof/full metadata checks from M. Save a new receipt directory and checkpoint outcomes; do not create a lease until rehearsal succeeds.
+4. Then follow the existing official prepare/prepublish/publication/three-probe verification flow. Bind the verifier's exact `PREPARED_AT` from the actual receipt, and verify the live estimated commission and below-table explanations with a normal read.
 
-Issue1006 remains at its known comment limit; this task ledger and PR provide continuity.
+Issue1006 remains at its known comment limit; this task ledger and PR provide continuity. Live Production changed: **no**; original source checkout changed to reviewed M only.
