@@ -1,3 +1,15 @@
+# Original rehearsal and owned publication — 2026-11-15 21:07 UTC
+
+Root read original-host rehearsal result`ok:true` at20:57:55.473239Z, receiptSHA256`58ac0aec258d90020f588601cd0c74f79b7fca14a1cbb4ce52bc2e18984424c6`. Original /app is exactM/accepted tree and tracked-clean. Configured adapter and package commands exited0; package stdout exact1278-byte proofSHA256`ce75761983cf60abad1e6954850943e9e21d6422a64fb293b3c2f89220c01185`. Required metadata for all120 platform entries preserved (bookkeeping55566→55692bytes; no private content or byte/prefix claim). Rehearsal exited without active lease.
+
+Root prepared own lease actor`chatgpt-provider1950-20261115-root` at`2026-11-15T20:59:27.875265+00:00`. Official prepublish exited0, ready_to_publish:true, exactA/M/runtime at21:00:34.715198Z; raw stdoutSHA256`d20a2fdd54d105dadad379ca373ba4d17f8bb0c73c302fb4326d206ebf673520`. One Republish→Publish changes was issued; baselineversion1f931e6. Platform showed new Deployment Started Nov16,12:01AM and Building your website. No new completion observed yet; no official live verification or financial action yet.
+
+Root and independent reviewer read the entire `official_verify_1950.py`,8222bytes/SHA256`b8bbc138043c332718faa247b4f27b14fbd55f748a466967bd8927f1219252b8`. It records one attempt, requires observed new platformsuccess and exact entire owned lease, runs official verify once without timeout/retry/abort, then requires exact3checks/A/J/M/runtime and inactive status. Standardlibrary only; pinned guard bytes match M. Do not invoke before explicit new platformsuccess. It remains outside/app and does not publish or alter source.
+
+Private official receipts`/tmp/provider1950-publication-20261115/`. This commit contains the reviewed wrapper and technical observations only. Root owns the current active release; no competing source/release operation or leaseclear is authorized. Final step after officialsuccess: explicit saved Tabby original and provider-table acceptance, without missing-principal/refund approvals.
+
+---
+
 # Exact M accepted; original rehearsal running — 2026-11-15 20:57 UTC
 
 Normal merge M`236a428364bc8163a684795ed1be87e237476f18` has exact B4 tree`6967da090ac1301ca38bc8bc179758d7eaa91976` and ordered parents[J4,B4]. Root and independent reviewer verified current production ref. All3 exact-M push workflows and all11 checks succeeded on attempt1; no failed, skipped or pending checks. Both actual Host20/24 generated outputs match all296 accepted B regular members byte-for-byte and mode-for-mode. Root separately read both M proof files and compared them exactly to the accepted1278-byte proof.

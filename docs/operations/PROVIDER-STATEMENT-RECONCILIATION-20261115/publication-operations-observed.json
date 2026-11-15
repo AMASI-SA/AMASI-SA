@@ -1,0 +1,54 @@
+{
+  "rehearsal": {
+    "receipt": {
+      "active_lease": false,
+      "append_only_after_bytes": 55692,
+      "append_only_before_bytes": 55566,
+      "base": "c626af288d3823694b4f1d0efcc3670e4ee74d81",
+      "bookkeeping_byte_prefix_proven": false,
+      "evidence_directory": "/tmp/provider1950-original-20261115",
+      "finished_at": "2026-11-15T20:57:55.473239+00:00",
+      "intent_commit": "983cb9307a8a23d086bc6cb3df962683870b01e2",
+      "lease_created": false,
+      "merge": "236a428364bc8163a684795ed1be87e237476f18",
+      "ok": true,
+      "package_proof_matches_accepted_B": true,
+      "publication_performed": false,
+      "release_id": "rg5-58ace8c534fca5cd31d89a58bc9fd7746a79e25681660f8c32b3eded55a74117",
+      "source": "1bd44b6f186de8b40877fde686b5d2d7aab52805",
+      "tree": "6967da090ac1301ca38bc8bc179758d7eaa91976",
+      "untracked_byte_identity_proven": false,
+      "untracked_contents_read": false,
+      "untracked_count": 120,
+      "untracked_metadata_preserved": true
+    },
+    "original_receipt_sha256": "58ac0aec258d90020f588601cd0c74f79b7fca14a1cbb4ce52bc2e18984424c6"
+  },
+  "prepare": {
+    "actor": "chatgpt-provider1950-20261115-root",
+    "deployment_git_sha": "236a428364bc8163a684795ed1be87e237476f18",
+    "source_git_sha": "1bd44b6f186de8b40877fde686b5d2d7aab52805",
+    "release_id": "rg5-58ace8c534fca5cd31d89a58bc9fd7746a79e25681660f8c32b3eded55a74117",
+    "prepared_at": "2026-11-15T20:59:27.875265+00:00",
+    "finished_at": "2026-11-15T20:59:28.998920+00:00",
+    "exit_code": 0,
+    "rehearsal_receipt_sha256": "58ac0aec258d90020f588601cd0c74f79b7fca14a1cbb4ce52bc2e18984424c6"
+  },
+  "prepublish": {
+    "deployment_git_sha": "236a428364bc8163a684795ed1be87e237476f18",
+    "source_git_sha": "1bd44b6f186de8b40877fde686b5d2d7aab52805",
+    "release_id": "rg5-58ace8c534fca5cd31d89a58bc9fd7746a79e25681660f8c32b3eded55a74117",
+    "ready_to_publish": true,
+    "protocol_version": 5,
+    "exit_code": 0,
+    "finished_at": "2026-11-15T21:00:34.715198+00:00",
+    "stdout_sha256": "d20a2fdd54d105dadad379ca373ba4d17f8bb0c73c302fb4326d206ebf673520"
+  },
+  "platform": {
+    "baseline": "1f931e6",
+    "single_publish_observed_at": "2026-11-15 21:01:51 UTC",
+    "status": "Building your website",
+    "new_version": null
+  },
+  "provenance": "Root read original-host private receipts and administration UI; this JSON records those observations."
+}
