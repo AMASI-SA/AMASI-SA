@@ -1,0 +1,11 @@
+{
+  "observed_at": "2026-11-15T20:42:25.593Z",
+  "order_number": "299781816",
+  "provenance": "Fresh ordinary assembly search after user reported source refresh from app and Salla/Mezan; no further source refresh performed",
+  "ready_count": 0,
+  "total_rows": 5,
+  "reconciliation_pending_rows": 5,
+  "disabled_ready_buttons": 5,
+  "production_database_access": "Not opened: automatic approval review rejected manager access",
+  "order_mutations_performed": false
+}

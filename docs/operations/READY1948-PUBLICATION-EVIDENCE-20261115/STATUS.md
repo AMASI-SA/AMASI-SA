@@ -1,3 +1,11 @@
+# Latest follow-up: Ready still locked after user refresh
+
+At 2026-11-15T20:42:25.593Z, a fresh read-only search still showed Ready 0/5 and five reconciliation holds after the user reported completing source refresh. The exact failing predicate is unresolved. Automatic approval review blocked opening the production database manager; explicit current authorization for the narrowly scoped read is required before that action. No code or production data was changed in this follow-up.
+
+See [FOLLOWUP-REFRESH-STILL-BLOCKED.md](FOLLOWUP-REFRESH-STILL-BLOCKED.md). The successful publication evidence below remains valid and does not constitute business acceptance of this order.
+
+---
+
 # PR1948 publication — final release status
 
 ## Outcome
