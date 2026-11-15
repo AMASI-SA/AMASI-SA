@@ -1,7 +1,7 @@
 {
   "task_id": "MZ-BUNDLE-CONDITIONAL-CHOICE-20261116",
   "scope": "Implement conditional descriptive-option costing in current bundle estimates.",
-  "state": "integrated_source_verified_pending_CI",
+  "state": "integrated_intent_B_frozen_pending_CI_and_host",
   "repository": "AMASI-SA/AMASI-SA",
   "task_branch": "codex/bundle-conditional-cost-integrated-20261116",
   "verified_milestone_commit": "ba19a270fb20ab45328f293e200728bebda6df4c",
@@ -94,8 +94,8 @@
   "pr": {
     "number": 1954,
     "url": "https://github.com/AMASI-SA/AMASI-SA/pull/1954",
-    "head": "ba19a270fb20ab45328f293e200728bebda6df4c",
-    "state": "open_draft",
+    "head": "a00e3e38530376943960f1f1ebe301dde5e7f061",
+    "state": "open_ready",
     "superseded": 1953
   },
   "ci": {
@@ -150,7 +150,7 @@
     "Shared /app 120 untracked files and unsaved Untitled-1; another provider release is active in a different conversation. Recheck Production base and lease before changes."
   ],
   "ledger": "Issue #1006 was previously at its comment limit; dedicated task status serves as recoverable handoff without retrying that append.",
-  "next_safe_action": "Open the integrated source PR against J2589. Preserve old A/B on their branch. No release-intent change may occur in source J..A. Obtain fresh reviewed candidate; coordinate by official host guard and never clear another owner lease.",
+  "next_safe_action": "Check exact integrated-B CI. Confirm original-host status inactive (provider publication may be pending), rehearse isolated B with exact public client origin, then normal merge only if Production still J2589, original-host materialization, official prepare/prepublish, authorized UI publication and three verification probes.",
   "owner_clarification": {
     "source": "User clarification after diagnosis",
     "statement": "Selecting affirmative customization adds no amount.",
@@ -185,5 +185,16 @@
     "frontend_isolated_runtime_artifact_verified": true,
     "published": false,
     "limitation": "Superseded after Production advanced; must rehearse fresh integrated B before prepare."
+  },
+  "intent_B": "a00e3e38530376943960f1f1ebe301dde5e7f061",
+  "intent_candidate": {
+    "artifact_id": 14186235559,
+    "run_id": 43774777595,
+    "zip_sha256": "6a323f71e86e14a33774a23ea38c4c666f31650bcf4c609a7d65a47ce96160ed",
+    "intent_sha256": "d571f82f6bb6feb7a8a4c697a6ccae49978d05f86beda77736be20f255583057",
+    "source_git_sha": "ba19a270fb20ab45328f293e200728bebda6df4c",
+    "source_base_git_sha": "2589f440106a7c5d463ee03eac3617d113319673",
+    "runtime_release_id": "rg5-39f41f8377951a9b3b673d643711b332a94f1479e45a6167b2c4c90a1fd9c27d",
+    "validation": "Exact ZIP/file digest and blob verified; candidate loader and complete Backend/control source manifests match integrated A. Intent-only B freezes original artifact bytes."
   }
 }
