@@ -1,6 +1,6 @@
 {
   "task": "EXECUTIVE-PROFIT-SPEND-BASIS-20261115",
-  "updated_at_utc": "2026-11-15 14:18:05 UTC",
+  "updated_at_utc": "2026-11-15 14:19:41 UTC",
   "repository": "AMASI-SA/AMASI-SA",
   "pull_request": 1936,
   "source_branch": "codex/executive-profit-release-20261115",
@@ -633,6 +633,16 @@
     "same_salla_source_in_M": true,
     "profit_source_changes_do_not_overlap": true,
     "owner_fix_state": "Owner preparing focused forwarding fix and production-composition regression on a separate branch.",
-    "root_independently_read_current_pr": true
+    "root_independently_read_current_pr": true,
+    "root_and_independent_source_review": "Confirmed exact M signature mismatch; both default and strict keyword calls raise before capture; Salla subtree unchanged by profit M.",
+    "recovery_limit": "Code analysis: MAX_ATTEMPTS=8; exhausted quarantined events are excluded from ordinary claims. No live quarantine query or event replay performed by this task. Owner must separately track functional recovery."
+  },
+  "profit_code_blobs": {
+    ".github/workflows/prod-dashboard-four-platform-spend-v1.yml": "f67a5092054a9c6b7798895c0b5cffd097cac4c6",
+    "backend/integrations_control_center/dashboard_ads_platform_spend_routes.py": "24d8bc826cccf0131b5a97c4f5a001c1f8595f8c",
+    "backend/tests/test_dashboard_tiktok_native_spend_basis.py": "22146146cdbc439b2432951c20a63b2c26d3f97a",
+    "backend/tests/test_snapchat_reporting_v2_midnight_zero_dashboard.py": "ef883e4e35f6f7d64e18f9f2c09f9158ecaa62ad",
+    "frontend/src/pages/AdvancedDashboard.cardRefresh.test.jsx": "7c5da14948d07e1b302d991107e99bd25eabc333",
+    "frontend/src/pages/AdvancedDashboard.jsx": "041d6ca993630eedcf1a2d394b226e8f68592448"
   }
 }
