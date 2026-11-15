@@ -1,14 +1,14 @@
 """Visible owner-only weekly statement upload, read and explicit confirmation."""
 from typing import Literal
 
-from fastapi import Depends, File, Form, Query, Request, UploadFile
+from fastapi import Depends, File, Form, Path, Query, Request, UploadFile
 from pydantic import BaseModel, ConfigDict, Field
 
 from excel_upload_security import read_safe_xlsx_upload
 from operational_balance_store import fail
 from operational_provider_statement_intake import MAX_FILE_BYTES, MAX_ROWS
 from operational_visible_report_read import run_visible_report_read
-from operational_provider_statement_reconciliation import upload, history, review, confirm
+from operational_provider_statement_reconciliation import upload, history, review, confirm, saved_files, use_saved_file
 
 
 class StatementDecision(BaseModel):
@@ -28,7 +28,32 @@ class StatementConfirmation(BaseModel):
     confirmed_unrecorded: bool = Field(default=False, strict=True)
 
 
+class SavedStatementUse(BaseModel):
+    model_config = ConfigDict(extra='forbid', str_strip_whitespace=True)
+    request_id: str = Field(min_length=8, max_length=160)
+    expected_session_scope: str = Field(pattern=r'^[a-f0-9]{64}$')
+    expected_started_at: str = Field(min_length=16, max_length=40)
+    expected_file_hash: str = Field(pattern=r'^[a-f0-9]{64}$')
+
+
 def attach_provider_statement_routes(router, db, current_user, scope, guarded):
+    @router.get('/provider-statements/saved-files')
+    async def statement_saved_files(request: Request, limit: int = Query(default=50, ge=1, le=100), user=Depends(current_user)):
+        async def read_page():
+            actor, owner, _ = await scope(db, user, 'bank_manage')
+            result = await saved_files(db, owner, actor['id'], limit=limit)
+            fresh, fresh_owner, _ = await scope(db, user, 'bank_manage')
+            if (fresh['id'], fresh_owner) != (actor['id'], owner):
+                fail('operational_actor_scope_changed', 'تغير الحساب؛ أعد فتح الصفحة', 403)
+            return result
+        return await run_visible_report_read(request, read_page)
+
+    @router.post('/provider-statements/saved-files/{file_id}/use')
+    async def statement_use_saved(payload: SavedStatementUse, file_id: str = Path(min_length=1, max_length=160),
+                                  user=Depends(guarded('bank_manage'))):
+        actor, owner, _ = await scope(db, user, 'bank_manage')
+        return await use_saved_file(db, owner, actor['id'], file_id, payload.model_dump())
+
     @router.get('/provider-statements')
     async def statement_history(request: Request, limit: int = Query(default=50, ge=1, le=100), user=Depends(current_user)):
         async def read_page():

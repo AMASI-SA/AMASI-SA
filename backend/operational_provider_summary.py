@@ -8,7 +8,7 @@ from operational_payment_evidence import DIAGNOSTICS
 from operational_provider_balance_sar import sar_amount
 from operational_provider_report_coverage import PLATFORMS
 from operational_provider_statement_fees import (prepare_statement_fee_context, resolve_statement_fees,
-    select_statement_average_profile, statement_average_summary)
+    select_statement_average_profile, statement_average_summary, statement_average_source_summary)
 
 ZERO = Decimal(0)
 PENDING_SAMPLE_LIMIT = 20
@@ -250,6 +250,7 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
             "average_variable_fees": ZERO, "average_fixed_fees": ZERO, "average_vat_fees": ZERO,
             "_average_fixed_complete": True, "_average_vat_complete": True, "_average_complete": True,
             "_average_profiles": {}, "_average_fixed_bases": set(), "_average_operations_bases": set(),
+            "_source_average_scopes": {},
             "average_estimated_orders": set(), "plan_estimated_orders": set(),
             "statement_evidence_as_of": None, "_statement_evidence_stamp": None, "_fee_bases": set(),
             "paid_orders": set(), "paid_orders_complete": True,
@@ -285,6 +286,11 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
     for identity, row in records.items():
         currency, provider = row["currency"], row["provider"]
         total = group(currency, provider)
+        account = (row.get("payment") or {}).get("merchant_account")
+        source_scope = row["native_currency"], type(account).__name__, str(account)
+        if source_scope not in total["_source_average_scopes"]:
+            total["_source_average_scopes"][source_scope] = statement_average_source_summary(
+                state, provider, row["native_currency"], payment=row.get("payment"))
         if row["gross"] > 0:
             total["orders"].add(row["order_id"])
             if row["paid_proven"]:
@@ -581,6 +587,19 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
         total["average_estimated_orders"] = len(total["average_estimated_orders"])
         total["plan_estimated_orders"] = len(total["plan_estimated_orders"])
         total["average_fee_profiles"] = [total["_average_profiles"][key] for key in sorted(total["_average_profiles"])]
+        source_profiles, source_issues = {}, defaultdict(int)
+        for source in total["_source_average_scopes"].values():
+            if source["available"]:
+                source_profiles[source["profile_id"]] = source
+            else:
+                source_issues[source["native_currency"], source["reason_code"]] += 1
+        total["source_average_profiles"] = [source_profiles[key] for key in sorted(source_profiles)]
+        total["source_average_issues"] = [{"native_currency": native, "reason_code": reason, "scopes": count}
+            for (native, reason), count in sorted(source_issues.items())]
+        if not total["_source_average_scopes"]:
+            total["source_average_issues"] = [{"native_currency": None, "reason_code": "source_scope_unproven", "scopes": 0}]
+        total["source_average_status"] = ("available" if source_profiles and not source_issues else
+                                          "partial" if source_profiles else "unavailable")
         total["average_fixed_bases"] = sorted(total["_average_fixed_bases"])
         total["average_operations_bases"] = sorted(total["_average_operations_bases"])
         if not total["_average_fixed_complete"]:

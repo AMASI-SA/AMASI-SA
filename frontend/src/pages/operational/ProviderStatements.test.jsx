@@ -7,7 +7,8 @@ import { statementMoney, statementActionHref } from "./providerStatementPresenta
 
 jest.mock("../../context/AuthContext", () => ({ useOptionalAuth: jest.fn() }));
 jest.mock("./api", () => ({ operationalApi: { providerStatements: jest.fn(), providerStatementReview: jest.fn(),
-    uploadProviderStatement: jest.fn(), confirmProviderStatement: jest.fn() }, requestId: jest.fn() }));
+    uploadProviderStatement: jest.fn(), confirmProviderStatement: jest.fn(),
+    providerStatementSavedFiles: jest.fn(), useSavedProviderStatement: jest.fn() }, requestId: jest.fn() }));
 
 const scope = "owner-one-period-one", stamp = "2026-11-15T08:00:00Z";
 const snapshot = { session_scope: scope, active: true, revision: 7, started_at: "2026-11-01T00:00:00Z", as_of: stamp,
@@ -30,6 +31,10 @@ function fixture(provider = "tabby") {
     ] };
 }
 const history = (patch = {}) => ({ ...snapshot, items: [{ ...statement, counts: { ...counts }, status: "needs_review" }], ...patch });
+const savedFile = { id: "legacy-tabby-one", provider: "tabby", filename: "saved-tabby.xlsx", statement_reference: "SAVED-TABBY",
+    uploaded_at: stamp, file_hash: "a".repeat(64), original_available: true, can_import: true, unavailable_reason: null };
+const savedFiles = (patch = {}) => ({ session_scope: scope, active: true, started_at: snapshot.started_at, as_of: stamp,
+    permissions: { upload: true }, items: [{ ...savedFile }], has_more: false, ...patch });
 const confirmation = (ids = ["missing"], patch = {}) => {
     const result = fixture();
     result.rows = result.rows.map(row => ids.includes(row.id) ? { ...row, status: "already_confirmed", can_confirm: false, allowed_actions: [] } : row);
@@ -67,6 +72,7 @@ beforeEach(() => {
     useOptionalAuth.mockReturnValue({ user: { id: "owner-one", role: "owner" }, loading: false, authStatus: "authenticated" });
     api.providerStatements.mockResolvedValue(history()); api.providerStatementReview.mockResolvedValue(fixture());
     api.uploadProviderStatement.mockResolvedValue(fixture()); api.confirmProviderStatement.mockResolvedValue(confirmation());
+    api.providerStatementSavedFiles.mockResolvedValue(savedFiles()); api.useSavedProviderStatement.mockResolvedValue(fixture());
     let serial = 0; requestId.mockImplementation(() => `intent-${++serial}`);
     host = document.createElement("div"); document.body.appendChild(host); root = createRoot(host); mounted = false;
 });
@@ -514,4 +520,106 @@ test.each([{ source: "unknown" }, { event_date: null }, { amount: null }, { nati
         native_alias: { id: "native-refund", reference: "SYNTHETIC-NATIVE-REFUND", amount: "50.00", native_currency: "SAR", event_date: stamp, source: "payment_refunds", ...patch } };
     api.providerStatementReview.mockResolvedValue(result); await render(); await review();
     expect(host.querySelector('[data-testid="provider-statement-review"]')).toBeNull(); expect(api.confirmProviderStatement).not.toHaveBeenCalled();
+});
+
+const openSavedFiles = async () => {
+    expect(button("استخدام كشف مرفوع سابقًا")).toBeDefined();
+    await click("استخدام كشف مرفوع سابقًا");
+};
+const selectSavedFile = async () => check("اختيار الكشف المحفوظ saved-tabby.xlsx");
+
+test("saved Tabby bridge reads only on opening and uses the selected original only after an explicit click", async () => {
+    api.useSavedProviderStatement.mockResolvedValue({ ...fixture(), statement_average: average });
+    await render(); expect(api.providerStatementSavedFiles).not.toHaveBeenCalled();
+    await openSavedFiles();
+    expect(api.providerStatementSavedFiles).toHaveBeenCalledTimes(1);
+    expect(api.providerStatementSavedFiles).toHaveBeenCalledWith({ signal: expect.any(AbortSignal), _mezanAuthDeadlineAt: expect.any(Number) });
+    expect(host.textContent).toContain("SAVED-TABBY");
+    await selectSavedFile(); await visibility("hidden"); await visibility("visible");
+    expect(api.useSavedProviderStatement).not.toHaveBeenCalled(); expect(api.uploadProviderStatement).not.toHaveBeenCalled();
+    expect(api.providerStatementSavedFiles).toHaveBeenCalledTimes(1);
+    await click("استخدام الكشف المختار ومطابقته");
+    expect(api.useSavedProviderStatement).toHaveBeenCalledWith("legacy-tabby-one", {
+        request_id: "intent-1", expected_session_scope: scope, expected_started_at: snapshot.started_at, expected_file_hash: savedFile.file_hash,
+    }, { signal: expect.any(AbortSignal) });
+    expect(host.querySelector('[aria-label="متوسط رسوم المنصة"]').textContent).toContain("7.47%");
+    expect(host.querySelector('[data-testid="statement-row-blocked"]').textContent).toContain("غير متاح");
+    expect(api.confirmProviderStatement).not.toHaveBeenCalled();
+    expect(api.providerStatements).toHaveBeenCalledTimes(1); expect(api.providerStatementSavedFiles).toHaveBeenCalledTimes(1);
+});
+
+test("uncertain saved-file use retains the exact file hash, period and request identity for explicit retry", async () => {
+    api.useSavedProviderStatement.mockRejectedValueOnce(new Error("uncertain"));
+    await render(); await openSavedFiles(); await selectSavedFile(); await click("استخدام الكشف المختار ومطابقته");
+    const [id, command] = api.useSavedProviderStatement.mock.calls[0];
+    expect(button("إعادة نفس محاولة استخدام الكشف")).toBeDefined();
+    await click("إعادة قراءة قائمة الكشوف السابقة");
+    expect(button("إعادة نفس محاولة استخدام الكشف")).toBeDefined();
+    expect(button("استخدام الكشف المختار ومطابقته").disabled).toBe(true);
+    await click("إعادة نفس محاولة استخدام الكشف");
+    expect(api.useSavedProviderStatement.mock.calls[1][0]).toBe(id);
+    expect(api.useSavedProviderStatement.mock.calls[1][1]).toBe(command); expect(requestId).toHaveBeenCalledTimes(1);
+    expect(api.confirmProviderStatement).not.toHaveBeenCalled(); expect(api.uploadProviderStatement).not.toHaveBeenCalled();
+});
+
+test("saved-file metadata with no original remains visibly unavailable and never invents amounts or totals", async () => {
+    api.providerStatementSavedFiles.mockResolvedValue(savedFiles({ items: [{ ...savedFile, uploaded_at: null, file_hash: null,
+        original_available: false, can_import: false, unavailable_reason: "الملف الأصلي غير محفوظ؛ ارفع نسخة Excel من جديد." }] }));
+    await render(); await openSavedFiles();
+    const section = host.querySelector('[aria-label="الكشوف المرفوعة سابقًا"]');
+    expect(section.textContent).toContain("الملف الأصلي غير محفوظ"); expect(section.textContent).toContain("غير متاح");
+    expect(section.textContent).not.toContain("0.00"); expect(section.querySelector("tfoot")).toBeNull();
+    expect(section.querySelector('input[type="radio"]').disabled).toBe(true);
+    expect(button("استخدام الكشف المختار ومطابقته").disabled).toBe(true);
+    await submit('[data-testid="provider-saved-file-use"]'); expect(api.useSavedProviderStatement).not.toHaveBeenCalled();
+});
+
+test.each([{ session_scope: "another-owner" }, { started_at: "2026-11-10T00:00:00Z" }])("saved-file scope %j is rejected before selection", async patch => {
+    api.providerStatementSavedFiles.mockResolvedValue(savedFiles(patch)); await render(); await openSavedFiles();
+    expect(host.textContent).not.toContain("SAVED-TABBY"); expect(api.useSavedProviderStatement).not.toHaveBeenCalled();
+    expect(host.textContent).toContain("تغيرت المطابقة أو جلسة التشغيل");
+});
+
+test.each([{ file_hash: null }, { original_available: false }])("an importable saved file with unproved original %j is rejected", async patch => {
+    api.providerStatementSavedFiles.mockResolvedValue(savedFiles({ items: [{ ...savedFile, ...patch }] }));
+    await render(); await openSavedFiles(); expect(host.textContent).not.toContain("SAVED-TABBY");
+    expect(api.useSavedProviderStatement).not.toHaveBeenCalled();
+});
+
+test("closing saved-file section aborts its read and ignores a late list without automatic restart", async () => {
+    const late = deferred(); api.providerStatementSavedFiles.mockReturnValueOnce(late.promise);
+    await render(); await openSavedFiles(); const signal = api.providerStatementSavedFiles.mock.calls[0][0].signal;
+    await click("إغلاق قائمة الكشوف السابقة"); expect(signal.aborted).toBe(true);
+    await act(async () => late.resolve(savedFiles())); await visibility("hidden"); await visibility("visible");
+    expect(host.querySelector('[aria-label="الكشوف المرفوعة سابقًا"]')).toBeNull();
+    expect(api.providerStatementSavedFiles).toHaveBeenCalledTimes(1); expect(api.useSavedProviderStatement).not.toHaveBeenCalled();
+});
+
+test("a refreshed operating period discards the selected saved original until a new explicit list read", async () => {
+    await render(); await openSavedFiles(); await selectSavedFile();
+    api.providerStatements.mockResolvedValue(history({ started_at: "2026-11-10T00:00:00Z" }));
+    await click("قراءة سجل الكشوف");
+    expect(host.querySelector('[aria-label="الكشوف المرفوعة سابقًا"] input[type="radio"]')).toBeNull();
+    expect(api.providerStatementSavedFiles).toHaveBeenCalledTimes(1); expect(api.useSavedProviderStatement).not.toHaveBeenCalled();
+});
+
+test.each(["hidden", "auth_loading", "unmount"])("%s consumes saved-file use and fences its late response", async departure => {
+    const late = deferred(); api.useSavedProviderStatement.mockReturnValueOnce(late.promise);
+    await render(); await openSavedFiles(); await selectSavedFile(); await click("استخدام الكشف المختار ومطابقته");
+    const signal = api.useSavedProviderStatement.mock.calls[0][2].signal;
+    if (departure === "hidden") await visibility("hidden");
+    else if (departure === "auth_loading") { useOptionalAuth.mockReturnValue({ user: { id: "owner-one", role: "owner" }, loading: true }); await render(); }
+    else { await act(async () => root.unmount()); mounted = false; }
+    expect(signal.aborted).toBe(true);
+    await act(async () => late.resolve({ ...fixture(), statement_average: average }));
+    if (departure === "hidden") await visibility("visible");
+    expect(host.querySelector('[data-testid="provider-statement-review"]')).toBeNull();
+    expect(api.useSavedProviderStatement).toHaveBeenCalledTimes(1); expect(api.confirmProviderStatement).not.toHaveBeenCalled();
+    expect(api.providerStatements).toHaveBeenCalledTimes(1); expect(api.providerStatementSavedFiles).toHaveBeenCalledTimes(1);
+});
+
+test.each([{ active: false }, { permissions: { upload: false } }])("saved-file restriction %j allows metadata but no use", async patch => {
+    api.providerStatementSavedFiles.mockResolvedValue(savedFiles(patch)); await render(); await openSavedFiles();
+    expect(host.textContent).toContain("SAVED-TABBY"); expect(host.querySelector('[aria-label="اختيار الكشف المحفوظ saved-tabby.xlsx"]').disabled).toBe(true);
+    await submit('[data-testid="provider-saved-file-use"]'); expect(api.useSavedProviderStatement).not.toHaveBeenCalled();
 });

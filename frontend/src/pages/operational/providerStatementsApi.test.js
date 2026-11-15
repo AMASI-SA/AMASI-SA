@@ -37,3 +37,18 @@ test("confirmation forwards only the exact reviewed decision body and never refr
     expect(http.post).toHaveBeenCalledWith("/operational-balances/provider-statements/statement%2Fone/confirm", body, { timeout: 30000, ...config });
     expect(http.get).not.toHaveBeenCalled();
 });
+
+test("saved original list uses one bounded cancellable GET", async () => {
+    const config = { signal: new AbortController().signal };
+    await api.providerStatementSavedFiles(config);
+    expect(http.get).toHaveBeenCalledWith("/operational-balances/provider-statements/saved-files", { timeout: 30000, ...config });
+    expect(http.post).not.toHaveBeenCalled();
+});
+
+test("explicit saved original use pins hash, session and period without a download or follow-up GET", async () => {
+    const body = { request_id: "same-saved-use", expected_session_scope: "scope", expected_started_at: "2026-11-01T00:00:00Z", expected_file_hash: "a".repeat(64) };
+    const config = { signal: new AbortController().signal };
+    await api.useSavedProviderStatement("saved/one", body, config);
+    expect(http.post).toHaveBeenCalledWith("/operational-balances/provider-statements/saved-files/saved%2Fone/use", body, { timeout: 60000, ...config });
+    expect(http.get).not.toHaveBeenCalled();
+});

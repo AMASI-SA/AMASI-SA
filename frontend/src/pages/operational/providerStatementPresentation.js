@@ -141,6 +141,24 @@ export function isStatementHistory(value) {
         && count(item.row_count) && item.row_count <= 10000 && (item.counts === null || validCounts(item.counts)));
 }
 
+export function isSavedStatementFiles(value) {
+    if (!object(value) || !text(value.session_scope) || typeof value.active !== "boolean"
+        || !(value.started_at === null || text(value.started_at)) || !object(value.permissions)
+        || typeof value.permissions.upload !== "boolean" || !Array.isArray(value.items) || value.items.length > 100) return false;
+    const ids = new Set();
+    return value.items.every(item => {
+        if (!object(item) || !text(item.id) || ids.has(item.id) || !Object.hasOwn(STATEMENT_PROVIDERS, item.provider)
+            || typeof item.original_available !== "boolean" || typeof item.can_import !== "boolean"
+            || item.can_import && (!item.original_available || typeof item.file_hash !== "string" || !/^[a-f0-9]{64}$/.test(item.file_hash))) return false;
+        ids.add(item.id); return true;
+    });
+}
+
+export function savedStatementUnavailableReason(item) {
+    if (text(item.unavailable_reason) && !/^[a-z][a-z0-9_]+$/.test(item.unavailable_reason)) return item.unavailable_reason;
+    return item.original_available ? "هذا الكشف غير متاح للاستخدام الآن." : "الملف الأصلي غير متاح؛ يمكنك رفع نسخة Excel من جديد.";
+}
+
 export function isStatementReview(value) {
     if (!validSnapshot(value) || value.bank_posting_allowed !== false || !object(value.statement)
         || !text(value.statement.id) || !Object.hasOwn(STATEMENT_PROVIDERS, value.statement.provider)

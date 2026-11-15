@@ -235,16 +235,36 @@ def store_statement_average_profile(state, profile):
     return True
 
 
-def select_statement_average_profile(state, provider, native_currency, *, payment=None):
+def _statement_average_candidates(state, provider, native_currency, payment):
     profiles = state.get("engine", {}).get("provider_fee_inputs", {}).get("average_profiles", [])
     candidates = [profile for profile in profiles if isinstance(profile, dict)
                   and profile.get("provider") == provider and profile.get("native_currency") == native_currency]
     account = (payment or {}).get("merchant_account")
     if account:
         candidates = [profile for profile in candidates if profile.get("merchant_account") == account]
+    return candidates
+
+
+def select_statement_average_profile(state, provider, native_currency, *, payment=None):
+    candidates = _statement_average_candidates(state, provider, native_currency, payment)
     if (len(candidates) != 1 or not _valid_average_profile(candidates[0], state.get("owner_id"))):
         return None
     return candidates[0]
+
+
+def statement_average_source_summary(state, provider, native_currency, *, payment=None):
+    """Describe a saved source independently of whether any order used it.
+
+    Selection uses the same owner, native currency and account boundary as
+    pricing. Missing or ambiguous scopes never acquire a headline percentage.
+    """
+    candidates = _statement_average_candidates(state, provider, native_currency, payment)
+    if len(candidates) == 1 and _valid_average_profile(candidates[0], state.get("owner_id")):
+        return statement_average_summary(candidates[0])
+    reason = ("source_profile_ambiguous" if len(candidates) > 1 or
+              len(candidates) == 1 and candidates[0].get("status") == "ambiguous" else
+              "source_profile_invalid" if candidates else "source_average_unavailable")
+    return {"available": False, "provider": provider, "native_currency": native_currency, "reason_code": reason}
 
 
 def statement_average_summary(profile):

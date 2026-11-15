@@ -14,6 +14,8 @@ export const operationalApi = {
   providerHistoryReviews: (config = {}) => data(api.get(`${base}/provider-history-reviews`, config)),
   approveProviderHistory: body => data(api.post(`${base}/provider-history-reviews/approve`, body)),
   providerStatements: (config = {}) => data(api.get(`${base}/provider-statements`, {timeout: 30000, ...config})),
+  providerStatementSavedFiles: (config = {}) => data(api.get(`${base}/provider-statements/saved-files`, {timeout: 30000, ...config})),
+  useSavedProviderStatement: (id, body, config = {}) => data(api.post(`${base}/provider-statements/saved-files/${encodeURIComponent(id)}/use`, body, {timeout: 60000, ...config})),
   providerStatementReview: (id, config = {}) => data(api.get(`${base}/provider-statements/${encodeURIComponent(id)}/review`, {timeout: 30000, ...config})),
   uploadProviderStatement: (file, body, config = {}) => {
     const form = new FormData();

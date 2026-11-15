@@ -7,7 +7,8 @@ import { canReadOperationalPage, visibleOperationalRead } from "./visibleOperati
 import {
     MAX_STATEMENT_FILE_BYTES, STATEMENT_COUNTS, STATEMENT_KINDS, STATEMENT_PROVIDERS,
     STATEMENT_AVERAGE_REASONS, STATEMENT_RECORD_EFFECTS, STATEMENT_STATUSES,
-    isStatementAverage, isStatementHistory, isStatementReview, statementActionHref, statementConfirmationAction, statementErrorMessage,
+    isSavedStatementFiles, isStatementAverage, isStatementHistory, isStatementReview, savedStatementUnavailableReason,
+    statementActionHref, statementConfirmationAction, statementErrorMessage,
     statementEstimatedAmount, statementMoney, statementRate, statementRowMessage, statementText,
 } from "./providerStatementPresentation";
 import "./operational.css";
@@ -16,8 +17,10 @@ import "./providerStatements.css";
 const date = value => typeof value === "string" && value && Number.isFinite(Date.parse(value)) ? formatRiyadhDateTime(value) : "غير متاح";
 const accepts = row => Boolean(statementConfirmationAction(row));
 const createsEvent = row => ["record_missing_capture", "record_missing_refund"].includes(statementConfirmationAction(row));
+const intake = kind => kind === "upload" || kind === "saved";
 const uncertain = kind => kind === "upload"
     ? "لم نتأكد من نتيجة الرفع. يمكنك إعادة نفس المحاولة؛ لن يُنشأ كشف مكرر."
+    : kind === "saved" ? "لم نتأكد من نتيجة استخدام الكشف. أعد نفس المحاولة أو اقرأ السجل للتحقق؛ لن تُكرر العمليات."
     : "لم نتأكد من نتيجة الاعتماد. أعد نفس المحاولة أو اقرأ المطابقة مجددًا للتحقق من السجل.";
 const snapshot = result => ({ session_scope: result.session_scope, active: result.active, revision: result.revision,
     started_at: result.started_at, as_of: result.as_of, permissions: result.permissions });
@@ -93,6 +96,8 @@ export default function ProviderStatements() {
 
 function StatementWorkspace() {
     const [history, setHistory] = useState(null), [detail, setDetail] = useState(null);
+    const [savedFilesOpen, setSavedFilesOpen] = useState(false), [savedFiles, setSavedFiles] = useState(null);
+    const [selectedSavedId, setSelectedSavedId] = useState("");
     const [file, setFile] = useState(null), [fileKey, setFileKey] = useState(0);
     const [choices, setChoices] = useState({}), [acknowledged, setAcknowledged] = useState(false);
     const [confirmedUnrecorded, setConfirmedUnrecorded] = useState(false);
@@ -107,6 +112,7 @@ function StatementWorkspace() {
     function resetSession() {
         context.current = null; currentDetail.current = null;
         setHistory(null); setDetail(null); setFile(null); setFileKey(value => value + 1);
+        setSavedFiles(null); setSavedFilesOpen(false); setSelectedSavedId("");
         clearSelection(); clearPending(); setNotice("");
     }
     function acceptReview(result, expectedScope, expectedId, expectedStart, saved = false) {
@@ -117,7 +123,7 @@ function StatementWorkspace() {
             failure.response = { status: 409 }; throw failure;
         }
         context.current = snapshot(result); currentDetail.current = result;
-        setDetail(result); clearSelection();
+        setDetail(result); clearSelection(); setSelectedSavedId("");
         setHistory(previous => {
             const items = previous?.session_scope === result.session_scope ? previous.items : [];
             const cached = items.find(row => row.id === result.statement.id);
@@ -132,16 +138,17 @@ function StatementWorkspace() {
 
     function read(kind, id, initial = false) {
         if (writeLock.current || denied) return;
-        if (kind === "review" && !context.current) return;
+        if (kind !== "history" && !context.current) return;
         const expectedScope = context.current?.session_scope;
         const expectedStart = context.current?.started_at;
         const generation = ++readGeneration.current;
         readCleanup.current?.();
-        setBusy("read"); setError(""); setNotice("");
+        setBusy(kind === "saved" ? "saved_read" : "read"); setError(""); setNotice("");
+        if (kind === "saved") { setSavedFiles(null); setSelectedSavedId(""); }
         if (kind === "review") { currentDetail.current = null; setDetail(null); clearSelection(); }
         const current = () => alive.current && generation === readGeneration.current;
         readCleanup.current = visibleOperationalRead(config => kind === "history"
-            ? api.providerStatements(config) : api.providerStatementReview(id, config), {
+            ? api.providerStatements(config) : kind === "saved" ? api.providerStatementSavedFiles(config) : api.providerStatementReview(id, config), {
             onData: result => {
                 if (!current()) return;
                 if (kind === "history") {
@@ -151,8 +158,18 @@ function StatementWorkspace() {
                     }
                     context.current = snapshot(result); currentDetail.current = null;
                     setHistory(result); setDetail(null); clearSelection();
+                    setSavedFiles(null); setSelectedSavedId("");
+                } else if (kind === "saved") {
+                    if (!isSavedStatementFiles(result)) throw new Error("invalid_saved_statement_files");
+                    if (result.session_scope !== expectedScope || result.started_at !== expectedStart) {
+                        resetSession(); const failure = new Error("statement_session_changed");
+                        failure.response = { status: 409 }; throw failure;
+                    }
+                    setSavedFiles(result); setSelectedSavedId("");
                 } else acceptReview(result, expectedScope, id, expectedStart);
-                clearPending();
+                // Saved-file metadata cannot establish whether an uncertain
+                // use command committed; retain its exact identity for retry.
+                if (kind !== "saved") clearPending();
             },
             onError: failure => {
                 if (!current()) return;
@@ -195,8 +212,8 @@ function StatementWorkspace() {
         if (!command || writeLock.current || !alive.current || !canReadOperationalPage() || denied) return;
         const current = context.current;
         if (!current?.active || command.body.expected_session_scope !== current.session_scope
-            || current.permissions[command.kind === "upload" ? "upload" : "confirm"] !== true) return;
-        if (command.kind === "upload" && (!current.started_at || command.body.expected_started_at !== current.started_at)) return;
+            || current.permissions[intake(command.kind) ? "upload" : "confirm"] !== true) return;
+        if (intake(command.kind) && (!current.started_at || command.body.expected_started_at !== current.started_at)) return;
         writeLock.current = true; readGeneration.current += 1; readCleanup.current?.();
         const attempt = { command, controller: new AbortController(), valid: true };
         operation.current = attempt; pendingCommand.current = command; setPending(command);
@@ -206,6 +223,7 @@ function StatementWorkspace() {
             const config = { signal: attempt.controller.signal };
             const result = command.kind === "upload"
                 ? await api.uploadProviderStatement(command.file, command.body, config)
+                : command.kind === "saved" ? await api.useSavedProviderStatement(command.id, command.body, config)
                 : await api.confirmProviderStatement(command.id, command.body, config);
             if (!stillCurrent()) return;
             if (command.kind === "confirm" && (!Array.isArray(result?.applied_row_ids)
@@ -214,11 +232,13 @@ function StatementWorkspace() {
                 || !command.body.decisions.every(decision => result.applied_row_ids.includes(decision.row_id)))) {
                 throw new Error("unconfirmed_statement_result");
             }
-            acceptReview(result, command.body.expected_session_scope, command.kind === "upload" ? result?.statement?.id : command.id,
-                command.kind === "upload" ? command.body.expected_started_at : command.startedAt, true);
+            acceptReview(result, command.body.expected_session_scope, intake(command.kind) ? result?.statement?.id : command.id,
+                intake(command.kind) ? command.body.expected_started_at : command.startedAt, true);
             clearPending(); setFile(null); setFileKey(value => value + 1);
-            setNotice(command.kind === "upload"
-                ? result.replayed || result.duplicate ? "هذا الكشف محفوظ مسبقًا. عُرضت مطابقته دون تكرار العمليات." : "حُفظ الكشف وعُرضت المطابقة. راجع العمليات التي تحتاج قرارًا أدناه."
+            setNotice(intake(command.kind)
+                ? result.replayed || result.duplicate ? "هذا الكشف محفوظ مسبقًا. عُرضت مطابقته دون تكرار العمليات."
+                    : command.kind === "saved" ? "استُخدم الملف الأصلي المحفوظ وعُرضت مطابقته. راجع العمليات التي تحتاج قرارًا أدناه."
+                        : "حُفظ الكشف وعُرضت المطابقة. راجع العمليات التي تحتاج قرارًا أدناه."
                 : result.replayed ? "هذا الاعتماد مسجل مسبقًا. لم تُكرر العمليات."
                     : command.body.confirmed_unrecorded ? "حُفظ الاعتماد وسُجلت العمليات المالية المحددة. تم تحديث دليل العمولة."
                         : command.body.decisions.every(decision => decision.action === "link_native_refund") ? "حُفظ ربط مرجع الاسترجاع بالعملية المحتسبة دون خصم إضافي."
@@ -240,7 +260,7 @@ function StatementWorkspace() {
     function chooseFile(event) {
         if (busy || pendingCommand.current) return;
         const selected = event.target.files?.[0];
-        setFile(null); setError(""); setNotice("");
+        setFile(null); setError(""); setNotice(""); setSelectedSavedId("");
         currentDetail.current = null; setDetail(null); clearSelection();
         if (!selected) return;
         if (!/\.xlsx$/i.test(selected.name)) { setError("اختر ملف Excel أصليًا بصيغة .xlsx من تابي أو تمارا أو سلة."); return; }
@@ -251,6 +271,27 @@ function StatementWorkspace() {
         event.preventDefault();
         if (!file || busy || pendingCommand.current || !context.current?.permissions.upload) return;
         send({ kind: "upload", file, body: { request_id: requestId(), expected_session_scope: context.current.session_scope, expected_started_at: context.current.started_at } });
+    }
+    function toggleSavedFiles() {
+        if (savedFilesOpen) {
+            if (busy === "saved_read") { readGeneration.current += 1; readCleanup.current?.(); setBusy(""); }
+            setSavedFilesOpen(false); setSavedFiles(null); setSelectedSavedId("");
+        } else {
+            setSavedFilesOpen(true); read("saved");
+        }
+    }
+    function chooseSavedFile(id) {
+        if (!canUseSaved || !savedFiles.items.some(item => item.id === id && item.can_import)) return;
+        setSelectedSavedId(id); setFile(null); setFileKey(value => value + 1); setError(""); setNotice("");
+        currentDetail.current = null; setDetail(null); clearSelection();
+    }
+    function useSavedFile(event) {
+        event.preventDefault();
+        if (!canUseSaved) return;
+        const selected = savedFiles.items.find(item => item.id === selectedSavedId && item.can_import && item.original_available);
+        if (!selected) return;
+        send({ kind: "saved", id: selected.id, body: { request_id: requestId(), expected_session_scope: savedFiles.session_scope,
+            expected_started_at: savedFiles.started_at, expected_file_hash: selected.file_hash } });
     }
     function confirm(event) {
         event.preventDefault();
@@ -273,22 +314,48 @@ function StatementWorkspace() {
     const recordsNewEvents = selected.some(createsEvent);
     const disabled = Boolean(busy || pending || !readable || !history?.active || denied);
     const canConfirm = detail?.active && detail?.permissions.confirm && history?.session_scope === detail?.session_scope;
+    const canUseSaved = !disabled && history?.permissions.upload && savedFiles?.active && savedFiles.permissions.upload
+        && Boolean(savedFiles.started_at) && savedFiles.session_scope === history?.session_scope && savedFiles.started_at === history?.started_at;
     return <>
         {error && <p role="alert" className="op-error">{error}</p>}
         {notice && <p role="status" className="op-success">{notice}</p>}
         {denied ? <p className="op-muted">أعد تسجيل الدخول بحساب المالك لعرض الكشوف.</p> : <>
             <div className="op-statement-toolbar">
                 <button type="button" onClick={() => read("history")} disabled={Boolean(busy) || !readable}>قراءة سجل الكشوف</button>
-                {busy && <span role="status">{busy === "upload" ? "جارٍ رفع الكشف ومطابقته…" : busy === "confirm" ? "جارٍ حفظ الاعتماد…" : "جارٍ قراءة الكشوف…"}</span>}
+                {busy && <span role="status">{busy === "upload" ? "جارٍ رفع الكشف ومطابقته…" : busy === "saved" ? "جارٍ استخدام الكشف المحفوظ ومطابقته…" : busy === "confirm" ? "جارٍ حفظ الاعتماد…" : "جارٍ قراءة الكشوف…"}</span>}
             </div>
             {pending && !busy && <section className="op-statement-pending" aria-label="محاولة تحتاج تحقق">
                 <p>احتُفظ بنفس المحاولة لحماية السجل من التكرار. لا تبدأ عملية أخرى قبل التحقق من النتيجة.</p>
                 <button type="button" onClick={() => send(pendingCommand.current)} disabled={Boolean(busy) || !readable}>
-                    {pending.kind === "upload" ? "إعادة نفس محاولة الرفع" : "إعادة نفس محاولة الاعتماد"}</button>
+                    {pending.kind === "upload" ? "إعادة نفس محاولة الرفع" : pending.kind === "saved" ? "إعادة نفس محاولة استخدام الكشف" : "إعادة نفس محاولة الاعتماد"}</button>
                 {pending.kind === "confirm" && <button type="button" onClick={() => read("review", pending.id)} disabled={Boolean(busy) || !readable}>قراءة المطابقة مجددًا</button>}
             </section>}
             {history && <>
                 {!history.active && <p className="op-error">التشغيل غير نشط. يمكنك قراءة الكشوف المحفوظة، ويتاح الرفع والاعتماد أثناء التشغيل.</p>}
+                <button type="button" className="op-statement-saved-toggle" aria-expanded={savedFilesOpen} onClick={toggleSavedFiles}
+                    disabled={(Boolean(busy) && busy !== "saved_read") || Boolean(pending) || !readable}>
+                    {savedFilesOpen ? "إغلاق قائمة الكشوف السابقة" : "استخدام كشف مرفوع سابقًا"}</button>
+                {savedFilesOpen && <section className="op-statement-saved" aria-label="الكشوف المرفوعة سابقًا">
+                    <h2>الكشوف المرفوعة سابقًا</h2><p>اختر ملفًا أصليًا محفوظًا من تابي أو تمارا أو سلة، ثم استخدمه لمطابقة العمليات والرسوم داخل الأرصدة التشغيلية.</p>
+                    <button type="button" onClick={() => read("saved")} disabled={Boolean(busy) || !readable}>إعادة قراءة قائمة الكشوف السابقة</button>
+                    {!savedFiles ? <p className="op-muted">{busy === "saved_read" ? "جارٍ قراءة بيانات الملفات المحفوظة…" : "لم تتوفر قائمة ملفات للعرض؛ أعد قراءتها عند الحاجة."}</p>
+                        : <form onSubmit={useSavedFile} data-testid="provider-saved-file-use">
+                            {savedFiles.has_more && <p className="op-muted">تعرض القائمة أحدث {savedFiles.items.length} ملفًا. توجد ملفات أقدم محفوظة.</p>}
+                            {!savedFiles.items.length ? <p className="op-muted">لا توجد كشوف منصات محفوظة متاحة في هذه القائمة.</p>
+                                : <PaginatedReportTable rows={savedFiles.items} label="الكشوف السابقة المتاحة" resetKey={`${savedFiles.session_scope}:${savedFiles.started_at}`}>
+                                    {rows => <div className="op-table"><table><thead><tr><th>اختيار</th><th>المنصة والكشف</th><th>وقت الرفع</th><th>حالة الأصل</th></tr></thead>
+                                        <tbody>{rows.map(item => <tr key={item.id} data-testid={`saved-provider-file-${item.id}`}>
+                                            <td><label><input type="radio" name="saved-provider-file" aria-label={`اختيار الكشف المحفوظ ${item.filename || item.statement_reference || item.id}`}
+                                                checked={selectedSavedId === item.id} disabled={!canUseSaved || !item.can_import}
+                                                onChange={() => chooseSavedFile(item.id)} /> اختيار</label></td>
+                                            <td><strong>{STATEMENT_PROVIDERS[item.provider]}</strong><span>{statementText(item.filename)}</span><small>{statementText(item.statement_reference)}</small></td>
+                                            <td>{date(item.uploaded_at)}</td><td>{item.can_import ? "الملف الأصلي متاح للمطابقة" : savedStatementUnavailableReason(item)}</td>
+                                        </tr>)}</tbody></table></div>}
+                                </PaginatedReportTable>}
+                            <p className="op-muted">تُعتمد رسوم العمليات المطابقة، وتبقى الفروق والعمليات غير المسجلة للمراجعة.</p>
+                            <button type="submit" className="op-primary" disabled={!canUseSaved || !selectedSavedId}>استخدام الكشف المختار ومطابقته</button>
+                        </form>}
+                </section>}
                 <form onSubmit={upload} className="op-statement-upload" data-testid="provider-statement-upload">
                     <h2>رفع كشف للمطابقة</h2>
                     <label className="op-field">ملف كشف المنصة

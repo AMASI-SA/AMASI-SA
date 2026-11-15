@@ -23,8 +23,11 @@ node scripts/testing/provider_statements/browser.cjs
 An optional `PROVIDER_STATEMENT_UAT_CHROMIUM` selects an already installed
 Chromium executable. The gate checks desktop and mobile RTL layouts, exact plan
 labels and fees, unknown amounts, explicit missing-refund acknowledgement,
-bounded viewport width, and no automatic POST on mount, file selection, or a
-hidden/visible cycle. A source manifest, count-only summary and synthetic
+bounded viewport width, and no automatic POST on mount, file selection, saved
+list opening/selection, or a hidden/visible cycle. Desktop uses a saved Tabby
+original with an explicit hash/period-bound action; mobile uploads a new file.
+An unavailable saved original has no invented amount or enabled use action.
+A source manifest, count-only summary and synthetic
 screenshots are written outside the repository. This fixture build is never a
 governed production artifact. Backend parser and transaction correctness are
 covered by the separate backend tests.

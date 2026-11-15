@@ -20,10 +20,18 @@ const server = http.createServer(async (request,response) => {
       calls.push({method:request.method,path:url.pathname,scenario});
       if (request.method === 'GET' && url.pathname === '/api/auth/me') return send(200,{id:'synthetic-owner',role:'owner',is_owner:true});
       if (request.method === 'GET' && url.pathname === '/api/operational-balances/provider-statements') return send(200,fixture.history(uploaded,confirmed));
+      if (request.method === 'GET' && url.pathname === '/api/operational-balances/provider-statements/saved-files') return send(200,fixture.savedFiles());
       if (request.method === 'GET' && url.pathname === '/api/operational-balances/provider-statements/synthetic-weekly-statement/review') return send(200,fixture.detail(confirmed));
       let size=0; const chunks=[];
       for await (const chunk of request) {size+=chunk.length;assert(size<=2*1024*1024,'Synthetic body must remain bounded');chunks.push(chunk);}
       const bytes=Buffer.concat(chunks);
+      if (request.method === 'POST' && url.pathname === '/api/operational-balances/provider-statements/saved-files/synthetic-saved-tabby/use') {
+        const body=JSON.parse(bytes.toString('utf8'));
+        assert.deepEqual(Object.keys(body).sort(),['expected_file_hash','expected_session_scope','expected_started_at','request_id']);
+        assert.equal(body.expected_file_hash,fixture.savedFiles().items[0].file_hash);
+        assert.equal(body.expected_session_scope,fixture.scope);assert.equal(body.expected_started_at,fixture.startedAt);assert(body.request_id.length>=8);
+        assert.equal(uploaded,false,'One explicit saved-file use only');uploaded=true;return send(200,fixture.detail());
+      }
       if (request.method === 'POST' && url.pathname === '/api/operational-balances/provider-statements/upload') {
         const body = await new Request('http://127.0.0.1/fixture',{method:'POST',headers:request.headers,body:bytes}).formData();
         assert.deepEqual([...body.keys()],['file','request_id','expected_session_scope','expected_started_at']);
@@ -74,9 +82,19 @@ async function visibilityCycle(page) {
       const page=await context.newPage();page.on('pageerror',error=>errors.push(error.message));
       await page.goto(origin);await page.getByRole('heading',{name:'رفع كشف للمطابقة',exact:true}).waitFor();
       assert.equal(posts(first).length,0,'Mount must never POST');await visibilityCycle(page);
-      await page.getByLabel('ملف كشف المنصة',{exact:true}).setInputFiles({name:'weekly-tabby.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:Buffer.from('synthetic-only-file')});
-      await quiet(page);assert.equal(posts(first).length,0,'Selecting a file must never upload');
-      await page.getByRole('button',{name:'رفع الكشف ومطابقته',exact:true}).click();
+      assert.equal(calls.slice(first).filter(call=>call.path.endsWith('/saved-files')).length,0,'Saved metadata needs explicit opening');
+      if(scenario==='desktop') {
+        await page.getByRole('button',{name:'استخدام كشف مرفوع سابقًا',exact:true}).click();
+        const saved=page.getByLabel('اختيار الكشف المحفوظ saved-weekly-tabby.xlsx',{exact:true});await saved.waitFor();
+        assert.equal(await page.getByLabel('اختيار الكشف المحفوظ missing-original.xlsx',{exact:true}).isDisabled(),true);
+        await saved.check();await visibilityCycle(page);assert.equal(posts(first).length,0,'Selecting a saved original must never use it');
+        assert.equal(calls.slice(first).filter(call=>call.path.endsWith('/saved-files')).length,1);
+        await page.getByRole('button',{name:'استخدام الكشف المختار ومطابقته',exact:true}).click();
+      } else {
+        await page.getByLabel('ملف كشف المنصة',{exact:true}).setInputFiles({name:'weekly-tabby.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:Buffer.from('synthetic-only-file')});
+        await quiet(page);assert.equal(posts(first).length,0,'Selecting a file must never upload');
+        await page.getByRole('button',{name:'رفع الكشف ومطابقته',exact:true}).click();
+      }
       await page.getByTestId('provider-statement-review').waitFor();assert.equal(posts(first).length,1);
       assert((await page.getByTestId('statement-row-sale-matched').innerText()).includes('Installments: 11 Months'));
       assert((await page.getByTestId('statement-row-refund-missing').innerText()).includes('Installments: 5 Months'));
@@ -100,7 +118,7 @@ async function visibilityCycle(page) {
       assert.equal(posts(first).length,2);await visibilityCycle(page);assert.equal(posts(first).length,2);
       assert.equal(await page.getByTestId('statement-row-refund-missing').locator('input[type=checkbox]').count(),0);
       scenarios.push({name:scenario,status:'PASS',viewport,request_counts:{get:calls.slice(first).filter(call=>call.method==='GET').length,post:posts(first).length},dimensions});
-      await context.close();console.log('PASS '+scenario+' real component upload, review, missing refund and visibility');
+      await context.close();console.log('PASS '+scenario+' real component intake, review, missing refund and visibility');
     }
     assert.equal(errors.length,0,errors.join('\n'));
     fs.writeFileSync(path.join(out,'summary.json'),JSON.stringify({synthetic_only:true,status:'PASS',scenarios,blocked_external_requests:blockedExternal,page_errors:errors.length,

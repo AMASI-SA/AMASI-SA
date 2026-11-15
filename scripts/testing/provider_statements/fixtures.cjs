@@ -31,4 +31,12 @@ function detail(confirmed=false) {
 function history(uploaded=false, confirmed=false) {
   return {...snapshot,revision:confirmed?8:7,items:uploaded?[{...statement,counts:detail(confirmed).counts,reviewed_at:evidenceTime,review_as_of:sourceTime,statement_average:{...average},status:'needs_review'}]:[],has_more:false};
 }
-module.exports = {scope,startedAt,detail,history};
+function savedFiles() {
+  return {session_scope:scope,active:true,started_at:startedAt,as_of:sourceTime,permissions:{upload:true},has_more:false,items:[
+    {id:'synthetic-saved-tabby',provider:'tabby',filename:'saved-weekly-tabby.xlsx',statement_reference:'SYNTHETIC-SAVED-WEEK-01',
+      uploaded_at:evidenceTime,file_hash:statement.file_hash,original_available:true,can_import:true,unavailable_reason:null},
+    {id:'synthetic-missing-original',provider:'tamara',filename:'missing-original.xlsx',statement_reference:'SYNTHETIC-MISSING-ORIGINAL',
+      uploaded_at:null,file_hash:null,original_available:false,can_import:false,unavailable_reason:'الملف الأصلي غير محفوظ؛ ارفع نسخة Excel من جديد.'},
+  ]};
+}
+module.exports = {scope,startedAt,detail,history,savedFiles};

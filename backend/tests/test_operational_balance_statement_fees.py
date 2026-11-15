@@ -245,6 +245,122 @@ def test_absent_source_profile_never_invents_an_average():
     assert row["known_fees"] is None and row["average_estimated_orders"] == 0
 
 
+@pytest.mark.parametrize("case,expected_fee", [("held", None), ("actual", "8.05"),
+                                               ("known_plan", "9.20"), ("no_eligible", None)])
+def test_saved_source_average_remains_visible_without_applied_estimates(case, expected_fee):
+    state, _ = tabby_state(plan="synthetic-plan" if case == "known_plan" else None)
+    if case == "held":
+        state["engine"]["obligations"]["provider:one"]["incomplete"] = True
+    elif case == "actual":
+        attach(state, accepted_event(state))
+    elif case == "no_eligible":
+        state["engine"]["provider_fee_inputs"]["orders"]["one"]["created_at"] = state["started_at"]
+    before = deepcopy(state)
+    row = platform(state, "tabby")
+    assert row["known_fees"] == expected_fee and row["average_estimated_orders"] == 0
+    assert row["average_fee_profiles"] == []
+    assert row["source_average_status"] == "available"
+    profile, = row["source_average_profiles"]
+    assert (profile["rate_percent"], profile["fixed_amount_per_sale"], profile["vat_rate_percent"]) == (
+        "6.25000000", "1.50000000", "15.00000000")
+    without_source = deepcopy(state)
+    without_source["engine"]["provider_fee_inputs"].pop("average_profiles")
+    original = platform(without_source, "tabby")
+    assert {key: value for key, value in row.items() if not key.startswith("source_average_")} == {
+        key: value for key, value in original.items() if not key.startswith("source_average_")}
+    displayed, = table(build_financial_position(state), "providers")["rows"]
+    assert "6.25% قبل الضريبة" in displayed["source_average_description"]
+    assert "1.5 SAR لكل عملية" in displayed["source_average_description"]
+    assert "15%" in displayed["source_average_description"] and "2026-11-01" in displayed["source_average_description"]
+    assert state == before
+
+
+def test_saved_source_average_does_not_cross_native_currency_or_unknown_account_scope():
+    state, order = tabby_state(currency="QAR")
+    order["customer_payment_sar"] = {"currency": "QAR", "native": {"tabby": "100.00"},
+        "shares": {"tabby": "110.00"}, "paid": "110.00", "basis": "salla_list_paid"}
+    state["engine"]["provider_fee_inputs"]["orders"]["one"]["customer_payment_sar"] = order["customer_payment_sar"]
+    refresh_basis(state, [order], state["engine"]["issues"])
+    row = platform(state, "tabby", provider_balances_sar=True)
+    assert row["source_average_status"] == "unavailable" and row["source_average_profiles"] == []
+    assert row["source_average_issues"][0]["native_currency"] == "QAR"
+    store_statement_average_profile(state, source_profile(state, currency="QAR", source="b"))
+    freeze_statement_fee_events(state)
+    state["engine"]["obligations"]["provider:one"]["incomplete"] = True
+    displayed, = table(build_financial_position(state), "providers")["rows"]
+    assert [profile["native_currency"] for profile in displayed["source_average_profiles"]] == ["QAR"]
+    assert "1.5 QAR لكل عملية" in displayed["source_average_description"]
+    assert "1.5 SAR لكل عملية" not in displayed["source_average_description"] and displayed["fees"] is None
+    state, _ = tabby_state()
+    state["provider_statement_reconciliation"]["average_profiles"] = {}
+    for account, source in (("account-a", "b"), ("account-b", "c")):
+        store_statement_average_profile(state, source_profile(state, account=account, source=source))
+    freeze_statement_fee_events(state)
+    row = platform(state, "tabby")
+    assert row["source_average_profiles"] == [] and row["source_average_status"] == "unavailable"
+    assert row["source_average_issues"][0]["reason_code"] == "source_profile_ambiguous"
+    state["engine"]["provider_fee_inputs"]["orders"]["one"]["payment"]["merchant_account"] = "account-a"
+    row = platform(state, "tabby")
+    assert [profile["merchant_account"] for profile in row["source_average_profiles"]] == ["account-a"]
+
+
+def test_saved_source_average_mixed_account_scope_preserves_known_fee_on_incomplete_row():
+    state, _ = tabby_state()
+    state["provider_statement_reconciliation"]["average_profiles"] = {}
+    store_statement_average_profile(state, source_profile(state, account="account-a"))
+    freeze_statement_fee_events(state)
+    first = state["engine"]["provider_fee_inputs"]["orders"]["one"]
+    first["payment"]["merchant_account"] = "account-a"
+    second = deepcopy(first)
+    second["payment"]["merchant_account"] = "account-b"
+    second["payment"]["captures"][0]["id"] = "second-receipt"
+    state["engine"]["provider_fee_inputs"]["orders"]["two"] = second
+    state["engine"]["facts"]["capture:second-receipt"] = {"order_id": "two", "provider": "tabby", "amount": "100.00"}
+    state["engine"]["obligations"]["provider:two"] = {**state["engine"]["obligations"]["provider:one"],
+        "id": "provider:two", "incomplete": True}
+    before = deepcopy(state)
+    row = platform(state, "tabby")
+    assert row["source_average_status"] == "partial"
+    assert [profile["merchant_account"] for profile in row["source_average_profiles"]] == ["account-a"]
+    assert row["source_average_issues"] == [{"native_currency": "SAR", "reason_code": "source_average_unavailable", "scopes": 1}]
+    assert row["known_fees"] == "8.34" and row["held_orders"] == 1 and row["paid_orders"] == 2
+    assert row["average_estimated_orders"] == 1 and row["net_confirmed_orders"] == 0 and not row["complete"]
+    displayed, = table(build_financial_position(state), "providers")["rows"]
+    assert displayed["fees"] == "8.34" and "الحساب account-a" in displayed["source_average_description"]
+    assert "لا يوجد متوسط محفوظ مطابق للنطاق" in displayed["source_average_description"]
+    assert state == before
+
+
+@pytest.mark.parametrize("wrong_scope", ["owner", "provider"])
+def test_saved_source_average_rejects_other_owner_or_provider(wrong_scope):
+    state, _ = tabby_state()
+    profile = (source_profile({**state, "owner_id": "foreign-owner"}) if wrong_scope == "owner"
+               else source_profile(state, provider="tamara"))
+    state["engine"]["provider_fee_inputs"]["average_profiles"] = [profile]
+    row = platform(state, "tabby")
+    assert row["source_average_status"] == "unavailable" and row["source_average_profiles"] == []
+    displayed, = table(build_financial_position(state), "providers")["rows"]
+    assert "6.25%" not in displayed["source_average_description"]
+    assert "foreign-owner" not in displayed["source_average_description"]
+
+
+@pytest.mark.parametrize("tax_status,label", [("missing", "غير مكتملة"), ("source_conflict", "تحتاج مراجعة لتعارض المصدر")])
+def test_saved_source_average_displays_tax_limit_without_applying_it(tax_status, label):
+    state, _ = tabby_state()
+    data = source_statement()
+    for sale in data["rows"]:
+        sale["fee_vat_rate"] = None
+        sale["fee_component_issues"] = ["statement_tax_rate_invalid"] if tax_status == "source_conflict" else []
+    profile = derive_statement_average_profile(state, data, statement_id="vat-limit",
+        accepted_at="2026-11-02T12:00:00+03:00")
+    state["engine"]["provider_fee_inputs"]["average_profiles"] = [profile]
+    state["engine"]["obligations"]["provider:one"]["incomplete"] = True
+    displayed, = table(build_financial_position(state), "providers")["rows"]
+    assert "6.25% قبل الضريبة" in displayed["source_average_description"]
+    assert label in displayed["source_average_description"] and "15%" not in displayed["source_average_description"]
+    assert displayed["fees"] is None and displayed["average_estimated_orders"] == 0
+
+
 def test_actual_statement_replaces_average_read_only_and_uses_separate_evidence_date():
     state, _ = tabby_state()
     attach(state, accepted_event(state))

@@ -318,6 +318,44 @@ def _provider_table(rows, issues):
     status_labels = {"confirmed": "فعلية مثبتة", "estimated": "تقديرية",
                      "mixed": "فعلية وتقديرية", "review": "تحتاج مراجعة", "unavailable": "غير متاحة"}
 
+    def decimal_text(value):
+        if value is None:
+            return "غير متاح"
+        text = str(value)
+        return (text.rstrip("0").rstrip(".") or "0") if "." in text else text
+
+    def source_average_description(row):
+        parts = []
+        for source in row.get("source_average_profiles", []):
+            currency = source["native_currency"]
+            account = f"، الحساب {source['merchant_account']}" if source.get("merchant_account") else ""
+            tax = (decimal_text(source.get("vat_rate_percent")) + "%" if source.get("vat_rate_status") == "explicit_uniform"
+                   and source.get("vat_rate_percent") is not None else
+                   "تحتاج مراجعة لتعارض المصدر" if source.get("vat_rate_status") == "source_conflict" else "غير مكتملة")
+            date_label = {"statement_date": "تاريخ الكشف", "sale_event_date": "تاريخ بيع المصدر",
+                          "accepted_at": "وقت اعتماد المصدر"}.get(source.get("source_date_basis"), "تاريخ المصدر")
+            source_date = str(source.get("source_as_of") or "غير متاح")
+            if source.get("date_precision") == "instant":
+                try:
+                    stamp = datetime.fromisoformat(source_date.replace("Z", "+00:00"))
+                    if stamp.tzinfo is not None:
+                        source_date = stamp.astimezone(timezone(timedelta(hours=3))).strftime("%Y-%m-%d %H:%M") + " (الرياض)"
+                except ValueError:
+                    pass
+            reference = str(source.get("statement_reference") or "الكشف المحفوظ")
+            parts.append(f"مصدر تقديري محفوظ لنطاق {currency}{account}: "
+                f"{decimal_text(source.get('rate_percent'))}% قبل الضريبة؛ "
+                f"متوسط ثابت المصدر {decimal_text(source.get('fixed_amount_per_sale'))} {currency} لكل عملية (تقديري)؛ "
+                f"ضريبة المصدر {tax}؛ {reference}؛ {date_label} {source_date}")
+        reasons = {"source_profile_ambiguous": "مصادر أو حسابات متعددة؛ يلزم تحديد النطاق",
+                   "source_profile_invalid": "تعذر التحقق من مصدر المتوسط",
+                   "source_average_unavailable": "لا يوجد متوسط محفوظ مطابق للنطاق",
+                   "source_scope_unproven": "لم يثبت نطاق العملة والحساب لمصدر المتوسط"}
+        for issue in row.get("source_average_issues", []):
+            prefix = str(issue["native_currency"]) + ": " if issue.get("native_currency") else ""
+            parts.append(prefix + reasons.get(issue.get("reason_code"), "مصدر المتوسط غير متاح"))
+        return " | ".join(parts) or "لا يوجد متوسط مصدر محفوظ"
+
     def fee_metadata(row):
         basis = " + ".join(basis_labels[key] for key in row.get("fee_basis_sources", []) if key in basis_labels)
         basis = basis or basis_labels.get(row.get("fee_basis"), "غير متاح")
@@ -349,6 +387,7 @@ def _provider_table(rows, issues):
             pass
         return {"fee_status_label": status, "fee_basis_label": basis,
                 "fee_description": status + "؛ " + basis + (f"؛ طلبات المتوسط: {count}" if count else "") + average_description,
+                "source_average_description": source_average_description(row),
                 "actual_fees": _money((_number(row.get("actual_statement_fees")) or ZERO)
                                       + (_number(row.get("actual_settlement_fees")) or ZERO)),
                 "statement_evidence_date_label": date_label}
@@ -357,6 +396,7 @@ def _provider_table(rows, issues):
                _column("gross", "المدفوع المثبت"), _column("fees", "العمولات المحتسبة مع ضريبتها"),
                _column("actual_fees", "منها عمولات فعلية"), _column("estimated_fees", "منها عمولات تقديرية"),
                _column("fee_description", "حالة العمولة ومصدرها", "text"),
+               _column("source_average_description", "مصدر متوسط العمولة المحفوظ", "text"),
                _column("statement_evidence_date_label", "آخر قبول لدليل الرسوم", "text"),
                _column("refunded", "الاستردادات"), _column("net", "صافي محتسب متبقٍ لنا", role="receivable"),
                _column("pending_orders", "طلبات تحتاج مراجعة", "exceptions")]
@@ -373,9 +413,10 @@ def _provider_table(rows, issues):
                                      if not displayed or any(row["orders"] is not None for row in displayed) else None),
                           "pending_orders": len({item["order_id"] for row in rows for item in row.get("pending_order_details", [])})
                               + sum(row.get("unidentified_pending_orders", 0) for row in rows),
-                          "fee_description": "", "statement_evidence_date_label": ""},
+                          "fee_description": "", "source_average_description": "", "statement_evidence_date_label": ""},
                   notes=["الصافي يشمل الافتتاحي المدخل والتسويات المثبتة. العمولة الفعلية تحل محل تقدير الجزء المطابق دون جمعهما مرتين.",
                          "العمولات المحتسبة قد تجمع الفعلية والتقديرية؛ متوسط العمولة المتغيرة مستخرج من الكشف قبل الضريبة ودون الرسم الثابت أو رسوم التحويل، وتعرض المكونات الأخرى منفصلة.",
+                         "بيانات مصدر المتوسط المحفوظ مستقلة عن المبالغ المحتسبة؛ يظهر استخدامه في حالة العمولة وعدد طلبات المتوسط. رسوم التحويل تُراجع مستقلة.",
                          "عند غياب عدد العمليات لطلب مدفوع مثبت ذي منصة واحدة، قد يُفترض رسم ثابت واحد كتقدير معلن؛ لا يثبت ذلك عدد العمليات أو الصافي النهائي.",
                          "تاريخ قبول دليل الرسوم مستقل عن تاريخ لقطة الأرصدة وتقرير الربح المحفوظ. اضغط عدد طلبات المراجعة لعرض الأرقام والأسباب.",
                          "المدفوع للمنصة مستقل عن وصول حوالتها إلى البنك؛ التحويل البنكي يثبت بتسوية منفصلة."])

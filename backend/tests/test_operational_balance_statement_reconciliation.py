@@ -826,3 +826,190 @@ async def test_concurrent_identical_confirmation_is_one_principal_and_one_receip
         assert sum(key.startswith('refund:') for key in after['engine']['facts']) == 1
         assert len(after['requests']) == 2  # One upload and one confirmation identity.
         assert sum(not response.json()['replayed'] for response in results) == 1
+
+
+async def saved_legacy_file(db, *, raw=None, file_id='legacy-week-one', owner='owner', provider='tabby'):
+    from accounting_source_files import preserve_original
+    from hashlib import sha256
+    raw = content(workbook(provider)) if raw is None else raw
+    file_hash = sha256(raw).hexdigest()
+    await db.settlement_files.insert_one({'id': file_id, 'user_id': owner, 'provider': provider,
+        'filename': 'synthetic-previous-week.xlsx', 'uploaded_at': '2026-11-10T10:00:00+00:00',
+        'file_hash': file_hash, 'file_size': len(raw), 'header': {'statement_id': 'SYNTHETIC-WEEK-1'},
+        'totals': {'commission': 999999}, 'unmatched_orders': ['not-a-financial-source']})
+    await preserve_original(db, owner, file_id, raw)
+    return raw, {'request_id': 'use-saved-week-one', 'expected_session_scope': digest([owner, owner]),
+        'expected_started_at': START, 'expected_file_hash': file_hash}
+
+
+@pytest.mark.asyncio
+async def test_saved_file_use_derives_fees_from_original_bytes_once_without_legacy_money_or_refresh():
+    db, client = await client_for()
+    raw, request = await saved_legacy_file(db)
+    before = await read(db, 'owner')
+    assert not before.get(RECONCILIATION, {}).get('average_profiles')
+    legacy = await db.settlement_files.find_one({'user_id': 'owner'})
+    source_orders = await db.unified_orders.find({'user_id': 'owner'}).to_list(100)
+    async with client:
+        listing = await client.get(BASE + '/saved-files')
+        assert listing.status_code == 200, listing.text
+        item = listing.json()['items'][0]
+        assert item['id'] == 'legacy-week-one' and item['can_import'] is True and item['original_available'] is True
+        assert 'totals' not in item
+        response = await client.post(BASE + '/saved-files/legacy-week-one/use', json=request)
+        assert response.status_code == 200, response.text
+        view = response.json()
+        assert view['statement_average']['rate_percent'] == '6.99000000'
+        assert view['rows'][0]['fee_total'] == '9.19'
+        after = await read(db, 'owner')
+        for key in ('facts', 'obligations', 'as_of'):
+            assert after['engine'][key] == before['engine'][key]
+        assert after['movements'] == before['movements'] and after['openings'] == before['openings']
+        assert await db.settlement_files.find_one({'user_id': 'owner'}) == legacy
+        assert await db.unified_orders.find({'user_id': 'owner'}).to_list(100) == source_orders
+        assert after[RECONCILIATION]['source_links'][digest('legacy-week-one')]['statement_id'] == view['statement']['id']
+        assert len(after[RECONCILIATION]['events']) == 1
+        provider = next(row for row in report(after)['details']['provider_balances']['SAR'] if row['provider'] == 'tabby')
+        assert provider['actual_statement_fees'] == '9.19'
+        replayed = await client.post(BASE + '/saved-files/legacy-week-one/use', json=request)
+        assert replayed.status_code == 200 and replayed.json()['replayed'] is True
+        assert await read(db, 'owner') == after
+        duplicate = await upload(client, raw, request='upload-original-after-saved-use')
+        assert duplicate.status_code == 200 and duplicate.json()['duplicate'] is True
+        assert len((await read(db, 'owner'))[RECONCILIATION]['events']) == 1
+        assert (await client.get(BASE + '/' + view['statement']['id'] + '/review')).json()['statement_average']['rate_percent'] == '6.99000000'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('corruption', ['missing_original', 'metadata_hash', 'blob_hash', 'content_hash',
+    'file_size', 'blob_size', 'oversize', 'missing_bytes', 'provider'])
+async def test_saved_file_use_rejects_missing_or_changed_original_without_operational_writes(corruption):
+    db, client = await client_for()
+    raw, request = await saved_legacy_file(db)
+    before = await read(db, 'owner')
+    if corruption == 'missing_original':
+        await db.accounting_source_files.delete_one({'user_id': 'owner', 'file_id': 'legacy-week-one'})
+    elif corruption == 'metadata_hash':
+        await db.settlement_files.update_one({'user_id': 'owner'}, {'$set': {'file_hash': 'f' * 64}})
+    elif corruption == 'blob_hash':
+        await db.accounting_source_files.update_one({'user_id': 'owner'}, {'$set': {'sha256': 'e' * 64}})
+    elif corruption == 'content_hash':
+        await db.accounting_source_files.update_one({'user_id': 'owner'}, {'$set': {'content': b'x' * len(raw)}})
+    elif corruption == 'file_size':
+        await db.settlement_files.update_one({'user_id': 'owner'}, {'$set': {'file_size': len(raw) + 1}})
+    elif corruption == 'blob_size':
+        await db.accounting_source_files.update_one({'user_id': 'owner'}, {'$set': {'size': len(raw) + 1}})
+    elif corruption == 'oversize':
+        await db.settlement_files.update_one({'user_id': 'owner'}, {'$set': {'file_size': 10 * 1024 * 1024 + 1}})
+    elif corruption == 'missing_bytes':
+        await db.accounting_source_files.update_one({'user_id': 'owner'}, {'$unset': {'content': ''}})
+    else:
+        await db.settlement_files.update_one({'user_id': 'owner'}, {'$set': {'provider': 'tamara'}})
+    async with client:
+        rejected = await client.post(BASE + '/saved-files/legacy-week-one/use', json=request)
+        assert rejected.status_code == 409, rejected.text
+        assert await read(db, 'owner') == before
+        assert await db[STATEMENTS].count_documents({}) == 0
+        if corruption == 'missing_original':
+            row = (await client.get(BASE + '/saved-files')).json()['items'][0]
+            assert row['original_available'] is False and row['can_import'] is False
+            assert isinstance(row['unavailable_reason'], str) and row['unavailable_reason']
+
+
+@pytest.mark.asyncio
+async def test_saved_file_use_checks_owner_scope_period_and_request_binding():
+    db, client = await client_for()
+    raw, request = await saved_legacy_file(db)
+    await saved_legacy_file(db, raw=raw, file_id='foreign-file', owner='other')
+    before = await read(db, 'owner')
+    async with client:
+        assert (await client.get(BASE + '/saved-files', headers={'x-test-user': 'staff'})).status_code == 403
+        assert (await client.post(BASE + '/saved-files/legacy-week-one/use', json=request,
+                                 headers={'x-test-user': 'staff'})).status_code == 403
+        assert (await client.post(BASE + '/saved-files/foreign-file/use', json=request)).status_code == 404
+        assert (await client.post(BASE + '/saved-files/legacy-week-one/use', json={**request,
+            'expected_session_scope': 'f' * 64})).status_code == 409
+        assert (await client.post(BASE + '/saved-files/legacy-week-one/use', json={**request,
+            'expected_started_at': '2026-10-01T00:00:00+00:00'})).status_code == 409
+        assert await read(db, 'owner') == before
+        accepted = await client.post(BASE + '/saved-files/legacy-week-one/use', json=request)
+        assert accepted.status_code == 200, accepted.text
+        after = await read(db, 'owner')
+        changed = await client.post(BASE + '/saved-files/legacy-week-one/use', json={**request,
+            'expected_file_hash': 'e' * 64})
+        assert changed.status_code == 409 and changed.json()['detail']['code'] == 'operational_request_conflict'
+        assert await read(db, 'owner') == after
+
+
+@pytest.mark.asyncio
+async def test_saved_file_use_validates_zip_before_parsing_or_preserving_operational_original():
+    from io import BytesIO
+    from zipfile import ZipFile
+    out = BytesIO()
+    with ZipFile(out, 'w') as archive:
+        archive.writestr('[Content_Types].xml', '<Types/>')
+        archive.writestr('xl/workbook.xml', '<workbook/>')
+        archive.writestr('../unexpected', 'synthetic')
+    db, client = await client_for()
+    _raw, request = await saved_legacy_file(db, raw=out.getvalue())
+    before = await read(db, 'owner')
+    async with client:
+        rejected = await client.post(BASE + '/saved-files/legacy-week-one/use', json=request)
+        assert rejected.status_code == 400 and rejected.json()['detail']['code'] == 'unsafe_xlsx_path'
+        assert await read(db, 'owner') == before
+        assert await db[STATEMENTS].count_documents({}) == 0
+        assert await db.accounting_source_files.count_documents({'user_id': 'owner'}) == 1
+
+
+@pytest.mark.asyncio
+async def test_saved_file_history_is_bounded_metadata_only_and_has_no_writes(monkeypatch):
+    import operational_provider_statement_reconciliation as service
+    db, client = await client_for()
+    await client.aclose()
+    raw, _request = await saved_legacy_file(db)
+    base = await db.settlement_files.find_one({'user_id': 'owner'}, {'_id': 0})
+    await db.settlement_files.insert_many([{**base, 'id': 'more-' + str(index)} for index in range(55)])
+    await db.settlement_files.insert_one({**base, 'id': 'unsupported-emkan', 'provider': 'emkan'})
+    await saved_legacy_file(db, raw=raw, file_id='private-other-file', owner='other')
+    before = await read(db, 'owner')
+    calls = []
+    class MetadataCollection:
+        def __init__(self, name): self.name = name
+        def find(self, query, projection):
+            calls.append((self.name, deepcopy(query), deepcopy(projection)))
+            assert projection and not any(field in projection for field in ('content', 'totals', 'unmatched_orders', 'rows', 'statement'))
+            return db[self.name].find(query, projection)
+        def __getattr__(self, name): return getattr(db[self.name], name)
+    class MetadataDB:
+        def __getitem__(self, name):
+            return MetadataCollection(name) if name in {STATES, 'settlement_files', 'accounting_source_files'} else db[name]
+    def forbidden(*args, **kwargs): raise AssertionError('saved-file history must not read/parse original bytes or write')
+    for name in ('read', 'normalize_statement', 'preserve_original', 'mutate', 'build_review'):
+        monkeypatch.setattr(service, name, forbidden)
+    result = await service.saved_files(MetadataDB(), 'owner', 'owner')
+    assert len(result['items']) == 50 and result['has_more'] is True
+    assert all(row['provider'] in {'tabby', 'tamara', 'salla'} for row in result['items'])
+    assert 'private-other-file' not in str(result)
+    assert {name for name, _, _ in calls} == {STATES, 'settlement_files', 'accounting_source_files'}
+    assert all(query.get('user_id', query.get('owner_id')) == 'owner' for _, query, _ in calls)
+    assert await read(db, 'owner') == before
+    with pytest.raises(HTTPException) as error:
+        await service.saved_files(MetadataDB(), 'owner', 'owner', limit=101)
+    assert error.value.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_saved_refund_file_remains_explicit_missing_principal_review():
+    db, client = await client_for(with_policy(saved_state()))
+    _raw, request = await saved_legacy_file(db, raw=refund_content(amount=20))
+    before = await read(db, 'owner')
+    async with client:
+        response = await client.post(BASE + '/saved-files/legacy-week-one/use', json=request)
+        assert response.status_code == 200, response.text
+        row = response.json()['rows'][0]
+        assert row['allowed_actions'] == ['record_missing_refund'] and row['can_confirm'] is True
+        after = await read(db, 'owner')
+        assert after['engine']['facts'] == before['engine']['facts']
+        assert after['engine']['obligations'] == before['engine']['obligations']
+        assert after['engine']['as_of'] == before['engine']['as_of']
+        assert after['movements'] == before['movements'] and after['openings'] == before['openings']

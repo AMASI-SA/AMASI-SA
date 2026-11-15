@@ -1,5 +1,75 @@
 # Operational provider statement reconciliation
 
+## Verified follow-up: saved statement binding (2026-11-15)
+
+The owner asked to connect Tabby now so its fees appear in the provider table.
+The verified feature checkpoint is
+`33048c14f33a7bf06ff138ff54ff64a9fe9b9703`, tree
+`912bb2f260d9a77528b7cec69d06053c595d9aaf`. Its exact-head CI completed with
+37 successful and 6 intentionally skipped checks, no failures or pending checks:
+4,929 backend tests, the 16 shipping tests with 18 subtests, 867 frontend tests
+across 54 suites, build, preflight and repository browser/security checks passed.
+The dedicated new-page visual acceptance remained blocked as documented below.
+
+The latest reviewed production base was merged without conflicts and preserved
+on the task branch as `6bb7895f5b71e1c8d9482a4ae70a843ff285af94`, tree
+`d9f367578af85fb55de4a64dac1dadd583f07aac`. Its ordered parents are the feature
+checkpoint above and `8f1b0ddb6408781e8677212bcb8cf2d51eab42f7`. This preserves
+the concurrent Salla incident recovery and executive-profit changes. The combined
+App routes were inspected; the only feature delta versus that production base
+is the lazy ProviderStatements import and its protected route.
+
+Read-only inspection of the live provider page and source proved two gaps:
+legacy settlement originals are preserved but do not enter operational average
+profiles, and available profile metadata is currently displayed only when an
+average is applied. The follow-up now implements both:
+
+- An explicit owner-only saved-file bridge lists bounded metadata and uses one
+  selected original only after a separate action. It verifies owner, session,
+  period, unique file/blob identity, matching metadata/computed hashes and sizes,
+  safe XLSX structure and native provider identity. It reuses the existing
+  immutable operational upload/CAS path; it never reruns the legacy importer.
+- The provider table shows available source-average metadata independently of
+  applied estimates: variable percentage before VAT, separately labeled source
+  fixed mean in its native currency, tax evidence and source reference/date.
+  Owner, provider, native-currency and merchant-account scope remain enforced.
+  Existing financial amounts, completeness and application counts are unchanged
+  by this presentation-only addition.
+- Metadata list reads and selections never write. Explicit saved-use retries
+  retain the same file/hash/period/request identity even after re-reading the
+  metadata list. Missing principal and refund evidence remains explicit review.
+
+Fresh verification on the integrated working tree, actual exit 0:
+
+- Root combined backend gate: **304 passed in 26.08s**, including the existing
+  intake, service/API, fees, pricing, subtotals, financial-position and affected
+  payment/refund boundaries.
+- Root frontend gate: **195 passed across 4 suites in 16.985s**, no skips.
+  Command remains the four-suite command below, with the saved-file cases added.
+- Backend owner: 49 service/API tests passed; independent source reviewer
+  approved the exact frozen source/routes/tests after inspecting all new
+  corruption, ownership, period, ZIP, replay and no-principal-write regressions.
+- Fee-display owner: 113 affected tests passed. Independent frontend reviewer
+  approved the frozen display delta and independently passed its 10 new source
+  average cases. Root inspected the final UI delta and its retry correction.
+- The real-component synthetic fixture build passed (4,630 modules); its updated
+  browser harness passed syntax checks. The dedicated browser scenarios were
+  **not run** because the previously documented browser restriction still
+  applies. No screenshot or visual-acceptance pass is claimed.
+- No application dependency or lockfile changed. No hardcoded merchant rate,
+  customer workbook or live financial value enters the repository.
+
+The shared production Release Guard was observed active for the separate
+`codex-salla-incident-recovery-1942` operation. No shared `/app` change, release
+rehearsal, lease takeover, live source refresh or live financial mutation has
+been performed by this task. Production changed by this task: **no**.
+
+Next safe action: preserve this verified source tree on the task branch, record
+its exact remote SHA/tree and remaining review/CI result in Draft PR #1938, then
+inspect the production release state. The previous merge checkpoint above is
+the parent; it does not itself contain the saved-file implementation. No shared
+workspace change or release rehearsal may start while another lease is active.
+
 ## Current integrated checkpoint (2026-11-15)
 
 Parent checkpoint: `5e518936ad627cf3211ee748df4d47243b53fc83`, tree

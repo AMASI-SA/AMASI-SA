@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from hashlib import sha256
 from pathlib import PurePath
+import re
 
 from fastapi import HTTPException
 from pymongo.errors import DuplicateKeyError
@@ -30,6 +31,9 @@ KINDS = {'sale': 'capture', 'refund': 'refund', 'settlement_fee': 'payout_fee'}
 RIYADH = timezone(timedelta(hours=3))
 CENT = Decimal('.01')
 MAX_MISSING_PREVIEWS = 20
+SAVED_FILE_FIELDS = {'_id': 0, **{key: 1 for key in ('id', 'user_id', 'provider', 'filename',
+    'uploaded_at', 'file_hash', 'file_size', 'header.statement_id', 'header.invoice_number')}}
+ORIGINAL_METADATA_FIELDS = {'_id': 1, 'user_id': 1, 'file_id': 1, 'sha256': 1, 'size': 1}
 
 MESSAGES = {
     'statement_row_incomplete': 'بيانات السطر أو العملة أو العمولة غير مكتملة؛ راجع أصل الكشف.',
@@ -1054,6 +1058,132 @@ async def history(db, owner, actor, *, limit=50):
         'items': items, 'has_more': len(records) > limit, 'permissions': {'upload': active, 'confirm': active}}
 
 
+def _file_hash(value):
+    return value if isinstance(value, str) and re.fullmatch(r'[a-f0-9]{64}', value) else None
+
+
+def _original_metadata_problem(source, originals, owner):
+    if not _file_hash(source.get('file_hash')):
+        return 'بصمة الكشف المحفوظ غير مكتملة؛ أعد رفع الملف الأصلي.'
+    size = source.get('file_size')
+    if isinstance(size, bool) or not isinstance(size, int) or not 0 < size <= MAX_FILE_BYTES:
+        return 'حجم الملف المحفوظ غير موثق أو يتجاوز 10 ميغابايت؛ أعد رفع الأصل ضمن الحد المسموح.'
+    if not originals:
+        return 'لم يُحفظ أصل هذا الكشف؛ أعد رفع الملف الأصلي من جهازك.'
+    if len(originals) != 1:
+        return 'يوجد أكثر من أصل مرتبط بهذا الكشف؛ يلزم تصحيح الربط قبل استخدامه.'
+    blob = originals[0]
+    if (blob.get('user_id') != owner or blob.get('file_id') != source['id']
+            or blob.get('_id') != sha256((owner + ':' + source['id']).encode()).hexdigest()
+            or blob.get('sha256') != source['file_hash']):
+        return 'بصمة أصل الكشف لا تطابق الملف المحفوظ؛ أعد رفع الأصل الصحيح.'
+    if isinstance(blob.get('size'), bool) or not isinstance(blob.get('size'), int) or blob.get('size') != size:
+        return 'حجم أصل الكشف لا يطابق الملف المحفوظ؛ أعد رفع الأصل الصحيح.'
+    return None
+
+
+async def saved_files(db, owner, actor, *, limit=50):
+    """Visible metadata only: no original bytes, totals, parsing or mutations."""
+    await _owner(db, owner, actor)
+    if type(limit) is not int or not 1 <= limit <= 100:
+        fail('provider_statement_history_limit', 'حد قراءة الكشوف غير صالح', 422)
+    from operational_read_runtime import read_source_cursor
+    states = await read_source_cursor(db[STATES].find({'_id': owner, 'owner_id': owner}, {
+        '_id': 1, 'owner_id': 1, 'revision': 1, 'status': 1, 'started_at': 1, 'engine.as_of': 1}).limit(1), 1)
+    state = states[0] if states else initial(owner)
+    files = await read_source_cursor(db['settlement_files'].find({'user_id': owner,
+        'provider': {'$in': sorted(PROVIDERS)}}, SAVED_FILE_FIELDS).sort('uploaded_at', -1).limit(limit + 1), limit + 1)
+    selected = files[:limit]
+    if any(row.get('user_id') != owner or row.get('provider') not in PROVIDERS
+           or not isinstance(row.get('id'), str) or not 0 < len(row['id']) <= 160 for row in selected):
+        fail('provider_statement_saved_metadata_invalid', 'تعذر التحقق من فهرس الملفات المحفوظة', 503)
+    ids = [row['id'] for row in selected]
+    blobs = await read_source_cursor(db['accounting_source_files'].find({'user_id': owner,
+        'file_id': {'$in': ids}}, ORIGINAL_METADATA_FIELDS).limit(2 * limit + 1), 2 * limit + 1) if ids else []
+    if len(blobs) > 2 * limit:
+        fail('provider_statement_saved_metadata_invalid', 'تعذر التحقق من اكتمال فهرس الأصول المحفوظة', 503)
+    by_file = defaultdict(list)
+    for blob in blobs:
+        by_file[blob.get('file_id')].append(blob)
+    active = await _authority(db, owner, state)
+    items, seen = [], set()
+    for source in selected:
+        identity = source['id']
+        if identity in seen:
+            continue
+        seen.add(identity)
+        originals = by_file.get(identity, [])
+        reason = _original_metadata_problem(source, originals, owner)
+        if ids.count(identity) > 1:
+            reason = 'هوية الكشف المحفوظ مكررة؛ يلزم تصحيح الربط قبل استخدامه.'
+        if not reason and not active:
+            reason = 'استخدام الكشف متاح بعد تفعيل فترة الأرصدة التشغيلية.'
+        header = source.get('header') if isinstance(source.get('header'), dict) else {}
+        reference = header.get('statement_id') or header.get('invoice_number')
+        uploaded = source.get('uploaded_at')
+        items.append({'id': identity, 'provider': source['provider'],
+            'filename': PurePath(str(source.get('filename') or 'statement.xlsx').replace('\\', '/')).name[:240],
+            'statement_reference': str(reference) if reference is not None else None,
+            'uploaded_at': uploaded.isoformat() if isinstance(uploaded, datetime) else uploaded if isinstance(uploaded, str) else None,
+            'file_hash': _file_hash(source.get('file_hash')), 'original_available': len(originals) == 1,
+            'can_import': active and reason is None, 'unavailable_reason': reason})
+    await _owner(db, owner, actor)
+    return {'session_scope': digest([owner, actor]), 'started_at': state.get('started_at'),
+        'as_of': state.get('engine', {}).get('as_of'), 'active': active, 'items': items,
+        'has_more': len(files) > limit, 'permissions': {'upload': active}}
+
+
+async def use_saved_file(db, owner, actor, file_id, payload):
+    """Verify one preserved original, then use the existing upload transaction."""
+    await _owner(db, owner, actor)
+    if payload.get('expected_session_scope') != digest([owner, actor]):
+        fail('operational_actor_scope_changed', 'تغير الحساب؛ أعد فتح صفحة الكشوف', 409)
+    state = await read(db, owner)
+    await active_gate(db, owner, state)
+    if payload.get('expected_started_at') != state.get('started_at'):
+        fail('provider_statement_period_changed', 'تغيرت فترة الأرصدة؛ أعد فتح صفحة الكشوف', 409)
+    identity = {'request_id': payload['request_id'], 'expected_session_scope': payload['expected_session_scope'],
+        'expected_started_at': payload['expected_started_at'], 'file_hash': payload.get('expected_file_hash'),
+        'source_file_id': file_id}
+    prior = replay(state, 'provider_statement_saved_file_use:' + actor, identity)
+    if prior is not None:
+        result = await _replay_review(db, owner, actor, state, prior)
+        await _owner(db, owner, actor)
+        return result
+    from operational_read_runtime import read_source_cursor
+    files = await read_source_cursor(db['settlement_files'].find({'user_id': owner, 'id': file_id,
+        'provider': {'$in': sorted(PROVIDERS)}}, SAVED_FILE_FIELDS).limit(2), 2)
+    if not files:
+        fail('provider_statement_saved_file_missing', 'الكشف المحفوظ غير موجود في هذا الحساب', 404)
+    if len(files) != 1 or files[0].get('user_id') != owner or files[0].get('id') != file_id:
+        fail('provider_statement_saved_metadata_invalid', 'تعذر التحقق من هوية الكشف المحفوظ', 409)
+    source = files[0]
+    if not _file_hash(payload.get('expected_file_hash')) or source.get('file_hash') != payload['expected_file_hash']:
+        fail('provider_statement_saved_file_changed', 'تغيرت بصمة الكشف المحفوظ؛ أعد قراءة قائمة الملفات', 409)
+    originals = await read_source_cursor(db['accounting_source_files'].find({'user_id': owner,
+        'file_id': file_id}, ORIGINAL_METADATA_FIELDS).limit(2), 2)
+    reason = _original_metadata_problem(source, originals, owner)
+    if reason:
+        fail('provider_statement_saved_original_invalid' if originals else 'provider_statement_saved_original_unavailable', reason, 409)
+    blobs = await read_source_cursor(db['accounting_source_files'].find({'_id': originals[0]['_id'],
+        'user_id': owner, 'file_id': file_id}, {**ORIGINAL_METADATA_FIELDS, 'content': 1}).limit(1), 1)
+    blob = blobs[0] if blobs else {}
+    content = blob.get('content')
+    if (_original_metadata_problem(source, [blob], owner) is not None
+            or not isinstance(content, bytes) or not 0 < len(content) <= MAX_FILE_BYTES
+            or len(content) != source['file_size'] or len(content) != blob.get('size')
+            or sha256(content).hexdigest() != source['file_hash']
+            or blob.get('sha256') != source['file_hash']):
+        fail('provider_statement_saved_original_invalid', 'تعذر التحقق من بايتات أصل الكشف وحجمه وبصمته؛ لم تتغير الأرصدة', 409)
+    from excel_upload_security import validate_xlsx_archive
+    await prepare_in_thread(validate_xlsx_archive, content)
+    await _owner(db, owner, actor)
+    return await upload(db, owner, actor, content=content, filename=source.get('filename') or 'statement.xlsx',
+        request_id=payload['request_id'], expected_session_scope=payload['expected_session_scope'],
+        expected_started_at=payload['expected_started_at'], saved_source={
+            'file_id': file_id, 'provider': source['provider'], 'file_hash': source['file_hash']})
+
+
 def _remember_review(state, action, payload, result, document, stamp):
     state.setdefault(RECONCILIATION, {}).setdefault('statement_summaries', {})[document['id']] = {
         'counts': deepcopy(result['counts']), 'reviewed_at': stamp, 'review_as_of': result['as_of'],
@@ -1123,7 +1253,7 @@ def _save_statement_average(state, document, actor, stamp):
     return statement_average_summary(profile)
 
 
-async def upload(db, owner, actor, *, content, filename, request_id, expected_session_scope, expected_started_at, clock=None):
+async def upload(db, owner, actor, *, content, filename, request_id, expected_session_scope, expected_started_at, clock=None, saved_source=None):
     await _owner(db, owner, actor)
     if expected_session_scope != digest([owner, actor]):
         fail('operational_actor_scope_changed', 'تغير الحساب؛ أعد فتح صفحة الكشوف', 409)
@@ -1133,9 +1263,11 @@ async def upload(db, owner, actor, *, content, filename, request_id, expected_se
     await active_gate(db, owner, state)
     if state.get('started_at') != expected_started_at:
         fail('provider_statement_period_changed', 'تغيرت فترة الأرصدة؛ أعد فتح صفحة الكشوف', 409)
-    action = 'provider_statement_upload:' + actor
+    action = ('provider_statement_saved_file_use:' if saved_source else 'provider_statement_upload:') + actor
     payload = {'request_id': request_id, 'expected_session_scope': expected_session_scope,
                'expected_started_at': expected_started_at, 'file_hash': sha256(content).hexdigest()}
+    if saved_source:
+        payload['source_file_id'] = saved_source['file_id']
     prior = replay(state, action, payload)
     if prior is not None:
         result = await _replay_review(db, owner, actor, state, prior)
@@ -1145,6 +1277,8 @@ async def upload(db, owner, actor, *, content, filename, request_id, expected_se
         normalized = await prepare_in_thread(normalize_statement, content)
     except ValueError as exc:
         fail('provider_statement_parse_invalid', str(exc), 422)
+    if saved_source and (normalized['provider'] != saved_source['provider'] or normalized['file_hash'] != saved_source['file_hash']):
+        fail('provider_statement_saved_provider_conflict', 'هوية المنصة في الملف الأصلي لا تطابق فهرس الكشف المحفوظ؛ لم تتغير الأرصدة', 409)
     stamp = clock or now()
     document = statement_document(owner, actor, filename, normalized, stamp)
     await _owner(db, owner, actor)
@@ -1179,6 +1313,17 @@ async def upload(db, owner, actor, *, content, filename, request_id, expected_se
         prior = replay(current, action, payload)
         if prior is not None:
             return await _replay_review(db, owner, actor, current, prior)
+        if saved_source:
+            key = digest(saved_source['file_id'])
+            links = current.setdefault(RECONCILIATION, {}).setdefault('source_links', {})
+            prior_link = links.get(key)
+            proof = {**saved_source, 'statement_id': document['id']}
+            if prior_link and any(prior_link.get(name) != value for name, value in proof.items()):
+                fail('provider_statement_saved_file_changed', 'تغير أصل الكشف المرتبط بالمطابقة؛ أعد المراجعة', 409)
+            if not prior_link:
+                links[key] = {**proof, 'linked_by': actor, 'linked_at': stamp}
+                audit(current, actor, 'provider_statement_saved_source_linked', None, proof,
+                    'استخدام الأصل المحفوظ لإعادة المطابقة التشغيلية دون إعادة الاستيراد أو الترحيل', 'provider_statement', stamp)
         external = await _external_evidence(db, owner, document, current)
         # This new receipt always commits one aggregate revision. Compute its
         # preview once at that revision; a missing-only upload must not run its
