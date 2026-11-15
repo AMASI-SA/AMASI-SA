@@ -300,3 +300,13 @@ test("new navigation does not route to legacy Mezan pages", () => {
     expect(targets).not.toContain("/transactions");
     expect(targets).not.toContain("/settings");
 });
+
+test("provider statement review is connected inside the operational Mezan 2 navigation", () => {
+    const location = { pathname: "/operational-balances/provider-statements", search: "" };
+    const markup = renderToStaticMarkup(<MezanV2NavigationShell location={location} onOpenAll={() => {}} />);
+    expect(isMezanV2Route(location.pathname)).toBe(true);
+    expect(activeNavigationSection(location)?.id).toBe("operational-balances");
+    expect(markup).toContain('href="/operational-balances/provider-statements"');
+    expect(markup).toContain("مطابقة كشوف منصات الدفع");
+    expect(markup).not.toContain('href="/payment-settlements"');
+});
