@@ -10,13 +10,30 @@ on:
       - "backend/integrations_control_center/dashboard_ads_platform_refresh.py"
       - "backend/integrations_control_center/dashboard_ads_platform_spend_routes.py"
       - "backend/dashboard_snapchat_spend.py"
+      - "backend/dashboard_v2_routes.py"
+      - "backend/dashboard_ads_account_results.py"
+      - "backend/dashboard_ads_costs.py"
+      - "backend/dashboard_ads_periods.py"
+      - "backend/unified_marketing/readers/snapchat_v2.py"
+      - "backend/integrations_control_center/ads_auto_sync_scheduler.py"
       - "backend/integrations_control_center/dashboard_ads_executive_routes.py"
       - "backend/tests/test_dashboard_four_platform_spend_v1.py"
       - "backend/tests/test_dashboard_tiktok_native_spend_basis.py"
       - "backend/tests/test_dashboard_snapchat_spend_issue_727.py"
       - "backend/tests/test_google_ads_reporting_v1.py"
+      - "backend/tests/test_dashboard_ads_account_results.py"
+      - "backend/tests/test_dashboard_ads_costs.py"
+      - "backend/tests/test_dashboard_ads_periods.py"
+      - "backend/tests/test_dashboard_runtime_source_contract.py"
+      - "backend/tests/test_snapchat_reporting_v2_account_display.py"
+      - "backend/tests/test_tiktok_scheduler_hourly.py"
       - "frontend/src/components/DashboardAdsSpendCard.jsx"
       - "frontend/src/components/DashboardAdsSpendCard.test.jsx"
+      - "frontend/src/components/DashboardAdsAccountRow.jsx"
+      - "frontend/src/components/DashboardAdsAccountRow.test.jsx"
+      - "frontend/src/lib/dashboardAdsAccountResults.js"
+      - "frontend/src/lib/dashboardAdsAccountResults.test.js"
+      - "frontend/src/pages/AdvancedDashboard.jsx"
       - "frontend/src/lib/dashboardPlatformSpendClient.js"
       - "frontend/src/lib/dashboardPlatformSpendClient.test.js"
       - "frontend/src/services/dashboardAdsSpend.js"
@@ -34,6 +51,14 @@ jobs:
         working-directory: backend
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Fetch pinned source-parity baselines
+        working-directory: .
+        run: >-
+          git fetch --no-tags origin
+          0abf4517afd10e9e331fc10dbbca1c60b981c505
+          2a7740359451a538be8df373266c4c92ca1a57c8
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -43,6 +68,7 @@ jobs:
           pytest pytest-asyncio fastapi "pydantic>=2" httpx pymongo motor
           cryptography openpyxl bcrypt PyJWT reportlab pillow
           python-multipart qrcode arabic-reshaper python-bidi
+          mongomock==4.3.0 mongomock-motor==0.0.36
       - name: Compile four-platform reporting
         run: >-
           python -m py_compile
@@ -51,6 +77,12 @@ jobs:
           integrations_control_center/dashboard_ads_platform_refresh.py
           integrations_control_center/dashboard_ads_platform_spend_routes.py
           dashboard_snapchat_spend.py
+          dashboard_ads_account_results.py
+          dashboard_ads_costs.py
+          dashboard_ads_periods.py
+          dashboard_v2_routes.py
+          unified_marketing/readers/snapchat_v2.py
+          integrations_control_center/ads_auto_sync_scheduler.py
           integrations_control_center/dashboard_ads_executive_routes.py
           tests/test_dashboard_four_platform_spend_v1.py
           tests/test_dashboard_tiktok_native_spend_basis.py
@@ -64,6 +96,15 @@ jobs:
           tests/test_dashboard_snapchat_spend_issue_727.py
           tests/test_google_ads_reporting_v1.py
           tests/test_dashboard_ads_hourly_spend_v1.py
+          tests/test_dashboard_ads_account_results.py
+          tests/test_dashboard_ads_costs.py
+          tests/test_dashboard_ads_periods.py
+          tests/test_dashboard_runtime_source_contract.py
+          tests/test_dashboard_card_snapshots.py
+          tests/test_dashboard_bundle_cost_authority.py
+          tests/test_snapchat_reporting_v2_account_display.py
+          tests/test_tiktok_scheduler_hourly.py
+          tests/test_ads_auto_sync_scheduler_v2.py
       - name: Enforce original four-provider read contract
         working-directory: .
         run: |
@@ -102,6 +143,10 @@ jobs:
         run: >-
           yarn test --watchAll=false --runInBand --runTestsByPath
           src/components/DashboardAdsSpendCard.test.jsx
+          src/components/DashboardAdsSpendCard.manualRefresh.test.jsx
+          src/components/DashboardAdsAccountRow.test.jsx
+          src/lib/dashboardAdsAccountResults.test.js
+          src/pages/AdvancedDashboard.cardRefresh.test.jsx
           src/lib/dashboardPlatformSpendClient.test.js
           src/services/dashboardAdsSpend.test.js
           src/components/DashboardAnalyticsPlacement.test.js
@@ -122,6 +167,6 @@ jobs:
           grep -q 'line:Google Ads' frontend/src/components/DashboardAdsSpendCard.test.jsx
           grep -q '/integrations-v2/dashboard/ads-platform-spend/refresh' "$CLIENT"
           grep -q 'loadDashboardPlatformSpend' "$SERVICE"
-          grep -q 'سناب شات + ميتا + تيك توك + Google Ads' "$CARD"
+          grep -q 'tableProviders = \["snapchat", "google", "tiktok", "meta"\]' "$CARD"
           ! grep -q 'المصروف المحاسبي' "$CARD"
           ! grep -q 'booked_ad_expense_sar' "$CARD" "$SERVICE" "$CLIENT"
