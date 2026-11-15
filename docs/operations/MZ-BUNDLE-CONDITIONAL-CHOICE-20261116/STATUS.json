@@ -1,7 +1,7 @@
 {
   "task_id": "MZ-BUNDLE-CONDITIONAL-CHOICE-20261116",
   "scope": "Implement conditional descriptive-option costing in current bundle estimates.",
-  "state": "source_A_verified_intent_candidate_ready_pending_remaining_CI",
+  "state": "intent_B_frozen_pending_exact_head_CI_and_host_rehearsal",
   "repository": "AMASI-SA/AMASI-SA",
   "task_branch": "codex/bundle-conditional-cost-fix-20261116",
   "verified_milestone_commit": "1b0ffbc814c664c098e9dbc422691e67671d03d7",
@@ -80,7 +80,7 @@
     "number": 1953,
     "url": "https://github.com/AMASI-SA/AMASI-SA/pull/1953",
     "state": "open_draft",
-    "head": "1b0ffbc814c664c098e9dbc422691e67671d03d7"
+    "head": "a694b290ee6f74e57048810d754ff8c87de99735"
   },
   "ci": {
     "as_of_utc": "2026-11-15T23:20:19Z",
@@ -105,7 +105,8 @@
       "Operational Stock Eligibility",
       "Operational Balance Backend",
       "CodeQL python"
-    ]
+    ],
+    "reviewed_head_pending": "a694b290ee6f74e57048810d754ff8c87de99735"
   },
   "review": "independent_implementation_review_passed",
   "merge": "not_performed",
@@ -126,7 +127,7 @@
     "Shared /app 120 untracked files and unsaved Untitled-1; another provider release is active in a different conversation. Recheck Production base and lease before changes."
   ],
   "ledger": "Issue #1006 was previously at its comment limit; dedicated task status serves as recoverable handoff without retrying that append.",
-  "next_safe_action": "Recheck Production head J and source-A check completion, create an intent-only B from the exact verified candidate. Never append source/status commits after B. Rehearse on original host only after guard status is inactive; integrate any new Production base via a fresh A/B if needed.",
+  "next_safe_action": "Inspect exact-B checks and Production head. On original host check inactive lease, then rehearse an isolated clone of B with reviewed public backend URL. If Production advances beyond J, integrate into a fresh source A and regenerate intent B; never publish stale source.",
   "owner_clarification": {
     "source": "User clarification after diagnosis",
     "statement": "Selecting affirmative customization adds no amount.",
@@ -148,6 +149,7 @@
     "source_git_sha": "1b0ffbc814c664c098e9dbc422691e67671d03d7",
     "source_base_git_sha": "236a428364bc8163a684795ed1be87e237476f18",
     "runtime_release_id": "rg5-e3ba9016b9cc29c7595d14dafe7ef16bbc984a7142fcada742d11f524be9e652",
-    "validation": "Exact ZIP digest verified; candidate loader and full Backend/runtime-control manifests match source A; no intent B created yet."
-  }
+    "validation": "Exact ZIP digest verified; candidate loader and full Backend/runtime-control manifests match source A; no intent B created yet. Intent-only B frozen without source changes."
+  },
+  "intent_B": "a694b290ee6f74e57048810d754ff8c87de99735"
 }
