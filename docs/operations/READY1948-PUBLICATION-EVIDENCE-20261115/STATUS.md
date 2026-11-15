@@ -1,3 +1,22 @@
+# Latest follow-up — production read diagnosis (2026-11-15 21:06 UTC)
+
+**Current Ready blocker identified; earlier failed refresh remains unresolved.**
+
+- User granted the scoped production read and supplied the connection through secure browserAuth.
+- Salla and unified order now show `completed` (status change at 20:58:08 UTC / 23:58:08 Riyadh).
+- Source revision14 is stable and `component_pending=false`; matching legacy lifecycle is accepted.
+- Assembly remains **0/5**, with all five Ready buttons disabled by **«مرحلة الطلب لا تسمح بإكمال المنتج الآن»**.
+- New pending-piece Ready actions require `in_progress`; the current status explains the current lock.
+- This does not prove recovery of the earlier failed refresh. Its exact predicate and revision were not captured.
+- No database/status/Ready/receipt/label/financial/source/publication mutation occurred in this diagnostic investigation.
+- Await user clarification of the intended operational status before a status change.
+- Read **PRODUCTION-READ-DIAGNOSIS.md** and **production-read-diagnosis.json** for evidence and limits.
+- Provider PR1950 has advanced the release base; its owner retains publication continuation. No lease/source interference.
+
+---
+
+## Earlier checkpoints (historical)
+
 # Latest follow-up: Ready still locked after user refresh
 
 At 2026-11-15T20:42:25.593Z, a fresh read-only search still showed Ready 0/5 and five reconciliation holds after the user reported completing source refresh. The exact failing predicate is unresolved. Automatic approval review blocked opening the production database manager; explicit current authorization for the narrowly scoped read is required before that action. No code or production data was changed in this follow-up.

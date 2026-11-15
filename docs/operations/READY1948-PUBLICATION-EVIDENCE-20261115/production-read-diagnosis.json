@@ -1,0 +1,349 @@
+{
+  "schema_version": 1,
+  "authorization": "Current-turn explicit user grant for read-only production matching records for order299781816; Mongo URL entered through secure browserAuth; no credential disclosed",
+  "production_context": "Production Databases in Emergent database manager",
+  "identity_binding": {
+    "order_number": "299781816",
+    "salla_order_id": "800420115",
+    "unique_owner_binding_verified": true,
+    "owner_filter_applied_after_binding": true
+  },
+  "watermarks": {
+    "order_number": {
+      "type": "string",
+      "value": "299781816"
+    },
+    "order_id": {
+      "type": "string",
+      "value": "800420115"
+    },
+    "order_date": {
+      "type": "string",
+      "value": "2026-11-13"
+    },
+    "order_status": {
+      "type": "string",
+      "value": "تم التنفيذ"
+    },
+    "order_status_slug": {
+      "type": "string",
+      "value": "completed"
+    },
+    "g47_salla_snapshot": {
+      "type": "object",
+      "value": {
+        "source_updated_at": "2026-11-15T20:58:08.000000+00:00",
+        "cancelled": false,
+        "revision": 14,
+        "component_pending": false
+      }
+    },
+    "last_salla_direct_status_source_updated_at": {
+      "missing": true
+    },
+    "orders_v2_salla_refreshed_at": {
+      "type": "string",
+      "value": "2026-11-15T20:34:52.393004+00:00"
+    },
+    "orders_v2_salla_refresh_items_count": {
+      "type": "number",
+      "value": 3
+    },
+    "raw_by_source.salla_direct.updated_at": {
+      "type": "object",
+      "value": {
+        "date": "2026-11-15 23:58:08.000000",
+        "timezone": "Asia/Riyadh",
+        "timezone_type": 3
+      }
+    },
+    "raw_by_source.salla_direct.date": {
+      "type": "object",
+      "value": {
+        "date": "2026-11-13 03:05:27.000000",
+        "timezone": "Asia/Riyadh",
+        "timezone_type": 3
+      }
+    },
+    "raw_by_source.salla_direct.created_at": {
+      "type": "object",
+      "value": {
+        "date": "2026-11-15 23:58:08.000000",
+        "timezone": "Asia/Riyadh",
+        "timezone_type": 3
+      }
+    }
+  },
+  "lifecycle": {
+    "order_number": {
+      "type": "string",
+      "value": "299781816"
+    },
+    "state": {
+      "type": "string",
+      "value": "legacy_operational_pre_g47"
+    },
+    "accepted": {
+      "type": "boolean",
+      "value": true
+    },
+    "retry_required": {
+      "type": "boolean",
+      "value": false
+    },
+    "cancelled": {
+      "type": "boolean",
+      "value": false
+    },
+    "source_fingerprint": {
+      "type": "string",
+      "value": "917d26b5cbb9f9648d2534cf0c8586f0542968d801957fd0dd14f9cf1bf73ecb"
+    },
+    "source_updated_at": {
+      "type": "string",
+      "value": "2026-11-15T20:58:08.000000+00:00"
+    },
+    "snapshot_revision": {
+      "type": "number",
+      "value": 14
+    },
+    "generation": {
+      "type": "number",
+      "value": 3
+    },
+    "error_code": {
+      "missing": true
+    },
+    "updated_at": {
+      "type": "string",
+      "value": "2026-11-15T20:58:19.791414+00:00"
+    },
+    "option_price_currency_revalidation": {
+      "missing": true
+    },
+    "zero_price_currency_revalidation": {
+      "missing": true
+    },
+    "catalog_label_revalidation": {
+      "missing": true
+    }
+  },
+  "source_provenance": {
+    "salla_webhook_event": {
+      "missing": true
+    },
+    "salla_webhook_received_at": {
+      "missing": true
+    },
+    "last_salla_direct_sync_at": "2026-11-15T20:58:19.402632+00:00",
+    "updated_at": "2026-11-15T20:58:19.402632+00:00",
+    "last_source": "salla_direct",
+    "updated_by_source": "salla_direct"
+  },
+  "webhook_captures": [
+    {
+      "merchant_id": "1673234356",
+      "event": "order.status.updated",
+      "event_hash": "c4b241d2919ee5b55855bf76b1bfe69a335720305359dc797d890c90bc7c1ed2",
+      "first_received_at": "2026-11-15T20:58:19.374000",
+      "last_received_at": "2026-11-15T20:58:19.374000",
+      "updated_at": "2026-11-15T20:58:19.374000",
+      "delivery_count": 1,
+      "verified_before_capture": true,
+      "order_mutation_scope": "full_order_from_webhook",
+      "processing_retry_required": false,
+      "order_sync.order_number": "299781816",
+      "order_sync.synced": true,
+      "order_sync.auto_fulfillment.attempted": true,
+      "order_sync.auto_fulfillment.promoted": false,
+      "order_sync.auto_fulfillment.reverted": false,
+      "order_sync.auto_fulfillment.stage": "in_progress"
+    },
+    {
+      "merchant_id": "1673234356",
+      "event": "order.status.updated",
+      "event_hash": "93480e58703d8a1488a9c6a8a86a84727e8d1ef009a1e890d4e1d97e7810c686",
+      "first_received_at": "2026-11-14T01:20:23.642000",
+      "last_received_at": "2026-11-14T01:20:23.642000",
+      "updated_at": "2026-11-14T01:20:23.642000",
+      "delivery_count": 1,
+      "verified_before_capture": true,
+      "order_mutation_scope": "full_order_from_webhook",
+      "order_sync.order_number": "299781816",
+      "order_sync.synced": true,
+      "order_sync.auto_fulfillment.attempted": true,
+      "order_sync.auto_fulfillment.promoted": false,
+      "order_sync.auto_fulfillment.reverted": false,
+      "order_sync.auto_fulfillment.reason": "component_acceptance_blocked",
+      "order_sync.auto_fulfillment.stage": "in_progress",
+      "order_sync.auto_fulfillment.component_lifecycle.state": "stale_ignored",
+      "order_sync.auto_fulfillment.component_lifecycle.accepted": false,
+      "order_sync.auto_fulfillment.component_lifecycle.generation": 2
+    },
+    {
+      "merchant_id": "1673234356",
+      "event": "order.updated",
+      "event_hash": "8beb3e0989e7fb65f2f927a4704b25a3cf1d91db4d36ca2aff097abaa61c5331",
+      "first_received_at": "2026-11-14T01:20:23.713000",
+      "last_received_at": "2026-11-14T01:20:23.713000",
+      "updated_at": "2026-11-14T01:20:23.713000",
+      "delivery_count": 1,
+      "verified_before_capture": true,
+      "order_mutation_scope": "full_order_from_webhook",
+      "order_sync.order_number": "299781816",
+      "order_sync.synced": true,
+      "order_sync.auto_fulfillment.attempted": true,
+      "order_sync.auto_fulfillment.promoted": false,
+      "order_sync.auto_fulfillment.reverted": false,
+      "order_sync.auto_fulfillment.reason": "component_acceptance_blocked",
+      "order_sync.auto_fulfillment.stage": "in_progress",
+      "order_sync.auto_fulfillment.component_lifecycle.state": "stale_ignored",
+      "order_sync.auto_fulfillment.component_lifecycle.accepted": false,
+      "order_sync.auto_fulfillment.component_lifecycle.generation": 2
+    },
+    {
+      "merchant_id": "1673234356",
+      "event": "order.created",
+      "event_hash": "0c4cd7af7a4ceee86f3fa69cea2095527d6721f0df54630003a796e101898165",
+      "first_received_at": "2026-11-13T00:05:30.012000",
+      "last_received_at": "2026-11-13T00:05:30.012000",
+      "updated_at": "2026-11-13T00:05:30.012000",
+      "delivery_count": 1,
+      "verified_before_capture": true,
+      "order_mutation_scope": "full_order_from_webhook",
+      "order_sync.order_number": "299781816",
+      "order_sync.synced": true,
+      "order_sync.auto_fulfillment.attempted": true,
+      "order_sync.auto_fulfillment.promoted": false,
+      "order_sync.auto_fulfillment.reverted": false,
+      "order_sync.auto_fulfillment.reason": "component_acceptance_blocked",
+      "order_sync.auto_fulfillment.stage": "pending_review",
+      "order_sync.auto_fulfillment.component_lifecycle.state": "stale_ignored",
+      "order_sync.auto_fulfillment.component_lifecycle.accepted": false,
+      "order_sync.auto_fulfillment.component_lifecycle.generation": 1
+    },
+    {
+      "merchant_id": "1673234356",
+      "event": "order.status.updated",
+      "event_hash": "6ce5900b6056f377532f74f5175dfbc75f24c1d97d3128cb1e0be7923f83f4c2",
+      "first_received_at": "2026-11-13T00:05:29.296000",
+      "last_received_at": "2026-11-13T00:05:29.296000",
+      "updated_at": "2026-11-13T00:05:29.296000",
+      "delivery_count": 1,
+      "verified_before_capture": true,
+      "order_mutation_scope": "full_order_from_webhook",
+      "order_sync.order_number": "299781816",
+      "order_sync.synced": true,
+      "order_sync.auto_fulfillment.attempted": true,
+      "order_sync.auto_fulfillment.promoted": false,
+      "order_sync.auto_fulfillment.reverted": false,
+      "order_sync.auto_fulfillment.reason": "component_acceptance_blocked",
+      "order_sync.auto_fulfillment.stage": "pending_review",
+      "order_sync.auto_fulfillment.component_lifecycle.state": "blocked",
+      "order_sync.auto_fulfillment.component_lifecycle.accepted": false,
+      "order_sync.auto_fulfillment.component_lifecycle.retry_required": true,
+      "order_sync.auto_fulfillment.component_lifecycle.error_code": "component_source_event_stale"
+    },
+    {
+      "merchant_id": "1673234356",
+      "event": "order.updated",
+      "event_hash": "6d83543dfcf5534c8be70f8a302d570457a4628a5aac065cb4a1c28e2ab28e9e",
+      "first_received_at": "2026-11-15T20:58:10.205000",
+      "last_received_at": "2026-11-15T20:58:10.205000",
+      "updated_at": "2026-11-15T20:58:10.205000",
+      "delivery_count": 1,
+      "verified_before_capture": true,
+      "order_mutation_scope": "full_order_from_webhook",
+      "processing_retry_required": false,
+      "order_sync.order_number": "299781816",
+      "order_sync.synced": true,
+      "order_sync.auto_fulfillment.attempted": true,
+      "order_sync.auto_fulfillment.promoted": false,
+      "order_sync.auto_fulfillment.reverted": false,
+      "order_sync.auto_fulfillment.stage": "in_progress"
+    }
+  ],
+  "final_consistency": {
+    "observed_at": "2026-11-15T21:06:05.285Z",
+    "order_number": "299781816",
+    "order_id": "800420115",
+    "owner_matches": true,
+    "status": "completed",
+    "snapshot": {
+      "source_updated_at": "2026-11-15T20:58:08.000000+00:00",
+      "cancelled": false,
+      "revision": 14,
+      "component_pending": false
+    },
+    "last_salla_direct_sync_at": "2026-11-15T20:58:19.402632+00:00"
+  },
+  "assembly": {
+    "observed_at": "2026-11-15T21:06:33.320Z",
+    "order_number": "299781816",
+    "ready_count": 0,
+    "total_pieces": 5,
+    "disabled_ready_buttons": 5,
+    "current_blocker_message": "مرحلة الطلب لا تسمح بإكمال المنتج الآن",
+    "current_blocker_count": 5,
+    "ready_or_shipping_actions_performed": false
+  },
+  "limitations": [
+    "Current source revision14 supersedes the earlier failed refresh state",
+    "Revalidation does not persist its exact rejected predicate",
+    "No immutable raw/lifecycle/approval snapshot of the earlier failed refresh state was available in this investigation; its revision was not established.",
+    "A cleared component_pending flag does not establish that the prior fix repaired the earlier proof failure"
+  ],
+  "mutations": {
+    "database": 0,
+    "order_status": 0,
+    "ready": 0,
+    "receipt": 0,
+    "shipping_label": 0,
+    "financial": 0,
+    "source_code": 0,
+    "publication": 0
+  },
+  "salla_readback": {
+    "source": "Connected Amasi Salla orders_get; store 1673234356",
+    "order_id": 800420115,
+    "reference_id": 299781816,
+    "status": "completed",
+    "updated_at": {
+      "date": "2026-11-15 23:58:08.000000",
+      "timezone": "Asia/Riyadh",
+      "timezone_type": 3
+    },
+    "history_statuses": [
+      {
+        "status": "completed",
+        "at": "2026-11-15 23:58:10.000000",
+        "timezone": "Asia/Riyadh"
+      },
+      {
+        "status": "completed",
+        "at": "2026-11-15 23:58:08.000000",
+        "timezone": "Asia/Riyadh"
+      },
+      {
+        "status": "in_progress",
+        "at": "2026-11-14 04:20:21.000000",
+        "timezone": "Asia/Riyadh"
+      },
+      {
+        "status": "under_review",
+        "at": "2026-11-13 03:05:28.000000",
+        "timezone": "Asia/Riyadh"
+      }
+    ]
+  },
+  "conclusion": {
+    "current_ready_blocker": "Canonical Salla status completed; pending piece Ready requires in_progress",
+    "source_pending_currently_cleared": true,
+    "business_recovery_verified": false,
+    "earlier_refresh_rejection_predicate": "unresolved",
+    "earlier_failed_refresh_revision": "not captured",
+    "status_change_origin": "Salla status history and received order.updated/order.status.updated webhooks; initiating actor not determined",
+    "next_decision": "User must clarify whether completed status is intended before any operational status change; existing grant was read-only"
+  },
+  "mutation_scope": "Zeros cover this current read-only diagnostic investigation only; the authorized PR1948 publication completed earlier."
+}
