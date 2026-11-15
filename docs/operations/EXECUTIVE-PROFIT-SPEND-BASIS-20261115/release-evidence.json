@@ -1,6 +1,6 @@
 {
   "task": "EXECUTIVE-PROFIT-SPEND-BASIS-20261115",
-  "updated_at_utc": "2026-11-15 15:07:56 UTC",
+  "updated_at_utc": "2026-11-15 15:20:36 UTC",
   "repository": "AMASI-SA/AMASI-SA",
   "pull_request": 1936,
   "source_branch": "codex/executive-profit-release-20261115",
@@ -211,9 +211,9 @@
   "intent_only_B_root_and_independent_review": "passed",
   "B_readiness_run": 43720779459,
   "merge_commit": "a2a8218f858547f4d9d094d29998a93b09bf59ae",
-  "production_changed": false,
+  "production_changed": true,
   "lease_created": false,
-  "next_action": "Preserve the owner active lease and /app. Observe newer explicit deployment success, read exact live identity and actual profit card, then owner official three-probe completion and inactive guard. Do not start another publication, close the lease, or wait for separate quarantine recovery to claim only what is verified for this profit task.",
+  "next_action": "Preserve owner lease during official three-probe verification. Wait for its successful completion and inactive status, perform final read-only closure check and leave dashboard deliverable. Profit UI is accepted; separate Salla incident recovery remains owner scope and no recovery is claimed.",
   "B_workflows": [
     {
       "id": 43720779455,
@@ -467,7 +467,7 @@
     "release/release-intent-v5.json"
   ],
   "production_branch_changed": true,
-  "production_changed_note": "Repository production branch merged; live deployment has not changed by this task.",
+  "production_changed_note": "The profit fix is now live through the owner's combined PR1940 publication (version5d52cf3). Root independently verified UI, arithmetic, and public health identity; root did not start a duplicate release or close the owner lease. Official three-probe verification remains pending.",
   "M_workflows": [
     {
       "id": 43721828337,
@@ -651,7 +651,7 @@
     "recovery_limit": "Code analysis: MAX_ATTEMPTS=8; exhausted quarantined events are excluded from ordinary claims. No live quarantine query or event replay performed by this task. Owner must separately track functional recovery.",
     "pr": 1940,
     "url": "https://github.com/AMASI-SA/AMASI-SA/pull/1940",
-    "state": "Owner single authorized combined publication in progress",
+    "state": "Combined runtime published; root actual profit UI, arithmetic and health acceptance PASS; owner official verification running",
     "source_commit": "a6c5bc5763fdca144b44473285d37130eb8213e9",
     "source_tree": "e4cd5f6f07aa8e3d94ce729231b21db41faf619e",
     "sole_parent": "a2a8218f858547f4d9d094d29998a93b09bf59ae",
@@ -1120,9 +1120,12 @@
         "timezone": "Asia/Riyadh",
         "status": "Building your website... / Publishing..."
       },
-      "succeeded_observed": false,
+      "succeeded_observed": true,
       "official_verify_pending": true,
-      "profit_live_acceptance_pending": true
+      "profit_live_acceptance_pending": false,
+      "version": "5d52cf3",
+      "root_finish_display": "Deployment finished Nov15 06:14 PM Asia/Riyadh",
+      "official_verify_started_by_owner": true
     }
   },
   "profit_code_blobs": {
@@ -1132,5 +1135,38 @@
     "backend/tests/test_snapchat_reporting_v2_midnight_zero_dashboard.py": "ef883e4e35f6f7d64e18f9f2c09f9158ecaa62ad",
     "frontend/src/pages/AdvancedDashboard.cardRefresh.test.jsx": "7c5da14948d07e1b302d991107e99bd25eabc333",
     "frontend/src/pages/AdvancedDashboard.jsx": "041d6ca993630eedcf1a2d394b226e8f68592448"
+  },
+  "published_release": {
+    "source_git_sha": "a6c5bc5763fdca144b44473285d37130eb8213e9",
+    "deployment_git_sha": "d7facb0ff4e2e30edbabf012b3865155d5902a85",
+    "runtime_release_id": "rg5-f33cd3537f17e7a25804236a8b4ad0680c73618af6d3cddabc75fe8486f8d93a",
+    "version": "5d52cf3",
+    "root_public_health_read": {
+      "verified_identity_available": true,
+      "critical_file_hashes_match": true,
+      "frontend_build_verified": true,
+      "source_and_runtime_exact_match": true
+    }
+  },
+  "live_acceptance": {
+    "url": "https://mezansalla.com/dashboard-advanced",
+    "period": "2026-11-15",
+    "fresh_page_reload": true,
+    "net_profit_numeric_visible": true,
+    "cpa_numeric_visible": true,
+    "roas_numeric_visible": true,
+    "financial_basis_wait_message_count": 0,
+    "legacy_make_marker_count": 0,
+    "executive_and_platform_ad_totals_match": true,
+    "canonical_tiktok_basis_visible": true,
+    "genuine_provisional_advertising_status_preserved": true,
+    "arithmetic": {
+      "net_matches_visible_components": true,
+      "cpa_matches": true,
+      "roas_matches": true,
+      "margin_matches": true
+    },
+    "private_business_figures_not_recorded": true,
+    "customer_data_not_recorded": true
   }
 }
