@@ -1,5 +1,71 @@
 # Operational provider statement reconciliation
 
+## Authorized continuation and remaining configuration access, 2026-11-15 18:27 UTC
+
+The user explicitly assigned root the remaining work and publication. This
+supersedes the earlier passive wait for another conversation, while preserving
+all active-lease and immutable-release requirements. B2 and its release branch
+remain unchanged. The independent fresh candidate check at 18:18:48Z passed
+the official intent loader, exact A2/B2/J2 ancestry and tree/byte pins. All 24
+same-head runs were accounted for: the latest 21 workflows were 20 successes
+and one conditional skip, with no failure or pending run. PR #1946 remains
+ready, unmerged and mergeable against J2.
+
+Root's actual shared readback at 18:19:50.574200Z returned the complete guard
+status `active:false`, exact HEAD J2 and no tracked changes. The existing first
+Salla verifier receipt was read without rerunning its launcher: exit 0,
+17:17:52.649892Z to 17:31:09.999479Z, `verified:true`, three checks, exact
+source `9b91e88c049166f111905c80a4c1fa07a96b51bd`, deployment J2 and runtime
+`rg5-41884037a1555abb570d35f23b2a81edc8c24e1135035a37aabee30c2d16e8e7`.
+Receipt SHA-256 values are
+`baf4047d6df392d9977d06e8e1c58ab256b2aeb5b2174b6c1826e72b87cfa049`
+for completion and
+`67425fe1406b4e25c18c4c8c93adb0b37670d640791a74193860d5323af08fb6`
+for the full verifier output. A scoped process read at 18:22:30.763695Z found
+no matching release/recovery Python operator; this is not a general claim
+that no other collaborator is active.
+
+The owner UI now reports 47 incident grants: 45 completed and two quarantined,
+with none pending, processing or retrying. The final explicit config read was
+18:26:57Z. Its latest-completion timestamp covers all owner/merchant events,
+not specifically those grants. Existing reviewed UI/API surfaces expose no
+per-row reason for the two quarantines; neither their cause nor relation to
+the reported orders is inferred. No regrant, marker removal or forced retry
+was attempted.
+
+Root independently opened each of the seven exact previously reported orders
+through the existing owner UI and confirmed all seven are present. References
+and individual results remain in private scratch evidence, not this checkpoint.
+These detail visits can automatically mark orders read; they are not described
+as GET-only. No financial evidence, capture, refund or order principal was
+edited. Root did not perform or take credit for the existing recovery grants.
+
+The maintenance UI remains enabled. Management still shows the first completed
+publication `c75a275`; no second flag-off publication was observed. Automatic
+approval review rejected opening the production Secrets panel because its
+accessibility state could expose secret metadata or values and the existing
+authorization did not specifically cover that store. The rejected action did
+not run. No alternate endpoint, terminal mutation, source change or indirect
+workaround was used. Specific user authorization for access to the documented
+maintenance key `SALLA_WEBHOOK_INCIDENT_RECOVERY_ENABLED` is now required.
+
+**Provider deployment and statement binding remain pending.** No merge, shared
+source/service change, own release lease, publication, statement binding or
+source refresh occurred. Root's malformed read-only terminal input was cancelled
+by closing only its own Terminal 9; subsequent read-only inspection used its new
+Terminal 10. Other terminals, unsaved editor work and unrelated files were left
+intact. No new application code or tests were needed or rerun.
+
+Next: obtain the specific configuration-store authorization, recheck actual
+state and active operators, close maintenance through the normal platform and
+fresh same-source governed publication, and verify `enabled:false` plus three
+official probes and inactive guard. Preserve the two quarantined events for
+review; seven present orders do not mean all 47 events succeeded. Then freshly
+verify production/B2, merge #1946 normally, pass exact-M push gates and the local
+preserving rehearsal, prepare/prepublish/publish once, complete official live
+verification, and explicitly use the saved Tabby original. This evidence-only
+branch remains separate from the frozen deployment candidate.
+
 ## Live deployment hold, 2026-11-15 17:53 UTC
 
 The deployment-ready candidate remains immutable B2
