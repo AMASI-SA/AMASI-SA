@@ -85,6 +85,7 @@ jobs:
             tests/test_salla_webhook_ingress_queue.py \
             tests/test_salla_webhook_processing_contract.py \
             tests/test_salla_webhook_installed_capture_contract.py \
+            tests/test_salla_webhook_incident_recovery.py \
             tests/test_salla_abandoned_cart_order_reconciliation.py \
             tests/test_salla_webhook_deferred_outbox.py \
             tests/test_salla_webhook_monitor_queue.py \
