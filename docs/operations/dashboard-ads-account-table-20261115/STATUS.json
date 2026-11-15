@@ -40,6 +40,18 @@
       "result": "Restored Git objects 0abf4517afd10e9e331fc10dbbca1c60b981c505 and 2a7740359451a538be8df373266c4c92ca1a57c8. Existing full guards pass, with only the exact three reviewed optional collector hooks erased for comparison."
     },
     {
+      "name": "GitHub frontend tests and production build",
+      "result": "Passed on implementation commit 8ab1087a0a9ca8156f17adc01d6f83a02fda13c6, workflow 43738524826, job 132886382064."
+    },
+    {
+      "name": "Focused backend CI environment",
+      "result": "Initial CI collection lacked mongomock_motor. Added the same pinned mongomock/mongomock-motor pair used by the existing cadence workflow and explicit fetches for both immutable source-parity baselines. Awaiting the follow-up CI run; no test or source guard was weakened."
+    },
+    {
+      "name": "Release source membership review",
+      "result": "All three new backend helpers are tracked and automatically included by the governed runtime source manifest policy; no critical-files list change is required."
+    },
+    {
       "name": "Interactive preview",
       "result": "A standalone HTML preview is built from the actual frontend components and synthetic fixtures; it is not connected to live accounts."
     },
@@ -56,7 +68,7 @@
   "pr_state": "Open draft; current CI state is authoritative on PR #1943.",
   "continuation_ledger": "Issue #1006 is at its comment cap; preserve this task status and the draft PR as the recoverable handoff.",
   "next_safe_action": "Finish the standalone preview validation, preserve this checkpoint remotely, inspect CI on that exact SHA, and deliver the reviewable PR/preview. Do not publish or create a release lease without the separate authorization required by AGENTS.md.",
-  "previous_remote_checkpoint": "062000ef2e6af5e2caea345cc7b14dc068588ab4",
+  "previous_remote_checkpoint": "8ab1087a0a9ca8156f17adc01d6f83a02fda13c6",
   "pr_url": "https://github.com/AMASI-SA/AMASI-SA/pull/1943",
   "source_checkpoint_record": "The PR body/continuation record carries the exact full source commit SHA after this status document is committed."
 }
