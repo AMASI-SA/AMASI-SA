@@ -1,6 +1,6 @@
 {
   "task": "EXECUTIVE-PROFIT-SPEND-BASIS-20261115",
-  "updated_at_utc": "2026-11-15 13:59:56 UTC",
+  "updated_at_utc": "2026-11-15 14:04:10 UTC",
   "repository": "AMASI-SA/AMASI-SA",
   "pull_request": 1936,
   "source_branch": "codex/executive-profit-release-20261115",
@@ -213,7 +213,7 @@
   "merge_commit": "a2a8218f858547f4d9d094d29998a93b09bf59ae",
   "production_changed": false,
   "lease_created": false,
-  "next_action": "Require exact-M CodeQL, Security Gate and Release Readiness push gates including both adapter rehearsals; accept independent operator review; fresh inactive shared lease; retrieve pinned operator/proof outside /app; run guard-locked original rehearsal, then prepare/prepublish/publication/official probes/live-card verification.",
+  "next_action": "Wait for other owner codex-salla-webhook-recovery-1935 to finish its already-started J publication and close its lease. Do not mutate /app or clear that lease. Require remaining exact-M CodeQL success, then fresh inactive guard and execute reviewed pinned original operator followed by own guarded publication.",
   "B_workflows": [
     {
       "id": 43720779455,
@@ -428,12 +428,14 @@
     "frontend_package_files": 1472
   },
   "shared_workspace_last_read": {
-    "head": "331b7917b3c01d064ee2a17affb4714f3a296331",
-    "branch": "hotfix/prod-snap-meta-final",
-    "tracked_clean": true,
-    "active_lease": false,
-    "observed_at_utc": "2026-11-15 13:56:53 UTC",
-    "note": "Read-only observation in independent Terminal3; not a reservation. Recheck under official operation mutex before mutation."
+    "active_lease": true,
+    "actor": "codex-salla-webhook-recovery-1935",
+    "deployment_git_sha": "331b7917b3c01d064ee2a17affb4714f3a296331",
+    "source_git_sha": "8c11053b602f8f56a1facbaee09779f2896b0ada",
+    "release_id": "rg5-8c765a3025bcafa7098d2fbdffe572d5582ecfe52c4be96f8c254ecd498d79f0",
+    "prepared_at": "2026-11-15T13:57:01.652551+00:00",
+    "observed_at_utc": "2026-11-15 14:03:39 UTC",
+    "note": "Other owner active; original rehearsal not executed. Must wait for owner; never clear or reuse this lease."
   },
   "B_independent_artifact_review": {
     "passed": true,
@@ -456,26 +458,26 @@
   "production_changed_note": "Repository production branch merged; live deployment has not changed by this task.",
   "M_workflows": [
     {
-      "id": 43721828337,
-      "name": "Security Gate",
+      "id": 43721828360,
+      "name": "CodeQL",
       "status": "in_progress",
       "conclusion": null,
+      "event": "push",
+      "head_sha": "a2a8218f858547f4d9d094d29998a93b09bf59ae"
+    },
+    {
+      "id": 43721828337,
+      "name": "Security Gate",
+      "status": "completed",
+      "conclusion": "success",
       "event": "push",
       "head_sha": "a2a8218f858547f4d9d094d29998a93b09bf59ae"
     },
     {
       "id": 43721828382,
       "name": "Mezan Release Readiness",
-      "status": "in_progress",
-      "conclusion": null,
-      "event": "push",
-      "head_sha": "a2a8218f858547f4d9d094d29998a93b09bf59ae"
-    },
-    {
-      "id": 43721828360,
-      "name": "CodeQL",
-      "status": "in_progress",
-      "conclusion": null,
+      "status": "completed",
+      "conclusion": "success",
       "event": "push",
       "head_sha": "a2a8218f858547f4d9d094d29998a93b09bf59ae"
     }
@@ -484,7 +486,64 @@
     "path": "docs/operations/EXECUTIVE-PROFIT-SPEND-BASIS-20261115/operators/original_release_1936.py",
     "sha256": "1cf90631ca0af815879975195181a630b441e5e8daece868be31bcaebbe95049",
     "bytes": 7547,
-    "independent_review": "pending",
-    "executed": false
-  }
+    "independent_review": "passed",
+    "executed": false,
+    "staged_in_original_workspace": true,
+    "staging_location": "/tmp/executive-profit-release-1936/operator",
+    "pinned_evidence_commit": "c2c82d6fdfa7ef8346d9ddb59d41458ccaa8888d",
+    "staged_sha256_verified": true
+  },
+  "live_baseline": {
+    "observed_at_utc": "2026-11-15 14:01:24 UTC",
+    "path": "/dashboard-advanced",
+    "selected_period": "2026-11-15",
+    "executive_net_profit_hidden": true,
+    "pending_spend_basis_message_present": true,
+    "tiktok_display_uses_historical_Make_marker": true,
+    "live_financial_figures_retained": false
+  },
+  "M_readiness_jobs": [
+    {
+      "id": 132835296650,
+      "name": "Host Node 20.20.2 engine and dispatcher contract",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 132835296881,
+      "name": "Frontend build",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 132835296901,
+      "name": "Backend preflight",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 132835296930,
+      "name": "Host Node 24.19.0 engine and dispatcher contract",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 132835590685,
+      "name": "Emergent Host Node 24.19.0 clean-clone adapter rehearsal",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 132835590895,
+      "name": "Emergent Host Node 20.20.2 clean-clone adapter rehearsal",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 132836209115,
+      "name": "Emergent manual redeploy required",
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ]
 }

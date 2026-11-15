@@ -1,10 +1,12 @@
-# Current operational checkpoint — 2026-11-15 13:59:56 UTC
+# Current operational checkpoint — 2026-11-15 14:04:10 UTC
 
-PR #1936 is merged normally as `a2a8218f858547f4d9d094d29998a93b09bf59ae`, tree-identical to reviewed B. All 25 applicable B workflows and independent Host20/24 artifact reviews passed. Exact-M push CI is running. This task has not changed shared `/app`, created a lease, or published. The live production deployment remains pending.
+PR #1936 is merged normally as `a2a8218f858547f4d9d094d29998a93b09bf59ae`, tree-identical to B. All 25 applicable B workflows and independent Host20/24 artifact reviews passed. Exact-M Security and Release Readiness (all 7 jobs including both rehearsals and push handoff) passed; CodeQL is still running. The original-workspace operator and companion package proof are staged and independently reviewed, but not executed.
 
-Current canonical evidence: `release-evidence.json` on `codex/executive-profit-evidence-20261115`. This branch contains evidence and an operator only; never merge it into the frozen source/intent release. The next safe action is the exact-M gate and operator review described there.
+**Shared workspace wait:** the other owner `codex-salla-webhook-recovery-1935` has an active lease prepared at `2026-11-15T13:57:01.652551+00:00` for J `331b7917b3c01d064ee2a17affb4714f3a296331`. Emergent shows its publication started at 16:58 Riyadh and still building. This task has not modified `/app`, created a lease, or published. Preserve the other owner's active operation.
 
-The original source status below is retained as historical evidence; its pre-merge statements describe earlier checkpoints.
+Current canonical evidence is `release-evidence.json` on `codex/executive-profit-evidence-20261115`. Never merge this evidence branch into A/B. Next: wait for owner completion/inactive status, require remaining M gate, then execute the pinned operator from commit `c2c82d6fdfa7ef8346d9ddb59d41458ccaa8888d` with unchanged hashes, fresh status and locked preconditions.
+
+Historical source checkpoint follows.
 
 ---
 
