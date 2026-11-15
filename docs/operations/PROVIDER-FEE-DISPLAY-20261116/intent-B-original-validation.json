@@ -1,0 +1,11 @@
+{
+  "source": "f7c5e110a074a242036233ea004d63c270a4daaa",
+  "base": "236a428364bc8163a684795ed1be87e237476f18",
+  "deployment": "c4bddfc4adb012620a161549b42c875c40e0e5d0",
+  "release": "rg5-79ac457d2b1bc4c417fb86d9f3d6dc10f7e613f3402018cb15f101f558cda9f6",
+  "official_load_release_intent": true,
+  "official_verify_release_intent_git": true,
+  "tracked_clean": true,
+  "scope": "isolated original checkout",
+  "production_changed": false
+}
