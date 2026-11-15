@@ -1,3 +1,39 @@
+# Provider PR1950 publication evidence — do not deploy this branch
+
+This documentation-only branch preserves the continuation record. The deployment candidate remains the unchanged A4/B4 pair on PR1950. Never merge or deploy this evidence branch.
+
+## Resumed release checkpoint — 2026-11-15 20:36 UTC
+
+The owner asked to continue from the interrupted provider release and the existing explicit merge/publication authorization persists. Root resumed from the verified remote PR1950 checkpoint; PR1946/1949 remain superseded and unchanged.
+
+### Exact immutable release
+- Production predecessor J4: `c626af288d3823694b4f1d0efcc3670e4ee74d81`.
+- Source A4: `1bd44b6f186de8b40877fde686b5d2d7aab52805`, tree `d5a0fb81302e84dea26a43ec5d090646a9de24f1`.
+- Intent-only B4: `983cb9307a8a23d086bc6cb3df962683870b01e2`, tree `6967da090ac1301ca38bc8bc179758d7eaa91976`.
+- B4 is a direct child of A4; only `release/release-intent-v5.json` changes. Exact intent blob `7cf111bae2234013a2b2708f70793ce9a7a3ab7f`.
+- Runtime `rg5-58ace8c534fca5cd31d89a58bc9fd7746a79e25681660f8c32b3eded55a74117`.
+- Branch `codex/provider-statement-release-r4-20261115`. No squash, rebase or source changes after A4.
+
+### Accepted source and candidate evidence
+All20 exact-A4 PR workflows succeeded. Primary operational jobs tested A4: Backend4953 passed plus16 source-contract cases/18subtests; Frontend883 tests/54suites. Actual isolated-Mongo and existing browser/mobile/visibility gates passed. Fresh combined local source regression remains402 passed/116subtests.
+
+Official producer run43754412141/job132935241414, artifact14177847514: ZIP382556bytes, SHA256`3698cb2c9581ad5511e0c69afb72e28460f03567156b4828a17f1418be295ef1`; one regular unencrypted intent member. Exact JSON1324247bytes, SHA256`8ba08f1a55e872c80bbca60d2ae189c7b123032544ccbf4ab94806bbde8728fa`. Root executed official `load_candidate_release_intent` successfully in the clean exact-A4 isolated original-host checkout, with candidate outside it. An independent reviewer checked bytes, producer log/provenance, runtime derivation, source digests/Git projection trees and embedded two-pass proof. These exact bytes were frozen unchanged in B4.
+
+Private original temporary evidence: `/tmp/provider1950-resume-20261115/`. No merchant statement, credential or live financial data is in this PR.
+
+### Prior publication completed and coordination
+Root freshly read PR1948's final receipt: single platform version1f931e6, official `verified:true,checks:3` at20:23:36Z and inactive guard20:24:19Z. Root independently read original /app official `active:false`, tracked-clean HEADJ4. Root only fetched this task and created an isolated detached A4 worktree; shared tracked source remainsJ4. No new lease, provider publication, live statement use or financial write.
+
+Issue1006's2500-comment ledger is full; this task PR and its STATUS/evidence branch carry the current continuation without rewriting historical claims.
+
+### Scope and remaining acceptance
+Owner-scoped native Tabby/Tamara/Salla statement intake, saved-original reuse, accepted actual fee substitution and explicit reconciliation review. Variable percentage excludes VAT, fixed charges and payout costs; unknown or unsplit rates remain unknown. Existing employee principal/refunds must not be duplicated. The operational provider table changes; advertising-dashboard merchant settings remain a separate source.
+
+Next: complete exact-B4 CI including actual Host20/24 clean-clone artifact/package rehearsals; independently accept proof; recheck current production and original guard; normal tree-equivalent merge and exact-M push gates; original-workspace governed rehearsal preserving platform files; own prepare/prepublish; one authorized publication; official three deployed probes/inactive; explicit original saved Tabby use and live provider-table readback. Missing payment/refund principal stays in explicit review. A4 success is not B/M or deployment proof.
+
+
+---
+
 # Operational provider statement reconciliation
 
 ## R4 source integration on actual Ready predecessor, 2026-11-15 19:46 UTC
