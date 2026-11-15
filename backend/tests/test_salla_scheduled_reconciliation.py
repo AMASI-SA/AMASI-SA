@@ -100,7 +100,7 @@ async def test_short_order_pages_still_refresh_all_orders_and_items(monkeypatch)
     from resource_governor import governor
     monkeypatch.setattr(paid_sar_sync, 'observe_list_evidence', AsyncMock())
     monkeypatch.setattr(governor, 'peek', lambda: ('allowed', None))
-    result = await sync.run_orders_sync(object(), 'owner', log_id='run', refresh_window=(end-timedelta(hours=24), end))
+    result = await sync.run_orders_sync(AsyncMongoMockClient().db, 'owner', log_id='run', refresh_window=(end-timedelta(hours=24), end))
     assert result['created'] == 2 and result['skipped'] == 1 and not result['truncated']
     assert [c.args[2]['order_number'] for c in persist.await_args_list] == ['1', '3']
     assert all(c.args[2]['products'][0]['quantity'] == 3 for c in persist.await_args_list)
@@ -177,3 +177,53 @@ async def test_catalogue_schedule_is_independent_of_order_completion(monkeypatch
     assert await scheduled.run_due(db, 'owner', now=NOW, catalogue=True)
     assert not await scheduled.run_due(db, 'owner', now=NOW, catalogue=True)
     run.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('fence', ['blocked', 'stale'])
+async def test_scheduled_light_fence_fetches_versioned_details_and_resumes(monkeypatch, fence):
+    db = AsyncMongoMockClient(tz_aware=True).db
+    row = {'id': 123, 'reference_id': '456', 'date': {'date': '2026-11-10 12:00:00', 'timezone': 'Asia/Riyadh'},
+           'status': {'slug': 'canceled'}, 'total': {'amount': 80, 'currency': 'SAR'}}
+    details = {**row, 'updated_at': {'date': '2026-11-10 13:00:00', 'timezone': 'Asia/Riyadh'}}
+    calls = []
+    async def provider(db, user, method, path, **kw):
+        calls.append(path)
+        if path == '/orders':
+            return {'data': [row], 'pagination': {'currentPage': 1, 'totalPages': 1}}
+        if path == '/orders/items':
+            return {'data': [{'id': 1, 'quantity': 2}]}
+        assert path == '/orders/123' and method == 'GET'
+        return {'data': details}
+    async def persist(db, user, doc, raw, **kw):
+        if not kw.get('authoritative_refresh'):
+            return {fence: True}
+        assert raw['updated_at'] == details['updated_at']
+        assert raw['items'][0]['quantity'] == 2
+        await db.unified_orders.update_one({'user_id': user, 'order_number': '456'}, {'$set': doc}, upsert=True)
+        return {'created': False}
+    monkeypatch.setattr(sync, 'call_salla', provider)
+    monkeypatch.setattr(sync, '_persist_sync_component_snapshot', persist)
+    monkeypatch.setattr(sync, '_enrich_order_receiving_bank', AsyncMock(side_effect=lambda db,u,r:r))
+    monkeypatch.setattr(sync, '_refresh_plan_b_status_snapshot', AsyncMock())
+    monkeypatch.setattr(sync.asyncio, 'sleep', AsyncMock())
+    from salla_integration import paid_sar_sync
+    from resource_governor import governor
+    monkeypatch.setattr(paid_sar_sync, 'observe_list_evidence', AsyncMock())
+    monkeypatch.setattr(governor, 'peek', lambda: ('allowed', None))
+    window = (NOW-timedelta(hours=24), NOW)
+    first = await sync.run_orders_sync(db, 'owner', refresh_window=window)
+    assert first['errors_count'] == 0 and first['updated'] == 1
+    again = await sync.run_orders_sync(db, 'owner', refresh_window=window)
+    assert again['errors_count'] == 0 and again['skipped'] == 1
+    assert calls.count('/orders/123') == 1 and calls.count('/orders/items') == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('change', [{'id': 999}, {'reference_id': 'other'}, {'updated_at': None}])
+async def test_scheduled_details_reject_wrong_identity_or_missing_version(monkeypatch, change):
+    light = {'id': 123, 'reference_id': '456', 'items': []}
+    details = {**light, 'updated_at': '2026-11-10T13:00:00+03:00', **change}
+    monkeypatch.setattr(sync, 'call_salla', AsyncMock(return_value={'data': details}))
+    with pytest.raises(ValueError):
+        await sync._fetch_scheduled_order_details(None, 'owner', light)

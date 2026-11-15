@@ -1,0 +1,14 @@
+{
+  "task": "SALLA-SCHEDULED-AUTHORITY-20261111",
+  "base": "f439bed54579fafb79a8abcb43080c8150cb5063",
+  "branch": "codex/salla-scheduled-authority-20261111",
+  "status": "candidate_local_tests_pass",
+  "scope": "Recover fenced light order snapshots through identity/version-checked details; resume exact bounded window without repeating completed order I/O",
+  "evidence": "Two live cancelled orders have dated authoritative details; scheduled light snapshots blocked; other versioned canonical rows were skipped as stale",
+  "tests": "2 regression cases failed before; 47 passed / 13 real-Mongo skipped locally after",
+  "production_changed": false,
+  "next": "Real Mongo CI, code review, guarded A/B build and authorized publication; observe terminal scheduler and catalogue progress",
+  "preserved": "No cancellation/version guard weakening, preparation/stock/provider-financial actions, catalogue deletion or manual DB repair",
+  "catalogue": "Existing per-product resume observed progressing; full cycle not yet verified complete",
+  "remaining": "Validate real Mongo transaction preservation and postdeployment scheduler acceptance; SAR0.01 difference separate/unproven"
+}

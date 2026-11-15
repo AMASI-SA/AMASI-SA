@@ -936,7 +936,7 @@ async def run_orders_sync(
         while page <= max_pages:
             params: dict = {"page": page, "per_page": ORDERS_PER_PAGE, "format": "light"}
             if refresh_window:
-                # Fetch items separately; never open /orders/{id} in background.
+                # Light pages first; fenced snapshots use a targeted details read.
                 params["per_page"] = 30
             if from_date:
                 params["from_date"] = from_date
@@ -1009,6 +1009,14 @@ async def run_orders_sync(
                         if not refresh_window[0] <= created_at <= refresh_window[1]:
                             skipped += 1
                             continue
+                        window_key = refresh_window[1].isoformat()
+                        resume_query = {"user_id": user_id, "order_number": str(raw.get("reference_id") or "")}
+                        done = await db.unified_orders.find_one({
+                            **resume_query, "scheduled_order_window_end": window_key,
+                        }, {"_id": 1})
+                        if done:
+                            skipped += 1
+                            continue
                         from resource_governor import governor, ResourcePressure
                         if governor.peek()[0] in {"blocked", "cancel"}:
                             raise ResourcePressure("resource_pressure")
@@ -1056,9 +1064,21 @@ async def run_orders_sync(
                         skipped += 1
                         continue
                     res = await _persist_sync_component_snapshot(db, user_id, doc, raw)
+                    if refresh_window and (res.get("blocked") or res.get("stale")):
+                        raw = await _fetch_scheduled_order_details(db, user_id, raw)
+                        raw = await _enrich_order_receiving_bank(db, user_id, raw)
+                        doc = _salla_order_to_doc(raw)
+                        res = await _persist_sync_component_snapshot(
+                            db, user_id, doc, raw, authoritative_refresh=True,
+                        )
                     if res.get("blocked") and refresh_window:
                         raise RuntimeError("scheduled_snapshot_blocked")
                     if res.get("stale") or res.get("blocked"):
+                        if refresh_window and res.get("stale"):
+                            # A genuinely newer canonical snapshot already wins.
+                            await db.unified_orders.update_one(resume_query, {"$set": {
+                                "scheduled_order_window_end": window_key,
+                            }})
                         skipped += 1
                         continue
                     from .paid_sar_sync import observe_list_evidence
@@ -1066,6 +1086,12 @@ async def run_orders_sync(
                     await _refresh_plan_b_status_snapshot(
                         db, user_id, doc["order_number"], doc
                     )
+                    if refresh_window:
+                        # Resume a bounded run without repeating provider reads
+                        # for orders already refreshed in this exact window.
+                        await db.unified_orders.update_one(resume_query, {"$set": {
+                            "scheduled_order_window_end": window_key,
+                        }})
                     if res.get("created"):
                         created += 1
                     else:
@@ -1144,6 +1170,24 @@ async def run_orders_sync(
         "attribution_orders_recovered": attribution_orders_recovered,
         "attribution_recovery_errors": attribution_recovery_errors,
     }
+
+
+async def _fetch_scheduled_order_details(db, user_id, light):
+    """Recover missing source authority; never invent a provider version."""
+    from fulfillment_v2_routes import component_provider_version
+    internal_id = str(light.get("id") or "")
+    reference = str(light.get("reference_id") or "")
+    if not internal_id or not reference:
+        raise ValueError("scheduled_order_missing_identity")
+    response = await call_salla(db, user_id, "GET", f"/orders/{internal_id}")
+    details = response.get("data") if isinstance(response, dict) else None
+    if (not isinstance(details, dict) or str(details.get("id")) != internal_id
+            or str(details.get("reference_id")) != reference):
+        raise ValueError("scheduled_order_details_identity_mismatch")
+    if not component_provider_version(details):
+        raise ValueError("scheduled_order_details_missing_version")
+    # Items were independently fetched with complete pagination in this run.
+    return {**details, "items": light["items"]}
 
 
 async def _fetch_scheduled_order_items(db, user_id, internal_id):
