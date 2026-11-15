@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PR1951 UNBOUND review template: one handoff/rehearsal, never publication.
+"""PR1951 bound review operator: one handoff/rehearsal, never publication.
 
 Bind every release pin and the complete reviewed source-parent map, then require
 all exact-M gates, fresh inactive handoff, independent byte review, and durable
@@ -21,18 +21,21 @@ from datetime import datetime, timezone
 ROOT = Path('/app')
 BRANCH = 'hotfix/prod-snap-meta-final'
 BASE = '236a428364bc8163a684795ed1be87e237476f18'
-MERGE = None  # Bind the independently accepted normal merge; --merge must match.
-TREE = None  # Bind the identical B/M tree.
-INTENT_B = None
-SOURCE_A = None
-SOURCE_TREE = None
+MERGE = '2589f440106a7c5d463ee03eac3617d113319673'
+TREE = 'd91e281aa9fc7e02ddab1a36989dc6c3bf0b68ec'
+INTENT_B = 'c4bddfc4adb012620a161549b42c875c40e0e5d0'
+SOURCE_A = 'f7c5e110a074a242036233ea004d63c270a4daaa'
+SOURCE_TREE = '5646f5ee7c346c17e3f8ceb9bfbbedeb15e16eab'
 RELEASE_BASE_J = BASE
 # Bind every commit in J..A to its exact ordered parent list after review.
 # The anticipated shape is {W1: [J], A: [W1]}, with full 40-hex Git IDs.
-SOURCE_PARENT_PINS = None
-INTENT_SHA256 = None
-RUNTIME_ID = None
-PROOF_SHA256 = None
+SOURCE_PARENT_PINS = {
+    'afc3a17784e020d9b1fe3751f4c4974ffc6a9941': ['236a428364bc8163a684795ed1be87e237476f18'],
+    'f7c5e110a074a242036233ea004d63c270a4daaa': ['afc3a17784e020d9b1fe3751f4c4974ffc6a9941'],
+}
+INTENT_SHA256 = '253b2f15dbdbf1868c26bb4dbe8c38a4a471e553645c75ca31bc717b818b4a5e'
+RUNTIME_ID = 'rg5-79ac457d2b1bc4c417fb86d9f3d6dc10f7e613f3402018cb15f101f558cda9f6'
+PROOF_SHA256 = '8bc0564eba0bbf3c4e7c45464c7324445b16d011df3ef1721459ca41f75f9747'
 EVIDENCE = None  # Required fresh direct child of /tmp.
 EXPECTED_PROOF = Path(__file__).with_name('expected-package-boundary-1951.json')
 INTENT_PATH = 'release/release-intent-v5.json'

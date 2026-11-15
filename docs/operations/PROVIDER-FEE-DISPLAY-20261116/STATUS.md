@@ -1,4 +1,4 @@
-# Provider fee display repair — intent B under release verification
+# Provider fee display repair — merged M awaiting original rehearsal
 
 Task `PROVIDER-FEE-DISPLAY-20261116`, repository AMASI-SA/AMASI-SA, PR https://github.com/AMASI-SA/AMASI-SA/pull/1951. This is the evidence-only branch; do not merge or deploy it.
 
@@ -21,20 +21,22 @@ Task `PROVIDER-FEE-DISPLAY-20261116`, repository AMASI-SA/AMASI-SA, PR https://g
 - Final-A operational backend/frontend/browser acceptance, release readiness and other observed checks succeeded. Operational Stock Eligibility A run was cancelled when superseded by B; the exact-B replacement remains a required gate. Candidate-A success does not replace reviewed-B Host Node adapter rehearsals.
 - Intent-only B is `c4bddfc4adb012620a161549b42c875c40e0e5d0`, tree `d91e281aa9fc7e02ddab1a36989dc6c3bf0b68ec`, sole parent A. PR1951 is ready for review. B changes only the intent file; source A remains frozen.
 - Original isolated B validation completed successfully with official `load_release_intent()` and `verify_release_intent_git()`; exact A/J/B/runtime matched, tracked worktree clean. Original `/app` is still baseline J.
-- B readiness run `43773611516` and operational run `43773611494` are in progress. Superseded duplicate Snapchat runs are cancelled; latest replacements are successful. The unrelated conditional TikTok candidate run is skipped.
+- All 11 expected latest B workflows completed successfully, including readiness `43773611516` and operational `43773611494`. Both actual Host Node 20/24 rehearsals passed. Two earlier duplicate Snapchat runs were superseded/cancelled; their latest replacements passed. The unrelated conditional TikTok candidate run is skipped.
+- Independent generated-byte/package acceptance passed on both hosts: all 297 generated files are byte-identical, all 294 frontend files and canonical metadata match the intent; complete frontend/backend package trees reconstructed. Common package-proof SHA256 `8bc0564eba0bbf3c4e7c45464c7324445b16d011df3ef1721459ca41f75f9747` (1,278 bytes); acceptance receipt adjacent.
+- PR1951 normally merged as `2589f440106a7c5d463ee03eac3617d113319673`, ordered parents J/B, tree `d91e281aa9fc7e02ddab1a36989dc6c3bf0b68ec` exactly equal to B. Git API verified this after merge. Exact-M push checks are now running.
 
 ## Preserved limits and original environment
 
 - Original `/app` remains baseline J, tracked-clean, guard inactive; 120 unrelated untracked entries are preserved. Changes/tests are in the isolated original checkout.
 - The narrowly scoped diagnostic owner lookup did not establish a unique target. Source provides no proof that shell configuration is production-bound; no saved financial state was read, scope was not broadened, and no financial data was written. No live incomplete-row predicate is claimed or used to weaken calculation eligibility.
-- Adjacent rehearsal and verifier helpers are **unbound templates, never executed**. Both were statically parsed and independently reviewed. Bind only from accepted A/B/M artifacts and fresh original-environment evidence, review final bytes, and checkpoint before execution.
-- No new lease, production-branch merge, deployment, source refresh, statement reimport, payment/refund confirmation or other financial write occurred. Production changed in this follow-up: **no**.
+- Rehearsal helper is now bound to accepted A/B/M, source-parent map, intent/runtime and package proof; 18,859 bytes, SHA256 `40479a58a63004bd6ba9b3257f775a5110eace755c20a05656dbc7143e5a1140`. It is statically parsed, never executed; final independent binding review is pending. Verifier is partially bound but `PREPARED_AT` remains None until the official prepare receipt exists; it must not run yet.
+- The production Git branch has advanced to reviewed M through the normal merge; original `/app` and the live deployed application have not changed yet. No new lease, deployment, source refresh, statement reimport, payment/refund confirmation or other financial write occurred. Live Production changed in this follow-up: **no**.
 
 ## Next safe actions
 
-1. Finish exact-B required CI and independently accept both Host Node package/generated-output proofs; no source or intent edits are planned.
-2. Require reviewed-B readiness including both actual Host Node adapter rehearsals and accepted package proofs, then normal-merge without squash/rebase and verify B/M tree equality.
-3. Bind/checkpoint the original helper with current pins, perform fresh inactive-state handoff and configured-entry rehearsal, preserving unrelated files. Only then use the session's existing publication authorization and official lease flow.
-4. Observe a newer explicit platform success, run the single official three-probe verifier and require inactive status, then inspect the live estimated commission and below-table explanations with a fresh read.
+1. Complete exact-M required CI and final bound-helper review. Stage the hash-verified helper and accepted package proof outside `/app` from this immutable evidence checkpoint; do not repeat any executed step.
+2. Observe fresh original guard inactive, exact starting J and clean tracked files. Execute the once-only bound original helper with `--merge 2589f440106a7c5d463ee03eac3617d113319673 --package-proof /tmp/expected-package-boundary-1951.json --evidence-directory /tmp/provider1951-original-20261116`. It performs ff-only update/configured-entry rehearsal under the official mutex, preserves unrelated metadata, and creates no lease or publication.
+3. Record successful rehearsal, then create the owned official prepare receipt. Bind/checkpoint the verifier's exact `PREPARED_AT` from that receipt, run prepublish immediately before the authorized UI publication, and observe newer explicit platform success.
+4. Run the single official three-probe verifier and require inactive status, then inspect the live estimated commission and below-table explanations with a fresh read. No financial refresh is needed.
 
 Issue1006 remains at its known comment limit; this task ledger and PR provide continuity.

@@ -1,0 +1,138 @@
+{
+  "accepted": true,
+  "accepted_at": "2026-11-15T23:21:53.163499+00:00",
+  "artifacts": [
+    {
+      "bytes": 3019466,
+      "expired": false,
+      "id": 14185760243,
+      "name": "release-v5-generated-outputs-host-24.19.0",
+      "sha256": "fb6f46233a412aebeb02347bfccda698b90fee3093668dd7ae89c7dd55f33082"
+    },
+    {
+      "bytes": 46615,
+      "expired": false,
+      "id": 14185462971,
+      "name": "release-v5-clean-clone-evidence-host-20.20.2",
+      "sha256": "c37d8f67e167ed1c60b8917d7783c15ef37bc1b4428da5a630ada148d9d68461"
+    },
+    {
+      "bytes": 46617,
+      "expired": false,
+      "id": 14185178690,
+      "name": "release-v5-clean-clone-evidence-host-24.19.0",
+      "sha256": "69941191e9e2a67f8235486abb68e90459e796234991f9c8d4b4ab7c7dd3d040"
+    },
+    {
+      "bytes": 3019318,
+      "expired": false,
+      "id": 14185074085,
+      "name": "release-v5-generated-outputs-host-20.20.2",
+      "sha256": "5ab9b42e652e5d18e0f6ad1c739cfbce0b9ea846de802b422cb397ffdb45c68b"
+    }
+  ],
+  "checks": {
+    "all_297_generated_member_bytes_identical_across_hosts": true,
+    "all_frontend_file_bytes_match_intent_and_metadata": true,
+    "declared_tar_checksums_match": true,
+    "exact_B_provenance": true,
+    "generated_identity_matches_accepted_runtime": true,
+    "generated_intent_bytes_match_accepted_A": true,
+    "required_package_members_and_isolation_contract": true,
+    "safe_unique_archive_members": true
+  },
+  "frontend": {
+    "artifact_tree_sha256": "8017e720f266ed5d6b0141d83312512e8052396c7da65e22557dce1c8fe79fcb",
+    "asset_files": 284,
+    "build_meta": {
+      "bytes": 479858,
+      "sha256": "cbd8a8d7056ae4e0fbf849b1eb0f2dfdca5404d5a430e2edcfcf3d25034e6657"
+    },
+    "canonical_build_meta_json": true,
+    "generated_build_files": 294,
+    "public_files": 291,
+    "source_files": 1195
+  },
+  "generated_archives": [
+    {
+      "artifact_id": 14185760243,
+      "directories": 3,
+      "host": "24.19.0",
+      "regular_files": 297,
+      "tar_sha256": "23d450cf48e1923c35d88b315c16c5399ea1648ee052875f526df49a86e8bfb7"
+    },
+    {
+      "artifact_id": 14185074085,
+      "directories": 3,
+      "host": "20.20.2",
+      "regular_files": 297,
+      "tar_sha256": "8f3fb72c33ddb4f8eec28c93ad94108cbb91152c61db01bc4d1452ee27911774"
+    }
+  ],
+  "intent": {
+    "bytes": 1325607,
+    "git_blob": "9d9d986ff35aa0ea6a1e7837f7d29cdf3c6e90df",
+    "only_B_change": true,
+    "sha256": "253b2f15dbdbf1868c26bb4dbe8c38a4a471e553645c75ca31bc717b818b4a5e"
+  },
+  "intent_commit": "c4bddfc4adb012620a161549b42c875c40e0e5d0",
+  "intent_tree": "d91e281aa9fc7e02ddab1a36989dc6c3bf0b68ec",
+  "kind": "provider1951_independent_B_artifact_acceptance",
+  "limits": [
+    "Package source records were checked against exact Git trees during A acceptance; generated archives contain output files, not every source file.",
+    "No original-environment rehearsal, live verification, lease, publication, source change, or remote mutation was performed by this acceptance review."
+  ],
+  "package_proof": {
+    "backend": {
+      "file_count": 1232,
+      "package_tree_sha256": "eae21ece7b5b4d6a1baf2653378dbb939c834c74aca3062550e26266a1de4095"
+    },
+    "byte_identical_across_hosts_and_expected_copy": true,
+    "bytes": 1278,
+    "complete_contract_objects_reconstructed_and_equal": true,
+    "frontend": {
+      "file_count": 1489,
+      "package_tree_sha256": "38f280cf62f8c9b5676ee76ef7bcbc441ee5012825d29a99d3a86e68377f4be2"
+    },
+    "sha256": "8bc0564eba0bbf3c4e7c45464c7324445b16d011df3ef1721459ca41f75f9747"
+  },
+  "readiness": {
+    "conclusion": "success",
+    "head_sha": "c4bddfc4adb012620a161549b42c875c40e0e5d0",
+    "host_jobs": [
+      {
+        "completed_at": "2026-11-15T23:16:16Z",
+        "conclusion": "success",
+        "id": 132995045297,
+        "name": "Emergent Host Node 24.19.0 clean-clone adapter rehearsal"
+      },
+      {
+        "completed_at": "2026-11-15T23:16:34Z",
+        "conclusion": "success",
+        "id": 132995045358,
+        "name": "Emergent Host Node 20.20.2 clean-clone adapter rehearsal"
+      }
+    ],
+    "run_id": 43773611516,
+    "status": "completed"
+  },
+  "release_id": "rg5-79ac457d2b1bc4c417fb86d9f3d6dc10f7e613f3402018cb15f101f558cda9f6",
+  "reproducibility_proof": {
+    "bytes": 1521,
+    "retained_pass": 2,
+    "sha256": "ee14b7e4653b18c7882fd6c9a80ed8c96111a78c2a6f59134cc8073c510b696c",
+    "two_passes_match": true
+  },
+  "reviewers": [
+    "/root/release_operator",
+    "/root/release_operator/fee_completeness_review"
+  ],
+  "runtime_identity": {
+    "bytes": 443337,
+    "deterministic_identity_recomputed": true,
+    "sha256": "421d2bf78e6572f65260e9e6814ba64a12d6a4462a96566e380503bfb441c987"
+  },
+  "schema_version": 1,
+  "source_base_git_sha": "236a428364bc8163a684795ed1be87e237476f18",
+  "source_git_sha": "f7c5e110a074a242036233ea004d63c270a4daaa"
+}

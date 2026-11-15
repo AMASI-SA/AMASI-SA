@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Verify PR1951 once, only after the operator observes newer platform success.
 
-UNBOUND TEMPLATE: root must bind the six None constants from accepted evidence.
+Prepared-at remains unbound until the exact official prepare receipt is observed.
 This wrapper neither publishes nor clears a lease. Only the official successful
 verifier may close its lease. Failure retains every receipt for review; no retry.
 """
@@ -22,15 +22,15 @@ PREPARE = EVIDENCE / "prepare.json"
 GUARD = ROOT / "scripts/production_release_guard.py"
 GUARD_SHA256 = "4e56f1f60f5f79931658b8f95a0aeb2269471025ca84f7e5b651cd284806349a"
 # Bind by reviewed source edit only; no CLI or environment identity overrides.
-SOURCE = None  # Final accepted source A, 40 lowercase hexadecimal characters.
+SOURCE = "f7c5e110a074a242036233ea004d63c270a4daaa"
 BASE = "236a428364bc8163a684795ed1be87e237476f18"
-MERGE = None  # Final accepted deployment M, 40 lowercase hexadecimal characters.
-RELEASE = None  # Accepted deterministic rg5 runtime identity.
-ACTOR = None  # Exact actor in the official PR1951 prepare.json.
+MERGE = "2589f440106a7c5d463ee03eac3617d113319673"
+RELEASE = "rg5-79ac457d2b1bc4c417fb86d9f3d6dc10f7e613f3402018cb15f101f558cda9f6"
+ACTOR = "chatgpt-provider1951-20261116-root"
 PREPARED_AT = None  # Exact timezone-aware prepared_at in that same receipt.
 BRANCH = "hotfix/prod-snap-meta-final"
 ORIGIN = "https://mezansalla.com"
-BASELINE_VERSION = None  # Observed successful PR1950 platform version, not 1f931e6.
+BASELINE_VERSION = "3e5bbfb"
 
 
 def require(condition, reason):
