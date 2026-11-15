@@ -1,6 +1,6 @@
 {
   "task": "EXECUTIVE-PROFIT-SPEND-BASIS-20261115",
-  "updated_at_utc": "2026-11-15 14:32:40 UTC",
+  "updated_at_utc": "2026-11-15 14:34:41 UTC",
   "repository": "AMASI-SA/AMASI-SA",
   "pull_request": 1936,
   "source_branch": "codex/executive-profit-release-20261115",
@@ -645,7 +645,7 @@
     "recovery_limit": "Code analysis: MAX_ATTEMPTS=8; exhausted quarantined events are excluded from ordinary claims. No live quarantine query or event replay performed by this task. Owner must separately track functional recovery.",
     "pr": 1940,
     "url": "https://github.com/AMASI-SA/AMASI-SA/pull/1940",
-    "state": "draft source candidate; owner handles corrective release",
+    "state": "Intent-only B frozen; exact-B gates and package rehearsals in progress; owner handles release",
     "source_commit": "a6c5bc5763fdca144b44473285d37130eb8213e9",
     "source_tree": "e4cd5f6f07aa8e3d94ce729231b21db41faf619e",
     "sole_parent": "a2a8218f858547f4d9d094d29998a93b09bf59ae",
@@ -783,6 +783,19 @@
         "case_seconds": 11.944,
         "assertions": "Queue done on attempt one; payload removed; one capture audit; duplicate suppressed."
       }
+    },
+    "frozen_B": {
+      "B": "ac1443d46d6c172983dfe74479c6f96c40b0c4ec",
+      "tree": "d5bb8d88f7f04610dd6796648edebca24d025c1c",
+      "intent_sha256": "812c3b0bdb27215b6647d40055616ded848d118fc0a7879b289f70a5c02a1c6d",
+      "source_git_sha": "a6c5bc5763fdca144b44473285d37130eb8213e9",
+      "source_base_git_sha": "a2a8218f858547f4d9d094d29998a93b09bf59ae",
+      "runtime_release_id": "rg5-f33cd3537f17e7a25804236a8b4ad0680c73618af6d3cddabc75fe8486f8d93a",
+      "frontend_artifact_tree_sha256": "8f6bb73cec2d628eadb120994d2f4ab1fab730eb0637bad8f7c8a050770ea943",
+      "frontend_source_tree_sha256": "db0c60ac3c54d9a25d283f15c8e6379d667c4c66ff0f2e52a6b3ff703016cdc5",
+      "profit_six_blobs_unchanged": true,
+      "readiness_run": 43724980285,
+      "parent_and_intent_only_diff_verified": true
     }
   },
   "profit_code_blobs": {
