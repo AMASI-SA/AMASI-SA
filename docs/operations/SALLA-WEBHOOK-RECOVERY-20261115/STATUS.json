@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/salla-webhook-release-evidence-20261115",
   "base_commit": "9afb38cf0dc0d8e8cd887f2c2cdb4a6be5a7ca68",
-  "status": "PR1935 identity verified and lease closed; functional queue hold continues; corrected PR1940 intent-only B gates running",
+  "status": "Corrected PR1940 normal merge accepted; exact M push gates running; actual /app remains previous verified M, functional recovery pending",
   "requested_behavior": [
     "Repair the blocking verified webhook path and duplicate processing identified by platform support",
     "One scheduled refresh at 10:00 Asia/Riyadh over a fixed preceding 24-hour window",
@@ -222,7 +222,14 @@
       "Queue recovery is at least once after process death between business write and queue settlement; existing source and outbox idempotency remain authoritative",
       "Do not invent updated_at_gt support: official Salla List Orders documentation and existing repository contract do not establish it",
       "Do not call Order Details from background reconciliation because the repository records that it may mark orders read"
-    ]
+    ],
+    "support_followup": {
+      "thread_id": "1a19e3869a6261da",
+      "sent_message_id": "1a1dfa7c03e616a0",
+      "recipient": "support@emergent.sh",
+      "purpose": "Existing incident #299768: request sanctioned production maintenance surface or metadata-only dry run; no credentials or mutation requested",
+      "status": "sent"
+    }
   },
   "last_remote_checkpoint": "443424812fbeaad6108f1f67094d94d30a2f0d28",
   "pull_request": "https://github.com/AMASI-SA/AMASI-SA/pull/1935",
@@ -253,7 +260,7 @@
   },
   "release_branch": "codex/salla-webhook-recovery-release-20261115",
   "evidence_only": true,
-  "checkpoint_at": "2026-11-15 14:33:49 UTC",
+  "checkpoint_at": "2026-11-15 14:43:15 UTC",
   "production_source_branch_changed": true,
   "production_runtime_changed": true,
   "operator": {
@@ -513,6 +520,183 @@
       "ci_salla_passed": 355,
       "ci_skipped": 0,
       "canonical_child_seconds": 11.944
-    }
+    },
+    "merge": "d7facb0ff4e2e30edbabf012b3865155d5902a85",
+    "merge_tree": "d5bb8d88f7f04610dd6796648edebca24d025c1c",
+    "B_workflows": [
+      {
+        "id": 43724979880,
+        "name": "TikTok Creator Release Candidate",
+        "head_sha": "ac1443d46d6c172983dfe74479c6f96c40b0c4ec",
+        "status": "completed",
+        "conclusion": "skipped",
+        "run_attempt": 1
+      },
+      {
+        "id": 43724979838,
+        "name": "Snapchat Settings Management V2",
+        "head_sha": "ac1443d46d6c172983dfe74479c6f96c40b0c4ec",
+        "status": "completed",
+        "conclusion": "success",
+        "run_attempt": 1
+      },
+      {
+        "id": 43724980005,
+        "name": "Snapchat Direct Active Publication",
+        "head_sha": "ac1443d46d6c172983dfe74479c6f96c40b0c4ec",
+        "status": "completed",
+        "conclusion": "success",
+        "run_attempt": 1
+      },
+      {
+        "id": 43724979935,
+        "name": "Qoyod Payment Freshness",
+        "head_sha": "ac1443d46d6c172983dfe74479c6f96c40b0c4ec",
+        "status": "completed",
+        "conclusion": "success",
+        "run_attempt": 1
+      },
+      {
+        "id": 43724979881,
+        "name": "Salla durable ingress and daily refresh",
+        "head_sha": "ac1443d46d6c172983dfe74479c6f96c40b0c4ec",
+        "status": "completed",
+        "conclusion": "success",
+        "run_attempt": 1
+      },
+      {
+        "id": 43724979997,
+        "name": "Background workers and two-hour Qoyod cycles",
+        "head_sha": "ac1443d46d6c172983dfe74479c6f96c40b0c4ec",
+        "status": "completed",
+        "conclusion": "success",
+        "run_attempt": 1
+      },
+      {
+        "id": 43724979857,
+        "name": "G47 Focused Integration",
+        "head_sha": "ac1443d46d6c172983dfe74479c6f96c40b0c4ec",
+        "status": "completed",
+        "conclusion": "success",
+        "run_attempt": 1
+      },
+      {
+        "id": 43724979852,
+        "name": "MZ2 Track F native shipping",
+        "head_sha": "ac1443d46d6c172983dfe74479c6f96c40b0c4ec",
+        "status": "completed",
+        "conclusion": "success",
+        "run_attempt": 1
+      },
+      {
+        "id": 43724980285,
+        "name": "Mezan Release Readiness",
+        "head_sha": "ac1443d46d6c172983dfe74479c6f96c40b0c4ec",
+        "status": "completed",
+        "conclusion": "success",
+        "run_attempt": 1
+      },
+      {
+        "id": 43724979843,
+        "name": "Security Gate",
+        "head_sha": "ac1443d46d6c172983dfe74479c6f96c40b0c4ec",
+        "status": "completed",
+        "conclusion": "success",
+        "run_attempt": 1
+      },
+      {
+        "id": 43724979830,
+        "name": "Operational Stock Eligibility",
+        "head_sha": "ac1443d46d6c172983dfe74479c6f96c40b0c4ec",
+        "status": "completed",
+        "conclusion": "success",
+        "run_attempt": 1
+      },
+      {
+        "id": 43724979886,
+        "name": "Operational Balance Web",
+        "head_sha": "ac1443d46d6c172983dfe74479c6f96c40b0c4ec",
+        "status": "completed",
+        "conclusion": "success",
+        "run_attempt": 1
+      },
+      {
+        "id": 43724979866,
+        "name": "CodeQL",
+        "head_sha": "ac1443d46d6c172983dfe74479c6f96c40b0c4ec",
+        "status": "completed",
+        "conclusion": "success",
+        "run_attempt": 1
+      }
+    ],
+    "B_package_review": {
+      "20.20.2": {
+        "generated_directories": 3,
+        "generated_files": 293,
+        "generated_members": 296,
+        "package_proof_sha256": "9d22c541d4697d7e23c0e8a21f09af2da69cf22010f7e4ec80dc18089136030e"
+      },
+      "24.19.0": {
+        "generated_directories": 3,
+        "generated_files": 293,
+        "generated_members": 296,
+        "package_proof_sha256": "9d22c541d4697d7e23c0e8a21f09af2da69cf22010f7e4ec80dc18089136030e"
+      },
+      "accepted_package_proof_exact": true,
+      "backend_identity_sha256": "19b545aea2f729673232c863d434909470d48009895b727036a75548094d71b1",
+      "backend_package_files": 1220,
+      "build_meta_sha256": "92ee524407e9ef85c39179c4d5194f5cb5f4c672e8a8bdd997a1996a4614f4f1",
+      "clean_worktree_unchanged": true,
+      "deployment_git_sha": "ac1443d46d6c172983dfe74479c6f96c40b0c4ec",
+      "frontend_package_files": 1472,
+      "frontend_payload_files_verified": 289,
+      "frontend_public_files_verified": 287,
+      "full_membership_hash_modes_and_bytes_equal": true,
+      "generated_files": 293,
+      "non_public_header_files_verified": [
+        "_headers",
+        "_headers.json"
+      ],
+      "package_proof": {
+        "backend": {
+          "file_count": 1220,
+          "git_directory_present": false,
+          "health_verified": true,
+          "identity": {
+            "bytes": 438599,
+            "path": "release_identity.json",
+            "sha256": "19b545aea2f729673232c863d434909470d48009895b727036a75548094d71b1"
+          },
+          "isolated_verified": true,
+          "package_tree_sha256": "720ec9556425434ae55d6e023850e73c4449ab9bfcf86dfaea7fcea14fed225c",
+          "runtime_root": "backend",
+          "sibling_frontend_present": false
+        },
+        "frontend": {
+          "artifact_tree_sha256": "8f6bb73cec2d628eadb120994d2f4ab1fab730eb0637bad8f7c8a050770ea943",
+          "build_meta": {
+            "bytes": 474117,
+            "path": "build/build-meta.json",
+            "sha256": "92ee524407e9ef85c39179c4d5194f5cb5f4c672e8a8bdd997a1996a4614f4f1"
+          },
+          "content_type_contract": "application/json",
+          "file_count": 1472,
+          "isolated_runtime_artifact_verified": true,
+          "package_tree_sha256": "e123482d0364a4d1eb531d4827525b7412762edc4eaff379dba0cf9f5cdcc52c",
+          "runtime_root": "frontend",
+          "static_root": "frontend/build"
+        },
+        "kind": "mezan_release_package_boundary_proof_v1",
+        "release_id": "rg5-f33cd3537f17e7a25804236a8b4ad0680c73618af6d3cddabc75fe8486f8d93a",
+        "schema_version": 1,
+        "source_git_sha": "a6c5bc5763fdca144b44473285d37130eb8213e9"
+      },
+      "result": "PASS",
+      "source_frontend_files_verified": 1182,
+      "source_git_sha": "a6c5bc5763fdca144b44473285d37130eb8213e9"
+    },
+    "shared_app_changed": false,
+    "prepared": false,
+    "published": false
   }
 }
