@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/salla-webhook-release-evidence-20261115",
   "base_commit": "9afb38cf0dc0d8e8cd887f2c2cdb4a6be5a7ca68",
-  "status": "Corrected PR1940 normal merge accepted; exact M push gates running; actual /app remains previous verified M, functional recovery pending",
+  "status": "Corrective PR1940 production publication in progress under its exact prepared lease; incident recovery follow-up in development",
   "requested_behavior": [
     "Repair the blocking verified webhook path and duplicate processing identified by platform support",
     "One scheduled refresh at 10:00 Asia/Riyadh over a fixed preceding 24-hour window",
@@ -229,6 +229,16 @@
       "recipient": "support@emergent.sh",
       "purpose": "Existing incident #299768: request sanctioned production maintenance surface or metadata-only dry run; no credentials or mutation requested",
       "status": "sent"
+    },
+    "recovery_followup": {
+      "support_reply_message_id": "1a1dfaf27d02b45d",
+      "support_reply_at": "2026-11-15T14:49:19+00:00",
+      "confirmed": "CodeServer is Preview only; production DB separate",
+      "approved_approach": "Use protected default-disabled in-application maintenance, dry-run metadata plan first, worker lock, transaction and one-time grant",
+      "branch": "codex/salla-incident-recovery-20261115",
+      "base": "d7facb0ff4e2e30edbabf012b3865155d5902a85",
+      "status": "Backend/UI/tests in development in isolated worktree; no data repair or publication yet",
+      "latest_user_report": "Recent orders and status changes stopped in prior deployment; confirm supplied missing-order samples after corrected admission and bounded recovery"
     }
   },
   "last_remote_checkpoint": "443424812fbeaad6108f1f67094d94d30a2f0d28",
@@ -260,7 +270,7 @@
   },
   "release_branch": "codex/salla-webhook-recovery-release-20261115",
   "evidence_only": true,
-  "checkpoint_at": "2026-11-15 14:43:15 UTC",
+  "checkpoint_at": "2026-11-15 15:06:05 UTC",
   "production_source_branch_changed": true,
   "production_runtime_changed": true,
   "operator": {
@@ -695,8 +705,89 @@
       "source_frontend_files_verified": 1182,
       "source_git_sha": "a6c5bc5763fdca144b44473285d37130eb8213e9"
     },
-    "shared_app_changed": false,
-    "prepared": false,
-    "published": false
+    "shared_app_changed": true,
+    "prepared": {
+      "actor": "codex-salla-capture-contract-recovery-1940",
+      "prepared_at": "2026-11-15T15:03:23.434007+00:00",
+      "source_git_sha": "a6c5bc5763fdca144b44473285d37130eb8213e9",
+      "deployment_git_sha": "d7facb0ff4e2e30edbabf012b3865155d5902a85",
+      "release_id": "rg5-f33cd3537f17e7a25804236a8b4ad0680c73618af6d3cddabc75fe8486f8d93a",
+      "prepare_sha256": "3afa9df9aa927ee648ced9c7bd0685bf092da0e711851e9d7535f1c690192740"
+    },
+    "published": false,
+    "M_workflows": [
+      {
+        "id": 43725789566,
+        "name": "Security Gate",
+        "head_sha": "d7facb0ff4e2e30edbabf012b3865155d5902a85",
+        "status": "completed",
+        "conclusion": "success",
+        "run_attempt": 1
+      },
+      {
+        "id": 43725789610,
+        "name": "Mezan Release Readiness",
+        "head_sha": "d7facb0ff4e2e30edbabf012b3865155d5902a85",
+        "status": "completed",
+        "conclusion": "success",
+        "run_attempt": 1
+      },
+      {
+        "id": 43725789598,
+        "name": "CodeQL",
+        "head_sha": "d7facb0ff4e2e30edbabf012b3865155d5902a85",
+        "status": "completed",
+        "conclusion": "success",
+        "run_attempt": 1
+      }
+    ],
+    "operator_sha256": "21e6d2e65fd816e10c3033bd18669403095b09fe2d6ce9fe4985845773fa9fd4",
+    "original_workspace_rehearsal": {
+      "ok": true,
+      "merge": "d7facb0ff4e2e30edbabf012b3865155d5902a85",
+      "tree": "d5bb8d88f7f04610dd6796648edebca24d025c1c",
+      "source_git_sha": "a6c5bc5763fdca144b44473285d37130eb8213e9",
+      "finished_at": "2026-11-15T15:01:24.100029+00:00",
+      "untracked_count": 120,
+      "untracked_preserved": true,
+      "previous_release_evidence_preserved": true,
+      "old_bytecode_quarantine_preserved": true,
+      "append_only_before_bytes": 52890,
+      "append_only_after_bytes": 52890,
+      "package_proof_matches_accepted_B": true,
+      "active_lease": false,
+      "functional_acceptance_hold": "incident_quarantine_recovery_pending",
+      "adapter": {
+        "exit_code": 0,
+        "started_at": "2026-11-15T15:00:13.866959+00:00",
+        "finished_at": "2026-11-15T15:01:21.612281+00:00",
+        "stdout_sha256": "e5099135f1c8c42e4c4a78ecadba542301498fd39dae232641355bcaa79a28c7",
+        "stderr_sha256": "f9de9a5c904514893fea046115f3a8ce6346639f86ce2fae7c20dd6ea7532633"
+      },
+      "packages": {
+        "exit_code": 0,
+        "started_at": "2026-11-15T15:01:21.615518+00:00",
+        "finished_at": "2026-11-15T15:01:24.013133+00:00",
+        "stdout_sha256": "9d22c541d4697d7e23c0e8a21f09af2da69cf22010f7e4ec80dc18089136030e"
+      }
+    },
+    "prepublish": {
+      "ready_to_publish": true,
+      "sha256": "adc8140dea81ea87d4ec87cee7a4df3eefde85c8c36e9f2b736a48e84c4e3b95"
+    },
+    "publication": {
+      "observed_at": "2026-11-15 15:06:05 UTC",
+      "ui": "Publishing...",
+      "prepare": {
+        "actor": "codex-salla-capture-contract-recovery-1940",
+        "prepared_at": "2026-11-15T15:03:23.434007+00:00",
+        "source_git_sha": "a6c5bc5763fdca144b44473285d37130eb8213e9",
+        "deployment_git_sha": "d7facb0ff4e2e30edbabf012b3865155d5902a85",
+        "release_id": "rg5-f33cd3537f17e7a25804236a8b4ad0680c73618af6d3cddabc75fe8486f8d93a",
+        "prepare_sha256": "3afa9df9aa927ee648ced9c7bd0685bf092da0e711851e9d7535f1c690192740"
+      },
+      "prepublish_sha256": "adc8140dea81ea87d4ec87cee7a4df3eefde85c8c36e9f2b736a48e84c4e3b95",
+      "one_submission": true
+    }
   }
 }
