@@ -1,0 +1,96 @@
+{
+  "schema": "mezan.ready1948.observed-phase-receipt.v1",
+  "record_type": "sanitized_secondary_observation",
+  "recorded_at_utc": "2026-11-15 20:02:21 UTC",
+  "recording_agent": "/root/release_base_audit",
+  "provenance": {
+    "source_kind": "parent_agent_collaboration_messages",
+    "source_agent": "/root",
+    "observations_reported_by": "/root",
+    "original_stdout_bytes_received": false,
+    "original_stdout_bytes_recreated": false,
+    "supplied_output_hashes_independently_recomputed": false,
+    "live_platform_state_independently_observed_by_recording_agent": false,
+    "scope": "Root-reported original operator, prepare, prepublish, and one publication submission through the currently observed Building phase only."
+  },
+  "release": {
+    "repository": "AMASI-SA/AMASI-SA",
+    "pull_request": 1948,
+    "production_branch": "hotfix/prod-snap-meta-final",
+    "source_A": "d8a7ce0352bbe2f8858b349a32f2127c7e202343",
+    "intent_B": "dd1f29970506f9db2454cdf3b708818b399ee620",
+    "release_base_J": "742b1032113730961597ea413665409d9c213f7b",
+    "original_starting_head": "742b1032113730961597ea413665409d9c213f7b",
+    "normal_merge_M": "c626af288d3823694b4f1d0efcc3670e4ee74d81",
+    "accepted_B_and_M_tree": "8b35611f0e66945a323b2365d7c6d456668d8b2e",
+    "runtime_release_id": "rg5-507b99021ed912e77780f15eaf183e0cd72f0012fbaa7e1af3cade593195324f",
+    "accepted_B_package_proof_sha256_reported": "30899db8bab016f7a4fba67183f864a5da4ee71097b3829c2603a4c9419733b2"
+  },
+  "original_operator": {
+    "reported_result": "PASS",
+    "finished_at": "2026-11-15T19:54:36.451466+00:00",
+    "exact_merge_tree_source_intent_and_runtime_match_reported": true,
+    "package_proof_matches_accepted_B_reported": true,
+    "active_lease_at_operator_completion_reported": false,
+    "preserved_untracked_path_count_reported": 120,
+    "append_only_bookkeeping_before_bytes_reported": 54936,
+    "append_only_bookkeeping_after_bytes_reported": 55062
+  },
+  "prepare": {
+    "reported_return_code": 0,
+    "started_at": "2026-11-15T19:56:01.244716+00:00",
+    "finished_at": "2026-11-15T19:56:04.121903+00:00",
+    "actor": "codex-ready1948-root-20261115",
+    "prepared_at": "2026-11-15T19:56:03.002127+00:00",
+    "stdout_sha256_reported": "79955b56c692a57108e73fceb52addf9f8941077d40395cf517d7e40be31747c",
+    "stderr_empty_reported": true,
+    "stderr_sha256_reported": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "prepublish": {
+    "reported_return_code": 0,
+    "started_at": "2026-11-15T19:59:21.954984+00:00",
+    "finished_at": "2026-11-15T19:59:26.514293+00:00",
+    "ready_to_publish_reported": true,
+    "exact_source_A_merge_M_and_runtime_match_reported": true,
+    "stdout_sha256_reported": "85db312b4ea5e369ca9c3da6b5e605ea1232c0c905d218e1dd2692a5a0830e7d",
+    "stderr_empty_reported": true,
+    "stderr_sha256_reported": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "publication": {
+    "submission_count_reported": 1,
+    "submission_surface_reported": "UI Publish changes",
+    "ordering_reported": "Submitted after successful prepublish",
+    "exact_submission_timestamp_not_supplied": true,
+    "platform_deployment_started_display_raw": "Nov 15 10:59 PM",
+    "platform_display_timezone_not_supplied": true,
+    "current_platform_phase_reported": "Building",
+    "previous_deployment_baseline_reported": {
+      "ordinal_display_raw": "100th",
+      "revision_display_raw": "0ba2d75"
+    },
+    "successful_completion_reported": false,
+    "final_published_deployment_identity_not_yet_supplied": true,
+    "official_postpublish_verification_not_yet_reported": true,
+    "guard_closure_after_publication_not_yet_reported": true
+  },
+  "status_at_receipt": {
+    "publication": "pending",
+    "functional_ready_repair": "not_live_verified",
+    "no_success_claim": true
+  },
+  "actions_by_recording_agent": {
+    "wrote_this_scratch_receipt_only": true,
+    "original_environment_execution": false,
+    "source_checkout_edit": false,
+    "remote_mutation": false,
+    "publication_submission": false,
+    "order_revalidation": false,
+    "ready_or_receipt_action": false,
+    "financial_action": false
+  },
+  "required_followup": [
+    "Observe the actual platform publication outcome and preserve its exact identity.",
+    "After successful publication, perform and inspect the separately authorized official postpublish verification and resulting guard state.",
+    "Read current assembly eligibility for order 299781816 before deciding whether any fenced scoped revalidation is still necessary."
+  ]
+}
