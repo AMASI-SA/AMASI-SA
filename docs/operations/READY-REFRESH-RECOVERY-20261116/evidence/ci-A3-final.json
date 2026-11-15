@@ -1,0 +1,236 @@
+{
+  "schema": "ready-refresh-recovery-ci-observation-v1",
+  "task": "READY-REFRESH-RECOVERY-20261116",
+  "observer": "/root/release_base_audit",
+  "provenance": "Read-only authenticated GitHub connector observations; final Actions job log and run/artifact metadata. No test execution, rerun, source mutation, build, lease or publication performed by this observer.",
+  "source": {
+    "repository": "AMASI-SA/AMASI-SA",
+    "pull_request": 1955,
+    "url": "https://github.com/AMASI-SA/AMASI-SA/pull/1955",
+    "branch": "codex/ready-refresh-recovery-release-20261116",
+    "commit": "1accaa42e132ca1232ce86b3122971b48169ca81",
+    "tree": "be16191c9c2498a942fa7974455c6c24e6fac005",
+    "parents": [
+      "2589f440106a7c5d463ee03eac3617d113319673"
+    ],
+    "exact_source_and_tree_observed_in_final_job_log": true,
+    "independent_remote_parent_and_delta_verification": {
+      "delta_paths": 7,
+      "reviewed_code_test_workflow_blobs_equal_prior_A1": true,
+      "inherited_intent_blob": "9d9d986ff35aa0ea6a1e7837f7d29cdf3c6e90df",
+      "prior_A1": "bbdca0dd2b3fcc8ceac3614f086e134776f9a21c"
+    }
+  },
+  "workflow": {
+    "name": "Review Completion Resumable",
+    "id": 43775290295,
+    "job_id": 133000104970,
+    "job_name": "real-mongo-review",
+    "attempt": 1,
+    "event": "pull_request",
+    "status": "completed",
+    "conclusion": "success",
+    "created_at": "2026-11-15T23:31:39Z",
+    "updated_at": "2026-11-15T23:43:58Z",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43775290295",
+    "job_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43775290295/job/133000104970",
+    "fixture": {
+      "mongodb_version": "8.0.12",
+      "replica_set": "reviewtest",
+      "primary": true,
+      "loopback_only": true,
+      "disposable_fixture_cleanup_step": "success"
+    },
+    "gates": [
+      {
+        "name": "preparation-refresh-recovery",
+        "executed_cases": 35,
+        "subtests_passed": 35,
+        "skips": 0,
+        "failures": 0,
+        "errors": 0,
+        "named_required_contracts_gate": "passed",
+        "required_new_unit_methods": 7,
+        "required_new_integration_methods": 12,
+        "required_retained_methods": 4
+      },
+      {
+        "name": "android-operations",
+        "executed_cases": 329,
+        "subtests_passed": 59,
+        "skips": 0,
+        "failures": 0,
+        "errors": 0
+      },
+      {
+        "name": "review-completion",
+        "executed_cases": 828,
+        "subtests_passed": 573,
+        "skips": 0,
+        "failures": 0,
+        "errors": 0
+      },
+      {
+        "name": "source-snapshot",
+        "executed_cases": 124,
+        "subtests_passed": 28,
+        "skips": 0,
+        "failures": 0,
+        "errors": 0
+      },
+      {
+        "name": "review-acceptance-guard",
+        "executed_cases": 1,
+        "skips": 0,
+        "failures": 0,
+        "errors": 0
+      }
+    ],
+    "focused_executed_log_lines": [
+      "2026-11-15T23:32:53.3067643Z 1accaa42e132ca1232ce86b3122971b48169ca81",
+      "2026-11-15T23:32:53.3407254Z 1accaa42e132ca1232ce86b3122971b48169ca81",
+      "2026-11-15T23:32:53.3422187Z be16191c9c2498a942fa7974455c6c24e6fac005",
+      "2026-11-15T23:33:23.5271742Z Preparation recovery fixture: MongoDB 8.0.12, reviewtest primary, loopback only",
+      "2026-11-15T23:34:08.2325527Z 35 passed, 35 subtests passed in 42.31s",
+      "2026-11-15T23:34:09.7833152Z Preparation refresh recovery: 35 executed cases; named contracts present; zero skips/failures/errors",
+      "2026-11-15T23:34:48.9950910Z 329 passed, 5 warnings, 59 subtests passed in 37.69s",
+      "2026-11-15T23:34:50.3323301Z Android operations: 329 executed cases; zero skips/failures/errors",
+      "2026-11-15T23:42:15.8861475Z 828 passed, 1 warning, 573 subtests passed in 442.39s (0:07:22)",
+      "2026-11-15T23:43:45.6790047Z 124 passed, 28 subtests passed in 83.69s (0:01:23)",
+      "2026-11-15T23:43:51.3336569Z 1 passed in 2.18s",
+      "2026-11-15T23:43:52.0931079Z review-completion.xml: 828 executed cases; zero skips/failures/errors",
+      "2026-11-15T23:43:52.0931582Z review-acceptance-guard.xml: 1 executed cases; zero skips/failures/errors",
+      "2026-11-15T23:43:52.0931989Z source-snapshot.xml: 124 executed cases; zero skips/failures/errors"
+    ]
+  },
+  "junit_artifact": {
+    "id": 14185989004,
+    "name": "review-completion-1accaa42e132ca1232ce86b3122971b48169ca81",
+    "size_bytes": 30411,
+    "archive_digest": "sha256:35d8faeb1add2eeb8f04f1abab98e45e7edb21421b2dc9f3ed01b76696b64bc7",
+    "created_at": "2026-11-15T23:43:53Z",
+    "expires_at": "2027-02-13T23:31:40Z",
+    "expired_at_observation": false,
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43775290295/artifacts/14185989004",
+    "download_or_archive_contents_independently_verified": false
+  },
+  "candidate_producer": {
+    "workflow_run": 43775290274,
+    "job": 133000104611,
+    "conclusion": "success",
+    "artifact": {
+      "id": 14186160978,
+      "name": "release-v5-reviewed-intent-candidate",
+      "size_bytes": 383043,
+      "archive_digest": "sha256:edc3bf3353f75c03a7deba59c5141870656cbe040baf80ef62475dd9782551d6",
+      "created_at": "2026-11-15T23:32:41Z",
+      "expires_at": "2026-11-17T23:32:39Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43775290274/artifacts/14186160978"
+    },
+    "archive_digest_is_not_intent_json_digest": true,
+    "candidate_acceptance_or_B_freeze_performed_by_this_observer": false
+  },
+  "exact_head_workflows": {
+    "retrieved_count": 13,
+    "all_retrieved_success": true,
+    "runs": [
+      {
+        "id": 43775290245,
+        "name": "Snapchat Settings Management V2",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43775290245"
+      },
+      {
+        "id": 43775290363,
+        "name": "Qoyod Payment Freshness",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43775290363"
+      },
+      {
+        "id": 43775290274,
+        "name": "Mezan Release Readiness",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43775290274"
+      },
+      {
+        "id": 43775290397,
+        "name": "Fulfillment V2",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43775290397"
+      },
+      {
+        "id": 43775290354,
+        "name": "Snapchat Direct Active Publication",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43775290354"
+      },
+      {
+        "id": 43775290252,
+        "name": "Operational Balance Web",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43775290252"
+      },
+      {
+        "id": 43775290304,
+        "name": "Operational Stock Eligibility",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43775290304"
+      },
+      {
+        "id": 43775290248,
+        "name": "G47 Focused Integration",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43775290248"
+      },
+      {
+        "id": 43775290360,
+        "name": "Build20 supplier scan recovery (no deployment)",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43775290360"
+      },
+      {
+        "id": 43775290333,
+        "name": "MZ2 Track F native shipping",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43775290333"
+      },
+      {
+        "id": 43775290328,
+        "name": "Security Gate",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43775290328"
+      },
+      {
+        "id": 43775290262,
+        "name": "CodeQL",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43775290262"
+      },
+      {
+        "id": 43775290295,
+        "name": "Review Completion Resumable",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43775290295"
+      }
+    ]
+  },
+  "limits": [
+    "CI observation proves this source's executed synthetic tests, not live order readiness or deployment.",
+    "Reviewed B clean-clone Host Node 20/24 adapter rehearsals remain a separate release gate.",
+    "PR1951 shared original-environment publication/handoff remains separately coordinated; this receipt grants no lease or mutation authority.",
+    "No claim that the separately diagnosed garment source guard is changed."
+  ]
+}

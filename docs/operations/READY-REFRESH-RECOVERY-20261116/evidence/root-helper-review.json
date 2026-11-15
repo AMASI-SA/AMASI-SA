@@ -1,0 +1,40 @@
+{
+  "kind": "bounded_original_rehearsal_helper_review",
+  "recorded_at": "2026-11-15T23:54:46.508255+00:00",
+  "helper_sha256": "f795b6ee49cafbef56745e11e85f85ef476d9cd7eae529338ffc7f316a6298d7",
+  "bytes": 13880,
+  "reviewers": [
+    "root",
+    "verify_ready_fix"
+  ],
+  "verdict": "accepted for later gated execution only",
+  "ast_syntax_pass": true,
+  "executed_or_imported": false,
+  "fixed_findings": [
+    "absent optional .github/actions scan root",
+    "metadata-only non-alias backend configuration preflight before control reads/imports",
+    "generated-root type checks before imports",
+    "reject existing entries at newly tracked paths including ignored entries"
+  ],
+  "accepted_invariants": [
+    "fixed A3/J2/intent/runtime and exact M/B ancestry",
+    "official mutex with status outside its scope",
+    "single official adapter build, no retry",
+    "official source/identity/artifact checks after build",
+    "strict unrelated untracked inventory preservation",
+    "no configuration-content read/hash/copy",
+    "no lease lifecycle or publish/business action"
+  ],
+  "execution_preconditions": [
+    "PR1951 completed publication handoff",
+    "fresh original active:false and no incomplete lease",
+    "all B and exact M required gates accepted",
+    "original branch/clean HEAD at J2 and exact remote M",
+    "immutable helper bytes preserved"
+  ],
+  "residual_limits": [
+    "cooperative mutex cannot stop non-cooperating external writers",
+    "backend .env preservation is metadata only, not byte equality",
+    "failure after ff or adapter may leave workspace advanced/generated outputs changed; no automatic retry"
+  ]
+}

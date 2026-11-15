@@ -1,0 +1,73 @@
+{
+  "schema": "ready-refresh-recovery-CI-failure-observation-v1",
+  "task": "READY-REFRESH-RECOVERY-20261116",
+  "observer": "/root/release_base_audit",
+  "provenance": "Read-only GitHub completed run/job log and artifact metadata; no rerun or source modification.",
+  "source": {
+    "commit": "dd4fc24dbef4b2d6e4abafac5ee5ee47d14e802b",
+    "tree_from_independent_git_api": "aded5cb29b69b5bb09b7386932ad9fc5c35d1f44",
+    "branch": "codex/ready-refresh-recovery-release-20261116",
+    "pull_request": 1955
+  },
+  "workflow": {
+    "id": 43776446776,
+    "name": "Operational Balance Web",
+    "event": "pull_request",
+    "attempt": 1,
+    "status": "completed",
+    "conclusion": "failure",
+    "created_at": "2026-11-15T23:44:40Z",
+    "updated_at": "2026-11-15T23:49:35Z",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43776446776"
+  },
+  "failed_job": {
+    "id": 133003708822,
+    "name": "Operational Balance Backend",
+    "step": 7,
+    "step_name": "Run operational contracts",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43776446776/job/133003708822"
+  },
+  "failure": {
+    "test": "backend/tests/test_operational_balance_issue_index.py::test_four_thousand_distinct_diagnostics_avoid_repeated_whole_list_work",
+    "line": 245,
+    "predicate": "new_cpu < old_cpu * 0.65",
+    "old_process_cpu_seconds": 0.2859268099999923,
+    "new_process_cpu_seconds": 0.24774235800001065,
+    "failed": 1,
+    "passed": 4963,
+    "warnings": 8,
+    "exit_code": 1
+  },
+  "actual_failure_log_lines": [
+    "2026-11-15T23:49:30.4059643Z ____ test_four_thousand_distinct_diagnostics_avoid_repeated_whole_list_work ____",
+    "2026-11-15T23:49:30.4066175Z backend/tests/test_operational_balance_issue_index.py:245: in test_four_thousand_distinct_diagnostics_avoid_repeated_whole_list_work",
+    "2026-11-15T23:49:30.4067152Z     assert new_cpu < old_cpu * 0.65, (old_cpu, new_cpu)",
+    "2026-11-15T23:49:30.4067782Z E   AssertionError: (0.2859268099999923, 0.24774235800001065)",
+    "2026-11-15T23:49:30.4068371Z E   assert 0.24774235800001065 < (0.2859268099999923 * 0.65)",
+    "2026-11-15T23:49:30.4096122Z FAILED backend/tests/test_operational_balance_issue_index.py::test_four_thousand_distinct_diagnostics_avoid_repeated_whole_list_work - AssertionError: (0.2859268099999923, 0.24774235800001065)",
+    "2026-11-15T23:49:30.4096993Z 1 failed, 4963 passed, 8 warnings in 255.34s (0:04:15)",
+    "2026-11-15T23:49:31.3044829Z ##[error]Process completed with exit code 1."
+  ],
+  "evidence_artifact": {
+    "id": 14186294012,
+    "name": "operational-backend-results",
+    "size_bytes": 83408,
+    "archive_digest": "sha256:4fef7fa56927668d83291190eacb52f7f5b6ca40d8802878a4d9102204eb29a0",
+    "created_at": "2026-11-15T23:49:32Z",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43776446776/artifacts/14186294012"
+  },
+  "source_readback": {
+    "timer": "time.process_time, not wall-clock time",
+    "workload": "4,000 distinct diagnostics compared against the frozen legacy helper",
+    "equality_assertion_precedes_failed_timing_assertion": true,
+    "failed_test_file_and_direct_modules_not_in_the_seven_recovery_paths": true,
+    "prior_A3_operational_workflow": "43775290252 passed",
+    "B_changes_only_reviewed_intent": true
+  },
+  "limits": [
+    "Only the ratio assertion failed; the preceding output-equality assertion did not fail.",
+    "Prior source success and unchanged direct modules suggest timing variability, but this receipt does not prove flakiness or waive the failing gate.",
+    "A bounded same-head rerun decision belongs to root; no rerun was requested by this observer.",
+    "No all-B-checks-success claim is made."
+  ]
+}
