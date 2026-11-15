@@ -1,0 +1,32 @@
+[
+  {
+    "device": 66333,
+    "items": [
+      {
+        "bytes": 39622,
+        "ignored": true,
+        "mode": 420,
+        "mtime_ns": 1794782590938187103,
+        "path": "backend/__pycache__/frontend_build_identity.cpython-311.pyc",
+        "regular": true,
+        "suffix": ".pyc",
+        "symlink": false,
+        "tracked": false
+      },
+      {
+        "bytes": 80941,
+        "ignored": true,
+        "mode": 420,
+        "mtime_ns": 1794782590950187103,
+        "path": "backend/__pycache__/release_protocol_v5.cpython-311.pyc",
+        "regular": true,
+        "suffix": ".pyc",
+        "symlink": false,
+        "tracked": false
+      }
+    ],
+    "mode": 493,
+    "mtime_ns": 1794782590950187103,
+    "path": "backend/__pycache__"
+  }
+]
