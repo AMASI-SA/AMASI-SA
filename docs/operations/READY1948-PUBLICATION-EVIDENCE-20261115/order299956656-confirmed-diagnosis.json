@@ -1,0 +1,249 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-11-15T22:03:29.009Z",
+  "order_number": "299956656",
+  "salla_internal_id": "658497035",
+  "authorization": "Current explicit user grant: read-only production records for this order and future user-specified Ready cases",
+  "source": {
+    "observed_at": "2026-11-15T21:55:21.125Z",
+    "order_number": "299956656",
+    "order_id": "658497035",
+    "owner_matches": true,
+    "order_status": "قيد التنفيذ",
+    "order_status_slug": "in_progress",
+    "g47_salla_snapshot": {
+      "source_updated_at": "2026-11-14T01:25:18.000000+00:00",
+      "cancelled": false,
+      "revision": 6,
+      "component_pending": false
+    },
+    "orders_v2_salla_refreshed_at": "2026-11-15T21:44:00.923545+00:00",
+    "last_salla_direct_sync_at": "2026-11-15T21:44:00.947567+00:00"
+  },
+  "workflow": {
+    "observed_at": "2026-11-15T21:55:50.482Z",
+    "order_number": "299956656",
+    "completion_mode": "mezan_local_v1",
+    "stage": "reviewed",
+    "revision": 3,
+    "assembly_status": {
+      "missing": true
+    },
+    "preparation_assignment_status": "partially_assigned",
+    "preparation_progress": {
+      "required_quantity": 2,
+      "allocated_quantity": 1,
+      "remaining_quantity": 1,
+      "updated_at": "2026-11-14T01:18:05.717000",
+      "last_batch_id": "2f47ae284a7f440ebc329addc20279e8"
+    },
+    "review_completion_operation_id": "review_1e85f0f2d4cd2f49c6f54ddd50bf2c0d9b0d0da497c3ce569839c0fd3faa121b",
+    "updated_at": "2026-11-14T01:18:05.717000"
+  },
+  "pieces": [
+    {
+      "doc_id": "6af7b86531079cfa6403a527",
+      "piece_id": "b0a21cd1c68f5538a3a9942913150daf",
+      "order_number": "299956656",
+      "sku": "AMS13282",
+      "order_item_id": "salla:299956656:876825824",
+      "unit_index": 1,
+      "batch_id": "d8f2cd4e96bd44a4930861108b73eb86",
+      "file_number": "PF-20261114-0724",
+      "virtual_kind": {
+        "missing": true
+      },
+      "status": "received",
+      "execution_status": "received_from_supplier",
+      "assembly_status": {
+        "missing": true
+      },
+      "supplier_dispatch_id": {
+        "missing": true
+      },
+      "supplier_dispatch_status": "received",
+      "received_at": "2026-11-14T23:42:39.183000",
+      "preparation_receipt_status": {
+        "missing": true
+      },
+      "preparation_received_at": {
+        "missing": true
+      },
+      "active_hold_id": {
+        "missing": true
+      },
+      "experiment_archived_at": {
+        "missing": true
+      },
+      "updated_at": "2026-11-14T23:42:39.183000",
+      "preparation_received_by_present": false,
+      "services": [
+        {
+          "status": "completed",
+          "required_quantity": 1,
+          "completed_quantity": 1
+        }
+      ]
+    },
+    {
+      "doc_id": "6af7b68431079cfa6403a3ac",
+      "piece_id": "bbf07626f26b5ec18f15bf559579da8d",
+      "order_number": "299956656",
+      "sku": "AMS10253",
+      "order_item_id": "salla:299956656:144248550",
+      "unit_index": 1,
+      "batch_id": "2f47ae284a7f440ebc329addc20279e8",
+      "file_number": "PF-20261114-0722",
+      "virtual_kind": {
+        "missing": true
+      },
+      "status": "assigned",
+      "execution_status": "not_started",
+      "assembly_status": {
+        "missing": true
+      },
+      "supplier_dispatch_id": {
+        "missing": true
+      },
+      "supplier_dispatch_status": {
+        "missing": true
+      },
+      "received_at": {
+        "missing": true
+      },
+      "preparation_receipt_status": {
+        "missing": true
+      },
+      "preparation_received_at": {
+        "missing": true
+      },
+      "active_hold_id": {
+        "missing": true
+      },
+      "experiment_archived_at": {
+        "missing": true
+      },
+      "updated_at": "2026-11-14T01:18:12.540000",
+      "preparation_received_by_present": false,
+      "services": [
+        {
+          "status": "pending",
+          "required_quantity": 1,
+          "completed_quantity": 0
+        }
+      ]
+    }
+  ],
+  "allocations": [
+    {
+      "doc_id": "6af7b86395cdd51424876725",
+      "order_number": "299956656",
+      "order_item_id": "salla:299956656:876825824",
+      "unit_index": 1,
+      "status": "committed",
+      "batch_id": "d8f2cd4e96bd44a4930861108b73eb86",
+      "committed_at": "2026-11-14T01:24:53.312000",
+      "updated_at": {
+        "missing": true
+      }
+    },
+    {
+      "doc_id": "6af7b683cead11d106302691",
+      "order_number": "299956656",
+      "order_item_id": "salla:299956656:144248550",
+      "unit_index": 1,
+      "status": "committed",
+      "batch_id": "2f47ae284a7f440ebc329addc20279e8",
+      "committed_at": "2026-11-14T01:16:53.116000",
+      "updated_at": {
+        "missing": true
+      }
+    }
+  ],
+  "workflow_line_scope": [
+    {
+      "order_item_id": "salla:299956656:144248550",
+      "quantity": 1
+    },
+    {
+      "order_item_id": "salla:299956656:1516645863",
+      "quantity": 1,
+      "supplier_export": false,
+      "preparation_route": "direct_assembly"
+    },
+    {
+      "order_item_id": "salla:299956656:876825824",
+      "quantity": 1
+    }
+  ],
+  "operational_modes": {
+    "supplier_assignment_mode": "optional",
+    "preparation_employee_receipt_mode": "optional",
+    "source": "Only settings.operational_flow UI subtree was expanded; no full settings document was copied"
+  },
+  "supplier_receipt_path": [
+    {
+      "piece_id": "b0a21cd1c68f5538a3a9942913150daf",
+      "sku": "AMS13282",
+      "supplier_assignment_mode": "direct_at_partial_receipt",
+      "supplier_assigned_at_receipt": true
+    },
+    {
+      "piece_id": "bbf07626f26b5ec18f15bf559579da8d",
+      "sku": "AMS10253",
+      "supplier_assignment_mode": {
+        "missing": true
+      },
+      "supplier_assigned_at_receipt": {
+        "missing": true
+      }
+    }
+  ],
+  "batches": [
+    {
+      "batch_id": "d8f2cd4e96bd44a4930861108b73eb86",
+      "status": "ready",
+      "execution_status": "assigned",
+      "created_at": "2026-11-14T01:24:51.412000",
+      "updated_at": "2026-11-14T01:25:34.305000",
+      "target_in_reconciliation_required": true,
+      "target_in_remaining_review": false,
+      "target_in_transitioned": false
+    },
+    {
+      "batch_id": "2f47ae284a7f440ebc329addc20279e8",
+      "status": "ready",
+      "execution_status": "assigned",
+      "created_at": "2026-11-14T01:16:51.195000",
+      "updated_at": "2026-11-14T01:18:12.059000",
+      "target_in_reconciliation_required": false,
+      "target_in_remaining_review": true,
+      "target_in_transitioned": "not_shown_in_truncated_list"
+    }
+  ],
+  "conclusion": {
+    "first_failed_gate": "Physical piece is rejected by local reviewed-stage eligibility before optional employee-receipt shortcut",
+    "post_allocation_reconciliation_failed": true,
+    "progress_cache_stale": true,
+    "physical_allocations_committed": "2/2",
+    "piece_AMS13282": "Supplier custody and service complete; reviewed-stage obstruction remains",
+    "piece_AMS10253": "Supplier receipt absent and service pending0/1; must remain ineligible",
+    "historical_exception_detail": "Not persisted by batch reconciliation"
+  },
+  "proposed_recovery": {
+    "endpoint": "GET /api/order-reviews-v1/299956656/preparation-status",
+    "allow_dispatch": false,
+    "mutates_local_state": true,
+    "salla_status_post_allowed": false,
+    "requires_explicit_local_repair_permission": true,
+    "invoked": false
+  },
+  "mutations": {
+    "database": 0,
+    "order_status": 0,
+    "ready": 0,
+    "receipt": 0,
+    "source_code": 0,
+    "publication": 0
+  }
+}

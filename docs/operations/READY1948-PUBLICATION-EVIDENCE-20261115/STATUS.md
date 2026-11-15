@@ -1,3 +1,24 @@
+# Latest follow-up — order299956656 confirmed diagnosis (16 November2026 Riyadh)
+
+**Read-only diagnosis complete; guarded local repair awaits explicit write authorization.**
+
+- Canonical Salla status in_progress, snapshot6, no component_pending.
+- Workflow remains local reviewed with stale cached1/2, while committed allocation ledger proves2/2.
+- Last allocation batch explicitly records this order in reconciliation_required.
+- Both operational modes are optional.
+- AMS13282 is supplier-received with completed service; reviewed-stage guard blocks it before the optional shortcut.
+- AMS10253 independently lacks supplier receipt and has a pending service, so must stay blocked.
+- Narrow existing continuation: GET /api/order-reviews-v1/299956656/preparation-status, allow_dispatch=false.
+- Despite GET/provider_read_only, this writes local workflow/source metadata. **Not invoked under the user's read-only grant.**
+- No source changes, publication, or production business mutations occurred.
+- See ORDER299956656-CONFIRMED-DIAGNOSIS.md and order299956656-confirmed-diagnosis.json.
+
+Original order299781816 remains user-confirmed Ready-enabled.
+
+---
+
+## Earlier checkpoints (historical)
+
 # Latest outcome — Ready enabled (2026-11-16 Asia/Riyadh)
 
 **Current Ready button lock for order299781816 resolved by user confirmation.**
