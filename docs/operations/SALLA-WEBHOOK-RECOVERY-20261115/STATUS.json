@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/salla-webhook-release-evidence-20261115",
   "base_commit": "9afb38cf0dc0d8e8cd887f2c2cdb4a6be5a7ca68",
-  "status": "Official prepare/prepublish passed; one authorized Emergent publication in progress",
+  "status": "Published identity verification running; functional queue acceptance blocked by proven installed-wrapper keyword mismatch",
   "requested_behavior": [
     "Repair the blocking verified webhook path and duplicate processing identified by platform support",
     "One scheduled refresh at 10:00 Asia/Riyadh over a fixed preceding 24-hour window",
@@ -71,11 +71,11 @@
       "source_or_assertion_changes": false
     }
   },
-  "production_changed": false,
+  "production_changed": true,
   "release": {
     "protocol": 5,
     "prepared": true,
-    "published": false,
+    "published": true,
     "current_guard_active": true,
     "shared_head": "331b7917b3c01d064ee2a17affb4714f3a296331",
     "shared_tracked_worktree_clean": true,
@@ -181,11 +181,29 @@
       },
       "publication_submitted_before_remote_movement": true,
       "action": "No ref/source/lease changes; verify existing publication against original exact prepared A/M/runtime"
+    },
+    "platform_completion": {
+      "observed_at": "2026-11-15 14:09:56 UTC",
+      "ui": "Deployment finished Nov 15, 05:07 PM",
+      "version": "908dee3",
+      "previous_version": "2e2ec44",
+      "publish_label_observed": "100th publish",
+      "note": "UI reindexed historical publish labels; distinguish by new version and new completion timestamp, not inferred counter."
+    },
+    "prepare_file_hashes": {
+      "prepare.json": "97a2e42bd12358048285935ea9200c9d245707df3f1c842c0a428cf21b3fc9f0",
+      "prepublish.json": "1b15e9c15232d630bac9739801229a1ff553529b73cbbb328cc494fe16d7aced",
+      "status-during-publish.json": "5eae337a86a53ecdb1df59c55075ecb758f6a8da21ebf27e3f61957fc0bf74ed"
+    },
+    "verify_running": {
+      "pid": 35629,
+      "whole_saved_lease_equal": true,
+      "invocations": 1
     }
   },
   "continuation": {
     "ledger": "Issue #1006 has reached 2500 comments; use this status document and the task PR as the durable fallback",
-    "next": "Existing one publication is Building after prepared/packaged stages. Confirm same whole active lease before invoking official verify, compare returned fields with immutable expected A/M/runtime, and require new explicit platform completion. Remote advanced to PR1936 only after our submission; do not rerun prepublish/reprepare, mutate /app, or publish again.",
+    "next": "Complete independent minimal fix and canonical production-composition failure/pass regression, checkpoint source follow-up/PR, require exact-source CI and v5 review before corrected publication. Existing official verify checks identity only and may close lease; this is not functional task completion. Other PR1936 has acknowledged inherited bug and waits. No manual sync, synthetic production event, broad retry reset, deletion, or credential extraction.",
     "caveats": [
       "Queue recovery is at least once after process death between business write and queue settlement; existing source and outbox idempotency remain authoritative",
       "Do not invent updated_at_gt support: official Salla List Orders documentation and existing repository contract do not establish it",
@@ -221,9 +239,9 @@
   },
   "release_branch": "codex/salla-webhook-recovery-release-20261115",
   "evidence_only": true,
-  "checkpoint_at": "2026-11-15T14:02:45Z",
+  "checkpoint_at": "2026-11-15T14:20:00Z",
   "production_source_branch_changed": true,
-  "production_runtime_changed": false,
+  "production_runtime_changed": true,
   "operator": {
     "path": "operators/original_release_1935.py",
     "sha256": "5ea00d759706151f89914ae96c2afd5db9d3d485be917baf037cd25f6c785e27",
@@ -311,5 +329,46 @@
         "result.json": "bc5abfab75b6f9855380470e950a481087746963947da5b58d55dae70987af25"
       }
     }
+  },
+  "functional_blocker": {
+    "reason": "production capture wrapper missing raise_on_processing_error argument",
+    "status": "source-confirmed; independent reproduction in progress",
+    "queue_samples": [
+      {
+        "at": "2026-11-15T14:10:45.950034Z",
+        "retry": 2,
+        "oldest_age": 8
+      },
+      {
+        "at": "2026-11-15T14:12:32.472616Z",
+        "retry": 4,
+        "oldest_age": 115
+      }
+    ],
+    "claimed_complete": false,
+    "independent_reproduction": "Exact M installer raises TypeError unexpected keyword raise_on_processing_error; underlying capture call count zero",
+    "source_hash": "931605b8c2acbfb66ad9f6faf4f68032060c90b20d551a06f1dbb4f9b877900a",
+    "import_order": "canonical server -> package attach_salla_routes -> install cart wrapper -> core route factory -> easy_mode import of patched capture",
+    "test_gap": "existing ingress/paused HTTP tests import core route factory and easy_mode directly; empty canonical worker smoke never dispatches business event",
+    "latest_queue": {
+      "generated_at": "2026-11-15T14:19:11.046440+00:00",
+      "pending": 0,
+      "processing": 0,
+      "retry": 12,
+      "quarantined": 0,
+      "oldest_unfinished_age_seconds": 513,
+      "expired_processing_count": 0
+    },
+    "first_seen_created_at": "2026-11-15T14:10:37.125000+00:00",
+    "earliest_nominal_attempt_limit_at": "2026-11-15T14:31:47Z",
+    "payloads_retained": true,
+    "live_decryption_failure_proven": false
+  },
+  "follow_up": {
+    "branch": "codex/salla-capture-contract-recovery-20261115",
+    "base": "a2a8218f858547f4d9d094d29998a93b09bf59ae",
+    "local_worktree": "/workspace/scratch/ce6ef737d6c9/salla-capture-contract-recovery",
+    "scope": "Explicitly forward strict error flag through installed production wrapper; add actual canonical composition regression; assess narrowly scoped incident recovery if queued events exhaust attempts",
+    "code_checkpoint": "pending focused test reproduction"
   }
 }
