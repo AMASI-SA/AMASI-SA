@@ -1,6 +1,6 @@
 {
   "task": "EXECUTIVE-PROFIT-SPEND-BASIS-20261115",
-  "updated_at_utc": "2026-11-15 14:43:14 UTC",
+  "updated_at_utc": "2026-11-15 14:48:14 UTC",
   "repository": "AMASI-SA/AMASI-SA",
   "pull_request": 1936,
   "source_branch": "codex/executive-profit-release-20261115",
@@ -646,7 +646,7 @@
     "recovery_limit": "Code analysis: MAX_ATTEMPTS=8; exhausted quarantined events are excluded from ordinary claims. No live quarantine query or event replay performed by this task. Owner must separately track functional recovery.",
     "pr": 1940,
     "url": "https://github.com/AMASI-SA/AMASI-SA/pull/1940",
-    "state": "Merged normally; exact actual-M push gates in progress; owner handles original rehearsal/publication",
+    "state": "All exact successor A/B/M gates passed; owner original rehearsal and publication pending",
     "source_commit": "a6c5bc5763fdca144b44473285d37130eb8213e9",
     "source_tree": "e4cd5f6f07aa8e3d94ce729231b21db41faf619e",
     "sole_parent": "a2a8218f858547f4d9d094d29998a93b09bf59ae",
@@ -964,30 +964,113 @@
     },
     "M_push_runs": [
       {
-        "id": 43725789598,
-        "name": "CodeQL",
-        "status": "in_progress",
-        "conclusion": null,
-        "head_sha": "d7facb0ff4e2e30edbabf012b3865155d5902a85",
-        "event": "push"
-      },
-      {
         "id": 43725789566,
         "name": "Security Gate",
-        "status": "in_progress",
-        "conclusion": null,
+        "status": "completed",
+        "conclusion": "success",
         "head_sha": "d7facb0ff4e2e30edbabf012b3865155d5902a85",
-        "event": "push"
+        "event": "push",
+        "run_attempt": 1
       },
       {
         "id": 43725789610,
         "name": "Mezan Release Readiness",
-        "status": "in_progress",
-        "conclusion": null,
+        "status": "completed",
+        "conclusion": "success",
         "head_sha": "d7facb0ff4e2e30edbabf012b3865155d5902a85",
-        "event": "push"
+        "event": "push",
+        "run_attempt": 1
+      },
+      {
+        "id": 43725789598,
+        "name": "CodeQL",
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": "d7facb0ff4e2e30edbabf012b3865155d5902a85",
+        "event": "push",
+        "run_attempt": 1
       }
-    ]
+    ],
+    "M_checks": [
+      {
+        "id": 132848182532,
+        "name": "Emergent manual redeploy required",
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": "d7facb0ff4e2e30edbabf012b3865155d5902a85"
+      },
+      {
+        "id": 132847570234,
+        "name": "Emergent Host Node 20.20.2 clean-clone adapter rehearsal",
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": "d7facb0ff4e2e30edbabf012b3865155d5902a85"
+      },
+      {
+        "id": 132847570214,
+        "name": "Emergent Host Node 24.19.0 clean-clone adapter rehearsal",
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": "d7facb0ff4e2e30edbabf012b3865155d5902a85"
+      },
+      {
+        "id": 132847306991,
+        "name": "Host Node 24.19.0 engine and dispatcher contract",
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": "d7facb0ff4e2e30edbabf012b3865155d5902a85"
+      },
+      {
+        "id": 132847306985,
+        "name": "Backend preflight",
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": "d7facb0ff4e2e30edbabf012b3865155d5902a85"
+      },
+      {
+        "id": 132847306955,
+        "name": "Host Node 20.20.2 engine and dispatcher contract",
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": "d7facb0ff4e2e30edbabf012b3865155d5902a85"
+      },
+      {
+        "id": 132847306735,
+        "name": "Frontend build",
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": "d7facb0ff4e2e30edbabf012b3865155d5902a85"
+      },
+      {
+        "id": 132847306438,
+        "name": "Frontend dependency and CSP checks",
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": "d7facb0ff4e2e30edbabf012b3865155d5902a85"
+      },
+      {
+        "id": 132847306275,
+        "name": "Backend security contracts",
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": "d7facb0ff4e2e30edbabf012b3865155d5902a85"
+      },
+      {
+        "id": 132847306263,
+        "name": "CodeQL (python)",
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": "d7facb0ff4e2e30edbabf012b3865155d5902a85"
+      },
+      {
+        "id": 132847306117,
+        "name": "CodeQL (javascript-typescript)",
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": "d7facb0ff4e2e30edbabf012b3865155d5902a85"
+      }
+    ],
+    "M_all_gates_passed": true
   },
   "profit_code_blobs": {
     ".github/workflows/prod-dashboard-four-platform-spend-v1.yml": "f67a5092054a9c6b7798895c0b5cffd097cac4c6",
