@@ -1,0 +1,216 @@
+{
+  "failed_function": "_restoration_evidence",
+  "failed_line": 155,
+  "option_price_restoration_reached_full_source_comparison": true,
+  "changed_nonzero": true,
+  "source_differences": [
+    {
+      "path": "/actions",
+      "change": "new_current"
+    },
+    {
+      "path": "/checkout_url",
+      "change": "new_current"
+    },
+    {
+      "path": "/features",
+      "change": "value_or_type"
+    },
+    {
+      "path": "/has_remaining_amount",
+      "change": "new_current"
+    },
+    {
+      "path": "/items/0/codes",
+      "change": "new_current"
+    },
+    {
+      "path": "/items/0/digital_edit_rules",
+      "change": "new_current"
+    },
+    {
+      "path": "/items/0/files",
+      "change": "new_current"
+    },
+    {
+      "path": "/items/0/is_digital_code_product",
+      "change": "new_current"
+    },
+    {
+      "path": "/items/0/product/price/amount",
+      "change": "value_or_type"
+    },
+    {
+      "path": "/items/0/product/price/currency",
+      "change": "value_or_type"
+    },
+    {
+      "path": "/items/0/product/regular_price/amount",
+      "change": "value_or_type"
+    },
+    {
+      "path": "/items/0/product/regular_price/currency",
+      "change": "value_or_type"
+    },
+    {
+      "path": "/items/0/product/sale_price/currency",
+      "change": "value_or_type"
+    },
+    {
+      "path": "/items/0/reservations",
+      "change": "new_current"
+    },
+    {
+      "path": "/items/0/thumbnail",
+      "change": "new_current"
+    },
+    {
+      "path": "/items/1/codes",
+      "change": "new_current"
+    },
+    {
+      "path": "/items/1/digital_edit_rules",
+      "change": "new_current"
+    },
+    {
+      "path": "/items/1/files",
+      "change": "new_current"
+    },
+    {
+      "path": "/items/1/is_digital_code_product",
+      "change": "new_current"
+    },
+    {
+      "path": "/items/1/product/price/amount",
+      "change": "value_or_type"
+    },
+    {
+      "path": "/items/1/product/price/currency",
+      "change": "value_or_type"
+    },
+    {
+      "path": "/items/1/product/regular_price/amount",
+      "change": "value_or_type"
+    },
+    {
+      "path": "/items/1/product/regular_price/currency",
+      "change": "value_or_type"
+    },
+    {
+      "path": "/items/1/product/sale_price/amount",
+      "change": "value_or_type"
+    },
+    {
+      "path": "/items/1/product/sale_price/currency",
+      "change": "value_or_type"
+    },
+    {
+      "path": "/items/1/reservations",
+      "change": "new_current"
+    },
+    {
+      "path": "/items/1/thumbnail",
+      "change": "new_current"
+    },
+    {
+      "path": "/items/2/codes",
+      "change": "new_current"
+    },
+    {
+      "path": "/items/2/digital_edit_rules",
+      "change": "new_current"
+    },
+    {
+      "path": "/items/2/files",
+      "change": "new_current"
+    },
+    {
+      "path": "/items/2/is_digital_code_product",
+      "change": "new_current"
+    },
+    {
+      "path": "/items/2/product/price/amount",
+      "change": "value_or_type"
+    },
+    {
+      "path": "/items/2/product/price/currency",
+      "change": "value_or_type"
+    },
+    {
+      "path": "/items/2/product/regular_price/amount",
+      "change": "value_or_type"
+    },
+    {
+      "path": "/items/2/product/regular_price/currency",
+      "change": "value_or_type"
+    },
+    {
+      "path": "/items/2/product/sale_price/currency",
+      "change": "value_or_type"
+    },
+    {
+      "path": "/items/2/reservations",
+      "change": "new_current"
+    },
+    {
+      "path": "/items/2/thumbnail",
+      "change": "new_current"
+    },
+    {
+      "path": "/paid_amount",
+      "change": "new_current"
+    },
+    {
+      "path": "/payment_actions",
+      "change": "value_or_type"
+    },
+    {
+      "path": "/payment_checkout_url",
+      "change": "new_current"
+    },
+    {
+      "path": "/payment_collection_status",
+      "change": "new_current"
+    },
+    {
+      "path": "/pending_payment_ends_at",
+      "change": "value_or_type"
+    },
+    {
+      "path": "/read",
+      "change": "value_or_type"
+    },
+    {
+      "path": "/remaining_amount",
+      "change": "new_current"
+    }
+  ],
+  "unknown_source_differences": [
+    "/source/actions",
+    "/source/checkout_url",
+    "/source/features",
+    "/source/items/0/codes",
+    "/source/items/0/digital_edit_rules",
+    "/source/items/0/files",
+    "/source/items/0/is_digital_code_product",
+    "/source/items/0/reservations",
+    "/source/items/0/thumbnail",
+    "/source/items/1/codes",
+    "/source/items/1/digital_edit_rules",
+    "/source/items/1/files",
+    "/source/items/1/is_digital_code_product",
+    "/source/items/1/reservations",
+    "/source/items/1/thumbnail",
+    "/source/items/2/codes",
+    "/source/items/2/digital_edit_rules",
+    "/source/items/2/files",
+    "/source/items/2/is_digital_code_product",
+    "/source/items/2/reservations",
+    "/source/items/2/thumbnail",
+    "/source/payment_actions",
+    "/source/payment_checkout_url",
+    "/source/pending_payment_ends_at",
+    "/source/read",
+    "/source/updated_at"
+  ]
+}

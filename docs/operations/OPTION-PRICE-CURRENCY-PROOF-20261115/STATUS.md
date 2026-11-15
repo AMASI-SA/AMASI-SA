@@ -1,5 +1,19 @@
 # Option-price currency recovery: release handoff
 
+## Continuation 2026-11-15 — exact proof rejection observed
+
+Production Database Manager access succeeded through the approved secure credential flow. Owner-scoped direct filters located exactly one current order, one lifecycle, one workflow and the exact linked approval. Numeric-looking values in the viewer did not locate the order with equals; contains with an anchored textual pattern did. The viewer's assisted Search is unavailable because its provider budget is exhausted; no further assisted search is needed. No credential value was read or disclosed to model-visible tools.
+
+Observed source: revision6, component_pending=true, source_updated_at2026-11-14T01:20:21.000000+00:00. Raw updated_at is a documented date object at04:20:21 Asia/Riyadh, matching that UTC instant. Lifecycle is accepted=true, retry_required=false, cancelled=false, legacy_operational_pre_g47, snapshot_revision3, generation2, with the same source_updated_at and no currency revalidation audit. Scoped component plan count is zero; the owner's rendered settings document has no g47_inventory field. Workflow is mezan_local_v1, stage in_progress, revision4, and binds the inspected completed, non-superseded mezan_local_v1 operation (approval revision1, snapshot schema2/normalization3).
+
+The viewer's Copy document omits _id. The approval's exact ID was read independently from its visible Doc ID control, verified against workflow binding and the scoped filter, then restored only in the local analysis copy. No production document was edited. Restricted local temporary copies are outside the git checkout and are not included in evidence commits.
+
+A local read-only execution of the exact deployed proof module (PYTHONPATH=backend, Python3.12.14, exit0) establishes: snapshot integrity valid, snapshot identity exact, complete exchange_rate envelope matches both approved hashes, all option-price changes pass their existing native-unit rules, then _restoration_evidence returns None at line155 on full-source/unknown-source comparison. PROOF-DIAGNOSIS.json retains only differing field paths, never customer values. Differences include source detail enrichment, nested catalog reference prices, payment enrichment, read/clock metadata and new item delivery metadata. Do not classify the whole set as harmless or relax FX tolerance.
+
+A fresh authenticated API read after the database reads still shows revision6, the same UTC clock and updated_at2026-11-15T01:52:48.708592+00:00, with review_completion_source_fence2. The evidence was not invalidated by an observed source refresh during diagnosis.
+
+Production changed by this continuation: no. Ready remains locked. No source patch, review approval, source refresh, receipt, Ready operation, merge, lease change or publish has occurred. Next: finish independent field/consumer analysis, prove deterministic enrichment against immutable hashes, and implement only a bounded recovery that preserves actual order financial and selection facts. Validate the real captured input locally before any new release; then use a fresh official guard status and the existing v5 release protocol.
+
 ## Continuation 2026-11-15 — scoped production access approved
 
 Automatic approval review rejected the initial secure browser credential request because prior fix/deploy permission did not explicitly authorize transmitting the live production MongoDB connection credential to mongoview.emergent.host. The request did not run and no credential was disclosed. The blocker and its reason were explained to the user. The user then explicitly replied that they approve this production Database Manager access. This is authorization for the secure credential entry and the task-scoped diagnosis; it is not authorization to reveal credentials in model-visible tools or mutate order/financial data.
