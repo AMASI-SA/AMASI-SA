@@ -1,4 +1,4 @@
-"""Explicit one-order source refresh; never approve, receive or complete work."""
+"""Explicit source refresh with guarded local preparation continuation."""
 from fastapi import HTTPException
 from mobile_app_permissions import mobile_app_access_for_user
 from order_engine.salla_refresh import refresh_order_from_salla
@@ -19,15 +19,17 @@ async def refresh_mobile_order(db, user, number, *, page):
         if live.get("role") == "owner" or live.get("is_owner") is True:
             if str(live.get("id")) != owner:
                 raise HTTPException(403, detail={"code": "employee_store_changed"})
-            return
-        from mobile_app_request_context import _linked_owner_id
-        access = await mobile_app_access_for_user(scoped, live)
-        if not access.get("enabled") or page not in (access.get("permissions") or []):
-            raise HTTPException(403, detail={"code": "mobile_app_page_permission_required"})
-        if await _linked_owner_id(scoped, live) != owner:
-            raise HTTPException(403, detail={"code": "employee_store_changed"})
+        else:
+            from mobile_app_request_context import _linked_owner_id
+            access = await mobile_app_access_for_user(scoped, live)
+            if not access.get("enabled") or page not in (access.get("permissions") or []):
+                raise HTTPException(403, detail={"code": "mobile_app_page_permission_required"})
+            if await _linked_owner_id(scoped, live) != owner:
+                raise HTTPException(403, detail={"code": "employee_store_changed"})
+        return {"id": actor, "name": live.get("name") or live.get("display_name") or actor,
+                "email": live.get("email") or ""}
 
-    await authorize(db)
+    operation_actor = await authorize(db)
     result = await refresh_order_from_salla(
         db, owner, number, force=True, allow_auto_fulfillment=False,
         allow_delivery_observation=False, allow_billing_eligibility=False,
@@ -38,4 +40,8 @@ async def refresh_mobile_order(db, user, number, *, page):
         raise HTTPException(409 if result.get("ok") or result.get("needs_reauth") else 502,
             detail={"code": result.get("code") or result.get("reason") or "order_refresh_unconfirmed",
                     "message": "تعذّر تأكيد تحديث الطلب من سلة؛ أعد المحاولة.", "order_number": number})
-    return result
+    from preparation_refresh_recovery import recover_preparation_after_refresh
+    return await recover_preparation_after_refresh(
+        db, user_id=owner, order_number=number, actor=operation_actor,
+        result=result, authorize=authorize,
+    )

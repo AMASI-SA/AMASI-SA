@@ -425,7 +425,19 @@ def make_order_engine_router(
         )
 
         if result.get("ok") and result.get("found"):
-            return result
+            owner_id = str(owner["id"])
+
+            async def authorize(scoped):
+                live = await scoped.users.find_one({"id": owner_id})
+                _require_owner(live)
+                if live.get("disabled") or live.get("is_active") is False or live.get("deleted_at"):
+                    raise HTTPException(403, detail={"code": "order_refresh_actor_unavailable"})
+
+            from preparation_refresh_recovery import recover_preparation_after_refresh
+            return await recover_preparation_after_refresh(
+                db, user_id=owner_id, order_number=str(order_number).strip(),
+                actor=owner, result=result, authorize=authorize,
+            )
 
         if result.get("ok") and not result.get("found"):
             raise HTTPException(

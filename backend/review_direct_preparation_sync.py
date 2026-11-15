@@ -9,7 +9,7 @@ from __future__ import annotations
 from copy import deepcopy
 import hashlib
 import logging
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 from fastapi import HTTPException
 
@@ -132,7 +132,8 @@ def _provider_allowed(current: Any, *, internal_id: str, number: str) -> bool:
 
 
 async def reconcile_direct_preparation_after_review(db, *, user_id: str, order_number: str,
-        actor: dict, result: dict, allow_dispatch: bool = True, batch_id: str = "") -> dict:
+        actor: dict, result: dict, allow_dispatch: bool = True, batch_id: str = "",
+        authorize: Callable[[Any], Awaitable[Any]] | None = None) -> dict:
     """Return immutable review receipt plus separate preparation sync evidence.
 
     ``allow_dispatch=False`` may only read/confirm a previous outcome. A timeout
@@ -160,6 +161,8 @@ async def reconcile_direct_preparation_after_review(db, *, user_id: str, order_n
         confirmed: dict = {}
 
         async def current_scope(scoped):
+            if authorize is not None:
+                await authorize(scoped)
             latest = await scoped[WORKFLOWS].find_one(selector, {"_id": 0}) or {}
             current_source = await scoped.unified_orders.find_one(selector) or {}
             current_order = await get_order(MongoOrderRepository(scoped), user_id=user_id, order_number=order_number)
@@ -184,6 +187,8 @@ async def reconcile_direct_preparation_after_review(db, *, user_id: str, order_n
             # operational_owner commits with majority+journaled write concern.
             return await operational_owner(db, user_id, owned)
 
+        if authorize is not None:
+            await authorize(db)
         state, reason = await pieces._sync_salla_in_progress(db, user_id=user_id, order=order,
             reserve_dispatch=reserve, confirmed_order=confirmed,
             validate_current=lambda current: _provider_allowed(current, internal_id=internal_id, number=order_number))
@@ -235,6 +240,8 @@ async def reconcile_direct_preparation_after_review(db, *, user_id: str, order_n
         await operational_owner(db, user_id, finish)
         return {**result, "preparation_status_sync": {"state": "sent", "retry_post": False}, "current_stage": "in_progress"}
     except Exception as failure:
+        if authorize is not None and isinstance(failure, HTTPException) and failure.status_code in {401, 403}:
+            raise
         reason = (failure.detail.get("code") if isinstance(failure, HTTPException) and isinstance(failure.detail, dict)
                   else type(failure).__name__)
         LOGGER.warning("direct_preparation_sync_pending operation_id=%s reason=%s",
