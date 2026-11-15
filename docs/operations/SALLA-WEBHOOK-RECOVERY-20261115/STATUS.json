@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/salla-webhook-release-evidence-20261115",
   "base_commit": "9afb38cf0dc0d8e8cd887f2c2cdb4a6be5a7ca68",
-  "status": "PR1940 verified and live new-order/status sync restored; PR1942 actual-M gates and original-workspace rehearsal passed; configuring scoped recovery before guarded publication.",
+  "status": "PR1940 officially verified and new-order/status flow restored; PR1942 publication submitted once and currently building under root-owned exact prepared lease. No recovery grant yet.",
   "requested_behavior": [
     "Repair the blocking verified webhook path and duplicate processing identified by platform support",
     "One scheduled refresh at 10:00 Asia/Riyadh over a fixed preceding 24-hour window",
@@ -270,7 +270,7 @@
   },
   "release_branch": "codex/salla-webhook-recovery-release-20261115",
   "evidence_only": true,
-  "checkpoint_at": "2026-11-15T15:57:30Z",
+  "checkpoint_at": "2026-11-15T16:06:30Z",
   "production_source_branch_changed": true,
   "production_runtime_changed": true,
   "operator": {
@@ -895,7 +895,7 @@
           "base": "d7facb0ff4e2e30edbabf012b3865155d5902a85"
         }
       },
-      "next": "Normal platform flag configuration, then official prepare/prepublish/one publication/verify. Functional acceptance and maintenance shutdown still open.",
+      "next": "Wait for explicit platform completion; compare full lease to saved prepare then run official verification once. Keep fixed incident end15:20Z for dry-run classification; do not infer all51 quarantines are eligible. Disable Live maintenance flag after final grant and verify effective false.",
       "B_all_applicable_workflows_success": true,
       "B_expected_unrelated_scope_skip": "TikTok Creator Release Candidate",
       "B_package_acceptance": {
@@ -952,8 +952,218 @@
       },
       "B_final_ci_report_sha256": "ad343f7ce061bb511337badff4ab284374f3bae9162e7a2fe5ae5b57a4b54391",
       "shared_app_changed": true,
-      "prepared": false,
-      "published": false
+      "prepared": true,
+      "published": false,
+      "prepare": {
+        "actor": "codex-salla-incident-recovery-1942",
+        "prepared_at": "2026-11-15T16:02:36.468107+00:00",
+        "deployment_git_sha": "8f1b0ddb6408781e8677212bcb8cf2d51eab42f7",
+        "source_git_sha": "2896f97bb3ffe5c919ade61a4f60e551a7a49162",
+        "release_id": "rg5-144ce747d2042279a6d9a86cb338a133bd0a7e05237f96b22331b905ce083cf3",
+        "raw_bytes": 571454,
+        "raw_sha256": "9be9249dbbdee1180e0d9759df773ef46567cf7ac2898ecaab3c22629da48175",
+        "exit_code": 0,
+        "stderr_bytes": 0
+      },
+      "prepublish": {
+        "ready_to_publish": true,
+        "source_git_sha": "2896f97bb3ffe5c919ade61a4f60e551a7a49162",
+        "deployment_git_sha": "8f1b0ddb6408781e8677212bcb8cf2d51eab42f7",
+        "release_id": "rg5-144ce747d2042279a6d9a86cb338a133bd0a7e05237f96b22331b905ce083cf3",
+        "raw_bytes": 333,
+        "raw_sha256": "c894e076e8164c0601bb23e2f411fb5c92f6760b62d4a6887c360c9a36b92f94",
+        "exit_code": 0,
+        "stderr_bytes": 0
+      },
+      "publication": {
+        "submitted_at": "2026-11-15T16:04:24.362Z",
+        "platform": "Emergent",
+        "production_url": "https://mezansalla.com",
+        "submission_count": 1,
+        "observed_state": "Publishing...",
+        "lease": {
+          "actor": "codex-salla-incident-recovery-1942",
+          "prepared_at": "2026-11-15T16:02:36.468107+00:00",
+          "deployment_git_sha": "8f1b0ddb6408781e8677212bcb8cf2d51eab42f7",
+          "source_git_sha": "2896f97bb3ffe5c919ade61a4f60e551a7a49162",
+          "release_id": "rg5-144ce747d2042279a6d9a86cb338a133bd0a7e05237f96b22331b905ce083cf3",
+          "raw_bytes": 571454,
+          "raw_sha256": "9be9249dbbdee1180e0d9759df773ef46567cf7ac2898ecaab3c22629da48175",
+          "exit_code": 0,
+          "stderr_bytes": 0
+        }
+      },
+      "flag_configuration": {
+        "key": "SALLA_WEBHOOK_INCIDENT_RECOVERY_ENABLED",
+        "preview": "false",
+        "live_saved": "true",
+        "effective_live_pending_publication": true,
+        "preview_registered_at": "2026-11-15T15:58:40.494826+00:00",
+        "prefix_inode_mode_preserved": true
+      },
+      "pre_publication_monitor": {
+        "generated_at": "2026-11-15T15:59:09.515771+00:00",
+        "queue": {
+          "backlog": 51,
+          "pending": 0,
+          "processing": 0,
+          "retry": 0,
+          "quarantined": 51,
+          "expired_processing_count": 0
+        },
+        "order_events": [
+          {
+            "event": "order.created",
+            "order": "300245820",
+            "received_at": "2026-11-15T15:50:22.968000+00:00",
+            "synced": true
+          },
+          {
+            "event": "order.updated",
+            "order": "299798813",
+            "received_at": "2026-11-15T15:57:54.814000+00:00",
+            "synced": true
+          },
+          {
+            "event": "order.status.updated",
+            "order": "299798813",
+            "received_at": "2026-11-15T15:57:56.425000+00:00",
+            "synced": true
+          }
+        ]
+      },
+      "actual_rehearsal": {
+        "active_lease": false,
+        "append_only_after_bytes": 53234,
+        "append_only_before_bytes": 53234,
+        "finished_at": "2026-11-15T15:56:07.811835+00:00",
+        "functional_acceptance_hold": "authenticated_incident_recovery_and_worker_completion_pending",
+        "merge": "8f1b0ddb6408781e8677212bcb8cf2d51eab42f7",
+        "ok": true,
+        "old_bytecode_quarantine_preserved": true,
+        "package_proof_matches_accepted_B": true,
+        "previous_release_evidence_preserved": true,
+        "release_id": "rg5-144ce747d2042279a6d9a86cb338a133bd0a7e05237f96b22331b905ce083cf3",
+        "scope": "original_workspace_governed_rehearsal",
+        "source_git_sha": "2896f97bb3ffe5c919ade61a4f60e551a7a49162",
+        "tree": "a8616930de7f98a43a509ff7dad287befd61ba5a",
+        "untracked_count": 120,
+        "untracked_preserved": true
+      },
+      "original_receipt_manifest": {
+        "adapter.json": {
+          "bytes": 300,
+          "sha256": "be1372c123bbce657a683f6aeb08b687c7f5a58891a1087c2d85580b0380f457"
+        },
+        "adapter.started.json": {
+          "bytes": 122,
+          "sha256": "3995bd8952fa22a6f8bf4f74ad0bbe5173416e0d855bd3e6c63799eb8d9a4a6d"
+        },
+        "adapter.stderr": {
+          "bytes": 10248,
+          "sha256": "f9de9a5c904514893fea046115f3a8ce6346639f86ce2fae7c20dd6ea7532633"
+        },
+        "adapter.stdout": {
+          "bytes": 165318,
+          "sha256": "dfc8e631e28e95395ee1ff3bf31730a9a61a2587b802015c192ba74dd8cfff66"
+        },
+        "continuity-after.json": {
+          "bytes": 16638,
+          "sha256": "c310b79f7187517db59114222628e6285def008d2a15202e2f10c01254ea7add"
+        },
+        "continuity-before.json": {
+          "bytes": 16638,
+          "sha256": "c310b79f7187517db59114222628e6285def008d2a15202e2f10c01254ea7add"
+        },
+        "fast-forward.json": {
+          "bytes": 300,
+          "sha256": "c706c15b176d68d8017fcd67d477cfbb2082b625255026a2fecaed34e194aab4"
+        },
+        "fast-forward.started.json": {
+          "bytes": 171,
+          "sha256": "195c83ebd52a08b0b729099253d1c2398056ceb6f49cd42537a8dd1f4412ee12"
+        },
+        "fast-forward.stderr": {
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "fast-forward.stdout": {
+          "bytes": 1098,
+          "sha256": "a0bc3cb73c357fbae41e0b4894d6dacf56c66786024f31eb6e7189095fcb5000"
+        },
+        "fetch.json": {
+          "bytes": 300,
+          "sha256": "f1c26830bd6cce3d314e789f6a08b1753177c0f401c39cae68510e7e63e0e7e3"
+        },
+        "fetch.started.json": {
+          "bytes": 161,
+          "sha256": "c55e53062cbad782e522b32ab0624ab260814253584c01fd9a5aef1ffd0a0c0b"
+        },
+        "fetch.stderr": {
+          "bytes": 200,
+          "sha256": "da454bd516e03fd286fe6060e01d69bfbeab022078423902566f45db31ea54b7"
+        },
+        "fetch.stdout": {
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "old-quarantine-after.json": {
+          "bytes": 807,
+          "sha256": "060fc70b3aede90c4c82905ae7f50d0e8c4c39e8f77187cd1e42b5bfce4cf8f0"
+        },
+        "old-quarantine-before.json": {
+          "bytes": 807,
+          "sha256": "060fc70b3aede90c4c82905ae7f50d0e8c4c39e8f77187cd1e42b5bfce4cf8f0"
+        },
+        "operator-pins.json": {
+          "bytes": 1363,
+          "sha256": "88beb98ccc3182d4d85f3f1f93aea6b4da44386909286d906b3b0250a54a5d57"
+        },
+        "packages.json": {
+          "bytes": 300,
+          "sha256": "fcedb5478e2252a90fcdbb623ede17f3cbc54ae13990859c19889d07c7716686"
+        },
+        "packages.started.json": {
+          "bytes": 181,
+          "sha256": "cbfcfb80ff31d1df5fd834061a295423cad84be648c6873888ccda925e48675e"
+        },
+        "packages.stderr": {
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "packages.stdout": {
+          "bytes": 1278,
+          "sha256": "09d58d1afab57d3543d3697bc23897a986cd3c3d7bbc598b65f8cc74f1619e59"
+        },
+        "result.json": {
+          "bytes": 771,
+          "sha256": "92d1555879ee451e9fcffe70857c5c797bf3506e38ed20a6089a571eddee7e37"
+        },
+        "status-after.json": {
+          "bytes": 108,
+          "sha256": "2a9b41be0bb9d037f82764a3883d0f1673ece64da8151ad66ea904b37934b962"
+        },
+        "status-before-build.json": {
+          "bytes": 108,
+          "sha256": "2a9b41be0bb9d037f82764a3883d0f1673ece64da8151ad66ea904b37934b962"
+        },
+        "status-before.json": {
+          "bytes": 108,
+          "sha256": "2a9b41be0bb9d037f82764a3883d0f1673ece64da8151ad66ea904b37934b962"
+        },
+        "untracked-after-sync.json": {
+          "bytes": 31801,
+          "sha256": "703a3242cb2be51153aafce43325c2f9a0d7c82f71e33e6fcd76d47a4db74196"
+        },
+        "untracked-after.json": {
+          "bytes": 31801,
+          "sha256": "703a3242cb2be51153aafce43325c2f9a0d7c82f71e33e6fcd76d47a4db74196"
+        },
+        "untracked-before.json": {
+          "bytes": 31801,
+          "sha256": "703a3242cb2be51153aafce43325c2f9a0d7c82f71e33e6fcd76d47a4db74196"
+        }
+      }
     },
     "official_verify": {
       "verified": true,
