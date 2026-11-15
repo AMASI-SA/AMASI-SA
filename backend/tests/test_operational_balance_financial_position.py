@@ -153,6 +153,7 @@ def test_provider_net_cash_and_actual_fees_are_not_subtracted_twice():
     assert table(result, "providers")["totals"] == {"name": "الإجمالي", "orders": 1, "gross": "100.00",
                                                      "fees": "11.00", "refunded": "0.00", "net": "54.00", "pending_orders": 0,
                                                      "actual_fees": "5.00", "estimated_fees": "6.00",
+                                                     "estimated_fees_complete": True,
                                                      "fee_description": "", "source_average_description": "", "statement_evidence_date_label": ""}
     assert table(result, "provider_collections_expected")["totals"]["amount"] == "0.00"
     assert result["currencies"]["SAR"]["metrics"]["monetary_position"] == "1089.00"

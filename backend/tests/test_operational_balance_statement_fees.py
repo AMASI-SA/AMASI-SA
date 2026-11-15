@@ -177,11 +177,15 @@ def test_missing_vat_keeps_variable_and_fixed_visible_without_inventing_total():
     row = platform(state, "tamara")
     assert (row["average_variable_fees"], row["average_fixed_fees"], row["average_vat_fees"]) == ("6.25", "1.50", None)
     assert row["known_fees"] is None and row["estimated_fees"] is None and row["known_net"] is None
+    assert row["known_estimated_fees"] is None and not row["known_estimated_fees_available"]
+    assert not row["estimated_fees_complete"] and row["estimated_fee_incomplete_orders"] == 1
+    assert row["estimated_fee_incomplete_reasons"] == [{"code": "provider_fee_vat_rate_missing", "orders": 1}]
     assert row["average_estimated_orders"] == 1 and row["fee_status"] == "review"
     assert statement_average_summary(profile)["full_estimate_requires_vat"] is True
     refresh_provider_fee_inputs(state, {"orders": [order], "provider_fee_settings": settings("تمارا", None, None, "15")})
     row = platform(state, "tamara")
     assert row["known_fees"] == "8.91" and row["fee_status"] == "estimated"
+    assert row["known_estimated_fees"] == "8.91" and row["estimated_fees_complete"]
 
 
 def test_missing_source_variable_fixed_split_never_becomes_an_inclusive_average():
@@ -447,6 +451,9 @@ def test_an_average_rounding_to_zero_is_still_estimated_not_confirmed():
     row = platform(state, "tabby")
     assert row["known_fees"] == "0.00" and row["fee_status"] == "estimated"
     assert row["average_estimated_orders"] == 1 and row["net_confirmed_orders"] == 0
+    assert row["known_estimated_fees"] == "0.00" and row["known_estimated_fees_available"]
+    assert row["estimated_fee_calculated_orders"] == 1 and row["estimated_fees_complete"]
+    assert row["estimated_fee_incomplete_orders"] == 0
 
 
 @pytest.mark.parametrize("provider", ["tamara", "salla"])
@@ -581,6 +588,59 @@ def test_page_estimated_operation_count_cannot_override_known_partial_capture_de
     assert row["average_fixed_fees"] is None and row["average_operations_bases"] == ["unavailable"]
 
 
+def test_incomplete_average_preserves_calculated_estimate_beside_actual_without_pricing_unknown_parts():
+    state, _ = tabby_state()
+    engine = state["engine"]
+    inputs = engine["provider_fee_inputs"]
+    for oid in ("partial", "actual"):
+        inputs["orders"][oid] = deepcopy(inputs["orders"]["one"])
+        inputs["orders"][oid]["payment"]["captures"][0]["id"] = oid
+        engine["obligations"]["provider:" + oid] = {
+            **deepcopy(engine["obligations"]["provider:one"]), "id": "provider:" + oid}
+        engine["facts"]["capture:" + oid] = {"order_id": oid, "provider": "tabby", "amount": "100.00"}
+    engine["facts"]["capture:partial"]["amount"] = "40.00"
+    engine["facts"]["provider_order_balance:partial"] = {
+        "order_id": "partial", "provider": "tabby", "currency": "SAR", "paid": "100.00"}
+    partial_payment = inputs["orders"]["partial"]["payment"]
+    partial_payment["captures"][0]["amount"] = "40.00"
+    partial_payment["order_page_balance"] = {"paid": "100.00"}
+    event = accepted_event(state, key="actual", cover="capture:actual")
+    event["order_id"] = "actual"
+    attach(state, event)
+    engine["issues"] = [{"code": "provider_fee_estimate_unavailable", "source_id": "provider:partial"}] * 2
+    before = deepcopy(state)
+
+    row = platform(state, "tabby")
+    assert row["estimated_fees"] is None and row["average_estimated_fees"] is None
+    assert row["known_estimated_fees"] == "8.34" and row["known_estimated_fees_available"]
+    assert row["actual_statement_fees"] == "8.05" and row["known_fees"] == "16.39"
+    assert Decimal(row["known_estimated_fees"]) + Decimal(row["actual_statement_fees"]) == Decimal(row["known_fees"])
+    assert row["average_variable_fees"] == "12.50"  # Includes a variable-only, undeducted component.
+    assert row["average_fixed_fees"] is None and row["average_vat_fees"] is None
+    assert not row["estimated_fees_complete"] and row["estimated_fee_calculated_orders"] == 1
+    assert row["estimated_fee_incomplete_orders"] == 1
+    assert row["estimated_fee_incomplete_reasons"] == [{"code": "provider_fee_operation_count_missing", "orders": 1}]
+    assert not row["estimated_fee_scope_incomplete"] and row["estimated_fee_unidentified_orders"] == 0
+    assert row["known_net"] == "183.61" and row["net"] is None
+    assert row["paid_orders"] == 3 and row["net_confirmed_orders"] == 1
+    assert row["pending_orders"] == 2 and row["average_estimated_orders"] == 2
+    assert state == before
+
+
+def test_actual_replacement_removes_calculated_estimate_once_and_confirms_zero_estimated_remainder():
+    state, _ = tabby_state()
+    before = platform(state, "tabby")
+    assert before["known_estimated_fees"] == "8.34" and before["estimated_fees_complete"]
+    attach(state, accepted_event(state))
+    saved = deepcopy(state)
+    row = platform(state, "tabby")
+    assert row["known_estimated_fees"] == "0.00" and row["known_estimated_fees_available"]
+    assert row["estimated_fee_calculated_orders"] == row["estimated_fee_incomplete_orders"] == 0
+    assert row["estimated_fee_incomplete_reasons"] == [] and row["estimated_fees_complete"]
+    assert row["known_fees"] == row["actual_statement_fees"] == "8.05"
+    assert state == saved and row == platform(state, "tabby")
+
+
 def test_partial_settlement_cannot_reuse_an_average_fixed_cost_without_event_coverage():
     state, _ = tabby_state()
     state["movements"].append({"id": "partial", "kind": "settlement", "party_type": "provider", "party_id": "tabby",
@@ -615,6 +675,8 @@ def test_partial_actual_does_not_apportion_a_per_order_fixed_tariff():
     row = platform(state, "tabby")
     assert row["fees"] is None and row["known_fees"] == "4.60" and row["known_net"] is None
     assert row["fee_status"] == "review" and row["estimated_fees"] == "0.00"
+    assert row["known_estimated_fees"] is None and not row["known_estimated_fees_available"]
+    assert not row["estimated_fees_complete"] and row["estimated_fee_incomplete_orders"] == 1
 
 
 def test_signed_refund_fee_reduces_capture_fee_without_posting_refund_again():

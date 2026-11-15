@@ -1,11 +1,11 @@
 {
   "task_id": "MZ-BUNDLE-CONDITIONAL-CHOICE-20261116",
   "scope": "Implement conditional descriptive-option costing in current bundle estimates.",
-  "state": "intent_B_frozen_pending_exact_head_CI_and_host_rehearsal",
+  "state": "integrated_source_verified_pending_CI",
   "repository": "AMASI-SA/AMASI-SA",
-  "task_branch": "codex/bundle-conditional-cost-fix-20261116",
-  "verified_milestone_commit": "1b0ffbc814c664c098e9dbc422691e67671d03d7",
-  "inspected_branch_head": "236a428364bc8163a684795ed1be87e237476f18",
+  "task_branch": "codex/bundle-conditional-cost-integrated-20261116",
+  "verified_milestone_commit": "ba19a270fb20ab45328f293e200728bebda6df4c",
+  "inspected_branch_head": "2589f440106a7c5d463ee03eac3617d113319673",
   "observed_live_source": "1bd44b6f186de8b40877fde686b5d2d7aab52805",
   "changed_files": [
     "backend/current_bundle_reporting_estimate.py",
@@ -71,50 +71,73 @@
       "command": "Independent focused bundle and current/source financial parity review, plus git diff --check",
       "exit_status": 0,
       "result": "59 passed in 3.50s; both discovered identity-erasure classes fixed; no remaining concrete scoped blocker."
+    },
+    {
+      "command": "git merge-tree --write-tree 2589f440106a7c5d463ee03eac3617d113319673 1b0ffbc814c664c098e9dbc422691e67671d03d7",
+      "exit_status": 0,
+      "result": "Clean automatic source integration; provider release changes do not overlap bundle estimator or its test files. Production release intent remains the new base intent."
+    },
+    {
+      "command": "Nine affected pytest modules using isolated Python, --noconftest and no cacheprovider; J2589 integrated source",
+      "exit_status": 0,
+      "result": "231 passed in 12.62s; same two existing Pydantic deprecation warnings."
+    },
+    {
+      "command": "Independent immutable Git tree/blob comparison",
+      "exit_status": 0,
+      "result": "Estimator and two regression files exactly match reviewed source A1b0ffbc. J2589..Aba19 changes exactly five scoped files; no intent change and all provider release files preserved."
     }
   ],
   "verification_limits": [
     "Local isolated tests ran under Python 3.12.14. Exact-source Python 3.11 Sold product cost details CI passed."
   ],
   "pr": {
-    "number": 1953,
-    "url": "https://github.com/AMASI-SA/AMASI-SA/pull/1953",
+    "number": 1954,
+    "url": "https://github.com/AMASI-SA/AMASI-SA/pull/1954",
+    "head": "ba19a270fb20ab45328f293e200728bebda6df4c",
     "state": "open_draft",
-    "head": "a694b290ee6f74e57048810d754ff8c87de99735"
+    "superseded": 1953
   },
   "ci": {
-    "as_of_utc": "2026-11-15T23:20:19Z",
-    "exact_head": "1b0ffbc814c664c098e9dbc422691e67671d03d7",
-    "readiness": {
-      "run_id": 43773857740,
-      "status": "success"
+    "previous_source": {
+      "as_of_utc": "2026-11-15T23:20:19Z",
+      "exact_head": "1b0ffbc814c664c098e9dbc422691e67671d03d7",
+      "readiness": {
+        "run_id": 43773857740,
+        "status": "success"
+      },
+      "sold_product_cost_details": {
+        "run_id": 43773857728,
+        "status": "success"
+      },
+      "G47": {
+        "run_id": 43773857710,
+        "status": "success"
+      },
+      "security_gate": {
+        "run_id": 43773857920,
+        "status": "success"
+      },
+      "pending": [
+        "Operational Stock Eligibility",
+        "Operational Balance Backend",
+        "CodeQL python"
+      ],
+      "reviewed_head_pending": "a694b290ee6f74e57048810d754ff8c87de99735"
     },
-    "sold_product_cost_details": {
-      "run_id": 43773857728,
-      "status": "success"
-    },
-    "G47": {
-      "run_id": 43773857710,
-      "status": "success"
-    },
-    "security_gate": {
-      "run_id": 43773857920,
-      "status": "success"
-    },
-    "pending": [
-      "Operational Stock Eligibility",
-      "Operational Balance Backend",
-      "CodeQL python"
-    ],
-    "reviewed_head_pending": "a694b290ee6f74e57048810d754ff8c87de99735"
+    "integrated_source": {
+      "head": "ba19a270fb20ab45328f293e200728bebda6df4c",
+      "readiness_run_id": 43774777595,
+      "status": "running"
+    }
   },
   "review": "independent_implementation_review_passed",
   "merge": "not_performed",
-  "release_guard": "original host observed inactive; not acquired or modified",
+  "release_guard": "No lease acquired. Isolated prior-candidate build started while inactive; no production files changed. Provider release merged concurrently and may claim original host.",
   "deployment": "not_performed_for_this_case",
   "production_changed": "no",
   "incomplete_work": [
-    "Freeze exact reviewed intent as intent-only B, exact-B CI, original-host isolated adapter rehearsal, normal merge, main /app materialization, authorized publication and three verification probes."
+    "Obtain exact integrated-source CI candidate, freeze a fresh intent-only B, await inactive original-host lease, rehearse, normal merge, publish and verify."
   ],
   "risks": [
     "Preserve unresolved results for missing or conflicting decisions needed by actual cost-bearing dependencies.",
@@ -127,7 +150,7 @@
     "Shared /app 120 untracked files and unsaved Untitled-1; another provider release is active in a different conversation. Recheck Production base and lease before changes."
   ],
   "ledger": "Issue #1006 was previously at its comment limit; dedicated task status serves as recoverable handoff without retrying that append.",
-  "next_safe_action": "Inspect exact-B checks and Production head. On original host check inactive lease, then rehearse an isolated clone of B with reviewed public backend URL. If Production advances beyond J, integrate into a fresh source A and regenerate intent B; never publish stale source.",
+  "next_safe_action": "Open the integrated source PR against J2589. Preserve old A/B on their branch. No release-intent change may occur in source J..A. Obtain fresh reviewed candidate; coordinate by official host guard and never clear another owner lease.",
   "owner_clarification": {
     "source": "User clarification after diagnosis",
     "statement": "Selecting affirmative customization adds no amount.",
@@ -138,10 +161,11 @@
   },
   "live_observation": "Bounded saved reads confirmed no option-cost bindings for the incident product. Its bundle definition was changed externally after the original diagnostic snapshot; preserve current user configuration. No provider refresh or business-data write was performed.",
   "reviewed_estimator_sha256": "022f38f9505ea8e7476928ecc6ce4b75c631b2b46546b8428e8013650ae493c7",
-  "source_A": "1b0ffbc814c664c098e9dbc422691e67671d03d7",
-  "source_base_J": "236a428364bc8163a684795ed1be87e237476f18",
+  "source_base_J": "2589f440106a7c5d463ee03eac3617d113319673",
   "evidence_branch": "codex/bundle-conditional-cost-evidence-20261116",
-  "intent_candidate": {
+  "previous_reviewed_source_A": "1b0ffbc814c664c098e9dbc422691e67671d03d7",
+  "superseded_intent_B": "a694b290ee6f74e57048810d754ff8c87de99735",
+  "previous_intent_candidate": {
     "artifact_id": 14185468274,
     "run_id": 43773857740,
     "zip_sha256": "ebf24f34a78db320d70280dff5a8f15940a469f9090f0f81033f32e824898da1",
@@ -151,5 +175,15 @@
     "runtime_release_id": "rg5-e3ba9016b9cc29c7595d14dafe7ef16bbc984a7142fcada742d11f524be9e652",
     "validation": "Exact ZIP digest verified; candidate loader and full Backend/runtime-control manifests match source A; no intent B created yet. Intent-only B frozen without source changes."
   },
-  "intent_B": "a694b290ee6f74e57048810d754ff8c87de99735"
+  "source_A": "ba19a270fb20ab45328f293e200728bebda6df4c",
+  "previous_candidate_host_rehearsal": {
+    "candidate_B": "a694b290ee6f74e57048810d754ff8c87de99735",
+    "host": "original Emergent /app host, isolated clone /tmp/mz-bundle-cost-v5.3FmC4L/repo",
+    "exit_status": 0,
+    "duration_seconds": 88.71,
+    "backend_isolated_verified": true,
+    "frontend_isolated_runtime_artifact_verified": true,
+    "published": false,
+    "limitation": "Superseded after Production advanced; must rehearse fresh integrated B before prepare."
+  }
 }

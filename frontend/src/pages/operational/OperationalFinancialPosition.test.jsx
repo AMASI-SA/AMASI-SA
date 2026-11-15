@@ -1111,3 +1111,139 @@ test("USD advertising conversion uses supplied SAR fees and net balances above t
     ]);
     expect(balances.textContent).toContain("475.74");
 });
+
+function providerFeeFixture({ estimate = "255.43", complete = false } = {}) {
+    const payload = rawFixture();
+    const profile = { available: true, profile_id: "tabby-sar-profile", provider: "tabby", native_currency: "SAR",
+        merchant_account: "account-a", rate_percent: "7.57473800", fixed_amount_per_sale: "1.00000000",
+        vat_rate_percent: "15.00000000", vat_rate_status: "explicit_uniform", vat_rate: "0.15000000",
+        calculation: "sale_variable_fees_before_vat_over_sale_principal", eligible_sale_rows: 10,
+        principal_total: "1000.00", fee_variable_net_total: "75.74", fee_fixed_net_total: "10.00",
+        statement_id: "saved-tabby-statement", statement_reference: "TABBY-SAR/2026-11-15",
+        source_as_of: "2026-11-15", source_date_basis: "statement_date", date_precision: "day", accepted_at: "2026-11-15T20:00:00Z" };
+    const row = { id: "tabby", provider: "tabby", name: "تابي", orders: 300, gross: "9007199254740993.25",
+        fees: "355.43", actual_fees: "100.00", estimated_fees: estimate, known_estimated_fees: estimate,
+        estimated_fees_complete: complete, estimated_fee_calculated_orders: 283, estimated_fee_incomplete_orders: complete ? 0 : 2,
+        estimated_fee_incomplete_reasons: complete ? [] : [{ code: "provider_fee_vat_rate_missing", orders: 2 }],
+        fees_complete: false, complete: false, fee_status: "review", fee_basis_sources: ["actual_statement", "average_estimate"],
+        fee_description: "الوصف الكامل للعمولة: فعلية وتقديرية مع مكونات الدليل المحفوظ.",
+        source_average_description: "الوصف الكامل للمصدر: TABBY-SAR/2026-11-15، نسبة قبل الضريبة وثابت وضريبة منفصلة.",
+        statement_evidence_as_of: "2026-11-15T20:00:00Z", statement_evidence_date_label: "2026-11-15 23:00 (الرياض)",
+        source_average_profiles: [profile, { ...profile, profile_id: "tabby-kwd-profile", native_currency: "KWD",
+            rate_percent: "9.12500000", fixed_amount_per_sale: "0.25050000", statement_reference: "TABBY-KWD/2026-11-15" }],
+        source_average_issues: [], average_fee_profiles: [profile], average_estimated_orders: 283,
+        average_variable_fees: "200.00", average_fixed_fees: "22.11", average_vat_fees: "33.32",
+        average_fixed_bases: ["statement_sale_mean"], average_operations_bases: ["one_provider_order_estimate"],
+        refunded: "50.00", net: "9007199254740587.82", pending_orders: 283,
+        pending_reasons: [{ code: "provider_fee_average_estimate", message: "هذه الطلبات تعتمد على تقدير عمولة معلن." }],
+        pending_order_details: [{ order_id: "provider-order-one", order_number: "TABBY-1001",
+            reasons: [{ code: "provider_fee_average_estimate", message: "هذه الطلبات تعتمد على تقدير عمولة معلن." }] }],
+    };
+    const columns = [
+        { key: "name", label: "المنصة", type: "text" }, { key: "orders", label: "طلبات مدفوعة مثبتة", type: "count" },
+        { key: "gross", label: "المدفوع المثبت", type: "money" }, { key: "fees", label: "العمولات المحتسبة مع ضريبتها", type: "money" },
+        { key: "actual_fees", label: "منها عمولات فعلية", type: "money" }, { key: "estimated_fees", label: "منها عمولات تقديرية", type: "money" },
+        { key: "fee_description", label: "حالة العمولة ومصدرها", type: "text" },
+        { key: "source_average_description", label: "مصدر متوسط العمولة المحفوظ", type: "text" },
+        { key: "statement_evidence_date_label", label: "آخر قبول لدليل الرسوم", type: "text" },
+        { key: "refunded", label: "الاستردادات", type: "money" }, { key: "net", label: "صافي محتسب متبقٍ لنا", type: "money", role: "receivable" },
+        { key: "pending_orders", label: "طلبات تحتاج مراجعة", type: "exceptions" },
+    ];
+    payload.currencies.SAR.tables = [{ id: "providers", title: "منصات الدفع", section: "fulfillment", complete: false,
+        columns, rows: [row], totals_basis: "known_subtotals", totals: { orders: 300, gross: row.gross, fees: row.fees,
+            actual_fees: row.actual_fees, estimated_fees: estimate, estimated_fees_complete: complete, refunded: row.refunded,
+            net: row.net, pending_orders: 283, fee_description: "", source_average_description: "", statement_evidence_date_label: "" },
+        notes: ["النسبة المعروضة قبل الضريبة؛ الرسم الثابت والضريبة منفصلان.", "النسبة المعروضة قبل الضريبة؛ الرسم الثابت والضريبة منفصلان."] }];
+    return payload;
+}
+
+test("provider rows stay compact while every explanation and source component appears below the table", async () => {
+    const payload = providerFeeFixture();
+    const original = JSON.stringify(payload);
+    serve(payload);
+    await render("providers");
+    const card = host.querySelector('[data-testid="financial-table-providers"]');
+    const table = card.querySelector(".ofp-table-scroll > table"), row = table.querySelector("tbody tr");
+    expect(row.cells[6].textContent).toBe("تحتاج مراجعة");
+    expect(row.cells[7].textContent).toBe("7.574738%");
+    expect(row.textContent).not.toMatch(/الوصف الكامل|قبل الضريبة|TABBY-SAR|TABBY-KWD|KWD|2026-11-15|رسم ثابت/);
+    expect(table.querySelectorAll("thead th")).toHaveLength(11);
+    expect(row.textContent).toContain("9,007,199,254,740,993.25");
+    expect(row.cells[5].textContent).toBe("255.43جزئي");
+    expect(table.querySelector("tfoot").textContent).toContain("المجموع المعلوم");
+    const explanations = card.querySelector('[aria-label="توضيحات منصات الدفع"]');
+    expect(explanations.querySelector("h3").textContent).toBe("توضيحات");
+    expect(explanations.closest("table")).toBeNull();
+    expect(explanations.textContent).toContain("1.00 SAR");
+    expect(explanations.textContent).toContain("0.2505 KWD");
+    expect(explanations.textContent).toContain("15%");
+    expect(explanations.textContent).toContain("TABBY-SAR/2026-11-15");
+    expect(explanations.textContent).toContain("2026-11-15");
+    expect(explanations.textContent).toContain("طلبات لم تكتمل رسومها التقديرية: 2");
+    expect(explanations.querySelectorAll(".ofp-provider-table-notes p")).toHaveLength(1);
+    expect(card.querySelectorAll(".ofp-notes")).toHaveLength(0);
+    expect(explanations.querySelector("button, dialog, details")).toBeNull();
+    expect(requestedViews()).toEqual(["providers"]);
+    expect(operationalApi.refreshBalances).not.toHaveBeenCalled();
+    expect(JSON.stringify(payload)).toBe(original);
+});
+
+test("the provider review count remains an accessible numeric button with the existing reasons popup", async () => {
+    serve(providerFeeFixture());
+    await render("providers");
+    const table = host.querySelector('[data-testid="financial-table-providers"] table');
+    const count = table.querySelector(".ofp-pending-orders");
+    expect(count.textContent).toBe("283");
+    expect(count.getAttribute("aria-label")).toBe("283 طلبات غير مؤكدة — تابي");
+    await act(async () => count.click());
+    const dialog = document.querySelector('[role="dialog"]');
+    expect(dialog.textContent).toContain("TABBY-1001");
+    expect(dialog.textContent).toContain("هذه الطلبات تعتمد على تقدير عمولة معلن.");
+    await act(async () => dialog.querySelector('[aria-label="إغلاق نافذة الطلبات"]').click());
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(requestedViews()).toEqual(["providers"]);
+    expect(operationalApi.refreshBalances).not.toHaveBeenCalled();
+    expect(operationalApi.previewDeliveryAfterStart).not.toHaveBeenCalled();
+    expect(operationalApi.confirmDeliveryAfterStart).not.toHaveBeenCalled();
+});
+
+test.each([
+    ["255.43", false, "255.43جزئي"], [null, false, "غير متاح"], ["0.00", true, "0.00"], ["0.00", false, "0.00جزئي"],
+])("provider estimate %s with complete=%s preserves supplied money and partial state", async (estimate, complete, expected) => {
+    serve(providerFeeFixture({ estimate, complete }));
+    await render("providers");
+    const table = host.querySelector('[data-testid="financial-table-providers"] table');
+    expect(table.querySelector("tbody tr").cells[5].textContent).toBe(expected);
+    expect(table.querySelector("tfoot tr").cells[5].textContent).toBe(expected);
+});
+
+test("provider printing stays compact with source explanations below and export retains full saved evidence", async () => {
+    const payload = providerFeeFixture(); serve(payload);
+    await render("providers");
+    print.mockImplementation(() => {
+        const content = useReactToPrint.mock.calls.at(-1)[0].contentRef.current;
+        const card = content.querySelector('[data-testid="financial-table-providers"]');
+        const table = card.querySelector("table");
+        expect(table.querySelector("tbody tr").cells[6].textContent).toBe("تحتاج مراجعة");
+        expect(table.querySelector("tbody tr").cells[7].textContent).toBe("7.574738%");
+        expect(table.textContent).not.toContain("TABBY-SAR/2026-11-15");
+        expect(table.querySelector("button")).toBeNull();
+        const explanations = card.querySelector('[aria-label="توضيحات منصات الدفع"]');
+        expect(explanations.closest(".ofp-no-print")).toBeNull();
+        expect(explanations.textContent).toContain("TABBY-SAR/2026-11-15");
+        expect(explanations.textContent).toContain("0.2505 KWD");
+    });
+    await click("طباعة هذه الصفحة");
+    await act(async () => useReactToPrint.mock.calls.at(-1)[0].onAfterPrint());
+    await click("تصدير هذه الصفحة");
+    const workbook = XLSX.writeFile.mock.calls[0][0], values = workbookValues(workbook);
+    const row = payload.currencies.SAR.tables[0].rows[0];
+    expect(values).toContain(row.fee_description);
+    expect(values).toContain(row.source_average_description);
+    expect(values).toContain(row.statement_evidence_date_label);
+    expect(values).toContain("9007199254740993.25");
+    expect(values).toContain("255.43");
+    expect(values).toContain("TABBY-1001");
+    expect(requestedViews()).toEqual(["providers"]);
+    expect(operationalApi.refreshBalances).not.toHaveBeenCalled();
+});
