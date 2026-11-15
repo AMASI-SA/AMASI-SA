@@ -1320,4 +1320,6 @@ def make_operational_balance_router(db, current_user):
     attach_delivery_confirmation_routes(router, db, current_user, scope, guarded)
     from operational_demand_refresh_routes import attach_demand_refresh_routes
     attach_demand_refresh_routes(router, db, current_user, scope)
+    from operational_provider_statement_routes import attach_provider_statement_routes
+    attach_provider_statement_routes(router, db, current_user, scope, guarded)
     return router
