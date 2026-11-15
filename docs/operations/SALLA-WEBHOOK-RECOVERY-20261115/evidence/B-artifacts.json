@@ -1,0 +1,80 @@
+{
+  "artifacts": [
+    {
+      "id": 14163820552,
+      "name": "release-v5-generated-outputs-host-20.20.2",
+      "size_in_bytes": 2976673,
+      "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14163820552",
+      "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14163820552/zip",
+      "expired": false,
+      "created_at": "2026-11-15T13:18:04Z",
+      "expires_at": "2026-11-29T13:18:03Z",
+      "updated_at": "2026-11-15T13:18:04Z",
+      "digest": "sha256:1159c1596bcb29d65c714e88b9bd6fe07785ad2c8a76e59e675a996eff2cf60b",
+      "workflow_run": {
+        "id": 43717903750,
+        "repository_id": 1250664189,
+        "head_repository_id": 1250664189,
+        "head_branch": "codex/salla-webhook-recovery-release-20261115",
+        "head_sha": "443424812fbeaad6108f1f67094d94d30a2f0d28"
+      }
+    },
+    {
+      "id": 14163601364,
+      "name": "release-v5-clean-clone-evidence-host-20.20.2",
+      "size_in_bytes": 46005,
+      "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14163601364",
+      "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14163601364/zip",
+      "expired": false,
+      "created_at": "2026-11-15T13:18:04Z",
+      "expires_at": "2026-11-29T13:18:04Z",
+      "updated_at": "2026-11-15T13:18:04Z",
+      "digest": "sha256:5d2d2a616ebee8deec440056a6d107b158b18bb1c0ea2016aaf7e334f5a29221",
+      "workflow_run": {
+        "id": 43717903750,
+        "repository_id": 1250664189,
+        "head_repository_id": 1250664189,
+        "head_branch": "codex/salla-webhook-recovery-release-20261115",
+        "head_sha": "443424812fbeaad6108f1f67094d94d30a2f0d28"
+      }
+    },
+    {
+      "id": 14163591295,
+      "name": "release-v5-generated-outputs-host-24.19.0",
+      "size_in_bytes": 2977799,
+      "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14163591295",
+      "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14163591295/zip",
+      "expired": false,
+      "created_at": "2026-11-15T13:17:32Z",
+      "expires_at": "2026-11-29T13:17:32Z",
+      "updated_at": "2026-11-15T13:17:32Z",
+      "digest": "sha256:56ecb0dd1402db044a2b80653a25b178e1789e109d39370007667c731833694d",
+      "workflow_run": {
+        "id": 43717903750,
+        "repository_id": 1250664189,
+        "head_repository_id": 1250664189,
+        "head_branch": "codex/salla-webhook-recovery-release-20261115",
+        "head_sha": "443424812fbeaad6108f1f67094d94d30a2f0d28"
+      }
+    },
+    {
+      "id": 14163551317,
+      "name": "release-v5-clean-clone-evidence-host-24.19.0",
+      "size_in_bytes": 46002,
+      "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14163551317",
+      "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14163551317/zip",
+      "expired": false,
+      "created_at": "2026-11-15T13:17:33Z",
+      "expires_at": "2026-11-29T13:17:33Z",
+      "updated_at": "2026-11-15T13:17:33Z",
+      "digest": "sha256:df868c5a35635c7af855cb140c7e05ab506cd5a0c813ca2100cc1a508781dab9",
+      "workflow_run": {
+        "id": 43717903750,
+        "repository_id": 1250664189,
+        "head_repository_id": 1250664189,
+        "head_branch": "codex/salla-webhook-recovery-release-20261115",
+        "head_sha": "443424812fbeaad6108f1f67094d94d30a2f0d28"
+      }
+    }
+  ]
+}

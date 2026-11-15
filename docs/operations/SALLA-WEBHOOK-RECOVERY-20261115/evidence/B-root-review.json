@@ -1,0 +1,13 @@
+{
+  "result": "PASS",
+  "generated_files": 293,
+  "frontend_payload_files_verified": 289,
+  "frontend_source_files_verified": 1182,
+  "intent_equal": true,
+  "identity_equal": true,
+  "repro_equal": true,
+  "package_proof_sha256": "9f763811000725857e83ab14d17fbac01426469a83e8e97b8aabbe62df3ee05a",
+  "backend_identity_sha256": "e89fbb81d9e54a561412a451983bacf3e68ac86ff828185bb47af884192658ed",
+  "build_meta_sha256": "3d464133a7e1283f859d1a835f82733591a9f638f0e15a426e1a8fe9feb69862",
+  "runtime": "rg5-8c765a3025bcafa7098d2fbdffe572d5582ecfe52c4be96f8c254ecd498d79f0"
+}
