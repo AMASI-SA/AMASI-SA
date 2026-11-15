@@ -1,0 +1,39 @@
+{
+  "observed_at": "2026-11-15T20:15:44.961Z",
+  "provenance": "Fresh reload and read-only search in live Mezan assembly UI",
+  "url": "https://mezansalla.com/fulfillment-v2?stage=ready_to_ship",
+  "order_number": "299781816",
+  "platform_version_observed": "1f931e6",
+  "official_release_verification_at_observation": "running",
+  "ready_count": 0,
+  "total_rows": 5,
+  "reconciliation_pending_rows": 4,
+  "rows": [
+    {
+      "sku": "AMS11509",
+      "ready_enabled": false,
+      "blocker": "source_reconciliation_pending"
+    },
+    {
+      "sku": "AMS13255",
+      "ready_enabled": false,
+      "blocker": "source_reconciliation_pending"
+    },
+    {
+      "sku": "AMS11549",
+      "ready_enabled": false,
+      "blocker": "supplier_receipt_required"
+    },
+    {
+      "row_position": 4,
+      "ready_enabled": false,
+      "blocker": "source_reconciliation_pending"
+    },
+    {
+      "row_position": 5,
+      "ready_enabled": false,
+      "blocker": "source_reconciliation_pending"
+    }
+  ],
+  "order_mutations_performed": false
+}

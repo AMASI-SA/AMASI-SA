@@ -1,0 +1,27 @@
+{
+  "record_type": "platform_publication_observation",
+  "recorded_at_utc": "2026-11-15 20:19:04 UTC",
+  "provenance": "Root observed normal Emergent Manage UI",
+  "project": "salla-analytics",
+  "production_url": "https://mezansalla.com",
+  "publication_submissions": 1,
+  "previous_version": "0ba2d75",
+  "new_version": "1f931e6",
+  "completion_text": "Deployment finished Nov 15, 11:08 PM",
+  "displayed_current_row": "100th publish",
+  "original_prepared_at": "2026-11-15T19:56:03.002127+00:00",
+  "source_git_sha": "d8a7ce0352bbe2f8858b349a32f2127c7e202343",
+  "source_base_git_sha": "742b1032113730961597ea413665409d9c213f7b",
+  "deployment_git_sha": "c626af288d3823694b4f1d0efcc3670e4ee74d81",
+  "release_id": "rg5-507b99021ed912e77780f15eaf183e0cd72f0012fbaa7e1af3cade593195324f",
+  "official_verify_started_at": "2026-11-15T20:10:03.670506+00:00",
+  "official_verify_status": "running_at_record_creation",
+  "screenshot": {
+    "file": "platform-publication.jpg",
+    "bytes": 76437,
+    "sha256": "6200d9ef145e6654cbff848de01b28b3d3204a60c49a9641fed2ded23ecc21f6",
+    "git_blob_sha1": "963efcd34bad4c6fdd3f50c2e7c1849554616233"
+  },
+  "logs_boundary": "View Logs exposed current runtime entries, not the configured Cloud build transcript. A filtered empty Error logs view is not a general application correctness assertion.",
+  "current_order_boundary": "Fresh post-publication UI remains 0/5 Ready: four reconciliation-pending elements and a separate supplier receipt prerequisite on child product AMS11549. No order mutation performed."
+}
