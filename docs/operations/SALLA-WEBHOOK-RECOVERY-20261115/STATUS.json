@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/salla-webhook-release-evidence-20261115",
   "base_commit": "9afb38cf0dc0d8e8cd887f2c2cdb4a6be5a7ca68",
-  "status": "Published identity verification running; functional queue acceptance blocked by proven installed-wrapper keyword mismatch",
+  "status": "PR1935 identity verified and lease closed; functional queue hold continues; corrected PR1940 intent-only B gates running",
   "requested_behavior": [
     "Repair the blocking verified webhook path and duplicate processing identified by platform support",
     "One scheduled refresh at 10:00 Asia/Riyadh over a fixed preceding 24-hour window",
@@ -199,6 +199,20 @@
       "pid": 35629,
       "whole_saved_lease_equal": true,
       "invocations": 1
+    },
+    "official_verify": {
+      "verified": true,
+      "checks": 3,
+      "source_git_sha": "8c11053b602f8f56a1facbaee09779f2896b0ada",
+      "deployment_git_sha": "331b7917b3c01d064ee2a17affb4714f3a296331",
+      "release_id": "rg5-8c765a3025bcafa7098d2fbdffe572d5582ecfe52c4be96f8c254ecd498d79f0",
+      "exit_code": 0,
+      "stderr_bytes": 0,
+      "verify_sha256": "780a91d64b17d80a2d65cfafef43773a8b1bec66ce566299c7380e76c860c381",
+      "fresh_official_status": {
+        "active": false
+      },
+      "functional_acceptance": false
     }
   },
   "continuation": {
@@ -239,7 +253,7 @@
   },
   "release_branch": "codex/salla-webhook-recovery-release-20261115",
   "evidence_only": true,
-  "checkpoint_at": "2026-11-15T14:20:00Z",
+  "checkpoint_at": "2026-11-15 14:33:49 UTC",
   "production_source_branch_changed": true,
   "production_runtime_changed": true,
   "operator": {
@@ -351,12 +365,14 @@
     "import_order": "canonical server -> package attach_salla_routes -> install cart wrapper -> core route factory -> easy_mode import of patched capture",
     "test_gap": "existing ingress/paused HTTP tests import core route factory and easy_mode directly; empty canonical worker smoke never dispatches business event",
     "latest_queue": {
-      "generated_at": "2026-11-15T14:19:11.046440+00:00",
+      "generated_at": "2026-11-15T14:34:16.587869+00:00",
       "pending": 0,
       "processing": 0,
-      "retry": 12,
-      "quarantined": 0,
-      "oldest_unfinished_age_seconds": 513,
+      "retry": 13,
+      "quarantined": 10,
+      "backlog": 23,
+      "oldest_unfinished_at": "2026-11-15T14:10:37.125000+00:00",
+      "oldest_unfinished_age_seconds": 1419,
       "expired_processing_count": 0
     },
     "first_seen_created_at": "2026-11-15T14:10:37.125000+00:00",
@@ -369,6 +385,134 @@
     "base": "a2a8218f858547f4d9d094d29998a93b09bf59ae",
     "local_worktree": "/workspace/scratch/ce6ef737d6c9/salla-capture-contract-recovery",
     "scope": "Explicitly forward strict error flag through installed production wrapper; add actual canonical composition regression; assess narrowly scoped incident recovery if queued events exhaust attempts",
-    "code_checkpoint": "pending focused test reproduction"
+    "code_checkpoint": "pending focused test reproduction",
+    "pull_request": 1940,
+    "source": {
+      "sha": "a6c5bc5763fdca144b44473285d37130eb8213e9",
+      "tree": "e4cd5f6f07aa8e3d94ce729231b21db41faf619e",
+      "base": "a2a8218f858547f4d9d094d29998a93b09bf59ae"
+    },
+    "intent_commit": {
+      "sha": "ac1443d46d6c172983dfe74479c6f96c40b0c4ec",
+      "tree": "d5bb8d88f7f04610dd6796648edebca24d025c1c",
+      "parent": "a6c5bc5763fdca144b44473285d37130eb8213e9"
+    },
+    "candidate": {
+      "sha256": "812c3b0bdb27215b6647d40055616ded848d118fc0a7879b289f70a5c02a1c6d",
+      "release_id": "rg5-f33cd3537f17e7a25804236a8b4ad0680c73618af6d3cddabc75fe8486f8d93a",
+      "artifact_id": 14165204312,
+      "official_validation": "pass"
+    },
+    "source_workflows": [
+      {
+        "id": 43724172051,
+        "name": "Snapchat Settings Management V2",
+        "head_sha": "a6c5bc5763fdca144b44473285d37130eb8213e9",
+        "status": "completed",
+        "conclusion": "success",
+        "run_attempt": 1
+      },
+      {
+        "id": 43724172163,
+        "name": "Snapchat Direct Active Publication",
+        "head_sha": "a6c5bc5763fdca144b44473285d37130eb8213e9",
+        "status": "completed",
+        "conclusion": "success",
+        "run_attempt": 1
+      },
+      {
+        "id": 43724172200,
+        "name": "Qoyod Payment Freshness",
+        "head_sha": "a6c5bc5763fdca144b44473285d37130eb8213e9",
+        "status": "completed",
+        "conclusion": "success",
+        "run_attempt": 1
+      },
+      {
+        "id": 43724172185,
+        "name": "Salla durable ingress and daily refresh",
+        "head_sha": "a6c5bc5763fdca144b44473285d37130eb8213e9",
+        "status": "completed",
+        "conclusion": "success",
+        "run_attempt": 1
+      },
+      {
+        "id": 43724172113,
+        "name": "Background workers and two-hour Qoyod cycles",
+        "head_sha": "a6c5bc5763fdca144b44473285d37130eb8213e9",
+        "status": "completed",
+        "conclusion": "success",
+        "run_attempt": 1
+      },
+      {
+        "id": 43724172179,
+        "name": "Mezan Release Readiness",
+        "head_sha": "a6c5bc5763fdca144b44473285d37130eb8213e9",
+        "status": "completed",
+        "conclusion": "success",
+        "run_attempt": 1
+      },
+      {
+        "id": 43724172119,
+        "name": "Security Gate",
+        "head_sha": "a6c5bc5763fdca144b44473285d37130eb8213e9",
+        "status": "completed",
+        "conclusion": "success",
+        "run_attempt": 1
+      },
+      {
+        "id": 43724172067,
+        "name": "G47 Focused Integration",
+        "head_sha": "a6c5bc5763fdca144b44473285d37130eb8213e9",
+        "status": "completed",
+        "conclusion": "success",
+        "run_attempt": 1
+      },
+      {
+        "id": 43724172061,
+        "name": "Operational Balance Web",
+        "head_sha": "a6c5bc5763fdca144b44473285d37130eb8213e9",
+        "status": "completed",
+        "conclusion": "success",
+        "run_attempt": 1
+      },
+      {
+        "id": 43724172054,
+        "name": "MZ2 Track F native shipping",
+        "head_sha": "a6c5bc5763fdca144b44473285d37130eb8213e9",
+        "status": "completed",
+        "conclusion": "success",
+        "run_attempt": 1
+      },
+      {
+        "id": 43724172082,
+        "name": "Operational Stock Eligibility",
+        "head_sha": "a6c5bc5763fdca144b44473285d37130eb8213e9",
+        "status": "completed",
+        "conclusion": "success",
+        "run_attempt": 1
+      },
+      {
+        "id": 43724172049,
+        "name": "CodeQL",
+        "head_sha": "a6c5bc5763fdca144b44473285d37130eb8213e9",
+        "status": "completed",
+        "conclusion": "success",
+        "run_attempt": 1
+      }
+    ],
+    "independent_review": "PASS; strict flag preserved; real canonical child and before/after reproduction",
+    "tests": {
+      "before_failed": 3,
+      "after_passed": 3,
+      "supplemental_passed": 47,
+      "supplemental_skipped": 1,
+      "local_skip_reason": "No Mongo fixture; required CI executed",
+      "ci_background_passed": 293,
+      "ci_daily_passed": 88,
+      "ci_salla_passed": 355,
+      "ci_skipped": 0,
+      "canonical_child_seconds": 11.944
+    }
   }
 }

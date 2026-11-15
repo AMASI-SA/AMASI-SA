@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="3" skipped="0" tests="3" time="9.813" timestamp="2026-11-15T17:20:00.076831+03:00" hostname="0ea9230bb766"><testcase classname="backend.tests.test_salla_webhook_installed_capture_contract" name="test_production_installed_capture_contract[completed]" time="3.138"><failure message="AssertionError: Traceback (most recent call last):&#10;    File &quot;/workspace/scratch/ce6ef737d6c9/salla-capture-contract-recovery/backend/tests/test_salla_webhook_installed_capture_contract.py&quot;, line 121, in &lt;module&gt;&#10;      asyncio.run(_exercise_installed_capture(sys.argv[1]))&#10;    File &quot;/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py&quot;, line 195, in run&#10;      return runner.run(main)&#10;             ^^^^^^^^^^^^^^^^&#10;    File &quot;/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py&quot;, line 118, in run&#10;      return self._loop.run_until_complete(task)&#10;             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^&#10;    File &quot;/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/base_events.py&quot;, line 691, in run_until_complete&#10;      return future.result()&#10;             ^^^^^^^^^^^^^^^&#10;    File &quot;/workspace/scratch/ce6ef737d6c9/salla-capture-contract-recovery/backend/tests/test_salla_webhook_installed_capture_contract.py&quot;, line 83, in _exercise_installed_capture&#10;      assert counts[&quot;done&quot;] == 1, (counts, row.get(&quot;last_error_code&quot;))&#10;             ^^^^^^^^^^^^^^^^^^^&#10;  AssertionError: ({'claimed': 1, 'done': 0, 'retry': 1, 'quarantined': 0, 'lease_busy': False, 'lease_lost': False}, 'processing_failed')&#10;  &#10;assert 1 == 0&#10; +  where 1 = CompletedProcess(args=['/workspace/scratch/ce6ef737d6c9/issue-index-verification-venv/bin/python', '-B', '/workspace/s...'done\': 0, \'retry\': 1, \'quarantined\': 0, \'lease_busy\': False, \'lease_lost\': False}, \'processing_failed\')\n').returncode">backend/tests/test_salla_webhook_installed_capture_contract.py:37: in test_production_installed_capture_contract
+    assert result.returncode == 0, result.stdout + result.stderr
+E   AssertionError: Traceback (most recent call last):
+E       File "/workspace/scratch/ce6ef737d6c9/salla-capture-contract-recovery/backend/tests/test_salla_webhook_installed_capture_contract.py", line 121, in &lt;module&gt;
+E         asyncio.run(_exercise_installed_capture(sys.argv[1]))
+E       File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py", line 195, in run
+E         return runner.run(main)
+E                ^^^^^^^^^^^^^^^^
+E       File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py", line 118, in run
+E         return self._loop.run_until_complete(task)
+E                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/base_events.py", line 691, in run_until_complete
+E         return future.result()
+E                ^^^^^^^^^^^^^^^
+E       File "/workspace/scratch/ce6ef737d6c9/salla-capture-contract-recovery/backend/tests/test_salla_webhook_installed_capture_contract.py", line 83, in _exercise_installed_capture
+E         assert counts["done"] == 1, (counts, row.get("last_error_code"))
+E                ^^^^^^^^^^^^^^^^^^^
+E     AssertionError: ({'claimed': 1, 'done': 0, 'retry': 1, 'quarantined': 0, 'lease_busy': False, 'lease_lost': False}, 'processing_failed')
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['/workspace/scratch/ce6ef737d6c9/issue-index-verification-venv/bin/python', '-B', '/workspace/s...'done\': 0, \'retry\': 1, \'quarantined\': 0, \'lease_busy\': False, \'lease_lost\': False}, \'processing_failed\')\n').returncode</failure></testcase><testcase classname="backend.tests.test_salla_webhook_installed_capture_contract" name="test_production_installed_capture_contract[strict_failure]" time="2.632"><failure message="AssertionError: Traceback (most recent call last):&#10;    File &quot;/workspace/scratch/ce6ef737d6c9/salla-capture-contract-recovery/backend/tests/test_salla_webhook_installed_capture_contract.py&quot;, line 121, in &lt;module&gt;&#10;      asyncio.run(_exercise_installed_capture(sys.argv[1]))&#10;    File &quot;/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py&quot;, line 195, in run&#10;      return runner.run(main)&#10;             ^^^^^^^^^^^^^^^^&#10;    File &quot;/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py&quot;, line 118, in run&#10;      return self._loop.run_until_complete(task)&#10;             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^&#10;    File &quot;/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/base_events.py&quot;, line 691, in run_until_complete&#10;      return future.result()&#10;             ^^^^^^^^^^^^^^^&#10;    File &quot;/workspace/scratch/ce6ef737d6c9/salla-capture-contract-recovery/backend/tests/test_salla_webhook_installed_capture_contract.py&quot;, line 105, in _exercise_installed_capture&#10;      await easy.dispatch_event(db, body, raise_on_processing_error=True,&#10;    File &quot;/workspace/scratch/ce6ef737d6c9/salla-capture-contract-recovery/backend/salla_integration/easy_mode_webhook.py&quot;, line 466, in dispatch_event&#10;      capture = await capture_unknown_event(&#10;                      ^^^^^^^^^^^^^^^^^^^^^^&#10;  TypeError: install_verified_order_cart_reconciliation.&lt;locals&gt;.wrapped() got an unexpected keyword argument 'raise_on_processing_error'&#10;  &#10;assert 1 == 0&#10; +  where 1 = CompletedProcess(args=['/workspace/scratch/ce6ef737d6c9/issue-index-verification-venv/bin/python', '-B', '/workspace/s...ified_order_cart_reconciliation.&lt;locals&gt;.wrapped() got an unexpected keyword argument \'raise_on_processing_error\'\n').returncode">backend/tests/test_salla_webhook_installed_capture_contract.py:37: in test_production_installed_capture_contract
+    assert result.returncode == 0, result.stdout + result.stderr
+E   AssertionError: Traceback (most recent call last):
+E       File "/workspace/scratch/ce6ef737d6c9/salla-capture-contract-recovery/backend/tests/test_salla_webhook_installed_capture_contract.py", line 121, in &lt;module&gt;
+E         asyncio.run(_exercise_installed_capture(sys.argv[1]))
+E       File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py", line 195, in run
+E         return runner.run(main)
+E                ^^^^^^^^^^^^^^^^
+E       File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py", line 118, in run
+E         return self._loop.run_until_complete(task)
+E                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/base_events.py", line 691, in run_until_complete
+E         return future.result()
+E                ^^^^^^^^^^^^^^^
+E       File "/workspace/scratch/ce6ef737d6c9/salla-capture-contract-recovery/backend/tests/test_salla_webhook_installed_capture_contract.py", line 105, in _exercise_installed_capture
+E         await easy.dispatch_event(db, body, raise_on_processing_error=True,
+E       File "/workspace/scratch/ce6ef737d6c9/salla-capture-contract-recovery/backend/salla_integration/easy_mode_webhook.py", line 466, in dispatch_event
+E         capture = await capture_unknown_event(
+E                         ^^^^^^^^^^^^^^^^^^^^^^
+E     TypeError: install_verified_order_cart_reconciliation.&lt;locals&gt;.wrapped() got an unexpected keyword argument 'raise_on_processing_error'
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['/workspace/scratch/ce6ef737d6c9/issue-index-verification-venv/bin/python', '-B', '/workspace/s...ified_order_cart_reconciliation.&lt;locals&gt;.wrapped() got an unexpected keyword argument \'raise_on_processing_error\'\n').returncode</failure></testcase><testcase classname="backend.tests.test_salla_webhook_installed_capture_contract" name="test_production_installed_capture_contract[legacy_failure]" time="2.770"><failure message="AssertionError: Traceback (most recent call last):&#10;    File &quot;/workspace/scratch/ce6ef737d6c9/salla-capture-contract-recovery/backend/tests/test_salla_webhook_installed_capture_contract.py&quot;, line 121, in &lt;module&gt;&#10;      asyncio.run(_exercise_installed_capture(sys.argv[1]))&#10;    File &quot;/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py&quot;, line 195, in run&#10;      return runner.run(main)&#10;             ^^^^^^^^^^^^^^^^&#10;    File &quot;/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py&quot;, line 118, in run&#10;      return self._loop.run_until_complete(task)&#10;             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^&#10;    File &quot;/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/base_events.py&quot;, line 691, in run_until_complete&#10;      return future.result()&#10;             ^^^^^^^^^^^^^^^&#10;    File &quot;/workspace/scratch/ce6ef737d6c9/salla-capture-contract-recovery/backend/tests/test_salla_webhook_installed_capture_contract.py&quot;, line 108, in _exercise_installed_capture&#10;      result = await easy.dispatch_event(db, body)&#10;               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^&#10;    File &quot;/workspace/scratch/ce6ef737d6c9/salla-capture-contract-recovery/backend/salla_integration/easy_mode_webhook.py&quot;, line 466, in dispatch_event&#10;      capture = await capture_unknown_event(&#10;                      ^^^^^^^^^^^^^^^^^^^^^^&#10;  TypeError: install_verified_order_cart_reconciliation.&lt;locals&gt;.wrapped() got an unexpected keyword argument 'raise_on_processing_error'&#10;  &#10;assert 1 == 0&#10; +  where 1 = CompletedProcess(args=['/workspace/scratch/ce6ef737d6c9/issue-index-verification-venv/bin/python', '-B', '/workspace/s...ified_order_cart_reconciliation.&lt;locals&gt;.wrapped() got an unexpected keyword argument \'raise_on_processing_error\'\n').returncode">backend/tests/test_salla_webhook_installed_capture_contract.py:37: in test_production_installed_capture_contract
+    assert result.returncode == 0, result.stdout + result.stderr
+E   AssertionError: Traceback (most recent call last):
+E       File "/workspace/scratch/ce6ef737d6c9/salla-capture-contract-recovery/backend/tests/test_salla_webhook_installed_capture_contract.py", line 121, in &lt;module&gt;
+E         asyncio.run(_exercise_installed_capture(sys.argv[1]))
+E       File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py", line 195, in run
+E         return runner.run(main)
+E                ^^^^^^^^^^^^^^^^
+E       File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py", line 118, in run
+E         return self._loop.run_until_complete(task)
+E                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/base_events.py", line 691, in run_until_complete
+E         return future.result()
+E                ^^^^^^^^^^^^^^^
+E       File "/workspace/scratch/ce6ef737d6c9/salla-capture-contract-recovery/backend/tests/test_salla_webhook_installed_capture_contract.py", line 108, in _exercise_installed_capture
+E         result = await easy.dispatch_event(db, body)
+E                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/workspace/scratch/ce6ef737d6c9/salla-capture-contract-recovery/backend/salla_integration/easy_mode_webhook.py", line 466, in dispatch_event
+E         capture = await capture_unknown_event(
+E                         ^^^^^^^^^^^^^^^^^^^^^^
+E     TypeError: install_verified_order_cart_reconciliation.&lt;locals&gt;.wrapped() got an unexpected keyword argument 'raise_on_processing_error'
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['/workspace/scratch/ce6ef737d6c9/issue-index-verification-venv/bin/python', '-B', '/workspace/s...ified_order_cart_reconciliation.&lt;locals&gt;.wrapped() got an unexpected keyword argument \'raise_on_processing_error\'\n').returncode</failure></testcase></testsuite></testsuites>
