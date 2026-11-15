@@ -7,7 +7,12 @@
 - Branch: `codex/option-price-currency-proof-20261115`.
 - Starting source: `7ef45017e5221635ce3c80c3788f73d9c50b1e08`.
 - Implementation commit: `a9f563890c2be4c36b026eb8c081cb9dcacddd75` (local).
-- State: implementation verified locally; exact-head real-Mongo CI is next.
+- Remote PR: https://github.com/AMASI-SA/AMASI-SA/pull/1933 (Draft).
+- First remote source: `51ee523d81806990498860851d14e9cbc0240040`, tree
+  `b2e79ae261171cf58e59a9c8a1171ac2d7944b02`.
+- State: the seven real-Mongo currency cases passed. One neighboring test
+  fixture needed correction; a new exact-source CI run and new v5 intent are
+  required before release.
 - Owner authorization on 2026-11-15: explicitly approved pushing, merging and
   publishing this fix ("تمام وادمج وانشر"). The earlier push refusal is resolved
   by this new explicit instruction. Publication still requires the normal
@@ -71,24 +76,49 @@ The web client recognizes the source-pending reason and keeps its action frozen.
   They are included in `Review Completion Resumable`, with an executed-test
   minimum and the existing no-skip/no-failure evidence gate.
 - The local environment could not start a disposable Mongo server. No substitute
-  or production database was used for those tests. Their exact-head CI result is
-  pending and must not be described as passing yet.
+  or production database was used. CI run `43656826678` ran the seven new
+  integration cases against its disposable replica set: all seven passed, with
+  zero skips, failures, or errors. Android recovery also passed 329 tests.
+- The first CI source was not accepted overall: the main group had 808 passed,
+  one failed, and 457 passed subtests. The failure was
+  `test_legacy_addition_ready_retry_after_address_correction[True-in_progress-in_progress-True]`.
+  Its obsolete `source_status` mock no longer supplied canonical source data
+  after the source-message read change. The fixture now inserts the same
+  parametrized status in scoped `unified_orders`; no production fallback or
+  assertion was changed. Local RED was reproduced (exit 1); the complete
+  source-addition file plus source-message tests then passed 25 tests (exit 0).
+- Retained first-run JUnit artifact: `14138252213`, SHA256
+  `0438d874bb1f90fa173d84fc6921545dff4addbe29ecbd5e768e4108f8d9f65c`.
+  The remaining 18 first-source workflows passed. The candidate intent from
+  readiness run `43656826800` is superseded by this fixture/status source
+  change and must not be frozen or deployed.
 
 ## Remaining work and next safe action
 
-1. Push the checkpoint and open a Draft PR targeting
-   `hotfix/prod-snap-meta-final`; record its exact source SHA and CI evidence.
-2. Require the seven new integration cases and existing review/assembly suites
-   to execute against the workflow's disposable loopback Mongo replica set.
-3. Publish the mobile message from the latest verified published mobile base,
-   excluding separately held notification changes. Confirm the existing release
-   process and its device/build requirements before that publication.
-4. After verified deployment, perform a scoped dry run of the
+1. Advance PR1933 with the narrow fixture correction and this checkpoint; record
+   the new full source A SHA in the PR. Require all exact-source CI, including
+   the seven new Mongo cases and the corrected neighboring retry regression.
+2. Review the new readiness artifact, freeze intent-only B, and require both
+   clean-clone deployment adapter rehearsals and all B gates. A normal merge
+   must have the exact B tree. Never reuse the superseded first-source intent.
+3. The original `/app` guard currently reports an active release owned by
+   `codex-campaign-operating-period-1932`, prepared at
+   `2026-11-14T22:10:56.977380+00:00`, deployment commit
+   `7ef45017e5221635ce3c80c3788f73d9c50b1e08`. Do not clear that lease or change
+   `/app` or the production branch during its handoff. Recheck read-only status
+   before the main merge/publication. This task has made no lease change.
+4. Mobile PR https://github.com/AMASI-SA/amasi-mobile/pull/357 is based directly
+   on published Android81 (`ef3984ee423d2e2645155fc33d154c6376d83a76`), excludes
+   PR356, and prepares Android82 / 1.0.67 with the existing APK profile. Current
+   candidate is `2d6b97656c84d9cc45a6adb2e907db6a57d028c7`; exact CI and export
+   must finish before normal merge and one EAS build. It changes the diagnostic
+   message only and does not remove the backend source hold.
+5. After verified deployment, perform a scoped dry run of the
    existing revalidation path against the current revision of the affected
    order. Apply only if the full approved-source proof passes. The complete live
    proof has **not** been executed in this task; an FX-envelope match alone is
    not sufficient to claim the existing order will pass.
-5. Preserve supplier-receipt and all other normal Ready requirements. A piece
+6. Preserve supplier-receipt and all other normal Ready requirements. A piece
    without receipt remains blocked even after source reconciliation succeeds.
 
 The repository-wide continuity ledger is Issue #1006. Fresh read on 2026-11-15

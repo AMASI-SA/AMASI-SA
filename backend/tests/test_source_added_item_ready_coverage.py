@@ -130,8 +130,6 @@ async def test_legacy_ready_does_not_hide_unreviewed_current_source_line():
 async def test_legacy_addition_ready_retry_after_address_correction(
     monkeypatch, approved, stage, canonical, can_retry,
 ):
-    import assembly_status_policy
-
     db = AsyncMongoMockClient().db
     workflow = snapshot(approved, False)
     await db[operations.WORKFLOWS].insert_one(workflow)
@@ -156,7 +154,10 @@ async def test_legacy_addition_ready_retry_after_address_correction(
     monkeypatch.setattr(operations, "_current_assembly_order", AsyncMock(return_value=order))
     monkeypatch.setattr(operations, "_assembly_source_specs_by_item", lambda _: {})
     monkeypatch.setattr(operations, "_historical_assembly_context", AsyncMock(return_value=(None, None, [])))
-    monkeypatch.setattr(assembly_status_policy, "source_status", AsyncMock(return_value=canonical))
+    await db["unified_orders"].insert_one({
+        "user_id": "owner", "order_number": "100", "order_status": canonical,
+        "raw_by_source": {"salla_direct": {"status": {"slug": canonical}}},
+    })
     found = await operations._assembly_search(db, user_id="owner", query="100")
     assert len(found["pieces"]) == 2
     assert all(row["assembly_ready"] for row in found["pieces"])
