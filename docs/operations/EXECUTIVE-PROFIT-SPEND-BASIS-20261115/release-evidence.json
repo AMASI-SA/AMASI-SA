@@ -1,6 +1,6 @@
 {
   "task": "EXECUTIVE-PROFIT-SPEND-BASIS-20261115",
-  "updated_at_utc": "2026-11-15 14:19:41 UTC",
+  "updated_at_utc": "2026-11-15T14:28:30Z",
   "repository": "AMASI-SA/AMASI-SA",
   "pull_request": 1936,
   "source_branch": "codex/executive-profit-release-20261115",
@@ -213,7 +213,7 @@
   "merge_commit": "a2a8218f858547f4d9d094d29998a93b09bf59ae",
   "production_changed": false,
   "lease_created": false,
-  "next_action": "Wait for the J owner to finish identity verification and close its lease. Track that owner's focused Salla forwarding successor, verify it descends from M and retains this profit fix, then accept its governed source/intent/release gates and coordinate one current-source publication. Do not mutate or clear the other owner's lease and do not publish an obsolete source. Finally verify the live profit card.",
+  "next_action": "Track owner PR1940 exact source/intent/merge gates and guarded combined publication; verify current successor preserves all profit blobs, then inspect actual executive profit card. Do not execute the obsolete M-pinned operator or clear another owner's lease.",
   "B_workflows": [
     {
       "id": 43720779455,
@@ -435,7 +435,14 @@
     "release_id": "rg5-8c765a3025bcafa7098d2fbdffe572d5582ecfe52c4be96f8c254ecd498d79f0",
     "prepared_at": "2026-11-15T13:57:01.652551+00:00",
     "observed_at_utc": "2026-11-15 14:03:39 UTC",
-    "note": "Other owner active; original rehearsal not executed. Must wait for owner; never clear or reuse this lease."
+    "note": "Other owner active; original rehearsal not executed. Must wait for owner; never clear or reuse this lease.",
+    "official_guard_observed_at_utc": "2026-11-15T14:24:00Z",
+    "official_guard_status": {
+      "active": false,
+      "actor": null,
+      "deployment_git_sha": null
+    },
+    "observation": "Root's own browser terminal status command returned after the preceding owner's verification lock released. No /app source change or owned lease."
   },
   "B_independent_artifact_review": {
     "passed": true,
@@ -635,7 +642,21 @@
     "owner_fix_state": "Owner preparing focused forwarding fix and production-composition regression on a separate branch.",
     "root_independently_read_current_pr": true,
     "root_and_independent_source_review": "Confirmed exact M signature mismatch; both default and strict keyword calls raise before capture; Salla subtree unchanged by profit M.",
-    "recovery_limit": "Code analysis: MAX_ATTEMPTS=8; exhausted quarantined events are excluded from ordinary claims. No live quarantine query or event replay performed by this task. Owner must separately track functional recovery."
+    "recovery_limit": "Code analysis: MAX_ATTEMPTS=8; exhausted quarantined events are excluded from ordinary claims. No live quarantine query or event replay performed by this task. Owner must separately track functional recovery.",
+    "pr": 1940,
+    "url": "https://github.com/AMASI-SA/AMASI-SA/pull/1940",
+    "state": "draft source candidate; owner handles corrective release",
+    "source_commit": "a6c5bc5763fdca144b44473285d37130eb8213e9",
+    "source_tree": "e4cd5f6f07aa8e3d94ce729231b21db41faf619e",
+    "sole_parent": "a2a8218f858547f4d9d094d29998a93b09bf59ae",
+    "profit_six_blobs_verified_unchanged": true,
+    "root_and_independent_targeted_review": "PASS; complete strict/default forwarding and production-order regression; real-Mongo CI execution review pending",
+    "current_source_ci": {
+      "total": 12,
+      "success": 8,
+      "in_progress": 4
+    },
+    "quarantine_boundary": "Signature repair does not automatically recover exhausted rows. Bounded recovery remains the Salla owner's separately reviewed scope."
   },
   "profit_code_blobs": {
     ".github/workflows/prod-dashboard-four-platform-spend-v1.yml": "f67a5092054a9c6b7798895c0b5cffd097cac4c6",

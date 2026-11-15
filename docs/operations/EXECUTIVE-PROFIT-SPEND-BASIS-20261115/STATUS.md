@@ -1,10 +1,14 @@
-# Current operational checkpoint — 2026-11-15 14:18:05 UTC
+# Current operational checkpoint — 2026-11-15 14:28:30 UTC
 
-The profit fix is merged as `a2a8218f858547f4d9d094d29998a93b09bf59ae`; its complete source, B, and actual-M gates passed. **The profit fix is not published or live-verified yet.** The pinned original operator remains staged and unexecuted; this task has not changed shared `/app` or created a lease.
+The profit fix is merged as `a2a8218f858547f4d9d094d29998a93b09bf59ae`; its complete source, B, and actual-M gates passed. **The profit fix is not published or live-verified yet.** The pinned original operator remains staged and unexecuted. This task has not changed shared `/app`, created a lease, or published.
 
-The preceding Salla release owner published version `908dee3` and is still running its official verification under its own lease. Its current PR #1935 acceptance section reports a separate wrapper/strict-keyword mismatch that prevents natural webhook work from reaching capture; the owner is preparing a focused forwarding fix and regression test. M inherits that unchanged Salla code. Preserve the owner's lease and follow-up source, and track a reviewed descendant that retains the profit fix instead of publishing an obsolete runtime.
+The preceding Salla owner published version `908dee3`. Root directly observed the official guard return `active: false` at about 14:24 UTC after that owner's verification lock released. Functional Salla acceptance remains open because its installed capture wrapper rejected the strict-processing keyword before processing queued events.
 
-Current canonical evidence is `release-evidence.json` on `codex/executive-profit-evidence-20261115`. Never merge this evidence branch into the frozen source/intent release. The staged M operator must not be run blindly after this checkpoint. Next: verify owner closure and successor ancestry/blobs/gates, then current-source publication and actual profit-card acceptance.
+The owner opened draft PR #1940 with source `a6c5bc5763fdca144b44473285d37130eb8213e9`, tree `e4cd5f6f07aa8e3d94ce729231b21db41faf619e`, sole parent our M. Root and independent review verified exactly five changed Salla/test/workflow/status paths and all six profit-fix blobs unchanged. The explicit boolean is forwarded with default False; strict capture failures propagate outside the optional reconciliation catch. Tests cover real installation order and fresh worker completion. At 14:28:30 UTC, eight source workflows passed and four were in progress; no intent B is frozen yet.
+
+The Salla owner controls the successor release. Follow that reviewed descendant through its own A/B/M and original-workspace protocol instead of publishing the obsolete M. Do not run this task's staged M operator blindly. Quarantined rows do not automatically resume; bounded data recovery remains outside this profit task. Issue #1006 is full; this status, PR #1936 and `release-evidence.json` on the evidence branch are the recoverable continuation. Never merge the evidence branch into the frozen source release.
+
+Next: verify exact successor gates and publication evidence, then live executive net-profit visibility and canonical spend basis. Production changed by this task: no.
 
 Historical source checkpoint follows.
 
