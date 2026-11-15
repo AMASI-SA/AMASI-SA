@@ -1,0 +1,209 @@
+{
+  "order_number": "299956656",
+  "salla_order_id": 658497035,
+  "authorization": "Explicit user grant for guarded local recovery; no Ready or receipt actions authorized",
+  "recovery_observed_at": "2026-11-15T22:24:00.172Z",
+  "response": {
+    "ok": true,
+    "order_number": "299956656",
+    "provider_read_only": true,
+    "preparation_status_sync": {
+      "state": "sent",
+      "retry_post": false
+    },
+    "current_stage": "in_progress"
+  },
+  "workflow_after": {
+    "observed_at": "2026-11-15T22:25:42.697Z",
+    "order_number": "299956656",
+    "stage": "in_progress",
+    "completion_mode": "mezan_local_v1",
+    "revision": 3,
+    "review_completion_operation_id": "review_1e85f0f2d4cd2f49c6f54ddd50bf2c0d9b0d0da497c3ce569839c0fd3faa121b",
+    "preparation_assignment_status": "assigned",
+    "preparation_progress": {
+      "fully_routed": true,
+      "direct_quantity": 1,
+      "required_quantity": 2,
+      "allocated_quantity": 2,
+      "remaining_quantity": 0,
+      "updated_at": "2026-11-15T22:23:40.140000"
+    },
+    "preparation_status_revision": 1,
+    "updated_at": "2026-11-15T22:23:40.140000"
+  },
+  "pieces_after": [
+    {
+      "observed_at": "2026-11-15T22:24:56.592Z",
+      "piece_id": "b0a21cd1c68f5538a3a9942913150daf",
+      "sku": "AMS13282",
+      "order_item_id": "salla:299956656:876825824",
+      "unit_index": 1,
+      "status": "received",
+      "execution_status": "received_from_supplier",
+      "assembly_status": {
+        "missing": true
+      },
+      "supplier_dispatch_status": "received",
+      "received_at": "2026-11-14T23:42:39.183000",
+      "updated_at": "2026-11-14T23:42:39.183000",
+      "preparation_receipt_status": {
+        "missing": true
+      },
+      "preparation_received_at": {
+        "missing": true
+      },
+      "supplier_assignment_mode": "direct_at_partial_receipt",
+      "supplier_assigned_at_receipt": true,
+      "active_hold_id": {
+        "missing": true
+      },
+      "services": [
+        {
+          "status": "completed",
+          "required_quantity": 1,
+          "completed_quantity": 1,
+          "completed_at": "2026-11-14T23:42:39.183000"
+        }
+      ]
+    },
+    {
+      "observed_at": "2026-11-15T22:24:58.027Z",
+      "piece_id": "bbf07626f26b5ec18f15bf559579da8d",
+      "sku": "AMS10253",
+      "order_item_id": "salla:299956656:144248550",
+      "unit_index": 1,
+      "status": "received",
+      "execution_status": "received_from_supplier",
+      "assembly_status": {
+        "missing": true
+      },
+      "supplier_dispatch_status": "received",
+      "received_at": "2026-11-15T22:22:14.493000",
+      "updated_at": "2026-11-15T22:22:14.493000",
+      "preparation_receipt_status": {
+        "missing": true
+      },
+      "preparation_received_at": {
+        "missing": true
+      },
+      "supplier_assignment_mode": "direct_at_receiving_draft",
+      "supplier_assigned_at_receipt": true,
+      "active_hold_id": {
+        "missing": true
+      },
+      "services": [
+        {
+          "status": "completed",
+          "required_quantity": 1,
+          "completed_quantity": 1,
+          "completed_at": "2026-11-15T22:22:14.493000"
+        }
+      ]
+    }
+  ],
+  "ui_after": [
+    {
+      "blocker": null,
+      "current_stage": "تم الاستلام من المورد",
+      "product": "شال نسائي شتوي مطرز بالاسم حسب الطلب | أماسي",
+      "ready_button_enabled": true,
+      "sku": "AMS13282"
+    },
+    {
+      "blocker": null,
+      "current_stage": "تم الاستلام من المورد",
+      "product": "شال بالاسم بألوان مختلفه",
+      "ready_button_enabled": true,
+      "sku": "AMS10253"
+    },
+    {
+      "blocker": null,
+      "current_stage": "في التجميع والعنونة",
+      "product": "تغليف فروات مع كرت اهداء",
+      "ready_button_enabled": true,
+      "sku": "AMS10593"
+    },
+    {
+      "blocker": null,
+      "current_stage": "في التجميع والعنونة",
+      "product": "تغليف أماسي المميز",
+      "ready_button_enabled": true,
+      "sku": null
+    },
+    {
+      "blocker": null,
+      "current_stage": "في التجميع والعنونة",
+      "product": "كرت إهداء",
+      "ready_button_enabled": true,
+      "sku": null
+    }
+  ],
+  "ui_ready_enabled_count": 5,
+  "actual_ready_count": 0,
+  "actual_ready_total": 5,
+  "actions_excluded": [
+    "Ready approval",
+    "supplier receipt",
+    "service completion",
+    "Salla status mutation",
+    "manual database mutation",
+    "source change",
+    "new deployment"
+  ],
+  "second_piece_completion_preceded_recovery": true,
+  "salla_after": {
+    "id": 658497035,
+    "reference_id": 299956656,
+    "status": {
+      "id": 1939592358,
+      "name": "قيد التنفيذ",
+      "slug": "in_progress",
+      "customized": {
+        "id": 2020523226,
+        "name": "قيد التنفيذ"
+      }
+    },
+    "updated_at": {
+      "date": "2026-11-14 04:25:18.000000",
+      "timezone_type": 3,
+      "timezone": "Asia/Riyadh"
+    }
+  },
+  "salla_before_observed": {
+    "id": 658497035,
+    "reference_id": 299956656,
+    "status": "in_progress",
+    "updated_at": {
+      "date": "2026-11-14 04:25:18.000000",
+      "timezone": "Asia/Riyadh"
+    }
+  },
+  "provider_status_and_timestamp_unchanged": true,
+  "operation": {
+    "method": "GET",
+    "path": "/api/order-reviews-v1/299956656/preparation-status",
+    "invocations": 1,
+    "allow_dispatch": false,
+    "local_mutation": true,
+    "existing_authenticated_browser_session": true
+  },
+  "before_evidence_commit": "588ff3ab114f7bfa3c3408bf1a618f933ccd2dfb",
+  "before_workflow": {
+    "stage": "reviewed",
+    "revision": 3,
+    "preparation_assignment_status": "partially_assigned",
+    "required_quantity": 2,
+    "allocated_quantity": 1,
+    "remaining_quantity": 1,
+    "committed_allocation_quantity": 2
+  },
+  "verification": {
+    "production_response_success": true,
+    "scoped_workflow_and_piece_readback": true,
+    "ui_readback": true,
+    "independent_review": "accepted",
+    "local_pytest": "not executed successfully: pytest absent; existing targeted tests reviewed only",
+    "future_nonrecurrence_claimed": false
+  }
+}

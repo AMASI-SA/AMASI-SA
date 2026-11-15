@@ -1,3 +1,22 @@
+# Latest outcome — order 299956656 repaired (16 November 2026 Riyadh)
+
+**User-authorized guarded local recovery succeeded; Ready is enabled for all five items.**
+
+- Local workflow: reviewed → in_progress; cached allocation 1/2 → 2/2; remaining 0.
+- Existing guarded preparation-status continuation invoked once with allow_dispatch=false. Response: ok=true, sent, retry_post=false, provider_read_only=true.
+- AMS13282 remained supplier-received/service-completed.
+- AMS10253's supplier receipt and service completion were recorded at 01:22:14.493 Riyadh, before this action and the local repair at 01:23:40.140. Its enabled Ready control is therefore valid; this recovery did not record its completion.
+- Actual Ready approval remains 0/5. No Ready, receipt, Salla status, inventory/financial, direct DB, source, or deployment action was performed.
+- Salla remains in_progress with unchanged provider timestamp.
+- Independent verification accepted the result.
+- See ORDER299956656-RECOVERY-COMPLETED.md, order299956656-recovery-result.json, and order299956656-recovery-result.jpg.
+
+Current order recovery is complete. No pending authorization or publication step remains for this recovery. Read-only authorization for future explicitly supplied Ready-case order numbers remains scoped as previously granted.
+
+---
+
+## Earlier checkpoints (historical)
+
 # Latest follow-up — order299956656 confirmed diagnosis (16 November2026 Riyadh)
 
 **Read-only diagnosis complete; guarded local repair awaits explicit write authorization.**
