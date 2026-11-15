@@ -1,5 +1,46 @@
 # Operational provider statement reconciliation
 
+## Authorized flag-off publication active, 2026-11-15 18:42 UTC
+
+The user explicitly approved the previously blocked configuration-store access.
+Root submitted Live `SALLA_WEBHOOK_INCIDENT_RECOVERY_ENABLED=false` through the
+normal platform Edit/Update and save controls; the form closed normally. No other
+key or Test value changed. Runtime flag-off acceptance is still pending.
+
+Fresh shared precheck at 18:37:27.245264Z: complete inactive guard, clean tracked
+production branch at J2, reviewed intent SHA-256
+`fc151ac8b5c0faad002ca4773d510b6b16e6492ebb3bdf82b352fa1eaa4e5dc5`,
+and retained identity/build/proof present. The accepted original same-source
+rehearsal remains valid; the new prepare revalidated its retained artifacts.
+No new source build or test rerun was needed for this configuration-only step.
+
+Fresh actor `codex-salla-incident-flagoff-root-20261115` prepared successfully at
+`2026-11-15T18:40:19.664108+00:00`. Prepare exited 0 after 6.473 seconds;
+stdout was 571462 bytes, SHA-256
+`b1ea0b6656f171cc7fafc6a905b5461a14ee9be4ea9128ab33140485f68c2604`.
+Prepublish exited 0 at 18:41:25.762262Z with `ready_to_publish:true`, exact J2,
+source9b91e88 and runtime418840. Its stdout was 333 bytes, SHA-256
+`957e44d04396d1204c4c7369b829ba6c8c8fab22408c1a92b2caf1f41265c420`.
+One actual normal Publish changes submission was observed Publishing by
+18:42:40Z, after the prior completed-version baseline `c75a275`.
+
+New private receipts are outside `/app` at
+`/tmp/salla-flagoff-root-20261115-1831/`; historical receipts/launchers were not
+overwritten or reused. A new preservation inventory records 120 untracked paths
+with size, mtime and symlink metadata. Root uses its own Terminal 2 in the new
+code-server tab; other terminal/editor work and services remain preserved.
+No shared source update, source refresh, statement use or financial write has
+occurred. Seven reported orders are present; existing grants remain45done and
+two quarantined out of47, with no additional grant or forced retry by root.
+
+The new publication and lease are active; no handoff or flag-off success is yet
+claimed. Require a newer explicit platform completion, one uninterrupted official
+verifier with all three probes, independently observed recovery disabled, inactive
+guard and preservation comparison. Only then may the unchanged provider B2
+proceed to its normal merge/M checks/rehearsal/publication and saved-file use.
+PRs1945/1946 now carry this live coordination checkpoint. The prior access-denial
+checkpoint below is historical; the specific authorization now persists.
+
 ## Authorized continuation and remaining configuration access, 2026-11-15 18:27 UTC
 
 The user explicitly assigned root the remaining work and publication. This
