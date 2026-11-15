@@ -1,4 +1,4 @@
-"""Real HMAC -> dispatch -> capture -> canonical persistence on loopback Mongo.
+"""Real HMAC -> durable inbox -> worker -> canonical write on loopback Mongo.
 
 No server/bootstrap import, .env loading, external client, or mocked persistence.
 The old coupling is reproduced only by rebinding the operational entry point to
@@ -11,8 +11,10 @@ import os
 import sys
 import types
 import unittest
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
+from cryptography.fernet import Fernet
 from fastapi import APIRouter, FastAPI, HTTPException
 from httpx import ASGITransport, AsyncClient
 
@@ -22,6 +24,8 @@ from accounting_ledger_v2 import (
     AUDIT_COLLECTION, GENERAL_LEDGER_COLLECTION, GROUPS_COLLECTION, SEQUENCES_COLLECTION,
 )
 import fulfillment_v2_routes as fulfillment
+import customer_identity
+from salla_integration import webhook_inbox as inbox
 from salla_integration.routes import attach_salla_routes
 from stock_component_consumption_service import PLANS, UNITS, CLAIMS
 
@@ -32,6 +36,7 @@ class PausedSallaWebhookHTTPTests(unittest.IsolatedAsyncioTestCase):
         await self.fixture.asyncSetUp()
         self.addAsyncCleanup(self.fixture.asyncTearDown)
         self.db = self.fixture.db
+        self.worker_clock = datetime.now(timezone.utc)
         await self.db.mz2_atomic_owners.update_one({"_id": "owner"}, {"$set": {"writes_paused": True}})
         await self.db.settings.update_one({"user_id": "owner"}, {"$unset": {"g47_inventory": ""}})
         await self.db.salla_integrations.insert_one({"store_id": "synthetic-store", "user_id": "owner"})
@@ -39,11 +44,16 @@ class PausedSallaWebhookHTTPTests(unittest.IsolatedAsyncioTestCase):
         self.secret = "isolated-webhook-http-test-key-not-a-live-credential"
         environment = patch.dict(os.environ, {
             "SALLA_WEBHOOK_SECRET": self.secret,
+            "MEZAN_CUSTOMER_PII_ENC_KEY": Fernet.generate_key().decode(),
             "SALLA_ORDERS_V3_SHADOW_ENABLED": "false",
             "MEZAN_SNAPCHAT_CAPI_ENABLED": "false",
         })
         environment.start()
         self.addCleanup(environment.stop)
+        encryption = patch.object(customer_identity, "_fernet", None)
+        encryption.start()
+        self.addCleanup(encryption.stop)
+        await inbox.ensure_indexes(self.db)
 
         # attach_salla_routes imports this dependency to declare unrelated
         # authenticated routes. The public webhook never calls it.
@@ -86,42 +96,76 @@ class PausedSallaWebhookHTTPTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(failure.exception.detail["code"], "mz2_writes_paused")
         callback.assert_not_awaited()
 
-    async def test_http_200_old_pause_failure_then_fixed_ingestion_replay_update_and_deferred_recovery(self):
+    async def consume(self, job_id, *, retry=False):
+        job = await self.db[inbox.COLLECTION].find_one({"_id": job_id})
+        self.assertIsNotNone(job)
+        due = job["next_attempt_at"]
+        if due.tzinfo is None:
+            due = due.replace(tzinfo=timezone.utc)
+        # Advance the worker's clock only; do not modify persisted retry state.
+        # This lets the retry retain its actual backoff while keeping tests fast.
+        self.worker_clock = max(self.worker_clock, datetime.now(timezone.utc), due) + timedelta(milliseconds=1)
+        result = await inbox.run_once(self.db, now=self.worker_clock, limit=1)
+        self.assertEqual(result["claimed"], 1, result)
+        self.assertEqual(result["retry" if retry else "done"], 1, result)
+        current = await self.db[inbox.COLLECTION].find_one({"_id": job_id})
+        self.assertEqual(current["state"], "retry" if retry else "done", current)
+        return current
+
+    async def test_durable_ack_pause_retry_duplicate_update_and_deferred_recovery(self):
         payload = self.fixture.source_payload()
-        # Historical coupling: ACK 200/capture can succeed while canonical
-        # persistence fails at the real financial pause gate before its callback.
-        with patch.object(fulfillment, "operational_owner", atomic_owner):
-            response = await self.post_event(payload)
+        response = await self.post_event(payload)
         self.assertEqual(response.status_code, 200, response.text)
         self.assertTrue(response.json()["stored"])
-        old_sync = response.json()["capture"]["order_sync"]
+        self.assertTrue(response.json()["queued"])
+        job_id = response.json()["job_id"]
+        self.assertEqual(await self.db.unified_orders.count_documents({}), 0)
+        self.assertEqual(await self.db.salla_webhook_event_captures.count_documents({}), 0)
+
+        # Historical pause failure remains observable after ACK, but cannot be
+        # misclassified as completed or lost; the durable worker keeps a retry.
+        with patch.object(fulfillment, "operational_owner", atomic_owner):
+            failed = await self.consume(job_id, retry=True)
+        old_capture = await self.db.salla_webhook_event_captures.find_one({})
+        old_sync = old_capture["order_sync"]
         self.assertFalse(old_sync["synced"])
         self.assertEqual(old_sync["reason"], "order_webhook_persist_failed")
-        self.assertIn("mz2_writes_paused", old_sync["error"])
-        old_capture = await self.db.salla_webhook_event_captures.find_one({})
+        self.assertEqual(old_sync["error_type"], "HTTPException")
+        self.assertNotIn("error", old_sync)
         self.assertTrue(old_capture["verified_before_capture"])
-        self.assertEqual(old_capture["order_sync"], old_sync)
         self.assertEqual(await self.db.unified_orders.count_documents({}), 0)
         await self.assert_no_finance_or_component_effects()
 
-        for _ in range(2):
-            response = await self.post_event(payload)
-            self.assertEqual(response.status_code, 200, response.text)
-            capture = response.json()["capture"]
-            self.assertTrue(capture["order_sync"]["synced"], capture)
-            self.assertEqual(capture["order_mutation_scope"], "full_order_from_webhook")
-            self.assertTrue(capture["no_salla_api_calls"])
-            self.assertTrue(capture["no_qoyod_calls"])
+        response = await self.post_event(payload)
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["job_id"], job_id)
+        redelivery = await self.db[inbox.COLLECTION].find_one({"_id": job_id})
+        self.assertEqual(redelivery["state"], "retry")
+        self.assertEqual(redelivery["next_attempt_at"], failed["next_attempt_at"])
+        self.assertEqual(redelivery["attempts"], failed["attempts"])
+        await self.consume(job_id)
+        replay_capture = await self.db.salla_webhook_event_captures.find_one({})
+        self.assertTrue(replay_capture["order_sync"]["synced"], replay_capture)
+        self.assertEqual(replay_capture["order_mutation_scope"], "full_order_from_webhook")
+        self.assertTrue(replay_capture["no_salla_api_calls"])
+        self.assertTrue(replay_capture["no_qoyod_calls"])
+
+        # A completed redelivery is acknowledged without repeating business work.
+        response = await self.post_event(payload)
+        self.assertEqual(response.status_code, 200, response.text)
+        nothing = await inbox.run_once(self.db, now=self.worker_clock, limit=1)
+        self.assertEqual(nothing["claimed"], 0, nothing)
+        self.assertFalse(nothing["lease_busy"], nothing)
         self.assertEqual(await self.db.unified_orders.count_documents({"order_number": "intake-order"}), 1)
         self.assertEqual(await self.db.salla_webhook_event_captures.count_documents({}), 1)
-        replay_capture = await self.db.salla_webhook_event_captures.find_one({})
-        self.assertEqual(replay_capture["delivery_count"], 3)
-        self.assertTrue(replay_capture["order_sync"]["synced"])
+        self.assertEqual((await self.db[inbox.COLLECTION].find_one({"_id": job_id}))["delivery_count"], 3)
+        self.assertEqual((await self.db.salla_webhook_event_captures.find_one({}))["delivery_count"], 2)
 
         updated = self.fixture.source_payload(version=lifecycle.LATER, status="in_progress")
         response = await self.post_event(updated, "order.updated")
         self.assertEqual(response.status_code, 200, response.text)
-        self.assertTrue(response.json()["capture"]["order_sync"]["synced"])
+        self.assertTrue(response.json()["queued"])
+        await self.consume(response.json()["job_id"])
         canonical = await self.db.unified_orders.find_one({"order_number": "intake-order"})
         self.assertEqual(canonical["order_status_slug"], "in_progress")
         self.assertEqual(canonical["raw_by_source"]["salla_direct"], updated)
@@ -129,11 +173,14 @@ class PausedSallaWebhookHTTPTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(marker["operational_cohort"], fulfillment.LEGACY_COMPONENT_COHORT)
 
         deferred = self.fixture.source_payload(number="deferred-order")
+        response = await self.post_event(deferred)
+        self.assertEqual(response.status_code, 200, response.text)
+        deferred_id = response.json()["job_id"]
         with patch.object(fulfillment, "reconcile_component_order_lifecycle",
                           AsyncMock(side_effect=RuntimeError("isolated G47 interruption"))):
-            response = await self.post_event(deferred)
-        self.assertEqual(response.status_code, 200, response.text)
-        sync = response.json()["capture"]["order_sync"]
+            await self.consume(deferred_id, retry=True)
+        saved = await self.db.salla_webhook_event_captures.find_one({"payload.data.reference_id": "deferred-order"})
+        sync = saved["order_sync"]
         self.assertTrue(sync["synced"], sync)
         self.assertTrue(sync["auto_fulfillment"]["retry_required"], sync)
         self.assertEqual(sync["auto_fulfillment"]["error_code"], "component_intake_retry_required")
@@ -143,13 +190,14 @@ class PausedSallaWebhookHTTPTests(unittest.IsolatedAsyncioTestCase):
         marker = await self.db[fulfillment.COMPONENT_LIFECYCLES].find_one({"order_number": "deferred-order"})
         self.assertEqual(marker["state"], "blocked")
         self.assertTrue(marker["retry_required"])
-        saved = await self.db.salla_webhook_event_captures.find_one({"payload.data.reference_id": "deferred-order"})
-        self.assertEqual(saved["order_sync"], sync)
         await self.assert_no_finance_or_component_effects()
 
         response = await self.post_event(deferred)
         self.assertEqual(response.status_code, 200, response.text)
-        self.assertTrue(response.json()["capture"]["order_sync"]["synced"])
+        self.assertEqual(response.json()["job_id"], deferred_id)
+        await self.consume(deferred_id)
+        recovered = await self.db.salla_webhook_event_captures.find_one({"payload.data.reference_id": "deferred-order"})
+        self.assertTrue(recovered["order_sync"]["synced"])
         self.assertEqual(await self.db.unified_orders.count_documents({"order_number": "deferred-order"}), 1)
         marker = await self.db[fulfillment.COMPONENT_LIFECYCLES].find_one({"order_number": "deferred-order"})
         self.assertEqual(marker["operational_cohort"], fulfillment.LEGACY_COMPONENT_COHORT)
@@ -160,5 +208,6 @@ class PausedSallaWebhookHTTPTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 401, response.text)
         self.assertEqual(response.json()["detail"]["code"], "INVALID_SIGNATURE")
         self.assertEqual(await self.db.salla_webhook_event_captures.count_documents({}), 0)
+        self.assertEqual(await self.db[inbox.COLLECTION].count_documents({}), 0)
         self.assertEqual(await self.db.unified_orders.count_documents({}), 0)
         await self.assert_no_finance_or_component_effects()

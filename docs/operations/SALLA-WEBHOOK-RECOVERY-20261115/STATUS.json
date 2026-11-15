@@ -1,0 +1,103 @@
+{
+  "task_id": "SALLA-WEBHOOK-RECOVERY-20261115",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/salla-webhook-recovery-release-20261115",
+  "base_commit": "9afb38cf0dc0d8e8cd887f2c2cdb4a6be5a7ca68",
+  "status": "Fresh linear release source assembled on published PR1933; combined exact-source CI and v5 handoff pending",
+  "requested_behavior": [
+    "Repair the blocking verified webhook path and duplicate processing identified by platform support",
+    "One scheduled refresh at 10:00 Asia/Riyadh over a fixed preceding 24-hour window",
+    "Update existing records only; preserve customer choices and accounting invariants"
+  ],
+  "implemented": [
+    "Encrypted durable inbox with majority+journal persistence before HTTP acknowledgement and atomic semantic deduplication",
+    "Bounded separate-process worker with replica lease, heartbeats, retry/backoff, crash recovery and pinned tenant binding",
+    "Strict core failure handling, safe diagnostics and recovery of failed CAPI local-outbox stage from current canonical state; optional shadow does not retry core",
+    "One admitted daily 10:00 Asia/Riyadh cycle, fixed preceding24h window, bounded within-cycle retries and no off-hours startup catch-up",
+    "Update-only existing orders/products with source and owner transaction fences, unchanged no-op and preserved customer choices/accounting projections",
+    "Grouped current/legacy synchronization leases shared by all manual order/product and daily paths",
+    "Owner-scoped unfinished queue counts/ages and count-only retry/quarantine diagnostics"
+  ],
+  "verification": {
+    "integrated_gate": {
+      "passed": 347,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration_seconds": 34.62,
+      "database": "disposable loopback Mongo7 replica",
+      "evidence": "evidence/integrated.xml",
+      "source_commit": "5bf8772eac6fd48a5328a529c0c6b336a66db73f"
+    },
+    "canonical_runtime_and_isolation": {
+      "passed": 8,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration_seconds": 15.28,
+      "evidence": "evidence/runtime-isolation.xml",
+      "source_commit": "5bf8772eac6fd48a5328a529c0c6b336a66db73f"
+    },
+    "independent_review": "HTTP/manual/scheduler and deferred-outbox boundaries reviewed; identified defects corrected with reproductions",
+    "additional_adjacent_checks": "187 scheduler/mapper/catalogue/option/product projection cases passed; 21 real Mongo snapshot cases are included in the integrated gate",
+    "preexisting_failures": "Two optional marketing-attribution tests reproduced identically against original source: extra utm_content key and stale fixture missing the canonical source gate. No assertion or production change made for these unrelated baseline failures.",
+    "diff_check": "passed",
+    "final_remote_ci": {
+      "prior_source_commit": "5bf8772eac6fd48a5328a529c0c6b336a66db73f",
+      "prior_passed": 22,
+      "current_release_source": "pending exact-head validation; do not relabel old test receipts"
+    }
+  },
+  "production_changed": false,
+  "release": {
+    "protocol": 5,
+    "prepared": false,
+    "published": false,
+    "current_guard_active": false,
+    "shared_head": "9afb38cf0dc0d8e8cd887f2c2cdb4a6be5a7ca68",
+    "shared_tracked_worktree_clean": true,
+    "prior_lease_closed_by_owner": "PR1932 officially aborted 2026-11-15T01:14:02.965298+00:00; PR1933 then published and verified",
+    "live_source_observed": "fc5ff89f5794061bf62a7de283eedc9ecd4ec7c9",
+    "live_release_observed": "rg5-92ce2e87026743df6ed7cd3083940f596b3a562e1c608cc985df3dc7c15cabe3",
+    "live_identity_verified": true,
+    "live_frontend_verified": true,
+    "blocker": null,
+    "recheck_requirement": "Fresh shared guard and production ref required again immediately before workspace mutation and publication"
+  },
+  "continuation": {
+    "ledger": "Issue #1006 has reached 2500 comments; use this status document and the task PR as the durable fallback",
+    "next": "Validate this fresh single-parent source with the official candidate-transition parser and exact-source CI, obtain and independently review its governed candidate intent, create intent-only B, pass clean-clone rehearsal and exact-B gates, then normal merge and single authorized v5 publication with three official probes. Preserve PR1933 Ready/receipt diagnosis and unrelated workspace paths.",
+    "caveats": [
+      "Queue recovery is at least once after process death between business write and queue settlement; existing source and outbox idempotency remain authoritative",
+      "Do not invent updated_at_gt support: official Salla List Orders documentation and existing repository contract do not establish it",
+      "Do not call Order Details from background reconciliation because the repository records that it may mark orders read"
+    ]
+  },
+  "last_remote_checkpoint": "bfd8daf052f1e2b368c9f06394c025322eeaa462",
+  "pull_request": "https://github.com/AMASI-SA/AMASI-SA/pull/1934",
+  "provider_coverage": {
+    "complete": false,
+    "reason": "provider_modified_since_filter_unavailable",
+    "discovery": "bounded recent creations plus verified local source activity",
+    "candidate_limit": 500,
+    "authority": "provider order-level updated_at inside the fixed24h window",
+    "unknown_timestamps": "counted and skipped; not converted into a full historical scan",
+    "daily_result": "partial coverage is reported and alone does not cause repeated synchronization"
+  },
+  "previous_implementation": {
+    "branch": "codex/salla-webhook-durable-recovery-20261115",
+    "commit": "5bf8772eac6fd48a5328a529c0c6b336a66db73f",
+    "tree": "1b5684ead71d3913dea0e689426d05d779e04983",
+    "pull_request": "https://github.com/AMASI-SA/AMASI-SA/pull/1934",
+    "handoff": "c4d5bc9c54216462f301d58a8875495ade4163cc",
+    "ci_passed": 22,
+    "preserved": true
+  },
+  "integration": {
+    "production_changes": "PR1933 currency equivalence proof, canonical-source fixture, and reviewed release retained",
+    "approved_patch_sha256": "02b5c9da1fdcaeb2cadda8c4a755bc62c8ec6ce07a8aa1ab90b0c7f12915c00c",
+    "source_paths_overlap": false,
+    "approved_code_test_workflow_blobs_changed": false,
+    "lineage": "New single-parent source directly on published J; old accepted branch is not rebased or force-updated. A two-parent merge was rejected because full-history intent provenance would fail."
+  }
+}

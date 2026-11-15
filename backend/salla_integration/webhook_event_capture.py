@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import time
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
@@ -26,6 +27,42 @@ from .webhook_order_sync import (
 
 
 log = logging.getLogger("salla.webhook_capture")
+
+
+class WebhookProcessingIncomplete(RuntimeError):
+    """Fixed diagnostic used by durable workers; contains no event data."""
+
+
+def _processing_retry_required(*results: Any) -> bool:
+    """Recognize unfinished work without turning intentional rejections into retries."""
+    retry_reasons = {
+        "unhandled_exception", "order_webhook_persist_failed",
+        "connected_salla_owner_not_found", "address_projection_failed",
+        "customer_options_unavailable", "source_changed", "order_not_found",
+        "enqueue_failed",
+    }
+    for result in results:
+        if not isinstance(result, dict):
+            continue
+        reason = result.get("reason")
+        if result.get("retry_required") is True or isinstance(reason, str) and reason in retry_reasons:
+            return True
+        for key in ("auto_fulfillment", "customer_options_enrichment", "address_sync"):
+            child = result.get(key)
+            if isinstance(child, dict) and _processing_retry_required(child):
+                return True
+    return False
+
+
+def _safe_processing_diagnostics(value: Any) -> Any:
+    """Exceptions may echo a customer payload; retain only fixed error codes."""
+    if isinstance(value, dict):
+        return {key: ("processing_error" if key in {"error", "last_error", "exception", "traceback"}
+                      else _safe_processing_diagnostics(child))
+                for key, child in value.items()}
+    if isinstance(value, list):
+        return [_safe_processing_diagnostics(child) for child in value]
+    return value
 
 _SECRET_KEYS = {
     "access_token",
@@ -132,11 +169,13 @@ async def capture_unknown_event(
     event_body: dict[str, Any],
     *,
     known_events: Iterable[str],
+    raise_on_processing_error: bool = False,
 ) -> dict[str, Any]:
     """Persist and process a verified non-lifecycle Salla event.
 
     Events are deduplicated by merchant + event name + sanitized payload hash.
-    Processing failure never prevents acknowledging the verified webhook.
+    Direct callers retain the captured-result contract. A durable worker asks
+    for a strict failure after saving the audit when processing is incomplete.
     """
     event_name = str(event_body.get("event") or "").strip()
     if event_name in set(known_events):
@@ -154,6 +193,16 @@ async def capture_unknown_event(
     merchant_id = str(event_body.get("merchant") or "").strip() or None
     event_hash = _fingerprint(sanitized)
     now = datetime.now(timezone.utc)
+    started = time.monotonic()
+    timings: dict[str, int] = {}
+    refund_retry_required = False
+
+    async def timed(stage: str, work):
+        began = time.monotonic()
+        try:
+            return await work
+        finally:
+            timings[stage] = round((time.monotonic() - began) * 1000)
 
     # A received label must survive a later order-processing failure. Failure
     # to durably enqueue is propagated instead of acknowledging lost data.
@@ -192,14 +241,14 @@ async def capture_unknown_event(
         shipment_sync["reason"] = "isolated_abandoned_cart_event"
         snapchat_capi["reason"] = "isolated_abandoned_cart_event"
         try:
-            cart_sync = await persist_abandoned_cart_event(db, event_body)
+            cart_sync = await timed("abandoned_cart", persist_abandoned_cart_event(db, event_body))
         except Exception as exc:  # webhook acknowledgement remains independent
-            log.exception("abandoned_cart_webhook.unhandled event=%s", event_name)
+            log.warning("abandoned_cart_webhook.unhandled error_type=%s", type(exc).__name__)
             cart_sync = {
                 "attempted": True,
                 "synced": False,
                 "reason": "unhandled_exception",
-                "error": str(exc)[:500],
+                "error_type": type(exc).__name__,
                 "provider_write_reached": False,
                 "pii_stored": False,
                 "plaintext_pii_stored": False,
@@ -210,14 +259,14 @@ async def capture_unknown_event(
 
     if not is_abandoned_cart_event and not payment_job:
         try:
-            order_sync = await sync_order_from_verified_webhook(db, event_body)
+            order_sync = await timed("order_sync", sync_order_from_verified_webhook(db, event_body))
         except Exception as exc:  # webhook must still return HTTP 200
-            log.exception("order_webhook.unhandled event=%s", event_name or "<none>")
+            log.warning("order_webhook.unhandled error_type=%s", type(exc).__name__)
             order_sync = {
                 "attempted": True,
                 "synced": False,
                 "reason": "unhandled_exception",
-                "error": str(exc)[:500],
+                "error_type": type(exc).__name__,
                 "no_salla_api_calls": True,
                 "no_qoyod_calls": True,
             }
@@ -232,8 +281,8 @@ async def capture_unknown_event(
                     key: address_result.get(key)
                     for key in ("synced", "reason", "source")
                 }
-            except Exception:
-                log.exception("order_address_webhook.retry_required")
+            except Exception as exc:
+                log.warning("order_address_webhook.retry_required error_type=%s", type(exc).__name__)
                 order_sync["address_sync"] = {
                     "synced": False, "reason": "address_projection_failed"
                 }
@@ -253,8 +302,9 @@ async def capture_unknown_event(
                     from accounting_order_refunds import process_order_refunds
                     await process_order_refunds(db, owner=refund_owner, order_number=str(reference),
                         source={"kind": "salla_verified_order_update", "event": event_name, "capture_hash": event_hash}, payload=payload)
-            except Exception:
-                log.exception("mz2.order_refund_requires_retry event=%s", event_name)
+            except Exception as exc:
+                log.warning("mz2.order_refund_requires_retry error_type=%s", type(exc).__name__)
+                refund_retry_required = True
 
     # The V3 observer runs only after webhook verification and writes only to
     # its isolated shadow event/queue collections. It cannot change the result
@@ -281,51 +331,82 @@ async def capture_unknown_event(
                         "reason": "connected_owner_not_found",
                     }
         except Exception as exc:
-            log.exception("salla.orders_v3.shadow_capture_failed event=%s", event_name)
+            log.warning("salla.orders_v3.shadow_capture_failed error_type=%s", type(exc).__name__)
             orders_v3_shadow = {
                 "accepted": False,
                 "reason": "shadow_capture_failed",
                 "error_type": type(exc).__name__,
             }
 
-    # Provider delivery is never performed inside the webhook.  This call only
-    # creates a hashed, idempotent outbox record when CAPI is explicitly enabled.
-    if not is_abandoned_cart_event and order_sync.get("synced"):
+    # A newer source can legitimately make the original snapshot stale between
+    # attempts. Preserve a previously failed outbox stage, but derive its retry
+    # from the current canonical source so an old active order cannot revive a
+    # purchase after cancellation. Ordinary stale deliveries remain no-ops.
+    retry_current_capi = False
+    if (raise_on_processing_error and not is_abandoned_cart_event
+            and order_sync.get("reason") == "stale_salla_snapshot"):
+        previous = await db.salla_webhook_event_captures.find_one(
+            {"merchant_id": merchant_id, "event": event_name or None, "event_hash": event_hash},
+            {"snapchat_capi.reason": 1},
+        )
+        retry_current_capi = ((previous or {}).get("snapchat_capi") or {}).get("reason") == "enqueue_failed"
+
+    # This creates/cancels only the existing idempotent local outbox. It never
+    # makes a provider request or enables an otherwise disabled integration.
+    if not is_abandoned_cart_event and (order_sync.get("synced") or retry_current_capi):
         try:
             from integrations_control_center.snapchat_capi_purchases import (
-                enqueue_snapchat_purchase_from_salla_event,
+                enqueue_snapchat_purchase_from_salla_event, cancel_pending_snapchat_purchase_event,
+                _status_eligible,
             )
-
-            snapchat_capi = await enqueue_snapchat_purchase_from_salla_event(
-                db,
-                event_body,
-            )
+            capi_event = event_body
+            current_ineligible = False
+            if retry_current_capi:
+                from .webhook_order_sync import _order_payload, _order_reference
+                owner = await _resolve_user_id(db, merchant_id)
+                reference = _order_reference(_order_payload(event_body))
+                if not owner or not reference:
+                    raise WebhookProcessingIncomplete("capi_current_source_unavailable")
+                current = await db.unified_orders.find_one(
+                    {"user_id": owner, "order_number": reference},
+                    {"raw_by_source.salla_direct": 1, "order_status": 1, "order_status_slug": 1},
+                )
+                raw = ((current or {}).get("raw_by_source") or {}).get("salla_direct")
+                if not isinstance(raw, dict) or _order_reference(raw) != reference:
+                    raise WebhookProcessingIncomplete("capi_current_source_unavailable")
+                # A separately fenced light-status observation can be newer
+                # than the archived full payload. Its cancellation still wins.
+                current_ineligible = not _status_eligible(current)
+                capi_event = {"event": "order.updated", "merchant": merchant_id, "data": raw}
+            if current_ineligible:
+                snapchat_capi = await cancel_pending_snapchat_purchase_event(
+                    db, user_id=owner, event_id=reference,
+                )
+            else:
+                snapchat_capi = await enqueue_snapchat_purchase_from_salla_event(db, capi_event)
+            if retry_current_capi:
+                snapchat_capi["recovered_from_current_source"] = True
         except Exception as exc:  # webhook acknowledgement remains independent
-            log.exception(
-                "snapchat_capi.enqueue_failed event=%s order=%s",
-                event_name or "<none>",
-                order_sync.get("order_number"),
-            )
+            log.warning("snapchat_capi.enqueue_failed error_type=%s", type(exc).__name__)
             snapchat_capi = {
                 "queued": False,
                 "reason": "enqueue_failed",
-                "error": str(exc)[:300],
+                "error_type": type(exc).__name__,
                 "provider_call_reached": False,
             }
 
     if not is_abandoned_cart_event:
         try:
-            shipment_sync = await sync_shipment_payload_from_verified_webhook(
-                db,
-                event_body,
+            shipment_sync = await timed(
+                "shipment_sync", sync_shipment_payload_from_verified_webhook(db, event_body),
             )
         except Exception as exc:  # webhook must still return HTTP 200
-            log.exception("shipment_webhook.unhandled event=%s", event_name or "<none>")
+            log.warning("shipment_webhook.unhandled error_type=%s", type(exc).__name__)
             shipment_sync = {
                 "attempted": True,
                 "synced": False,
                 "reason": "unhandled_exception",
-                "error": str(exc)[:500],
+                "error_type": type(exc).__name__,
                 "no_salla_api_calls": True,
                 "no_qoyod_calls": True,
             }
@@ -344,6 +425,16 @@ async def capture_unknown_event(
         _log_reason_code(shipment_sync.get("reason") or order_sync.get("reason")),
     )
 
+    order_sync, shipment_sync, cart_sync, snapchat_capi, orders_v3_shadow = (
+        _safe_processing_diagnostics(result)
+        for result in (order_sync, shipment_sync, cart_sync, snapchat_capi, orders_v3_shadow)
+    )
+    retry_required = refund_retry_required or _processing_retry_required(
+        order_sync, shipment_sync, cart_sync, snapchat_capi,
+    )
+    timings["total"] = round((time.monotonic() - started) * 1000)
+    log.info("salla_webhook.processing duration_ms=%s retry_required=%s capture_hash=%s",
+             timings["total"], retry_required, event_hash[:12])
     selector = {
         "merchant_id": merchant_id,
         "event": event_name or None,
@@ -380,6 +471,8 @@ async def capture_unknown_event(
             "orders_v3_shadow": orders_v3_shadow,
             "abandoned_cart_isolated": is_abandoned_cart_event,
             "order_mutation_scope": order_mutation_scope,
+            "processing_retry_required": retry_required,
+            "processing_timings_ms": timings,
         },
         "$inc": {"delivery_count": 1},
     }
@@ -388,6 +481,8 @@ async def capture_unknown_event(
         update,
         upsert=True,
     )
+    if raise_on_processing_error and retry_required:
+        raise WebhookProcessingIncomplete("salla_webhook_processing_incomplete")
     return {
         "captured": True,
         "created": result.upserted_id is not None,
@@ -401,6 +496,7 @@ async def capture_unknown_event(
         "orders_v3_shadow": orders_v3_shadow,
         "abandoned_cart_isolated": is_abandoned_cart_event,
         "order_mutation_scope": order_mutation_scope,
+        "processing_retry_required": retry_required,
         "no_salla_api_calls": True,
         "no_qoyod_calls": True,
     }

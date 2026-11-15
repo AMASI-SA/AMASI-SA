@@ -431,21 +431,44 @@ async def _handle_app_uninstalled(db, event_body: dict) -> dict:
 
 
 # ── Event router ──────────────────────────────────────────────────────
-async def dispatch_event(db, event_body: dict) -> dict:
+async def accept_verified_event(db, event_body: dict) -> dict:
+    """Acknowledge business events only after durable enqueue.
+
+    Lifecycle credentials keep their established immediate handler. Business
+    work is consumed by the existing dedicated background process, never by
+    an in-memory task attached to the request or the web event loop.
+    """
+    event_name = (event_body.get("event") or "").strip()
+    if event_name in EVENT_HANDLERS:
+        return await dispatch_event(db, event_body)
+    from .webhook_inbox import enqueue_verified_event
+    queued = await enqueue_verified_event(db, event_body)
+    return {"ok": True, "stored": True, "event": event_name,
+            "reason": "verified_event_queued", **queued}
+
+
+async def dispatch_event(
+    db, event_body: dict, *, raise_on_processing_error: bool = False,
+    expected_user_id: str | None = None,
+) -> dict:
     """Route a parsed and verified webhook to its handler.
 
-    Unknown verified events are captured safely and still acknowledged with
-    HTTP 200 so Salla does not enter a retry storm. Capture is read-only with
-    respect to orders and never calls Qoyod.
+    This is the business processor, not the HTTP acknowledgement boundary.
+    Deferred workers request strict failures so a partial write cannot be
+    mistaken for a completed queue item. Direct internal callers retain the
+    established captured-result contract.
     """
     event_name = (event_body.get("event") or "").strip()
     handler_name = EVENT_HANDLERS.get(event_name)
     if not handler_name:
-        capture = await capture_unknown_event(
-            db,
-            event_body,
-            known_events=EVENT_HANDLERS.keys(),
-        )
+        from .webhook_order_sync import verified_webhook_owner
+        with verified_webhook_owner(expected_user_id):
+            capture = await capture_unknown_event(
+                db,
+                event_body,
+                known_events=EVENT_HANDLERS.keys(),
+                raise_on_processing_error=raise_on_processing_error,
+            )
         log.info(
             "easy_mode.captured_unknown event=%r created=%s hash=%s",
             event_name,

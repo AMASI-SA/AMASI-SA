@@ -614,6 +614,7 @@ async def _ensure_order_products_catalogued(
     order_number: str,
     order_doc: dict,
     source: str,
+    existing_only: bool = False,
 ) -> dict:
     """Create/update db.products rows from order products[].
 
@@ -710,6 +711,9 @@ async def _ensure_order_products_catalogued(
                 },
             )
             updated += 1
+            continue
+        if existing_only:
+            skipped += 1
             continue
         generated_key = ident["product_id"]
         is_auto = _is_auto_product_id(generated_key)
@@ -1006,7 +1010,10 @@ def _merge_into(existing: dict, incoming: dict, source: str) -> dict:
 async def upsert_order(db, user_id: str, order_number: str, incoming: dict,
                        source: str, raw: Optional[dict] = None,
                        shipping_snapshot: Optional[dict] = None,
-                       allow_billing_eligibility: bool = True) -> dict:
+                       allow_billing_eligibility: bool = True,
+                       existing_only: bool = False) -> dict:
+    if type(existing_only) is not bool:
+        raise ValueError("existing_only must be boolean")
     observation = shipping_snapshot if shipping_snapshot is not None else (
         extract_shipping(raw if raw is not None else incoming) if source == "salla_direct" else None
     )
@@ -1019,7 +1026,10 @@ async def upsert_order(db, user_id: str, order_number: str, incoming: dict,
         result = await _upsert_order(
             scoped, user_id, order_number, incoming, source, raw, observation,
             allow_billing_eligibility=allow_billing_eligibility,
+            existing_only=existing_only,
         )
+        if result.get("skipped") or result.get("unchanged"):
+            return result
         from assembly_status_policy import invalidate_shipping_if_blocked
         await invalidate_shipping_if_blocked(scoped, user_id, order_number)
         return result
@@ -1029,7 +1039,8 @@ async def upsert_order(db, user_id: str, order_number: str, incoming: dict,
 async def _upsert_order(db, user_id: str, order_number: str, incoming: dict,
                         source: str, raw: Optional[dict],
                         shipping_snapshot: Optional[dict], *,
-                        allow_billing_eligibility: bool = True) -> dict:
+                        allow_billing_eligibility: bool = True,
+                        existing_only: bool = False) -> dict:
     """Upsert a single order into `unified_orders`. Returns {"created": bool, "doc": dict}."""
     order_number = str(order_number).strip()
     if not order_number:
@@ -1045,13 +1056,11 @@ async def _upsert_order(db, user_id: str, order_number: str, incoming: dict,
     selector = {"user_id": user_id, "order_number": order_number}
     for attempt in range(5):
         existing = await db.unified_orders.find_one(selector) or {}
+        if existing_only and not existing:
+            return {"created": False, "skipped": True, "reason": "existing_order_missing"}
         merged = _merge_into(existing, incoming, source)
         merged["user_id"] = user_id
         merged["order_number"] = order_number
-        # Durable hint shares the canonical owner transaction. No Qoyod
-        # collection may be written through a restricted operational DB.
-        merged['qoyod_followup_dirty'] = True
-        merged['qoyod_followup_revision'] = uuid.uuid4().hex
         if raw is not None:
             # Keep archived payloads and richer product options. Current
             # shipping is projected separately from this source history.
@@ -1072,6 +1081,17 @@ async def _upsert_order(db, user_id: str, order_number: str, incoming: dict,
             else:
                 raws[source] = raw
             merged["raw_by_source"] = raws
+        if existing_only and (existing.get("g47_salla_snapshot") or {}).get("component_pending") is False:
+            # Re-reading unchanged source evidence is not another order event.
+            # Retain the original audit dates and derived accounting markers.
+            observational = {"updated_at", "data_sources", "last_salla_direct_sync_at",
+                             "last_source", "updated_by_source"}
+            if ({key: value for key, value in merged.items() if key not in observational}
+                    == {key: value for key, value in existing.items() if key not in observational}):
+                return {"created": False, "unchanged": True, "doc": existing}
+        # Changed source facts keep the established accounting follow-up hint.
+        merged['qoyod_followup_dirty'] = True
+        merged['qoyod_followup_revision'] = uuid.uuid4().hex
         if not existing:
             merged["received_at"] = _now()
         fenced_selector = dict(selector)
@@ -1102,6 +1122,7 @@ async def _upsert_order(db, user_id: str, order_number: str, incoming: dict,
             order_number=order_number,
             order_doc=merged,
             source=source,
+            existing_only=existing_only,
         )
     except Exception as exc:
         logger.warning(

@@ -85,12 +85,15 @@ HISTORICAL_ABANDONED_CART_STOP_REASON = (
 logger = logging.getLogger(__name__)
 _MANUAL_ORDER_SYNC_TASKS: dict[str, asyncio.Task] = {}
 _ORDER_SYNC_LEASE_SECONDS = 30 * 60
+_MANUAL_SYNC_TIMEOUT_SECONDS = 20 * 60
 
 
-async def _acquire_order_sync_lease(db, user_id: str) -> tuple[Optional[str], Optional[dict]]:
+async def _acquire_order_sync_lease(
+    db, user_id: str, *, lease_token: Optional[str] = None,
+) -> tuple[Optional[str], Optional[dict]]:
     now = datetime.now(timezone.utc)
     lease_id = f"salla-orders:{user_id}"
-    lease_token = secrets.token_urlsafe(18)
+    lease_token = lease_token or secrets.token_urlsafe(18)
     try:
         lease = await db.salla_sync_leases.find_one_and_update(
             {
@@ -128,6 +131,36 @@ async def _release_order_sync_lease(db, user_id: str, lease_token: str) -> None:
         },
         {"$set": {"lease_until": datetime.now(timezone.utc)}, "$unset": {"log_id": ""}},
     )
+
+
+async def _acquire_salla_sync_lease(db, user_id: str) -> tuple[Optional[str], Optional[dict]]:
+    """Exclude both current syncs and an old catalogue worker during rollout.
+
+    Pick the token before any write so an ambiguous database failure can release
+    this attempt's claims without releasing work owned by another process.
+    """
+    token = secrets.token_urlsafe(18)
+    try:
+        shared, active = await _acquire_order_sync_lease(db, user_id, lease_token=token)
+        if not shared:
+            return None, active
+        legacy, active = await _acquire_order_sync_lease(
+            db, f"{user_id}:catalogue", lease_token=token,
+        )
+        if not legacy:
+            await _release_order_sync_lease(db, user_id, token)
+            return None, active
+        return token, None
+    except BaseException:
+        await _release_salla_sync_lease(db, user_id, token)
+        raise
+
+
+async def _release_salla_sync_lease(db, user_id: str, lease_token: str) -> None:
+    try:
+        await _release_order_sync_lease(db, f"{user_id}:catalogue", lease_token)
+    finally:
+        await _release_order_sync_lease(db, user_id, lease_token)
 
 
 async def close_running_historical_cart_imports(
@@ -219,7 +252,7 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
     ) -> None:
         task_key = str(user_id)
         try:
-            await run_orders_sync(
+            await asyncio.wait_for(run_orders_sync(
                 db,
                 task_key,
                 from_date=from_date,
@@ -227,7 +260,7 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
                 updated_since_hours=updated_since_hours,
                 log_id=log_id,
                 recover_marketing_attribution=recover_marketing_attribution,
-            )
+            ), timeout=_MANUAL_SYNC_TIMEOUT_SECONDS)
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -238,7 +271,7 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
             )
         finally:
             try:
-                await _release_order_sync_lease(db, task_key, lease_token)
+                await _release_salla_sync_lease(db, task_key, lease_token)
             finally:
                 current = _MANUAL_ORDER_SYNC_TASKS.get(task_key)
                 if current is asyncio.current_task():
@@ -262,7 +295,7 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
         STRATEGY_SIGNATURE,
         STRATEGY_TOKEN,
         _extract_provided_token,
-        dispatch_event,
+        accept_verified_event,
         get_webhook_secret,
         resolve_strategy,
         verify_signature,
@@ -351,10 +384,27 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
                 detail={"code": "INVALID_JSON", "message": str(e)},
             )
 
-        # 4. Dispatch. Unknown events return 200 (Salla will keep
-        #    retrying on non-2xx — so we MUST 200 anything we don't
-        #    care about to avoid retry storms).
-        result = await dispatch_event(db, body)
+        if not isinstance(body, dict) or not isinstance(body.get("event"), str):
+            raise HTTPException(status_code=400, detail={"code": "INVALID_EVENT_BODY"})
+
+        # 4. Persist first, then ACK. A failed durable write must remain
+        # retryable at Salla; acknowledging it would lose the event.
+        from .webhook_inbox import WebhookInboxInvalidEvent
+        try:
+            result = await accept_verified_event(db, body)
+        except WebhookInboxInvalidEvent as exc:
+            code = str(exc)
+            raise HTTPException(
+                status_code=413 if code == "salla_webhook_payload_too_large" else 400,
+                detail={"code": code},
+            ) from None
+        except HTTPException:
+            raise
+        except Exception as exc:
+            _log.warning("easy_mode.accept_failed error_type=%s", type(exc).__name__)
+            raise HTTPException(
+                status_code=503, detail={"code": "SALLA_EVENT_ACCEPTANCE_UNAVAILABLE"},
+            ) from None
         _log.info(
             "easy_mode.dispatched strategy=%s event=%s stored=%s http_status=200",
             strategy,
@@ -699,7 +749,7 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
             }},
         )
 
-        lease_token, active = await _acquire_order_sync_lease(db, user_id)
+        lease_token, active = await _acquire_salla_sync_lease(db, user_id)
         if not lease_token:
             return {
                 "ok": True,
@@ -718,7 +768,7 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
                 {"$set": {"log_id": log_id}},
             )
         except Exception:
-            await _release_order_sync_lease(db, user_id, lease_token)
+            await _release_salla_sync_lease(db, user_id, lease_token)
             raise
         try:
             task = asyncio.create_task(
@@ -745,19 +795,32 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
                     "last_error": "failed_to_schedule_background_sync",
                 }},
             )
-            await _release_order_sync_lease(db, user_id, lease_token)
+            await _release_salla_sync_lease(db, user_id, lease_token)
             raise
         return {"ok": True, "accepted": True, "log_id": log_id}
 
     @router.post("/sync/products")
     async def sync_products(user: dict = Depends(current_user)):
+        user_id = str(user["id"])
+        lease_token, _ = await _acquire_salla_sync_lease(db, user_id)
+        if not lease_token:
+            raise HTTPException(status_code=409, detail={
+                "code": "SALLA_SYNC_ALREADY_RUNNING",
+                "message": "توجد مزامنة سلة قيد التنفيذ. انتظر اكتمالها ثم أعد المحاولة.",
+            })
         try:
-            result = await run_products_sync(db, user["id"])
+            result = await asyncio.wait_for(
+                run_products_sync(db, user_id), timeout=_MANUAL_SYNC_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=504, detail={"code": "SALLA_SYNC_TIMEOUT"}) from None
         except SallaError as e:
             raise HTTPException(
                 status_code=e.status_code if e.status_code != 200 else 400,
                 detail={"message": str(e), "needs_reauth": e.needs_reauth},
             )
+        finally:
+            await _release_salla_sync_lease(db, user_id, lease_token)
         return {"ok": True, **result}
 
     def _public_cart_sync_log(row: Optional[dict]) -> Optional[dict]:
@@ -968,6 +1031,8 @@ async def ensure_salla_indexes(db) -> None:
     # doesn't grow forever.
     await db.salla_oauth_states.create_index("expires_at", expireAfterSeconds=0)
     await ensure_abandoned_cart_indexes(db)
+    from .webhook_inbox import ensure_indexes as ensure_webhook_inbox_indexes
+    await ensure_webhook_inbox_indexes(db)
     # Phase 2 — sync indexes
     await ensure_sync_indexes(db)
     # Warm up the credentials cache from DB so the very first OAuth

@@ -613,7 +613,8 @@ async def _resolve_salla_user_id(db: Any, merchant_id: Any) -> str | None:
         {"_id": 0, "user_id": 1},
         sort=[("updated_at", -1)],
     )
-    return _text((row or {}).get("user_id"))
+    from salla_integration.webhook_order_sync import enforce_verified_webhook_owner
+    return enforce_verified_webhook_owner(_text((row or {}).get("user_id")))
 
 
 def _salla_event_order(event_body: dict[str, Any]) -> dict[str, Any]:
