@@ -1,0 +1,47 @@
+{
+  "accepted_B_proof_path": "/workspace/scratch/ce6ef737d6c9/release-evidence/incident-recovery-ci-fff5/accepted-package-boundary-v5.json",
+  "accepted_B_proof_sha256": "09d58d1afab57d3543d3697bc23897a986cd3c3d7bbc598b65f8cc74f1619e59",
+  "deployment_git_sha": "8f1b0ddb6408781e8677212bcb8cf2d51eab42f7",
+  "deployment_tree_oid": "a8616930de7f98a43a509ff7dad287befd61ba5a",
+  "host_jobs": [
+    {
+      "all_21_steps_success": true,
+      "conclusion": "success",
+      "id": 132865348408,
+      "name": "Emergent Host Node 24.19.0 clean-clone adapter rehearsal"
+    },
+    {
+      "all_21_steps_success": true,
+      "conclusion": "success",
+      "id": 132865348483,
+      "name": "Emergent Host Node 20.20.2 clean-clone adapter rehearsal"
+    }
+  ],
+  "hosts": [
+    {
+      "adapter_without_git_confirmed": true,
+      "artifact_id": 14169021576,
+      "evidence_zip_bytes": 46219,
+      "evidence_zip_sha256": "1fd3fb427d2e34fc544aba8be5495c4d9bfb971e205d5c9f03b8c5aa683e6212",
+      "exact_accepted_B_bytes": true,
+      "host": "20.20.2",
+      "package_proof_bytes": 1278,
+      "package_proof_sha256": "09d58d1afab57d3543d3697bc23897a986cd3c3d7bbc598b65f8cc74f1619e59"
+    },
+    {
+      "adapter_without_git_confirmed": true,
+      "artifact_id": 14168272884,
+      "evidence_zip_bytes": 46229,
+      "evidence_zip_sha256": "aa2941d86c8bf0fe8df09728055ac89b4602845da5105cc12409904fd12ee8b9",
+      "exact_accepted_B_bytes": true,
+      "host": "24.19.0",
+      "package_proof_bytes": 1278,
+      "package_proof_sha256": "09d58d1afab57d3543d3697bc23897a986cd3c3d7bbc598b65f8cc74f1619e59"
+    }
+  ],
+  "readiness_run_id": 43731605823,
+  "result": "PASS",
+  "runtime_release_id": "rg5-144ce747d2042279a6d9a86cb338a133bd0a7e05237f96b22331b905ce083cf3",
+  "scope": "Small M proof binding only; full B artifact comparison retained unchanged. No M generated archive duplication or source access.",
+  "source_git_sha": "2896f97bb3ffe5c919ade61a4f60e551a7a49162"
+}

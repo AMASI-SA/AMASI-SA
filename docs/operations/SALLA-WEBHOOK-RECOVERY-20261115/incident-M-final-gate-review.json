@@ -1,0 +1,148 @@
+{
+  "accepted_package_proof_sha256": "09d58d1afab57d3543d3697bc23897a986cd3c3d7bbc598b65f8cc74f1619e59",
+  "all_required_runs_first_attempt_success": true,
+  "both_M_raw_package_proofs_exact_accepted_B": true,
+  "check_run_counts": {
+    "failure": 0,
+    "pending": 0,
+    "success": 11
+  },
+  "deployment_git_sha": "8f1b0ddb6408781e8677212bcb8cf2d51eab42f7",
+  "deployment_tree_oid": "a8616930de7f98a43a509ff7dad287befd61ba5a",
+  "exact_M_check_runs": [
+    {
+      "conclusion": "success",
+      "head_sha": "8f1b0ddb6408781e8677212bcb8cf2d51eab42f7",
+      "id": 132866015221,
+      "name": "Emergent manual redeploy required",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "head_sha": "8f1b0ddb6408781e8677212bcb8cf2d51eab42f7",
+      "id": 132865348483,
+      "name": "Emergent Host Node 20.20.2 clean-clone adapter rehearsal",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "head_sha": "8f1b0ddb6408781e8677212bcb8cf2d51eab42f7",
+      "id": 132865348408,
+      "name": "Emergent Host Node 24.19.0 clean-clone adapter rehearsal",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "head_sha": "8f1b0ddb6408781e8677212bcb8cf2d51eab42f7",
+      "id": 132865059615,
+      "name": "Host Node 20.20.2 engine and dispatcher contract",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "head_sha": "8f1b0ddb6408781e8677212bcb8cf2d51eab42f7",
+      "id": 132865059532,
+      "name": "Backend preflight",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "head_sha": "8f1b0ddb6408781e8677212bcb8cf2d51eab42f7",
+      "id": 132865059498,
+      "name": "Host Node 24.19.0 engine and dispatcher contract",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "head_sha": "8f1b0ddb6408781e8677212bcb8cf2d51eab42f7",
+      "id": 132865059357,
+      "name": "Backend security contracts",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "head_sha": "8f1b0ddb6408781e8677212bcb8cf2d51eab42f7",
+      "id": 132865059298,
+      "name": "Frontend build",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "head_sha": "8f1b0ddb6408781e8677212bcb8cf2d51eab42f7",
+      "id": 132865059034,
+      "name": "Frontend dependency and CSP checks",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "head_sha": "8f1b0ddb6408781e8677212bcb8cf2d51eab42f7",
+      "id": 132865058823,
+      "name": "CodeQL (javascript-typescript)",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "head_sha": "8f1b0ddb6408781e8677212bcb8cf2d51eab42f7",
+      "id": 132865058686,
+      "name": "CodeQL (python)",
+      "status": "completed"
+    }
+  ],
+  "host_proof_binding_report": "/workspace/scratch/ce6ef737d6c9/release-evidence/incident-recovery-ci-8f1b/M-host-proof-binding.json",
+  "host_proof_binding_report_sha256": "3be5bd094d0138477d824b147bdc665a91fcbe51a4c3a1597e1458eac9b0241e",
+  "host_rehearsals": [
+    {
+      "all_21_steps_success": true,
+      "conclusion": "success",
+      "id": 132865348408,
+      "name": "Emergent Host Node 24.19.0 clean-clone adapter rehearsal"
+    },
+    {
+      "all_21_steps_success": true,
+      "conclusion": "success",
+      "id": 132865348483,
+      "name": "Emergent Host Node 20.20.2 clean-clone adapter rehearsal"
+    }
+  ],
+  "observed_at": "2026-11-15T15:54:30.107939+00:00",
+  "required_push_workflows": [
+    {
+      "conclusion": "success",
+      "event": "push",
+      "head_sha": "8f1b0ddb6408781e8677212bcb8cf2d51eab42f7",
+      "head_tree": "a8616930de7f98a43a509ff7dad287befd61ba5a",
+      "id": 43731605823,
+      "name": "Mezan Release Readiness",
+      "run_attempt": 1,
+      "status": "completed",
+      "updated_at": "2026-11-15T15:48:28Z"
+    },
+    {
+      "conclusion": "success",
+      "event": "push",
+      "head_sha": "8f1b0ddb6408781e8677212bcb8cf2d51eab42f7",
+      "head_tree": "a8616930de7f98a43a509ff7dad287befd61ba5a",
+      "id": 43731605741,
+      "name": "Security Gate",
+      "run_attempt": 1,
+      "status": "completed",
+      "updated_at": "2026-11-15T15:47:36Z"
+    },
+    {
+      "conclusion": "success",
+      "event": "push",
+      "head_sha": "8f1b0ddb6408781e8677212bcb8cf2d51eab42f7",
+      "head_tree": "a8616930de7f98a43a509ff7dad287befd61ba5a",
+      "id": 43731605710,
+      "name": "CodeQL",
+      "run_attempt": 1,
+      "status": "completed",
+      "updated_at": "2026-11-15T15:53:04Z"
+    }
+  ],
+  "result": "PASS",
+  "reviewed_B": "fff5e81d715c6109d6e7b84cb284ec6b32c38ac1",
+  "runtime_release_id": "rg5-144ce747d2042279a6d9a86cb338a133bd0a7e05237f96b22331b905ce083cf3",
+  "scope": "Read-only exact-M CI and small proof binding. No large archive repetition, source or /app calls, CI reruns, or production mutation.",
+  "source_A": "2896f97bb3ffe5c919ade61a4f60e551a7a49162"
+}

@@ -1,0 +1,395 @@
+{
+  "accepted_host_package_proof": {
+    "host20_evidence_artifact": 14168034375,
+    "host20_output_artifact": 14168596548,
+    "host24_evidence_artifact": 14168029373,
+    "host24_output_artifact": 14169040044,
+    "proof": "accepted-package-boundary-v5.json",
+    "proof_bytes": 1278,
+    "proof_sha256": "09d58d1afab57d3543d3697bc23897a986cd3c3d7bbc598b65f8cc74f1619e59",
+    "report": "B-independent-artifact-review.json",
+    "report_sha256": "a3b923410d5713674f877246a1bb39d89994fba2b811cd1fafa8eeae8d104b3d",
+    "review_ownership": "Complete artifact-byte/mode/member and reconstructed package-tree review performed by independent frontend reviewer; root separately reviews before execution."
+  },
+  "additional_actual_logs": {
+    "balance_backend": {
+      "job_id": 132862653774,
+      "no_skips_gate": "PASS",
+      "passed": 4799,
+      "run_id": 43730833073,
+      "shipping_compatibility_passed": 16,
+      "shipping_compatibility_subtests": 18
+    },
+    "stock": {
+      "job_id": 132862653262,
+      "no_skips_gate": "PASS",
+      "passed": 4513,
+      "run_id": 43730833079,
+      "subtests_passed": 7
+    }
+  },
+  "additional_scope_skipped_workflow": {
+    "conclusion": "skipped",
+    "id": 43730833261,
+    "name": "TikTok Creator Release Candidate",
+    "reason": "Job explicitly requires github.head_ref == codex/tiktok-content-ci-20261011; current incident-recovery branch is outside that scope.",
+    "source_file": ".github/workflows/tiktok-content-release-candidate.yml"
+  },
+  "all_applicable_workflows_success": true,
+  "all_first_attempt": true,
+  "applicable_workflow_count": 16,
+  "checks": {
+    "conditional_skips": 6,
+    "failure": 0,
+    "note": "Conditional job skips are manual publication, four unrelated Snapchat jobs and the branch-scoped TikTok candidate. Both actual Host clean-clone rehearsal jobs succeeded. No Salla acceptance test was skipped.",
+    "pending": 0,
+    "skipped_checks": [
+      {
+        "id": 132863584406,
+        "name": "Emergent manual redeploy required"
+      },
+      {
+        "id": 132862703709,
+        "name": "Backend settings and zero-write regressions"
+      },
+      {
+        "id": 132862703627,
+        "name": "Frontend Snapchat settings tests and build"
+      },
+      {
+        "id": 132862697003,
+        "name": "Publication backend and existing write guards"
+      },
+      {
+        "id": 132862696987,
+        "name": "Publication frontend and existing media flow"
+      },
+      {
+        "id": 132862655479,
+        "name": "reviewed-candidate"
+      }
+    ],
+    "success": 31,
+    "total": 37
+  },
+  "exact_A_to_B_relation": {
+    "byte_identical_to_accepted_A2_candidate": true,
+    "intent_bytes": 1312444,
+    "intent_git_blob": "6458c54b6abbf2067fabea0803411732aa5c6e53",
+    "intent_sha256": "ff7f91de77d2683063d45a3dcbd729f09bdaa2dcedcabf161675b5d14a2819c2",
+    "only_changed_path": "release/release-intent-v5.json",
+    "result": "PASS",
+    "sole_parent": "2896f97bb3ffe5c919ade61a4f60e551a7a49162"
+  },
+  "frontend": {
+    "actual_job_log_inspected": true,
+    "job_id": 132862653791,
+    "new_recovery_interaction_cases": 38,
+    "new_suite": "src/pages/SallaWebhookRecovery.test.jsx",
+    "page_sha256": "5b0b8978a16aedb59f435ccb843c9601e35b951b7777669dd43745dd6d172c4b",
+    "production_audit": {
+      "critical": 0,
+      "high": 0,
+      "info": 0,
+      "low": 0,
+      "moderate": 0
+    },
+    "run_id": 43730833060,
+    "sanitized_actual_log_excerpt": "2026-11-15T15:36:35.5953154Z   ref: fff5e81d715c6109d6e7b84cb284ec6b32c38ac1\n2026-11-15T15:36:38.7901273Z HEAD is now at fff5e81 Freeze reviewed v5 release intent for Salla incident recovery\n2026-11-15T15:37:41.3475750Z PASS src/pages/SallaWebhookRecovery.test.jsx\n2026-11-15T15:38:32.2111340Z Test Suites: 403 passed, 403 total\n2026-11-15T15:38:32.2111648Z Tests:       3848 passed, 3848 total\n2026-11-15T15:38:33.2567888Z {\"type\":\"auditSummary\",\"data\":{\"vulnerabilities\":{\"info\":0,\"low\":0,\"moderate\":0,\"high\":0,\"critical\":0},\"dependencies\":409,\"devDependencies\":0,\"optionalDependencies\":0,\"totalDependencies\":409}}\n2026-11-15T15:38:42.4562970Z Emergent edge security manifest passed.\n",
+    "sanitized_actual_log_excerpt_sha256": "5cceb6a72588c44659fb7094d86c5001adf256c62f4c042e08ce2bbbf7d427bb",
+    "security_manifest": "PASS",
+    "source_git_sha": "fff5e81d715c6109d6e7b84cb284ec6b32c38ac1",
+    "suites_passed": 403,
+    "suites_total": 403,
+    "test_sha256": "e59cd962ad6ec15254afceae8cfb380fc55ee7cebd42b58a74fc72cd908a37d2",
+    "tests_passed": 3848,
+    "tests_total": 3848
+  },
+  "intent_commit": "fff5e81d715c6109d6e7b84cb284ec6b32c38ac1",
+  "intent_tree_oid": "a8616930de7f98a43a509ff7dad287befd61ba5a",
+  "observed_at_utc": "2026-11-15 15:43:41 UTC",
+  "prior_rejected_A_receipt": "See ../incident-recovery-ci-2896/A2-independent-ci-gate-review.json for preserved original fce21070 Security Gate harness failure and ordinary fast-forward correction. No original failing attempt was rerun or concealed.",
+  "production_base_git_sha": "d7facb0ff4e2e30edbabf012b3865155d5902a85",
+  "result": "PASS",
+  "review_scope": "Independent exact-B source relation and CI acceptance. Does not establish actual-M deployment, published runtime verification, or incident backfill completion.",
+  "reviewer_side_effects": "No CI reruns/cancels, tests, source edits, production/browser/app/lease calls. Parent-authorized sanitized evidence report only.",
+  "salla": {
+    "actual_artifact_bytes_verified": true,
+    "archive_bytes": 8364,
+    "archive_sha256": "b7f3126f16837256ffabbdd27a78aa3c953bdd338edbd427a3cedbe78bebb5f6",
+    "artifact_id": 14167904576,
+    "errors": 0,
+    "failures": 0,
+    "job_id": 132862653795,
+    "junit_entries": 428,
+    "passed": 409,
+    "real_mongo_incident_cases": [
+      {
+        "name": "test_batch_commit_preserves_identity_payload_history_and_grants_once",
+        "result": "passed",
+        "seconds": "0.269"
+      },
+      {
+        "name": "test_changed_current_owner_refuses_before_grant",
+        "result": "passed",
+        "seconds": "0.249"
+      },
+      {
+        "name": "test_concurrent_ingress_after_snapshot_aborts_prior_row_changes",
+        "result": "passed",
+        "seconds": "0.247"
+      },
+      {
+        "name": "test_concurrent_same_document_rebind_conflicts_and_rolls_back_grants",
+        "result": "passed",
+        "seconds": "0.241"
+      },
+      {
+        "name": "test_expiry_before_final_write_fence_rolls_back_entire_batch",
+        "result": "passed",
+        "seconds": "0.244"
+      },
+      {
+        "name": "test_live_worker_lease_is_never_overridden",
+        "result": "passed",
+        "seconds": "0.239"
+      },
+      {
+        "name": "test_newer_binding_committed_during_snapshot_is_seen_by_fresh_final_check",
+        "result": "passed",
+        "seconds": "0.247"
+      },
+      {
+        "name": "test_only_existing_worker_processes_grant_and_keeps_done_tombstone",
+        "result": "passed",
+        "seconds": "0.284"
+      },
+      {
+        "name": "test_real_query_excludes_every_nonincident_or_unsafe_state_and_never_writes",
+        "result": "passed",
+        "seconds": "0.255"
+      },
+      {
+        "name": "test_runtime_change_before_commit_rolls_back_entire_batch",
+        "result": "passed",
+        "seconds": "0.250"
+      },
+      {
+        "name": "test_stale_delivery_metadata_payload_or_extra_fields_refuse_whole_batch",
+        "result": "passed",
+        "seconds": "0.305"
+      },
+      {
+        "name": "test_successor_epoch_is_not_modified_or_released",
+        "result": "passed",
+        "seconds": "0.239"
+      }
+    ],
+    "replica_set": "Disposable loopback MongoDB 7.0.15",
+    "run_id": 43730833244,
+    "skipped": 0,
+    "source_file_values": [
+      "fff5e81d715c6109d6e7b84cb284ec6b32c38ac1",
+      "a8616930de7f98a43a509ff7dad287befd61ba5a"
+    ],
+    "subtests_passed": 19,
+    "xml_sha256": "472d68b73d891f953f26fba92956cad1a023df61b30ea7d00539dbe416410569"
+  },
+  "schema_version": 1,
+  "source_git_sha": "2896f97bb3ffe5c919ade61a4f60e551a7a49162",
+  "source_tree_oid": "eb6973e7b7b2569c9da27d60e489ee32fafa27ed",
+  "workflows": [
+    {
+      "attempt": 1,
+      "conclusion": "success",
+      "created_at": "2026-11-15T15:36:32Z",
+      "event": "pull_request",
+      "head_sha": "fff5e81d715c6109d6e7b84cb284ec6b32c38ac1",
+      "id": 43730833169,
+      "name": "Auth Passkey Security",
+      "status": "completed",
+      "updated_at": "2026-11-15T15:37:30Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43730833169"
+    },
+    {
+      "attempt": 1,
+      "conclusion": "success",
+      "created_at": "2026-11-15T15:36:32Z",
+      "event": "pull_request",
+      "head_sha": "fff5e81d715c6109d6e7b84cb284ec6b32c38ac1",
+      "id": 43730833163,
+      "name": "CodeQL",
+      "status": "completed",
+      "updated_at": "2026-11-15T15:43:23Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43730833163"
+    },
+    {
+      "attempt": 1,
+      "conclusion": "success",
+      "created_at": "2026-11-15T15:36:32Z",
+      "event": "pull_request",
+      "head_sha": "fff5e81d715c6109d6e7b84cb284ec6b32c38ac1",
+      "id": 43730833206,
+      "name": "Employees V2 Foundation",
+      "status": "completed",
+      "updated_at": "2026-11-15T15:37:53Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43730833206"
+    },
+    {
+      "attempt": 1,
+      "conclusion": "success",
+      "created_at": "2026-11-15T15:36:32Z",
+      "event": "pull_request",
+      "head_sha": "fff5e81d715c6109d6e7b84cb284ec6b32c38ac1",
+      "id": 43730833155,
+      "name": "Fulfillment V2",
+      "status": "completed",
+      "updated_at": "2026-11-15T15:37:39Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43730833155"
+    },
+    {
+      "attempt": 1,
+      "conclusion": "success",
+      "created_at": "2026-11-15T15:36:32Z",
+      "event": "pull_request",
+      "head_sha": "fff5e81d715c6109d6e7b84cb284ec6b32c38ac1",
+      "id": 43730833069,
+      "name": "G47 Focused Integration",
+      "status": "completed",
+      "updated_at": "2026-11-15T15:40:06Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43730833069"
+    },
+    {
+      "attempt": 1,
+      "conclusion": "success",
+      "created_at": "2026-11-15T15:36:32Z",
+      "event": "pull_request",
+      "head_sha": "fff5e81d715c6109d6e7b84cb284ec6b32c38ac1",
+      "id": 43730833080,
+      "name": "Mezan Release Readiness",
+      "status": "completed",
+      "updated_at": "2026-11-15T15:39:53Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43730833080"
+    },
+    {
+      "attempt": 1,
+      "conclusion": "success",
+      "created_at": "2026-11-15T15:36:32Z",
+      "event": "pull_request",
+      "head_sha": "fff5e81d715c6109d6e7b84cb284ec6b32c38ac1",
+      "id": 43730833198,
+      "name": "MZ2 Track F native shipping",
+      "status": "completed",
+      "updated_at": "2026-11-15T15:40:03Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43730833198"
+    },
+    {
+      "attempt": 1,
+      "conclusion": "success",
+      "created_at": "2026-11-15T15:36:32Z",
+      "event": "pull_request",
+      "head_sha": "fff5e81d715c6109d6e7b84cb284ec6b32c38ac1",
+      "id": 43730833073,
+      "name": "Operational Balance Web",
+      "status": "completed",
+      "updated_at": "2026-11-15T15:41:44Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43730833073"
+    },
+    {
+      "attempt": 1,
+      "conclusion": "success",
+      "created_at": "2026-11-15T15:36:32Z",
+      "event": "pull_request",
+      "head_sha": "fff5e81d715c6109d6e7b84cb284ec6b32c38ac1",
+      "id": 43730833079,
+      "name": "Operational Stock Eligibility",
+      "status": "completed",
+      "updated_at": "2026-11-15T15:42:03Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43730833079"
+    },
+    {
+      "attempt": 1,
+      "conclusion": "success",
+      "created_at": "2026-11-15T15:36:32Z",
+      "event": "pull_request",
+      "head_sha": "fff5e81d715c6109d6e7b84cb284ec6b32c38ac1",
+      "id": 43730833207,
+      "name": "Production Mezan2 Ad Cost Settings",
+      "status": "completed",
+      "updated_at": "2026-11-15T15:37:44Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43730833207"
+    },
+    {
+      "attempt": 1,
+      "conclusion": "success",
+      "created_at": "2026-11-15T15:36:32Z",
+      "event": "pull_request",
+      "head_sha": "fff5e81d715c6109d6e7b84cb284ec6b32c38ac1",
+      "id": 43730833072,
+      "name": "Qoyod Payment Freshness",
+      "status": "completed",
+      "updated_at": "2026-11-15T15:36:59Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43730833072"
+    },
+    {
+      "attempt": 1,
+      "conclusion": "success",
+      "created_at": "2026-11-15T15:36:32Z",
+      "event": "pull_request",
+      "head_sha": "fff5e81d715c6109d6e7b84cb284ec6b32c38ac1",
+      "id": 43730833142,
+      "name": "Salla Abandoned Cart Webhooks",
+      "status": "completed",
+      "updated_at": "2026-11-15T15:37:00Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43730833142"
+    },
+    {
+      "attempt": 1,
+      "conclusion": "success",
+      "created_at": "2026-11-15T15:36:32Z",
+      "event": "pull_request",
+      "head_sha": "fff5e81d715c6109d6e7b84cb284ec6b32c38ac1",
+      "id": 43730833244,
+      "name": "Salla durable ingress and daily refresh",
+      "status": "completed",
+      "updated_at": "2026-11-15T15:38:07Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43730833244"
+    },
+    {
+      "attempt": 1,
+      "conclusion": "success",
+      "created_at": "2026-11-15T15:36:32Z",
+      "event": "pull_request",
+      "head_sha": "fff5e81d715c6109d6e7b84cb284ec6b32c38ac1",
+      "id": 43730833060,
+      "name": "Security Gate",
+      "status": "completed",
+      "updated_at": "2026-11-15T15:38:45Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43730833060"
+    },
+    {
+      "attempt": 1,
+      "conclusion": "success",
+      "created_at": "2026-11-15T15:36:32Z",
+      "event": "pull_request",
+      "head_sha": "fff5e81d715c6109d6e7b84cb284ec6b32c38ac1",
+      "id": 43730833099,
+      "name": "Snapchat Direct Active Publication",
+      "status": "completed",
+      "updated_at": "2026-11-15T15:36:42Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43730833099"
+    },
+    {
+      "attempt": 1,
+      "conclusion": "success",
+      "created_at": "2026-11-15T15:36:32Z",
+      "event": "pull_request",
+      "head_sha": "fff5e81d715c6109d6e7b84cb284ec6b32c38ac1",
+      "id": 43730833109,
+      "name": "Snapchat Settings Management V2",
+      "status": "completed",
+      "updated_at": "2026-11-15T15:36:43Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43730833109"
+    }
+  ]
+}

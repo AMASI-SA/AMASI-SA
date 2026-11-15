@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/salla-webhook-release-evidence-20261115",
   "base_commit": "9afb38cf0dc0d8e8cd887f2c2cdb4a6be5a7ca68",
-  "status": "Corrective PR1940 production publication in progress under its exact prepared lease; incident recovery follow-up in development",
+  "status": "PR1940 verified and live new-order/status sync restored; PR1942 actual-M gates and original-workspace rehearsal passed; configuring scoped recovery before guarded publication.",
   "requested_behavior": [
     "Repair the blocking verified webhook path and duplicate processing identified by platform support",
     "One scheduled refresh at 10:00 Asia/Riyadh over a fixed preceding 24-hour window",
@@ -217,7 +217,7 @@
   },
   "continuation": {
     "ledger": "Issue #1006 has reached 2500 comments; use this status document and the task PR as the durable fallback",
-    "next": "Complete independent minimal fix and canonical production-composition failure/pass regression, checkpoint source follow-up/PR, require exact-source CI and v5 review before corrected publication. Existing official verify checks identity only and may close lease; this is not functional task completion. Other PR1936 has acknowledged inherited bug and waits. No manual sync, synthetic production event, broad retry reset, deletion, or credential extraction.",
+    "next": "Activate the default-disabled incident switch through normal platform configuration, prepare exact PR1942 M once, prepublish, publish once, and official verify. Then fixed-window metadata dry-run and bounded grant; disable maintenance and verify worker completion plus the seven reported order IDs.",
     "caveats": [
       "Queue recovery is at least once after process death between business write and queue settlement; existing source and outbox idempotency remain authoritative",
       "Do not invent updated_at_gt support: official Salla List Orders documentation and existing repository contract do not establish it",
@@ -237,7 +237,7 @@
       "approved_approach": "Use protected default-disabled in-application maintenance, dry-run metadata plan first, worker lock, transaction and one-time grant",
       "branch": "codex/salla-incident-recovery-20261115",
       "base": "d7facb0ff4e2e30edbabf012b3865155d5902a85",
-      "status": "Backend/UI/tests in development in isolated worktree; no data repair or publication yet",
+      "status": "PR1942 merged; all A/B/M gates passed; original /app preserving rehearsal succeeded. No production grant yet.",
       "latest_user_report": "Recent orders and status changes stopped in prior deployment; confirm supplied missing-order samples after corrected admission and bounded recovery"
     }
   },
@@ -270,7 +270,7 @@
   },
   "release_branch": "codex/salla-webhook-recovery-release-20261115",
   "evidence_only": true,
-  "checkpoint_at": "2026-11-15T15:47:00Z",
+  "checkpoint_at": "2026-11-15T15:57:30Z",
   "production_source_branch_changed": true,
   "production_runtime_changed": true,
   "operator": {
@@ -363,7 +363,7 @@
   },
   "functional_blocker": {
     "reason": "production capture wrapper missing raise_on_processing_error argument",
-    "status": "source-confirmed; independent reproduction in progress",
+    "status": "Capture-contract defect fixed and officially verified in PR1940; 47 incident events remain quarantined pending PR1942 one-time budget grant.",
     "queue_samples": [
       {
         "at": "2026-11-15T14:10:45.950034Z",
@@ -382,15 +382,36 @@
     "import_order": "canonical server -> package attach_salla_routes -> install cart wrapper -> core route factory -> easy_mode import of patched capture",
     "test_gap": "existing ingress/paused HTTP tests import core route factory and easy_mode directly; empty canonical worker smoke never dispatches business event",
     "latest_queue": {
-      "generated_at": "2026-11-15T15:13:12.717181+00:00",
-      "pending": 0,
-      "processing": 0,
-      "retry": 15,
-      "quarantined": 45,
-      "backlog": 60,
-      "oldest_unfinished_at": "2026-11-15T14:10:37.125000+00:00",
-      "oldest_unfinished_age_seconds": 3755,
-      "expired_processing_count": 0
+      "generated_at": "2026-11-15T15:30:40.253386+00:00",
+      "queue": {
+        "pending": 0,
+        "processing": 0,
+        "retry": 0,
+        "quarantined": 47,
+        "backlog": 47,
+        "expired_processing_count": 0
+      },
+      "orders": [
+        {
+          "event": "order.created",
+          "at": "2026-11-15T15:29:26.511000+00:00",
+          "order_number": "300241904",
+          "synced": true
+        },
+        {
+          "event": "order.updated",
+          "at": "2026-11-15T15:27:28.097000+00:00",
+          "order_number": "299139489",
+          "synced": true
+        },
+        {
+          "event": "order.status.updated",
+          "at": "2026-11-15T15:29:25.158000+00:00",
+          "order_number": "300241904",
+          "synced": true
+        }
+      ],
+      "backfill_complete": false
     },
     "first_seen_created_at": "2026-11-15T14:10:37.125000+00:00",
     "earliest_nominal_attempt_limit_at": "2026-11-15T14:31:47Z",
@@ -874,7 +895,7 @@
           "base": "d7facb0ff4e2e30edbabf012b3865155d5902a85"
         }
       },
-      "next": "B CI and both host package artifacts, then normal merge + M gates + preserving actual rehearsal; no production grant yet",
+      "next": "Normal platform flag configuration, then official prepare/prepublish/one publication/verify. Functional acceptance and maintenance shutdown still open.",
       "B_all_applicable_workflows_success": true,
       "B_expected_unrelated_scope_skip": "TikTok Creator Release Candidate",
       "B_package_acceptance": {
@@ -892,14 +913,47 @@
       },
       "merge": "8f1b0ddb6408781e8677212bcb8cf2d51eab42f7",
       "merge_tree": "a8616930de7f98a43a509ff7dad287befd61ba5a",
-      "M_gates": "pending",
+      "M_gates": {
+        "status": "PASS",
+        "attempt": 1,
+        "checks_success": 11,
+        "pending": 0,
+        "failed": 0,
+        "workflows": {
+          "security": 43731605741,
+          "readiness": 43731605823,
+          "codeql": 43731605710
+        },
+        "report_sha256": "e491db642fcfc917f88348071b4af234c5bd0fa6d70b0aa50593ebd757614377",
+        "proof_binding_sha256": "3be5bd094d0138477d824b147bdc665a91fcbe51a4c3a1597e1458eac9b0241e"
+      },
       "operator": {
         "sha256": "b9cb6b3eedef177bff5dc7d78ea824875a6fc6ffc69a7ea1f72ad05c9c40bab1",
         "independent_review": "PASS",
         "root_review": "PASS",
-        "executed": false,
-        "previous_manifest_sha256": "ce9ba44e9e28d52a70912de3b8bc6922fbce588af5eafe8035ce1528b4237b90"
-      }
+        "executed": true,
+        "previous_manifest_sha256": "ce9ba44e9e28d52a70912de3b8bc6922fbce588af5eafe8035ce1528b4237b90",
+        "staged_from_evidence_commit": "d26fd31bf3365a7115df11b9afb5eebb31309a70",
+        "started_at": "2026-11-15T15:54:55.057867+00:00",
+        "pid": 89005,
+        "result": {
+          "ok": true,
+          "finished_at": "2026-11-15T15:56:07.811835+00:00",
+          "untracked_count": 120,
+          "untracked_preserved": true,
+          "previous_release_evidence_preserved": true,
+          "old_bytecode_quarantine_preserved": true,
+          "package_proof_matches_accepted_B": true,
+          "active_lease": false,
+          "append_only_before_bytes": 53234,
+          "append_only_after_bytes": 53234
+        },
+        "stderr_bytes": 0
+      },
+      "B_final_ci_report_sha256": "ad343f7ce061bb511337badff4ab284374f3bae9162e7a2fe5ae5b57a4b54391",
+      "shared_app_changed": true,
+      "prepared": false,
+      "published": false
     },
     "official_verify": {
       "verified": true,
