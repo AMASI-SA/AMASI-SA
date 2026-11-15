@@ -94,6 +94,13 @@ async def test_separates_accounts_with_one_small_owner_scoped_catalog_read():
     assert snapshot["timezone"] == "Asia/Riyadh"
     assert snapshot["source_only"] is True
     assert snapshot["coverage"]["unassigned_orders"] == 0
+    assert snapshot["direct_result"]["provider"] == "direct"
+    assert snapshot["direct_result"]["ad_spend_applicable"] is False
+    assert snapshot["direct_result"]["salla_orders"] == 1
+    assert snapshot["direct_result"]["salla_sales_sar"] == 999
+    assert snapshot["daily_total"]["cohort_basis"] == "executive_filtered_orders"
+    assert snapshot["daily_total"]["salla_orders"] == 4
+    assert snapshot["daily_total"]["salla_sales_sar"] == 1604
     assert len(db.catalog.reads) == 1
     read = db.catalog.reads[0]
     assert read["query"] == {"user_id": OWNER, "provider": "snapchat_ads", "entity_type": "campaign"}
@@ -161,6 +168,48 @@ async def test_known_foreign_account_is_excluded_without_making_selected_totals_
     assert snapshot["coverage"]["unassigned_orders"] == 0
     assert rows_by_id(snapshot)["usd"]["salla_sales_sar"] == 60
     assert rows_by_id(snapshot)["sar"]["salla_orders"] == 0
+    assert snapshot["coverage"]["unrepresented_orders"] == 1
+    assert snapshot["direct_result"]["salla_orders"] == 0
+    assert snapshot["daily_total"]["salla_orders"] == 2
+    assert snapshot["daily_total"]["salla_sales_sar"] == 960
+
+
+@pytest.mark.asyncio
+async def test_all_order_total_includes_unassigned_and_outside_snapchat_without_relabeling_them_direct():
+    db = Db([campaign("usd", "c-usd"), campaign("sar", "c-sar"), campaign("outside", "c-outside")])
+    snapshot = await build(db, [
+        order("c-usd", 100), order("c-sar", 200),
+        order(None, 50, source_native="store"), order(None, 60, source_native=None),
+        order(None, 300), order("c-outside", 400),
+    ])
+    direct, total = snapshot["direct_result"], snapshot["daily_total"]
+    assert (direct["salla_orders"], direct["salla_sales_sar"]) == (2, 110)
+    assert direct["ad_spend_applicable"] is False
+    assert not any("spend" in key for key in direct if key != "ad_spend_applicable")
+    assert (total["salla_orders"], total["salla_sales_sar"]) == (6, 1110)
+    assert total["attribution_complete"] is True
+    assert total["cohort_basis"] == "executive_filtered_orders"
+    assert snapshot["coverage"]["unassigned_orders"] == 1
+    assert snapshot["coverage"]["outside_account_scope_orders"] == 1
+    assert snapshot["coverage"]["unrepresented_orders"] == 2
+    assert all(row["salla_orders"] is None for row in snapshot["accounts"])
+    assert sum(row["known_salla_orders"] for row in snapshot["accounts"]) == 2
+    assert len(db.catalog.reads) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("account_ids", [[], ["usd", "sar"]])
+async def test_catalog_or_accounts_unavailable_cannot_hide_total_or_convert_snapchat_to_direct(account_ids):
+    db = Db(error=True)
+    snapshot = await build(db, [order(None, 100), order(None, 40, source_native="store")], account_ids=account_ids)
+    assert snapshot["coverage"]["status"] == "unavailable"
+    assert snapshot["coverage"]["unrepresented_orders"] == 1
+    assert snapshot["direct_result"]["salla_orders"] == 1
+    assert snapshot["direct_result"]["salla_sales_sar"] == 40
+    assert snapshot["daily_total"]["salla_orders"] == 2
+    assert snapshot["daily_total"]["salla_sales_sar"] == 140
+    assert snapshot["daily_total"]["attribution_complete"] is True
+    assert len(db.catalog.reads) == (1 if account_ids else 0)
 
 
 @pytest.mark.asyncio
@@ -302,6 +351,26 @@ async def test_executive_snapshot_reuses_filtered_orders_and_its_existing_cache(
     assert cached.json()["ads_v2"]["account_results"] == snapshot
     assert len(env.reads) == 1
     assert env.calls["ads"] == 1
+
+
+@pytest.mark.asyncio
+async def test_direct_and_all_order_total_use_the_exact_filtered_executive_cohort(card_app):
+    env = card_app
+    await env.db.unified_orders.update_many({"user_id": "a"}, {"$set": {
+        "source_native": "store",
+        "order_date_raw": PARAMS["from_date"] + "T10:00:00+03:00",
+    }})
+    response = await env.client.get("/dashboard-v2/cards/executive", params=PARAMS)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    result = body["ads_v2"]["account_results"]
+    assert result["daily_total"]["salla_orders"] == body["totals"]["total_orders"] == 1
+    assert result["daily_total"]["salla_sales_sar"] == body["totals"]["total_sales"] == 100
+    assert result["direct_result"]["salla_orders"] == 1
+    assert result["direct_result"]["hover_summary"]["product_cost_sar"] == 10
+    assert [segment["direct_result"]["salla_orders"] for segment in result["segments"]] == [1, 0]
+    assert [segment["total"]["salla_orders"] for segment in result["segments"]] == [1, 0]
+    assert len(env.reads) == len(env.costs) == 1
 
 
 @pytest.mark.asyncio

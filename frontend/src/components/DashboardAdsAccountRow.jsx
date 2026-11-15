@@ -16,6 +16,7 @@ function MetricValue({ value, available, suffix = "ر.س", digits = 2, maximumDi
 }
 
 function SpendValue({ report }) {
+    if (report.adSpendApplicable === false) return <span className="font-medium text-slate-400">—</span>;
     return <span className="inline-flex flex-col items-end">
         {report.currency === "USD" && known(report.nativeSpend)
             && <bdi dir="ltr" className="text-[10px] tabular-nums">USD {number(report.nativeSpend)}</bdi>}
@@ -208,7 +209,9 @@ export default function DashboardAdsAccountRow({ label, stats = {}, fromDate, to
                     <span>العائد <MetricValue value={report.roas} suffix="×" /></span>
                 </div>
             </section>
-            <p className="mb-0 mt-2 text-[9px] leading-4 text-slate-500">التكاليف: المنتجات والشحن وعمولات طرق الدفع. صافي الأرباح = المبيعات − الصرف الإعلاني − التكاليف.</p>
+            <p className="mb-0 mt-2 text-[9px] leading-4 text-slate-500">التكاليف: المنتجات والشحن وعمولات طرق الدفع. {report.adSpendApplicable === false
+                ? "صافي الأرباح = المبيعات − التكاليف."
+                : "صافي الأرباح = المبيعات − الصرف الإعلاني − التكاليف."}</p>
             {report.provisional && report.complete && <p className="mb-0 mt-1 text-[9px] leading-4 text-amber-700">صافي الأرباح تقديري حتى اكتمال بيانات الصرف.</p>}
         </div>, document.body)}
     </>;

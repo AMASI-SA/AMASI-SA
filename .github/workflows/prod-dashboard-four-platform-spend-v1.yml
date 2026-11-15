@@ -167,6 +167,6 @@ jobs:
           grep -q 'line:Google Ads' frontend/src/components/DashboardAdsSpendCard.test.jsx
           grep -q '/integrations-v2/dashboard/ads-platform-spend/refresh' "$CLIENT"
           grep -q 'loadDashboardPlatformSpend' "$SERVICE"
-          grep -q 'سناب شات + ميتا + تيك توك + Google Ads' "$CARD"
+          grep -q 'tableProviders = \["snapchat", "google", "tiktok", "meta"\]' "$CARD"
           ! grep -q 'المصروف المحاسبي' "$CARD"
           ! grep -q 'booked_ad_expense_sar' "$CARD" "$SERVICE" "$CLIENT"

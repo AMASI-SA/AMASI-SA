@@ -88,6 +88,25 @@ test("missing profit stays unknown while explicitly known partial costs are labe
     expect(profit.textContent).not.toContain("0.00");
 });
 
+test("direct orders display no assigned advertising amount in both periods and the daily summary", () => {
+    const stats = sampleStats();
+    const direct = (row) => ({ ...row, cpa: null, profit: { ...row.profit,
+        adSpendApplicable: false, spendSar: null, knownSpendSar: null, nativeSpend: null,
+        netProfit: 300, roas: null, provisional: false } });
+    const report = { ...direct(stats), segments: stats.segments.map(direct) };
+    enter(renderRow(report, { label: "مباشر / بدون مصدر" }));
+    const popup = details();
+    expect(popup.querySelector("h3").textContent).toBe("مباشر / بدون مصدر");
+    const spendingRows = [...popup.querySelectorAll("dl > div")]
+        .filter((row) => row.querySelector("dt").textContent === "الصرف الإعلاني");
+    expect(spendingRows).toHaveLength(3);
+    spendingRows.forEach((row) => expect(row.querySelector("dd").textContent).toBe("—"));
+    const profits = [...popup.querySelectorAll("dl > div")]
+        .filter((row) => row.querySelector("dt").textContent === "صافي الأرباح");
+    profits.forEach((row) => expect(row.querySelector("dd").textContent).toBe("300.00 ر.س"));
+    expect(popup.textContent).not.toContain("USD");
+});
+
 test("midnight keeps the morning's noon boundary and source quantities retain their precision", () => {
     const stats = sampleStats();
     stats.segments[0].status = "not_started";

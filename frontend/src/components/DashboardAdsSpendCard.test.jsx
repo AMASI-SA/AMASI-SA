@@ -118,9 +118,8 @@ test("renders four original hourly provider lines for one selected day", () => {
     );
 
     expect(html).toContain("صرفيات منصات الإعلانات");
-    expect(html).toContain("سناب شات + ميتا + تيك توك + Google Ads");
     expect(html).toContain("صرفيات يوم 2026-07-15");
-    expect(html).toContain("عرض ساعي");
+    expect(html).toContain('data-chart-granularity="hour"');
     expect(html).toContain("8,873.97 ر.س");
     expect(html).toContain("axis:hour");
     expect(html).toContain("line:سناب شات");
@@ -158,7 +157,7 @@ test("renders four platform lines by day for a multi-day range", () => {
         />,
     );
 
-    expect(html).toContain("عرض يومي");
+    expect(html).toContain('data-chart-granularity="day"');
     expect(html).toContain("axis:date");
     expect(html).toContain("line:سناب شات");
     expect(html).toContain("line:ميتا");
@@ -249,8 +248,7 @@ test("labels the temporary TikTok Make daily-total marker truthfully", () => {
 
     expect(html).toContain("line:تيك توك");
     expect(html).toContain("إجمالي Make عند آخر تحديث");
-    expect(html).toContain("علامة تيك توك تمثل إجمالي اليوم");
-    expect(html).toContain("لا يتم توزيع الإجمالي بالتخمين");
+    expect(html).toContain("line:تيك توك · إجمالي اليوم عند آخر تحديث");
     expect(html).not.toContain("بيانات ساعية أصلية");
 });
 
@@ -358,7 +356,7 @@ test("available portfolio total uses the saved subtotal once across all provider
     const before = JSON.parse(JSON.stringify(data));
     const host = midnightMarkup(data);
     expect(host.querySelector('[data-testid="dashboard-ads-spend-total"]').textContent)
-        .toBe("إجمالي المنصات: غير مكتمل، المتاح 1,405.65 ر.س");
+        .toBe("غير مكتمل، المتاح 1,405.65 ر.س");
     expect(data).toEqual(before);
 });
 
@@ -367,7 +365,7 @@ test("available portfolio total cannot leak a saved subtotal from another period
     data.date_from = "2026-10-25";
     const host = midnightMarkup(data);
     expect(host.querySelector('[data-testid="dashboard-ads-spend-total"]').textContent)
-        .toBe("إجمالي المنصات: بيانات غير مكتملة");
+        .toBe("بيانات غير مكتملة");
 });
 
 test("available portfolio total does not label default zero as known when every provider is unknown", () => {
@@ -375,7 +373,7 @@ test("available portfolio total does not label default zero as known when every 
     data.provider_totals_sar = { snapchat: null, meta: null, tiktok: null, google: null };
     const host = midnightMarkup(data);
     expect(host.querySelector('[data-testid="dashboard-ads-spend-total"]').textContent)
-        .toBe("إجمالي المنصات: بيانات غير مكتملة");
+        .toBe("بيانات غير مكتملة");
 });
 
 
@@ -388,7 +386,7 @@ test.each([null, 0, 81.32])("connected incomplete Snapchat never presents %s as 
     expect(snapchat.textContent).not.toContain("81.32");
     expect(snapchat.textContent).not.toContain("0.00 ر.س");
     expect(host.querySelector('[data-testid="dashboard-ads-spend-total"]').textContent)
-        .toBe("إجمالي المنصات: بيانات غير مكتملة");
+        .toBe("بيانات غير مكتملة");
     expect(host.querySelector('[data-testid="dashboard-ads-provider-meta"]').textContent).toContain("20.00 ر.س");
     expect(host.querySelector('[data-testid="dashboard-ads-provider-tiktok"]').textContent).toContain("5.00 ر.س");
     expect(host.querySelector('[data-testid="dashboard-ads-provider-google"]').textContent).toContain("7.50 ر.س");
@@ -440,7 +438,7 @@ test.each([[81.32, 99.71, 18.39], [0, 0, 0]])(
         expect(snapchat.textContent).not.toContain("لا بيانات");
         expect(snapchat.textContent).not.toContain("أولي");
         expect(host.querySelector('[data-testid="dashboard-ads-spend-total"]').textContent)
-            .toBe(`إجمالي المنصات: غير مكتمل، المتاح ${knownAll.toFixed(2)} ر.س`);
+            .toBe(`غير مكتمل، المتاح ${knownAll.toFixed(2)} ر.س`);
         expect(data.total_sar).toBeNull();
         expect(data.provider_totals_sar.snapchat).toBeNull();
         expect(data.hourly_spend[0].snapchat).toBeNull();
@@ -456,7 +454,7 @@ test("known other-platform spend never supplies a missing Snapchat known amount"
     expect(snapchat.textContent).not.toContain("المتاح");
     expect(snapchat.textContent).not.toContain("0.00 ر.س");
     expect(host.querySelector('[data-testid="dashboard-ads-spend-total"]').textContent)
-        .toBe("إجمالي المنصات: غير مكتمل، المتاح 32.50 ر.س");
+        .toBe("غير مكتمل، المتاح 32.50 ر.س");
 });
 
 

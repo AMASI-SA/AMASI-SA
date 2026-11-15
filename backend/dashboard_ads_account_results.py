@@ -62,19 +62,24 @@ async def build_dashboard_ads_account_results(
     cost_collector: DashboardAdsCostCollector | None = None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
-    """Partition proven Snapchat orders once without guessing any account.
+    """Partition the executive cohort once without guessing any account.
 
     Canonical account totals are unknown when a Snapchat order cannot be
     assigned. Known matched subtotals remain explicit. Orders proven to belong
-    to a different account are excluded, not redistributed to the shown ones.
+    to a different account are not redistributed to the shown ones. Both kinds
+    still belong to the all-order totals, never to the direct/unattributed row.
     """
     account_ids = sorted({str(value).strip() for value in snapchat_account_ids
                           if value is not None and str(value).strip()})
     keys = [("snapchat", account_id) for account_id in account_ids]
     keys += [(provider, "") for provider in ("google", "tiktok", "meta")]
+    direct_key = ("direct", "")
+    keys.append(direct_key)
     buckets: dict[tuple[str, str], list[dict]] = {key: [] for key in keys}
     segments = dashboard_day_segments(date_from, date_to, now=now)
     segment_buckets = {segment["id"]: {key: [] for key in keys} for segment in segments}
+    segment_totals: dict[str, list[dict]] = {segment["id"]: [] for segment in segments}
+    has_available_segment = any(segment["status"] in {"active", "completed"} for segment in segments)
     segment_unassigned: Counter[str] = Counter()
     segment_outside: Counter[str] = Counter()
     uncertain_times: Counter[tuple[str, str]] = Counter()
@@ -108,10 +113,16 @@ async def build_dashboard_ads_account_results(
         # Use the same platform classifier and the same prefiltered population
         # as the executive breakdown; this view cannot change its source policy.
         provider = resolve_salla_ad_platform(order)
-        if provider not in {"snapchat", "google", "tiktok", "meta"}:
-            continue
         segment_id = segment_for(order)
-        key: tuple[str, str] | None = (provider, "")
+        if segment_id:
+            segment_totals[segment_id].append(order)
+        elif has_available_segment:
+            # Account attribution cannot exclude an order from the executive
+            # total or make its unknown time appear precisely assigned.
+            unassigned_time_orders += 1
+        key: tuple[str, str] | None = (
+            (provider, "") if provider in {"snapchat", "google", "tiktok", "meta"} else direct_key
+        )
         if provider == "snapchat" and not catalog_loaded:
             catalog_loaded = True
             if account_ids:
@@ -158,8 +169,7 @@ async def build_dashboard_ads_account_results(
             buckets[key].append(order)
             if segment_id:
                 segment_buckets[segment_id][key].append(order)
-        if segment_id is None and any(segment["status"] in {"active", "completed"} for segment in segments):
-            unassigned_time_orders += 1
+        if segment_id is None and has_available_segment:
             if key is not None:
                 uncertain_times[key] += 1
             elif provider == "snapchat":
@@ -204,11 +214,14 @@ async def build_dashboard_ads_account_results(
             row["provider"] = row_key[0]
             if row_key[0] == "snapchat":
                 row["account_id"] = row_key[1]
+            elif row_key == direct_key:
+                row["ad_spend_applicable"] = False
         return row
 
-    async def build_rows(bucket_map, *, assigned, available=True, segment=False, extra_reasons=None):
+    async def build_rows(bucket_map, total_rows, *, assigned, available=True, segment=False, extra_reasons=None):
         accounts = []
         providers = {}
+        direct = None
         for key, rows in bucket_map.items():
             row = await result_row(
                 rows, assigned=assigned if key[0] == "snapchat" else True,
@@ -217,49 +230,58 @@ async def build_dashboard_ads_account_results(
             )
             if key[0] == "snapchat":
                 accounts.append(row)
+            elif key == direct_key:
+                direct = row
             else:
                 providers[key[0]] = row
-        all_rows = [row for rows in bucket_map.values() for row in rows]
         total = await result_row(
-            all_rows, assigned=assigned,
+            total_rows, assigned=True,
             timed=not unassigned_time_orders if segment else True,
             available=available, extra_reasons=extra_reasons,
         )
-        row_fees = [row["hover_summary"]["payment_fees_sar"] for row in accounts + list(providers.values())]
+        total["cohort_basis"] = "executive_filtered_orders"
+        row_fees = [row["hover_summary"]["payment_fees_sar"]
+                    for row in accounts + list(providers.values()) + [direct]]
         total_fee = total["hover_summary"]["payment_fees_sar"]
+        fully_represented = sum(len(rows) for rows in bucket_map.values()) == len(total_rows)
         total["hover_summary"]["row_payment_fees_rounding_delta_sar"] = (
             round(sum(row_fees) - total_fee, 2)
-            if total_fee is not None and all(fee is not None for fee in row_fees) else None
+            if fully_represented and total_fee is not None and all(fee is not None for fee in row_fees) else None
         )
-        return accounts, providers, total
+        return accounts, providers, direct, total
 
-    accounts, providers, daily_total = await build_rows(buckets, assigned=attribution_complete)
+    accounts, providers, direct, daily_total = await build_rows(buckets, orders, assigned=attribution_complete)
     coverage = {
         "status": ("unavailable" if not catalog_complete
                    else "partial" if unassigned_orders else "complete"),
         "unassigned_orders": unassigned_orders,
         "outside_account_scope_orders": outside_scope_orders,
+        "unrepresented_orders": unassigned_orders + outside_scope_orders,
         "catalog_complete": catalog_complete,
-        "reason_codes": sorted(reasons),
+        "time_assignment_complete": not unassigned_time_orders,
+        "unassigned_time_orders": unassigned_time_orders,
+        "reason_codes": sorted(set(reasons) | ({"order_time_unverified"} if unassigned_time_orders else set())),
     }
     for segment in segments:
         segment_id = segment["id"]
         available = segment["status"] in {"active", "completed"}
         assigned = catalog_complete and not segment_unassigned[segment_id]
-        segment_accounts, segment_providers, total = await build_rows(
-            segment_buckets[segment_id], assigned=assigned, available=available, segment=True,
+        segment_accounts, segment_providers, segment_direct, total = await build_rows(
+            segment_buckets[segment_id], segment_totals[segment_id], assigned=assigned, available=available, segment=True,
             extra_reasons=segment["reason_codes"] + ([] if available else [segment["status"]]),
         )
         segment.update({
             "source_only": True,
             "accounts": segment_accounts,
             "provider_results": segment_providers,
+            "direct_result": segment_direct,
             "total": total,
             "coverage": {
                 "status": "unavailable" if not catalog_complete else "partial" if not assigned else "complete",
                 "catalog_complete": catalog_complete,
                 "unassigned_orders": segment_unassigned[segment_id],
                 "outside_account_scope_orders": segment_outside[segment_id],
+                "unrepresented_orders": segment_unassigned[segment_id] + segment_outside[segment_id],
                 "time_assignment_complete": not unassigned_time_orders,
                 "unassigned_time_orders": unassigned_time_orders,
                 "reason_codes": sorted(set(reasons) | ({"order_time_unverified"} if unassigned_time_orders else set())),
@@ -268,12 +290,14 @@ async def build_dashboard_ads_account_results(
         if available and (not assigned or unassigned_time_orders):
             segment["status"] = "partial"
 
-    daily_rows = accounts + list(providers.values()) + [daily_total]
+    daily_rows = accounts + list(providers.values()) + [direct, daily_total]
     for daily_row in daily_rows:
         half_fees = []
         for segment in segments:
             if daily_row.get("provider") == "snapchat":
                 half_row = next(row for row in segment["accounts"] if row["account_id"] == daily_row["account_id"])
+            elif daily_row.get("provider") == "direct":
+                half_row = segment["direct_result"]
             elif daily_row.get("provider"):
                 half_row = segment["provider_results"][daily_row["provider"]]
             else:
@@ -292,6 +316,7 @@ async def build_dashboard_ads_account_results(
         "source_only": True,
         "accounts": accounts,
         "provider_results": providers,
+        "direct_result": direct,
         "daily_total": daily_total,
         "segments": segments,
         "coverage": coverage,

@@ -40,7 +40,10 @@ function fixture() {
                     { provider: "snapchat", account_id: "usd", ...salla(5, 1500), attribution_complete: true },
                     { provider: "snapchat", account_id: "sar", ...salla(2, 500), attribution_complete: true },
                 ],
-                coverage: { unassigned_orders: 0, catalog_complete: true, status: "complete", reason_codes: [] },
+                direct_result: { provider: "direct", ad_spend_applicable: false, ...salla(0, 0),
+                    attribution_complete: true, time_assignment_complete: true, hover_summary: costs(0, 0, 0, 0) },
+                coverage: { unassigned_orders: 0, outside_account_scope_orders: 0,
+                    catalog_complete: true, status: "complete", reason_codes: [] },
             },
         },
     };
@@ -65,15 +68,15 @@ test("joins independent account identities and uses SAR for CPA and weighted dis
     expect(result.unassignedOrders).toBe(0);
 });
 
-test("null account mode uses the legacy Snapchat provider once without requiring account results", () => {
+test("null account mode uses the legacy Snapchat provider once while missing direct evidence keeps totals partial", () => {
     const input = fixture();
     input.snapchatAccounts = null;
     delete input.executiveSnapshot.ads_v2.account_results;
     const result = buildDashboardAdsTableMetrics(input);
     expect(result.accounts.size).toBe(0);
-    expect(result.total.orders).toBe(78);
-    expect(result.total.sales).toBe(102299);
-    expect(result.total.cpa).toBeCloseTo(625 / 78, 10);
+    expect(result.total).toMatchObject({ orders: null, sales: null, cpa: null,
+        knownOrders: 78, knownSales: 102299, partial: true });
+    expect(result.direct).toMatchObject({ orders: null, sales: null, adSpendApplicable: false });
     expect(result.pending).toBe(false);
 });
 
@@ -252,7 +255,7 @@ test("an explicit empty display list excludes combined Snapchat metrics and need
     delete input.executiveSnapshot.ads_v2.account_results;
     const result = buildDashboardAdsTableMetrics(input);
     expect(result.accounts.size).toBe(0);
-    expect(result.total).toMatchObject({ orders: 8, sales: 2300, cpa: 25, partial: false });
+    expect(result.total).toMatchObject({ orders: null, sales: null, cpa: null, knownOrders: 8, knownSales: 2300, partial: true });
     expect(result.pending).toBe(false);
 });
 
@@ -333,9 +336,9 @@ function financialFixture(cutoffHour = 16.5) {
     result.accounts[1].hover_summary = costs(2, 160, 20, 3);
     result.accounts.forEach((row) => { row.time_assignment_complete = true; });
     result.provider_results = {
-        google: { ...salla(1, 200), attribution_complete: true, time_assignment_complete: true, hover_summary: costs(1, 80, 10, 2) },
-        tiktok: { ...salla(3, 900), attribution_complete: true, time_assignment_complete: true, hover_summary: costs(4, 300, 15, 4) },
-        meta: { ...salla(4, 1200), attribution_complete: true, time_assignment_complete: true, hover_summary: costs(6, 500, 20, 6) },
+        google: { provider: "google", ...salla(1, 200), attribution_complete: true, time_assignment_complete: true, hover_summary: costs(1, 80, 10, 2) },
+        tiktok: { provider: "tiktok", ...salla(3, 900), attribution_complete: true, time_assignment_complete: true, hover_summary: costs(4, 300, 15, 4) },
+        meta: { provider: "meta", ...salla(4, 1200), attribution_complete: true, time_assignment_complete: true, hover_summary: costs(6, 500, 20, 6) },
     };
     const segmentRow = (provider, orders, sales, summary, account_id) => ({ provider,
         ...(account_id ? { account_id } : {}), ...salla(orders, sales), hover_summary: summary,
@@ -359,6 +362,7 @@ function financialFixture(cutoffHour = 16.5) {
                     index === 0 ? costs(1, 100, 5, 1.33) : costs(3, 200, 10, 2.67)),
                 meta: segmentRow("meta", 2, 600, costs(3, 250, 10, 3)),
             },
+            direct_result: { ...segmentRow("direct", 0, 0, costs(0, 0, 0, 0)), ad_spend_applicable: false },
             coverage: { ...result.coverage, time_assignment_complete: true, unassigned_time_orders: 0 },
             reason_codes: [],
         };
@@ -651,4 +655,199 @@ test("contradictory union metrics do not replace valid row sales with a fabricat
     expect(total).toMatchObject({ orders: 15, sales: 4300 });
     expect(total.profit.netProfit).toBeNull();
     expect(total.profit.reasonCodes).toContain("row_metrics_mismatch");
+});
+
+function allCohortFixture() {
+    const input = financialFixture();
+    const result = input.executiveSnapshot.ads_v2.account_results;
+    const direct = (orders, sales, summary) => ({ provider: "direct", ad_spend_applicable: false,
+        ...salla(orders, sales), attribution_complete: true, time_assignment_complete: true, hover_summary: summary });
+    const total = (orders, sales, summary) => ({ cohort_basis: "executive_filtered_orders",
+        ...salla(orders, sales), attribution_complete: true, time_assignment_complete: true, hover_summary: summary });
+    result.direct_result = direct(4, 800, costs(5, 300, 25, 5));
+    result.daily_total = total(19, 5100, costs(25, 1740, 110, 25));
+    result.coverage.unrepresented_orders = 0;
+    result.segments[0].direct_result = direct(1, 200, costs(1, 75, 5, 1));
+    result.segments[1].direct_result = direct(3, 600, costs(4, 225, 20, 4));
+    result.segments[0].total = total(8, 2150, costs(10, 745, 48, 10.83));
+    result.segments[1].total = total(11, 2950, costs(15, 995, 62, 14.17));
+    result.segments.forEach((segment) => { segment.coverage.unrepresented_orders = 0; });
+    // The source cohorts, not these independent executive headline values,
+    // govern account/direct counts and sales.
+    input.executiveSnapshot.totals.total_orders = 999;
+    input.executiveSnapshot.totals.total_sales = 99999;
+    return input;
+}
+
+test("direct Salla outcomes and source cohort totals do not copy executive counts or count paid rows twice", () => {
+    const input = allCohortFixture();
+    const before = JSON.parse(JSON.stringify(input));
+    const result = buildDashboardAdsTableMetrics(input);
+    expect(result.direct).toMatchObject({ orders: 4, sales: 800, cpa: null, adSpendApplicable: false,
+        profit: { adSpendApplicable: false, spendSar: null, knownSpendSar: null, nativeSpend: null,
+            totalCost: 330, netProfit: 470, roas: null, complete: true } });
+    expect(result.direct.segments[0]).toMatchObject({ orders: 1, sales: 200, cpa: null,
+        profit: { adSpendApplicable: false, spendSar: null, netProfit: 119, roas: null, complete: true } });
+    expect(result.direct.segments[1].profit).toMatchObject({ netProfit: 351, provisional: false });
+    expect(result.accounts.get("usd").orders).toBe(5);
+    expect(result.providers.google.orders).toBe(1);
+    expect(result.total).toMatchObject({ orders: 19, sales: 5100, partial: false,
+        profit: { spendSar: 625, totalCost: 1875, netProfit: 2600, complete: true } });
+    expect(result.total.cpa).toBeCloseTo(625 / 19, 10);
+    expect(result.total.segments[0]).toMatchObject({ orders: 8, sales: 2150,
+        profit: { spendSar: 287.5, netProfit: 1058.67, complete: true } });
+    expect(result.total.segments[1].profit.netProfit).toBe(1541.33);
+    expect(result.unrepresentedOrders).toBe(0);
+    expect(input).toEqual(before);
+});
+
+test.each(["missing", "changed"])("direct profit is independent of %s advertising evidence while paid profits remain guarded", (fault) => {
+    const input = allCohortFixture();
+    if (fault === "missing") input.spendSnapshot = null;
+    else input.executiveSnapshot.totals.total_ads_cost = 999;
+    const result = buildDashboardAdsTableMetrics(input);
+    expect(result.direct.profit).toMatchObject({ spendSar: null, nativeSpend: null, netProfit: 470, complete: true });
+    expect(result.direct.segments[0].profit.netProfit).toBe(119);
+    expect(result.accounts.get("usd").profit.netProfit).toBeNull();
+    expect(result.total).toMatchObject({ orders: 19, sales: 5100, cpa: null, profit: { netProfit: null } });
+});
+
+test.each([false, true])("unrepresented Snapchat outcomes stay accurate while only proven outside scope blocks total finance (outside: %s)", (outside) => {
+    const input = allCohortFixture();
+    const source = input.executiveSnapshot.ads_v2.account_results;
+    Object.assign(source.coverage, { status: "partial", unassigned_orders: outside ? 1 : 2,
+        outside_account_scope_orders: outside ? 1 : 0, unrepresented_orders: 2 });
+    source.accounts.forEach((row) => Object.assign(row, {
+        attribution_complete: false, salla_orders: null, salla_sales_sar: null,
+    }));
+    Object.assign(source.daily_total, salla(21, 5400), { hover_summary: costs(27, 1780, 116, 27) });
+    const result = buildDashboardAdsTableMetrics(input);
+    expect(result.accounts.get("usd")).toMatchObject({ orders: null, knownOrders: 5, cpa: null,
+        partial: true, profit: { netProfit: null } });
+    expect(result.direct).toMatchObject({ orders: 4, sales: 800, profit: { netProfit: 470 } });
+    expect(result.total).toMatchObject({ orders: 21, sales: 5400, knownOrders: 21, partial: false,
+        profit: { spendSar: 625, totalCost: 1923, netProfit: outside ? null : 2852, complete: !outside } });
+    if (outside) {
+        expect(result.total.cpa).toBeNull();
+        expect(result.total.profit.roas).toBeNull();
+    } else {
+        expect(result.total.cpa).toBeCloseTo(625 / 21, 10);
+        expect(result.total.profit.roas).toBeCloseTo(5400 / 625, 10);
+    }
+    expect(result.unassignedOrders).toBe(outside ? 1 : 2);
+    expect(result.unrepresentedOrders).toBe(2);
+});
+
+test("an outside-scope afternoon order blocks daily and afternoon finance without hiding a sound morning", () => {
+    const input = allCohortFixture();
+    const source = input.executiveSnapshot.ads_v2.account_results;
+    const afternoon = source.segments[1];
+    [source.coverage, afternoon.coverage].forEach((coverage) => Object.assign(coverage, {
+        outside_account_scope_orders: 1, unrepresented_orders: 1,
+    }));
+    Object.assign(source.daily_total, salla(20, 5200), { hover_summary: costs(26, 1760, 112, 26) });
+    Object.assign(afternoon.total, salla(12, 3050), { hover_summary: costs(16, 1015, 64, 15.17) });
+    const result = buildDashboardAdsTableMetrics(input);
+    expect(result.total).toMatchObject({ orders: 20, sales: 5200, cpa: null,
+        profit: { spendSar: 625, totalCost: 1898, netProfit: null, roas: null } });
+    expect(result.total.segments[0]).toMatchObject({ orders: 8, sales: 2150,
+        profit: { netProfit: 1058.67, complete: true } });
+    expect(result.total.segments[0].cpa).toBeCloseTo(287.5 / 8, 10);
+    expect(result.total.segments[1]).toMatchObject({ orders: 12, sales: 3050, cpa: null,
+        profit: { spendSar: 337.5, totalCost: 1094.17, netProfit: null, roas: null } });
+    expect(result.accounts.get("usd").segments[1].profit.netProfit).toBe(382.5);
+    expect(result.direct.profit.netProfit).toBe(470);
+});
+
+test("displaying a subset keeps source counts while blocking full-cohort financial ratios and profit", () => {
+    const input = allCohortFixture();
+    input.snapchatAccounts = [input.snapchatAccounts[0]];
+    const result = buildDashboardAdsTableMetrics(input);
+    expect(result.accounts.has("sar")).toBe(false);
+    expect(result.total).toMatchObject({ orders: 19, sales: 5100, cpa: null,
+        profit: { netProfit: null, complete: false } });
+    expect(result.total.profit.reasonCodes).toContain("displayed_account_scope_mismatch");
+    expect(result.direct.profit.netProfit).toBe(470);
+});
+
+test.each(["count", "coverage", "coverage counts", "duplicate account", "provider identity", "direct applicability"])(
+    "contradictory source %s cannot certify a complete cohort total", (fault) => {
+        const input = allCohortFixture();
+        const source = input.executiveSnapshot.ads_v2.account_results;
+        if (fault === "count") source.daily_total.salla_orders = 20;
+        if (fault === "coverage") delete source.coverage.unrepresented_orders;
+        if (fault === "coverage counts") source.coverage.unassigned_orders = 1;
+        if (fault === "duplicate account") source.accounts.push({ ...source.accounts[0] });
+        if (fault === "provider identity") source.provider_results.google.provider = "meta";
+        if (fault === "direct applicability") delete source.direct_result.ad_spend_applicable;
+        const result = buildDashboardAdsTableMetrics(input);
+        expect(result.total.orders).toBeNull();
+        expect(result.total.sales).toBeNull();
+        expect(result.total.cpa).toBeNull();
+        expect(result.total.profit.netProfit).toBeNull();
+        expect(result.total.profit.reasonCodes).toContain("cohort_total_unverified");
+        if (fault === "direct applicability") {
+            expect(result.direct.orders).toBeNull();
+            expect(result.direct.profit.netProfit).toBeNull();
+        }
+    },
+);
+
+test("a missing direct cohort stays unknown instead of being inferred from executive minus paid orders", () => {
+    const input = allCohortFixture();
+    delete input.executiveSnapshot.ads_v2.account_results.direct_result;
+    const result = buildDashboardAdsTableMetrics(input);
+    expect(result.direct).toMatchObject({ orders: null, sales: null, knownOrders: null,
+        profit: { spendSar: null, netProfit: null, adSpendApplicable: false } });
+    expect(result.total.orders).toBeNull();
+    expect(result.total.knownOrders).toBe(15);
+});
+
+test("a stale account-result period cannot leak direct or complete cohort values", () => {
+    const input = allCohortFixture();
+    input.executiveSnapshot.ads_v2.account_results.date_from = "2026-11-14";
+    const result = buildDashboardAdsTableMetrics(input);
+    expect(result.direct.orders).toBeNull();
+    expect(result.direct.profit.netProfit).toBeNull();
+    expect(result.direct.segments[0].profit.netProfit).toBeNull();
+    expect(result.total.orders).toBeNull();
+    expect(result.unrepresentedOrders).toBeNull();
+});
+
+test("unknown direct order time affects the halves while daily source counts and costs remain available", () => {
+    const input = allCohortFixture();
+    const segment = input.executiveSnapshot.ads_v2.account_results.segments[0];
+    [segment.direct_result, segment.total].forEach((row) => Object.assign(row, {
+        time_assignment_complete: false, salla_orders: null, salla_sales_sar: null,
+    }));
+    const result = buildDashboardAdsTableMetrics(input);
+    expect(result.direct.profit.netProfit).toBe(470);
+    expect(result.total.orders).toBe(19);
+    expect(result.direct.segments[0]).toMatchObject({ orders: null, knownOrders: 1, profit: { netProfit: null } });
+    expect(result.total.segments[0]).toMatchObject({ orders: null, knownOrders: 8, profit: { netProfit: null } });
+    expect(result.accounts.get("usd").segments[0].orders).toBe(2);
+});
+
+test("missing direct cost evidence withholds only its profit and keeps attributed counts", () => {
+    const input = allCohortFixture();
+    Object.assign(input.executiveSnapshot.ads_v2.account_results.direct_result.hover_summary, {
+        shipping_cost_complete: false, shipping_cost_sar: null, total_cost_sar: null, complete: false,
+    });
+    const result = buildDashboardAdsTableMetrics(input);
+    expect(result.direct).toMatchObject({ orders: 4, sales: 800,
+        profit: { spendSar: null, shippingCost: null, knownShippingCost: 25, netProfit: null, complete: false } });
+    expect(result.accounts.get("usd").profit.netProfit).toBe(700);
+});
+
+test("a proven empty direct cohort has zero outcomes and profit but no reported ad spend or ratio", () => {
+    const result = buildDashboardAdsTableMetrics(financialFixture());
+    expect(result.direct).toMatchObject({ orders: 0, sales: 0, cpa: null, partial: false,
+        profit: { spendSar: null, nativeSpend: null, totalCost: 0, netProfit: 0, roas: null, complete: true } });
+    expect(result.direct.segments[0].profit).toMatchObject({ spendSar: null, netProfit: 0, complete: true });
+});
+
+test("legacy warning metadata uses unassigned count without inventing a larger unrepresented count", () => {
+    const input = fixture();
+    input.executiveSnapshot.ads_v2.account_results.coverage.unassigned_orders = 3;
+    expect(buildDashboardAdsTableMetrics(input).unrepresentedOrders).toBe(3);
 });

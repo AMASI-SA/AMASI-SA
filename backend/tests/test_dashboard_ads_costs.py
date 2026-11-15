@@ -210,10 +210,95 @@ async def test_unassigned_afternoon_account_does_not_hide_proven_morning(bundle_
     unknown["campaign_id"] = None
     result, _, _ = await snapshot(bundle_db, [ad_order("known"), unknown])
     assert rows_by_id(result)["usd"]["salla_orders"] is None
-    assert result["daily_total"]["salla_orders"] is None
-    assert result["daily_total"]["known_salla_orders"] == 1
+    assert result["daily_total"]["salla_orders"] == 2
+    assert result["daily_total"]["known_salla_orders"] == 2
+    assert result["direct_result"]["salla_orders"] == 0
+    assert result["daily_total"]["hover_summary"]["total_cost_sar"] is not None
+    assert [segment["total"]["salla_orders"] for segment in result["segments"]] == [1, 1]
     assert rows_by_id(result["segments"][0])["usd"]["salla_orders"] == 1
     assert all(row["salla_orders"] is None for row in result["segments"][1]["accounts"])
+
+
+@pytest.mark.asyncio
+async def test_direct_hover_and_all_order_costs_include_unrepresented_paid_orders_once(bundle_db):
+    orders = [
+        ad_order("direct-am", provider="store"),
+        ad_order("direct-pm", provider="", hour="12:00:00", quantity=2),
+        ad_order("snap-known"),
+        ad_order("snap-unassigned", hour="12:30:00", campaign_id=None),
+    ]
+    result, costs, identities = await snapshot(bundle_db, orders)
+    direct, total = result["direct_result"], result["daily_total"]
+    assert (direct["salla_orders"], direct["salla_sales_sar"]) == (2, 300)
+    assert direct["ad_spend_applicable"] is False
+    assert direct["hover_summary"]["pieces"] == 3
+    assert direct["hover_summary"]["product_cost_sar"] == 27
+    assert direct["hover_summary"]["shipping_cost_sar"] == 23
+    assert direct["hover_summary"]["complete"] is True
+    assert [part["direct_result"]["salla_orders"] for part in result["segments"]] == [1, 1]
+    assert [part["direct_result"]["hover_summary"]["pieces"] for part in result["segments"]] == [1, 2]
+    assert (total["salla_orders"], total["salla_sales_sar"]) == (4, 500)
+    assert total["hover_summary"]["pieces"] == 5
+    assert total["hover_summary"]["product_cost_sar"] == 45
+    assert total["hover_summary"]["shipping_cost_sar"] == aggregate_breakdown(orders, costs.company_configs)["total_with_tax"]
+    assert total["hover_summary"]["payment_fees_sar"] == match_settings(orders_to_parsed(orders), SETTINGS["payment_methods"], [])["total_payment_fees"]
+    assert total["hover_summary"]["row_payment_fees_rounding_delta_sar"] is None
+    assert [part["total"]["salla_orders"] for part in result["segments"]] == [2, 2]
+    assert all(part["total"]["cohort_basis"] == "executive_filtered_orders" for part in result["segments"])
+    assert len(identities.catalog.reads) == 1
+
+
+@pytest.mark.asyncio
+async def test_direct_missing_time_and_currency_preserve_day_count_and_known_subtotals(bundle_db):
+    unknown = ad_order("direct-date-only", provider="store", order_date_raw=DAY, currency="KWD")
+    orders = [unknown, ad_order("direct-known", provider="store"), ad_order("google-known", provider="google")]
+    result, _, identities = await snapshot(bundle_db, orders)
+    direct, total = result["direct_result"], result["daily_total"]
+    assert direct["salla_orders"] == 2
+    assert direct["salla_sales_sar"] is None and direct["known_salla_sales_sar"] == 100
+    assert direct["hover_summary"]["payment_fees_sar"] is None
+    assert "payment_sales_currency_unverified" in direct["hover_summary"]["reason_codes"]
+    assert total["salla_orders"] == 3
+    assert total["salla_sales_sar"] is None and total["known_salla_sales_sar"] == 200
+    assert result["coverage"]["unassigned_time_orders"] == 1
+    assert result["coverage"]["time_assignment_complete"] is False
+    assert "order_time_unverified" in result["coverage"]["reason_codes"]
+    for part in result["segments"]:
+        assert part["direct_result"]["salla_orders"] is None
+        assert part["direct_result"]["time_assignment_complete"] is False
+        assert "order_time_unverified" in part["direct_result"]["hover_summary"]["reason_codes"]
+        assert part["total"]["salla_orders"] is None
+    assert result["segments"][0]["direct_result"]["known_salla_orders"] == 1
+    assert result["segments"][0]["provider_results"]["google"]["salla_orders"] == 1
+    assert identities.catalog.reads == []
+
+
+@pytest.mark.asyncio
+async def test_outside_account_time_and_costs_stay_in_total_without_affecting_direct_or_accounts(bundle_db):
+    orders = [ad_order("direct", provider="store"),
+              ad_order("outside", account="outside", order_date_raw=DAY)]
+    costs = DashboardAdsCostCollector()
+    costs.capture_settings(SETTINGS)
+    await dashboard.build_mezan_v2_product_cost_cooperative(
+        ReadOnlyDB(bundle_db), OWNER, orders, include_product_rows=False, cost_collector=costs,
+    )
+    identities = Db([campaign("outside", "c-outside", user_id=OWNER)])
+    result = await build_dashboard_ads_account_results(
+        identities, OWNER, orders, snapchat_account_ids=["usd", "sar"],
+        date_from=DAY, date_to=DAY, now=PAST_NOW, cost_collector=costs,
+    )
+    assert result["daily_total"]["salla_orders"] == 2
+    assert result["daily_total"]["hover_summary"]["product_cost_sar"] == 18
+    assert result["daily_total"]["hover_summary"]["row_payment_fees_rounding_delta_sar"] is None
+    assert result["coverage"]["unrepresented_orders"] == 1
+    assert result["coverage"]["unassigned_time_orders"] == 1
+    assert result["direct_result"]["salla_orders"] == 1
+    assert all(row["salla_orders"] == 0 for row in result["accounts"])
+    morning = result["segments"][0]
+    assert morning["total"]["salla_orders"] is None
+    assert morning["total"]["known_salla_orders"] == 1
+    assert morning["direct_result"]["salla_orders"] == 1
+    assert all(row["salla_orders"] == 0 for row in morning["accounts"])
 
 
 @pytest.mark.asyncio

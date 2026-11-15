@@ -8,7 +8,6 @@ import {
 } from "@phosphor-icons/react";
 import {
     CartesianGrid,
-    Legend,
     Line,
     LineChart,
     ResponsiveContainer,
@@ -245,7 +244,8 @@ function AdsAccountResultsTable({ data, accounts, accountMode, ready, singleDay,
         .some((key) => Array.isArray(salesFilters?.[key])
             ? salesFilters[key].some((value) => String(value).trim())
             : Boolean(salesFilters?.[key]));
-    return <div className="mt-3 min-w-0" data-testid="dashboard-ads-account-results">
+    const unrepresentedOrders = metrics.unrepresentedOrders ?? metrics.unassignedOrders;
+    return <div className="mt-2 min-w-0" data-testid="dashboard-ads-account-results">
         <div className="mb-2 text-[10px] font-extrabold text-slate-700">تفاصيل الحسابات</div>
         <div className="overflow-hidden rounded-xl border border-slate-200">
             <table dir="rtl" className="w-full table-fixed border-collapse text-[10px] leading-4 text-slate-800"
@@ -301,10 +301,23 @@ function AdsAccountResultsTable({ data, accounts, accountMode, ready, singleDay,
                             <SallaMetricCells stats={metrics.providers[provider]} />
                         </DashboardAdsAccountRow>;
                     })}
+                    <DashboardAdsAccountRow className="border-t border-slate-100"
+                        label="مباشر / بدون مصدر" stats={metrics.direct} fromDate={fromDate} toDate={toDate}
+                        active={activeDetails === "direct"} onActivate={() => setActiveDetails("direct")}
+                        data-testid="dashboard-ads-provider-direct">
+                        <th scope="row" className="px-1.5 py-2 text-right font-bold">
+                            <div className="flex min-w-0 items-center gap-1">
+                                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400" />
+                                <span>مباشر / بدون مصدر</span>
+                            </div>
+                        </th>
+                        <td className="px-1 py-2 text-center font-medium text-slate-400">—</td>
+                        <SallaMetricCells stats={metrics.direct} />
+                    </DashboardAdsAccountRow>
                 </tbody>
                 <tfoot className="border-t border-yellow-200 bg-yellow-50 font-bold"><tr data-testid="dashboard-ads-account-total">
                     <th scope="row" className="px-1.5 py-2 text-right">الإجمالي</th>
-                    <td className="px-1 py-2 text-center"><bdi dir="ltr">{totalLabel}</bdi></td>
+                    <td className="px-1 py-2 text-center" data-testid="dashboard-ads-spend-total"><bdi dir="ltr">{totalLabel}</bdi></td>
                     <SallaMetricCells stats={metrics.total} />
                 </tr></tfoot>
             </table>
@@ -312,8 +325,8 @@ function AdsAccountResultsTable({ data, accounts, accountMode, ready, singleDay,
         <p className="mt-2 text-[9px] leading-4 text-slate-500">متوسط تكلفة الطلب = الصرف بالريال ÷ طلبات سلة.</p>
         <p className="text-[9px] leading-4 text-slate-500">أشّر على أي صف لعرض تفاصيل الصباح والمساء، أو اضغط لتثبيتها.</p>
         {filtered && <p className="text-[9px] leading-4 text-slate-500">طلبات ومبيعات سلة حسب الفلاتر؛ الصرف إجمالي الفترة.</p>}
-        {metrics.unassignedOrders > 0 && <p className="text-[9px] leading-4 text-amber-700" data-testid="dashboard-ads-unassigned-orders">
-            {metrics.unassignedOrders.toLocaleString("en-US")} طلبات سناب بلا حساب مؤكد؛ المعروض هو المتاح، ومتوسط التكلفة ينتظر اكتمال الإسناد.
+        {unrepresentedOrders > 0 && <p className="text-[9px] leading-4 text-amber-700" data-testid="dashboard-ads-unassigned-orders">
+            {unrepresentedOrders.toLocaleString("en-US")} طلبات ضمن الإجمالي لم يُحدد لها حساب إعلاني معروض؛ تفاصيل الحسابات تعرض المتاح.
         </p>}
         {metrics.pending && <p className="text-[9px] leading-4 text-slate-500" data-testid="dashboard-ads-results-pending">بانتظار بيانات سلة المطابقة للفترة.</p>}
     </div>;
@@ -376,6 +389,7 @@ export function DashboardAdsSpendCardContent({
             data-from-date={fromDate || ""}
             data-to-date={toDate || ""}
             data-chart-granularity={singleDay ? "hour" : "day"}
+            aria-label={selectedPeriodLabel(fromDate, toDate)}
         >
             <div className="flex min-h-14 items-center justify-between gap-3 bg-yellow-400 px-4 py-3 text-black">
                 <div className="flex min-w-0 items-center gap-2">
@@ -409,34 +423,7 @@ export function DashboardAdsSpendCardContent({
 
             <div className="p-3 sm:p-4">
                 {refreshStatus && <p role="status" className="mb-3 text-xs font-bold text-amber-800" data-testid="dashboard-ads-manual-refresh-status">{refreshStatus}</p>}
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                        <div className="text-xs font-extrabold text-slate-800" data-testid="dashboard-ads-spend-period">
-                            {selectedPeriodLabel(fromDate, toDate)}
-                        </div>
-                        <div className="mt-1 text-[10px] font-semibold text-slate-500">
-                            سناب شات + ميتا + تيك توك + Google Ads · العرض بتوقيت الرياض
-                        </div>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                        <div className="rounded-full border border-yellow-200 bg-yellow-50 px-3 py-1 text-[11px] font-extrabold text-yellow-900">
-                            {singleDay ? "عرض ساعي" : "عرض يومي"}
-                        </div>
-                        <div className="rounded-full border border-yellow-200 bg-yellow-50 px-3 py-1 text-[11px] font-extrabold text-yellow-900" data-testid="dashboard-ads-spend-total">
-                            إجمالي المنصات: {totalLabel}
-                        </div>
-                    </div>
-                </div>
-
                 {accountMode && accounts.length === 0 && <p className="mb-2 text-[10px] text-slate-500" data-testid="dashboard-snapchat-accounts-empty">لا توجد حسابات سناب مفعّلة لهذه الفترة</p>}
-                {accountMode && <p className="mb-2 text-[10px] font-semibold text-slate-500">جميع قيم الرسم بالريال السعودي، ولكل حساب سناب منحنى مستقل.</p>}
-                {singleDay && (
-                    <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-semibold text-slate-600">
-                        {hasTikTokMakeMarker
-                            ? "علامة تيك توك تمثل إجمالي اليوم عند ساعة آخر تحديث من Make؛ بقية الخطوط مبنية على ساعات المنصات الأصلية، ولا يتم توزيع الإجمالي بالتخمين."
-                            : "خطوط الساعات مبنية على ساعات المنصات الأصلية فقط، ولا يتم توزيع إجمالي اليوم على الساعات بالتخمين."}
-                    </div>
-                )}
 
                 {displayError && (
                     <div
@@ -449,10 +436,10 @@ export function DashboardAdsSpendCardContent({
                 )}
 
                 {loading && !points.length ? (
-                    <div className="h-[360px] animate-pulse rounded-xl bg-slate-100" data-testid="dashboard-ads-spend-loading" />
+                    <div className="h-[320px] animate-pulse rounded-xl bg-slate-100" data-testid="dashboard-ads-spend-loading" />
                 ) : points.length && hasAnySeries ? (
                     <div
-                        className="h-[360px] min-w-0"
+                        className="h-[320px] min-w-0"
                         dir="ltr"
                         data-testid={singleDay
                             ? "dashboard-ads-spend-hourly-chart"
@@ -484,7 +471,6 @@ export function DashboardAdsSpendCardContent({
                                         fontFamily: "Cairo",
                                     }}
                                 />
-                                <Legend wrapperStyle={{ direction: "rtl", fontSize: 11 }} />
                                 {accountLines.map(({ account, color }) => <Line key={account.account_id}
                                     type="monotone" dataKey={(point) => point.snapchat_accounts?.get(account.account_id) ?? null}
                                     name={accountName(account)} stroke={color} strokeWidth={2.5} connectNulls={false} dot={{ r: 3, strokeWidth: 1 }} />)}
@@ -494,7 +480,9 @@ export function DashboardAdsSpendCardContent({
                                             key={provider}
                                             type="monotone"
                                             dataKey={provider}
-                                            name={PROVIDER_META[provider].label}
+                                            name={provider === "tiktok" && hasTikTokMakeMarker
+                                                ? "تيك توك · إجمالي اليوم عند آخر تحديث"
+                                                : PROVIDER_META[provider].label}
                                             stroke={PROVIDER_META[provider].stroke}
                                             strokeWidth={provider === "snapchat" ? 2.5 : 2.25}
                                             connectNulls={false}
@@ -509,7 +497,7 @@ export function DashboardAdsSpendCardContent({
                     </div>
                 ) : (
                     <div
-                        className="flex h-[360px] items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 text-center text-sm font-bold text-slate-500"
+                        className="flex h-[320px] items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 text-center text-sm font-bold text-slate-500"
                         data-testid={singleDay
                             ? "dashboard-ads-spend-hourly-empty"
                             : "dashboard-ads-spend-daily-empty"}
