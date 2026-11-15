@@ -1,0 +1,104 @@
+{
+  "accepted_package_proof_bytes": 1278,
+  "accepted_package_proof_exact": true,
+  "accepted_package_proof_path": "/workspace/scratch/ce6ef737d6c9/release-evidence/binding-recovery-ci-3227/accepted-package-boundary-v5.json",
+  "accepted_package_proof_sha256": "381878cf3b8a30dde15d80014a1751df166b7ce420b9e4b84da6c347cab77f4f",
+  "backend_identity_sha256": "175e42aa428ad2375849cec480e5e469d6ecaeb39625ab454b0ea4b5f42c589d",
+  "backend_package_files": 1221,
+  "build_meta_sha256": "3fa8828fbe1e969faf111884d0b5185219731fdc770c4fa4efb1feb616920973",
+  "clean_worktree_unchanged": true,
+  "deployment_git_sha": "3227ff58776ff1bf99621940816b8ff8ca0b0a4b",
+  "deployment_tree_oid": "ff7e1e334bd755f844d0903d5fdba45541509854",
+  "frontend_package_files": 1475,
+  "frontend_payload_files_verified": 290,
+  "frontend_public_files_verified": 288,
+  "full_membership_hash_modes_and_bytes_equal": true,
+  "generated_directory_modes": [
+    "0755"
+  ],
+  "generated_file_modes": [
+    "0644"
+  ],
+  "generated_files": 294,
+  "generated_member_manifest_sha256": "7d899922a9b82a1f41ca6a9a3439a89369eaa1502c8c42962668911484e4f146",
+  "generated_members": 297,
+  "host_jobs": [
+    {
+      "all_steps_success": true,
+      "conclusion": "success",
+      "id": 132882205222,
+      "name": "Emergent Host Node 20.20.2 clean-clone adapter rehearsal"
+    },
+    {
+      "all_steps_success": true,
+      "conclusion": "success",
+      "id": 132882205273,
+      "name": "Emergent Host Node 24.19.0 clean-clone adapter rehearsal"
+    }
+  ],
+  "host_summaries": {
+    "20.20.2": {
+      "adapter_without_git_confirmed": true,
+      "all_rehearsal_steps_success": true,
+      "generated_directories": 3,
+      "generated_files": 294,
+      "generated_members": 297,
+      "package_proof_bytes": 1278,
+      "package_proof_sha256": "381878cf3b8a30dde15d80014a1751df166b7ce420b9e4b84da6c347cab77f4f"
+    },
+    "24.19.0": {
+      "adapter_without_git_confirmed": true,
+      "all_rehearsal_steps_success": true,
+      "generated_directories": 3,
+      "generated_files": 294,
+      "generated_members": 297,
+      "package_proof_bytes": 1278,
+      "package_proof_sha256": "381878cf3b8a30dde15d80014a1751df166b7ce420b9e4b84da6c347cab77f4f"
+    }
+  },
+  "non_public_header_files_verified": [
+    "_headers",
+    "_headers.json"
+  ],
+  "package_proof": {
+    "backend": {
+      "file_count": 1221,
+      "git_directory_present": false,
+      "health_verified": true,
+      "identity": {
+        "bytes": 439251,
+        "path": "release_identity.json",
+        "sha256": "175e42aa428ad2375849cec480e5e469d6ecaeb39625ab454b0ea4b5f42c589d"
+      },
+      "isolated_verified": true,
+      "package_tree_sha256": "274a7c64b7ca401b2e25800662492bab02b7abb570163fe27e31bc9cb6bd68ff",
+      "runtime_root": "backend",
+      "sibling_frontend_present": false
+    },
+    "frontend": {
+      "artifact_tree_sha256": "7cd63bb1cd550a2601b09c5107b6e4ddba0c4b3eae435bfdfe80ddcb9934e977",
+      "build_meta": {
+        "bytes": 475187,
+        "path": "build/build-meta.json",
+        "sha256": "3fa8828fbe1e969faf111884d0b5185219731fdc770c4fa4efb1feb616920973"
+      },
+      "content_type_contract": "application/json",
+      "file_count": 1475,
+      "isolated_runtime_artifact_verified": true,
+      "package_tree_sha256": "1a235e3a507cdc804f7e87ae8426a5ca6c9aab3b02b18ca6156dd3fdfefd6a97",
+      "runtime_root": "frontend",
+      "static_root": "frontend/build"
+    },
+    "kind": "mezan_release_package_boundary_proof_v1",
+    "release_id": "rg5-41884037a1555abb570d35f23b2a81edc8c24e1135035a37aabee30c2d16e8e7",
+    "schema_version": 1,
+    "source_git_sha": "9b91e88c049166f111905c80a4c1fa07a96b51bd"
+  },
+  "readiness_run_attempt": 1,
+  "readiness_run_id": 43737089479,
+  "result": "PASS",
+  "scope_limit": "Both exact-B Host package proofs accepted; remaining required CI and normal merge gates remain separate.",
+  "source_backend_files_verified": 1220,
+  "source_frontend_files_verified": 1184,
+  "source_git_sha": "9b91e88c049166f111905c80a4c1fa07a96b51bd"
+}

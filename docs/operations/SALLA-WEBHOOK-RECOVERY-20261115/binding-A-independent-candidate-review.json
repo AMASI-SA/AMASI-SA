@@ -1,0 +1,164 @@
+{
+  "acceptance_limit": "Candidate evidence only; remaining exact-A CI gates and intent-only B/normal M gates remain required. No intent freeze or source mutation performed.",
+  "artifact_id": 14170597482,
+  "backend_runtime_source_summary": {
+    "added_count": 0,
+    "deleted_count": 0,
+    "file_count": 1220,
+    "manifest_sha256": "9dced2974cde94320a3ac0ab32f6111e101403635f0d23b085ee587032077c89",
+    "modified_count": 1,
+    "projection_tree_oid": "a7d963bef9a028c9c2fe19388e254f0900847e91",
+    "scope": "backend_runtime_package_v1",
+    "scope_tree_oid": "b4548973f048f0f3aba17c583aec86b29abaf04d",
+    "source_base_git_sha": "8f1b0ddb6408781e8677212bcb8cf2d51eab42f7",
+    "source_base_root_tree_oid": "a8616930de7f98a43a509ff7dad287befd61ba5a",
+    "source_base_scope_tree_oid": "bacbe0ff936751282c6eeaee08f010c03ed55f58",
+    "source_git_sha": "9b91e88c049166f111905c80a4c1fa07a96b51bd",
+    "source_root_tree_oid": "bb79134858e4f472a97e33cec100ec4ddfe095f7",
+    "tombstone_count": 0,
+    "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "tree_sha256": "83cf3534297d049681b25f985b759a79a62d7e4fcea8bc3af6d04e1fa29040ce"
+  },
+  "candidate_bytes": 1312444,
+  "candidate_path": "/workspace/scratch/ce6ef737d6c9/release-evidence/binding-recovery-ci-9b91/release-intent-v5.json",
+  "candidate_sha256": "fc151ac8b5c0faad002ca4773d510b6b16e6492ebb3bdf82b352fa1eaa4e5dc5",
+  "complete_frontend_Git_membership_blob_modes_bytes_hashes": "PASS",
+  "critical_Git_blob_hashes": "PASS",
+  "critical_file_hashes": {
+    "frontend_build_identity.py": "7896dfa2c9b4fea8c426b47c5b75e331380c0a4a3f947028aa4f5afa101f9d87",
+    "integrations/qoyod_manual/routes.py": "e3950202ab1b465608124ef1d142f330038086d6f69d21418dc0be99e9fa64ce",
+    "integrations/qoyod_manual/send.py": "b8cfbece5ccec2b91c8c7c6f9643f6a912440a306ddc8607f714be608a4b005c",
+    "release_identity.py": "ee4c098266722c10f6d973927f25de3602081c4923f9992f1de85d71775fca4d",
+    "release_protocol_v5.py": "1961ac18a5363ec425ceec4f98f96f611d378b09e19380d4756bd6776987d8ef",
+    "server.py": "5fb5e4f09883c05c0c9851d5b488341642ba3330508cf83d786f70a83fb22ac5"
+  },
+  "deterministic_runtime_id": "PASS",
+  "frontend_artifact_tree_sha256": "7cd63bb1cd550a2601b09c5107b6e4ddba0c4b3eae435bfdfe80ddcb9934e977",
+  "frontend_build_metadata": {
+    "bytes": 475187,
+    "path": "build-meta.json",
+    "sha256": "3fa8828fbe1e969faf111884d0b5185219731fdc770c4fa4efb1feb616920973"
+  },
+  "frontend_reproducibility_file": {
+    "bytes": 1521,
+    "path": "frontend/.release/reproducible-build.json",
+    "sha256": "a436dc975512a625b8b0770d12f05f5e7a3c0155e47777c5bd2e87c0c02e45c0"
+  },
+  "frontend_source_summary": {
+    "file_count": 1184,
+    "git_tree_oid": "b9e83f8c39537fed5cdf545568d80bdf3a87eba6",
+    "scope": "git_head_frontend_tree_v1",
+    "tree_sha256": "ebd3d871ae7c11e7d7df8559ae388f6716e79061df7a45ce005111bc3b7401a6"
+  },
+  "full_backend_and_release_control_Git_J_to_A_manifests": "PASS",
+  "official_candidate_loader": "PASS",
+  "package_source_pins": {
+    "backend/requirements.txt": {
+      "bytes": 2366,
+      "sha256": "2ce69692284860d7612378b81bbff479ad21cf19f92435289d8fa0686019614d"
+    },
+    "frontend/.nvmrc": {
+      "bytes": 8,
+      "sha256": "08062faf0d7a2d22f5d7933c50e975dd1527034275597be7c1b3b9fd2b9d079a"
+    },
+    "frontend/package.json": {
+      "bytes": 3672,
+      "sha256": "62a5d5bb28e0fc529a16b3d47b1f107e19ae40af8e0482d14d73b04400c7b32b"
+    },
+    "frontend/yarn.lock": {
+      "bytes": 543057,
+      "sha256": "ade3795ddac57d89c236de42f3946160e04aa72abc87356b3b361954e06fefdc"
+    },
+    "scripts/emergent_deployment_adapter.py": {
+      "bytes": 73931,
+      "sha256": "2e09999684b329045af3cb15290e3bee3b615b8e1d9a378e903977ba9f1a8287"
+    },
+    "scripts/frontend_release_toolchain.py": {
+      "bytes": 52209,
+      "sha256": "31583e3777ab2b899697085a34b9f55bb9fff9f79a82631468d28b1a7b24c80e"
+    },
+    "scripts/release_backend_requirements.lock": {
+      "bytes": 2366,
+      "sha256": "2ce69692284860d7612378b81bbff479ad21cf19f92435289d8fa0686019614d"
+    }
+  },
+  "readiness_first_attempt_success": true,
+  "readiness_jobs": [
+    {
+      "conclusion": "success",
+      "id": 132878548531,
+      "name": "Host Node 20.20.2 engine and dispatcher contract",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "id": 132878548738,
+      "name": "Frontend build",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "id": 132878548761,
+      "name": "Host Node 24.19.0 engine and dispatcher contract",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "id": 132878548763,
+      "name": "Backend preflight",
+      "status": "completed"
+    },
+    {
+      "conclusion": "skipped",
+      "id": 132880153730,
+      "name": "Emergent Host Node ${{ matrix.host-node }} clean-clone adapter rehearsal",
+      "status": "completed"
+    },
+    {
+      "conclusion": "skipped",
+      "id": 132880153855,
+      "name": "Emergent manual redeploy required",
+      "status": "completed"
+    }
+  ],
+  "readiness_run_id": 43735976384,
+  "release_control_source_summary": {
+    "added_count": 0,
+    "deleted_count": 0,
+    "file_count": 292,
+    "manifest_sha256": "55f84f3d71a911900319a349d966c9c4ee7bd85a46f28058a13df8f1840b92e7",
+    "modified_count": 0,
+    "projection_tree_oid": "858757c0e091c69878a8f396e4cd051a8413e6d9",
+    "scope": "release_control_source_v1",
+    "scope_tree_oid": "858757c0e091c69878a8f396e4cd051a8413e6d9",
+    "source_base_git_sha": "8f1b0ddb6408781e8677212bcb8cf2d51eab42f7",
+    "source_base_root_tree_oid": "a8616930de7f98a43a509ff7dad287befd61ba5a",
+    "source_base_scope_tree_oid": "858757c0e091c69878a8f396e4cd051a8413e6d9",
+    "source_git_sha": "9b91e88c049166f111905c80a4c1fa07a96b51bd",
+    "source_root_tree_oid": "bb79134858e4f472a97e33cec100ec4ddfe095f7",
+    "tombstone_count": 0,
+    "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "tree_sha256": "4e2d9a1b6b3b0c7e26fc5c349c715981b00e1f0ce21224ae84af2774929aa84b"
+  },
+  "result": "PASS",
+  "reviewed_three_file_hashes_bound_to_Git": {
+    "backend/salla_integration/webhook_incident_recovery.py": "32ac7fb3d9a4f9e4f477b5b9d9e2759f858da0a089809a4d37835b074d38f5b7",
+    "backend/tests/test_salla_webhook_incident_recovery.py": "443e49a8f68dcd133bd73a58592206d8d440e2965d1ac9d6e7ee9c282479dfd3",
+    "docs/operations/SALLA-RECOVERY-OWNERSHIP-20261115/STATUS.json": "668913e0ac81f47518f4e351d975314674d31fd42e43da437c09ccce38463f83"
+  },
+  "runtime_release_id": "rg5-41884037a1555abb570d35f23b2a81edc8c24e1135035a37aabee30c2d16e8e7",
+  "source_base_git_sha": "8f1b0ddb6408781e8677212bcb8cf2d51eab42f7",
+  "source_git_sha": "9b91e88c049166f111905c80a4c1fa07a96b51bd",
+  "source_root_and_base_tree_binding": "PASS",
+  "source_tree_oid": "bb79134858e4f472a97e33cec100ec4ddfe095f7",
+  "toolchain": {
+    "node": "22.23.2",
+    "vite": "8.2.4",
+    "yarn": "1.22.22"
+  },
+  "toolchain_and_package_pins": "PASS",
+  "two_clean_builds_match_retained_pass_2": "PASS",
+  "worktree_clean_unchanged": "PASS",
+  "zip_bytes": 379266,
+  "zip_sha256": "6fbcd8d6005c8843b2451a48645cae9620dbce8a0c114d7a21c8f6fccec09b4f"
+}

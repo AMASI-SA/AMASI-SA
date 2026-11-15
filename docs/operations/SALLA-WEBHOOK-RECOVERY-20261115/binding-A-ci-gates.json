@@ -1,0 +1,487 @@
+{
+  "balance": {
+    "backend_job_id": 132878549170,
+    "passed": 4799,
+    "run_id": 43735976562,
+    "sanitized_log_excerpt": "2026-11-15T16:41:05.7438163Z 4799 passed, 8 warnings in 239.12s (0:03:59)\n2026-11-15T16:41:07.2640691Z 16 passed, 18 subtests passed in 0.30s\n",
+    "sanitized_log_excerpt_sha256": "a98c51c82e31b4aea5b5191257040a8107b9eab40bc574e2f8bcf94a3ee87107",
+    "shipping_subtests_passed": 18,
+    "shipping_tests_passed": 16
+  },
+  "candidate": {
+    "artifact_id": 14170597482,
+    "independent_reviewer": "release_runtime_prerequisites",
+    "intent_sha256": "fc151ac8b5c0faad002ca4773d510b6b16e6492ebb3bdf82b352fa1eaa4e5dc5",
+    "report": "A-independent-candidate-review.json",
+    "report_sha256": "5d69347daeece6f971d07ee94bb2b988ea6355aeea908433081bcc8bce366928",
+    "runtime": "rg5-41884037a1555abb570d35f23b2a81edc8c24e1135035a37aabee30c2d16e8e7",
+    "validation": "Official candidate loader and complete Git backend/control/frontend source manifests passed; reviewer downloaded once"
+  },
+  "check_summary": {
+    "conditional_skipped": 6,
+    "failed": 0,
+    "pending": 0,
+    "success": 21,
+    "total": 27
+  },
+  "checks": [
+    {
+      "conclusion": "success",
+      "id": 132880333806,
+      "name": "CodeQL",
+      "status": "completed"
+    },
+    {
+      "conclusion": "skipped",
+      "id": 132880153855,
+      "name": "Emergent manual redeploy required",
+      "status": "completed"
+    },
+    {
+      "conclusion": "skipped",
+      "id": 132880153730,
+      "name": "Emergent Host Node ${{ matrix.host-node }} clean-clone adapter rehearsal",
+      "status": "completed"
+    },
+    {
+      "conclusion": "skipped",
+      "id": 132879872543,
+      "name": "Frontend Snapchat settings tests and build",
+      "status": "completed"
+    },
+    {
+      "conclusion": "skipped",
+      "id": 132879872215,
+      "name": "Backend settings and zero-write regressions",
+      "status": "completed"
+    },
+    {
+      "conclusion": "skipped",
+      "id": 132878749542,
+      "name": "Publication backend and existing write guards",
+      "status": "completed"
+    },
+    {
+      "conclusion": "skipped",
+      "id": 132878748989,
+      "name": "Publication frontend and existing media flow",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "id": 132878549547,
+      "name": "durable-ingress",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "id": 132878549170,
+      "name": "Operational Balance Backend",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "id": 132878549097,
+      "name": "Canonical worker excludes operational balance jobs",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "id": 132878549057,
+      "name": "Operational balances browser, mobile and visibility acceptance",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "id": 132878548984,
+      "name": "Stock eligibility, reservation and consumption on isolated Mongo",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "id": 132878548853,
+      "name": "Operational Balance Frontend",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "id": 132878548763,
+      "name": "Backend preflight",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "id": 132878548761,
+      "name": "Host Node 24.19.0 engine and dispatcher contract",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "id": 132878548738,
+      "name": "Frontend build",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "id": 132878548664,
+      "name": "Frontend dependency and CSP checks",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "id": 132878548611,
+      "name": "G47 real Mongo purchase, payment, opening and component lifecycle",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "id": 132878548574,
+      "name": "Fail-closed settings and multi-account scope guard",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "id": 132878548531,
+      "name": "Host Node 20.20.2 engine and dispatcher contract",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "id": 132878548442,
+      "name": "scope",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "id": 132878548400,
+      "name": "G47 purchase and receiving UI tests and build",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "id": 132878548377,
+      "name": "CodeQL (javascript-typescript)",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "id": 132878548376,
+      "name": "native-contract",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "id": 132878548330,
+      "name": "Backend security contracts",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "id": 132878547997,
+      "name": "CodeQL (python)",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "id": 132878547832,
+      "name": "backend-unit",
+      "status": "completed"
+    }
+  ],
+  "decision": "PASS: all applicable exact-A workflows succeeded on first attempts; eligible for intent-only B freeze, not production acceptance",
+  "frontend": {
+    "build_and_security_steps": "success",
+    "job_id": 132878548664,
+    "passed_suites": 403,
+    "passed_tests": 3848,
+    "production_dependency_audit": {
+      "critical": 0,
+      "high": 0,
+      "info": 0,
+      "low": 0,
+      "moderate": 0
+    },
+    "recovery_suite": "SallaWebhookRecovery.test.jsx PASS; unchanged38-case source suite",
+    "run_id": 43735976351,
+    "sanitized_log_excerpt": "2026-11-15T16:35:25.2111202Z PASS src/pages/SallaWebhookRecovery.test.jsx\n2026-11-15T16:36:24.2884337Z Test Suites: 403 passed, 403 total\n2026-11-15T16:36:24.2884677Z Tests:       3848 passed, 3848 total\n2026-11-15T16:36:25.3653971Z {\"type\":\"auditSummary\",\"data\":{\"vulnerabilities\":{\"info\":0,\"low\":0,\"moderate\":0,\"high\":0,\"critical\":0},\"dependencies\":409,\"devDependencies\":0,\"optionalDependencies\":0,\"totalDependencies\":409}}\n",
+    "sanitized_log_excerpt_sha256": "0d9972b3fc6a7b6a9cb1abf4c5500cd31460c841686b7975fcc135b49f71890f"
+  },
+  "observed_at_utc": "2026-11-15 16:42:23 UTC",
+  "pull_request": 1945,
+  "repository": "AMASI-SA/AMASI-SA",
+  "review_boundary": "No tests rerun, workflow mutation, code change, PR write, /app operation, lease action or production call by this reviewer. Only sanitized evidence files written outside source.",
+  "reviewer": "review_release_continuation",
+  "salla": {
+    "archive_bytes": 8681,
+    "archive_sha256": "c3cc6de3b03608ebb8e0236855ef32ec5df6b234a60c2627eeb5deab61d91cdf",
+    "artifact_id": 14170486877,
+    "error_count": 0,
+    "failure_count": 0,
+    "job_id": 132878549547,
+    "members": [
+      "salla-recovery.txt",
+      "salla-recovery.xml",
+      "source.txt"
+    ],
+    "mongo_case_count": 16,
+    "mongo_cases": [
+      {
+        "classname": "tests.test_salla_webhook_incident_recovery.IncidentRecoveryMongoTests",
+        "name": "test_batch_commit_preserves_identity_payload_history_and_grants_once",
+        "result": "passed",
+        "time": "0.301"
+      },
+      {
+        "classname": "tests.test_salla_webhook_incident_recovery.IncidentRecoveryMongoTests",
+        "name": "test_changed_current_owner_refuses_before_grant",
+        "result": "passed",
+        "time": "0.255"
+      },
+      {
+        "classname": "tests.test_salla_webhook_incident_recovery.IncidentRecoveryMongoTests",
+        "name": "test_concurrent_ingress_after_snapshot_aborts_prior_row_changes",
+        "result": "passed",
+        "time": "0.281"
+      },
+      {
+        "classname": "tests.test_salla_webhook_incident_recovery.IncidentRecoveryMongoTests",
+        "name": "test_concurrent_same_document_rebind_conflicts_and_rolls_back_grants",
+        "result": "passed",
+        "time": "0.269"
+      },
+      {
+        "classname": "tests.test_salla_webhook_incident_recovery.IncidentRecoveryMongoTests",
+        "name": "test_expiry_before_final_write_fence_rolls_back_entire_batch",
+        "result": "passed",
+        "time": "0.275"
+      },
+      {
+        "classname": "tests.test_salla_webhook_incident_recovery.IncidentRecoveryMongoTests",
+        "name": "test_historical_binding_updated_to_new_winner_aborts_snapshot_grants",
+        "result": "passed",
+        "time": "0.281"
+      },
+      {
+        "classname": "tests.test_salla_webhook_incident_recovery.IncidentRecoveryMongoTests",
+        "name": "test_live_worker_lease_is_never_overridden",
+        "result": "passed",
+        "time": "0.260"
+      },
+      {
+        "classname": "tests.test_salla_webhook_incident_recovery.IncidentRecoveryMongoTests",
+        "name": "test_newer_binding_committed_during_snapshot_is_seen_by_fresh_final_check",
+        "result": "passed",
+        "time": "0.280"
+      },
+      {
+        "classname": "tests.test_salla_webhook_incident_recovery.IncidentRecoveryMongoTests",
+        "name": "test_only_existing_worker_processes_grant_and_keeps_done_tombstone",
+        "result": "passed",
+        "time": "0.307"
+      },
+      {
+        "classname": "tests.test_salla_webhook_incident_recovery.IncidentRecoveryMongoTests",
+        "name": "test_owner_change_after_final_read_is_rejected_by_existing_worker",
+        "result": "passed",
+        "time": "0.305"
+      },
+      {
+        "classname": "tests.test_salla_webhook_incident_recovery.IncidentRecoveryMongoTests",
+        "name": "test_real_mongo_ambiguous_bson_ranks_never_select_a_convenient_owner",
+        "result": "passed",
+        "time": "0.289"
+      },
+      {
+        "classname": "tests.test_salla_webhook_incident_recovery.IncidentRecoveryMongoTests",
+        "name": "test_real_mongo_legacy_scalar_history_matches_canonical_owner_without_writes",
+        "result": "passed",
+        "time": "0.324"
+      },
+      {
+        "classname": "tests.test_salla_webhook_incident_recovery.IncidentRecoveryMongoTests",
+        "name": "test_real_query_excludes_every_nonincident_or_unsafe_state_and_never_writes",
+        "result": "passed",
+        "time": "0.292"
+      },
+      {
+        "classname": "tests.test_salla_webhook_incident_recovery.IncidentRecoveryMongoTests",
+        "name": "test_runtime_change_before_commit_rolls_back_entire_batch",
+        "result": "passed",
+        "time": "0.272"
+      },
+      {
+        "classname": "tests.test_salla_webhook_incident_recovery.IncidentRecoveryMongoTests",
+        "name": "test_stale_delivery_metadata_payload_or_extra_fields_refuse_whole_batch",
+        "result": "passed",
+        "time": "0.360"
+      },
+      {
+        "classname": "tests.test_salla_webhook_incident_recovery.IncidentRecoveryMongoTests",
+        "name": "test_successor_epoch_is_not_modified_or_released",
+        "result": "passed",
+        "time": "0.268"
+      }
+    ],
+    "passed": 419,
+    "real_mongo": "Actual disposable loopback replica set executed all16 required cases; no skip/failure/error anywhere in XML",
+    "run_id": 43735976605,
+    "skipped_count": 0,
+    "source_path": "A-source.txt",
+    "source_txt": "9b91e88c049166f111905c80a4c1fa07a96b51bd\nbb79134858e4f472a97e33cec100ec4ddfe095f7\n",
+    "source_txt_bytes": 82,
+    "source_txt_sha256": "7c5dcd9fb3e437d0635bd856d83f53530da27291d601fcc6e53632cacf4663f8",
+    "subtests_passed": 43,
+    "suite_attributes": [
+      {
+        "errors": "0",
+        "failures": "0",
+        "hostname": "runnervm8axu0",
+        "name": "pytest",
+        "skipped": "0",
+        "tests": "462",
+        "time": "35.144",
+        "timestamp": "2026-11-15T16:32:26.710440+00:00"
+      }
+    ],
+    "testcase_count": 419,
+    "xml_bytes": 65738,
+    "xml_path": "A-salla-recovery.xml",
+    "xml_sha256": "ef9a5365cb58e92fa70600f43596e383f352ea52d421112d2e4cb257b2bb80f2"
+  },
+  "schema_version": 1,
+  "source_commit": "9b91e88c049166f111905c80a4c1fa07a96b51bd",
+  "source_parent": "8f1b0ddb6408781e8677212bcb8cf2d51eab42f7",
+  "source_tree": "bb79134858e4f472a97e33cec100ec4ddfe095f7",
+  "stock": {
+    "job_id": 132878548984,
+    "passed": 4513,
+    "run_id": 43735976469,
+    "sanitized_log_excerpt": "2026-11-15T16:42:00.8726508Z 4513 passed, 8 warnings, 7 subtests passed in 338.51s (0:05:38)\n",
+    "sanitized_log_excerpt_sha256": "c0df573e93b7cb9c9ce834fc08545da8378a9db8cc961ef3bf1acf337d131191",
+    "subtests_passed": 7
+  },
+  "workflow_count": 11,
+  "workflows": [
+    {
+      "attempt": 1,
+      "conclusion": "success",
+      "created_at": "2026-11-15T16:31:46Z",
+      "event": "pull_request",
+      "head_sha": "9b91e88c049166f111905c80a4c1fa07a96b51bd",
+      "id": 43735976321,
+      "name": "CodeQL",
+      "status": "completed",
+      "updated_at": "2026-11-15T16:38:49Z"
+    },
+    {
+      "attempt": 1,
+      "conclusion": "success",
+      "created_at": "2026-11-15T16:31:46Z",
+      "event": "pull_request",
+      "head_sha": "9b91e88c049166f111905c80a4c1fa07a96b51bd",
+      "id": 43735976322,
+      "name": "Qoyod Payment Freshness",
+      "status": "completed",
+      "updated_at": "2026-11-15T16:33:58Z"
+    },
+    {
+      "attempt": 1,
+      "conclusion": "success",
+      "created_at": "2026-11-15T16:31:46Z",
+      "event": "pull_request",
+      "head_sha": "9b91e88c049166f111905c80a4c1fa07a96b51bd",
+      "id": 43735976351,
+      "name": "Security Gate",
+      "status": "completed",
+      "updated_at": "2026-11-15T16:36:37Z"
+    },
+    {
+      "attempt": 1,
+      "conclusion": "success",
+      "created_at": "2026-11-15T16:31:46Z",
+      "event": "pull_request",
+      "head_sha": "9b91e88c049166f111905c80a4c1fa07a96b51bd",
+      "id": 43735976363,
+      "name": "G47 Focused Integration",
+      "status": "completed",
+      "updated_at": "2026-11-15T16:36:18Z"
+    },
+    {
+      "attempt": 1,
+      "conclusion": "success",
+      "created_at": "2026-11-15T16:31:46Z",
+      "event": "pull_request",
+      "head_sha": "9b91e88c049166f111905c80a4c1fa07a96b51bd",
+      "id": 43735976384,
+      "name": "Mezan Release Readiness",
+      "status": "completed",
+      "updated_at": "2026-11-15T16:37:16Z"
+    },
+    {
+      "attempt": 1,
+      "conclusion": "success",
+      "created_at": "2026-11-15T16:31:46Z",
+      "event": "pull_request",
+      "head_sha": "9b91e88c049166f111905c80a4c1fa07a96b51bd",
+      "id": 43735976405,
+      "name": "Snapchat Settings Management V2",
+      "status": "completed",
+      "updated_at": "2026-11-15T16:36:18Z"
+    },
+    {
+      "attempt": 1,
+      "conclusion": "success",
+      "created_at": "2026-11-15T16:31:46Z",
+      "event": "pull_request",
+      "head_sha": "9b91e88c049166f111905c80a4c1fa07a96b51bd",
+      "id": 43735976409,
+      "name": "MZ2 Track F native shipping",
+      "status": "completed",
+      "updated_at": "2026-11-15T16:37:25Z"
+    },
+    {
+      "attempt": 1,
+      "conclusion": "success",
+      "created_at": "2026-11-15T16:31:46Z",
+      "event": "pull_request",
+      "head_sha": "9b91e88c049166f111905c80a4c1fa07a96b51bd",
+      "id": 43735976413,
+      "name": "Snapchat Direct Active Publication",
+      "status": "completed",
+      "updated_at": "2026-11-15T16:32:28Z"
+    },
+    {
+      "attempt": 1,
+      "conclusion": "success",
+      "created_at": "2026-11-15T16:31:46Z",
+      "event": "pull_request",
+      "head_sha": "9b91e88c049166f111905c80a4c1fa07a96b51bd",
+      "id": 43735976469,
+      "name": "Operational Stock Eligibility",
+      "status": "completed",
+      "updated_at": "2026-11-15T16:42:07Z"
+    },
+    {
+      "attempt": 1,
+      "conclusion": "success",
+      "created_at": "2026-11-15T16:31:46Z",
+      "event": "pull_request",
+      "head_sha": "9b91e88c049166f111905c80a4c1fa07a96b51bd",
+      "id": 43735976562,
+      "name": "Operational Balance Web",
+      "status": "completed",
+      "updated_at": "2026-11-15T16:41:11Z"
+    },
+    {
+      "attempt": 1,
+      "conclusion": "success",
+      "created_at": "2026-11-15T16:31:46Z",
+      "event": "pull_request",
+      "head_sha": "9b91e88c049166f111905c80a4c1fa07a96b51bd",
+      "id": 43735976605,
+      "name": "Salla durable ingress and daily refresh",
+      "status": "completed",
+      "updated_at": "2026-11-15T16:33:07Z"
+    }
+  ]
+}

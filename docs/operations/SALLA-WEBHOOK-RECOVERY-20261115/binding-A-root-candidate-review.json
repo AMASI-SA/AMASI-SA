@@ -1,0 +1,25 @@
+{
+  "candidate_bytes": 1312444,
+  "candidate_sha256": "fc151ac8b5c0faad002ca4773d510b6b16e6492ebb3bdf82b352fa1eaa4e5dc5",
+  "critical_git_hashes": 6,
+  "frontend_artifact_tree_sha256": "7cd63bb1cd550a2601b09c5107b6e4ddba0c4b3eae435bfdfe80ddcb9934e977",
+  "frontend_files": 1184,
+  "independent_frontend_git_membership_mode_blob_bytes_hash_comparison": true,
+  "observed_at": "2026-11-15T16:41:27.106742+00:00",
+  "official_candidate_loader": "PASS in immediately preceding root invocation; full backend/control Git manifests validated",
+  "remaining": "All applicable exact-A CI gates must pass before intent-only B freeze; candidate review is not publication clearance",
+  "result": "PASS",
+  "reviewer": "root",
+  "runtime_release_id": "rg5-41884037a1555abb570d35f23b2a81edc8c24e1135035a37aabee30c2d16e8e7",
+  "source_base_git_sha": "8f1b0ddb6408781e8677212bcb8cf2d51eab42f7",
+  "source_checkout_boot_diagnostic": "Expected absent generated backend/release_identity.json in unmaterialized source A; candidate loader returned successfully, no runtime file created",
+  "source_git_sha": "9b91e88c049166f111905c80a4c1fa07a96b51bd",
+  "source_tree": "bb79134858e4f472a97e33cec100ec4ddfe095f7",
+  "toolchain": {
+    "node": "22.23.2",
+    "vite": "8.2.4",
+    "yarn": "1.22.22"
+  },
+  "two_matching_clean_build_passes_retained_second": true,
+  "worktree_clean": true
+}
