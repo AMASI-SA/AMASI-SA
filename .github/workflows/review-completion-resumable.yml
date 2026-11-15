@@ -39,6 +39,11 @@ on:
       - "backend/tests/test_review_gift_address.py"
       - "backend/preparation_piece_operations.py"
       - "backend/mobile_order_refresh.py"
+      - "backend/preparation_refresh_recovery.py"
+      - "backend/review_direct_preparation_sync.py"
+      - "backend/order_engine/routes.py"
+      - "backend/tests/test_preparation_refresh_recovery.py"
+      - "backend/tests/test_review_direct_preparation_sync.py"
       - "backend/assembly_manual_label_refresh.py"
       - "backend/preparation_supplier_progress.py"
       - "backend/tests/test_supplier_progress_files.py"
@@ -147,6 +152,73 @@ jobs:
             sleep 1
           done
           docker exec review-rs mongosh --port 27018 --quiet --eval 'if(!db.hello().isWritablePrimary){quit(1)}'
+      - name: Verify explicit-refresh preparation recovery with real Mongo
+        run: |
+          python - <<'PY'
+          import os
+          from urllib.parse import urlparse
+          from pymongo import MongoClient
+          uri = os.environ["MZ2_TEST_MONGO_URI"]
+          parsed = urlparse(uri)
+          assert parsed.scheme == "mongodb" and parsed.hostname == "127.0.0.1"
+          assert parsed.username is None and parsed.password is None
+          with MongoClient(uri, serverSelectionTimeoutMS=5000) as client:
+              hello = client.admin.command("hello")
+              version = client.admin.command("buildInfo")["version"]
+              assert version == "8.0.12", version
+              assert hello.get("setName") == "reviewtest" and hello.get("isWritablePrimary") is True
+          print("Preparation recovery fixture: MongoDB 8.0.12, reviewtest primary, loopback only")
+          PY
+          python -m pytest --noconftest -p no:cacheprovider -q --tb=short \
+            tests/test_preparation_refresh_recovery.py \
+            tests/test_review_direct_preparation_sync.py \
+            --junitxml="$RUNNER_TEMP/preparation-refresh-recovery.xml"
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          cases = list(ET.parse(Path(os.environ["RUNNER_TEMP"]) / "preparation-refresh-recovery.xml").iter("testcase"))
+          assert cases, "Missing preparation refresh recovery cases"
+          rejected = [row.attrib.get("name") for row in cases
+                      if any(row.find(tag) is not None for tag in ("skipped", "failure", "error"))]
+          assert not rejected, rejected
+          required = {
+              "test_preparation_refresh_recovery.ExplicitRefreshContractTests": {
+                  "test_mobile_refresh_returns_guarded_preparation_continuation",
+                  "test_cached_failed_stale_or_foreign_refresh_never_starts_recovery",
+                  "test_pending_recovery_preserves_successful_source_refresh",
+                  "test_recovery_read_failure_does_not_erase_applied_source_result",
+                  "test_revoked_actor_cannot_start_recovery",
+                  "test_late_authorization_denial_is_not_converted_to_pending",
+                  "test_owner_refresh_denies_missing_deleted_or_demoted_actor",
+              },
+              "test_preparation_refresh_recovery.PreparationRefreshRecoveryIntegrationTests": {
+                  "test_mobile_orders_refresh_recovers_committed_allocations",
+                  "test_mobile_assembly_refresh_recovers_committed_allocations",
+                  "test_owner_web_refresh_recovers_committed_allocations",
+                  "test_partial_allocation_returns_source_success_and_pending",
+                  "test_ineligible_workflows_make_no_extra_provider_read",
+                  "test_provider_identity_and_terminal_observations_never_promote",
+                  "test_revoked_actor_during_readback_prevents_local_commit",
+                  "test_newer_source_during_readback_is_not_overwritten",
+                  "test_repeated_explicit_refresh_preserves_approval_and_single_event",
+                  "test_confirmed_refresh_source_race_returns_pending",
+                  "test_confirmed_refresh_workflow_race_returns_pending",
+                  "test_completed_source_refresh_stays_successful_with_recovery_pending",
+              },
+              "test_review_direct_preparation_sync.DirectPreparationSyncTests": {
+                  "test_already_in_progress_confirms_without_post",
+                  "test_uncertain_post_is_never_repeated_read_only_reconciliation_confirms",
+                  "test_status_get_cannot_dispatch_and_keeps_permission_and_tenant_boundaries",
+                  "test_mixed_partial_waits_then_last_supplier_allocation_uses_same_guarded_transition",
+              },
+          }
+          for suite, names in required.items():
+              executed = {row.attrib.get("name") for row in cases
+                          if row.attrib.get("classname", "").endswith(suite)}
+              assert names <= executed, ("Missing preparation recovery contracts", suite, sorted(names - executed))
+          print(f"Preparation refresh recovery: {len(cases)} executed cases; named contracts present; zero skips/failures/errors")
+          PY
       - name: Verify Android operation recovery with disposable Mongo
         run: |
           python -m pytest --noconftest -p no:cacheprovider -q --tb=short \
@@ -306,6 +378,7 @@ jobs:
             ${{ runner.temp }}/review-acceptance-guard.xml
             ${{ runner.temp }}/android-operations.xml
             ${{ runner.temp }}/source-snapshot.xml
+            ${{ runner.temp }}/preparation-refresh-recovery.xml
           if-no-files-found: error
       - name: Remove this job's disposable fixture
         if: always()
