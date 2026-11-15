@@ -1,5 +1,17 @@
 # Option-price currency recovery: release handoff
 
+## Continuation 2026-11-15 — fresh readback before authentication
+
+Production branch remains9afb38cf0dc0d8e8cd887f2c2cdb4a6be5a7ca68. A fresh ordinary browser GET /api/health confirms sourcefc5ff89f5794061bf62a7de283eedc9ecd4ec7c9 and runtimerg5-92ce2e87026743df6ed7cd3083940f596b3a562e1c608cc985df3dc7c15cabe3, with verified identity, critical hashes and frontend verification true. This is a read-only runtime observation, not a new official release verification or lease action.
+
+Fresh authenticated assembly search still shows all five Ready buttons disabled: women hoodie, shawl and packaging wait for approved-source reconciliation; child hoodie still requires supplier receipt. No source refresh, receipt, Ready, provider or financial action was repeated. User's requested outcome remains FAILED.
+
+Emergent now redirects /chat to its sign-in landing page, offering Google, Email and Phone. It must be authenticated through the supported secure browser flow before refreshing production Database Viewer access. Mezan itself remains signed in. No credential values were read or entered. Next action: secure sign-in method request, then verify the signed-in Emergent page and legitimate production database access before scoped proof diagnosis. Prior expiry must not be worked around by reading secrets, weakening guards or applying against preview.
+
+Repository restored cleanly at exact production head in /workspace/scratch/5ce5f8c6856e/mezan-ready-followup-20261115. No source patch started. Independent read-only audit found no newer production source; open Draft PR1934 concerns webhook/sync performance and is not part of this Ready follow-up. Its old1932 lease narrative is historical; fresh shared guard status is still required before any future /app change. Existing PR1904 symbols are already present in current production; do not merge it merely because it remains open.
+
+Production changed by this continuation: no. Last deployed release and the single earlier source refresh remain documented below.
+
 ## Current live checkpoint — release verified; target Ready still locked
 
 Confirmed on 2026-11-15, after the one ordinary source refresh and after loading the approved frontend. PR1933 normal merge M9afb38cf0dc0d8e8cd887f2c2cdb4a6be5a7ca68 is live with inherited PR1932. The official verify completed successfully at01:56:41.846800UTC, exit0, verified=true, checks=3, exact sourceA fc5ff89f5794061bf62a7de283eedc9ecd4ec7c9 and runtime rg5-92ce2e87026743df6ed7cd3083940f596b3a562e1c608cc985df3dc7c15cabe3. It verified canonical/cache-busted assets, exact JSON build-meta, shell/cache behavior and retirement workers. Own Release Guard status afterward active=false. The earlier startup HTTP520 failure and its one justified verify retry remain documented below. No second publish was submitted.
