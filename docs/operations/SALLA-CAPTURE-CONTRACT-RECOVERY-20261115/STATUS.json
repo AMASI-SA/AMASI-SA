@@ -1,0 +1,63 @@
+{
+  "task_id": "SALLA-CAPTURE-CONTRACT-RECOVERY-20261115",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/salla-capture-contract-recovery-20261115",
+  "base_commit": "a2a8218f858547f4d9d094d29998a93b09bf59ae",
+  "status": "Focused source repair and before/after production-composition regression ready; CI and independent review pending",
+  "scope": "Preserve the strict webhook processing contract through the installed cart reconciliation wrapper; retain prior daily10 update-only schedule, durable inbox, customer choices and accounting gates",
+  "incident": {
+    "predecessor_pr": 1935,
+    "predecessor_source": "8c11053b602f8f56a1facbaee09779f2896b0ada",
+    "published_version": "908dee3",
+    "platform_completion": "2026-11-15 17:07 Asia/Riyadh",
+    "observation": "New jobs run and ingress persists events, but natural events accumulate in retry without capture audit advancement",
+    "root_cause": "Canonical server installs a wrapper accepting only known_events before importing dispatcher, which now passes raise_on_processing_error; wrapper raises TypeError before capture",
+    "independent_reproduction": "Exact prior installer reproduces unexpected-keyword TypeError with zero underlying capture calls",
+    "test_gap": "Core route factory and direct dispatcher imports bypassed canonical package installation; empty canonical worker smoke only checked readiness"
+  },
+  "changes": [
+    "Explicit bool defaultFalse parameter on installed wrapper; forward unchanged to underlying capture",
+    "Fresh-process canonical package factory regression for successful default inbox processing, strict failures and legacy callers",
+    "Canonical real-Mongo ManagedWorker smoke now processes a synthetic product event and checks audit, completion, ciphertext removal and duplicate suppression",
+    "Required Salla workflow includes installed-wrapper and neighboring cart-reconciliation cases"
+  ],
+  "verification": {
+    "before": {
+      "failed": 3,
+      "seconds": 9.77,
+      "mechanism": "completion retry processing_failed with no audit, strict/default unexpected-keyword TypeError"
+    },
+    "after": {
+      "passed": 3,
+      "failed": 0,
+      "seconds": 5.47,
+      "exit_code": 0
+    },
+    "diff_check": "pass",
+    "neighbor_suites": "running; dependency-only local collection blocker being resolved",
+    "real_mongo_child": "must execute in required background workflow with no skipped cases",
+    "independent_review": "PASS: explicit strict forwarding, preserved cart reconciliation, canonical fresh-process regression and actual child case reviewed"
+  },
+  "preserved": {
+    "production_profit_changes": "All PR1936 source changes retained by direct descendant base",
+    "ready_followup": "Unmerged PR1939 outside scope",
+    "release_intent": "Inherited exact reviewed base intent; no freezing or generated-output addition yet"
+  },
+  "release": {
+    "prepared": false,
+    "published": false,
+    "shared_app_changed": false,
+    "predecessor_identity_verification": "running separately; identity success is not functional queue acceptance"
+  },
+  "recovery": {
+    "attempt_limit": 8,
+    "quarantine_payload_retained": true,
+    "no_automatic_requeue": true,
+    "next": "After corrected runtime verification, observe natural draining; if incident rows already exhausted attempts, use a separately reviewed narrowly scoped recovery operator with preserved history, one-time CAS and existing global-worker lease. Do not blanket-reset or delete rows."
+  },
+  "continuation": {
+    "ledger": "Issue1006 is full; task PR and evidence branch are durable continuation record",
+    "next": "Run exact source gates and independent review; freeze accepted candidate as intent-only B; require both clean-clone host rehearsals and package proof; normal merge, fresh inactive original guard, preserving adapter rehearsal, prepare/prepublish and one authorized publication; verify exact live identity and queue completion"
+  },
+  "production_changed_by_this_followup": false
+}
