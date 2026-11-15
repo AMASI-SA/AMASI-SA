@@ -1,7 +1,7 @@
 {
   "task_id": "MZ-BUNDLE-CONDITIONAL-CHOICE-20261116",
   "scope": "Implement conditional descriptive-option costing in current bundle estimates.",
-  "state": "integrated_intent_B_frozen_pending_CI_and_host",
+  "state": "integrated_B_original_host_rehearsal_passed_pending_CI",
   "repository": "AMASI-SA/AMASI-SA",
   "task_branch": "codex/bundle-conditional-cost-integrated-20261116",
   "verified_milestone_commit": "ba19a270fb20ab45328f293e200728bebda6df4c",
@@ -129,6 +129,15 @@
       "head": "ba19a270fb20ab45328f293e200728bebda6df4c",
       "readiness_run_id": 43774777595,
       "status": "running"
+    },
+    "reviewed_B": {
+      "head": "a00e3e38530376943960f1f1ebe301dde5e7f061",
+      "readiness_run_id": 43775111815,
+      "details_run_id": 43775111868,
+      "security_run_id": 43775111963,
+      "codeql_run_id": 43775111794,
+      "status": "running",
+      "snapshot": "Details, source coverage, backend preflight, dispatcher and frontend build passed. Integration and both clean-clone adapter jobs remained in progress."
     }
   },
   "review": "independent_implementation_review_passed",
@@ -150,7 +159,7 @@
     "Shared /app 120 untracked files and unsaved Untitled-1; another provider release is active in a different conversation. Recheck Production base and lease before changes."
   ],
   "ledger": "Issue #1006 was previously at its comment limit; dedicated task status serves as recoverable handoff without retrying that append.",
-  "next_safe_action": "Check exact integrated-B CI. Confirm original-host status inactive (provider publication may be pending), rehearse isolated B with exact public client origin, then normal merge only if Production still J2589, original-host materialization, official prepare/prepublish, authorized UI publication and three verification probes.",
+  "next_safe_action": "Wait for exact-B applicable checks; confirm provider publication is finished and official lease inactive, recheck Production remains J2589, normally merge PR1954 preserving B tree. Rehearse/materialize merged M on original host under official mutex, then official prepare/prepublish, publish once and verify three probes. Preserve all unrelated /app files.",
   "owner_clarification": {
     "source": "User clarification after diagnosis",
     "statement": "Selecting affirmative customization adds no amount.",
@@ -196,5 +205,23 @@
     "source_base_git_sha": "2589f440106a7c5d463ee03eac3617d113319673",
     "runtime_release_id": "rg5-39f41f8377951a9b3b673d643711b332a94f1479e45a6167b2c4c90a1fd9c27d",
     "validation": "Exact ZIP/file digest and blob verified; candidate loader and complete Backend/control source manifests match integrated A. Intent-only B freezes original artifact bytes."
+  },
+  "host_rehearsal": {
+    "source_A": "ba19a270fb20ab45328f293e200728bebda6df4c",
+    "intent_B": "a00e3e38530376943960f1f1ebe301dde5e7f061",
+    "path": "/tmp/mz-bundle-integrated-v5.Ice9jc/repo",
+    "duration_seconds": 58.61,
+    "exit_status": 0,
+    "host_node": "v24.19.0",
+    "host_python": "3.11.18",
+    "host_yarn": "1.22.22",
+    "architecture": "aarch64",
+    "runtime_release_id": "rg5-39f41f8377951a9b3b673d643711b332a94f1479e45a6167b2c4c90a1fd9c27d",
+    "frontend_artifact_tree_sha256": "8017e720f266ed5d6b0141d83312512e8052396c7da65e22557dce1c8fe79fcb",
+    "backend_isolated_verified": true,
+    "backend_health_verified": true,
+    "frontend_isolated_runtime_artifact_verified": true,
+    "lease_created": false,
+    "production_files_modified": false
   }
 }
