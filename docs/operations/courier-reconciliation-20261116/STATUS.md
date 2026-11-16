@@ -1,6 +1,49 @@
 # Courier delivery reconciliation — 2026-11-16
 
-## Current outcome — published and verified, 2026-11-17 Asia/Riyadh
+## Current outcome — refreshed and measured, 2026-11-17 Asia/Riyadh
+
+The owner's subsequent instruction `حدث وقيس اثر الاصلاح` explicitly authorized the visible source/balance refresh and measurement after publication. **The second refresh completed successfully.** This section supersedes only the earlier no-refresh/saved-snapshot boundary; the verified release identity below remains unchanged.
+
+- Same live page: https://mezansalla.com/operational-balances/financial-position?view=couriers
+- Before saved calculation: **14 November 2026, 23:09 Riyadh**.
+- After saved calculation: **17 November 2026, 02:09 Riyadh**.
+- Both exports use **SAR**, operating start **1 November 2026, 00:30 Riyadh**, and default unfiltered detail scope.
+- First visible refresh began at **02:04:43 Riyadh** (`2026-11-16T23:04:43.154Z`). It ended with the orders-source read timeout message and retained the prior saved calculation.
+- One bounded retry began at **02:09:04 Riyadh** (`2026-11-16T23:09:04.480Z`). The disabled button returned to normal, the error disappeared, and the new saved timestamp and values were observed. No third refresh, manual delivery confirmation, deployment, policy relaxation, or change to source caps/timeouts/retry fences was performed.
+- The timeout maps to the stored `unified_orders` read; this is not evidence of a Salla API failure. The preserved old aggregate does not rule out earlier partial source/native-evidence writes.
+- A console event named `operational_refresh_source_stage_timings` was observed after the first attempt, but the UI tool exposed its payload only as `Array(6)`. No per-stage timing values or native acquisition results are claimed.
+
+### Measured result
+
+| Company | Pending before | Entries | Exits | Pending after | Net | Payable before SAR | Payable after SAR |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Aramex | 228 | 45 | 0 | 273 | +45 | 0.00 | 0.00 |
+| iMile | 1,996 | 185 | 42 | 2,139 | +143 | 6,848.50 | 6,883.00 |
+| SMSA | 277 | 45 | 10 | 312 | +35 | 3,800.00 | 3,800.00 |
+| **Named-company total** | **2,501** | **275** | **52** | **2,724** | **+223** | **10,648.50** | **10,683.00** |
+
+Unassigned pending is separate: **7,763 → 7,794**, explained by **85 entries − 54 exits = +31**. Confirmed-delivery counters remain **0 → 0**. Per-order detail records increased **162 → 203**; all 162 old detail IDs remain, and **no detail acquired a delivery timestamp**.
+
+The **SAR 34.50** payable increase is exactly two newly exported iMile fulfillment-fee records of **SAR 17.25** each. Their displayed fulfillment times, **16 November 23:22** and **17 November 00:22 Riyadh**, are both later than the old snapshot. These are fulfillment fees, not proof of confirmed delivery or isolated causal effect of the patch. Opening balances did not change.
+
+The +41 details comprise **33 previously exported unassigned orders** (31 now in iMile details, 2 SMSA, all with zero shipping fees and no delivery dates) and **8 IDs absent from the old export**. Two other existing unassigned orders moved to iMile pending. Displayed reasons changed for **51 unique orders retaining the same main pending membership**, comprising 44 named-company and 7 unassigned orders. A larger 86 order–membership count includes auxiliary sections and must not be reported as unique orders.
+
+Of the 275 named-company pending entries, 272 IDs were absent from the old export and 3 were already exported. Of 52 exits, 51 IDs are no longer visible anywhere in the new export and 1 remains in details. **Entry does not prove newly created orders, and exit does not prove cancellation, deletion, delivery or resolution.**
+
+### Measurement verification and limits
+
+Both immutable XLSX exports were normalized read-only with exact money strings, nulls, IDs, references, full reason messages and membership multiplicities preserved. Company totals reconcile to the identity bridge; exact decimal arithmetic reconciles the two new fees to the full payable delta. No missing IDs, reference conflicts or unresolved reason-message segmentation were found.
+
+The original source hashes are:
+
+- Before export, 567,416 bytes: `80f376332fba74182a9bda1a9383002cc026a777ae5f7935e791541ca93ba2d3`.
+- After export, 580,201 bytes: `0f1513d2f869fc1d48874e36bc1befd0e38f6268580bf62ba083f49afb30d8a9`.
+
+The snapshots are **51 hours apart**, so source state and cohort membership changed along with execution of the published code. The exports contain no native-candidate selection/acquisition/CAS results. Zero confirmed deliveries establishes **no measured final delivery-count improvement**, not zero attempted or partial native recovery. The four-candidate cap across all couriers and the 15-minute cooldown before retrying the same selected order remain in force; the cooldown is not a global interval between manual page refreshes. This refresh is not a historical backfill.
+
+**Current conclusion:** the refreshed report is saved, and its financial delta is fully explained. A complete Salla/courier match and a causal recovery count attributable to PR #1964 remain unestablished. Raw exports, order IDs and financial detail are retained only in the user's private evidence package, not copied into this repository record.
+
+## Publication outcome — published and verified, 2026-11-17 Asia/Riyadh
 
 **PR #1964 is normally merged and the authorized Production publication is complete.** This section supersedes the historical pending/unmerged states below.
 
@@ -37,9 +80,9 @@ The platform's actual Cloud Build command/argv transcript was not exposed in the
 Shared-host receipts are in `/tmp/courier-1964-buildproof/`:
 `shared-rehearsal-result.json`, `guard-prepare.json`, `guard-prepublish.json`, `production-verify.stdout`, `production-verify.stderr`, `production-verification.json`, and `production-verification-summary.json`. The current record preserves the decisive observed identity and gate results without copying customer data or secrets.
 
-### Read-only UI verification and reconciliation limit
+### Historical read-only UI verification before the authorized refresh
 
-The newly published site loaded the saved courier report successfully:
+This historical checkpoint preceded the subsequent authorized refresh and is superseded by the current measurement above. The newly published site loaded the saved courier report successfully:
 https://mezansalla.com/operational-balances/financial-position?view=couriers
 
 The iMile pending-order dialog opened with 1,996 records (page 1 of 200) and closed successfully. Its rows and reasons rendered. The report still identifies its last saved calculation as **14 November 2026, 23:09 Riyadh**, with operating start **1 November 2026, 00:30 Riyadh**, currency SAR.
