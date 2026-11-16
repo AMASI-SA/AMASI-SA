@@ -1,0 +1,333 @@
+{
+  "schema": "ready-refresh-recovery-reviewed-B-final-CI-observation-v1",
+  "task": "READY-REFRESH-RECOVERY-20261116",
+  "observer": "/root/release_base_audit",
+  "provenance": "Read-only GitHub final metadata and actual completed job logs. The single same-head failed-job rerun was authorized and performed by root; this observer initiated no rerun.",
+  "source": {
+    "repository": "AMASI-SA/AMASI-SA",
+    "pull_request": 1955,
+    "url": "https://github.com/AMASI-SA/AMASI-SA/pull/1955",
+    "branch": "codex/ready-refresh-recovery-release-20261116",
+    "J": "2589f440106a7c5d463ee03eac3617d113319673",
+    "A": "1accaa42e132ca1232ce86b3122971b48169ca81",
+    "B": "dd4fc24dbef4b2d6e4abafac5ee5ee47d14e802b",
+    "B_tree": "aded5cb29b69b5bb09b7386932ad9fc5c35d1f44",
+    "B_sole_parent": "1accaa42e132ca1232ce86b3122971b48169ca81",
+    "only_A_to_B_changed_path": "release/release-intent-v5.json",
+    "intent_blob": "bf8f2ac59543bbde3e1c73fa0a43a768ca9a7f22",
+    "runtime_from_actual_B_adapter_logs": "rg5-255b2b13ed893324729b31c21409fa1be3be98d8c536485f712424d70bab4b4e"
+  },
+  "required_workflows": {
+    "count": 13,
+    "all_completed_success": true,
+    "runs": [
+      {
+        "id": 43776446803,
+        "name": "Security Gate",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43776446803"
+      },
+      {
+        "id": 43776446819,
+        "name": "Mezan Release Readiness",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43776446819"
+      },
+      {
+        "id": 43776446642,
+        "name": "Build20 supplier scan recovery (no deployment)",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43776446642"
+      },
+      {
+        "id": 43776446829,
+        "name": "MZ2 Track F native shipping",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43776446829"
+      },
+      {
+        "id": 43776446640,
+        "name": "G47 Focused Integration",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43776446640"
+      },
+      {
+        "id": 43776446709,
+        "name": "Operational Stock Eligibility",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43776446709"
+      },
+      {
+        "id": 43776446655,
+        "name": "CodeQL",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43776446655"
+      },
+      {
+        "id": 43776446672,
+        "name": "Snapchat Direct Active Publication",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43776446672"
+      },
+      {
+        "id": 43776446669,
+        "name": "Qoyod Payment Freshness",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43776446669"
+      },
+      {
+        "id": 43776446790,
+        "name": "Snapchat Settings Management V2",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43776446790"
+      },
+      {
+        "id": 43776446646,
+        "name": "Fulfillment V2",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43776446646"
+      },
+      {
+        "id": 43776446789,
+        "name": "Review Completion Resumable",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43776446789"
+      },
+      {
+        "id": 43776446776,
+        "name": "Operational Balance Web",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43776446776"
+      }
+    ]
+  },
+  "separate_conditional_workflow": {
+    "runs": [
+      {
+        "id": 43776446781,
+        "name": "TikTok Creator Release Candidate",
+        "status": "completed",
+        "conclusion": "skipped",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43776446781"
+      }
+    ],
+    "source_path": ".github/workflows/tiktok-content-release-candidate.yml",
+    "job_condition": "github.head_ref == 'codex/tiktok-content-ci-20261011' && github.event.pull_request.head.repo.full_name == github.repository",
+    "current_head_branch_matches": false,
+    "not_counted_as_a_failed_or_required_recovery_gate": true
+  },
+  "real_mongo_recovery": {
+    "workflow_id": 43776446789,
+    "job_id": 133003708652,
+    "attempt": 1,
+    "status": "completed",
+    "conclusion": "success",
+    "updated_at": "2026-11-15T23:55:51Z",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43776446789",
+    "actual_checked_out_head_and_tree_match_B": true,
+    "fixture": {
+      "mongodb_version": "8.0.12",
+      "replica_set": "reviewtest",
+      "primary": true,
+      "loopback_only": true
+    },
+    "gates": [
+      {
+        "name": "preparation-refresh-recovery",
+        "executed_cases": 35,
+        "subtests_passed": 35,
+        "required_new_unit_methods": 7,
+        "required_new_integration_methods": 12,
+        "required_retained_methods": 4,
+        "named_contracts_gate": "passed",
+        "skips": 0,
+        "failures": 0,
+        "errors": 0
+      },
+      {
+        "name": "android-operations",
+        "executed_cases": 329,
+        "subtests_passed": 59,
+        "skips": 0,
+        "failures": 0,
+        "errors": 0
+      },
+      {
+        "name": "review-completion",
+        "executed_cases": 828,
+        "subtests_passed": 573,
+        "skips": 0,
+        "failures": 0,
+        "errors": 0
+      },
+      {
+        "name": "source-snapshot",
+        "executed_cases": 124,
+        "subtests_passed": 28,
+        "skips": 0,
+        "failures": 0,
+        "errors": 0
+      },
+      {
+        "name": "review-acceptance-guard",
+        "executed_cases": 1,
+        "skips": 0,
+        "failures": 0,
+        "errors": 0
+      }
+    ],
+    "executed_log_lines": [
+      "2026-11-15T23:44:47.9450603Z dd4fc24dbef4b2d6e4abafac5ee5ee47d14e802b",
+      "2026-11-15T23:44:47.9889658Z dd4fc24dbef4b2d6e4abafac5ee5ee47d14e802b",
+      "2026-11-15T23:44:47.9910210Z aded5cb29b69b5bb09b7386932ad9fc5c35d1f44",
+      "2026-11-15T23:45:12.1396190Z Preparation recovery fixture: MongoDB 8.0.12, reviewtest primary, loopback only",
+      "2026-11-15T23:45:51.9137404Z 35 passed, 35 subtests passed in 37.60s",
+      "2026-11-15T23:45:52.9683033Z Preparation refresh recovery: 35 executed cases; named contracts present; zero skips/failures/errors",
+      "2026-11-15T23:46:33.4495036Z 329 passed, 5 warnings, 59 subtests passed in 39.08s",
+      "2026-11-15T23:46:34.3934182Z Android operations: 329 executed cases; zero skips/failures/errors",
+      "2026-11-15T23:54:08.5554914Z 828 passed, 1 warning, 573 subtests passed in 451.61s (0:07:31)",
+      "2026-11-15T23:55:40.3047256Z 124 passed, 28 subtests passed in 87.03s (0:01:27)",
+      "2026-11-15T23:55:45.9315736Z 1 passed in 2.58s",
+      "2026-11-15T23:55:46.6708187Z review-completion.xml: 828 executed cases; zero skips/failures/errors",
+      "2026-11-15T23:55:46.6709088Z review-acceptance-guard.xml: 1 executed cases; zero skips/failures/errors",
+      "2026-11-15T23:55:46.6709879Z source-snapshot.xml: 124 executed cases; zero skips/failures/errors"
+    ],
+    "artifact": {
+      "id": 14186882656,
+      "name": "review-completion-dd4fc24dbef4b2d6e4abafac5ee5ee47d14e802b",
+      "size_bytes": 30379,
+      "archive_digest": "sha256:754212c37a007ed1713d236dad36a705701b687a0c24cf9b26a755b5137c5fac",
+      "created_at": "2026-11-15T23:55:47Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43776446789/artifacts/14186882656"
+    }
+  },
+  "operational_acceptance": {
+    "workflow_id": 43776446776,
+    "job_id": 133006178250,
+    "attempt": 2,
+    "head_sha": "dd4fc24dbef4b2d6e4abafac5ee5ee47d14e802b",
+    "status": "completed",
+    "conclusion": "success",
+    "updated_at": "2026-11-15T23:58:21Z",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43776446776",
+    "operational_contracts": {
+      "passed": 4964,
+      "failed": 0,
+      "skipped": 0,
+      "errors": 0
+    },
+    "shipping_summary_and_calculator_contracts": {
+      "passed": 16,
+      "subtests_passed": 18
+    },
+    "junit_gate": {
+      "name": "Reject missing or skipped tests",
+      "status": "completed",
+      "conclusion": "success",
+      "assertion": "Required named coverage and every testcase has no skipped, failure or error element"
+    },
+    "relevant_steps": [
+      {
+        "number": 6,
+        "name": "Record exact tested source",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "number": 7,
+        "name": "Run operational contracts",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "number": 8,
+        "name": "Preserve shipping summary and calculator contracts",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "number": 9,
+        "name": "Reject missing or skipped tests",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "number": 10,
+        "name": "Run actions/upload-artifact@v4",
+        "status": "completed",
+        "conclusion": "success"
+      }
+    ],
+    "executed_log_lines": [
+      "2026-11-15T23:53:44.4196065Z dd4fc24dbef4b2d6e4abafac5ee5ee47d14e802b",
+      "2026-11-15T23:58:16.3191225Z 4964 passed, 8 warnings in 245.63s (0:04:05)",
+      "2026-11-15T23:58:17.8068096Z 16 passed, 18 subtests passed in 0.35s"
+    ],
+    "artifact": {
+      "id": 14186977242,
+      "name": "operational-backend-results",
+      "size_bytes": 83016,
+      "archive_digest": "sha256:2f3337727ab90a92d64d2524b7597f7fd7414ddad21e6cfc199f530b0c324517",
+      "created_at": "2026-11-15T23:58:18Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43776446776/artifacts/14186977242"
+    },
+    "prior_attempt_retained": {
+      "attempt": 1,
+      "job_id": 133003708822,
+      "conclusion": "failure",
+      "failed": 1,
+      "passed": 4963,
+      "test": "backend/tests/test_operational_balance_issue_index.py::test_four_thousand_distinct_diagnostics_avoid_repeated_whole_list_work",
+      "assertion": "new_cpu < old_cpu * 0.65",
+      "old_process_cpu_seconds": 0.2859268099999923,
+      "new_process_cpu_seconds": 0.24774235800001065,
+      "prior_evidence_file": "ci-B-operational-attempt1-failure.json",
+      "prior_evidence_sha256": "7b9f844023a31301b54c68fabac5c0b031a23cab8483580ca84dcd36007f31fd",
+      "reason_for_timing_difference": "not established",
+      "additional_reruns_by_this_observer": 0
+    }
+  },
+  "actual_B_clean_clone_readiness": {
+    "workflow_id": 43776446819,
+    "attempt": 1,
+    "conclusion": "success",
+    "hosts": [
+      {
+        "node": "20.20.2",
+        "job_id": 133003993603
+      },
+      {
+        "node": "24.19.0",
+        "job_id": 133003993626
+      }
+    ],
+    "adapter_package_identity_and_actual_JSON_MIME_steps": "success on both hosts",
+    "emitted_package_proof_objects_equal": true,
+    "detailed_evidence_file": "ci-B-readiness-dd4fc24.json",
+    "detailed_evidence_sha256": "deb0cc891e1c4e4bfbdf6f3f7cdaaffdc4c792b988a50cd52080f5db9bae9441"
+  },
+  "source_A3_evidence": {
+    "file": "ci-A3-1accaa42.json",
+    "sha256": "a5877fb4958399eb291da5937546943a0dd4eabbfb50a13bb707ff49279e5099"
+  },
+  "limits": [
+    "One operational performance ratio assertion failed on attempt 1. A single authorized same-head rerun passed; its timing cause remains unproven and is not conclusively labeled flaky.",
+    "Artifact metadata and job logs were observed; generated archive byte acceptance is independently performed by the release reviewer.",
+    "These results prove synthetic CI execution for B, not original-environment rehearsal, platform publication, live identity, or live order readiness.",
+    "No source edit, merge, prepare, lease, publication, production DB operation or browser action was performed by this observer.",
+    "The separate PR1951 publication/handoff remains governed by its owner and current official guard."
+  ]
+}

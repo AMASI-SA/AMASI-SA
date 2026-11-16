@@ -2,7 +2,7 @@
 
 This branch is an evidence ledger only. **Do not merge it as application source.**
 
-Updated: 2026-11-15 23:55:24 UTC
+Updated: 2026-11-16 00:03:19 UTC
 
 ## Exact release
 
@@ -24,11 +24,17 @@ B Readiness run `43776446819` passed, including actual Host20.20.2 job `13300399
 
 Evidence files under `evidence/` preserve the exact candidate, provenance, both candidate reviews, complete A3 CI receipt, B source validation, B readiness and package proof.
 
-## Remaining B gate / preserved failure
+## B complete acceptance and preserved first-attempt failure
 
-Full B acceptance is **pending**. Operational Balance run `43776446776` attempt 1 / job `133003708822` failed only a pre-existing process-CPU ratio test at 4000 distinct issues; output equality passed. Suite: 4963 passed / 1 failed. Values: old CPU `0.2859268099999923`, new CPU `0.24774235800001065`, threshold new < old * 0.65. The exact failure and artifact are preserved in `ci-B-operational-attempt1-failure.json`.
+All 13 required exact-B workflows passed. The separate TikTok Creator workflow is inapplicable to this branch by its exact source condition and is recorded as skipped, distinct from mandatory zero-skip test gates.
 
-The affected test/implementation is unchanged and A3 passed it. One isolated local test passed under Python3.12 (not equivalent to CI Python3.11). Root requested exactly one failed-job rerun on unchanged B; attempt 2 new Backend job is `133006178250`. Timing variance is plausible but not conclusively established. Do not bypass the gate or retry repeatedly; a repeated failure requires diagnosis. Review Completion B also remains under observation. Conditional inapplicable TikTok workflow skip must be distinguished from required executed-test zero-skip gates.
+Review run `43776446789`, attempt 1 / job `133003708652`, executed the actual B tree against MongoDB 8.0.12: 35 focused (+35 subtests), 329 Android, 828 review/provider, 124 source-snapshot and 1 conflict cases, with no skipped, failed or errored test cases. Artifact `14186882656` has ZIP SHA256 `754212c37a007ed1713d236dad36a705701b687a0c24cf9b26a755b5137c5fac`.
+
+Operational Balance run `43776446776` attempt 1 / job `133003708822` failed only a pre-existing process-CPU ratio test at 4000 distinct issues; output equality passed. Suite: 4963 passed / 1 failed. Values: old CPU `0.2859268099999923`, new CPU `0.24774235800001065`, threshold new < old * 0.65. The exact failure and artifact remain in `ci-B-operational-attempt1-failure.json`.
+
+Root requested exactly one failed-job rerun on unchanged B after reviewing the source/logs and one isolated local diagnostic. Attempt 2 / job `133006178250` succeeded at `2026-11-15T23:58:21Z`: 4964 passed, then 16 passed +18 subtests, with the required no-skips/failures/errors gate passing. Artifact `14186977242` has ZIP SHA256 `2f3337727ab90a92d64d2524b7597f7fd7414ddad21e6cfc199f530b0c324517`. No source, test or threshold changed. The precise timing cause remains unproven; attempt 1 is not erased or conclusively labeled flaky. No further rerun was requested.
+
+Complete B receipt: `evidence/ci-B-final.json`, SHA256 `94f0644693d8706d7c8cd51d56455aa56128cd64c2e16ccc992c8c60e9068ba5`. Root independently read the final run/job metadata and relevant successful job logs.
 
 ## Original rehearsal helper — reviewed, unexecuted
 
@@ -40,6 +46,8 @@ It requires exact accepted M, current original J2/clean source, no lease, and pr
 
 PR #1951 owns a separately recorded active publication lease (actor `chatgpt-provider1951-20261116-root`, prepared `2026-11-15T23:45:16.349437+00:00`; owner evidence `e625bf05e4daa05dd6db4ec2bf8870e5f037fb3c`). Its completed live verification/handoff has not yet been accepted here. Do not touch original /app, merge into its live release path, reuse or clear its lease. Historical inactive observations are not a handoff.
 
-Next: finish the bounded B rerun and all required B gates; independently verify the prior owner's completed handoff and current production Git still J2. Then normal-merge B preserving A3/B history, verify exact M tree/parents and push gates. Only afterward read original guard afresh, stage the immutable reviewed helper outside /app and execute once with exact M. Compare emitted package proof to the accepted canonical digest; then use official prepare/prepublish, one authorized platform publish, explicit Deployment Succeeded and official three-probe verify, ending with inactive lease and exact local/remote M.
+Root's fresh management UI observation at approximately 2026-11-16 00:01 UTC showed a new 100th published version, `c1784c4`, and enabled Republish controls. This is platform evidence for the other publication only; it does not establish its official live verification or lease closure.
+
+Next: independently verify the prior owner's completed handoff and current production Git still J2. Then normal-merge B preserving A3/B history, verify exact M tree/parents and push gates. Only afterward read original guard afresh, stage the immutable reviewed helper outside /app and execute once with exact M. Compare emitted package proof to the accepted canonical digest; then use official prepare/prepublish, one authorized platform publish, explicit Deployment Succeeded and official three-probe verify, ending with inactive lease and exact local/remote M.
 
 The separately received garment remains blocked by source/approval representation proof, not stale workflow. This application patch does not clear that guard or mark Ready/receipt/service/provider state. Private order/customer evidence is excluded. Issue #1006 is full; PR #1955 and this record are continuation anchors.
