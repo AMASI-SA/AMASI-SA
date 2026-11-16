@@ -1,0 +1,49 @@
+{
+  "kind": "canonical_release_verification_summary",
+  "official_result": {
+    "verified": true,
+    "checks": 3,
+    "source_git_sha": "7a1de33535081393fbf3597523d722ec308b2ca8",
+    "source_base_git_sha": "b05cd3c9b25ce22df1b2dd06c23d97606bd632c6",
+    "deployment_git_sha": "4cdc10931f49124a4715153f220e0adf274e8bcc",
+    "release_id": "rg5-4890bb5f409d7f6080ad2c19f881ed5edfe30b8f93b9502fbb3e45977f6a28f1",
+    "protocol_version": 5,
+    "url": "https://mezansalla.com",
+    "frontend_artifact_tree_sha256": "8017e720f266ed5d6b0141d83312512e8052396c7da65e22557dce1c8fe79fcb"
+  },
+  "full_receipt_bytes": 33703,
+  "full_receipt_sha256": "eb4e93de7c55c692504ee46a1db812135dfec1e83f144133dec8d154e7308af1",
+  "wrapper_success": {
+    "actor": "codex-bundle-conditional-cost-1956-20261116",
+    "branch": "hotfix/prod-snap-meta-final",
+    "canonical_result_sha256": "eb4e93de7c55c692504ee46a1db812135dfec1e83f144133dec8d154e7308af1",
+    "deployment_git_sha": "4cdc10931f49124a4715153f220e0adf274e8bcc",
+    "deployment_success_sha256": "60459b1297e527751927bc9cf2c74ab56bd53857a31a21636f012eb8a1f60b37",
+    "finished_at": "2026-11-16T01:33:40.629071+00:00",
+    "git_sha": "7a1de33535081393fbf3597523d722ec308b2ca8",
+    "mode": "verify",
+    "ok": true,
+    "pr": 1956,
+    "prepare_sha256": "6b6d59160b426186b545d1fa953c118a42e917d34a97254c1845ef42b0368af3",
+    "prepared_at": "2026-11-16T01:08:55.170137+00:00",
+    "protocol_version": 5,
+    "release_id": "rg5-4890bb5f409d7f6080ad2c19f881ed5edfe30b8f93b9502fbb3e45977f6a28f1",
+    "source_base_git_sha": "b05cd3c9b25ce22df1b2dd06c23d97606bd632c6",
+    "source_git_sha": "7a1de33535081393fbf3597523d722ec308b2ca8",
+    "started_at": "2026-11-16T01:22:24.958313+00:00"
+  },
+  "status_after": {
+    "active": false
+  },
+  "final_git": {
+    "branch": "hotfix/prod-snap-meta-final",
+    "head": "4cdc10931f49124a4715153f220e0adf274e8bcc",
+    "remote_head": "4cdc10931f49124a4715153f220e0adf274e8bcc",
+    "tracked_clean": true,
+    "tree": "49140bb5e22b368788c181362f316218344e9d41",
+    "untracked_count": 120
+  },
+  "observed_at": "2026-11-16T01:34:54.137672+00:00",
+  "read_by": "root",
+  "private_original_receipt": "/tmp/mz-bundle-release-1956-Zi79Sb/verify.json"
+}
