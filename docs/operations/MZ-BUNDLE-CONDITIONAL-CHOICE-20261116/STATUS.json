@@ -1,7 +1,7 @@
 {
   "task_id": "MZ-BUNDLE-CONDITIONAL-CHOICE-20261116",
   "scope": "Resolve phantom incomplete costs from conditional descriptive bundle options without changing genuine cost dependencies.",
-  "state": "merged_original_host_build_prepare_running",
+  "state": "merged_original_host_prepared",
   "repository": "AMASI-SA/AMASI-SA",
   "task_branch": "codex/bundle-conditional-cost-current-20261116",
   "source_base_J": "b05cd3c9b25ce22df1b2dd06c23d97606bd632c6",
@@ -73,10 +73,11 @@
     "outcome": "Helper timed out before receiving a merge receipt and exited1. No deployment, host source mutation, own lease or publish occurred."
   },
   "release_guard": {
-    "active_before_operator": false,
-    "observed_by": "root",
-    "operator_mutex_owned": true,
-    "prepared_lease": "not yet observed"
+    "active": true,
+    "owner": "codex-bundle-conditional-cost-1956-20261116",
+    "prepared_at": "2026-11-16T01:08:55.170137+00:00",
+    "deployment_M": "4cdc10931f49124a4715153f220e0adf274e8bcc",
+    "modified_by_this_task": true
   },
   "merge": {
     "pr": 1956,
@@ -99,9 +100,9 @@
     "Do not equate zero customer surcharge with zero internal cost.",
     "Preserve unresolved state for genuine cost decisions with missing/conflicting evidence."
   ],
-  "next_safe_action": "Observe our original configured build and matching prepare result. Stage reviewed publication wrapper, then prepublish immediately before one UI publication. Record root-observed explicit new success and run exactly one canonical verifier to inactive; normal saved-report GET acceptance.",
+  "next_safe_action": "Use reviewed wrapper once for prepublish immediately before one authorized UI publication. Record root-observed explicit new platform version, then run its canonical three-round verifier exactly once and confirm inactive. Normal saved-report GET acceptance; no Salla refresh.",
   "ledger": "Issue1006 is at its known comment limit. This status and the evidence-only branch are the durable continuation record.",
-  "checkpoint_updated_at_utc": "2026-11-16 01:08:26 UTC",
+  "checkpoint_updated_at_utc": "2026-11-16 01:10:10 UTC",
   "source_tree": "fe74d9ce67a0a1a4bcedbfd0a5a7e8721d5ef9f6",
   "pr": {
     "number": 1956,
@@ -131,7 +132,7 @@
     "bytes": 8171,
     "sha256": "e72fd1e7acde4aa260ddaf87ea44c4c9397ecb5d9c4a7e3a12305fe2f879d4c4",
     "review": "Independent static review PASS; only successor identity/PR pins changed.",
-    "state": "Running after fresh inactive guard and root-observed ready_for_merge; atomic merge result supplied; building phase observed.",
+    "state": "Completed successfully: original configured build66.70s, matching canonical prepare and120 unrelated untracked metadata preserved.",
     "required_start": "Fresh original guard inactive, exact original/remote Jb05, no tracked changes.",
     "runner_requirements": [
       "Keep helper file and stdout log outside initially empty receipts directory.",
@@ -139,7 +140,11 @@
       "Never clear another lease or alter the frozen A/B."
     ],
     "receipts": "/tmp/mz-bundle-release-1956-Zi79Sb",
-    "pid": 71339
+    "pid": 71339,
+    "prepared_at": "2026-11-16T01:08:55.170137+00:00",
+    "untracked_count": 120,
+    "untracked_metadata_preserved": true,
+    "bytecode_count_before": 0
   },
   "host_rehearsal": {
     "path": "/tmp/mz-bundle-current-v5-d9Wxrj/repo",
