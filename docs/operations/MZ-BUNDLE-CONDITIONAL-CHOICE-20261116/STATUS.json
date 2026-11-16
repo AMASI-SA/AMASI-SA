@@ -1,12 +1,17 @@
 {
   "task_id": "MZ-BUNDLE-CONDITIONAL-CHOICE-20261116",
-  "scope": "Implement conditional descriptive-option costing in current bundle estimates.",
-  "state": "all_gates_passed_waiting_for_other_owned_publication",
+  "scope": "Resolve phantom incomplete costs from conditional descriptive bundle options without changing genuine cost dependencies.",
+  "state": "current_source_tests_passed_ci_running",
   "repository": "AMASI-SA/AMASI-SA",
-  "task_branch": "codex/bundle-conditional-cost-integrated-20261116",
-  "verified_milestone_commit": "ba19a270fb20ab45328f293e200728bebda6df4c",
-  "inspected_branch_head": "a00e3e38530376943960f1f1ebe301dde5e7f061",
-  "observed_live_source": "1bd44b6f186de8b40877fde686b5d2d7aab52805",
+  "task_branch": "codex/bundle-conditional-cost-current-20261116",
+  "source_base_J": "b05cd3c9b25ce22df1b2dd06c23d97606bd632c6",
+  "source_base_tree": "aded5cb29b69b5bb09b7386932ad9fc5c35d1f44",
+  "source_A": "7a1de33535081393fbf3597523d722ec308b2ca8",
+  "previous_source_A": "ba19a270fb20ab45328f293e200728bebda6df4c",
+  "superseded_intent_B": "a00e3e38530376943960f1f1ebe301dde5e7f061",
+  "previous_pr": 1954,
+  "earlier_pr": 1953,
+  "evidence_branch": "codex/bundle-conditional-cost-evidence-20261116",
   "changed_files": [
     "backend/current_bundle_reporting_estimate.py",
     "backend/tests/test_current_bundle_cost_details.py",
@@ -14,258 +19,68 @@
     "docs/operations/MZ-BUNDLE-CONDITIONAL-CHOICE-20261116/DIAGNOSIS.md",
     "docs/operations/MZ-BUNDLE-CONDITIONAL-CHOICE-20261116/STATUS.json"
   ],
-  "application_code_changed": true,
-  "completed_behavior": "Recognized fill-based fields without enum values no longer synthesize missing service costs from catalog requiredness. Real root option bindings use shared conditional-visibility and presence decisions from validated canonical IDs/markers. Required enums, recipe decisions, included-in-base policy, variant pricing, nested pairs and historical authorities remain protected. Invalid/conflicting/retired identities cannot be relabeled into a declined paid choice.",
-  "verification": [
+  "completed_behavior": "Recognized fill-based fields without enum values cannot synthesize a missing cost from catalog requiredness. Actual root financial bindings use shared conditional visibility and validated canonical identities/presence markers. Enum, recipe, variant, currency, nested and frozen/actual authorities remain protected; invalid/conflicting/retired identities are not relabeled into declined paid choices.",
+  "source_preservation": "Three runtime/test blobs are byte-identical to the already independently reviewed source Aba19. The new source has sole parent Jb05, inherits its release intent unchanged and preserves all PR1951/PR1955 changes.",
+  "verification_history": [
     {
-      "command": "git status --short",
-      "exit_status": 0,
-      "result": "Clean inspection checkout."
+      "result": "Initial regression RED: 27 failed, 20 passed; the additional conflicting-alias regression separately failed before correction."
     },
     {
-      "command": "git log -1 --format='%H %s'",
-      "exit_status": 0,
-      "result": "Inspected head matches recorded branch head."
+      "result": "Nine affected modules passed 231 tests on original reviewed source and 231 tests in12.62s on integrated Aba19. Independent focused review passed59 tests."
     },
     {
-      "command": "git diff --stat 1bd44b6f186de8b40877fde686b5d2d7aab52805 HEAD",
-      "exit_status": 0,
-      "result": "Only release/release-intent-v5.json differs; inspected runtime source matches live source."
-    },
-    {
-      "command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=backend python - (synthetic in-memory catalog_options/_option_visibility assertions)",
-      "exit_status": 0,
-      "result": {
-        "normalized_visibility_present": false,
-        "merged_visibility": "on_condition",
-        "declined_parent_visibility": false,
-        "missing_parent_visibility": null,
-        "input_unchanged": true
-      }
-    },
-    {
-      "method": "Bounded saved-data reads and independent source review",
-      "result": "Explicit declining customer answer, absent conditional text, preserved raw catalog visibility, and the generated report warning agree with the source trace. No provider refresh was requested."
-    },
-    {
-      "command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=backend:backend/tests <isolated-python> -B -m pytest --noconftest -p no:cacheprovider -q --tb=short backend/tests/test_current_bundle_cost_details.py",
-      "exit_status": 1,
-      "result": "RED baseline: 27 failed, 20 passed in 1.75s. Intended failures reproduce phantom required-text cost and unsupported actual text binding decisions. A subsequent alias-conflict test and hover cases are added but not yet executed."
-    },
-    {
-      "command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=backend:backend/tests <isolated-python> -B -m pytest --noconftest -p no:cacheprovider -q --tb=short backend/tests/test_current_bundle_cost_details.py backend/tests/test_report_option_identity.py backend/tests/test_report_raw_option_recovery.py",
-      "exit_status": 0,
-      "result": "Initial focused implementation: 108 passed in 4.19s."
-    },
-    {
-      "command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=backend:backend/tests <isolated-python> -B -m pytest --noconftest -p no:cacheprovider -q --tb=short backend/tests/test_current_bundle_cost_details.py::test_conflicting_explicit_text_value_aliases_cannot_be_canonicalized_away",
-      "exit_status": 1,
-      "result": "Reviewer-discovered conflict regression RED before correction; one failed because no exception was raised."
-    },
-    {
-      "command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=backend:backend/tests <isolated-python> -B -m pytest --noconftest -p no:cacheprovider -q --tb=short backend/tests/test_current_bundle_cost_details.py backend/tests/test_report_option_identity.py backend/tests/test_report_raw_option_recovery.py backend/tests/test_sold_product_cost_details.py backend/tests/test_sold_products_report_v2.py backend/tests/test_order_cost_authority.py backend/tests/test_dashboard_bundle_cost_authority.py backend/tests/test_campaign_hover_profit.py backend/tests/test_order_profitability_summary.py",
-      "exit_status": 0,
-      "result": "Final integrated affected suite: 231 passed in 11.97s; two existing unrelated Pydantic deprecation warnings."
-    },
-    {
-      "command": "Independent focused bundle and current/source financial parity review, plus git diff --check",
-      "exit_status": 0,
-      "result": "59 passed in 3.50s; both discovered identity-erasure classes fixed; no remaining concrete scoped blocker."
-    },
-    {
-      "command": "git merge-tree --write-tree 2589f440106a7c5d463ee03eac3617d113319673 1b0ffbc814c664c098e9dbc422691e67671d03d7",
-      "exit_status": 0,
-      "result": "Clean automatic source integration; provider release changes do not overlap bundle estimator or its test files. Production release intent remains the new base intent."
-    },
-    {
-      "command": "Nine affected pytest modules using isolated Python, --noconftest and no cacheprovider; J2589 integrated source",
-      "exit_status": 0,
-      "result": "231 passed in 12.62s; same two existing Pydantic deprecation warnings."
-    },
-    {
-      "command": "Independent immutable Git tree/blob comparison",
-      "exit_status": 0,
-      "result": "Estimator and two regression files exactly match reviewed source A1b0ffbc. J2589..Aba19 changes exactly five scoped files; no intent change and all provider release files preserved."
+      "result": "Prior exact-B checks:36 total,26 successful,10 explicit scope skips,0 failed/pending. Old intent cannot be reused on a different base."
     }
   ],
-  "verification_limits": [
-    "Local isolated tests ran under Python 3.12.14. Exact-source Python 3.11 Sold product cost details CI passed."
-  ],
-  "pr": {
-    "number": 1954,
-    "url": "https://github.com/AMASI-SA/AMASI-SA/pull/1954",
-    "head": "a00e3e38530376943960f1f1ebe301dde5e7f061",
-    "state": "open_ready",
-    "superseded": 1953
-  },
-  "ci": {
-    "previous_source": {
-      "as_of_utc": "2026-11-15T23:20:19Z",
-      "exact_head": "1b0ffbc814c664c098e9dbc422691e67671d03d7",
-      "readiness": {
-        "run_id": 43773857740,
-        "status": "success"
-      },
-      "sold_product_cost_details": {
-        "run_id": 43773857728,
-        "status": "success"
-      },
-      "G47": {
-        "run_id": 43773857710,
-        "status": "success"
-      },
-      "security_gate": {
-        "run_id": 43773857920,
-        "status": "success"
-      },
-      "pending": [
-        "Operational Stock Eligibility",
-        "Operational Balance Backend",
-        "CodeQL python"
-      ],
-      "reviewed_head_pending": "a694b290ee6f74e57048810d754ff8c87de99735"
+  "current_candidate_verification": {
+    "affected_suite": {
+      "exit_status": 0,
+      "passed": 231,
+      "duration_seconds": 13.19,
+      "warnings": "Two existing Pydantic deprecation warnings.",
+      "command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=backend:backend/tests isolated-python -B -m pytest --noconftest -p no:cacheprovider -q --tb=short (nine affected modules)"
     },
-    "integrated_source": {
-      "head": "ba19a270fb20ab45328f293e200728bebda6df4c",
-      "readiness_run_id": 43774777595,
-      "status": "success"
-    },
-    "reviewed_B": {
-      "head": "a00e3e38530376943960f1f1ebe301dde5e7f061",
-      "readiness_run_id": 43775111815,
-      "details_run_id": 43775111868,
-      "security_run_id": 43775111963,
-      "codeql_run_id": 43775111794,
-      "status": "all_applicable_checks_passed",
-      "snapshot": "All 36 exact-B checks completed: 26 success, 10 explicit scope skips, no failures or pending jobs. PR1954 mergeable_state clean at 2026-11-16T00:10Z.",
-      "check_summary": {
-        "total": 36,
-        "success": 26,
-        "skipped": 10,
-        "failed": 0,
-        "pending": 0
-      },
-      "mergeable_state": "clean"
+    "git_diff_check": "passed",
+    "source_ci": {
+      "readiness_run_id": 43779653592,
+      "status": "running",
+      "host20_dispatcher": "success",
+      "host24_dispatcher": "success",
+      "backend_preflight": "success",
+      "frontend_build": "running"
     }
   },
-  "review": "independent_implementation_review_passed",
+  "last_safe_handoff": {
+    "timestamp_utc": "2026-11-16T00:18:00Z",
+    "original_actor": "codex-bundle-conditional-cost-20261116",
+    "original_helper_receipts": "/tmp/mz-bundle-release-1954-mLoiC4",
+    "original_helper_pid": 46563,
+    "gate": "ready_for_merge observed with inactive guard, J2589,120 preserved unrelated untracked entries and no Python cache.",
+    "merge_attempt": "GitHub405 conflict; Production had advanced via PR1955 at00:15:52Z to Jb05. No PR1954 merge occurred.",
+    "outcome": "Helper timed out before receiving a merge receipt and exited1. No deployment, host source mutation, own lease or publish occurred."
+  },
+  "release_guard": "No lease created by this task; fresh original status must be checked after the PR1955 owner's publication.",
   "merge": "not_performed",
-  "release_guard": {
-    "active": true,
-    "owner": "chatgpt-provider1951-20261116-root",
-    "source_git_sha": "f7c5e110a074a242036233ea004d63c270a4daaa",
-    "deployment_git_sha": "2589f440106a7c5d463ee03eac3617d113319673",
-    "release_id": "rg5-79ac457d2b1bc4c417fb86d9f3d6dc10f7e613f3402018cb15f101f558cda9f6",
-    "prepared_at": "2026-11-15T23:45:16.349437+00:00",
-    "modified_by_this_task": false
-  },
-  "deployment": "Our fix is not yet merged or published. The previous provider release is published and is undergoing its official three-round verification.",
+  "deployment": "not_performed",
   "production_changed": "no",
-  "incomplete_work": [
-    "Wait for the provider owner's running official verifier to close only its matching lease.",
-    "Run the independently reviewed fenced operator; after ready_for_merge, normally merge PR1954 at exact B and atomically provide M.",
-    "Complete original-host configured build and official prepare/prepublish; publish once, observe a newer explicit success, run three canonical verification rounds, and confirm inactive status.",
-    "Read the saved-data report normally without a Salla refresh and record final publication evidence."
-  ],
+  "business_data_changed": false,
+  "live_limits": "No option cost bindings were observed for the incident product. Its saved bundle definition changed externally after diagnosis; preserve current user configuration. No Salla refresh or business-data mutation was performed.",
   "risks": [
-    "Preserve unresolved results for missing or conflicting decisions needed by actual cost-bearing dependencies.",
-    "Do not infer internal cost from the amount charged to the customer.",
-    "Do not suppress operational missing-text evidence when removing an unrelated financial warning."
+    "Do not equate zero customer surcharge with zero internal cost.",
+    "Preserve unresolved state for genuine cost decisions with missing/conflicting evidence."
   ],
-  "unrelated_work_preserved": [
-    "Prior completed missing-options ingestion repair and release.",
-    "Existing shared workspace and unrelated production operations.",
-    "Shared /app 120 untracked files and unsaved Untitled-1; another provider release is active in a different conversation. Recheck Production base and lease before changes."
-  ],
-  "ledger": "Issue #1006 was previously at its comment limit; dedicated task status serves as recoverable handoff without retrying that append.",
-  "next_safe_action": "Wait for the provider owner's explicit successful publication and official lease closure. Then rerun fresh inactive precondition and the immutable reviewed operator from a54633d678081d0ff6da62712eb51cf36067aa9f; read ready_for_merge before normally merging PR1954. Supply atomic merged-head.json, preserve exact B tree and run official checks; never reuse or clear provider lease.",
-  "owner_clarification": {
-    "source": "User clarification after diagnosis",
-    "statement": "Selecting affirmative customization adds no amount.",
-    "interpretation": "Required fields or affirmative choices cannot alone generate service cost. Do not conflate zero customer surcharge with zero internal cost.",
-    "financial_rule": "A descriptive option with no actual service, component, recipe, or mapping cost dependency must not independently block cost completeness.",
-    "operational_rule": "Missing necessary customization text may require a separate fulfillment warning.",
-    "verification_pending": "No option cost bindings were observed for the incident product. The saved bundle definition changed externally after diagnosis; no original configuration was restored or altered."
-  },
-  "live_observation": "Bounded saved reads confirmed no option-cost bindings for the incident product. Its bundle definition was changed externally after the original diagnostic snapshot; preserve current user configuration. No provider refresh or business-data write was performed.",
-  "reviewed_estimator_sha256": "022f38f9505ea8e7476928ecc6ce4b75c631b2b46546b8428e8013650ae493c7",
-  "source_base_J": "2589f440106a7c5d463ee03eac3617d113319673",
-  "evidence_branch": "codex/bundle-conditional-cost-evidence-20261116",
-  "previous_reviewed_source_A": "1b0ffbc814c664c098e9dbc422691e67671d03d7",
-  "superseded_intent_B": "a694b290ee6f74e57048810d754ff8c87de99735",
-  "previous_intent_candidate": {
-    "artifact_id": 14185468274,
-    "run_id": 43773857740,
-    "zip_sha256": "ebf24f34a78db320d70280dff5a8f15940a469f9090f0f81033f32e824898da1",
-    "intent_sha256": "5ca5233ef325dcd88c9b76e93b55a953649d58c76c01bcd4b302e47752fd4295",
-    "source_git_sha": "1b0ffbc814c664c098e9dbc422691e67671d03d7",
-    "source_base_git_sha": "236a428364bc8163a684795ed1be87e237476f18",
-    "runtime_release_id": "rg5-e3ba9016b9cc29c7595d14dafe7ef16bbc984a7142fcada742d11f524be9e652",
-    "validation": "Exact ZIP digest verified; candidate loader and full Backend/runtime-control manifests match source A; no intent B created yet. Intent-only B frozen without source changes."
-  },
-  "source_A": "ba19a270fb20ab45328f293e200728bebda6df4c",
-  "previous_candidate_host_rehearsal": {
-    "candidate_B": "a694b290ee6f74e57048810d754ff8c87de99735",
-    "host": "original Emergent /app host, isolated clone /tmp/mz-bundle-cost-v5.3FmC4L/repo",
-    "exit_status": 0,
-    "duration_seconds": 88.71,
-    "backend_isolated_verified": true,
-    "frontend_isolated_runtime_artifact_verified": true,
-    "published": false,
-    "limitation": "Superseded after Production advanced; must rehearse fresh integrated B before prepare."
-  },
-  "intent_B": "a00e3e38530376943960f1f1ebe301dde5e7f061",
-  "intent_candidate": {
-    "artifact_id": 14186235559,
-    "run_id": 43774777595,
-    "zip_sha256": "6a323f71e86e14a33774a23ea38c4c666f31650bcf4c609a7d65a47ce96160ed",
-    "intent_sha256": "d571f82f6bb6feb7a8a4c697a6ccae49978d05f86beda77736be20f255583057",
-    "source_git_sha": "ba19a270fb20ab45328f293e200728bebda6df4c",
-    "source_base_git_sha": "2589f440106a7c5d463ee03eac3617d113319673",
-    "runtime_release_id": "rg5-39f41f8377951a9b3b673d643711b332a94f1479e45a6167b2c4c90a1fd9c27d",
-    "validation": "Exact ZIP/file digest and blob verified; candidate loader and complete Backend/control source manifests match integrated A. Intent-only B freezes original artifact bytes."
-  },
-  "host_rehearsal": {
-    "source_A": "ba19a270fb20ab45328f293e200728bebda6df4c",
-    "intent_B": "a00e3e38530376943960f1f1ebe301dde5e7f061",
-    "path": "/tmp/mz-bundle-integrated-v5.Ice9jc/repo",
-    "duration_seconds": 58.61,
-    "exit_status": 0,
-    "host_node": "v24.19.0",
-    "host_python": "3.11.18",
-    "host_yarn": "1.22.22",
-    "architecture": "aarch64",
-    "runtime_release_id": "rg5-39f41f8377951a9b3b673d643711b332a94f1479e45a6167b2c4c90a1fd9c27d",
-    "frontend_artifact_tree_sha256": "8017e720f266ed5d6b0141d83312512e8052396c7da65e22557dce1c8fe79fcb",
-    "backend_isolated_verified": true,
-    "backend_health_verified": true,
-    "frontend_isolated_runtime_artifact_verified": true,
-    "lease_created": false,
-    "production_files_modified": false
-  },
-  "publication_coordination": {
-    "latest_original_host_head": "2589f440106a7c5d463ee03eac3617d113319673",
-    "lease_observed_active": true,
-    "provider_release": "Owner reports new platform version c1784c4 and successful deployment at 02:58 Riyadh. Owner's once-only canonical verifier is currently running (child PID39424); our read-only status command is waiting on the official operation mutex.",
-    "preservation": "Do not interrupt provider verification, start another verifier, clear its lease, or change /app before the official status returns inactive.",
-    "plan": "After fresh inactive status, serialize normal merge/host handoff under the existing official operation mutex using the reviewed immutable helper. No source retest/rebuild regeneration required unless Production base or frozen identities change."
-  },
-  "operator": {
-    "path": "docs/operations/MZ-BUNDLE-CONDITIONAL-CHOICE-20261116/release_operator.py",
-    "sha256": "8b19bd6d2f193466ce26a5761cd75f6b0703fcb304a6796883bc926a699a8938",
-    "bytes": 8166,
-    "state": "Independent review passed. Runner stopped at fresh CLI inactive precondition because provider lease was active; operator itself was not started, no receipt directory created and no merge/source/cache/lease mutation performed.",
-    "behavior": "Existing official mutex fences ready-for-merge through ff-only materialization and unchanged official prepare checks. Precisely inventoried ignored bytecode is preserved via atomic reversible move; no publish or lease removal.",
-    "runner_requirements": [
-      "Redirect operator stdout to receipt_path+'.log', outside initially empty receipt directory.",
-      "Write merged-head.json by atomic temporary sibling replacement."
+  "next_safe_action": "Open fresh-source PR and complete exact-head verification. Generate fresh candidate intent, freeze intent-only B, and preserve A/B on normal merge. Follow official original-host inactive/build/prepare/prepublish/publish/three-round verify/inactive sequence.",
+  "ledger": "Issue1006 is at its known comment limit. This status and the evidence-only branch are the durable continuation record.",
+  "checkpoint_updated_at_utc": "2026-11-16T00:21:00Z",
+  "source_tree": "fe74d9ce67a0a1a4bcedbfd0a5a7e8721d5ef9f6",
+  "pr": {
+    "number": 1956,
+    "url": "https://github.com/AMASI-SA/AMASI-SA/pull/1956",
+    "head": "7a1de33535081393fbf3597523d722ec308b2ca8",
+    "state": "open_draft",
+    "superseded": [
+      1953,
+      1954
     ]
-  },
-  "checkpoint_updated_at_utc": "2026-11-16T00:11:00Z",
-  "last_observed_other_publication": {
-    "platform_version": "c1784c4",
-    "owner_evidence_branch": "codex/provider-fee-display-evidence-20261116",
-    "status": "published_ui_accepted_official_verifier_running",
-    "source_git_sha": "f7c5e110a074a242036233ea004d63c270a4daaa"
   }
 }
