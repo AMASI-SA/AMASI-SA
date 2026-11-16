@@ -1,4 +1,4 @@
-# Provider fee display repair — owned publication lease prepared
+# Provider fee display repair — published and UI verified; official checks running
 
 Task `PROVIDER-FEE-DISPLAY-20261116`, repository AMASI-SA/AMASI-SA, PR https://github.com/AMASI-SA/AMASI-SA/pull/1951. This is the evidence-only branch; do not merge or deploy it.
 
@@ -50,11 +50,18 @@ Official prepare ran once and exited 0. Owned actor `chatgpt-provider1951-202611
 
 Final bound verifier `official_verify_1951.py`: 9,702 bytes, SHA256 `db3ee59f4c9b27717b6757b278aaef02d8208dba46cc61cfc949007f509b85d3`. Root and both independent static reviewers accepted exact pins and unchanged executable behavior. No verifier execution yet. Fresh Manage Overview still shows prior platform `3e5bbfb` (100th publish), so publication has not happened.
 
+## Live publication and UI acceptance
+
+Official prepublish passed at 2026-11-15T23:47:41.993569+00:00; stdout SHA256 `4b0921de44e7a5909e6b9841a60b20c2942f81612c8efe0f7661d842253ca125`. The authorized platform publish was initiated once. New published version `c1784c4` and green `Deployment finished Nov 16, 02:58 AM` were observed in the platform UI (Riyadh timezone, minute precision). Live Production changed: **yes**.
+
+Bound verifier launched once: wrapper PID39422, official child PID39424. It is running uninterrupted; latest observed stdout/stderr are empty and no final receipt exists yet. Do not run a second verifier, abort the lease, or stop these processes. Private receipts remain `/tmp/provider1951-publication-20261116`.
+
+A normal fresh live provider-page read shows the new numeric known estimated subtotal, its partial-coverage label, concise table cells and source details below under «توضيحات». Visual inspection passed; the existing numeric review control opens the prior review dialog and was closed without mutation. No source refresh, statement reimport or financial write was performed. User-facing table is marked for review. Account figures and order identifiers are intentionally omitted from this durable engineering ledger.
+
 ## Next safe actions
 
-1. Transfer the exact bound verifier outside /app and verify its digest. Do not alter governed source or rerun preparation/rehearsal.
-2. Run official prepublish immediately before the authorized platform Republish. Observe a new explicit successful version and timestamp later than prepare.
-3. Run the bound verifier exactly once without timeout/interruption; require exact three successful official checks and inactive status. Preserve private receipts and checkpoint outcome.
-4. Verify the live estimated commission and below-table explanations with a normal page read; no financial refresh, statement reimport or financial writes.
+1. Allow the current once-only official verifier to finish. Observe its exact final receipt, three successful checks and inactive guard; do not infer technical completion from successful UI acceptance alone.
+2. Save the official outcome in this evidence branch and update the canonical PR body. No further source change or test expansion is needed absent a concrete failure.
+3. Complete the browser workflow and report the calculated estimate, below-table explanations and the remaining explicit partial-coverage qualification to the user.
 
-Issue1006 remains at its known comment limit; this task ledger and PR provide continuity. Live Production changed: **no**. Owned publication lease is active; source/build ready at M.
+Issue1006 remains at its known comment limit. Live Production changed: **yes**; UI acceptance passed. The owned publication lease remains active until the running official verifier succeeds.

@@ -1,0 +1,37 @@
+{
+  "platform": {
+    "version": "c1784c4",
+    "completed_at": "2026-11-16T02:58:00+03:00",
+    "time_precision": "minute",
+    "evidence": "Observed new Published versions entry and green Deployment finished Nov16 02:58AM in platform UI",
+    "official_verify": "started; completion pending",
+    "wrapper_pid": 39422,
+    "official_verifier_pid": 39424,
+    "official_verify_started": true,
+    "final_result_observed": false
+  },
+  "prepublish": {
+    "source_git_sha": "f7c5e110a074a242036233ea004d63c270a4daaa",
+    "deployment_git_sha": "2589f440106a7c5d463ee03eac3617d113319673",
+    "release_id": "rg5-79ac457d2b1bc4c417fb86d9f3d6dc10f7e613f3402018cb15f101f558cda9f6",
+    "exit_code": 0,
+    "started_at": "2026-11-15T23:47:37.098353+00:00",
+    "finished_at": "2026-11-15T23:47:41.993569+00:00",
+    "stdout_sha256": "4b0921de44e7a5909e6b9841a60b20c2942f81612c8efe0f7661d842253ca125",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "verifier_sha256": "db3ee59f4c9b27717b6757b278aaef02d8208dba46cc61cfc949007f509b85d3"
+  },
+  "ui_acceptance": {
+    "normal_live_page_read": true,
+    "estimated_column_numeric_for_known_subtotal": true,
+    "partial_coverage_disclosed": true,
+    "below_table_explanations_visible": true,
+    "table_cells_compact_visually_verified": true,
+    "existing_numeric_review_popup_opened_and_closed": true,
+    "financial_refresh": false,
+    "financial_writes": false,
+    "export_download_performed": false,
+    "live_page_marked_for_user": true,
+    "final_official_verification_pending": true
+  }
+}
