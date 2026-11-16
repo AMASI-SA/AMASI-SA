@@ -65,6 +65,10 @@
     {
       "name": "Authorized merge and official merge-identity verification",
       "result": "GitHub merged PR1961 using expected B and merge method merge. Remote commit parents and tree match exactly. Fresh Git fetch resolves production to M. Official verify_release_intent_git accepted deployment M, exit0; source A to M changes only release/release-intent-v5.json. Frozen task branch remains at B and its checkout is clean."
+    },
+    {
+      "name": "Fresh publication resume readiness",
+      "result": "Production ref remains M. Root independently read 11 post-merge check-runs: all completed/success, no failed/pending/skipped checks, including both clean-clone rehearsals. Browser still requires email-code verification. No /app mutation, lease, prepare/prepublish or publish occurred."
     }
   ],
   "preview": {
@@ -81,19 +85,18 @@
     "handoff": "2d1fa4ea5367a23340fb296097feddb7f318008e",
     "disposition": "Superseded by a fresh source rooted on current production J2. PR1960 source and preceding frozen candidates are preserved unchanged and must not be deployed."
   },
-  "release_state": "PR1961 merged normally in GitHub. Verified M parents [J2,B], M tree exactly B tree, and official verify_release_intent_git accepted M. No live Emergent publication occurred in this task. Post-merge checks are running; authentication blocks shared-host release work.",
+  "release_state": "PR1961 merged normally in GitHub. Verified M parents [J2,B], M tree exactly B tree, and official verify_release_intent_git accepted M. Fresh read confirms production remains at M and all 11 post-merge checks succeeded. Live Emergent publication is still blocked by the existing authentication screen; no shared-host release work or publish occurred.",
   "incomplete": [
-    "Finish or inspect automatic post-merge CI on M before live release; these checks were still running at the final snapshot.",
     "Complete the existing Emergent authentication handoff and observe a positive signed-in state.",
     "Read the official shared /app release guard and require active=false before shared changes/rehearsal; preserve any foreign lease.",
     "Recheck current production refs, then configured shared adapter build for M, prepare/prepublish, one authorized publication, explicit new deployment success, official three-probe verification and live layout/footer acceptance."
   ],
   "production_changed": true,
   "release_guard": "No shared /app mutation, lease or publication. Shared guard status has not been freshly read because Emergent is still at the existing rejected verification-code screen; never assume inactive status.",
-  "authentication": "Fresh observation on this publication request still shows the previously rejected email verification code, with 4 attempts left. The prior manual handoff remains outstanding. No new credential entry, auth retry or repeated takeover request was performed.",
-  "authorization": "Owner explicitly reaffirmed merge and production publication on 2026-11-16 for the latest compact-heading advertising card. No repeated authorization question is needed.",
+  "authentication": "Fresh observation on the owner's repeated publish request still shows the rejected email verification screen: Incorrect code. 4 attempts left. The prior manual handoff remains outstanding. No new credential entry, auth retry or repeated takeover request was performed; the same cloud tab was kept as handoff.",
+  "authorization": "Owner explicitly reaffirmed merge and production publication on 2026-11-16 for the latest compact-heading advertising card, then requested publication again after merge. No repeated authorization question is needed.",
   "continuation_ledger": "Issue1006 is at its 2500-comment cap. The replacement task PR body records the canonical full source SHA and final handoff; this updated task status document accompanies the source.",
-  "next_safe_action": "Do not merge again: PR1961 is already merged as M. Read this checkpoint and PR, verify current production/PR refs and M post-merge CI. Resume the existing authentication handoff without repeating credential attempts; once sign-in is positively observed, read official shared /app guard status and require active=false, then carry out the remaining release protocol from M. Never deploy this documentation-only checkpoint or superseded candidates. If production advanced beyond M, review the newer source/intent boundary before any shared change.",
+  "next_safe_action": "Do not merge again: PR1961 is already merged as M and all post-merge checks have passed. Read this checkpoint and PR, freshly verify current production/PR refs, then resume the existing authentication handoff without repeated credential attempts. Once positive sign-in is observed, read official shared /app guard status and require active=false, then perform the configured shared adapter build, prepare/prepublish, one authorized publish, explicit newer Deployment Succeeded, official three-probe verification and live layout/footer acceptance. Never deploy this documentation-only checkpoint or superseded candidates. If production advanced beyond M, review the newer source/intent boundary before any shared change.",
   "preserved_compact_source": "248cb46d182e9d82648e83b60c940362aef3e4a9",
   "integration": {
     "production_pr": 1959,
@@ -169,7 +172,7 @@
     "node24_evidence_artifact": 14237172778
   },
   "merge_policy_review": "Independent review of AGENTS and matching workflow triggers confirms the inactive shared guard is required before /app work/rehearsal, not GitHub merge alone. Matching production-push workflows are GitHub-hosted checks and manual handoff only; no automatic deployment or lease. The earlier fresh-guard-before-merge sequence was a conservative task plan, now revised under the owner's explicit merge request.",
-  "updated_at_utc": "2026-11-16T15:13:01Z",
+  "updated_at_utc": "2026-11-16T15:26:09Z",
   "deployment_head": "6599fa62361f7a977a35db48b90e0a55aa72ecf3",
   "deployment_git_sha": "b56e0794f7d9d4c2ef52e69fd0b36886ea3bfa95",
   "merge_commit": "b56e0794f7d9d4c2ef52e69fd0b36886ea3bfa95",
@@ -179,20 +182,25 @@
     "6599fa62361f7a977a35db48b90e0a55aa72ecf3"
   ],
   "post_merge_ci": {
-    "snapshot_at_utc": "2026-11-16T15:13:01Z",
-    "state": "in_progress",
+    "snapshot_at_utc": "2026-11-16T15:26:09Z",
+    "state": "complete",
+    "head": "b56e0794f7d9d4c2ef52e69fd0b36886ea3bfa95",
     "checks": {
-      "total": 10,
-      "success": 4,
-      "in_progress": 6,
-      "failure": 0
+      "total": 11,
+      "success": 11,
+      "pending": 0,
+      "failure": 0,
+      "skipped": 0,
+      "cancelled": 0
     },
     "runs": {
       "security_gate": 43893712599,
       "codeql": 43893712645,
       "readiness": 43893712622
     },
-    "note": "Automatic post-merge checks are separate from the completed exact-B gates. Do not claim these new runs passed until freshly observed."
+    "node20_job": 133392014116,
+    "node24_job": 133392013984,
+    "note": "Fresh root read found all 11 check-runs completed with success on M, including both actual clean-clone adapter rehearsals. These checks do not deploy Emergent."
   },
   "production_branch_changed": true,
   "live_deployment_changed": false
