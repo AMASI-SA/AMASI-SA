@@ -216,9 +216,48 @@ def _records(state, obligations, valuations):
     return records, claims
 
 
+def _unclaimed_same_provider_aliases(state, records, claims):
+    """Find cumulative SAR observations that overlap a retained unsplit proof.
+
+    This is a report-only alias, never a claim migration. Allocation identities,
+    fee authority and the original records must remain intact. Foreign quotes,
+    wallet shares and cross-provider reallocations require their own evidence.
+    """
+    engine = state.get("engine", {})
+    inputs = engine.get("provider_fee_inputs", {}).get("orders", {})
+    facts = engine.get("facts", {})
+    aliases = {}
+    for identity, row in records.items():
+        oid, provider = row["order_id"], row["provider"]
+        parent = "provider:" + oid
+        prior = records.get(parent)
+        if (identity != parent + ":" + provider or identity in claims
+                or not row.get("split_payment") or not prior or not prior.get("paid_proven")
+                or prior["provider"] != provider or "provider_split:" + oid in facts):
+            continue
+        if any(record["native_currency"] != "SAR" or record["currency"] != "SAR"
+               for record in (prior, row)):
+            continue
+        split = (inputs.get(oid, {}).get("payment") or {}).get("split") or {}
+        tenders = split.get("tenders", [])
+        if not tenders or any(leg.get("provider") != provider for leg in tenders):
+            continue
+        aliases[identity] = parent
+    return aliases
+
+
 def provider_balances(state, details, obligations, parties, valuations, *, sar_view=False):
     """Project fees once on the unpaid gross claim. Never change saved financial state."""
     records, claims = _records(state, obligations, valuations)
+    aliases = _unclaimed_same_provider_aliases(state, records, claims)
+    displayed = {}
+    for identity, parent in aliases.items():
+        prior, current = records[parent], records[identity]
+        # Both describe cumulative principal, not disjoint receipts. Keep the
+        # strongest proved amount, without changing the claim used for net fees.
+        paid = max(prior["gross"], current["gross"])
+        displayed[parent] = (paid, max(prior["refunded"], current["refunded"]))
+        displayed[identity] = (ZERO, ZERO)
     allocated, actual_fees, settled_cash = _settlements(state, valuations)
     settings = state.get("engine", {}).get("provider_fee_inputs", {}).get("settings", {})
     policies = state.get("engine", {}).get("provider_fee_inputs", {}).get("policies", [])
@@ -313,12 +352,13 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
                 # Customer paid proof is distinct from accepting the claim
                 # against opening/settlement history or proving its net fees.
                 total["paid_orders"].add(row["order_id"])
-        total["gross"] += row["gross"]
-        total["known_gross"] += row["gross"]
+        displayed_gross, displayed_refund = displayed.get(identity, (row["gross"], row["refunded"]))
+        total["gross"] += displayed_gross
+        total["known_gross"] += displayed_gross
         total["_gross_available"] = total["_gross_available"] or row["paid_proven"]
         if row.get("order_number"):
             total["_order_numbers"][row["order_id"]] = str(row["order_number"])
-        total["refunded"] += row["refunded"]
+        total["refunded"] += displayed_refund
         claim = claims.get(identity)
         original = (claim.get("native_balance") or claim) if claim else {}
         held = (not claim or claim["currency"] != currency or claim.get("incomplete")
@@ -330,6 +370,13 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
             incomplete_estimate(total, row["order_id"], "provider_balance_recognition_pending")
         elif row["gross"] > 0:
             total["confirmed_orders"].add(row["order_id"])
+        if identity in aliases:
+            # The old claim still owns its proved fees and settlements. A full
+            # estimate on this held observation would price that portion again;
+            # the unaccepted additional amount keeps its fee scope incomplete.
+            total["complete"] = total["fees_complete"] = False
+            incomplete_estimate(total, row["order_id"], "provider_balance_recognition_pending")
+            continue
         projection = details.get("provider_reports", {}).get(identity)
         fee = None
         fee_basis = "unavailable"
