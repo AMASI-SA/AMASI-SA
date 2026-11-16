@@ -1,8 +1,8 @@
 {
   "task_id": "dashboard-ads-net-profit-overview-20261116",
-  "status": "followup_source_verified_ready_for_checkpoint",
+  "status": "release_candidate_verified_authentication_blocked",
   "repository": "AMASI-SA/AMASI-SA",
-  "branch": "codex/dashboard-ads-footer-roas-20261116",
+  "branch": "codex/dashboard-ads-footer-roas-handoff-20261116",
   "source_base": "4cdc10931f49124a4715153f220e0adf274e8bcc",
   "scope": "Preserve net-profit and footer-only Riyadh half-day comparison, add canonical ROAS across main/account/period/aggregate tables, and show only total non-advertising costs. Rebuild and functionally verify the exact delivered HTML so it includes the interactive footer.",
   "acceptance": [
@@ -39,28 +39,129 @@
     {
       "name": "Visual limitation",
       "result": "No pixel-layout acceptance claim. Prior Cloud Browser file-URL denial was respected; no alternate browser or tunnel workaround. Functional DOM/event acceptance is separate from visual verification."
+    },
+    {
+      "name": "Governed source release proof",
+      "result": "Two matching clean builds; official Frontend verification exit0. Independent candidate loader, Git manifest and actual artifact/proof comparison PASS. Local candidate exactly equals CI artifact14233025141 bytes."
+    },
+    {
+      "name": "Intent-only commit verification",
+      "result": "B is child of A and changes only release/release-intent-v5.json. Local load_release_intent and verify_release_intent_git using python -B exited0; independent remote comparison confirmed tree/blob."
+    },
+    {
+      "name": "Actual clean-clone adapter rehearsals",
+      "result": "Readiness 43881530380 succeeded. Node20.20.2 job133349443439 and Node24.19.0 job133349443396 executed successfully, not skipped. Independent log review confirmed host versions, Git metadata removal, package/proof/identity, and complete HTTP tests including exact build-meta bytes, cache-bust, production/preview hosts, immutable assets and SPA route. Both use the frozen source A and deployment B identities."
+    },
+    {
+      "name": "Final exact-B CI snapshot",
+      "result": "Root freshly observed all 44 raw check-runs completed: 33 success, 8 skipped, 3 superseded cancelled checks, no failure/pending/neutral. Independent run correlation gives 30 success and 6 intentional skips across latest relevant workflows. CodeQL run43881530471 succeeded on attempt1; no manual reruns or weakened gates."
     }
   ],
   "incomplete": [
-    "Preserve new canonical source and replacement PR, run exact-source CI and governed two-build proof, then freeze new intent-only commit and complete its gates.",
-    "Verify the outstanding Emergent authentication handoff outcome. Last observed website rejected a submitted verification code; no automated retry was performed.",
-    "Fresh inactive official shared guard before shared changes. Complete authorized merge/build/prepare/prepublish/single publish and official3-probe verification.",
-    "Check live browser layout and footer after publication when authenticated access is available."
+    "Complete existing Emergent authentication handoff; verify a positive signed-in state.",
+    "Fresh official shared guard active=false, refs and tree checks before ordinary merge or shared changes.",
+    "Actual shared adapter build, prepare/prepublish, one authorized publish, explicit newer deployment success and official three-probe verification.",
+    "Live browser visual/layout and footer acceptance."
   ],
   "production_changed": false,
   "release_guard": "No shared /app mutation, lease, merge or publish by either this revision or its superseded candidate.",
   "authorization": "Same advertising-card task. Earlier explicit merge/publication authorization persists; newest user feedback overrides the previous UI specification.",
-  "continuation_ledger": "Issue1006 is at its2500-comment cap. The task PR will serve as the current continuation handoff alongside this status document.",
+  "continuation_ledger": "Issue1006 is at its 2500-comment cap. PR1958 and this separate documentation-only checkpoint are the current continuation handoff.",
   "previous_completed_task": "PR1947 is already merged/published/verified. This follow-up starts from the newer PR1956 production base; it does not repeat the previous deployment.",
-  "next_safe_action": "Create source checkpoint and replacement PR on codex/dashboard-ads-footer-roas-20261116, then build/freeze an entirely new release pair. Do not merge/deploy superseded PR1957 or its documentation checkpoint.",
+  "next_safe_action": "Resume from frozen B on deployment_branch only after the existing manual Emergent authentication handoff has completed and a positive signed-in state is observed. Re-read the official shared /app guard and require active=false, and check production/PR refs and tree identities before any ordinary merge or shared mutation. Do not deploy or merge this documentation-only checkpoint. Complete the configured shared adapter build, prepare/prepublish, one authorized publish, explicit new deployment success, official three-probe verification and live footer/layout acceptance.",
   "completed": [
     "Added canonical ROAS to the compact main table, all platform half-day/day/range detail sections, and aggregate tables.",
     "Replaced average cost with total cost in overview, removed detailed cost rows and duplicate daily totals.",
     "Verified existing footer hover and delivered an updated actual-source bundle replacing the older attached preview.",
-    "Preserved frozen old A/B; PR1957 returned to draft as superseded pending replacement release."
+    "Preserved frozen old A/B for audit. PR1957 is closed without merge and superseded by PR1958; the old candidate must not be deployed.",
+    "Frozen new A/B and passed exact-head source and intent CI, including both actual clean-clone adapter rehearsals. Updated preview is saved and available; live publication remains blocked by authentication."
   ],
   "revision_task_id": "dashboard-ads-footer-roas-20261116",
   "superseded_pr": 1957,
   "preserved_previous_source": "fc26ab163b25dc067b1a352394b6f26a3d557345",
-  "preserved_previous_intent": "7328a3d3df39dc3535786fc3587a47405f869219"
+  "preserved_previous_intent": "7328a3d3df39dc3535786fc3587a47405f869219",
+  "documentation_only": true,
+  "deploy_candidate": false,
+  "checkpoint_branch": "codex/dashboard-ads-footer-roas-handoff-20261116",
+  "deployment_branch": "codex/dashboard-ads-footer-roas-20261116",
+  "deployment_head": "96d59e005e7a66aac2505146739ecd0bf78d4124",
+  "source_commit": "116beec72007969fe63f3620a5f649b4b9968fc5",
+  "source_tree": "9303ecfd9e56db2759fae131828d19ff1d07180e",
+  "intent_commit": "96d59e005e7a66aac2505146739ecd0bf78d4124",
+  "intent_tree": "475502dd10a32825c80af3c346812716e25c39a1",
+  "intent_blob": "d8b85a98d9db7ec02de4e1d2fc1e8cafcfeaea78",
+  "pull_request": "https://github.com/AMASI-SA/AMASI-SA/pull/1958",
+  "runtime_release_id": "rg5-65de6672e5aac980357e404d9cd79fb2b0697925f0f9633ff4a85788f1fc0d3b",
+  "artifact_tree_sha256": "4a1a988f8893c551667299be58bdc6558be54ae938666bb607cd428814898fbc",
+  "reproducibility_proof_sha256": "a93b8c871a51229b414536ed5da32d4a044e0540505d255d7f08fb7fef25f46c",
+  "intent_sha256": "1fabfad7d61094725f6b0195c1c4a3bef2e7d0e156aefefe7213c16971ee3f32",
+  "source_ci": {
+    "success": 28,
+    "skipped": 6,
+    "failure": 0,
+    "pending": 0,
+    "neutral": 0,
+    "readiness_run": 43880373169,
+    "candidate_artifact": 14233025141
+  },
+  "authentication": "Fresh browser observation after prior manual handoff still shows the rejected verification-code screen. No new credential request or retry. Existing authentication handoff must complete before shared release work.",
+  "intent_ci": {
+    "head": "96d59e005e7a66aac2505146739ecd0bf78d4124",
+    "state": "complete",
+    "readiness_run": 43881530380,
+    "readiness_conclusion": "success",
+    "four_platform_run": 43881530342,
+    "four_platform_conclusion": "success",
+    "node20_rehearsal": {
+      "job": 133349443439,
+      "conclusion": "success",
+      "generated_artifact": 14233016721,
+      "evidence_artifact": 14232986683
+    },
+    "node24_rehearsal": {
+      "job": 133349443396,
+      "conclusion": "success",
+      "generated_artifact": 14233186928,
+      "evidence_artifact": 14233037368
+    },
+    "superseded_publication_run": 43881530482,
+    "superseding_publication_run": 43881650539,
+    "superseding_publication_conclusion": "success",
+    "cancelled_checks_explanation": "Three checks belong to the older same-head publication workflow cancelled by the ready_for_review event concurrency policy. Replacement run succeeded with scope success and both out-of-scope jobs skipped. No gate was rerun or weakened.",
+    "checked_at_utc": "2026-11-16T14:11:27Z",
+    "latest_relevant_checks": {
+      "success": 30,
+      "skipped": 6,
+      "cancelled": 0,
+      "failure": 0,
+      "pending": 0,
+      "neutral": 0
+    },
+    "raw_checks": {
+      "total": 44,
+      "success": 33,
+      "skipped": 8,
+      "cancelled": 3,
+      "failure": 0,
+      "pending": 0,
+      "neutral": 0
+    },
+    "codeql_run": 43881530471,
+    "codeql_conclusion": "success",
+    "codeql_attempt": 1
+  },
+  "preview": {
+    "filename": "ads-card-preview.html",
+    "size_bytes": 883083,
+    "sha256": "1322f15ae499147da9277b3aed9385017f1cb7834292e7a999da2c70392beab0",
+    "fixture_data": "Synthetic demonstration data, not live customer totals",
+    "functional_acceptance": "Exact self-contained actual-source bundle DOM/events passed",
+    "visual_acceptance": "Unverified; no browser policy workaround attempted"
+  },
+  "updated_at_utc": "2026-11-16T14:11:27Z",
+  "production_ref_last_observed": {
+    "at_utc": "2026-11-16T14:11:27Z",
+    "sha": "4cdc10931f49124a4715153f220e0adf274e8bcc",
+    "changed_by_this_task": false
+  }
 }
