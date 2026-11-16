@@ -81,6 +81,7 @@ jobs:
             tests/test_salla_products_projection.py \
             tests/test_salla_products_projection_integration.py \
             tests/test_salla_products_projection_repair.py \
+            tests/test_salla_products_projection_repair_routes.py \
             tests/test_salla_order_items_snapshot.py \
             tests/test_salla_raw_snapshot_preservation.py \
             tests/test_salla_single_order_status_resync.py \
@@ -105,7 +106,8 @@ jobs:
                       if any(row.find(tag) is not None for tag in ("skipped", "failure", "error"))]
           assert not rejected, f"Salla projection skipped or failed: {rejected}"
           expected = {"test_salla_products_projection", "test_salla_products_projection_integration",
-                      "test_salla_products_projection_repair", "test_salla_order_items_snapshot",
+                      "test_salla_products_projection_repair", "test_salla_products_projection_repair_routes",
+                      "test_salla_order_items_snapshot",
                       "test_salla_sync_component_snapshot"}
           observed = {part for row in cases for part in row.get("classname", "").split(".")}
           assert expected <= observed, f"Missing suites: {sorted(expected - observed)}"
@@ -272,6 +274,7 @@ jobs:
           src/components/products/BundleReportPanel.test.jsx
           src/components/products/ProductCreationPanel.test.jsx
           src/components/orders/BundleOperationalPanel.test.jsx
+          src/services/orderEngine.productsProjectionRepair.test.js
           src/pages/OrderDetailsV2.shippingIdentity.test.jsx
           --json --outputFile="$RUNNER_TEMP/g47-frontend.json"
       - name: Require executed UI tests with no skips
