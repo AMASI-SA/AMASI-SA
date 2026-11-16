@@ -1,7 +1,7 @@
 {
   "task_id": "dashboard-ads-net-profit-overview-20261116",
   "revision_task_id": "dashboard-ads-compact-release-20261116",
-  "status": "github_merged_live_publication_blocked_by_authentication",
+  "status": "github_merged_shared_workspace_aligned_ready_for_adapter",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/dashboard-ads-compact-release-handoff-20261116",
   "source_base": "66433833f35fa3a352e72d8dd780258122293473",
@@ -69,6 +69,10 @@
     {
       "name": "Fresh publication resume readiness",
       "result": "Production ref remains M. Root independently read 11 post-merge check-runs: all completed/success, no failed/pending/skipped checks, including both clean-clone rehearsals. Browser still requires email-code verification. No /app mutation, lease, prepare/prepublish or publish occurred."
+    },
+    {
+      "name": "Authenticated shared-host readiness and completed fast-forward alignment",
+      "result": "Root reports the user-requested reload resolved authentication and Emergent /home shows authenticated Salla Analytics. Fresh official python -B scripts/production_release_guard.py status returned active=false. Root verified shared branch=production, HEAD J2=66433833f35fa3a352e72d8dd780258122293473 and clean tracked status, then git merge --ff-only M succeeded. Shared HEAD is b56e0794f7d9d4c2ef52e69fd0b36886ea3bfa95 and tree d48e112a8c432b0701f597fb25298422b0c6415c; tracked status is empty and untracked files were not touched. Root independently confirmed latest remote production M and all 11 post-merge checks successful. No actual adapter build, lease, prepare/prepublish, or live publication has started."
     }
   ],
   "preview": {
@@ -85,18 +89,17 @@
     "handoff": "2d1fa4ea5367a23340fb296097feddb7f318008e",
     "disposition": "Superseded by a fresh source rooted on current production J2. PR1960 source and preceding frozen candidates are preserved unchanged and must not be deployed."
   },
-  "release_state": "PR1961 merged normally in GitHub. Verified M parents [J2,B], M tree exactly B tree, and official verify_release_intent_git accepted M. Fresh read confirms production remains at M and all 11 post-merge checks succeeded. Live Emergent publication is still blocked by the existing authentication screen; no shared-host release work or publish occurred.",
+  "release_state": "PR1961 is merged normally in GitHub as M=b56e0794f7d9d4c2ef52e69fd0b36886ea3bfa95. Verified M parents [J2,B], M tree exactly B tree, and official verify_release_intent_git accepted M. Root's latest independent remote read confirms M and all 11 post-merge checks succeeded. The user-requested reload resolved Emergent authentication; /home positively shows authenticated Salla Analytics. Root read the official shared release guard as active=false, verified the production branch at clean J2, and completed git merge --ff-only M. Shared /app now has HEAD M and tree d48e112a8c432b0701f597fb25298422b0c6415c with clean tracked status; untracked files were preserved. The actual shared adapter build has not started. No lease, prepare/prepublish, or live publication occurred.",
   "incomplete": [
-    "Complete the existing Emergent authentication handoff and observe a positive signed-in state.",
-    "Read the official shared /app release guard and require active=false before shared changes/rehearsal; preserve any foreign lease.",
-    "Recheck current production refs, then configured shared adapter build for M, prepare/prepublish, one authorized publication, explicit new deployment success, official three-probe verification and live layout/footer acceptance."
+    "Run the configured actual /app/frontend yarn build with reviewed REACT_APP_BACKEND_URL=https://mezansalla.com and retain the official adapter/identity verification output for M.",
+    "After the actual shared adapter passes with the reviewed identity, root performs prepare/prepublish, one authorized publication, explicit newer deployment completion, official three-probe verification, and live layout/footer acceptance."
   ],
   "production_changed": true,
-  "release_guard": "No shared /app mutation, lease or publication. Shared guard status has not been freshly read because Emergent is still at the existing rejected verification-code screen; never assume inactive status.",
-  "authentication": "Fresh observation on the owner's repeated publish request still shows the rejected email verification screen: Incorrect code. 4 attempts left. The prior manual handoff remains outstanding. No new credential entry, auth retry or repeated takeover request was performed; the same cloud tab was kept as handoff.",
+  "release_guard": "Root freshly ran python -B scripts/production_release_guard.py status in shared /app before alignment; result active=false. No lease, prepare/prepublish, or publication has been created. Shared alignment from clean production J2 to M completed by fast-forward; the actual shared adapter build remains pending.",
+  "authentication": "Resolved by the user's requested reload. Root observed Emergent /home in the existing cloud tab showing authenticated Salla Analytics. Authentication is no longer a blocker; no live publication is claimed.",
   "authorization": "Owner explicitly reaffirmed merge and production publication on 2026-11-16 for the latest compact-heading advertising card, then requested publication again after merge. No repeated authorization question is needed.",
   "continuation_ledger": "Issue1006 is at its 2500-comment cap. The replacement task PR body records the canonical full source SHA and final handoff; this updated task status document accompanies the source.",
-  "next_safe_action": "Do not merge again: PR1961 is already merged as M and all post-merge checks have passed. Read this checkpoint and PR, freshly verify current production/PR refs, then resume the existing authentication handoff without repeated credential attempts. Once positive sign-in is observed, read official shared /app guard status and require active=false, then perform the configured shared adapter build, prepare/prepublish, one authorized publish, explicit newer Deployment Succeeded, official three-probe verification and live layout/footer acceptance. Never deploy this documentation-only checkpoint or superseded candidates. If production advanced beyond M, review the newer source/intent boundary before any shared change.",
+  "next_safe_action": "Do not merge again or deploy this documentation-only handoff branch. Root owns the authenticated browser and shared /app, now aligned to M=b56e0794f7d9d4c2ef52e69fd0b36886ea3bfa95 with tree d48e112a8c432b0701f597fb25298422b0c6415c and clean tracked status. Preserve untracked files and foreign leases. Confirm the official shared guard remains inactive, then from /app/frontend run REACT_APP_BACKEND_URL=https://mezansalla.com yarn build through the configured deployment entry point. Require the actual adapter and reviewed identity checks to pass before prepare/prepublish; then perform one authorized publish, observe explicit newer deployment completion, run official three-probe verification, and inspect live layout/footer behavior. If production advanced beyond M, review the new source/intent boundary before further shared changes.",
   "preserved_compact_source": "248cb46d182e9d82648e83b60c940362aef3e4a9",
   "integration": {
     "production_pr": 1959,
@@ -172,7 +175,7 @@
     "node24_evidence_artifact": 14237172778
   },
   "merge_policy_review": "Independent review of AGENTS and matching workflow triggers confirms the inactive shared guard is required before /app work/rehearsal, not GitHub merge alone. Matching production-push workflows are GitHub-hosted checks and manual handoff only; no automatic deployment or lease. The earlier fresh-guard-before-merge sequence was a conservative task plan, now revised under the owner's explicit merge request.",
-  "updated_at_utc": "2026-11-16T15:26:09Z",
+  "updated_at_utc": "2026-11-16T15:44:38Z",
   "deployment_head": "6599fa62361f7a977a35db48b90e0a55aa72ecf3",
   "deployment_git_sha": "b56e0794f7d9d4c2ef52e69fd0b36886ea3bfa95",
   "merge_commit": "b56e0794f7d9d4c2ef52e69fd0b36886ea3bfa95",
@@ -203,5 +206,25 @@
     "note": "Fresh root read found all 11 check-runs completed with success on M, including both actual clean-clone adapter rehearsals. These checks do not deploy Emergent."
   },
   "production_branch_changed": true,
-  "live_deployment_changed": false
+  "live_deployment_changed": false,
+  "shared_workspace": {
+    "evidence_owner": "root",
+    "branch": "hotfix/prod-snap-meta-final",
+    "previous_head": "66433833f35fa3a352e72d8dd780258122293473",
+    "head": "b56e0794f7d9d4c2ef52e69fd0b36886ea3bfa95",
+    "tree": "d48e112a8c432b0701f597fb25298422b0c6415c",
+    "alignment": "completed_by_git_merge_ff_only",
+    "tracked_worktree_clean": true,
+    "untracked_files_preserved": true,
+    "guard_command": "python -B scripts/production_release_guard.py status",
+    "guard_active": false,
+    "actual_adapter_build": "not_started",
+    "lease_prepared": false,
+    "prepublish_run": false,
+    "publish_clicked": false
+  },
+  "checkpoint_parent": "275f42ded0630224a5ed0852d751a6765894a860",
+  "checkpoint_changed_files": [
+    "docs/operations/dashboard-ads-net-profit-overview-20261116/STATUS.json"
+  ]
 }
