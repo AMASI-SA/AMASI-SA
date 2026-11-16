@@ -1,0 +1,22 @@
+{
+  "helper_sha256": "ad0dac23730c82ad7901b23c2c6fc39dedf734177e4feea60ad28fe5178844e5",
+  "bytes": 12399,
+  "AST_and_compile_only": "passed",
+  "imported_or_executed": false,
+  "fixed_M": "b05cd3c9b25ce22df1b2dd06c23d97606bd632c6",
+  "actor": "chatgpt-ready1955-20261116-root",
+  "all_three_official_control_hashes_match_exact_M": true,
+  "reviewed_at": "2026-11-16 00:23:00 UTC",
+  "reviewer": "/root",
+  "all_255_lines_read": true,
+  "accepted": true,
+  "operations": [
+    "official _prepublish_locked",
+    "official _verify_locked"
+  ],
+  "atomic_full_prepare_receipt_binding": true,
+  "nested_public_guard_calls_under_mutex": false,
+  "unique_private_phase_evidence": true,
+  "no_source_build_prepare_abort_platform_or_business_operations": true,
+  "execution_performed": false
+}
