@@ -123,6 +123,7 @@ function emptyProfit(currency = "SAR", reason = "costs_unavailable", adSpendAppl
         spendSar: null, knownSpendSar: null, nativeSpend: null, currency,
         pieces: null, knownPieces: null, productCost: null, knownProductCost: null,
         shippingCost: null, knownShippingCost: null, paymentFees: null, knownPaymentFees: null,
+        bankFees: null, knownBankFees: null,
         totalCost: null, knownTotalCost: null, netProfit: null, roas: null,
         complete: false, provisional: false, reasonCodes: [reason],
     };
@@ -148,6 +149,84 @@ function dailySpend(snapshot, provider, account, ready) {
         provisional: quality.provisional === true || quality.status === "provisional"
             || snapshot?.spend_quality?.provisional === true || snapshot?.spend_quality?.status === "provisional",
         reasonCodes: sar === null ? ["spend_unavailable"] : [],
+    };
+}
+
+// This is the scope of the executive's advertising-bank-fee authority.
+// Google fees are not part of that authority; customer gateway fees stay separate.
+const AD_BANK_PROVIDERS = { snapchat: "snapchat_ads", meta: "meta_ads", tiktok: "tiktok_ads" };
+
+function bankFeeRows(context, provider) {
+    if (context.bankFeeRows.has(provider)) return context.bankFeeRows.get(provider);
+    const bank = context.executiveSnapshot?.ads_v2?.bank_commissions;
+    const expectedSpend = providerSpend(context.spendSnapshot, provider, context.spendReady);
+    const nested = bank?.coverage?.[provider === "snapchat" ? "snapchat" : "meta_tiktok"];
+    let result = null;
+    if (context.basisMatches && record(bank) && bank.coverage?.complete === true
+        && Array.isArray(bank.accounts) && bank.accounts.every(record) && expectedSpend !== null) {
+        const rows = bank.accounts.filter((row) => row.provider === AD_BANK_PROVIDERS[provider]);
+        const identities = new Set();
+        const valid = rows.every((row) => {
+            const identity = row.external_account_id || row.mezan_integration_account_id;
+            const spend = amount(row.spend_sar);
+            const fee = amount(row.bank_commission_fee_sar);
+            const pct = amount(row.bank_commission_pct);
+            if (typeof identity !== "string" || !identity.trim() || identities.has(identity)
+                || spend === null || fee === null || pct === null || pct > 20
+                || typeof row.apply_bank_commission !== "boolean"
+                || row.apply_bank_commission === false && fee !== 0
+                || row.apply_bank_commission === true && (fee > 0 && (spend === 0 || pct === 0)
+                    || Math.abs(fee - spend * pct / 100) > HALF_HALALA + ROUNDING_EPSILON)) return false;
+            identities.add(identity);
+            return true;
+        });
+        const observedSpend = rows.length ? sum(rows.map((row) => amount(row.spend_sar)), { complete: true }) : 0;
+        const roundingBound = rows.length * HALF_HALALA + ROUNDING_EPSILON;
+        if (valid && (nested?.complete === true || !rows.length && expectedSpend === 0)
+            && observedSpend !== null && Math.abs(observedSpend - expectedSpend) <= roundingBound) result = rows;
+    }
+    context.bankFeeRows.set(provider, result);
+    return result;
+}
+
+function dailyBankFees(context, provider, account = null) {
+    if (!Object.prototype.hasOwnProperty.call(AD_BANK_PROVIDERS, provider)) return 0;
+    const rows = bankFeeRows(context, provider);
+    if (rows === null) return null;
+    const selected = account ? rows.filter((row) => row.external_account_id === account.account_id) : rows;
+    if (!selected.length) return account ? accountSpend(account, context.spendReady) === 0 ? 0 : null : 0;
+    if (account && (selected.length !== 1 || amount(selected[0].spend_sar) !== accountSpend(account, context.spendReady))) return null;
+    return sum(selected.map((row) => amount(row.bank_commission_fee_sar)), { complete: true });
+}
+
+function totalBankFees(context) {
+    const bank = context.executiveSnapshot?.ads_v2?.bank_commissions;
+    const groups = Object.keys(AD_BANK_PROVIDERS).map((provider) => bankFeeRows(context, provider));
+    if (groups.some((rows) => rows === null) || !record(bank)) return null;
+    const rows = groups.flat();
+    if (rows.length !== bank.accounts.length) return null;
+    const fee = rows.length ? sum(rows.map((row) => amount(row.bank_commission_fee_sar)), { complete: true }) : 0;
+    const spend = rows.length ? sum(rows.map((row) => amount(row.spend_sar)), { complete: true }) : 0;
+    const subjectRows = rows.filter((row) => row.apply_bank_commission);
+    const subjectSpend = subjectRows.length ? sum(subjectRows.map((row) => amount(row.spend_sar)), { complete: true }) : 0;
+    if (fee === null || amount(bank.total_fee_sar) !== fee || spend === null
+        || subjectSpend === null || amount(bank.fee_subject_spend_sar) === null
+        || Math.abs(amount(bank.fee_subject_spend_sar) - subjectSpend) > subjectRows.length * HALF_HALALA + ROUNDING_EPSILON
+        || amount(bank.total_effective_spend_sar) === null
+        || Math.abs(amount(bank.total_effective_spend_sar) - spend) > rows.length * HALF_HALALA + ROUNDING_EPSILON) return null;
+    const totals = context.executiveSnapshot?.totals;
+    if (Object.prototype.hasOwnProperty.call(totals || {}, "ad_bank_commission_fees")
+        && amount(totals.ad_bank_commission_fees) !== fee) return null;
+    return fee;
+}
+
+function withBankFees(profit, fee, knownFee = fee) {
+    const totalCost = profit.totalCost !== null && fee !== null ? sum([profit.totalCost, fee], { complete: true }) : null;
+    const netProfit = profit.netProfit !== null && fee !== null ? signedMoney(profit.netProfit - fee) : null;
+    return { ...profit, bankFees: fee, knownBankFees: knownFee, totalCost,
+        knownTotalCost: sum([profit.knownTotalCost, knownFee]),
+        netProfit, complete: profit.complete && fee !== null && totalCost !== null && netProfit !== null,
+        reasonCodes: reasonCodes(profit.reasonCodes, fee === null ? ["ad_bank_fees_unverified"] : []),
     };
 }
 
@@ -311,6 +390,39 @@ function reconcileHourlyDay(context, provider, account) {
     return result;
 }
 
+function segmentBankFees(context, provider, account, id, spend) {
+    const dailyFee = dailyBankFees(context, provider, account);
+    if (dailyFee === null || dailyFee === 0) return dailyFee;
+    if (spend.sar === null || !reconcileHourlyDay(context, provider, account).complete) return null;
+    const rows = bankFeeRows(context, provider)?.filter((row) => !account || row.external_account_id === account.account_id);
+    // A provider's hourly total cannot split fees across differently billed accounts.
+    if (rows?.length !== 1) return null;
+    const row = rows[0];
+    const pct = amount(row.bank_commission_pct);
+    if (pct === null || row.apply_bank_commission !== true) return null;
+    const candidates = context.result.segments.filter((segment) => segment.id === "morning");
+    const morning = candidates.length === 1 ? candidates[0] : null;
+    const window = morning && segmentWindow(morning, context.range.fromDate, "morning");
+    if (!window) return null;
+    const afternoon = context.result.segments.find((segment) => segment.id === "afternoon");
+    if (id === "morning" && afternoon?.status === "not_started") return dailyFee;
+    const morningSpend = hourlySpend(context.spendSnapshot, provider, account, context.range.fromDate, window, context.spendReady);
+    let morningBasis = morningSpend.sar;
+    if (account) {
+        const rate = amount(row.exchange_rate_to_sar);
+        if (morningSpend.native === null || rate === null || rate <= 0
+            || !reconcileHourlyDay(context, provider, account).nativeVerified) return null;
+        morningBasis = signedMoney(morningSpend.native * rate);
+    }
+    if (morningBasis === null) return null;
+    const morningFee = morningBasis === amount(row.spend_sar) ? dailyFee : signedMoney(morningBasis * pct / 100);
+    if (morningFee === null || morningFee < 0 || morningFee > dailyFee) return null;
+    // Cumulative rounding: round the verified morning basis once; the remaining
+    // charge belongs to the elapsed afternoon. The server's daily charge wins,
+    // so the two halves cannot charge a rounding halala twice or change spend.
+    return id === "morning" ? morningFee : signedMoney(dailyFee - morningFee);
+}
+
 function unavailableSegment(id, currency, reason, status = "unavailable", segment = null, adSpendApplicable = true) {
     return { id, status, startAt: segment?.start_at || null, endAt: segment?.end_at || null,
         cutoffAt: segment?.cutoff_at || null, ...emptyStats(), adSpendApplicable,
@@ -357,7 +469,8 @@ function segmentStats(context, provider, id, account) {
     let stats = metrics(row, spend.sar, basisMatches, { account: direct || Boolean(account), coverageComplete: direct || coverageComplete });
     if (!timed) stats = { ...stats, orders: null, sales: null, cpa: null,
         knownOrders: count(row?.known_salla_orders), knownSales: amount(row?.known_salla_sales_sar), partial: true };
-    const profit = profitMetrics(stats, row?.hover_summary, spend, basisMatches, { attributed, timed, adSpendApplicable: !direct });
+    const profit = withBankFees(profitMetrics(stats, row?.hover_summary, spend, basisMatches,
+        { attributed, timed, adSpendApplicable: !direct }), segmentBankFees(context, provider, account, id, spend));
     return { id, status: profit.complete ? window.cutoff < window.end ? "active" : "completed" : "partial",
         startAt: segment.start_at, endAt: segment.end_at, cutoffAt: segment.cutoff_at,
         ...stats, adSpendApplicable: !direct, profit, reasonCodes: reasonCodes(profit.reasonCodes, row?.reason_codes) };
@@ -376,8 +489,8 @@ function withDetails(stats, context, provider, id = null) {
     const compatible = record(row) && (stats.orders === null || count(row.salla_orders) === stats.orders)
         && (stats.sales === null || amount(row.salla_sales_sar) === stats.sales);
     return { ...stats, adSpendApplicable: !direct,
-        profit: profitMetrics(stats, row?.hover_summary, spend, context.basisMatches, { attributed, compatible,
-            timed: !direct || row?.time_assignment_complete === true, adSpendApplicable: !direct }),
+        profit: withBankFees(profitMetrics(stats, row?.hover_summary, spend, context.basisMatches, { attributed, compatible,
+            timed: !direct || row?.time_assignment_complete === true, adSpendApplicable: !direct }), dailyBankFees(context, provider, account)),
         segments: SEGMENT_IDS.map((segmentId) => segmentStats(context, provider, segmentId, account)),
     };
 }
@@ -397,6 +510,7 @@ function aggregateProfit(stats, entries, basisMatches) {
         productCost: total("productCost"), knownProductCost: total("knownProductCost", false, false),
         shippingCost: total("shippingCost"), knownShippingCost: total("knownShippingCost", false, false),
         paymentFees: total("paymentFees"), knownPaymentFees: total("knownPaymentFees", false, false),
+        bankFees: total("bankFees"), knownBankFees: total("knownBankFees", false, false),
         totalCost, knownTotalCost: total("knownTotalCost", false, false), netProfit,
         roas: basisMatches && stats.sales !== null && spendSar !== null && spendSar > 0 ? amount(stats.sales / spendSar) : null,
         complete: financialComplete && netProfit !== null,
@@ -415,11 +529,11 @@ function sourceTotalProfit(stats, rows, context, source, { timed = true } = {}) 
     // Cohort-level gateway rounding belongs to the server. It is never spread
     // over account rows, or borrowed by a subset of the displayed accounts.
     const compatible = count(source.salla_orders) === stats.orders && amount(source.salla_sales_sar) === stats.sales;
-    return profitMetrics(stats, source.hover_summary, {
+    return withBankFees(profitMetrics(stats, source.hover_summary, {
         sar: fallback.spendSar, knownSar: fallback.knownSpendSar, native: fallback.spendSar,
         currency: "SAR", provisional: fallback.provisional, reasonCodes: fallback.reasonCodes,
     }, context.basisMatches, { attributed: source.attribution_complete === true,
-        timed, compatible });
+        timed, compatible }), fallback.bankFees, fallback.knownBankFees);
 }
 
 function strictAccountSet(rows, providerRequired = false) {
@@ -494,6 +608,11 @@ function totalSpendEvidence(context, entries = null, coverage = context.result?.
 
 function withTotalDetails(stats, rows, context) {
     const { basisMatches } = context;
+    const bankFees = totalBankFees(context);
+    const verifyBankFeeBasis = (profit) => bankFees !== null ? profit : { ...profit,
+        bankFees: null, totalCost: null, netProfit: null, complete: false,
+        reasonCodes: reasonCodes(profit.reasonCodes, ["ad_bank_fees_unverified"]),
+    };
     const advertisedCohort = context.accountsReady && record(context.result?.daily_total)
         && Object.prototype.hasOwnProperty.call(context.result.daily_total, "cohort_basis");
     const dailySource = context.accountsReady ? verifiedCohortTotal(context.result, context.result.daily_total) : null;
@@ -501,10 +620,11 @@ function withTotalDetails(stats, rows, context) {
     const dailySpend = totalSpendEvidence(context);
     const total = dailySource ? cohortMetrics(dailySource, dailySpend, financialBasis)
         : advertisedCohort ? { ...stats, orders: null, sales: null, cpa: null, partial: true } : stats;
-    const profit = dailySource ? profitMetrics(total, dailySource.hover_summary, dailySpend, financialBasis,
-        { timed: dailySource.time_assignment_complete === true })
+    const profit = verifyBankFeeBasis(dailySource ? withBankFees(profitMetrics(total, dailySource.hover_summary, dailySpend, financialBasis,
+        { timed: dailySource.time_assignment_complete === true }), bankFees,
+        sum(rows.map((row) => row.profit.knownBankFees)))
         : advertisedCohort ? emptyProfit("SAR", "cohort_total_unverified")
-            : sourceTotalProfit(total, rows, context, context.result?.daily_total);
+            : sourceTotalProfit(total, rows, context, context.result?.daily_total));
     return { ...total, adSpendApplicable: true, profit,
         segments: SEGMENT_IDS.map((id) => {
             const entries = rows.map((row) => row.segments.find((segment) => segment.id === id));
@@ -530,20 +650,22 @@ function withTotalDetails(stats, rows, context) {
                 const segmentFinancialBasis = basisMatches && financialAccountScopeMatches(context, segment.coverage);
                 const spend = totalSpendEvidence(context, entries, segment.coverage);
                 const stats = cohortMetrics(proven, spend, segmentFinancialBasis);
-                const profit = profitMetrics(stats, proven.hover_summary, spend, segmentFinancialBasis,
-                    { timed: proven.time_assignment_complete === true });
+                const profit = verifyBankFeeBasis(withBankFees(profitMetrics(stats, proven.hover_summary, spend, segmentFinancialBasis,
+                    { timed: proven.time_assignment_complete === true }),
+                    sum(entries.map((entry) => entry.profit.bankFees), { complete: true }),
+                    sum(entries.map((entry) => entry.profit.knownBankFees))));
                 return { id, status: profit.complete ? window.cutoff < window.end ? "active" : "completed" : "partial",
                     startAt: segment.start_at, endAt: segment.end_at, cutoffAt: segment.cutoff_at,
                     ...stats, adSpendApplicable: true, profit, reasonCodes: profit.reasonCodes };
             }
-            const profit = sourceTotalProfit(metrics, entries, context, source,
-                { timed: source?.time_assignment_complete === true });
+            const profit = verifyBankFeeBasis(sourceTotalProfit(metrics, entries, context, source,
+                { timed: source?.time_assignment_complete === true }));
             const status = entries.every((entry) => entry.status === "not_started") ? "not_started"
                 : entries.every((entry) => entry.status === "unavailable") ? "unavailable"
                 : profit.complete ? entries.some((entry) => entry.status === "active") ? "active" : "completed" : "partial";
             return { id, status, startAt: entries[0]?.startAt || null, endAt: entries[0]?.endAt || null,
                 cutoffAt: entries[0]?.cutoffAt || null, ...metrics, adSpendApplicable: true, profit,
-                reasonCodes: reasonCodes(...entries.map((entry) => entry.reasonCodes)) };
+                reasonCodes: reasonCodes(profit.reasonCodes, ...entries.map((entry) => entry.reasonCodes)) };
         }),
     };
 }
@@ -615,7 +737,7 @@ export function buildDashboardAdsTableMetrics({
     });
 
     const context = { executiveSnapshot, spendSnapshot, range, basisMatches, spendReady, accountsReady, accountMode,
-        result, resultsById, spendsById, displayed, coverageComplete, reconciliations: new Map() };
+        result, resultsById, spendsById, displayed, coverageComplete, reconciliations: new Map(), bankFeeRows: new Map() };
     accounts.forEach((stats, id) => accounts.set(id, withDetails(stats, context, "snapchat", id)));
     DASHBOARD_ADS_PROVIDERS.forEach((provider) => {
         providers[provider] = withDetails(providers[provider], context, provider);

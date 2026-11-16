@@ -23,10 +23,18 @@ function fixture() {
         ads_v2: {
             breakdown: { snapchat: 425, google_transitional: 25, tiktok: 75, meta: 100 },
             spend_quality: { status: "complete" },
-            bank_commissions: { accounts: accounts.map((row) => ({
+            bank_commissions: { total_fee_sar: 0, fee_subject_spend_sar: 0, total_effective_spend_sar: 600,
+                coverage: { complete: true, snapchat: { complete: true }, meta_tiktok: { complete: true } },
+                accounts: [...accounts.map((row) => ({
                 provider: "snapchat_ads", external_account_id: row.account_id,
                 spend_sar: row.total_sar, spend_native: row.total_native, native_currency: row.currency,
-            })) },
+                exchange_rate_to_sar: row.currency === "USD" ? 3.75 : 1,
+                bank_commission_fee_sar: 0, bank_commission_pct: 0, apply_bank_commission: false,
+            })), ...[["meta", 100], ["tiktok", 75]].map(([provider, spend]) => ({
+                provider: `${provider}_ads`, external_account_id: provider,
+                spend_sar: spend, spend_native: spend, native_currency: "SAR", exchange_rate_to_sar: 1,
+                bank_commission_fee_sar: 0, bank_commission_pct: 0, apply_bank_commission: false,
+            }))] },
             executive_breakdown: {
                 providers: {
                     snapchat: salla(70, 99999), google: salla(1, 200),
@@ -328,10 +336,12 @@ function financialFixture(cutoffHour = 16.5) {
     executiveSnapshot.ads_v2.breakdown.snapchat = spendSnapshot.provider_totals_sar.snapchat;
     spendSnapshot.total_sar = Object.values(spendSnapshot.provider_totals_sar).reduce((total, value) => total + value, 0);
     executiveSnapshot.totals.total_ads_cost = spendSnapshot.total_sar;
-    executiveSnapshot.ads_v2.bank_commissions.accounts.forEach((row, index) => {
-        row.spend_sar = input.snapchatAccounts[index].total_sar;
-        row.spend_native = input.snapchatAccounts[index].total_native;
+    executiveSnapshot.ads_v2.bank_commissions.accounts.forEach((row) => {
+        const account = input.snapchatAccounts.find((item) => item.account_id === row.external_account_id);
+        row.spend_sar = account ? account.total_sar : spendSnapshot.provider_totals_sar[row.external_account_id];
+        row.spend_native = account ? account.total_native : row.spend_sar;
     });
+    executiveSnapshot.ads_v2.bank_commissions.total_effective_spend_sar = spendSnapshot.total_sar - spendSnapshot.provider_totals_sar.google;
     result.accounts[0].hover_summary = costs(7, 400, 20, 5);
     result.accounts[1].hover_summary = costs(2, 160, 20, 3);
     result.accounts.forEach((row) => { row.time_assignment_complete = true; });
@@ -370,7 +380,7 @@ function financialFixture(cutoffHour = 16.5) {
     return input;
 }
 
-test("daily hover uses the three costs and exact native total without operating or extra ad bank fees", () => {
+test("daily hover excludes operating expenses and unverified fee fields in the order summary", () => {
     const input = financialFixture();
     const summary = input.executiveSnapshot.ads_v2.account_results.accounts[0].hover_summary;
     summary.operating_expenses_sar = 9999;
@@ -384,6 +394,170 @@ test("daily hover uses the three costs and exact native total without operating 
     });
     expect(result.providers.google.profit).toMatchObject({ spendSar: 25, totalCost: 92, netProfit: 83 });
     expect(result.total.profit).toMatchObject({ spendSar: 625, totalCost: 1545, netProfit: 2130 });
+});
+
+function withBankFees(input, fees = { usd: [8.62, 2.3], sar: [1.15, 2.3] }) {
+    const bank = input.executiveSnapshot.ads_v2.bank_commissions;
+    bank.accounts.forEach((row) => {
+        const fee = fees[row.external_account_id];
+        if (fee) Object.assign(row, { bank_commission_fee_sar: fee[0], bank_commission_pct: fee[1],
+            apply_bank_commission: true, configured: false });
+    });
+    bank.total_fee_sar = Number(bank.accounts.reduce((total, row) => total + row.bank_commission_fee_sar, 0).toFixed(2));
+    bank.fee_subject_spend_sar = Number(bank.accounts.reduce((total, row) => total + (row.apply_bank_commission ? row.spend_sar : 0), 0).toFixed(2));
+    input.executiveSnapshot.totals.ad_bank_commission_fees = bank.total_fee_sar;
+    return input;
+}
+
+test("canonical bank charges enter each account and the total once without changing spend, CPA or ROAS", () => {
+    const input = withBankFees(financialFixture());
+    input.executiveSnapshot.ads_v2.account_results.accounts[0].hover_summary.ad_bank_fees_sar = 8888;
+    input.executiveSnapshot.ads_v2.account_results.accounts[0].hover_summary.operating_expenses_sar = 9999;
+    const before = JSON.parse(JSON.stringify(input));
+    const result = buildDashboardAdsTableMetrics(input);
+    expect(result.accounts.get("usd")).toMatchObject({ cpa: 75, profit: {
+        spendSar: 375, paymentFees: 5, bankFees: 8.62, totalCost: 433.62,
+        netProfit: 691.38, roas: 4, complete: true,
+    } });
+    expect(result.accounts.get("sar").profit).toMatchObject({ bankFees: 1.15, totalCost: 184.15, netProfit: 265.85 });
+    expect(result.total.profit).toMatchObject({ bankFees: 9.77, totalCost: 1554.77, netProfit: 2120.23 });
+    expect(result.direct.profit).toMatchObject({ bankFees: 0, netProfit: 0 });
+    expect(input).toEqual(before);
+});
+
+test.each(["missing", "null", "invalid", "duplicate", "coverage", "disabled charge", "zero rate", "missing rate"])(
+    "unverified %s bank-fee evidence withholds costs and profit without changing proven ROAS", (fault) => {
+        const input = withBankFees(financialFixture());
+        const bank = input.executiveSnapshot.ads_v2.bank_commissions;
+        if (fault === "missing") delete bank.accounts[0].bank_commission_fee_sar;
+        if (fault === "null") bank.accounts[0].bank_commission_fee_sar = null;
+        if (fault === "invalid") bank.accounts[0].bank_commission_fee_sar = Infinity;
+        if (fault === "duplicate") bank.accounts.push({ ...bank.accounts[0] });
+        if (fault === "coverage") bank.coverage.snapchat.complete = false;
+        if (fault === "disabled charge") bank.accounts[0].apply_bank_commission = false;
+        if (fault === "zero rate") bank.accounts[0].bank_commission_pct = 0;
+        if (fault === "missing rate") delete bank.accounts[0].bank_commission_pct;
+        const result = buildDashboardAdsTableMetrics(input);
+        expect(result.accounts.get("usd")).toMatchObject({ cpa: 75, profit: {
+            bankFees: null, totalCost: null, knownTotalCost: 425, netProfit: null, roas: 4, complete: false,
+        } });
+        expect(result.accounts.get("usd").profit.reasonCodes).toContain("ad_bank_fees_unverified");
+        expect(result.total.profit.netProfit).toBeNull();
+        expect(result.providers.google.profit.netProfit).toBe(83);
+        expect(result.direct.profit.netProfit).toBe(0);
+    },
+);
+
+test("missing advertising fee authority is unknown while explicit disabled charges and direct orders stay valid", () => {
+    const input = financialFixture();
+    expect(buildDashboardAdsTableMetrics(input).accounts.get("usd").profit).toMatchObject({ bankFees: 0, netProfit: 700 });
+    delete input.executiveSnapshot.ads_v2.bank_commissions;
+    const result = buildDashboardAdsTableMetrics(input);
+    expect(result.accounts.get("usd").profit).toMatchObject({ bankFees: null, netProfit: null, roas: 4 });
+    expect(result.direct.profit).toMatchObject({ bankFees: 0, netProfit: 0 });
+});
+
+test.each(["fee total", "executive fee", "spend total", "subject spend", "extra provider"])(
+    "a contradictory canonical %s cannot certify the full cohort's profit", (fault) => {
+        const input = withBankFees(allCohortFixture());
+        const bank = input.executiveSnapshot.ads_v2.bank_commissions;
+        if (fault === "fee total") bank.total_fee_sar += 1;
+        if (fault === "executive fee") input.executiveSnapshot.totals.ad_bank_commission_fees += 1;
+        if (fault === "spend total") bank.total_effective_spend_sar += 1;
+        if (fault === "subject spend") bank.fee_subject_spend_sar += 1;
+        if (fault === "extra provider") bank.accounts.push({ ...bank.accounts[0], provider: "other_ads" });
+        const result = buildDashboardAdsTableMetrics(input);
+        expect(result.total).toMatchObject({ orders: 19, sales: 5100,
+            profit: { bankFees: null, totalCost: null, netProfit: null, complete: false } });
+        expect(result.total.profit.roas).toBeCloseTo(5100 / 625, 10);
+        result.total.segments.forEach((segment) => expect(segment.profit.netProfit).toBeNull());
+    },
+);
+
+test("legacy totals and half-day totals cannot bypass the canonical bank-fee contract", () => {
+    const input = withBankFees(financialFixture());
+    input.executiveSnapshot.ads_v2.bank_commissions.total_fee_sar += 1;
+    const result = buildDashboardAdsTableMetrics(input);
+    expect(result.total.profit.netProfit).toBeNull();
+    result.total.segments.forEach((segment) => expect(segment.profit.netProfit).toBeNull());
+    expect(result.accounts.get("usd").profit.netProfit).toBe(691.38);
+});
+
+test("provider and legacy Snapchat rows use only their own authoritative account charges", () => {
+    const input = withBankFees(financialFixture(), { usd: [8.62, 2.3], sar: [1.15, 2.3], meta: [1, 1], tiktok: [1.5, 2] });
+    let result = buildDashboardAdsTableMetrics(input);
+    expect(result.providers.meta.profit).toMatchObject({ bankFees: 1, netProfit: 573 });
+    expect(result.providers.tiktok.profit).toMatchObject({ bankFees: 1.5, netProfit: 504.5 });
+    expect(result.providers.meta.segments[0].profit.bankFees).toBe(1);
+    expect(result.providers.tiktok.segments[1].profit.bankFees).toBe(1.5);
+    expect(result.total.profit).toMatchObject({ bankFees: 12.27, netProfit: 2117.73 });
+    const source = input.executiveSnapshot.ads_v2.account_results;
+    source.provider_results.snapchat = { provider: "snapchat", ...salla(7, 2000),
+        attribution_complete: true, time_assignment_complete: true, hover_summary: costs(9, 560, 40, 8) };
+    input.executiveSnapshot.ads_v2.executive_breakdown.providers.snapchat = salla(7, 2000);
+    input.snapchatAccounts = null;
+    result = buildDashboardAdsTableMetrics(input);
+    expect(result.providers.snapchat.profit).toMatchObject({ bankFees: 9.77, totalCost: 617.77, netProfit: 957.23 });
+    expect(result.total.profit.bankFees).toBe(12.27);
+});
+
+test("multiple provider accounts retain daily charges without inventing a weighted half-day fee", () => {
+    const input = withBankFees(financialFixture(), { meta: [0.6, 1] });
+    const bank = input.executiveSnapshot.ads_v2.bank_commissions;
+    const meta = bank.accounts.find((row) => row.provider === "meta_ads");
+    Object.assign(meta, { spend_sar: 60, spend_native: 60 });
+    bank.accounts.push({ ...meta, external_account_id: "meta-second", spend_sar: 40, spend_native: 40,
+        bank_commission_pct: 3, bank_commission_fee_sar: 1.2 });
+    bank.total_fee_sar = input.executiveSnapshot.totals.ad_bank_commission_fees = 1.8;
+    const result = buildDashboardAdsTableMetrics(input);
+    expect(result.providers.meta.profit).toMatchObject({ bankFees: 1.8, netProfit: 572.2 });
+    expect(result.providers.meta.segments[0].profit).toMatchObject({ bankFees: null, totalCost: null, netProfit: null });
+    expect(result.total.profit.bankFees).toBe(1.8);
+    expect(result.total.segments[0].profit.netProfit).toBeNull();
+});
+
+test("half-day bank charges use verified account spend and preserve the server daily rounding", () => {
+    const input = withBankFees(financialFixture());
+    const result = buildDashboardAdsTableMetrics(input);
+    const row = result.accounts.get("usd");
+    expect(row.segments[0].profit).toMatchObject({ bankFees: 2.59, totalCost: 172.59, netProfit: 314.91 });
+    expect(row.segments[1].profit).toMatchObject({ bankFees: 6.03, totalCost: 261.03, netProfit: 376.47 });
+    expect(Number(row.segments.reduce((total, segment) => total + segment.profit.bankFees, 0).toFixed(2))).toBe(8.62);
+    expect(result.total.segments[0].profit.bankFees).toBe(3.74);
+    expect(result.total.segments[1].profit.bankFees).toBe(6.03);
+    const early = buildDashboardAdsTableMetrics(withBankFees(financialFixture(10.5), { usd: [1.72, 2.3], sar: [0, 2.3] }));
+    expect(early.accounts.get("usd").segments[0].profit.bankFees).toBe(1.72);
+    expect(early.accounts.get("usd").segments[1]).toMatchObject({ status: "not_started", profit: { netProfit: null } });
+});
+
+test("an elapsed zero-spend afternoon receives no bank charge despite a daily midpoint rounding tie", () => {
+    const input = withBankFees(financialFixture(24));
+    input.snapchatAccounts[0].hourly_sar[DAY].forEach((point) => {
+        point.spend_native = point.hour_index === 0 ? 100 : 0;
+        point.spend_sar = point.hour_index === 0 ? 375 : 0;
+    });
+    const row = buildDashboardAdsTableMetrics(input).accounts.get("usd");
+    expect(row.segments[0].profit).toMatchObject({ bankFees: 8.62, complete: true });
+    expect(row.segments[1].profit).toMatchObject({ spendSar: 0, bankFees: 0, complete: true });
+});
+
+test("SAR half-day fees use original native precision without moving a rounded halala into zero-spend hours", () => {
+    const input = financialFixture(24);
+    const account = input.snapchatAccounts[1];
+    account.hourly_sar[DAY].forEach((point) => {
+        point.spend_native = point.hour_index < 12 ? 1.7949 : 0;
+        point.spend_sar = point.hour_index < 12 ? 1.79 : 0;
+    });
+    Object.assign(account, { total_native: 21.5388, total_sar: 21.54 });
+    input.spendSnapshot.provider_totals_sar.snapchat = input.executiveSnapshot.ads_v2.breakdown.snapchat = 396.54;
+    input.spendSnapshot.total_sar = input.executiveSnapshot.totals.total_ads_cost = 596.54;
+    const bank = input.executiveSnapshot.ads_v2.bank_commissions;
+    Object.assign(bank.accounts[1], { spend_native: 21.5388, spend_sar: 21.54 });
+    bank.total_effective_spend_sar = 571.54;
+    withBankFees(input, { sar: [0.5, 2.3] });
+    const row = buildDashboardAdsTableMetrics(input).accounts.get("sar");
+    expect(row.segments[0].profit).toMatchObject({ bankFees: 0.5, complete: true });
+    expect(row.segments[1].profit).toMatchObject({ spendSar: 0, bankFees: 0, complete: true });
 });
 
 test("noon belongs to afternoon; exact native hourly evidence supplies both halves without future hours", () => {
@@ -554,6 +728,8 @@ test("half-day raw native precision is retained until rendering", () => {
     input.snapchatAccounts[0].hourly_sar[DAY][0].spend_native = 20.123456;
     input.snapchatAccounts[0].total_native = 100.123456;
     input.executiveSnapshot.ads_v2.bank_commissions.accounts[0].spend_native = 100.123456;
+    // This legacy precision-only fixture intentionally has no explicit FX proof.
+    delete input.executiveSnapshot.ads_v2.bank_commissions.accounts[0].exchange_rate_to_sar;
     expect(buildDashboardAdsTableMetrics(input).accounts.get("usd").segments[0].profit.nativeSpend).toBe(30.123456);
 });
 
@@ -618,16 +794,19 @@ test("completed half-days retain provisional source labeling", () => {
     expect(row.segments[0].profit.netProfit).toBe(317.5);
 });
 
-test("matching union totals preserve server gateway rounding without redistributing a halala", () => {
+test.each([false, true])("matching union totals preserve server gateway rounding (with bank fees: %s)", (chargeBankFees) => {
     const input = financialFixture();
+    if (chargeBankFees) withBankFees(input);
     const result = input.executiveSnapshot.ads_v2.account_results;
     result.daily_total = { ...salla(15, 4300), attribution_complete: true, time_assignment_complete: true,
         hover_summary: costs(20, 1440, 85, 19.99) };
     result.segments[0].total = { ...salla(7, 1950), attribution_complete: true, time_assignment_complete: true,
         hover_summary: costs(9, 670, 43, 9.82) };
     const metrics = buildDashboardAdsTableMetrics(input);
-    expect(metrics.total.profit).toMatchObject({ paymentFees: 19.99, totalCost: 1544.99, netProfit: 2130.01 });
-    expect(metrics.total.segments[0].profit).toMatchObject({ paymentFees: 9.82, totalCost: 722.82, netProfit: 939.68 });
+    expect(metrics.total.profit).toMatchObject({ paymentFees: 19.99,
+        totalCost: chargeBankFees ? 1554.76 : 1544.99, netProfit: chargeBankFees ? 2120.24 : 2130.01 });
+    expect(metrics.total.segments[0].profit).toMatchObject({ paymentFees: 9.82,
+        totalCost: chargeBankFees ? 726.56 : 722.82, netProfit: chargeBankFees ? 935.94 : 939.68 });
     expect(metrics.accounts.get("usd").profit.paymentFees).toBe(5);
     expect(metrics.accounts.get("sar").profit.paymentFees).toBe(3);
     expect(metrics.accounts.get("usd").segments[0].profit.paymentFees).toBe(2);
@@ -678,6 +857,55 @@ function allCohortFixture() {
     input.executiveSnapshot.totals.total_sales = 99999;
     return input;
 }
+
+test("the reported daily reconciliation deducts both Snapchat bank charges without allocating unmatched orders or operating expenses", () => {
+    const input = allCohortFixture();
+    const { executiveSnapshot, spendSnapshot } = input;
+    const source = executiveSnapshot.ads_v2.account_results;
+    const bank = executiveSnapshot.ads_v2.bank_commissions;
+    const day = "2026-11-13";
+    input.fromDate = input.toDate = day;
+    executiveSnapshot.range = { from_date: day, to_date: day };
+    Object.assign(spendSnapshot, { date_from: day, date_to: day, total_sar: 32875.20,
+        provider_totals_sar: { snapchat: 27607.19, google: 99.67, tiktok: 1100.81, meta: 4067.53 } });
+    Object.assign(source, { date_from: day, date_to: day, segments: [] });
+    Object.assign(executiveSnapshot.totals, { total_ads_cost: 32875.20, operating_expenses: 1894.92, net_profit: 23360.20 });
+    executiveSnapshot.ads_v2.breakdown = { snapchat: 27607.19, google_transitional: 99.67, tiktok: 1100.81, meta: 4067.53 };
+    const snap = { usd: [7232.89, 27155.16, 261, 71073.24], sar: [452.03, 452.03, 2, 492.66] };
+    input.snapchatAccounts.forEach((row) => {
+        [row.total_native, row.total_sar] = snap[row.account_id];
+    });
+    source.accounts.forEach((row) => Object.assign(row, salla(...snap[row.account_id].slice(2)), {
+        attribution_complete: false, salla_orders: null, salla_sales_sar: null,
+    }));
+    bank.accounts.forEach((row) => {
+        const account = input.snapchatAccounts.find((item) => item.account_id === row.external_account_id);
+        row.spend_sar = account ? account.total_sar : spendSnapshot.provider_totals_sar[row.external_account_id];
+        row.spend_native = account ? account.total_native : row.spend_sar;
+        if (row.external_account_id === "usd") row.exchange_rate_to_sar = 3.7544;
+    });
+    bank.total_effective_spend_sar = 32775.53;
+    Object.entries({ google: [3, 706.16], tiktok: [13, 3389.04], meta: [66, 19362.36] }).forEach(([provider, values]) => {
+        Object.assign(source.provider_results[provider], salla(...values));
+        Object.assign(executiveSnapshot.ads_v2.executive_breakdown.providers[provider], salla(...values));
+    });
+    Object.assign(source.direct_result, salla(46, 13769.45));
+    Object.assign(source.coverage, { status: "partial", unassigned_orders: 2, unrepresented_orders: 2 });
+    Object.assign(source.daily_total, salla(393, 109199.23), {
+        hover_summary: { ...costs(393, 38190.95, 7458.75, 4784.24), operating_expenses_sar: 1894.92 },
+    });
+    withBankFees(input, { usd: [624.57, 2.3], sar: [10.40, 2.3] });
+    const result = buildDashboardAdsTableMetrics(input);
+    expect(result.total).toMatchObject({ orders: 393, sales: 109199.23, profit: {
+        spendSar: 32875.20, paymentFees: 4784.24, bankFees: 634.97,
+        totalCost: 51068.91, netProfit: 25255.12, complete: true,
+    } });
+    expect(result.total.profit.netProfit - executiveSnapshot.totals.operating_expenses).toBeCloseTo(executiveSnapshot.totals.net_profit, 2);
+    expect(result.unassignedOrders).toBe(2);
+    expect(result.accounts.get("usd").profit).toMatchObject({ bankFees: 624.57, netProfit: null });
+    expect(result.accounts.get("sar").profit).toMatchObject({ bankFees: 10.40, netProfit: null });
+    expect(result.direct.profit.bankFees).toBe(0);
+});
 
 test("direct Salla outcomes and source cohort totals do not copy executive counts or count paid rows twice", () => {
     const input = allCohortFixture();
