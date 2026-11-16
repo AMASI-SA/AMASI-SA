@@ -163,7 +163,7 @@
   ],
   "next_safe_action": "Let owned canonical verify pid78706 finish without timeout, interruption or retry. Inspect its private receipt/log files only; do not run concurrent guard status. Require verify-success with canonical verified:true/checks:3 and fresh inactive receipt. Then saved-report GET acceptance and final checkpoint.",
   "ledger": "Issue1006 is at its known comment limit. This status and the evidence-only branch are the durable continuation record.",
-  "checkpoint_updated_at_utc": "2026-11-16 01:24:03 UTC",
+  "checkpoint_updated_at_utc": "2026-11-16 01:29:51 UTC",
   "source_tree": "fe74d9ce67a0a1a4bcedbfd0a5a7e8721d5ef9f6",
   "pr": {
     "number": 1956,
@@ -284,5 +284,13 @@
     "started_at": "2026-11-16T01:22:24.958313+00:00",
     "wrapper_sha256": "0d5c716a83f2db81ccffcb2e8a4dd39ccb8e8d02e82b4952f13d45fff859656f",
     "final_outcome": "pending"
+  },
+  "live_acceptance_after_publication": {
+    "observed_at": "2026-11-16T01:29:24.553Z",
+    "method": "Normal report reload/GET followed by target cost-row expansion. No update-costs or provider-refresh action.",
+    "result": "Target row is complete and its expanded breakdown matches the prepublication externally changed configuration; no phantom descriptive service row.",
+    "baseline_distinction": "Already complete before this task publication; do not attribute removal of the original physical component or the lower total to this patch.",
+    "business_data_written": false,
+    "private_figures_excluded": true
   }
 }
