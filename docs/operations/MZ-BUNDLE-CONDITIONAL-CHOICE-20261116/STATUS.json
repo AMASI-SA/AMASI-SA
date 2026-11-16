@@ -61,6 +61,20 @@
       "readiness_run_id": 43779950303,
       "host20_rehearsal": "passed",
       "host24_rehearsal": "passed"
+    },
+    "merged_M_ci": {
+      "head": "4cdc10931f49124a4715153f220e0adf274e8bcc",
+      "total": 11,
+      "success": 11,
+      "failed": 0,
+      "pending": 0,
+      "skipped": 0,
+      "first_attempt": true,
+      "security_run": 43784373138,
+      "codeql_run": 43784373144,
+      "readiness_run": 43784373142,
+      "root_read_exact_checks": true,
+      "independent_review": "PASS"
     }
   },
   "last_safe_handoff": {
@@ -118,7 +132,13 @@
       "source_git_sha": "7a1de33535081393fbf3597523d722ec308b2ca8",
       "started_at": "2026-11-16T01:10:56.923588+00:00"
     },
-    "ui_success_observed": false
+    "ui_success_observed": false,
+    "provider_details_observed": [
+      "Workspace ready",
+      "Changes packaged",
+      "Building your website... Turning your code into a production-ready package."
+    ],
+    "provider_build_argv_observed": false
   },
   "production_changed": "yes: authorized normal merge; runtime publication pending",
   "business_data_changed": false,
@@ -129,7 +149,7 @@
   ],
   "next_safe_action": "Wait for root-observed new platform version and explicit completed UI outcome. Record atomic deployment-success.json bound to this prepare/prepublish, then run reviewed verify once in persistent process without timeout. Require canonical three rounds and inactive status, then normal saved-report GET acceptance.",
   "ledger": "Issue1006 is at its known comment limit. This status and the evidence-only branch are the durable continuation record.",
-  "checkpoint_updated_at_utc": "2026-11-16 01:12:21 UTC",
+  "checkpoint_updated_at_utc": "2026-11-16 01:14:26 UTC",
   "source_tree": "fe74d9ce67a0a1a4bcedbfd0a5a7e8721d5ef9f6",
   "pr": {
     "number": 1956,
