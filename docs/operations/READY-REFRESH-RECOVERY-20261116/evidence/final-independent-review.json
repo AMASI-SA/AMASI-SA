@@ -1,0 +1,32 @@
+{
+  "reviewed_at": "2026-11-16 00:59:26 UTC",
+  "reviewer": "verify_ready_fix",
+  "scope": "Independent read-only acceptance of the reconstructed final receipt against the accepted v5 intent; no new live probes, status, original workspace or business writes.",
+  "final_receipt_sha256": "b3f2258f5bdb1d4b38c4e79308a88f423d79b366f93f55ab8f0cc157a2c21836",
+  "accepted": true,
+  "findings": {
+    "exact_source_base_deployment_runtime_frontend": true,
+    "backend_and_control_summaries_equal_intent": true,
+    "checks": 3,
+    "request_list_reconstructed_count": 590,
+    "request_list_canonical_sha256": "f7d3323f363332289bc0d6508394da5606c26f7e72c51cb6b88dede49e49f268",
+    "reconstructed_official_result": {
+      "bytes": 33743,
+      "sha256": "a537e801c6490612cbe1d4f49d6a9bd3db71ce1bfd1d5e1eb7618dab5cbbaf61"
+    },
+    "reconstructed_status_after": {
+      "bytes": 22,
+      "sha256": "595219792dd54a38a8ace80a6a7fc33b928ea74f0dd1bdfac6a2b708dbe0dd1e",
+      "active": false
+    },
+    "final_git_exact_and_tracked_clean": true,
+    "final_git_observed_at": "2026-11-16T00:56:52.341376+00:00",
+    "two_boot_identities_retained": true,
+    "boot_identity_difference_cause": "not inferred",
+    "prepared_at": "2026-11-16T00:29:28.806882+00:00",
+    "prepared_at_source": "Previously accepted and hash-matched prepare summary supplied by root.",
+    "both_boot_identities_after_prepare": true,
+    "business_eligibility_tested": false,
+    "received_garment_guard_fixed": false
+  }
+}

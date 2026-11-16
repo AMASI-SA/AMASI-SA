@@ -1,0 +1,140 @@
+{
+  "actor": "chatgpt-ready1955-20261116-root",
+  "business_writes_by_this_task": false,
+  "final_git": {
+    "branch": "hotfix/prod-snap-meta-final",
+    "exact_expected": true,
+    "head": "b05cd3c9b25ce22df1b2dd06c23d97606bd632c6",
+    "observed_at": "2026-11-16T00:56:52.341376+00:00",
+    "remote_production": "b05cd3c9b25ce22df1b2dd06c23d97606bd632c6",
+    "tracked_clean": true,
+    "tree": "aded5cb29b69b5bb09b7386932ad9fc5c35d1f44"
+  },
+  "frontend_requests_evidence_sha256": "f7d3323f363332289bc0d6508394da5606c26f7e72c51cb6b88dede49e49f268",
+  "frontend_requests_per_probe": 590,
+  "frontend_service_workers": [
+    {
+      "age": null,
+      "cache_control": "no-cache, no-store, must-revalidate, max-age=0",
+      "cf_cache_status": null,
+      "content_type": "application/javascript; charset=utf-8",
+      "etag": "\"28bfda7be2133fb6650e9bd67f2dffd1\"",
+      "path": "/service-worker.js",
+      "state": "retirement_payload_present"
+    },
+    {
+      "age": null,
+      "cache_control": "no-cache, no-store, must-revalidate, max-age=0",
+      "cf_cache_status": null,
+      "content_type": "application/javascript; charset=utf-8",
+      "etag": "\"28bfda7be2133fb6650e9bd67f2dffd1\"",
+      "path": "/sw.js",
+      "state": "retirement_payload_present"
+    }
+  ],
+  "frontend_shell_cache": [
+    {
+      "age": null,
+      "cache_control": "no-cache, no-store, must-revalidate",
+      "cf_cache_status": null,
+      "content_type": "text/html; charset=utf-8",
+      "etag": "\"a37cfc339b53f41ba3e37feded266f84\"",
+      "path": "/index.html"
+    },
+    {
+      "age": null,
+      "cache_control": "no-cache, no-store, must-revalidate",
+      "cf_cache_status": null,
+      "content_type": "text/html; charset=utf-8",
+      "etag": "\"a37cfc339b53f41ba3e37feded266f84\"",
+      "path": "/"
+    },
+    {
+      "age": null,
+      "cache_control": "no-cache, no-store, must-revalidate",
+      "cf_cache_status": null,
+      "content_type": "text/html; charset=utf-8",
+      "etag": null,
+      "path": "/snapchat-accounts"
+    }
+  ],
+  "garment_source_match_guard_fixed": false,
+  "observed_at": "2026-11-16T00:56:52.903535+00:00",
+  "official_result_file": {
+    "bytes": 33743,
+    "mtime_utc": "2026-11-16T00:56:42.399185+00:00",
+    "sha256": "a537e801c6490612cbe1d4f49d6a9bd3db71ce1bfd1d5e1eb7618dab5cbbaf61"
+  },
+  "official_verify": {
+    "backend_runtime_source": {
+      "added_count": 1,
+      "deleted_count": 0,
+      "file_count": 1232,
+      "manifest_sha256": "b601f23ac08050d24656c11fe99c973ee3e899e7ac805028656abe9cebc630d8",
+      "modified_count": 3,
+      "projection_tree_oid": "a0218d25b333ff1bb898d36ac574a413f294f4e2",
+      "scope": "backend_runtime_package_v1",
+      "scope_tree_oid": "7d03c5079085365f3a61dbb06ab9c1b19a404891",
+      "source_base_git_sha": "2589f440106a7c5d463ee03eac3617d113319673",
+      "source_base_root_tree_oid": "d91e281aa9fc7e02ddab1a36989dc6c3bf0b68ec",
+      "source_base_scope_tree_oid": "918f8545a825bfa6e89450286c1b3f5ecbdb3eb6",
+      "source_git_sha": "1accaa42e132ca1232ce86b3122971b48169ca81",
+      "source_root_tree_oid": "be16191c9c2498a942fa7974455c6c24e6fac005",
+      "tombstone_count": 0,
+      "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tree_sha256": "01e06fee83b14d6e2073d1dd507a10a1e090e1e193652906a8f4870185ba87f4"
+    },
+    "boot_started_at": "2026-11-16T00:41:14.884325+00:00",
+    "boot_started_at_observations": [
+      "2026-11-16T00:41:14.884325+00:00",
+      "2026-11-16T00:40:33.434593+00:00"
+    ],
+    "checks": 3,
+    "deployment_git_sha": "b05cd3c9b25ce22df1b2dd06c23d97606bd632c6",
+    "frontend_artifact_tree_sha256": "8017e720f266ed5d6b0141d83312512e8052396c7da65e22557dce1c8fe79fcb",
+    "git_sha": "1accaa42e132ca1232ce86b3122971b48169ca81",
+    "protocol_version": 5,
+    "release_control_source": {
+      "added_count": 0,
+      "deleted_count": 0,
+      "file_count": 298,
+      "manifest_sha256": "4a57acc305bc3aebd62760fd00550f35a26830450ab10b7decae66ec94955160",
+      "modified_count": 1,
+      "projection_tree_oid": "e08f7054b01196831c4a6623800ea0a9f24634ea",
+      "scope": "release_control_source_v1",
+      "scope_tree_oid": "e08f7054b01196831c4a6623800ea0a9f24634ea",
+      "source_base_git_sha": "2589f440106a7c5d463ee03eac3617d113319673",
+      "source_base_root_tree_oid": "d91e281aa9fc7e02ddab1a36989dc6c3bf0b68ec",
+      "source_base_scope_tree_oid": "4566e4366a83f589c2018888bebe792f44f0d469",
+      "source_git_sha": "1accaa42e132ca1232ce86b3122971b48169ca81",
+      "source_root_tree_oid": "be16191c9c2498a942fa7974455c6c24e6fac005",
+      "tombstone_count": 0,
+      "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tree_sha256": "4df08bbb7ded272721e78763719db47e5e45806377745f82bf0c6d7944fcd2b2"
+    },
+    "release_id": "rg5-255b2b13ed893324729b31c21409fa1be3be98d8c536485f712424d70bab4b4e",
+    "source_base_git_sha": "2589f440106a7c5d463ee03eac3617d113319673",
+    "source_git_sha": "1accaa42e132ca1232ce86b3122971b48169ca81",
+    "url": "https://mezansalla.com",
+    "verified": true
+  },
+  "platform_completed_at": "2026-11-16T03:41:00+03:00",
+  "platform_time_precision": "minute",
+  "platform_version": "231aae8",
+  "prepare_sha256": "0aeb8938261cb3e02dfd172bf289cc30215aebf0c254323a70c32970127c9bc5",
+  "read_only_final_collection": true,
+  "request_file": {
+    "bytes": 618,
+    "mtime_utc": "2026-11-16T00:45:05.526188+00:00",
+    "sha256": "466a6c7521d19ff1b5612374a714d024192795eef266e431b40c2d5a9862cd20"
+  },
+  "status_after": {
+    "active": false
+  },
+  "status_after_file": {
+    "bytes": 22,
+    "mtime_utc": "2026-11-16T00:56:42.439185+00:00",
+    "sha256": "595219792dd54a38a8ace80a6a7fc33b928ea74f0dd1bdfac6a2b708dbe0dd1e"
+  },
+  "verify_requested_at": "2026-11-16T00:45:05.526246+00:00"
+}
