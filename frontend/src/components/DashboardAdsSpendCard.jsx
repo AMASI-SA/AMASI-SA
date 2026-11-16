@@ -1,5 +1,6 @@
 import DashboardPanel from "./DashboardPanel";
 import DashboardAdsAccountRow from "./DashboardAdsAccountRow";
+import DashboardAdsPeriodsOverview from "./DashboardAdsPeriodsOverview";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ArrowsClockwise,
@@ -223,11 +224,36 @@ function SallaMetric({ value, known, integer = false }) {
     </>;
 }
 
+function NetProfitMetric({ profit }) {
+    const value = profit?.netProfit;
+    if (profit?.complete !== true || typeof value !== "number" || !Number.isFinite(value)) {
+        return <span className="text-slate-400">—</span>;
+    }
+    return <>
+        <bdi dir="ltr" className={`block whitespace-nowrap font-bold tabular-nums ${value < 0 ? "text-rose-700" : "text-emerald-700"}`}>
+            {value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </bdi>
+        {profit.provisional === true && <span className="block text-[8px] font-normal text-amber-700">تقديري</span>}
+    </>;
+}
+
+function RoasMetric({ profit }) {
+    const value = profit?.roas;
+    if (profit?.adSpendApplicable === false || typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+        return <span className="text-slate-400">—</span>;
+    }
+    return <bdi dir="ltr" className="block whitespace-nowrap tabular-nums">
+        {value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ×
+    </bdi>;
+}
+
 function SallaMetricCells({ stats = {} }) {
     return <>
         <td className="px-1 py-2 text-center"><SallaMetric value={stats.sales} known={stats.knownSales} /></td>
         <td className="px-1 py-2 text-center"><SallaMetric value={stats.orders} known={stats.knownOrders} integer /></td>
         <td className="px-1 py-2 text-center"><SallaMetric value={stats.cpa} /></td>
+        <td className="px-1 py-2 text-center" data-metric="roas"><RoasMetric profit={stats.profit} /></td>
+        <td className="px-1 py-2 text-center"><NetProfitMetric profit={stats.profit} /></td>
     </>;
 }
 
@@ -245,20 +271,33 @@ function AdsAccountResultsTable({ data, accounts, accountMode, ready, singleDay,
             ? salesFilters[key].some((value) => String(value).trim())
             : Boolean(salesFilters?.[key]));
     const unrepresentedOrders = metrics.unrepresentedOrders ?? metrics.unassignedOrders;
+    const overviewRecords = [
+        ...(accountMode ? accounts.map((account, index) => ({
+            key: `snapchat:${account.account_id}`, label: accountName(account),
+            color: ACCOUNT_COLORS[index % ACCOUNT_COLORS.length], stats: metrics.accounts.get(account.account_id),
+        })) : []),
+        ...tableProviders.map((provider) => ({ key: provider,
+            label: provider === "google" ? "جوجل" : PROVIDER_META[provider].label,
+            color: PROVIDER_META[provider].stroke, stats: metrics.providers[provider] })),
+        { key: "direct", label: "مباشر / بدون مصدر", color: "#94a3b8", stats: metrics.direct },
+    ];
     return <div className="mt-2 min-w-0" data-testid="dashboard-ads-account-results">
         <div className="mb-2 text-[10px] font-extrabold text-slate-700">تفاصيل الحسابات</div>
         <div className="overflow-hidden rounded-xl border border-slate-200">
-            <table dir="rtl" className="w-full table-fixed border-collapse text-[10px] leading-4 text-slate-800"
+            <table dir="rtl" className="w-full table-fixed border-collapse text-[9px] leading-4 text-slate-800"
                 data-testid="dashboard-ads-account-table">
-                <caption className="sr-only">صرف الحسابات ومبيعات وطلبات سلة للفترة المحددة</caption>
-                <colgroup><col style={{ width: "27%" }} /><col style={{ width: "25%" }} />
-                    <col style={{ width: "18%" }} /><col style={{ width: "12%" }} /><col style={{ width: "18%" }} /></colgroup>
-                <thead className="bg-slate-50 text-[9px] font-bold text-slate-600"><tr>
-                    <th scope="col" className="px-1.5 py-2 text-right">المنصة / الحساب</th>
+                <caption className="sr-only">صرف الحسابات ومبيعات وطلبات سلة والعائد الإعلاني وصافي الأرباح للفترة المحددة</caption>
+                <colgroup><col style={{ width: "21%" }} /><col style={{ width: "20%" }} />
+                    <col style={{ width: "15%" }} /><col style={{ width: "8%" }} /><col style={{ width: "11%" }} />
+                    <col style={{ width: "10%" }} /><col style={{ width: "15%" }} /></colgroup>
+                <thead className="whitespace-nowrap bg-slate-50 text-[9px] font-bold text-slate-600"><tr>
+                    <th scope="col" aria-label="المنصة / الحساب" className="px-1.5 py-2 text-right">المنصة</th>
                     <th scope="col" className="px-1 py-2 text-center">الصرف</th>
-                    <th scope="col" className="px-1 py-2 text-center">مبيعات سلة<span className="block text-[8px] font-normal">ر.س</span></th>
-                    <th scope="col" className="px-1 py-2 text-center">طلبات سلة</th>
-                    <th scope="col" className="px-1 py-2 text-center">متوسط تكلفة الطلب<span className="block text-[8px] font-normal">ر.س</span></th>
+                    <th scope="col" aria-label="مبيعات سلة بالريال السعودي" className="px-1 py-2 text-center">مبيعات<span className="block text-[8px] font-normal">ر.س</span></th>
+                    <th scope="col" aria-label="طلبات سلة" className="px-1 py-2 text-center">طلبات</th>
+                    <th scope="col" aria-label="متوسط تكلفة الطلب بالريال السعودي" className="px-1 py-2 text-center">متوسط<span className="block text-[8px] font-normal">ر.س</span></th>
+                    <th scope="col" aria-label="العائد الإعلاني" className="px-1 py-2 text-center">العائد<span className="block text-[8px] font-normal">×</span></th>
+                    <th scope="col" aria-label="صافي الأرباح بالريال السعودي" className="px-1 py-2 text-center">الأرباح<span className="block text-[8px] font-normal">ر.س</span></th>
                 </tr></thead>
                 <tbody data-testid="dashboard-ads-provider-totals">
                     {accountMode && accounts.map((account, index) => {
@@ -315,15 +354,19 @@ function AdsAccountResultsTable({ data, accounts, accountMode, ready, singleDay,
                         <SallaMetricCells stats={metrics.direct} />
                     </DashboardAdsAccountRow>
                 </tbody>
-                <tfoot className="border-t border-yellow-200 bg-yellow-50 font-bold"><tr data-testid="dashboard-ads-account-total">
+                <tfoot className="border-t border-yellow-200 bg-yellow-50 font-bold"><DashboardAdsPeriodsOverview
+                    records={overviewRecords} total={metrics.total} fromDate={fromDate} toDate={toDate}
+                    contextKey={JSON.stringify(salesFilters || {})}
+                    active={activeDetails === "overview"} onActivate={() => setActiveDetails("overview")}
+                    data-testid="dashboard-ads-account-total">
                     <th scope="row" className="px-1.5 py-2 text-right">الإجمالي</th>
                     <td className="px-1 py-2 text-center" data-testid="dashboard-ads-spend-total"><bdi dir="ltr">{totalLabel}</bdi></td>
                     <SallaMetricCells stats={metrics.total} />
-                </tr></tfoot>
+                </DashboardAdsPeriodsOverview></tfoot>
             </table>
         </div>
         <p className="mt-2 text-[9px] leading-4 text-slate-500">متوسط تكلفة الطلب = الصرف بالريال ÷ طلبات سلة.</p>
-        <p className="text-[9px] leading-4 text-slate-500">أشّر على أي صف لعرض تفاصيل الصباح والمساء، أو اضغط لتثبيتها.</p>
+        <p className="text-[9px] leading-4 text-slate-500">أشّر على أي صف لتفاصيله، أو على الإجمالي لمقارنة المنصات صباحًا ومساءً. اضغط لتثبيت التفاصيل.</p>
         {filtered && <p className="text-[9px] leading-4 text-slate-500">طلبات ومبيعات سلة حسب الفلاتر؛ الصرف إجمالي الفترة.</p>}
         {unrepresentedOrders > 0 && <p className="text-[9px] leading-4 text-amber-700" data-testid="dashboard-ads-unassigned-orders">
             {unrepresentedOrders.toLocaleString("en-US")} طلبات ضمن الإجمالي لم يُحدد لها حساب إعلاني معروض؛ تفاصيل الحسابات تعرض المتاح.
