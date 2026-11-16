@@ -1,7 +1,7 @@
 {
   "task_id": "MZ-BUNDLE-CONDITIONAL-CHOICE-20261116",
   "scope": "Resolve phantom incomplete costs from conditional descriptive bundle options without changing genuine cost dependencies.",
-  "state": "intent_B_frozen_exact_checks_running",
+  "state": "all_gates_passed_current_release_ready",
   "repository": "AMASI-SA/AMASI-SA",
   "task_branch": "codex/bundle-conditional-cost-current-20261116",
   "source_base_J": "b05cd3c9b25ce22df1b2dd06c23d97606bd632c6",
@@ -50,7 +50,18 @@
       "frontend_build": "success"
     },
     "candidate_parser": "passed: exact A/J and complete Git-derived Backend/control manifests",
-    "reviewed_B_parser": "load_release_intent and verify_release_intent_git passed; exact A/J/B/runtime"
+    "reviewed_B_parser": "load_release_intent and verify_release_intent_git passed; exact A/J/B/runtime",
+    "reviewed_B_ci": {
+      "exact_head": "4da5d711717146088d879f4d8426cda9958f9d36",
+      "total": 36,
+      "success": 26,
+      "skipped": 10,
+      "failed": 0,
+      "pending": 0,
+      "readiness_run_id": 43779950303,
+      "host20_rehearsal": "passed",
+      "host24_rehearsal": "passed"
+    }
   },
   "last_safe_handoff": {
     "timestamp_utc": "2026-11-16T00:18:00Z",
@@ -71,9 +82,9 @@
     "Do not equate zero customer surcharge with zero internal cost.",
     "Preserve unresolved state for genuine cost decisions with missing/conflicting evidence."
   ],
-  "next_safe_action": "Complete exact-B gates and original-host isolated rehearsal only after a fresh inactive observation. Wait for PR1955 owner's publication/verification closure, then run the reviewed pin-bound operator, normal merge expected B, prepare/prepublish, publish once and verify three rounds ending inactive.",
+  "next_safe_action": "Fresh original status must report inactive. Run immutable reviewed operator from b87f320fb21790cf70a7ed5f589089e18dcdb3ca. Observe ready_for_merge, confirm Production remains Jb05 and normally merge exact PR1956 B; immediately atomically provide actual M. Require matching build and prepare, then prepublish, single authorized UI publication, explicit newer success and canonical three-round verify ending inactive. Never clear or reuse another lease.",
   "ledger": "Issue1006 is at its known comment limit. This status and the evidence-only branch are the durable continuation record.",
-  "checkpoint_updated_at_utc": "2026-11-16 00:23:54 UTC",
+  "checkpoint_updated_at_utc": "2026-11-16 00:29:32 UTC",
   "source_tree": "fe74d9ce67a0a1a4bcedbfd0a5a7e8721d5ef9f6",
   "pr": {
     "number": 1956,
@@ -110,5 +121,22 @@
       "Observe ready_for_merge before normal merge and write merged-head.json atomically within120seconds.",
       "Never clear another lease or alter the frozen A/B."
     ]
-  }
+  },
+  "host_rehearsal": {
+    "path": "/tmp/mz-bundle-current-v5-d9Wxrj/repo",
+    "wrapper_pid": 52300,
+    "exit_status": 0,
+    "duration_seconds": 47.9,
+    "source_A": "7a1de33535081393fbf3597523d722ec308b2ca8",
+    "intent_B": "4da5d711717146088d879f4d8426cda9958f9d36",
+    "release_id": "rg5-4890bb5f409d7f6080ad2c19f881ed5edfe30b8f93b9502fbb3e45977f6a28f1",
+    "frontend_artifact_tree_sha256": "8017e720f266ed5d6b0141d83312512e8052396c7da65e22557dce1c8fe79fcb",
+    "backend_health_verified": true,
+    "configured_adapter_passed": true,
+    "backend_identity_sha256": "ce9c4668e4bfbddeb4dffd73573175545cd64faa5bbe281baa186c68385e9d5b",
+    "build_meta_sha256": "6bfbfba154c83a9949432f06ebf1ff2bf7ca35660565fab3565ddb1a1d751930",
+    "own_lease_created": false,
+    "original_source_modified": false
+  },
+  "publication_coordination": "PR1955 is fully preserved in source A. Its original rehearsal owns its own mutex while running. A fresh inactive CLI result and exact original/remote Jb05 are mandatory before our operator. Proceed only through the official mutex; an active or incomplete other lease stops the operation before merge/source mutation. If inactive and exact, a combined publication contains both reviewed changes."
 }
