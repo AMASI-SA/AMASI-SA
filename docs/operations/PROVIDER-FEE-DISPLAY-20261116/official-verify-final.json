@@ -1,0 +1,31 @@
+{
+  "active_lease": false,
+  "actor": "chatgpt-provider1951-20261116-root",
+  "boot_started_at_observations": [
+    "2026-11-15T23:57:52.943896+00:00",
+    "2026-11-15T23:57:51.131196+00:00"
+  ],
+  "checks": 3,
+  "deployment_git_sha": "2589f440106a7c5d463ee03eac3617d113319673",
+  "evidence_directory": "/tmp/provider1951-publication-20261116",
+  "finished_at": "2026-11-16T00:12:53.453076+00:00",
+  "inactive_observed_at": "2026-11-16T00:12:53.452736+00:00",
+  "ok": true,
+  "platform_completed_at": "2026-11-16T02:58:00+03:00",
+  "platform_version": "c1784c4",
+  "prepare_sha256": "e542d1c14b0252c52201adf57d4a59bf9a2cde4383c601f8880f2b8c90621643",
+  "prepared_at": "2026-11-15T23:45:16.349437+00:00",
+  "release_id": "rg5-79ac457d2b1bc4c417fb86d9f3d6dc10f7e613f3402018cb15f101f558cda9f6",
+  "source_git_sha": "f7c5e110a074a242036233ea004d63c270a4daaa",
+  "status_after_sha256": "595219792dd54a38a8ace80a6a7fc33b928ea74f0dd1bdfac6a2b708dbe0dd1e",
+  "status_before_sha256": "ff2a22925e4d08d27f09ca4159252d0b0b41d93bc21952b1241a4fff984fa4ff",
+  "verified": true,
+  "verifier_child_pid": 39424,
+  "verify_finished_at": "2026-11-16T00:12:53.325935+00:00",
+  "verify_started_at": "2026-11-16T00:01:08.856227+00:00",
+  "verify_stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "verify_stdout_sha256": "b2d0bb70a781f5497b56eb3a7a8fd4c7776884e1b0c99ea229f5bc0bfd4053f8",
+  "wrapper_parent_pid": 39421,
+  "wrapper_pid": 39422,
+  "wrapper_started_at": "2026-11-16T00:01:08.742415+00:00"
+}
