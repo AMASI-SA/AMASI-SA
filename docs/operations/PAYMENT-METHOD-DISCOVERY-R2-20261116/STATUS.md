@@ -6,9 +6,9 @@
 - Repository: `AMASI-SA/AMASI-SA`.
 - Task branch: `codex/payment-method-discovery-r2-20261116`.
 - Exact verified production/source base J: `71d1dd9010b3fd73de0463a6164f82fcd2b7cff5`.
-- State: smallest confirmed live-acceptance fix implemented, regression-tested and independently reviewed; fresh source/intent release pending.
+- State: independently reviewed R2 source and intent-only B are frozen; exact-B checks and clean-clone adapter gates are in progress.
 - Production changed by this R2 source: **no**.
-- The preceding feature PR1962 is merged and published. Its new revision `0680799` reported `Deployment successful` in Emergent, operation `ecbb3454-9e59-58b0-af49-6f8e34cc2267`. One Publish action was submitted. Its first official verification returned HTTP520 during startup; the subsequent official verification is still in progress against its own lease. Do not clear or replace that lease, or assume it is inactive.
+- The preceding feature PR1962 is merged and published as `0680799`, operation `ecbb3454-9e59-58b0-af49-6f8e34cc2267`; Emergent reported `Deployment successful`. Its first official verification hit startup HTTP520; the second finished normally with **exit0, verified:true and all3 probes**, matching source A1/deployment M1/runtime. Final official status is **active:false**. No interrupt, abort, second Publish or lease replacement occurred. Runtime verification passed; the functional defect below still requires R2.
 - Prior frozen source A: `03c91e903c992a2e397fccab2124e07fe002e0e6`; intent B: `03605c83e67c26b8f92477624f92d662fb97616e`; merge M/current base J: `71d1dd9010b3fd73de0463a6164f82fcd2b7cff5`.
 - Prior runtime: `rg5-2e67a08592737d05609cbedd7b422876345be2ac13df2d97ea6f0e44066a24cb`.
 - Prior documentation-only checkpoint: `6d654a622fc987fba1ffd038e94c72a939bc7481` on `codex/payment-method-discovery-handoff-20261116`. Never merge or deploy that branch.
@@ -51,14 +51,29 @@ Result: **13 tests, one suite, exit0**, using governed Node22.23.2/Yarn1.22.22. 
 
 The frontend reviewer independently reviewed the backend source/test diff and approved it with no material finding. Review confirmed row-local conflict protection and unchanged genuine read-failure/authorization/save protections. Root reviewed both diffs. No real merchant fees or customer data were used in tests or written by this task.
 
-## Next safe actions
+## Frozen reviewed R2 release
+- Source A: `39c891d7b1da06d01e75b71bb42310eb8d29f066`.
+- Source tree: `03491ab6bd54b4a8a9e0db9a6fb0f9073eb19db4`.
+- Intent-only B: `ec6b3a1b808ca7bb4af081f7c63ea28796d89617`.
+- B tree: `70842fa4b3db6c9cea6a4b4d743a804f078f7e52`.
+- PR: https://github.com/AMASI-SA/AMASI-SA/pull/1963 (ready for review).
+- Runtime: `rg5-ddac746f37c8ee913405c42ced5804aa9e68ff17b56ba60a60ff2a824a7ffe8e`.
+- Frontend artifact: `a31d130116eaa72d7ba3a0ec0f36fda19c29db272d207642d520482df16e46ff`.
+- Reproducibility proof: `1a7f37962dc5acfe31e346f90d3c75e259b49361fda98c29d890ce92b8a3167f`.
+- Intent SHA256: `a421b93d18b796adffc567f8c691721fb53d1c0844603ea54ff2c154d2025480`.
+- Local source-A two matching builds, frontend verifier, external intent freeze/candidate validator and official B Git transition validation all exited0. Fetched B intent exactly matches the validated candidate; A→B changes only the intent and tracked worktree is clean.
+- Exact-A Readiness `43945209388` succeeded and produced candidate artifact `14263972896`. A operational frontend `133572941074` passed920tests/56suites. These do not substitute for the fresh exact-B gates.
+- This is a documentation-only handoff on `codex/payment-method-discovery-r2-handoff-20261116`. Never merge or deploy it. Frozen runtime branch remains at B.
 
-1. Preserve this tested checkpoint on the task branch and record its exact source SHA in the PR. The prior frozen A/B branch must remain unchanged.
-2. Finish the prior release's official verification and require final `active:false` before any shared `/app` change or release rehearsal.
-3. Build the fresh source A with the governed toolchain and exact public client origin; freeze a new external reviewed intent and create intent-only B. Never reuse the previous intent/runtime identity.
-4. Require exact B CI, both clean-clone adapter rehearsals, current production base and tree-equivalent normal merge. Follow AGENTS protocolv5 for shared adapter, prepare, prepublish and the separately authorized publication.
-5. Require explicit newer deployment success, all three official production probes and inactive final guard. Revisit the exact-method deep link and verify blank editable terms without saving any real commission.
-6. Record final release identities, CI, deployment and live acceptance in a separate documentation handoff so frozen runtime commits are not amended.
+## R1 verification receipt
+The successful prior receipt is `/tmp/mezan-payment-method-release-1962/verify2.json`; exit record `verify2-exit.json`; final status `final-status.json`. Three probes observed boot identities `2026-11-16T19:51:55.134941+00:00` and `2026-11-16T19:51:49.045223+00:00`, with the exact reviewed frontend artifact. The verifier checked canonical/cache-busted metadata, full public files, shell and service-worker contracts, then closed its matching lease. No R2 lease has been prepared.
+
+## Next safe actions
+1. Require all applicable exact-B checks and both actual clean-clone adapter rehearsals. Reconfirm the current production base before a normal merge preserving A/B; require merge tree equal B.
+2. Before shared source changes/rehearsal, obtain a fresh official inactive-guard result, preserve unrelated files and require expected HEAD/tracked-clean state. Run the configured adapter on the reviewed production merge.
+3. Observe exact-merge gates, then prepare a fresh task-owned R2 lease, prepublish and perform the authorized Publish once.
+4. Require a newer explicit deployment success, all3 official production probes and final inactive guard. Revisit the exact-method link and verify editable blank commission terms without saving real values.
+5. Update this separate handoff and PR with final exact merge, release receipts and live acceptance. Do not amend the frozen runtime branch.
 
 ## Preserved scope
 
