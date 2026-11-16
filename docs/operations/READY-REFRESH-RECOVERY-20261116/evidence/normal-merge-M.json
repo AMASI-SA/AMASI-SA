@@ -1,0 +1,32 @@
+{
+  "schema": "ready1955-normal-merge-and-prior-handoff-v1",
+  "observed_at": "2026-11-16 00:17:24 UTC",
+  "repository": "AMASI-SA/AMASI-SA",
+  "pull_request": 1955,
+  "source_A3": "1accaa42e132ca1232ce86b3122971b48169ca81",
+  "intent_B": "dd4fc24dbef4b2d6e4abafac5ee5ee47d14e802b",
+  "merge_M": "b05cd3c9b25ce22df1b2dd06c23d97606bd632c6",
+  "tree": "aded5cb29b69b5bb09b7386932ad9fc5c35d1f44",
+  "ordered_parents": [
+    "2589f440106a7c5d463ee03eac3617d113319673",
+    "dd4fc24dbef4b2d6e4abafac5ee5ee47d14e802b"
+  ],
+  "production_remote_observed": "b05cd3c9b25ce22df1b2dd06c23d97606bd632c6",
+  "prior_handoff": {
+    "commit": "bb06a2c63e9b56e3bd5e399143a5fc2ff00a5ff2",
+    "receipt_sha256": "1b1596a3c2f0632f2cd58d06e421237bdca2e51376f4c59f4b60d022095d5248",
+    "verified": true,
+    "checks": 3,
+    "active_lease": false,
+    "root_direct_status": {
+      "observed_at": "2026-11-16T00:12:53.324590+00:00",
+      "active": false,
+      "incomplete_lease_directory": false
+    }
+  },
+  "own_original_rehearsal": false,
+  "own_lease": false,
+  "own_platform_publish": false,
+  "original_expected_current": "2589f440106a7c5d463ee03eac3617d113319673",
+  "next": "Accept exact-M push gates before fresh inactive status and original rehearsal."
+}

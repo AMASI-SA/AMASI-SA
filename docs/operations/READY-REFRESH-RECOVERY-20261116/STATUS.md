@@ -2,7 +2,7 @@
 
 This branch is an evidence ledger only. **Do not merge it as application source.**
 
-Updated: 2026-11-16 00:03:19 UTC
+Updated: 2026-11-16 00:17:24 UTC
 
 ## Exact release
 
@@ -14,7 +14,7 @@ Updated: 2026-11-16 00:03:19 UTC
 - Intent-only B/current application head: `dd4fc24dbef4b2d6e4abafac5ee5ee47d14e802b`, tree `aded5cb29b69b5bb09b7386932ad9fc5c35d1f44`.
 - B has sole parent A3 and only `release/release-intent-v5.json` changed. Exact intent blob `bf8f2ac59543bbde3e1c73fa0a43a768ca9a7f22`, SHA256 `0d90b88def88e0c84d595376d050e80f3e18493bf9ca71284382af1af8754899`.
 - Runtime identity: `rg5-255b2b13ed893324729b31c21409fa1be3be98d8c536485f712424d70bab4b4e`.
-- Merge M: not created. Production changed by this task: **no**.
+- Normal merge M: `b05cd3c9b25ce22df1b2dd06c23d97606bd632c6`, tree identical to B, ordered parents [J2, B]. GitHub production branch advanced to M. Live Production changed by this task: **no**.
 
 ## Completed acceptance
 
@@ -44,10 +44,10 @@ It requires exact accepted M, current original J2/clean source, no lease, and pr
 
 ## Publication coordination / next safe action
 
-PR #1951 owns a separately recorded active publication lease (actor `chatgpt-provider1951-20261116-root`, prepared `2026-11-15T23:45:16.349437+00:00`; owner evidence `e625bf05e4daa05dd6db4ec2bf8870e5f037fb3c`). Its completed live verification/handoff has not yet been accepted here. Do not touch original /app, merge into its live release path, reuse or clear its lease. Historical inactive observations are not a handoff.
+PR #1951 completed its separately owned publication. Its immutable final receipt at evidence commit `bb06a2c63e9b56e3bd5e399143a5fc2ff00a5ff2` has SHA256 `1b1596a3c2f0632f2cd58d06e421237bdca2e51376f4c59f4b60d022095d5248`, `verified:true`, `checks:3`, `active_lease:false`, platform `c1784c4`, and exact J2 runtime. Root read this receipt and independently observed the official original guard return `active:false` at `2026-11-16T00:12:53.324590+00:00`. No lease was reused or cleared by this task.
 
-Root's fresh management UI observation at approximately 2026-11-16 00:01 UTC showed a new 100th published version, `c1784c4`, and enabled Republish controls. This is platform evidence for the other publication only; it does not establish its official live verification or lease closure.
+Root then freshly confirmed production Git still J2, exact PR head B, no auto-merge and clean mergeability, and performed one normal PR #1955 merge. M is `b05cd3c9b25ce22df1b2dd06c23d97606bd632c6`; its exact tree equals B and ordered parents are [J2, B]. Root and an independent observer verified remote production=M. The original workspace remains expected at J2; no own original source handoff/build/lease/platform publish has run.
 
-Next: independently verify the prior owner's completed handoff and current production Git still J2. Then normal-merge B preserving A3/B history, verify exact M tree/parents and push gates. Only afterward read original guard afresh, stage the immutable reviewed helper outside /app and execute once with exact M. Compare emitted package proof to the accepted canonical digest; then use official prepare/prepublish, one authorized platform publish, explicit Deployment Succeeded and official three-probe verify, ending with inactive lease and exact local/remote M.
+Exact-M push gates are running: Security `43779331347`, CodeQL `43779331479`, Readiness `43779331359`. Preserve source and intent unchanged. Next: accept all required M gates including actual Host20/24 package and HTTP proofs, then read original guard afresh, stage the immutable reviewed rehearsal helper outside /app and execute once with exact M. Compare emitted package proof to canonical digest `7f42de559eaccc3c8c9129017639ed5bffaae6d84600047ebf61a9fd295e6fdd`; then official prepare/prepublish, one authorized platform publish, explicit deployment completion and official three-probe verify, ending inactive with exact local/remote M.
 
 The separately received garment remains blocked by source/approval representation proof, not stale workflow. This application patch does not clear that guard or mark Ready/receipt/service/provider state. Private order/customer evidence is excluded. Issue #1006 is full; PR #1955 and this record are continuation anchors.
