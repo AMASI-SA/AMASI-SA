@@ -187,3 +187,11 @@ PR #1964 was merged with the normal merge method and expected B head after all 1
 - Production source branch changed: **yes**, to M. Live Production runtime changed: **no** at this checkpoint; no publish/lease has occurred.
 
 Next safe action: require inactive guard, fast-forward shared `/app` to exact M, execute the actual `cd frontend && yarn build` adapter rehearsal, verify preserved untracked content and exact identity, require the Production-push checks, then own prepare/prepublish and one authorized publish. Official three-probe verification and saved courier UI inspection remain mandatory after publication.
+
+## Shared rehearsal environment correction — 2026-11-17 Asia/Riyadh
+
+Shared `/app` fast-forwarded to exact M with the expected tree. The first actual adapter rehearsal stopped before building with `EMERGENT_DEPLOYMENT_REFUSED: Backend runtime source contains prepackaged bytecode: __pycache__`. This was an environment artifact, not a governed source change. No lease or publish occurred.
+
+One ignored/untracked cache directory containing two `.pyc`/`.pyo` files was reversibly moved outside `/app` to the task's bytecode quarantine. Each cache member was verified regular, untracked, and ignored before moving; no tracked source changed. Subsequent Python commands set `PYTHONDONTWRITEBYTECODE=1` to prevent recurrence. The second actual adapter rehearsal is now running and will compare all 120 unrelated untracked files with the saved manifest before allowing any lease.
+
+Exact-M Production-push Readiness `43964649337` and Security `43964649351` succeeded. Readiness included actual Node20 job `133641304006`, actual Node24 job `133641304119`, and Production handoff `133642591339`. Exact-M CodeQL `43964649567` remains pending at this checkpoint. Live Production runtime changed: **no**; publication remains pending.
