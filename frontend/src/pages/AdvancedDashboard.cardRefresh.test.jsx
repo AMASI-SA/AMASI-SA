@@ -83,6 +83,33 @@ function sharedSpend(amount, { day = "2026-11-11", complete = false } = {}) {
     };
 }
 
+test("new payment method notice uses executive reads and clears on the existing refresh", async () => {
+    let needsCommission = true;
+    api.get.mockImplementation(async (url) => {
+        const response = responseFor(url);
+        if (url.startsWith(paths.executive)) response.data.payment_method_setup = {
+            complete: true, revision: "synthetic-revision", pending_count: needsCommission ? 1 : 0,
+            items: [{ key: "synthetic-method", name: "paypal", status: needsCommission ? "needs_commission" : "configured" }],
+        };
+        return response;
+    });
+    await render();
+    const notice = host.querySelector('[data-testid="payment-method-setup-notice"]');
+    expect(notice.textContent).toContain("paypal");
+    expect(notice.querySelector("a").getAttribute("href")).toBe("/operational-balances/provider-fees?method=paypal");
+    expect(host.querySelector(".dashboard-columns").contains(notice)).toBe(false);
+    expect(calls("executive")).toHaveLength(1);
+    expect(api.get.mock.calls.some(([url]) => url.includes("fee-policy") || url.includes("payment-method"))).toBe(false);
+    const timersBefore = jest.getTimerCount();
+    needsCommission = false;
+    await tick(60_000);
+    expect(host.querySelector('[data-testid="payment-method-setup-notice"]')).toBeNull();
+    expect(calls("executive")).toHaveLength(2);
+    expect(jest.getTimerCount()).toBe(timersBefore);
+    expect(api.get.mock.calls.some(([url]) => url.includes("fee-policy") || url.includes("payment-method"))).toBe(false);
+    expect(api.post).not.toHaveBeenCalled();
+});
+
 test("available portfolio total stays identical after the real spend card's existing read without another request", async () => {
     mockRenderRealSpendCard = true;
     let amount = 100;

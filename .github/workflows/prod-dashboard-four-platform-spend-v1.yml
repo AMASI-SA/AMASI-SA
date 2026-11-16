@@ -14,6 +14,8 @@ on:
       - "backend/dashboard_ads_account_results.py"
       - "backend/dashboard_ads_costs.py"
       - "backend/dashboard_ads_periods.py"
+      - "backend/payment_method_setup.py"
+      - "backend/accounting_onboarding_setup_routes.py"
       - "backend/unified_marketing/readers/snapchat_v2.py"
       - "backend/integrations_control_center/ads_auto_sync_scheduler.py"
       - "backend/integrations_control_center/dashboard_ads_executive_routes.py"
@@ -24,6 +26,8 @@ on:
       - "backend/tests/test_dashboard_ads_account_results.py"
       - "backend/tests/test_dashboard_ads_costs.py"
       - "backend/tests/test_dashboard_ads_periods.py"
+      - "backend/tests/test_payment_method_setup.py"
+      - "backend/tests/test_payment_method_setup_routes.py"
       - "backend/tests/test_dashboard_runtime_source_contract.py"
       - "backend/tests/test_snapchat_reporting_v2_account_display.py"
       - "backend/tests/test_tiktok_scheduler_hourly.py"
@@ -36,6 +40,14 @@ on:
       - "frontend/src/lib/dashboardAdsAccountResults.js"
       - "frontend/src/lib/dashboardAdsAccountResults.test.js"
       - "frontend/src/pages/AdvancedDashboard.jsx"
+      - "frontend/src/components/PaymentMethodSetupNotice.jsx"
+      - "frontend/src/components/PaymentMethodSetupNotice.test.jsx"
+      - "frontend/src/pages/operational/ObservedPaymentMethods.jsx"
+      - "frontend/src/pages/operational/ObservedPaymentMethods.test.jsx"
+      - "frontend/src/pages/operational/ProviderFeeSetup.jsx"
+      - "frontend/src/pages/operational/ProviderFeeSetup.test.jsx"
+      - "frontend/src/services/accountingOnboarding.js"
+      - "frontend/src/services/accountingOnboarding.test.js"
       - "frontend/src/lib/dashboardPlatformSpendClient.js"
       - "frontend/src/lib/dashboardPlatformSpendClient.test.js"
       - "frontend/src/services/dashboardAdsSpend.js"
@@ -82,6 +94,8 @@ jobs:
           dashboard_ads_account_results.py
           dashboard_ads_costs.py
           dashboard_ads_periods.py
+          payment_method_setup.py
+          accounting_onboarding_setup_routes.py
           dashboard_v2_routes.py
           unified_marketing/readers/snapchat_v2.py
           integrations_control_center/ads_auto_sync_scheduler.py
@@ -103,6 +117,8 @@ jobs:
           tests/test_dashboard_ads_periods.py
           tests/test_dashboard_runtime_source_contract.py
           tests/test_dashboard_card_snapshots.py
+          tests/test_payment_method_setup.py
+          tests/test_payment_method_setup_routes.py
           tests/test_dashboard_bundle_cost_authority.py
           tests/test_snapchat_reporting_v2_account_display.py
           tests/test_tiktok_scheduler_hourly.py
@@ -153,6 +169,10 @@ jobs:
           src/lib/dashboardPlatformSpendClient.test.js
           src/services/dashboardAdsSpend.test.js
           src/components/DashboardAnalyticsPlacement.test.js
+          src/components/PaymentMethodSetupNotice.test.jsx
+          src/pages/operational/ObservedPaymentMethods.test.jsx
+          src/pages/operational/ProviderFeeSetup.test.jsx
+          src/services/accountingOnboarding.test.js
       - name: Build Production frontend
         env:
           CI: "false"

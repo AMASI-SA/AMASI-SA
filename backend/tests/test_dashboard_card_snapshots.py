@@ -314,6 +314,72 @@ async def test_saved_key_changes_for_scope_policy_settings_and_riyadh_day(card_a
 
 
 @pytest.mark.asyncio
+async def test_executive_discovers_unconfigured_methods_outside_filters_without_writes(card_app):
+    env = card_app
+    await env.db.unified_orders.insert_many([
+        sample_order("a", "unconfigured-old-method", "2025-01-01", 120, payment="paypal"),
+        sample_order("b", "other-tenant-method", "2025-01-01", 250, payment="another_gateway"),
+    ])
+    before = await env.db.settings.find_one({"user_id": "a"})
+    response = await env.client.get("/dashboard-v2/cards/executive", params=PARAMS)
+    assert response.status_code == 200, response.text
+    setup = response.json()["payment_method_setup"]
+    assert setup["complete"] is True
+    pending = {row["name"] for row in setup["items"] if row["status"] == "needs_commission"}
+    assert "paypal" in pending
+    assert "another_gateway" not in pending
+    paypal = next(row for row in setup["items"] if row["name"] == "paypal")
+    assert all(paypal[field] is None for field in ("commission_percent", "fixed_fee", "vat_percent"))
+    assert await env.db.settings.find_one({"user_id": "a"}) == before
+    # The owner-wide setup read does not change the selected sales cohort.
+    assert response.json()["totals"]["total_orders"] == 1
+    assert len(env.reads) == 1
+
+
+@pytest.mark.asyncio
+async def test_fee_content_changes_invalidate_executive_even_without_revision_or_timestamp(card_app):
+    env = card_app
+    await env.db.unified_orders.insert_one(
+        sample_order("a", "method-to-configure", "2025-01-01", 120, payment="paypal"),
+    )
+    path = "/dashboard-v2/cards/executive"
+    first = (await env.client.get(path, params=PARAMS)).json()
+    initial_calls = env.calls["legacy"]
+    assert (await env.client.get(path, params=PARAMS)).json() == first
+    assert env.calls["legacy"] == initial_calls
+
+    # Simulates the pre-existing settings writer, which knows no new revision.
+    await env.db.settings.update_one({"user_id": "a"}, {"$push": {"payment_methods": {
+        "name": "paypal", "commission_percent": 3.4, "fixed_fee": 1.5, "vat_percent": 15,
+    }}})
+    configured = (await env.client.get(path, params=PARAMS)).json()["payment_method_setup"]
+    assert env.calls["legacy"] == initial_calls + 1
+    assert configured["revision"] != first["payment_method_setup"]["revision"]
+    paypal = next(row for row in configured["items"] if row["name"] == "paypal")
+    assert paypal["status"] == "configured"
+    assert paypal["commission_percent"] == 3.4
+
+    methods = (await env.db.settings.find_one({"user_id": "a"}))["payment_methods"]
+    methods[-1]["commission_percent"] = 4.1
+    await env.db.settings.update_one({"user_id": "a"}, {"$set": {"payment_methods": methods}})
+    edited = (await env.client.get(path, params=PARAMS)).json()["payment_method_setup"]
+    assert env.calls["legacy"] == initial_calls + 2
+    assert edited["revision"] != configured["revision"]
+
+
+@pytest.mark.asyncio
+async def test_method_discovery_is_exclusive_to_executive_card_build(card_app, monkeypatch):
+    async def forbidden(*args, **kwargs):
+        raise AssertionError("product and period cards must not add method discovery")
+
+    monkeypatch.setattr(dashboard, "load_payment_method_setup", forbidden)
+    for section in ("top-products", "period-summary"):
+        response = await card_app.client.get("/dashboard-v2/cards/" + section, params=PARAMS)
+        assert response.status_code == 200, response.text
+        assert "payment_method_setup" not in response.json()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("section", ["top-products", "period-summary", "executive"])
 @pytest.mark.parametrize("bad", [{"from_date": "not-a-date"}, {"to_date": "2026-11-10"}, {"report_statuses": "unsupported"}])
 async def test_card_validation_precedes_any_computation(card_app, section, bad):

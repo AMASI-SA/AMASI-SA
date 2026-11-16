@@ -5207,6 +5207,8 @@ async def _global_startup() -> None:
     await db.order_payment_transactions_v2.create_index([("user_id", 1), ("order_number", 1), ("source", 1)])
     await db.unified_orders.create_index([("user_id", 1), ("order_date", -1)])
     await db.unified_orders.create_index([("user_id", 1), ("data_source", 1)])
+    # On-demand method setup reads only distinct owner-scoped method names.
+    await db.unified_orders.create_index([("user_id", 1), ("payment_method", 1)])
     await db.operating_salaries.create_index([("user_id", 1), ("status", 1)])
     await db.operating_rentals.create_index([("user_id", 1), ("status", 1)])
     await db.operating_daily_expenses.create_index([("user_id", 1), ("date", -1)])
