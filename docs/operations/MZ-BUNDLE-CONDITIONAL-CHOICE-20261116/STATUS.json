@@ -1,0 +1,57 @@
+{
+  "task_id": "MZ-BUNDLE-CONDITIONAL-CHOICE-20261116",
+  "scope": "Resolve phantom incomplete costs from conditional descriptive bundle options without changing genuine cost dependencies.",
+  "state": "fresh_source_candidate_on_current_production",
+  "repository": "AMASI-SA/AMASI-SA",
+  "task_branch": "codex/bundle-conditional-cost-current-20261116",
+  "source_base_J": "b05cd3c9b25ce22df1b2dd06c23d97606bd632c6",
+  "source_base_tree": "aded5cb29b69b5bb09b7386932ad9fc5c35d1f44",
+  "source_A": "Recorded after commit creation in the evidence branch and PR.",
+  "previous_source_A": "ba19a270fb20ab45328f293e200728bebda6df4c",
+  "superseded_intent_B": "a00e3e38530376943960f1f1ebe301dde5e7f061",
+  "previous_pr": 1954,
+  "earlier_pr": 1953,
+  "evidence_branch": "codex/bundle-conditional-cost-evidence-20261116",
+  "changed_files": [
+    "backend/current_bundle_reporting_estimate.py",
+    "backend/tests/test_current_bundle_cost_details.py",
+    "backend/tests/test_campaign_hover_profit.py",
+    "docs/operations/MZ-BUNDLE-CONDITIONAL-CHOICE-20261116/DIAGNOSIS.md",
+    "docs/operations/MZ-BUNDLE-CONDITIONAL-CHOICE-20261116/STATUS.json"
+  ],
+  "completed_behavior": "Recognized fill-based fields without enum values cannot synthesize a missing cost from catalog requiredness. Actual root financial bindings use shared conditional visibility and validated canonical identities/presence markers. Enum, recipe, variant, currency, nested and frozen/actual authorities remain protected; invalid/conflicting/retired identities are not relabeled into declined paid choices.",
+  "source_preservation": "Three runtime/test blobs are byte-identical to the already independently reviewed source Aba19. The new source has sole parent Jb05, inherits its release intent unchanged and preserves all PR1951/PR1955 changes.",
+  "verification_history": [
+    {
+      "result": "Initial regression RED: 27 failed, 20 passed; the additional conflicting-alias regression separately failed before correction."
+    },
+    {
+      "result": "Nine affected modules passed 231 tests on original reviewed source and 231 tests in12.62s on integrated Aba19. Independent focused review passed59 tests."
+    },
+    {
+      "result": "Prior exact-B checks:36 total,26 successful,10 explicit scope skips,0 failed/pending. Old intent cannot be reused on a different base."
+    }
+  ],
+  "current_candidate_verification": "Fresh exact-A suite/CI and a new intent-only B remain required.",
+  "last_safe_handoff": {
+    "timestamp_utc": "2026-11-16T00:18:00Z",
+    "original_actor": "codex-bundle-conditional-cost-20261116",
+    "original_helper_receipts": "/tmp/mz-bundle-release-1954-mLoiC4",
+    "original_helper_pid": 46563,
+    "gate": "ready_for_merge observed with inactive guard, J2589,120 preserved unrelated untracked entries and no Python cache.",
+    "merge_attempt": "GitHub405 conflict; Production had advanced via PR1955 at00:15:52Z to Jb05. No PR1954 merge occurred.",
+    "outcome": "Helper timed out before receiving a merge receipt and exited1. No deployment, host source mutation, own lease or publish occurred."
+  },
+  "release_guard": "No lease created by this task; fresh original status must be checked after the PR1955 owner's publication.",
+  "merge": "not_performed",
+  "deployment": "not_performed",
+  "production_changed": "no",
+  "business_data_changed": false,
+  "live_limits": "No option cost bindings were observed for the incident product. Its saved bundle definition changed externally after diagnosis; preserve current user configuration. No Salla refresh or business-data mutation was performed.",
+  "risks": [
+    "Do not equate zero customer surcharge with zero internal cost.",
+    "Preserve unresolved state for genuine cost decisions with missing/conflicting evidence."
+  ],
+  "next_safe_action": "Open fresh-source PR and complete exact-head verification. Generate fresh candidate intent, freeze intent-only B, and preserve A/B on normal merge. Follow official original-host inactive/build/prepare/prepublish/publish/three-round verify/inactive sequence.",
+  "ledger": "Issue1006 is at its known comment limit. This status and the evidence-only branch are the durable continuation record."
+}

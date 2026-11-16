@@ -18,6 +18,7 @@ from typing import Any
 
 from order_cost_authority import VERSION, _amount, _sar, decimal, line_id
 from order_option_cost_snapshot_routes import resolve_base_unit_cost
+from product_option_cost_routes import FILL_BASED_OPTION_TYPES
 
 
 class _Unresolved(ValueError):
@@ -55,17 +56,21 @@ def _options(product: dict) -> list[dict]:
     return [o for o in raw if isinstance(o, dict)]
 
 
-def _choice_pairs(item: dict, product: dict, missing_choices: list | None = None) -> set[tuple[str, str]]:
+def _choice_pairs(item: dict, product: dict, missing_choices: list | None = None,
+                  *, selection_evidence: list | None = None) -> set[tuple[str, str]]:
     """Recover price choices from current catalog without changing provider IDs.
 
     Order-row id is NOT catalog option id. Existing valid ID wins; otherwise
     a unique exact name/value match is needed. Ambiguous Yes answers fail.
     Customer text is only a presence signal and is never emitted or persisted.
+    Required fill fields are fulfillment instructions; actual cost bindings
+    determine whether their absence leaves a financial amount unresolved.
     """
     from report_option_identity import catalog_options
     from report_option_recovery import report_cost_item
     item = report_cost_item(item)
     aliases = catalog_options(product)
+    known_value_ids = {vid for entry in aliases.values() for vid in entry.get("values", {})}
     options = _options(product)
     by_id = {_id(o.get("id")): o for o in options if _id(o.get("id"))}
     if len(by_id) != len(options):
@@ -94,8 +99,10 @@ def _choice_pairs(item: dict, product: dict, missing_choices: list | None = None
         candidate = next(iter(strong_ids), "")
         if candidate and candidate not in by_id:
             _fail("current_order_option_id_unknown")
-        if not candidate and _id(row.get("id")) in by_id:
+        if not candidate and _id(row.get("id")) in aliases:
             candidate = _id(row["id"])
+            if candidate not in by_id:
+                _fail("current_order_option_id_unknown")
         name = _label(row.get("option_name") or row.get("name") or nested.get("name"))
         if not candidate and name:
             matching = [oid for oid, o in by_id.items() if name in aliases.get(oid, {}).get("labels", set())]
@@ -107,6 +114,14 @@ def _choice_pairs(item: dict, product: dict, missing_choices: list | None = None
             "value", row.get("value_name", row.get("selected", row.get("answer", row.get("text")))))
         pieces = raw_values if isinstance(raw_values, list) else [raw_values]
         pieces = [v for v in pieces if v not in (None, "", [], {})]
+        explicit_value_ids = []
+        for value in pieces:
+            data = value if isinstance(value, dict) else {}
+            explicit_values = {_id(row.get("value_id")), _id(data.get("value_id")),
+                               _id(data.get("option_value_id"))} - {""}
+            if len(explicit_values) > 1:
+                _fail("current_order_value_id_conflict")
+            explicit_value_ids.append(next(iter(explicit_values), ""))
         if not candidate:
             # Some historical Salla choices only provide a selected value label.
             # Its match must be globally unique within the product options.
@@ -118,16 +133,33 @@ def _choice_pairs(item: dict, product: dict, missing_choices: list | None = None
             if len(matches) != 1 or len(pieces) != 1:
                 _fail("current_order_choice_ambiguous")
             oid, vid = matches[0]
+            data = pieces[0] if isinstance(pieces[0], dict) else {}
+            raw_vid = explicit_value_ids[0] or _id(data.get("id"))
+            if raw_vid != vid and (explicit_value_ids[0] or raw_vid in known_value_ids):
+                _fail("current_order_value_unproved")
             pairs.add((oid, vid))
             continue
         option = by_id[candidate]
         if not values[candidate]:
             if any(pieces):
                 filled.add(candidate)
+            if selection_evidence is not None:
+                has_content = bool(_label(row.get("text") or row.get("answer"))) or any(
+                    _label((value.get("name") or value.get("label") or value.get("value")
+                            or value.get("text")) if isinstance(value, dict) else value)
+                    for value in pieces)
+                # Preserve present-empty versus absent without passing customer
+                # text to the financial resolver or its output.
+                selection_evidence.append({"option_id": candidate,
+                                           "values": "filled" if has_content else ""})
             continue
-        for value in pieces:
+        for value, explicit_vid in zip(pieces, explicit_value_ids):
             data = value if isinstance(value, dict) else {}
-            raw_vid = _id(row.get("value_id") or data.get("value_id") or data.get("option_value_id") or data.get("id"))
+            raw_vid = explicit_vid or _id(data.get("id"))
+            if raw_vid not in values[candidate] and (explicit_vid or raw_vid in known_value_ids):
+                # A known retired catalog identity is not a checkout-row ID.
+                # Relabeling it could falsely prove that a paid field is hidden.
+                _fail("current_order_value_unproved")
             label = _label(data.get("name") or data.get("label") or data.get("value") or
                            data.get("text") if data else value)
             if raw_vid in values[candidate]:
@@ -144,6 +176,8 @@ def _choice_pairs(item: dict, product: dict, missing_choices: list | None = None
                 "checkbox", "multiple", "multi_select"}:
             _fail("current_order_multiple_conflicting_values")
         if not (option.get("required") or option.get("is_required")):
+            continue
+        if not values[oid] and _label(option.get("type")) in FILL_BASED_OPTION_TYPES:
             continue
         dependencies = option.get("show_if") or option.get("conditions") or []
         if not isinstance(dependencies, list) or any(not isinstance(c, dict)
@@ -164,6 +198,10 @@ def _choice_pairs(item: dict, product: dict, missing_choices: list | None = None
             if missing_choices is None:
                 _fail("current_order_required_choice_missing")
             missing_choices.append((oid, option.get("name") or oid))
+    if selection_evidence is not None:
+        # Retain the estimator's strict legacy label recovery as stable IDs.
+        selection_evidence.extend({"option_id": oid, "values": [{"value_id": vid}]}
+                                  for oid, vid in sorted(pairs))
     return pairs
 
 
@@ -194,7 +232,12 @@ def _build_line_cost(item: dict, root: str, definitions: dict, products: dict,
     if quantity != quantity.to_integral_value():
         _fail("current_bundle_quantity_fractional")
     missing_choices = []
-    selected = _choice_pairs(item, products[root], missing_choices)
+    selection_evidence = []
+    selected = _choice_pairs(item, products[root], missing_choices,
+                             selection_evidence=selection_evidence)
+    from report_option_identity import resolve_report_choices
+    root_option_decisions, _ = resolve_report_choices(
+        {"options_raw": selection_evidence}, products[root], options.get(root, []))
     missing_reasons = []
     used_resources = set()
     mezan_complete = True
@@ -310,11 +353,14 @@ def _build_line_cost(item: dict, root: str, definitions: dict, products: dict,
                 else:
                     _fail("current_bundle_recipe_kind_unresolved")
         current_option_bindings = [
-            ("component", row) for row in bindings.get(pid, [])] + [
-            ("option", row) for row in options.get(pid, [])
+            ("component", row, True) for row in bindings.get(pid, [])] + [
+            ("option", row, root_option_decisions[index] if path == "root" else
+             True if (_id(row.get("option_id")), _id(row.get("value_id"))) in pairs else
+             False if any(oid == _id(row.get("option_id")) for oid, _ in pairs) else None)
+            for index, row in enumerate(options.get(pid, []))
         ]
         seen_bindings = set()
-        for kind, binding in current_option_bindings:
+        for kind, binding, selection in current_option_bindings:
             bid = _id(binding.get("id"))
             resource = resources.get(_id(binding.get("resource_id"))) or {}
             detail_key = path + ":" + kind + ":" + (bid or str(binding.get("resource_id") or "unknown"))
@@ -323,12 +369,11 @@ def _build_line_cost(item: dict, root: str, definitions: dict, products: dict,
             policy = ((profile.get("composition_components") or {}).get(
                 ("option_resource:" if kind == "option" else "product_resource:") + bid) or {})
             included = policy.get("cost_treatment") == "included_in_base" or binding.get("cost_treatment") == "included_in_base"
-            if kind == "option" and (_id(binding.get("option_id")), _id(binding.get("value_id"))) not in pairs:
+            if kind == "option" and selection is not True:
                 if included:
                     cell(detail_key, detail_label, detail_kind, "included_in_base", Decimal(0))
                     continue
-                proved = any(oid == _id(binding.get("option_id")) for oid, _ in pairs)
-                if not proved:
+                if selection is None:
                     cell(detail_key, detail_label, detail_kind, "unresolved")
                     missing_reasons.append("current_bundle_sale_selection_unavailable:" + detail_key)
                     continue

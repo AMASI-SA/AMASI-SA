@@ -384,6 +384,87 @@ async def test_changed_raw_customer_choice_cannot_reuse_a_stale_frozen_bundle_co
     assert "current_order_choices_unverified" in row["cost_reasons"]
 
 
+def free_message_catalog():
+    question = {"id": "customize", "type": "radio", "required": True,
+                "values": [{"id": "yes", "name": "Yes"}, {"id": "no", "name": "No"}]}
+    field = {"id": "message", "name": "Message", "type": "text",
+             "required": True, "values": []}
+    saved_field = {**field, "visibility": "on_condition", "visibility_condition_type": "=",
+                   "visibility_condition_option": "customize", "visibility_condition_value": "yes"}
+    return {"options": [question, field],
+            "raw_salla_details": {"options": [deepcopy(question), saved_field]}}
+
+
+def free_message_selections(answer, text=None):
+    rows = [{"option_id": "customize", "values": [{"value_id": answer}]}]
+    if text is not None:
+        rows.append({"option_id": "message", "value": text})
+    return rows
+
+
+@pytest.mark.parametrize("answer,current_text,source_text", [
+    ("no", None, None),
+    ("yes", "PRIVATE_CURRENT_TEXT", "PRIVATE_SOURCE_TEXT"),
+    ("yes", None, "PRIVATE_SOURCE_TEXT"),
+])
+def test_free_required_text_does_not_block_matching_current_bundle_financial_choices(
+        answer, current_text, source_text):
+    from order_engine.campaign_hover_profit import _current_choices_match
+    product = free_message_catalog()
+    current = {"options_raw": free_message_selections(answer, current_text)}
+    source = {"options_raw": free_message_selections(answer, source_text)}
+    before = deepcopy((current, source, product))
+    assert _current_choices_match(current, source, product, [], composite=True) is True
+    assert (current, source, product) == before
+
+
+@pytest.mark.parametrize("marker", ["filled", "__option__"])
+def test_actual_text_service_decision_difference_still_rejects_current_bundle_parity(marker):
+    from order_engine.campaign_hover_profit import _current_choices_match
+    product = free_message_catalog()
+    current = {"options_raw": free_message_selections("yes")}
+    source = {"options_raw": free_message_selections("yes", "PRIVATE_SOURCE_TEXT")}
+    bindings = [{"id": "message-work", "option_id": "message", "value_id": marker,
+                 "mode": "direct", "direct_amount": 5}]
+    before = deepcopy((current, source, product, bindings))
+    assert _current_choices_match(current, source, product, bindings, composite=True) is False
+    assert (current, source, product, bindings) == before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("answer,text", [("no", None), ("yes", "PRIVATE_SOURCE_TEXT")])
+async def test_unfrozen_bundle_free_message_cost_matches_hover_and_executive(db, answer, text):
+    from dashboard_v2_routes import build_mezan_v2_product_cost_cooperative
+    from product_v2_routes import PRODUCTS
+    await campaign_setup(db)
+    stored = await db[PRODUCTS].find_one({"user_id": OWNER, "salla_product_id": "shawl"})
+    message_catalog = free_message_catalog()
+    options = [*stored["options"], *message_catalog["options"]]
+    saved_options = [*deepcopy(stored["options"]), *message_catalog["raw_salla_details"]["options"]]
+    await db[PRODUCTS].update_one({"user_id": OWNER, "salla_product_id": "shawl"}, {"$set": {
+        "options": options, "raw_salla_details": {"options": saved_options},
+    }})
+    order = campaign_order()
+    line = sale_line("bundle-line", 2)
+    line["options"].extend(free_message_selections(answer, text))
+    order["products"] = [line]
+    order["raw_by_source"]["salla_direct"]["items"] = [{
+        "id": "bundle-line", "product_id": "shawl", "quantity": 2,
+        "type": "product", "options": deepcopy(line["options"]),
+    }]
+    await db.unified_orders.insert_one(deepcopy(order))
+    before = deepcopy(await db.unified_orders.find_one({"order_number": "one"}))
+    expected = await build_mezan_v2_product_cost_cooperative(
+        ReadOnlyDB(db), OWNER, [order], include_product_rows=False)
+    row = await report(db)
+    assert row["product_cost_sar"] == expected["total"] == 110  # 2 * (base 15 + bouquet 40).
+    assert row["product_cost_complete"] is True
+    assert row["costs_complete"] is True
+    assert "current_order_choices_unverified" not in row["cost_reasons"]
+    assert "PRIVATE_SOURCE_TEXT" not in repr(row)
+    assert await db.unified_orders.find_one({"order_number": "one"}) == before
+
+
 def test_prefixed_meta_account_fee_and_conflicting_aliases():
     from order_engine.campaign_hover_profit import _ad_bank_fee
     record = {"account_id": "111", "provider": "meta", "spend_sar": 100}
