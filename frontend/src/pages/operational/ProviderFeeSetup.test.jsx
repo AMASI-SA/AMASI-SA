@@ -6,7 +6,7 @@ import * as fees from "../../services/accountingOnboarding";
 import { requestId } from "./api";
 
 jest.mock("../../context/AuthContext", () => ({ useOptionalAuth: jest.fn() }));
-jest.mock("../../services/accountingOnboarding", () => ({ listOnboardingFeePolicies: jest.fn(), listOnboardingFeeCandidates: jest.fn(), createOnboardingFeePolicy: jest.fn(), updateOnboardingFeePolicy: jest.fn(), saveOnboardingFeeSourceMode: jest.fn(), previewOnboardingFeePolicy: jest.fn() }));
+jest.mock("../../services/accountingOnboarding", () => ({ listOnboardingFeePolicies: jest.fn(), listOnboardingFeeCandidates: jest.fn(), createOnboardingFeePolicy: jest.fn(), updateOnboardingFeePolicy: jest.fn(), saveOnboardingFeeSourceMode: jest.fn(), previewOnboardingFeePolicy: jest.fn(), saveObservedPaymentMethodCommission: jest.fn() }));
 jest.mock("./api", () => ({ requestId: jest.fn() }));
 let root, host;
 const input = key => host.querySelector(`[aria-label="${key}"]`);
@@ -91,6 +91,30 @@ test("non-owner never loads merchant settings or a confirmation form", async () 
     await act(async () => root.render(<ProviderFeeSetup />));
     expect(host.querySelector("form")).toBeNull();
     expect(fees.listOnboardingFeeCandidates).not.toHaveBeenCalled();
+    expect(fees.saveObservedPaymentMethodCommission).not.toHaveBeenCalled();
+});
+
+test("discovered methods reuse the candidate read and save without activating or changing dated policies", async () => {
+    const method = { key: "paypal", name: "PayPal", status: "needs_commission", commission_percent: null, fixed_fee: null, vat_percent: null };
+    const setup = { items: [method], pending_count: 1, complete: true, revision: "a".repeat(64) };
+    fees.listOnboardingFeeCandidates.mockResolvedValue({ items: [], conflicts: [], payment_method_setup: setup });
+    fees.saveObservedPaymentMethodCommission.mockResolvedValue({ payment_method_setup: {
+        ...setup, revision: "b".repeat(64), pending_count: 0,
+        items: [{ ...method, status: "configured", commission_percent: 2.5, fixed_fee: 1, vat_percent: 15 }],
+    } });
+    await act(async () => root.render(<ProviderFeeSetup />));
+    const section = host.querySelector("[data-testid=observed-payment-methods]");
+    expect(section.textContent).toContain("PayPal");
+    await act(async () => section.querySelector("tbody button").click());
+    await set("نسبة العمولة %", "2.5"); await set("الرسم الثابت بالريال", "1"); await set("ضريبة العمولة %", "15");
+    await act(async () => section.querySelector("button[type=submit]").click());
+    expect(section.querySelector("tbody").textContent).toContain("مكتملة");
+    expect(fees.listOnboardingFeeCandidates).toHaveBeenCalledTimes(1);
+    expect(fees.listOnboardingFeePolicies).toHaveBeenCalledTimes(1);
+    expect(fees.saveObservedPaymentMethodCommission).toHaveBeenCalledTimes(1);
+    expect(fees.createOnboardingFeePolicy).not.toHaveBeenCalled();
+    expect(fees.updateOnboardingFeePolicy).not.toHaveBeenCalled();
+    expect(fees.saveOnboardingFeeSourceMode).not.toHaveBeenCalled();
 });
 
 test("component VAT rounding is explicit while unverified event terms stay empty", async () => {

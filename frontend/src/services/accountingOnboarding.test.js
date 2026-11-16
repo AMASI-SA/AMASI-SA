@@ -4,6 +4,17 @@ const financialBase = "/api/financial-provider-apps/accounting-module/financial-
 jest.mock("../lib/api", () => ({ get: jest.fn(), put: jest.fn(), post: jest.fn() }));
 beforeEach(() => { jest.clearAllMocks(); for (const method of Object.values(api)) method.mockResolvedValue({ data: { fixture: true } }); });
 
+test("discovered method commission saves its raw name and revision to the focused settings route", async () => {
+    const payload = { name: "PayPal / دولي", commission_percent: 0, fixed_fee: 0, vat_percent: 0, expected_revision: "a".repeat(64) };
+    const result = { payment_method_setup: { items: [], pending_count: 0, complete: true, revision: "b".repeat(64) } };
+    api.put.mockResolvedValue({ data: result });
+    expect(await service.saveObservedPaymentMethodCommission(payload)).toEqual(result);
+    expect(api.put).toHaveBeenCalledTimes(1);
+    expect(api.put).toHaveBeenCalledWith("/accounting-module/onboarding/payment-method-commission", payload);
+    expect(api.get).not.toHaveBeenCalled();
+    expect(api.post).not.toHaveBeenCalled();
+});
+
 test("delivered Track G setup transport keeps all six native routes reachable", async () => {
     const policy = { provider: "tabby", evidence: "native-proof" };
     const prepaid = { invoice_id: "native-invoice" };

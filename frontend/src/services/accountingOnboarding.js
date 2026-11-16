@@ -120,6 +120,7 @@ export function onboardingErrorMessage(error) {
 
 export const listOnboardingFeePolicies = () => api.get(`${BASE}/fee-policies`).then(body);
 export const listOnboardingFeeCandidates = () => api.get(`${BASE}/fee-policy-candidates`).then(body);
+export const saveObservedPaymentMethodCommission = payload => api.put(`${BASE}/payment-method-commission`, payload).then(body);
 export const createOnboardingFeePolicy = payload => api.post(`${BASE}/fee-policies`, payload).then(body);
 export const updateOnboardingFeePolicy = (id, payload) => api.put(`${BASE}/fee-policies/${encodeURIComponent(id)}`, payload).then(body);
 export const saveOnboardingFeeSourceMode = mode => api.put(`${BASE}/fee-source-mode`, { mode }).then(body);

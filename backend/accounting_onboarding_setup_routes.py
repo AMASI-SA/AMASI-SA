@@ -1,12 +1,16 @@
 """Allowlisted setup-only routes, mounted outside the financial write barrier."""
 from datetime import date
-from fastapi import Depends
+from fastapi import Depends, HTTPException
+from accounting_module_contract import is_owner
 from accounting_onboarding_domains import ExternalPersonIn, create_external_person
 from accounting_onboarding_ssot import (
     FeePolicyCreate, FeePolicyUpdate, FeePolicyPreview, FeeSourceMode, PrepaidSelection, TypedFactCreate,
     create_fee_policy, update_fee_policy, get_fee_source_mode, save_fee_source_mode, preview_fee_policy,
     list_fee_candidates, list_fee_policies, list_prepaid_candidates, save_prepaid_selection,
     create_typed_fact, list_typed_facts,
+)
+from payment_method_setup import (
+    PaymentMethodCommissionIn, load_payment_method_setup, save_payment_method_commission,
 )
 
 
@@ -33,8 +37,20 @@ def install_setup_contract_routes(router, raw, current_user, actor_for, base):
 
     @router.get(base + "/fee-policy-candidates")
     async def fee_candidates(user: dict = Depends(current_user)):
-        _, owner = await actor_for(user, "drafts_manage")
-        return await list_fee_candidates(raw, owner, include_conflicts=True)
+        actor, owner = await actor_for(user, "drafts_manage")
+        result = await list_fee_candidates(raw, owner, include_conflicts=True)
+        # Preserve existing accountant access to policy suggestions. The new
+        # method-commission setup surface is restricted to the fresh owner.
+        if is_owner(actor):
+            result["payment_method_setup"] = await load_payment_method_setup(raw, owner)
+        return result
+
+    @router.put(base + "/payment-method-commission")
+    async def method_commission(payload: PaymentMethodCommissionIn, user: dict = Depends(current_user)):
+        actor, owner = await actor_for(user, "drafts_manage")
+        if not is_owner(actor):
+            raise HTTPException(status_code=403, detail={"code": "payment_method_owner_required"})
+        return await save_payment_method_commission(raw, owner, actor["id"], payload)
 
     @router.post(base + "/fee-policies")
     async def policy(payload: FeePolicyCreate, user: dict = Depends(current_user)):

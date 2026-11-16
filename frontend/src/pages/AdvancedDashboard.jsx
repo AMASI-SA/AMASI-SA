@@ -16,6 +16,7 @@ import CampaignAccountAnalysis from "../components/marketing/CampaignAccountAnal
 import AdvancedFilters, { defaultFilters, filtersToQueryString } from "../components/AdvancedFilters";
 import AdsExecutiveBreakdownTable from "../components/AdsExecutiveBreakdownTable";
 import DashboardAdsSpendCard from "../components/DashboardAdsSpendCard";
+import PaymentMethodSetupNotice from "../components/PaymentMethodSetupNotice";
 import LatestSoldProductsCard from "../components/LatestSoldProductsCard";
 import { buildPaymentFeeRows } from "../components/ProfitSummaryCard";
 import { useOrders } from "../hooks/useOrders";
@@ -1087,6 +1088,7 @@ export default function AdvancedDashboard() {
         </header>
         <div className="flex items-stretch gap-2"><div className="min-w-0 flex-1"><AdvancedFilters value={filters} onChange={setFilters} defaultPreset="today" /></div><button type="button" onClick={refreshAll} disabled={loading} aria-busy={loading} className="rounded-xl border bg-white px-4 text-blue-700 disabled:cursor-wait disabled:opacity-60" aria-label="تحديث بيانات الفترة"><RefreshCw aria-hidden="true" className={`h-5 w-5 ${loading ? "animate-spin" : ""}`} /></button></div>
         {!loading && loadError && <Panel className="border-amber-200 bg-amber-50 p-5 text-sm font-bold text-amber-900"><span role="alert">{loadError} — {visibleData ? "تم الاحتفاظ بآخر بيانات موثوقة." : "لم تُعرض أرقام بديلة أو بيانات من فترة سابقة."}</span></Panel>}
+        <PaymentMethodSetupNotice setup={visibleData?.payment_method_setup} />
         <PeriodSummaryCard data={periodSummary.data} filters={filters} loading={periodSummary.loading} error={periodSummary.error} onRefresh={periodSummary.refresh} />
         <CampaignAdvisorCard />
         <div dir="ltr" className="dashboard-columns grid min-w-0 grid-cols-1 items-start gap-4 min-[1280px]:grid-cols-[minmax(420px,460px)_minmax(0,1fr)]">

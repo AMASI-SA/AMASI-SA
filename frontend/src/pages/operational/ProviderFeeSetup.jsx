@@ -6,6 +6,7 @@ import {
 } from "../../services/accountingOnboarding";
 import { formatRiyadhDateTime } from "../../lib/dates";
 import PaginatedReportTable from "./PaginatedReportTable";
+import ObservedPaymentMethods from "./ObservedPaymentMethods";
 import { requestId } from "./api";
 import "./financialPosition.css";
 
@@ -104,6 +105,7 @@ function FeePreview({ policy, onClose }) {
 function FeeForm() {
     const [policies, setPolicies] = useState([]), [suggestions, setSuggestions] = useState([]);
     const [conflicts, setConflicts] = useState([]);
+    const [paymentMethodSetup, setPaymentMethodSetup] = useState(null);
     const [form, setForm] = useState(initial), [parts, setParts] = useState([]), [busy, setBusy] = useState(true), [message, setMessage] = useState("");
     const [editing, setEditing] = useState(null);
     const [sourceMode, setSourceMode] = useState(null);
@@ -113,9 +115,9 @@ function FeeForm() {
         let current = true;
         Promise.all([
             listOnboardingFeePolicies(),
-            listOnboardingFeeCandidates().catch(() => ({ items: [], conflicts: [] })),
+            listOnboardingFeeCandidates().catch(() => ({ items: [], conflicts: [], payment_method_setup: { items: [], complete: false } })),
         ]).then(([saved, stored]) => {
-            if (current) { setPolicies(saved.items); setSourceMode(saved.source_mode || "legacy_settings"); setSuggestions(stored.items); setConflicts(stored.conflicts || []); }
+            if (current) { setPolicies(saved.items); setSourceMode(saved.source_mode || "legacy_settings"); setSuggestions(stored.items); setConflicts(stored.conflicts || []); setPaymentMethodSetup(stored.payment_method_setup || null); }
         }).catch(() => { if (current) setMessage("تعذرت قراءة التعرفات. أعد تحميل الصفحة."); })
             .finally(() => { if (current) setBusy(false); });
         return () => { current = false; };
@@ -179,6 +181,7 @@ function FeeForm() {
         <a href="/operational-balances/financial-position">العودة إلى المركز المالي التشغيلي</a>
         <h1 className="text-2xl font-bold">رسوم طرق الدفع في ميزان 2</h1>
         <p>يعرض الجدول تعرفات الرسوم وفترات سريانها، ويُحفظ كل تعديل مع إصدار التعرفة السابق. تعتمد الرسوم الفعلية عند توثيق كشف التسوية.</p>
+        <ObservedPaymentMethods setup={paymentMethodSetup} onSaved={setPaymentMethodSetup} />
         {sourceMode === "mz2_policies" ? <p role="status">مصدر احتساب الرسوم المعتمد هو جدول ميزان 2.</p> : sourceMode === "legacy_settings" && <div className="space-y-2">
             <p>المصدر الحالي هو إعدادات طرق الدفع القديمة. احفظ التعرفات ثم اربط الأرصدة بجدول ميزان 2.</p>
             <button type="button" className="ofp-button" disabled={busy || !policies.length} onClick={activate}>ربط الأرصدة التشغيلية بهذا الجدول</button>

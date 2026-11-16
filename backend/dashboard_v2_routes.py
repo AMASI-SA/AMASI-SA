@@ -36,6 +36,7 @@ from dashboard_v2_ads_executive import build_salla_ads_executive_breakdown_coope
 from dashboard_ads_account_results import build_dashboard_ads_account_results
 from dashboard_ads_costs import DashboardAdsCostCollector
 from dashboard_ads_periods import SALLA_ORDER_TIMESTAMP_PROJECTION
+from payment_method_setup import load_payment_method_setup, payment_settings_revision
 from dashboard_snapchat_spend import load_snapchat_dashboard_spend
 from integrations_control_center.meta_oauth_security import META_PROVIDER_ID
 from integrations_control_center.snapchat_oauth_security import SNAPCHAT_PROVIDER_ID
@@ -2154,7 +2155,8 @@ def make_dashboard_v2_router(
             get_product_cost_revision(db, user_id),
             db.settings.find_one(
                 {"user_id": user_id},
-                {"_id": 0, "hide_inferred_date_orders": 1, "report_included_statuses": 1},
+                {"_id": 0, "hide_inferred_date_orders": 1, "report_included_statuses": 1,
+                 **({"payment_methods": 1} if section == "executive" else {})},
             ),
             get_policy_map(db, user_id),
         )
@@ -2170,6 +2172,7 @@ def make_dashboard_v2_router(
             revision, bool(settings.get("hide_inferred_date_orders")),
             tuple(sorted(str(value) for value in (settings.get("report_included_statuses") or []))),
             tuple(sorted(policy.items())),
+            payment_settings_revision(settings) if section == "executive" else None,
         )
         filters = {
             "from_date": from_date, "to_date": to_date,
@@ -2180,11 +2183,18 @@ def make_dashboard_v2_router(
         @_heavy_dashboard_stage("dashboard_v2_" + section.replace("-", "_"))
         async def build() -> dict[str, Any]:
             if section == "executive":
-                return await compute_dashboard_v2(
-                    user=current, **filters,
-                    include_month_kpis=False, include_product_rows=False,
-                    include_account_results=True,
+                result, method_setup = await _gather_dashboard_reads(
+                    compute_dashboard_v2(
+                        user=current, **filters,
+                        include_month_kpis=False, include_product_rows=False,
+                        include_account_results=True,
+                    ),
+                    # Setup is owner-wide, so a date or payment filter cannot
+                    # hide an unresolved method. This reads names only; it does
+                    # not initialize fees, create accounts or run a sync.
+                    load_payment_method_setup(db, user_id, settings=settings),
                 )
+                return {**result, "payment_method_setup": method_setup}
             orders = await _filtered_orders(
                 db, user_id, **filters,
                 include_marketing_attribution=True,
