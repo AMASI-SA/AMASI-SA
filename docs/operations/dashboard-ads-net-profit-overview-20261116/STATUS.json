@@ -1,9 +1,9 @@
 {
   "task_id": "dashboard-ads-net-profit-overview-20261116",
   "revision_task_id": "dashboard-ads-compact-release-20261116",
-  "status": "integrated_source_verified_release_proof_pending_authentication_blocked",
+  "status": "github_merged_live_publication_blocked_by_authentication",
   "repository": "AMASI-SA/AMASI-SA",
-  "branch": "codex/dashboard-ads-compact-release-20261116",
+  "branch": "codex/dashboard-ads-compact-release-handoff-20261116",
   "source_base": "66433833f35fa3a352e72d8dd780258122293473",
   "parent_source": "66433833f35fa3a352e72d8dd780258122293473",
   "scope": "Shorten only the main advertising account table headings while preserving the current card/table width, seven columns, ROAS/net-profit calculations and all existing row/footer interactions. Carry forward the prior unpublished net-profit, ROAS, total-cost and half-day comparison work.",
@@ -49,6 +49,22 @@
     {
       "name": "Production advance review",
       "result": "Independent review confirmed J2 contains only the provider summary fix, its test, documentation and intent; no overlap with the eight advertising-card files. Production base intent bytes are preserved unchanged. The trial two-parent lineage was rejected by the official guard; no ref points to that probe."
+    },
+    {
+      "name": "Governed source proof and independent candidate review",
+      "result": "Official source transition passed on the canonical single-parent source. Two identical governed builds and official frontend verifier exited0. Independent official candidate loader plus actual artifact/proof readers passed. CI candidate ZIP sha2564b6ad079d5f1bc7c1fb0c79a89cd2b17e24fdf13b5d3c1335b63da7bd4c74747 matched expected ZIP and contained the byte-identical local candidate. Independent B parent/tree/blob/diff review confirms intent-only child."
+    },
+    {
+      "name": "Intent-only B local verification",
+      "result": "load_release_intent and verify_release_intent_git on canonical B both passed, exit0. B is sole child of A and changes only release/release-intent-v5.json; checkout is clean."
+    },
+    {
+      "name": "Exact-B final gates and actual adapter rehearsal evidence",
+      "result": "Root verified all 44 raw checks completed successfully or skipped before merge; latest relevant workflows have 30 success and 6 intentional skips. Both real Node20.20.2 and Node24.19.0 clean-clone adapter rehearsals passed, with source A/deployment B/runtime/artifact identities, absent Git metadata, package boundaries and full HTTP JSON/cache-bust/host/asset/SPA acceptance. Independent log review and evidence artifact IDs are recorded in intent_ci."
+    },
+    {
+      "name": "Authorized merge and official merge-identity verification",
+      "result": "GitHub merged PR1961 using expected B and merge method merge. Remote commit parents and tree match exactly. Fresh Git fetch resolves production to M. Official verify_release_intent_git accepted deployment M, exit0; source A to M changes only release/release-intent-v5.json. Frozen task branch remains at B and its checkout is clean."
     }
   ],
   "preview": {
@@ -65,19 +81,19 @@
     "handoff": "2d1fa4ea5367a23340fb296097feddb7f318008e",
     "disposition": "Superseded by a fresh source rooted on current production J2. PR1960 source and preceding frozen candidates are preserved unchanged and must not be deployed."
   },
-  "release_state": "No reviewed intent has been frozen for this new source. The inherited intent belongs to the production base and must not be used to deploy this branch. Keep the replacement PR draft until new-source release proof and intent-only B gates complete.",
+  "release_state": "PR1961 merged normally in GitHub. Verified M parents [J2,B], M tree exactly B tree, and official verify_release_intent_git accepted M. No live Emergent publication occurred in this task. Post-merge checks are running; authentication blocks shared-host release work.",
   "incomplete": [
-    "Freeze new-source governed release proof and a new intent-only B before deployment; the preceding frozen A/B cannot be reused.",
+    "Finish or inspect automatic post-merge CI on M before live release; these checks were still running at the final snapshot.",
     "Complete the existing Emergent authentication handoff and observe a positive signed-in state.",
-    "Fresh official inactive /app release guard and exact production/PR/tree checks before ordinary merge or shared changes.",
-    "Actual configured shared adapter build, prepare/prepublish, one authorized publication, explicit new deployment success, official three-probe verification and live layout/hover acceptance."
+    "Read the official shared /app release guard and require active=false before shared changes/rehearsal; preserve any foreign lease.",
+    "Recheck current production refs, then configured shared adapter build for M, prepare/prepublish, one authorized publication, explicit new deployment success, official three-probe verification and live layout/footer acceptance."
   ],
-  "production_changed": false,
-  "release_guard": "No shared /app mutation, lease, merge or publication.",
+  "production_changed": true,
+  "release_guard": "No shared /app mutation, lease or publication. Shared guard status has not been freshly read because Emergent is still at the existing rejected verification-code screen; never assume inactive status.",
   "authentication": "Fresh observation on this publication request still shows the previously rejected email verification code, with 4 attempts left. The prior manual handoff remains outstanding. No new credential entry, auth retry or repeated takeover request was performed.",
   "authorization": "Owner explicitly reaffirmed merge and production publication on 2026-11-16 for the latest compact-heading advertising card. No repeated authorization question is needed.",
   "continuation_ledger": "Issue1006 is at its 2500-comment cap. The replacement task PR body records the canonical full source SHA and final handoff; this updated task status document accompanies the source.",
-  "next_safe_action": "Persist and verify this direct-child source on J2, run its official source-transition check, build the governed A/B release proof and freeze a new intent-only B; finish exact-head gates. Observe positive Emergent sign-in and obtain a fresh official shared guard before shared release work. Verify current refs/trees before authorized ordinary merge and publication; never deploy prior frozen candidates or documentation-only handoffs.",
+  "next_safe_action": "Do not merge again: PR1961 is already merged as M. Read this checkpoint and PR, verify current production/PR refs and M post-merge CI. Resume the existing authentication handoff without repeating credential attempts; once sign-in is positively observed, read official shared /app guard status and require active=false, then carry out the remaining release protocol from M. Never deploy this documentation-only checkpoint or superseded candidates. If production advanced beyond M, review the newer source/intent boundary before any shared change.",
   "preserved_compact_source": "248cb46d182e9d82648e83b60c940362aef3e4a9",
   "integration": {
     "production_pr": 1959,
@@ -85,5 +101,99 @@
     "scope": "Preserve production provider cumulative-payment display fix unchanged; eight advertising-card source/test/workflow/status paths differ from the new production base.",
     "lineage": "New source is a direct child of J2 on a new branch; prior sources and frozen intents remain unchanged.",
     "reason": "A two-parent source merge failed the official full-history intent-change check. Use a fresh single-parent source on J2 with the same reviewed combined content; no release gate was changed or bypassed."
-  }
+  },
+  "documentation_only": true,
+  "deploy_candidate": false,
+  "checkpoint_branch": "codex/dashboard-ads-compact-release-handoff-20261116",
+  "deployment_branch": "codex/dashboard-ads-compact-release-20261116",
+  "source_commit": "17bdfe6578f0a82f11e8c2379263ef17de0b9560",
+  "source_tree": "970123fd62ef5479041b841d27dafcd2559cb5da",
+  "intent_commit": "6599fa62361f7a977a35db48b90e0a55aa72ecf3",
+  "intent_tree": "d48e112a8c432b0701f597fb25298422b0c6415c",
+  "intent_blob": "4fdd78f576f0d51dae52f7fe2b7158b0a2aa8d0e",
+  "pull_request": "https://github.com/AMASI-SA/AMASI-SA/pull/1961",
+  "runtime_release_id": "rg5-e1fe5f8d15aeb2d8b6d3e517671d670b37387dc61e005b838b983286218bce7f",
+  "artifact_tree_sha256": "fb1169bdc7bb05440ea4a686920f85435b7e7a6c8731b9b685f5d30b2f724c78",
+  "reproducibility_proof_sha256": "74ea1075ab191147766fc8ed92d9c44272ab7282a96919526de7a38c187527a7",
+  "build_meta_sha256": "8ad32f454286b08d543e0b21feec6974d7702aff4bdef96f9dbd4c229be14fa0",
+  "intent_sha256": "cc1149b861f30981c6904bce838e75c4f4a250b990fd1d5477cfb26347baa3f3",
+  "source_ci": {
+    "state": "complete",
+    "readiness_run": 43890384208,
+    "candidate_artifact": 14236402094,
+    "candidate_exact_match": true,
+    "four_platform_run": 43890384078,
+    "frontend_tests": 311,
+    "frontend_suites": 9,
+    "backend_tests": 284,
+    "backend_subtests": 5,
+    "success": 28,
+    "skipped": 6,
+    "failure": 0,
+    "pending": 0,
+    "neutral": 0,
+    "cancelled": 0
+  },
+  "intent_ci": {
+    "state": "complete",
+    "head": "6599fa62361f7a977a35db48b90e0a55aa72ecf3",
+    "readiness_run": 43892253819,
+    "node20_job": 133386845434,
+    "node24_job": 133386845590,
+    "four_platform_run": 43892254025,
+    "latest_relevant_checks": {
+      "success": 30,
+      "skipped": 6,
+      "pending": 0,
+      "failure": 0,
+      "neutral": 0,
+      "cancelled": 0
+    },
+    "raw_checks": {
+      "total": 44,
+      "success": 34,
+      "skipped": 10,
+      "pending": 0,
+      "failure": 0,
+      "neutral": 0,
+      "cancelled": 0
+    },
+    "superseded_check_explanation": "Eight successful/skipped older Reporting, Settings and Publication checks were replaced by ready_for_review runs; no cancelled or failed checks.",
+    "readiness_conclusion": "success",
+    "readiness_attempt": 1,
+    "node20_conclusion": "success",
+    "node24_conclusion": "success",
+    "node20_generated_artifact": 14238420196,
+    "node20_evidence_artifact": 14236369781,
+    "node24_generated_artifact": 14237202685,
+    "node24_evidence_artifact": 14237172778
+  },
+  "merge_policy_review": "Independent review of AGENTS and matching workflow triggers confirms the inactive shared guard is required before /app work/rehearsal, not GitHub merge alone. Matching production-push workflows are GitHub-hosted checks and manual handoff only; no automatic deployment or lease. The earlier fresh-guard-before-merge sequence was a conservative task plan, now revised under the owner's explicit merge request.",
+  "updated_at_utc": "2026-11-16T15:13:01Z",
+  "deployment_head": "6599fa62361f7a977a35db48b90e0a55aa72ecf3",
+  "deployment_git_sha": "b56e0794f7d9d4c2ef52e69fd0b36886ea3bfa95",
+  "merge_commit": "b56e0794f7d9d4c2ef52e69fd0b36886ea3bfa95",
+  "merge_tree": "d48e112a8c432b0701f597fb25298422b0c6415c",
+  "merge_parents": [
+    "66433833f35fa3a352e72d8dd780258122293473",
+    "6599fa62361f7a977a35db48b90e0a55aa72ecf3"
+  ],
+  "post_merge_ci": {
+    "snapshot_at_utc": "2026-11-16T15:13:01Z",
+    "state": "in_progress",
+    "checks": {
+      "total": 10,
+      "success": 4,
+      "in_progress": 6,
+      "failure": 0
+    },
+    "runs": {
+      "security_gate": 43893712599,
+      "codeql": 43893712645,
+      "readiness": 43893712622
+    },
+    "note": "Automatic post-merge checks are separate from the completed exact-B gates. Do not claim these new runs passed until freshly observed."
+  },
+  "production_branch_changed": true,
+  "live_deployment_changed": false
 }
