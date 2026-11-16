@@ -1,7 +1,7 @@
 {
   "task_id": "dashboard-ads-net-profit-overview-20261116",
   "revision_task_id": "dashboard-ads-compact-release-20261116",
-  "status": "platform_deployment_finished_official_verification_pending",
+  "status": "published_verified",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/dashboard-ads-compact-release-handoff-20261116",
   "source_base": "66433833f35fa3a352e72d8dd780258122293473",
@@ -86,6 +86,14 @@
     {
       "name": "Official prepublish followed by one authorized publication and platform completion",
       "result": "Root reports official prepublish exit0 with ready_to_publish=true and matching source A/deployment M/runtime identity. Publish changes was clicked once and publishing started before 2026-11-16T15:52:02Z (UI 6:51 PM Riyadh). The new Emergent UI observation is Deployment finished Nov16 7:01 PM Riyadh, latest published short version 1ce35c9, operation 9a1e5aca-e8a1-54e5-b71b-df69802fe98f. The official three-probe verification, lease-closure/inactive confirmation and live UI acceptance are pending; this checkpoint does not claim verified release identity."
+    },
+    {
+      "name": "Official production identity verification and closed lease",
+      "result": "Root's official shared /app verify completed at or before 2026-11-16T16:20:58Z with exit0, verified=true and checks=3. Source A, deployment M, runtime release and frontend artifact match the reviewed identities. Boot started at 2026-11-16T16:00:57.913629+00:00. Frontend verification checked 590 requests per probe, 1770 across all three. Verify receipt SHA256 is 6e6b9722a768eaedd319c78c77abbdbb86f79b310c5dd35ca9527c66766bd30d. Subsequent official status exited0 with active=false, confirming matching lease closure. The actual green Deployment finished Nov16,07:01PM and latest green Published version 1ce35c9 supply the platform completion evidence; no invented literal success label."
+    },
+    {
+      "name": "Live compact advertising card and period-detail acceptance",
+      "result": "Root observed the live dashboard after reload: card width460px; main table width/clientWidth/scrollWidth all422px, exactly the baseline with no horizontal overflow. Seven short headers and seven footer cells remain, with six body rows (two Snapchat accounts, Google, TikTok, Meta and direct). Real footer click/pin opens two period tables with eight headers and six platform rows each, morning00:00–12:00 and afternoon12:00–current Riyadh time, plus period totals and daily total. Popups show only total costs and no separate product/shipping/payment-fee or operating-cost labels; net formula is sales minus ad spend minus total costs. Direct-row popup has completed morning, active afternoon and a daily summary; all three ad-spend values are dashes. Pointer-only hover is established by existing JSDOM tests, while live browser acceptance verifies click/pin. CUA completed successfully and the dashboard deliverable was marked."
     }
   ],
   "preview": {
@@ -102,17 +110,14 @@
     "handoff": "2d1fa4ea5367a23340fb296097feddb7f318008e",
     "disposition": "Superseded by a fresh source rooted on current production J2. PR1960 source and preceding frozen candidates are preserved unchanged and must not be deployed."
   },
-  "release_state": "PR1961 remains merged as M=b56e0794f7d9d4c2ef52e69fd0b36886ea3bfa95 with the reviewed source A, intent and runtime identity preserved. The actual shared adapter and official prepare passed. Root subsequently ran official prepublish successfully with ready_to_publish=true and matching source A/deployment M/runtime identity, then clicked Publish changes exactly once. Publishing started before 2026-11-16T15:52:02Z (UI 6:51 PM Riyadh). Emergent now displays Deployment finished Nov16 7:01 PM Riyadh for latest published short version 1ce35c9, operation 9a1e5aca-e8a1-54e5-b71b-df69802fe98f. This records the platform completion observation only: explicit release-success evidence, official Release Guard three-probe verification and live UI acceptance remain pending; verified production identity and final release completion are not yet claimed.",
-  "incomplete": [
-    "Root completes the explicit newer deployment-success evidence and runs the official Release Guard verification against https://mezansalla.com, requiring all three probes to match the reviewed source/runtime/artifact identity.",
-    "After successful verification, confirm the matching lease is closed and the official guard is inactive, then complete and record live layout/footer acceptance."
-  ],
+  "release_state": "Complete: PR1961 is merged and its reviewed release is published and officially verified in production. Emergent displayed the new green Deployment finished Nov16,07:01PM label and latest green Published version 1ce35c9 for operation 9a1e5aca-e8a1-54e5-b71b-df69802fe98f. This is the platform's actual completion wording, semantically equivalent to the success label named in AGENTS; no literal Deployment Succeeded text is claimed. Root's official shared /app Release Guard verification finished with exit0, verified=true and three successful checks at or before 2026-11-16T16:20:58Z, matching source A, deployment M, runtime release and frontend artifact identities. The subsequent official status exited0 with active=false, confirming the matching lease is closed. Live compact-table and footer/detail acceptance passed. Frozen source/intent branches remain unchanged; this handoff is documentation-only and is not a deployment candidate.",
+  "incomplete": [],
   "production_changed": true,
-  "release_guard": "Official prepare and prepublish both passed for the reviewed protocol5 source A/deployment M/runtime identity; prepublish returned ready_to_publish=true. One authorized Publish changes was clicked and the platform now reports Deployment finished. The prepared lease has not yet been confirmed closed: official three-probe verification and a fresh inactive guard result remain pending. Do not repeat prepare or publication.",
+  "release_guard": "Complete. Official shared /app verify exited0 with verified=true and checks=3 at or before 2026-11-16T16:20:58Z, matching reviewed source A=17bdfe6578f0a82f11e8c2379263ef17de0b9560, deployment M=b56e0794f7d9d4c2ef52e69fd0b36886ea3bfa95, runtime rg5-e1fe5f8d15aeb2d8b6d3e517671d670b37387dc61e005b838b983286218bce7f and frontend artifact fb1169bdc7bb05440ea4a686920f85435b7e7a6c8731b9b685f5d30b2f724c78. Subsequent official status exited0 and active=false; the matching lease is closed. No further prepare, prepublish, publish or verification action is needed for this completed task.",
   "authentication": "Resolved by the user's requested reload. Root observed Emergent /home in the existing cloud tab showing authenticated Salla Analytics. Authentication is no longer a blocker; no live publication is claimed.",
   "authorization": "Owner explicitly reaffirmed merge and production publication on 2026-11-16 for the latest compact-heading advertising card, then requested publication again after merge. No repeated authorization question is needed.",
   "continuation_ledger": "Issue1006 is at its 2500-comment cap. The replacement task PR body records the canonical full source SHA and final handoff; this updated task status document accompanies the source.",
-  "next_safe_action": "Do not merge, rebuild, prepare, or publish again, and never deploy this documentation-only handoff branch. Root owns the authenticated browser and shared /app at reviewed M. Preserve the frozen source, current release lease, and unrelated files. Retain explicit completion evidence for Emergent operation 9a1e5aca-e8a1-54e5-b71b-df69802fe98f / published short version 1ce35c9, then run python scripts/production_release_guard.py verify --url https://mezansalla.com and require all three probes to match source A=17bdfe6578f0a82f11e8c2379263ef17de0b9560 and runtime rg5-e1fe5f8d15aeb2d8b6d3e517671d670b37387dc61e005b838b983286218bce7f, including exact JSON build-meta checks. Confirm the matching lease closes and status is inactive, inspect the live compact headers, platform rows, ROAS/profit and footer period interactions, then record the final verified outcome. Do not treat the platform completion label alone as verified release identity.",
+  "next_safe_action": "None for this completed work. Preserve the verified live source A/deployment M and frozen intent B. Do not redeploy this documentation-only handoff branch or repeat the completed publication. Any new requested change requires its own reviewed source/release sequence.",
   "preserved_compact_source": "248cb46d182e9d82648e83b60c940362aef3e4a9",
   "integration": {
     "production_pr": 1959,
@@ -188,7 +193,7 @@
     "node24_evidence_artifact": 14237172778
   },
   "merge_policy_review": "Independent review of AGENTS and matching workflow triggers confirms the inactive shared guard is required before /app work/rehearsal, not GitHub merge alone. Matching production-push workflows are GitHub-hosted checks and manual handoff only; no automatic deployment or lease. The earlier fresh-guard-before-merge sequence was a conservative task plan, now revised under the owner's explicit merge request.",
-  "updated_at_utc": "2026-11-16T16:06:18Z",
+  "updated_at_utc": "2026-11-16T16:22:20Z",
   "deployment_head": "6599fa62361f7a977a35db48b90e0a55aa72ecf3",
   "deployment_git_sha": "b56e0794f7d9d4c2ef52e69fd0b36886ea3bfa95",
   "merge_commit": "b56e0794f7d9d4c2ef52e69fd0b36886ea3bfa95",
@@ -230,15 +235,15 @@
     "tracked_worktree_clean": true,
     "untracked_files_preserved": true,
     "guard_command": "python -B scripts/production_release_guard.py status",
-    "guard_active": true,
+    "guard_active": false,
     "actual_adapter_build": "passed",
     "lease_prepared": true,
     "prepublish_run": true,
     "publish_clicked": true,
-    "guard_state": "prepared_publication_finished_verification_pending",
-    "guard_state_evidence": "official_prepare_and_prepublish_exit0_no_closure_confirmed"
+    "guard_state": "inactive_after_verified_publication",
+    "guard_state_evidence": "official_verify_exit0_verified_true_checks3_then_official_status_exit0_active_false"
   },
-  "checkpoint_parent": "7f0336f26ae67cd62912f8f61b690021c7848919",
+  "checkpoint_parent": "62a779df4322e9bc4c81bd7772702f2032948e6a",
   "checkpoint_changed_files": [
     "docs/operations/dashboard-ads-net-profit-overview-20261116/STATUS.json"
   ],
@@ -291,7 +296,9 @@
     "runtime_release_id": "rg5-e1fe5f8d15aeb2d8b6d3e517671d670b37387dc61e005b838b983286218bce7f",
     "reviewed_identities_match": true,
     "prepublish_run": true,
-    "publish_clicked": true
+    "publish_clicked": true,
+    "closed": true,
+    "closed_by": "successful_official_three_probe_verification"
   },
   "prepublish": {
     "evidence_owner": "root",
@@ -308,13 +315,104 @@
     "started_before_utc": "2026-11-16T15:52:02Z",
     "started_display": "Nov16 6:51 PM Riyadh",
     "platform_completion_label": "Deployment finished",
-    "platform_completion_display": "Nov16 7:01 PM Riyadh",
+    "platform_completion_display": "Nov16,07:01PM",
     "published_short_version": "1ce35c9",
     "operation_id": "9a1e5aca-e8a1-54e5-b71b-df69802fe98f",
     "platform_completion_observed": true,
-    "official_release_guard_verification": "pending",
-    "live_ui_acceptance": "pending",
-    "verified_release_identity": false,
-    "final_release_completion_claimed": false
+    "official_release_guard_verification": "passed",
+    "live_ui_acceptance": "passed",
+    "verified_release_identity": true,
+    "final_release_completion_claimed": true,
+    "platform_completion_timezone": "Asia/Riyadh",
+    "platform_completion_color": "green",
+    "published_version_label": "Published",
+    "published_version_color": "green",
+    "completion_wording_note": "Actual observed UI wording is Deployment finished with a latest green Published version. This is treated as the platform's semantic success equivalent; literal Deployment Succeeded text was not observed or invented."
+  },
+  "blockers": [],
+  "official_release_verification": {
+    "evidence_owner": "root",
+    "execution_location": "shared /app",
+    "command": "python scripts/production_release_guard.py verify --url https://mezansalla.com",
+    "completed_at_or_before_utc": "2026-11-16T16:20:58Z",
+    "exit_code": 0,
+    "verified": true,
+    "checks": 3,
+    "source_git_sha": "17bdfe6578f0a82f11e8c2379263ef17de0b9560",
+    "deployment_git_sha": "b56e0794f7d9d4c2ef52e69fd0b36886ea3bfa95",
+    "runtime_release_id": "rg5-e1fe5f8d15aeb2d8b6d3e517671d670b37387dc61e005b838b983286218bce7f",
+    "frontend_artifact_tree_sha256": "fb1169bdc7bb05440ea4a686920f85435b7e7a6c8731b9b685f5d30b2f724c78",
+    "boot_started_at": "2026-11-16T16:00:57.913629+00:00",
+    "frontend_checked_requests_per_probe": 590,
+    "frontend_checked_requests_total": 1770,
+    "verify_receipt_sha256": "6e6b9722a768eaedd319c78c77abbdbb86f79b310c5dd35ca9527c66766bd30d",
+    "receipts": [
+      "/tmp/mezan-ads-release-1961/verify.json",
+      "/tmp/mezan-ads-release-1961/verify.err",
+      "/tmp/mezan-ads-release-1961/verify.exit",
+      "/tmp/mezan-ads-release-1961/status-after-verify.json",
+      "/tmp/mezan-ads-release-1961/status-after-verify.err"
+    ],
+    "status_after_verify": {
+      "exit_code": 0,
+      "active": false
+    },
+    "matching_lease_closed": true
+  },
+  "live_acceptance": {
+    "evidence_owner": "root",
+    "state": "passed",
+    "surface": "live dashboard after reload",
+    "card_width_px": 460,
+    "main_table_width_px": 422,
+    "main_table_client_width_px": 422,
+    "main_table_scroll_width_px": 422,
+    "baseline_widths_unchanged": true,
+    "horizontal_overflow": false,
+    "main_headers": [
+      "المنصة",
+      "الصرف",
+      "مبيعات",
+      "طلبات",
+      "متوسط",
+      "العائد",
+      "الأرباح"
+    ],
+    "main_column_count": 7,
+    "main_body_row_count": 6,
+    "snapchat_account_rows": 2,
+    "other_rows": [
+      "Google",
+      "TikTok",
+      "Meta",
+      "direct"
+    ],
+    "footer_cell_count": 7,
+    "footer_interaction": "real browser click and pin",
+    "period_table_count": 2,
+    "period_table_header_count_each": 8,
+    "period_table_platform_row_count_each": 6,
+    "morning_window": "00:00–12:00 Asia/Riyadh",
+    "afternoon_window": "12:00–current time Asia/Riyadh",
+    "period_totals_present": true,
+    "daily_total_present": true,
+    "cost_presentation": "إجمالي التكاليف only; no separate product, shipping, payment-fee or operating-cost labels",
+    "net_profit_formula": "sales - advertising spend - total costs",
+    "direct_row_popup": {
+      "morning_status": "completed",
+      "afternoon_status": "active",
+      "daily_summary_present": true,
+      "morning_ad_spend": "—",
+      "afternoon_ad_spend": "—",
+      "daily_ad_spend": "—"
+    },
+    "pointer_only_hover_evidence": "Covered by existing JSDOM tests, including every footer cell and pointer transition into the portal. Native browser pointer-only hover was not claimed; live browser click/pin was verified.",
+    "cua_completed_successfully": true,
+    "dashboard_deliverable_marked": true
+  },
+  "frozen_task_branch": {
+    "name": "codex/dashboard-ads-compact-release-20261116",
+    "head": "6599fa62361f7a977a35db48b90e0a55aa72ecf3",
+    "remains_at_intent_B": true
   }
 }
