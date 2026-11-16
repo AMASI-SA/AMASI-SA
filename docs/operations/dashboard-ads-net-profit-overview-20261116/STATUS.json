@@ -1,7 +1,7 @@
 {
   "task_id": "dashboard-ads-net-profit-overview-20261116",
   "revision_task_id": "dashboard-ads-compact-release-20261116",
-  "status": "github_merged_actual_shared_adapter_passed_lease_prepared",
+  "status": "platform_deployment_finished_official_verification_pending",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/dashboard-ads-compact-release-handoff-20261116",
   "source_base": "66433833f35fa3a352e72d8dd780258122293473",
@@ -82,6 +82,10 @@
     {
       "name": "Official shared lease prepared after actual adapter verification",
       "result": "Root reports official prepare exit0 for actor dashboard-ads-compact-release-20261116 at 2026-11-16T15:48:34.546922+00:00. Protocol5, source A=17bdfe6578f0a82f11e8c2379263ef17de0b9560, deployment M=b56e0794f7d9d4c2ef52e69fd0b36886ea3bfa95 and runtime rg5-e1fe5f8d15aeb2d8b6d3e517671d670b37387dc61e005b838b983286218bce7f all match the reviewed release. No prepublish or live publication has occurred."
+    },
+    {
+      "name": "Official prepublish followed by one authorized publication and platform completion",
+      "result": "Root reports official prepublish exit0 with ready_to_publish=true and matching source A/deployment M/runtime identity. Publish changes was clicked once and publishing started before 2026-11-16T15:52:02Z (UI 6:51 PM Riyadh). The new Emergent UI observation is Deployment finished Nov16 7:01 PM Riyadh, latest published short version 1ce35c9, operation 9a1e5aca-e8a1-54e5-b71b-df69802fe98f. The official three-probe verification, lease-closure/inactive confirmation and live UI acceptance are pending; this checkpoint does not claim verified release identity."
     }
   ],
   "preview": {
@@ -98,17 +102,17 @@
     "handoff": "2d1fa4ea5367a23340fb296097feddb7f318008e",
     "disposition": "Superseded by a fresh source rooted on current production J2. PR1960 source and preceding frozen candidates are preserved unchanged and must not be deployed."
   },
-  "release_state": "PR1961 is merged normally in GitHub as M=b56e0794f7d9d4c2ef52e69fd0b36886ea3bfa95, with verified M parents [J2,B] and M tree exactly B tree. All 11 post-merge checks passed. Authentication is resolved and shared /app is aligned to M with clean tracked status and preserved untracked files. Root completed the actual configured /app/frontend yarn build with the reviewed public origin; exit0, built=true, protocol5, source A and runtime/artifact identities match the reviewed release. Both isolated frontend and backend package verification passed. Root then completed official prepare with exit0 and matching protocol5/source A/deployment M/runtime identity. The lease is prepared for actor dashboard-ads-compact-release-20261116 at 2026-11-16T15:48:34.546922+00:00. Prepublish and live publication have not occurred.",
+  "release_state": "PR1961 remains merged as M=b56e0794f7d9d4c2ef52e69fd0b36886ea3bfa95 with the reviewed source A, intent and runtime identity preserved. The actual shared adapter and official prepare passed. Root subsequently ran official prepublish successfully with ready_to_publish=true and matching source A/deployment M/runtime identity, then clicked Publish changes exactly once. Publishing started before 2026-11-16T15:52:02Z (UI 6:51 PM Riyadh). Emergent now displays Deployment finished Nov16 7:01 PM Riyadh for latest published short version 1ce35c9, operation 9a1e5aca-e8a1-54e5-b71b-df69802fe98f. This records the platform completion observation only: explicit release-success evidence, official Release Guard three-probe verification and live UI acceptance remain pending; verified production identity and final release completion are not yet claimed.",
   "incomplete": [
-    "Root runs official prepublish for the already-prepared matching lease immediately before the authorized publication.",
-    "Perform one authorized publication, observe explicit newer deployment completion, run official three-probe verification, and complete live layout/footer acceptance."
+    "Root completes the explicit newer deployment-success evidence and runs the official Release Guard verification against https://mezansalla.com, requiring all three probes to match the reviewed source/runtime/artifact identity.",
+    "After successful verification, confirm the matching lease is closed and the official guard is inactive, then complete and record live layout/footer acceptance."
   ],
   "production_changed": true,
-  "release_guard": "The official shared guard was read active=false before alignment and the actual shared adapter build. After the configured actual adapter passed, root completed official prepare with exit0: actor dashboard-ads-compact-release-20261116, prepared_at 2026-11-16T15:48:34.546922+00:00, protocol5 and reviewed source A/deployment M/runtime identities all match. A prepared lease now exists. No prepublish or publication has occurred; preserve the frozen source and this lease.",
+  "release_guard": "Official prepare and prepublish both passed for the reviewed protocol5 source A/deployment M/runtime identity; prepublish returned ready_to_publish=true. One authorized Publish changes was clicked and the platform now reports Deployment finished. The prepared lease has not yet been confirmed closed: official three-probe verification and a fresh inactive guard result remain pending. Do not repeat prepare or publication.",
   "authentication": "Resolved by the user's requested reload. Root observed Emergent /home in the existing cloud tab showing authenticated Salla Analytics. Authentication is no longer a blocker; no live publication is claimed.",
   "authorization": "Owner explicitly reaffirmed merge and production publication on 2026-11-16 for the latest compact-heading advertising card, then requested publication again after merge. No repeated authorization question is needed.",
   "continuation_ledger": "Issue1006 is at its 2500-comment cap. The replacement task PR body records the canonical full source SHA and final handoff; this updated task status document accompanies the source.",
-  "next_safe_action": "Do not merge, build, or prepare again, and never deploy this documentation-only handoff branch. Root owns the authenticated browser and shared /app at M=b56e0794f7d9d4c2ef52e69fd0b36886ea3bfa95. The actual adapter passed and the matching protocol5 lease is already prepared for actor dashboard-ads-compact-release-20261116. Preserve the frozen source, current lease, and unrelated files. Run official prepublish immediately before one authorized publication. Observe explicit newer deployment completion, run python scripts/production_release_guard.py verify --url https://mezansalla.com and require all three probes to match the reviewed runtime/source identity, then confirm inactive guard and inspect live layout/footer behavior. If production or shared identity changes, review the source/intent boundary before proceeding.",
+  "next_safe_action": "Do not merge, rebuild, prepare, or publish again, and never deploy this documentation-only handoff branch. Root owns the authenticated browser and shared /app at reviewed M. Preserve the frozen source, current release lease, and unrelated files. Retain explicit completion evidence for Emergent operation 9a1e5aca-e8a1-54e5-b71b-df69802fe98f / published short version 1ce35c9, then run python scripts/production_release_guard.py verify --url https://mezansalla.com and require all three probes to match source A=17bdfe6578f0a82f11e8c2379263ef17de0b9560 and runtime rg5-e1fe5f8d15aeb2d8b6d3e517671d670b37387dc61e005b838b983286218bce7f, including exact JSON build-meta checks. Confirm the matching lease closes and status is inactive, inspect the live compact headers, platform rows, ROAS/profit and footer period interactions, then record the final verified outcome. Do not treat the platform completion label alone as verified release identity.",
   "preserved_compact_source": "248cb46d182e9d82648e83b60c940362aef3e4a9",
   "integration": {
     "production_pr": 1959,
@@ -184,7 +188,7 @@
     "node24_evidence_artifact": 14237172778
   },
   "merge_policy_review": "Independent review of AGENTS and matching workflow triggers confirms the inactive shared guard is required before /app work/rehearsal, not GitHub merge alone. Matching production-push workflows are GitHub-hosted checks and manual handoff only; no automatic deployment or lease. The earlier fresh-guard-before-merge sequence was a conservative task plan, now revised under the owner's explicit merge request.",
-  "updated_at_utc": "2026-11-16T15:50:42Z",
+  "updated_at_utc": "2026-11-16T16:06:18Z",
   "deployment_head": "6599fa62361f7a977a35db48b90e0a55aa72ecf3",
   "deployment_git_sha": "b56e0794f7d9d4c2ef52e69fd0b36886ea3bfa95",
   "merge_commit": "b56e0794f7d9d4c2ef52e69fd0b36886ea3bfa95",
@@ -215,7 +219,7 @@
     "note": "Fresh root read found all 11 check-runs completed with success on M, including both actual clean-clone adapter rehearsals. These checks do not deploy Emergent."
   },
   "production_branch_changed": true,
-  "live_deployment_changed": false,
+  "live_deployment_changed": true,
   "shared_workspace": {
     "evidence_owner": "root",
     "branch": "hotfix/prod-snap-meta-final",
@@ -229,12 +233,12 @@
     "guard_active": true,
     "actual_adapter_build": "passed",
     "lease_prepared": true,
-    "prepublish_run": false,
-    "publish_clicked": false,
-    "guard_state": "prepared",
-    "guard_state_evidence": "official_prepare_exit0"
+    "prepublish_run": true,
+    "publish_clicked": true,
+    "guard_state": "prepared_publication_finished_verification_pending",
+    "guard_state_evidence": "official_prepare_and_prepublish_exit0_no_closure_confirmed"
   },
-  "checkpoint_parent": "6c317c3c18e3d4c643705c8bc6287db6eb1d05fc",
+  "checkpoint_parent": "7f0336f26ae67cd62912f8f61b690021c7848919",
   "checkpoint_changed_files": [
     "docs/operations/dashboard-ads-net-profit-overview-20261116/STATUS.json"
   ],
@@ -286,7 +290,31 @@
     "deployment_git_sha": "b56e0794f7d9d4c2ef52e69fd0b36886ea3bfa95",
     "runtime_release_id": "rg5-e1fe5f8d15aeb2d8b6d3e517671d670b37387dc61e005b838b983286218bce7f",
     "reviewed_identities_match": true,
-    "prepublish_run": false,
-    "publish_clicked": false
+    "prepublish_run": true,
+    "publish_clicked": true
+  },
+  "prepublish": {
+    "evidence_owner": "root",
+    "exit_code": 0,
+    "ready_to_publish": true,
+    "source_git_sha": "17bdfe6578f0a82f11e8c2379263ef17de0b9560",
+    "deployment_git_sha": "b56e0794f7d9d4c2ef52e69fd0b36886ea3bfa95",
+    "runtime_release_id": "rg5-e1fe5f8d15aeb2d8b6d3e517671d670b37387dc61e005b838b983286218bce7f",
+    "reviewed_identities_match": true
+  },
+  "publication": {
+    "evidence_owner": "root",
+    "publish_changes_click_count": 1,
+    "started_before_utc": "2026-11-16T15:52:02Z",
+    "started_display": "Nov16 6:51 PM Riyadh",
+    "platform_completion_label": "Deployment finished",
+    "platform_completion_display": "Nov16 7:01 PM Riyadh",
+    "published_short_version": "1ce35c9",
+    "operation_id": "9a1e5aca-e8a1-54e5-b71b-df69802fe98f",
+    "platform_completion_observed": true,
+    "official_release_guard_verification": "pending",
+    "live_ui_acceptance": "pending",
+    "verified_release_identity": false,
+    "final_release_completion_claimed": false
   }
 }
