@@ -205,3 +205,18 @@ All 120 prior untracked paths remain present. 119 retain identical bytes and mod
 All exact-M Production-push gates are final success: Readiness `43964649337`, Security `43964649351`, CodeQL `43964649567`. Root independently reread their jobs and confirmed successful completion, including both actual adapter rehearsals and the Production handoff. No source changed during the environment correction.
 
 Live Production runtime changed: **no** at this checkpoint. Next safe action is own v5 `prepare` and immediate `prepublish`, one authorized UI publish, observed newer completion, then the official three consecutive Production probes and inactive-guard check. Saved courier UI inspection follows without the shared all-sections refresh.
+
+## Publication initiated — 2026-11-17 01:12 Asia/Riyadh
+
+The owner-authorized publication was initiated exactly once through Emergent's Republish → Publish changes controls for `salla-analytics` / `https://mezansalla.com`. The UI explicitly displayed `Deployment Started — Nov 17, 01:12 AM`, followed by `Workspace ready`, `Changes packaged`, and `Building your website...`. No paid agent message or new subscription/payment was used; the confirmation advertised free republishes.
+
+The task owns the active v5 lease:
+
+- Actor: `courier-waybill-recovery-pr1964-20261117`.
+- Prepared at: `2026-11-16T22:11:02.223010+00:00`.
+- Deployment M: `b439b683f26ffdd61b7b9de80315ea21747d135c`.
+- Source A: `2b977a7c486c9121302810b37f46da6b4de085a6`.
+- Runtime: `rg5-af4b492366600af5c14a6d2599ecc6cc00008f70f826cec8e8854cbdc1edf173`.
+- Official `prepublish` returned `ready_to_publish:true` immediately before the UI action.
+
+Publication is in progress; live runtime transition is not yet verified. **Do not publish again, recreate/clear the lease, or change shared source.** Next safe action: observe a newer explicit UI completion, then run `PYTHONDONTWRITEBYTECODE=1 python scripts/production_release_guard.py verify --url https://mezansalla.com` in shared `/app`. Require all three probes, matching source/runtime/critical/artifact metadata, and guard inactive afterward. Inspect only the saved courier report and read-only pending-order dialog. Persist final results after verification. If publication fails, diagnose and preserve this attempt; no automatic republish.
