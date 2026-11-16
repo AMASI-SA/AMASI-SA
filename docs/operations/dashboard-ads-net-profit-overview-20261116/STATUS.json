@@ -1,0 +1,89 @@
+{
+  "task_id": "dashboard-ads-net-profit-overview-20261116",
+  "revision_task_id": "dashboard-ads-compact-release-20261116",
+  "status": "integrated_source_verified_release_proof_pending_authentication_blocked",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/dashboard-ads-compact-release-20261116",
+  "source_base": "66433833f35fa3a352e72d8dd780258122293473",
+  "parent_source": "66433833f35fa3a352e72d8dd780258122293473",
+  "scope": "Shorten only the main advertising account table headings while preserving the current card/table width, seven columns, ROAS/net-profit calculations and all existing row/footer interactions. Carry forward the prior unpublished net-profit, ROAS, total-cost and half-day comparison work.",
+  "acceptance": [
+    "Visible main headings: المنصة، الصرف، مبيعات، طلبات، متوسط، العائد، الأرباح.",
+    "Keep the same w-full table-fixed layout, 21/20/15/8/11/10/15 percent column widths, 9px main/header font, padding, currency units and outer card sizing.",
+    "Use one-line visible headings and complete accessible header names so abbreviated sales, CPA, ROAS and net profit keep their meaning.",
+    "Leave all financial values, provider attribution, account rows, detail popups and the footer-only two-period interaction unchanged."
+  ],
+  "changed_files": [
+    ".github/workflows/prod-dashboard-four-platform-spend-v1.yml",
+    "docs/operations/dashboard-ads-net-profit-overview-20261116/STATUS.json",
+    "frontend/src/components/DashboardAdsAccountRow.jsx",
+    "frontend/src/components/DashboardAdsAccountRow.test.jsx",
+    "frontend/src/components/DashboardAdsPeriodsOverview.jsx",
+    "frontend/src/components/DashboardAdsPeriodsOverview.test.jsx",
+    "frontend/src/components/DashboardAdsSpendCard.jsx",
+    "frontend/src/components/DashboardAdsSpendCard.test.jsx"
+  ],
+  "verification": [
+    {
+      "name": "Existing affected component suite",
+      "command": "CI=true python -B scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend test --watchAll=false --runInBand --runTestsByPath src/components/DashboardAdsSpendCard.test.jsx",
+      "result": "54 existing tests passed; 1 suite; exit0. Only two existing label expectations changed. No new tests added for this low-impact presentation edit."
+    },
+    {
+      "name": "Exact deliverable build and functional acceptance",
+      "result": "Actual source components and repository CSS rebuilt successfully (6.02 seconds). Exact HTML DOM/event smoke exited0: seven main columns, eight popup columns, all seven footer-cell hovers, pointer transition, click pinning, direct rows, future-afternoon empty, no duplicate cost entry and no network requests. This is functional acceptance, not pixel-layout verification."
+    },
+    {
+      "name": "Independent read-only layout review",
+      "result": "No material issue. Column widths total 100 percent, table-fixed and existing sizes retained. Only main heading text/nowrap/accessibility metadata changed. Popup headings and logic remain untouched."
+    },
+    {
+      "name": "Diff review",
+      "result": "git diff --check exited0. Runtime source delta from previous source A is limited to main table header markup. No calculations, backend, API, refresh, financial or advertising mutations."
+    },
+    {
+      "name": "Fresh combined integration suite",
+      "command": "CI=true python -B scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend test --watchAll=false --runInBand --runTestsByPath src/components/DashboardAdsSpendCard.test.jsx src/components/DashboardAdsSpendCard.manualRefresh.test.jsx src/pages/AdvancedDashboard.cardRefresh.test.jsx src/lib/dashboardPlatformSpendClient.test.js src/services/dashboardAdsSpend.test.js src/components/DashboardAnalyticsPlacement.test.js src/components/DashboardAdsAccountRow.test.jsx src/lib/dashboardAdsAccountResults.test.js src/components/DashboardAdsPeriodsOverview.test.jsx",
+      "result": "311 tests in 9 suites passed, zero failures/skips, exit0; 9.714 seconds on the combined source tree."
+    },
+    {
+      "name": "Production advance review",
+      "result": "Independent review confirmed J2 contains only the provider summary fix, its test, documentation and intent; no overlap with the eight advertising-card files. Production base intent bytes are preserved unchanged. The trial two-parent lineage was rejected by the official guard; no ref points to that probe."
+    }
+  ],
+  "preview": {
+    "filename": "ads-card-preview.html",
+    "size_bytes": 883355,
+    "sha256": "b3758389a2fd4679b42c0de77d521e3199749bc929f42a87b983086481452267",
+    "synthetic_data": true,
+    "visual_geometry": "Not browser verified. Prior file-URL policy denial remains respected; no alternate browser or hosting workaround attempted."
+  },
+  "previous_candidate": {
+    "pull_request": "https://github.com/AMASI-SA/AMASI-SA/pull/1960",
+    "source": "248cb46d182e9d82648e83b60c940362aef3e4a9",
+    "intent": null,
+    "handoff": "2d1fa4ea5367a23340fb296097feddb7f318008e",
+    "disposition": "Superseded by a fresh source rooted on current production J2. PR1960 source and preceding frozen candidates are preserved unchanged and must not be deployed."
+  },
+  "release_state": "No reviewed intent has been frozen for this new source. The inherited intent belongs to the production base and must not be used to deploy this branch. Keep the replacement PR draft until new-source release proof and intent-only B gates complete.",
+  "incomplete": [
+    "Freeze new-source governed release proof and a new intent-only B before deployment; the preceding frozen A/B cannot be reused.",
+    "Complete the existing Emergent authentication handoff and observe a positive signed-in state.",
+    "Fresh official inactive /app release guard and exact production/PR/tree checks before ordinary merge or shared changes.",
+    "Actual configured shared adapter build, prepare/prepublish, one authorized publication, explicit new deployment success, official three-probe verification and live layout/hover acceptance."
+  ],
+  "production_changed": false,
+  "release_guard": "No shared /app mutation, lease, merge or publication.",
+  "authentication": "Fresh observation on this publication request still shows the previously rejected email verification code, with 4 attempts left. The prior manual handoff remains outstanding. No new credential entry, auth retry or repeated takeover request was performed.",
+  "authorization": "Owner explicitly reaffirmed merge and production publication on 2026-11-16 for the latest compact-heading advertising card. No repeated authorization question is needed.",
+  "continuation_ledger": "Issue1006 is at its 2500-comment cap. The replacement task PR body records the canonical full source SHA and final handoff; this updated task status document accompanies the source.",
+  "next_safe_action": "Persist and verify this direct-child source on J2, run its official source-transition check, build the governed A/B release proof and freeze a new intent-only B; finish exact-head gates. Observe positive Emergent sign-in and obtain a fresh official shared guard before shared release work. Verify current refs/trees before authorized ordinary merge and publication; never deploy prior frozen candidates or documentation-only handoffs.",
+  "preserved_compact_source": "248cb46d182e9d82648e83b60c940362aef3e4a9",
+  "integration": {
+    "production_pr": 1959,
+    "production_commit": "66433833f35fa3a352e72d8dd780258122293473",
+    "scope": "Preserve production provider cumulative-payment display fix unchanged; eight advertising-card source/test/workflow/status paths differ from the new production base.",
+    "lineage": "New source is a direct child of J2 on a new branch; prior sources and frozen intents remain unchanged.",
+    "reason": "A two-parent source merge failed the official full-history intent-change check. Use a fresh single-parent source on J2 with the same reviewed combined content; no release gate was changed or bypassed."
+  }
+}

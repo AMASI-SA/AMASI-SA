@@ -31,6 +31,8 @@ on:
       - "frontend/src/components/DashboardAdsSpendCard.test.jsx"
       - "frontend/src/components/DashboardAdsAccountRow.jsx"
       - "frontend/src/components/DashboardAdsAccountRow.test.jsx"
+      - "frontend/src/components/DashboardAdsPeriodsOverview.jsx"
+      - "frontend/src/components/DashboardAdsPeriodsOverview.test.jsx"
       - "frontend/src/lib/dashboardAdsAccountResults.js"
       - "frontend/src/lib/dashboardAdsAccountResults.test.js"
       - "frontend/src/pages/AdvancedDashboard.jsx"
@@ -145,6 +147,7 @@ jobs:
           src/components/DashboardAdsSpendCard.test.jsx
           src/components/DashboardAdsSpendCard.manualRefresh.test.jsx
           src/components/DashboardAdsAccountRow.test.jsx
+          src/components/DashboardAdsPeriodsOverview.test.jsx
           src/lib/dashboardAdsAccountResults.test.js
           src/pages/AdvancedDashboard.cardRefresh.test.jsx
           src/lib/dashboardPlatformSpendClient.test.js
