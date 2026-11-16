@@ -88,7 +88,7 @@
   ],
   "next_safe_action": "Wait for the PR1955 owner's successful publication and canonical verification ending inactive. Reconfirm Production Jb05 and exact B/green PR1956. Run immutable operator from b87f320fb21790cf70a7ed5f589089e18dcdb3ca, observe ready_for_merge, normally merge expected B and atomically supply actual M. After matching build/prepare, use reviewed publication wrapper for prepublish immediately before one authorized UI publication, then root-observed success and exactly one canonical three-round verification. Record final inactive and normal saved-report GET acceptance.",
   "ledger": "Issue1006 is at its known comment limit. This status and the evidence-only branch are the durable continuation record.",
-  "checkpoint_updated_at_utc": "2026-11-16 00:37:08 UTC",
+  "checkpoint_updated_at_utc": "2026-11-16 00:44:14 UTC",
   "source_tree": "fe74d9ce67a0a1a4bcedbfd0a5a7e8721d5ef9f6",
   "pr": {
     "number": 1956,
@@ -156,5 +156,19 @@
       "verify"
     ],
     "requirements": "Private owned prepare receipt; exact actor/A/J/M/B tree/runtime binding. Verify additionally requires the same successful prepublish and root-observed new UI success metadata. Official operations once, no timeout/retry, matching lease closure only."
+  },
+  "other_publication_observation": {
+    "owner": "chatgpt-ready1955-20261116-root",
+    "platform_version": "231aae8",
+    "platform_ui_text": "Deployment finished Nov16,03:41AM",
+    "ui_timezone": "Asia/Riyadh",
+    "official_verification": "Not yet accepted by this task; wait for owner's final canonical receipt and inactive handoff.",
+    "lease_last_observed_active": true
+  },
+  "live_acceptance_baseline": {
+    "method": "Normal saved sold-products report GET and expansion of the incident row; no provider refresh or business-state write.",
+    "result": "The incident row is already complete before this task's publication under its externally changed current configuration. The component present in the original bundle screenshot is absent from the current report breakdown.",
+    "limitation": "Do not attribute this pre-existing live completeness to the unpublished code fix. Original bundle behavior and free affirmative/declining options are proved by the reviewed regression suite; postpublication runtime identity still must match exact A.",
+    "private_figures_excluded": true
   }
 }
