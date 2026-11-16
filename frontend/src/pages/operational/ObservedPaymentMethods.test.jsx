@@ -56,6 +56,45 @@ test("the dashboard deep link opens and focuses the exact raw method with blank 
     expect(saveObservedPaymentMethodCommission).not.toHaveBeenCalled();
 });
 
+test("an ambiguous method stays locked while an unrelated PayPal deep link can save explicit fees", async () => {
+    const ambiguous = { ...second, name: "Visa Card", editable: false };
+    const paypal = { ...pending, name: "paypal", editable: true };
+    const updated = { ...directory([ambiguous, { ...paypal, status: "configured",
+        commission_percent: 2.5, fixed_fee: 1.25, vat_percent: 15 }]), revision: "b".repeat(64) };
+    let confirmSave;
+    saveObservedPaymentMethodCommission.mockImplementation(() => new Promise(resolve => { confirmSave = resolve; }));
+    window.history.replaceState({}, "", "/operational-balances/provider-fees?method=paypal");
+    await render(directory([ambiguous, paypal]));
+    const ambiguousRow = host.querySelectorAll("tbody tr")[0];
+    expect(ambiguousRow.textContent).toContain("تحتاج مراجعة إعداداتها");
+    expect(ambiguousRow.querySelector("button")).toBeNull();
+    expect([...ambiguousRow.querySelectorAll("td")].slice(1, 4).map(cell => cell.textContent)).toEqual(["—", "—", "—"]);
+    expect(host.querySelector("[role=alert]")).toBeNull();
+    expect(host.querySelector("form").getAttribute("aria-label")).toBe("عمولة paypal");
+    expect(document.activeElement).toBe(input("نسبة العمولة %"));
+    for (const label of ["نسبة العمولة %", "الرسم الثابت بالريال", "ضريبة العمولة %"]) expect(input(label).value).toBe("");
+    expect(saveObservedPaymentMethodCommission).not.toHaveBeenCalled();
+
+    await fill("2.5", "1.25", "15");
+    await click("حفظ العمولة");
+    expect(saveObservedPaymentMethodCommission).toHaveBeenCalledTimes(1);
+    expect(saveObservedPaymentMethodCommission).toHaveBeenCalledWith({ name: "paypal",
+        commission_percent: 2.5, fixed_fee: 1.25, vat_percent: 15, expected_revision: "a".repeat(64) });
+    expect(host.querySelectorAll("tbody tr")[1].textContent).toContain("العمولة غير محددة");
+    expect(host.querySelector("[role=status]")).toBeNull();
+    await act(async () => confirmSave({ payment_method_setup: updated }));
+
+    const rows = host.querySelectorAll("tbody tr");
+    expect(rows).toHaveLength(2);
+    expect(rows[0].textContent).toContain("تحتاج مراجعة إعداداتها");
+    expect(rows[0].querySelector("button")).toBeNull();
+    expect([...rows[0].querySelectorAll("td")].slice(1, 4).map(cell => cell.textContent)).toEqual(["—", "—", "—"]);
+    expect(rows[1].textContent).toContain("مكتملة");
+    expect([...rows[1].querySelectorAll("td")].slice(1, 4).map(cell => cell.textContent)).toEqual(["2.5", "1.25", "15"]);
+    expect(host.querySelector("form")).toBeNull();
+    expect(host.querySelector("[role=status]").textContent).toContain("حُفظت عمولة paypal");
+});
+
 test("explicit zero is saved once and authoritative results retain the configured row and other pending methods", async () => {
     const updated = { ...directory([{ ...pending, status: "configured", commission_percent: 0, fixed_fee: 0, vat_percent: 0 }, second]), revision: "b".repeat(64) };
     saveObservedPaymentMethodCommission.mockResolvedValue({ payment_method_setup: updated });
