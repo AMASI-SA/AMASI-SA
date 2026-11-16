@@ -290,14 +290,14 @@ function AdsAccountResultsTable({ data, accounts, accountMode, ready, singleDay,
                 <colgroup><col style={{ width: "21%" }} /><col style={{ width: "20%" }} />
                     <col style={{ width: "15%" }} /><col style={{ width: "8%" }} /><col style={{ width: "11%" }} />
                     <col style={{ width: "10%" }} /><col style={{ width: "15%" }} /></colgroup>
-                <thead className="bg-slate-50 text-[9px] font-bold text-slate-600"><tr>
-                    <th scope="col" className="px-1.5 py-2 text-right">المنصة / الحساب</th>
+                <thead className="whitespace-nowrap bg-slate-50 text-[9px] font-bold text-slate-600"><tr>
+                    <th scope="col" aria-label="المنصة / الحساب" className="px-1.5 py-2 text-right">المنصة</th>
                     <th scope="col" className="px-1 py-2 text-center">الصرف</th>
-                    <th scope="col" className="px-1 py-2 text-center">مبيعات سلة<span className="block text-[8px] font-normal">ر.س</span></th>
-                    <th scope="col" className="px-1 py-2 text-center">طلبات سلة</th>
-                    <th scope="col" className="px-1 py-2 text-center">متوسط تكلفة الطلب<span className="block text-[8px] font-normal">ر.س</span></th>
-                    <th scope="col" className="px-1 py-2 text-center">العائد الإعلاني<span className="block text-[8px] font-normal">×</span></th>
-                    <th scope="col" className="px-1 py-2 text-center">صافي الأرباح<span className="block text-[8px] font-normal">ر.س</span></th>
+                    <th scope="col" aria-label="مبيعات سلة بالريال السعودي" className="px-1 py-2 text-center">مبيعات<span className="block text-[8px] font-normal">ر.س</span></th>
+                    <th scope="col" aria-label="طلبات سلة" className="px-1 py-2 text-center">طلبات</th>
+                    <th scope="col" aria-label="متوسط تكلفة الطلب بالريال السعودي" className="px-1 py-2 text-center">متوسط<span className="block text-[8px] font-normal">ر.س</span></th>
+                    <th scope="col" aria-label="العائد الإعلاني" className="px-1 py-2 text-center">العائد<span className="block text-[8px] font-normal">×</span></th>
+                    <th scope="col" aria-label="صافي الأرباح بالريال السعودي" className="px-1 py-2 text-center">الأرباح<span className="block text-[8px] font-normal">ر.س</span></th>
                 </tr></thead>
                 <tbody data-testid="dashboard-ads-provider-totals">
                     {accountMode && accounts.map((account, index) => {

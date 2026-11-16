@@ -661,8 +661,8 @@ describe("net profit column and footer period overview", () => {
         const host = independentAccountMarkup(independentAccountData(true));
         const table = host.querySelector('[data-testid="dashboard-ads-account-table"]');
         expect(table.querySelectorAll("thead th")).toHaveLength(7);
-        expect(table.querySelector("thead").textContent).toContain("العائد الإعلاني×");
-        expect(table.querySelector("thead th:last-child").textContent).toBe("صافي الأرباحر.س");
+        expect(table.querySelector("thead").textContent).toContain("العائد×");
+        expect(table.querySelector("thead th:last-child").textContent).toBe("الأرباحر.س");
         [...table.rows].forEach((row) => expect(row.cells).toHaveLength(7));
         expect(roasCell(host, "dashboard-snapchat-account-USD.A").textContent).toBe("8.00 ×");
         expect(roasCell(host, "dashboard-ads-provider-direct").textContent).toBe("—");
