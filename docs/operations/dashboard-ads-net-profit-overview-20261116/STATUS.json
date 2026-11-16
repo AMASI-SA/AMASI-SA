@@ -114,7 +114,7 @@
   "incomplete": [],
   "production_changed": true,
   "release_guard": "Complete. Official shared /app verify exited0 with verified=true and checks=3 at or before 2026-11-16T16:20:58Z, matching reviewed source A=17bdfe6578f0a82f11e8c2379263ef17de0b9560, deployment M=b56e0794f7d9d4c2ef52e69fd0b36886ea3bfa95, runtime rg5-e1fe5f8d15aeb2d8b6d3e517671d670b37387dc61e005b838b983286218bce7f and frontend artifact fb1169bdc7bb05440ea4a686920f85435b7e7a6c8731b9b685f5d30b2f724c78. Subsequent official status exited0 and active=false; the matching lease is closed. No further prepare, prepublish, publish or verification action is needed for this completed task.",
-  "authentication": "Resolved by the user's requested reload. Root observed Emergent /home in the existing cloud tab showing authenticated Salla Analytics. Authentication is no longer a blocker; no live publication is claimed.",
+  "authentication": "Resolved by the user's requested reload. Root observed Emergent /home in the existing cloud tab showing authenticated Salla Analytics. Authentication is no longer a blocker. The subsequent authorized publication and successful official verification are recorded below.",
   "authorization": "Owner explicitly reaffirmed merge and production publication on 2026-11-16 for the latest compact-heading advertising card, then requested publication again after merge. No repeated authorization question is needed.",
   "continuation_ledger": "Issue1006 is at its 2500-comment cap. The replacement task PR body records the canonical full source SHA and final handoff; this updated task status document accompanies the source.",
   "next_safe_action": "None for this completed work. Preserve the verified live source A/deployment M and frozen intent B. Do not redeploy this documentation-only handoff branch or repeat the completed publication. Any new requested change requires its own reviewed source/release sequence.",
@@ -193,7 +193,7 @@
     "node24_evidence_artifact": 14237172778
   },
   "merge_policy_review": "Independent review of AGENTS and matching workflow triggers confirms the inactive shared guard is required before /app work/rehearsal, not GitHub merge alone. Matching production-push workflows are GitHub-hosted checks and manual handoff only; no automatic deployment or lease. The earlier fresh-guard-before-merge sequence was a conservative task plan, now revised under the owner's explicit merge request.",
-  "updated_at_utc": "2026-11-16T16:22:20Z",
+  "updated_at_utc": "2026-11-16T16:24:35Z",
   "deployment_head": "6599fa62361f7a977a35db48b90e0a55aa72ecf3",
   "deployment_git_sha": "b56e0794f7d9d4c2ef52e69fd0b36886ea3bfa95",
   "merge_commit": "b56e0794f7d9d4c2ef52e69fd0b36886ea3bfa95",
@@ -243,7 +243,7 @@
     "guard_state": "inactive_after_verified_publication",
     "guard_state_evidence": "official_verify_exit0_verified_true_checks3_then_official_status_exit0_active_false"
   },
-  "checkpoint_parent": "62a779df4322e9bc4c81bd7772702f2032948e6a",
+  "checkpoint_parent": "a93ed439e24b46e1e84bfa8877bd9bac4daa228e",
   "checkpoint_changed_files": [
     "docs/operations/dashboard-ads-net-profit-overview-20261116/STATUS.json"
   ],
