@@ -21,6 +21,7 @@ from operational_ad_wallet_pool import enabled as wallet_pool_enabled, project_p
 _LOG = logging.getLogger(__name__)
 
 DEFINITIVE_MOVEMENT_REJECTIONS = {
+    "operational_workspace_source_insufficient",
     "operational_future_business_date", "operational_business_date_invalid",
     "operational_supplier_payment_exceeds_payable",
     "operational_ad_debt_priority_required",
@@ -264,7 +265,10 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
                 fail("operational_bank_required", "اختر بنكًا أو صندوقًا معتمدًا من ميزان 2")
             bank = banks[0]
         if bank and bank["kind"] == "employee_custody":
-            if row["kind"] not in {"operating_expense", "supplier"} or payload["direction"] != "outgoing" or payload["kind"] != "payment":
+            custody_targets = {"operating_expense", "supplier"}
+            if payload.get("workspace_operation") == "external.pay":
+                custody_targets.add("external_person")
+            if row["kind"] not in custody_targets or payload["direction"] != "outgoing" or payload["kind"] != "payment":
                 fail("operational_custody_source_invalid", "العهدة تسمح بصرف تشغيلي أو سداد مورد فقط")
             balance = next((r for r in report(state)["parties"] if r["party_type"] == "employee_custody"
                             and r["party_id"] == bank["id"] and r["currency"] == currency), {})
@@ -285,6 +289,13 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
                 fail("operational_expense_direction_invalid", "المصروف أو السحب حركة صادرة")
         if payload["kind"] != "correction" and bank is None:
             fail("operational_bank_required", "حدد البنك أو الصندوق الذي تحرك منه أو إليه المبلغ")
+        if (payload.get("workspace_operation") and bank and payload["direction"] == "outgoing"):
+            available_source = next((r for r in report(state)["parties"]
+                if r["party_type"] == bank["kind"] and r["party_id"] == bank["id"]
+                and r["currency"] == ("SAR" if has_fx else currency)), {})
+            available_cash = Decimal(available_source.get("actual", "0"))
+            if (bank_gross if has_fx else amount) > available_cash:
+                fail("operational_workspace_source_insufficient", "تعذر تنفيذ المبلغ من المصدر المختار", 409)
         if payload["kind"] == "correction" and not payload.get("note", "").strip():
             fail("operational_correction_reason_required", "التصحيح يتطلب سببًا موثقًا")
         if payload["kind"] == "correction" and (bank or payload.get("allocations")):
@@ -389,8 +400,10 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
                 and total != min(amount, party_available)):
             fail("operational_ad_debt_priority_required",
                  "الدفعة تسدد المستحق الإعلاني أولًا، ثم يضاف الزائد إلى المحفظة. أكمل تخصيص المستحق أو اترك التخصيص تلقائيًا.")
+        recorded_actor = await db["users"].find_one({"id": actor}, {"_id": 0, "id": 1, "name": 1})
         item = {**payload, "id": operation_id,
                 "amount": fmt(amount), "actual_fee_amount": fmt(fee), "allocations": allocations, "actor_id": actor,
+                "recorded_by": {"id": actor, "name": str(recorded_actor.get("name") or "غير موثق")} if recorded_actor else None,
                 "source": source, "occurred_at": stamp, "name": row["name"],
                 "bank_kind": bank["kind"] if bank else None, "bank_name": bank["name"] if bank else None,
                 "funding_mode": row.get("funding_mode"),

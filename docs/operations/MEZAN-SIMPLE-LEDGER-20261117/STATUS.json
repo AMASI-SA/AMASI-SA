@@ -1,0 +1,39 @@
+{
+  "task": "MEZAN-SIMPLE-LEDGER-20261117",
+  "status": "WIP_IMPLEMENTATION_AND_VERIFICATION",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/mezan-simple-ledger-permissions-20261117",
+  "base_sha": "71125711d8181da3b4e35d9129fd51c048ba2bdd",
+  "production_changed": false,
+  "authorization": "Implement the owner's approved simple balances application and employee-specific account, party, operation and movement visibility permissions.",
+  "completed_source": [
+    "Tenant-bound owner-managed resource policies; use, none/own/all movements and full-balance access are independent.",
+    "Fresh server authorization for every workspace read and write, all linked resources and each CAS attempt; legacy aggregate routes deny restricted staff.",
+    "Existing saved operational aggregate supplies five-row party/account ledgers, full authorized balances and backdated-save focus.",
+    "Bank, cash and custody movements reuse the canonical movement service; linked external payroll, charity and owner drawings commit atomically in the same aggregate.",
+    "Immutable recorder name/id snapshot from authenticated user; legacy missing names remain undocumented.",
+    "Web Arabic RTL simple workspace and owner policy editor are implemented; frontend verification is in progress."
+  ],
+  "verification": [
+    {
+      "command": "PYTHONPATH=backend:backend/tests python -B -m pytest --noconftest -q backend/tests/test_operational_balance_workspace.py backend/tests/test_operational_balance_access.py",
+      "exit_status": 0,
+      "result": "45 passed; actual FastAPI routes/services with synthetic mongomock-motor database; no production server imported. The workspace suite switches to dedicated local Mongo when OPERATIONAL_TEST_MONGO_URI is set (as in existing CI)."
+    },
+    {
+      "check": "Real MongoDB local runtime",
+      "result": "NOT_RUN: MongoDB 8.0.12 aborts in CPU discovery because this executor has no sys CPU surface; 7.0.16 reports open Operation not permitted at startup. No sandbox override or alternate production database used."
+    },
+    {
+      "check": "Frontend",
+      "result": "NOT_RUN at this checkpoint; frozen Yarn installation in progress."
+    }
+  ],
+  "remaining": [
+    "Complete customer financial-only refund request/execution adapter and confirm caps against existing refunds.",
+    "Complete standalone native operational app patch on AMASI-SA/amasi-mobile branch feature/operational-order-compensation-20261101 at 982a38a60ea77ef09f4e2924766c085ea0523bfd.",
+    "Run fresh integrated frontend/native and actual-Mongo CI checks; independent review of permissions and linked financial effects.",
+    "APK, physical-device acceptance, production merge and governed deployment are not performed by this source checkpoint."
+  ],
+  "next_safe_action": "Continue task branch source implementation, run targeted verification and preserve the next reviewed source checkpoint; do not run release adapters, create a production lease or mutate live financial data."
+}

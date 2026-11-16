@@ -255,6 +255,21 @@ async def mobile_app_access_for_user(db: Any, user: dict[str, Any]) -> dict[str,
         access,
         account_active=account_active,
     ))
+    # The authenticated user document is refreshed by /auth/me. These two
+    # flags are navigation hints for the scoped balances workspace, not access
+    # to its legacy reports or writes. The workspace separately reloads and
+    # enforces resource/operation grants on every request and before money CAS.
+    # Do not require a second native-permission assignment for this workspace.
+    workspace_enabled = False
+    if not is_owner:
+        from operational_balance_access import POLICY_FIELD, normalized_policy
+        workspace = normalized_policy(user.get(POLICY_FIELD), owner=owner_id)
+        workspace_enabled = account_active and bool(owner_id) and workspace["enabled"]
+        permissions.difference_update(OPERATIONAL_APP_PERMISSIONS)
+        if workspace_enabled:
+            permissions.add(OPERATIONAL_APP_READ)
+            if workspace["operations"]:
+                permissions.add(OPERATIONAL_APP_WRITE)
     if is_owner and account_active:
         # The account owner is the native-app super-admin. Use the live
         # catalogue rather than a copied list so every current and future app
@@ -263,8 +278,8 @@ async def mobile_app_access_for_user(db: Any, user: dict[str, Any]) -> dict[str,
         permissions.update(MOBILE_APP_PERMISSIONS)
     permissions_list = sorted(permissions)
     return {
-        "configured": access is not None or is_owner,
-        "enabled": bool(account_active and (access is not None or is_owner)),
+        "configured": access is not None or is_owner or workspace_enabled,
+        "enabled": bool(account_active and (access is not None or is_owner or workspace_enabled)),
         "owner_override": bool(is_owner and account_active),
         "owner_baseline": bool(is_owner),
         "manager": MOBILE_APP_MANAGER in permissions,
