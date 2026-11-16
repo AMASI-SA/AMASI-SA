@@ -6,8 +6,8 @@
 - Repository: `AMASI-SA/AMASI-SA`.
 - Task branch: `codex/payment-method-discovery-r2-20261116`.
 - Exact verified production/source base J: `71d1dd9010b3fd73de0463a6164f82fcd2b7cff5`.
-- State: independently reviewed R2 source and intent-only B are frozen; exact-B checks and clean-clone adapter gates are in progress.
-- Production changed by this R2 source: **no**.
+- State: all applicable exact-B gates completed successfully; PR1963 merged normally; shared source is aligned and configured adapter is running. No R2 lease or publication yet.
+- Production Git branch changed by R2: **yes**, through PR1963. Live R2 publication: **no**, not yet submitted.
 - The preceding feature PR1962 is merged and published as `0680799`, operation `ecbb3454-9e59-58b0-af49-6f8e34cc2267`; Emergent reported `Deployment successful`. Its first official verification hit startup HTTP520; the second finished normally with **exit0, verified:true and all3 probes**, matching source A1/deployment M1/runtime. Final official status is **active:false**. No interrupt, abort, second Publish or lease replacement occurred. Runtime verification passed; the functional defect below still requires R2.
 - Prior frozen source A: `03c91e903c992a2e397fccab2124e07fe002e0e6`; intent B: `03605c83e67c26b8f92477624f92d662fb97616e`; merge M/current base J: `71d1dd9010b3fd73de0463a6164f82fcd2b7cff5`.
 - Prior runtime: `rg5-2e67a08592737d05609cbedd7b422876345be2ac13df2d97ea6f0e44066a24cb`.
@@ -56,7 +56,9 @@ The frontend reviewer independently reviewed the backend source/test diff and ap
 - Source tree: `03491ab6bd54b4a8a9e0db9a6fb0f9073eb19db4`.
 - Intent-only B: `ec6b3a1b808ca7bb4af081f7c63ea28796d89617`.
 - B tree: `70842fa4b3db6c9cea6a4b4d743a804f078f7e52`.
-- PR: https://github.com/AMASI-SA/AMASI-SA/pull/1963 (ready for review).
+- PR: https://github.com/AMASI-SA/AMASI-SA/pull/1963 (merged normally).
+- Production merge M: `438b461fc660e043726c8dd5ab282d06abd3c17f`; tree equals B, parents are J and B; official Git transition validator accepted M.
+- Previous documentation checkpoint: `b6881c2c8bd0b09675b3f8427370062f0e4f980b`.
 - Runtime: `rg5-ddac746f37c8ee913405c42ced5804aa9e68ff17b56ba60a60ff2a824a7ffe8e`.
 - Frontend artifact: `a31d130116eaa72d7ba3a0ec0f36fda19c29db272d207642d520482df16e46ff`.
 - Reproducibility proof: `1a7f37962dc5acfe31e346f90d3c75e259b49361fda98c29d890ce92b8a3167f`.
@@ -69,8 +71,8 @@ The frontend reviewer independently reviewed the backend source/test diff and ap
 The successful prior receipt is `/tmp/mezan-payment-method-release-1962/verify2.json`; exit record `verify2-exit.json`; final status `final-status.json`. Three probes observed boot identities `2026-11-16T19:51:55.134941+00:00` and `2026-11-16T19:51:49.045223+00:00`, with the exact reviewed frontend artifact. The verifier checked canonical/cache-busted metadata, full public files, shell and service-worker contracts, then closed its matching lease. No R2 lease has been prepared.
 
 ## Next safe actions
-1. Require all applicable exact-B checks and both actual clean-clone adapter rehearsals. Reconfirm the current production base before a normal merge preserving A/B; require merge tree equal B.
-2. Before shared source changes/rehearsal, obtain a fresh official inactive-guard result, preserve unrelated files and require expected HEAD/tracked-clean state. Run the configured adapter on the reviewed production merge.
+1. Finish the configured shared adapter already running; require exit0 and exact reviewed runtime identity. Do not start another build or modify shared source while it runs.
+2. Inspect all exact-M post-merge Readiness/Security/CodeQL gates, including both clean-clone adapter rehearsals.
 3. Observe exact-merge gates, then prepare a fresh task-owned R2 lease, prepublish and perform the authorized Publish once.
 4. Require a newer explicit deployment success, all3 official production probes and final inactive guard. Revisit the exact-method link and verify editable blank commission terms without saving real values.
 5. Update this separate handoff and PR with final exact merge, release receipts and live acceptance. Do not amend the frozen runtime branch.
@@ -78,3 +80,12 @@ The successful prior receipt is `/tmp/mezan-payment-method-release-1962/verify2.
 ## Preserved scope
 
 No real commission, payment, ledger entry, ad budget, campaign, provider policy or source-mode selection was changed. The existing compact ad card and refresh cadence remain unchanged. The actual merchant terms still require owner entry; this task must never invent rates or convert missing values to zero.
+
+## Exact-B and shared-source milestone
+All35 returned exact-B check records completed: **24success, 8skipped, 3cancelled**. The3 cancellations belonged to superseded Snapchat Direct run43947081870; its replacement43947133001 on exact B succeeded at scope and intentionally skipped its two out-of-scope jobs. No failed or pending check remained. Fresh PR head/base were B/J, mergeable clean, with actual production ref still J immediately before normal merge.
+
+Readiness43947081805 succeeded with both actual clean-clone rehearsals: Host20.20.2 job133580156661 and Host24.19.0 job133580156496. Four Platform Spend43947081853 and Operational Balance Web43947081942 succeeded. Exact-M checks run separately after merge; B results do not replace them.
+
+Shared update command obtained fresh official active:false, checked expected J HEAD and empty tracked/staged diffs, fetched the unchanged production M and checked its reviewed B tree, then fast-forwarded normally. Shared observed HEAD is M, tree70842fa4b3db6c9cea6a4b4d743a804f078f7e52, tracked_clean:true, guard_was_inactive:true. Unrelated untracked files were preserved.
+
+The configured `cd /app/frontend; REACT_APP_BACKEND_URL=https://mezansalla.com yarn build` was started after another official inactive-guard check and expected-M check. Receipt directory: `/tmp/mezan-payment-method-release-1963/`. No prepare/prepublish/Publish has been issued for R2.
