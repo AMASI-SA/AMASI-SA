@@ -1,6 +1,6 @@
 {
   "task_id": "dashboard-ads-net-profit-overview-20261116",
-  "status": "source_reviewed_tests_passed_ready_for_checkpoint",
+  "status": "release_ready_authentication_handoff_required",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/dashboard-ads-net-profit-column-20261116",
   "source_base": "4cdc10931f49124a4715153f220e0adf274e8bcc",
@@ -51,23 +51,84 @@
     {
       "name": "Independent integration review",
       "result": "Read-only review of card, overview, helper contracts and tests found no material issue. Canonical total-cost summary and signed daily profit confirmed."
+    },
+    {
+      "name": "Source A governed two-build proof",
+      "result": "Pinned build:release completed two matching clean builds, exit0. Official Frontend artifact verification exited0."
+    },
+    {
+      "name": "Independent release candidate review",
+      "result": "PASS with official candidate loader and Git manifests. Backend runtime unchanged. Local candidate byte-for-byte identical to source-A CI artifact14228637223 from Readiness43872776138."
+    },
+    {
+      "name": "Intent-only B review and loader",
+      "result": "Remote A..B contains one commit and only release/release-intent-v5.json. Local load_release_intent and verify_release_intent_git exited0. Root's initial non--B Python import created a task-local bytecode cache; only that generated cache was removed and verification was rerun successfully using python -B. No tracked source changes."
+    },
+    {
+      "name": "Final exact-B CI",
+      "result": "All44 checks completed:34 success,10 intentional skips,zero failure/pending/neutral. Independently confirmed and root-refreshed. Real clean-clone adapter rehearsals passed on Host Node20.20.2 and24.19.0, without Git metadata, matching runtime/artifact/proof and JSON route."
+    },
+    {
+      "name": "Focused B CI",
+      "result": "Four Platform Spend run43874131599: frontend284 tests/9 suites; backend284 tests plus5 subtests. New overview suite explicitly passed."
     }
   ],
   "incomplete": [
-    "Preserve canonical remote source A and a draft PR; run required exact-source CI and governed release build, then freeze intent-only B.",
-    "Review the actual component layout when an allowed preview or deployed environment is available.",
-    "Emergent currently displays its sign-in page. Authentication is required before inspecting the canonical shared guard and any authorized production handoff."
+    "Complete Emergent sign-in through the current browser handoff; verify a positive signed-in state before proceeding.",
+    "Read a fresh official shared /app production_release_guard status and continue only if active=false. Preserve unrelated shared files.",
+    "Refresh production and PR refs/checks. Only an ordinary merge with reviewed B tree is permitted; no squash/rebase.",
+    "Run the actual configured shared Frontend yarn build adapter before prepare/prepublish; then one already-authorized publish, explicit newer Deployment Succeeded and three official verification probes.",
+    "Check the new column, footer popup and preserved width in the live browser. No browser visual-pass claim has been made."
   ],
   "production_changed": false,
-  "release_guard": "No shared /app access or mutation, lease, merge or publication by this task.",
+  "release_guard": "No shared /app access or mutation, lease, merge or publication by this task. Current production reference was freshly confirmed at source_base J.",
   "authorization": "Current user requests the column and footer overview. Earlier same-card user authorization explicitly permits merge/publication; no new permission assumed for unrelated actions.",
   "continuation_ledger": "Issue1006 is at its2500-comment cap. The task PR will serve as the current continuation handoff alongside this status document.",
   "previous_completed_task": "PR1947 is already merged/published/verified. This follow-up starts from the newer PR1956 production base; it does not repeat the previous deployment.",
-  "next_safe_action": "Create remote source checkpoint/PR and run governed A/B release checks. Obtain Emergent authentication through the secure browser flow only after the implementation is concrete and reviewable; inspect fresh inactive guard before shared writes.",
+  "next_safe_action": "Finish the current manual Emergent authentication handoff. Then verify signed-in state, fresh inactive shared guard and immutable refs before any merge/shared release action. Resume from deployment B, not this documentation-only checkpoint.",
   "completed": [
     "Added the sixth signed net-profit column for all accounts, providers, direct orders and the source aggregate without changing accounting or data-fetch contracts.",
     "Added footer-only all-platform Riyadh half-day overview, with source period totals and full-day costs and profit.",
     "Added16 focused overview tests,7 main-card profit/activation tests, and sixth-cell row-hover coverage; registered the new component suite in the existing focused workflow.",
-    "Independent integration review found no material financial, scope or interaction issue."
-  ]
+    "Independent integration review found no material financial, scope or interaction issue.",
+    "Frozen intent-only B is remotely preserved and PR1957 is ready, mergeable and clean; source A and intent B remain immutable.",
+    "All required exact-B checks and independent release review passed. Shared deployment awaits authentication."
+  ],
+  "checkpoint_recorded_at": "2026-11-16",
+  "documentation_only": true,
+  "deploy_candidate": false,
+  "deployment_branch": "codex/dashboard-ads-net-profit-column-20261116",
+  "deployment_head": "7328a3d3df39dc3535786fc3587a47405f869219",
+  "source_commit": "fc26ab163b25dc067b1a352394b6f26a3d557345",
+  "source_tree": "c224d84af536584c8b5304cb8d7c5ac4dcf3eb9c",
+  "intent_commit": "7328a3d3df39dc3535786fc3587a47405f869219",
+  "intent_tree": "6c2171c6905c6b82d1521ccb40d8400fe2b41009",
+  "intent_blob": "892921df6ae3f46a2ed3a0dfdf47e8539d4792ea",
+  "checkpoint_branch": "codex/dashboard-ads-net-profit-handoff-20261116",
+  "pull_request": "https://github.com/AMASI-SA/AMASI-SA/pull/1957",
+  "runtime_release_id": "rg5-e3d4b8fe1afbbf6e21ae04c2c7eb2c034f0f8d1ef6b9d90d2547431046c8c338",
+  "artifact_tree_sha256": "c58f57d2d8c9cc1d62b384ce6006ee5012e606a0df454e9696469550edacd9ec",
+  "reproducibility_proof_sha256": "680e288c970fed2597ffc1f0fb826bc29a485b7851c4c4f45aaaea9d0a88c982",
+  "intent_sha256": "6cf78ad01339f36be8e3fac16f6f462f67dbaf1e912027c19772cca6734afac0",
+  "ci": {
+    "source_A": {
+      "success": 28,
+      "skipped": 6,
+      "failed": 0,
+      "pending": 0,
+      "neutral": 0
+    },
+    "intent_B": {
+      "success": 34,
+      "skipped": 10,
+      "failed": 0,
+      "pending": 0,
+      "neutral": 0,
+      "readiness_run": 43874131487,
+      "node20_adapter_job": 133323152333,
+      "node24_adapter_job": 133323152972,
+      "four_platform_run": 43874131599
+    }
+  },
+  "authentication": "Emergent secure browser flow selected email. Website rejected the submitted verification code. No automated retries or credential exposure; manual browser handoff is the next authentication step."
 }
