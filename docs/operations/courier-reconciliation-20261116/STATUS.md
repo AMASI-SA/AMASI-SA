@@ -46,6 +46,42 @@ and `python -m pytest --noconftest -q`:
   reported as verified passes.
 - `git diff --check`: passed.
 
+## Verified GitHub acceptance — 2026-11-17 (Asia/Riyadh)
+
+Draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/1964
+
+- Reviewed remote source: `2b977a7c486c9121302810b37f46da6b4de085a6`.
+- Source tree: `b6cdac3eb499f6e4cff3704ae8db9bff66be419e`.
+- Production base at review: `438b461fc660e043726c8dd5ab282d06abd3c17f`.
+- All **13 applicable pull-request workflows succeeded**, with no pending,
+  failed or skipped workflow in the final exact-source query.
+
+| GitHub backend check | Run / job | JUnit cases | New cases | Previously blocked Mongo cases | Failures / errors / skips |
+| --- | --- | ---: | ---: | ---: | --- |
+| Operational Balance Backend | 43956199085 / 133611284577 | 5,002 | 14 passed | 17 passed | 0 / 0 / 0 |
+| Stock eligibility, reservation and consumption on isolated Mongo | 43956199016 / 133611282904 | 4,716 | 14 passed | 17 passed | 0 / 0 / 0 |
+
+These suites overlap; do not add their totals as unique tests. The focused
+acquisition modules contain **102 successful cases** (14 new, 79 existing
+courier, 9 manual-confirmation acquisition cases). The 17 real-Mongo cases
+include seven-order recovery, source races, ineligible sources, concurrent
+acquisition and owner isolation. Their previous local environment limitation
+is now resolved by actual isolated-Mongo CI evidence.
+
+Independent reviewer and root both parsed the original JUnit files. The first
+artifact's saved source SHA/tree exactly match the reviewed source above; the
+second artifact's metadata, checkout and source-recording logs agree with that
+SHA. ZIP digests were matched to the GitHub artifact metadata.
+
+- Artifact `operational-backend-results`: ID `14271883448`, SHA-256
+  `760b266d7a7b6bc6b5e135684f4441e33bcf7664da03e2ce86d7d8d11295c7b3`.
+- Artifact `eligibility-backend-2b977a7c486c9121302810b37f46da6b4de085a6`:
+  ID `14272653045`, SHA-256
+  `a9945f69492f130b5a7f0680994dd447e36f3699e45edf424e810562a73e6242`.
+- Additional log results: 16 shipping/calculator tests plus 18 subtests;
+  stock eligibility reports 7 additional subtests. These are not included in
+  the JUnit totals above.
+
 ## Review and limits
 
 The recovery admission change does not relax native dated-proof validation.
@@ -79,36 +115,34 @@ financial balances have not been refreshed or reclassified by this task.
 
 ## Release and continuity
 
-**Production changed: no.** No merge, deployment, release lease, live balance
-refresh, source backfill, fee confirmation, or financial write was performed.
-The shared `/app` environment was inspected read-only; another conversation's
-active release lease was observed and left untouched. Local work is isolated
-in the task worktree. Existing unrelated release and payment work is preserved.
+**Production changed: no.** PR #1964 remains open, Draft, unmerged and mergeable
+at the final check. No deployment, release lease, live balance refresh, source
+backfill, fee confirmation or financial write was performed. This task did not
+change the shared `/app` workspace or another conversation's lease.
 
-The completed local implementation checkpoint is
-`77f883a2ad972b83e83a30e250f318e32ae2516f`. **Automatic approval review initially
-rejected the GitHub push** because explicit authorization to publish the code
-to that repository was not established in the visible conversation. No
-workaround or alternate push/PR route was attempted.
+The owner explicitly approved the task-branch upload and Draft PR on
+2026-11-17 (Asia/Riyadh), resolving the earlier automatic-approval rejection.
+The Git CLI then lacked transport credentials, so the authenticated GitHub
+integration created the exact reviewed tree and the task branch. A fresh Git
+fetch and full-tree comparison verified equality to local checkpoint
+`13d8cdbc53768048746248e670047e0a30b1e1e5`; that local history is preserved on
+`codex/courier-delivery-reconciliation-local-20261117`.
 
-On **2026-11-17 (Asia/Riyadh)** the owner explicitly approved the requested push
-to `AMASI-SA/AMASI-SA` and opening a Draft PR to complete its checks. This
-authorizes the task-branch push and Draft review/CI handoff. No merge or live
-deployment is included in this approval. This status-only checkpoint records
-that authorization; the reviewed runtime and regression-test content is
-unchanged from the implementation checkpoint above.
+Canonical implementation branch:
+`codex/courier-delivery-reconciliation-20261116` at remote source
+`2b977a7c486c9121302810b37f46da6b4de085a6`.
 
-Issue #1006 is the repository continuation ledger; its complete comments could
-not be retrieved in this session. The task-specific status is retained here.
-The Draft PR will record the exact uploaded full commit SHA and serve as the
-continuation record under the existing full-ledger convention. The issue body
-was retrieved on resumption and confirms its 2,500-comment limit; no attempt
-will be made to append another comment or replace its unrelated shared body.
+This final status update is retained on a **documentation-only evidence branch**,
+`codex/courier-reconciliation-evidence-20261117`, without changing the reviewed
+PR head or its verified runtime/test content. Do not use the evidence branch
+as a deployment candidate. The PR body records the evidence commit SHA.
 
-Next safe action: push this completed task branch to `AMASI-SA/AMASI-SA`, open
-the approved Draft PR, and inspect its required CI. Independent workflow review
-confirmed that Operational Balance Web and Operational Stock Eligibility both
-select `test_operational_balance*.py` with an isolated real Mongo service, so
-the new regressions and the 17 local environment-blocked scenarios are covered
-without a workflow change. A later production publish remains separate and
-must follow the v5 release protocol after the shared lease is inactive.
+Issue #1006 has reached its 2,500-comment limit. Its shared unrelated body was
+preserved; the task PR and this status document are the continuation record.
+
+The approved upload, Draft PR and CI-verification scope is complete. Next safe
+action: review PR #1964 and obtain separate authorization for integration and
+publication if requested. Before any later release, fetch the current production
+branch, preserve unrelated changes, recheck applicable gates, and follow the v5
+source/intent and shared Release Guard protocol. No live recovery count or
+complete Salla/financial reconciliation is claimed from these code tests.
