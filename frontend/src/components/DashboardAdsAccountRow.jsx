@@ -27,6 +27,9 @@ function SpendValue({ report }) {
 function FinancialRows({ stats = {}, detailed = true }) {
     const report = stats.profit || {};
     const profitReady = report.complete === true && known(report.netProfit);
+    const advertising = report.adSpendApplicable !== false;
+    const cpa = advertising && known(stats.cpa) && stats.cpa >= 0 ? stats.cpa : null;
+    const roas = advertising && known(report.roas) && report.roas >= 0 ? report.roas : null;
     const rows = [
         ["إجمالي المبيعات", <MetricValue value={stats.sales} available={stats.knownSales} />],
         ["الصرف الإعلاني", <SpendValue report={report} />],
@@ -34,10 +37,9 @@ function FinancialRows({ stats = {}, detailed = true }) {
             ["عدد الطلبات / القطع", <><MetricValue value={stats.orders} available={stats.knownOrders} suffix="طلب" digits={0} />
                 <span className="mx-1 font-normal text-slate-300">·</span>
                 <MetricValue value={report.pieces} available={report.knownPieces} suffix="قطعة" digits={0} maximumDigits={2} /></>],
-            ["تكلفة المنتجات", <MetricValue value={report.productCost} available={report.knownProductCost} />],
-            ["تكلفة الشحن", <MetricValue value={report.shippingCost} available={report.knownShippingCost} />],
-            ["عمولات طرق الدفع", <MetricValue value={report.paymentFees} available={report.knownPaymentFees} />],
         ] : []),
+        ["تكلفة الطلب", <MetricValue value={cpa} />],
+        ["العائد الإعلاني", <MetricValue value={roas} suffix="×" />],
         ["إجمالي التكاليف", <MetricValue value={report.totalCost} available={report.knownTotalCost} />],
         ["صافي الأرباح", <><MetricValue value={profitReady ? report.netProfit : null} />
             {profitReady && report.provisional && <span className="mr-1 text-[9px] font-medium">تقديري</span>}</>, true],
@@ -204,14 +206,10 @@ export default function DashboardAdsAccountRow({ label, stats = {}, fromDate, to
                     <span>طلبات سلة <MetricValue value={stats.orders} available={stats.knownOrders} suffix="" digits={0} /></span>
                     <span>القطع <MetricValue value={report.pieces} available={report.knownPieces} suffix="" digits={0} maximumDigits={2} /></span>
                 </div>}
-                <div className="mt-1 flex items-center justify-between gap-2 text-[10px] text-slate-600">
-                    <span>تكلفة الطلب <MetricValue value={stats.cpa} /></span>
-                    <span>العائد <MetricValue value={report.roas} suffix="×" /></span>
-                </div>
             </section>
-            <p className="mb-0 mt-2 text-[9px] leading-4 text-slate-500">التكاليف: المنتجات والشحن وعمولات طرق الدفع. {report.adSpendApplicable === false
-                ? "صافي الأرباح = المبيعات − التكاليف."
-                : "صافي الأرباح = المبيعات − الصرف الإعلاني − التكاليف."}</p>
+            <p className="mb-0 mt-2 text-[9px] leading-4 text-slate-500">{report.adSpendApplicable === false
+                ? "صافي الأرباح = المبيعات − إجمالي التكاليف."
+                : "صافي الأرباح = المبيعات − الصرف الإعلاني − إجمالي التكاليف."}</p>
             {report.provisional && report.complete && <p className="mb-0 mt-1 text-[9px] leading-4 text-amber-700">صافي الأرباح تقديري حتى اكتمال بيانات الصرف.</p>}
         </div>, document.body)}
     </>;

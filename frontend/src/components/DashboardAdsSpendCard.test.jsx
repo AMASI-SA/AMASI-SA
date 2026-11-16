@@ -635,7 +635,7 @@ describe("net profit column and footer period overview", () => {
     let metricsSpy;
     const day = "2026-10-26";
     function stats(netProfit, overrides = {}) {
-        const profit = { complete: true, netProfit, provisional: false, spendSar: 50,
+        const profit = { complete: true, netProfit, provisional: false, spendSar: 50, roas: 8,
             totalCost: 100, pieces: 3, ...overrides };
         const row = { orders: 2, sales: 400, cpa: 25, partial: false, profit };
         return { ...row, segments: [
@@ -650,18 +650,23 @@ describe("net profit column and footer period overview", () => {
             ["__proto__", stats(-123.45)]]),
         providers: { google: stats(0), tiktok: stats(75), meta: stats(125) },
         direct: stats(300, { adSpendApplicable: false, spendSar: null }),
-        total: stats(1611.11, { provisional: true }), pending: false, unrepresentedOrders: 0 };
+        total: stats(1611.11, { provisional: true, roas: 4.2 }), pending: false, unrepresentedOrders: 0 };
     }
     beforeEach(() => { metricsSpy = jest.spyOn(accountResults, "buildDashboardAdsTableMetrics").mockReturnValue(metrics()); });
     afterEach(() => { metricsSpy.mockRestore(); });
     const profitCell = (host, id) => host.querySelector(`[data-testid="${id}"]`).lastElementChild;
+    const roasCell = (host, id) => host.querySelector(`[data-testid="${id}"] [data-metric="roas"]`);
 
-    test("six compact columns show signed, zero and direct profit plus the supplied scoped aggregate", () => {
+    test("seven compact columns show canonical ROAS, signed profit and the supplied scoped aggregate", () => {
         const host = independentAccountMarkup(independentAccountData(true));
         const table = host.querySelector('[data-testid="dashboard-ads-account-table"]');
-        expect(table.querySelectorAll("thead th")).toHaveLength(6);
+        expect(table.querySelectorAll("thead th")).toHaveLength(7);
+        expect(table.querySelector("thead").textContent).toContain("العائد الإعلاني×");
         expect(table.querySelector("thead th:last-child").textContent).toBe("صافي الأرباحر.س");
-        [...table.rows].forEach((row) => expect(row.cells).toHaveLength(6));
+        [...table.rows].forEach((row) => expect(row.cells).toHaveLength(7));
+        expect(roasCell(host, "dashboard-snapchat-account-USD.A").textContent).toBe("8.00 ×");
+        expect(roasCell(host, "dashboard-ads-provider-direct").textContent).toBe("—");
+        expect(roasCell(host, "dashboard-ads-account-total").textContent).toBe("4.20 ×");
         expect(profitCell(host, "dashboard-snapchat-account-USD.A").textContent).toBe("1,234.56تقديري");
         expect(profitCell(host, "dashboard-snapchat-account-USD.A").querySelector("bdi").dir).toBe("ltr");
         expect(profitCell(host, "dashboard-snapchat-account-__proto__").textContent).toBe("-123.45");
@@ -673,6 +678,24 @@ describe("net profit column and footer period overview", () => {
         expect(profitCell(host, "dashboard-ads-provider-direct").textContent).toBe("300.00");
         expect(host.querySelector('[data-testid="dashboard-ads-provider-direct"]').children[1].textContent).toBe("—");
         expect(profitCell(host, "dashboard-ads-account-total").textContent).toBe("1,611.11تقديري");
+    });
+
+    test.each([
+        ["known ROAS without complete costs", 2.75, false, "2.75 ×"],
+        ["verified zero", 0, true, "0.00 ×"],
+        ["missing", null, true, "—"],
+        ["nonfinite", Infinity, true, "—"],
+        ["NaN", NaN, true, "—"],
+        ["negative", -1, true, "—"],
+        ["untyped", "2.75", true, "—"],
+    ])("%s ROAS is displayed without a local fallback calculation", (_label, roas, complete, expected) => {
+        const result = metrics();
+        Object.assign(result.accounts.get("USD.A").profit, { roas, complete });
+        Object.assign(result.total.profit, { roas, complete });
+        metricsSpy.mockReturnValue(result);
+        const host = independentAccountMarkup(independentAccountData(true));
+        expect(roasCell(host, "dashboard-snapchat-account-USD.A").textContent).toBe(expected);
+        expect(roasCell(host, "dashboard-ads-account-total").textContent).toBe(expected);
     });
 
     test.each([

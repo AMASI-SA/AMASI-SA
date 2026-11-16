@@ -237,11 +237,22 @@ function NetProfitMetric({ profit }) {
     </>;
 }
 
+function RoasMetric({ profit }) {
+    const value = profit?.roas;
+    if (profit?.adSpendApplicable === false || typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+        return <span className="text-slate-400">—</span>;
+    }
+    return <bdi dir="ltr" className="block whitespace-nowrap tabular-nums">
+        {value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ×
+    </bdi>;
+}
+
 function SallaMetricCells({ stats = {} }) {
     return <>
         <td className="px-1 py-2 text-center"><SallaMetric value={stats.sales} known={stats.knownSales} /></td>
         <td className="px-1 py-2 text-center"><SallaMetric value={stats.orders} known={stats.knownOrders} integer /></td>
         <td className="px-1 py-2 text-center"><SallaMetric value={stats.cpa} /></td>
+        <td className="px-1 py-2 text-center" data-metric="roas"><RoasMetric profit={stats.profit} /></td>
         <td className="px-1 py-2 text-center"><NetProfitMetric profit={stats.profit} /></td>
     </>;
 }
@@ -273,18 +284,19 @@ function AdsAccountResultsTable({ data, accounts, accountMode, ready, singleDay,
     return <div className="mt-2 min-w-0" data-testid="dashboard-ads-account-results">
         <div className="mb-2 text-[10px] font-extrabold text-slate-700">تفاصيل الحسابات</div>
         <div className="overflow-hidden rounded-xl border border-slate-200">
-            <table dir="rtl" className="w-full table-fixed border-collapse text-[10px] leading-4 text-slate-800"
+            <table dir="rtl" className="w-full table-fixed border-collapse text-[9px] leading-4 text-slate-800"
                 data-testid="dashboard-ads-account-table">
-                <caption className="sr-only">صرف الحسابات ومبيعات وطلبات سلة وصافي الأرباح للفترة المحددة</caption>
-                <colgroup><col style={{ width: "22%" }} /><col style={{ width: "22%" }} />
-                    <col style={{ width: "16%" }} /><col style={{ width: "10%" }} /><col style={{ width: "13%" }} />
-                    <col style={{ width: "17%" }} /></colgroup>
+                <caption className="sr-only">صرف الحسابات ومبيعات وطلبات سلة والعائد الإعلاني وصافي الأرباح للفترة المحددة</caption>
+                <colgroup><col style={{ width: "21%" }} /><col style={{ width: "20%" }} />
+                    <col style={{ width: "15%" }} /><col style={{ width: "8%" }} /><col style={{ width: "11%" }} />
+                    <col style={{ width: "10%" }} /><col style={{ width: "15%" }} /></colgroup>
                 <thead className="bg-slate-50 text-[9px] font-bold text-slate-600"><tr>
                     <th scope="col" className="px-1.5 py-2 text-right">المنصة / الحساب</th>
                     <th scope="col" className="px-1 py-2 text-center">الصرف</th>
                     <th scope="col" className="px-1 py-2 text-center">مبيعات سلة<span className="block text-[8px] font-normal">ر.س</span></th>
                     <th scope="col" className="px-1 py-2 text-center">طلبات سلة</th>
                     <th scope="col" className="px-1 py-2 text-center">متوسط تكلفة الطلب<span className="block text-[8px] font-normal">ر.س</span></th>
+                    <th scope="col" className="px-1 py-2 text-center">العائد الإعلاني<span className="block text-[8px] font-normal">×</span></th>
                     <th scope="col" className="px-1 py-2 text-center">صافي الأرباح<span className="block text-[8px] font-normal">ر.س</span></th>
                 </tr></thead>
                 <tbody data-testid="dashboard-ads-provider-totals">

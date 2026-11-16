@@ -1,73 +1,66 @@
 {
   "task_id": "dashboard-ads-net-profit-overview-20261116",
-  "status": "source_reviewed_tests_passed_ready_for_checkpoint",
+  "status": "followup_source_verified_ready_for_checkpoint",
   "repository": "AMASI-SA/AMASI-SA",
-  "branch": "codex/dashboard-ads-net-profit-column-20261116",
+  "branch": "codex/dashboard-ads-footer-roas-20261116",
   "source_base": "4cdc10931f49124a4715153f220e0adf274e8bcc",
-  "scope": "Add a compact net-profit column to every Dashboard advertising account/provider/direct/total row. Hover, focus or click the total FOOTER row to compare all shown accounts in two Riyadh half-day tables and view authoritative totals below. The header remains unchanged as a non-trigger.",
+  "scope": "Preserve net-profit and footer-only Riyadh half-day comparison, add canonical ROAS across main/account/period/aggregate tables, and show only total non-advertising costs. Rebuild and functionally verify the exact delivered HTML so it includes the interactive footer.",
   "acceptance": [
-    "Preserve the existing Dashboard grid/card width; display six main columns with compact SAR and native spend.",
-    "Use existing stats.profit.complete/netProfit/provisional without recalculating profit, adding operating costs or introducing new reads.",
-    "Show signed losses, true zero and provisional profit correctly; incomplete, missing and non-finite profit remains unavailable.",
-    "The footer overview shows midnight to noon and noon to the current source cutoff/end of day, using existing metrics.segments. Before noon the second period has no numeric rows.",
-    "Both period tables show platform/account, advertising spend, Salla sales/orders, advertising CPA, average non-advertising order costs and net profit.",
-    "Average order costs use canonical product/shipping/payment totalCost divided by positive canonical orders, independently from advertising completeness. Zero orders are unavailable for this average.",
-    "Use total.segments for half-day totals and total for the full period; never sum rounded displayed profits or override financial scope guards.",
-    "Direct orders retain unavailable advertising spend/CPA, with their supplied non-advertising net profit.",
-    "Keep one locally rendered popup active, support mouse/touch/keyboard and small-screen scrolling, and suppress false half-day splits for multi-day ranges."
+    "Seven compact main columns retain current outer card width and native/SAR spend in one cell.",
+    "ROAS uses existing profit.roas directly, independent of cost completeness; valid zero is shown, direct or invalid ratios remain unavailable.",
+    "Every account period/day/range section shows only canonical totalCost or explicitly labeled partial knownTotalCost; remove product/shipping/payment breakdown rows and prose.",
+    "Both all-platform period tables show total costs instead of average costs, add ROAS, and keep authoritative scoped totals. Daily costs appear exactly once.",
+    "Hover any total-footer cell opens both tables. Moving into the popup preserves it; click pins it; header does not activate it. No new requests.",
+    "Before noon the second half remains empty. Net profit still excludes operating costs and preserves signed/incomplete/provisional states.",
+    "Deliver the exact rebuilt source component bundle; retain browser visual acceptance as unverified until an allowed live environment is available."
   ],
   "verification": [
     {
-      "name": "Pinned frontend toolchain and dependencies",
-      "result": "Node22.23.2/Yarn1.22.22 verified; frozen-lockfile install exited0. Reused dependency source package.json and yarn.lock are byte-identical to the current base."
+      "name": "Required new ROAS gap reproduced",
+      "result": "Before implementation, main-table regression run failed8 cases due to missing seventh column/ROAS cells. Existing net and footer cases passed; exit1 expected."
     },
     {
-      "name": "Financial helper and account-row interaction regressions",
-      "command": "CI=true python -B scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend test --watchAll=false --runInBand --runTestsByPath src/components/DashboardAdsAccountRow.test.jsx src/lib/dashboardAdsAccountResults.test.js",
-      "result": "102 tests in2 suites passed; exit0. Includes the newly added sixth-cell hover case."
+      "name": "Integrated focused tests",
+      "command": "CI=true python -B scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend test --watchAll=false --runInBand --runTestsByPath src/components/DashboardAdsSpendCard.test.jsx src/components/DashboardAdsSpendCard.manualRefresh.test.jsx src/pages/AdvancedDashboard.cardRefresh.test.jsx src/lib/dashboardPlatformSpendClient.test.js src/services/dashboardAdsSpend.test.js src/components/DashboardAnalyticsPlacement.test.js src/components/DashboardAdsAccountRow.test.jsx src/lib/dashboardAdsAccountResults.test.js src/components/DashboardAdsPeriodsOverview.test.jsx",
+      "result": "311 tests in9 suites passed, zero failures/skips; exit0. Includes main54, account24, overview26."
     },
     {
-      "name": "Existing live width baseline",
-      "result": "Read-only browser DOM at viewport1363x936: current card460px wide, table422px, five columns. No provider refresh or business write."
+      "name": "Stale uploaded preview diagnosis",
+      "result": "Attachment ads-card-preview.html SHA256 f0eb0bb7a4583d241258fcef9ed2e9342a6edb5637af2a8c747f7a16e176afeb contains a static total tr and no overview component. Current handlers pass hover regressions; no speculative handler rewrite."
     },
     {
-      "name": "Remaining focused frontend suites",
-      "command": "CI=true python -B scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend test --watchAll=false --runInBand --runTestsByPath src/components/DashboardAdsSpendCard.test.jsx src/components/DashboardAdsSpendCard.manualRefresh.test.jsx src/pages/AdvancedDashboard.cardRefresh.test.jsx src/lib/dashboardPlatformSpendClient.test.js src/services/dashboardAdsSpend.test.js src/components/DashboardAnalyticsPlacement.test.js",
-      "result": "166 tests in6 suites passed; exit0, including main column and footer activation integration."
+      "name": "Exact updated preview acceptance",
+      "result": "Actual changed components and repository CSS rebuilt into883083-byte self-contained HTML; SHA2561322f15ae499147da9277b3aed9385017f1cb7834292e7a999da2c70392beab0. JSDOM ran that exact bundle and proved7 main/8 period columns,6 platform/direct rows, all7 footer-cell hovers, pointer transition, click pin, one daily cost metric, no cost breakdown, and empty future afternoon. Zero network requests; exit0."
     },
     {
-      "name": "Footer overview tests",
-      "command": "CI=true python -B scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend test --watchAll=false --runInBand --runTestsByPath src/components/DashboardAdsPeriodsOverview.test.jsx",
-      "result": "16 tests passed; exit0. All9 focused suites passed across the three bounded runs:284 tests, zero failures/skips."
+      "name": "Independent final review",
+      "result": "Read-only review of stable6-file diff and raw integrated/preview evidence found no material issue. Existing financial helper and backend unchanged. git diff --check exit0."
     },
     {
-      "name": "Synthetic actual-component preview build",
-      "result": "Passed Vite8.2.4 library build of the actual changed components and existing synthetic financial fixtures with repository CSS. Temporary output is outside the Git checkout and is not a release artifact."
-    },
-    {
-      "name": "Visual verification limitation",
-      "result": "Cloud Browser could not connect to the local preview server, and explicitly rejected the local file URL under its URL policy. No browser workaround or visual-pass claim. The existing live baseline was observed at460px; preview behavior is covered by DOM tests."
-    },
-    {
-      "name": "Independent integration review",
-      "result": "Read-only review of card, overview, helper contracts and tests found no material issue. Canonical total-cost summary and signed daily profit confirmed."
+      "name": "Visual limitation",
+      "result": "No pixel-layout acceptance claim. Prior Cloud Browser file-URL denial was respected; no alternate browser or tunnel workaround. Functional DOM/event acceptance is separate from visual verification."
     }
   ],
   "incomplete": [
-    "Preserve canonical remote source A and a draft PR; run required exact-source CI and governed release build, then freeze intent-only B.",
-    "Review the actual component layout when an allowed preview or deployed environment is available.",
-    "Emergent currently displays its sign-in page. Authentication is required before inspecting the canonical shared guard and any authorized production handoff."
+    "Preserve new canonical source and replacement PR, run exact-source CI and governed two-build proof, then freeze new intent-only commit and complete its gates.",
+    "Verify the outstanding Emergent authentication handoff outcome. Last observed website rejected a submitted verification code; no automated retry was performed.",
+    "Fresh inactive official shared guard before shared changes. Complete authorized merge/build/prepare/prepublish/single publish and official3-probe verification.",
+    "Check live browser layout and footer after publication when authenticated access is available."
   ],
   "production_changed": false,
-  "release_guard": "No shared /app access or mutation, lease, merge or publication by this task.",
-  "authorization": "Current user requests the column and footer overview. Earlier same-card user authorization explicitly permits merge/publication; no new permission assumed for unrelated actions.",
+  "release_guard": "No shared /app mutation, lease, merge or publish by either this revision or its superseded candidate.",
+  "authorization": "Same advertising-card task. Earlier explicit merge/publication authorization persists; newest user feedback overrides the previous UI specification.",
   "continuation_ledger": "Issue1006 is at its2500-comment cap. The task PR will serve as the current continuation handoff alongside this status document.",
   "previous_completed_task": "PR1947 is already merged/published/verified. This follow-up starts from the newer PR1956 production base; it does not repeat the previous deployment.",
-  "next_safe_action": "Create remote source checkpoint/PR and run governed A/B release checks. Obtain Emergent authentication through the secure browser flow only after the implementation is concrete and reviewable; inspect fresh inactive guard before shared writes.",
+  "next_safe_action": "Create source checkpoint and replacement PR on codex/dashboard-ads-footer-roas-20261116, then build/freeze an entirely new release pair. Do not merge/deploy superseded PR1957 or its documentation checkpoint.",
   "completed": [
-    "Added the sixth signed net-profit column for all accounts, providers, direct orders and the source aggregate without changing accounting or data-fetch contracts.",
-    "Added footer-only all-platform Riyadh half-day overview, with source period totals and full-day costs and profit.",
-    "Added16 focused overview tests,7 main-card profit/activation tests, and sixth-cell row-hover coverage; registered the new component suite in the existing focused workflow.",
-    "Independent integration review found no material financial, scope or interaction issue."
-  ]
+    "Added canonical ROAS to the compact main table, all platform half-day/day/range detail sections, and aggregate tables.",
+    "Replaced average cost with total cost in overview, removed detailed cost rows and duplicate daily totals.",
+    "Verified existing footer hover and delivered an updated actual-source bundle replacing the older attached preview.",
+    "Preserved frozen old A/B; PR1957 returned to draft as superseded pending replacement release."
+  ],
+  "revision_task_id": "dashboard-ads-footer-roas-20261116",
+  "superseded_pr": 1957,
+  "preserved_previous_source": "fc26ab163b25dc067b1a352394b6f26a3d557345",
+  "preserved_previous_intent": "7328a3d3df39dc3535786fc3587a47405f869219"
 }

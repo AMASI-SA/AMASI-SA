@@ -35,15 +35,17 @@ afterEach(() => {
 function renderRow(stats = sampleStats(), props = {}) {
     act(() => root.render(<table><tbody><DashboardAdsAccountRow label="سناب الدولار" stats={stats}
         fromDate={day} toDate={day} {...props}>
-        <th>سناب الدولار</th><td>100.00</td><td>500.00</td><td>3</td><td>33.33</td><td>200.00</td>
+        <th>سناب الدولار</th><td>100.00</td><td>500.00</td><td>3</td><td>33.33</td><td>5.00×</td><td>200.00</td>
     </DashboardAdsAccountRow></tbody></table>));
     return host.querySelector("tbody tr");
 }
 const details = () => document.querySelector('[data-testid="dashboard-ads-account-tooltip"]');
 const enter = (element) => act(() => element.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
 const click = (element) => act(() => element.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+const financialRows = (label, scope = details()) => [...scope.querySelectorAll("dl > div")]
+    .filter((row) => row.querySelector("dt").textContent === label);
 
-test.each([0, 1, 2, 3, 4, 5])("hovering table cell %s opens the two Riyadh periods and daily totals", (index) => {
+test.each([0, 1, 2, 3, 4, 5, 6])("hovering table cell %s opens the two Riyadh periods and daily totals", (index) => {
     const row = renderRow();
     expect(details()).toBeNull();
     enter(row.children[index]);
@@ -54,10 +56,22 @@ test.each([0, 1, 2, 3, 4, 5])("hovering table cell %s opens the two Riyadh perio
     expect(popup.textContent).toContain("12:00 – 15:30");
     expect(popup.textContent).toContain("إجمالي اليوم");
     expect(popup.textContent).toContain("USD 26.67");
-    expect(popup.textContent).toContain("عمولات طرق الدفع");
+    expect(popup.textContent).toContain("إجمالي التكاليف");
     expect(popup.textContent).toContain("صافي الأرباح");
-    expect(popup.textContent).not.toMatch(/التشغيلية|التشغيل|عمولة البنك/);
+    expect(popup.textContent).not.toMatch(/تكلفة المنتجات|تكلفة الشحن|عمولات طرق الدفع|التشغيلية|التشغيل|عمولة البنك/);
     expect(row.getAttribute("aria-expanded")).toBe("true");
+});
+
+test("both periods and the daily summary each show canonical CPA, ROAS and total costs once", () => {
+    enter(renderRow());
+    for (const [label, value] of [["تكلفة الطلب", "33.33 ر.س"], ["العائد الإعلاني", "5.00 ×"], ["إجمالي التكاليف", "200.00 ر.س"]]) {
+        const rows = financialRows(label);
+        expect(rows).toHaveLength(3);
+        rows.forEach((row) => expect(row.querySelector("dd").textContent).toBe(value));
+    }
+    const summary = details().querySelector('[data-testid="dashboard-ads-daily-summary"]');
+    expect(summary.textContent.match(/تكلفة الطلب/g)).toHaveLength(1);
+    expect(summary.textContent.match(/العائد/g)).toHaveLength(1);
 });
 
 test("the afternoon remains an empty card before noon, even with a malformed zero payload", () => {
@@ -75,24 +89,26 @@ test("the afternoon remains an empty card before noon, even with a malformed zer
     expect(details().textContent).toContain("00:00 – 03:00");
 });
 
-test("missing profit stays unknown while explicitly known partial costs are labeled", () => {
+test("missing costs withhold profit but retain canonical ROAS and explicitly known partial total costs", () => {
     const stats = sampleStats();
     stats.profit = { ...stats.profit, complete: false, netProfit: null, totalCost: null, knownTotalCost: 120 };
-    stats.segments[0].profit = stats.profit;
-    stats.segments[0].status = "partial";
+    stats.segments.forEach((segment) => { segment.profit = stats.profit; segment.status = "partial"; });
     enter(renderRow(stats));
     const summary = details().querySelector('[data-testid="dashboard-ads-daily-summary"]');
     expect(summary.textContent).toContain("120.00 ر.سالمتاح");
     const profit = [...summary.querySelectorAll("dl > div")].find((row) => row.textContent.includes("صافي الأرباح"));
     expect(profit.querySelector("dd").textContent).toBe("—");
     expect(profit.textContent).not.toContain("0.00");
+    financialRows("العائد الإعلاني").forEach((row) => expect(row.querySelector("dd").textContent).toBe("5.00 ×"));
+    financialRows("إجمالي التكاليف").forEach((row) => expect(row.querySelector("dd").textContent).toBe("120.00 ر.سالمتاح"));
+    financialRows("صافي الأرباح").forEach((row) => expect(row.querySelector("dd").textContent).toBe("—"));
 });
 
 test("direct orders display no assigned advertising amount in both periods and the daily summary", () => {
     const stats = sampleStats();
-    const direct = (row) => ({ ...row, cpa: null, profit: { ...row.profit,
+    const direct = (row) => ({ ...row, cpa: 33.33, profit: { ...row.profit,
         adSpendApplicable: false, spendSar: null, knownSpendSar: null, nativeSpend: null,
-        netProfit: 300, roas: null, provisional: false } });
+        netProfit: 300, roas: 5, provisional: false } });
     const report = { ...direct(stats), segments: stats.segments.map(direct) };
     enter(renderRow(report, { label: "مباشر / بدون مصدر" }));
     const popup = details();
@@ -104,7 +120,47 @@ test("direct orders display no assigned advertising amount in both periods and t
     const profits = [...popup.querySelectorAll("dl > div")]
         .filter((row) => row.querySelector("dt").textContent === "صافي الأرباح");
     profits.forEach((row) => expect(row.querySelector("dd").textContent).toBe("300.00 ر.س"));
+    for (const label of ["تكلفة الطلب", "العائد الإعلاني"]) {
+        const rows = financialRows(label);
+        expect(rows).toHaveLength(3);
+        rows.forEach((row) => expect(row.querySelector("dd").textContent).toBe("—"));
+    }
     expect(popup.textContent).not.toContain("USD");
+});
+
+test.each([null, undefined, NaN, Infinity, -1, "5"])("invalid canonical ROAS %s remains unknown in every section", (roas) => {
+    const stats = sampleStats();
+    stats.profit.roas = roas;
+    enter(renderRow(stats));
+    const rows = financialRows("العائد الإعلاني");
+    expect(rows).toHaveLength(3);
+    rows.forEach((row) => expect(row.querySelector("dd").textContent).toBe("—"));
+});
+
+test("zero canonical ROAS is displayed instead of replaced by a dash", () => {
+    const stats = sampleStats();
+    for (const row of [stats, ...stats.segments]) {
+        row.sales = row.knownSales = 0;
+        row.profit.roas = 0;
+        row.profit.netProfit = -300;
+    }
+    enter(renderRow(stats));
+    financialRows("العائد الإعلاني").forEach((row) => expect(row.querySelector("dd").textContent).toBe("0.00 ×"));
+});
+
+test("a date-range summary retains orders and pieces but only the aggregate cost amount", () => {
+    enter(renderRow(sampleStats(), { toDate: "2026-11-16" }));
+    const popup = details();
+    expect(popup.querySelector('[data-testid="dashboard-ads-period-morning"]')).toBeNull();
+    expect(popup.querySelector('[data-testid="dashboard-ads-period-afternoon"]')).toBeNull();
+    const summary = popup.querySelector('[data-testid="dashboard-ads-daily-summary"]');
+    expect(summary.textContent).toContain("إجمالي الفترة");
+    expect(summary.textContent).toContain("3 طلب");
+    expect(summary.textContent).toContain("5 قطعة");
+    expect(financialRows("إجمالي التكاليف", summary)).toHaveLength(1);
+    expect(financialRows("تكلفة الطلب", summary)).toHaveLength(1);
+    expect(financialRows("العائد الإعلاني", summary)).toHaveLength(1);
+    expect(popup.textContent).not.toMatch(/تكلفة المنتجات|تكلفة الشحن|عمولات طرق الدفع/);
 });
 
 test("midnight keeps the morning's noon boundary and source quantities retain their precision", () => {

@@ -44,14 +44,13 @@ function NetProfit({ profit = {} }) {
 
 function metricEntries(stats = {}) {
     const profit = stats?.profit || {};
-    const average = count(stats?.orders) && stats.orders > 0 && amount(profit.totalCost)
-        ? profit.totalCost / stats.orders : null;
     return [
         { key: "spend", label: "الصرف الإعلاني", value: <Spend profit={profit} /> },
         { key: "sales", label: "المبيعات", unit: "ر.س", value: <Value value={stats?.sales} available={stats?.knownSales} /> },
         { key: "orders", label: "الطلبات", value: <Value value={stats?.orders} available={stats?.knownOrders} integer /> },
         { key: "cpa", label: "متوسط تكلفة الطلب", unit: "ر.س", value: <Value value={profit.adSpendApplicable === false ? null : stats?.cpa} /> },
-        { key: "average", label: "متوسط التكاليف", unit: "ر.س", value: <Value value={average} /> },
+        { key: "costs", label: "إجمالي التكاليف", unit: "ر.س", value: <Value value={profit.totalCost} available={profit.knownTotalCost} /> },
+        { key: "roas", label: "العائد الإعلاني", unit: "×", value: <Value value={profit.adSpendApplicable === false ? null : profit.roas} /> },
         { key: "net", label: "صافي الأرباح", unit: "ر.س", value: <NetProfit profit={profit} /> },
     ];
 }
@@ -94,7 +93,7 @@ function PeriodTable({ id, records, total }) {
         <div className="overflow-x-auto overscroll-x-contain" tabIndex={0} aria-label={`تمرير جدول ${title}`}>
             <table dir="rtl" className="w-full table-fixed border-collapse text-[10px] leading-4" style={{ minWidth: 720 }}>
                 <caption className="sr-only">أداء المنصات في {title}</caption>
-                <colgroup>{[20, 16, 14, 10, 13, 13, 14].map((width, index) => <col key={index} style={{ width: `${width}%` }} />)}</colgroup>
+                <colgroup>{[18, 15, 13, 8, 12, 13, 9, 12].map((width, index) => <col key={index} style={{ width: `${width}%` }} />)}</colgroup>
                 <thead className="bg-slate-50 text-[9px] font-bold text-slate-600"><tr>
                     <th scope="col" className="px-2 py-2 text-right">المنصة / الحساب</th>
                     {metricEntries().map((entry) => <th key={entry.key} scope="col" className="px-2 py-2 text-center">
@@ -102,7 +101,7 @@ function PeriodTable({ id, records, total }) {
                     </th>)}
                 </tr></thead>
                 <tbody>
-                    {notStarted ? <tr><td colSpan={7} className="px-3 py-5 text-center text-slate-400">
+                    {notStarted ? <tr><td colSpan={8} className="px-3 py-5 text-center text-slate-400">
                         {morning ? "لم تبدأ بيانات الفترة بعد" : "تبدأ عند 12 ظهرًا"}
                     </td></tr> : rows.length ? rows.map((row) => <tr key={row.key} data-overview-row={row.key} className="border-t border-slate-100">
                         <th scope="row" className="px-2 py-2 text-right font-bold" title={row.label}>
@@ -112,7 +111,7 @@ function PeriodTable({ id, records, total }) {
                             </span>
                         </th>
                         <MetricCells stats={reported(row.segment) ? row.segment : {}} />
-                    </tr>) : <tr><td colSpan={7} className="px-3 py-5 text-center text-slate-400">بانتظار بيانات المنصات.</td></tr>}
+                    </tr>) : <tr><td colSpan={8} className="px-3 py-5 text-center text-slate-400">بانتظار بيانات المنصات.</td></tr>}
                 </tbody>
                 {!notStarted && <tfoot className="border-t border-yellow-200 bg-yellow-50 font-bold">
                     <tr data-testid={`dashboard-ads-overview-${id}-total`}>
@@ -254,18 +253,14 @@ export default function DashboardAdsPeriodsOverview({ children, records = [], to
             <section data-testid="dashboard-ads-overview-total" className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50/50 p-3">
                 <h4 className="mb-2 mt-0 text-xs font-extrabold text-emerald-800">{singleDay ? "إجمالي اليوم" : "إجمالي الفترة"}</h4>
                 <dl className="m-0 grid grid-cols-2 gap-2 text-center sm:grid-cols-3">
-                    {[...metricEntries(total).filter((entry) => entry.key !== "net"),
-                        { key: "costs", label: "إجمالي التكاليف", unit: "ر.س",
-                            value: <Value value={total?.profit?.totalCost} available={total?.profit?.knownTotalCost} /> },
-                        metricEntries(total).find((entry) => entry.key === "net"),
-                    ].map((entry) => <div key={entry.key} data-metric={entry.key}
+                    {metricEntries(total).map((entry) => <div key={entry.key} data-metric={entry.key}
                         className={entry.key === "net" ? "col-span-full border-t border-emerald-200 pt-2" : ""}>
                         <dt className="mb-1 text-[9px] text-slate-600">{entry.label}{entry.unit && ` (${entry.unit})`}</dt>
                         <dd className="m-0 text-[11px] font-bold">{entry.value}</dd>
                     </div>)}
                 </dl>
             </section>
-            <p className="mb-0 mt-2 text-[9px] leading-4 text-slate-500">متوسط التكاليف = تكاليف المنتجات والشحن وعمولات طرق الدفع ÷ الطلبات.</p>
+            <p className="mb-0 mt-2 text-[9px] leading-4 text-slate-500">صافي الأرباح = المبيعات − الصرف الإعلاني − إجمالي التكاليف.</p>
         </div>, document.body)}
     </>;
 }
