@@ -1,7 +1,7 @@
 {
   "task_id": "MZ-BUNDLE-CONDITIONAL-CHOICE-20261116",
   "scope": "Resolve phantom incomplete costs from conditional descriptive bundle options without changing genuine cost dependencies.",
-  "state": "all_gates_passed_current_release_ready",
+  "state": "all_gates_passed_waiting_ready1955_publication",
   "repository": "AMASI-SA/AMASI-SA",
   "task_branch": "codex/bundle-conditional-cost-current-20261116",
   "source_base_J": "b05cd3c9b25ce22df1b2dd06c23d97606bd632c6",
@@ -72,7 +72,11 @@
     "merge_attempt": "GitHub405 conflict; Production had advanced via PR1955 at00:15:52Z to Jb05. No PR1954 merge occurred.",
     "outcome": "Helper timed out before receiving a merge receipt and exited1. No deployment, host source mutation, own lease or publish occurred."
   },
-  "release_guard": "No lease created by this task; fresh original status must be checked after the PR1955 owner's publication.",
+  "release_guard": {
+    "active": true,
+    "owner": "chatgpt-ready1955-20261116-root",
+    "modified_by_this_task": false
+  },
   "merge": "not_performed",
   "deployment": "not_performed",
   "production_changed": "no",
@@ -82,9 +86,9 @@
     "Do not equate zero customer surcharge with zero internal cost.",
     "Preserve unresolved state for genuine cost decisions with missing/conflicting evidence."
   ],
-  "next_safe_action": "Fresh original status must report inactive. Run immutable reviewed operator from b87f320fb21790cf70a7ed5f589089e18dcdb3ca. Observe ready_for_merge, confirm Production remains Jb05 and normally merge exact PR1956 B; immediately atomically provide actual M. Require matching build and prepare, then prepublish, single authorized UI publication, explicit newer success and canonical three-round verify ending inactive. Never clear or reuse another lease.",
+  "next_safe_action": "Wait for the PR1955 owner's successful publication and canonical verification ending inactive. Reconfirm Production Jb05 and exact B/green PR1956. Run immutable operator from b87f320fb21790cf70a7ed5f589089e18dcdb3ca, observe ready_for_merge, normally merge expected B and atomically supply actual M. After matching build/prepare, use reviewed publication wrapper for prepublish immediately before one authorized UI publication, then root-observed success and exactly one canonical three-round verification. Record final inactive and normal saved-report GET acceptance.",
   "ledger": "Issue1006 is at its known comment limit. This status and the evidence-only branch are the durable continuation record.",
-  "checkpoint_updated_at_utc": "2026-11-16 00:29:32 UTC",
+  "checkpoint_updated_at_utc": "2026-11-16 00:37:08 UTC",
   "source_tree": "fe74d9ce67a0a1a4bcedbfd0a5a7e8721d5ef9f6",
   "pr": {
     "number": 1956,
@@ -114,7 +118,7 @@
     "bytes": 8171,
     "sha256": "e72fd1e7acde4aa260ddaf87ea44c4c9397ecb5d9c4a7e3a12305fe2f879d4c4",
     "review": "Independent static review PASS; only successor identity/PR pins changed.",
-    "state": "not_executed",
+    "state": "Not executed. The outer fresh inactive assertion stopped at actor chatgpt-ready1955-20261116-root; no1956 receipt directory or process was created.",
     "required_start": "Fresh original guard inactive, exact original/remote Jb05, no tracked changes.",
     "runner_requirements": [
       "Keep helper file and stdout log outside initially empty receipts directory.",
@@ -138,5 +142,19 @@
     "own_lease_created": false,
     "original_source_modified": false
   },
-  "publication_coordination": "PR1955 is fully preserved in source A. Its original rehearsal owns its own mutex while running. A fresh inactive CLI result and exact original/remote Jb05 are mandatory before our operator. Proceed only through the official mutex; an active or incomplete other lease stops the operation before merge/source mutation. If inactive and exact, a combined publication contains both reviewed changes."
+  "publication_coordination": "PR1955 owns an active prepared lease; root observed its platform publication start Nov16 at03:31 Riyadh. All own B checks and isolated host rehearsal pass. Do not start another operator, clear its lease, or change /app while this lease remains active.",
+  "publication_wrapper": {
+    "path": "docs/operations/MZ-BUNDLE-CONDITIONAL-CHOICE-20261116/publication_1956.py",
+    "bytes": 10603,
+    "sha256": "0d5c716a83f2db81ccffcb2e8a4dd39ccb8e8d02e82b4952f13d45fff859656f",
+    "guard_sha256": "4e56f1f60f5f79931658b8f95a0aeb2269471025ca84f7e5b651cd284806349a",
+    "root_review": "passed",
+    "independent_review": "passed",
+    "executed": false,
+    "modes": [
+      "prepublish",
+      "verify"
+    ],
+    "requirements": "Private owned prepare receipt; exact actor/A/J/M/B tree/runtime binding. Verify additionally requires the same successful prepublish and root-observed new UI success metadata. Official operations once, no timeout/retry, matching lease closure only."
+  }
 }
