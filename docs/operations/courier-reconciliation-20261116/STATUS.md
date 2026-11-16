@@ -195,3 +195,13 @@ Shared `/app` fast-forwarded to exact M with the expected tree. The first actual
 One ignored/untracked cache directory containing two `.pyc`/`.pyo` files was reversibly moved outside `/app` to the task's bytecode quarantine. Each cache member was verified regular, untracked, and ignored before moving; no tracked source changed. Subsequent Python commands set `PYTHONDONTWRITEBYTECODE=1` to prevent recurrence. The second actual adapter rehearsal is now running and will compare all 120 unrelated untracked files with the saved manifest before allowing any lease.
 
 Exact-M Production-push Readiness `43964649337` and Security `43964649351` succeeded. Readiness included actual Node20 job `133641304006`, actual Node24 job `133641304119`, and Production handoff `133642591339`. Exact-M CodeQL `43964649567` remains pending at this checkpoint. Live Production runtime changed: **no**; publication remains pending.
+
+## Ready for authorized publication — 2026-11-17 Asia/Riyadh
+
+The corrected actual shared-host adapter rehearsal completed successfully (`yarn build`, 92.86 seconds) and emitted the expected package-boundary proof, deterministic runtime identity, artifact tree, and reproducibility proof. Shared receipt reports exact M `b439b683f26ffdd61b7b9de80315ea21747d135c`, source A `2b977a7c486c9121302810b37f46da6b4de085a6`, expected `rg5-af4b492366600af5c14a6d2599ecc6cc00008f70f826cec8e8854cbdc1edf173`, and clean tracked files.
+
+All 120 prior untracked paths remain present. 119 retain identical bytes and modes. Only `.emergent/stripped_env_names` changed; bounded classification confirmed it contains environment-variable names only. Its current bytes were left untouched, outside the governed source roots; an independent reviewer confirmed that this narrowly documented exception to our ad-hoc preservation comparison bypasses no official gate. The two ignored bytecode files remain preserved outside the workspace. Do not claim all 120 files are byte-identical.
+
+All exact-M Production-push gates are final success: Readiness `43964649337`, Security `43964649351`, CodeQL `43964649567`. Root independently reread their jobs and confirmed successful completion, including both actual adapter rehearsals and the Production handoff. No source changed during the environment correction.
+
+Live Production runtime changed: **no** at this checkpoint. Next safe action is own v5 `prepare` and immediate `prepublish`, one authorized UI publish, observed newer completion, then the official three consecutive Production probes and inactive-guard check. Saved courier UI inspection follows without the shared all-sections refresh.
