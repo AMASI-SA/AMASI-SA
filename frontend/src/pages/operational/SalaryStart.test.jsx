@@ -69,6 +69,26 @@ test('incomplete sources expose a reason and never offer approval', async () => 
   expect(api.approveSalaryStart).not.toHaveBeenCalled();
 });
 
+test('blocked preview exposes exact daily evidence without approving rounding differences', async () => {
+  api.previewSalaryStart.mockResolvedValue({...preview(), can_approve: false, issues: [
+    {code: 'operational_salary_recorded_day_reconciliation_required', source_id: 'salary:employee:2026-11-16',
+      business_date: '2026-11-16', reason: 'cutover_rounding_changed', currency: 'SAR', proposed_currency: 'SAR',
+      recorded: '33.33', proposed: '33.34'},
+    {code: 'employee_salary_contract_incomplete', source_id: 'employee-missing'},
+    {code: 'operational_salary_recorded_day_reconciliation_required', source_id: 'salary:other:2026-11-16',
+      currency: 'SAR', recorded: '10.00', proposed: null}
+  ]});
+  await render(); await showPreview();
+  expect(host.textContent).toContain('توزيع التقريب');
+  expect(host.textContent).toContain('salary:employee:2026-11-16');
+  expect(host.textContent).toContain('33.33 SAR');
+  expect(host.textContent).toContain('33.34 SAR');
+  expect(host.textContent).toContain('employee-missing');
+  expect(host.textContent).toContain('غير متاح');
+  expect(host.querySelector('input[type="checkbox"]')).toBeNull();
+  expect(api.approveSalaryStart).not.toHaveBeenCalled();
+});
+
 test.each([
   {session_scope: other}, {first_day: '2026-11-01'}, {preview_hash: 'bad'},
   {additional_amounts: {SAR: 100}}, {additional_amounts: {}}, {issues: [{code: 'missing'}]},
