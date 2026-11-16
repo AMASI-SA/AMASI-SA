@@ -14,7 +14,8 @@ from .service import call_salla
 
 
 ISSUE_CODES = {"operational_delivery_shipment_not_delivered", "operational_delivery_timestamp_missing",
-               "operational_delivery_shipment_source_missing", "operational_prepaid_shipping_completion_timestamp_missing"}
+               "operational_delivery_shipment_source_missing", "operational_delivery_order_waybill_unproven",
+               "operational_prepaid_shipping_completion_timestamp_missing"}
 _RETRY = "salla_courier_delivery_retry_after"
 _RAW = "raw_by_source.salla_direct"
 _FENCED = ("order_id", "salla_order_id", "merchant", "merchant_id", "store_id", "g47_salla_snapshot", "order_status", "order_status_slug",
