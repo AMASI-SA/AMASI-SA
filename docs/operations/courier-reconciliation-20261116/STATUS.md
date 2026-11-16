@@ -146,3 +146,16 @@ publication if requested. Before any later release, fetch the current production
 branch, preserve unrelated changes, recheck applicable gates, and follow the v5
 source/intent and shared Release Guard protocol. No live recovery count or
 complete Salla/financial reconciliation is claimed from these code tests.
+
+## Publication authorization and preflight — 2026-11-17 Asia/Riyadh
+
+The owner explicitly requested `ادمج وانشر` (merge and publish), superseding the previous upload-only boundary. Publication work is now authorized for PR #1964 using the v5 protocol; the frozen reconciliation evidence and other conversations' files remain preserved.
+
+- Fresh source A: `2b977a7c486c9121302810b37f46da6b4de085a6`; tree `b6cdac3eb499f6e4cff3704ae8db9bff66be419e`.
+- Fresh Production J and shared `/app` HEAD: `438b461fc660e043726c8dd5ab282d06abd3c17f`.
+- Local source worktree and shared tracked files are clean. Shared Release Guard reports `active:false`.
+- Source-A Readiness run `43956199068`, frontend job `133611284942`, passed. Candidate artifact `14269054833` independently validates A/J and full manifests. Intent SHA-256: `71b022cda288daad776a3cc8a0f57c178e622646836da9a9e1ace81a5f160a14`.
+- A local governed A/B build using Node 22.23.2 / Yarn 1.22.22 is being prepared before freezing intent B, as explicitly required by AGENTS.md. CI's source-A run did not perform the later reviewed-B clean-clone adapter rehearsals.
+- Production changed: **no** at this checkpoint. No merge, new lease, publish, refresh, backfill or financial write occurred.
+
+Next safe steps: finish local pinned build and compare intent with the independent CI candidate; create intent-only B; verify exact-B checks; normal merge preserving A/B; recheck inactive shared guard; perform actual adapter rehearsal; own prepare/prepublish; publish once and run official three-probe production verification. Post-publication UI verification will read the saved courier report. The all-sections refresh can also append eligible automatic bank collection movements and is outside a publication-only verification.
