@@ -159,3 +159,18 @@ The owner explicitly requested `ادمج وانشر` (merge and publish), supers
 - Production changed: **no** at this checkpoint. No merge, new lease, publish, refresh, backfill or financial write occurred.
 
 Next safe steps: finish local pinned build and compare intent with the independent CI candidate; create intent-only B; verify exact-B checks; normal merge preserving A/B; recheck inactive shared guard; perform actual adapter rehearsal; own prepare/prepublish; publish once and run official three-probe production verification. Post-publication UI verification will read the saved courier report. The all-sections refresh can also append eligible automatic bank collection movements and is outside a publication-only verification.
+
+## Intent-only B checkpoint — 2026-11-17 Asia/Riyadh
+
+The scratch dependency fetch repeatedly retried; the local prerequisite was completed in an isolated checkout on the existing host instead. Shared `/app` remained on J with clean tracked files. The isolated checkout used exact source A, independent copied dependencies checked by the pinned frozen installer, two governed bootstrap builds, official artifact verification, and `freeze-intent` outside the worktree. All subprocesses completed successfully. The resulting 1,328,388-byte intent has SHA-256 `71b022cda288daad776a3cc8a0f57c178e622646836da9a9e1ace81a5f160a14`, identical to the independently verified CI candidate.
+
+- Intent B: `e891d675a87134b06e0e0ad4b6d9e1fea0b059b7`.
+- B tree: `069adc524c86e5a2b166888c31673c4554991774`.
+- Intent Git blob: `8d5ad1a714ea25e94e0cdc1482e4a75b5ed98670`.
+- Parent/source A: `2b977a7c486c9121302810b37f46da6b4de085a6`.
+- Runtime identity: `rg5-af4b492366600af5c14a6d2599ecc6cc00008f70f826cec8e8854cbdc1edf173`.
+- A→B changes only `release/release-intent-v5.json`; root fetched B, fast-forwarded the task checkout, and passed `git diff --check` plus the official tracked-intent Git-relation validator (exit 0).
+- PR #1964 is now ready for review. Exact-B Readiness run `43963181648` and other applicable B workflows are running; a separate reviewer is checking B and both actual adapter rehearsals.
+- Production changed: **no**. No new lease or publish. Do not squash/rebase the frozen A/B pair.
+
+Next safe action: require the final exact-B checks and independent review; fresh-check Production J and the shared inactive guard, normal-merge the immutable pair, then actual shared adapter rehearsal and guarded publication. The UI verification scope remains saved-report reads, without all-section refresh or manual financial assertions.
