@@ -183,6 +183,7 @@ async def _observed_names(db, owner: str) -> tuple[list[str], bool]:
 
 
 def _directory(names: list[str], settings: dict | None, complete: bool, *, settings_available: bool = True) -> dict[str, Any]:
+    """Completeness describes read integrity; conflicting fees lock only their row."""
     # Defaults describe established absence, never a failed/foreign settings
     # read. Unknown merchant settings must leave even known rails unpriced.
     rows = _rows(settings) if settings_available else None
@@ -191,7 +192,6 @@ def _directory(names: list[str], settings: dict | None, complete: bool, *, setti
     items = []
     for name in names:
         selected, ambiguous = lookup.resolve(name)
-        complete = complete and not ambiguous
         configured = None if ambiguous else _terms(selected)
         exact = selected is None or normalize_name(selected["name"]) == normalize_name(name)
         items.append({

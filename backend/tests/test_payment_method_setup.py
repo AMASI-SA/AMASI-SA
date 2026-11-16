@@ -6,6 +6,7 @@ import json
 
 import pytest
 import pytest_asyncio
+from bson import BSON
 from fastapi import HTTPException
 from mongomock_motor import AsyncMongoMockClient
 from pydantic import ValidationError
@@ -343,12 +344,67 @@ async def test_exact_edit_preserves_custom_metadata_and_other_method_terms(db):
 async def test_duplicate_exact_settings_are_a_visible_conflict_without_choosing_a_rate(db):
     config = await seed(db, ["PayPal"], [terms("PayPal"), terms(" paypal ", commission_percent=99)])
     result = await load_payment_method_setup(db, OWNER)
-    assert result["complete"] is False
+    assert result["complete"] is True
     assert result["items"][0]["commission_percent"] is None
     assert not result["items"][0]["editable"]
     with pytest.raises(HTTPException) as conflict:
         await save_payment_method_commission(db, OWNER, "actor", valid_payload(expected_revision=payment_settings_revision(config)))
     assert conflict.value.detail["code"] == "payment_method_settings_alias_conflict"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reverse_settings", [False, True])
+async def test_conflicting_canonical_methods_do_not_block_independent_paypal_setup(db, reverse_settings):
+    methods = [
+        terms("credit card", commission_percent=2, merchant_note="first card terms"),
+        terms("بطاقة ائتمانية", commission_percent=4, merchant_note="other card terms"),
+        terms("EmkanInstallment", commission_percent=5, merchant_note="first installment terms"),
+        terms("إمكان", commission_percent=6, merchant_note="other installment terms"),
+        terms("mada", commission_percent=1),
+    ]
+    if reverse_settings:
+        methods.reverse()
+    await seed(db, ["credit_card", "emkan_installment", "paypal", "mada"], methods)
+    before_document = await db.settings.find_one({"user_id": OWNER})
+    before = await load_payment_method_setup(ReadOnlyDB(db), OWNER)
+    rows = {row["name"]: row for row in before["items"]}
+    assert before["complete"] is True and before["pending_count"] == 3
+    for name in ("credit_card", "emkan_installment"):
+        assert rows[name]["status"] == "needs_commission" and rows[name]["editable"] is False
+        assert all(rows[name][field] is None for field in ("commission_percent", "fixed_fee", "vat_percent"))
+    assert rows["paypal"]["status"] == "needs_commission" and rows["paypal"]["editable"] is True
+    assert all(rows["paypal"][field] is None for field in ("commission_percent", "fixed_fee", "vat_percent"))
+    assert rows["mada"]["status"] == "configured" and rows["mada"]["editable"] is True
+    assert rows["mada"]["commission_percent"] == 1
+    assert BSON.encode(await db.settings.find_one({"user_id": OWNER})) == BSON.encode(before_document)
+
+    response = await save_payment_method_commission(db, OWNER, "synthetic-owner-actor",
+        valid_payload(name="paypal", expected_revision=before["revision"]))
+    saved = response["payment_method_setup"]
+    assert saved == await load_payment_method_setup(ReadOnlyDB(db), OWNER)
+    assert saved["complete"] is True and saved["pending_count"] == 2
+    assert saved["revision"] != before["revision"]
+    after = {row["name"]: row for row in saved["items"]}
+    assert after["paypal"] == {**rows["paypal"], "status": "configured",
+                               "commission_percent": 3, "fixed_fee": 1, "vat_percent": 15}
+    for name in ("credit_card", "emkan_installment", "mada"):
+        assert after[name] == rows[name]
+
+    after_document = await db.settings.find_one({"user_id": OWNER})
+    assert after_document["payment_methods"][-1] == terms("paypal")
+    assert BSON.encode({"methods": after_document["payment_methods"][:-1]}) == (
+        BSON.encode({"methods": before_document["payment_methods"]}))
+    changed_keys = {"payment_methods", "updated_at", "payment_method_setup_updated_by"}
+    assert BSON.encode({key: value for key, value in after_document.items() if key not in changed_keys}) == (
+        BSON.encode({key: value for key, value in before_document.items() if key not in changed_keys}))
+
+    for name in ("credit_card", "emkan_installment"):
+        with pytest.raises(HTTPException) as conflict:
+            await save_payment_method_commission(db, OWNER, "synthetic-owner-actor",
+                valid_payload(name=name, expected_revision=saved["revision"]))
+        assert conflict.value.status_code == 409
+        assert conflict.value.detail["code"] == "payment_method_settings_alias_conflict"
+    assert BSON.encode(await db.settings.find_one({"user_id": OWNER})) == BSON.encode(after_document)
 
 
 @pytest.mark.asyncio
