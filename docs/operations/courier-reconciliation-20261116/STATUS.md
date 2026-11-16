@@ -1,5 +1,67 @@
 # Courier delivery reconciliation — 2026-11-16
 
+## Current outcome — published and verified, 2026-11-17 Asia/Riyadh
+
+**PR #1964 is normally merged and the authorized Production publication is complete.** This section supersedes the historical pending/unmerged states below.
+
+- User authorization: `ادمج وانشر` (merge and publish).
+- PR: https://github.com/AMASI-SA/AMASI-SA/pull/1964
+- Source A: `2b977a7c486c9121302810b37f46da6b4de085a6`.
+- Intent-only B: `e891d675a87134b06e0e0ad4b6d9e1fea0b059b7`.
+- Normal merge M: `b439b683f26ffdd61b7b9de80315ea21747d135c`.
+- M tree: `069adc524c86e5a2b166888c31673c4554991774`, exactly equal to B.
+- Runtime: `rg5-af4b492366600af5c14a6d2599ecc6cc00008f70f826cec8e8854cbdc1edf173`.
+- Public origin: https://mezansalla.com
+- Exactly one publication was initiated through the project's Republish / Publish changes controls at **01:12 Riyadh**. The platform subsequently displayed a newer green **Deployment finished — Nov 17, 01:21 AM**. Platform deployment marker `16f1cd2` is distinct from Git merge M.
+- The official v5 `production_release_guard.py verify --url https://mezansalla.com` completed successfully. The task wrapper asserted **verified:true**, **checks:3**, exact A/M/runtime, and **guard active:false** after verification. Completion was observed at approximately **01:34 Riyadh**.
+- Verification covered the complete public frontend manifest in three consecutive probes, canonical and cache-busted responses, exact bytes and content types, shell/service-worker cache policies, backend/control-source identity, critical hashes, frontend proof, and a boot identity newer than the prepared release within the official clock tolerance.
+- Observed HTML shell cache controls were `no-cache, no-store, must-revalidate`. The service-worker retirement responses included `max-age=0`; no stale cached response was accepted.
+- The task's release lease was closed by successful official verification. **Do not repeat the publication or recreate/clear its lease.**
+
+### Acceptance evidence
+
+All 13 applicable exact-B workflows passed; the unrelated TikTok Creator candidate workflow was conditionally skipped. Both actual Node20/24 clean-clone adapter rehearsals were independently reviewed. Source-A regression evidence includes 14 new cases, 102 focused acquisition cases including 17 real-Mongo scenarios, and the broader overlapping 5,002 / 4,716-case JUnit suites, each without failures, errors or skips.
+
+Exact-M Production-push gates all passed:
+
+| Gate | Run |
+| --- | --- |
+| Readiness | https://github.com/AMASI-SA/AMASI-SA/actions/runs/43964649337 |
+| Security | https://github.com/AMASI-SA/AMASI-SA/actions/runs/43964649351 |
+| CodeQL | https://github.com/AMASI-SA/AMASI-SA/actions/runs/43964649567 |
+
+The actual shared-host adapter rehearsal passed in 92.86 seconds. The earlier reversible bytecode cleanup and the single platform metadata preservation exception are documented below. All 120 prior untracked paths remained present; 119 retained the same bytes and modes. Do not claim that all 120 were byte-identical.
+
+The platform's actual Cloud Build command/argv transcript was not exposed in the observed UI. Actual adapter commands and environments were observed in CI and the shared-host rehearsal; these are not represented as observations of the platform's Cloud Build host.
+
+Shared-host receipts are in `/tmp/courier-1964-buildproof/`:
+`shared-rehearsal-result.json`, `guard-prepare.json`, `guard-prepublish.json`, `production-verify.stdout`, `production-verify.stderr`, `production-verification.json`, and `production-verification-summary.json`. The current record preserves the decisive observed identity and gate results without copying customer data or secrets.
+
+### Read-only UI verification and reconciliation limit
+
+The newly published site loaded the saved courier report successfully:
+https://mezansalla.com/operational-balances/financial-position?view=couriers
+
+The iMile pending-order dialog opened with 1,996 records (page 1 of 200) and closed successfully. Its rows and reasons rendered. The report still identifies its last saved calculation as **14 November 2026, 23:09 Riyadh**, with operating start **1 November 2026, 00:30 Riyadh**, currency SAR.
+
+| Saved report category | Orders needing review |
+| --- | ---: |
+| Aramex | 228 |
+| iMile | 1,996 |
+| SMSA | 277 |
+| Named-company total | 2,501 |
+| Unassigned delivery party, separate | 7,763 |
+
+These are saved pending-review counts, **not independently established Salla shipment differences or missing-order counts**. The saved report shows zero confirmed deliveries, shipping payable SAR 10,648.50 and 162 per-order records. Those values were read, not recalculated or certified by this publication.
+
+This release fixes admission of `operational_delivery_order_waybill_unproven` into the existing bounded native-evidence acquisition path. It preserves the four-order cap, retry fence, complete pagination, binding/CAS checks, and the existing recognition and financial rules. It does not itself run a backfill or reconcile every pending case.
+
+During post-publication verification the task did **not** invoke the all-sections source/balance refresh, manually confirm a delivery, or perform a financial write. The shared refresh can have wider financial effects and no courier-only recovery button was found. **Complete historical courier matching and full balance agreement with Salla remain unestablished.** The already delivered frozen reconciliation workbook and evidence archive remain unchanged.
+
+## Historical checkpoints
+
+The following chronology preserves earlier evidence and intermediate states. Its pending, draft, unmerged and not-published statements describe their own checkpoints and are superseded by the current outcome above.
+
 ## Scope and authorization
 
 Continue the owner's requested Salla/Mezan courier reconciliation and correct
