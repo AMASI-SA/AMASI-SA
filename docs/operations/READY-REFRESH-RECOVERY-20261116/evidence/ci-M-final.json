@@ -1,0 +1,309 @@
+{
+  "schema": "ready-refresh-recovery-exact-M-push-CI-v1",
+  "task": "READY-REFRESH-RECOVERY-20261116",
+  "observer": "/root/release_base_audit",
+  "observed_at_utc": "2026-11-16 00:24:04 UTC",
+  "provenance": "Read-only GitHub commit/ref/run/job/log/artifact metadata, plus local reading of root-accepted B proof files and deterministic JSON/hash comparison. No reruns, runtime tests, source edits, original-environment operations or publication by this observer.",
+  "source": {
+    "repository": "AMASI-SA/AMASI-SA",
+    "pull_request": 1955,
+    "M": "b05cd3c9b25ce22df1b2dd06c23d97606bd632c6",
+    "tree": "aded5cb29b69b5bb09b7386932ad9fc5c35d1f44",
+    "ordered_parents": [
+      "2589f440106a7c5d463ee03eac3617d113319673",
+      "dd4fc24dbef4b2d6e4abafac5ee5ee47d14e802b"
+    ],
+    "committed_at": "2026-11-16T00:15:52Z",
+    "A": "1accaa42e132ca1232ce86b3122971b48169ca81",
+    "B": "dd4fc24dbef4b2d6e4abafac5ee5ee47d14e802b",
+    "J": "2589f440106a7c5d463ee03eac3617d113319673",
+    "M_tree_equals_accepted_B_tree": true,
+    "production_ref_equal_M_at_initial_independent_read": true
+  },
+  "push_workflows": {
+    "query_event": "push",
+    "query_head_sha": "b05cd3c9b25ce22df1b2dd06c23d97606bd632c6",
+    "reported_total": 3,
+    "all_three_required_success": true,
+    "runs": [
+      {
+        "id": 43779331347,
+        "name": "Security Gate",
+        "event": "push",
+        "head_sha": "b05cd3c9b25ce22df1b2dd06c23d97606bd632c6",
+        "attempt": 1,
+        "status": "completed",
+        "conclusion": "success",
+        "created_at": "2026-11-16T00:15:55Z",
+        "updated_at": "2026-11-16T00:18:01Z",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43779331347"
+      },
+      {
+        "id": 43779331359,
+        "name": "Mezan Release Readiness",
+        "event": "push",
+        "head_sha": "b05cd3c9b25ce22df1b2dd06c23d97606bd632c6",
+        "attempt": 1,
+        "status": "completed",
+        "conclusion": "success",
+        "created_at": "2026-11-16T00:15:55Z",
+        "updated_at": "2026-11-16T00:19:29Z",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43779331359"
+      },
+      {
+        "id": 43779331479,
+        "name": "CodeQL",
+        "event": "push",
+        "head_sha": "b05cd3c9b25ce22df1b2dd06c23d97606bd632c6",
+        "attempt": 1,
+        "status": "completed",
+        "conclusion": "success",
+        "created_at": "2026-11-16T00:15:55Z",
+        "updated_at": "2026-11-16T00:22:49Z",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43779331479"
+      }
+    ]
+  },
+  "security_jobs": [
+    {
+      "id": 133012719473,
+      "name": "Frontend dependency and CSP checks",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 133012719786,
+      "name": "Backend security contracts",
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ],
+  "codeql_jobs": [
+    {
+      "id": 133012719488,
+      "name": "CodeQL (python)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 133012719553,
+      "name": "CodeQL (javascript-typescript)",
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ],
+  "actual_clean_clone_adapter": {
+    "run_id": 43779331359,
+    "jobs": [
+      {
+        "id": 133013007991,
+        "name": "Emergent Host Node 20.20.2 clean-clone adapter rehearsal",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43779331359/job/133013007991",
+        "actual_checkout_log_lines": [
+          "2026-11-16T00:17:00.9349422Z b05cd3c9b25ce22df1b2dd06c23d97606bd632c6",
+          "2026-11-16T00:17:01.0848437Z b05cd3c9b25ce22df1b2dd06c23d97606bd632c6"
+        ],
+        "observed_host_node": "v20.20.2",
+        "observed_host_yarn": "1.22.22",
+        "observed_git_directory_present": false,
+        "key_steps": [
+          {
+            "number": 7,
+            "name": "Create a clean tracked-source clone",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "number": 12,
+            "name": "Invoke the Emergent package adapter under the selected Host Node",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "number": 13,
+            "name": "Verify artifact, proof, identity, and package boundaries",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "number": 14,
+            "name": "Prove the governed runtime returns build metadata as JSON",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "number": 15,
+            "name": "Archive verified generated release outputs",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "number": 16,
+            "name": "Retain verified generated release outputs",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "number": 17,
+            "name": "Retain sanitized rehearsal evidence",
+            "status": "completed",
+            "conclusion": "success"
+          }
+        ]
+      },
+      {
+        "id": 133013008135,
+        "name": "Emergent Host Node 24.19.0 clean-clone adapter rehearsal",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43779331359/job/133013008135",
+        "actual_checkout_log_lines": [
+          "2026-11-16T00:17:02.8113730Z b05cd3c9b25ce22df1b2dd06c23d97606bd632c6",
+          "2026-11-16T00:17:03.0448648Z b05cd3c9b25ce22df1b2dd06c23d97606bd632c6"
+        ],
+        "observed_host_node": "v24.19.0",
+        "observed_host_yarn": "1.22.22",
+        "observed_git_directory_present": false,
+        "key_steps": [
+          {
+            "number": 7,
+            "name": "Create a clean tracked-source clone",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "number": 12,
+            "name": "Invoke the Emergent package adapter under the selected Host Node",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "number": 13,
+            "name": "Verify artifact, proof, identity, and package boundaries",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "number": 14,
+            "name": "Prove the governed runtime returns build metadata as JSON",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "number": 15,
+            "name": "Archive verified generated release outputs",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "number": 16,
+            "name": "Retain verified generated release outputs",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "number": 17,
+            "name": "Retain sanitized rehearsal evidence",
+            "status": "completed",
+            "conclusion": "success"
+          }
+        ]
+      }
+    ],
+    "governed_toolchain": {
+      "node": "22.23.2",
+      "yarn": "1.22.22"
+    },
+    "package_proof": {
+      "expected_source_A": "1accaa42e132ca1232ce86b3122971b48169ca81",
+      "release_id": "rg5-255b2b13ed893324729b31c21409fa1be3be98d8c536485f712424d70bab4b4e",
+      "canonical_encoding": "UTF-8 json.dumps(sort_keys=True, separators=(',', ':')), no trailing LF",
+      "expected_accepted_B_canonical_sha256": "7f42de559eaccc3c8c9129017639ed5bffaae6d84600047ebf61a9fd295e6fdd",
+      "accepted_B_raw_pretty_sha256": "325543cb75ef5de23df3886adca21ebebc8434b5255b6c1773cd3c25ebd6688a",
+      "accepted_B_raw_pretty_bytes": 1278,
+      "accepted_B_reference_path": "/workspace/scratch/3b6d796532bb/ready1955-release-evidence/host-20.20.2/mezan-package-boundary-v5.json",
+      "accepted_B_both_host_files_independently_read_and_byte_identical": true,
+      "M_verifier_stdout_reconstruction": [
+        {
+          "host": "host20",
+          "canonical_sha256": "7f42de559eaccc3c8c9129017639ed5bffaae6d84600047ebf61a9fd295e6fdd",
+          "reconstructed_pretty_bytes": 1278,
+          "reconstructed_pretty_sha256": "325543cb75ef5de23df3886adca21ebebc8434b5255b6c1773cd3c25ebd6688a",
+          "matches_accepted_B_pretty_bytes": true
+        },
+        {
+          "host": "host24",
+          "canonical_sha256": "7f42de559eaccc3c8c9129017639ed5bffaae6d84600047ebf61a9fd295e6fdd",
+          "reconstructed_pretty_bytes": 1278,
+          "reconstructed_pretty_sha256": "325543cb75ef5de23df3886adca21ebebc8434b5255b6c1773cd3c25ebd6688a",
+          "matches_accepted_B_pretty_bytes": true
+        }
+      ],
+      "actual_emitted_common_backend_package_tree": "cc00419706340719350b78183c13c2d41f844ea0a6268f9856f3c62128e59af3",
+      "actual_emitted_common_frontend_package_tree": "8cceec17675398fc3814f4ca37c9695b3ef04a4b3d028c403b79a474de73a1d8",
+      "actual_emitted_common_frontend_artifact_tree": "8017e720f266ed5d6b0141d83312512e8052396c7da65e22557dce1c8fe79fcb"
+    },
+    "HTTP_runtime_gate": {
+      "proof": "Official Prove the governed runtime returns build metadata as JSON step executed successfully on each actual M host job",
+      "destination": "disposable loopback governed runtime, 127.0.0.1:3000",
+      "checks": [
+        "/build-meta.json and cache-busted query, Accept application/json and */*: exact generated JSON body and application/json MIME",
+        "Production and preview Host headers: exact generated JSON body and application/json MIME",
+        "Hashed asset: immutable and max-age=31536000",
+        "SPA route: exact HTML shell with no-store"
+      ],
+      "live_production_probe": false
+    }
+  },
+  "artifacts": [
+    {
+      "id": 14187722380,
+      "name": "release-v5-clean-clone-evidence-host-24.19.0",
+      "size_bytes": 46616,
+      "archive_digest": "sha256:fadb68d34eddc0a8b489c8f5967385974be515a59d247ea35eb57f4b2ef1dcb9",
+      "created_at": "2026-11-16T00:19:03Z",
+      "expires_at": "2026-11-30T00:19:02Z",
+      "source_head": "b05cd3c9b25ce22df1b2dd06c23d97606bd632c6",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43779331359/artifacts/14187722380"
+    },
+    {
+      "id": 14187636694,
+      "name": "release-v5-clean-clone-evidence-host-20.20.2",
+      "size_bytes": 46608,
+      "archive_digest": "sha256:7f74445e63b0ff04d8af775d09e72a60ebe08f43ba4b245a4228305dcef703a3",
+      "created_at": "2026-11-16T00:19:01Z",
+      "expires_at": "2026-11-30T00:19:01Z",
+      "source_head": "b05cd3c9b25ce22df1b2dd06c23d97606bd632c6",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43779331359/artifacts/14187636694"
+    },
+    {
+      "id": 14187608251,
+      "name": "release-v5-generated-outputs-host-24.19.0",
+      "size_bytes": 3019781,
+      "archive_digest": "sha256:d03e53d03011ada0359b24a74785de8a718b7eb08773296015dfadb5dfec6a4e",
+      "created_at": "2026-11-16T00:19:01Z",
+      "expires_at": "2026-11-30T00:19:00Z",
+      "source_head": "b05cd3c9b25ce22df1b2dd06c23d97606bd632c6",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43779331359/artifacts/14187608251"
+    },
+    {
+      "id": 14187457593,
+      "name": "release-v5-generated-outputs-host-20.20.2",
+      "size_bytes": 3019117,
+      "archive_digest": "sha256:68587796d938128768ae5cc8aa452fdd65d806e5c71becf409839f10d860ca9e",
+      "created_at": "2026-11-16T00:19:00Z",
+      "expires_at": "2026-11-30T00:19:00Z",
+      "source_head": "b05cd3c9b25ce22df1b2dd06c23d97606bd632c6",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43779331359/artifacts/14187457593"
+    }
+  ],
+  "limits": [
+    "This receipt proves exact-M push CI and actual clean-clone adapter/package/HTTP gates. It does not prove original-environment rehearsal or publication.",
+    "M package-proof JSON was reconstructed from actual completed verifier stdout and compared byte-for-byte with the locally accepted B proof. Full M generated artifact ZIP contents were not downloaded by this observer.",
+    "Artifact digests identify ZIP archives; they are separate from canonical/raw package-proof digests.",
+    "No further CI rerun or test expansion was initiated; all three M workflows passed on attempt 1.",
+    "Prior PR1951 verified/inactive handoff and root's fresh official status were reported separately; no lease or authorization is created by this CI receipt."
+  ]
+}
