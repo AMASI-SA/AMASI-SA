@@ -1,7 +1,7 @@
 {
   "task_id": "MZ-BUNDLE-CONDITIONAL-CHOICE-20261116",
   "scope": "Resolve phantom incomplete costs from conditional descriptive bundle options without changing genuine cost dependencies.",
-  "state": "current_source_tests_passed_ci_running",
+  "state": "intent_B_frozen_exact_checks_running",
   "repository": "AMASI-SA/AMASI-SA",
   "task_branch": "codex/bundle-conditional-cost-current-20261116",
   "source_base_J": "b05cd3c9b25ce22df1b2dd06c23d97606bd632c6",
@@ -43,12 +43,14 @@
     "git_diff_check": "passed",
     "source_ci": {
       "readiness_run_id": 43779653592,
-      "status": "running",
+      "status": "readiness_success",
       "host20_dispatcher": "success",
       "host24_dispatcher": "success",
       "backend_preflight": "success",
-      "frontend_build": "running"
-    }
+      "frontend_build": "success"
+    },
+    "candidate_parser": "passed: exact A/J and complete Git-derived Backend/control manifests",
+    "reviewed_B_parser": "load_release_intent and verify_release_intent_git passed; exact A/J/B/runtime"
   },
   "last_safe_handoff": {
     "timestamp_utc": "2026-11-16T00:18:00Z",
@@ -69,18 +71,44 @@
     "Do not equate zero customer surcharge with zero internal cost.",
     "Preserve unresolved state for genuine cost decisions with missing/conflicting evidence."
   ],
-  "next_safe_action": "Open fresh-source PR and complete exact-head verification. Generate fresh candidate intent, freeze intent-only B, and preserve A/B on normal merge. Follow official original-host inactive/build/prepare/prepublish/publish/three-round verify/inactive sequence.",
+  "next_safe_action": "Complete exact-B gates and original-host isolated rehearsal only after a fresh inactive observation. Wait for PR1955 owner's publication/verification closure, then run the reviewed pin-bound operator, normal merge expected B, prepare/prepublish, publish once and verify three rounds ending inactive.",
   "ledger": "Issue1006 is at its known comment limit. This status and the evidence-only branch are the durable continuation record.",
-  "checkpoint_updated_at_utc": "2026-11-16T00:21:00Z",
+  "checkpoint_updated_at_utc": "2026-11-16 00:23:54 UTC",
   "source_tree": "fe74d9ce67a0a1a4bcedbfd0a5a7e8721d5ef9f6",
   "pr": {
     "number": 1956,
     "url": "https://github.com/AMASI-SA/AMASI-SA/pull/1956",
-    "head": "7a1de33535081393fbf3597523d722ec308b2ca8",
-    "state": "open_draft",
+    "head": "4da5d711717146088d879f4d8426cda9958f9d36",
+    "state": "open_ready",
     "superseded": [
       1953,
       1954
+    ]
+  },
+  "intent_B": "4da5d711717146088d879f4d8426cda9958f9d36",
+  "intent_B_tree": "49140bb5e22b368788c181362f316218344e9d41",
+  "review": "Independent immutable tree review passed; all PR1951 and PR1955 changes preserved.",
+  "intent_candidate": {
+    "run_id": 43779653592,
+    "artifact_id": 14187807226,
+    "zip_sha256": "70d6a9ef0c6e02c7182dac65842b3b8bda11571003a2d1ea6683d247c531cafc",
+    "bytes": 1326153,
+    "sha256": "9b5afac367badb03f081e04ed4b41a51dfa2a207022f2a4435bb3e70be347f85",
+    "blob": "de17e9d98a7ffe6e699fe53412a8c290988fb221",
+    "runtime_release_id": "rg5-4890bb5f409d7f6080ad2c19f881ed5edfe30b8f93b9502fbb3e45977f6a28f1",
+    "original_artifact_bytes_preserved": true
+  },
+  "operator": {
+    "path": "docs/operations/MZ-BUNDLE-CONDITIONAL-CHOICE-20261116/release_operator_1956.py",
+    "bytes": 8171,
+    "sha256": "e72fd1e7acde4aa260ddaf87ea44c4c9397ecb5d9c4a7e3a12305fe2f879d4c4",
+    "review": "Independent static review PASS; only successor identity/PR pins changed.",
+    "state": "not_executed",
+    "required_start": "Fresh original guard inactive, exact original/remote Jb05, no tracked changes.",
+    "runner_requirements": [
+      "Keep helper file and stdout log outside initially empty receipts directory.",
+      "Observe ready_for_merge before normal merge and write merged-head.json atomically within120seconds.",
+      "Never clear another lease or alter the frozen A/B."
     ]
   }
 }
