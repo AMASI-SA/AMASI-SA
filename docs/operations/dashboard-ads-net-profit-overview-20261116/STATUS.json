@@ -1,7 +1,7 @@
 {
   "task_id": "dashboard-ads-net-profit-overview-20261116",
   "revision_task_id": "dashboard-ads-compact-release-20261116",
-  "status": "github_merged_shared_workspace_aligned_ready_for_adapter",
+  "status": "github_merged_actual_shared_adapter_passed_lease_prepared",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/dashboard-ads-compact-release-handoff-20261116",
   "source_base": "66433833f35fa3a352e72d8dd780258122293473",
@@ -73,6 +73,15 @@
     {
       "name": "Authenticated shared-host readiness and completed fast-forward alignment",
       "result": "Root reports the user-requested reload resolved authentication and Emergent /home shows authenticated Salla Analytics. Fresh official python -B scripts/production_release_guard.py status returned active=false. Root verified shared branch=production, HEAD J2=66433833f35fa3a352e72d8dd780258122293473 and clean tracked status, then git merge --ff-only M succeeded. Shared HEAD is b56e0794f7d9d4c2ef52e69fd0b36886ea3bfa95 and tree d48e112a8c432b0701f597fb25298422b0c6415c; tracked status is empty and untracked files were not touched. Root independently confirmed latest remote production M and all 11 post-merge checks successful. No actual adapter build, lease, prepare/prepublish, or live publication has started."
+    },
+    {
+      "name": "Actual shared deployment adapter completed before lease preparation",
+      "command": "From /app/frontend: REACT_APP_BACKEND_URL=https://mezansalla.com yarn build",
+      "result": "Root reports exit0, built=true and protocol5. Source A=17bdfe6578f0a82f11e8c2379263ef17de0b9560, runtime rg5-e1fe5f8d15aeb2d8b6d3e517671d670b37387dc61e005b838b983286218bce7f and artifact tree fb1169bdc7bb05440ea4a686920f85435b7e7a6c8731b9b685f5d30b2f724c78 match the reviewed release. Frontend isolated_runtime_artifact_verified=true with 1491 files. Backend isolated_verified=true and health_verified=true with 1233 files, sibling_frontend_present=false and git_directory_present=false. Shared log /tmp/mezan-ads-release-1961/adapter.log has SHA256 24f432b0dea001a30a9e9ef1f904f67bf2c4b83db301d246f41e660581c8be03. At adapter completion no lease or publication existed; the subsequent successful prepare is recorded separately below."
+    },
+    {
+      "name": "Official shared lease prepared after actual adapter verification",
+      "result": "Root reports official prepare exit0 for actor dashboard-ads-compact-release-20261116 at 2026-11-16T15:48:34.546922+00:00. Protocol5, source A=17bdfe6578f0a82f11e8c2379263ef17de0b9560, deployment M=b56e0794f7d9d4c2ef52e69fd0b36886ea3bfa95 and runtime rg5-e1fe5f8d15aeb2d8b6d3e517671d670b37387dc61e005b838b983286218bce7f all match the reviewed release. No prepublish or live publication has occurred."
     }
   ],
   "preview": {
@@ -89,17 +98,17 @@
     "handoff": "2d1fa4ea5367a23340fb296097feddb7f318008e",
     "disposition": "Superseded by a fresh source rooted on current production J2. PR1960 source and preceding frozen candidates are preserved unchanged and must not be deployed."
   },
-  "release_state": "PR1961 is merged normally in GitHub as M=b56e0794f7d9d4c2ef52e69fd0b36886ea3bfa95. Verified M parents [J2,B], M tree exactly B tree, and official verify_release_intent_git accepted M. Root's latest independent remote read confirms M and all 11 post-merge checks succeeded. The user-requested reload resolved Emergent authentication; /home positively shows authenticated Salla Analytics. Root read the official shared release guard as active=false, verified the production branch at clean J2, and completed git merge --ff-only M. Shared /app now has HEAD M and tree d48e112a8c432b0701f597fb25298422b0c6415c with clean tracked status; untracked files were preserved. The actual shared adapter build has not started. No lease, prepare/prepublish, or live publication occurred.",
+  "release_state": "PR1961 is merged normally in GitHub as M=b56e0794f7d9d4c2ef52e69fd0b36886ea3bfa95, with verified M parents [J2,B] and M tree exactly B tree. All 11 post-merge checks passed. Authentication is resolved and shared /app is aligned to M with clean tracked status and preserved untracked files. Root completed the actual configured /app/frontend yarn build with the reviewed public origin; exit0, built=true, protocol5, source A and runtime/artifact identities match the reviewed release. Both isolated frontend and backend package verification passed. Root then completed official prepare with exit0 and matching protocol5/source A/deployment M/runtime identity. The lease is prepared for actor dashboard-ads-compact-release-20261116 at 2026-11-16T15:48:34.546922+00:00. Prepublish and live publication have not occurred.",
   "incomplete": [
-    "Run the configured actual /app/frontend yarn build with reviewed REACT_APP_BACKEND_URL=https://mezansalla.com and retain the official adapter/identity verification output for M.",
-    "After the actual shared adapter passes with the reviewed identity, root performs prepare/prepublish, one authorized publication, explicit newer deployment completion, official three-probe verification, and live layout/footer acceptance."
+    "Root runs official prepublish for the already-prepared matching lease immediately before the authorized publication.",
+    "Perform one authorized publication, observe explicit newer deployment completion, run official three-probe verification, and complete live layout/footer acceptance."
   ],
   "production_changed": true,
-  "release_guard": "Root freshly ran python -B scripts/production_release_guard.py status in shared /app before alignment; result active=false. No lease, prepare/prepublish, or publication has been created. Shared alignment from clean production J2 to M completed by fast-forward; the actual shared adapter build remains pending.",
+  "release_guard": "The official shared guard was read active=false before alignment and the actual shared adapter build. After the configured actual adapter passed, root completed official prepare with exit0: actor dashboard-ads-compact-release-20261116, prepared_at 2026-11-16T15:48:34.546922+00:00, protocol5 and reviewed source A/deployment M/runtime identities all match. A prepared lease now exists. No prepublish or publication has occurred; preserve the frozen source and this lease.",
   "authentication": "Resolved by the user's requested reload. Root observed Emergent /home in the existing cloud tab showing authenticated Salla Analytics. Authentication is no longer a blocker; no live publication is claimed.",
   "authorization": "Owner explicitly reaffirmed merge and production publication on 2026-11-16 for the latest compact-heading advertising card, then requested publication again after merge. No repeated authorization question is needed.",
   "continuation_ledger": "Issue1006 is at its 2500-comment cap. The replacement task PR body records the canonical full source SHA and final handoff; this updated task status document accompanies the source.",
-  "next_safe_action": "Do not merge again or deploy this documentation-only handoff branch. Root owns the authenticated browser and shared /app, now aligned to M=b56e0794f7d9d4c2ef52e69fd0b36886ea3bfa95 with tree d48e112a8c432b0701f597fb25298422b0c6415c and clean tracked status. Preserve untracked files and foreign leases. Confirm the official shared guard remains inactive, then from /app/frontend run REACT_APP_BACKEND_URL=https://mezansalla.com yarn build through the configured deployment entry point. Require the actual adapter and reviewed identity checks to pass before prepare/prepublish; then perform one authorized publish, observe explicit newer deployment completion, run official three-probe verification, and inspect live layout/footer behavior. If production advanced beyond M, review the new source/intent boundary before further shared changes.",
+  "next_safe_action": "Do not merge, build, or prepare again, and never deploy this documentation-only handoff branch. Root owns the authenticated browser and shared /app at M=b56e0794f7d9d4c2ef52e69fd0b36886ea3bfa95. The actual adapter passed and the matching protocol5 lease is already prepared for actor dashboard-ads-compact-release-20261116. Preserve the frozen source, current lease, and unrelated files. Run official prepublish immediately before one authorized publication. Observe explicit newer deployment completion, run python scripts/production_release_guard.py verify --url https://mezansalla.com and require all three probes to match the reviewed runtime/source identity, then confirm inactive guard and inspect live layout/footer behavior. If production or shared identity changes, review the source/intent boundary before proceeding.",
   "preserved_compact_source": "248cb46d182e9d82648e83b60c940362aef3e4a9",
   "integration": {
     "production_pr": 1959,
@@ -175,7 +184,7 @@
     "node24_evidence_artifact": 14237172778
   },
   "merge_policy_review": "Independent review of AGENTS and matching workflow triggers confirms the inactive shared guard is required before /app work/rehearsal, not GitHub merge alone. Matching production-push workflows are GitHub-hosted checks and manual handoff only; no automatic deployment or lease. The earlier fresh-guard-before-merge sequence was a conservative task plan, now revised under the owner's explicit merge request.",
-  "updated_at_utc": "2026-11-16T15:44:38Z",
+  "updated_at_utc": "2026-11-16T15:50:42Z",
   "deployment_head": "6599fa62361f7a977a35db48b90e0a55aa72ecf3",
   "deployment_git_sha": "b56e0794f7d9d4c2ef52e69fd0b36886ea3bfa95",
   "merge_commit": "b56e0794f7d9d4c2ef52e69fd0b36886ea3bfa95",
@@ -217,14 +226,67 @@
     "tracked_worktree_clean": true,
     "untracked_files_preserved": true,
     "guard_command": "python -B scripts/production_release_guard.py status",
-    "guard_active": false,
-    "actual_adapter_build": "not_started",
-    "lease_prepared": false,
+    "guard_active": true,
+    "actual_adapter_build": "passed",
+    "lease_prepared": true,
     "prepublish_run": false,
-    "publish_clicked": false
+    "publish_clicked": false,
+    "guard_state": "prepared",
+    "guard_state_evidence": "official_prepare_exit0"
   },
-  "checkpoint_parent": "275f42ded0630224a5ed0852d751a6765894a860",
+  "checkpoint_parent": "6c317c3c18e3d4c643705c8bc6287db6eb1d05fc",
   "checkpoint_changed_files": [
     "docs/operations/dashboard-ads-net-profit-overview-20261116/STATUS.json"
-  ]
+  ],
+  "actual_shared_adapter": {
+    "evidence_owner": "root",
+    "cwd": "/app/frontend",
+    "command": "REACT_APP_BACKEND_URL=https://mezansalla.com yarn build",
+    "exit_code": 0,
+    "built": true,
+    "protocol": 5,
+    "source_git_sha": "17bdfe6578f0a82f11e8c2379263ef17de0b9560",
+    "deployment_git_sha": "b56e0794f7d9d4c2ef52e69fd0b36886ea3bfa95",
+    "runtime_release_id": "rg5-e1fe5f8d15aeb2d8b6d3e517671d670b37387dc61e005b838b983286218bce7f",
+    "artifact_tree_sha256": "fb1169bdc7bb05440ea4a686920f85435b7e7a6c8731b9b685f5d30b2f724c78",
+    "frontend": {
+      "isolated_runtime_artifact_verified": true,
+      "file_count": 1491
+    },
+    "backend": {
+      "isolated_verified": true,
+      "health_verified": true,
+      "file_count": 1233,
+      "sibling_frontend_present": false,
+      "git_directory_present": false
+    },
+    "log_path": "/tmp/mezan-ads-release-1961/adapter.log",
+    "log_sha256": "24f432b0dea001a30a9e9ef1f904f67bf2c4b83db301d246f41e660581c8be03",
+    "frontend_package_sha256": "66bc373ec45f8420652cf24df5a8eb646e2cf15decd53b87f9ad69f76f3229b3",
+    "backend_package_sha256": "c17cdce1c9b26663dd066432cbaef1cce858db35704e437fa98df674515f42cc",
+    "build_meta_bytes": 480428,
+    "build_meta_sha256": "8ad32f454286b08d543e0b21feec6974d7702aff4bdef96f9dbd4c229be14fa0",
+    "shared_host": {
+      "architecture": "aarch64",
+      "node_version": "v24.19.0",
+      "python_version": "3.11.18",
+      "yarn_version": "1.22.22",
+      "cwd": "/app/frontend",
+      "git_directory_present": true
+    },
+    "observation_boundary": "This is actual shared-host rehearsal evidence. Outer Cloud Build argv and platform snapshot behavior remain unobserved. The isolated backend package has no Git directory or sibling frontend, independently of Git metadata being present in the shared build workspace."
+  },
+  "prepared_lease": {
+    "evidence_owner": "root",
+    "exit_code": 0,
+    "actor": "dashboard-ads-compact-release-20261116",
+    "prepared_at": "2026-11-16T15:48:34.546922+00:00",
+    "protocol": 5,
+    "source_git_sha": "17bdfe6578f0a82f11e8c2379263ef17de0b9560",
+    "deployment_git_sha": "b56e0794f7d9d4c2ef52e69fd0b36886ea3bfa95",
+    "runtime_release_id": "rg5-e1fe5f8d15aeb2d8b6d3e517671d670b37387dc61e005b838b983286218bce7f",
+    "reviewed_identities_match": true,
+    "prepublish_run": false,
+    "publish_clicked": false
+  }
 }
