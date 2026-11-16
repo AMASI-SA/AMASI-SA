@@ -1,0 +1,25 @@
+{
+  "schema": "ready1955-platform-publication-in-flight-v1",
+  "observed_at": "2026-11-16 00:32:40 UTC",
+  "source_A3": "1accaa42e132ca1232ce86b3122971b48169ca81",
+  "deployment_M": "b05cd3c9b25ce22df1b2dd06c23d97606bd632c6",
+  "runtime": "rg5-255b2b13ed893324729b31c21409fa1be3be98d8c536485f712424d70bab4b4e",
+  "actor": "chatgpt-ready1955-20261116-root",
+  "prepared_at": "2026-11-16T00:29:28.806882+00:00",
+  "prepare_sha256": "0aeb8938261cb3e02dfd172bf289cc30215aebf0c254323a70c32970127c9bc5",
+  "prepublish": {
+    "ok": true,
+    "ready_to_publish": true,
+    "official_result_path": "/tmp/ready1955-publication-20261116/prepublish/result.json"
+  },
+  "platform": {
+    "project": "salla-analytics",
+    "domain": "mezansalla.com",
+    "previous_version": "c1784c4",
+    "publish_changes_clicks": 1,
+    "observed_state": "Publishing...",
+    "final_result_pending": true
+  },
+  "lease": "owned active until official verify",
+  "next": "Observe a new explicit deployment completion; do not click publish again. Then invoke the already staged exact reviewed bound verifier once, using prepare digest and actual platform version/aware completion timestamp."
+}
