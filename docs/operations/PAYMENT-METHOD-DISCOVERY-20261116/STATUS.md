@@ -6,10 +6,13 @@
 - Repository: `AMASI-SA/AMASI-SA`.
 - Task branch: `codex/payment-method-discovery-20261116`.
 - Verified production/source base: `b56e0794f7d9d4c2ef52e69fd0b36886ea3bfa95`.
-- State: source A and intent-only B are remotely preserved; governed release build and clean-clone CI rehearsals passed; remaining exact-B checks are in progress.
-- Production changed by this task: **no**.
+- State: all exact-B checks passed; PR1962 merged normally; shared source is aligned to M and its configured adapter build is running.
+- Production Git branch changed: **yes**, through reviewed PR1962.
+- Live published production changed by this task: **no**, publication has not begun.
 - Runtime task branch is frozen at reviewed intent-only B. This status update is a separate documentation-only handoff; never merge or deploy the handoff branch.
-- PR: https://github.com/AMASI-SA/AMASI-SA/pull/1962 (draft while remaining B checks complete).
+- PR: https://github.com/AMASI-SA/AMASI-SA/pull/1962 (merged normally).
+- Production merge M: `71d1dd9010b3fd73de0463a6164f82fcd2b7cff5`.
+- Previous documentation checkpoint: `d6dd72a581de1793f7160d26e1c324153ace2e54`.
 - Source A: `03c91e903c992a2e397fccab2124e07fe002e0e6`.
 - Reviewed intent-only B: `03605c83e67c26b8f92477624f92d662fb97616e`.
 - B tree: `c04a6d71d253eba4ad96a79cb02eecf39b32f71b`.
@@ -89,11 +92,12 @@ Backend core and frontend integration were reviewed separately. One material fin
 
 ## Next safe actions
 
-1. Commit and push only this task's reviewed paths to its dedicated branch, verify the full remote SHA, and create/update the task PR handoff.
-2. Before any shared `/app` mutation or release rehearsal, confirm the official Release Guard reports `active: false`.
-3. Use a fresh protocol-v5 source A / intent-only B handoff and governed clean rehearsal. Never reuse the preceding release identity or squash/rebase frozen A/B.
-4. Inspect the current PR checks and production base before merge. Preserve unrelated concurrent work.
-5. Publication completion requires a newer explicit deployment success and all three official identity probes, followed by an inactive guard. Until then, production completion is not claimed.
+1. Observe completion of the shared configured adapter; require exit0 and exact source/runtime/artifact identities.
+2. Inspect exact-M post-merge checks and reconfirm production/ref/source state.
+3. Only after the matching adapter build, prepare the task-owned v5 lease and run prepublish immediately before one authorized publication.
+4. Observe a new explicit successful deployment, run all three official verification probes, and require an inactive guard.
+5. Confirm the live dashboard notice, direct setup link, automatic pending row and blank input terms without saving any real commission.
+6. Update the separate documentation handoff and PR; never merge/deploy the documentation branch.
 
 ## Reviewed release evidence
 
@@ -105,12 +109,15 @@ Backend core and frontend integration were reviewed separately. One material fin
 - Readiness B run `43937924442`: backend preflight, frontend build, both Host engine/dispatcher gates and both actual clean-clone adapter rehearsals succeeded. Host 20.20.2 rehearsal job `133548197956`; Host 24.19.0 job `133548197829`. The manual redeploy job is expected to be skipped for this PR.
 - Four Platform Spend B run `43937924868` succeeded: backend 345 tests plus 5 subtests; frontend/build/read contract passed.
 - Read-performance B run `43937924852` succeeded: query-budget backend 33 tests. Dashboard cadence run `43937924188` also passed.
-- Latest broader B snapshot: 32 successful workflows, five still running, one skipped, none failed. This is not an all-checks-passed claim. Operational Balance Web backend remains in its long operational contracts step; its frontend/browser/worker jobs passed.
+- Final exact-B checks: **81 completed; 71 success, 10 intentionally skipped, no failure or pending check**. The final Review Completion Resumable run `43937924953` succeeded before merge.
+- Root fetched M and verified its tree equals B, A is its ancestor, and the official `verify_release_intent_git` accepted M.
 
 ## Shared environment and continuation
 
-The signed-in Emergent Salla Analytics project is available. Existing published version remains `1ce35c9` from the preceding release. The official shared `/app` guard returned `active: false`; shared HEAD remains the verified production base above. Both tracked working-tree and staged diffs were empty. Existing unrelated untracked files were inspected by name and preserved. No lease, shared source update, merge, or publish has occurred for this feature.
+The signed-in Emergent Salla Analytics project is available. Existing published version remains `1ce35c9` from the preceding release. Before changing shared source, the official `/app` guard returned `active: false` inside the guarded update command. Shared HEAD was the expected base and both staged and tracked diffs were empty. A normal fast-forward to M then succeeded; observed output confirmed HEAD `71d1dd9010b3fd73de0463a6164f82fcd2b7cff5`, tree equal to B, and tracked-clean state. Existing unrelated untracked files were preserved.
 
-An extra scratch-only Host install was cancelled while fetching dependencies, before its Git metadata was hidden or any adapter build started. It is not counted as a successful rehearsal. The authoritative two-host clean-clone CI rehearsals above passed; the actual shared configured adapter build remains required before preparing a lease.
+The actual configured `/app/frontend` `yarn build` is running with the reviewed public origin. A wrapper will record its exact exit status and assert the generated backend identity equals the reviewed intent. Local receipts: `/tmp/mezan-payment-method-release-1962/adapter.log` and `adapter-exit.json`. No lease, prepare/prepublish or publication has occurred yet.
 
-Exact next safe action: wait for and inspect the remaining exact-B checks, then reread the production ref and PR head. With the same base and normal merge authority, use a merge commit preserving A/B, verify the resulting tree equals B, and inspect production checks. Before any shared source change, reread the official guard and require inactive status. Fast-forward the tracked-clean shared checkout while preserving unrelated files, run the configured frontend adapter with the reviewed origin, and only then prepare/prepublish for the authorized publication. Confirm a new explicit successful deployment, all three official probes and an inactive guard before claiming completion.
+Post-merge workflows on M are running: Readiness `43940808188`, Security `43940808320`, CodeQL `43940808126`. Their completion remains a pending observation, not an assumed pass.
+
+An extra scratch-only Host install was cancelled while fetching dependencies before hiding its Git metadata or starting any adapter build. It is not counted as a successful rehearsal. The authoritative two-host clean-clone CI rehearsals passed; the actual shared configured adapter remains required before the lease.
