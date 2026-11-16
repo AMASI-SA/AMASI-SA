@@ -6,13 +6,13 @@
 - Repository: `AMASI-SA/AMASI-SA`.
 - Task branch: `codex/payment-method-discovery-20261116`.
 - Verified production/source base: `b56e0794f7d9d4c2ef52e69fd0b36886ea3bfa95`.
-- State: all exact-B checks passed; PR1962 merged normally; shared source is aligned to M and its configured adapter build is running.
+- State: merged and fully checked; shared adapter and prepare/prepublish passed; one authorized publication is in progress. Do not publish again.
 - Production Git branch changed: **yes**, through reviewed PR1962.
-- Live published production changed by this task: **no**, publication has not begun.
+- Live publication: **in progress**; a new successful deployment and official verification have not yet been observed.
 - Runtime task branch is frozen at reviewed intent-only B. This status update is a separate documentation-only handoff; never merge or deploy the handoff branch.
 - PR: https://github.com/AMASI-SA/AMASI-SA/pull/1962 (merged normally).
 - Production merge M: `71d1dd9010b3fd73de0463a6164f82fcd2b7cff5`.
-- Previous documentation checkpoint: `d6dd72a581de1793f7160d26e1c324153ace2e54`.
+- Previous documentation checkpoint: `5d095418e1af1f5f0da5e59edf3d33ad47426cc0`.
 - Source A: `03c91e903c992a2e397fccab2124e07fe002e0e6`.
 - Reviewed intent-only B: `03605c83e67c26b8f92477624f92d662fb97616e`.
 - B tree: `c04a6d71d253eba4ad96a79cb02eecf39b32f71b`.
@@ -92,12 +92,10 @@ Backend core and frontend integration were reviewed separately. One material fin
 
 ## Next safe actions
 
-1. Observe completion of the shared configured adapter; require exit0 and exact source/runtime/artifact identities.
-2. Inspect exact-M post-merge checks and reconfirm production/ref/source state.
-3. Only after the matching adapter build, prepare the task-owned v5 lease and run prepublish immediately before one authorized publication.
-4. Observe a new explicit successful deployment, run all three official verification probes, and require an inactive guard.
-5. Confirm the live dashboard notice, direct setup link, automatic pending row and blank input terms without saving any real commission.
-6. Update the separate documentation handoff and PR; never merge/deploy the documentation branch.
+1. Observe a newer explicit successful Emergent deployment for the one submitted publication. Do not click Publish again while it is running.
+2. Run the official `python scripts/production_release_guard.py verify --url https://mezansalla.com` against this task's active lease; require all three probes and final `active: false`.
+3. Confirm the live dashboard notice, exact setup link, automatic pending row and blank input terms without saving any real commission.
+4. Update this separate documentation handoff and the PR with the new published version and verification evidence; never merge/deploy the documentation branch.
 
 ## Reviewed release evidence
 
@@ -114,10 +112,16 @@ Backend core and frontend integration were reviewed separately. One material fin
 
 ## Shared environment and continuation
 
-The signed-in Emergent Salla Analytics project is available. Existing published version remains `1ce35c9` from the preceding release. Before changing shared source, the official `/app` guard returned `active: false` inside the guarded update command. Shared HEAD was the expected base and both staged and tracked diffs were empty. A normal fast-forward to M then succeeded; observed output confirmed HEAD `71d1dd9010b3fd73de0463a6164f82fcd2b7cff5`, tree equal to B, and tracked-clean state. Existing unrelated untracked files were preserved.
+Shared `/app` was updated normally from the verified base to M after a fresh official inactive-guard check, expected-HEAD check and empty tracked/staged diffs. Observed HEAD is M, its tree equals B, and unrelated untracked files remain preserved.
 
-The actual configured `/app/frontend` `yarn build` is running with the reviewed public origin. A wrapper will record its exact exit status and assert the generated backend identity equals the reviewed intent. Local receipts: `/tmp/mezan-payment-method-release-1962/adapter.log` and `adapter-exit.json`. No lease, prepare/prepublish or publication has occurred yet.
+The actual configured `/app/frontend` `yarn build` completed with **exit0**. Its generated backend identity equals the reviewed intent, with exact A/runtime/artifact values recorded above. Full local receipt: `/tmp/mezan-payment-method-release-1962/adapter.log`; exit record: `adapter-exit.json`.
 
-Post-merge workflows on M are running: Readiness `43940808188`, Security `43940808320`, CodeQL `43940808126`. Their completion remains a pending observation, not an assumed pass.
+All **11 exact-M post-merge checks passed**: Readiness `43940808188`, Security `43940808320`, CodeQL `43940808126`. Both actual Host clean-clone rehearsals and all identity/package/HTTP checks passed on M.
 
-An extra scratch-only Host install was cancelled while fetching dependencies before hiding its Git metadata or starting any adapter build. It is not counted as a successful rehearsal. The authoritative two-host clean-clone CI rehearsals passed; the actual shared configured adapter remains required before the lease.
+Official prepare exited0 for actor `payment-method-discovery-20261116` at **2026-11-16T19:40:21.471201+00:00**, binding source A, deployment M and the reviewed runtime. This conversation owns the active v5 lease. Official prepublish exited0 with `ready_to_publish: true` and matching identities.
+
+The authorized Emergent **Publish changes** action was clicked **once**. The UI visibly showed **Publishing...**, observed before 2026-11-16T19:44:12Z. Existing previously published version was `1ce35c9`; a new published version has not yet been observed. No second publish, new prepare, or lease replacement is appropriate while this operation is running.
+
+Local prepare/prepublish receipts are in `/tmp/mezan-payment-method-release-1962/`. They contain release evidence only. No real merchant commission, payment, ledger, advertising budget or campaign was changed by this task.
+
+An extra scratch-only Host install was cancelled before any adapter invocation. It is not counted as a successful rehearsal. The official two-host CI rehearsals and actual shared configured build above provide the completed release proof.
