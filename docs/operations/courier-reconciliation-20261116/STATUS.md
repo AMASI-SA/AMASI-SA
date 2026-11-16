@@ -174,3 +174,16 @@ The scratch dependency fetch repeatedly retried; the local prerequisite was comp
 - Production changed: **no**. No new lease or publish. Do not squash/rebase the frozen A/B pair.
 
 Next safe action: require the final exact-B checks and independent review; fresh-check Production J and the shared inactive guard, normal-merge the immutable pair, then actual shared adapter rehearsal and guarded publication. The UI verification scope remains saved-report reads, without all-section refresh or manual financial assertions.
+
+## Normal merge completed; live publication pending — 2026-11-17 Asia/Riyadh
+
+PR #1964 was merged with the normal merge method and expected B head after all 13 applicable exact-B workflows succeeded. The unrelated TikTok Creator candidate workflow was conditionally skipped. Independent review verified both actual Node20/24 clean-clone adapter rehearsals in Readiness `43963181648` (jobs `133636216307` and `133636216161`).
+
+- Merge M: `b439b683f26ffdd61b7b9de80315ea21747d135c`.
+- Parents: Production J `438b461fc660e043726c8dd5ab282d06abd3c17f` and intent B `e891d675a87134b06e0e0ad4b6d9e1fea0b059b7`.
+- Merge tree: `069adc524c86e5a2b166888c31673c4554991774`, exactly equal to B.
+- Fresh fetch, B↔M empty diff, A ancestry, and A→M intent-only diff all passed (exit 0).
+- Shared host before handoff: J, tracked-clean, Release Guard inactive. The 120 unrelated untracked files were recorded with aggregate manifest SHA-256 `ff7a5c328699b9ab8bc249f4b182e33d3531e3ecd07342ae8246b0eceac56739` for preservation comparison.
+- Production source branch changed: **yes**, to M. Live Production runtime changed: **no** at this checkpoint; no publish/lease has occurred.
+
+Next safe action: require inactive guard, fast-forward shared `/app` to exact M, execute the actual `cd frontend && yarn build` adapter rehearsal, verify preserved untracked content and exact identity, require the Production-push checks, then own prepare/prepublish and one authorized publish. Official three-probe verification and saved courier UI inspection remain mandatory after publication.
