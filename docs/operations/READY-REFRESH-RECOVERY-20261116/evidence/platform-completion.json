@@ -1,0 +1,19 @@
+{
+  "platform_version": "231aae8",
+  "platform_completed_at": "2026-11-16T03:41:00+03:00",
+  "completion_precision": "minute",
+  "observed_label": "Deployment finished Nov 16, 03:41 AM",
+  "previous_version": "c1784c4",
+  "domain": "mezansalla.com",
+  "publish_changes_clicks": 1,
+  "observed_at": "2026-11-16 00:44:45 UTC",
+  "prepublish": {
+    "requested_at": "2026-11-16T00:30:52.494893+00:00",
+    "result_sha256": "eca1899fe500e144da785c5da8494f9ebd166ea5f197b2580439891668b40514",
+    "ready_to_publish": true,
+    "deployment_git_sha": "b05cd3c9b25ce22df1b2dd06c23d97606bd632c6"
+  },
+  "verified_live_identity": false,
+  "lease": "owned active",
+  "next": "Run staged bound verifier once with actual platform fields and accepted prepare digest."
+}

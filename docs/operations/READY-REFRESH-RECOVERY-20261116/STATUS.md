@@ -2,7 +2,7 @@
 
 This branch is an evidence ledger only. **Do not merge it as application source.**
 
-Updated: 2026-11-16 00:32:40 UTC
+Updated: 2026-11-16 00:44:45 UTC
 
 ## Exact release
 
@@ -62,12 +62,12 @@ Exact-M push gates all passed on attempt1: Security `43779331347`, CodeQL `43779
 
 Official prepare ran once and exited0 with empty stderr. Actor `chatgpt-ready1955-20261116-root`, prepared_at `2026-11-16T00:29:28.806882+00:00`, exact M/A3/J2/runtime/protocol5. Private full receipt `/tmp/ready1955-publication-20261116/prepare.json` is577143bytes, SHA256 `0aeb8938261cb3e02dfd172bf289cc30215aebf0c254323a70c32970127c9bc5`. Sanitized `evidence/prepare-summary.json` is byte-reconstructed and hash-matched to original SHA256 `73337055a6ffcc091728884851e25aa512e5faa545c6798f22f8af11d9184806`. Original rehearsal/CI acceptance is complete; do not rerun build or prepare. Current lease is this task's own and active.
 
-The exact reviewed bound prepublish wrapper ran **once** and returned `ok:true`, `ready_to_publish:true`, exact M/runtime. Its private result is `/tmp/ready1955-publication-20261116/prepublish/result.json`. Root immediately used the existing project Manage Republish control, verified target `mezansalla.com` and the UI's Free republishes disclosure, then clicked **Publish changes once**. The UI now shows disabled **Publishing...**. The last prior platform version was `c1784c4`; no newer completed version has been accepted yet.
+The exact reviewed bound prepublish wrapper ran **once** and returned `ok:true`, `ready_to_publish:true`, exact M/runtime. Its private result is `/tmp/ready1955-publication-20261116/prepublish/result.json`. Root immediately used the existing project Manage Republish control, verified target `mezansalla.com` and the UI's Free republishes disclosure, then clicked **Publish changes once**. The UI subsequently showed the new top published version **`231aae8`** and explicit **`Deployment finished Nov 16, 03:41 AM`** (Riyadh UTC+03, minute precision), replacing `c1784c4`; Republish controls became available. This establishes platform completion, not yet the official live identity acceptance.
 
 Publication request receipt: `evidence/platform-publication-in-flight.json`. Root's own lease remains active. **Do not rerun original rehearsal, prepare, prepublish, or platform publish. Do not clear or replace this lease.**
 
 Next: observe the single current platform publication until a new explicit successful completion. Record exact platform version and aware completion timestamp. Then run once:
 `PYTHONDONTWRITEBYTECODE=1 python -B /tmp/ready1955-bound-publication.py verify --prepare-sha256 0aeb8938261cb3e02dfd172bf289cc30215aebf0c254323a70c32970127c9bc5 --platform-version <observed-new-version> --deployment-completed-at <observed-aware-completion>`.
-The bound verifier must run uninterrupted; no external timeout, duplicate verify, or concurrent status. Its official checks are sequential and may take several minutes before final JSON. Accept only exact runtime/source/deployment, three checks, and inactive guard. Then verify final local/remote M and save final receipts. Current live release acceptance is **pending**.
+The bound verifier must run uninterrupted; no external timeout, duplicate verify, or concurrent status. Its official checks are sequential and may take several minutes before final JSON. Accept only exact runtime/source/deployment, three checks, and inactive guard. Then verify final local/remote M and save final receipts. Current live release acceptance is **pending**. Platform completion is accepted as version `231aae8`, timestamp `2026-11-16T03:41:00+03:00`. Next exact verifier inputs are those values with prepare digest `0aeb8938261cb3e02dfd172bf289cc30215aebf0c254323a70c32970127c9bc5`; verify has not yet been launched at this checkpoint.
 
 The separately received garment remains blocked by source/approval representation proof, not stale workflow. This application patch does not clear that guard or mark Ready/receipt/service/provider state. Private order/customer evidence is excluded. Issue #1006 is full; PR #1955 and this record are continuation anchors.
