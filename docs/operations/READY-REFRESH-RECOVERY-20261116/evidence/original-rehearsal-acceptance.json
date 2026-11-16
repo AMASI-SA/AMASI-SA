@@ -1,0 +1,19 @@
+{
+  "active_lease": false,
+  "adapter_log_sha256": "ca0ce7563838157e11b593b70bee34b3e150b4b51c71d6f745c055e395b5fe07",
+  "backend_environment_preservation": "metadata-only",
+  "deployment_git_sha": "b05cd3c9b25ce22df1b2dd06c23d97606bd632c6",
+  "intent_commit": "dd4fc24dbef4b2d6e4abafac5ee5ee47d14e802b",
+  "ok": true,
+  "package_canonical_sha256": "7f42de559eaccc3c8c9129017639ed5bffaae6d84600047ebf61a9fd295e6fdd",
+  "package_equals_accepted_B_and_M": true,
+  "preservation_record_sha256": "eb2aaa772948e2f8fb373e045fa6b196cf35fdc1c291b077d092d3440a485110",
+  "preservation_verified": true,
+  "recorded_at": "2026-11-16T00:27:45.345339+00:00",
+  "release_id": "rg5-255b2b13ed893324729b31c21409fa1be3be98d8c536485f712424d70bab4b4e",
+  "result_sha256": "cd2ffc4074154cfdff5a663b21e71a26ebd574ab5bfa7e8ea50df98b22ba3513",
+  "source_base_git_sha": "2589f440106a7c5d463ee03eac3617d113319673",
+  "source_git_sha": "1accaa42e132ca1232ce86b3122971b48169ca81",
+  "tree": "aded5cb29b69b5bb09b7386932ad9fc5c35d1f44",
+  "untracked_count": 120
+}
