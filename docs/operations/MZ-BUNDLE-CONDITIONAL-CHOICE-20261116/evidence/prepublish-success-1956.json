@@ -1,0 +1,19 @@
+{
+  "actor": "codex-bundle-conditional-cost-1956-20261116",
+  "branch": "hotfix/prod-snap-meta-final",
+  "canonical_result_sha256": "c6646851795bdcd3b2b1a27d97d7fef6b0cec2b02c3eac5714781ead87dd7c3b",
+  "deployment_git_sha": "4cdc10931f49124a4715153f220e0adf274e8bcc",
+  "deployment_success_sha256": null,
+  "finished_at": "2026-11-16T01:11:00.688858+00:00",
+  "git_sha": "7a1de33535081393fbf3597523d722ec308b2ca8",
+  "mode": "prepublish",
+  "ok": true,
+  "pr": 1956,
+  "prepare_sha256": "6b6d59160b426186b545d1fa953c118a42e917d34a97254c1845ef42b0368af3",
+  "prepared_at": "2026-11-16T01:08:55.170137+00:00",
+  "protocol_version": 5,
+  "release_id": "rg5-4890bb5f409d7f6080ad2c19f881ed5edfe30b8f93b9502fbb3e45977f6a28f1",
+  "source_base_git_sha": "b05cd3c9b25ce22df1b2dd06c23d97606bd632c6",
+  "source_git_sha": "7a1de33535081393fbf3597523d722ec308b2ca8",
+  "started_at": "2026-11-16T01:10:56.923588+00:00"
+}
