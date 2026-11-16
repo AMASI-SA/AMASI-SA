@@ -5,7 +5,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "task_branch": "codex/bundle-conditional-cost-integrated-20261116",
   "verified_milestone_commit": "ba19a270fb20ab45328f293e200728bebda6df4c",
-  "inspected_branch_head": "2589f440106a7c5d463ee03eac3617d113319673",
+  "inspected_branch_head": "a00e3e38530376943960f1f1ebe301dde5e7f061",
   "observed_live_source": "1bd44b6f186de8b40877fde686b5d2d7aab52805",
   "changed_files": [
     "backend/current_bundle_reporting_estimate.py",
@@ -128,7 +128,7 @@
     "integrated_source": {
       "head": "ba19a270fb20ab45328f293e200728bebda6df4c",
       "readiness_run_id": 43774777595,
-      "status": "running"
+      "status": "success"
     },
     "reviewed_B": {
       "head": "a00e3e38530376943960f1f1ebe301dde5e7f061",
@@ -137,7 +137,7 @@
       "security_run_id": 43775111963,
       "codeql_run_id": 43775111794,
       "status": "all_applicable_checks_passed",
-      "snapshot": "Details, source coverage, backend preflight, dispatcher and frontend build passed. Integration and both clean-clone adapter jobs remained in progress.",
+      "snapshot": "All 36 exact-B checks completed: 26 success, 10 explicit scope skips, no failures or pending jobs. PR1954 mergeable_state clean at 2026-11-16T00:10Z.",
       "check_summary": {
         "total": 36,
         "success": 26,
@@ -159,10 +159,13 @@
     "prepared_at": "2026-11-15T23:45:16.349437+00:00",
     "modified_by_this_task": false
   },
-  "deployment": "Other provider publication started 16 Nov 02:48 Riyadh; our fix not merged/published yet.",
+  "deployment": "Our fix is not yet merged or published. The previous provider release is published and is undergoing its official three-round verification.",
   "production_changed": "no",
   "incomplete_work": [
-    "Obtain exact integrated-source CI candidate, freeze a fresh intent-only B, await inactive original-host lease, rehearse, normal merge, publish and verify."
+    "Wait for the provider owner's running official verifier to close only its matching lease.",
+    "Run the independently reviewed fenced operator; after ready_for_merge, normally merge PR1954 at exact B and atomically provide M.",
+    "Complete original-host configured build and official prepare/prepublish; publish once, observe a newer explicit success, run three canonical verification rounds, and confirm inactive status.",
+    "Read the saved-data report normally without a Salla refresh and record final publication evidence."
   ],
   "risks": [
     "Preserve unresolved results for missing or conflicting decisions needed by actual cost-bearing dependencies.",
@@ -242,9 +245,10 @@
   },
   "publication_coordination": {
     "latest_original_host_head": "2589f440106a7c5d463ee03eac3617d113319673",
-    "lease_observed_active": false,
-    "provider_release": "Merged and fully preserved in integrated source; its original rehearsal is blocked by two pre-existing ignored Python bytecode files, with no prepared lease or publication at the recorded checkpoint.",
-    "plan": "Consolidate already-reviewed provider source and bundle repair in one current release. Serialize the merge/host handoff under the official operation mutex, stop on any active lease or unexpected head, and preserve bytecode via bounded reversible quarantine if the observed exact inventory still matches. Do not clear or reuse any other owner's lease."
+    "lease_observed_active": true,
+    "provider_release": "Owner reports new platform version c1784c4 and successful deployment at 02:58 Riyadh. Owner's once-only canonical verifier is currently running (child PID39424); our read-only status command is waiting on the official operation mutex.",
+    "preservation": "Do not interrupt provider verification, start another verifier, clear its lease, or change /app before the official status returns inactive.",
+    "plan": "After fresh inactive status, serialize normal merge/host handoff under the existing official operation mutex using the reviewed immutable helper. No source retest/rebuild regeneration required unless Production base or frozen identities change."
   },
   "operator": {
     "path": "docs/operations/MZ-BUNDLE-CONDITIONAL-CHOICE-20261116/release_operator.py",
@@ -256,5 +260,12 @@
       "Redirect operator stdout to receipt_path+'.log', outside initially empty receipt directory.",
       "Write merged-head.json by atomic temporary sibling replacement."
     ]
+  },
+  "checkpoint_updated_at_utc": "2026-11-16T00:11:00Z",
+  "last_observed_other_publication": {
+    "platform_version": "c1784c4",
+    "owner_evidence_branch": "codex/provider-fee-display-evidence-20261116",
+    "status": "published_ui_accepted_official_verifier_running",
+    "source_git_sha": "f7c5e110a074a242036233ea004d63c270a4daaa"
   }
 }
