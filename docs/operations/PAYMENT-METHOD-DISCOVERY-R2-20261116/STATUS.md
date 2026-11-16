@@ -6,8 +6,8 @@
 - Repository: `AMASI-SA/AMASI-SA`.
 - Task branch: `codex/payment-method-discovery-r2-20261116`.
 - Exact verified production/source base J: `71d1dd9010b3fd73de0463a6164f82fcd2b7cff5`.
-- State: all11 exact-M checks passed; prepare/prepublish passed; one authorized R2 publication is in progress. Do not publish again.
-- Production Git branch changed by R2: **yes**, through PR1963. Live R2 publication: **in progress**; new deployment success and official verification remain pending.
+- State: R2 publication18525af succeeded; live feature acceptance passed. Official three-probe verification is already running against the owned lease; do not restart it or publish again.
+- Production Git and live deployment changed by R2: **yes**. Emergent reported the new successful deployment; the feature was verified live. Official runtime verification is still in progress.
 - The preceding feature PR1962 is merged and published as `0680799`, operation `ecbb3454-9e59-58b0-af49-6f8e34cc2267`; Emergent reported `Deployment successful`. Its first official verification hit startup HTTP520; the second finished normally with **exit0, verified:true and all3 probes**, matching source A1/deployment M1/runtime. Final official status is **active:false**. No interrupt, abort, second Publish or lease replacement occurred. Runtime verification passed; the functional defect below still requires R2.
 - Prior frozen source A: `03c91e903c992a2e397fccab2124e07fe002e0e6`; intent B: `03605c83e67c26b8f92477624f92d662fb97616e`; merge M/current base J: `71d1dd9010b3fd73de0463a6164f82fcd2b7cff5`.
 - Prior runtime: `rg5-2e67a08592737d05609cbedd7b422876345be2ac13df2d97ea6f0e44066a24cb`.
@@ -58,7 +58,7 @@ The frontend reviewer independently reviewed the backend source/test diff and ap
 - B tree: `70842fa4b3db6c9cea6a4b4d743a804f078f7e52`.
 - PR: https://github.com/AMASI-SA/AMASI-SA/pull/1963 (merged normally).
 - Production merge M: `438b461fc660e043726c8dd5ab282d06abd3c17f`; tree equals B, parents are J and B; official Git transition validator accepted M.
-- Previous documentation checkpoint: `407d1bacf5312f5fa5841d5bcd172106ab55ea20`.
+- Previous documentation checkpoint: `5b02553c288e8dbe5ba511e029fcf0ac2ffe4f4c`.
 - Runtime: `rg5-ddac746f37c8ee913405c42ced5804aa9e68ff17b56ba60a60ff2a824a7ffe8e`.
 - Frontend artifact: `a31d130116eaa72d7ba3a0ec0f36fda19c29db272d207642d520482df16e46ff`.
 - Reproducibility proof: `1a7f37962dc5acfe31e346f90d3c75e259b49361fda98c29d890ce92b8a3167f`.
@@ -71,10 +71,10 @@ The frontend reviewer independently reviewed the backend source/test diff and ap
 The successful prior receipt is `/tmp/mezan-payment-method-release-1962/verify2.json`; exit record `verify2-exit.json`; final status `final-status.json`. Three probes observed boot identities `2026-11-16T19:51:55.134941+00:00` and `2026-11-16T19:51:49.045223+00:00`, with the exact reviewed frontend artifact. The verifier checked canonical/cache-busted metadata, full public files, shell and service-worker contracts, then closed its matching lease. No R2 lease has been prepared.
 
 ## Next safe actions
-1. Observe a newer explicit successful Emergent deployment for operation `c1201ebe-8a1a-5e5b-866e-1a6021ee12b4`. The one R2 Publish was already submitted; do not click it again or prepare another lease.
-2. Confirm the site session responds, then run official `python scripts/production_release_guard.py verify --url https://mezansalla.com` against the active R2 lease. Require all3probes, exact reviewed A/M/runtime and final `active:false`.
-3. Open the pending method from the dashboard notice and verify automatic listing, no unrelated-conflict global lock, blank editable commission/fixed/VAT fields and preserved compact advertising card. Do not save real commission values.
-4. Record the final published version, runtime verification and live acceptance in this separate handoff and PR; never amend or deploy the documentation branch.
+1. Wait for the **already-running** official R2 verifier in shared Terminal5. It started at `2026-11-16T20:40:29.536185+00:00`. Do not submit a second verifier or Publish.
+2. Read `/tmp/mezan-payment-method-release-1963/verify-exit.json` and `verify.json` after completion. Require exit0, verified:true, checks3, exact reviewed A/M/runtime, all frontend public-file checks and final official `active:false`.
+3. If verification fails, inspect the exact saved stderr before deciding on recovery. Never replace or clear another lease. The active lease is this task's prepared R2 lease.
+4. Preserve the useful live PayPal setup tab, which has three blank editable inputs. No real fee has been saved. After official completion, update the handoff and PR and report the completed feature.
 
 ## Preserved scope
 
@@ -102,3 +102,12 @@ All11 exact-M checks completed successfully: Readiness43948563014 (7), Security4
 Official prepublish exited0 with ready_to_publish:true and exact reviewed A/M/runtime. The authorized **Publish changes** button was clicked once; the UI visibly shows **Publishing...**, observed before **2026-11-16T20:30:08Z**. New operation: **c1201ebe-8a1a-5e5b-866e-1a6021ee12b4**, UI `Deployment Started Nov16,11:29PM` (Asia/Riyadh). Previously published version remains0680799; no new successful version has yet been observed. Keep the exact active task-owned R2lease prepared20:23:52.530472Z. Do not repeat prepare, build or Publish.
 
 Receipts remain under `/tmp/mezan-payment-method-release-1963/`: adapter, prepare and prepublish outputs. No merchant fee, ledger, payment or advertising setting was written.
+
+## New successful R2 deployment and live acceptance
+Emergent operation **c1201ebe-8a1a-5e5b-866e-1a6021ee12b4** now displays **Deployment finished Nov16,11:39PM** (Asia/Riyadh). The newly published version is **18525af**, shown as a few seconds old. One R2 Publish action was used.
+
+On the live website, the exact PayPal setup URL `https://mezansalla.com/operational-balances/provider-fees?method=paypal` loaded the automatically discovered method with status “العمولة غير محددة”. All three inputs (percentage, fixed SAR fee, commission VAT) were blank, required and enabled. The save button was enabled, and the previous global incomplete-read warning was absent. No input or Save action was performed.
+
+The dashboard notice rendered the observed pending methods, and its PayPal link was clicked to reopen the same live editor successfully. The notice is outside the dashboard columns. At the existing1363px browser viewport, the actual advertising card measured460px and its table422px, matching the previous compact dimensions.
+
+The official R2 verifier started after the live backend session and editable form responded successfully. It is scanning the entire published-file contract in three rounds; receipts are being written under `/tmp/mezan-payment-method-release-1963/`. It has not yet returned a final result at this checkpoint. Runtime validation must not be inferred from the successful UI acceptance alone. Earlier publication-pending chronology is superseded by this section.
