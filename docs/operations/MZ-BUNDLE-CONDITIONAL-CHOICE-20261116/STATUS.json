@@ -1,7 +1,7 @@
 {
   "task_id": "MZ-BUNDLE-CONDITIONAL-CHOICE-20261116",
   "scope": "Resolve phantom incomplete costs from conditional descriptive bundle options without changing genuine cost dependencies.",
-  "state": "all_gates_passed_waiting_ready1955_publication",
+  "state": "merged_original_host_build_prepare_running",
   "repository": "AMASI-SA/AMASI-SA",
   "task_branch": "codex/bundle-conditional-cost-current-20261116",
   "source_base_J": "b05cd3c9b25ce22df1b2dd06c23d97606bd632c6",
@@ -73,29 +73,41 @@
     "outcome": "Helper timed out before receiving a merge receipt and exited1. No deployment, host source mutation, own lease or publish occurred."
   },
   "release_guard": {
-    "active": true,
-    "owner": "chatgpt-ready1955-20261116-root",
-    "modified_by_this_task": false,
-    "last_observation": "Our original-host read reported active actor chatgpt-ready1955-20261116-root before any1956 operator started; owner ledger subsequently confirms its verification is running."
+    "active_before_operator": false,
+    "observed_by": "root",
+    "operator_mutex_owned": true,
+    "prepared_lease": "not yet observed"
   },
-  "merge": "not_performed",
+  "merge": {
+    "pr": 1956,
+    "method": "merge",
+    "merged": true,
+    "deployment_M": "4cdc10931f49124a4715153f220e0adf274e8bcc",
+    "expected_B": "4da5d711717146088d879f4d8426cda9958f9d36",
+    "tree": "49140bb5e22b368788c181362f316218344e9d41",
+    "ordered_parents": [
+      "b05cd3c9b25ce22df1b2dd06c23d97606bd632c6",
+      "4da5d711717146088d879f4d8426cda9958f9d36"
+    ],
+    "root_verified": true
+  },
   "deployment": "not_performed",
-  "production_changed": "no",
+  "production_changed": "yes: authorized normal merge; runtime publication pending",
   "business_data_changed": false,
   "live_limits": "No option cost bindings were observed for the incident product. Its saved bundle definition changed externally after diagnosis; preserve current user configuration. No Salla refresh or business-data mutation was performed.",
   "risks": [
     "Do not equate zero customer surcharge with zero internal cost.",
     "Preserve unresolved state for genuine cost decisions with missing/conflicting evidence."
   ],
-  "next_safe_action": "Wait for the PR1955 owner's successful publication and canonical verification ending inactive. Reconfirm Production Jb05 and exact B/green PR1956. Run immutable operator from b87f320fb21790cf70a7ed5f589089e18dcdb3ca, observe ready_for_merge, normally merge expected B and atomically supply actual M. After matching build/prepare, use reviewed publication wrapper for prepublish immediately before one authorized UI publication, then root-observed success and exactly one canonical three-round verification. Record final inactive and normal saved-report GET acceptance.",
+  "next_safe_action": "Observe our original configured build and matching prepare result. Stage reviewed publication wrapper, then prepublish immediately before one UI publication. Record root-observed explicit new success and run exactly one canonical verifier to inactive; normal saved-report GET acceptance.",
   "ledger": "Issue1006 is at its known comment limit. This status and the evidence-only branch are the durable continuation record.",
-  "checkpoint_updated_at_utc": "2026-11-16 00:50:18 UTC",
+  "checkpoint_updated_at_utc": "2026-11-16 01:08:26 UTC",
   "source_tree": "fe74d9ce67a0a1a4bcedbfd0a5a7e8721d5ef9f6",
   "pr": {
     "number": 1956,
     "url": "https://github.com/AMASI-SA/AMASI-SA/pull/1956",
     "head": "4da5d711717146088d879f4d8426cda9958f9d36",
-    "state": "open_ready",
+    "state": "merged",
     "superseded": [
       1953,
       1954
@@ -119,13 +131,15 @@
     "bytes": 8171,
     "sha256": "e72fd1e7acde4aa260ddaf87ea44c4c9397ecb5d9c4a7e3a12305fe2f879d4c4",
     "review": "Independent static review PASS; only successor identity/PR pins changed.",
-    "state": "Not executed. The outer fresh inactive assertion stopped at actor chatgpt-ready1955-20261116-root; no1956 receipt directory or process was created.",
+    "state": "Running after fresh inactive guard and root-observed ready_for_merge; atomic merge result supplied; building phase observed.",
     "required_start": "Fresh original guard inactive, exact original/remote Jb05, no tracked changes.",
     "runner_requirements": [
       "Keep helper file and stdout log outside initially empty receipts directory.",
       "Observe ready_for_merge before normal merge and write merged-head.json atomically within120seconds.",
       "Never clear another lease or alter the frozen A/B."
-    ]
+    ],
+    "receipts": "/tmp/mz-bundle-release-1956-Zi79Sb",
+    "pid": 71339
   },
   "host_rehearsal": {
     "path": "/tmp/mz-bundle-current-v5-d9Wxrj/repo",
@@ -143,7 +157,7 @@
     "own_lease_created": false,
     "original_source_modified": false
   },
-  "publication_coordination": "PR1955 owns an active prepared lease; root observed its platform publication start Nov16 at03:31 Riyadh. All own B checks and isolated host rehearsal pass. Do not start another operator, clear its lease, or change /app while this lease remains active.",
+  "publication_coordination": "Prior1955 owner completed canonical verification, fresh inactive and clean exact-J handoff before our operator. Our normal merge now owns this release continuation.",
   "publication_wrapper": {
     "path": "docs/operations/MZ-BUNDLE-CONDITIONAL-CHOICE-20261116/publication_1956.py",
     "bytes": 10603,
@@ -163,8 +177,15 @@
     "platform_version": "231aae8",
     "platform_ui_text": "Deployment finished Nov16,03:41AM",
     "ui_timezone": "Asia/Riyadh",
-    "official_verification": "Owner launched its bound canonical verifier exactly once, recorded in evidence764be57f6161ad56b8fd21cbe2fa72b29ab52fa8 (STATUS updated00:45:27UTC). No final outcome accepted yet. Monitor GitHub evidence only; no concurrent host status while its verifier runs.",
-    "lease_last_observed_active": true
+    "official_verification": {
+      "verified": true,
+      "checks": 3,
+      "status_after_active": false,
+      "evidence_commit": "13bead91462dc1f279e243fe7dec2d5f2b4311af",
+      "receipt_path": "docs/operations/READY-REFRESH-RECOVERY-20261116/evidence/official-verify-final.json",
+      "root_read_exact_receipt": true
+    },
+    "lease_last_observed_active": false
   },
   "live_acceptance_baseline": {
     "method": "Normal saved sold-products report GET and expansion of the incident row; no provider refresh or business-state write.",
