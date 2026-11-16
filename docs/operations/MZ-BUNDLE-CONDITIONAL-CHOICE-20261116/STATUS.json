@@ -75,7 +75,8 @@
   "release_guard": {
     "active": true,
     "owner": "chatgpt-ready1955-20261116-root",
-    "modified_by_this_task": false
+    "modified_by_this_task": false,
+    "last_observation": "Our original-host read reported active actor chatgpt-ready1955-20261116-root before any1956 operator started; owner ledger subsequently confirms its verification is running."
   },
   "merge": "not_performed",
   "deployment": "not_performed",
@@ -88,7 +89,7 @@
   ],
   "next_safe_action": "Wait for the PR1955 owner's successful publication and canonical verification ending inactive. Reconfirm Production Jb05 and exact B/green PR1956. Run immutable operator from b87f320fb21790cf70a7ed5f589089e18dcdb3ca, observe ready_for_merge, normally merge expected B and atomically supply actual M. After matching build/prepare, use reviewed publication wrapper for prepublish immediately before one authorized UI publication, then root-observed success and exactly one canonical three-round verification. Record final inactive and normal saved-report GET acceptance.",
   "ledger": "Issue1006 is at its known comment limit. This status and the evidence-only branch are the durable continuation record.",
-  "checkpoint_updated_at_utc": "2026-11-16 00:44:14 UTC",
+  "checkpoint_updated_at_utc": "2026-11-16 00:50:18 UTC",
   "source_tree": "fe74d9ce67a0a1a4bcedbfd0a5a7e8721d5ef9f6",
   "pr": {
     "number": 1956,
@@ -162,7 +163,7 @@
     "platform_version": "231aae8",
     "platform_ui_text": "Deployment finished Nov16,03:41AM",
     "ui_timezone": "Asia/Riyadh",
-    "official_verification": "Not yet accepted by this task; wait for owner's final canonical receipt and inactive handoff.",
+    "official_verification": "Owner launched its bound canonical verifier exactly once, recorded in evidence764be57f6161ad56b8fd21cbe2fa72b29ab52fa8 (STATUS updated00:45:27UTC). No final outcome accepted yet. Monitor GitHub evidence only; no concurrent host status while its verifier runs.",
     "lease_last_observed_active": true
   },
   "live_acceptance_baseline": {
