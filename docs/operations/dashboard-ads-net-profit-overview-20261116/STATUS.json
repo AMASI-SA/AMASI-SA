@@ -1,0 +1,73 @@
+{
+  "task_id": "dashboard-ads-net-profit-overview-20261116",
+  "status": "source_reviewed_tests_passed_ready_for_checkpoint",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/dashboard-ads-net-profit-column-20261116",
+  "source_base": "4cdc10931f49124a4715153f220e0adf274e8bcc",
+  "scope": "Add a compact net-profit column to every Dashboard advertising account/provider/direct/total row. Hover, focus or click the total FOOTER row to compare all shown accounts in two Riyadh half-day tables and view authoritative totals below. The header remains unchanged as a non-trigger.",
+  "acceptance": [
+    "Preserve the existing Dashboard grid/card width; display six main columns with compact SAR and native spend.",
+    "Use existing stats.profit.complete/netProfit/provisional without recalculating profit, adding operating costs or introducing new reads.",
+    "Show signed losses, true zero and provisional profit correctly; incomplete, missing and non-finite profit remains unavailable.",
+    "The footer overview shows midnight to noon and noon to the current source cutoff/end of day, using existing metrics.segments. Before noon the second period has no numeric rows.",
+    "Both period tables show platform/account, advertising spend, Salla sales/orders, advertising CPA, average non-advertising order costs and net profit.",
+    "Average order costs use canonical product/shipping/payment totalCost divided by positive canonical orders, independently from advertising completeness. Zero orders are unavailable for this average.",
+    "Use total.segments for half-day totals and total for the full period; never sum rounded displayed profits or override financial scope guards.",
+    "Direct orders retain unavailable advertising spend/CPA, with their supplied non-advertising net profit.",
+    "Keep one locally rendered popup active, support mouse/touch/keyboard and small-screen scrolling, and suppress false half-day splits for multi-day ranges."
+  ],
+  "verification": [
+    {
+      "name": "Pinned frontend toolchain and dependencies",
+      "result": "Node22.23.2/Yarn1.22.22 verified; frozen-lockfile install exited0. Reused dependency source package.json and yarn.lock are byte-identical to the current base."
+    },
+    {
+      "name": "Financial helper and account-row interaction regressions",
+      "command": "CI=true python -B scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend test --watchAll=false --runInBand --runTestsByPath src/components/DashboardAdsAccountRow.test.jsx src/lib/dashboardAdsAccountResults.test.js",
+      "result": "102 tests in2 suites passed; exit0. Includes the newly added sixth-cell hover case."
+    },
+    {
+      "name": "Existing live width baseline",
+      "result": "Read-only browser DOM at viewport1363x936: current card460px wide, table422px, five columns. No provider refresh or business write."
+    },
+    {
+      "name": "Remaining focused frontend suites",
+      "command": "CI=true python -B scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend test --watchAll=false --runInBand --runTestsByPath src/components/DashboardAdsSpendCard.test.jsx src/components/DashboardAdsSpendCard.manualRefresh.test.jsx src/pages/AdvancedDashboard.cardRefresh.test.jsx src/lib/dashboardPlatformSpendClient.test.js src/services/dashboardAdsSpend.test.js src/components/DashboardAnalyticsPlacement.test.js",
+      "result": "166 tests in6 suites passed; exit0, including main column and footer activation integration."
+    },
+    {
+      "name": "Footer overview tests",
+      "command": "CI=true python -B scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend test --watchAll=false --runInBand --runTestsByPath src/components/DashboardAdsPeriodsOverview.test.jsx",
+      "result": "16 tests passed; exit0. All9 focused suites passed across the three bounded runs:284 tests, zero failures/skips."
+    },
+    {
+      "name": "Synthetic actual-component preview build",
+      "result": "Passed Vite8.2.4 library build of the actual changed components and existing synthetic financial fixtures with repository CSS. Temporary output is outside the Git checkout and is not a release artifact."
+    },
+    {
+      "name": "Visual verification limitation",
+      "result": "Cloud Browser could not connect to the local preview server, and explicitly rejected the local file URL under its URL policy. No browser workaround or visual-pass claim. The existing live baseline was observed at460px; preview behavior is covered by DOM tests."
+    },
+    {
+      "name": "Independent integration review",
+      "result": "Read-only review of card, overview, helper contracts and tests found no material issue. Canonical total-cost summary and signed daily profit confirmed."
+    }
+  ],
+  "incomplete": [
+    "Preserve canonical remote source A and a draft PR; run required exact-source CI and governed release build, then freeze intent-only B.",
+    "Review the actual component layout when an allowed preview or deployed environment is available.",
+    "Emergent currently displays its sign-in page. Authentication is required before inspecting the canonical shared guard and any authorized production handoff."
+  ],
+  "production_changed": false,
+  "release_guard": "No shared /app access or mutation, lease, merge or publication by this task.",
+  "authorization": "Current user requests the column and footer overview. Earlier same-card user authorization explicitly permits merge/publication; no new permission assumed for unrelated actions.",
+  "continuation_ledger": "Issue1006 is at its2500-comment cap. The task PR will serve as the current continuation handoff alongside this status document.",
+  "previous_completed_task": "PR1947 is already merged/published/verified. This follow-up starts from the newer PR1956 production base; it does not repeat the previous deployment.",
+  "next_safe_action": "Create remote source checkpoint/PR and run governed A/B release checks. Obtain Emergent authentication through the secure browser flow only after the implementation is concrete and reviewable; inspect fresh inactive guard before shared writes.",
+  "completed": [
+    "Added the sixth signed net-profit column for all accounts, providers, direct orders and the source aggregate without changing accounting or data-fetch contracts.",
+    "Added footer-only all-platform Riyadh half-day overview, with source period totals and full-day costs and profit.",
+    "Added16 focused overview tests,7 main-card profit/activation tests, and sixth-cell row-hover coverage; registered the new component suite in the existing focused workflow.",
+    "Independent integration review found no material financial, scope or interaction issue."
+  ]
+}

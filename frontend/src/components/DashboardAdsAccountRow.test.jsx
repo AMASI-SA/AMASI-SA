@@ -35,7 +35,7 @@ afterEach(() => {
 function renderRow(stats = sampleStats(), props = {}) {
     act(() => root.render(<table><tbody><DashboardAdsAccountRow label="سناب الدولار" stats={stats}
         fromDate={day} toDate={day} {...props}>
-        <th>سناب الدولار</th><td>100.00</td><td>500.00</td><td>3</td><td>33.33</td>
+        <th>سناب الدولار</th><td>100.00</td><td>500.00</td><td>3</td><td>33.33</td><td>200.00</td>
     </DashboardAdsAccountRow></tbody></table>));
     return host.querySelector("tbody tr");
 }
@@ -43,7 +43,7 @@ const details = () => document.querySelector('[data-testid="dashboard-ads-accoun
 const enter = (element) => act(() => element.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
 const click = (element) => act(() => element.dispatchEvent(new MouseEvent("click", { bubbles: true })));
 
-test.each([0, 1, 2, 3, 4])("hovering table cell %s opens the two Riyadh periods and daily totals", (index) => {
+test.each([0, 1, 2, 3, 4, 5])("hovering table cell %s opens the two Riyadh periods and daily totals", (index) => {
     const row = renderRow();
     expect(details()).toBeNull();
     enter(row.children[index]);

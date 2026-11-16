@@ -2,6 +2,7 @@ import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { addDaysISO, todaySA } from "../lib/dates";
+import * as accountResults from "../lib/dashboardAdsAccountResults";
 import {
     DashboardAdsSpendCardContent,
     selectedPeriodLabel,
@@ -628,4 +629,93 @@ test.each([["USD.A", 81.32], ["__proto__", 0]])("real chart renders a lone obser
         host.remove();
         globalThis.IS_REACT_ACT_ENVIRONMENT = false;
     }
+});
+
+describe("net profit column and footer period overview", () => {
+    let metricsSpy;
+    const day = "2026-10-26";
+    function stats(netProfit, overrides = {}) {
+        const profit = { complete: true, netProfit, provisional: false, spendSar: 50,
+            totalCost: 100, pieces: 3, ...overrides };
+        const row = { orders: 2, sales: 400, cpa: 25, partial: false, profit };
+        return { ...row, segments: [
+            { ...row, id: "morning", status: "completed", startAt: `${day}T00:00:00+03:00`,
+                endAt: `${day}T12:00:00+03:00`, cutoffAt: `${day}T12:00:00+03:00` },
+            { ...row, id: "afternoon", status: "active", startAt: `${day}T12:00:00+03:00`,
+                endAt: "2026-10-27T00:00:00+03:00", cutoffAt: `${day}T15:30:00+03:00` },
+        ] };
+    }
+    function metrics() {
+        return { accounts: new Map([["USD.A", stats(1234.56, { provisional: true })],
+            ["__proto__", stats(-123.45)]]),
+        providers: { google: stats(0), tiktok: stats(75), meta: stats(125) },
+        direct: stats(300, { adSpendApplicable: false, spendSar: null }),
+        total: stats(1611.11, { provisional: true }), pending: false, unrepresentedOrders: 0 };
+    }
+    beforeEach(() => { metricsSpy = jest.spyOn(accountResults, "buildDashboardAdsTableMetrics").mockReturnValue(metrics()); });
+    afterEach(() => { metricsSpy.mockRestore(); });
+    const profitCell = (host, id) => host.querySelector(`[data-testid="${id}"]`).lastElementChild;
+
+    test("six compact columns show signed, zero and direct profit plus the supplied scoped aggregate", () => {
+        const host = independentAccountMarkup(independentAccountData(true));
+        const table = host.querySelector('[data-testid="dashboard-ads-account-table"]');
+        expect(table.querySelectorAll("thead th")).toHaveLength(6);
+        expect(table.querySelector("thead th:last-child").textContent).toBe("صافي الأرباحر.س");
+        [...table.rows].forEach((row) => expect(row.cells).toHaveLength(6));
+        expect(profitCell(host, "dashboard-snapchat-account-USD.A").textContent).toBe("1,234.56تقديري");
+        expect(profitCell(host, "dashboard-snapchat-account-USD.A").querySelector("bdi").dir).toBe("ltr");
+        expect(profitCell(host, "dashboard-snapchat-account-__proto__").textContent).toBe("-123.45");
+        expect(profitCell(host, "dashboard-snapchat-account-__proto__").querySelector("bdi").className).toContain("text-rose-700");
+        expect(profitCell(host, "dashboard-ads-provider-google").textContent).toBe("0.00");
+        expect(profitCell(host, "dashboard-ads-provider-google").querySelector("bdi").className).toContain("text-emerald-700");
+        expect(profitCell(host, "dashboard-ads-provider-tiktok").textContent).toBe("75.00");
+        expect(profitCell(host, "dashboard-ads-provider-meta").textContent).toBe("125.00");
+        expect(profitCell(host, "dashboard-ads-provider-direct").textContent).toBe("300.00");
+        expect(host.querySelector('[data-testid="dashboard-ads-provider-direct"]').children[1].textContent).toBe("—");
+        expect(profitCell(host, "dashboard-ads-account-total").textContent).toBe("1,611.11تقديري");
+    });
+
+    test.each([
+        ["incomplete evidence", { complete: false, netProfit: 42, provisional: true }],
+        ["missing amount", { complete: true, netProfit: null }],
+        ["nonfinite amount", { complete: true, netProfit: Infinity }],
+        ["NaN amount", { complete: true, netProfit: NaN }],
+        ["untyped amount", { complete: true, netProfit: "42" }],
+    ])("%s cannot become a displayed profit or zero", (_label, profit) => {
+        const result = metrics();
+        result.accounts.get("USD.A").profit = profit;
+        result.total.profit = profit;
+        metricsSpy.mockReturnValue(result);
+        const host = independentAccountMarkup(independentAccountData(true));
+        expect(profitCell(host, "dashboard-snapchat-account-USD.A").textContent).toBe("—");
+        expect(profitCell(host, "dashboard-ads-account-total").textContent).toBe("—");
+        expect(profitCell(host, "dashboard-ads-provider-direct").textContent).toBe("300.00");
+    });
+
+    test("only the footer opens the all-platform overview, and account hover replaces it", () => {
+        globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+        const host = document.createElement("div"); document.body.appendChild(host);
+        const root = createRoot(host);
+        const hover = (element) => act(() => element.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
+        const overview = () => document.querySelector('[data-testid="dashboard-ads-periods-overview"]');
+        try {
+            act(() => root.render(<DashboardAdsSpendCardContent data={independentAccountData(true)}
+                fromDate={day} toDate={day} />));
+            hover(host.querySelector("thead th"));
+            expect(overview()).toBeNull();
+            hover(profitCell(host, "dashboard-ads-account-total"));
+            expect(overview()).not.toBeNull();
+            expect(overview().querySelectorAll("tbody tr")).toHaveLength(12);
+            expect(overview().textContent).toContain("الفترة الصباحية");
+            expect(overview().textContent).toContain("الفترة المسائية");
+            expect(document.querySelector('[data-testid="dashboard-ads-account-tooltip"]')).toBeNull();
+            hover(profitCell(host, "dashboard-snapchat-account-USD.A"));
+            expect(overview()).toBeNull();
+            const rowPopup = document.querySelector('[data-testid="dashboard-ads-account-tooltip"]');
+            expect(rowPopup).not.toBeNull();
+            expect(rowPopup.querySelector('[data-testid="dashboard-ads-daily-summary"]').textContent).toContain("1,234.56 ر.س");
+        } finally {
+            act(() => root.unmount()); host.remove(); globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+        }
+    });
 });
