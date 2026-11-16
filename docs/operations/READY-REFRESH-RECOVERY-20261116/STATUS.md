@@ -2,7 +2,7 @@
 
 This branch is an evidence ledger only. **Do not merge it as application source.**
 
-Updated: 2026-11-16 00:44:45 UTC
+Updated: 2026-11-16 00:45:27 UTC
 
 ## Exact release
 
@@ -68,6 +68,6 @@ Publication request receipt: `evidence/platform-publication-in-flight.json`. Roo
 
 Next: observe the single current platform publication until a new explicit successful completion. Record exact platform version and aware completion timestamp. Then run once:
 `PYTHONDONTWRITEBYTECODE=1 python -B /tmp/ready1955-bound-publication.py verify --prepare-sha256 0aeb8938261cb3e02dfd172bf289cc30215aebf0c254323a70c32970127c9bc5 --platform-version <observed-new-version> --deployment-completed-at <observed-aware-completion>`.
-The bound verifier must run uninterrupted; no external timeout, duplicate verify, or concurrent status. Its official checks are sequential and may take several minutes before final JSON. Accept only exact runtime/source/deployment, three checks, and inactive guard. Then verify final local/remote M and save final receipts. Current live release acceptance is **pending**. Platform completion is accepted as version `231aae8`, timestamp `2026-11-16T03:41:00+03:00`. Next exact verifier inputs are those values with prepare digest `0aeb8938261cb3e02dfd172bf289cc30215aebf0c254323a70c32970127c9bc5`; verify has not yet been launched at this checkpoint.
+The bound verifier must run uninterrupted; no external timeout, duplicate verify, or concurrent status. Its official checks are sequential and may take several minutes before final JSON. Accept only exact runtime/source/deployment, three checks, and inactive guard. Then verify final local/remote M and save final receipts. Current live release acceptance is **pending**. Platform completion is accepted as version `231aae8`, timestamp `2026-11-16T03:41:00+03:00`. Next exact verifier inputs are those values with prepare digest `0aeb8938261cb3e02dfd172bf289cc30215aebf0c254323a70c32970127c9bc5`; The exact bound verifier was then launched **once** through the original Terminal2; its command and Python-running terminal state were observed. It is currently running without an external timeout. Do not launch another verify, interrupt it, or run status concurrently. Its private phase directory is `/tmp/ready1955-publication-20261116/verify`; await its own final JSON.
 
 The separately received garment remains blocked by source/approval representation proof, not stale workflow. This application patch does not clear that guard or mark Ready/receipt/service/provider state. Private order/customer evidence is excluded. Issue #1006 is full; PR #1955 and this record are continuation anchors.
