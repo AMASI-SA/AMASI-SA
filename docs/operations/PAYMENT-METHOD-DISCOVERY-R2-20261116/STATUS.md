@@ -6,7 +6,7 @@
 - Repository: `AMASI-SA/AMASI-SA`.
 - Task branch: `codex/payment-method-discovery-r2-20261116`.
 - Exact verified production/source base J: `71d1dd9010b3fd73de0463a6164f82fcd2b7cff5`.
-- State: all applicable exact-B gates completed successfully; PR1963 merged normally; shared source is aligned and configured adapter is running. No R2 lease or publication yet.
+- State: shared adapter passed; a task-owned R2 lease is prepared. Exact-M10of11checks passed at this checkpoint; only CodeQL Python remained running. Prepublish and R2 publication have not been submitted.
 - Production Git branch changed by R2: **yes**, through PR1963. Live R2 publication: **no**, not yet submitted.
 - The preceding feature PR1962 is merged and published as `0680799`, operation `ecbb3454-9e59-58b0-af49-6f8e34cc2267`; Emergent reported `Deployment successful`. Its first official verification hit startup HTTP520; the second finished normally with **exit0, verified:true and all3 probes**, matching source A1/deployment M1/runtime. Final official status is **active:false**. No interrupt, abort, second Publish or lease replacement occurred. Runtime verification passed; the functional defect below still requires R2.
 - Prior frozen source A: `03c91e903c992a2e397fccab2124e07fe002e0e6`; intent B: `03605c83e67c26b8f92477624f92d662fb97616e`; merge M/current base J: `71d1dd9010b3fd73de0463a6164f82fcd2b7cff5`.
@@ -58,7 +58,7 @@ The frontend reviewer independently reviewed the backend source/test diff and ap
 - B tree: `70842fa4b3db6c9cea6a4b4d743a804f078f7e52`.
 - PR: https://github.com/AMASI-SA/AMASI-SA/pull/1963 (merged normally).
 - Production merge M: `438b461fc660e043726c8dd5ab282d06abd3c17f`; tree equals B, parents are J and B; official Git transition validator accepted M.
-- Previous documentation checkpoint: `b6881c2c8bd0b09675b3f8427370062f0e4f980b`.
+- Previous documentation checkpoint: `eeeb99d4262c7412045e184ac2206669301dd481`.
 - Runtime: `rg5-ddac746f37c8ee913405c42ced5804aa9e68ff17b56ba60a60ff2a824a7ffe8e`.
 - Frontend artifact: `a31d130116eaa72d7ba3a0ec0f36fda19c29db272d207642d520482df16e46ff`.
 - Reproducibility proof: `1a7f37962dc5acfe31e346f90d3c75e259b49361fda98c29d890ce92b8a3167f`.
@@ -71,9 +71,9 @@ The frontend reviewer independently reviewed the backend source/test diff and ap
 The successful prior receipt is `/tmp/mezan-payment-method-release-1962/verify2.json`; exit record `verify2-exit.json`; final status `final-status.json`. Three probes observed boot identities `2026-11-16T19:51:55.134941+00:00` and `2026-11-16T19:51:49.045223+00:00`, with the exact reviewed frontend artifact. The verifier checked canonical/cache-busted metadata, full public files, shell and service-worker contracts, then closed its matching lease. No R2 lease has been prepared.
 
 ## Next safe actions
-1. Finish the configured shared adapter already running; require exit0 and exact reviewed runtime identity. Do not start another build or modify shared source while it runs.
-2. Inspect all exact-M post-merge Readiness/Security/CodeQL gates, including both clean-clone adapter rehearsals.
-3. Observe exact-merge gates, then prepare a fresh task-owned R2 lease, prepublish and perform the authorized Publish once.
+1. Confirm completion of the last exact-M CodeQL Python check. Readiness and Security, both actual clean-clone rehearsals and CodeQL JavaScript already passed.
+2. Preserve this task's prepared lease and shared M source. Do not prepare another lease or repeat the shared build.
+3. Immediately before the authorized Publish, run official prepublish against this lease and require exact reviewed A/M/runtime readiness, then click Publish once.
 4. Require a newer explicit deployment success, all3 official production probes and final inactive guard. Revisit the exact-method link and verify editable blank commission terms without saving real values.
 5. Update this separate handoff and PR with final exact merge, release receipts and live acceptance. Do not amend the frozen runtime branch.
 
@@ -89,3 +89,10 @@ Readiness43947081805 succeeded with both actual clean-clone rehearsals: Host20.2
 Shared update command obtained fresh official active:false, checked expected J HEAD and empty tracked/staged diffs, fetched the unchanged production M and checked its reviewed B tree, then fast-forwarded normally. Shared observed HEAD is M, tree70842fa4b3db6c9cea6a4b4d743a804f078f7e52, tracked_clean:true, guard_was_inactive:true. Unrelated untracked files were preserved.
 
 The configured `cd /app/frontend; REACT_APP_BACKEND_URL=https://mezansalla.com yarn build` was started after another official inactive-guard check and expected-M check. Receipt directory: `/tmp/mezan-payment-method-release-1963/`. No prepare/prepublish/Publish has been issued for R2.
+
+## Shared adapter and owned R2 lease
+The configured adapter completed **exit0**; generated backend identity exactly equals the reviewed intent. Observed source A, runtime and frontend artifact match the frozen R2 values above. Receipt: `/tmp/mezan-payment-method-release-1963/adapter.log`; exit record `adapter-exit.json`.
+
+Official prepare created the task's active v5 lease at **2026-11-16T20:23:52.530472+00:00**, actor `payment-method-discovery-r2-20261116`, source A39c891d7b1da06d01e75b71bb42310eb8d29f066, deployment M438b461fc660e043726c8dd5ab282d06abd3c17f, runtime rg5-ddac746f37c8ee913405c42ced5804aa9e68ff17b56ba60a60ff2a824a7ffe8e. Fresh official status confirms that exact active lease. Receipt: `prepare.json`. No second prepare, abort, prepublish or R2 Publish occurred.
+
+At this checkpoint exact-M Readiness43948563014 and Security43948562868 passed all9jobs; CodeQL43948563334 JavaScript passed and Python133584631274 was still running. Do not claim all11passed until the last result is observed. This active-lease section supersedes the earlier build-in-progress chronology.
