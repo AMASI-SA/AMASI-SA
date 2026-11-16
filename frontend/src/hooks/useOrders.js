@@ -43,6 +43,7 @@ export function useOrders({ statusGroup = null, statusExact = null } = {}) {
         refreshInFlightRef.current = true;
 
         if (!background) {
+            searchFiltersRef.current = null;
             setOrders([]);
             setNextCursor(null);
             setHasMore(false);
@@ -133,11 +134,13 @@ export function useOrders({ statusGroup = null, statusExact = null } = {}) {
             return;
         }
         const requestId = ++requestIdRef.current;
+        searchFiltersRef.current = null;
         refreshInFlightRef.current = true;
         setInitialLoading(true);
         setLoading(true);
         setError("");
         setSearchMode(true);
+        setResultSummary(null);
         try {
             const order = await getOrder(normalized);
             if (requestId !== requestIdRef.current) return;
@@ -195,17 +198,22 @@ export function useOrders({ statusGroup = null, statusExact = null } = {}) {
             (typeof navigator !== "undefined" && !navigator.onLine)
         ) return;
         if (searchModeRef.current) {
+            // Combined searches are user-driven cohorts, not single-order lookups.
+            // Preserve every loaded page without repeating expensive searches on focus/poll.
+            if (searchFiltersRef.current) return;
             const orderNumber = String(ordersRef.current[0]?.order_number || "").trim();
             if (!orderNumber) return;
+            const requestId = requestIdRef.current;
             refreshInFlightRef.current = true;
             try {
                 const order = await getOrder(orderNumber);
+                if (requestId !== requestIdRef.current) return;
                 if (order) setOrders([order]);
                 setError("");
             } catch (refreshError) {
-                setError(refreshError.message);
+                if (requestId === requestIdRef.current) setError(refreshError.message);
             } finally {
-                refreshInFlightRef.current = false;
+                if (requestId === requestIdRef.current) refreshInFlightRef.current = false;
             }
             return;
         }

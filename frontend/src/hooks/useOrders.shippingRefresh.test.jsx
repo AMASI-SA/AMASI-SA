@@ -118,3 +118,49 @@ test("combined search loads additional pages only on demand with the same filter
     expect(latest.orders.map(row => row.order_number)).toEqual(["1", "2"]);
     expect(latest.hasMore).toBe(false);
 });
+
+test.each([{ campaign_id: 'campaign-1' }, { sku: 'AMS11889' }])('automatic refresh preserves combined results and pagination for %j', async (filters) => {
+    listOrders.mockResolvedValue({ items: [], nextCursor: null });
+    await render(<List />);
+    const rows = Array.from({ length: 50 }, (_, i) => ({ order_number: String(i + 1) }));
+    listOrders.mockResolvedValueOnce({ items: rows, nextCursor: 'search:hash:50', resultSummary: { orders: 408 } });
+    getOrder.mockResolvedValue(rows[0]);
+    await act(async () => latest.searchCombined(filters));
+    await advance(30000);
+    await act(async () => {
+        window.dispatchEvent(new Event('focus'));
+        window.dispatchEvent(new Event('online'));
+        document.dispatchEvent(new Event('visibilitychange'));
+    });
+    expect(latest.orders).toEqual(rows);
+    expect(latest.hasMore).toBe(true);
+    expect(latest.resultSummary).toEqual({ orders: 408 });
+    expect(getOrder).not.toHaveBeenCalled();
+    expect(listOrders).toHaveBeenCalledTimes(2);
+    listOrders.mockResolvedValueOnce({ items: [{ order_number: '51' }], nextCursor: null });
+    await act(async () => latest.loadMore());
+    expect(latest.orders).toHaveLength(51);
+});
+
+test('exact order refresh resumes after combined search and ignores responses from a prior search', async () => {
+    listOrders.mockResolvedValue({ items: [], nextCursor: null });
+    await render(<List />);
+    await act(async () => latest.searchCombined({ sku: 'old' }));
+    getOrder.mockResolvedValue({ order_number: 'A', status: 'old' });
+    await act(async () => latest.searchExactOrder('A'));
+    getOrder.mockResolvedValueOnce({ order_number: 'A', status: 'new' });
+    await advance(10000);
+    expect(latest.orders[0].status).toBe('new');
+    const pending = deferred();
+    getOrder.mockReturnValueOnce(pending.promise);
+    await advance(10000);
+    const rows = [{ order_number: 'B' }, { order_number: 'C' }];
+    listOrders.mockResolvedValueOnce({ items: rows, nextCursor: null, resultSummary: { orders: 2 } });
+    await act(async () => latest.searchCombined({ sku: 'new' }));
+    await act(async () => pending.resolve({ order_number: 'A', status: 'stale' }));
+    expect(latest.orders).toEqual(rows);
+    await act(async () => latest.reload());
+    const calls = listOrders.mock.calls.length;
+    await advance(10000);
+    expect(listOrders).toHaveBeenCalledTimes(calls + 1);
+});
