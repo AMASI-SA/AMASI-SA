@@ -1,7 +1,7 @@
 {
   "task_id": "MZ-BUNDLE-CONDITIONAL-CHOICE-20261116",
   "scope": "Resolve phantom incomplete costs from conditional descriptive bundle options without changing genuine cost dependencies.",
-  "state": "merged_prepublish_passed_ui_publishing",
+  "state": "published_canonical_verification_running",
   "repository": "AMASI-SA/AMASI-SA",
   "task_branch": "codex/bundle-conditional-cost-current-20261116",
   "source_base_J": "b05cd3c9b25ce22df1b2dd06c23d97606bd632c6",
@@ -107,7 +107,7 @@
     "root_verified": true
   },
   "deployment": {
-    "state": "publishing",
+    "state": "ui_success",
     "root_click_at": "2026-11-16T01:11:23.083Z",
     "click_finished_at": "2026-11-16T01:11:23.517Z",
     "previous_platform_version": "231aae8",
@@ -132,13 +132,27 @@
       "source_git_sha": "7a1de33535081393fbf3597523d722ec308b2ca8",
       "started_at": "2026-11-16T01:10:56.923588+00:00"
     },
-    "ui_success_observed": false,
+    "ui_success_observed": true,
     "provider_details_observed": [
       "Workspace ready",
       "Changes packaged",
       "Building your website... Turning your code into a production-ready package."
     ],
-    "provider_build_argv_observed": false
+    "provider_build_argv_observed": false,
+    "success": {
+      "pr": 1956,
+      "prepare_sha256": "6b6d59160b426186b545d1fa953c118a42e917d34a97254c1845ef42b0368af3",
+      "deployment_git_sha": "4cdc10931f49124a4715153f220e0adf274e8bcc",
+      "release_id": "rg5-4890bb5f409d7f6080ad2c19f881ed5edfe30b8f93b9502fbb3e45977f6a28f1",
+      "status": "Deployment Succeeded",
+      "observed_by": "root",
+      "previous_platform_version": "231aae8",
+      "platform_version": "6c1329e",
+      "published_at": "2026-11-16T01:11:23.083Z",
+      "observed_at": "2026-11-16T01:21:45.125Z",
+      "platform_ui_text": "Deployment successful"
+    },
+    "additional_ui_text": "Deployment finished Nov 16, 04:21 AM (Asia/Riyadh)"
   },
   "production_changed": "yes: authorized normal merge; runtime publication pending",
   "business_data_changed": false,
@@ -147,9 +161,9 @@
     "Do not equate zero customer surcharge with zero internal cost.",
     "Preserve unresolved state for genuine cost decisions with missing/conflicting evidence."
   ],
-  "next_safe_action": "Wait for root-observed new platform version and explicit completed UI outcome. Record atomic deployment-success.json bound to this prepare/prepublish, then run reviewed verify once in persistent process without timeout. Require canonical three rounds and inactive status, then normal saved-report GET acceptance.",
+  "next_safe_action": "Let owned canonical verify pid78706 finish without timeout, interruption or retry. Inspect its private receipt/log files only; do not run concurrent guard status. Require verify-success with canonical verified:true/checks:3 and fresh inactive receipt. Then saved-report GET acceptance and final checkpoint.",
   "ledger": "Issue1006 is at its known comment limit. This status and the evidence-only branch are the durable continuation record.",
-  "checkpoint_updated_at_utc": "2026-11-16 01:14:26 UTC",
+  "checkpoint_updated_at_utc": "2026-11-16 01:24:03 UTC",
   "source_tree": "fe74d9ce67a0a1a4bcedbfd0a5a7e8721d5ef9f6",
   "pr": {
     "number": 1956,
@@ -225,6 +239,10 @@
     "requirements": "Private owned prepare receipt; exact actor/A/J/M/B tree/runtime binding. Verify additionally requires the same successful prepublish and root-observed new UI success metadata. Official operations once, no timeout/retry, matching lease closure only.",
     "completed_modes": [
       "prepublish"
+    ],
+    "started_modes": [
+      "prepublish",
+      "verify"
     ]
   },
   "other_publication_observation": {
@@ -247,5 +265,24 @@
     "result": "The incident row is already complete before this task's publication under its externally changed current configuration. The component present in the original bundle screenshot is absent from the current report breakdown.",
     "limitation": "Do not attribute this pre-existing live completeness to the unpublished code fix. Original bundle behavior and free affirmative/declining options are proved by the reviewed regression suite; postpublication runtime identity still must match exact A.",
     "private_figures_excluded": true
+  },
+  "verification": {
+    "actor": "codex-bundle-conditional-cost-1956-20261116",
+    "branch": "hotfix/prod-snap-meta-final",
+    "deployment_git_sha": "4cdc10931f49124a4715153f220e0adf274e8bcc",
+    "deployment_success_sha256": "60459b1297e527751927bc9cf2c74ab56bd53857a31a21636f012eb8a1f60b37",
+    "git_sha": "7a1de33535081393fbf3597523d722ec308b2ca8",
+    "mode": "verify",
+    "pid": 78706,
+    "pr": 1956,
+    "prepare_sha256": "6b6d59160b426186b545d1fa953c118a42e917d34a97254c1845ef42b0368af3",
+    "prepared_at": "2026-11-16T01:08:55.170137+00:00",
+    "protocol_version": 5,
+    "release_id": "rg5-4890bb5f409d7f6080ad2c19f881ed5edfe30b8f93b9502fbb3e45977f6a28f1",
+    "source_base_git_sha": "b05cd3c9b25ce22df1b2dd06c23d97606bd632c6",
+    "source_git_sha": "7a1de33535081393fbf3597523d722ec308b2ca8",
+    "started_at": "2026-11-16T01:22:24.958313+00:00",
+    "wrapper_sha256": "0d5c716a83f2db81ccffcb2e8a4dd39ccb8e8d02e82b4952f13d45fff859656f",
+    "final_outcome": "pending"
   }
 }
