@@ -1,0 +1,17 @@
+{
+  "actor": "chatgpt-ready1955-20261116-root",
+  "branch": "hotfix/prod-snap-meta-final",
+  "deployment_git_sha": "b05cd3c9b25ce22df1b2dd06c23d97606bd632c6",
+  "finished_at": "2026-11-16T00:29:29.927875+00:00",
+  "ok": true,
+  "prepare_bytes": 577143,
+  "prepare_sha256": "0aeb8938261cb3e02dfd172bf289cc30215aebf0c254323a70c32970127c9bc5",
+  "prepared_at": "2026-11-16T00:29:28.806882+00:00",
+  "protocol_version": 5,
+  "release_id": "rg5-255b2b13ed893324729b31c21409fa1be3be98d8c536485f712424d70bab4b4e",
+  "source_base_git_sha": "2589f440106a7c5d463ee03eac3617d113319673",
+  "source_git_sha": "1accaa42e132ca1232ce86b3122971b48169ca81",
+  "started_at": "2026-11-16T00:29:27.017795+00:00",
+  "stderr_bytes": 0,
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}
