@@ -32,6 +32,10 @@ on:
       - 'backend/tests/test_snapchat_shadow_cadence.py'
       - 'backend/tests/test_qoyod_auto_run_lifecycle.py'
       - 'backend/tests/test_qoyod_manual_send_jobs.py'
+      - 'backend/tests/test_qoyod_manual_runner_lease.py'
+      - 'backend/tests/test_qoyod_manual_job_projection.py'
+      - 'backend/tests/test_qoyod_manual_customer_identity.py'
+      - 'backend/tests/test_qoyod_manual_http_scope.py'
       - 'frontend/src/lib/qoyodManualSendJobs*'
       - 'frontend/src/pages/QoyodUnsentOrders*'
       - 'frontend/src/hooks/useCampaignShadowJob*'
@@ -56,6 +60,7 @@ jobs:
       JWT_SECRET: isolated-background-worker-test-secret
       QOYOD_API_BASE: https://qoyod.invalid/2.0
       QOYOD_TEST_MONGO_URI: mongodb://127.0.0.1:49417/?replicaSet=mezanBgTest
+      MEZAN_TEST_MONGO_URI: mongodb://127.0.0.1:49417/?replicaSet=mezanBgTest
       MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:49417/?replicaSet=mezanBgTest
       EMAIL_OTP_SMTP_HOST: smtp.example.invalid
       EMAIL_OTP_FROM_EMAIL: test@example.invalid
@@ -108,6 +113,10 @@ jobs:
             backend/tests/test_qoyod_scheduled_incremental.py \
             backend/tests/test_qoyod_auto_run_lifecycle.py \
             backend/tests/test_qoyod_manual_send_jobs.py \
+            backend/tests/test_qoyod_manual_runner_lease.py \
+            backend/tests/test_qoyod_manual_job_projection.py \
+            backend/tests/test_qoyod_manual_customer_identity.py \
+            backend/tests/test_qoyod_manual_http_scope.py \
             backend/tests/test_qoyod_plan_b_auto_send.py \
             backend/tests/test_qoyod_cycle_interruption_diagnostic.py \
             backend/tests/test_qoyod_post_invoice_failure_recovery.py \

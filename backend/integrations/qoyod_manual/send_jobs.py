@@ -17,7 +17,9 @@ from fastapi import HTTPException
 from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
+from resource_governor import governor
 from security_sensitive_routes import require_qoyod_security_owner
+from integrations.qoyod_manual import runner_lease
 from integrations.qoyod_manual.send import ManualSendRefused
 from integrations.qoyod_manual.canary_batch import SAFE_ALREADY_SENT_CODES
 
@@ -39,6 +41,9 @@ PRE_WRITE_REFUSALS = frozenset({
     "qoyod_preflight_payload_invalid", "qoyod_preflight_total_mismatch",
     "send_lock_unavailable",
     "manual_send_authority_changed",
+    "customer_name_missing", "authoritative_customer_identity_missing",
+    "authoritative_payment_not_eligible", "authoritative_payment_needs_verification",
+    "authoritative_payment_refresh_failed", "unified_sender_row_upsert_failed",
 })
 
 
@@ -140,18 +145,22 @@ async def execute_send(db, row):
         raise ManualSendRefused("manual_send_authority_changed",
             "لم يعد تفويض إرسال الطلب متاحًا") from exc
     actor = f"manual-job:{row['actor_id']}:{row['generation']}"
+    # Use the same current-payment/customer projection as the established
+    # manual UI. The direct core sender cannot establish prepaid eligibility
+    # from an old inbox row by itself. Projection is local after the single
+    # authoritative Salla refresh performed below or by failed_retry.
+    from integrations.qoyod_manual import auto_send
     if row["operation"] == "retry":
         from integrations.qoyod_manual.failed_retry import retry_failed_order
         return await retry_failed_order(db, orders_user_id=row["orders_user_id"],
-            order_number=row["order_number"], actor=actor)
-    from integrations.qoyod_manual.auto_send import _refresh_and_verify_salla_status
-    from integrations.qoyod_manual.send import manual_send_one
-    eligible, refresh = await _refresh_and_verify_salla_status(
+            order_number=row["order_number"], actor=actor,
+            send_fn=auto_send.manual_send_one)
+    eligible, refresh = await auto_send._refresh_and_verify_salla_status(
         db, orders_user_id=row["orders_user_id"], order_number=row["order_number"])
     if not eligible:
         raise ManualSendRefused("not_qoyod_eligible_status",
             "حالة الطلب الحالية في سلة ليست ضمن حالات الإرسال المسموحة")
-    return await manual_send_one(db, user_id="main", orders_user_id=row["orders_user_id"],
+    return await auto_send.manual_send_one(db, user_id="main", orders_user_id=row["orders_user_id"],
         order_number=row["order_number"], actor=actor,
         allow_missing_salla_order_date=True, allow_historical_positive_total=True)
 
@@ -209,7 +218,30 @@ async def recover_expired(db):
 
 async def run_once(db, *, executor=None):
     await recover_expired(db)
+    # Idle workers do not create or renew a global slot, or sample memory.
+    if not await db.qoyod_manual_send_jobs.find_one({"status": "queued"}, {"_id": 1}):
+        return False
+    # Defer new financial work while the container is under memory pressure.
+    # Never pressure-cancel a send already between invoice and payment writes.
+    pressure, _ = governor.decision()
+    if pressure in {"blocked", "cancel"}:
+        return False
     token = uuid.uuid4().hex
+    # Pending browser observers may keep the queue ready, but only one updated
+    # manual worker may execute across replicas. Automatic work owns its own
+    # leases and remains outside this dedicated manual slot.
+    if not await runner_lease.claim(db, token, LEASE_SECONDS):
+        return False
+    try:
+        return await _run_with_runner(db, token, executor=executor)
+    finally:
+        # Exact-token release cannot clear a replacement worker's slot. If the
+        # database is unavailable, server-clock expiry provides bounded recovery.
+        with suppress(Exception):
+            await asyncio.wait_for(runner_lease.release(db, token), timeout=5)
+
+
+async def _run_with_runner(db, token, *, executor=None):
     at = utcnow()
     row = await db.qoyod_manual_send_jobs.find_one_and_update(
         {"status": "queued"}, {"$set": {"status": "running", "claim_token": token,
@@ -222,6 +254,8 @@ async def run_once(db, *, executor=None):
     lease_lost = asyncio.Event()
 
     async def before_write():
+        if not await runner_lease.is_current(db, token):
+            raise RuntimeError("manual_runner_lease_lost")
         if not await db.qoyod_manual_send_jobs.find_one(
                 {**selector, "lease_until": {"$gt": utcnow()}}, {"_id": 1}):
             raise RuntimeError("manual_job_lease_lost")
@@ -231,15 +265,31 @@ async def run_once(db, *, executor=None):
             # A later write may follow an earlier successful provider effect.
             raise RuntimeError("manual_job_authority_changed") from exc
 
-    from integrations.qoyod_manual.client import begin_job_write_guard, end_job_write_guard
+    from integrations.qoyod_manual.client import (
+        begin_job_write_guard, end_job_write_guard, manual_qoyod_http_scope,
+    )
     guard_token = begin_job_write_guard(before_write)
-    execution = asyncio.create_task((executor or execute_send)(db, row),
+    async def scoped_execution():
+        # A delayed claim acknowledgement must not start provider reads after
+        # another replica can acquire the expired runner slot.
+        if not await runner_lease.is_current(db, token):
+            raise RuntimeError("manual_runner_lease_lost")
+        # Reuse connections only within this claimed job. The scope closes on
+        # success, refusal, timeout and cancellation; it shares no lookup proof.
+        async with manual_qoyod_http_scope():
+            return await (executor or execute_send)(db, row)
+
+    execution = asyncio.create_task(scoped_execution(),
                                     name="manual-send-job-execution")
 
     async def heartbeat():
         while True:
             await asyncio.sleep(HEARTBEAT_SECONDS)
             try:
+                if not await runner_lease.renew(db, token, LEASE_SECONDS):
+                    lease_lost.set()
+                    execution.cancel()
+                    return
                 renewed = await db.qoyod_manual_send_jobs.update_one(
                     {**selector, "lease_until": {"$gt": utcnow()}},
                     {"$set": {"lease_until": utcnow() + timedelta(seconds=LEASE_SECONDS)}})
@@ -314,4 +364,6 @@ async def run(db):
         except Exception as exc:
             log.warning("manual_send_job_worker_unavailable type=%s", type(exc).__name__)
             worked = False
-        await asyncio.sleep(1 if worked else POLL_SECONDS)
+        # Already queued work needs no extra one-second idle interval. Yield
+        # cooperatively while draining, retaining idle/error backoff.
+        await asyncio.sleep(0 if worked else POLL_SECONDS)

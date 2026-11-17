@@ -305,8 +305,11 @@ async def test_collector_builds_again_for_each_invocation_even_with_same_state(m
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('stop', ['disconnect', 'deadline'])
-async def test_actual_visible_collector_joins_history_worker_and_releases_only_own_lease(monkeypatch, stop):
+@pytest.mark.parametrize('stop, before_history_delay', [
+    ('disconnect', 0), ('deadline', 0), ('deadline', .2),
+], ids=['disconnect', 'deadline', 'deadline_after_slow_setup'])
+async def test_actual_visible_collector_joins_history_worker_and_releases_only_own_lease(
+        monkeypatch, stop, before_history_delay):
     from fastapi import HTTPException
     import operational_balance_sources as sources
     import operational_demand_refresh as runtime
@@ -334,10 +337,33 @@ async def test_actual_visible_collector_joins_history_worker_and_releases_only_o
             exited.set()
     monkeypatch.setattr(history, '_checkpoint', controlled_checkpoint)
     monkeypatch.setattr(sources, 'build_recorded_courier_fee_lookup', observed_builder)
+    deadline_scopes = []
     if stop == 'deadline':
-        monkeypatch.setattr(runtime, 'REQUEST_SECONDS', 0.15)
+        original_asyncio = runtime.asyncio
+        original_timeout = original_asyncio.timeout
+
+        class AsyncioWithArmedDeadline:
+            def __getattr__(self, name):
+                return getattr(original_asyncio, name)
+
+            def timeout(self, seconds):
+                assert seconds == runtime.REQUEST_SECONDS
+                deadline = original_timeout(None)
+                deadline_scopes.append(deadline)
+                return deadline
+
+        # This case exercises a deadline during owned history work, not the
+        # time taken by the collector's earlier reads and preparation stages.
+        # Keep the real source-read budget and every unrelated asyncio timer.
+        monkeypatch.setattr(runtime, 'asyncio', AsyncioWithArmedDeadline())
+
+    async def collect():
+        if before_history_delay:
+            await asyncio.sleep(before_history_delay)
+        return await sources.collect_sources(source_db, 'owner', START, NOW, operational_state=value)
+
     task = asyncio.create_task(runtime.run_visible_refresh(request, Database(), 'owner', 'staff', allowed,
-        lambda: sources.collect_sources(source_db, 'owner', START, NOW, operational_state=value)))
+        collect))
     try:
         assert await asyncio.to_thread(entered.wait, 2)
         if stop == 'disconnect':
@@ -345,7 +371,10 @@ async def test_actual_visible_collector_joins_history_worker_and_releases_only_o
             await asyncio.sleep(0)
             await asyncio.sleep(0)
         else:
+            assert len(deadline_scopes) == 1
+            deadline_scopes[0].reschedule(asyncio.get_running_loop().time())
             await asyncio.sleep(0.2)
+            assert deadline_scopes[0].expired()
         assert not task.done() and not exited.is_set()
         release.set()
         with pytest.raises(HTTPException) as failure:
@@ -357,3 +386,6 @@ async def test_actual_visible_collector_joins_history_worker_and_releases_only_o
         assert not [pending for pending in asyncio.all_tasks() if pending is not asyncio.current_task()]
     finally:
         release.set()
+        if not task.done():
+            task.cancel()
+        await asyncio.gather(task, return_exceptions=True)

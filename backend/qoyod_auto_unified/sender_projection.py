@@ -90,7 +90,32 @@ async def _upsert_sender_projection(
     customer_name = (
         _text(customer.get("name")) if isinstance(customer, dict) else ""
     )
-    if not customer_name:
+    markers = await _marker_fields(
+        db,
+        orders_user_id=orders_user_id,
+        legacy_user_id=legacy_user_id,
+        order_number=order_number,
+        unified=unified,
+    )
+    # Missing identity blocks new invoices, not observation of a persisted
+    # invoice or the core sender's payment-only recovery. Mirror its exact
+    # marker branches; a bare Plan-B legacy marker alone does not guarantee
+    # either path. Dry/preview markers cannot grant this exemption.
+    def real_invoice_id(value):
+        identifier = str(value or "").strip()
+        try:
+            return _is_real(identifier) and identifier.isdigit() and int(identifier) > 0
+        except ValueError:
+            return False
+
+    existing_invoice_path = (
+        real_invoice_id(markers.get("manual_qoyod_invoice_id"))
+        or (
+            real_invoice_id(markers.get("qoyod_invoice_id"))
+            and markers.get("qoyod_invoice_source") != "manual_plan_b"
+        )
+    )
+    if not customer_name and not existing_invoice_path:
         return {
             "ok": False,
             "code": "authoritative_customer_identity_missing",
@@ -104,13 +129,6 @@ async def _upsert_sender_projection(
         "salla_order_number": str(order_number),
     }
     stable_id = f"qoyod-unified-{order_number}"
-    markers = await _marker_fields(
-        db,
-        orders_user_id=orders_user_id,
-        legacy_user_id=legacy_user_id,
-        order_number=order_number,
-        unified=unified,
-    )
     patch: dict[str, Any] = {
         "trace_id": f"qoyod-unified-{uuid.uuid4().hex}",
         "user_id": str(legacy_user_id),
