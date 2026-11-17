@@ -1,5 +1,107 @@
 # Supplier receipt Ready policy
 
+## Release handoff — ready B, publication pending
+
+Owner publication authorization is explicit. **All 20 applicable workflows
+passed on exact intent-only B.** One additional TikTok Creator workflow was
+skipped by its unrelated branch condition. PR #1982 is open and ready for
+review, unmerged. Production changed by this task: **no**.
+
+| Binding | Exact identity |
+| --- | --- |
+| Reviewed base J | `f2d806efc18964a2cc7c3a475346590cbe8b1262` |
+| Source A | `46187a1b22b550db9d2b6bb2bb0caf5831d29bdd` |
+| A tree | `9ce9079a6a45decb2524b2b45a0ccb6fe12764d9` |
+| Intent-only B | `b10192a88fc8a0cda621c9f0a2922ed4081620cd` |
+| B tree | `940cd4d70ddc63d9dbd8593c662cf45b36556090` |
+| Runtime release | `rg5-d1ee6d2f096ad121415965bc8add18a84249ee715ab15221e7875f359d559f96` |
+| Frontend artifact tree | `feca50cf723178a51482b5552d3b5d994ad735e3a946ca067f0256c2814bfae5` |
+
+Release PR: https://github.com/AMASI-SA/AMASI-SA/pull/1982 . Source/intent
+branch: `codex/ready-supplier-receipt-release-20261118`. The documentation-only
+handoff branch is `codex/ready-supplier-receipt-release-handoff-20261118`; this
+status update does not alter the frozen source/intent pair and must not be
+merged as the deployment source. The PR records its exact documentation SHA.
+
+### Completed acceptance
+
+- Candidate readiness run `44195156304` passed. Artifact `14379505190`, ZIP
+  SHA-256 `520bf4eed98a4bd104be03d899a756ef2d218f48acd6265aa79a73575eb03931`;
+  JSON SHA-256 `4f445585dad7e9912a8a45b0497f81a580c3b31f8d302d1349b71dafba502dfb`.
+  The candidate loader passed while HEAD was exact clean A; the tracked
+  intent and full Git proof passed for B. A to B changes exactly the intent.
+- Final-B Review `44196296836` passed: 35 refresh +35 subtests; 348 Android
+  +59 subtests; 1,029 main +596 subtests; 124 source snapshots +28 subtests;
+  one acceptance guard. All XML gates have zero skips, failures or errors.
+  Review artifact `14380720860`, SHA-256
+  `e3d95412a2dfa7ca9abea806ec70a4eaae48060bc2ac52c4141695b1d75ee558`.
+- Final-B Stock `44196296951` passed 4,844 tests +7 subtests, with zero
+  skips, failures or errors. Artifact `14380126366`, SHA-256
+  `df5738fb7dd75a28e161609f84f9e9a5f52fa5bfec929f75ab786e0a88af7972`.
+- Final-B Release Readiness `44196296814` passed, including Host20.20.2
+  rehearsal `134439258266` and Host24.19.0 rehearsal `134439258197`.
+  Both actual no-Git clean-clone adapter builds, isolated Backend/Frontend
+  packages and canonical/cache-busted JSON routes passed. Generated artifacts
+  are `14377999803` and `14378758632`; evidence artifacts `14379396556` and
+  `14379357137`. The identity, package and route outputs match frozen B.
+- G47, shipping, security, CodeQL, operational balances and the remaining
+  applicable workflows all passed. A's earlier Review/Stock runs were
+  cancelled when B was pushed; they are not counted as complete acceptance.
+- The supplier runtime/test/workflow blobs remain identical to previously
+  verified 627cd57e. Balances-latency code, tests and current reviewed intent
+  from J are preserved. The focused integration run passed 205 cases plus
+  24 subtests with zero skips. No new APK is required.
+
+### Current publication blockers and protected state
+
+The latest PR #1980 body, updated `2026-11-17T23:10:31Z`, records another
+active sequential owner of shared `/app`. It fast-forwarded the host to J at
+23:01:59 UTC and completed its configured adapter at23:04:32 UTC, checkpointed
+23:09 UTC. It has not recorded its own lease/Publish or a final handoff yet.
+An inactive guard alone does not release another owner's pre-lease work.
+This task must wait for its explicit completed verification/inactive handoff
+before merging, modifying the host or starting another adapter/publisher.
+
+The read-only public health observation at23:11 UTC was healthy but still
+identified the prior Android shipping source
+`7f6bc85333b1189e40dd5f1138b841cf2241ee23`, runtime
+`rg5-c13e7f152e61e9ba1f799a1a78744bb998e3cdfb8be7cfdc09f97886868fa17e`.
+All identity/source/control/frontend flags were true. Supplier Ready was not
+live at that observation.
+
+The task-specific Emergent project page repeatedly timed out through the
+documented browser APIs. Automatic approval review rejected broader native
+tab/window inspection because it could expose unrelated private content.
+Those rejected actions did not execute. No rejection was bypassed, no paid
+Emergent chat request was sent, and no unrelated window content was read.
+If task-specific access remains unavailable, explicit user assistance or
+approval to locate only the Mezan terminal is required before continuing.
+
+No shared-host command, file mutation, adapter, lease, merge, Publish action,
+provider write, or live order/status/receipt change has occurred in this task.
+The local canonical checkout is restored to exact clean B after recording
+this documentation checkpoint. Earlier task branches and PRs are preserved.
+
+### Exact next safe actions
+
+1. Read fresh PR #1980 ownership/handoff and remote production refs; require
+   its completed release/verification handoff. Do not clear its lease or
+   treat its pre-lease inactive state as permission to take over.
+2. Restore task-specific Emergent project/terminal access. Read official
+   `/app` guard status and branch/tracked state before any host mutation.
+3. If production is still J, confirm exact-B checks and PR head, then perform
+   an ancestry-preserving merge of PR #1982 using expected head B. Require the
+   merge tree equal B and A-to-merge content diff only the intent. If a newer
+   reviewed base has appeared, integrate it as a new A/candidate/B instead.
+4. Fast-forward `/app` while preserving unrelated platform files. Run the
+   actual configured governed adapter, verify packages and ignored outputs,
+   then own `prepare --actor SUPPLIER-RECEIPT-READY-20261118` and `prepublish`.
+5. Publish once through the project's existing management controls; require
+   a newer explicit success, official `verify --url https://mezansalla.com`
+   with three passing probes, and final `active:false`. Record that evidence
+   in the release PR and a separate documentation handoff. Until then, do not
+   describe the supplier fix as deployed.
+
 ## Authorized release preparation — 2026-11-18 Riyadh
 
 The owner explicitly instructed: publish this update. The source fix was
