@@ -6,7 +6,6 @@ import asyncio
 from contextlib import ExitStack
 import os
 import time
-from types import SimpleNamespace
 import unittest
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
@@ -14,6 +13,9 @@ from uuid import uuid4
 from motor.motor_asyncio import AsyncIOMotorClient
 import preparation_piece_operations as pieces
 import order_tracking_notes as notes
+from order_engine.mapper import map_salla_order
+
+WHEN = "2026-11-08T00:00:00Z"
 
 class CountedCollection:
     def __init__(self, collection, counts):
@@ -46,8 +48,9 @@ class AssemblySearchInstructionTests(unittest.IsolatedAsyncioTestCase):
         self.raw = self.mongo["assembly_search_" + uuid4().hex]
         self.db = CountedDB(self.raw)
         self.stack = ExitStack()
-        self.order = SimpleNamespace(status="in_progress", status_native="in_progress", items=[], created_at=None, shipping=SimpleNamespace(company=None))
-        self.stack.enter_context(patch.object(pieces, "_current_assembly_order", AsyncMock(return_value=self.order)))
+        self.source_items = []
+        self.order_read = AsyncMock()
+        self.stack.enter_context(patch.object(pieces, "_current_assembly_order", self.order_read))
         self.stack.enter_context(patch.object(pieces, "_historical_assembly_context", AsyncMock(return_value=(None, None, set()))))
         self.stack.enter_context(patch.object(pieces, "assembly_execution_allowed", return_value=True))
         await self.raw[pieces.WORKFLOWS].insert_one({"user_id": "synthetic", "order_number": "42", "stage": "ready_to_ship"})
@@ -61,22 +64,34 @@ class AssemblySearchInstructionTests(unittest.IsolatedAsyncioTestCase):
 
     async def set_source_status(self, status):
         # Search requires canonical provider evidence as well as the mapped DTO.
+        raw = {
+            "id": "synthetic-42", "reference_id": "42", "created_at": WHEN,
+            "status": {"slug": status, "name": status}, "items": self.source_items,
+        }
+        self.order = map_salla_order(raw)
+        self.order_read.return_value = self.order
         await self.raw.unified_orders.update_one(
             {"user_id": "synthetic", "order_number": "42"},
             {"$set": {"order_status": status, "order_status_slug": status,
-                      "raw_by_source.salla_direct": {
-                          "id": "synthetic-42", "reference_id": "42",
-                          "status": {"slug": status, "name": status},
-                      }}},
+                      "raw_by_source.salla_direct": raw}},
             upsert=True,
         )
 
     async def seed(self, count):
         await self.raw[pieces.PIECES].delete_many({})
+        self.source_items = [
+            {"id": f"item-{i}", "name": f"Synthetic item {i}",
+             "quantity": min(2, count - 2 * i), "product": {"id": f"product-{i}"}}
+            for i in range((count + 1) // 2)
+        ]
+        await self.set_source_status("in_progress")
         await self.raw[pieces.PIECES].insert_many([
             {"user_id": "synthetic", "order_number": "42", "piece_id": f"piece-{i}",
-             "order_item_id": f"item-{i // 2}", "unit_index": i + 1,
-             "status": pieces.PIECE_STATUS_READY_FOR_ASSEMBLY, "supplier_dispatch_status": "received"}
+             "order_item_id": self.order.items[i // 2].order_item_id, "unit_index": i % 2 + 1,
+             "status": pieces.PIECE_STATUS_READY_FOR_ASSEMBLY, "supplier_dispatch_status": "received",
+             "execution_status": "received_from_supplier", "received_at": WHEN, "services": [],
+             "preparation_receipt_status": "received", "preparation_received_at": WHEN,
+             "preparation_received_by": "synthetic-receiver"}
             for i in range(count)
         ])
 
@@ -98,7 +113,8 @@ class AssemblySearchInstructionTests(unittest.IsolatedAsyncioTestCase):
         await self.seed(10)
         await self.instruction("a-order-notice")
         await self.instruction("b-piece", scope="piece", target_ids=["piece-0"], enforcement="completion_required")
-        await self.instruction("c-item", scope="item", target_id="item-1", enforcement="acknowledgement_required", acknowledged_by_ids=["actor"])
+        await self.instruction("c-item", scope="item", target_id=self.order.items[1].order_item_id,
+                               enforcement="acknowledgement_required", acknowledged_by_ids=["actor"])
         await self.instruction("d-waiting", scope="piece", target_id="piece-5", status="waiting_customer_service_approval")
         await self.instruction("e-other-stage", target_stages=["preparation"], enforcement="completion_required")
         await self.instruction("f-inactive", status="completed", enforcement="completion_required")
