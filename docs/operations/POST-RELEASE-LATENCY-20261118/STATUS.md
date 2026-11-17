@@ -1,5 +1,42 @@
 # Post-release availability and balances latency — 18 November 2026
 
+## Actual shared adapter accepted — 17 November 2026, 23:10 UTC
+
+The prior Android release's actual official verification completed at
+22:57:40.639406 UTC, exit0, verified:true, checks:3, with final active:false.
+Root read its actual result and verifier files. A new official status at
+23:00:56.473464 UTC was inactive; shared source was clean b009 with all120
+unrelated untracked paths. Their inventory SHA256 is
+`2a0200fc4ebb665ebc1fec275ef8db46870809282ef7fcc40a931e631f74eb04`.
+
+Another fresh inactive guard preceded the actual shared-source fast-forward,
+completed23:01:59.470621 UTC, to exact M
+`f2d806efc18964a2cc7c3a475346590cbe8b1262` and reviewed tree
+`cc07de471d47eab2dc0a2e695fb54fe4a302b444`. Tracked source remained clean and
+the complete unrelated untracked inventory was preserved.
+
+The configured actual `/app/frontend` `yarn build` ran once in a detached
+wrapper PID118657. It completed23:04:32.983623 UTC in67.94seconds with
+**exit0,accepted:true,tracked_clean:true,untracked_preserved:true**. Root read
+the actual selected result fields in the native CodeServer terminal. The
+wrapper sets acceptance only after exact generated identity, proof/metadata
+bytes/hashes, both accepted package hashes, unchanged source and inventory
+equality. GitHub and bootstrap/reviewed-intent markers were unset in the child;
+the exact reviewed public client origin and disabled bytecode were supplied.
+
+The sanitized acceptance and exact temporary evidence paths are retained in
+`evidence/actual-shared-adapter.json`. Repeated Chromium renderer/protocol
+failures delayed reading the result; no second build was started. No service
+was stopped and no restoration obligation was created.
+
+**No own lease or live publication yet.** Next: recover the free-publication
+administration view, freshly validate exact source/output and inactive guard,
+own prepare/immediate prepublish, one Publish action, newer explicit success,
+official three complete verification passes and final inactive status. This is
+actual adapter acceptance, not hosted performance acceptance. Other tasks must
+preserve this sequential handoff and exact M through the publication boundary.
+The evidence-only branch remains non-deployable; frozen A/B/M are unchanged.
+
 ## Merged-release checks accepted — 17 November 2026, 22:55 UTC
 
 All **11 checks on actual merge M

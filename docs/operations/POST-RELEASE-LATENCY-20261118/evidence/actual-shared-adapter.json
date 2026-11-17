@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "task_id": "POST-RELEASE-LATENCY-20261118",
+  "kind": "actual_shared_adapter_acceptance",
+  "deployment_git_sha": "f2d806efc18964a2cc7c3a475346590cbe8b1262",
+  "source_git_sha": "a48657447dfb5bff48013ece455b745920403458",
+  "deployment_tree_sha": "cc07de471d47eab2dc0a2e695fb54fe4a302b444",
+  "expected_runtime": "rg5-5903cd2b08dd34d72afa632fce3c189767c18b4428bb9e403cc45d25b20543fa",
+  "prior_publication": {
+    "version": "dd9f327",
+    "source": "7f6bc85333b1189e40dd5f1138b841cf2241ee23",
+    "deployment": "b009ee50a6b932368be8ad104c8c1b75e584b4e2",
+    "verify_finished_at": "2026-11-17T22:57:40.639406+00:00",
+    "exit_code": 0,
+    "verified": true,
+    "checks": 3,
+    "final_active": false
+  },
+  "preflight": {
+    "observed_at": "2026-11-17T23:00:56.473464+00:00",
+    "official_active": false,
+    "tracked_clean": true,
+    "untracked_count": 120,
+    "untracked_inventory_sha256": "2a0200fc4ebb665ebc1fec275ef8db46870809282ef7fcc40a931e631f74eb04",
+    "backend_pycache_present": false
+  },
+  "handoff": {
+    "completed_at": "2026-11-17T23:01:59.470621+00:00",
+    "guard_before_active": false,
+    "fast_forward": true,
+    "tracked_clean": true,
+    "untracked_preserved": true
+  },
+  "actual_adapter": {
+    "launched_at": "2026-11-17T23:03:25.006629+00:00",
+    "wrapper_pid": 118657,
+    "finished_at": "2026-11-17T23:04:32.983623+00:00",
+    "elapsed_seconds": 67.94,
+    "exit_code": 0,
+    "accepted": true,
+    "tracked_clean": true,
+    "untracked_preserved": true,
+    "failure": null,
+    "entry": "yarn build",
+    "cwd": "/app/frontend",
+    "public_client_origin": "https://mezansalla.com",
+    "unset_marker_names": [
+      "GITHUB_ACTIONS",
+      "GITHUB_SHA",
+      "GITHUB_WORKSPACE",
+      "GITHUB_EVENT_NAME",
+      "GITHUB_EVENT_PATH",
+      "MEZAN_RELEASE_BOOTSTRAP_INTENT",
+      "MEZAN_RELEASE_USE_REVIEWED_INTENT"
+    ]
+  },
+  "validated_by_actual_wrapper": {
+    "runtime_identity_exactly_equals_reviewed_intent": true,
+    "proof_and_metadata_bytes_and_sha256_match": true,
+    "backend_package_sha256": "249b2fda1fb2e4d9084355fb8c185868425abc93c3092b1bc0b49ca971b3937f",
+    "frontend_package_sha256": "641d6b159c3a25f278c126fe1827c6115052efef2126ed1ec7fd9986ac016c10"
+  },
+  "observation": "Root read actual wrapper selected fields in the native CodeServer terminal. The accepted wrapper asserts exact materialized identity/proof/meta/package and source/inventory equality before setting accepted=true.",
+  "raw_evidence_prefix": "/tmp/balances-latency-1980-",
+  "raw_files": [
+    "preflight.json",
+    "handoff.json",
+    "adapter-launch.json",
+    "adapter-start.json",
+    "adapter-run.py",
+    "actual-adapter.log",
+    "adapter-wrapper.log",
+    "adapter-result.json"
+  ],
+  "limitations": [
+    "Actual shared-workspace adapter acceptance, not publication or hosted speed acceptance.",
+    "Outer Emergent Cloud Build argv/install/snapshot order remains unobserved.",
+    "No own release lease or publication has started at this checkpoint.",
+    "No service was stopped; no restoration obligation was created."
+  ]
+}
