@@ -1,6 +1,155 @@
 # Post-release availability and balances latency — 18 November 2026
 
-## Integration checkpoint above the newer production base
+## Current accepted final candidate — 17 November 2026, 22:47 UTC
+
+[PR1980](https://github.com/AMASI-SA/AMASI-SA/pull/1980) was merged normally at
+22:46:33 UTC as `f2d806efc18964a2cc7c3a475346590cbe8b1262`.
+The accepted source A and intent-only B were not rewritten. This is a completed
+Git merge; this incident task has **not started its own live publication**.
+No hosted speed improvement is accepted yet.
+
+| Identity | Exact value |
+| --- | --- |
+| Reviewed production base | `b009ee50a6b932368be8ad104c8c1b75e584b4e2` |
+| Source A | `a48657447dfb5bff48013ece455b745920403458` |
+| Source A tree | `6d8c4218f5a7e567f32bb27ba49b8461c67194b3` |
+| Intent-only B | `89690ba6fbff16d54b01a101e0c0de58803f2cab` |
+| B and actual merge tree | `cc07de471d47eab2dc0a2e695fb54fe4a302b444` |
+| Actual ordinary merge M | `f2d806efc18964a2cc7c3a475346590cbe8b1262` |
+| Runtime release ID | `rg5-5903cd2b08dd34d72afa632fce3c189767c18b4428bb9e403cc45d25b20543fa` |
+| Frozen intent SHA256 | `47a061752182ec37622935afa1582f4b6b5b38b640dd530f31c2b796758edf2c` |
+
+B's only parent is A, and A-to-B changes only
+`release/release-intent-v5.json`. The reviewed base is an ancestor of A.
+The actual merge's ordered parents are the reviewed base and B; its tree is
+exactly B's tree. Fresh GitHub reads confirmed these identities, the merged PR,
+and no issue comments, inline review comments or review submissions. The exact
+deployable task branch remains `codex/balances-latency-final-20261118`.
+
+### Exact-B CI acceptance
+
+The final recorded snapshot has **35 completed checks: 25 successful and
+10 intentional skips, with no pending or failed checks**. The first acceptance
+snapshot had 29 checks (23 successful, six intentional skips). Moving the PR to
+ready added two successful Snapchat scope guards and four intentionally skipped
+out-of-scope jobs without changing B. There are 14 workflow runs: 13 successful
+runs covering 11 distinct applicable workflows, and one intentionally skipped
+TikTok workflow. Every recorded run has attempt 1; this verification did not
+request any retry.
+
+The skipped jobs are explained by the exact workflow conditions: Snapchat
+settings/publication paths are outside this patch, the TikTok candidate requires
+a different head branch, and the manual Emergent redeploy notice runs only on a
+push. None of the required balances acceptance cases was skipped.
+
+[Operational Balance Web 44189042475](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44189042475)
+passed all four jobs. Seven downloaded CI artifact ZIPs were independently
+hashed and parsed; all seven hashes match GitHub artifact metadata.
+
+| Evidence | Direct result |
+| --- | --- |
+| Backend job 134413387799 | 5,163 actual JUnit cases; zero failures, errors or skipped cases |
+| Nine required financial/permission modules | 194 cases, all passed; module counts are retained in the JSON record |
+| Separate shipping preservation step | 16 passed plus 18 passed subtests |
+| Frontend job 134413388141 | 62 suites, 1,000 passed; zero failed or pending tests |
+| Canonical worker job 134413388030 | Four passed; zero failures, errors or skips; exact B/tree recorded |
+| Browser job 134413388150 | 14 operational and eight simple-balances scenarios passed; no browser errors; synthetic fixtures |
+
+The actual
+[backend artifact 14375967971](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44189042475/artifacts/14375967971)
+has SHA256
+`ab93ca3867999c78aaf43ee082398ce3a44b5093bbd824329ba1199a6c5a985c`.
+Its source files identify B and the B tree above, and its XML suite count equals
+the actual number of test-case elements. The job's missing/skipped-test guard
+also passed.
+
+Actual backend logs show the isolated Mongo 8.0.12 replica set starting,
+successful ping and initiation, and the mandatory writable-primary check passing
+before pytest. `OPERATIONAL_TEST_MONGO_URI` was set for the actual pytest step.
+At exact B, the workspace and integration database helpers use Motor and ping
+that local server. Database-backed scenarios therefore exercised real isolated
+Mongo; individual pure unit cases do not necessarily access Mongo. The previous
+local Mongo CPU-discovery limitation did not apply to this CI acceptance.
+
+The official
+[CodeQL check 134414440085](https://github.com/AMASI-SA/AMASI-SA/runs/134414440085)
+reports **“No new alerts in code changed by this pull request”**, with zero
+annotations. Both language jobs and the Security Gate passed. This does not
+claim that all historical repository alerts are absent.
+
+### Governed adapter and package acceptance
+
+[Mezan Release Readiness 44189042673](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44189042673)
+passed both clean-clone host rehearsals and all their stages:
+
+| Host | Job | Rehearsal evidence artifact | Artifact SHA256 |
+| --- | --- | --- | --- |
+| Node 20.20.2 | 134413887176 | 14375493173 | `d7f7d4da489cd7eded371550cd035312a4c7102613b14252b46bc464b431395b` |
+| Node 24.19.0 | 134413887219 | 14376266242 | `5fd243e1ca5b43b1d3ad9f704615c2c097682de20766f61d41ab39c47886822c` |
+
+Both actual adapter build logs identify the same accepted A/runtime, host Yarn
+1.22.22, and absent Git metadata during the adapter invocation. The separate
+initial environment JSON was captured before Git metadata removal and correctly
+reports Git present at that earlier stage; it is not the no-Git invocation proof.
+
+Both hosts produced identical package proofs: isolated Backend health/identity
+verified without Git or a sibling Frontend package; isolated Frontend artifacts
+verified; canonical and cache-busted build-metadata routes returned exact JSON
+bytes with `application/json`; production and Preview host cases passed. These
+are GitHub-hosted rehearsals, not observations of the actual Emergent package
+snapshot or a live deployment of this incident fix.
+
+The existing root integration XML above b009 independently records **140 passed,
+zero failures/errors/skips**, exit 0, 53.10 seconds as recorded by root. It was
+read and retained unchanged for this checkpoint; tests were not rerun.
+The reviewed balances source and test hashes remain unchanged from the original
+accepted fix.
+
+### Publication handoff and durable evidence
+
+Immediately before merging PR1980, root observed the preceding Android
+shipping-label publication finish in the native UI at 01:42 Asia/Riyadh, version
+`dd9f327`. Root's public-health observation at 22:45:43 UTC identified source
+`7f6bc85333b1189e40dd5f1138b841cf2241ee23` and runtime
+`rg5-c13e7f152e61e9ba1f799a1a78744bb998e3cdfb8be7cfdc09f97886868fa17e`,
+with all identity-verification flags true. This is the preceding publisher's
+release, not this fix. Its owner's official three-probe verification and lease
+closure remain pending; **do not assume that lease is inactive**.
+
+No shared `/app` source, service, lease or live publication was changed by this
+incident task. The evidence reviewer made no shared-`/app`, status, UI or live
+calls. The current permitted next boundary is for the prior owner to complete
+official verification and lease closure. Before any shared workspace change or
+release rehearsal, root must read official guard status, require
+`active=false`, and revalidate current production Git state. Do not publish
+while another owner holds the lease. A later authorized publication still needs
+the newer explicit deployment-success result and the official three consecutive
+identity probes before it can be accepted.
+
+Complete machine-readable evidence, full artifact hashes, check/run IDs, exact
+ancestry, module counts and limitations are in
+`evidence/accepted-final-intent-b.json`. This status and that new record are the
+only changes on `codex/balances-latency-final-evidence-20261118`, based exactly
+on B. This is a documentation checkpoint branch and **must not be deployed or
+merged into the frozen candidate**. Root will checkpoint it remotely through the
+approved GitHub path. Historical evidence files remain byte-for-byte unchanged.
+
+PR1976 is closed unmerged and superseded; its original A/B and evidence branch
+remain preserved. PR1968 is a separate, unmerged bulk-permissions task and was
+not modified. Issue1006 has reached its comment limit, so the task status,
+evidence branch and task PR carry continuation.
+
+The benchmark and browser fixtures are synthetic. No real transaction, provider
+recovery, sync, backfill or advertising write was used for verification. The
+source repair removes demonstrated repeated work, but hosted performance and
+the cause of the earlier whole-system resource spike remain separate questions.
+
+## Integration checkpoint above the newer production base (historical)
+
+The following sections preserve earlier diagnosis and integration evidence.
+Their historical pending states are superseded by the exact final checkpoint
+above.
+
 
 The accepted original source A86452cd1a82ae9528b89c51edbc0ee86b2984bd3 and
 intent-only B6c75c3edf131d1a39155d245604860dc66d02266 remain preserved in PR1976.
@@ -34,7 +183,8 @@ ran with dotenv and bytecode writes disabled, explicit backend/test PYTHONPATH,
 all six b009 Android paths, including its intent, are byte-identical; accepted
 balances source/test hashes and all eight earlier evidence files match the
 original accepted source exactly. Only the task status and fresh result were
-added for this integration. Fresh exact final-candidate CI remains pending.
+added for this integration. At that checkpoint, fresh exact final-candidate CI
+remained pending; the current exact-B acceptance above supersedes that state.
 
 The full staged whitespace check identified a pre-existing trailing-space line
 in the retained failing pytest XML `evidence/workspace-projected-red.xml`.
@@ -179,8 +329,9 @@ reviewed source SHA256 is
 `8e3c9ea408dc081a69b47081efea50b77b0e749933260f2ca6ddaf37b939a126`;
 test SHA256 is
 `e91fd011ceebd49be5e02f840c6b080de3daf8d47e4d81b351853c54296be934`.
-`git diff --check` passes. Exact-source official CI and any release remain
-pending; local test success is not hosted performance acceptance.
+`git diff --check` passed at that checkpoint. Exact-source official CI and release
+were then pending; the current exact-B CI and ordinary merge are recorded above.
+Local test success is not hosted performance acceptance.
 
 The attempted broader local matrix has an environment limitation: its real
 Mongo fixtures require a local replica set. The available Mongo8.0.12 binary
@@ -195,14 +346,15 @@ requests before proposing a bounded heavy-read admission change. Do not reuse
 an owner-only estimate cache for employee results without complete permission
 fencing.
 
-## Continuation
+## Historical continuation note
 
 Issue1006 has reached its comment limit. Preserve its history; this document and
 the task PR are the continuation record. Preserve the original bulk-permissions
 checkout and PR1968 unchanged.
 
-Next: checkpoint the exact integrated source and tests remotely with a Draft PR,
-and inspect exact-source CI. Continue
+The next step at that earlier checkpoint was to preserve the exact integrated
+source and tests remotely with a Draft PR and inspect exact-source CI. Both are
+now complete for PR1980; follow the current publication handoff above. Continue
 correlating the already observed live resource spike with production route/stage
 logs. No hosted recovery or performance improvement is accepted until measured
 after an authorized, governed release.
