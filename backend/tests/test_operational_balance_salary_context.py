@@ -87,7 +87,8 @@ def test_http_context_owner_only_and_outer_context_advertises_no_staff_action(mo
             assert response.status_code == 200 and response.json()['first_day'] == '2026-11-01'
             for actor in ('owner', 'staff'):
                 response = await client.get('/api/operational-balances/context', headers={'x-test-user': actor})
-                assert response.status_code == 200
-                assert response.json()['can_manage_salary_start'] is (actor == 'owner')
+                assert response.status_code == (200 if actor == 'owner' else 403)
+                if actor == 'owner':
+                    assert response.json()['can_manage_salary_start'] is True
         assert await db[STATES].find_one({'_id': 'owner'}) == before
     run_mock(scenario)

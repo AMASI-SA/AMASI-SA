@@ -113,12 +113,45 @@ def test_packed_financial_snapshot_approval_and_replay_preserve_all_prior_money(
 
 
 @pytest.mark.parametrize('method', ['bank_transfer', 'card_terminal'])
-def test_real_concurrent_approval_is_exactly_once_and_preserves_old_order_fees(method):
+def test_real_concurrent_approval_is_exactly_once_and_preserves_old_order_fees(method, monkeypatch):
+    original_single = service.single
+    reads = []
+
+    async def traced_single(database, collection, query, code):
+        row = await original_single(database, collection, query, code)
+        if isinstance(database, ReviewDatabase) and collection in {service.REVIEWS, service.COLLECTIONS, STATES}:
+            # Scalar test diagnostics only; never emit financial rows or receipt
+            # contents. Keep the actual database/session behavior unchanged.
+            reads.append({'attempt': asyncio.current_task().get_name(), 'collection': collection,
+                'status': row.get('status'), 'revision': row.get('revision', 1),
+                'payment_confirmed': row.get('payment_confirmed'),
+                'has_recorded_event': bool(row.get('operational_event_id')),
+                'order_identity_matches': None if collection == STATES else
+                    (row.get('order_id') == 'order-1' and row.get('order_number') == '1'
+                     and row.get('driver_id') == 'driver')})
+        return row
+
+    monkeypatch.setattr(service, 'single', traced_single)
+
     async def scenario(db):
         assignment, payload = await seed(db, method)
         before = await db[STATES].find_one({'_id': 'owner'})
-        results = await asyncio.gather(*(service.review_payment(db, owner='owner', actor='owner',
-            assignment_id=assignment, payload=payload, clock=NOW) for _ in range(3)))
+        attempts = [asyncio.create_task(service.review_payment(db, owner='owner', actor='owner',
+            assignment_id=assignment, payload=payload, clock=NOW), name=f'approval-{index}') for index in range(3)]
+        # Join every attempt before the disposable database is dropped. An early
+        # failure must not close Mongo underneath the remaining transactions.
+        results = await asyncio.gather(*attempts, return_exceptions=True)
+        failures = [{'attempt': index, 'type': type(result).__name__,
+                     'code': result.detail.get('code') if isinstance(result, HTTPException)
+                             and isinstance(result.detail, dict) else None}
+                    for index, result in enumerate(results) if isinstance(result, BaseException)]
+        if failures:
+            saved_review = await db[service.REVIEWS].find_one({'user_id': 'owner', 'assignment_id': assignment})
+            saved_collection = await db[service.COLLECTIONS].find_one({'user_id': 'owner', 'assignment_id': assignment})
+            assert not failures, {'failures': failures, 'reads': reads[-30:],
+                'decision_count': await db[EVENTS].count_documents({'kind': 'decision'}),
+                'saved_review_status': saved_review.get('status'),
+                'saved_collection_confirmed': saved_collection.get('payment_confirmed')}
         assert results[0] == results[1] == results[2]
         state = await db[STATES].find_one({'_id': 'owner'})
         assert state['openings'] == before['openings']

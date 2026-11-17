@@ -6,10 +6,12 @@ import httpx
 from fastapi import FastAPI, Header, HTTPException
 
 from operational_balance_service import create_movement, report, save_opening, refresh
-from operational_balance_store import read, STATES
+from operational_balance_store import read, STATES, digest
 from operational_balance_routes import make_operational_balance_router
 from operational_external_advances import advance_id, advance_obligations
 from test_operational_balance_integration import run, opening, movement, START, NOW
+from test_operational_balance_workspace import BASE, grant as workspace_grant, resource
+from test_operational_balance_assigned_banks import workspace_command
 
 
 async def seed(db):
@@ -167,8 +169,7 @@ def test_explicit_repayment_can_reduce_saved_opening_without_changing_it(directi
 def test_http_permission_session_scope_and_optional_field_do_not_break_old_retry():
     async def scenario(db):
         await seed(db)
-        from mobile_app_permissions import OPERATIONAL_APP_READ
-        await db.mezan_mobile_app_access_v1.insert_one({'owner_user_id':'owner','user_id':'viewer','enabled':True,'permissions':[OPERATIONAL_APP_READ]})
+        await db.users.update_one({'id':'viewer'},{'$set':{'operational_balance_access':{'owner_id':'owner','version':1,'enabled':True,'operations':[],'resources':[resource('external_person','person',use=False),resource('bank','bank',use=False)]}}})
         app=FastAPI()
         async def principal(x_test_user:str=Header(default='owner')):
             return {'id':x_test_user,**({'_session_client':'amasi_mobile'} if x_test_user=='viewer' else {})}
@@ -177,7 +178,7 @@ def test_http_permission_session_scope_and_optional_field_do_not_break_old_retry
             base='/api/operational-balances'
             context=(await client.get(base+'/context')).json()
             p=payload('borrow',key='http-borrow');p['expected_session_scope']=context['session_scope']
-            viewer_context=(await client.get(base+'/context',headers={'x-test-user':'viewer'})).json()
+            viewer_context=(await client.get(BASE+'/context',headers={'x-test-user':'viewer'})).json()
             denied=await client.post(base+'/movements',json={**p,'expected_session_scope':viewer_context['session_scope']},headers={'x-test-user':'viewer'})
             assert denied.status_code==403,denied.text
             first=await client.post(base+'/movements',json=p);assert first.status_code==200,first.text
@@ -190,61 +191,77 @@ def test_http_permission_session_scope_and_optional_field_do_not_break_old_retry
     run(scenario)
 
 
+async def grant_external(db, can_report, operations=None, version=1):
+    await workspace_grant(db, operations=operations if operations is not None else ['external.receive'],
+        resources=[resource('external_person','person',balance=can_report),resource('bank','bank',balance=can_report)],version=version)
+
+
+def workspace_external(**changes):
+    return workspace_command(party_type='external_person',party_id='person',side='for_party',reason='receipt',amount='100',**changes)
+
+
 @pytest.mark.parametrize('can_report',[False,True])
 def test_mobile_write_grant_does_not_implicitly_disclose_loan_or_bank_balances(can_report):
-    from test_operational_balance_app_permissions import client,grant,READ,WRITE
+    from test_operational_balance_app_permissions import client
     async def scenario(db):
-        await seed(db);await grant(db,[WRITE,READ] if can_report else [WRITE])
+        await seed(db);await grant_external(db,can_report)
         async with client(db) as c:
-            context=(await c.get('/api/operational-balances/context')).json()
-            p=payload('borrow',key='mobile-borrow');p['expected_session_scope']=context['session_scope']
-            r=await c.post('/api/operational-balances/movements',json=p)
+            context=(await c.get(BASE+'/context')).json()
+            p=workspace_external(request_id='mobile-borrow');p['expected_session_scope']=context['session_scope']
+            r=await c.post(BASE+'/entries',json=p)
             assert r.status_code==200,r.text
-            assert ('external_balance_snapshot' in r.json()) is can_report
-            assert r.json()['actor_id']=='staff'
-            assert (await c.post('/api/operational-balances/movements',json=p)).json()==r.json()
-        assert balances(await read(db,'owner'))==('1100.00','0.00','100.00')
+            assert set(r.json())=={'saved','movement_id','party_type','party_id'}
+            ledger=(await c.get(BASE+'/ledger/external_person/person')).json()
+            assert ledger['items'][0]['recorded_by']['id']=='staff'
+            assert (ledger['resource']['balance'] is not None) is can_report
+            if can_report:
+                assert ledger['resource']['balance']['amount']=='100.00'
+            assert (await c.post(BASE+'/entries',json=p)).json()==r.json()
+        stored=await read(db,'owner')
+        assert stored['movements'][0]['actor_id']=='staff'
+        assert balances(stored)==('1100.00','0.00','100.00')
     run(scenario)
 
 
 def test_native_reporting_revoked_after_commit_redacts_balance_but_keeps_exact_ack(monkeypatch):
-    from test_operational_balance_app_permissions import client,grant,READ,WRITE
-    import operational_balance_routes as routes
-    original=routes.create_movement
+    from test_operational_balance_app_permissions import client
+    import operational_balance_workspace as workspace
+    original=workspace.create_movement
     async def record_then_revoke(db,*a,**kw):
         result=await original(db,*a,**kw)
-        await grant(db,[WRITE])
+        await grant_external(db,False,version=2)
         return result
-    monkeypatch.setattr(routes,'create_movement',record_then_revoke)
+    monkeypatch.setattr(workspace,'create_movement',record_then_revoke)
     async def scenario(db):
-        await seed(db);await grant(db,[WRITE,READ])
+        await seed(db);await grant_external(db,True)
         async with client(db) as c:
-            context=(await c.get('/api/operational-balances/context')).json()
-            p=payload('borrow',key='revoked-read');p['expected_session_scope']=context['session_scope']
-            r=await c.post('/api/operational-balances/movements',json=p)
+            p=workspace_external(request_id='revoked-read')
+            r=await c.post(BASE+'/entries',json=p)
             assert r.status_code==200,r.text
-            assert 'external_balance_snapshot' not in r.json()
+            assert set(r.json())=={'saved','movement_id','party_type','party_id'}
+            ledger=(await c.get(BASE+'/ledger/external_person/person')).json()
+            assert ledger['resource']['balance'] is None
+            assert len(ledger['items'])==1
             stored=await read(db,'owner')
-            assert len(stored['movements'])==1 and stored['movements'][0]['external_balance_snapshot']
-            assert (await c.post('/api/operational-balances/movements',json=p)).json()==r.json()
+            assert len(stored['movements'])==1
+            assert balances(stored)==('1100.00','0.00','100.00')
+            assert (await c.post(BASE+'/entries',json=p)).json()==r.json()
             assert len((await read(db,'owner'))['movements'])==1
     run(scenario)
 
 
 def test_loan_write_revoked_at_persistence_is_not_recorded(monkeypatch):
-    from test_operational_balance_app_permissions import client,grant,READ,WRITE
-    import operational_balance_routes as routes
-    original=routes.create_movement
+    from test_operational_balance_app_permissions import client
+    import operational_balance_workspace as workspace
+    original=workspace.create_movement
     async def revoke_then_record(db,*a,**kw):
-        await grant(db,[READ])
+        await grant_external(db,True,operations=[],version=2)
         return await original(db,*a,**kw)
-    monkeypatch.setattr(routes,'create_movement',revoke_then_record)
+    monkeypatch.setattr(workspace,'create_movement',revoke_then_record)
     async def scenario(db):
-        await seed(db);await grant(db,[WRITE,READ])
+        await seed(db);await grant_external(db,True)
         async with client(db) as c:
-            context=(await c.get('/api/operational-balances/context')).json()
-            p=payload('borrow',key='revoked-write');p['expected_session_scope']=context['session_scope']
-            r=await c.post('/api/operational-balances/movements',json=p)
+            r=await c.post(BASE+'/entries',json=workspace_external(request_id='revoked-write'))
             assert r.status_code==403,r.text
         assert balances(await read(db,'owner'))==('1000.00','0.00','0.00')
         assert not (await read(db,'owner'))['movements']
@@ -265,24 +282,26 @@ def test_refresh_does_not_duplicate_loan_or_recreate_paid_amount():
 
 
 def test_native_owner_change_after_commit_cannot_disclose_previous_owner_balance(monkeypatch):
-    from test_operational_balance_app_permissions import client,grant,READ,WRITE
-    import operational_balance_routes as routes
-    original=routes.create_movement
+    from test_operational_balance_app_permissions import client
+    import operational_balance_workspace as workspace
+    original=workspace.create_movement
     async def record_then_reassign(db,*a,**kw):
         result=await original(db,*a,**kw)
-        await db.users.update_one({'id':'staff'},{'$set':{'created_by':'other'}})
-        await db.mezan_mobile_app_access_v1.insert_one({'owner_user_id':'other','user_id':'staff',
-            'enabled':True,'permissions':[WRITE,READ]})
+        await db.users.update_one({'id':'staff'},{'$set':{'created_by':'other','operational_balance_access.owner_id':'other'}})
         return result
-    monkeypatch.setattr(routes,'create_movement',record_then_reassign)
+    monkeypatch.setattr(workspace,'create_movement',record_then_reassign)
     async def scenario(db):
-        await seed(db);await grant(db,[WRITE,READ])
+        await seed(db);await grant_external(db,True)
         async with client(db) as c:
-            context=(await c.get('/api/operational-balances/context')).json()
-            p=payload('borrow',key='owner-change-after-commit');p['expected_session_scope']=context['session_scope']
-            r=await c.post('/api/operational-balances/movements',json=p)
+            p=workspace_external(request_id='owner-change-after-commit')
+            r=await c.post(BASE+'/entries',json=p)
             assert r.status_code==200,r.text
-            assert 'external_balance_snapshot' not in r.json()
+            assert set(r.json())=={'saved','movement_id','party_type','party_id'}
+            current=(await c.get(BASE+'/context')).json()
+            assert current['session_scope']==digest(['other','staff'])
+            assert current['resources']==[]
+            retried=await c.post(BASE+'/entries',json=p)
+            assert retried.status_code==409 and retried.json()['detail']['code']=='operational_actor_scope_changed'
             assert len((await read(db,'owner'))['movements'])==1
             assert not (await read(db,'other'))['movements']
     run(scenario)

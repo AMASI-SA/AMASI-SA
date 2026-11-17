@@ -5,10 +5,24 @@ from test_operational_balance_integration import run, started, movement
 from test_operational_balance_app_permissions import grant, client, WRITE, READ
 from operational_balance_store import read, digest
 from operational_app_banks import validate_assignment
+from test_operational_balance_workspace import BASE, grant as workspace_grant, resource
 
 
 def command(**changes):
     return {**movement(), "source_account_type": "bank", "expected_session_scope": digest(["owner", "staff"]), **changes}
+
+
+def workspace_command(**changes):
+    """Scoped entry helper; keep command() unchanged for owner legacy tests."""
+    return {"request_id": "workspace-payment", "expected_session_scope": digest(["owner", "staff"]),
+            "party_type": "supplier", "party_id": "supplier", "side": "for_us", "reason": "payment",
+            "amount": "300", "business_date": "2026-10-06", "note": "دفعة موثقة",
+            "source_type": "bank", "source_id": "bank", **changes}
+
+
+async def workspace_access(db, *, operations=None, resources=None):
+    await workspace_grant(db, operations=operations if operations is not None else ["supplier.payment"],
+        resources=resources if resources is not None else [resource("supplier", "supplier"), resource("bank", "bank")])
 
 
 @pytest.mark.parametrize("config", [{}, {"bank_ids": []}, {"bank_ids": ["cash"]}, {"bank_ids": ["foreign"]}, {"bank_ids": ["bank", "bank"]}])
@@ -33,41 +47,41 @@ def test_multiple_banks_require_explicit_default_and_single_is_automatic():
 @pytest.mark.parametrize("bank,kind", [("cash","cash"),("foreign","bank"),("bank2","bank")])
 def test_direct_api_rejects_unassigned_bank_without_partial_write(bank,kind):
     async def scenario(db):
-        await started(db); await grant(db,[WRITE])
+        await started(db); await workspace_access(db)
         await db.mz2_financial_accounts.insert_one({"id":"bank2","user_id":"owner","name":"Other","account_type":"bank","currency":"SAR","status":"active"})
         async with client(db) as c:
-            rows=(await c.get('/api/operational-balances/entities/bank')).json()['items']
+            rows=(await c.get(BASE + '/parties?kind=bank')).json()['items']
             assert [r['id'] for r in rows] == ['bank']
-            result=await c.post('/api/operational-balances/movements',json=command(bank_id=bank,source_account_type=kind))
+            result=await c.post(BASE + '/entries',json=workspace_command(source_id=bank,source_type=kind))
             assert result.status_code==403, result.text
         assert (await read(db,'owner'))['movements']==[]
     run(scenario)
 
 
 def test_bank_revocation_rechecked_at_persistence(monkeypatch):
-    import operational_balance_routes as routes
+    import operational_balance_workspace as routes
     original=routes.create_movement
     async def revoke(db,*args,**kwargs):
-        await db.mezan_mobile_app_access_v1.update_one({'user_id':'staff'},{'$set':{'operational_banks':{'bank_ids':[]}}})
+        await workspace_grant(db, operations=['supplier.payment'], resources=[resource('supplier','supplier')], version=2)
         return await original(db,*args,**kwargs)
     monkeypatch.setattr(routes,'create_movement',revoke)
     async def scenario(db):
-        await started(db); await grant(db,[WRITE])
+        await started(db); await workspace_access(db)
         async with client(db) as c:
-            assert (await c.post('/api/operational-balances/movements',json=command())).status_code==403
+            assert (await c.post(BASE + '/entries',json=workspace_command())).status_code==403
         assert (await read(db,'owner'))['movements']==[]
     run(scenario)
 
 
 def test_date_note_and_concurrent_retry_are_preserved():
     async def scenario(db):
-        await started(db); await grant(db,[WRITE])
-        payload=command(business_date='2026-10-06',note='رسالة البنك الاختبارية',receipt_id=None)
+        await started(db); await workspace_access(db)
+        payload=workspace_command(business_date='2026-10-06',note='رسالة البنك الاختبارية')
         async with client(db) as c:
-            replies=await asyncio.gather(*[c.post('/api/operational-balances/movements',json=payload) for _ in range(5)])
+            replies=await asyncio.gather(*[c.post(BASE + '/entries',json=payload) for _ in range(5)])
             assert all(r.status_code==200 for r in replies), [r.text for r in replies]
-            assert (await c.post('/api/operational-balances/movements',json={**payload,'business_date':'2026-02-30'})).status_code==422
-            assert (await c.post('/api/operational-balances/movements',json={**payload,'business_date':'2026-10-07'})).status_code==409
+            assert (await c.post(BASE + '/entries',json={**payload,'business_date':'2026-02-30'})).status_code==422
+            assert (await c.post(BASE + '/entries',json={**payload,'business_date':'2026-10-07'})).status_code==409
         rows=(await read(db,'owner'))['movements']
         assert len(rows)==1
         assert rows[0]['business_date']=='2026-10-06' and rows[0]['note']==payload['note']

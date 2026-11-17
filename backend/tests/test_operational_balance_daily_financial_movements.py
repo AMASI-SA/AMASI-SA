@@ -400,8 +400,8 @@ def test_real_mongo_http_permission_acl_and_idempotent_writer_snapshot():
             assert (await browser_staff.get(endpoint, params=params)).status_code == 403
         async with client(db, actor="owner", mobile=False) as browser_owner:
             assert (await browser_owner.get(endpoint, params=params)).status_code == 200
-        async with client(db) as http:
-            payload = {**command(), "expected_session_scope": digest(["owner", "staff"])}
+        async with client(db, actor="owner") as http:
+            payload = {**command(), "expected_session_scope": digest(["owner", "owner"])}
             first = await http.post("/api/operational-balances/movements", json=payload)
             again = await http.post("/api/operational-balances/movements", json=payload)
             assert first.status_code == again.status_code == 200, first.text
@@ -416,6 +416,7 @@ def test_real_mongo_http_permission_acl_and_idempotent_writer_snapshot():
             assert body["total"] == 1 and body["items"][0]["account_balance_after"] == "700.00"
             assert body["items"][0]["counterparty_balance_after"] == "-200.00"
             assert await read(db, "owner") == saved
+        async with client(db) as http:
             await grant(db, [WRITE])
             assert (await http.get("/api/operational-balances/daily-financial-movements",
                 params={"from_date": "2026-11-07", "to_date": "2026-11-07"})).status_code == 403

@@ -197,13 +197,12 @@ def test_mobile_read_and_write_grants_stay_independent_without_owner_impersonati
     db = ReadOnlyDB()
     principal = {"id": "owner", "role": "owner", "_session_client": "amasi_mobile", "_mobile_actor_id": "staff"}
     read = asyncio.run(request(db, principal))
-    assert read.status_code == 200, read.text
-    assert read.json()["permissions"] == {"record_movements": False}
+    assert read.status_code == 403, read.text
     db.data["mezan_mobile_app_access_v1"][0]["permissions"] = [OPERATIONAL_APP_WRITE]
     assert asyncio.run(request(db, principal)).status_code == 403
     db.data["mezan_mobile_app_access_v1"][0]["permissions"] = [OPERATIONAL_APP_READ, OPERATIONAL_APP_WRITE]
     both = asyncio.run(request(db, principal))
-    assert both.status_code == 200 and both.json()["permissions"]["record_movements"] is True
+    assert both.status_code == 403
     db.data["mezan_role_assignments_v2"][0]["extra_permissions"] = []
     assert asyncio.run(request(db, principal)).status_code == 403
 

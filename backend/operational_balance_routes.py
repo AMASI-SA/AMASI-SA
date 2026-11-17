@@ -364,6 +364,10 @@ async def scope(db, principal, permission):
             or owner_account.get("is_active") is False or owner_account.get("deleted_at")):
         fail("operational_owner_inactive", "حساب المالك غير متاح", 403)
     mobile = principal.get("_session_client") == "amasi_mobile"
+    if permission == "workspace":
+        # Membership only. The new workspace applies its own explicit resource
+        # and operation policy; old native flags must not form a second screen.
+        return actor, owner, "employee_app" if mobile else "mezan2"
     if permission == "courier_tariff_manage" and actor.get("role") != "owner":
         fail("courier_tariff_owner_required", "اعتماد تعرفة الشحن متاح للمالك فقط", 403)
     if permission == "bank_manage" and actor.get("role") != "owner":
@@ -385,15 +389,30 @@ async def scope(db, principal, permission):
                     "move": {OPERATIONAL_APP_WRITE}, "reports": {OPERATIONAL_APP_READ}}.get(permission, set())
         if not granted.intersection(required):
             fail("operational_app_permission_required", "لا توجد صلاحية لهذه الوظيفة", 403)
-    # Browser access still follows active membership; native grants are separate.
+    # Legacy handlers retain their owner behavior. The router gate below blocks
+    # staff from their unscoped responses, regardless of old browser/native flags.
     return actor, owner, "employee_app" if mobile else "mezan2"
 
 
 def make_operational_balance_router(db, current_user):
     async def native_gate(request: HttpRequest, user=Depends(current_user)):
+        path = request.url.path.rstrip("/").split("/operational-balances", 1)[-1]
+        actor, owner, _ = await scope(db, user, "workspace")
+        if path == "/access" or path.startswith("/access/"):
+            # Owner-only checks live on the administration routes. /current
+            # remains available to a disabled staff policy to explain denial.
+            return
+        if path == "/workspace" or path.startswith("/workspace/"):
+            from operational_balance_access import load_access
+            (await load_access(db, actor, owner)).require_enabled()
+            return
+        if actor.get("role") != "owner":
+            # Fail closed for every existing/attached aggregate, export, audit,
+            # receipt and mutation route. Scoped staff use the safe workspace
+            # adapter; adding an operation grant never reopens legacy APIs.
+            fail("operational_workspace_route_required", "استخدم صفحة الأرصدة المخصصة لصلاحياتك", 403)
         if user.get("_session_client") != "amasi_mobile":
             return
-        path = request.url.path.rstrip("/").split("/operational-balances", 1)[-1]
         permission = None
         if request.method == "GET":
             if path == "/context" or path == "/inventory-catalog" or path.startswith("/entities/"):
@@ -1322,4 +1341,12 @@ def make_operational_balance_router(db, current_user):
     attach_demand_refresh_routes(router, db, current_user, scope)
     from operational_provider_statement_routes import attach_provider_statement_routes
     attach_provider_statement_routes(router, db, current_user, scope, guarded)
+    from operational_balance_access_routes import install_access_routes
+    install_access_routes(router, db, current_user, scope)
+    from operational_balance_workspace import install_workspace_routes
+    install_workspace_routes(router, db, current_user, scope)
+    from operational_workspace_refunds import install_refund_routes
+    install_refund_routes(router, db, current_user, scope)
+    from operational_workspace_pending import install_pending_command_routes
+    install_pending_command_routes(router, db, current_user, scope)
     return router

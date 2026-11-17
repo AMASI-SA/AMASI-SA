@@ -29,7 +29,7 @@ async def snapshot(db):return {name:await db[name].find({}).to_list(1000) for na
 def test_physical_authority_raw_customized_cost_reservations_and_zero_writes():
  async def scenario(db):
   await setup(db);before=await snapshot(db)
-  async with client(db) as c:
+  async with client(db, 'owner') as c:
    r=await c.get('/api/operational-balances/inventory');assert r.status_code==200,r.text
    result=r.json();assert result['source']=='warehouse_locations' and result['read_only'] and result['schema_version']==1
    raw,ready=result['items'];assert (raw['physical'],raw['reserved'],raw['available'])==(10,1,9)
@@ -76,7 +76,7 @@ def test_component_without_sku_exact_unit_reservations_no_service_or_legacy_fall
   assert len(result['items'])==3 and result['warnings']
  run(scenario)
 
-@pytest.mark.parametrize('permissions,status',[([],403),([WRITE],403),([READ],200),([READ,WRITE],200)])
+@pytest.mark.parametrize('permissions,status',[([],403),([WRITE],403),([READ],403),([READ,WRITE],403)])
 def test_reports_permission(permissions,status):
  async def scenario(db):
   await setup(db);await grant(db,permissions)

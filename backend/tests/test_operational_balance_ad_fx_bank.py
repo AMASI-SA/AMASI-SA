@@ -133,12 +133,17 @@ def test_duplicate_bank_reference_cannot_register_same_debit_twice():
     run(scenario)
 
 
-def test_owner_mobile_endpoint_enforces_assigned_sar_bank_and_fx_fields():
+def test_owner_fx_endpoint_enforces_exact_sar_bank_and_staff_legacy_access_is_denied():
     async def scenario(db):
         await setup(db)
         await grant(db, [WRITE, READ])
-        payload = {**fx_payment(), "expected_session_scope": digest(["owner", "staff"])}
+        payload = {**fx_payment(), "expected_session_scope": digest(["owner", "owner"])}
         async with client(db, "staff") as c:
+            denied = await c.post("/api/operational-balances/movements", json={
+                **payload, "expected_session_scope": digest(["owner", "staff"])})
+            assert denied.status_code == 403, denied.text
+        assert (await read(db, "owner"))["movements"] == []
+        async with client(db, "owner") as c:
             response = await c.post("/api/operational-balances/movements", json=payload)
             assert response.status_code == 200, response.text
             again = await c.post("/api/operational-balances/movements", json=payload)

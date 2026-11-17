@@ -157,6 +157,10 @@ def _frozen_candidates(state):
     for case in checked_rows(state.get('customer_returns', [])):
         if not isinstance(case, dict):
             continue
+        if case.get('case_type') == 'financial_refund':
+            # A workspace request is not payment evidence. A completed provider
+            # match points to the canonical fact already enumerated above.
+            continue
         oid = str(case.get('order_id') or '')
         documented = case.get('status') == 'salla_refund_recorded' and case.get('refund_source_type') is None
         provider = ((orders.get(oid) or {}).get('payment') or {}).get('provider') if documented else case.get('refund_source_id')

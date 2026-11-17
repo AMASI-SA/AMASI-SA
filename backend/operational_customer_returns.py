@@ -196,6 +196,10 @@ async def save_case(db, owner, actor, payload, *, case_id=None, clock=None):
         existing = next((r for r in cases if r['id'] == case_id), None) if case_id else None
         if case_id and not existing:
             fail('customer_return_missing', 'المرتجع غير موجود')
+        if existing and existing.get('case_type') == 'financial_refund':
+            # Its amount/source are reserved and immutable. Legacy item-return
+            # confirmations must not bypass the scoped financial workflow.
+            fail('operational_refund_workspace_required', 'راجع الطلب المالي من صفحة الاسترجاع', 409)
         if payload.get('case_type', 'item_return') == 'order_compensation':
             if case_id is not None or payload['status'] not in {
                     'salla_refund_recorded', 'salla_refund_confirmed'}:
@@ -284,6 +288,9 @@ async def save_case(db, owner, actor, payload, *, case_id=None, clock=None):
                     if prior_provider:
                         fail('customer_compensation_provider_already_recorded',
                              'عملية الاسترداد واردة من مزود الدفع؛ راجع مطابقتها لمنع التكرار', 409)
+            if confirmed:
+                from operational_workspace_refunds import guard_workspace_refund_capacity
+                guard_workspace_refund_capacity(state, order['id'], order['total'], value)
             case = {
                 'id': digest([owner, actor, payload['request_id']]),
                 'case_type': 'order_compensation',
@@ -357,6 +364,9 @@ async def save_case(db, owner, actor, payload, *, case_id=None, clock=None):
             if current_order['id'] != case['order_id'] or current_order['total'] != case['order_total'] or current_order['provider'] != case['original_provider']:
                 fail('customer_return_order_changed', 'تغيرت بيانات الطلب؛ يلزم مراجعة المرتجع قبل رد المبلغ')
             value = money(payload['amount'])
+            from operational_workspace_refunds import guard_workspace_refund_capacity
+            guard_workspace_refund_capacity(state, case['order_id'], case['order_total'], value,
+                                            exclude_case_id=case.get('id'))
             paid = sum((money(r['amount']) for r in cases if r['order_id'] == case['order_id'] and r['status'] == 'refunded'), Decimal(0))
             if paid + value > money(case['order_total']):
                 fail('customer_return_amount_exceeded', 'المبلغ يتجاوز المتبقي القابل للاسترداد')

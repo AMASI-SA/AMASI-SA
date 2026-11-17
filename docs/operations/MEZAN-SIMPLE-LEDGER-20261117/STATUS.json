@@ -1,0 +1,123 @@
+{
+  "task": "MEZAN-SIMPLE-LEDGER-20261117",
+  "status": "SOURCE_COMPLETE_AUTHORIZED_RELEASE_GATES_PENDING",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/mezan-simple-ledger-permissions-20261117",
+  "base_sha": "71125711d8181da3b4e35d9129fd51c048ba2bdd",
+  "production_changed": false,
+  "authorization": "Owner approved the complete simple balances implementation and now explicitly requested: طيب انشر وادمج. Merge and publication are authorized; actual business transactions are not part of release verification.",
+  "completed_source": [
+    "Tenant-bound owner-managed resource policies; use, none/own/all movements and full-balance access are independent.",
+    "Fresh server authorization for every workspace read and write, all linked resources and each CAS attempt; legacy aggregate routes deny restricted staff.",
+    "Existing saved operational aggregate supplies five-row party/account ledgers, full authorized balances and backdated-save focus.",
+    "Bank, cash and custody movements reuse the canonical movement service; linked external payroll, charity and owner drawings commit atomically in the same aggregate.",
+    "Immutable recorder name/id snapshot from authenticated user; legacy missing names remain undocumented.",
+    "Arabic RTL web and native workspaces with three primary tabs, contextual amount forms, explicit blank choices and owner policy editors.",
+    "Financial-only order refunds: Arabic/Persian order digits, confirmed-payment caps, pending reservations, bank confirmation, cancellation and existing-provider-proof reconciliation without duplicate financial effects.",
+    "Independent review fixes: exact native permission DTO, own matching actor visibility, Arabic order search and safe pagination clamp after permission changes.",
+    "Legacy route tests migrated to explicit workspace grants or owner specialist flows while preserving monetary, concurrency, tenant, stock and audit assertions.",
+    "Actual-screen browser harness and CI collection checks added without removing or relaxing existing gates.",
+    "Actor-bound immutable server recovery replaces clear-text browser financial commands. Only a hashed slot and opaque UUID persist locally; fresh recovery is read-only, retries keep the exact request, and retirement erases the saved payload without altering financial history.",
+    "Pending recovery routes initialize without acquiring their collection; existing read-only, authorization and cancellation routes retain their prior construction behavior."
+  ],
+  "verification": [
+    {
+      "check": "Focused backend",
+      "result": "83 passed locally: access29 + workspace21 + financial refunds33, including the final external-history before-CAS race test. Actual FastAPI/services with isolated mongomock-motor; no production server imported."
+    },
+    {
+      "check": "Focused web",
+      "result": "5 suites /35 tests passed after all review fixes; adjacent navigation25 passed. Isolated Vite harness build, syntax and diff checks passed."
+    },
+    {
+      "check": "Native",
+      "result": "25 workspace groups,22 standalone checks and focused TypeScript passed. Remote AMASI Mobile CI TypeScript/ESLint passed at b791a088caab7e12be45a599ff07db786dd6f7f6."
+    },
+    {
+      "check": "Initial full backend/web CI",
+      "head_sha": "6fbeb9a3092f2659581eed75e42e8a25e2a4e574",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43984481540",
+      "result": "Backend4906 passed/141 failed: legacy staff authorization expectations plus one timing-sensitive diagnostic-index test. Frontend59 suites passed/one compile error. Existing browser and canonical worker gates passed. Staff tests are now migrated to the new explicit contract; the Jest mock compile issue is fixed; no timing assertion was weakened. A fresh complete run is required for this checkpoint."
+    },
+    {
+      "check": "Local environment limits",
+      "result": "Real Mongo process startup and sandboxed Chromium process sockets are unavailable in this executor. Full real-Mongo and browser verification runs on the existing isolated GitHub CI runner; no override or production fallback used."
+    },
+    {
+      "check": "Full backend/web CI",
+      "head_sha": "4452a236f8dcacd6556d4602a43be5c200786885",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43988351100",
+      "result": "PASS:5093 operational backend tests on isolated Mongo replica set;16 shipping checks plus18 subtests;61 web suites/955tests;14 existing browser scenarios plus8 actual simple-workspace scenarios with8 screenshots;4 canonical worker process checks. No skipped/failing tests or relaxed timing gates."
+    },
+    {
+      "check": "Visual review and final mobile permission fix",
+      "result": "Inspected real component screenshots at390px/1440px and verified15 source hashes. All ledger/refund/entry screens were within width. Mobile access table hid columns behind horizontal scroll; converted the same controls to labelled account cards under560px while preserving desktop table/API. Focused2 suites/9tests and harness build passed. Stronger per-control viewport assertions are included; fresh CI and screenshot review pending for this presentation-only change."
+    },
+    {
+      "check": "Final presentation checkpoint and independent security gate",
+      "head_sha": "4fbfa5df408dd02c5d3893520decd1bfad9a181f",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43989319313",
+      "result": "All 22 workflow runs succeeded; operational backend5093, web61suites/956tests, browser14+8 and all8 screenshots/source hashes accepted. A separate Advanced Security CodeQL check133726937463 failed on clear-text storage in SimpleBalances.jsx (alert93). The equivalent new refund storage is included in the repair. This check is not waived or dismissed; authenticated server recovery replaces browser payload storage before release."
+    },
+    {
+      "check": "Authenticated recovery repair",
+      "result": "Backend116 focused tests passed, including33 new HTTP/security/concurrency cases; root independently reran33/33 on the frozen files. Web50tests/6suites passed, including11 recovery cases, scope changes during writes, explicit retries and no financial submission before registration. Isolated actual-component harness build and diff/syntax checks passed. Fresh full real-Mongo/browser/security CI is required for this new source checkpoint."
+    },
+    {
+      "check": "Authenticated recovery full CI and compatibility repair",
+      "head_sha": "7d429b8d97d77638b87d4cf82addf19bcb6414f9",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43995254103",
+      "result": "Web62suites/970tests,14existing+8simplebrowser scenarios,8screenshots and16/16simple+20/20legacy source hashes PASS. JavaScript, Python and aggregate CodeQL PASS. Backend5045passed/81failed:80 failures from eager pending collection acquisition during unrelated router construction, plus one intermittent real-Mongo concurrent driver approval409. The candidate intent for7d429 is superseded and must not deploy."
+    },
+    {
+      "check": "Lazy recovery route initialization and joined concurrency diagnostics",
+      "result": "Pending collection is acquired only within authenticated pending requests; no unrelated router construction touches it.159 related read/recovery cases passed, covering the80 initializer failures and33 recovery cases;60 driver unit contracts passed. Both real-Mongo concurrency cases collect. Independent diff review PASS: all original every-attempt-success, equal-result, exactly-once money/history assertions remain. The concurrency test now joins every attempt before database teardown and emits bounded scalar diagnostics only on failure. Its original409 cause is unproven; no money-service, DDL, retry policy or assertion was changed to hide it. Fresh full isolated-Mongo CI is required."
+    },
+    {
+      "check": "Full recovery compatibility CI",
+      "head_sha": "606580d12e6e3fad47adb3ff2f8da8b8517c2d19",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43997029567",
+      "result": "Backend5125passed/1failed. All80 router-initializer failures are resolved and both real-Mongo concurrent driver approvals pass (bank0.356s,terminal0.303s). The only failure is issue-index processCPU timing old0.25434/new0.28821 versus0.65ratio. Web62suites/970tests,14+8browser scenarios,allsourcehashes and all3CodeQL checks PASS. EightPNGbytes match the independently reviewed prior images.606580 candidate intent is superseded; it must not deploy."
+    },
+    {
+      "check": "Isolated diagnostic benchmark measurement",
+      "result": "Only the existing performance test changes: collect inherited heap debt before BOTH timingwindows and use current-threadCPU for the synchronous collector. GCremains enabled inside the workloads and its configuration/state is unchanged. Same4000identities, exactoutput equality and newCPU<oldCPU*0.65; no repeats,best-of,thresholdrelaxation or productionalgorithm change. Actualfile21passed1.14s; measuredold0.273328/new0.020177 ratio0.073819. Independent frozen-diff review PASS. The exact previousCI contamination source remains unproven. Fresh fullCI remains required."
+    }
+  ],
+  "remaining": [
+    "Pass fresh affected backend, web, browser and aggregate security checks on the new exact source, including every concurrent driver approval.",
+    "Freeze an intent-only v5 commit from this source, verify clean-clone rehearsals, merge and publish through the existing guard; require exact deployed identity and inactive final lease.",
+    "Deliver verified APK1.0.20/code23 after compatible backend publication; distinguish unperformed physical-device update acceptance."
+  ],
+  "next_safe_action": "Run all exact-source CI after the isolated benchmark correction. Both real-Mongo concurrency cases and the unchanged strict performance ratio must pass. Then freeze only this source new reviewed v5 intent, run clean-clone adapter rehearsals, merge normally and verify actual publication.",
+  "pull_request": "https://github.com/AMASI-SA/AMASI-SA/pull/1966",
+  "companion_native": {
+    "repository": "AMASI-SA/amasi-mobile",
+    "pull_request": "https://github.com/AMASI-SA/amasi-mobile/pull/359",
+    "head_sha": "8c94ac84be73d6dcee70b18a881a77460e494682",
+    "base_branch": "feature/operational-order-compensation-20261101",
+    "base_sha": "982a38a60ea77ef09f4e2924766c085ea0523bfd",
+    "ci": "https://github.com/AMASI-SA/amasi-mobile/actions/runs/43992896934",
+    "ci_status": "PASS on exact release source: TypeScript and ESLint",
+    "tree_sha": "2075f7e2639f6a6c33398175e4036d5dd1824071",
+    "merge_sha": "a8a7a55e22b4f7430c7619bb792c5d7d540b4f43",
+    "version": "1.0.20",
+    "version_code": 23,
+    "apk_workflow": "https://github.com/AMASI-SA/amasi-mobile/actions/runs/43993219682",
+    "apk_status": "PASS: EAS5a39f3d2-491f-4f39-bba5-76d2f23a3558 built APK1.0.20/code23. Actual package/runtime/project/productionAPI, ZIPCRC, OTA-disabled manifest and valid v2 signature verified. Physical device update not tested.",
+    "ota_enabled": false,
+    "apk_sha256": "c1ad75f4671f06703612cb4378b25a1088e37d6724a9a9b0f530f9060156006b",
+    "apk_signer_sha256": "f09151d74dca30a265f4b0bd49a8ba6b94acccdf5d1500f5da36654fc929b22f",
+    "signing_continuity": "APK22 and23 build logs retain the same existing EAS remote keystore configuration. APK22 binary expiredNov16, so direct certificate comparison is unavailable. Historical locally built codes14–18 use a different documented certificate. No signing credentials were changed; in-place upgrade compatibility is not claimed."
+  },
+  "parent_source_sha": "606580d12e6e3fad47adb3ff2f8da8b8517c2d19",
+  "release_preflight": {
+    "production_branch_sha": "71125711d8181da3b4e35d9129fd51c048ba2bdd",
+    "emergent_workspace_sha": "71125711d8181da3b4e35d9129fd51c048ba2bdd",
+    "tracked_changes": "none",
+    "unrelated_untracked_files": "preserved",
+    "release_guard_active": false,
+    "backend_merge": false,
+    "backend_publication": false
+  }
+}

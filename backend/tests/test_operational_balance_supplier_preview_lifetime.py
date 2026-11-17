@@ -124,7 +124,7 @@ def test_disconnect_joins_supplier_preview_stage_before_closing_snapshot(monkeyp
             return None
 
         async def scope(*_args, **_kwargs):
-            return {"id": "owner"}, "owner", None
+            return {"id": "owner", "role": "owner"}, "owner", None
 
         async def actor(*_args, **_kwargs):
             return {"merchant_id": "owner"}

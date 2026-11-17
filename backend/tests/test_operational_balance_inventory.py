@@ -17,8 +17,8 @@ async def seed(db):
     await db.products.insert_one({'user_id':'owner','id':'legacy','name':'Forbidden'})
 
 
-def command(**patch):
-    return {'request_id':'inventory-create-1','expected_session_scope':digest(['owner','staff']),
+def command(*, actor='staff', **patch):
+    return {'request_id':'inventory-create-1','expected_session_scope':digest(['owner',actor]),
         'supplier_id':'supplier','invoice_number':'STOCK-1','invoice_date':'2026-10-07','note':'',
         'lines':[{'kind':'product','item_id':'product','quantity':3,'unit_price':'20','tax':'9'},
                  {'kind':'component','item_id':'component','quantity':2,'unit_price':'5','tax':'1.50'}],**patch}
@@ -82,12 +82,12 @@ def test_api_permissions_and_write_only_entry(permissions):
         await seed(db);await grant(db,permissions)
         async with client(db) as c:
             base='/api/operational-balances'
-            assert (await c.get(base+'/inventory-catalog')).status_code==(200 if permissions else 403)
-            assert (await c.get(base+'/inventory-purchases')).status_code==(200 if READ in permissions else 403)
+            assert (await c.get(base+'/inventory-catalog')).status_code==403
+            assert (await c.get(base+'/inventory-purchases')).status_code==403
             r=await c.post(base+'/inventory-purchases',json=command())
-            assert r.status_code==(200 if WRITE in permissions else 403),r.text
+            assert r.status_code==403,r.text
             lookup=await c.get(base+'/inventory-purchases/entry/supplier/STOCK-1')
-            assert lookup.status_code==(200 if WRITE in permissions else 403),lookup.text
+            assert lookup.status_code==403,lookup.text
     run(scenario)
 
 
@@ -111,8 +111,8 @@ def test_inventory_payment_source_and_overpayment_atomic(source_kind):
         saved=await save_purchase(db,'owner','staff',command(),clock=NOW)
         account={'bank':'bank','cash':'cash','employee_custody':'employee'}[source_kind]
         pay={**movement(),'request_id':'pay-inventory','source_account_type':source_kind,'bank_id':account,'amount':'80.50',
-             'expected_session_scope':digest(['owner','staff']),'allocations':[{'obligation_id':saved['obligation_id'],'amount':'80.50'}]}
-        async with client(db) as c:
+             'expected_session_scope':digest(['owner','owner']),'allocations':[{'obligation_id':saved['obligation_id'],'amount':'80.50'}]}
+        async with client(db, 'owner') as c:
             replies=await asyncio.gather(*[c.post('/api/operational-balances/movements',json=pay) for _ in range(3)])
             assert all(r.status_code==200 for r in replies),[r.text for r in replies]
             assert (await c.post('/api/operational-balances/movements',json={**pay,'request_id':'overpayment-1'})).status_code==409
@@ -156,22 +156,22 @@ def test_later_mz2_invoice_stops_refresh_without_duplicate_debt():
     run(scenario)
 
 
-def test_invoice_number_with_slash_and_live_grant_revocation(monkeypatch):
+def test_invoice_number_with_slash_and_live_owner_revocation(monkeypatch):
     import operational_balance_inventory as inventory
     original=inventory.save_purchase
     async def scenario(db):
         await seed(db);await grant(db,[WRITE])
-        async with client(db) as c:
+        async with client(db, 'owner') as c:
             base='/api/operational-balances'
-            payload=command(invoice_number='INV/2026/001')
+            payload=command(actor='owner',invoice_number='INV/2026/001')
             assert (await c.post(base+'/inventory-purchases',json=payload)).status_code==200
             assert (await c.get(base+'/inventory-purchases/entry/supplier/INV%2F2026%2F001')).status_code==200
             async def revoke(*args,**kwargs):
-                await grant(db,[READ])
+                await db.users.update_one({'id':'owner'}, {'$set':{'disabled':True}})
                 return await original(*args,**kwargs)
             monkeypatch.setattr(inventory,'save_purchase',revoke)
             before=await read(db,'owner')
-            response=await c.post(base+'/inventory-purchases',json=command(invoice_number='REVOKED',request_id='revoked-inventory'))
+            response=await c.post(base+'/inventory-purchases',json=command(actor='owner',invoice_number='REVOKED',request_id='revoked-inventory'))
             assert response.status_code==403
             assert await read(db,'owner')==before
     run(scenario)

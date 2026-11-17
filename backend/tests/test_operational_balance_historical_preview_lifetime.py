@@ -97,7 +97,7 @@ def test_disconnect_stops_historical_review_before_snapshot_closes(monkeypatch, 
             return None
 
         async def scope(*_args, **_kwargs):
-            return {"id": "owner"}, "owner", None
+            return {"id": "owner", "role": "owner"}, "owner", None
 
         async def read(*_args, **_kwargs):
             if kind == "provider" and stage == "sources":

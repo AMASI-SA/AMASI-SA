@@ -66,6 +66,7 @@ jobs:
         run: >-
           python -B -m pytest --noconftest -q
           backend/tests/test_operational_balance*.py
+          backend/tests/test_operational_workspace_refunds.py
           backend/tests/test_operational_completed_shipping*.py
           backend/tests/test_operational_read_runtime.py
           backend/tests/test_operational_financial_review_groups.py
@@ -89,6 +90,8 @@ jobs:
           import xml.etree.ElementTree as ET
           cases = ET.parse('operational-backend.xml').findall('.//testcase')
           assert len(cases) >= 3500, 'Operational test collection incomplete'
+          assert len([c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_workspace_refunds']) >= 23, 'Scoped financial-only refund contracts missing'
+          assert len([c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_balance_pending_commands']) >= 33, 'Authenticated pending-command recovery contracts missing'
           assert any('test_operational_open_cost_exposure' in c.get('classname', '') for c in cases), 'Historical open-cost tests were not collected'
           bundle_cases = [c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_bundle_cost_projection']
           assert len(bundle_cases) >= 67, 'Remaining-product bundle projection tests missing or incomplete'
@@ -196,6 +199,8 @@ jobs:
               r.numFailedTests || r.numFailedTestSuites || r.numPendingTests ||
               r.numPendingTestSuites || r.numTodoTests) process.exit(1);
           for (const suffix of ['SalaryStart.test.jsx', 'EmployeesV2Management.test.jsx', 'OperationalSupplierAccount.test.jsx',
+                                'SimpleBalances.test.jsx', 'SimpleBalanceAccess.test.jsx', 'SimpleOrderRefunds.test.jsx',
+                                'simpleBalancesApi.test.js', 'simpleBalancesModel.test.js', 'simpleBalancesPending.test.jsx',
                                 'OperationalFinancialPosition.test.jsx', 'DriverPaymentReview.test.jsx',
                                 'NativePurchaseReview.test.jsx', 'nativePurchaseLinkApi.test.js',
                                 'ExternalOperationControls.test.jsx', 'ProviderFeeSetup.test.jsx',
@@ -346,6 +351,42 @@ jobs:
           }
           JS
           git diff --exit-code
+      - name: Run simple balances and permission screens at desktop and mobile widths
+        env:
+          EXPECTED_SOURCE: ${{ github.event.pull_request.head.sha || github.sha }}
+          SIMPLE_BALANCES_UAT_OUTPUT: ${{ runner.temp }}/simple-balances-browser
+          PLAYWRIGHT_MODULE: ${{ runner.temp }}/operational-playwright/node_modules/playwright
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE"
+          node scripts/testing/simple_balances/build.cjs
+          node scripts/testing/simple_balances/browser.cjs
+          node - <<'JS'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const out = process.env.SIMPLE_BALANCES_UAT_OUTPUT;
+          const evidence = JSON.parse(fs.readFileSync(path.join(out, 'browser-evidence.json')));
+          if (evidence.synthetic_only !== true || evidence.actual_components !== true ||
+              evidence.chromium_sandbox !== true || evidence.results.length !== 8 ||
+              evidence.results.some(result => result.status !== 'PASS') || evidence.errors.length) {
+            throw Error('All eight simple balances browser scenarios must execute and pass');
+          }
+          for (const name of ['ledger', 'external-form', 'refund', 'access']) {
+            for (const size of ['desktop', 'mobile']) {
+              if (!fs.statSync(path.join(out, `${name}-${size}.png`)).size) throw Error('Missing component screenshot');
+            }
+          }
+          JS
+          git diff --exit-code
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: simple-balances-browser-results
+          path: |
+            ${{ runner.temp }}/simple-balances-browser/source-manifest.json
+            ${{ runner.temp }}/simple-balances-browser/browser-evidence.json
+            ${{ runner.temp }}/simple-balances-browser/*.png
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         if: always()
         with:

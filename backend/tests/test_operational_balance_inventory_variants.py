@@ -1,4 +1,6 @@
 """Variant purchasing and accepted returns through isolated Mongo and HTTP."""
+# Specialized inventory routes are owner-only; preserve the money and stock assertions.
+from functools import partial
 import asyncio
 from copy import deepcopy
 import pytest
@@ -11,6 +13,9 @@ from operational_balance_inventory import catalog, save_purchase, inventory_view
 from operational_supplier_adjustments import save_adjustment
 from operational_balance_store import read
 from operational_balance_service import report, refresh
+
+command = partial(command, actor="owner")
+adjustment = partial(adjustment, actor="owner")
 
 
 async def seed_variants(db):
@@ -31,7 +36,7 @@ def test_silver10_gold20_concurrent_purchase_return_discount_and_readback():
     async def scenario(db):
         await seed_variants(db); await grant(db,[WRITE,READ])
         original=await db.mezan_products_v2.find_one({})
-        async with client(db) as c:
+        async with client(db, 'owner') as c:
             base='/api/operational-balances'
             cat=(await c.get(base+'/inventory-catalog')).json()['items']
             assert {(r.get('variant_id'),r['sku']) for r in cat if r['kind']=='product'}=={('silver','SILVER'),('gold','GOLD')}
@@ -51,7 +56,7 @@ def test_silver10_gold20_concurrent_purchase_return_discount_and_readback():
             assert {(l['variant_id'],l['quantity'],l['remaining_quantity']) for l in view['stock']}=={('silver',10,8),('gold',20,20)}
         # A whole-invoice credit must retain each variant identity as well.
         p.update(request_id='variant-discount',reference='DISCOUNT',kind='discount',amount='55.20',lines=[])
-        credited=await save_adjustment(db,'owner','staff',p,clock=NOW)
+        credited=await save_adjustment(db,'owner','owner',p,clock=NOW)
         rows={l['variant_id']:l for l in credited['lines']}
         assert (rows['silver']['remaining_gross'],rows['gold']['remaining_gross'])==('82.80','414.00')
         await refresh(db,'owner',clock=NOW)
@@ -77,10 +82,10 @@ def test_invalid_variant_purchase_is_atomic(case):
             await db.mezan_products_v2.insert_one({'user_id':'other','mezan_product_id':'other-product','name':'Other','variants':[{'id':'foreign','name':'Other'}]})
             p['lines'][0]['variant_id']='foreign'
         if case=='changed_retry':
-            await save_purchase(db,'owner','staff',p,clock=NOW)
+            await save_purchase(db,'owner','owner',p,clock=NOW)
             p=deepcopy(p);p['lines'][0]['quantity']=11
         before=await read(db,'owner')
-        with pytest.raises(HTTPException): await save_purchase(db,'owner','staff',p,clock=NOW)
+        with pytest.raises(HTTPException): await save_purchase(db,'owner','owner',p,clock=NOW)
         assert await read(db,'owner')==before
     run(scenario)
 
@@ -89,14 +94,14 @@ def test_invalid_variant_purchase_is_atomic(case):
 def test_variant_return_cannot_consume_another_color(case):
     async def scenario(db):
         await seed_variants(db)
-        invoice=await save_purchase(db,'owner','staff',variant_command(),clock=NOW)
+        invoice=await save_purchase(db,'owner','owner',variant_command(),clock=NOW)
         p=adjustment(invoice);p['lines']=[{'kind':'product','item_id':'product','variant_id':'silver','quantity':2}]
         if case=='missing':p['lines'][0].pop('variant_id')
         if case=='unknown':p['lines'][0]['variant_id']='other'
         if case=='duplicate':p['lines']*=2
         if case=='excess':p['lines'][0]['quantity']=11
         before=await read(db,'owner')
-        with pytest.raises(HTTPException):await save_adjustment(db,'owner','staff',p,clock=NOW)
+        with pytest.raises(HTTPException):await save_adjustment(db,'owner','owner',p,clock=NOW)
         assert await read(db,'owner')==before
     run(scenario)
 
@@ -112,9 +117,9 @@ def test_incomplete_or_ambiguous_mz2_variants_fail_closed(variants,count):
 
 def test_old_unallocated_stock_stays_separate_after_product_gets_variants():
     async def scenario(db):
-        await seed(db);await save_purchase(db,'owner','staff',command(),clock=NOW)
+        await seed(db);await save_purchase(db,'owner','owner',command(),clock=NOW)
         await db.mezan_products_v2.update_one({'mezan_product_id':'product'},{'$set':{'variants':[{'id':'silver','name':'فضي'},{'id':'gold','name':'ذهبي'}]}})
-        await save_purchase(db,'owner','staff',variant_command(request_id='second-invoice',invoice_number='SECOND'),clock=NOW)
+        await save_purchase(db,'owner','owner',variant_command(request_id='second-invoice',invoice_number='SECOND'),clock=NOW)
         stock=inventory_view(await read(db,'owner'))['stock']
         assert {(l.get('variant_id'),l['quantity']) for l in stock if l['kind']=='product'}=={(None,3),('silver',10),('gold',20)}
     run(scenario)
@@ -124,10 +129,10 @@ def test_pre_variant_saved_requests_replay_through_updated_api():
     async def scenario(db):
         await seed(db);await grant(db,[WRITE])
         old=command()
-        invoice=await save_purchase(db,'owner','staff',old,clock=NOW)
+        invoice=await save_purchase(db,'owner','owner',old,clock=NOW)
         credit=adjustment(invoice)
-        returned=await save_adjustment(db,'owner','staff',credit,clock=NOW)
-        async with client(db) as c:
+        returned=await save_adjustment(db,'owner','owner',credit,clock=NOW)
+        async with client(db, 'owner') as c:
             r=await c.post('/api/operational-balances/inventory-purchases',json=old)
             assert r.status_code==200,r.text
             assert r.json()==invoice

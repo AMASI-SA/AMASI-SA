@@ -1,4 +1,6 @@
 """Canonical product options remain distinct from stock quantity and money."""
+# Specialized inventory routes are owner-only; preserve the money and stock assertions.
+from functools import partial
 from copy import deepcopy
 import pytest
 from test_operational_balance_inventory_personalizations import seed_variants, personalized
@@ -31,7 +33,7 @@ def test_canonical_fields_two_fields_same_name_different_letter_variants_and_rep
   products=[r for r in await catalog(db,'owner') if r['kind']=='product']
   assert all(r['customization_fields']==FIELDS and r['customization_issues']==[] for r in products)
   p=payload();p['lines'][0]['personalizations'][0]['values'].append({'option_id':'note','value':' ملاحظة '*30})
-  async with client(db) as c:
+  async with client(db, 'owner') as c:
    url='/api/operational-balances/inventory-purchases'
    response=await c.post(url,json=p); assert response.status_code==200,response.text
    saved=response.json(); assert saved['gross']=='172.50'
@@ -58,7 +60,7 @@ def test_invalid_canonical_allocations_atomic(kind):
   if kind=='duplicate_combination':p['lines'][0]['personalizations'].append(deepcopy(a))
   if kind=='forged_label':a['values'][0]['option_name']='forged'
   before=await read(db,'owner')
-  async with client(db) as c:
+  async with client(db, 'owner') as c:
    r=await c.post('/api/operational-balances/inventory-purchases',json=p)
    assert r.status_code==422,r.text
   assert await read(db,'owner')==before
@@ -69,7 +71,7 @@ def test_missing_unsupported_incomplete_fields_never_invent_name(options):
  async def scenario(db):
   await setup(db)
   await db.mezan_products_v2.update_many({}, {'$set':{'options':options,'options_count':len(options)}})
-  async with client(db) as c:
+  async with client(db, 'owner') as c:
    r=await c.post('/api/operational-balances/inventory-purchases',json=personalized())
    assert r.status_code==422,r.text
   assert not (await read(db,'owner')).get('inventory_purchases')
@@ -78,9 +80,9 @@ def test_missing_unsupported_incomplete_fields_never_invent_name(options):
 def test_old_name_request_replays_before_changed_catalog_validation():
  async def scenario(db):
   await seed_variants(db);await grant(db,[WRITE])
-  old=personalized();saved=await save_purchase(db,'owner','staff',old,clock=NOW)
+  old=personalized();saved=await save_purchase(db,'owner','owner',old,clock=NOW)
   await db.mezan_products_v2.update_many({}, {'$set':{'options':[],'options_count':0}})
-  async with client(db) as c:
+  async with client(db, 'owner') as c:
    r=await c.post('/api/operational-balances/inventory-purchases',json=old)
    assert r.status_code==200 and r.json()==saved,r.text
  run(scenario)
@@ -101,7 +103,7 @@ def test_select_is_proven_by_canonical_variant_not_display_label(mode):
   items=[r for r in await catalog(db,'owner') if r['kind']=='product']
   allowed=mode in {'names','ids'}
   assert all(bool(r['customization_issues'])!=allowed for r in items)
-  async with client(db) as c:
+  async with client(db, 'owner') as c:
    r=await c.post('/api/operational-balances/inventory-purchases',json=payload())
    assert r.status_code==(200 if allowed else 422),r.text
  run(scenario)
