@@ -1,0 +1,91 @@
+{
+  "baseline_git_sha": "d7c9ed77137bed0948f4d32a34c6bf571d75e6f8",
+  "candidate_source_sha256": "8e3c9ea408dc081a69b47081efea50b77b0e749933260f2ca6ddaf37b939a126",
+  "fixture": {
+    "suppliers": 250,
+    "movements": 6000,
+    "audit_pages": 16,
+    "events_per_page": 250
+  },
+  "method": "Real module and ASGI routes; synthetic mongomock Mongo, no network; counterbalanced six runs",
+  "production_latency_measured": false,
+  "identical_responses": true,
+  "runs": [
+    {
+      "variant": "baseline",
+      "run": 1,
+      "context_ms": 493.073,
+      "movements_ms": 581.978,
+      "combined_ms": 1075.05,
+      "process_cpu_ms": 1044.997,
+      "audit_page_reads": 32,
+      "response_sha256": "f92af37c6cbcdf111fdf01f937904a9c46e6df95983596370d06b4a7eb6aeb9e"
+    },
+    {
+      "variant": "candidate",
+      "run": 2,
+      "context_ms": 356.626,
+      "movements_ms": 313.416,
+      "combined_ms": 670.043,
+      "process_cpu_ms": 669.296,
+      "audit_page_reads": 0,
+      "response_sha256": "f92af37c6cbcdf111fdf01f937904a9c46e6df95983596370d06b4a7eb6aeb9e"
+    },
+    {
+      "variant": "candidate",
+      "run": 3,
+      "context_ms": 287.98,
+      "movements_ms": 251.202,
+      "combined_ms": 539.182,
+      "process_cpu_ms": 538.96,
+      "audit_page_reads": 0,
+      "response_sha256": "f92af37c6cbcdf111fdf01f937904a9c46e6df95983596370d06b4a7eb6aeb9e"
+    },
+    {
+      "variant": "baseline",
+      "run": 4,
+      "context_ms": 390.826,
+      "movements_ms": 655.468,
+      "combined_ms": 1046.294,
+      "process_cpu_ms": 1042.313,
+      "audit_page_reads": 32,
+      "response_sha256": "f92af37c6cbcdf111fdf01f937904a9c46e6df95983596370d06b4a7eb6aeb9e"
+    },
+    {
+      "variant": "baseline",
+      "run": 5,
+      "context_ms": 496.231,
+      "movements_ms": 742.917,
+      "combined_ms": 1239.148,
+      "process_cpu_ms": 1222.673,
+      "audit_page_reads": 32,
+      "response_sha256": "f92af37c6cbcdf111fdf01f937904a9c46e6df95983596370d06b4a7eb6aeb9e"
+    },
+    {
+      "variant": "candidate",
+      "run": 6,
+      "context_ms": 325.8,
+      "movements_ms": 257.422,
+      "combined_ms": 583.223,
+      "process_cpu_ms": 584.33,
+      "audit_page_reads": 0,
+      "response_sha256": "f92af37c6cbcdf111fdf01f937904a9c46e6df95983596370d06b4a7eb6aeb9e"
+    }
+  ],
+  "median_ms": {
+    "baseline": {
+      "context_ms": 493.073,
+      "movements_ms": 655.468,
+      "combined_ms": 1075.05,
+      "process_cpu_ms": 1044.997,
+      "audit_page_reads": 32
+    },
+    "candidate": {
+      "context_ms": 325.8,
+      "movements_ms": 257.422,
+      "combined_ms": 583.223,
+      "process_cpu_ms": 584.33,
+      "audit_page_reads": 0
+    }
+  }
+}
