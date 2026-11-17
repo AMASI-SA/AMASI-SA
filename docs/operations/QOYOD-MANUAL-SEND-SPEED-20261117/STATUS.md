@@ -234,6 +234,77 @@ so authenticated production memory/admission diagnostics were not called.
 No credential was printed, added, rotated or weakened. Production resource
 measurements remain unavailable through that path.
 
+## Release-gate dependency remediation
+
+Source checkpoint `ae86bd812e2fca6edecbc3e574bef4c741917c51` corrected Build20;
+run 44163686355/job 134323942863 passed 49 Plan-B and 28 unified-backlog tests.
+Its real-Mongo run 44163686145/job 134323942177 passed 351 acceptance tests and
+88 Salla tests on stock MongoDB 8.0.12 with the no-skips checks satisfied. The
+manual UI job 134323941757 passed 105 tests in five suites. Security run
+44163686044/job 134323943536 passed 4,230 frontend tests in 417 suites, then
+blocked on five dependency paths for GHSA-fc5q-39xc-vjpf. The affected original
+picomatch 2.3.2/4.0.7 manifests and lockfile were unchanged from production.
+
+The verified upstream release/advisory evidence identified no official fixed
+version. A concurrent repository task already implemented and independently
+reviewed transparent local backports in PR #1970. This task adopts only the 28
+security-related paths from its exact source
+`d9964df9f07cee22806202311712d92e6bd717ba` (security commits 41b510c and d9964df).
+No courier implementation or courier task status is imported or modified.
+
+The two package majors remain separate, with honest private `mezan.2` identities,
+retained MIT licenses and immutable npm source/integrity provenance. The repair
+checks compiled repeated-glob bodies, preserves certified safe forms, and
+literalizes unsupported ambiguous repetition; a linear unescaping correction
+also addresses the donor's CodeQL findings. The new copy/consumer verifier checks
+all installed runtime bytes. The strict audit evaluator, severity thresholds and
+dependency groups remain unchanged. A clean registry audit is not used by itself
+as proof that the private sources are safe.
+
+Fresh integrated local evidence on Node 22.23.2 and Yarn 1.22.22:
+- Frozen installation exited 0.
+- All 210 security contracts passed, with no skips/failures/cancellations.
+- Complete integrity checks verified three installed copies and eight consumer
+  resolutions, preserving the consumers' original major versions.
+- The unchanged audit evaluated 409 production dependencies: zero advisories,
+  exceptions NONE and blocking 0, exit 0.
+- Full integrated application frontend regression passed 4,230 tests in all
+  417 suites, exit 0 (177.901 seconds), on the adopted dependency graph.
+- The operational dependency check passed from its documented frontend cwd.
+  An initial invocation from the repository root matched no source paths; this
+  was corrected in the command, not by modifying product code or the test.
+
+Independent provenance verification redownloaded and SHA-512-verified both
+published npm tarballs and checked every original and patched runtime hash.
+The frozen unescape oracle was independently reproduced from both upstream and
+both patched implementations for all 37,449 bounded inputs per implementation.
+
+Compatibility qualification: the released upstream suites were run unmodified
+against pristine and patched copies. Pristine v2 passed 1,972/1,972 tests; patched
+v2 passed 1,901 with 71 failures. Pristine v4 passed 1,983/1,983; patched v4 passed
+1,912 with the same 71 failures. These are real, documented restrictions of
+complex repeated extglobs/raw repetitions, recursion opt-outs, rewritten nested
+captures and backreferences; they are not represented as an upstream-suite pass.
+Ordinary-glob cases passed, including all six ordinary-capture cases per major
+and the quoting/escaping cases (20 in v2, 21 in v4). Static search found the
+changed exact patterns only in security tests, with no application/config use;
+this does not claim coverage of every dynamically generated pattern. The
+fresh full application and consumer checks above passed. The imported source
+was retained unchanged after provenance, static and compatibility review.
+
+An optional additional adversarial-review agent was stopped by an automated
+cybersecurity content screen; that unfinished extra matrix is not credited as
+passed. The executed 210 existing security contracts, immutable-source checks,
+current consumer/application regressions and fresh exact-source CI are the
+acceptance evidence. No complete/general regex-safety claim is made.
+
+The earlier governed source-A build for ae86bd8 completed two clean identical
+builds (artifact tree 30909766c3583d9172d3032ffc2632c7d17c3bb2ab089021156be6abe22bab12)
+and exact-source verification. It is historical evidence only: the added
+security sources require a new final source commit, new governed build and new
+intent-only B. No intent has been frozen for this task, and no production lease,
+merge or publication has occurred.
+
 ## Next safe action
 
 Complete exact-source CI and final source A, generate a fresh governed A/B build

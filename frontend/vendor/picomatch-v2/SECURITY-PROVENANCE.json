@@ -1,0 +1,35 @@
+{
+  "upstream": "picomatch@2.3.2",
+  "upstream_tarball_url": "https://registry.npmjs.org/picomatch/-/picomatch-2.3.2.tgz",
+  "upstream_tarball_integrity": "sha512-V7+vQEJ06Z+c5tSye8S+nHUfI51xoXIXjHQ99cQtKUkQqqO1kO/KCJUfZXuB47h/YBlDhah2H3hdUGXn8ie0oA==",
+  "upstream_git_head": "81cba8d4b767cab3cb29d26eb4f691eed75b73b2",
+  "advisory": "GHSA-fc5q-39xc-vjpf",
+  "original_files_sha256": {
+    "LICENSE": "d0cd141b0c322fded5dfad1d4645bb2fedfc05b7321fe1009469638190d59ef9",
+    "lib/constants.js": "980225ab847a88a784f6d315557b8434f7742b2551ce20e354455c61b938c0a5",
+    "index.js": "5695ff5dfcd5a338a40630bd506056f2950bcb08fe1cc068519cbbfe60add480",
+    "lib/parse.js": "3a91656f440069aa8f8e15c9d695b9f6b2209df1eab2be8127c72cbcca45ff5f",
+    "lib/picomatch.js": "2cb169cbe17d356036c5f62a377318b85e30817877e59797842aec9d8b15f54b",
+    "lib/scan.js": "227fcc994a477ea95c5a0435d32783566334c6bd0dcc4a103029735ad8c9c535",
+    "lib/utils.js": "809fc29cf35ab0aa76b99cad29182f62c0ae598902481d10f9868eaef71981ee",
+    "package.json": "63264d817e856a4bff57d4304f2b38d2964a4f6df520eb169e7bcdb619f13e9a"
+  },
+  "patched_files_sha256": {
+    "LICENSE": "d0cd141b0c322fded5dfad1d4645bb2fedfc05b7321fe1009469638190d59ef9",
+    "index.js": "5695ff5dfcd5a338a40630bd506056f2950bcb08fe1cc068519cbbfe60add480",
+    "lib/constants.js": "980225ab847a88a784f6d315557b8434f7742b2551ce20e354455c61b938c0a5",
+    "lib/parse.js": "705f7a1c530f57d4c6cabfcef7041b57edc4743710eed9b56c7100985fce16b1",
+    "lib/picomatch.js": "2cb169cbe17d356036c5f62a377318b85e30817877e59797842aec9d8b15f54b",
+    "lib/repeated-extglob-safety.js": "2d6f345b66e1575df07ecec53dcdccc4dc4e6bd4cfaf8f105d6094b9de131c87",
+    "lib/scan.js": "227fcc994a477ea95c5a0435d32783566334c6bd0dcc4a103029735ad8c9c535",
+    "lib/utils.js": "c39b3bf602cb74fa631c933fbd6d937865b741f85607f25a293ed429a849a470",
+    "package.json": "3c1f473d37e58cbbae972536f2664082019c628b71b2682bc45e5ccd1f33764a"
+  },
+  "local_patch": "Mandatory classification of final compiled repeated-extglob bodies; bounded finite unambiguous grammar, independently certified greedy nullable-character-star rewrites, and literalization of unsupported repetition. Raw group repetitions are checked as well so they cannot wrap a finite accepted extglob in another unsafe repeat. Token accounting fixes ensure emitted and checked bodies agree. Revision 2 replaces the upstream quadratic removeBackslashes regular expression with an equivalent linear two-pass scanner.",
+  "security_boundary": "Local repeated-extglob compilation and linear removeBackslashes processing used by public scan unescaping. Not a general safety guarantee for arbitrary caller-supplied regular expressions or forged parse states.",
+  "compatibility_policy": "Keep existing major APIs. Preserve reviewed ordinary globs, safe finite repeats, literal stars, and all branches of certified star rewrites. Unsupported ambiguous or complex repeated forms intentionally become literals; recursion opt-outs cannot disable this guard.",
+  "additional_review_findings": [
+    "https://github.com/AMASI-SA/AMASI-SA/security/code-scanning/94",
+    "https://github.com/AMASI-SA/AMASI-SA/security/code-scanning/95"
+  ]
+}
