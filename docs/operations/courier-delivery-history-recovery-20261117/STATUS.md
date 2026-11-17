@@ -1,37 +1,86 @@
 # Courier delivery history recovery — 2026-11-17
 
-## WIP: implementation checkpoint awaiting integrated verification
+## Verified source; deployment blocked by inherited dependency advisory
 
+- Task: bounded visible courier evidence recovery and explicit matching of a saved pending order.
 - Repository: `AMASI-SA/AMASI-SA`.
-- Task branch: `codex/courier-delivery-history-recovery-20261117`.
-- Verified production source base: `8df479ef24b4f8847c26ba18d48e3248f7b673cf`.
-- Scope: visible-request courier evidence acquisition, fair bounded progress,
-  and explicit matching of an existing pending order. Preserve delivery proof,
-  source version, owner, waybill, cutover and financial guards.
-- Production changed: **no**. No release lease, merge or deployment performed.
-- Remote RED checkpoint: `3e42238ccfcd42eddf5890f09357ac68d04f3431`.
+- Source branch: `codex/courier-delivery-history-recovery-20261117`.
+- Source candidate A: `986083f9344ea0b980263d3228f89c984e675cfd`.
+- Source tree: `ffc20f4f2712814d3ae8ea03e520b05f4dd73d9d`.
+- Verified production base: `8df479ef24b4f8847c26ba18d48e3248f7b673cf`.
 - Draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/1967 .
-- Implementation checkpoint: `7116da02320807bb6f7dc4c5dd5a0028811ce43e`
-  (tree `b6b32fd269acf7f1cdf9645396a0283df5494ef1`).
+- Final handoff branch: `codex/courier-delivery-history-evidence-20261117`.
+- This evidence-only branch updates this document without advancing the reviewed source candidate. The PR body records its resulting immutable commit SHA.
+- Production changed: **no**. No merge, release lease, clean-clone deployment rehearsal, or publication was performed. No live recovery or financial update was executed by this task.
 
-## Evidence
+## Confirmed failure modes and completed behavior
 
-The existing native history verifier accepts a synthetic reproduction with a
-single original delivered shipment, no shipment delivery timestamp, and a
-complete same-carrier dispatch/delivery history. No date parser or proof guard
-change is justified by that reproduction.
+The existing native verifier accepts a synthetic reproduction of a single original delivered shipment with no shipment-level delivery timestamp and complete same-carrier dispatch/delivery history. No date parser or delivery-proof acceptance change was justified by this reproduction. The corresponding live production source record has not been verified or repaired by this candidate.
 
-New synthetic regressions in
-`backend/tests/test_operational_balance_courier_acquisition_progress.py` reproduce:
+Four independently reproduced regressions explain why usable history can remain unavailable to the saved operational report:
 
-1. An expired invalid prefix repeatedly consumes all four selection slots and
-   prevents a later never-attempted delivery from being inspected.
-2. Due candidates are chosen in insertion order rather than oldest retry order.
-3. One native transport timeout abandons the remaining bounded order allowance.
-4. A hanging bank adapter consumes the complete visible acquisition budget and
-   prevents courier acquisition from starting.
+1. An expired invalid prefix repeatedly consumes the four-order selection allowance, starving never-attempted orders.
+2. Due orders are selected in insertion order instead of oldest retry order.
+3. One native transport failure abandons the remaining bounded allowance.
+4. A hanging bank adapter consumes the entire visible evidence budget before the courier adapter begins.
 
-Root independently ran the following against unchanged production source:
+The implementation atomically prefers never-attempted and oldest-due courier gaps; isolates provider transport failures per order; and reserves time for each remaining source within the unchanged serial twenty-five-second budget. Adapters are cancelled and joined before advancing. The four-order cap and per-order fifteen-minute cooldown remain.
+
+Native recovery now returns separate verified, saved, unchanged, blocked, unavailable, and source-conflict outcomes. Saving requires the existing full compare-and-set match on the source snapshot, current shipment and watermark. A successful aggregate refresh alone is not reported as successful native recovery. Timeout outcomes omit unknown counts, and arbitrary provider exception text is not returned.
+
+The frontend adds explicit `مطابقة مع سلة` to eligible courier pending rows. The selected order must intersect the current owner's saved courier issues and match the current session scope. It performs one targeted native acquisition followed by the existing shared aggregate and one guarded report read. Close, hide, offline, navigation, authorization changes, and unmount cancel the request; there is no replay or background retry. Explanatory results appear below the pending-order table and remain visible if the corrected row disappears. Saved evidence is distinguished from unchanged evidence and from delivery proof. Existing manual delivery confirmation remains a separate action.
+
+Independent review found and fixed an export overlap issue: revoking an earlier export now clears its busy/error presentation state even if the subsequent match cancels or fails without replacing the snapshot. Four regression cases cover page/full export crossed with match cancellation/failure.
+
+No delivery date is fabricated. Owner, session, proof, carrier, waybill, source-version, cutover, authorization, cancellation and financial guards remain enforced.
+
+## Changed files at source A
+
+Backend runtime:
+
+- `backend/salla_integration/courier_delivery_sync.py`
+- `backend/operational_visible_evidence.py`
+- `backend/operational_demand_refresh_routes.py`
+
+Backend verification:
+
+- `backend/tests/test_operational_balance_courier_acquisition_progress.py`
+- `backend/tests/test_operational_balance_courier_targeted_acquisition.py`
+- `backend/tests/test_operational_balance_demand_refresh_routes.py`
+- `backend/tests/test_operational_balance_visible_evidence.py`
+
+Frontend runtime and paired tests under `frontend/src/pages/operational/`:
+
+- `OperationalFinancialPosition.jsx` / `OperationalFinancialPosition.test.jsx`
+- `PendingOrdersDialog.jsx` / `PendingOrdersDialog.test.jsx`
+- `api.js` / `financialPositionApi.test.js`
+- `visibleOperationalRead.js` / `visibleOperationalRead.test.js`
+
+The source checkpoint also includes the earlier revision of this status document.
+
+## Exact-source verification accepted
+
+Operational Balance Web run: https://github.com/AMASI-SA/AMASI-SA/actions/runs/44141898374 . All four jobs succeeded on source A.
+
+| Check | Accepted result |
+| --- | --- |
+| Backend with genuine MongoDB 8.0.12 replica set | 5,151 passed; zero skipped, failures or errors |
+| Additional shipping summary/calculator checks | 16 passed and 18 subtests passed |
+| New progress regressions | 4/4, including both genuine-Mongo sorted-claim cases |
+| New targeted acquisition regressions | 21/21 |
+| Existing native courier acquisition | 79/79 |
+| Existing waybill acquisition | 14/14 |
+| Operational frontend contracts | 1,000 tests / 62 suites; zero failures, pending or todo |
+| Browser/mobile/visibility acceptance | 14 operational scenarios and 8 simple-balances scenarios passed |
+| Canonical worker exclusion | Passed |
+
+Independent review checked the source and tree in the downloaded backend evidence artifact, not just the workflow status. Backend artifact 14353789680: https://github.com/AMASI-SA/AMASI-SA/actions/runs/44141898374/artifacts/14353789680 . ZIP SHA-256: `3088ea347be104211bb07e72427b3716546f38ed9f7e18f0e3cd2d66af4e300f`.
+
+The earlier `7116da02320807bb6f7dc4c5dd5a0028811ce43e` backend run was cancelled and is not counted as acceptance. Its frontend result preceded the export regression fix. Final results above are for A only.
+
+Root verified thirteen PR workflows: twelve succeeded; Security Gate is the sole failure described below. Within that failed workflow, the general frontend suite passed 4,246 tests / 417 suites; backend security contracts also passed. The later frontend CSP/build steps were skipped after the audit failed and must not be claimed as passed.
+
+Initial RED checkpoint: `3e42238ccfcd42eddf5890f09357ac68d04f3431`. Root independently reproduced all four intended failures against unchanged production source using:
 
 ```bash
 PYTHONPATH=backend:backend/tests PYTHON_DOTENV_DISABLED=1 PYTHONDONTWRITEBYTECODE=1 \
@@ -40,84 +89,57 @@ PYTHONPATH=backend:backend/tests PYTHON_DOTENV_DISABLED=1 PYTHONDONTWRITEBYTECOD
   backend/tests/test_operational_balance_courier_acquisition_progress.py
 ```
 
-Result: **4 failed in 1.99 seconds, exit 1**, at the four intended assertions.
-The tests use in-memory Mongo emulation and mocked provider reads; they are not
-real-Mongo or production evidence. Existing waybill acquisition baseline:
-**14 passed in 1.62 seconds**.
+RED result: four failures at intended assertions, exit 1. Focused implementation checks later passed 66 tests, exit 0, and targeted acquisition passed 21 tests, exit 0. The final sorting regressions use genuine Mongo in CI because mongomock 4.3.0 returns the sorted document but updates the wrong document when sorted find-and-modify excludes `_id` from projection. Production projection was not changed to accommodate this emulator defect. The local official Mongo binary could not start because this runtime lacks required sysfs CPU metadata; no binary or system-file workaround was attempted. CI resolved this verification gap without skips.
 
-## Implementation and verification
+## Governed build preparation
 
-Implemented fair atomic claim ordering (never attempted, then oldest due),
-per-order native transport failure isolation, reserved time for each remaining
-source inside the unchanged twenty-five-second visible budget, and truthful
-verified/saved/unchanged/blocked/conflicted/unavailable outcomes. Source writes
-still require the complete existing compare-and-set guard. No delivery proof
-acceptance rule was relaxed.
+Verified official toolchain: Node 22.23.2 / Yarn 1.22.22. Frozen dependency installation exited 0 without tracked changes. The governed source A build command was:
 
-The visible refresh accepts an optional courier order target only when its
-current session scope matches and the owner's saved courier issues contain it.
-It inspects only that order, obeys the fifteen-minute cooldown, skips unrelated
-native sources, and then invokes the shared aggregate once. The frontend adds
-an explicit per-order matching action, aborts on close/hide/scope change, and
-keeps explanatory results below the pending-order table.
+```bash
+MEZAN_RELEASE_BOOTSTRAP_INTENT=1 REACT_APP_BACKEND_URL=https://mezansalla.com \
+  python scripts/frontend_release_toolchain.py exec -- \
+  yarn --cwd frontend build:release
+```
 
-Focused backend verification, including targeted selection, owner isolation,
-CAS receipts, cancellation and existing confirmation/waybill behavior:
-**66 passed in 3.65 seconds, exit 0**. Final isolated targeted rerun:
-**21 passed in 1.63 seconds, exit 0**. These tests use mocked external reads.
+Both clean builds matched; exit 0. Artifact tree SHA-256: `6d5e1fd2c721c08e2ccce25f28eb35f36ee6dc942f7d8615479649cecd0c3954`. Reproducibility proof SHA-256: `c708fe013a19149404417879734779a2c4bbf9d59b0c85dda350924ec93b5e89`.
 
-The oldest-due and expired-prefix regressions now require genuine Mongo using
-the existing isolated integration fixture. Mongomock 4.3.0 has a confirmed
-sorted find-and-modify defect when projection omits `_id`: it returns the
-sorted document but updates the first unsorted match. Production projection
-and claim semantics were not changed to accommodate that emulator defect.
+```bash
+python scripts/frontend_release_toolchain.py exec -- \
+  python scripts/verify_frontend_build.py \
+  --expected-git-sha 986083f9344ea0b980263d3228f89c984e675cfd
+```
 
-Local real-Mongo verification is blocked by the execution runtime: the
-official Debian MongoDB 8.0.12 binary (verified SHA-256
-`6afc35ae5623b302deeaeace63981f685d775d8b1bcd2dbe8d4077f9f21267c8`)
-aborts before startup because its allocator requires an unavailable sysfs CPU
-file. No test server was started. Run these non-skipping regressions in the
-existing CI Docker replica set; do not patch the binary or fake sysfs.
+Verification exited 0. A local intent freeze also exited 0 after removing two generated, untracked Python bytecode files and disabling bytecode generation. It was written outside the worktree; the tracked intent was not changed. Frozen candidate intent SHA-256: `013cad17a93891f3fcf3c511615f97d47d3361c8b52704754675cd92af5af6fc` (1,338,136 bytes). Candidate runtime ID: `rg5-5bd96a691e5309473999fbe6c1abe4525b1c9d651ab8c6ca50c1692da9a253a9`.
 
-The governed Node v22.23.2 / Yarn v1.22.22 toolchain is verified locally.
-At exact implementation SHA `7116da02320807bb6f7dc4c5dd5a0028811ce43e`,
-Operational Balance Web run `44140834654` passed frontend contracts:
-**996 tests / 62 suites, zero failures, pending or skipped tests**. The changed
-four suites account for 184 tests. Its browser/mobile/visibility acceptance
-passed fourteen operational scenarios and eight simple-balances scenarios;
-canonical worker exclusion passed. The genuine Mongo replica startup and
-exact-source recording passed; backend results are still being collected.
+This is preparation evidence only. No intent-only B commit or clean-clone adapter rehearsal was completed, and no runtime identity was materialized in Production. Any source or dependency remediation requires a new A and newly frozen intent. Recreate local ignored outputs from the reviewed source; never rely on their persistence.
 
-Independent backend review found no authority, cancellation, proof-guard or
-CAS regression. Independent frontend review found one concrete export overlap
-issue: a cancelled export could leave export buttons busy when a targeted
-match subsequently cancelled or failed without replacing the snapshot. The
-new source checkpoint explicitly clears export presentation state when it
-revokes that export, with four regression cases (page/full export crossed with
-match cancellation/failure). This follow-up needs fresh exact-head frontend
-CI; the earlier green result does not cover it. No other blocking review
-finding was reported.
+## Blocking Security Gate finding
 
-## Implementation ownership and next action
+- Run: https://github.com/AMASI-SA/AMASI-SA/actions/runs/44141898393 .
+- Failing job: https://github.com/AMASI-SA/AMASI-SA/actions/runs/44141898393/job/134246616705 .
+- Failed step: production frontend dependency audit, 2026-11-17T17:56:11Z.
+- Advisory: https://github.com/advisories/GHSA-fc5q-39xc-vjpf (`CVE-2026-112366`), high-severity repeated-extglob regular-expression denial of service in `picomatch`.
+- The official advisory lists versions through 4.0.7 as affected and no patched version. Official npm metadata and the latest upstream release both still identify 4.0.7 as latest at review time. The referenced upstream PR is not a complete released fix.
+- Installed vulnerable versions are 2.3.2 and 4.0.7, reached through five paths: tailwindcss → micromatch; tailwindcss → chokidar → anymatch; vite directly; vite → tinyglobby; and tailwindcss → sucrase → tinyglobby.
 
-Root owns backend production changes. A test-only agent authored the new
-regressions. A separate frontend agent owns the explicit per-order matching
-control and focused frontend verification. No shared production file has
-multiple writers.
+This dependency graph predates the courier change. Production base Security Gate run https://github.com/AMASI-SA/AMASI-SA/actions/runs/44001199684 reported high=0, exceptions=NONE, blocking=0 at 2026-11-17T02:14:48Z. The advisory was reviewed/updated later on November 17; it was originally published earlier. Byte comparisons show these files are unchanged between the production base and A: `frontend/package.json`, `frontend/yarn.lock`, `scripts/check_frontend_audit.cjs`, `.github/workflows/security-gate.yml`, and `frontend/scripts/verify-operational-dependency-compat.cjs`.
 
-Next: preserve this implementation checkpoint and trigger CI, complete the
-four focused frontend suites, review the integrated diff independently, and
-require the real-Mongo ordering regressions to pass. Only then prepare a
-governed source/intent release under the existing production protocol.
+The governed runtime starts Vite preview, so build-only/non-applicable status has not been established. No exception, gate weakening, dependency reclassification, version downgrade, fake version, or unreviewed upstream patch was applied. The source remains a draft and must not be merged or published while this gate is unresolved.
 
-Preserve the four-order cap, per-order fifteen-minute cooldown, cancellation,
-authorization and compare-and-set guards. No background recovery, manual
-delivery assertion, financial mutation shortcut, or loosened shipment matching.
+## Production and continuity state
 
-## Continuity
+Read-only inspection of the signed-in Emergent project found `/app` at production base 8df479ef, no tracked or staged changes, and 120 unrelated untracked files, all preserved. Release Guard status reported `active: false`. No checkout, source edit, dependency installation, rehearsal, lease or deployment was performed there. Temporary diagnostic terminal sessions were closed; the user's unrelated unsaved editor was preserved.
 
-Issue #1006 has reached its comment limit. Do not overwrite its historical
-content or repeatedly attempt an append. This task status and the forthcoming
-task PR serve as the continuation record, with exact pushed checkpoint SHAs in
-the PR description. The draft PR's initial RED checkpoint CI is not evidence
-for this implementation; assess the new pushed implementation SHA explicitly.
+The live Mezan pending-order view still showed the selected case. A read-only exact-case lookup in the Emergent workspace database did not locate it; that environment was not established as the production data store, so this does not prove the case is absent from production. No native recovery, reduction in pending count/value, or live financial/shipping reconciliation is claimed.
+
+Issue #1006 has reached its comment limit. Do not overwrite its history or retry appending. This status document and the PR description are the continuation record. No customer records, credentials or provider payloads are included here.
+
+## Exact next safe action
+
+1. Re-read this evidence checkpoint and PR 1967; fetch the source branch and verify A and the current production base before edits.
+2. Resolve the existing dependency advisory with a supported fixed release or an independently reviewed removal/replacement of all affected paths; retain the strict audit. A partial upstream patch is insufficient.
+3. If source changes, create a new source A, require the relevant CI and security gates, rebuild, and freeze a new intent-only B under AGENTS.md protocol v5. Do not squash or rebase a frozen A/B pair.
+4. Recheck Release Guard, complete the clean-clone adapter rehearsal, then resume the previously authorized normal merge and governed publish only after all gates pass. Require a newer explicit Deployment Succeeded, three matching production identity probes, and inactive guard afterward. User authorization is already present; do not ask again for the same action.
+5. On the verified live release, explicitly match the user's selected pending case and inspect the native receipt plus new report revision. Measure before/after pending orders and amounts over the same period and scope. If proof remains blocked, use its precise reason and inspect the authoritative production source; do not substitute order creation/update time or assert delivery manually to clear the discrepancy.
+
+Do not report completion of the user's live reconciliation goal until that final measurement is verified.
