@@ -34,7 +34,15 @@ Root owns frontend integration, timing serialization, related tests and this sta
 The backend worker owns the demand-refresh route and focused backend route regressions.
 An independent reviewer must assess the integrated patch.
 
-No new follow-on tests have passed yet. Required evidence: regression failures on the previous implementation; targeted backend/UI tests, cancellation and authorization checks; integrated review; proportionate repository CI and release gates before any merge or deployment.
+Draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/1977. Initial durable checkpoint: 5778ec6db0e0e42e0098c3753789d0a59b14b55d. Issue #1006 is full, so this task status and PR hold its continuation record.
+
+Frontend regression evidence: the first two targeted suites failed for the intended missing behavior (12 failed, 83 passed, exit 1). After the bounded receipt and message changes, all 95 passed. Independent review found another receipt-loss path in the real financial page: the follow-up report GET could fail after the native result had returned. Three new real-page regressions reproduced this (3 failed, exit 1); the page now retains the existing snapshot when a freshly scoped failure receipt is available. Successful refreshes and unscoped failures retain their original read path.
+
+Fresh integrated frontend command: `CI=true python3 scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend test --watchAll=false --runInBand --runTestsByPath src/pages/operational/OperationalFinancialPosition.test.jsx src/pages/operational/visibleOperationalRead.test.js src/pages/operational/PendingOrdersDialog.test.jsx` — 202 passed, 3 suites, exit 0. Governed Node 22.23.2 / Yarn 1.22.22. `git diff --check` passed before the last integration slice; rerun at the combined checkpoint.
+
+The backend regression module independently reproduced the missing receipt and missing failure-path authorization check (10 failed, 18 passed, exit 1). Its route implementation and bounded post-failure authorization tests are still in progress. These incomplete backend files are not part of the frontend checkpoint. No production change by this follow-on, no release intent frozen, no acceptance or merge claim.
+
+Required remaining evidence: complete backend tests including bounded authorization and disconnects; independent integrated review; proportionate repository CI and release gates before any merge or deployment.
 
 ## Remaining work / next safe action
 
@@ -43,3 +51,4 @@ No new follow-on tests have passed yet. Required evidence: regression failures o
 3. Obtain the actual scalar source-stage timings or authorized live query evidence before modifying order read performance. Existing owner-leading indexes and root projection already exist.
 4. Preserve this WIP and tests on the dedicated branch. Keep private order data outside GitHub.
 5. Respect the separate PR #1972 lease; do not abort, reuse or publish over it.
+

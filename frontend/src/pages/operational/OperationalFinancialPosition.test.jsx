@@ -191,6 +191,32 @@ test("one courier match forwards the selected identity and scope then applies on
     expect(operationalApi.refreshBalances).toHaveBeenCalledTimes(1);
 });
 
+test.each([
+    ["saved", undefined, "تم التحقق من دليل الطلب وحفظه"],
+    ["blocked", "courier_native_shipment_mismatch", "لم تتطابق البوليصة"],
+    ["unavailable", "native_evidence_unavailable", "تعذرت قراءة دليل"],
+])("a failed aggregate retains the scoped %s receipt and saved report without another read", async (status, reason, expected) => {
+    const payload = courierMatchingFixture();
+    operationalApi.financialPosition.mockResolvedValueOnce(payload).mockRejectedValue(new Error("report unavailable"));
+    operationalApi.refreshBalances.mockRejectedValue({response: {status: 409, data: {detail: {
+        code: "operational_source_setup_incomplete", message: "تعذر احتساب التقرير؛ بقيت اللقطة السابقة.",
+        session_scope: payload.session_scope, native_evidence: {courier: {
+            status: status === "unavailable" ? "deferred" : "completed", selected: 1,
+            outcomes: [{order_id: "8101", status, reason}],
+        }},
+    }}}});
+    await render("couriers"); await openPendingCourier(); await act(async () => matchCourierButton().click());
+    expect(operationalApi.refreshBalances).toHaveBeenCalledTimes(1);
+    expect(operationalApi.financialPosition).toHaveBeenCalledTimes(1);
+    const notice = document.querySelector('[data-testid="courier-match-result"]');
+    expect(notice.textContent).toContain(expected);
+    expect(notice.textContent).toContain("بقيت اللقطة السابقة");
+    expect(notice.textContent).not.toContain("أُعيد احتساب الأرصدة");
+    expect(notice.closest("table")).toBeNull();
+    expect(host.querySelector('[data-testid="financial-table-couriers"] .ofp-pending-orders')).not.toBeNull();
+    expect(operationalApi.confirmDeliveryAfterStart).not.toHaveBeenCalled();
+});
+
 test.each(["close", "hide", "navigation", "unmount"])("courier matching cancels on %s without follow-up GET or replay", async action => {
     const visibility = jest.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
     const payload = courierMatchingFixture(), pending = deferred();

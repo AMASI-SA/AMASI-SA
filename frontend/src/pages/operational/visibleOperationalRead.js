@@ -152,11 +152,44 @@ function logOperationalRefreshTimings(detail, label) {
         && row.duration_ms >= 0 && row.duration_ms <= 300000
         && ["complete", "cancelled", "failed"].includes(row.outcome))
         .slice(-64).map(({ stage, duration_ms, outcome }) => ({ stage, duration_ms, outcome }));
-    if (timings.length) console.info(label, timings);
+    if (timings.length) console.info(label + " " + JSON.stringify(timings));
 }
 
 export function logOperationalRefreshTimeoutTimings(detail) {
     logOperationalRefreshTimings(detail, "operational_refresh_timeout_stage_timings");
+}
+
+const COURIER_OUTCOME_STATUSES = new Set(["saved", "unchanged", "already_eligible", "blocked", "unavailable", "source_changed"]);
+const COURIER_OUTCOME_REASONS = new Set([
+    "courier_native_shipment_ambiguous", "courier_native_shipment_mismatch", "courier_native_history_order_mismatch",
+    "courier_native_timeline_conflict", "courier_native_source_conflict", "courier_native_pagination_incomplete",
+    "courier_native_pagination_missing", "courier_native_page_repeated", "courier_native_source_refresh_required",
+    "courier_native_source_version_mismatch", "courier_native_shipment_identity_missing", "courier_native_order_not_delivered",
+    "courier_native_order_mismatch", "courier_native_carrier_missing", "courier_native_source_changed",
+    "courier_native_evidence_invalid", "native_evidence_unavailable", "courier_native_response_invalid",
+    "courier_native_clock_in_future", "courier_native_order_transition_missing",
+]);
+
+// A failed aggregate may still follow a completed native acquisition. Accept
+// only the bounded receipt for this explicit target and the current session.
+function courierReceiptFromFailure(status, detail, config) {
+    const allowedFailure = (status === 408 && detail?.code === "operational_refresh_timeout")
+        || (status === 409 && ["operational_source_setup_incomplete", "operational_capacity_requires_archive"].includes(detail?.code));
+    if (!allowedFailure || typeof config.courierOrderId !== "string" || !/^[A-Za-z0-9_-]{1,80}$/.test(config.courierOrderId)
+        || typeof config.expectedSessionScope !== "string" || !/^[a-f0-9]{64}$/.test(config.expectedSessionScope)
+        || detail?.session_scope !== config.expectedSessionScope) return null;
+    const courier = detail?.native_evidence?.courier;
+    if (!["completed", "deferred"].includes(courier?.status) || ![0, 1].includes(courier?.selected)
+        || !Array.isArray(courier.outcomes) || courier.outcomes.length !== courier.selected) return null;
+    const outcomes = [];
+    if (courier.selected === 1) {
+        const row = courier.outcomes[0];
+        if (row?.order_id !== config.courierOrderId || !COURIER_OUTCOME_STATUSES.has(row?.status)) return null;
+        const outcome = {order_id: row.order_id, status: row.status};
+        if (COURIER_OUTCOME_REASONS.has(row.reason)) outcome.reason = row.reason;
+        outcomes.push(outcome);
+    }
+    return {courier: {status: courier.status, selected: courier.selected, outcomes}};
 }
 
 export async function refreshVisibleSnapshot(api, config) {
@@ -179,7 +212,9 @@ export async function refreshVisibleSnapshot(api, config) {
             logOperationalRefreshTimings(detail, "operational_refresh_source_stage_timings");
         }
         if (refreshTimedOut || sourceFailure || status >= 500 || ["ECONNABORTED", "ETIMEDOUT", "ERR_NETWORK"].includes(error?.code)) {
-            return {refresh_warning: "تعذر تحديث المصادر؛ تُعرض آخر أرصدة محفوظة بتاريخها. " + (detail?.message || "أعد التحديث عند الحاجة من الصفحة.")};
+            const native = courierReceiptFromFailure(status, detail, config);
+            return {refresh_warning: "تعذر تحديث المصادر؛ تُعرض آخر أرصدة محفوظة بتاريخها. " + (detail?.message || "أعد التحديث عند الحاجة من الصفحة."),
+                ...(native ? {native_evidence: native} : {})};
         }
         throw error;
     }
@@ -199,15 +234,26 @@ export function canMatchCourierOrder(row) {
 // Native acquisition and financial reconciliation have different outcomes. A
 // saved proof never means all other review reasons or balances are resolved.
 export function courierRecoveryMessage(result, orderId) {
-    if (result?.refresh_warning) return result.refresh_warning;
+    const warning = result?.refresh_warning;
+    const message = courierNativeRecoveryMessage(result, orderId, !warning);
+    return warning ? (message ? message + " " : "") + warning
+        : message || "أُعيدت قراءة الأرصدة، لكن لم تصل نتيجة مؤكدة لمطابقة هذا الطلب مع سلة.";
+}
+
+function courierNativeRecoveryMessage(result, orderId, refreshed) {
     const courier = result?.native_evidence?.courier;
     const outcome = Array.isArray(courier?.outcomes)
         ? courier.outcomes.find(row => row?.order_id === orderId) : null;
     if (outcome?.status === "saved") {
-        return "تم التحقق من دليل الطلب وحفظه من سلة، وأُعيد احتساب الأرصدة. قد تبقى للطلب أسباب مراجعة أخرى.";
+        return refreshed ? "تم التحقق من دليل الطلب وحفظه من سلة، وأُعيد احتساب الأرصدة. قد تبقى للطلب أسباب مراجعة أخرى."
+            : "تم التحقق من دليل الطلب وحفظه من سلة. قد تبقى للطلب أسباب مراجعة أخرى.";
     }
-    if (outcome?.status === "unchanged") return "تم التحقق من دليل الطلب المحفوظ؛ لم يحتج إلى تغيير. أُعيد احتساب الأرصدة، وقد تبقى للطلب أسباب مراجعة أخرى.";
-    if (outcome?.status === "already_eligible") return "دليل الطلب المحفوظ مستوفٍ لهذا الفحص؛ أُعيد احتساب الأرصدة للتحقق من حالته.";
+    if (outcome?.status === "unchanged") return refreshed
+        ? "تم التحقق من دليل الطلب المحفوظ؛ لم يحتج إلى تغيير. أُعيد احتساب الأرصدة، وقد تبقى للطلب أسباب مراجعة أخرى."
+        : "تم التحقق من دليل الطلب المحفوظ؛ لم يحتج إلى تغيير. قد تبقى للطلب أسباب مراجعة أخرى.";
+    if (outcome?.status === "already_eligible") return refreshed
+        ? "دليل الطلب المحفوظ مستوفٍ لهذا الفحص؛ أُعيد احتساب الأرصدة للتحقق من حالته."
+        : "دليل الطلب المحفوظ مستوفٍ لهذا الفحص.";
     if (outcome?.status === "source_changed") return "تغيرت بيانات الطلب أثناء المطابقة؛ لم يُحفظ دليل على بيانات قديمة. راجع الحالة المحدثة قبل إعادة المحاولة.";
     if (outcome?.status === "unavailable") return "تعذرت قراءة دليل هذا الطلب من سلة. لم تُثبت المطابقة؛ أعد المحاولة عند الحاجة بعد مهلة إعادة المحاولة.";
     if (outcome?.status === "blocked") {
@@ -230,10 +276,11 @@ export function courierRecoveryMessage(result, orderId) {
         return "لم تُثبت المطابقة: " + (reasons[outcome.reason] || "الدليل المتاح لا يستوفي شروط التحقق من الطلب والبوليصة وحالة الشحنة وتواريخها.");
     }
     if (courier?.status === "deferred" || result?.native_evidence?.status === "deferred") {
-        return "لم تكتمل محاولة مطابقة الطلب ضمن الوقت المتاح. لا تعني إعادة احتساب الأرصدة أن دليل الطلب قد ثبت.";
+        return refreshed ? "لم تكتمل محاولة مطابقة الطلب ضمن الوقت المتاح. لا تعني إعادة احتساب الأرصدة أن دليل الطلب قد ثبت."
+            : "لم تكتمل محاولة مطابقة الطلب ضمن الوقت المتاح؛ لم تصل نتيجة تثبت دليل الطلب.";
     }
     if (courier?.status === "completed" && courier.selected === 0) {
         return "لم تُجرَ محاولة جديدة لهذا الطلب؛ قد يكون ضمن مهلة إعادة المحاولة البالغة 15 دقيقة أو تغيرت أهليته للمطابقة. راجع الحالة المحدثة.";
     }
-    return "أُعيدت قراءة الأرصدة، لكن لم تصل نتيجة مؤكدة لمطابقة هذا الطلب مع سلة.";
+    return null;
 }
