@@ -1,7 +1,7 @@
 """Manual send must acknowledge a durable job before any provider work."""
 import asyncio
 from datetime import timedelta
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from fastapi import FastAPI
@@ -14,6 +14,17 @@ from integrations.qoyod_manual.send import ManualSendRefused
 
 OWNER = {"id": "owner", "role": "owner"}
 BASE = "/api/integrations/qoyod/manual"
+
+
+@pytest.fixture(autouse=True)
+def isolated_runner_boundary(monkeypatch):
+    # These tests isolate durable job transitions with mongomock, which does
+    # not implement Mongo's server-clock update pipeline. Distributed runner
+    # ownership and write fencing execute against real Mongo in their suite.
+    from integrations.qoyod_manual import runner_lease
+    for method in ("claim", "renew", "is_current"):
+        monkeypatch.setattr(runner_lease, method, AsyncMock(return_value=True))
+    monkeypatch.setattr(runner_lease, "release", AsyncMock())
 
 
 async def make_db():
@@ -300,3 +311,134 @@ async def test_heartbeat_lease_loss_stops_execution_without_cancelling_worker_ta
     assert not task.cancelled()
     await jobs.recover_expired(db)
     assert (await db.qoyod_manual_send_jobs.find_one({"_id": queued["job"]["id"]}))["status"] == "needs_review"
+
+
+@pytest.mark.asyncio
+async def test_worker_drains_ready_jobs_without_one_second_gaps_and_keeps_idle_backoff(monkeypatch):
+    work = AsyncMock(side_effect=[True, True, True, False, asyncio.CancelledError()])
+    pause = AsyncMock()
+    monkeypatch.setattr(jobs, "run_once", work)
+    monkeypatch.setattr(jobs.asyncio, "sleep", pause)
+
+    with pytest.raises(asyncio.CancelledError):
+        await jobs.run(object())
+
+    # A cooperative yield keeps the event loop responsive without adding a
+    # wall-clock second to every item already waiting in the durable queue.
+    assert [call.args[0] for call in pause.await_args_list] == [0, 0, 0, jobs.POLL_SECONDS]
+
+
+@pytest.mark.asyncio
+async def test_worker_keeps_backoff_after_storage_failure(monkeypatch):
+    work = AsyncMock(side_effect=[RuntimeError("storage unavailable"), asyncio.CancelledError()])
+    pause = AsyncMock()
+    monkeypatch.setattr(jobs, "run_once", work)
+    monkeypatch.setattr(jobs.asyncio, "sleep", pause)
+
+    with pytest.raises(asyncio.CancelledError):
+        await jobs.run(object())
+
+    pause.assert_awaited_once_with(jobs.POLL_SECONDS)
+
+
+@pytest.mark.asyncio
+async def test_durable_job_reuses_http_connections_only_for_its_own_execution(monkeypatch):
+    import httpx
+    from integrations.qoyod_manual.client import ManualQoyodClient
+
+    db = await make_db()
+    for order in ("123", "456"):
+        await jobs.enqueue(db, user=OWNER, order_number=order)
+    clients = []
+    requests = []
+    original_client = httpx.AsyncClient
+
+    def respond(request):
+        requests.append((request.method, request.url.path))
+        return httpx.Response(200, json={"id": "synthetic"})
+
+    def create_client(**kwargs):
+        client = original_client(transport=httpx.MockTransport(respond), **kwargs)
+        clients.append(client)
+        return client
+
+    monkeypatch.setattr(httpx, "AsyncClient", create_client)
+
+    async def execute(db, row):
+        for path in ("/customers", "/products"):
+            client = ManualQoyodClient(api_key="synthetic-key", base_url="https://qoyod.invalid/2.0")
+            await client._request("GET", path)
+        return {"invoice_id": "synthetic-" + row["order_number"]}
+
+    assert await jobs.run_once(db, executor=execute) is True
+    assert len(clients) == 1
+    assert clients[0].is_closed
+    assert await jobs.run_once(db, executor=execute) is True
+    assert len(clients) == 2
+    assert all(client.is_closed for client in clients)
+    assert len(requests) == 4
+
+
+@pytest.mark.asyncio
+async def test_missing_buyer_name_is_a_definite_prewrite_refusal_and_can_be_corrected():
+    db = await make_db()
+    await jobs.enqueue(db, user=OWNER, order_number="123", request_id="missing-name")
+    await jobs.run_once(db, executor=AsyncMock(side_effect=ManualSendRefused(
+        "customer_name_missing", "اسم العميل غير متوفر؛ حدّث بيانات الطلب من سلة")))
+
+    held = await jobs.enqueue(db, user=OWNER, order_number="123", request_id="missing-name")
+    assert held["job"]["status"] == "refused"
+    assert held["job"]["error"]["code"] == "customer_name_missing"
+    assert await db.qoyod_manual_auto_quarantines.count_documents({}) == 0
+    corrected = await jobs.enqueue(db, user=OWNER, order_number="123", request_id="corrected-name")
+    assert corrected["job"]["status"] == "queued"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("pressure", ["blocked", "cancel"])
+async def test_resource_pressure_leaves_job_queued_without_provider_work(monkeypatch, pressure):
+    from resource_governor import governor
+
+    db = await make_db()
+    queued = await jobs.enqueue(db, user=OWNER, order_number="123")
+    execute = AsyncMock(return_value={"invoice_id": "once-after-pressure"})
+    decision = Mock(return_value=(pressure, None))
+    monkeypatch.setattr(governor, "decision", decision)
+
+    assert await jobs.run_once(db, executor=execute) is False
+    row = await db.qoyod_manual_send_jobs.find_one({"_id": queued["job"]["id"]})
+    assert row["status"] == "queued"
+    assert "started_at" not in row
+    assert "claim_token" not in row
+    assert await db.qoyod_manual_auto_quarantines.count_documents({}) == 0
+    execute.assert_not_awaited()
+
+    decision.return_value = ("normal", None)
+    assert await jobs.run_once(db, executor=execute) is True
+    execute.assert_awaited_once()
+    assert (await jobs.read_job(db, user=OWNER, job_id=queued["job"]["id"]))["job"]["status"] == "succeeded"
+
+
+@pytest.mark.asyncio
+async def test_pressure_change_finishes_current_invoice_but_defers_next_job(monkeypatch):
+    from resource_governor import governor
+
+    db = await make_db()
+    first = await jobs.enqueue(db, user=OWNER, order_number="123")
+    second = await jobs.enqueue(db, user=OWNER, order_number="456")
+    decision = Mock(return_value=("normal", None))
+    monkeypatch.setattr(governor, "decision", decision)
+
+    async def execute(db, row):
+        assert row["order_number"] == "123"
+        # The financial operation has started. A later pressure signal must
+        # not cancel it between invoice creation and its payment/finalization.
+        decision.return_value = ("cancel", None)
+        return {"invoice_id": "confirmed-invoice", "payment_id": "confirmed-payment"}
+
+    assert await jobs.run_once(db, executor=execute) is True
+    assert (await jobs.read_job(db, user=OWNER, job_id=first["job"]["id"]))["job"]["status"] == "succeeded"
+    forbidden = AsyncMock(side_effect=AssertionError("no new work under pressure"))
+    assert await jobs.run_once(db, executor=forbidden) is False
+    assert (await jobs.read_job(db, user=OWNER, job_id=second["job"]["id"]))["job"]["status"] == "queued"
+    forbidden.assert_not_awaited()

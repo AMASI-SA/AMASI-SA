@@ -293,20 +293,55 @@ async def test_snapshot_has_capture_time_and_deterministic_fingerprint(db):
     assert len(first["snapshot_fingerprint"]) == 64
 
 
+def _runtime_policy_numbers(source):
+    tree = ast.parse(source)
+    time_unit_literals = set()
+    for node in tree.body:
+        if (not isinstance(node, ast.Assign) or len(node.targets) != 1
+                or not isinstance(node.targets[0], ast.Name)
+                or node.targets[0].id != "_ABANDONED_RUN_AGE_SECONDS"):
+            continue
+        value = node.value
+        # Exempt only the seconds-per-minute factor in this named timeout.
+        # Its minute count and every numeric literal in candidate/count/money
+        # policy still participate in the incident-total check below.
+        if (isinstance(value, ast.BinOp) and isinstance(value.op, ast.Mult)
+                and isinstance(value.left, ast.Constant)
+                and type(value.left.value) is int and value.left.value > 0
+                and isinstance(value.right, ast.Constant)
+                and type(value.right.value) is int and value.right.value == 60):
+            time_unit_literals.add(value.right)
+    return {
+        node.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Constant)
+        and isinstance(node.value, (int, float))
+        and not isinstance(node.value, bool)
+        and node not in time_unit_literals
+    }
+
+
 def test_runtime_policy_does_not_embed_incident_totals():
     runtime_modules = (candidate_orders, auto_send)
     forbidden_numbers = {60, 158, 11898.31, 28704.24}
+    assert auto_send._ABANDONED_RUN_AGE_SECONDS == timedelta(minutes=15).total_seconds()
 
     for module in runtime_modules:
-        tree = ast.parse(inspect.getsource(module))
-        runtime_numbers = {
-            node.value
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Constant)
-            and isinstance(node.value, (int, float))
-            and not isinstance(node.value, bool)
-        }
+        runtime_numbers = _runtime_policy_numbers(inspect.getsource(module))
         assert runtime_numbers.isdisjoint(forbidden_numbers), module.__name__
+
+
+@pytest.mark.parametrize("source, forbidden", [
+    ("_ABANDONED_RUN_AGE_SECONDS = 15 * 60", set()),
+    ("_ABANDONED_RUN_AGE_SECONDS = 60", {60}),
+    ("_ABANDONED_RUN_AGE_SECONDS = 60 * 60", {60}),
+    ("candidate_count = 15 * 60", {60}),
+    ("_ABANDONED_RUN_AGE_SECONDS = 15 * 60\n"
+     "candidate_count = 60\nother_count = 158\n"
+     "subtotal = 11898.31\ntotal = 28704.24", {60, 158, 11898.31, 28704.24}),
+])
+def test_incident_number_check_only_exempts_named_timeout_unit(source, forbidden):
+    assert _runtime_policy_numbers(source) & {60, 158, 11898.31, 28704.24} == forbidden
 
 
 @pytest.mark.asyncio
