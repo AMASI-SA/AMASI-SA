@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import SimpleOrderRefunds, { RefundDetails, RefundRequestForm } from './SimpleOrderRefunds';
 import { simpleBalancesApi as api } from './simpleBalancesApi';
 
-jest.mock('./simpleBalancesApi', () => ({ simpleBalancesApi: { refundOrder: jest.fn(), refunds: jest.fn(), refund: jest.fn(), requestRefund: jest.fn(), confirmRefund: jest.fn(), cancelRefund: jest.fn(), reconcileRefund: jest.fn() }, simpleBalanceError: error => error?.localMessage || 'لم تتأكد نتيجة الحفظ' }));
+jest.mock('./simpleBalancesApi', () => ({ simpleBalancesApi: { refundOrder: jest.fn(), refunds: jest.fn(), refund: jest.fn(), requestRefund: jest.fn(), confirmRefund: jest.fn(), cancelRefund: jest.fn(), reconcileRefund: jest.fn(), registerPending: jest.fn(), pendingCommand: jest.fn(), retirePending: jest.fn() }, simpleBalanceError: error => error?.localMessage || 'لم تتأكد نتيجة الحفظ' }));
 jest.mock('react-router-dom', () => ({ useSearchParams: () => {
   const ReactModule = require('react');
   const [params, setParams] = ReactModule.useState(() => new URLSearchParams(globalThis.window.location.search));
@@ -37,11 +37,20 @@ beforeEach(() => {
   jest.clearAllMocks(); localStorage.clear(); window.history.replaceState({}, '', '/');
   Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
   Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
-  counter = 0; Object.defineProperty(globalThis, 'crypto', { configurable: true, value: { randomUUID: () => `refund-request-${++counter}` } });
+  counter = 0; Object.defineProperty(globalThis, 'TextEncoder', { configurable: true, value: require('util').TextEncoder });
+  Object.defineProperty(globalThis, 'crypto', { configurable: true, value: {
+    randomUUID: () => `00000000-0000-4000-8000-${String(++counter).padStart(12, '0')}`,
+    subtle: { digest: async (algorithm, input) => Uint8Array.from(require('crypto').createHash('sha256').update(input).digest()).buffer },
+  } });
   host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host); saved = jest.fn();
-  api.requestRefund.mockResolvedValue({ saved: true, item: refund() });
+  api.requestRefund.mockImplementation(body => Promise.resolve({ saved: true, item: refund({ order_number: body.order_number,
+    amount: body.amount, method: body.method, source: body.method === 'bank' ? { kind: 'bank', id: body.bank_id, name: 'بنك المؤسسة' }
+      : { kind: 'provider', id: 'tamara', name: 'تمارا' } }) }));
   api.confirmRefund.mockResolvedValue({ saved: true, item: refund({ status: 'refunded', can_confirm: false }) });
   api.cancelRefund.mockResolvedValue({ saved: true, item: refund({ status: 'cancelled', can_cancel: false }) });
+  api.registerPending.mockImplementation((id, value) => Promise.resolve({ id, ...value }));
+  api.pendingCommand.mockRejectedValue({ response: { status: 404, data: { detail: { code: 'operational_pending_command_not_found' } } } });
+  api.retirePending.mockImplementation(id => Promise.resolve({ deleted: true, id }));
 });
 afterEach(() => { act(() => root.unmount()); host.remove(); });
 
@@ -105,6 +114,22 @@ test('a platform request never exposes a local bank confirmation even if a malfo
   expect(host.textContent).toContain('بانتظار تأكيد تمارا');
   expect(host.querySelector('input[type="checkbox"]')).toBeNull(); expect(host.querySelector('form')).toBeNull();
   expect(api.confirmRefund).not.toHaveBeenCalled();
+});
+
+test('reopening an uncertain cancellation restores its exact action and reason from the server', async () => {
+  api.cancelRefund.mockRejectedValueOnce(new Error('cancellation reply unknown'));
+  await render(<RefundDetails key="before" context={context()} item={refund()} onBack={() => {}} onSaved={saved} />);
+  await click('إلغاء طلب الاسترجاع'); await change('سبب الإلغاء', 'إلغاء توضيحي بطلب العميل'); await submit();
+  const original = api.cancelRefund.mock.calls[0][1];
+  const [id, registered] = api.registerPending.mock.calls[0];
+  expect(registered.action).toBe('refund.cancel'); expect(registered.target_id).toBe('refund-one');
+  expect(localStorage.getItem(localStorage.key(0))).toBe(id);
+  api.pendingCommand.mockResolvedValue({ id, ...registered });
+  await render(<RefundDetails key="after" context={context()} item={refund()} onBack={() => {}} onSaved={saved} />);
+  expect(field('سبب الإلغاء').value).toBe('إلغاء توضيحي بطلب العميل');
+  expect(api.cancelRefund).toHaveBeenCalledTimes(1); expect(api.confirmRefund).not.toHaveBeenCalled();
+  await submit(); expect(api.cancelRefund).toHaveBeenCalledTimes(2); expect(api.cancelRefund.mock.calls[1][1]).toEqual(original);
+  expect(localStorage.length).toBe(0);
 });
 
 test('a confirmed no-write conflict releases the form for correction; uncertain transport retries the same request', async () => {

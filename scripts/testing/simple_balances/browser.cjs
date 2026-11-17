@@ -17,6 +17,14 @@ const calls = [], errors = [], results = [], screenshots = [];
 let actor = f.owner, scenario = '', access = structuredClone(f.access);
 const rows = structuredClone(f.ledger), refunds = [...Array.from({ length: 6 }, (_, index) => f.refund(index)), structuredClone(f.platformRefund)];
 const requests = new Set();
+const pendingCommands = new Map(), retiredCommands = new Set();
+let holdEntryRegistration = false, releaseEntryRegistration = null, entryRegistrationStarted = null;
+const assertRegistered = (action, targetId, body) => {
+  const pending = pendingCommands.get(body.request_id);
+  assert(pending && pending.actor_id === actor.id, 'A financial request requires its authenticated server recovery record');
+  assert.equal(pending.value.action, action); assert.equal(pending.value.target_id, targetId);
+  assert.deepEqual(pending.value.command, body, 'Execution must use the registered immutable command');
+};
 const pageResult = (items, params) => {
   const page = Math.max(1, Number(params.get('page') || 1));
   assert.equal(params.get('page_size'), '5');
@@ -43,6 +51,30 @@ const server = http.createServer(async (request, response) => {
     if (url.pathname === '/api/auth/me' && request.method === 'GET') return send(200, actor);
     const base = '/api/operational-balances/workspace';
     const admin = '/api/operational-balances/access';
+    if (url.pathname.startsWith(`${base}/pending-commands/`)) {
+      const id = url.pathname.split('/').at(-1);
+      assert.match(id, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+      if (retiredCommands.has(id)) return send(410, { detail: { code: 'operational_pending_command_retired' } });
+      if (request.method === 'POST') {
+        assert.equal(body.command.request_id, id); assert.equal(body.command.expected_session_scope, f.scope);
+        const value = { id, action: body.action, target_id: body.target_id || null, command: body.command };
+        const old = pendingCommands.get(id);
+        if (old) { assert.equal(old.actor_id, actor.id); assert.deepEqual(old.value, value); }
+        else pendingCommands.set(id, { actor_id: actor.id, value });
+        if (holdEntryRegistration && value.action === 'entry') {
+          releaseEntryRegistration = () => send(200, value); entryRegistrationStarted?.(); return;
+        }
+        return send(200, value);
+      }
+      const pending = pendingCommands.get(id);
+      if (!pending || pending.actor_id !== actor.id) return send(404, { detail: { code: 'operational_pending_command_not_found' } });
+      if (request.method === 'GET') { assert.equal(url.searchParams.get('expected_session_scope'), f.scope); return send(200, pending.value); }
+      if (request.method === 'DELETE') {
+        assert.equal(body.expected_session_scope, f.scope); pendingCommands.delete(id); retiredCommands.add(id);
+        return send(200, { deleted: true, id });
+      }
+      throw Error('Unsupported recovery method');
+    }
     if (url.pathname.startsWith(admin) && !actor.is_owner) return send(403, { detail: { message: 'صلاحيات المالك مطلوبة' } });
     if (url.pathname === `${base}/context`) return send(200, f.context(actor));
     if (url.pathname === `${base}/parties`) return send(200, { items: f.resources.filter(item => (!url.searchParams.get('kind') || item.kind === url.searchParams.get('kind')) && (!url.searchParams.get('q') || item.name.includes(url.searchParams.get('q')))) });
@@ -53,6 +85,7 @@ const server = http.createServer(async (request, response) => {
       return send(200, { ...pageResult(rows, params), resource: f.resources[0] });
     }
     if (url.pathname === `${base}/entries` && request.method === 'POST') {
+      assertRegistered('entry', null, body);
       assert.equal(body.expected_session_scope, f.scope); assert.equal(body.party_type, 'external_person');
       assert.equal(body.party_id, 'external-demo'); assert.equal(body.side, 'for_us'); assert.equal(body.amount, '50.00');
       assert.equal(body.reason, undefined); assert.equal(body.source_type, 'employee_custody'); assert.equal(body.source_id, 'custody-demo');
@@ -65,6 +98,7 @@ const server = http.createServer(async (request, response) => {
     if (url.pathname === `${base}/refunds/order/2044`) return send(200, f.order);
     if (url.pathname === `${base}/refunds` && request.method === 'GET') return send(200, pageResult(refunds, url.searchParams));
     if (url.pathname === `${base}/refunds` && request.method === 'POST') {
+      assertRegistered('refund.create', null, body);
       assert.equal(body.expected_session_scope, f.scope); assert.equal(body.order_number, '2044'); assert.equal(body.amount, '50.00');
       assert.equal(body.method, 'bank'); assert.equal(body.bank_id, 'bank-demo'); assert.equal(body.beneficiary_iban, undefined);
       assert.equal(body.items, undefined); assert(!requests.has(body.request_id)); requests.add(body.request_id);
@@ -73,6 +107,7 @@ const server = http.createServer(async (request, response) => {
       return send(200, { saved: true, item });
     }
     if (url.pathname === `${base}/refunds/refund-platform/reconcile` && request.method === 'POST') {
+      assertRegistered('refund.reconcile', 'refund-platform', body);
       const item = refunds.find(value => value.id === 'refund-platform');
       assert.equal(body.expected_session_scope, f.scope); assert.equal(item.status, 'pending');
       assert.equal(body.evidence_id, f.platformRefund.provider_evidence[0].id);
@@ -106,6 +141,11 @@ const field = (page, label) => page.locator('label.sb-field').filter({ has: page
 async function check(name, action) {
   scenario = name; const before = calls.length; await action();
   results.push({ name, status: 'PASS', request_count: calls.length - before }); console.log(`PASS ${name}`);
+}
+async function deadline(promise) {
+  let timer;
+  try { return await Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(Error('Recovery registration did not reach the fixture')), 5000); })]); }
+  finally { clearTimeout(timer); }
 }
 async function capture(page, name) {
   const dimensions = await page.evaluate(() => ({ width: innerWidth, html: document.documentElement.scrollWidth, body: document.body.scrollWidth }));
@@ -155,7 +195,17 @@ async function capture(page, name) {
       assert.equal(await field(page, 'الموظف').count(), 0); assert.equal(await field(page, 'الدفع من').inputValue(), '');
       await field(page, 'الدفع من').selectOption(JSON.stringify(['employee_custody', 'custody-demo']));
       await field(page, 'التاريخ').fill('2026-01-01');
+      holdEntryRegistration = true;
+      const registrationReady = new Promise(resolve => { entryRegistrationStarted = resolve; });
       await page.getByRole('button', { name: 'حفظ والعودة للحركات', exact: true }).click();
+      await deadline(registrationReady);
+      assert.equal(calls.filter(call => call.path.endsWith('/entries') && call.method === 'POST').length, 0,
+        'No financial write may start before registration is confirmed');
+      const markers = await page.evaluate(() => Object.entries(localStorage));
+      assert.equal(markers.length, 1);
+      assert.match(markers[0][0], /^mezan\.pending-command\.v1:[a-f0-9]{64}$/);
+      assert.match(markers[0][1], /^[0-9a-f-]{36}$/i);
+      holdEntryRegistration = false; releaseEntryRegistration(); releaseEntryRegistration = null; entryRegistrationStarted = null;
       await page.locator('.sb-new-row').waitFor();
       assert((await page.locator('.sb-new-row').innerText()).includes('صرف توضيحي من العهدة'));
       assert.equal(await page.getByRole('button', { name: 'الصفحة 2', exact: true }).getAttribute('aria-current'), 'page');

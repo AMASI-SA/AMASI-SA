@@ -14,6 +14,13 @@ export const simpleBalancesApi = {
     { ...read(config), params },
   )),
   entry: body => data(http.post(`${workspace}/entries`, body, { timeout: 30000 })),
+  registerPending: (id, body) => data(http.post(`${workspace}/pending-commands/${encodeURIComponent(id)}`, body, { timeout: 30000 })),
+  pendingCommand: (id, scope, config) => data(http.get(`${workspace}/pending-commands/${encodeURIComponent(id)}`, {
+    ...read(config), params: { expected_session_scope: scope },
+  })),
+  retirePending: (id, scope) => data(http.delete(`${workspace}/pending-commands/${encodeURIComponent(id)}`, {
+    timeout: 30000, data: { expected_session_scope: scope },
+  })),
   refundOrder: (number, config) => data(http.get(`${workspace}/refunds/order/${encodeURIComponent(number)}`, read(config))),
   refunds: (params, config) => data(http.get(`${workspace}/refunds`, { ...read(config), params })),
   refund: (id, config) => data(http.get(`${workspace}/refunds/${encodeURIComponent(id)}`, read(config))),

@@ -51,8 +51,16 @@ The method starts with **اختر طريقة الاسترجاع**. The choices a
 
 ## Verification and release boundary
 
+### Authenticated recovery of an interrupted save
+
+The new web entry and refund forms keep only an opaque recovery UUID in persistent browser storage. Before a financial POST, the exact immutable command is registered under the authenticated actor and tenant in `operational_workspace_pending_commands_v1`. Registration does not reserve or move money. A refresh reads the saved command through `/workspace/pending-commands/{id}` and requires an explicit retry with the original request ID; it never submits a financial action automatically.
+
+Recovery rechecks the current operation and every linked resource permission. An ID alone cannot retrieve another actor's command, including through an owner account. Conflicting registrations cannot replace a command. Cleanup removes its financial payload and retains a tombstone, so a delayed registration cannot recreate it. The financial endpoints retain their existing idempotency and atomic movement checks. Android uses the existing `expo-secure-store` implementation for pending commands.
+
+This replaces the clear-text browser command storage reported by the independent GitHub Advanced Security check on the earlier source checkpoint. Passing CodeQL analysis workflow jobs alone is not sufficient: the aggregated security check must also pass before release.
+
 The companion PRs contain actual implementation and regression tests. The web CI runs the existing operational test collection against an isolated Mongo replica set, the new refund contracts, existing component tests and an added browser fixture that imports the real screens at 390px and 1440px. The fixture uses synthetic transport and records its source hashes; it is not a production preview.
 
 See `STATUS.json` and the PR checks for the checkpoint's verification state. Local synthetic tests are explicitly distinguished from real-Mongo and browser acceptance. No test fixture imports a live production server or uses live financial records.
 
-Release requires the compatible scoped backend and clients together, explicit staff grants, the repository's governed release process and device acceptance. This source change does not create a production lease, merge the PRs, publish an OTA update or build/sign an APK.
+The owner explicitly authorized merge and publication on 2026-11-17. Release requires the compatible scoped backend and clients, explicit staff grants, and the repository's governed source/intent/build/verification process. Physical-device acceptance is recorded separately from source CI and APK verification. The companion PRs and `STATUS.json` record the actual merge, build and deployment milestones; source readiness alone is not proof of publication.

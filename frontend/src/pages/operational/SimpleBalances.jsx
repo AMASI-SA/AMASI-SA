@@ -1,9 +1,10 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useOptionalAuth } from '../../context/AuthContext';
 import { todaySA } from '../../lib/dates';
-import { simpleBalancesApi as api, simpleBalanceError } from './simpleBalancesApi';
+import { simpleBalancesApi as api } from './simpleBalancesApi';
 import { authIdentity, useBalanceRead } from './simpleBalancesHooks';
+import { usePendingBalanceCommand } from './simpleBalancesPending';
 import SimpleOrderRefunds from './SimpleOrderRefunds';
 import {
   BALANCE_PAGE_SIZE, afterBalance, balanceText, decimalAmount, entryChoices, isMoneyAccount,
@@ -134,36 +135,29 @@ function Summary({ resource, amount, side, choice, reason, employee, owner, expe
   </section>;
 }
 
-function restoreCommand(key, scope, resource) {
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return { command: null };
-    const command = JSON.parse(raw);
-    if (!command?.request_id || command.expected_session_scope !== scope || command.party_type !== resource.kind || command.party_id !== resource.id) throw new Error('invalid saved command');
-    return { command };
-  } catch {
-    return { command: null, error: 'تعذر قراءة العملية المحفوظة. لا تُدخل عملية أخرى قبل التحقق من سجل الحساب.' };
-  }
-}
-
 function EntryForm({ context, resource, onCancel, onSaved }) {
   const scope = context.session_scope;
-  const storageKey = `mezan.simple-balances.entry.v1:${context.actor.id}:${scope}:${resourceKey(resource)}`;
-  const [restored] = useState(() => restoreCommand(storageKey, scope, resource));
-  const [pending, setPending] = useState(restored.command);
-  const [form, setForm] = useState(() => ({
-    side: restored.command?.side || (isMoneyAccount(resource.kind) ? 'for_us' : ''),
-    reason: restored.command?.reason?.startsWith('charity_') ? 'charity' : restored.command?.reason || (isMoneyAccount(resource.kind) ? 'transfer' : ''),
-    amount: restored.command?.amount || '', business_date: restored.command?.business_date || todaySA(),
-    note: restored.command?.note || '', source: restored.command?.source_id ? JSON.stringify([restored.command.source_type, restored.command.source_id]) : '',
-    employee_id: restored.command?.employee_id || '', owner_id: restored.command?.owner_id || '', expense_id: restored.command?.expense_id || '',
-    charity_account: restored.command?.reason === 'charity_company' ? 'company' : restored.command?.reason === 'charity_owner' ? 'owner' : '',
-  }));
-  const [error, setError] = useState(restored.error || '');
-  const [busy, setBusy] = useState(false);
-  const lock = useRef(false);
-  const mounted = useRef(true);
-  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const mutation = usePendingBalanceCommand({ context,
+    storageIdentity: JSON.stringify(['entry', context.actor.id, scope, resource.kind, resource.id]),
+    validate: value => value.action === 'entry' && value.target_id === null
+      && value.command.party_type === resource.kind && value.command.party_id === resource.id,
+    execute: value => api.entry(value.command),
+    validateSaved: (result, pending) => Boolean(result.movement_id)
+      && result.party_type === pending.command.party_type && result.party_id === pending.command.party_id,
+    onSaved, onRetired: onCancel });
+  const pending = mutation.pending?.command;
+  const { error, busy } = mutation;
+  const [form, setForm] = useState(() => ({ side: isMoneyAccount(resource.kind) ? 'for_us' : '',
+    reason: isMoneyAccount(resource.kind) ? 'transfer' : '', amount: '', business_date: todaySA(), note: '',
+    source: '', employee_id: '', owner_id: '', expense_id: '', charity_account: '' }));
+  useEffect(() => {
+    if (!pending) return;
+    setForm({ side: pending.side, reason: pending.reason?.startsWith('charity_') ? 'charity' : pending.reason || '',
+      amount: pending.amount, business_date: pending.business_date, note: pending.note || '',
+      source: pending.source_id ? JSON.stringify([pending.source_type, pending.source_id]) : '',
+      employee_id: pending.employee_id || '', owner_id: pending.owner_id || '', expense_id: pending.expense_id || '',
+      charity_account: pending.reason === 'charity_company' ? 'company' : pending.reason === 'charity_owner' ? 'owner' : '' });
+  }, [pending]);
   const operations = permittedOperations(context, resource);
   const globalOperations = permittedOperations(context);
   const external = resource.kind === 'external_person';
@@ -186,18 +180,15 @@ function EntryForm({ context, resource, onCancel, onSaved }) {
   const owner = owners.find(item => item.id === form.owner_id);
   const expense = expenses.find(item => item.id === form.expense_id);
   const canWrite = context.status === 'active' && resource.access?.use === true && operations.size > 0;
-  const disabled = busy || Boolean(pending) || Boolean(restored.error) || !canWrite;
-  const change = patch => { if (!disabled) { setForm(value => ({ ...value, ...patch })); setError(''); } };
+  const disabled = busy || Boolean(pending) || mutation.recovering || mutation.blocked || !canWrite;
+  const change = patch => { if (!disabled) { setForm(value => ({ ...value, ...patch })); mutation.clearError(); } };
   const resetConditional = { source: '', employee_id: '', owner_id: '', expense_id: '', charity_account: '' };
   const chooseSide = side => change({ ...resetConditional, side, reason: '' });
 
   async function save(event) {
     event.preventDefault();
-    if (lock.current || !canWrite || restored.error) return;
-    lock.current = true; setBusy(true); setError('');
-    try {
-      let command = pending;
-      if (!command) {
+    if (!canWrite) return;
+    await mutation.submit('entry', null, () => {
         const amount = decimalAmount(form.amount);
         if (!choice || !form.side) throw { localMessage: 'حدد له أو عليه واختر سبب المبلغ عند ظهوره.' };
         if (!amount) throw { localMessage: 'أدخل مبلغًا صحيحًا أكبر من صفر، وبحد أقصى منزلتين عشريتين.' };
@@ -215,8 +206,7 @@ function EntryForm({ context, resource, onCancel, onSaved }) {
         if (reason === 'charity' && !['company', 'owner'].includes(form.charity_account)) throw { localMessage: 'اختر هل الصدقات على حساب المؤسسة أم المالك.' };
         if (needsOwner && !owner) throw { localMessage: 'اختر حساب المالك المتاح لك.' };
         if (needsExpense && !expense) throw { localMessage: 'اختر حساب الصدقات ضمن المصروفات المتاحة لك.' };
-        command = {
-          request_id: globalThis.crypto.randomUUID(), expected_session_scope: scope,
+        return {
           party_type: resource.kind, party_id: resource.id, side: form.side,
           amount, business_date: form.business_date, note: form.note.trim(),
           ...(reason ? { reason: reason === 'charity' ? `charity_${form.charity_account}` : reason } : {}),
@@ -224,31 +214,15 @@ function EntryForm({ context, resource, onCancel, onSaved }) {
           ...(reason === 'salary_settlement' ? { employee_id: employee.id } : {}),
           ...(needsOwner ? { owner_id: owner.id } : {}), ...(needsExpense ? { expense_id: expense.id } : {}),
         };
-        try { localStorage.setItem(storageKey, JSON.stringify(command)); }
-        catch { throw { localMessage: 'تعذر حفظ مرجع العملية محليًا لإعادة المحاولة الآمنة. تحقق من إعدادات التخزين ثم أعد المحاولة.' }; }
-        setPending(command);
-      }
-      const result = await api.entry(command);
-      if (result?.saved !== true || !result.movement_id || result.party_type !== resource.kind || result.party_id !== resource.id) throw { localMessage: 'لم تتأكد نتيجة الحفظ. أعد محاولة العملية نفسها للتحقق دون تكرارها.' };
-      localStorage.removeItem(storageKey);
-      if (mounted.current) { setPending(null); onSaved(result); }
-    } catch (failure) {
-      const detail = failure?.response?.data?.detail;
-      if (detail?.not_applied === true || [400, 422].includes(failure?.response?.status)) {
-        localStorage.removeItem(storageKey);
-        if (mounted.current) setPending(null);
-      }
-      if (mounted.current) setError(simpleBalanceError(failure));
-    } finally {
-      lock.current = false;
-      if (mounted.current) setBusy(false);
-    }
+    });
   }
 
   return <section><button type="button" className="sb-text" disabled={busy} onClick={onCancel}>العودة إلى الحساب</button><div className="sb-title"><h1>{account ? 'تحويل إلى هذا الحساب' : 'إضافة مبلغ'}</h1><p>{resource.name}</p></div><BalanceCard resource={resource} label="الرصيد قبل الحركة" />
     {!canWrite && <Notice error="إضافة الحركات غير متاحة لهذا الحساب في حالة النظام أو الصلاحيات الحالية." />}
     <form className="sb-entry" onSubmit={save} noValidate>
       <Notice error={error} />
+      {mutation.recovering && <Notice>جارٍ استعادة العملية السابقة من الخادم…</Notice>}
+      {mutation.blocked && <button className="sb-secondary" type="button" onClick={mutation.recover} disabled={busy || mutation.recovering}>استعادة العملية السابقة</button>}
       {pending && <Notice>هناك عملية بانتظار تأكيد النتيجة. إعادة المحاولة تستخدم العملية نفسها دون إنشاء قيد جديد.</Notice>}
       {!account && <fieldset className="sb-direction" disabled={disabled}><legend>المبلغ يسجل</legend><div>{[['for_party', 'له', external ? 'أخذت منه مبلغًا أو دفع عنك' : 'يزيد ما له أو يقلل ما عليه'], ['for_us', 'عليه', external ? 'سلّمت له مبلغًا' : 'يقلل ما له أو يزيد ما عليه']].map(([side, label, help]) => <button type="button" key={side} data-side={side} aria-pressed={form.side === side} disabled={disabled || !entryChoices(resource.kind, side, operations).length} onClick={() => chooseSide(side)}><strong>{label}</strong><span>{help}</span></button>)}</div></fieldset>}
       {!implicit && form.side && <Field label="سبب المبلغ"><select value={form.reason} disabled={disabled} onChange={event => change({ ...resetConditional, reason: event.target.value })} required><option value="">اختر سبب المبلغ</option>{choices.map(item => <option key={item.reason} value={item.reason}>{item.label}</option>)}</select></Field>}
@@ -260,7 +234,7 @@ function EntryForm({ context, resource, onCancel, onSaved }) {
       {needsExpense && <Field label="حساب الصدقات"><select value={form.expense_id} disabled={disabled} onChange={event => change({ expense_id: event.target.value })} required><option value="">اختر حساب المصروف</option>{expenses.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>}
       <Field label={reason === 'adjustment' ? 'سبب الخصم' : 'ملاحظة (اختياري)'}><textarea rows="2" maxLength="1000" value={form.note} disabled={disabled} required={reason === 'adjustment'} onChange={event => change({ note: event.target.value })} /></Field>
       <Summary resource={resource} amount={form.amount} side={form.side} choice={choice} reason={reason} employee={employee} owner={owner} expense={expense} source={source} />
-      <button className="sb-primary sb-submit" type="submit" disabled={busy || Boolean(restored.error) || !canWrite}>{busy ? 'جارٍ تأكيد الحفظ…' : pending ? 'إعادة محاولة العملية نفسها' : 'حفظ والعودة للحركات'}</button>
+      <button className="sb-primary sb-submit" type="submit" disabled={busy || mutation.blocked || mutation.recovering || !canWrite}>{busy ? 'جارٍ تأكيد الحفظ…' : pending ? 'إعادة محاولة العملية نفسها' : 'حفظ والعودة للحركات'}</button>
     </form>
   </section>;
 }

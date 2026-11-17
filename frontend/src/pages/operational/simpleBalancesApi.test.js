@@ -1,12 +1,13 @@
 import http from '../../lib/api';
 import { simpleBalancesApi as api } from './simpleBalancesApi';
 
-jest.mock('../../lib/api', () => ({ get: jest.fn(), post: jest.fn(), put: jest.fn() }));
+jest.mock('../../lib/api', () => ({ get: jest.fn(), post: jest.fn(), put: jest.fn(), delete: jest.fn() }));
 beforeEach(() => {
   jest.resetAllMocks();
   http.get.mockResolvedValue({ data: { items: [] } });
   http.post.mockResolvedValue({ data: { saved: true } });
   http.put.mockResolvedValue({ data: { access: { version: 4 } } });
+  http.delete.mockResolvedValue({ data: { deleted: true } });
 });
 
 test('ledger reads encode resource identifiers and retain cancellation, page size, and focus', async () => {
@@ -48,4 +49,15 @@ test('refund requests bind the order and confirmations do not add editable sourc
   const proof = { request_id: 'match-intent', expected_session_scope: 'scope', evidence_id: 'fact', expected_evidence_hash: 'a'.repeat(64) };
   await api.reconcileRefund('refund/one', proof);
   expect(http.post).toHaveBeenLastCalledWith('/operational-balances/workspace/refunds/refund%2Fone/reconcile', proof, { timeout: 30000 });
+});
+
+test('pending-command registration and recovery use scoped authenticated endpoints', async () => {
+  const record = { action: 'entry', target_id: null, command: { request_id: 'opaque', expected_session_scope: 'scope' } };
+  await api.registerPending('opaque/id', record);
+  expect(http.post).toHaveBeenLastCalledWith('/operational-balances/workspace/pending-commands/opaque%2Fid', record, { timeout: 30000 });
+  const signal = new AbortController().signal;
+  await api.pendingCommand('opaque/id', 'scope', { signal });
+  expect(http.get).toHaveBeenLastCalledWith('/operational-balances/workspace/pending-commands/opaque%2Fid', { timeout: 30000, signal, params: { expected_session_scope: 'scope' } });
+  await api.retirePending('opaque/id', 'scope');
+  expect(http.delete).toHaveBeenLastCalledWith('/operational-balances/workspace/pending-commands/opaque%2Fid', { timeout: 30000, data: { expected_session_scope: 'scope' } });
 });

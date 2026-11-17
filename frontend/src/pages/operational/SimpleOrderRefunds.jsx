@@ -1,7 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { simpleBalancesApi as api, simpleBalanceError } from './simpleBalancesApi';
+import { simpleBalancesApi as api } from './simpleBalancesApi';
 import { useBalanceRead } from './simpleBalancesHooks';
+import { usePendingBalanceCommand } from './simpleBalancesPending';
 import { BALANCE_PAGE_SIZE, decimalAmount, isPage, minorUnits, money, permittedOperations } from './simpleBalancesModel';
 
 const statusLabel = status => ({ pending: 'بانتظار الرد', refunded: 'تم تسجيل رد المبلغ', cancelled: 'ملغى' }[status] || 'قيد المراجعة');
@@ -17,71 +18,45 @@ const dateLabel = value => {
 };
 const Field = ({ label, children }) => <label className="sb-field"><span>{label}</span>{children}</label>;
 
-function useRefundMutation({ context, identity, validate, execute, onSaved, resolved = false }) {
-  const storageKey = `mezan.simple-balances.refund.v1:${context.actor.id}:${context.session_scope}:${identity}`;
-  const [restored] = useState(() => {
-    try {
-      const raw = localStorage.getItem(storageKey);
-      if (!raw) return {};
-      if (resolved) { localStorage.removeItem(storageKey); return {}; }
-      const command = JSON.parse(raw);
-      if (!command?.body?.request_id || command.body.expected_session_scope !== context.session_scope || !validate(command)) throw new Error('invalid refund command');
-      return { command };
-    } catch {
-      return { error: 'تعذر قراءة العملية المحفوظة. راجع سجل الاسترجاع قبل إنشاء عملية جديدة.' };
-    }
-  });
-  const [command, setCommand] = useState(restored.command || null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(restored.error || '');
-  const lock = useRef(false), completed = useRef(false), mounted = useRef(true);
-  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
-  async function submit(action, makeBody) {
-    if (lock.current || completed.current || restored.error) return;
-    lock.current = true; setBusy(true); setError('');
-    try {
-      let pending = command;
-      if (!pending) {
-        const body = { ...makeBody(), request_id: globalThis.crypto.randomUUID(), expected_session_scope: context.session_scope };
-        pending = { action, body };
-        try { localStorage.setItem(storageKey, JSON.stringify(pending)); }
-        catch { throw { localMessage: 'تعذر حفظ مرجع العملية لإعادة المحاولة الآمنة. تحقق من إعدادات التخزين ثم أعد المحاولة.' }; }
-        setCommand(pending);
-      }
-      const result = await execute(pending);
-      if (result?.saved !== true || !result.item?.id) throw { localMessage: 'لم تتأكد نتيجة الحفظ. أعد محاولة العملية نفسها للتحقق دون تكرارها.' };
-      completed.current = true;
-      localStorage.removeItem(storageKey);
-      if (mounted.current) { setCommand(null); onSaved(result.item); }
-    } catch (failure) {
-      if (failure?.response?.data?.detail?.not_applied === true || [400, 422].includes(failure?.response?.status)) {
-        localStorage.removeItem(storageKey);
-        if (mounted.current) setCommand(null);
-      }
-      if (mounted.current) setError(simpleBalanceError(failure));
-    } finally {
-      lock.current = false;
-      if (mounted.current) setBusy(false);
-    }
-  }
-  return { command, busy, error, blocked: Boolean(restored.error), submit };
+function useRefundMutation({ context, identity, targetId = null, validate, execute, validateSaved, onSaved, onRetired, resolved = false }) {
+  const unpack = value => ({ action: value.action.slice('refund.'.length), body: value.command });
+  const mutation = usePendingBalanceCommand({ context,
+    storageIdentity: JSON.stringify(['refund', context.actor.id, context.session_scope, identity]),
+    validate: value => value.action.startsWith('refund.') && value.target_id === targetId && validate(unpack(value)),
+    execute: value => execute(unpack(value)), validateSaved,
+    onSaved: result => onSaved(result.item), onRetired });
+  return { ...mutation, resolved, command: !resolved && mutation.pending ? unpack(mutation.pending) : null,
+    submit: (action, makeBody) => mutation.submit(`refund.${action}`, targetId, makeBody) };
 }
 
 function MutationStatus({ mutation }) {
-  return <>{mutation.error && <p className="sb-notice sb-error" role="alert">{mutation.error}</p>}{mutation.command && <p className="sb-notice" role="status">هناك عملية بانتظار تأكيد النتيجة. إعادة المحاولة تستخدم المرجع نفسه.</p>}</>;
+  if (mutation.resolved) return null;
+  return <>{mutation.error && <p className="sb-notice sb-error" role="alert">{mutation.error}</p>}
+    {mutation.recovering && <p className="sb-notice" role="status">جارٍ استعادة العملية السابقة من الخادم…</p>}
+    {mutation.blocked && <button type="button" className="sb-secondary" disabled={mutation.busy || mutation.recovering} onClick={mutation.recover}>استعادة العملية السابقة</button>}
+    {mutation.command && <p className="sb-notice" role="status">هناك عملية بانتظار تأكيد النتيجة. إعادة المحاولة تستخدم المرجع نفسه.</p>}</>;
 }
 
-export function RefundRequestForm({ context, order, onSaved }) {
+export function RefundRequestForm({ context, order, onSaved, onRecoveryRetired }) {
   const operations = permittedOperations(context);
   const permitted = context.status === 'active' && operations.has('customer.refund_request');
   const allowed = permitted && order.can_request === true;
   const mutation = useRefundMutation({ context, identity: `order:${order.id || order.order_number}`,
     validate: value => value.action === 'create' && value.body.order_number === order.order_number,
-    execute: value => api.requestRefund(value.body), onSaved });
+    execute: value => api.requestRefund(value.body),
+    validateSaved: (result, pending) => Boolean(result.item?.id) && result.item.order_number === pending.command.order_number
+      && minorUnits(result.item.amount) === minorUnits(pending.command.amount) && result.item.method === pending.command.method
+      && (pending.command.method !== 'bank' || result.item.source?.kind === 'bank' && result.item.source.id === pending.command.bank_id),
+    onSaved, onRetired: onRecoveryRetired });
   const [mode, setMode] = useState('partial');
-  const [form, setForm] = useState(() => ({ amount: mutation.command?.body.amount || '', method: mutation.command?.body.method || '',
-    bank_id: mutation.command?.body.bank_id || '', reason: mutation.command?.body.reason || '', reference: mutation.command?.body.reference || '' }));
-  const disabled = mutation.busy || Boolean(mutation.command) || mutation.blocked || !allowed;
+  const [form, setForm] = useState({ amount: '', method: '', bank_id: '', reason: '', reference: '' });
+  const pendingBody = mutation.command?.body;
+  useEffect(() => {
+    if (!pendingBody) return;
+    setMode('partial'); setForm({ amount: pendingBody.amount, method: pendingBody.method, bank_id: pendingBody.bank_id || '',
+      reason: pendingBody.reason, reference: pendingBody.reference || '' });
+  }, [pendingBody]);
+  const disabled = mutation.busy || Boolean(mutation.command) || mutation.blocked || mutation.recovering || !allowed;
   const available = minorUnits(order.available_amount);
   const canRequestAmount = available !== null && available > 0n;
   const choose = patch => { if (!disabled) setForm(value => ({ ...value, ...patch })); };
@@ -102,7 +77,8 @@ export function RefundRequestForm({ context, order, onSaved }) {
     <dl className="sb-order-totals">{[['المدفوع المؤكد', order.paid_amount], ['سبق رده', order.refunded_amount], ['بانتظار الرد', order.reserved_amount], ['المتاح للاسترجاع', order.available_amount]].map(([label, value]) => <div key={label}><dt>{label}</dt><dd><bdi>{money(value)}</bdi> {unit(order.currency)}</dd></div>)}</dl>
     {!canRequestAmount && <p className="sb-notice">لا يوجد مبلغ متاح لاسترجاع جديد من هذا الطلب.</p>}
     {!allowed && <p className="sb-small-note">يمكنك مراجعة الطلب. إنشاء طلب استرجاع غير متاح ضمن صلاحياتك الحالية.</p>}
-    {(allowed && canRequestAmount || mutation.command) && <form onSubmit={submit} noValidate><MutationStatus mutation={mutation} />
+    <MutationStatus mutation={mutation} />
+    {(allowed && canRequestAmount || mutation.command) && <form onSubmit={submit} noValidate>
       <div className="sb-refund-modes"><button type="button" className="sb-secondary" aria-pressed={mode === 'partial'} disabled={disabled} onClick={() => setMode('partial')}>رد جزئي</button><button type="button" className="sb-secondary" aria-pressed={mode === 'full'} disabled={disabled} onClick={() => { setMode('full'); choose({ amount: order.available_amount }); }}>رد كامل المتاح</button></div>
       <Field label="المبلغ المسترجع"><input inputMode="decimal" dir="ltr" value={mode === 'full' ? order.available_amount : form.amount} disabled={disabled || mode === 'full'} onChange={event => choose({ amount: event.target.value })} required /></Field>
       <Field label="طريقة الاسترجاع"><select value={form.method} disabled={disabled} onChange={event => choose({ method: event.target.value })} required><option value="">اختر طريقة الاسترجاع</option>{(order.methods || []).map(method => <option key={method.id} value={method.id}>{method.label}</option>)}</select></Field>
@@ -110,17 +86,20 @@ export function RefundRequestForm({ context, order, onSaved }) {
       <Field label="سبب الاسترجاع"><textarea rows="2" maxLength="1000" value={form.reason} disabled={disabled} onChange={event => choose({ reason: event.target.value })} required /></Field>
       <Field label="مرجع العملية (اختياري)"><input value={form.reference} disabled={disabled} onChange={event => choose({ reference: event.target.value })} /></Field>
       <p className="sb-small-note">حفظ الطلب يحجز المبلغ. يُسجّل خروجه عند توثيق ردّه بالفعل.</p>
-      <button className="sb-primary sb-submit" type="submit" disabled={mutation.busy || mutation.blocked || !(mutation.command ? permitted : allowed)}>{mutation.busy ? 'جارٍ حفظ الطلب…' : mutation.command ? 'إعادة محاولة العملية نفسها' : 'حفظ طلب الاسترجاع'}</button>
+      <button className="sb-primary sb-submit" type="submit" disabled={mutation.busy || mutation.blocked || mutation.recovering || !(mutation.command ? permitted : allowed)}>{mutation.busy ? 'جارٍ حفظ الطلب…' : mutation.command ? 'إعادة محاولة العملية نفسها' : 'حفظ طلب الاسترجاع'}</button>
     </form>}
   </section>;
 }
 
-export function RefundDetails({ context, item, onSaved, onBack }) {
+export function RefundDetails({ context, item, onSaved, onBack, onRecoveryRetired }) {
   const operations = permittedOperations(context);
-  const mutation = useRefundMutation({ context, identity: `item:${item.id}`,
+  const mutation = useRefundMutation({ context, identity: `item:${item.id}`, targetId: item.id,
     validate: value => ['confirm', 'cancel', 'reconcile'].includes(value.action),
     execute: value => value.action === 'confirm' ? api.confirmRefund(item.id, value.body)
-      : value.action === 'reconcile' ? api.reconcileRefund(item.id, value.body) : api.cancelRefund(item.id, value.body), onSaved,
+      : value.action === 'reconcile' ? api.reconcileRefund(item.id, value.body) : api.cancelRefund(item.id, value.body),
+    validateSaved: (result, pending) => result.item?.id === pending.target_id
+      && result.item.status === (pending.action === 'refund.cancel' ? 'cancelled' : 'refunded'),
+    onSaved, onRetired: onRecoveryRetired,
     resolved: item.status !== 'pending' });
   const normalMode = item.method === 'original' ? 'reconcile' : 'confirm';
   const [mode, setMode] = useState(mutation.command?.action || normalMode);
@@ -129,13 +108,20 @@ export function RefundDetails({ context, item, onSaved, onBack }) {
   const [executedAt, setExecutedAt] = useState(localTime(mutation.command?.body.executed_at));
   const [confirmed, setConfirmed] = useState(mutation.command?.body.confirmed === true);
   const [reason, setReason] = useState(mutation.command?.action === 'cancel' ? mutation.command.body.reason || '' : '');
+  const pendingBody = mutation.command?.body, pendingAction = mutation.command?.action;
+  useEffect(() => {
+    if (!pendingBody) return;
+    setMode(pendingAction); setEvidenceId(pendingBody.evidence_id || ''); setReference(pendingBody.reference || '');
+    setExecutedAt(localTime(pendingBody.executed_at)); setConfirmed(pendingBody.confirmed === true);
+    setReason(pendingAction === 'cancel' ? pendingBody.reason || '' : '');
+  }, [pendingBody, pendingAction]);
   const active = context.status === 'active';
   const canConfirm = active && item.method === 'bank' && item.status === 'pending' && item.can_confirm === true && operations.has('customer.refund_execute');
   const evidence = Array.isArray(item.provider_evidence) ? item.provider_evidence : [];
   const canReconcile = active && item.method === 'original' && item.status === 'pending' && item.can_reconcile === true
     && evidence.length > 0 && operations.has('customer.refund_execute');
   const canCancel = active && item.status === 'pending' && item.can_cancel === true;
-  const disabled = mutation.busy || Boolean(mutation.command) || mutation.blocked;
+  const disabled = mutation.busy || Boolean(mutation.command) || mutation.blocked || mutation.recovering;
   async function save(event) {
     event.preventDefault();
     const action = mutation.command?.action || mode;
@@ -173,7 +159,7 @@ export function RefundDetails({ context, item, onSaved, onBack }) {
       {mode === 'cancel' ? <><h3>إلغاء طلب الاسترجاع</h3><Field label="سبب الإلغاء"><textarea value={reason} rows="2" disabled={disabled} onChange={event => setReason(event.target.value)} required /></Field><p className="sb-small-note">يفك الحجز عن المبلغ دون حركة بنكية.</p></>
         : canReconcile ? <><h3>مطابقة تأكيد المنصة</h3><p className="sb-small-note">اربط الطلب بتأكيد الاسترجاع الموجود في سجل المنصة، دون تسجيل دفع جديد.</p><Field label="تأكيد المنصة"><select value={evidenceId} disabled={disabled} onChange={event => setEvidenceId(event.target.value)} required><option value="">اختر التأكيد المطابق</option>{evidence.map(value => <option key={value.id} value={value.id}>{value.reference || value.id} · {money(value.amount)} {unit(item.currency)}</option>)}</select></Field></>
           : canConfirm ? <><h3>تسجيل رد المبلغ</h3><p className="sb-small-note">يوثّق هذا الإجراء تحويلًا تم بالفعل من البنك المحدد للعميل.</p><Field label="وقت التنفيذ الفعلي (بتوقيت جهازك)"><input type="datetime-local" value={executedAt} disabled={disabled} onChange={event => setExecutedAt(event.target.value)} required /></Field><Field label="مرجع التحويل (اختياري)"><input value={reference} disabled={disabled} onChange={event => setReference(event.target.value)} /></Field><label className="sb-check"><input type="checkbox" checked={confirmed} disabled={disabled} onChange={event => setConfirmed(event.target.checked)} /><span>تم رد هذا المبلغ فعليًا للعميل</span></label></> : null}
-      <div className="sb-actions">{(mode === 'cancel' && canCancel || mode === 'confirm' && canConfirm || mode === 'reconcile' && canReconcile) && <button type="submit" className="sb-primary" disabled={mutation.busy || mutation.blocked}>{mutation.busy ? 'جارٍ الحفظ…' : mutation.command ? 'إعادة محاولة العملية نفسها' : mode === 'cancel' ? 'حفظ إلغاء الطلب' : mode === 'reconcile' ? 'مطابقة تأكيد المنصة' : 'تسجيل رد المبلغ'}</button>}
+      <div className="sb-actions">{(mode === 'cancel' && canCancel || mode === 'confirm' && canConfirm || mode === 'reconcile' && canReconcile) && <button type="submit" className="sb-primary" disabled={mutation.busy || mutation.blocked || mutation.recovering}>{mutation.busy ? 'جارٍ الحفظ…' : mutation.command ? 'إعادة محاولة العملية نفسها' : mode === 'cancel' ? 'حفظ إلغاء الطلب' : mode === 'reconcile' ? 'مطابقة تأكيد المنصة' : 'تسجيل رد المبلغ'}</button>}
         {canCancel && mode !== 'cancel' && !mutation.command && <button type="button" className="sb-secondary" disabled={disabled} onClick={() => setMode('cancel')}>إلغاء طلب الاسترجاع</button>}
         {mode === 'cancel' && !mutation.command && <button type="button" className="sb-text" disabled={disabled} onClick={() => setMode(normalMode)}>رجوع</button>}
       </div>
@@ -216,11 +202,12 @@ export default function SimpleOrderRefunds({ context, identity, onBalancesChange
   }, JSON.stringify([scopeKey, 'detail', selectedId]), allowed && Boolean(selectedId));
   if (!allowed) return <p className="sb-notice sb-error" role="alert">عرض طلبات الاسترجاع غير متاح ضمن صلاحياتك.</p>;
   const saved = item => { go({ refund_id: item.id, order: item.order_number }); detail.reload(); list.reload(); orderRead.reload(); if (item.status === 'refunded') onBalancesChanged(); };
-  if (selectedId) return <>{detail.loading && <p role="status">جارٍ تحميل طلب الاسترجاع…</p>}{detail.error && <><p className="sb-notice sb-error" role="alert">{detail.error}</p><button type="button" className="sb-secondary" onClick={detail.reload}>إعادة التحميل</button></>}{detail.data && <RefundDetails key={JSON.stringify([scopeKey, detail.data.id, detail.data.status])} context={context} item={detail.data} onSaved={saved} onBack={() => go({ order: detail.data.order_number })} />}</>;
+  const recoveryRetired = () => { detail.reload(); list.reload(); orderRead.reload(); onBalancesChanged(); };
+  if (selectedId) return <>{detail.loading && <p role="status">جارٍ تحميل طلب الاسترجاع…</p>}{detail.error && <><p className="sb-notice sb-error" role="alert">{detail.error}</p><button type="button" className="sb-secondary" onClick={detail.reload}>إعادة التحميل</button></>}{detail.data && <RefundDetails key={JSON.stringify([scopeKey, detail.data.id, detail.data.status])} context={context} item={detail.data} onSaved={saved} onRecoveryRetired={recoveryRetired} onBack={() => go({ order: detail.data.order_number })} />}</>;
   return <section><button type="button" className="sb-text" onClick={onExit}>العودة إلى الأطراف</button><div className="sb-title"><h1>الطلبات ورد المبالغ</h1><p>ابحث برقم الطلب، دون الحاجة إلى معرفة اسم العميل.</p></div>
     <form className="sb-search" onSubmit={event => { event.preventDefault(); if (query.trim()) go({ order: query.trim() }); }}><Field label="رقم الطلب"><input value={query} onChange={event => setQuery(event.target.value)} inputMode="numeric" placeholder="اكتب رقم الطلب" required /></Field><button className="sb-primary" type="submit">عرض الطلب</button></form>
     {orderRead.loading && <p role="status">جارٍ البحث عن الطلب…</p>}{orderRead.error && <><p className="sb-notice sb-error" role="alert">{orderRead.error}</p><button type="button" className="sb-secondary" onClick={orderRead.reload}>إعادة البحث</button></>}
-    {orderRead.data && <RefundRequestForm key={JSON.stringify([scopeKey, orderRead.data.id, orderRead.data.available_amount, orderRead.data.reserved_amount])} context={context} order={orderRead.data} onSaved={saved} />}
+    {orderRead.data && <RefundRequestForm key={JSON.stringify([scopeKey, orderRead.data.id, orderRead.data.available_amount, orderRead.data.reserved_amount])} context={context} order={orderRead.data} onSaved={saved} onRecoveryRetired={recoveryRetired} />}
     <div className="sb-section-title"><h2>سجل الاسترجاع</h2><button type="button" className="sb-text" onClick={list.reload}>تحديث السجل</button></div>
     {list.loading && <p role="status">جارٍ تحميل السجل…</p>}{list.error && <p className="sb-notice sb-error" role="alert">{list.error}</p>}
     {list.data && <>{!list.data.items.length ? <p className="sb-empty">لا توجد طلبات استرجاع ضمن السجل المتاح لك.</p> : <div className="sb-table-wrap"><table className="sb-ledger"><thead><tr><th scope="col">الطلب</th><th scope="col">المبلغ</th><th scope="col">الحالة</th></tr></thead><tbody>{list.data.items.map(item => <tr key={item.id}><td><button type="button" className="sb-row-button" onClick={() => go({ refund_id: item.id, order: item.order_number })}><strong>طلب {item.order_number}</strong><span>{methodLabel(item)} · {dateLabel(item.created_at)}</span><small>سجّلها: {item.recorded_by?.name || 'غير موثق'}</small></button></td><td>{money(item.amount)}<small className="sb-currency">{item.currency || 'SAR'}</small></td><td>{statusLabel(item.status)}</td></tr>)}</tbody></table></div>}<RefundPages result={list.data} onPage={number => go({ order: orderNumber, refund_page: number })} /></>}

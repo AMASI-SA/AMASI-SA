@@ -1,11 +1,11 @@
 {
   "task": "MEZAN-SIMPLE-LEDGER-20261117",
-  "status": "SOURCE_COMPLETE_FULL_CI_PASSED_MOBILE_LAYOUT_ACCEPTANCE_PENDING",
+  "status": "SOURCE_COMPLETE_AUTHORIZED_RELEASE_GATES_PENDING",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/mezan-simple-ledger-permissions-20261117",
   "base_sha": "71125711d8181da3b4e35d9129fd51c048ba2bdd",
   "production_changed": false,
-  "authorization": "Implement the owner's approved simple balances application and employee-specific account, party, operation and movement visibility permissions.",
+  "authorization": "Owner approved the complete simple balances implementation and now explicitly requested: طيب انشر وادمج. Merge and publication are authorized; actual business transactions are not part of release verification.",
   "completed_source": [
     "Tenant-bound owner-managed resource policies; use, none/own/all movements and full-balance access are independent.",
     "Fresh server authorization for every workspace read and write, all linked resources and each CAS attempt; legacy aggregate routes deny restricted staff.",
@@ -16,7 +16,8 @@
     "Financial-only order refunds: Arabic/Persian order digits, confirmed-payment caps, pending reservations, bank confirmation, cancellation and existing-provider-proof reconciliation without duplicate financial effects.",
     "Independent review fixes: exact native permission DTO, own matching actor visibility, Arabic order search and safe pagination clamp after permission changes.",
     "Legacy route tests migrated to explicit workspace grants or owner specialist flows while preserving monetary, concurrency, tenant, stock and audit assertions.",
-    "Actual-screen browser harness and CI collection checks added without removing or relaxing existing gates."
+    "Actual-screen browser harness and CI collection checks added without removing or relaxing existing gates.",
+    "Actor-bound immutable server recovery replaces clear-text browser financial commands. Only a hashed slot and opaque UUID persist locally; fresh recovery is read-only, retries keep the exact request, and retirement erases the saved payload without altering financial history."
   ],
   "verification": [
     {
@@ -50,21 +51,49 @@
     {
       "check": "Visual review and final mobile permission fix",
       "result": "Inspected real component screenshots at390px/1440px and verified15 source hashes. All ledger/refund/entry screens were within width. Mobile access table hid columns behind horizontal scroll; converted the same controls to labelled account cards under560px while preserving desktop table/API. Focused2 suites/9tests and harness build passed. Stronger per-control viewport assertions are included; fresh CI and screenshot review pending for this presentation-only change."
+    },
+    {
+      "check": "Final presentation checkpoint and independent security gate",
+      "head_sha": "4fbfa5df408dd02c5d3893520decd1bfad9a181f",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43989319313",
+      "result": "All 22 workflow runs succeeded; operational backend5093, web61suites/956tests, browser14+8 and all8 screenshots/source hashes accepted. A separate Advanced Security CodeQL check133726937463 failed on clear-text storage in SimpleBalances.jsx (alert93). The equivalent new refund storage is included in the repair. This check is not waived or dismissed; authenticated server recovery replaces browser payload storage before release."
+    },
+    {
+      "check": "Authenticated recovery repair",
+      "result": "Backend116 focused tests passed, including33 new HTTP/security/concurrency cases; root independently reran33/33 on the frozen files. Web50tests/6suites passed, including11 recovery cases, scope changes during writes, explicit retries and no financial submission before registration. Isolated actual-component harness build and diff/syntax checks passed. Fresh full real-Mongo/browser/security CI is required for this new source checkpoint."
     }
   ],
   "remaining": [
-    "Fresh CI/screenshots for the final mobile access-card presentation; backend business logic is unchanged from the full passing checkpoint.",
-    "APK/signing, physical-device acceptance, merge and governed production deployment remain outside this source checkpoint."
+    "Pass fresh affected backend, web, browser and aggregate security checks on the new exact source.",
+    "Freeze an intent-only v5 commit from this source, verify rehearsal, merge and publish through the existing guard; require exact deployed identity and inactive final lease.",
+    "Complete APK1.0.20/code23 binary inspection and deliver its install link after backend publication. Physical-device acceptance is not yet performed."
   ],
-  "next_safe_action": "Verify final mobile access-card screenshots and all required checks on the task head, report exact source and test evidence, and leave release work to the governed release flow.",
+  "next_safe_action": "Run the new source checkpoint through all affected CI and the independent aggregated CodeQL check, then freeze its newly generated v5 intent. The earlier4fbfa candidate is superseded and must not be deployed.",
   "pull_request": "https://github.com/AMASI-SA/AMASI-SA/pull/1966",
   "companion_native": {
     "repository": "AMASI-SA/amasi-mobile",
     "pull_request": "https://github.com/AMASI-SA/amasi-mobile/pull/359",
-    "head_sha": "b791a088caab7e12be45a599ff07db786dd6f7f6",
+    "head_sha": "8c94ac84be73d6dcee70b18a881a77460e494682",
     "base_branch": "feature/operational-order-compensation-20261101",
     "base_sha": "982a38a60ea77ef09f4e2924766c085ea0523bfd",
-    "ci": "https://github.com/AMASI-SA/amasi-mobile/actions/runs/43987800175",
-    "ci_status": "PASS: TypeScript and ESLint on exact native source"
+    "ci": "https://github.com/AMASI-SA/amasi-mobile/actions/runs/43992896934",
+    "ci_status": "PASS on exact release source: TypeScript and ESLint",
+    "tree_sha": "2075f7e2639f6a6c33398175e4036d5dd1824071",
+    "merge_sha": "a8a7a55e22b4f7430c7619bb792c5d7d540b4f43",
+    "version": "1.0.20",
+    "version_code": 23,
+    "apk_workflow": "https://github.com/AMASI-SA/amasi-mobile/actions/runs/43993219682",
+    "apk_status": "Build in progress; no duplicate manual dispatch. The merge tree exactly matches the reviewed source tree.",
+    "ota_enabled": false
+  },
+  "parent_source_sha": "4fbfa5df408dd02c5d3893520decd1bfad9a181f",
+  "release_preflight": {
+    "production_branch_sha": "71125711d8181da3b4e35d9129fd51c048ba2bdd",
+    "emergent_workspace_sha": "71125711d8181da3b4e35d9129fd51c048ba2bdd",
+    "tracked_changes": "none",
+    "unrelated_untracked_files": "preserved",
+    "release_guard_active": false,
+    "backend_merge": false,
+    "backend_publication": false
   }
 }

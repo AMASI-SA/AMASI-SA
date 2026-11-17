@@ -4,7 +4,7 @@ import SimpleBalances, { EntryForm } from './SimpleBalances';
 import { simpleBalancesApi as api } from './simpleBalancesApi';
 import { useOptionalAuth } from '../../context/AuthContext';
 
-jest.mock('./simpleBalancesApi', () => ({ simpleBalancesApi: { context: jest.fn(), parties: jest.fn(), ledger: jest.fn(), movements: jest.fn(), entry: jest.fn() }, simpleBalanceError: error => error?.localMessage || (error?.response?.status === 403 ? 'لا توجد صلاحية لهذا الحساب' : 'لم يتأكد الحفظ') }));
+jest.mock('./simpleBalancesApi', () => ({ simpleBalancesApi: { context: jest.fn(), parties: jest.fn(), ledger: jest.fn(), movements: jest.fn(), entry: jest.fn(), registerPending: jest.fn(), pendingCommand: jest.fn(), retirePending: jest.fn() }, simpleBalanceError: error => error?.localMessage || (error?.response?.status === 403 ? 'لا توجد صلاحية لهذا الحساب' : 'لم يتأكد الحفظ') }));
 jest.mock('../../context/AuthContext', () => ({ useOptionalAuth: jest.fn() }));
 jest.mock('react-router-dom', () => ({
   Link: ({ to, children, ...props }) => <a href={to} {...props}>{children}</a>,
@@ -53,13 +53,20 @@ beforeEach(() => {
   jest.clearAllMocks(); localStorage.clear(); window.history.replaceState({}, '', '/');
   Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
   Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
-  uuid = 0; Object.defineProperty(globalThis, 'crypto', { configurable: true, value: { randomUUID: () => `request-${++uuid}` } });
+  uuid = 0; Object.defineProperty(globalThis, 'TextEncoder', { configurable: true, value: require('util').TextEncoder });
+  Object.defineProperty(globalThis, 'crypto', { configurable: true, value: {
+    randomUUID: () => `00000000-0000-4000-8000-${String(++uuid).padStart(12, '0')}`,
+    subtle: { digest: async (algorithm, input) => Uint8Array.from(require('crypto').createHash('sha256').update(input).digest()).buffer },
+  } });
   host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host); saved = jest.fn();
   useOptionalAuth.mockReturnValue({ user: { id: 'staff' } });
   api.context.mockResolvedValue(context()); api.movements.mockImplementation(query => Promise.resolve(page(query.page)));
   api.parties.mockResolvedValue({ items: context().resources });
   api.ledger.mockImplementation((kind, id, query) => Promise.resolve(page(query.page, { resource: context().resources.find(item => item.id === id && item.kind === kind) })));
   api.entry.mockResolvedValue({ saved: true, movement_id: 'new-movement', party_type: 'external_person', party_id: 'external' });
+  api.registerPending.mockImplementation((id, value) => Promise.resolve({ id, ...value }));
+  api.pendingCommand.mockRejectedValue({ response: { status: 404, data: { detail: { code: 'operational_pending_command_not_found' } } } });
+  api.retirePending.mockImplementation(id => Promise.resolve({ deleted: true, id }));
 });
 afterEach(() => { act(() => root.unmount()); host.remove(); });
 
@@ -144,6 +151,24 @@ test('an uncertain save retries the identical command and prevents double submis
   await submit();
   expect(api.entry).toHaveBeenCalledTimes(2); expect(api.entry.mock.calls[1][0]).toEqual(command);
   expect(saved).toHaveBeenCalledTimes(1); expect(localStorage.length).toBe(0);
+});
+
+test('reopening an entry restores its server body without an automatic financial retry', async () => {
+  api.entry.mockRejectedValueOnce(new Error('financial response unknown'));
+  await render(<EntryForm key="before" context={context()} resource={external()} onCancel={() => {}} onSaved={saved} />);
+  await act(async () => host.querySelector('[data-side="for_us"][aria-pressed]').click());
+  await change('المبلغ بالريال', '50'); await change('الدفع من', JSON.stringify(['bank', 'bank']));
+  await change('ملاحظة (اختياري)', 'دفعة توضيحية'); await submit();
+  const original = api.entry.mock.calls[0][0];
+  const [id, registered] = api.registerPending.mock.calls[0];
+  expect(localStorage.getItem(localStorage.key(0))).toBe(id);
+  api.pendingCommand.mockResolvedValue({ id, ...registered });
+  await render(<EntryForm key="after" context={context()} resource={external()} onCancel={() => {}} onSaved={saved} />);
+  expect(byLabel('المبلغ بالريال').value).toBe('50.00'); expect(byLabel('المبلغ بالريال').disabled).toBe(true);
+  expect(byLabel('ملاحظة (اختياري)').value).toBe('دفعة توضيحية');
+  expect(api.entry).toHaveBeenCalledTimes(1);
+  await submit(); expect(api.entry).toHaveBeenCalledTimes(2); expect(api.entry.mock.calls[1][0]).toEqual(original);
+  expect(localStorage.length).toBe(0);
 });
 
 test('salary settlement cannot exceed the selected employee due and creates no payment-source field', async () => {
