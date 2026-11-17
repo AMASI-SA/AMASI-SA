@@ -670,6 +670,7 @@ _SUPPLIER_DEFER_REASONS = frozenset({
     "component_reservation_missing", "component_order_cancelled",
     "component_configuration_required", "component_canonical_order_required",
     "component_source_created_at_required", "component_execution_blocked",
+    "component_source_snapshot_stale",
     "component_unit_selection_unknown", "component_unit_released",
     "component_safe_scan_limit_exceeded", "component_stock_identity_missing",
     "component_stock_identity_ambiguous", "component_reservation_exceeds_stock",
@@ -698,6 +699,13 @@ async def consume_component_stock(db: Any, *, merchant_id: str, order_id: str,
             if defer_unavailable:
                 from fulfillment_v2_routes import assert_component_execution
                 await assert_component_execution(scoped, user_id=owner, order_number=order, plan=plan)
+                # Supplier custody authorizes Ready independently. Inventory
+                # still needs the exact approved/current canonical revision,
+                # checked read-only before pins, deductions or unit writes.
+                from preparation_piece_operations import _assert_reviewed_physical_snapshot_current
+                await _assert_reviewed_physical_snapshot_current(
+                    scoped, user_id=owner, order_number=order,
+                )
             rows = await _selected_units(scoped, owner, plan_id, units)
             # Validate all active reservations before consuming the selected
             # units. In deferrable mode even the location pins wait until every

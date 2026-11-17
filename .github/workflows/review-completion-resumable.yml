@@ -38,6 +38,11 @@ on:
       - "backend/review_gift_address.py"
       - "backend/tests/test_review_gift_address.py"
       - "backend/preparation_piece_operations.py"
+      - "backend/supplier_receipt_ready_policy.py"
+      - "backend/tests/test_supplier_receipt_ready_policy.py"
+      - "backend/tests/test_supplier_receipt_delivery_policy.py"
+      - "backend/tests/test_supplier_component_consumption_deferral.py"
+      - "backend/tests/test_supplier_receipt_bundle_coverage.py"
       - "backend/mobile_order_refresh.py"
       - "backend/preparation_refresh_recovery.py"
       - "backend/review_direct_preparation_sync.py"
@@ -256,6 +261,10 @@ jobs:
           tests/test_review_local_completion.py
           tests/test_review_local_downstream.py
           tests/test_review_local_assembly.py
+          tests/test_supplier_receipt_ready_policy.py
+          tests/test_supplier_receipt_delivery_policy.py
+          tests/test_supplier_component_consumption_deferral.py
+          tests/test_supplier_receipt_bundle_coverage.py
           tests/test_assembly_completion_delivery.py
           tests/test_assembly_print_completion.py
           tests/test_unified_completed_carrier_label.py
@@ -354,7 +363,11 @@ jobs:
                                          ("test_assembly_search_instruction_batch.AssemblySearchInstructionTests", 4),
                                          ("test_preparation_receiving_custody.PreparationCustodyTests", 11),
                                          ("test_review_local_downstream.LocalDownstreamTests", 10),
-                                         ("test_review_local_assembly.LocalAssemblyTests", 26),
+                                         ("test_review_local_assembly.LocalAssemblyTests", 41),
+                                         ("test_supplier_receipt_ready_policy", 82),
+                                         ("test_supplier_receipt_delivery_policy.SupplierReceiptDeliveryTests", 28),
+                                         ("test_supplier_component_consumption_deferral", 35),
+                                         ("test_supplier_receipt_bundle_coverage", 39),
                                          ("test_assignment_salla_in_progress.AssignmentSyncTests", 15),
                                          ("test_assignment_single_post_transport.SinglePostTransportTests", 6),
                                          ("test_assignment_single_post_transport.MongoSinglePostTests", 7),

@@ -1,5 +1,5 @@
 import api from "./api";
-import { sendQoyodManualJob } from "./qoyodManualSendJobs";
+import { sendQoyodManualBatch, sendQoyodManualJob } from "./qoyodManualSendJobs";
 
 jest.mock("./api", () => ({ __esModule: true, default: { get: jest.fn(), post: jest.fn() } }));
 
@@ -174,4 +174,134 @@ test("the rolling-update legacy completion does not poll", async () => {
   await expect(sendQoyodManualJob(order)).resolves.toEqual(legacy);
   expect(api.get).not.toHaveBeenCalled();
   expect(window.sessionStorage.getItem(storageKey(order))).toBeNull();
+});
+
+test("bulk caps at 100 distinct valid orders and keeps the per-order retry route", async () => {
+  const orders = Array.from({ length: 105 }, (_, index) => String(982000000 + index));
+  api.post.mockImplementation((url) => Promise.resolve({ data: { invoice_id: `invoice-${url.split("/").pop()}` } }));
+  const onResult = jest.fn();
+  const results = await sendQoyodManualBatch([orders[0], "", "invalid", ...orders], {
+    retryOrderNumbers: [orders[1]], onResult,
+  });
+  expect(api.post).toHaveBeenCalledTimes(100);
+  expect(api.post.mock.calls.map(([url]) => url)).toEqual(orders.slice(0, 100)
+    .map((order, index) => `${BASE}/${index === 1 ? "retry-failed" : "send"}/${order}`));
+  expect(results.map((result) => result.orderNumber)).toEqual(orders.slice(0, 100));
+  expect(results.every((result) => result.status === "fulfilled")).toBe(true);
+  expect(onResult).toHaveBeenCalledTimes(100);
+  expect(api.get).not.toHaveBeenCalled();
+});
+
+test("bulk bounds pending jobs to three, replenishes completed slots and reports in selection order", async () => {
+  const orders = ["982001001", "982001002", "982001003", "982001004", "982001005"];
+  const responses = new Map(orders.map((order) => [order, deferred()]));
+  let active = 0, peak = 0;
+  api.post.mockImplementation((url) => {
+    const order = url.split("/").pop();
+    active += 1;
+    peak = Math.max(peak, active);
+    return responses.get(order).promise.finally(() => { active -= 1; });
+  });
+  const onResult = jest.fn();
+  const request = sendQoyodManualBatch(orders, { onResult });
+  await flush();
+  expect(api.post).toHaveBeenCalledTimes(3);
+  responses.get(orders[1]).resolve({ data: { invoice_id: "second" } });
+  await flush(); await flush();
+  expect(api.post).toHaveBeenCalledTimes(4);
+  expect(onResult.mock.calls[0][1].map((result) => result.orderNumber)).toEqual([orders[1]]);
+  responses.get(orders[0]).resolve({ data: { invoice_id: "first" } });
+  await flush(); await flush();
+  expect(api.post).toHaveBeenCalledTimes(5);
+  expect(onResult.mock.calls[1][1].map((result) => result.orderNumber)).toEqual(orders.slice(0, 2));
+  responses.get(orders[2]).resolve({ data: { job: { ...job(orders[2], "refused"),
+    error: { code: "customer_name_missing", message: "اسم العميل مفقود" } } } });
+  responses.get(orders[3]).resolve({ data: { invoice_id: "fourth" } });
+  responses.get(orders[4]).resolve({ data: { invoice_id: "fifth" } });
+  const results = await request;
+  expect(peak).toBe(3);
+  expect(results.map((result) => result.orderNumber)).toEqual(orders);
+  expect(results.map((result) => result.status)).toEqual([
+    "fulfilled", "fulfilled", "rejected", "fulfilled", "fulfilled",
+  ]);
+});
+
+test("aborting bulk observation retains accepted keys and never submits the remaining orders", async () => {
+  const orders = ["982002001", "982002002", "982002003", "982002004"];
+  api.post.mockImplementation((url) => Promise.resolve({ data: { job: job(url.split("/").pop()) } }));
+  const controller = new AbortController(), onResult = jest.fn();
+  const request = settle(sendQoyodManualBatch(orders, { signal: controller.signal, onResult }));
+  await flush();
+  expect(api.post).toHaveBeenCalledTimes(3);
+  controller.abort();
+  await advance(10000);
+  expect((await request).error.name).toBe("AbortError");
+  expect(api.post).toHaveBeenCalledTimes(3);
+  expect(api.get).not.toHaveBeenCalled();
+  expect(onResult).not.toHaveBeenCalled();
+  expect(orders.slice(0, 3).every((order) => window.sessionStorage.getItem(storageKey(order)))).toBe(true);
+  expect(window.sessionStorage.getItem(storageKey(orders[3]))).toBeNull();
+});
+
+test("an unknown batch result retains its original job identity while other orders finish", async () => {
+  const orders = ["982003001", "982003002", "982003003", "982003004"];
+  api.post.mockImplementation((url) => {
+    const order = url.split("/").pop();
+    return order === orders[0]
+      ? Promise.reject({ response: { status: 503 } })
+      : Promise.resolve({ data: { invoice_id: `invoice-${order}` } });
+  });
+  const results = await sendQoyodManualBatch(orders);
+  expect(results[0]).toMatchObject({ orderNumber: orders[0], status: "rejected",
+    reason: { response: { data: { detail: { code: "manual_job_submission_unknown" } } } } });
+  expect(results.slice(1).every((result) => result.status === "fulfilled")).toBe(true);
+  const key = api.post.mock.calls[0][2].headers["Idempotency-Key"];
+  expect(window.sessionStorage.getItem(storageKey(orders[0]))).toBe(key);
+  api.post.mockResolvedValueOnce({ data: { job: completed(orders[0]) } });
+  await sendQoyodManualJob(orders[0]);
+  expect(api.post.mock.calls[4][2].headers["Idempotency-Key"]).toBe(key);
+});
+
+test("feeding the same sequential worker ahead removes browser polling gaps from a 100-order fixture", async () => {
+  // The provider still processes one order each second. Only queue submission
+  // changes; both variants retain the real client's five-second status polling.
+  jest.setSystemTime(0);
+  let workerAvailableAt = 0;
+  const completionAt = new Map();
+  api.post.mockImplementation((url) => {
+    const order = url.split("/").pop();
+    workerAvailableAt = Math.max(Date.now(), workerAvailableAt) + 1000;
+    completionAt.set(order, workerAvailableAt);
+    return Promise.resolve({ data: { job: job(order) } });
+  });
+  api.get.mockImplementation((url) => {
+    const order = decodeURIComponent(url.split("/").pop()).split("/").pop();
+    return Promise.resolve({ data: { job: Date.now() >= completionAt.get(order)
+      ? completed(order) : job(order, "running") } });
+  });
+  const serialOrders = Array.from({ length: 100 }, (_, index) => String(982004000 + index));
+  let serialFinishedAt;
+  const serial = (async () => {
+    for (const order of serialOrders) await sendQoyodManualJob(order);
+    serialFinishedAt = Date.now();
+  })();
+  await flush();
+  for (let step = 0; step < 100; step += 1) await advance(5000);
+  await serial;
+  expect(serialFinishedAt).toBeDefined();
+  const serialElapsed = serialFinishedAt;
+
+  const batchOrders = serialOrders.map((order) => String(Number(order) + 100));
+  const start = Date.now();
+  let batchFinishedAt;
+  const batch = sendQoyodManualBatch(batchOrders).then((results) => {
+    batchFinishedAt = Date.now();
+    return results;
+  });
+  await flush();
+  for (let step = 0; step < 100 && batchFinishedAt === undefined; step += 1) await advance(5000);
+  expect(await batch).toHaveLength(100);
+  expect(serialElapsed).toBe(500000);
+  expect(batchFinishedAt - start).toBe(170000);
+  expect(api.post).toHaveBeenCalledTimes(200);
 });

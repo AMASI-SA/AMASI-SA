@@ -83,7 +83,7 @@ async def seed(db, *, locations=1):
     })
     await db.raw[fulfillment.COMPONENT_LIFECYCLES].insert_one({
         "user_id": OWNER, "order_number": ORDER, "state": "reserved",
-        "accepted": True, "generation": 7,
+        "accepted": True, "generation": 7, "snapshot_revision": 7,
     })
     await db.raw.unified_orders.insert_one({
         "user_id": OWNER, "order_number": ORDER,
@@ -152,7 +152,10 @@ async def test_healthy_consumption_and_retry_keep_existing_stock_semantics(datab
     ("missing_plan", "component_reservation_missing"),
     ("cancelled_plan", "component_order_cancelled"),
     ("stale_acceptance", "component_execution_blocked"),
+    ("unaccepted_lifecycle", "component_execution_blocked"),
+    ("retry_required", "component_execution_blocked"),
     ("source_pending", "component_execution_blocked"),
+    ("source_refresh_required", "component_execution_blocked"),
     ("unknown_unit", "component_unit_selection_unknown"),
     ("released_unit", "component_unit_released"),
     ("insufficient_stock", "component_reservation_exceeds_stock"),
@@ -168,8 +171,14 @@ async def test_unavailable_component_business_evidence_defers_before_any_stock_w
         await db.raw[stock.PLANS].update_one({}, {"$set": {"state": "cancelled"}})
     elif case == "stale_acceptance":
         await db.raw[fulfillment.COMPONENT_LIFECYCLES].update_one({}, {"$set": {"generation": 99}})
+    elif case == "unaccepted_lifecycle":
+        await db.raw[fulfillment.COMPONENT_LIFECYCLES].update_one({}, {"$set": {"accepted": False}})
+    elif case == "retry_required":
+        await db.raw[fulfillment.COMPONENT_LIFECYCLES].update_one({}, {"$set": {"retry_required": True}})
     elif case == "source_pending":
         await db.raw.unified_orders.update_one({}, {"$set": {"g47_salla_snapshot.component_pending": True}})
+    elif case == "source_refresh_required":
+        await db.raw.unified_orders.update_one({}, {"$set": {"g47_salla_snapshot.requires_authoritative_refresh": True}})
     elif case == "unknown_unit":
         await db.raw[stock.UNITS].delete_many({})
     elif case == "released_unit":
@@ -192,6 +201,40 @@ async def test_unavailable_component_business_evidence_defers_before_any_stock_w
     assert result == {"deferred": True, "reason": reason}
     assert db.writes == []
     assert await snapshot(db) == before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("approved, current", [
+    (6, 7), (7, 8), (None, 7), (7, None),
+    ("7", 7), (7, "7"), (7.0, 7), (7, 7.0), (True, 1), (1, True),
+])
+async def test_optional_consumption_defers_unproven_source_revision_before_any_write(database, approved, current):
+    db = database
+    await seed(db)
+    await db.raw[fulfillment.COMPONENT_LIFECYCLES].update_one({},
+        {"$unset": {"snapshot_revision": ""}} if approved is None else {"$set": {"snapshot_revision": approved}})
+    await db.raw.unified_orders.update_one({},
+        {"$unset": {"g47_salla_snapshot.revision": ""}} if current is None else {"$set": {"g47_salla_snapshot.revision": current}})
+    before = await snapshot(db)
+
+    result = await consume(db, defer_unavailable=True)
+
+    assert result == {"deferred": True, "reason": "component_source_snapshot_stale"}
+    assert db.writes == []
+    assert await snapshot(db) == before
+
+
+@pytest.mark.asyncio
+async def test_default_consumption_does_not_add_supplier_revision_preflight(database):
+    db = database
+    await seed(db)
+    await db.raw[fulfillment.COMPONENT_LIFECYCLES].update_one({}, {"$unset": {"snapshot_revision": ""}})
+
+    result = await consume(db)
+
+    assert result["duplicate"] is False
+    assert result["units"][0]["state"] == "consumed"
+    assert (await db.raw[stock.LOCATIONS].find_one({}))["occupancy"]["total_quantity"] == 8
 
 
 @pytest.mark.asyncio

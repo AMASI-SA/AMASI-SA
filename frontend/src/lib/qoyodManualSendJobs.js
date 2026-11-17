@@ -1,6 +1,8 @@
 import api from "./api";
 
 const BASE = "/integrations/qoyod/manual";
+export const QOYOD_MANUAL_BATCH_LIMIT = 100;
+const ACTIVE_BATCH_JOBS = 3;
 const pendingRequests = new Map();
 const keyFor = (order) => `qoyod-manual-job:${order}`;
 
@@ -113,4 +115,42 @@ export async function sendQoyodManualJob(order, {
         message: "حُفظت مهمة الإرسال، لكن تعذرت متابعة نتيجتها. إعادة فتح نفس الإجراء تتابع المهمة المحفوظة." });
     }
   }
+}
+
+// Keep a small queue ahead of the server's sequential accounting worker. The
+// next submission need not wait for the browser to observe every prior result.
+// Each order retains the same durable job, refusal and unknown-outcome rules.
+export async function sendQoyodManualBatch(orderNumbers, {
+  signal, onProgress, onResult, maxWaitMs, retryOrderNumbers = [],
+} = {}) {
+  if (signal?.aborted) throw abortError();
+  const orders = Array.from(new Set(orderNumbers
+    .map((order) => String(order || "").trim())
+    .filter((order) => /^\d+$/.test(order))))
+    .slice(0, QOYOD_MANUAL_BATCH_LIMIT);
+  const results = new Array(orders.length);
+  const retryOrders = new Set(retryOrderNumbers.map((order) => String(order).trim()));
+  let nextIndex = 0;
+  async function observeNext() {
+    while (!signal?.aborted && nextIndex < orders.length) {
+      const index = nextIndex++;
+      const orderNumber = orders[index];
+      let result;
+      try {
+        const value = await sendQoyodManualJob(orderNumber, {
+          retry: retryOrders.has(orderNumber), signal, onProgress, maxWaitMs,
+        });
+        result = { orderNumber, status: "fulfilled", value };
+      } catch (reason) {
+        if (signal?.aborted) return;
+        result = { orderNumber, status: "rejected", reason };
+      }
+      if (signal?.aborted) return;
+      results[index] = result;
+      onResult?.(result, results.filter(Boolean));
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(ACTIVE_BATCH_JOBS, orders.length) }, observeNext));
+  if (signal?.aborted) throw abortError();
+  return results;
 }

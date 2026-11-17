@@ -1098,11 +1098,48 @@ async def _finalize_lock(db, *, order_number: str, user_id: str,
 
 
 # ─── Payload builders (minimal, standalone) ──────────────────────────
+def _canonical_customer(canon: dict) -> dict:
+    """Read the current Salla buyer fields, retaining the legacy DTO shape.
+
+    The status refresh copies current buyer facts into flat canonical fields.
+    A copied nested customer may still describe an older snapshot; prefer the
+    nonblank refreshed fields just as the unified sender projection does.
+    Shipping recipients are deliberately not customer identity sources.
+    """
+    customer = canon.get("customer")
+    customer = dict(customer) if isinstance(customer, dict) else {}
+
+    def text(*values):
+        return next((str(value).strip() for value in values
+                     if isinstance(value, (str, int))
+                     and not isinstance(value, bool) and str(value).strip()), "")
+
+    return {
+        **customer,
+        "name": text(canon.get("customer_name"), customer.get("name")),
+        "phone": text(canon.get("customer_mobile"),
+                      customer.get("phone"), customer.get("mobile")),
+        "email": text(canon.get("customer_email"), customer.get("email")),
+    }
+
+
 def _build_customer_payload(canon: dict) -> dict:
-    cust = canon.get("customer") or {}
-    name = str(cust.get("name") or "").strip() \
-        or f"عميل {canon.get('order_number') or ''}".strip() \
-        or "عميل مباشر"
+    cust = _canonical_customer(canon)
+    name = cust["name"]
+    # Older normalizers invented these exact labels when Salla had no name.
+    # They are not proof of buyer identity and must not become a new contact.
+    placeholders = {"عميل", "عميل مباشر", "ضيف"}
+    for value in (canon.get("order_number"), canon.get("order_id")):
+        if str(value or "").strip():
+            placeholders.update({f"عميل {str(value).strip()}", f"ضيف #{str(value).strip()}"})
+    if cust["phone"]:
+        placeholders.add(f"عميل {cust['phone']}")
+    if not name or name in placeholders:
+        raise ManualSendRefused(
+            "customer_name_missing",
+            "اسم العميل غير متوفر في بيانات الطلب؛ تحقق من الاسم في سلة ثم أعد الإرسال.",
+            {"qoyod_write_performed": False},
+        )
     payload = {
         "contact": {
             "name":  name,
@@ -2958,9 +2995,12 @@ async def _run_all_steps(
     steps_trace: list[dict] = []
 
     # ── 1) Customer ────────────────────────────────────────────────
-    cust = canon.get("customer") or {}
-    phone = str(cust.get("phone") or "").strip()
-    email = str(cust.get("email") or "").strip()
+    # This common send/retry boundary follows the live duplicate check and
+    # precedes every provider write. Payment-only recovery does not enter it.
+    canon = {**canon, "customer": _canonical_customer(canon)}
+    payload = _build_customer_payload(canon)
+    phone = payload["contact"].get("phone", "")
+    email = payload["contact"].get("email", "")
     contact_id: Optional[int] = None
     matched_via = None
     if phone:
@@ -2975,7 +3015,6 @@ async def _run_all_steps(
             matched_via = "email"
     if contact_id is None:
         # Create new customer.
-        payload = _build_customer_payload(canon)
         idem = f"cust-{order_number}"
         created = await client.create_customer(payload, idem=idem)
         # Qoyod may wrap under `contact` or return the entity directly.
