@@ -54,6 +54,7 @@ on:
       - "backend/order_engine/amasi_shipping_compat.py"
       - "backend/tests/test_amasi_shipping_compat.py"
       - "backend/tests/test_mobile_assembly_refresh_actions.py"
+      - "backend/tests/test_mobile_external_label_read_parity.py"
       - "backend/tests/test_manual_courier_label_refresh_race.py"
       - "backend/tests/test_manual_label_delivery_overlap.py"
       - "backend/tests/test_preparation_progress_dates.py"
@@ -223,6 +224,7 @@ jobs:
         run: |
           python -m pytest --noconftest -p no:cacheprovider -q --tb=short \
             tests/test_mobile_assembly_refresh_actions.py \
+            tests/test_mobile_external_label_read_parity.py \
             tests/test_manual_courier_label_refresh_race.py \
             tests/test_manual_label_delivery_overlap.py \
             tests/test_preparation_progress_dates.py \
