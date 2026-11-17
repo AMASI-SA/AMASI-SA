@@ -1,0 +1,33 @@
+{
+  "upstream": "picomatch@4.0.7",
+  "upstream_tarball_url": "https://registry.npmjs.org/picomatch/-/picomatch-4.0.7.tgz",
+  "upstream_tarball_integrity": "sha512-qcJu88Q2IWqJsDD529JKMdwGm/dvInW4HvQnRwiH9JtihJvzGOscDtHE3x1pBKeUOTysQ8kVmLnJ2kJu7yhcGA==",
+  "upstream_git_head": "6bb40679c218cefba5d4e9662408c5fdf699a8bb",
+  "advisory": "GHSA-fc5q-39xc-vjpf",
+  "original_files_sha256": {
+    "LICENSE": "d0cd141b0c322fded5dfad1d4645bb2fedfc05b7321fe1009469638190d59ef9",
+    "lib/constants.js": "c28f952d2758261fe5428a121add485cc25b03e0193633f649de903dc0e5e222",
+    "index.js": "02ae26406508e28f9ba0865be16cf77f0b33de6c4d4d49c212c4176df1d5625a",
+    "lib/parse.js": "4e1e05447668aa1e94366c5516a2bcd8f5fff800cc92b1d0cd7d77703b8618c4",
+    "lib/picomatch.js": "fdd249d7ffff853f3bb1c77eafc8baa1a437bea85a94c35877b83c6a40d9ca94",
+    "posix.js": "5695ff5dfcd5a338a40630bd506056f2950bcb08fe1cc068519cbbfe60add480",
+    "lib/scan.js": "6457a1764e5c2e543cc3a0c00ce12ebb3764097628868198370b64d4e642aaae",
+    "lib/utils.js": "f04604f70cd1a3f6ace80b84766468674ff38b4bb83818d2ef1d81fc6355f935",
+    "package.json": "479b70b87aa7b44344d62c8a459ae7e53dd2bca6c61f1396bd55e63e9de73fc6"
+  },
+  "patched_files_sha256": {
+    "LICENSE": "d0cd141b0c322fded5dfad1d4645bb2fedfc05b7321fe1009469638190d59ef9",
+    "index.js": "02ae26406508e28f9ba0865be16cf77f0b33de6c4d4d49c212c4176df1d5625a",
+    "lib/constants.js": "c28f952d2758261fe5428a121add485cc25b03e0193633f649de903dc0e5e222",
+    "lib/parse.js": "ce51b5e3324d71356608ab9ced722383ee21d27e6e8cd2f4f12423b07e34f55e",
+    "lib/picomatch.js": "fdd249d7ffff853f3bb1c77eafc8baa1a437bea85a94c35877b83c6a40d9ca94",
+    "lib/repeated-extglob-safety.js": "2d6f345b66e1575df07ecec53dcdccc4dc4e6bd4cfaf8f105d6094b9de131c87",
+    "lib/scan.js": "6457a1764e5c2e543cc3a0c00ce12ebb3764097628868198370b64d4e642aaae",
+    "lib/utils.js": "f04604f70cd1a3f6ace80b84766468674ff38b4bb83818d2ef1d81fc6355f935",
+    "package.json": "43661076ebb613ae045dda849b3fd25229b28975ba9890dbd03cd2db3b8e92ef",
+    "posix.js": "5695ff5dfcd5a338a40630bd506056f2950bcb08fe1cc068519cbbfe60add480"
+  },
+  "local_patch": "Mandatory classification of final compiled repeated-extglob bodies; bounded finite unambiguous grammar, independently certified greedy nullable-character-star rewrites, and literalization of unsupported repetition. Raw group repetitions are checked as well so they cannot wrap a finite accepted extglob in another unsafe repeat. Token accounting fixes ensure emitted and checked bodies agree.",
+  "security_boundary": "Local repeated-extglob compilation only. Not a general safety guarantee for arbitrary caller-supplied regular expressions or forged parse states.",
+  "compatibility_policy": "Keep existing major APIs. Preserve reviewed ordinary globs, safe finite repeats, literal stars, and all branches of certified star rewrites. Unsupported ambiguous or complex repeated forms intentionally become literals; recursion opt-outs cannot disable this guard."
+}

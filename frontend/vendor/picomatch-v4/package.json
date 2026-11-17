@@ -1,0 +1,26 @@
+{
+  "name": "@mezan/picomatch-v4",
+  "version": "4.0.7-mezan.1",
+  "private": true,
+  "description": "Local security backport of picomatch 4.0.7; not an upstream release",
+  "license": "MIT",
+  "main": "index.js",
+  "engines": {
+    "node": ">=12"
+  },
+  "files": [
+    "index.js",
+    "posix.js",
+    "lib",
+    "LICENSE",
+    "SECURITY-PROVENANCE.json",
+    "README.md"
+  ],
+  "mezanSecurity": {
+    "upstreamPackage": "picomatch@4.0.7",
+    "advisory": "GHSA-fc5q-39xc-vjpf",
+    "patchKind": "local compiled repeated-extglob safety boundary",
+    "upstreamRelease": false
+  },
+  "sideEffects": false
+}
