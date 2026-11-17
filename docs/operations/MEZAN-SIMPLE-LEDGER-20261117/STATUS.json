@@ -72,6 +72,16 @@
     {
       "check": "Lazy recovery route initialization and joined concurrency diagnostics",
       "result": "Pending collection is acquired only within authenticated pending requests; no unrelated router construction touches it.159 related read/recovery cases passed, covering the80 initializer failures and33 recovery cases;60 driver unit contracts passed. Both real-Mongo concurrency cases collect. Independent diff review PASS: all original every-attempt-success, equal-result, exactly-once money/history assertions remain. The concurrency test now joins every attempt before database teardown and emits bounded scalar diagnostics only on failure. Its original409 cause is unproven; no money-service, DDL, retry policy or assertion was changed to hide it. Fresh full isolated-Mongo CI is required."
+    },
+    {
+      "check": "Full recovery compatibility CI",
+      "head_sha": "606580d12e6e3fad47adb3ff2f8da8b8517c2d19",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43997029567",
+      "result": "Backend5125passed/1failed. All80 router-initializer failures are resolved and both real-Mongo concurrent driver approvals pass (bank0.356s,terminal0.303s). The only failure is issue-index processCPU timing old0.25434/new0.28821 versus0.65ratio. Web62suites/970tests,14+8browser scenarios,allsourcehashes and all3CodeQL checks PASS. EightPNGbytes match the independently reviewed prior images.606580 candidate intent is superseded; it must not deploy."
+    },
+    {
+      "check": "Isolated diagnostic benchmark measurement",
+      "result": "Only the existing performance test changes: collect inherited heap debt before BOTH timingwindows and use current-threadCPU for the synchronous collector. GCremains enabled inside the workloads and its configuration/state is unchanged. Same4000identities, exactoutput equality and newCPU<oldCPU*0.65; no repeats,best-of,thresholdrelaxation or productionalgorithm change. Actualfile21passed1.14s; measuredold0.273328/new0.020177 ratio0.073819. Independent frozen-diff review PASS. The exact previousCI contamination source remains unproven. Fresh fullCI remains required."
     }
   ],
   "remaining": [
@@ -79,7 +89,7 @@
     "Freeze an intent-only v5 commit from this source, verify clean-clone rehearsals, merge and publish through the existing guard; require exact deployed identity and inactive final lease.",
     "Deliver verified APK1.0.20/code23 after compatible backend publication; distinguish unperformed physical-device update acceptance."
   ],
-  "next_safe_action": "Run fresh full backend/web/browser/security CI for this repaired source. Every concurrent driver attempt must succeed. If it fails, use the new bounded diagnostics to identify the cause; do not waive it or blindly rerun. Only after all gates pass may this source produce a new intent-onlyB and governed deployment.",
+  "next_safe_action": "Run all exact-source CI after the isolated benchmark correction. Both real-Mongo concurrency cases and the unchanged strict performance ratio must pass. Then freeze only this source new reviewed v5 intent, run clean-clone adapter rehearsals, merge normally and verify actual publication.",
   "pull_request": "https://github.com/AMASI-SA/AMASI-SA/pull/1966",
   "companion_native": {
     "repository": "AMASI-SA/amasi-mobile",
@@ -100,7 +110,7 @@
     "apk_signer_sha256": "f09151d74dca30a265f4b0bd49a8ba6b94acccdf5d1500f5da36654fc929b22f",
     "signing_continuity": "APK22 and23 build logs retain the same existing EAS remote keystore configuration. APK22 binary expiredNov16, so direct certificate comparison is unavailable. Historical locally built codes14–18 use a different documented certificate. No signing credentials were changed; in-place upgrade compatibility is not claimed."
   },
-  "parent_source_sha": "7d429b8d97d77638b87d4cf82addf19bcb6414f9",
+  "parent_source_sha": "606580d12e6e3fad47adb3ff2f8da8b8517c2d19",
   "release_preflight": {
     "production_branch_sha": "71125711d8181da3b4e35d9129fd51c048ba2bdd",
     "emergent_workspace_sha": "71125711d8181da3b4e35d9129fd51c048ba2bdd",

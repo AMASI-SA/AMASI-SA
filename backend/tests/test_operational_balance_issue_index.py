@@ -1,6 +1,7 @@
 """Exact diagnostic behavior and a workload regression for attempt-local lookup."""
 from copy import deepcopy
-from time import process_time
+import gc
+from time import thread_time
 
 import pytest
 
@@ -228,18 +229,21 @@ def test_sync_and_candidate_walk_cooperate_with_cancellation(monkeypatch):
 
 
 def test_four_thousand_distinct_diagnostics_avoid_repeated_whole_list_work():
-    # Process CPU excludes scheduling delays in other CI jobs. The legacy
-    # workload makes almost eight million comparisons; allow a broad margin.
+    # Measure this synchronous collector, not Mongo/executor threads left by
+    # other tests. Collect prior heap debt outside both windows; GC stays
+    # enabled for each workload. The same 4000 rows and margin remain required.
     identities = [str(n) for n in range(4000)]
     baseline = {'issues': []}
-    started = process_time()
+    gc.collect()
+    started = thread_time()
     for identity in identities:
         legacy_issue(baseline, 'source_incomplete', identity, component='shipping_fee')
-    old_cpu = process_time() - started
+    old_cpu = thread_time() - started
     actual = enabled()
-    started = process_time()
+    gc.collect()
+    started = thread_time()
     for identity in identities:
         issue(actual, 'source_incomplete', identity, component='shipping_fee')
-    new_cpu = process_time() - started
+    new_cpu = thread_time() - started
     assert actual['issues'] == baseline['issues']
     assert new_cpu < old_cpu * 0.65, (old_cpu, new_cpu)
