@@ -9,8 +9,8 @@ of a generated customer/order label. Repository: AMASI-SA/AMASI-SA. Task branch:
 `8df479ef24b4f8847c26ba18d48e3248f7b673cf`.
 
 Latest user constraint: the update must not make the system heavy or slow.
-Verified implementation checkpoint, including the load safeguards below:
-`dd1a89dfd939a42a87959da894d31d35ac8473c1`.
+The verified implementation checkpoints and current release PR are recorded
+below. The final source/intent pair will be recorded on PR #1971 after freezing.
 
 Implementation is isolated from the other courier task and the shared /app.
 No production data, provider invoices, existing contacts or release identity
@@ -89,7 +89,7 @@ CI=true node node_modules/react-scripts/scripts/test.js \
 
 git diff --check passed. The existing background-worker CI workflow now includes
 the four new backend test files and passes its existing disposable Mongo URI to
-the manual-runner suite. Remote CI has not run for this task.
+the manual-runner suite. Release CI is tracked on PR #1971; final exact-B gates remain required.
 
 Independent review confirmed COD sends create no payment and payment-only
 recovery creates no customer/product/invoice, for both send and retry paths.
@@ -177,37 +177,77 @@ not changed to accommodate the test environment.
   backlog faster can still increase continuous resource use. Production CPU,
   memory, Mongo latency and employee-page response times remain unmeasured.
 
-## Publication blocker
+## Authorized release continuation — PR #1971
 
-Local backend checkpoint: `171f0f98e9c1accd9b78b1d61dc6dda54565f0c4`.
-Prior complete feature checkpoint: `920877e59b9e35eda97531ca4134a0835e54cc71`.
-Verified feature plus load safeguards: `dd1a89dfd939a42a87959da894d31d35ac8473c1`.
-The attempted git push was rejected by automatic approval review: uploading
-private source/tests/workflow changes and creating/updating a GitHub branch
-requires explicit user authorization for the GitHub destination. The feature
-implementation request was not accepted as that authorization. Do not bypass
-this rejection with another transport or connector. No task branch or PR was
-created remotely; further upload is paused pending the user's permission.
+The owner requested continuation after the explicit named-destination
+upload/merge/publish authorization request. The earlier automatic-approval
+rejection was respected until this continuation. Native Git push then failed
+because this runtime has no Git credential prompt; the linked GitHub connection
+successfully uploaded the verified source tree.
 
-An attempted continuation comment on Issue #1006 returned GitHub 403:
-commenting is disabled on issues with more than 2500 comments. This local status
-and source commits retain the exact work for the authorized follow-up. No claim
-of durable remote checkpoint or GitHub acceptance is made.
+Canonical initial remote checkpoint:
+`0bf73122e6ee05757511de345892520b53edb651`, tree
+`3045c804cb7e20b52f9ece761311742b5d2e6300`.
+PR: https://github.com/AMASI-SA/AMASI-SA/pull/1971
+The remotely fetched tree is exactly equal to local complete checkpoint
+`bf40f39b16c9fef88218878c8a03686d9aa6c664`; the original local history is retained
+on `codex/qoyod-manual-send-speed-20261117-local-history` and in the earlier patch.
+The tests above exercise this identical implementation content.
+
+Original local milestones remain available:
+`171f0f98e9c1accd9b78b1d61dc6dda54565f0c4`,
+`920877e59b9e35eda97531ca4134a0835e54cc71`, and
+`dd1a89dfd939a42a87959da894d31d35ac8473c1`.
+
+Production ref freshly remained
+`8df479ef24b4f8847c26ba18d48e3248f7b673cf`; official shared /app status was
+read again and reported active:false. No shared tracked source, lease or
+production runtime has been changed by this task.
+
+Issue #1006 remains at its 2500-comment limit and rejected the previous handoff
+comment. This status and PR #1971 are the current continuation records. Use the
+PR's exact current SHA and CI state; do not treat this initial uploaded source
+as a frozen release pair or reuse the inherited intent.
+
+## Source CI correction and read-only production check
+
+Initial source CI run 44161737690 passed 49 Plan-B tests but exposed a
+pre-existing test false positive: the historical-count policy rejected the
+seconds-per-minute factor in `_ABANDONED_RUN_AGE_SECONDS = 15 * 60`.
+Both the runtime and test were byte-identical to production base 8df479e.
+The test-only correction exempts only the right-hand time-unit factor in that
+named timeout, independently requires the unchanged 15-minute timeout, and
+retains negative controls for forbidden counts and monetary literals. No
+production timeout or other runtime behavior was changed to pass the check.
+The corrected policy plus controls passed six tests; the two Build20 files
+passed separately, 49 Plan-B and 28 unified-backlog tests (77 total, both exit 0).
+The local runs used the repository's existing mongomock compatibility shim
+without shared /app environment or fixture-file writes. Fresh CI on the final
+source and intent-only head is still required.
+
+The live health identity was readable and verified before deployment: intended
+current source 80e941b5b990ede691948babe4c46558fa5922a0; identity, critical hashes,
+Frontend build, backend runtime source and release control source all verified.
+One health request took 529 ms; this is a single observation, not a benchmark.
+The shared environment does not expose the existing internal diagnostics token,
+so authenticated production memory/admission diagnostics were not called.
+No credential was printed, added, rotated or weakened. Production resource
+measurements remain unavailable through that path.
 
 ## Next safe action
 
-Obtain explicit permission to upload the completed change to AMASI-SA/AMASI-SA,
-create the dedicated task branch and PR, then run exact-source checks. If merge
-and deployment are also authorized, recheck the current production base and
-shared Release Guard status, produce the governed A/B source candidate and new
-intent-only commit, require all applicable gates, and perform the ordinary
-reviewed merge/publication plus three-probe verification. Never reuse the
-inherited production intent for these changed sources.
+Complete exact-source CI and final source A, generate a fresh governed A/B build
+and intent-only B, require all applicable exact-B gates and clean-clone adapter
+rehearsals, then recheck production ref/shared inactive guard before the ordinary
+merge and configured adapter handoff. Preserve A/B after freezing. The already
+authorized publication still requires its own fresh prepare/prepublish lease,
+one publish, a newer explicit completion and the official three-probe verify.
 
 At authorized rollout, replace the old worker processes, verify that container
 memory limits are visible, and observe CPU/memory, Mongo latency and ordinary
 employee-page response times while the bounded manual queue is active. Do not
 present local synthetic timing as proof of production response time.
 
-Production changed by this task: **no**. Deployment requires the repository's
-separate user authorization and Release Guard v5 source/intent procedure.
+Production changed by this task: **no**. User continuation authorizes the named
+release; Release Guard v5, exact-source CI and production verification remain
+mandatory before reporting deployment complete.
