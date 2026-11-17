@@ -70,6 +70,8 @@ def test_saved_source_gaps_include_paid_sar_and_share_one_bounded_visible_stage(
             async def acquire(guarded, owner, gaps, **options):
                 calls.append((name, owner, deepcopy(gaps), options))
                 await guarded.unified_orders.find_one({"user_id": owner})
+                if name == "courier":
+                    return {"status": "completed", "selected": 0, "outcomes": []}
             return acquire
 
         monkeypatch.setattr(bank_payment_sync, "acquire_missing", adapter("bank"))
@@ -77,7 +79,8 @@ def test_saved_source_gaps_include_paid_sar_and_share_one_bounded_visible_stage(
         monkeypatch.setattr(paid_sar_sync, "acquire_missing", adapter("sar"))
         result = await run_visible_refresh(request, db, "owner", "owner", allowed,
             lambda: acquisition.acquire_visible_evidence(db, "owner"))
-        assert result == {"status": "attempted", "bank_candidates": 1, "courier_candidates": 1, "sar_candidates": 1}
+        assert result == {"status": "attempted", "bank_candidates": 1, "courier_candidates": 1, "sar_candidates": 1,
+                          "courier": {"status": "completed", "selected": 0, "outcomes": []}}
         assert [name for name, *_ in calls] == ["bank", "courier", "sar"]
         assert all(owner == "owner" and options["limit"] == 4 for _, owner, _, options in calls)
         assert calls[2][2] == [{"order_id": "sar-order", "order_number": "17"}]
@@ -160,6 +163,8 @@ def test_budget_joins_native_read_and_leaves_saved_gaps_for_the_visible_refresh(
                 stopped.set()
 
         monkeypatch.setattr(bank_payment_sync, "acquire_missing", acquire)
+        monkeypatch.setattr(courier_delivery_sync, "acquire_missing", acquire)
+        monkeypatch.setattr(paid_sar_sync, "acquire_missing", acquire)
         result = await run_visible_refresh(request, db, "owner", "owner", allowed,
             lambda: acquisition.acquire_visible_evidence(db, "owner"))
         assert result["status"] == "deferred" and result["reason"] == "native_evidence_budget_exhausted"

@@ -53,7 +53,9 @@ def test_first_visible_page_needs_no_saved_session_digest(monkeypatch):
     response, calls = asyncio.run(post(db, monkeypatch))
     assert response.status_code == 200, response.text
     assert response.json() == {"status": "refreshed", "as_of": "2026-11-12T12:00:00+00:00",
-                               "revision": 2, "session_scope": digest(["owner", "staff"])}
+                               "revision": 2, "session_scope": digest(["owner", "staff"]),
+                               "native_evidence": {"status": "attempted", "bank_candidates": 0,
+                                                   "courier_candidates": 0, "sar_candidates": 0}}
     assert calls and set(calls) == {"reports"}
     assert db.data[LEASES] == {}
 

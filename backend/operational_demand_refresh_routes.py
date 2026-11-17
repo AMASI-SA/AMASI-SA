@@ -13,6 +13,7 @@ class VisibleRefreshInput(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     visible: Literal[True]
     expected_session_scope: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
+    courier_order_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{1,80}$")
 
     @field_validator("visible", mode="before")
     @classmethod
@@ -31,6 +32,8 @@ def attach_demand_refresh_routes(router, db, current_user, scope):
         actor, owner, _ = await scope(db, user, "reports")
         actor_id = actor["id"]
         session_scope = digest([owner, actor_id])
+        if payload.courier_order_id is not None and payload.expected_session_scope is None:
+            fail("operational_actor_scope_required", "أعد فتح التقرير للتحقق من ارتباط الحساب قبل مطابقة الطلب", 400)
         if payload.expected_session_scope is not None and payload.expected_session_scope != session_scope:
             fail("operational_actor_scope_changed", "تغير ارتباط الحساب؛ أعد فتح الصفحة", 403)
 
@@ -62,11 +65,13 @@ def attach_demand_refresh_routes(router, db, current_user, scope):
         async def update():
             from operational_visible_evidence import acquire_visible_evidence
             with refresh_stage("native_evidence"):
-                await acquire_visible_evidence(db, owner)
+                options = {"courier_order_id": payload.courier_order_id} if payload.courier_order_id is not None else {}
+                native_evidence = await acquire_visible_evidence(db, owner, **options)
             with refresh_stage("aggregate"):
                 state = await refresh(db, owner)
             return {"status": "refreshed", "as_of": state.get("engine", {}).get("as_of"),
-                    "revision": state.get("revision"), "session_scope": session_scope}
+                    "revision": state.get("revision"), "session_scope": session_scope,
+                    "native_evidence": native_evidence}
 
         return await run_visible_refresh(request, db, owner, actor_id, verify, update)
 

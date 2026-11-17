@@ -122,7 +122,7 @@ async def _unconfirmed_courier_dates(db, owner, state, issues):
     return [row for row in issues if str(row.get('source_id') or '') not in skipped]
 
 
-async def acquire_visible_evidence(db, owner):
+async def acquire_visible_evidence(db, owner, *, courier_order_id=None):
     """Acquire at most four proofs per source within this visible request."""
     context = demand_context()
     if context is None or context.db is not db or context.owner != owner:
@@ -145,30 +145,64 @@ async def acquire_visible_evidence(db, owner):
     bank = [issue for issue in issues if issue.get("code") == "operational_order_bank_binding_incomplete"]
     courier = [issue for issue in issues if issue.get("code") in ISSUE_CODES]
     sar = (state.get("engine", {}).get("customer_tender_coverage", {}).get("sar", {}).get("proof_lookups") or [])
+    if courier_order_id is not None:
+        # The explicit target is an intersection with this owner's saved gaps,
+        # never a request to inspect an arbitrary provider order or all orders.
+        courier = [issue for issue in courier if str(issue.get("source_id") or "") == courier_order_id]
+        if not courier:
+            fail("operational_courier_target_not_pending", "لم يعد الطلب ضمن حالات مطابقة الشحن في التقرير المحفوظ؛ حدّث الصفحة", 409)
+        bank, sar = [], []
     result = {"status": "attempted", "bank_candidates": len(bank), "courier_candidates": len(courier),
               "sar_candidates": len(sar)}
+    jobs = [(name, pending) for name, pending in (("bank", bank), ("courier", courier), ("sar", sar)) if pending]
+    finished = set()
+    deadline = asyncio.get_running_loop().time() + ACQUISITION_SECONDS
+
+    def deferred(name, reason):
+        result.update(status="deferred", reason=reason)
+        # A cancelled adapter may have saved earlier proofs. Counts are unknown,
+        # so do not misreport zero successes or a completed native acquisition.
+        result[name] = {"status": "deferred", "reason": reason}
+
     try:
         async with asyncio.timeout(ACQUISITION_SECONDS):
-            for name, pending in (("bank", bank), ("courier", courier), ("sar", sar)):
-                if not pending:
-                    continue
+            for index, (name, pending) in enumerate(jobs):
                 await checkpoint()
+                # Reserve time for each remaining source. Completed adapters
+                # donate unused time; exhausted adapters are cancelled and
+                # joined before the next one starts. Native reads stay serial.
+                remaining = max(0, deadline - asyncio.get_running_loop().time())
+                source_budget = remaining / (len(jobs) - index)
                 try:
-                    if name == "bank":
-                        await acquire_bank(guarded, owner, pending, limit=LIMIT_PER_SOURCE)
-                    elif name == "courier":
-                        pending = await _unconfirmed_courier_dates(guarded, owner, state, pending)
-                        if pending:
-                            await acquire_courier(guarded, owner, pending, started_at=state["started_at"], limit=LIMIT_PER_SOURCE)
-                    else:
-                        await acquire_sar(guarded, owner, pending, limit=LIMIT_PER_SOURCE)
+                    async with asyncio.timeout(source_budget):
+                        if name == "bank":
+                            await acquire_bank(guarded, owner, pending, limit=LIMIT_PER_SOURCE)
+                        elif name == "courier":
+                            pending = await _unconfirmed_courier_dates(guarded, owner, state, pending)
+                            if pending:
+                                receipt = await acquire_courier(guarded, owner, pending, started_at=state["started_at"],
+                                    limit=1 if courier_order_id is not None else LIMIT_PER_SOURCE)
+                                result["courier"] = receipt
+                                if receipt and receipt.get("status") == "deferred":
+                                    result.update(status="deferred", reason="native_evidence_unavailable")
+                            else:
+                                result["courier"] = {"status": "completed", "selected": 0, "outcomes": [],
+                                                     "reason": "native_evidence_not_required"}
+                        else:
+                            await acquire_sar(guarded, owner, pending, limit=LIMIT_PER_SOURCE)
                 except (SallaError, httpx.RequestError):
                     # Missing native evidence remains an explicit saved-source
                     # gap. Local authorization/identity errors are never caught.
-                    result.update(status="deferred", reason="native_evidence_unavailable")
+                    deferred(name, "native_evidence_unavailable")
+                except TimeoutError:
+                    deferred(name, "native_evidence_budget_exhausted")
+                finished.add(name)
     except TimeoutError:
         # The timeout cancels and joins the awaited adapter; nothing continues
         # after this request. Any completed source CAS is safe to replay.
         result.update(status="deferred", reason="native_evidence_budget_exhausted")
+        for name, _ in jobs:
+            if name not in finished:
+                deferred(name, "native_evidence_budget_exhausted")
     await checkpoint()
     return result

@@ -20,7 +20,7 @@ import PaginatedReportTable from "./PaginatedReportTable";
 import CustomerWalletBalance from "./CustomerWalletBalance";
 import PendingOrdersDialog from "./PendingOrdersDialog";
 import CompletedShippingFeeReview from "./CompletedShippingFeeReview";
-import { canReadOperationalPage, visibleOperationalRead, refreshVisibleSnapshot } from "./visibleOperationalRead";
+import { canMatchCourierOrder, canReadOperationalPage, courierRecoveryMessage, visibleOperationalRead, refreshVisibleSnapshot } from "./visibleOperationalRead";
 import { FINANCIAL_PAGES, financialPage, financialViewFromSearch, financialViewHref,
     financialSnapshotKey, financialSnapshotParams, hasFinancialSnapshot, sameFinancialSnapshot } from "./financialPositionViews";
 
@@ -58,7 +58,7 @@ function DataCell({ value, column }) {
     return positionText(value);
 }
 
-function ReportCell({ row, column, provider, currency, printing, confirmationControl, name }) {
+function ReportCell({ row, column, provider, currency, printing, confirmationControl, courierControl, name }) {
     if (provider) {
         if (column.key === "fee_description") return <ProviderFeeStatus row={row} />;
         if (column.key === "source_average_description") return <ProviderSourceAverage row={row} currency={currency} />;
@@ -70,11 +70,11 @@ function ReportCell({ row, column, provider, currency, printing, confirmationCon
                 confirmationControl={confirmationControl} countOnly />;
     }
     return column.type === "exceptions" && !printing
-        ? <PendingOrdersDialog count={row[column.key]} details={row.pending_order_details} name={row.name || name} confirmationControl={confirmationControl} />
+        ? <PendingOrdersDialog count={row[column.key]} details={row.pending_order_details} name={row.name || name} confirmationControl={confirmationControl} courierControl={courierControl} />
         : <DataCell value={row[column.key]} column={column} />;
 }
 
-function ReportTable({ table, printing, confirmationControl, currency }) {
+function ReportTable({ table, printing, confirmationControl, courierControl, currency }) {
     const provider = table.id === "providers";
     const providerHeadings = { fee_description: "حالة العمولة", source_average_description: "متوسط العمولة المتغيرة" };
     const columns = (table.columns || []).filter(column => !provider || column.key !== "statement_evidence_date_label")
@@ -86,7 +86,7 @@ function ReportTable({ table, printing, confirmationControl, currency }) {
             <tbody>{rows.map((row, index) => <tr key={row.id || index}>{columns.map(column =>
                 <td key={column.key} className={column.type === "text" ? "ofp-label-cell" : "ofp-value-cell"}>
                     <ReportCell row={row} column={column} provider={provider} currency={currency} printing={printing}
-                        confirmationControl={confirmationControl} name={table.title} /></td>)}</tr>)}
+                        confirmationControl={confirmationControl} courierControl={table.id === "couriers" ? courierControl : undefined} name={table.title} /></td>)}</tr>)}
                 {!table.rows?.length && <tr><td className="ofp-empty-cell" colSpan={Math.max(columns.length, 1)}>{table.complete === true ? "لا توجد أرصدة مسجلة لهذا القسم." : "لم تتوفر بيانات مكتملة لهذا القسم."}</td></tr>}
             </tbody>
             {table.show_totals !== false && table.totals && Object.keys(table.totals).length > 0 && <tfoot><tr>{columns.map((column, index) => <td key={column.key}>
@@ -205,6 +205,9 @@ export default function OperationalFinancialPosition() {
     const consumedRefreshIntent = useRef(-1);
     const exportCleanup = useRef(null), exportActivityCleanup = useRef(null), exportGeneration = useRef(0), forecastAttempt = useRef(null);
     const latestReport = useRef(null), confirmedDeliveries = useRef(null), confirmationRefresh = useRef(null);
+    const courierAttempt = useRef(null);
+
+    useEffect(() => () => { courierAttempt.current?.cancel(true); }, [scope, view, authLoading, authMissing, intent.id]);
 
     useEffect(() => {
         const pop = () => {
@@ -383,6 +386,90 @@ export default function OperationalFinancialPosition() {
         setState(previous => ({ ...previous, phase: "refreshing", error: "" }));
         setIntent(previous => ({ id: previous.id + 1, kind: "refresh", scope, view }));
     };
+    const matchCourier = (row, { signal } = {}) => {
+        if (refreshLock.current || courierAttempt.current || authMissing || authLoading || view !== "couriers"
+            || state.phase !== "ready" || report?.permissions?.reports !== true || !hasFinancialSnapshot(report)
+            || !/^[a-f0-9]{64}$/.test(report.session_scope || "")
+            || signal?.aborted || !canReadOperationalPage() || !canMatchCourierOrder(row)) {
+            return Promise.reject(new DOMException("Page is not active", "AbortError"));
+        }
+        const expected = report, expectedAttempt = intent.id;
+        const stillCurrent = () => !signal?.aborted && canReadOperationalPage()
+            && !latestReport.current?.authLoading && !latestReport.current?.authMissing
+            && latestReport.current?.scope === scope && latestReport.current?.view === view
+            && latestReport.current?.attempt === expectedAttempt
+            && latestReport.current?.report?.session_scope === expected.session_scope
+            && latestReport.current?.report?.started_at === expected.started_at;
+        refreshLock.current = true;
+        exportGeneration.current += 1; exportCleanup.current?.(); exportActivityCleanup.current?.();
+        setExporting(false); setExportError("");
+        setState(previous => ({ ...previous, phase: "refreshing", error: "" }));
+        return new Promise((resolve, reject) => {
+            const attempt = { cleanup: null, settled: false };
+            const finish = (error, result) => {
+                if (attempt.settled) return;
+                attempt.settled = true;
+                signal?.removeEventListener("abort", abort);
+                if (courierAttempt.current === attempt) { courierAttempt.current = null; refreshLock.current = false; }
+                if (error) reject(error); else resolve(result);
+            };
+            attempt.cancel = (silent = false) => {
+                if (attempt.settled) return;
+                attempt.cleanup?.();
+                if (!silent && latestReport.current?.scope === scope && latestReport.current?.view === view) {
+                    setState(previous => ({ ...previous, phase: previous.report ? "ready" : "paused",
+                        attempt: expectedAttempt, error: "" }));
+                }
+                finish(new DOMException("Courier matching cancelled", "AbortError"));
+            };
+            const abort = () => attempt.cancel();
+            courierAttempt.current = attempt;
+            signal?.addEventListener("abort", abort, { once: true });
+            const read = async config => {
+                if (!stillCurrent()) throw new DOMException("Page is not active", "AbortError");
+                const update = await refreshVisibleSnapshot(operationalApi, { ...config,
+                    courierOrderId: row.order_id, expectedSessionScope: expected.session_scope });
+                if (!stillCurrent() || config.signal?.aborted) throw new DOMException("Page is not active", "AbortError");
+                if (update?.status === "refreshed" && update.session_scope !== expected.session_scope) {
+                    throw new Error("Courier refresh scope changed");
+                }
+                const received = await operationalApi.financialPosition({ ...config, params: { view } });
+                if (!stillCurrent() || config.signal?.aborted) throw new DOMException("Page is not active", "AbortError");
+                if (received?.session_scope !== expected.session_scope || received?.started_at !== expected.started_at
+                    || Number.isSafeInteger(update?.revision) && received.revision < update.revision) {
+                    throw new Error("Courier report scope changed");
+                }
+                return { update, received };
+            };
+            attempt.cleanup = visibleOperationalRead(read, {
+                onData: ({ update, received }) => {
+                    if (!stillCurrent()) { attempt.cancel(); return; }
+                    if (received?.permissions?.reports !== true) {
+                        setState({ scope, view, phase: "denied", report: null, error: "ليست لديك صلاحية عرض التقرير المالي التشغيلي." });
+                        finish(new Error("Courier report permission changed"));
+                    } else if (!isPositionContract(received) || received.view !== view || !Number.isSafeInteger(received.revision)) {
+                        setState(previous => ({ ...previous, phase: "ready", attempt: expectedAttempt }));
+                        finish(new Error("Invalid courier report"));
+                    } else {
+                        setState({ scope, view, phase: "ready", error: "", attempt: expectedAttempt,
+                            report: { ...received, courier_notice: `الطلب ${deliveryOrderLabel(row)}: ${courierRecoveryMessage(update, row.order_id)}` } });
+                        finish(null, update);
+                    }
+                },
+                onError: error => {
+                    if ([401, 403].includes(error?.response?.status)) {
+                        setState({ scope, view, phase: "denied", report: null, error: "انتهت صلاحية قراءة التقرير؛ أعد تسجيل الدخول." });
+                    } else setState(previous => ({ ...previous, phase: previous.report ? "ready" : "error", attempt: expectedAttempt }));
+                    finish(error);
+                },
+                onPaused: () => attempt.cancel(),
+            }, readLane.current, { singleAttemptTimeoutMs: REPORT_LOAD_TIMEOUT_MS, deferUntilVisible: false });
+            if (attempt.settled) attempt.cleanup();
+        });
+    };
+    const courierControl = { allowed: view === "couriers" && report?.permissions?.reports === true && hasFinancialSnapshot(report)
+            && /^[a-f0-9]{64}$/.test(report.session_scope || ""),
+        busy: loading || refreshing, sessionScope: report?.session_scope, periodStart: report?.started_at, onMatch: matchCourier };
     const deliverySaved = (record, { refreshAllowed } = {}) => {
         const latest = latestReport.current;
         if (latest.scope !== scope || latest.report?.permissions?.confirm_delivery_after_start !== true
@@ -549,6 +636,7 @@ export default function OperationalFinancialPosition() {
                 {report?.status === "active" && !data && <div className="ofp-page-notice" role="status">لا توجد بيانات عملة جاهزة للعرض حتى آخر احتساب.</div>}
                 {report?.status === "active" && !data && view === "summary" && pendingForecast && <ForecastPending message={forecastMessage} loading={forecastState.phase === "loading"} retry={reload} />}
                 {report?.refresh_warning && <p role="alert" className="ofp-warning">{report.refresh_warning}</p>}
+                {report?.courier_notice && <p role="status" className="ofp-warning ofp-no-print">{report.courier_notice}</p>}
                 {confirmationNotice && <p role="status" className="ofp-warning ofp-no-print">{confirmationNotice}</p>}
                 {data && user?.role === "owner" && view === "providers" && <div className="ofp-owner-controls ofp-no-print">
                     <a className="ofp-button" href="/operational-balances/provider-fees">مراجعة تعرفات منصات الدفع</a>
@@ -573,7 +661,7 @@ export default function OperationalFinancialPosition() {
                     <ReportWarnings report={report} data={data} />
                     {view !== "summary" && <section className="ofp-section" aria-labelledby="ofp-page-heading">
                         <SectionHeading id="ofp-page-heading" number="01" title={page.label}><span className="ofp-positive">لنا: مستحق للمنشأة</span><span className="ofp-negative">علينا: مستحق للغير</span></SectionHeading>
-                        <div className="ofp-table-grid">{tables.map(table => <ReportTable key={`${activeCurrency}:${table.id}`} table={table} printing={printing} confirmationControl={confirmationControl} currency={activeCurrency} />)}</div>
+                        <div className="ofp-table-grid">{tables.map(table => <ReportTable key={`${activeCurrency}:${table.id}`} table={table} printing={printing} confirmationControl={confirmationControl} courierControl={courierControl} currency={activeCurrency} />)}</div>
                         {data.deliveries && ["couriers", "drivers", "expected"].includes(view) && <DeliveryDetails key={activeCurrency} delivery={data.deliveries} filters={filters} onFiltersChange={setFilters} currency={activeCurrency} />}
                     </section>}
                     {view === "summary" && <section className="ofp-section" aria-labelledby="ofp-summary-heading">

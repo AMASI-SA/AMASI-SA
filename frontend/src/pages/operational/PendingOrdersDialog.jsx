@@ -4,7 +4,7 @@ import PaginatedReportTable from "./PaginatedReportTable";
 import { deliveryOrderLabel, formatPositionCount } from "./financialPositionPresentation";
 import { formatRiyadhDateTime } from "../../lib/dates";
 import { operationalApi, requestId } from "./api";
-import { canReadOperationalPage } from "./visibleOperationalRead";
+import { canMatchCourierOrder, canReadOperationalPage, courierRecoveryMessage } from "./visibleOperationalRead";
 import "./financialPosition.css";
 
 const confirmationLabel = "تأكيد التوصيل بعد بداية التشغيل";
@@ -71,13 +71,18 @@ export function distinctPendingOrders(details = []) {
     return [...orders.values()];
 }
 
-export default function PendingOrdersDialog({ count, details, name = "هذه الجهة", confirmationControl, countOnly = false }) {
-    const { allowed = false, sessionScope, periodStart, recordedConfirmations = {}, onSaved } = confirmationControl || {};
+export default function PendingOrdersDialog({ count, details, name = "هذه الجهة", confirmationControl, courierControl, countOnly = false }) {
+    const { allowed = false, recordedConfirmations = {}, onSaved } = confirmationControl || {};
+    const sessionScope = confirmationControl?.sessionScope ?? courierControl?.sessionScope;
+    const periodStart = confirmationControl?.periodStart ?? courierControl?.periodStart;
+    const courierAllowed = courierControl?.allowed === true && /^[a-f0-9]{64}$/.test(sessionScope || "") && courierControl.sessionScope === sessionScope
+        && courierControl.periodStart === periodStart && typeof courierControl.onMatch === "function";
     const contextKey = JSON.stringify([sessionScope || "", periodStart || ""]);
     const [opening, setOpening] = useState(null);
     const open = opening === contextKey;
     const [search, setSearch] = useState("");
     const [actions, setActions] = useState({}), [busyKey, setBusyKey] = useState(null);
+    const [courierNotice, setCourierNotice] = useState(null);
     const [active, setActive] = useState(canReadOperationalPage);
     const dialogRef = useRef(null), triggerRef = useRef(null);
     const lifetime = useRef({ alive: true, generation: 0 }), pending = useRef(null), localRecords = useRef({});
@@ -85,17 +90,18 @@ export default function PendingOrdersDialog({ count, details, name = "هذه ا�
     const allRows = useMemo(() => distinctPendingOrders(details), [details]);
     const rows = useMemo(() => allRows.filter(row => !search.trim() ||
         [row.order_number, row.order_id].some(value => String(value || "").includes(search.trim()))), [allRows, search]);
-    current.current = { contextKey, allowed, sessionScope, periodStart, open, allRows, recordedConfirmations, onSaved };
+    current.current = { contextKey, allowed, courierAllowed, courierControl, sessionScope, periodStart, open, allRows, recordedConfirmations, onSaved };
 
     const cancelPreview = useCallback(() => {
         lifetime.current.generation += 1;
         const request = pending.current;
-        if (request?.stage !== "preview") return;
+        if (!["preview", "native"].includes(request?.stage)) return;
         request.controller.abort();
         pending.current = null;
         if (lifetime.current.alive) {
             setBusyKey(null);
-            setActions(previous => ({ ...previous, [request.key]: { error: "توقفت المعاينة؛ أعد المحاولة من النافذة الظاهرة." } }));
+            if (request.stage === "native") setCourierNotice({ order: request.order, message: "توقفت المطابقة عند إغلاق النافذة أو مغادرة الصفحة. أعد المحاولة من النافذة الظاهرة عند الحاجة." });
+            else setActions(previous => ({ ...previous, [request.key]: { error: "توقفت المعاينة؛ أعد المحاولة من النافذة الظاهرة." } }));
         }
     }, []);
 
@@ -122,9 +128,35 @@ export default function PendingOrdersDialog({ count, details, name = "هذه ا�
         cancelPreview();
         pending.current = null;
         localRecords.current = {};
-        setOpening(null); setSearch(""); setActions({}); setBusyKey(null);
+        setOpening(null); setSearch(""); setActions({}); setBusyKey(null); setCourierNotice(null);
     }, [contextKey, cancelPreview]);
-    useEffect(() => { if (!allowed) cancelPreview(); }, [allowed, cancelPreview]);
+    useEffect(() => {
+        if (pending.current?.stage === "preview" && !allowed || pending.current?.stage === "native" && !courierAllowed) cancelPreview();
+    }, [allowed, courierAllowed, cancelPreview]);
+
+    const matchCourier = async row => {
+        if (pending.current || !courierAllowed || courierControl.busy || !open || !canReadOperationalPage()
+            || !text(sessionScope) || !Number.isFinite(instant(periodStart)) || !canMatchCourierOrder(row)) return;
+        const request = { key: `native:${row.order_id}`, order: deliveryOrderLabel(row), contextKey,
+            generation: lifetime.current.generation, stage: "native", controller: new AbortController() };
+        const canContinue = () => lifetime.current.alive && pending.current === request
+            && current.current.contextKey === request.contextKey && current.current.open && current.current.courierAllowed
+            && lifetime.current.generation === request.generation && !request.controller.signal.aborted && canReadOperationalPage();
+        pending.current = request; setBusyKey(request.key);
+        setCourierNotice({ order: request.order, message: "جارٍ مطابقة البوليصة وحالة الشحنة وتواريخها مع سلة…" });
+        try {
+            const result = await courierControl.onMatch(row, { signal: request.controller.signal });
+            if (canContinue()) setCourierNotice({ order: request.order, message: courierRecoveryMessage(result, row.order_id) });
+        } catch (error) {
+            if (canContinue()) setCourierNotice({ order: request.order, error: true,
+                message: error?.response?.data?.detail?.message || "تعذرت مطابقة الطلب؛ راجع الحالة المحدثة قبل إعادة المحاولة." });
+        } finally {
+            if (pending.current === request) {
+                pending.current = null;
+                if (lifetime.current.alive) setBusyKey(null);
+            }
+        }
+    };
 
     const confirmDelivery = async row => {
         const target = confirmationTarget(row);
@@ -232,12 +264,17 @@ export default function PendingOrdersDialog({ count, details, name = "هذه ا�
                             <td>{row.reasons.length ? row.reasons.map((reason, reasonIndex) => <p key={`${reason.code}:${reasonIndex}`}>{reason.message}</p>) : "سبب المراجعة غير متوفر في هذه اللقطة."}
                                 {canConfirm && <button type="button" className="ofp-button" aria-label={confirmationLabel} disabled={busyKey !== null || !active}
                                     onClick={() => confirmDelivery(row)}>{confirmationLabel}</button>}
+                                {courierAllowed && canMatchCourierOrder(row) && <button type="button" className="ofp-button" aria-label={`مطابقة الطلب ${deliveryOrderLabel(row)} مع سلة`}
+                                    disabled={busyKey !== null || courierControl.busy || !active} onClick={() => matchCourier(row)}>مطابقة مع سلة</button>}
                                 {busyKey !== null && busyKey === key && <p role="status">جارٍ التحقق وحفظ التأكيد…</p>}
                                 {record && <p role="status">{savedMessage(record.state)}{record.confirmed_at && <> · وقت التسجيل: <bdi>{formatRiyadhDateTime(record.confirmed_at)}</bdi></>}</p>}
                                 {action.error && <p role="alert">{action.error}</p>}
                             </td>
                         </tr>; })}</tbody></table></div>}
                 </PaginatedReportTable>
+                {courierNotice && <div className="ofp-notes" role={courierNotice.error ? "alert" : "status"} data-testid="courier-match-result">
+                    <strong>نتيجة مطابقة الطلب <bdi>{courierNotice.order}</bdi></strong><p>{courierNotice.message}</p>
+                </div>}
                 {!rows.length && <p role="status">{allRows.length ? "لا توجد طلبات تطابق البحث." : "تفاصيل الطلبات غير متوفرة في هذه اللقطة؛ حدّث التقرير لقراءة أحدث تفاصيل محفوظة."}</p>}
                 {allRows.length !== count && <p role="status">تفاصيل متاحة لـ{allRows.length} من {count} طلبًا. لم تُعتبر بقية الطلبات مكتملة.</p>}
             </div></dialog>, document.body)}

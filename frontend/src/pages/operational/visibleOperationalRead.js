@@ -184,3 +184,56 @@ export async function refreshVisibleSnapshot(api, config) {
         throw error;
     }
 }
+
+const COURIER_RECOVERY_CODES = new Set([
+    "operational_delivery_shipment_not_delivered", "operational_delivery_timestamp_missing",
+    "operational_delivery_shipment_source_missing", "operational_delivery_order_waybill_unproven",
+    "operational_prepaid_shipping_completion_timestamp_missing",
+]);
+
+export function canMatchCourierOrder(row) {
+    return typeof row?.order_id === "string" && /^[A-Za-z0-9_-]{1,80}$/.test(row.order_id)
+        && Array.isArray(row.reasons) && row.reasons.some(reason => COURIER_RECOVERY_CODES.has(reason?.code));
+}
+
+// Native acquisition and financial reconciliation have different outcomes. A
+// saved proof never means all other review reasons or balances are resolved.
+export function courierRecoveryMessage(result, orderId) {
+    if (result?.refresh_warning) return result.refresh_warning;
+    const courier = result?.native_evidence?.courier;
+    const outcome = Array.isArray(courier?.outcomes)
+        ? courier.outcomes.find(row => row?.order_id === orderId) : null;
+    if (outcome?.status === "saved") {
+        return "تم التحقق من دليل الطلب وحفظه من سلة، وأُعيد احتساب الأرصدة. قد تبقى للطلب أسباب مراجعة أخرى.";
+    }
+    if (outcome?.status === "unchanged") return "تم التحقق من دليل الطلب المحفوظ؛ لم يحتج إلى تغيير. أُعيد احتساب الأرصدة، وقد تبقى للطلب أسباب مراجعة أخرى.";
+    if (outcome?.status === "already_eligible") return "دليل الطلب المحفوظ مستوفٍ لهذا الفحص؛ أُعيد احتساب الأرصدة للتحقق من حالته.";
+    if (outcome?.status === "source_changed") return "تغيرت بيانات الطلب أثناء المطابقة؛ لم يُحفظ دليل على بيانات قديمة. راجع الحالة المحدثة قبل إعادة المحاولة.";
+    if (outcome?.status === "unavailable") return "تعذرت قراءة دليل هذا الطلب من سلة. لم تُثبت المطابقة؛ أعد المحاولة عند الحاجة بعد مهلة إعادة المحاولة.";
+    if (outcome?.status === "blocked") {
+        const reasons = {
+            courier_native_shipment_ambiguous: "توجد بوالص متعددة أو مستبدلة؛ يلزم تحديد البوليصة التي أُنجز تسليمها.",
+            courier_native_shipment_mismatch: "لم تتطابق البوليصة أو شركة الشحن مع حالة الشحنة في سلة.",
+            courier_native_history_order_mismatch: "سجل التسليم لا يخص الطلب المطلوب.",
+            courier_native_timeline_conflict: "تسلسل تواريخ الطلب والشحنة لا يكفي لإثبات تاريخ التسليم.",
+            courier_native_source_conflict: "دليل التسليم يتعارض مع بيانات الشحنة المحفوظة.",
+            courier_native_pagination_incomplete: "لم يكتمل سجل سلة اللازم للتحقق من التسليم وعدم وجود حركة لاحقة.",
+            courier_native_pagination_missing: "لم يكتمل سجل سلة اللازم للتحقق من التسليم وعدم وجود حركة لاحقة.",
+            courier_native_page_repeated: "لم يكتمل سجل سلة اللازم للتحقق من التسليم وعدم وجود حركة لاحقة.",
+            courier_native_source_refresh_required: "بيانات الطلب الأساسية غير مكتملة أو تحتاج إلى تحديث موثوق من سلة قبل اعتماد الدليل.",
+            courier_native_source_version_mismatch: "تاريخ نسخة الطلب لا يطابق النسخة المحفوظة؛ يلزم تحديث بيانات الطلب قبل اعتماد الدليل.",
+            courier_native_shipment_identity_missing: "معرف الشحنة أو رقم البوليصة غير متاح؛ لا يمكن ربط الحالة بالشحنة الفعلية.",
+            courier_native_order_not_delivered: "حالة الطلب المحفوظة لا تثبت التسليم المطلوب لهذا الفحص.",
+            courier_native_order_mismatch: "هوية الطلب لا تطابق بيانات المصدر المحفوظة.",
+            courier_native_carrier_missing: "شركة الشحن غير محددة في بيانات الطلب المحفوظة.",
+        };
+        return "لم تُثبت المطابقة: " + (reasons[outcome.reason] || "الدليل المتاح لا يستوفي شروط التحقق من الطلب والبوليصة وحالة الشحنة وتواريخها.");
+    }
+    if (courier?.status === "deferred" || result?.native_evidence?.status === "deferred") {
+        return "لم تكتمل محاولة مطابقة الطلب ضمن الوقت المتاح. لا تعني إعادة احتساب الأرصدة أن دليل الطلب قد ثبت.";
+    }
+    if (courier?.status === "completed" && courier.selected === 0) {
+        return "لم تُجرَ محاولة جديدة لهذا الطلب؛ قد يكون ضمن مهلة إعادة المحاولة البالغة 15 دقيقة أو تغيرت أهليته للمطابقة. راجع الحالة المحدثة.";
+    }
+    return "أُعيدت قراءة الأرصدة، لكن لم تصل نتيجة مؤكدة لمطابقة هذا الطلب مع سلة.";
+}

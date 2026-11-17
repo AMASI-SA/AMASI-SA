@@ -1,4 +1,4 @@
-import {visibleOperationalRead, refreshVisibleSnapshot, logOperationalRefreshTimeoutTimings} from './visibleOperationalRead';
+import {visibleOperationalRead, refreshVisibleSnapshot, logOperationalRefreshTimeoutTimings, courierRecoveryMessage} from './visibleOperationalRead';
 
 const flush = async () => { for (let index = 0; index < 8; index += 1) await Promise.resolve(); };
 const deferred = () => { let resolve, reject; const promise = new Promise((a, b) => {resolve = a; reject = b;}); return {promise, resolve, reject}; };
@@ -8,6 +8,37 @@ beforeEach(() => {
   online = jest.spyOn(navigator, 'onLine', 'get').mockReturnValue(true);
 });
 afterEach(() => jest.restoreAllMocks());
+
+test.each([
+  [{status: 'completed', selected: 0, outcomes: []}, 'لم تُجرَ محاولة جديدة'],
+  [{status: 'deferred', reason: 'native_evidence_budget_exhausted'}, 'لم تكتمل محاولة'],
+  [{status: 'completed', selected: 1, outcomes: [{order_id: '8101', status: 'blocked', reason: 'courier_native_shipment_mismatch'}]}, 'لم تتطابق البوليصة'],
+  [{status: 'completed', selected: 1, outcomes: [{order_id: '8101', status: 'source_changed'}]}, 'تغيرت بيانات الطلب'],
+  [{status: 'completed', selected: 1, outcomes: [{order_id: '8101', status: 'unavailable'}]}, 'تعذرت قراءة دليل'],
+  [{status: 'completed', selected: 1, outcomes: [{order_id: 'another-order', status: 'saved'}]}, 'لم تصل نتيجة مؤكدة'],
+])('aggregate success does not claim native matching from incomplete outcome %j', (courier, expected) => {
+  const message = courierRecoveryMessage({status: 'refreshed', native_evidence: {courier}}, '8101');
+  expect(message).toContain(expected);
+  expect(message).not.toContain('تم التحقق من دليل الطلب وحفظه');
+});
+
+test('unknown blocked reason text is not rendered from the native response', () => {
+  const message = courierRecoveryMessage({native_evidence: {courier: {outcomes: [
+    {order_id: '8101', status: 'blocked', reason: 'PRIVATE_PROVIDER_RESPONSE'},
+  ]}}}, '8101');
+  expect(message).toContain('لا يستوفي شروط التحقق');
+  expect(message).not.toContain('PRIVATE_PROVIDER_RESPONSE');
+});
+
+test('saved execution evidence and unchanged evidence are reported without asserting delivery', () => {
+  const result = status => courierRecoveryMessage({native_evidence: {courier: {
+    outcomes: [{order_id: '8101', status}],
+  }}}, '8101');
+  expect(result('saved')).toContain('تم التحقق من دليل الطلب وحفظه');
+  expect(result('unchanged')).toContain('لم يحتج إلى تغيير');
+  expect(result('unchanged')).not.toContain('وحفظه من سلة');
+  for (const status of ['saved', 'unchanged']) expect(result(status)).not.toContain('دليل التوصيل');
+});
 
 test('hidden mount does no work; one visible completion never polls or refreshes on focus/visibility', async () => {
   visibility.mockReturnValue('hidden');

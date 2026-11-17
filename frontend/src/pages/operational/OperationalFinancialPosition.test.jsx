@@ -153,6 +153,147 @@ const mockDeliveryConfirmation = payload => {
         order_id: "old-order", order_number: "1001", recorded_confirmation: { id: "proof-one", confirmed_at: "2026-11-01T10:00:00Z", state: "pending_reconciliation" } });
 };
 
+function courierMatchingFixture() {
+    const payload = fixture("couriers");
+    payload.session_scope = "a".repeat(64);
+    payload.currencies.SAR.tables = [{ id: "couriers", title: "شركات الشحن", kind: "actual", complete: false,
+        columns: [{ key: "name", type: "text", label: "الشركة" }, { key: "pending_orders", type: "exceptions", label: "طلبات غير مؤكدة" }],
+        rows: [{ id: "synthetic-courier", name: "شركة التجربة", pending_orders: 1,
+            pending_order_details: [{ order_id: "8101", order_number: "9101",
+                reasons: [{ code: "operational_delivery_order_waybill_unproven", message: "البوليصة تحتاج مطابقة" }] }] }] }];
+    return payload;
+}
+const matchCourierButton = () => [...document.querySelectorAll("button")].find(node => node.textContent === "مطابقة مع سلة");
+const openPendingCourier = async () => act(async () => host.querySelector('[data-testid="financial-table-couriers"] .ofp-pending-orders').click());
+const courierMatched = (scope, outcome = "saved") => ({ status: "refreshed", session_scope: scope, revision: 8,
+    native_evidence: { status: "attempted", courier: { status: "completed", selected: 1,
+        outcomes: [{ order_id: "8101", status: outcome }] } } });
+
+test("one courier match forwards the selected identity and scope then applies one same-session report", async () => {
+    const payload = courierMatchingFixture(), updated = JSON.parse(JSON.stringify(payload));
+    updated.revision = 8; updated.currencies.SAR.tables[0].rows[0].pending_orders = 0;
+    updated.currencies.SAR.tables[0].rows[0].pending_order_details = [];
+    operationalApi.financialPosition.mockResolvedValueOnce(payload).mockResolvedValue(updated);
+    operationalApi.refreshBalances.mockResolvedValue(courierMatched(payload.session_scope));
+    await render("couriers"); await openPendingCourier();
+    expect(operationalApi.refreshBalances).not.toHaveBeenCalled();
+    await act(async () => matchCourierButton().click());
+    expect(operationalApi.refreshBalances).toHaveBeenCalledTimes(1);
+    expect(operationalApi.refreshBalances).toHaveBeenCalledWith(expect.objectContaining({
+        courierOrderId: "8101", expectedSessionScope: payload.session_scope, signal: expect.any(AbortSignal),
+    }));
+    expect(operationalApi.financialPosition).toHaveBeenCalledTimes(2);
+    expect(operationalApi.financialPosition.mock.calls[1][0].params).toEqual({ view: "couriers" });
+    expect(host.textContent).toContain("تم التحقق من دليل الطلب وحفظه");
+    expect(host.querySelector('[data-testid="financial-table-couriers"] .ofp-pending-orders')).toBeNull();
+    expect(operationalApi.confirmDeliveryAfterStart).not.toHaveBeenCalled();
+    await act(async () => { window.dispatchEvent(new Event("focus")); window.dispatchEvent(new Event("online")); });
+    expect(operationalApi.refreshBalances).toHaveBeenCalledTimes(1);
+});
+
+test.each(["close", "hide", "navigation", "unmount"])("courier matching cancels on %s without follow-up GET or replay", async action => {
+    const visibility = jest.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+    const payload = courierMatchingFixture(), pending = deferred();
+    operationalApi.financialPosition.mockResolvedValue(payload);
+    operationalApi.refreshBalances.mockReturnValue(pending.promise);
+    await render("couriers"); await openPendingCourier();
+    await act(async () => matchCourierButton().click());
+    const signal = operationalApi.refreshBalances.mock.calls[0][0].signal;
+    if (action === "close") await act(async () => document.querySelector('button[aria-label="إغلاق نافذة الطلبات"]').click());
+    if (action === "hide") await act(async () => { visibility.mockReturnValue("hidden"); document.dispatchEvent(new Event("visibilitychange")); });
+    if (action === "navigation") await navigate("drivers");
+    if (action === "unmount") await unmount();
+    expect(signal.aborted).toBe(true);
+    await act(async () => pending.resolve(courierMatched(payload.session_scope)));
+    await act(async () => { visibility.mockReturnValue("visible"); document.dispatchEvent(new Event("visibilitychange")); window.dispatchEvent(new Event("online")); });
+    expect(operationalApi.refreshBalances).toHaveBeenCalledTimes(1);
+    // Navigation can read the newly selected section, never the cancelled courier report.
+    expect(requestedViews().filter(value => value === "couriers")).toHaveLength(1);
+    expect(host.textContent).not.toContain("تم التحقق من دليل الطلب وحفظه");
+});
+
+test("a no-longer-pending target is not silently replaced by a general refresh", async () => {
+    const payload = courierMatchingFixture();
+    operationalApi.financialPosition.mockResolvedValue(payload);
+    operationalApi.refreshBalances.mockRejectedValue({ response: { status: 409, data: { detail: {
+        code: "operational_courier_target_not_pending", message: "لم يعد الطلب ضمن حالات مطابقة الشحن" } } } });
+    await render("couriers"); await openPendingCourier(); await act(async () => matchCourierButton().click());
+    expect(operationalApi.refreshBalances).toHaveBeenCalledTimes(1);
+    expect(operationalApi.financialPosition).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('[data-testid="courier-match-result"]').textContent).toContain("لم يعد الطلب ضمن حالات مطابقة الشحن");
+});
+
+test.each([["page", "close"], ["page", "failure"], ["all", "close"], ["all", "failure"]])(
+    "courier matching releases a revoked %s export after %s without requiring a new snapshot", async (kind, outcome) => {
+        const payload = courierMatchingFixture(), serialization = deferred(), native = deferred();
+        serve(payload);
+        XLSX.writeFile.mockReturnValue(serialization.promise);
+        operationalApi.refreshBalances.mockReturnValue(native.promise);
+        await render("couriers");
+        await click(kind === "page" ? "تصدير هذه الصفحة" : "تصدير جميع الأقسام");
+        expect(XLSX.writeFile).toHaveBeenCalledTimes(1);
+        const shouldContinue = XLSX.writeFile.mock.calls[0][2].shouldContinue;
+        expect(shouldContinue()).toBe(true);
+        expect(host.querySelector(".ofp-export").disabled).toBe(true);
+        expect(button(kind === "all" ? "جارٍ تحميل التقرير الكامل" : "تصدير جميع الأقسام").disabled).toBe(true);
+        await openPendingCourier(); await act(async () => matchCourierButton().click());
+        expect(shouldContinue()).toBe(false);
+        if (outcome === "close") {
+            await act(async () => document.querySelector('button[aria-label="إغلاق نافذة الطلبات"]').click());
+            expect(operationalApi.refreshBalances.mock.calls[0][0].signal.aborted).toBe(true);
+            await act(async () => native.resolve(courierMatched(payload.session_scope)));
+        } else await act(async () => native.reject({ response: { status: 409, data: { detail: {
+            code: "operational_courier_target_not_pending", message: "لم يعد الطلب ضمن حالات مطابقة الشحن" } } } }));
+        expect(requestedViews()).toEqual(kind === "page" ? ["couriers"] : ["couriers", "all"]);
+        expect(host.querySelector('[data-testid="financial-table-couriers"] .ofp-pending-orders')).not.toBeNull();
+        expect(host.querySelector(".ofp-export").disabled).toBe(false);
+        expect(button("تصدير جميع الأقسام").disabled).toBe(false);
+        await act(async () => serialization.resolve(false));
+        expect(shouldContinue()).toBe(false);
+        expect(host.querySelector(".ofp-export").disabled).toBe(false);
+        expect(button("تصدير جميع الأقسام").disabled).toBe(false);
+        expect(host.textContent).not.toContain("أُلغي التصدير");
+    });
+
+test("a courier refresh with another session never starts the follow-up report read", async () => {
+    const payload = courierMatchingFixture();
+    operationalApi.financialPosition.mockResolvedValue(payload);
+    operationalApi.refreshBalances.mockResolvedValue(courierMatched("b".repeat(64)));
+    await render("couriers"); await openPendingCourier(); await act(async () => matchCourierButton().click());
+    expect(operationalApi.financialPosition).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('[data-testid="courier-match-result"]').textContent).toContain("تعذرت مطابقة الطلب");
+});
+
+test("closing during the courier follow-up read aborts it and rejects its late display", async () => {
+    const payload = courierMatchingFixture(), pending = deferred(), updated = JSON.parse(JSON.stringify(payload));
+    updated.revision = 8; updated.currencies.SAR.tables[0].rows[0].name = "LATE-COURIER";
+    operationalApi.financialPosition.mockResolvedValueOnce(payload).mockReturnValue(pending.promise);
+    operationalApi.refreshBalances.mockResolvedValue(courierMatched(payload.session_scope));
+    await render("couriers"); await openPendingCourier(); await act(async () => matchCourierButton().click());
+    expect(operationalApi.financialPosition).toHaveBeenCalledTimes(2);
+    const signal = operationalApi.financialPosition.mock.calls[1][0].signal;
+    await act(async () => document.querySelector('button[aria-label="إغلاق نافذة الطلبات"]').click());
+    expect(signal.aborted).toBe(true);
+    await act(async () => pending.resolve(updated));
+    expect(host.textContent).not.toContain("LATE-COURIER");
+    expect(host.textContent).not.toContain("تم التحقق من دليل الطلب وحفظه");
+    expect(operationalApi.refreshBalances).toHaveBeenCalledTimes(1);
+});
+
+test.each(["session_scope", "started_at", "revision"])("courier matching refuses a follow-up report with stale %s", async fieldName => {
+    const payload = courierMatchingFixture(), changed = JSON.parse(JSON.stringify(payload));
+    changed.revision = 8;
+    changed[fieldName] = fieldName === "session_scope" ? "b".repeat(64)
+        : fieldName === "started_at" ? "2026-11-02T00:00:00Z" : 7;
+    changed.currencies.SAR.tables[0].rows[0].name = "OBSOLETE-COURIER";
+    operationalApi.financialPosition.mockResolvedValueOnce(payload).mockResolvedValue(changed);
+    operationalApi.refreshBalances.mockResolvedValue(courierMatched(payload.session_scope));
+    await render("couriers"); await openPendingCourier(); await act(async () => matchCourierButton().click());
+    expect(host.textContent).not.toContain("OBSOLETE-COURIER");
+    expect(host.textContent).not.toContain("تم التحقق من دليل الطلب وحفظه");
+    expect(operationalApi.refreshBalances).toHaveBeenCalledTimes(1);
+});
+
 test("standalone report permission supports one manual delivery confirmation and one visible refresh", async () => {
     const payload = confirmationFixture();
     useOptionalAuth.mockReturnValue(undefined);

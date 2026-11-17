@@ -73,7 +73,11 @@ export const operationalApi = {
   obligations: (party_type, party_id, config = {}) => data(api.get(`${base}/obligations`, {...config, params:{...config.params, party_type, party_id}})),
   receiptContent: id => data(api.get(`${base}/receipts/${encodeURIComponent(id)}`, {responseType:"blob"})),
   reports: (config = {}) => data(api.get(`${base}/reports`, {timeout: 45000, ...config})),
-  refreshBalances: (config = {}) => data(api.post(`${base}/refresh`, {visible: true}, {timeout: 90000, ...config})),
+  refreshBalances: ({ courierOrderId, expectedSessionScope, ...config } = {}) => data(api.post(`${base}/refresh`, {
+    visible: true,
+    ...(courierOrderId !== undefined ? {courier_order_id: courierOrderId} : {}),
+    ...(expectedSessionScope !== undefined ? {expected_session_scope: expectedSessionScope} : {}),
+  }, {timeout: 90000, ...config})),
   costExposure: (config = {}) => data(api.get(`${base}/cost-exposure`, {timeout: 45000, ...config})),
   financialPosition: (config = {}) => data(api.get(`${base}/financial-position`, {timeout: 60000, ...config})),
   dailyFinancialMovements: (params, config = {}) => data(api.get(`${base}/daily-financial-movements`, {timeout: 30000, ...config, params})),

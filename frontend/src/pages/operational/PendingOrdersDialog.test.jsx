@@ -20,6 +20,58 @@ const details = count => Array.from({length: count}, (_, i) => ({order_id: `id-$
     reasons: [{code: "date_missing", message: `تاريخ التوصيل غير مؤكد للطلب ${i}`}] }));
 const click = async text => act(async () => [...document.querySelectorAll("button")].find(node => node.textContent.includes(text)).click());
 
+const courierRow = () => ({ order_id: "8101", order_number: "9101",
+    reasons: [{ code: "operational_delivery_order_waybill_unproven", message: "البوليصة تحتاج مطابقة" }] });
+const courierControls = onMatch => ({ allowed: true, sessionScope: "a".repeat(64),
+    periodStart: "2026-11-01T00:00:00Z", onMatch });
+
+test("courier matching requires an explicit click and reports its proof outcome below the table", async () => {
+    let resolve;
+    const onMatch = jest.fn().mockReturnValue(new Promise(done => { resolve = done; }));
+    await act(async () => root.render(<PendingOrdersDialog count={1} details={[courierRow()]} name="شركة التجربة"
+        courierControl={courierControls(onMatch)} />));
+    await click("طلبات غير مؤكدة");
+    expect(onMatch).not.toHaveBeenCalled();
+    const match = [...document.querySelectorAll("button")].find(node => node.textContent === "مطابقة مع سلة");
+    await act(async () => { match.click(); match.click(); });
+    expect(onMatch).toHaveBeenCalledTimes(1);
+    expect(onMatch).toHaveBeenCalledWith(expect.objectContaining({ order_id: "8101" }), { signal: expect.any(AbortSignal) });
+    expect(match.disabled).toBe(true);
+    await act(async () => resolve({ native_evidence: { courier: { status: "completed", selected: 1,
+        outcomes: [{ order_id: "8101", status: "saved" }] } } }));
+    const result = document.querySelector('[data-testid="courier-match-result"]');
+    expect(result.closest("table")).toBeNull();
+    expect(result.textContent).toContain("تم التحقق من دليل الطلب وحفظه");
+    expect(result.textContent).toContain("قد تبقى للطلب أسباب مراجعة أخرى");
+    expect(operationalApi.previewDeliveryAfterStart).not.toHaveBeenCalled();
+    expect(operationalApi.confirmDeliveryAfterStart).not.toHaveBeenCalled();
+});
+
+test.each(["permission", "reason", "identity"])("courier matching stays unavailable without valid %s", async missing => {
+    const row = courierRow(), controls = courierControls(jest.fn());
+    if (missing === "permission") controls.allowed = false;
+    if (missing === "reason") row.reasons = [{ code: "operational_fee_missing", message: "تعرفة غير محفوظة" }];
+    if (missing === "identity") row.order_id = "../orders";
+    await act(async () => root.render(<PendingOrdersDialog count={1} details={[row]} courierControl={controls} />));
+    await click("طلبات غير مؤكدة");
+    expect(document.querySelector('[role="dialog"]').textContent).not.toContain("مطابقة مع سلة");
+    expect(controls.onMatch).not.toHaveBeenCalled();
+});
+
+test("closing courier matching aborts its native request and cannot present a late saved result", async () => {
+    let resolve;
+    const onMatch = jest.fn().mockReturnValue(new Promise(done => { resolve = done; }));
+    await act(async () => root.render(<PendingOrdersDialog count={1} details={[courierRow()]} courierControl={courierControls(onMatch)} />));
+    await click("طلبات غير مؤكدة"); await click("مطابقة مع سلة");
+    const signal = onMatch.mock.calls[0][1].signal;
+    await click("إغلاق");
+    expect(signal.aborted).toBe(true);
+    await act(async () => resolve({ native_evidence: { courier: { outcomes: [{ order_id: "8101", status: "saved" }] } } }));
+    await click("طلبات غير مؤكدة");
+    expect(onMatch).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('[role="dialog"]').textContent).not.toContain("تم التحقق من دليل الطلب وحفظه");
+});
+
 test("clicking seven pending orders shows seven order numbers and reasons without hiding the known balance", async () => {
     await act(async () => root.render(<><span>الرصيد المحتسب 930.00</span><PendingOrdersDialog count={7} details={details(7)} name="المندوب" /></>));
     await click("7");

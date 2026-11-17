@@ -134,8 +134,9 @@ jobs:
         run: node scripts/verify-operational-dependency-compat.cjs
       - name: Verify strict audit and local security backport contracts
         run: |
-          node --test ../scripts/test_frontend_audit.cjs scripts/braces-security.test.cjs
+          node --test ../scripts/test_frontend_audit.cjs scripts/braces-security.test.cjs scripts/picomatch-security.test.cjs
           node scripts/verify-braces-backport.cjs
+          node scripts/verify-picomatch-backports.cjs
       - name: Run unmodified released braces compatibility suite
         run: |
           npm install --prefix "$RUNNER_TEMP/braces-tests" --ignore-scripts --no-package-lock mocha@11.7.5 bash-path@2.0.1
