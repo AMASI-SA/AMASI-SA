@@ -1,5 +1,75 @@
 # Post-release availability and balances latency — 18 November 2026
 
+## Publication UI blocker — 17 November 2026, 23:40 UTC
+
+This is a resumable blocked-publication checkpoint. The actual shared adapter
+remains accepted; its successful build was not repeated.
+**No own prepare, prepublish or Publish action has occurred.** The fix is merged
+and built, but it has not been published and has no hosted performance acceptance.
+
+Root encountered repeated native Chromium and CDP renderer Error 9 failures
+and timeouts. An independent window reached Emergent Home and the project
+`/chat` route, but that renderer crashed before the Publish controls became
+available. The blocker is access to the publication UI; these observations do
+not establish an application-runtime failure or a failed build.
+
+At 23:36:32 UTC, root freshly read the production Git ref as the accepted merge
+`f2d806efc18964a2cc7c3a475346590cbe8b1262`. At
+23:37:21.728859 UTC, its read-only public-health request returned HTTP 200,
+`ok=true`, and the preceding published source
+`7f6bc85333b1189e40dd5f1138b841cf2241ee23` / runtime
+`rg5-c13e7f152e61e9ba1f799a1a78744bb998e3cdfb8be7cfdc09f97886868fa17e`.
+Verified identity, critical hashes, Frontend build and Backend runtime-source
+flags were all true. The response reported boot time 23:13:10.428877 UTC;
+**the cause of that boot is not established**. A successful health response
+does not establish performance recovery.
+
+The sanitized response is retained byte-for-byte in
+`evidence/live-before-publication.json`. The prior durable checkpoint is
+`0b39cc945e19b35367c8cb9e1569e9e44fe71e58`; its actual adapter record,
+all accepted A/B/M identities and all existing historical evidence are unchanged.
+This evidence-only branch remains non-deployable.
+
+At 23:42:32.977046 UTC, root recovered an independent CodeServer Terminal 9
+and freshly ran the official guard status (exit 0): **active=false**, no actor.
+Shared HEAD was still exact M and tracked source was clean. The unrelated
+untracked-path inventory still contained 120 entries and exactly matched the
+saved inventory. The actual adapter result remained accepted with exit 0. Root retained these
+selected observed fields in `evidence/publication-preflight.json`; the raw
+result is `/tmp/balances-latency-1980-publication-preflight.json` on the shared
+workspace. No own lease or publish was started.
+
+The project page subsequently still showed the Chromium renderer's **Error 9**.
+The observed page is retained as `evidence/publication-ui-error.jpg`. The healthy
+CodeServer continuation tab was preserved. Repository release documentation
+and workflow inspection found no supported terminal publication substitute:
+the guard has no deploy command, and the workflow explicitly performs a CI
+handoff rather than publication. No private deployment API was guessed, no paid
+chat was used, and no unrelated browser task or service was stopped.
+
+### Next safe actions
+
+1. Recover a stable authenticated administration view for the existing Emergent
+   project and reach its Publish controls. Do not repeat the successful adapter
+   build merely to recover the browser.
+2. Before a release operation, freshly confirm the production ref and shared
+   source still equal accepted M, the reviewed identity/output checks still
+   match, and unrelated files remain preserved. Read
+   `python scripts/production_release_guard.py status` from `/app` and require
+   `active=false`; the earlier inactive result is not current authorization to
+   ignore a newer lease. If source, outputs or ownership changed, reconcile the
+   discrepancy before proceeding.
+3. Once the UI and exact candidate are ready, perform the task's own governed
+   prepare, immediate prepublish check, and one Publish action. Record the
+   resulting deployment before considering any retry.
+4. Require a newer explicit deployment-success result, then run the official
+   `python scripts/production_release_guard.py verify --url https://mezansalla.com`.
+   Accept publication only after all three consecutive identity probes and final
+   inactive status. Measure hosted balances responsiveness separately afterward.
+
+The following checkpoints retain their original observation times. No source,
+intent, test or build change is part of this UI-blocker checkpoint.
+
 ## Actual shared adapter accepted — 17 November 2026, 23:10 UTC
 
 The prior Android release's actual official verification completed at

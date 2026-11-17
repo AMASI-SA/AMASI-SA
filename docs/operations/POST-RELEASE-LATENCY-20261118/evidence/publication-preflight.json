@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "task_id": "POST-RELEASE-LATENCY-20261118",
+  "kind": "root_observed_publication_preflight",
+  "observation": "Root read the actual official guard result and shared-workspace checks in an independent CodeServer Terminal 9. Raw result remains /tmp/balances-latency-1980-publication-preflight.json.",
+  "observed_at": "2026-11-17T23:42:32.977046+00:00",
+  "guard_exit": 0,
+  "active": false,
+  "actor": null,
+  "head": "f2d806efc18964a2cc7c3a475346590cbe8b1262",
+  "tracked_clean": true,
+  "untracked_count": 120,
+  "untracked_preserved": true,
+  "adapter_accepted": true,
+  "adapter_exit": 0,
+  "own_prepare_performed": false,
+  "own_prepublish_performed": false,
+  "own_publish_performed": false
+}
