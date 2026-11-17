@@ -308,15 +308,22 @@ def _lot(item: dict) -> str:
 
 
 async def _available(db: Any, owner: str, warehouse_ids: list[str]) -> list[dict]:
-    from fulfillment_v2_routes import _load_inventory_evidence, _inventory_eligibility, _pin_inventory_locations
-    from operational_atomic import OperationalDatabase
-    from accounting_atomic import SessionDatabase
     query: dict[str, Any] = {"user_id": owner, "state": {"$ne": "disabled"}}
     if warehouse_ids:
         query["warehouse_id"] = {"$in": warehouse_ids}
     locations = await _rows(db[LOCATIONS], query)
+    return await _availability_at_locations(db, owner, locations, warehouse_ids=warehouse_ids)
+
+
+async def _availability_at_locations(
+    db: Any, owner: str, locations: list[dict], *, warehouse_ids: list[str], pin: bool = True,
+) -> list[dict]:
+    """Validate the captured locations; optional preflight must not pin them."""
+    from fulfillment_v2_routes import _load_inventory_evidence, _inventory_eligibility, _pin_inventory_locations
+    from operational_atomic import OperationalDatabase
+    from accounting_atomic import SessionDatabase
     evidence = await _load_inventory_evidence(db, owner, locations)
-    if isinstance(db, (OperationalDatabase, SessionDatabase)):
+    if pin and isinstance(db, (OperationalDatabase, SessionDatabase)):
         await _pin_inventory_locations(db, owner, locations)
     reserved: dict[tuple[str, str, str], Decimal] = {}
     for unit in await _rows(db[UNITS], {"user_id": owner, "state": "reserved"}):
@@ -581,20 +588,16 @@ async def _selected_units(db: Any, owner: str, plan_id: str, units: dict | None)
     return [found[key] for key in sorted(keys)]
 
 
-async def _deduct(db: Any, owner: str, allocations: list[dict]) -> None:
+async def _plan_deductions(db: Any, owner: str, allocations: list[dict]) -> list[dict]:
+    """Read and validate every location before any deduction is applied."""
     from fulfillment_v2_routes import _load_inventory_evidence, _inventory_eligibility
-    from operational_atomic import OperationalDatabase
-    from accounting_atomic import SessionDatabase
-    if not isinstance(db, (OperationalDatabase, SessionDatabase)):
-        async def deduct(scoped):
-            await _deduct(scoped, owner, allocations)
-        return await operational_owner(db, owner, deduct)
     grouped: dict[str, list[dict]] = {}
     for allocation in allocations:
         grouped.setdefault(allocation["location_id"], []).append(allocation)
     locations = await _rows(db[LOCATIONS], {"user_id": owner, "id": {"$in": list(grouped)}, "state": {"$ne": "disabled"}})
     by_id = {location["id"]: location for location in locations}
     evidence = await _load_inventory_evidence(db, owner, locations)
+    deductions = []
     for location_id, demands in grouped.items():
         location = by_id.get(location_id)
         if not location:
@@ -634,36 +637,106 @@ async def _deduct(db: Any, owner: str, allocations: list[dict]) -> None:
         if not cached_total.is_finite() or abs(cached_total - before_sum) > Decimal("0.0000005"):
             _fail("stock_total_invalid")
         after["total_quantity"] = _stored(before_sum - total_taken)
-        result = await db[LOCATIONS].update_one({"user_id": owner, "id": location_id, "state": location.get("state"), "occupancy": before},
-                                              {"$set": {"occupancy": after, "updated_at": _now()}})
+        deductions.append({
+            "selector": {"user_id": owner, "id": location_id,
+                         "state": location.get("state"), "occupancy": before},
+            "occupancy": after,
+        })
+    return deductions
+
+
+async def _apply_deductions(db: Any, deductions: list[dict]) -> None:
+    """Apply prevalidated CAS updates; failures must abort the owner transaction."""
+    for deduction in deductions:
+        result = await db[LOCATIONS].update_one(
+            deduction["selector"],
+            {"$set": {"occupancy": deduction["occupancy"], "updated_at": _now()}},
+        )
         if result.matched_count != 1:
             _fail("stock_conflict")
 
 
+async def _deduct(db: Any, owner: str, allocations: list[dict]) -> None:
+    from operational_atomic import OperationalDatabase
+    from accounting_atomic import SessionDatabase
+    if not isinstance(db, (OperationalDatabase, SessionDatabase)):
+        async def deduct(scoped):
+            await _deduct(scoped, owner, allocations)
+        return await operational_owner(db, owner, deduct)
+    await _apply_deductions(db, await _plan_deductions(db, owner, allocations))
+
+
+_SUPPLIER_DEFER_REASONS = frozenset({
+    "component_reservation_missing", "component_order_cancelled",
+    "component_configuration_required", "component_canonical_order_required",
+    "component_source_created_at_required", "component_execution_blocked",
+    "component_unit_selection_unknown", "component_unit_released",
+    "component_safe_scan_limit_exceeded", "component_stock_identity_missing",
+    "component_stock_identity_ambiguous", "component_reservation_exceeds_stock",
+    "component_reserved_location_missing", "component_reserved_lot_missing",
+    "component_stock_ineligible_reconciliation_required", "component_insufficient_stock",
+    "component_stock_total_invalid", "component_quantity_invalid",
+    "component_quantity_precision_loss", "inventory_evidence_limit_reconciliation_required",
+    "bundle_inventory_scan_limit", "bundle_components_incomplete",
+})
+
+
 async def consume_component_stock(db: Any, *, merchant_id: str, order_id: str,
-                                  units: dict | None = None, actor_id: str = "system") -> dict:
+                                  units: dict | None = None, actor_id: str = "system",
+                                  defer_unavailable: bool = False) -> dict:
     owner, order = _text(merchant_id), _text(order_id)
     if not owner or not order:
         _fail("owner_order_required")
     plan_id = _id("component_plan", owner, order)
     async def consume(scoped):
-        plan = await scoped[PLANS].find_one({"_id": plan_id, "user_id": owner})
-        if not plan:
-            _fail("reservation_missing")
-        if plan["state"] == "cancelled":
-            _fail("order_cancelled")
-        rows = await _selected_units(scoped, owner, plan_id, units)
-        # Detect a raw stock edit that invalidated another active reservation,
-        # before committing any of this order's physical consumption.
-        await _available(scoped, owner, [])
-        duplicate = all(row["state"] == "consumed" for row in rows)
-        pending = [row for row in rows if row["state"] != "consumed"]
-        if any(row["state"] != "reserved" for row in pending):
-            _fail("unit_released")
-        from bundle_fulfillment_v2 import capture_actual_cost
-        bundle_costs = {row["_id"]: await capture_actual_cost(scoped, owner, row)
-                        for row in pending if row.get("bundle_leaves")}
-        await _deduct(scoped, owner, [allocation for row in pending for allocation in row["allocations"]])
+        async def validate():
+            plan = await scoped[PLANS].find_one({"_id": plan_id, "user_id": owner})
+            if not plan:
+                _fail("reservation_missing")
+            if plan["state"] == "cancelled":
+                _fail("order_cancelled")
+            if defer_unavailable:
+                from fulfillment_v2_routes import assert_component_execution
+                await assert_component_execution(scoped, user_id=owner, order_number=order, plan=plan)
+            rows = await _selected_units(scoped, owner, plan_id, units)
+            # Validate all active reservations before consuming the selected
+            # units. In deferrable mode even the location pins wait until every
+            # source, stock, bundle-cost and deduction check has passed.
+            locations = None
+            if defer_unavailable:
+                locations = await _rows(scoped[LOCATIONS], {"user_id": owner, "state": {"$ne": "disabled"}})
+                await _availability_at_locations(scoped, owner, locations, warehouse_ids=[], pin=False)
+            else:
+                await _available(scoped, owner, [])
+            duplicate = all(row["state"] == "consumed" for row in rows)
+            pending = [row for row in rows if row["state"] != "consumed"]
+            if any(row["state"] != "reserved" for row in pending):
+                _fail("unit_released")
+            from bundle_fulfillment_v2 import capture_actual_cost
+            bundle_costs = {row["_id"]: await capture_actual_cost(scoped, owner, row)
+                            for row in pending if row.get("bundle_leaves")}
+            deductions = await _plan_deductions(scoped, owner, [
+                allocation for row in pending for allocation in row["allocations"]
+            ])
+            return plan, rows, duplicate, bundle_costs, deductions, locations
+
+        if defer_unavailable:
+            try:
+                prepared = await validate()
+            except HTTPException as exc:
+                reason = exc.detail.get("code") if isinstance(exc.detail, dict) else None
+                if exc.status_code == 409 and reason in _SUPPLIER_DEFER_REASONS:
+                    return {"deferred": True, "reason": reason}
+                raise
+        else:
+            prepared = await validate()
+        plan, rows, duplicate, bundle_costs, deductions, locations = prepared
+        # No exception below this point is converted into a deferral. A failed
+        # pin, CAS, unit update or response read must roll the transaction back.
+        if defer_unavailable:
+            from fulfillment_v2_routes import _pin_inventory_locations
+            await _pin_inventory_locations(scoped, owner, locations)
+        await _apply_deductions(scoped, deductions)
         for row in rows:
             if row["state"] == "consumed":
                 continue
