@@ -5,7 +5,8 @@
 User requested a direct manual send action for each unsent order in Mezan 2,
 faster bulk sending (100 orders per attempt), and the real customer name instead
 of a generated customer/order label. Repository: AMASI-SA/AMASI-SA. Task branch:
-`codex/qoyod-manual-send-speed-20261117`. Freshly fetched production base:
+`codex/qoyod-manual-send-release-v2-20261117` (supersedes the preserved first
+candidate branch `codex/qoyod-manual-send-speed-20261117`). Production base:
 `8df479ef24b4f8847c26ba18d48e3248f7b673cf`.
 
 Latest user constraint: the update must not make the system heavy or slow.
@@ -305,7 +306,7 @@ security sources require a new final source commit, new governed build and new
 intent-only B. No intent has been frozen for this task, and no production lease,
 merge or publication has occurred.
 
-## Next safe action
+## Historical first-candidate handoff
 
 Complete exact-source CI and final source A, generate a fresh governed A/B build
 and intent-only B, require all applicable exact-B gates and clean-clone adapter
@@ -322,3 +323,93 @@ present local synthetic timing as proof of production response time.
 Production changed by this task: **no**. User continuation authorizes the named
 release; Release Guard v5, exact-source CI and production verification remain
 mandatory before reporting deployment complete.
+
+## Second release candidate: deterministic deadline-test scheduling
+
+The first frozen pair remains intact and remotely recoverable on PR #1971:
+source A `55773a216d9cf33087bb8d817bdfedef6ece966c`, intent-only B
+`ba44b7f0fbcc659acd46844dc8e535cdd5aa28b9`, B tree
+`7ad35590a051942b4e24cdbc5bbd5061b3c9e4a7`. Its governed two-pass build matched
+the official source-A candidate artifact byte-for-byte. Both final-B clean-clone
+adapter rehearsals passed on host Node 20.20.2 and 24.19.0. Final-B worker/UI,
+memory, Build20 and security gates passed; the actual CodeQL scan-result check
+134342260858 succeeded with zero new alerts and zero annotations. Review
+submissions and inline threads were both empty; no external approval is claimed.
+
+The final-B Operational Balance browser job initially failed at a registry
+download (lru-cache HTTP 503) before running tests. Its one unchanged-head rerun
+passed. Stock Eligibility run 44168594706 failed in both attempt 1/job
+134341391833 and the one rerun/job 134347909856: 4,806 passes, seven subtests and
+one failure in each. The repeated failure was the existing recorded-courier-fee
+history test's `[deadline]` case waiting for its worker checkpoint. No further
+unchanged-head retry was attempted, and no failed gate was waived.
+
+The test and its five relevant operational runtime modules were byte-identical
+to production base. The same exact case passed in the broader Operational
+Balance job on B (artifact 14365944608): 0.211 seconds, all 116 cases in that
+module passed, and the full report contained 5,126 tests with zero failures,
+errors or skips. That gate uses Python 3.11/pytest 9.1.1; Stock uses Python
+3.12/pytest 9.0.3, so the cross-pass is qualified rather than treated as an
+identical-environment reproduction.
+
+The test's 150 ms timer surrounded the complete collector, including earlier
+reads/preparation, although its intended subject was cancellation after the
+history worker had started. A deterministic local regression inserted 200 ms
+of setup before the actual collector. Before correction, this reproduced the
+same `entered.wait` assertion failure (exit 1, 3.20 seconds). The first local
+invocation had an incomplete PYTHONPATH and stopped at an import; the corrected
+command added the repository parent and produced the meaningful red result.
+
+Only the test's scheduling is corrected. It follows the repository's existing
+armed-timeout test pattern: a proxy local to `operational_demand_refresh.asyncio`
+captures one real `asyncio.Timeout`, then reschedules it after the controlled
+history checkpoint has been reached. The actual timeout must expire and the
+request must still return HTTP 408, wait for its worker, stop at the tenth
+checkpoint, preserve all input data, release only its own lease and leave no
+detached tasks. Production REQUEST_SECONDS remains 85. The original 2/3-second
+watchdogs, source-read budgets and unrelated asyncio timers are unchanged.
+Failure cleanup releases the worker and awaits the request task. A new delayed
+setup parameter keeps the reproduced regression covered.
+
+Fresh verification on the read-only prepared Python 3.12 environment:
+
+```
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=..:.:tests python -B -m pytest \
+  --noconftest -p no:cacheprovider -q --tb=short --asyncio-mode=auto \
+  -o asyncio_default_fixture_loop_scope=function \
+  tests/test_operational_balance_recorded_courier_fee_index.py \
+  tests/test_operational_balance_source_conversion_lifetime.py \
+  tests/test_operational_balance_demand_refresh.py
+```
+
+Result: **140 passed**, exit 0, 4.52 seconds. Independent review passed the scoped
+timer design. Two independent in-memory negative controls both failed at the
+intended assertions: suppressing lease release failed the lease-empty check;
+suppressing the preparation join failed the blocked-request check. These were
+meaningful red controls, not import failures or a timeout of the test harness.
+No runtime source was modified for either control, and no mutations were kept.
+`git diff --check` passed.
+
+## Current continuation and next safe action
+
+The second candidate branch starts from the original source A, not from B, so
+it retains the reviewed base J's intent without rewriting the first frozen pair.
+The only source changes after original A are this status and the deterministic
+deadline test above. All Qoyod feature code and security backports are unchanged.
+The new canonical source A, PR, fresh two-pass build and intent-only B will be
+recorded on the successor PR. The old PR is draft and must not be merged.
+
+Complete the new source checkpoint, freeze a fresh A/B pair, require every
+applicable final-B gate and both clean-clone adapter rehearsals, then recheck the
+production branch and official shared inactive guard before an ordinary
+tree-equivalent merge. Run the configured adapter in /app before creating an
+owner lease; then prepare/prepublish, publish once, observe a newer explicit
+success, require the official three-probe verification and final active:false.
+
+The latest shared check remained tracked-clean on production base 8df479e,
+with 120 untracked platform files untouched, host Node24.19.0/Yarn1.22.22,
+and official Release Guard active:false. No shared source mutation, lease,
+merge or publish has occurred. No production accounting send or load test was
+performed. User release authorization persists; no repeat permission is needed.
+
+Production changed by this task: **no**.
