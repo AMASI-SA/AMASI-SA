@@ -1,0 +1,136 @@
+{
+  "task": "MEZAN-SIMPLE-LEDGER-20261117",
+  "source_A": "80e941b5b990ede691948babe4c46558fa5922a0",
+  "intent_B": "3f85ac282b362095f790bfc0c2d501e3034c4724",
+  "merge_M": "8df479ef24b4f8847c26ba18d48e3248f7b673cf",
+  "source_tree": "29a20dc5571267dbcb1acdf612b5420fc86f82a8",
+  "merge_tree": "744553ba5a3bcc6cfc41ae2cfca91de42fefad47",
+  "actual_app_build": {
+    "exit_code": 0,
+    "seconds": 100,
+    "source_git_sha": "80e941b5b990ede691948babe4c46558fa5922a0",
+    "deployment_git_sha": "8df479ef24b4f8847c26ba18d48e3248f7b673cf",
+    "release_id": "rg5-5d3abe75f325b41a64ebfd8701ffbf9f7abe768caedb6624377168dd516bc37c",
+    "frontend_artifact_tree_sha256": "ba27b1e6c0b07baaf6002bcd539384b914cc09fcdc290e71b275794249846fc5",
+    "untracked_preserved": 120,
+    "adapter_success": true
+  },
+  "release_guard": {
+    "exit_code": 0,
+    "seconds": 632.4,
+    "verified": true,
+    "source_git_sha": "80e941b5b990ede691948babe4c46558fa5922a0",
+    "deployment_git_sha": "8df479ef24b4f8847c26ba18d48e3248f7b673cf",
+    "release_id": "rg5-5d3abe75f325b41a64ebfd8701ffbf9f7abe768caedb6624377168dd516bc37c",
+    "checks": 3,
+    "boot_started_at": "2026-11-17T02:25:29.706470+00:00",
+    "frontend_artifact_tree_sha256": "ba27b1e6c0b07baaf6002bcd539384b914cc09fcdc290e71b275794249846fc5",
+    "frontend_checked_request_count": 594,
+    "final_guard_status": {
+      "active": false
+    }
+  },
+  "production": {
+    "status": "PUBLISHED_AND_VERIFIED",
+    "expected_merge_commit": "8df479ef24b4f8847c26ba18d48e3248f7b673cf",
+    "expected_runtime_identity": "rg5-5d3abe75f325b41a64ebfd8701ffbf9f7abe768caedb6624377168dd516bc37c",
+    "root_reported_build_status": "PASS",
+    "guarded_build_result": {
+      "exit_code": 0,
+      "seconds": 100,
+      "source_git_sha": "80e941b5b990ede691948babe4c46558fa5922a0",
+      "deployment_git_sha": "8df479ef24b4f8847c26ba18d48e3248f7b673cf",
+      "release_id": "rg5-5d3abe75f325b41a64ebfd8701ffbf9f7abe768caedb6624377168dd516bc37c",
+      "frontend_artifact_tree_sha256": "ba27b1e6c0b07baaf6002bcd539384b914cc09fcdc290e71b275794249846fc5",
+      "untracked_preserved": 120,
+      "adapter_success": true
+    },
+    "publication_result": "New green Deployment finished Nov17,05:26AM and published revision73031ac observed in Emergent; previous46aef4d moved to older release.",
+    "published_at_utc": null,
+    "live_version": "73031ac",
+    "live_source_commit": "80e941b5b990ede691948babe4c46558fa5922a0",
+    "live_release_id": "rg5-5d3abe75f325b41a64ebfd8701ffbf9f7abe768caedb6624377168dd516bc37c",
+    "live_release_identity_matches_expected": true,
+    "final_release_guard_active": false,
+    "authenticated_live_acceptance": {
+      "movements_url": "https://mezansalla.com/operational-balances/daily-movements",
+      "five_data_rows_per_page": true,
+      "page_two_navigation_verified": true,
+      "permissions_url": "https://mezansalla.com/operational-balances/access",
+      "employee_picker_loaded": true,
+      "resource_use_controls_loaded": true,
+      "own_all_movement_options_loaded": true,
+      "balance_visibility_controls_loaded": true,
+      "operation_controls_loaded": true,
+      "save_disabled_without_changes": true,
+      "employee_selection_restored_to_placeholder": true,
+      "staff_grants_changed": false,
+      "business_transactions_performed": false
+    },
+    "public_api_health": {
+      "ok": true,
+      "verified_identity_available": true,
+      "backend_runtime_source_verified": true,
+      "release_control_source_bound": true,
+      "critical_file_hashes_match": true,
+      "frontend_build_verified": true,
+      "evidence": "Required assertions enforced by the exact deployed v5 guard; all three probes returned verified=true."
+    },
+    "evidence_paths": [
+      "docs/operations/MEZAN-SIMPLE-LEDGER-20261117/STATUS.json",
+      "docs/operations/MEZAN-SIMPLE-LEDGER-20261117/RELEASE-20261117.json"
+    ],
+    "business_transactions_performed_by_verification": false,
+    "guard_prepare": {
+      "actor": "codex-mezan-balances-7991a9e0b249-20261117",
+      "prepared_at": "2026-11-17T02:16:08.119760+00:00",
+      "success": true,
+      "source_git_sha": "80e941b5b990ede691948babe4c46558fa5922a0",
+      "deployment_git_sha": "8df479ef24b4f8847c26ba18d48e3248f7b673cf"
+    },
+    "guard_prepublish": {
+      "ready_to_publish": true,
+      "source_git_sha": "80e941b5b990ede691948babe4c46558fa5922a0",
+      "deployment_git_sha": "8df479ef24b4f8847c26ba18d48e3248f7b673cf",
+      "release_id": "rg5-5d3abe75f325b41a64ebfd8701ffbf9f7abe768caedb6624377168dd516bc37c"
+    },
+    "published_at_display": "Nov 17, 05:26 AM",
+    "published_at_utc_minute": "2026-11-17T02:26Z",
+    "verified_at_utc": "2026-11-17 02:39:07 UTC",
+    "release_guard_result": {
+      "exit_code": 0,
+      "seconds": 632.4,
+      "verified": true,
+      "source_git_sha": "80e941b5b990ede691948babe4c46558fa5922a0",
+      "deployment_git_sha": "8df479ef24b4f8847c26ba18d48e3248f7b673cf",
+      "release_id": "rg5-5d3abe75f325b41a64ebfd8701ffbf9f7abe768caedb6624377168dd516bc37c",
+      "checks": 3,
+      "boot_started_at": "2026-11-17T02:25:29.706470+00:00",
+      "frontend_artifact_tree_sha256": "ba27b1e6c0b07baaf6002bcd539384b914cc09fcdc290e71b275794249846fc5",
+      "frontend_checked_request_count": 594,
+      "final_guard_status": {
+        "active": false
+      }
+    },
+    "frontend_public_verification": {
+      "checks": 3,
+      "requests_per_check": 594,
+      "canonical_and_cache_busted_exact_bytes": true,
+      "build_meta_json_mime": true,
+      "html_shell_and_retirement_service_worker_headers": true
+    },
+    "cloud_build_transcript_limit": "The visible platform log view exposes runtime logs, not exact Cloud Build install/build argv/cwd. Actual /app adapter output and final deployed identity/probes are recorded separately."
+  },
+  "android": {
+    "version": "1.0.20",
+    "version_code": 23,
+    "package": "com.amasi.sa.mezanoperational",
+    "merge_sha": "a8a7a55e22b4f7430c7619bb792c5d7d540b4f43",
+    "build_id": "5a39f3d2-491f-4f39-bba5-76d2f23a3558",
+    "apk_sha256": "c1ad75f4671f06703612cb4378b25a1088e37d6724a9a9b0f530f9060156006b",
+    "signature_verified": true,
+    "ota_enabled": false,
+    "physical_device_update_verified": false
+  },
+  "verified_at_utc": "2026-11-17 02:39:07 UTC"
+}

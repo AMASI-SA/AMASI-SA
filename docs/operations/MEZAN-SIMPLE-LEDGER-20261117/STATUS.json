@@ -1,10 +1,10 @@
 {
   "task": "MEZAN-SIMPLE-LEDGER-20261117",
-  "status": "MERGED_BUILD_VERIFIED_PUBLISHING_LIVE_VERIFICATION_PENDING",
+  "status": "COMPLETE_MERGED_PUBLISHED_VERIFIED_APK_READY",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/mezan-simple-ledger-permissions-20261117",
   "base_sha": "71125711d8181da3b4e35d9129fd51c048ba2bdd",
-  "production_changed": null,
+  "production_changed": true,
   "authorization": "Owner approved the complete simple balances implementation and now explicitly requested: طيب انشر وادمج. Merge and publication are authorized; actual business transactions are not part of release verification.",
   "completed_source": [
     "Tenant-bound owner-managed resource policies; use, none/own/all movements and full-balance access are independent.",
@@ -21,12 +21,10 @@
     "Pending recovery routes initialize without acquiring their collection; existing read-only, authorization and cancellation routes retain their prior construction behavior."
   ],
   "remaining": [
-    "Root completes the actual governed build/publication, verifies the exact live release identity against this A/B/M intent, and confirms the final release lease is inactive.",
-    "Record permitted read-only production acceptance and public health evidence; no real financial transactions or permission changes are part of verification.",
-    "Deliver the verified APK1.0.20/code23 after compatible backend publication, retaining the physical-device and APK22 binary-signature comparison limits.",
-    "Update and persist this evidence-only draft after final live verification; frozen A/B/M source branches stay unchanged."
+    "Owner assigns the intended individual staff permissions through the published owner UI; no broad grants were guessed during release verification.",
+    "Physical Android device update acceptance remains unperformed. APK22 binary expired, so its certificate could not be directly compared. Preserve installed app if an older local-build signing conflict occurs."
   ],
-  "next_safe_action": "Await newer explicit Emergent deployment success; run Release Guard verify against https://mezansalla.com, require three exact probes and inactive final lease, then read-only authenticated UI acceptance.",
+  "next_safe_action": "Use the published movements and owner-access pages; configure selected staff policies deliberately. The release is complete: do not republish, rebuild the APK or create another lease to repeat completed work.",
   "pull_request": "https://github.com/AMASI-SA/AMASI-SA/pull/1966",
   "companion_native": {
     "repository": "AMASI-SA/amasi-mobile",
@@ -203,21 +201,21 @@
       },
       "comparison_limit": "Compare future APK23 against historical documented certificate only until an archived APK22 is supplied; do not claim actual APK22 certificate comparison."
     },
-    "delivery_status": "READY_AFTER_COMPATIBLE_BACKEND_PUBLICATION",
+    "delivery_status": "READY_COMPATIBLE_BACKEND_PUBLISHED",
     "physical_device_acceptance": "NOT_PERFORMED",
     "apk22_binary_certificate_comparison": "UNAVAILABLE_EXPIRED_ARTIFACT",
     "in_place_upgrade_compatibility": "UNVERIFIED"
   },
   "parent_source_sha": "606580d12e6e3fad47adb3ff2f8da8b8517c2d19",
   "draft": false,
-  "updated_at_utc": "2026-11-17 02:17:17 UTC",
-  "draft_note": "Evidence-only checkpoint; frozen source A, intent B and deployed merge M are not modified by this branch.",
+  "updated_at_utc": "2026-11-17 02:39:07 UTC",
+  "draft_note": "Final evidence-only handoff. Frozen source A, intent B and deployed merge M are unchanged by this documentation branch.",
   "based_on_status": {
     "path": "/workspace/scratch/7991a9e0b249/mezan-production/docs/operations/MEZAN-SIMPLE-LEDGER-20261117/STATUS.json",
     "sha256": "917c49ccc427d19dc0d784d9a2377a7282a6e14ce524a0fa121eea63776470b8",
     "previous_status": "SOURCE_COMPLETE_AUTHORIZED_RELEASE_GATES_PENDING"
   },
-  "production_changed_note": "Emergent publication initiated after successful prepare/prepublish. Await explicit success and guarded live verification before claiming production changed.",
+  "production_changed_note": "New Emergent published revision73031ac observed, replacing46aef4d; Release Guard v5 exit0 confirms exact source A/runtime/artifacts in all three production probes and inactive final lease.",
   "verification_history": [
     {
       "check": "Focused backend",
@@ -293,10 +291,10 @@
   },
   "release_preflight": {
     "backend_merge": true,
-    "backend_publication": false,
+    "backend_publication": true,
     "expected_deployment_commit": "8df479ef24b4f8847c26ba18d48e3248f7b673cf",
     "actual_governed_build": "PASS",
-    "live_release_guard_active": true,
+    "live_release_guard_active": false,
     "root_reported_workspace_sha": "8df479ef24b4f8847c26ba18d48e3248f7b673cf",
     "root_reported_workspace_tracked_changes": "none",
     "root_reported_preserved_untracked_file_count": 120
@@ -358,7 +356,7 @@
     }
   ],
   "release_evidence": {
-    "draft": true,
+    "draft": false,
     "generated_at_utc": "2026-11-17 02:14:48 UTC",
     "scope": "Read-only independent release evidence; production deployment pending",
     "merge": {
@@ -1808,8 +1806,13 @@
       "manual_tax_confirmed_completed_at": "2026-11-17T02:14:49Z"
     },
     "production_deployment": {
-      "status": "PUBLISHING",
-      "verified": false
+      "status": "PUBLISHED_AND_VERIFIED",
+      "verified": true,
+      "source_git_sha": "80e941b5b990ede691948babe4c46558fa5922a0",
+      "deployment_git_sha": "8df479ef24b4f8847c26ba18d48e3248f7b673cf",
+      "release_id": "rg5-5d3abe75f325b41a64ebfd8701ffbf9f7abe768caedb6624377168dd516bc37c",
+      "checks": 3,
+      "final_guard_active": false
     }
   },
   "source_artifact_evidence": {
@@ -1917,7 +1920,7 @@
     }
   },
   "production_deployment": {
-    "status": "PUBLISHING",
+    "status": "PUBLISHED_AND_VERIFIED",
     "expected_merge_commit": "8df479ef24b4f8847c26ba18d48e3248f7b673cf",
     "expected_runtime_identity": "rg5-5d3abe75f325b41a64ebfd8701ffbf9f7abe768caedb6624377168dd516bc37c",
     "root_reported_build_status": "PASS",
@@ -1931,16 +1934,41 @@
       "untracked_preserved": 120,
       "adapter_success": true
     },
-    "publication_result": "Publishing... observed in Emergent after explicit Publish changes click; final result pending.",
+    "publication_result": "New green Deployment finished Nov17,05:26AM and published revision73031ac observed in Emergent; previous46aef4d moved to older release.",
     "published_at_utc": null,
-    "live_version": null,
-    "live_source_commit": null,
-    "live_release_id": null,
-    "live_release_identity_matches_expected": null,
-    "final_release_guard_active": null,
-    "authenticated_live_acceptance": null,
-    "public_api_health": null,
-    "evidence_paths": [],
+    "live_version": "73031ac",
+    "live_source_commit": "80e941b5b990ede691948babe4c46558fa5922a0",
+    "live_release_id": "rg5-5d3abe75f325b41a64ebfd8701ffbf9f7abe768caedb6624377168dd516bc37c",
+    "live_release_identity_matches_expected": true,
+    "final_release_guard_active": false,
+    "authenticated_live_acceptance": {
+      "movements_url": "https://mezansalla.com/operational-balances/daily-movements",
+      "five_data_rows_per_page": true,
+      "page_two_navigation_verified": true,
+      "permissions_url": "https://mezansalla.com/operational-balances/access",
+      "employee_picker_loaded": true,
+      "resource_use_controls_loaded": true,
+      "own_all_movement_options_loaded": true,
+      "balance_visibility_controls_loaded": true,
+      "operation_controls_loaded": true,
+      "save_disabled_without_changes": true,
+      "employee_selection_restored_to_placeholder": true,
+      "staff_grants_changed": false,
+      "business_transactions_performed": false
+    },
+    "public_api_health": {
+      "ok": true,
+      "verified_identity_available": true,
+      "backend_runtime_source_verified": true,
+      "release_control_source_bound": true,
+      "critical_file_hashes_match": true,
+      "frontend_build_verified": true,
+      "evidence": "Required assertions enforced by the exact deployed v5 guard; all three probes returned verified=true."
+    },
+    "evidence_paths": [
+      "docs/operations/MEZAN-SIMPLE-LEDGER-20261117/STATUS.json",
+      "docs/operations/MEZAN-SIMPLE-LEDGER-20261117/RELEASE-20261117.json"
+    ],
     "business_transactions_performed_by_verification": false,
     "guard_prepare": {
       "actor": "codex-mezan-balances-7991a9e0b249-20261117",
@@ -1954,7 +1982,34 @@
       "source_git_sha": "80e941b5b990ede691948babe4c46558fa5922a0",
       "deployment_git_sha": "8df479ef24b4f8847c26ba18d48e3248f7b673cf",
       "release_id": "rg5-5d3abe75f325b41a64ebfd8701ffbf9f7abe768caedb6624377168dd516bc37c"
-    }
+    },
+    "published_at_display": "Nov 17, 05:26 AM",
+    "published_at_utc_minute": "2026-11-17T02:26Z",
+    "verified_at_utc": "2026-11-17 02:39:07 UTC",
+    "release_guard_result": {
+      "exit_code": 0,
+      "seconds": 632.4,
+      "verified": true,
+      "source_git_sha": "80e941b5b990ede691948babe4c46558fa5922a0",
+      "deployment_git_sha": "8df479ef24b4f8847c26ba18d48e3248f7b673cf",
+      "release_id": "rg5-5d3abe75f325b41a64ebfd8701ffbf9f7abe768caedb6624377168dd516bc37c",
+      "checks": 3,
+      "boot_started_at": "2026-11-17T02:25:29.706470+00:00",
+      "frontend_artifact_tree_sha256": "ba27b1e6c0b07baaf6002bcd539384b914cc09fcdc290e71b275794249846fc5",
+      "frontend_checked_request_count": 594,
+      "final_guard_status": {
+        "active": false
+      }
+    },
+    "frontend_public_verification": {
+      "checks": 3,
+      "requests_per_check": 594,
+      "canonical_and_cache_busted_exact_bytes": true,
+      "build_meta_json_mime": true,
+      "html_shell_and_retirement_service_worker_headers": true
+    },
+    "cloud_build_transcript_limit": "The visible platform log view exposes runtime logs, not exact Cloud Build install/build argv/cwd. Actual /app adapter output and final deployed identity/probes are recorded separately."
   },
-  "evidence_branch": "codex/mezan-simple-ledger-release-evidence-20261117"
+  "evidence_branch": "codex/mezan-simple-ledger-release-evidence-20261117",
+  "final_evidence_parent_commit": "2ac354483ed3e2ee2a07478e3d1ebde72dabf8bb"
 }
