@@ -1,5 +1,78 @@
 # Supplier receipt Ready policy
 
+## Final handoff — 2026-11-17
+
+**Source implementation verified; all 20 triggered workflows passed.**
+Production changed by this task: **no**.
+
+- Canonical source A: `627cd57eea162c32d475fe99a33ffb11d84e4574`.
+- Verified source tree: `cb6c215e8faa67d3ef75612b79780fd896f4324f`.
+- Reviewed base J: `b009ee50a6b932368be8ad104c8c1b75e584b4e2`.
+- Active Draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/1981 .
+- Source branch: `codex/ready-supplier-receipt-current-20261118`.
+- This final status is retained separately on documentation branch
+  `codex/ready-supplier-receipt-handoff-20261118` so the tested source A and
+  candidate artifact remain unchanged. This documentation commit is not a
+  deployment source or an intent-only B. The active PR links its exact SHA.
+- Earlier PRs #1975 and #1978 are closed as superseded; their remote branches
+  and checkpoints remain recoverable. The canonical checkout was verified
+  clean at source A. Unrelated mobile printing work was not modified.
+- No release intent B, release lease, merge, rehearsal, publication, provider
+  write, or live order/receipt/status mutation occurred.
+
+### Exact-source acceptance
+
+| Verification | Passed evidence |
+| --- | --- |
+| Review Completion Resumable 44190015862 | Main **1,029 passed + 596 subtests**; Android **348 passed**; refresh **35 passed**; source snapshot **124 passed**; acceptance guard **1 passed**. Final XML and minimum-count gates passed with zero skips, failures or errors. |
+| Required Review coverage | LocalAssembly **41**; supplier Ready **82**; supplier delivery/fingerprint **28**; stock deferral **35**; bundle coverage **39**; instruction search **4**. The repaired inherited zero-price scenarios and currency expectation pass in the successful main command. |
+| Operational Stock Eligibility 44190015755 | **4,833 passed + 7 subtests**, 338.75 seconds; XML confirms 4,833 executed cases and zero skips, failures or errors. |
+| G47 Focused Integration 44190015571 | Projection **228 + 88 subtests**; acceptance **331 + 127 subtests**; order cost **436**. All real-Mongo execution gates have zero skips, failures or errors. UI **140 tests / 10 suites**, zero skips, build passed. |
+| Shipping Print Boundary 44190015483 | Groups **26**, **231**, **597** passed. One pre-existing skip remains in the last shipping group; it is not counted as supplier-policy acceptance. |
+| Release Readiness 44190015655 | Source/base classification, backend preflight, Node contracts, both frontend builds, reproducibility, candidate retention, and clean-worktree checks passed. |
+| Other workflows | Production Preparation, Fulfillment V2, performance, supplier invoice, both Snapchat suites, Qoyod freshness, mobile settings, direct receipt, Build20 components, native shipping, accounting, CodeQL, Security Gate and operational balances all passed. |
+
+Primary evidence:
+
+- https://github.com/AMASI-SA/AMASI-SA/actions/runs/44190015862
+- https://github.com/AMASI-SA/AMASI-SA/actions/runs/44190015755
+- https://github.com/AMASI-SA/AMASI-SA/actions/runs/44190015571
+- https://github.com/AMASI-SA/AMASI-SA/actions/runs/44190015483
+- https://github.com/AMASI-SA/AMASI-SA/actions/runs/44190015655
+
+Review artifact: `14376233835`,
+`review-completion-627cd57eea162c32d475fe99a33ffb11d84e4574`, ZIP SHA-256
+`6191ce07fe2c1cc97c94f86b2885a8b1a0201713e486ec8492818686d5c7121b`,
+expires `2027-02-15T22:26:06Z`.
+
+Release candidate artifact: `14377200290`,
+`release-v5-reviewed-intent-candidate`, ZIP SHA-256
+`f7cdbda569c44a7196c1375b8fb9da681b71a9daa8042265592b401baf2e7513`,
+expires `2026-11-19T22:27:46Z`. Both frontend builds produced artifact tree
+`feca50cf723178a51482b5552d3b5d994ad735e3a946ca067f0256c2814bfae5`.
+This is source-candidate evidence only: deployment rehearsal and redeploy jobs
+were skipped, and no B was frozen.
+
+### Changed scope and next action
+
+Runtime changes are limited to `supplier_receipt_ready_policy.py`,
+`preparation_piece_operations.py`, `stock_component_consumption_service.py`,
+`assembly_completion_delivery.py`, `assembly_status_policy.py`,
+`fulfillment_carrier_label.py` and `order_engine/amasi_shipping_compat.py`.
+The source PR also changes eleven related test modules, the Review CI selectors
+and minimum gates, and this task record. Android shipping-label parity from J
+is carried unchanged.
+
+Implementation and verification are complete. The active PR remains a draft
+source candidate, with no merge or publication authorized by this task. The
+next safe continuation is to review source A and its retained evidence. A
+separately authorized release must check the current reviewed base and guard
+state, obtain the candidate while retained or rebuild it, and follow protocol
+v5 to produce an intent-only B and the required rehearsal/publication/probes.
+Do not use this documentation branch as source A or treat a candidate build as
+a deployment. No additional source changes or test reruns are needed for this
+handoff.
+
 ## Contract
 
 The owner explicitly removed component/source-approval prerequisites from Ready
@@ -27,8 +100,9 @@ direct/virtual Ready paths retain their existing policy.
   links the active source PR, whose body records the latest exact source SHA
   and CI evidence. Both branches remain recoverable.
 - The local checkout is isolated from concurrent mobile printing work.
-- **WIP — not release-ready.** No release intent, merge, live data change,
-  release lease or production publication has occurred.
+- Source verification is complete. No release intent, merge, live data change,
+  release lease or production publication has occurred; the final handoff above
+  supersedes the earlier WIP evidence below.
 
 ## Implementation
 
@@ -51,7 +125,7 @@ direct/virtual Ready paths retain their existing policy.
   unavailable bundle leaves the supplier piece Ready and the order incomplete;
   it does not manufacture a physical bundle piece or ignore missing products.
 
-## Verification and remaining work
+## Verification history
 
 - Initial remote checkpoint preserves the independently reviewed inventory
   preflight/deferral service and its regression tests. The integrated source
@@ -139,10 +213,9 @@ direct/virtual Ready paths retain their existing policy.
   reviewed base, including its mobile read behavior/tests and release intent,
   then applies the supplier policy and fixture changes. Earlier task branches
   and PRs are retained; no release-intent history is rewritten or bypassed.
-- Next: verify the new source branch's exact SHA/tree and retained intent,
-  complete real-Mongo Review/G47 and release-candidate CI, and record final
-  exact-head evidence in the active PR. Source readiness and production
-  deployment remain separate. Production changed by this task: **no**.
+- The planned exact-source Review/G47, stock and release-candidate checks are
+  now complete; final evidence and the remaining release boundary are recorded
+  above and in the active PR. Production changed by this task: **no**.
 
 Issue #1006 is full. This task document and its draft PR are the continuation
 record. Keep any source checkpoint explicitly WIP until the required evidence
