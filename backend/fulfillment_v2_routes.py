@@ -2656,18 +2656,18 @@ def make_fulfillment_v2_router(
         owner, _ = await assembly_app_scope(db, user)
         number = _text(order_number)
         internal_courier = await mezan_courier_name(db, owner, number)
-        if internal_courier:
-            # Android76 calls this URL for its fetch button. Merchant couriers
-            # keep their current local document once completion is confirmed.
-            # Only explicit evidence that Salla is still unconfirmed enters
-            # the fenced completion action; print/ordinary refresh stay reads.
-            local_result = await _mobile_carrier_label_v1(number, user, issue=False)
-            if local_result.get("order_status_completed") is not False:
-                return local_result
         async def authorize():
             if (await assembly_app_scope(db, user))[0] != owner:
                 raise HTTPException(403, detail={"code": "completion_owner_changed"})
         try:
+            # Android fetch uses the same current-label read as ordinary printing
+            # for every carrier. An already completed external order needs no
+            # completion POST or the additional local evidence required for one.
+            # Only an explicit unconfirmed status enters the fenced action below;
+            # read failures, cancellation and changed shipping never fall back.
+            current_result = await _mobile_carrier_label_v1(number, user, issue=False)
+            if current_result.get("order_status_completed") is not False:
+                return current_result
             if internal_courier:
                 return await complete_and_refresh(db, owner, number, authorize,
                     require_completed_stage=True)

@@ -748,15 +748,18 @@ class MobileShippingV1Tests(unittest.IsolatedAsyncioTestCase):
             document.assert_not_awaited()
             external.assert_not_awaited()
 
-    async def test_android76_external_fetch_keeps_explicit_completion_flow(self):
+    async def test_android76_unconfirmed_external_fetch_reads_before_explicit_completion(self):
         await self.seed_current_mezan_courier()
         await self.native_assembly_actor()
         await self.db.unified_orders.update_one(self.key, {"$set": {"shipping_company": "SMSA"}})
-        with patch("assembly_manual_label_refresh.complete_and_refresh", new_callable=AsyncMock,
+        with patch.object(compat, "carrier_label", new_callable=AsyncMock,
+                          side_effect=legacy.ShippingLabelError("carrier_order_in_progress", "pending")) as read, \
+             patch("assembly_manual_label_refresh.complete_and_refresh", new_callable=AsyncMock,
                    return_value={**self.pdf, "order_number": "12345", "contract_version": 1,
                                  "print_state": "ready"}) as external:
             response = await self.client.post(self.path + "/complete-and-refresh")
             self.assertEqual(response.status_code, 200, response.text)
+            read.assert_awaited_once_with(self.db, "merchant", "12345", issue=False, completed_only=True)
             external.assert_awaited_once()
             self.assertEqual(external.await_args.args[:3], (self.db, "merchant", "12345"))
             self.assertEqual(response.json()["label_url"], self.pdf["label_url"])
