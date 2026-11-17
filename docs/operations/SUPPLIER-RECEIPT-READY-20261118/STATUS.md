@@ -1,5 +1,13 @@
 # Supplier receipt Ready policy
 
+## Access restored; sequential owner handoff pending — 2026-11-18 02:36 Riyadh
+
+The user explicitly approved focused inspection of open tab titles to locate the Mezan project terminal and continuation after the balances release completes. Root recovered an independent CodeServer tab and created Terminal8; `pwd` returned `/app`. A read-only observation found exact shared HEAD `f2d806efc18964a2cc7c3a475346590cbe8b1262` and only PR1980 preflight/adapter evidence, with no completed-publication/verification handoff record. No guard, build, lease, source mutation or Publish action was run for PR1982.
+
+Fresh exact-B merge readiness: PR1982 open, ready, mergeable=true and mergeable_state=clean; B and reviewed production J unchanged. All24 B workflow runs are complete (23 success, one conditional TikTok skip). All53 checks are complete (43 success, ten conditional skips), with zero pending, failed or cancelled checks. The three newly triggered MZ2/Snapchat workflows passed. The legacy status endpoint has zero contexts and is not a pending check.
+
+The browser-access blocker is resolved. PR1980 remains the explicitly recorded sequential handoff owner (latest body update23:10:31UTC); its actual adapter succeeded, but its own publication/official verification/final inactive handoff remains unrecorded. Do not infer permission from an inactive lease, alter shared/app, advance the production branch, start another adapter, or publish before that handoff. Next: observe PR1980 publication acceptance and owner release, then fresh status/source checks, ancestry-preserving merge of exactB, actual adapter, own prepare/prepublish, one free Publish and full official three-check verification. Frozen A/B and production source are unchanged by this checkpoint.
+
 ## Release handoff — ready B, publication pending
 
 Owner publication authorization is explicit. **All 20 applicable workflows
