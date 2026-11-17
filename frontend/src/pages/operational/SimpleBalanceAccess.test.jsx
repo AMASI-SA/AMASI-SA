@@ -65,6 +65,28 @@ test('a stale-version conflict keeps the proposed grants and requires explicit r
   expect(host.querySelector('[aria-label="استخدام بنك المؤسسة"]').checked).toBe(false);
 });
 
+test('each responsive account row has one labeled control per permission and balance remains independent', async () => {
+  await render(<AccessEditor user={user} catalog={catalog} identity="owner" />);
+  const rows = [...host.querySelectorAll('.sb-access-table tbody tr')];
+  expect(rows).toHaveLength(2);
+  for (const [index, row] of rows.entries()) {
+    expect(row.querySelector('th[scope="row"]').textContent).toContain(catalog.resources[index].name);
+    expect([...row.querySelectorAll('.sb-access-mobile-label')].map(label => label.textContent))
+      .toEqual(['استخدام الحساب', 'الحركات المعروضة', 'عرض الرصيد']);
+    expect(row.querySelectorAll('input,select')).toHaveLength(3);
+    expect([...row.querySelectorAll('label')].every(label => label.querySelectorAll('input,select').length === 1)).toBe(true);
+  }
+  const bankBalance = rows[0].querySelector('[aria-label="رصيد بنك المؤسسة"]');
+  await click(bankBalance.closest('label'));
+  expect(bankBalance.checked).toBe(true);
+  expect(rows[0].querySelector('[aria-label="استخدام بنك المؤسسة"]').checked).toBe(false);
+  expect(rows[0].querySelector('select').value).toBe('none');
+  await submit();
+  expect(api.saveUserAccess.mock.calls[0][1].resources).toEqual([
+    { kind: 'bank', id: 'bank', use: false, movements: 'none', balance: true },
+  ]);
+});
+
 test('a non-owner never loads the owner resource catalogue or employee roster', async () => {
   useOptionalAuth.mockReturnValue({ user: { id: 'staff', is_owner: false } });
   await render(<SimpleBalanceAccess />);

@@ -202,8 +202,29 @@ async function capture(page, name) {
       await page.getByText('تم حفظ صلاحيات موظف الاختبار. تُطبق على الطلبات التالية مباشرة.', { exact: true }).waitFor();
       assert.equal(calls.filter(call => call.method === 'PUT').length, 1);
     });
-    await check('Mobile permissions contain their wide table without horizontal body overflow', async () => {
-      await page.setViewportSize({ width: 390, height: 844 }); await capture(page, 'access-mobile');
+    await check('Mobile permission cards expose every account label and control inside the viewport', async () => {
+      await page.setViewportSize({ width: 390, height: 844 });
+      const cards = page.locator('.sb-access-table tbody tr');
+      assert.equal(await cards.count(), f.catalog.resources.length);
+      // A bounded body alone can conceal a horizontally clipped table. Inspect
+      // every permission and its visible label before any horizontal scrolling.
+      const horizontal = await cards.evaluateAll(nodes => nodes.flatMap(card =>
+        [...card.querySelectorAll('th strong,.sb-access-mobile-label,input,select')].map(node => {
+          const rect = node.getBoundingClientRect();
+          return { name: node.getAttribute('aria-label') || node.textContent, left: rect.left, right: rect.right,
+            width: rect.width, height: rect.height, viewport: innerWidth };
+        })));
+      assert.equal(horizontal.length, f.catalog.resources.length * 7);
+      for (const box of horizontal) assert(box.width > 0 && box.height > 0 && box.left >= 0 && box.right <= box.viewport,
+        `Clipped mobile permission: ${JSON.stringify(box)}`);
+      for (let index = 0; index < await cards.count(); index++) {
+        const card = cards.nth(index); await card.scrollIntoViewIfNeeded();
+        assert.equal(await card.evaluate(node => [...node.querySelectorAll('.sb-access-mobile-label,input,select')].every(control => {
+          const rect = control.getBoundingClientRect();
+          return rect.top >= 0 && rect.bottom <= innerHeight && rect.left >= 0 && rect.right <= innerWidth;
+        })), true, 'Every permission must be visible when its account card is in view');
+      }
+      await page.evaluate(() => window.scrollTo(0, 0)); await capture(page, 'access-mobile');
       assert.equal(await page.getByLabel('استخدام بنك المؤسسة التوضيحي', { exact: true }).isChecked(), false);
       assert.equal(await page.getByLabel('رصيد بنك المؤسسة التوضيحي', { exact: true }).isChecked(), true);
     });

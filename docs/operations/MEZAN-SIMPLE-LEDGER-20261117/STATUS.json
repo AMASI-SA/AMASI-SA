@@ -1,6 +1,6 @@
 {
   "task": "MEZAN-SIMPLE-LEDGER-20261117",
-  "status": "SOURCE_COMPLETE_INTEGRATED_CI_PENDING",
+  "status": "SOURCE_COMPLETE_FULL_CI_PASSED_MOBILE_LAYOUT_ACCEPTANCE_PENDING",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/mezan-simple-ledger-permissions-20261117",
   "base_sha": "71125711d8181da3b4e35d9129fd51c048ba2bdd",
@@ -40,14 +40,23 @@
     {
       "check": "Local environment limits",
       "result": "Real Mongo process startup and sandboxed Chromium process sockets are unavailable in this executor. Full real-Mongo and browser verification runs on the existing isolated GitHub CI runner; no override or production fallback used."
+    },
+    {
+      "check": "Full backend/web CI",
+      "head_sha": "4452a236f8dcacd6556d4602a43be5c200786885",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43988351100",
+      "result": "PASS:5093 operational backend tests on isolated Mongo replica set;16 shipping checks plus18 subtests;61 web suites/955tests;14 existing browser scenarios plus8 actual simple-workspace scenarios with8 screenshots;4 canonical worker process checks. No skipped/failing tests or relaxed timing gates."
+    },
+    {
+      "check": "Visual review and final mobile permission fix",
+      "result": "Inspected real component screenshots at390px/1440px and verified15 source hashes. All ledger/refund/entry screens were within width. Mobile access table hid columns behind horizontal scroll; converted the same controls to labelled account cards under560px while preserving desktop table/API. Focused2 suites/9tests and harness build passed. Stronger per-control viewport assertions are included; fresh CI and screenshot review pending for this presentation-only change."
     }
   ],
   "remaining": [
-    "Fresh full backend/web CI on this checkpoint, including real Mongo replica-set contracts and the new actual-screen browser harness.",
-    "Inspect generated desktop/mobile screenshots and resolve any observed acceptance failure.",
+    "Fresh CI/screenshots for the final mobile access-card presentation; backend business logic is unchanged from the full passing checkpoint.",
     "APK/signing, physical-device acceptance, merge and governed production deployment remain outside this source checkpoint."
   ],
-  "next_safe_action": "Run and inspect existing isolated CI on this task branch, fix only concrete remaining failures, then report exact source and verification. Do not trigger release adapters or mutate production data.",
+  "next_safe_action": "Verify final mobile access-card screenshots and all required checks on the task head, report exact source and test evidence, and leave release work to the governed release flow.",
   "pull_request": "https://github.com/AMASI-SA/AMASI-SA/pull/1966",
   "companion_native": {
     "repository": "AMASI-SA/amasi-mobile",
