@@ -21,7 +21,7 @@ from operational_balance_service import (
 from operational_balance_store import (
     audit, claim_movement, digest, fail, mutate, now, read, remember, replay,
 )
-from operational_financial_activity_runtime import prepare_in_thread
+from operational_financial_activity_runtime import checked_rows, preparation_checkpoint, prepare_in_thread
 from operational_visible_report_read import run_visible_report_read
 
 
@@ -368,16 +368,52 @@ def _row(policy, resource, item, amount, side, description):
     return result
 
 
-def ledger_items(state, computed, resource, policy):
+def _index_ledger_sources(state, computed, resources):
+    """Group this request's rows once; ledger projection retains every access check."""
+    sources = {"openings": (), "obligations": (), "movements": (), "customer_returns": ()}
+    indexed = {(row["kind"], row["id"], row["currency"]): {name: [] for name in sources}
+               for row in checked_rows(resources) if row["access"]["movements"] != "none"}
+    if not indexed:
+        return indexed
+
+    def append(name, key, item):
+        # A malformed unrelated identity could not equal a catalog resource in
+        # the original scan. Do not turn it into an unhashable-key failure.
+        if all(isinstance(value, str) for value in key):
+            selected = indexed.get(key)
+            if selected is not None:
+                selected[name].append(item)
+
+    for name, rows in (("openings", state.get("openings", {}).values()),
+                       ("obligations", computed["obligations"])):
+        for item in checked_rows(rows):
+            append(name, (item.get("party_type"), item.get("party_id"), item.get("currency")), item)
+    for item in checked_rows(state.get("movements", [])):
+        primary = (item["party_type"], item["party_id"], item["currency"])
+        cash = (item.get("bank_kind"), item.get("bank_id"), item.get("bank_currency") or item["currency"])
+        append("movements", primary, item)
+        if cash != primary:
+            append("movements", cash, item)
+    for item in checked_rows(state.get("customer_returns", [])):
+        append("customer_returns", (item.get("refund_source_type"), item.get("refund_source_id"), item.get("currency")), item)
+    preparation_checkpoint()
+    return indexed
+
+
+def ledger_items(state, computed, resource, policy, *, sources=None):
+    preparation_checkpoint()
     kind, identity, currency = resource["kind"], resource["id"], resource["currency"]
+    if sources is None:
+        sources = {"openings": state.get("openings", {}).values(), "obligations": computed["obligations"],
+                   "movements": state.get("movements", []), "customer_returns": state.get("customer_returns", [])}
     result = []
-    for item in state.get("openings", {}).values():
+    for item in checked_rows(sources["openings"]):
         if (item.get("party_type"), item.get("party_id"), item.get("currency")) != (kind, identity, currency) or not _can_row(policy, resource, item):
             continue
         amount = Decimal(item["amount"])
         if amount:
             result.append(_row(policy, resource, item, amount, item["direction"], "رصيد افتتاحي"))
-    for item in computed["obligations"]:
+    for item in checked_rows(sources["obligations"]):
         if item.get("kind") in {"baseline", "external_advance", "advertising_balance"} or item.get("virtual"):
             continue
         if (item.get("party_type"), item.get("party_id"), item.get("currency")) != (kind, identity, currency) or not _can_row(policy, resource, item):
@@ -386,7 +422,7 @@ def ledger_items(state, computed, resource, policy):
         if amount > 0:
             result.append(_row(policy, resource, item, amount,
                                "for_party" if item["direction"] == "payable" else "for_us", "مستحق من المصدر"))
-    for item in state.get("movements", []):
+    for item in checked_rows(sources["movements"]):
         primary = (item["party_type"], item["party_id"], item["currency"]) == (kind, identity, currency)
         cash = (item.get("bank_kind"), item.get("bank_id"), item.get("bank_currency") or item["currency"]) == (kind, identity, currency)
         if not (primary or cash) or not _can_row(policy, resource, item):
@@ -411,7 +447,7 @@ def ledger_items(state, computed, resource, policy):
         }.get(item["kind"], "حركة مالية")
         result.append(_row(policy, resource, item, amount, side, description))
     if kind in {"bank", "provider"}:
-        for case in state.get("customer_returns", []):
+        for case in checked_rows(sources["customer_returns"]):
             if (case.get("refund_source_type"), case.get("refund_source_id"), case.get("currency")) != (kind, identity, currency):
                 continue
             if case.get("status") == "provider_matched":
@@ -450,13 +486,16 @@ def ledger_items(state, computed, resource, policy):
             if not _can_row(policy, resource, item):
                 continue
             result.append(_row(policy, resource, item, Decimal(case["amount"]), "for_party", "رد مبلغ طلب"))
+    preparation_checkpoint()
     result.sort(key=lambda item: (item["business_date"], item["recorded_at"], item["id"]), reverse=True)
+    preparation_checkpoint()
     return result
 
 
 def paginate(items, page, page_size, focus_id=None):
+    preparation_checkpoint()
     if focus_id:
-        match = next((index for index, row in enumerate(items) if row["id"] == focus_id), None)
+        match = next((index for index, row in enumerate(checked_rows(items)) if row["id"] == focus_id), None)
         if match is not None:
             page = match // page_size + 1
     total_pages = max(1, ceil(len(items) / page_size))
@@ -476,8 +515,11 @@ def install_workspace_routes(router, db, current_user, scope):
         return actor, owner, source, policy
 
     async def checked_read(user, callback):
+        from operational_financial_position_state import read_financial_position_state
         actor, owner, source, policy = await load(user)
-        state = await read(db, owner)
+        # Workspace reports need current financial proofs, not historical audit
+        # pages or idempotency receipts. Writers keep the complete store reader.
+        state = await read_financial_position_state(db, owner)
         resources, computed = await resource_catalog(db, owner, policy, state)
         result = await prepare_in_thread(callback, actor, owner, policy, state, resources, computed)
         current_actor, current_owner, _, current = await load(user)
@@ -517,10 +559,12 @@ def install_workspace_routes(router, db, current_user, scope):
     async def movements(request: Request, page: int = Query(default=1, ge=1), page_size: int = Query(default=5, ge=1, le=5), user=Depends(current_user)):
         def project(actor, owner, policy, state, resources, computed):
             items, seen = [], set()
-            for resource in resources:
+            indexed = _index_ledger_sources(state, computed, resources)
+            for resource in checked_rows(resources):
                 if resource["access"]["movements"] == "none":
                     continue
-                for row in ledger_items(state, computed, resource, policy):
+                sources = indexed[(resource["kind"], resource["id"], resource["currency"])]
+                for row in checked_rows(ledger_items(state, computed, resource, policy, sources=sources)):
                     if row["event_id"] in seen:
                         continue
                     seen.add(row["event_id"])

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="2.448" timestamp="2026-11-18T00:38:59.313078+03:00" hostname="df6527194688"><testcase classname="backend.tests.test_operational_balance_workspace" name="test_workspace_report_reads_preserve_full_state_results_without_loading_audit_pages" time="1.100"><failure message="AssertionError: assert [{'_id': '78a...'owner'}, ...] == []&#10;  &#10;  Left contains 40 more items, first extra item: {'_id': '78af9a2aa441ccae97170139fb40bacb3a90424abea3e109a9fe1fd98247214f', 'owner_id': 'owner'}&#10;  Use -v to get more diff">backend/tests/test_operational_balance_workspace.py:631: in test_workspace_report_reads_preserve_full_state_results_without_loading_audit_pages
+    run(scenario)
+backend/tests/test_operational_balance_workspace.py:66: in run
+    asyncio.run(execute())
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+backend/tests/test_operational_balance_workspace.py:62: in execute
+    await scenario(db, http)
+backend/tests/test_operational_balance_workspace.py:622: in scenario
+    assert reads == []
+E   AssertionError: assert [{'_id': '78a...'owner'}, ...] == []
+E     
+E     Left contains 40 more items, first extra item: {'_id': '78af9a2aa441ccae97170139fb40bacb3a90424abea3e109a9fe1fd98247214f', 'owner_id': 'owner'}
+E     Use -v to get more diff</failure></testcase></testsuite></testsuites>

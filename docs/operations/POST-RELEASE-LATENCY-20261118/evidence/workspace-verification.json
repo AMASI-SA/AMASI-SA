@@ -1,0 +1,85 @@
+{
+  "base_git_sha": "d7c9ed77137bed0948f4d32a34c6bf571d75e6f8",
+  "source_sha256": "8e3c9ea408dc081a69b47081efea50b77b0e749933260f2ca6ddaf37b939a126",
+  "test_sha256": "e91fd011ceebd49be5e02f840c6b080de3daf8d47e4d81b351853c54296be934",
+  "production_changed_by_this_patch": false,
+  "slices": [
+    {
+      "name": "Request-local ledger indexing and cancellation",
+      "red": {
+        "command": "PYTHONDONTWRITEBYTECODE=1 PYTHON_DOTENV_DISABLED=1 PYTHONPATH=backend:backend/tests env -u OPERATIONAL_TEST_MONGO_URI /tmp/mezan-courier-test-venv/bin/python -B -m pytest --noconftest -p no:cacheprovider -q --tb=short backend/tests/test_operational_balance_workspace.py -k 'daily_projection_scans_saved_history_once or ledger_projection_observes_cancellation'",
+        "chunk_id": "03731b",
+        "wall_time_seconds": 3.163580951,
+        "exit_code": 1,
+        "original_token_count": 534,
+        "output": "FF                                                                       [100%]\n=================================== FAILURES ===================================\n______ test_daily_projection_scans_saved_history_once_for_many_resources _______\nbackend/tests/test_operational_balance_workspace.py:433: in test_daily_projection_scans_saved_history_once_for_many_resources\n    run(scenario)\nbackend/tests/test_operational_balance_workspace.py:66: in run\n    asyncio.run(execute())\n/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py:195: in run\n    return runner.run(main)\n           ^^^^^^^^^^^^^^^^\n/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py:118: in run\n    return self._loop.run_until_complete(task)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/base_events.py:691: in run_until_complete\n    return future.result()\n           ^^^^^^^^^^^^^^^\nbackend/tests/test_operational_balance_workspace.py:62: in execute\n    await scenario(db, http)\nbackend/tests/test_operational_balance_workspace.py:431: in scenario\n    assert visits[\"movements\"] <= 2 * source_sizes[\"movements\"], visits\nE   AssertionError: {'movements': 22500, 'obligations': 135}\nE   assert 22500 <= (2 * 500)\n_ test_ledger_projection_observes_cancellation_while_scanning_unrelated_history _\nbackend/tests/test_operational_balance_workspace.py:458: in test_ledger_projection_observes_cancellation_while_scanning_unrelated_history\n    with preparation_scope(stop), pytest.raises(asyncio.CancelledError):\n                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nE   Failed: DID NOT RAISE CancelledError\n=========================== short test summary info ============================\nFAILED backend/tests/test_operational_balance_workspace.py::test_daily_projection_scans_saved_history_once_for_many_resources\nFAILED backend/tests/test_operational_balance_workspace.py::test_ledger_projection_observes_cancellation_while_scanning_unrelated_history\n2 failed, 21 deselected in 2.45s\n"
+      },
+      "green": {
+        "chunk_id": "ad20e3",
+        "wall_time_seconds": 2.931503809,
+        "exit_code": 0,
+        "original_token_count": 29,
+        "output": "..                                                                       [100%]\n2 passed, 21 deselected in 2.27s\n"
+      }
+    },
+    {
+      "name": "Use existing validated report-only snapshot reader",
+      "red": {
+        "exit_code": 1,
+        "junit": "workspace-projected-red.xml",
+        "assertion": "Five actual ASGI routes made 40 historical audit-page reads; expected zero. Full-response parity already passed before this assertion."
+      },
+      "green": {
+        "chunk_id": "46d156",
+        "wall_time_seconds": 5.016135603,
+        "exit_code": 0,
+        "original_token_count": 29,
+        "output": "....                                                                     [100%]\n4 passed, 28 deselected in 4.13s\n",
+        "junit": "workspace-projected-green.xml"
+      }
+    }
+  ],
+  "final_local_matrix": {
+    "command": "PYTHONDONTWRITEBYTECODE=1 PYTHON_DOTENV_DISABLED=1 PYTHONPATH=backend:backend/tests env -u OPERATIONAL_TEST_MONGO_URI /tmp/mezan-courier-test-venv/bin/python -B -m pytest --noconftest -p no:cacheprovider -q --tb=short --junitxml=docs/operations/POST-RELEASE-LATENCY-20261118/evidence/workspace-focused.xml backend/tests/test_operational_balance_workspace.py backend/tests/test_operational_workspace_refunds.py backend/tests/test_operational_balance_pending_commands.py backend/tests/test_operational_financial_position_state.py backend/tests/test_operational_balance_snapshot_encoding.py backend/tests/test_operational_balance_archive_read_lifetime.py",
+    "exit_code": 0,
+    "passed": 140,
+    "failed": 0,
+    "skipped": 0,
+    "duration_seconds": 43.53,
+    "junit": "workspace-focused.xml",
+    "database": "mongomock_motor or explicit read-only in-memory test doubles; no real MongoDB"
+  },
+  "benchmark": {
+    "script": "workspace_projection_benchmark.py",
+    "results": "workspace-benchmark.json",
+    "command": "PYTHONDONTWRITEBYTECODE=1 PYTHON_DOTENV_DISABLED=1 /tmp/mezan-courier-test-venv/bin/python -B docs/operations/POST-RELEASE-LATENCY-20261118/evidence/workspace_projection_benchmark.py",
+    "exit_code": 0,
+    "production_latency_measured": false
+  },
+  "environment_failures": [
+    "Initial adjacent collection with small venv failed on missing qrcode. Existing fuller venv resolved that import; no packages installed.",
+    "Initial broad real-Mongo selection lacked its required local service and was interrupted (exit 130). A single isolated case confirmed ServerSelectionTimeoutError at admin ping on 127.0.0.1:27305 before application assertions.",
+    "Existing MongoDB 8.0.12 binary aborted before readiness with NumPossibleCPUsNoCache: cpus.has_value() (false), exit -6. Owned attempted processes/temp paths were cleaned. No real-Mongo pass is claimed."
+  ],
+  "required_real_mongo_ci_targets": [
+    "backend/tests/test_operational_balance_workspace.py",
+    "backend/tests/test_operational_balance_security.py",
+    "backend/tests/test_operational_workspace_refunds.py",
+    "backend/tests/test_operational_balance_external_advances.py",
+    "backend/tests/test_operational_balance_custody_payments.py",
+    "backend/tests/test_operational_balance_assigned_banks.py",
+    "backend/tests/test_operational_balance_pending_commands.py",
+    "backend/tests/test_operational_balance_cash_assignments.py",
+    "backend/tests/test_operational_balance_app_permissions.py"
+  ],
+  "preserved_invariants": [
+    "Per-resource currency, primary and bank counterpart semantics, including matching keys and bank currency/amount",
+    "Resource iteration order, event-group deduplication, exact row ordering, pagination and focus",
+    "Own/all movement access, reference redaction and current policy recheck",
+    "Provider-refund proof validation, execution/matching actor and dates",
+    "Complete financial packet/issue decoding and owner/hash/marker checks",
+    "Audit manifest metadata remains validated; only historical audit-page contents are omitted by report-only reads",
+    "Full store, financial mutations, audit readers, permissions policy and monetary formulas are unchanged"
+  ],
+  "limitation": "No hosted CPU/latency causal claim. Current financial report and catalogs still run per request; no heavy-admission or cross-request cache changes."
+}
