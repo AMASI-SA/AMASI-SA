@@ -1,0 +1,120 @@
+{
+  "schema_version": 1,
+  "kind": "sanitized_mezan_production_verification_summary",
+  "repository": "AMASI-SA/AMASI-SA",
+  "pull_request": 1974,
+  "acceptance": "accepted",
+  "verified": true,
+  "evidence_only": true,
+  "deployable": false,
+  "summary_not_original_verifier_record": true,
+  "source": {
+    "source_A": "7f6bc85333b1189e40dd5f1138b841cf2241ee23",
+    "intent_B": "996fcfab1350298ecfb9d3472c14e6514c7649de",
+    "deployment_merge_M": "b009ee50a6b932368be8ad104c8c1b75e584b4e2",
+    "deployment_merge_tree": "129beb5d3e5121a9f2ed3a8130dc26a3f5cee8d8",
+    "production_base": "b92d3eb8d12920663a052744c9c0d2773a785e1a",
+    "production_ref": "hotfix/prod-snap-meta-final",
+    "release_branch": "codex/android-shipping-print-release-20261118",
+    "intent_path": "release/release-intent-v5.json",
+    "intent_git_blob": "cb55cc4d5f643f9f3dfb7feff4c6f260bd1c4c51",
+    "intent_sha256": "f76793d280ddd2c4e0229feaa0b8d6953bfbea00164947e4af351319fb26e307"
+  },
+  "runtime": {
+    "release_id": "rg5-c13e7f152e61e9ba1f799a1a78744bb998e3cdfb8be7cfdc09f97886868fa17e",
+    "boot_started_at": "2026-11-17T22:42:04.514248Z",
+    "frontend_artifact_tree_sha256": "feca50cf723178a51482b5552d3b5d994ad735e3a946ca067f0256c2814bfae5"
+  },
+  "official_verifier": {
+    "started_at": "2026-11-17T22:46:11.153685+00:00",
+    "finished_at": "2026-11-17T22:57:40.639406+00:00",
+    "duration_seconds_rounded": 689.49,
+    "exit_code": 0,
+    "verified": true,
+    "invocation_count": 1,
+    "checks_count": 3,
+    "frontend_checked_requests_count": 594,
+    "frontend_checked_requests_result": "pass",
+    "frontend_checked_requests_original_field_type": "list",
+    "frontend_checked_requests_summary_method": "Per-pass count of the original frontend_checked_requests list; individual request entries omitted. The unchanged verifier repeats the complete request set in all three passes.",
+    "shell_cache_checks_count": 3,
+    "service_worker_checks_count": 2,
+    "fresh_guard_active_after_verification": false
+  },
+  "publication": {
+    "publish_action_count": 1,
+    "deployment_event_id": "08d2acc5-d0a4-5d2b-ad97-dcdd429d296d",
+    "platform_artifact_label": "dd9f327",
+    "ui_status": "Deployment finished",
+    "ui_displayed_time": "2026-11-18 01:42 AM",
+    "ui_timezone": "Asia/Riyadh",
+    "ui_time_precision": "minute",
+    "ui_deployment_ordinal": 100,
+    "preceding_platform_artifact_label": "223bc07",
+    "preceding_ui_deployment_ordinal": 99,
+    "artifact_labels_are_git_shas": false,
+    "services_stopped_count": 0,
+    "unrelated_untracked_entries_preserved_count": 120
+  },
+  "observability_limits": {
+    "outer_cloud_build_argv_observed": false,
+    "outer_cloud_build_snapshot_order_observed": false,
+    "complete_build_transcript_observed": false,
+    "platform_view_logs_error": "Chromium Error 9",
+    "physical_android_pdf_printer_acceptance_observed": false
+  },
+  "raw_record_provenance": {
+    "observed_by": "Coordinating root agent",
+    "observation_method": "Official verifier record read through the owned UI terminal on the original remote /app host, with field assertions and raw SHA-256 calculation.",
+    "remote_path": "/tmp/android-print-1974-verify.json",
+    "raw_sha256": "e5c7b7a9da52cf777cb6afc7e5bc2e91c51d26198a6ad7ca54d1c3d2b8ff445b",
+    "raw_copy_present_in_local_evidence_directory": false,
+    "summary_preparer_independently_read_raw_record": false,
+    "sanitization": "Retains nonsecret release identities, summary counts, timestamps, publication observations and limitations. Omits raw per-request entries and terminal transcript."
+  },
+  "independent_preparation_reads": {
+    "canonical_status_url": "https://raw.githubusercontent.com/AMASI-SA/AMASI-SA/b009ee50a6b932368be8ad104c8c1b75e584b4e2/docs/operations/ANDROID-SHIPPING-PRINT-20261117/STATUS.md",
+    "canonical_status_git_blob": "8f9a1a69bab3e0e5d1fb98c2d61768db657c3197",
+    "canonical_merge_api_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/git/commits/b009ee50a6b932368be8ad104c8c1b75e584b4e2",
+    "frozen_intent_local_bytes_matched_canonical_git_blob": true
+  },
+  "evidence_branch_plan": {
+    "state": "proposed_not_created_by_preparation",
+    "suggested_name": "codex/android-shipping-print-evidence-20261118",
+    "base_commit": "b009ee50a6b932368be8ad104c8c1b75e584b4e2",
+    "non_deployable": true,
+    "allowed_changed_paths": [
+      "docs/operations/ANDROID-SHIPPING-PRINT-20261117/STATUS.md",
+      "docs/operations/ANDROID-SHIPPING-PRINT-20261117/PRODUCTION-VERIFICATION.json"
+    ],
+    "preserve_all_other_paths": true,
+    "modify_frozen_source_or_intent": false,
+    "merge_into_source_release_or_production_refs": false,
+    "invoke_publication_or_acquire_lease": false
+  },
+  "android_handoff": {
+    "repository": "AMASI-SA/amasi-mobile",
+    "pull_request": 360,
+    "merged_at": "2026-11-17T23:04:58Z",
+    "merge_commit": "29f444cdc0d46406746cfa9c64b6f175e3dc577e",
+    "merge_tree": "fe483dfb32f07db5df3c8ec61eaf57ce47dc4d1d",
+    "parents": [
+      "3dfcf66d359414c964d20a3b8f36dff853698340",
+      "66c453482600638a617e28add33280e3f60cca31"
+    ],
+    "reviewed_ci_head": "66c453482600638a617e28add33280e3f60cca31",
+    "required_ci_jobs_passed": 4,
+    "android_version_code": 84,
+    "app_version": "1.0.69",
+    "eas_build_id": "96a6350e-fb9a-40ec-9d51-e686b3e318cd",
+    "eas_build_url": "https://expo.dev/accounts/amasi-sa/projects/amasi/builds/96a6350e-fb9a-40ec-9d51-e686b3e318cd",
+    "eas_confirm_action_count": 1,
+    "eas_status": "in_progress",
+    "eas_status_observed_at": "2026-11-17T23:10:00Z",
+    "eas_status_time_precision": "minute",
+    "apk_observed": false,
+    "distribution_observed": false,
+    "physical_printing_observed": false,
+    "observation_source": "Coordinating root agent; status is a timestamped handoff snapshot, not a claim about later build completion."
+  }
+}
