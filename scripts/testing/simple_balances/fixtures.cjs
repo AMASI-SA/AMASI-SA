@@ -14,6 +14,10 @@ const resources = [
   resource('employee', 'employee-demo', 'موظف توضيحي', '1000.00', 'for_party', ['employee.accrual', 'employee.payment']),
   resource('supplier', 'supplier-demo', 'مورد توضيحي', '2000.00', 'for_party', ['supplier.payment']),
   resource('supplier', 'supplier-extra', 'مورد إضافي للاختبار', '500.00', 'for_party', ['supplier.payment']),
+  // Repeated IDs deliberately exercise the boundary between resource kinds.
+  resource('store_driver', 'employee-demo', 'موصل توضيحي', '300.00', 'for_us', []),
+  resource('store_driver', 'driver-extra', 'موصل إضافي للاختبار', '200.00', 'for_us', []),
+  resource('courier', 'employee-demo', 'شركة شحن توضيحية', '700.00', 'for_us', []),
   resource('employee_custody', 'custody-demo', 'عهدة الموظف التوضيحي', '500.00', 'for_us', []),
   resource('owner_withdrawal', 'owner-demo', 'حساب المالك التوضيحي', '0.00', 'balanced', []),
   resource('bank', 'bank-demo', 'بنك المؤسسة التوضيحي', '5000.00', 'for_us', ['accounts.transfer']),
@@ -48,5 +52,6 @@ const access = { version: 3, enabled: true, operations: ['external.pay', 'custod
 ] };
 const catalog = { operations, resources: resources.map(({ kind, id, name, currency }) => ({ kind, id, name, currency })),
   resource_kinds: [['external_person', 'الجهات الخارجية'], ['employee', 'الموظفون'], ['supplier', 'الموردون'],
+    ['store_driver', 'الموصلون'], ['courier', 'شركات الشحن'],
     ['employee_custody', 'العهد'], ['owner_withdrawal', 'المالك'], ['bank', 'البنوك'], ['cash', 'الصناديق']].map(([key, label]) => ({ key, label })) };
 module.exports = { synthetic_only: true, operations, resources, scope, owner, staff, context, ledger, order, refund, platformRefund, access, catalog };
