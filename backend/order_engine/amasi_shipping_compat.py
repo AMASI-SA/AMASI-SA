@@ -563,7 +563,8 @@ async def local_mezan_courier_label(db, owner: str, number: str, workflow: dict,
     if not name:
         return None
     source = await db.unified_orders.find_one({"user_id": owner, "order_number": number}, {
-        "_id": 0, "order_status": 1, "order_status_slug": 1, "g47_salla_snapshot": 1,
+        "_id": 0, "user_id": 1, "order_number": 1,
+        "order_status": 1, "order_status_slug": 1, "g47_salla_snapshot": 1,
         "raw_by_source.salla_direct": 1, "shipping_address_raw": 1,
         "salla_shipment_id": 1, "salla_shipment_snapshot": 1, legacy.CURRENT_SHIPPING: 1,
         "shipping_address_source_path": 1, "salla_address_verified_at": 1, "salla_address_provider_updated_at": 1,
@@ -573,6 +574,14 @@ async def local_mezan_courier_label(db, owner: str, number: str, workflow: dict,
     if not isinstance(raw, dict):
         raise legacy.ShippingLabelError("salla_order_reference_mismatch", "تعذّر تأكيد هوية الطلب في ميزان.")
     status = canonical_status(source)
+    if status is None:
+        from supplier_receipt_ready_policy import completed_supplier_policy, supplier_status
+        current = await db["order_review_workflows"].find_one({"user_id": owner, "order_number": number})
+        if current and await completed_supplier_policy(db, owner, number, workflow=current, source=source):
+            # Retained component flags do not revoke proven supplier completion.
+            # Provider confirmation below must come from this same saved workflow.
+            status = supplier_status(source)
+            workflow = current
     if status == "in_progress":
         from assembly_completion_delivery import public_status
         confirmed = public_status(workflow, canonical=status)["order_completion_status"] == "confirmed"
