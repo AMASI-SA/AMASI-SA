@@ -1,6 +1,40 @@
 # Post-release availability and balances latency — 18 November 2026
 
-## Scope and current state
+## Latest accepted checkpoint — 2026-11-17 22:05:16 UTC
+
+**Evidence branch only. Do not deploy this branch.** The deployable candidate
+remains frozen source A `86452cd1a82ae9528b89c51edbc0ee86b2984bd3` plus intent-only B
+`6c75c3edf131d1a39155d245604860dc66d02266` in PR1976. Its task branch remains
+`codex/post-release-latency-20261118`; A/B must not be rebased or squashed.
+
+All11 applicable B workflows passed, with one intentionally skipped TikTok
+candidate workflow. Root directly checked23 successful checks and6 scope skips,
+zero pending/failures. Both exact-B clean-clone adapter rehearsals and JSON runtime
+metadata routes passed. Actual B operational backend artifact records5163tests,
+zero failures/errors/skips against the isolated Mongo replica set. Both source
+and B introduced-alert CodeQL verdicts contain no new alerts and zero annotations.
+The root independently validated the reviewed A/B/history contract.
+
+The governed local two-build result and frozen intent are byte-identical to the
+official source-A candidate artifact. Full identities, artifact hashes and
+job IDs are recorded in `evidence/accepted-intent-b.json`.
+
+Production changed by this task: **no**. PR1976 is not yet merged or published.
+No own release lease or live financial/provider operation exists. The separate
+PR1972 release is now visible as source3dfbc70373632dcb2e8ca044448b8ff723515d15
+with healthy identity flags; its publisher still owns the official verification
+and Preview-backend restoration. An attempted bounded read-only status probe
+waited on that operation mutex and timed out; it did not change the lease.
+Preserve all shared /app work and PR1968/PR1974.
+
+Next safe action: wait for the prior publisher's completed handoff and require
+fresh official `active:false` before shared /app mutation or rehearsal. Complete
+the reviewed merge, actual configured adapter, own prepare/prepublish, one
+publication, explicit newer platform success, official three-probe verification,
+and hosted balances observation. No hosted speed improvement is accepted yet.
+
+
+## Original diagnosis checkpoint (source A)
 
 The owner reports that Mezan became slow and then appeared frozen after the
 latest publication, and separately confirms that the balances application is

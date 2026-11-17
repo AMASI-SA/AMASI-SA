@@ -1,0 +1,79 @@
+{
+  "task": "POST-RELEASE-LATENCY-20261118",
+  "recorded_utc": "2026-11-17 22:05:16 UTC",
+  "source_a": "86452cd1a82ae9528b89c51edbc0ee86b2984bd3",
+  "source_tree": "729d9ed6de29f77d32503025f0344e7510548318",
+  "intent_b": "6c75c3edf131d1a39155d245604860dc66d02266",
+  "intent_tree": "e5b04ad57593726e04b3b8a5656622a9e47f7629",
+  "source_base": "b92d3eb8d12920663a052744c9c0d2773a785e1a",
+  "runtime": "rg5-cfc00a1760898e8e80177b9eeaa1f80288b6789b20c8eb7acd0e97047df37605",
+  "intent_sha256": "28817aa7636853fb52be5fef4ff7316f4bcd34f20398af6bd4eca79274ccb4d4",
+  "local_ci_intent_byte_identical": true,
+  "local_root_tests": {
+    "passed": 140,
+    "failed": 0,
+    "skipped": 0
+  },
+  "a_workflows": {
+    "passed": 11
+  },
+  "b_workflows": {
+    "passed": 11,
+    "intentionally_skipped": 1
+  },
+  "b_checks": {
+    "success": 23,
+    "intentionally_skipped": 6,
+    "pending": 0,
+    "failed": 0
+  },
+  "readiness": {
+    "run": 44184828842,
+    "hosts": [
+      {
+        "node": "20.20.2",
+        "job": 134399042314
+      },
+      {
+        "node": "24.19.0",
+        "job": 134399042654
+      }
+    ],
+    "clean_clone_no_git": true,
+    "canonical_and_cache_busted_json_routes": true,
+    "backend_package_tree": "c1f93a77cb7b9ee790820d71b053a5b8f7a6ecadc629b0e4699a28d7c1cf6a8b",
+    "frontend_package_tree": "7e06bf76541a0d8f3acfeeb63cd15a4dd6337c39f8165880680bef94b50b2dcc"
+  },
+  "operational_ci": {
+    "run": 44184828651,
+    "backend": {
+      "passed": 5163,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "isolated_mongo": "8.0.12 replica set",
+      "artifact": 14375430342,
+      "artifact_sha256": "836c54d3bab9a918962f331df5d2fec3fc5a5a384a96026f38a79c92d68af4f4"
+    },
+    "frontend": {
+      "suites": 62,
+      "passed": 1000
+    },
+    "canonical_worker_passed": 4,
+    "browser_passed": 22
+  },
+  "security": {
+    "run": 44184829149,
+    "codeql_workflow": 44184828723,
+    "aggregate_check": 134399511761,
+    "introduced_alerts": 0,
+    "annotations": 0,
+    "existing_alerts_claimed_zero": false
+  },
+  "pr": 1976,
+  "merged": false,
+  "production_changed_by_task": false,
+  "own_release_lease": false,
+  "hosted_acceptance": "unverified; prior PR1972 release verification/preview restoration still owned by its publisher",
+  "next": "Preserve frozen A/B; wait previous owner handoff and fresh official inactive guard before shared app/rehearsal. Merge through guarded reviewed workflow, run actual configured adapter, own prepare/prepublish, one publication, explicit newer success and official three probes, then measure balances."
+}
