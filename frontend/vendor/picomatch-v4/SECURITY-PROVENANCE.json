@@ -23,11 +23,15 @@
     "lib/picomatch.js": "fdd249d7ffff853f3bb1c77eafc8baa1a437bea85a94c35877b83c6a40d9ca94",
     "lib/repeated-extglob-safety.js": "2d6f345b66e1575df07ecec53dcdccc4dc4e6bd4cfaf8f105d6094b9de131c87",
     "lib/scan.js": "6457a1764e5c2e543cc3a0c00ce12ebb3764097628868198370b64d4e642aaae",
-    "lib/utils.js": "f04604f70cd1a3f6ace80b84766468674ff38b4bb83818d2ef1d81fc6355f935",
-    "package.json": "43661076ebb613ae045dda849b3fd25229b28975ba9890dbd03cd2db3b8e92ef",
+    "lib/utils.js": "d31e01e7cad59be0d39c4caff0f2d5cb09b64912b813c460628f97eaa56a2bec",
+    "package.json": "fde4c707633e26248e481a44cb870fd846c4ba5b05e9b94b3e1f3fc5e2510330",
     "posix.js": "5695ff5dfcd5a338a40630bd506056f2950bcb08fe1cc068519cbbfe60add480"
   },
-  "local_patch": "Mandatory classification of final compiled repeated-extglob bodies; bounded finite unambiguous grammar, independently certified greedy nullable-character-star rewrites, and literalization of unsupported repetition. Raw group repetitions are checked as well so they cannot wrap a finite accepted extglob in another unsafe repeat. Token accounting fixes ensure emitted and checked bodies agree.",
-  "security_boundary": "Local repeated-extglob compilation only. Not a general safety guarantee for arbitrary caller-supplied regular expressions or forged parse states.",
-  "compatibility_policy": "Keep existing major APIs. Preserve reviewed ordinary globs, safe finite repeats, literal stars, and all branches of certified star rewrites. Unsupported ambiguous or complex repeated forms intentionally become literals; recursion opt-outs cannot disable this guard."
+  "local_patch": "Mandatory classification of final compiled repeated-extglob bodies; bounded finite unambiguous grammar, independently certified greedy nullable-character-star rewrites, and literalization of unsupported repetition. Raw group repetitions are checked as well so they cannot wrap a finite accepted extglob in another unsafe repeat. Token accounting fixes ensure emitted and checked bodies agree. Revision 2 replaces the upstream quadratic removeBackslashes regular expression with an equivalent linear two-pass scanner.",
+  "security_boundary": "Local repeated-extglob compilation and linear removeBackslashes processing used by public scan unescaping. Not a general safety guarantee for arbitrary caller-supplied regular expressions or forged parse states.",
+  "compatibility_policy": "Keep existing major APIs. Preserve reviewed ordinary globs, safe finite repeats, literal stars, and all branches of certified star rewrites. Unsupported ambiguous or complex repeated forms intentionally become literals; recursion opt-outs cannot disable this guard.",
+  "additional_review_findings": [
+    "https://github.com/AMASI-SA/AMASI-SA/security/code-scanning/94",
+    "https://github.com/AMASI-SA/AMASI-SA/security/code-scanning/95"
+  ]
 }

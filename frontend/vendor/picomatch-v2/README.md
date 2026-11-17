@@ -34,6 +34,16 @@ correction so final rebuilt output agrees with the expression checked by the
 security boundary. Neither package trusts the previous raw-pattern heuristic's
 proposed rewrite without independently checking the actual compiled expression.
 
+## Linear scan unescaping
+
+Independent CodeQL review also identified quadratic behavior in the unchanged
+upstream `removeBackslashes` helper, reachable through public `scan` with
+`unescape: true`. The second local revision replaces that expression with a
+linear two-pass scan. It preserves the original leftmost bracket-span and
+backslash-removal behavior, including JavaScript line terminators, without
+truncating inputs or changing the public scan contract. The private package
+revision is `mezan.2`; original upstream provenance remains unchanged.
+
 ## Verification and replacement
 
 `frontend/scripts/verify-picomatch-backports.cjs` binds the vendor and every

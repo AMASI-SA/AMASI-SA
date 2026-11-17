@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const { createHash } = require("node:crypto");
 const { spawnSync } = require("node:child_process");
 const { createRequire } = require("node:module");
 const { test } = require("node:test");
@@ -17,7 +18,12 @@ const childProgram = `
   const { file, pattern, options, input, mode } = JSON.parse(process.argv[1]);
   const pm = require(file);
   let matches;
-  if (mode === "makeRe") matches = pm.makeRe(pattern, options).test(input);
+  if (mode === "remove-backslashes") matches = pm.removeBackslashes(pattern) === input;
+  else if (mode === "scan-unescape") {
+    const result = pm.scan(pattern, options);
+    matches = result.glob === input && result.base === "" && result.prefix === "" && result.isGlob === true;
+  }
+  else if (mode === "makeRe") matches = pm.makeRe(pattern, options).test(input);
   else if (mode === "parse-compile") matches = pm.compileRe(pm.parse(pattern, options), options).test(input);
   else matches = pm(pattern, options)(input);
   process.stdout.write(JSON.stringify({ matches }));
@@ -62,7 +68,85 @@ const attacks = [
   ["path-context", "src/+(*a).js", "src/" + "a".repeat(64) + "!.js"],
 ];
 
+// Frozen from the unchanged picomatch 2.3.2 and 4.0.7 release utilities.
+// In particular, one line terminator immediately before ] may be the final
+// character of a preserved bracket span; a line terminator inside it may not.
+const unescapeFixtures = [
+  ["", ""], ["[", "["], ["[]", "[]"], ["[]]", "[]]"], ["[a]", "[a]"],
+  ["[\\]", "[]"], ["[\\a]", "[\\a]"], ["[a\\]]", "[a\\]]"],
+  ["[[\\a]", "[[\\a]"], ["[\\a", "[a"], ["\\[a\\]", "[a]"], ["\\[a]", "[a]"],
+  ["\\\\", "\\"], ["\\", "\\"], ["\\a", "a"], ["\\\\a", "a"], ["a\\b", "ab"],
+  ["[\\a][\\b]", "[\\a][\\b]"],
+  ["[a\\b\n]", "[a\\b\n]"], ["[a\\b\r]", "[a\\b\r]"],
+  ["[a\\b\u2028]", "[a\\b\u2028]"], ["[a\\b\u2029]", "[a\\b\u2029]"],
+  ["[a\\b\r\nc]", "[ab\r\nc]"], ["[a\\b\nc]", "[ab\nc]"],
+  ["\\\n", "\\\n"], ["\\\r", "\\\r"], ["\\\u2028", "\\\u2028"], ["\\\u2029", "\\\u2029"],
+  ["[\\\n]", "[\\\n]"], ["[a\\\nb]", "[a\\\nb]"],
+  ["[\\a\\]]", "[\\a\\]]"], ["a\\b[\\c]d\\e", "ab[\\c]de"],
+];
+const unescapeAlphabet = ["[", "]", "\\", "a", "\n", "\r", "\u2028", "\u2029"];
+function* boundedUnescapeInputs(prefix = "") {
+  yield prefix;
+  if (prefix.length < 5) {
+    for (const character of unescapeAlphabet) yield* boundedUnescapeInputs(prefix + character);
+  }
+}
+
 for (const { variant, file } of modules) {
+  test(`${variant}: removeBackslashes unescaping remains bounded for unmatched brackets`, () => {
+    const utility = path.join(path.dirname(file), "lib/utils.js");
+    const brackets = "[".repeat(60000);
+    // Exercise actual unescaping first, then the no-backslash fast path.
+    for (const [suffix, expected] of [["\\a", "a"], ["", ""]]) {
+      assert.equal(probe(utility, brackets + suffix, brackets + expected, {}, "remove-backslashes"), true);
+    }
+  });
+  test(`${variant}: public scan unescaping remains bounded for unmatched brackets`, () => {
+    const brackets = "*" + "[".repeat(60000);
+    for (const [suffix, expected] of [["\\a", "a"], ["", ""]]) {
+      assert.equal(probe(file, brackets + suffix, brackets + expected, { unescape: true }, "scan-unescape"), true);
+    }
+  });
+  test(`${variant}: bracket and line-break unescaping preserves exact upstream semantics`, () => {
+    const { removeBackslashes } = require(path.join(path.dirname(file), "lib/utils.js"));
+    for (const [input, expected] of unescapeFixtures) {
+      assert.equal(removeBackslashes(input), expected, JSON.stringify(input));
+    }
+    // The digest records all 37,449 inputs of at most five code units in this
+    // alphabet, in generator order. Both unchanged official releases agree.
+    // Keeping their bounded oracle as data avoids embedding the unsafe regex.
+    const oracle = createHash("sha256");
+    let count = 0;
+    for (const input of boundedUnescapeInputs()) {
+      oracle.update(JSON.stringify([input, removeBackslashes(input)]) + "\n");
+      count++;
+    }
+    assert.equal(count, 37449);
+    assert.equal(oracle.digest("hex"), "01ff47a1f7988706b46827ef00b010ad498ff477558ab0944bffdde5fe67b239");
+  });
+  test(`${variant}: public scan unescaping preserves bracket and line-break state`, () => {
+    const pm = require(file);
+    const examples = [
+      ["src/\\*.js", "src/*.js", "", false, false],
+      ["src/[a\\]b]/*.js", "src", "[a\\]b]/*.js", true, true],
+      ["src/\\[a]/file\\?.js", "src/[a]/file?.js", "", false, false],
+      ["src/[a\\b\n]/*.js", "src", "[a\\b\n]/*.js", true, true],
+      ["src/[a\\b\nc]/*.js", "src", "[ab\nc]/*.js", true, true],
+      ["src/[a\\b\r\nc]/*.js", "src", "[ab\r\nc]/*.js", true, true],
+      ["src/[\\\n]/*.js", "src", "[\\\n]/*.js", true, true],
+      ["src/a\\\\b/*.js", "src/ab", "*.js", true, false],
+      ["*[\\]", "", "*[]", true, false],
+      ["*[a\\]]", "", "*[a\\]]", true, false],
+      ["*[a\\b\u2028]", "", "*[a\\b\u2028]", true, false],
+      ["*[a\\b\u2029c]", "", "*[ab\u2029c]", true, false],
+    ];
+    for (const [input, base, glob, isGlob, isBracket] of examples) {
+      const state = pm.scan(input, { unescape: true });
+      assert.deepEqual({ base: state.base, glob: state.glob, prefix: state.prefix,
+        isGlob: state.isGlob, isBracket: state.isBracket },
+      { base, glob, prefix: "", isGlob, isBracket }, JSON.stringify(input));
+    }
+  });
   for (const [name, pattern, input, options] of attacks) {
     for (const mode of ["matcher", "makeRe", "parse-compile"]) {
       test(`adversarial ${variant}: ${name} [${mode}]`, () => {
@@ -166,9 +250,10 @@ for (const { variant, file } of modules) {
     const { analyzeCompiledRepeat } = require(path.join(path.dirname(file), 'lib/repeated-extglob-safety.js'));
     const result = analyzeCompiledRepeat('a*?');
     assert.equal(result.safeOutput, 'a*');
-    const original = /^((?:a*?)+)(a*)$/;
     const fixed = new RegExp(`^((?:${result.safeOutput}))(a*)$`);
-    assert.deepEqual(fixed.exec('aaa'), original.exec('aaa'));
+    // Freeze the original greedy-outer result without constructing its unsafe
+    // nested repetition solely to obtain these three known captures.
+    assert.deepEqual(Array.from(fixed.exec('aaa')), ['aaa', 'aaa', '']);
   });
 }
 

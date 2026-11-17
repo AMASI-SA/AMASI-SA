@@ -1,6 +1,18 @@
 # Courier delivery history recovery — 2026-11-17
 
-## Active checkpoint: security remediation awaiting immutable-source CI
+## Active revision 2: addressing CodeQL review findings before merge
+
+The normal merge request for PR 1967 was rejected by GitHub with `All comments must be resolved`. No merge, production source update, release lease or publication occurred. The frozen first A/B pair is preserved without rewriting: A `41b510c36b4b57a4f1bff3a860f9e9ce84902906`, B `c59664ae63ad46fec1c6cb3c8a04b3dc71ce1617`. Both passed 15 applicable workflows; B also passed host 20.20.2 and 24.19.0 clean-clone/no-Git/package/runtime-route rehearsals. Green CodeQL workflow status did not resolve its three inline findings, so those badges were insufficient to merge.
+
+CodeQL alerts 94 and 95 identify a genuine inherited polynomial expression in both upstream `removeBackslashes` utilities. It is reachable from the public `scan(..., {unescape:true})` API. Root reproduced four intended failures on the governed Node 22.23.2 runtime: direct helper and public scan for each major exceeded a 750ms process deadline on 60,000 unmatched opening brackets and were killed. The correction replaces the expression with an equivalent linear scanner, preserving bracket spans, backslash handling and JavaScript line-terminator semantics. Private fork versions advance to `mezan.2`; original upstream provenance is retained. Alert 96 points to an intentionally unsafe expression in a fixed-input test witness; that test now uses the explicit known capture expectation without constructing the unsafe expression.
+
+Current task branch: `codex/courier-delivery-history-security-r2-20261117`, starting from source A41b510c so the required new source-A history contains no earlier intent-only B. A new reviewed A/B pair and superseding PR are required; the old frozen pair must not be squashed, rebased, or force-moved. The resulting new source SHA and PR will be recorded in the PR continuation evidence. Issue #1006 is full and remains untouched.
+
+Revision 2 local verification is complete: independent review found no blocking issue after 212 complete helper/public-scan comparisons with the official releases. The tracked tests also bind 37,449 bounded upstream oracle inputs per major. The four new performance regressions fail on the original utility at the intended 750ms deadline and pass on the linear replacement; the focused new suite passed 10/10. Governed Node 22.23.2 / Yarn 1.22.22 frozen installation and installed-byte verification passed (3 copies, 8 consumer resolutions). The full combined security suite passed 210/210 with zero failures, skips, cancellations or todo. Strict production audit returned zero advisories at every severity over 409 dependencies; unchanged policy checker: exceptions NONE, blocking 0. Exact patched-file manifests were regenerated after both utility implementations were stable.
+
+Next: save this immutable source checkpoint and require exact-source CI plus CodeQL review-thread inspection before freezing a new intent. Then repeat the governed release steps and live reconciliation measurement already authorized by the user. Production changed: **no**.
+
+## Historical first remediation checkpoint (superseded before merge)
 
 The user explicitly requested fixing the remaining dependency blocker. Work continues on the same task branch from source986083f; its previous accepted CI remains historical evidence, not acceptance of the changed dependency graph.
 

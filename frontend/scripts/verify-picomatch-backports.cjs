@@ -10,8 +10,8 @@ const { createRequire } = require("node:module");
 
 const frontendRoot = path.resolve(__dirname, "..");
 const variants = Object.freeze({
-  v2: Object.freeze({ name: "@mezan/picomatch-v2", version: "2.3.2-mezan.1", upstream: "picomatch@2.3.2" }),
-  v4: Object.freeze({ name: "@mezan/picomatch-v4", version: "4.0.7-mezan.1", upstream: "picomatch@4.0.7" }),
+  v2: Object.freeze({ name: "@mezan/picomatch-v2", version: "2.3.2-mezan.2", upstream: "picomatch@2.3.2" }),
+  v4: Object.freeze({ name: "@mezan/picomatch-v4", version: "4.0.7-mezan.2", upstream: "picomatch@4.0.7" }),
 });
 const advisory = "GHSA-fc5q-39xc-vjpf";
 const digest = bytes => crypto.createHash("sha256").update(bytes).digest("hex");

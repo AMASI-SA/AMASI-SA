@@ -1,6 +1,6 @@
 {
   "name": "@mezan/picomatch-v2",
-  "version": "2.3.2-mezan.1",
+  "version": "2.3.2-mezan.2",
   "private": true,
   "description": "Local security backport of picomatch 2.3.2; not an upstream release",
   "license": "MIT",

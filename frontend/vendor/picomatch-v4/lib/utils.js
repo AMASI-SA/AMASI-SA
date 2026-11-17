@@ -3,7 +3,6 @@
 
 const {
   REGEX_BACKSLASH,
-  REGEX_REMOVE_BACKSLASH,
   REGEX_SPECIAL_CHARS,
   REGEX_SPECIAL_CHARS_GLOBAL
 } = require('./constants');
@@ -27,10 +26,43 @@ exports.isWindows = () => {
   return false;
 };
 
+const isLineTerminator = code => code === 10 || code === 13 || code === 0x2028 || code === 0x2029;
+
 exports.removeBackslashes = str => {
-  return str.replace(REGEX_REMOVE_BACKSLASH, match => {
-    return match === '\\' ? '' : match;
-  });
+  const length = str.length;
+  const bracketEnds = new Int32Array(length);
+  let nextClose = -1;
+
+  // Find each opening bracket's first eligible close in one reverse pass.
+  // The old dot cannot cross a line terminator, but its final non-backslash
+  // body character may be a line terminator immediately before the close.
+  for (let index = length - 1; index > 0; index--) {
+    const code = str.charCodeAt(index);
+    if (code !== 92 && str.charCodeAt(index + 1) === 93) {
+      nextClose = index + 1;
+    } else if (isLineTerminator(code)) {
+      nextClose = -1;
+    }
+    if (str.charCodeAt(index - 1) === 91) bracketEnds[index - 1] = nextClose;
+  }
+
+  const chunks = [];
+  let start = 0;
+  for (let index = 0; index < length; index++) {
+    // A preserved bracket span has at least one body character. All indices
+    // refer to the original input, so deleting a slash cannot create a span.
+    if (bracketEnds[index] >= index + 2) {
+      index = bracketEnds[index];
+      continue;
+    }
+    if (str.charCodeAt(index) === 92 && index + 1 < length
+      && !isLineTerminator(str.charCodeAt(index + 1))) {
+      if (start < index) chunks.push(str.slice(start, index));
+      start = index + 1;
+    }
+  }
+  chunks.push(str.slice(start));
+  return chunks.join('');
 };
 
 exports.escapeLast = (input, char, lastIdx) => {
