@@ -96,7 +96,35 @@ test("footer cells open two eight-column tables with all accounts and authoritat
     expect(cell(day, "costs").querySelector("dd").textContent).toBe("444.01");
     expect(day.querySelectorAll('[data-metric="costs"]')).toHaveLength(1);
     expect(cell(day, "roas").querySelector("dd").textContent).toBe("30.03");
-    expect(popup().textContent).not.toMatch(/التشغيلية|عمولة البنك|متوسط التكاليف|تكلفة المنتجات|تكلفة الشحن|عمولات طرق الدفع/);
+    expect(popup().textContent).not.toMatch(/متوسط التكاليف|تكلفة المنتجات|تكلفة الشحن|عمولات طرق الدفع/);
+    expect(popup().textContent).toContain("الأرباح قبل المصروفات التشغيلية");
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+});
+
+test.each([
+    [288.53, 288.53, "288.53"],
+    [0, 0, "0.00"],
+    [null, null, "—"],
+    [undefined, undefined, "—"],
+    [null, 280.16, "280.16المتاح"],
+])("daily bank commissions use the existing total without adding a comparison column (%s, known %s)", (bankFees, knownBankFees, expected) => {
+    const props = fixture();
+    Object.assign(props.total.profit, { bankFees, knownBankFees });
+    const before = JSON.parse(JSON.stringify(props));
+    click(render(props));
+    const day = popup().querySelector('[data-testid="dashboard-ads-overview-total"]');
+    const fees = cell(day, "bankFees");
+    expect(fees.querySelector("dt").textContent).toBe("منها عمولات البنك (ر.س)");
+    expect(fees.querySelector("dd").textContent).toBe(expected);
+    expect(cell(day, "costs").querySelector("dd").textContent).toBe("444.01");
+    expect(cell(day, "net").querySelector("dd").textContent).toBe("9,221.99");
+    for (const id of ["morning", "afternoon"]) {
+        expect(period(id).querySelectorAll("thead th")).toHaveLength(8);
+        expect(period(id).querySelector('[data-metric="bankFees"]')).toBeNull();
+    }
+    expect(popup().textContent).toContain("عمولات البنك المعروضة ضمن إجمالي التكاليف ومخصومة مرة واحدة");
+    expect(popup().textContent).toContain("الأرباح قبل المصروفات التشغيلية");
+    expect(JSON.parse(JSON.stringify(props))).toEqual(before);
     expect(globalThis.fetch).not.toHaveBeenCalled();
 });
 

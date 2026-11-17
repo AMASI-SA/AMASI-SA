@@ -76,14 +76,17 @@ async def build_dashboard_ads_account_results(
     direct_key = ("direct", "")
     keys.append(direct_key)
     buckets: dict[tuple[str, str], list[dict]] = {key: [] for key in keys}
+    unassigned_bucket: list[dict] = []
     segments = dashboard_day_segments(date_from, date_to, now=now)
     segment_buckets = {segment["id"]: {key: [] for key in keys} for segment in segments}
+    segment_unassigned_rows: dict[str, list[dict]] = {segment["id"]: [] for segment in segments}
     segment_totals: dict[str, list[dict]] = {segment["id"]: [] for segment in segments}
     has_available_segment = any(segment["status"] in {"active", "completed"} for segment in segments)
     segment_unassigned: Counter[str] = Counter()
     segment_outside: Counter[str] = Counter()
     uncertain_times: Counter[tuple[str, str]] = Counter()
     unassigned_time_orders = 0
+    untimed_unassigned_orders = 0
     costs = cost_collector if cost_collector is not None else DashboardAdsCostCollector()
     budget = CPUWorkBudget(ADVERTISING_BUDGET_MS)
     catalog_loaded = False
@@ -162,8 +165,12 @@ async def build_dashboard_ads_account_results(
                     key = ("snapchat", campaign[0])
             if key is None:
                 unassigned_orders += 1
+                unassigned_bucket.append(order)
                 if segment_id:
                     segment_unassigned[segment_id] += 1
+                    segment_unassigned_rows[segment_id].append(order)
+                elif has_available_segment:
+                    untimed_unassigned_orders += 1
 
         if key is not None:
             buckets[key].append(order)
@@ -218,6 +225,18 @@ async def build_dashboard_ads_account_results(
                 row["ad_spend_applicable"] = False
         return row
 
+    async def unassigned_row(rows: list[dict], **kwargs) -> dict:
+        # These orders have a known platform but no proven account. Retain the
+        # available order/cost evidence without claiming an advertising spend
+        # allocation, changing account totals, or counting the cohort twice.
+        row = await result_row(rows, assigned=False, **kwargs)
+        row.update({
+            "provider": "snapchat",
+            "cohort_basis": "snapchat_unassigned_orders",
+            "ad_spend_allocation_complete": False,
+        })
+        return row
+
     async def build_rows(bucket_map, total_rows, *, assigned, available=True, segment=False, extra_reasons=None):
         accounts = []
         providers = {}
@@ -251,6 +270,7 @@ async def build_dashboard_ads_account_results(
         return accounts, providers, direct, total
 
     accounts, providers, direct, daily_total = await build_rows(buckets, orders, assigned=attribution_complete)
+    unassigned_result = await unassigned_row(unassigned_bucket, extra_reasons=sorted(reasons))
     coverage = {
         "status": ("unavailable" if not catalog_complete
                    else "partial" if unassigned_orders else "complete"),
@@ -275,6 +295,10 @@ async def build_dashboard_ads_account_results(
             "accounts": segment_accounts,
             "provider_results": segment_providers,
             "direct_result": segment_direct,
+            "unassigned_result": await unassigned_row(
+                segment_unassigned_rows[segment_id], timed=not untimed_unassigned_orders, available=available,
+                extra_reasons=segment["reason_codes"] + sorted(reasons) + ([] if available else [segment["status"]]),
+            ),
             "total": total,
             "coverage": {
                 "status": "unavailable" if not catalog_complete else "partial" if not assigned else "complete",
@@ -317,6 +341,7 @@ async def build_dashboard_ads_account_results(
         "accounts": accounts,
         "provider_results": providers,
         "direct_result": direct,
+        "unassigned_result": unassigned_result,
         "daily_total": daily_total,
         "segments": segments,
         "coverage": coverage,
