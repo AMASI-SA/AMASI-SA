@@ -1,0 +1,277 @@
+{
+  "task_id": "BALANCE-SUPPLIER-BULK-ACCESS-20261117",
+  "recorded_at_utc": "2026-11-17 20:31:32 UTC",
+  "repository": "AMASI-SA/AMASI-SA",
+  "source_branch": "codex/balance-supplier-bulk-access-20261117",
+  "source_sha": "6cae21257e7503abf00beda428f254253ce84848",
+  "source_tree": "9cac2fdcdca10ec3d1b085698533b2489e0847fc",
+  "evidence_branch": "codex/balance-all-resource-evidence-20261117",
+  "production_ref_observed": "8df479ef24b4f8847c26ba18d48e3248f7b673cf",
+  "production_changed_by_task": false,
+  "pr": {
+    "number": 1968,
+    "url": "https://github.com/AMASI-SA/AMASI-SA/pull/1968",
+    "state": "open",
+    "draft": true,
+    "merged": false
+  },
+  "local": {
+    "toolchain": {
+      "node": "22.23.2",
+      "yarn": "1.22.22"
+    },
+    "baseline_red": {
+      "passed": 5,
+      "failed": 14,
+      "total": 19,
+      "exit_code": 1
+    },
+    "related_tests": {
+      "passed": 43,
+      "total": 43,
+      "suites": 4,
+      "skipped": 0,
+      "exit_code": 0
+    },
+    "permission_tests": 19,
+    "component_sha256": "a7258f015a08888077530153c123cb7483824254018ac34e32f2ab5baded1f4e",
+    "test_sha256": "c184ee3e498e40cf68b3a54ce21bc05bcedba5214594ead7e56f6f4d86bd19c0",
+    "actual_component_build": {
+      "modules": 98,
+      "exit_code": 0
+    }
+  },
+  "review": {
+    "independent_source": "approved_no_actionable_findings",
+    "mobile_followup": "approved_no_actionable_findings",
+    "root_visual": {
+      "approved": true,
+      "desktop": {
+        "width": 1440,
+        "height": 2472
+      },
+      "mobile": {
+        "width": 390,
+        "height": 5993
+      },
+      "findings": [],
+      "scope_label_fully_readable": true,
+      "individual_exceptions_visible": true
+    }
+  },
+  "operational_ci": {
+    "run_id": 44169376678,
+    "source_sha": "6cae21257e7503abf00beda428f254253ce84848",
+    "frontend": {
+      "job_id": 134344213767,
+      "conclusion": "success",
+      "tests": 984,
+      "suites": 62,
+      "missing_and_skipped_gate": "success"
+    },
+    "canonical_worker": {
+      "job_id": 134344214185,
+      "conclusion": "success",
+      "tests": 4,
+      "xml_no_skips_gate": "success"
+    },
+    "browser": {
+      "job_id": 134344213387,
+      "conclusion": "success",
+      "simple_scenarios": 8,
+      "report_scenarios": 14,
+      "chromium_sandbox": true,
+      "source_sha": "6cae21257e7503abf00beda428f254253ce84848",
+      "artifact_id": 14367181785,
+      "zip_size": 880716,
+      "zip_sha256": "8c4c2c3cd1fc8dc79fd562439c67fc7b7c9004d60351f3ecbd785f6fe675b4ae",
+      "source_hashes_matched": 16,
+      "results": [
+        {
+          "name": "Desktop ledger uses five rows, recorder names, red له and green عليه",
+          "status": "PASS",
+          "request_count": 4
+        },
+        {
+          "name": "Mobile ledger remains inside a 390px page with numbered pagination",
+          "status": "PASS",
+          "request_count": 3
+        },
+        {
+          "name": "External reasons and custody source are conditional; save returns to the actual backdated page",
+          "status": "PASS",
+          "request_count": 5
+        },
+        {
+          "name": "Owner sees specialized routes without deleted grant keys and exactly three primary tabs",
+          "status": "PASS",
+          "request_count": 0
+        },
+        {
+          "name": "Order refund reserves a partial amount and reconciles only server provider evidence",
+          "status": "PASS",
+          "request_count": 19
+        },
+        {
+          "name": "Owner applies all-resource and per-kind permissions with individual exceptions before one versioned save",
+          "status": "PASS",
+          "request_count": 9
+        },
+        {
+          "name": "Mobile permission cards expose every account label and control inside the viewport",
+          "status": "PASS",
+          "request_count": 0
+        },
+        {
+          "name": "Staff cannot see owner tools or fetch the owner permission catalog",
+          "status": "PASS",
+          "request_count": 4
+        }
+      ],
+      "screenshots": {
+        "access-desktop.png": [
+          1440,
+          2472
+        ],
+        "access-mobile.png": [
+          390,
+          5993
+        ]
+      },
+      "access_put_count": 1,
+      "resource_grants": 11,
+      "browser_evidence_sha256": "0c1a1154931b10fb885b659d49069387d02b99cac320a0bc2a173d11a841f94c",
+      "source_manifest_sha256": "fad783e487f7ebd1e78d63fc800df354de881c398aaa1df3622824b266a33bac"
+    },
+    "backend": {
+      "job_id": 134344214223,
+      "status": "in_progress_at_recorded_read",
+      "conclusion": null,
+      "not_counted_as_passed": true
+    }
+  },
+  "security_ci": {
+    "run_id": 44169376591,
+    "job_id": 134344036997,
+    "conclusion": "failure",
+    "full_frontend_regression": {
+      "passed": 4230,
+      "total": 4230,
+      "suites": 417
+    },
+    "failed_step": "Audit production frontend dependencies",
+    "exit_code": 1,
+    "advisory": {
+      "id": "GHSA-fc5q-39xc-vjpf",
+      "module": "picomatch",
+      "severity": "high",
+      "cves": [
+        "CVE-2026-112366"
+      ],
+      "findings": [
+        {
+          "version": "2.3.2",
+          "paths": [
+            "tailwindcss>micromatch>picomatch",
+            "tailwindcss>chokidar>anymatch>picomatch"
+          ]
+        },
+        {
+          "version": "4.0.7",
+          "paths": [
+            "vite>tinyglobby>picomatch",
+            "tailwindcss>sucrase>tinyglobby>picomatch"
+          ]
+        },
+        {
+          "version": "4.0.7",
+          "paths": [
+            "vite>picomatch"
+          ]
+        }
+      ],
+      "recommendation": "None",
+      "patched_versions": "<0.0.0"
+    },
+    "dependency_paths": 5,
+    "audit_exceptions": "NONE",
+    "skipped_steps": [
+      "Reject vulnerable spreadsheet runtime",
+      "Verify production build and frontend security manifests"
+    ],
+    "dependency_and_gate_files_unchanged_from_production": true,
+    "release_blocked": true
+  },
+  "artifacts": [
+    {
+      "id": 14367965544,
+      "name": "operational-frontend-results",
+      "size_in_bytes": 31674,
+      "digest": "sha256:998a4520ba1868534be21dac935f3b780056fd4456ad61f0060e944c4f87b51e",
+      "source_sha": "6cae21257e7503abf00beda428f254253ce84848",
+      "download_and_digest_verified_by_root": false
+    },
+    {
+      "id": 14367930707,
+      "name": "operational-balances-browser-results",
+      "size_in_bytes": 771466,
+      "digest": "sha256:79adb034fef999056c0461f69cef0ea17e02de686d7fffa46ab1736bd83181b9",
+      "source_sha": "6cae21257e7503abf00beda428f254253ce84848",
+      "download_and_digest_verified_by_root": false
+    },
+    {
+      "id": 14367696163,
+      "name": "operational-worker-results",
+      "size_in_bytes": 750,
+      "digest": "sha256:9b8fb3e752178931f41ab1b5be30235bbe29b2946c12a842c530e867c685572d",
+      "source_sha": "6cae21257e7503abf00beda428f254253ce84848",
+      "download_and_digest_verified_by_root": false
+    },
+    {
+      "id": 14367181785,
+      "name": "simple-balances-browser-results",
+      "size_in_bytes": 880716,
+      "digest": "sha256:8c4c2c3cd1fc8dc79fd562439c67fc7b7c9004d60351f3ecbd785f6fe675b4ae",
+      "source_sha": "6cae21257e7503abf00beda428f254253ce84848",
+      "download_and_digest_verified_by_root": true
+    }
+  ],
+  "source_manifest": {
+    "synthetic_only": true,
+    "sha256": {
+      "frontend/src/pages/operational/SimpleBalances.jsx": "7a085c982a9213168628ffea2f37620851b48d085a8b035faedd28f9dcfc2112",
+      "frontend/src/pages/operational/SimpleBalanceAccess.jsx": "a7258f015a08888077530153c123cb7483824254018ac34e32f2ab5baded1f4e",
+      "frontend/src/pages/operational/SimpleOrderRefunds.jsx": "176386ce3801003f735b5171fb6ded648bcf4fb418beed6974689bdf531bdab1",
+      "frontend/src/pages/operational/simpleBalancesApi.js": "d56c1807e75963321e16e29c72505653384a5501dde2919610a34fdd583449ce",
+      "frontend/src/pages/operational/simpleBalancesModel.js": "1cfb8e83077cdeb33c45d33b064af4a6912799b50e8b70bf9e368127cc5547e2",
+      "frontend/src/pages/operational/simpleBalancesHooks.js": "f0e01026e639ccc63a7473d4a3812b93951affb4182f880932d87175e52bdad6",
+      "frontend/src/pages/operational/simpleBalancesPending.js": "6caac07207c5d98d77aeaab22bd86c769f7c8d5ee5d1d1d45751f8b61d44dd8d",
+      "frontend/src/pages/operational/simpleBalances.css": "79ec1ed598d5b773bb49d7ff27ce139a287604f9708493546223b7cb6cdaf4c1",
+      "frontend/src/pages/operational/visibleOperationalRead.js": "764deae0c9dfb5abde2ca9b577326cb455bc0ccffc05c0f3ceeaedc594439ebc",
+      "frontend/src/context/AuthContext.jsx": "dbce81348f4ecc0f3016519d8bb2c163a5d66b733f7932de60dd85c7f241a955",
+      "frontend/src/lib/api.js": "2c42c9bd395761e8613344f68bb3dc8b2dfa2d884609d9a4c183860a1d994094",
+      "scripts/testing/simple_balances/main.jsx": "4fc0c0abd48bf107961617fe91409635cef309fd6d18f81176180f8967ba0e53",
+      "scripts/testing/simple_balances/index.html": "8d50a9f3079b023d68591caa30cd98d13597f230531f8d156f3f137cb9000acd",
+      "scripts/testing/simple_balances/build.cjs": "920004369fb1a22076b11918cfccca65702ce006a6a306240b9472c32266151f",
+      "scripts/testing/simple_balances/browser.cjs": "13cf58ec894cbd52ee446e98c4f926ba08ed9e8a052e014921219d87461f0dca",
+      "scripts/testing/simple_balances/fixtures.cjs": "8768943a09da0b4c96ab3363c7bdb89b4970ddcb829b6646372985183802ce97"
+    }
+  },
+  "continuity": {
+    "issue": 1006,
+    "update_acknowledged": true,
+    "readback_confirmed": false,
+    "verified_records": [
+      "task source branch",
+      "evidence branch",
+      "Draft PR1968",
+      "STATUS.md",
+      "EVIDENCE.json"
+    ]
+  },
+  "live_grants_changed": false,
+  "financial_writes": false,
+  "merge": false,
+  "release_intent_created": false,
+  "deployed": false
+}
