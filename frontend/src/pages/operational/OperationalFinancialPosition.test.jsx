@@ -223,6 +223,38 @@ test("a no-longer-pending target is not silently replaced by a general refresh",
     expect(document.querySelector('[data-testid="courier-match-result"]').textContent).toContain("لم يعد الطلب ضمن حالات مطابقة الشحن");
 });
 
+test.each([["page", "close"], ["page", "failure"], ["all", "close"], ["all", "failure"]])(
+    "courier matching releases a revoked %s export after %s without requiring a new snapshot", async (kind, outcome) => {
+        const payload = courierMatchingFixture(), serialization = deferred(), native = deferred();
+        serve(payload);
+        XLSX.writeFile.mockReturnValue(serialization.promise);
+        operationalApi.refreshBalances.mockReturnValue(native.promise);
+        await render("couriers");
+        await click(kind === "page" ? "تصدير هذه الصفحة" : "تصدير جميع الأقسام");
+        expect(XLSX.writeFile).toHaveBeenCalledTimes(1);
+        const shouldContinue = XLSX.writeFile.mock.calls[0][2].shouldContinue;
+        expect(shouldContinue()).toBe(true);
+        expect(host.querySelector(".ofp-export").disabled).toBe(true);
+        expect(button(kind === "all" ? "جارٍ تحميل التقرير الكامل" : "تصدير جميع الأقسام").disabled).toBe(true);
+        await openPendingCourier(); await act(async () => matchCourierButton().click());
+        expect(shouldContinue()).toBe(false);
+        if (outcome === "close") {
+            await act(async () => document.querySelector('button[aria-label="إغلاق نافذة الطلبات"]').click());
+            expect(operationalApi.refreshBalances.mock.calls[0][0].signal.aborted).toBe(true);
+            await act(async () => native.resolve(courierMatched(payload.session_scope)));
+        } else await act(async () => native.reject({ response: { status: 409, data: { detail: {
+            code: "operational_courier_target_not_pending", message: "لم يعد الطلب ضمن حالات مطابقة الشحن" } } } }));
+        expect(requestedViews()).toEqual(kind === "page" ? ["couriers"] : ["couriers", "all"]);
+        expect(host.querySelector('[data-testid="financial-table-couriers"] .ofp-pending-orders')).not.toBeNull();
+        expect(host.querySelector(".ofp-export").disabled).toBe(false);
+        expect(button("تصدير جميع الأقسام").disabled).toBe(false);
+        await act(async () => serialization.resolve(false));
+        expect(shouldContinue()).toBe(false);
+        expect(host.querySelector(".ofp-export").disabled).toBe(false);
+        expect(button("تصدير جميع الأقسام").disabled).toBe(false);
+        expect(host.textContent).not.toContain("أُلغي التصدير");
+    });
+
 test("a courier refresh with another session never starts the follow-up report read", async () => {
     const payload = courierMatchingFixture();
     operationalApi.financialPosition.mockResolvedValue(payload);

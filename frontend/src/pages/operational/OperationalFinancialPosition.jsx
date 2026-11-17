@@ -402,6 +402,7 @@ export default function OperationalFinancialPosition() {
             && latestReport.current?.report?.started_at === expected.started_at;
         refreshLock.current = true;
         exportGeneration.current += 1; exportCleanup.current?.(); exportActivityCleanup.current?.();
+        setExporting(false); setExportError("");
         setState(previous => ({ ...previous, phase: "refreshing", error: "" }));
         return new Promise((resolve, reject) => {
             const attempt = { cleanup: null, settled: false };

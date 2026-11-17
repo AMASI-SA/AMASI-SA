@@ -11,6 +11,8 @@
 - Production changed: **no**. No release lease, merge or deployment performed.
 - Remote RED checkpoint: `3e42238ccfcd42eddf5890f09357ac68d04f3431`.
 - Draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/1967 .
+- Implementation checkpoint: `7116da02320807bb6f7dc4c5dd5a0028811ce43e`
+  (tree `b6b32fd269acf7f1cdf9645396a0283df5494ef1`).
 
 ## Evidence
 
@@ -78,9 +80,23 @@ file. No test server was started. Run these non-skipping regressions in the
 existing CI Docker replica set; do not patch the binary or fake sysfs.
 
 The governed Node v22.23.2 / Yarn v1.22.22 toolchain is verified locally.
-Locked dependency installation is in progress; full frontend Jest suites,
-integrated build and independent final review are pending. Frontend syntax
-checks and focused helper assertions passed, but do not substitute for Jest.
+At exact implementation SHA `7116da02320807bb6f7dc4c5dd5a0028811ce43e`,
+Operational Balance Web run `44140834654` passed frontend contracts:
+**996 tests / 62 suites, zero failures, pending or skipped tests**. The changed
+four suites account for 184 tests. Its browser/mobile/visibility acceptance
+passed fourteen operational scenarios and eight simple-balances scenarios;
+canonical worker exclusion passed. The genuine Mongo replica startup and
+exact-source recording passed; backend results are still being collected.
+
+Independent backend review found no authority, cancellation, proof-guard or
+CAS regression. Independent frontend review found one concrete export overlap
+issue: a cancelled export could leave export buttons busy when a targeted
+match subsequently cancelled or failed without replacing the snapshot. The
+new source checkpoint explicitly clears export presentation state when it
+revokes that export, with four regression cases (page/full export crossed with
+match cancellation/failure). This follow-up needs fresh exact-head frontend
+CI; the earlier green result does not cover it. No other blocking review
+finding was reported.
 
 ## Implementation ownership and next action
 
