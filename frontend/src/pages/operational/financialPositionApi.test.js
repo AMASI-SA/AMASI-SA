@@ -26,3 +26,20 @@ test("scoped and bound full report reads forward only explicit GET configuration
     expect(http.get).toHaveBeenLastCalledWith("/operational-balances/financial-position", { timeout: 60000, params, signal: controller.signal });
     expect(http.post).not.toHaveBeenCalled();
 });
+
+test("targeted courier refresh binds the selected order and session in the body, not transport config", async () => {
+    const controller = new AbortController(), scope = "a".repeat(64);
+    const response = { status: "refreshed", session_scope: scope };
+    http.post.mockResolvedValueOnce({ data: response });
+    expect(await operationalApi.refreshBalances({ courierOrderId: "8101", expectedSessionScope: scope,
+        signal: controller.signal, _mezanAuthDeadlineAt: 12345 })).toBe(response);
+    expect(http.post).toHaveBeenLastCalledWith("/operational-balances/refresh", {
+        visible: true, courier_order_id: "8101", expected_session_scope: scope,
+    }, { timeout: 90000, signal: controller.signal, _mezanAuthDeadlineAt: 12345 });
+});
+
+test("ordinary visible refresh retains its original unscoped body", async () => {
+    http.post.mockResolvedValueOnce({ data: { status: "refreshed" } });
+    await operationalApi.refreshBalances();
+    expect(http.post).toHaveBeenLastCalledWith("/operational-balances/refresh", { visible: true }, { timeout: 90000 });
+});

@@ -1,6 +1,9 @@
 """Acquire a bounded, version-bound native shipment and carrier delivery timeline."""
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
+import re
+
+import httpx
 
 from operational_courier_transitions import (
     CARRIER_HISTORY, ORDER_HISTORY, WEBHOOK_PROOF, _state, carrier_activity_transition, native_status_transition,
@@ -10,7 +13,7 @@ from operational_delivery_evidence import (DELIVERED, _inactive, _instant, _orde
                                            _status, _text, created_after_start_delivery)
 from operational_balance_store import check_authorization
 from salla_shipping import CURRENT_SHIPPING, SHIPPING_FIELDS, accept_shipping, extract_shipping, same_carrier, shipping_root_fields
-from .service import call_salla
+from .service import SallaError, call_salla
 
 
 ISSUE_CODES = {"operational_delivery_shipment_not_delivered", "operational_delivery_timestamp_missing",
@@ -150,6 +153,24 @@ def verified_order_delivery(source, histories, owner, now):
 
 async def acquire_missing(db, owner, issues, *, started_at, limit=4):
     """Refresh identified post-opening delivery gaps, without financial/workflow hooks."""
+    result = {"status": "completed", "selected": 0, "verified": 0, "saved": 0,
+              "unchanged": 0, "blocked": 0, "conflicted": 0, "unavailable": 0, "outcomes": []}
+
+    def outcome(identity, status, reason=None):
+        counter = "conflicted" if status == "source_changed" else status
+        if counter in result:
+            result[counter] += 1
+        item = {"order_id": identity, "status": status}
+        if reason:
+            item["reason"] = reason
+        result["outcomes"].append(item)
+
+    def rejection(error):
+        # Never return arbitrary provider text or source/customer values.
+        code = str(error)
+        return (code if re.fullmatch(r"(?:courier_native|operational_delivery|operational_prepaid_shipping)_[a-z_]{1,100}", code)
+                else "courier_native_evidence_invalid")
+
     target_codes = {}
     for row in issues:
         if row.get('code') in ISSUE_CODES and row.get('source_id'):
@@ -160,7 +181,7 @@ async def acquire_missing(db, owner, issues, *, started_at, limit=4):
     completed_targets = {str(row['source_id']) for row in issues
                          if row.get('code') == 'operational_prepaid_shipping_completion_timestamp_missing' and row.get('source_id')}
     if not targets:
-        return
+        return result
     identities = list(targets) + [int(value) for value in targets if value.isascii() and value.isdigit()]
     start, now = _instant(started_at), datetime.now(timezone.utc)
     for _ in range(min(limit, 4)):
@@ -169,9 +190,11 @@ async def acquire_missing(db, owner, issues, *, started_at, limit=4):
              **({} if completed_targets else {"order_status_slug": {"$in": ["delivered", "تم التوصيل"]}}),
              "g47_salla_snapshot.source_updated_at": {"$gte": start.isoformat()},
              "$or": [{_RETRY: {"$exists": False}}, {_RETRY: {"$lte": now}}]},
-            {"$set": {_RETRY: now + timedelta(minutes=15)}}, projection=_PROJECTION)
+            {"$set": {_RETRY: now + timedelta(minutes=15)}}, projection=_PROJECTION,
+            sort=[(_RETRY, 1), ("_id", 1)])
         if not source:
             break
+        result["selected"] += 1
         raw = (source.get("raw_by_source") or {}).get("salla_direct") or {}
         current, watermark = source.get(CURRENT_SHIPPING) or {}, source.get("g47_salla_snapshot") or {}
         identity, number = _text(raw.get("id")), _text(source.get("order_number"))
@@ -184,17 +207,25 @@ async def acquire_missing(db, owner, issues, *, started_at, limit=4):
             version = _instant(raw.get("updated_at") or date.get("updated") or raw.get("date_updated"))
             if (source.get("user_id") != owner or not identity or not number
                     or _text(raw.get("reference_id") or raw.get("order_number")) != number
-                    or any(source.get(key) is not None and _text(source[key]) != identity for key in ("order_id", "salla_order_id"))
-                    or not completed and _state(effective) is not True
-                    or not completed and any(_state(source[key]) is not True for key in ("order_status", "order_status_slug") if source.get(key) is not None)
-                    or any(watermark.get(key) for key in ("cancelled", "component_pending", "requires_authoritative_refresh"))
-                    or not start <= version <= now or _instant(watermark.get("source_updated_at")) != version
-                    or current.get("source_kind") not in {"order", "shipment"} or _inactive(current)
-                    or not completed and (not _text(current.get("shipment_id")) or not _text(current.get("tracking_number")))
-                    or completed and not (_text(current.get('company_code')) or _text(current.get('company_name')))
-                    or any(source[key] != value for key, value in shipping_root_fields(current).items() if key in source)
-                    or current.get("superseded_shipment_ids")):
-                continue
+                    or any(source.get(key) is not None and _text(source[key]) != identity for key in ("order_id", "salla_order_id"))):
+                raise ValueError("courier_native_order_mismatch")
+            if not completed and (_state(effective) is not True
+                    or any(_state(source[key]) is not True for key in ("order_status", "order_status_slug") if source.get(key) is not None)):
+                raise ValueError("courier_native_order_not_delivered")
+            if any(watermark.get(key) for key in ("cancelled", "component_pending", "requires_authoritative_refresh")):
+                raise ValueError("courier_native_source_refresh_required")
+            if not start <= version <= now or _instant(watermark.get("source_updated_at")) != version:
+                raise ValueError("courier_native_source_version_mismatch")
+            if current.get("source_kind") not in {"order", "shipment"} or _inactive(current):
+                raise ValueError("courier_native_shipment_mismatch")
+            if not completed and (not _text(current.get("shipment_id")) or not _text(current.get("tracking_number"))):
+                raise ValueError("courier_native_shipment_identity_missing")
+            if completed and not (_text(current.get('company_code')) or _text(current.get('company_name'))):
+                raise ValueError("courier_native_carrier_missing")
+            if any(source[key] != value for key, value in shipping_root_fields(current).items() if key in source):
+                raise ValueError("courier_native_source_conflict")
+            if current.get("superseded_shipment_ids"):
+                raise ValueError("courier_native_shipment_ambiguous")
             if identity in date_only and created_after_start_delivery(raw, start, now):
                 # A saved issue from the earlier contract does not justify
                 # downloading an order history just to date an already eligible
@@ -205,6 +236,7 @@ async def acquire_missing(db, owner, issues, *, started_at, limit=4):
                 except ValueError:
                     pass  # Current native shipment evidence is still needed.
                 else:
+                    outcome(identity, "already_eligible")
                     continue
             if completed:
                 from operational_completed_capture import recover_completed_capture
@@ -233,8 +265,16 @@ async def acquire_missing(db, owner, issues, *, started_at, limit=4):
                 except ValueError:
                     shipments = await _complete_pages(db, owner, "/shipments", {"order_id": identity}, max_pages=1)
                     accepted = verified_delivery(source, shipments, histories, owner, now)
-        except (ValueError, KeyError, TypeError, AttributeError):
+        except (SallaError, httpx.RequestError):
+            # One unavailable order must not abandon the other bounded claims.
+            # Cancellation and authorization errors deliberately escape.
+            result["status"] = "deferred"
+            outcome(identity, "unavailable", "native_evidence_unavailable")
             continue
+        except (ValueError, KeyError, TypeError, AttributeError) as error:
+            outcome(identity, "blocked", rejection(error))
+            continue
+        result["verified"] += 1
         # The inspected order, source revision, current waybill, and its clocks
         # must all survive the network reads. No source or delivery hook runs.
         selector = {"user_id": owner, "order_number": number, _RAW: raw,
@@ -244,9 +284,16 @@ async def acquire_missing(db, owner, issues, *, started_at, limit=4):
             try:
                 await recheck_capture_set(db, owner, source, now, capture_binding, capture_scope)
                 if await owner_binding(db, owner) != capture_binding:
+                    outcome(identity, "source_changed", "courier_native_source_changed")
                     continue
-            except (ValueError, KeyError, TypeError, AttributeError):
+            except (ValueError, KeyError, TypeError, AttributeError) as error:
+                outcome(identity, "source_changed", rejection(error))
                 continue
-        await db.unified_orders.update_one(selector, {"$set": {
+        saved = await db.unified_orders.update_one(selector, {"$set": {
             CURRENT_SHIPPING: accepted, **shipping_root_fields(accepted),
         }})
+        if saved.matched_count != 1:
+            outcome(identity, "source_changed", "courier_native_source_changed")
+        else:
+            outcome(identity, "saved" if saved.modified_count else "unchanged")
+    return result

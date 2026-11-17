@@ -16,6 +16,7 @@ from test_operational_balance_courier_waybill_acquisition import binding_gap, re
 from test_operational_balance_delivery_confirmation_acquisition import LocalProofDB
 from test_operational_balance_delivery_cutover import DELIVERED, NOW
 from test_operational_balance_demand_refresh import Request, allowed
+from test_operational_balance_integration import run as run_real_mongo
 
 
 def freeze_acquisition_clock(monkeypatch):
@@ -35,8 +36,9 @@ def test_expired_invalid_prefix_cannot_starve_a_later_native_delivery(monkeypatc
     snapshots, calls = {}, []
     native_provider(monkeypatch, snapshots, calls)
 
-    async def scenario():
+    async def scenario(sources):
         db = LocalProofDB()
+        db.sources = sources
         originals = {}
         for index in range(5):
             identity = str(8400 + index)
@@ -59,7 +61,7 @@ def test_expired_invalid_prefix_cannot_starve_a_later_native_delivery(monkeypatc
             "A never-attempted eligible delivery remains behind an expired invalid prefix"
         )
         assert resolve(valid_data, recovered)["delivered_at"] == DELIVERED
-        assert {identity for identity, _ in calls} == {"8404"}
+        assert calls == [("8404", "/orders/8404/histories"), ("8404", "/shipments")]
         for identity, original in originals.items():
             saved = await db.sources.unified_orders.find_one({"user_id": "owner", "order_id": identity})
             assert saved["raw_by_source"] == original["raw_by_source"]
@@ -68,7 +70,7 @@ def test_expired_invalid_prefix_cannot_starve_a_later_native_delivery(monkeypatc
                 assert WEBHOOK_PROOF not in saved[CURRENT_SHIPPING]
         assert db.data[STATES] == before and db.data[LEASES] == {}
 
-    asyncio.run(scenario())
+    run_real_mongo(scenario)
 
 
 def test_oldest_due_deliveries_progress_with_cap_cooldown_and_owner_isolation(monkeypatch):
@@ -76,8 +78,12 @@ def test_oldest_due_deliveries_progress_with_cap_cooldown_and_owner_isolation(mo
     snapshots, calls = {}, []
     native_provider(monkeypatch, snapshots, calls)
 
-    async def scenario():
+    async def scenario(sources):
         db, foreign = LocalProofDB(), []
+        # Sorting and claim updates must use the same document atomically.
+        # mongomock selects a sorted projected row but updates natural order
+        # when projection excludes _id; only real Mongo proves this contract.
+        db.sources = sources
         # Natural insertion order puts the most recently attempted rows first.
         # All are due, but the four longest waiting orders should go first.
         for index, age in enumerate((30, 31, 60, 61, 62, 63)):
@@ -116,7 +122,7 @@ def test_oldest_due_deliveries_progress_with_cap_cooldown_and_owner_isolation(mo
             assert saved == expected
         assert db.data[STATES] == before and db.data[LEASES] == {}
 
-    asyncio.run(scenario())
+    run_real_mongo(scenario)
 
 
 def test_one_native_read_timeout_does_not_discard_remaining_four_order_allowance(monkeypatch):

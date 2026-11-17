@@ -1,6 +1,6 @@
 # Courier delivery history recovery — 2026-11-17
 
-## WIP: independently reproduced acquisition failures
+## WIP: implementation checkpoint awaiting integrated verification
 
 - Repository: `AMASI-SA/AMASI-SA`.
 - Task branch: `codex/courier-delivery-history-recovery-20261117`.
@@ -9,6 +9,8 @@
   and explicit matching of an existing pending order. Preserve delivery proof,
   source version, owner, waybill, cutover and financial guards.
 - Production changed: **no**. No release lease, merge or deployment performed.
+- Remote RED checkpoint: `3e42238ccfcd42eddf5890f09357ac68d04f3431`.
+- Draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/1967 .
 
 ## Evidence
 
@@ -41,6 +43,45 @@ The tests use in-memory Mongo emulation and mocked provider reads; they are not
 real-Mongo or production evidence. Existing waybill acquisition baseline:
 **14 passed in 1.62 seconds**.
 
+## Implementation and verification
+
+Implemented fair atomic claim ordering (never attempted, then oldest due),
+per-order native transport failure isolation, reserved time for each remaining
+source inside the unchanged twenty-five-second visible budget, and truthful
+verified/saved/unchanged/blocked/conflicted/unavailable outcomes. Source writes
+still require the complete existing compare-and-set guard. No delivery proof
+acceptance rule was relaxed.
+
+The visible refresh accepts an optional courier order target only when its
+current session scope matches and the owner's saved courier issues contain it.
+It inspects only that order, obeys the fifteen-minute cooldown, skips unrelated
+native sources, and then invokes the shared aggregate once. The frontend adds
+an explicit per-order matching action, aborts on close/hide/scope change, and
+keeps explanatory results below the pending-order table.
+
+Focused backend verification, including targeted selection, owner isolation,
+CAS receipts, cancellation and existing confirmation/waybill behavior:
+**66 passed in 3.65 seconds, exit 0**. Final isolated targeted rerun:
+**21 passed in 1.63 seconds, exit 0**. These tests use mocked external reads.
+
+The oldest-due and expired-prefix regressions now require genuine Mongo using
+the existing isolated integration fixture. Mongomock 4.3.0 has a confirmed
+sorted find-and-modify defect when projection omits `_id`: it returns the
+sorted document but updates the first unsorted match. Production projection
+and claim semantics were not changed to accommodate that emulator defect.
+
+Local real-Mongo verification is blocked by the execution runtime: the
+official Debian MongoDB 8.0.12 binary (verified SHA-256
+`6afc35ae5623b302deeaeace63981f685d775d8b1bcd2dbe8d4077f9f21267c8`)
+aborts before startup because its allocator requires an unavailable sysfs CPU
+file. No test server was started. Run these non-skipping regressions in the
+existing CI Docker replica set; do not patch the binary or fake sysfs.
+
+The governed Node v22.23.2 / Yarn v1.22.22 toolchain is verified locally.
+Locked dependency installation is in progress; full frontend Jest suites,
+integrated build and independent final review are pending. Frontend syntax
+checks and focused helper assertions passed, but do not substitute for Jest.
+
 ## Implementation ownership and next action
 
 Root owns backend production changes. A test-only agent authored the new
@@ -48,10 +89,10 @@ regressions. A separate frontend agent owns the explicit per-order matching
 control and focused frontend verification. No shared production file has
 multiple writers.
 
-Next: preserve this RED checkpoint remotely, implement fair atomic selection,
-per-order transport isolation, per-source time allocation and truthful CAS
-outcomes; expose a scope-bound optional order target under the existing visible
-refresh lease; rerun regressions and review the integrated diff independently.
+Next: preserve this implementation checkpoint and trigger CI, complete the
+four focused frontend suites, review the integrated diff independently, and
+require the real-Mongo ordering regressions to pass. Only then prepare a
+governed source/intent release under the existing production protocol.
 
 Preserve the four-order cap, per-order fifteen-minute cooldown, cancellation,
 authorization and compare-and-set guards. No background recovery, manual
@@ -62,4 +103,5 @@ delivery assertion, financial mutation shortcut, or loosened shipment matching.
 Issue #1006 has reached its comment limit. Do not overwrite its historical
 content or repeatedly attempt an append. This task status and the forthcoming
 task PR serve as the continuation record, with exact pushed checkpoint SHAs in
-the PR description. No PR or CI run exists for this checkpoint yet.
+the PR description. The draft PR's initial RED checkpoint CI is not evidence
+for this implementation; assess the new pushed implementation SHA explicitly.
