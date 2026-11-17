@@ -487,20 +487,61 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
             }), 1,
         )
 
-    async def test_reviewed_received_physical_ready_retry_does_not_consume_twice(self):
+    async def test_reviewed_received_physical_ready_consumes_current_stock_once(self):
         physical = await self._reviewed_supplier_piece_fixture()
+        before_stock = await self._supplier_component_documents()
+        before_quantity = await self.on_hand()
+        unit_selector = {"user_id": "owner", "order_line_id": physical["order_item_id"],
+                         "unit_index": physical["unit_index"]}
+        selected = await self.db[UNITS].find_one(unit_selector)
+        self.assertIsNotNone(selected)
+        self.assertEqual(selected["state"], "reserved")
         first = await self.mark(physical["piece_id"])
         self.assertFalse(first["idempotent"])
-        after_first_stock = await self.on_hand()
+        after_stock = await self._supplier_component_documents()
+        self.assertEqual(await self.on_hand(), before_quantity - 2)
+        self.assertEqual((await self.db[UNITS].find_one(unit_selector))["state"], "consumed")
+        self.assertEqual(after_stock[PLANS], before_stock[PLANS])
+        self.assertEqual(after_stock[fulfillment.COMPONENT_LIFECYCLES], before_stock[fulfillment.COMPONENT_LIFECYCLES])
+        self.assertEqual(
+            [row for row in after_stock[UNITS] if row["_id"] != selected["_id"]],
+            [row for row in before_stock[UNITS] if row["_id"] != selected["_id"]],
+        )
         retry = await self.mark(physical["piece_id"])
         self.assertTrue(retry["idempotent"])
-        self.assertEqual(await self.on_hand(), after_first_stock)
+        self.assertEqual(await self._supplier_component_documents(), after_stock)
+        saved = await self.db[pieces.PIECES].find_one({"piece_id": physical["piece_id"]})
+        self.assertEqual(saved["assembly_ready_basis"], "supplier_receipt_v1")
+        self.assertEqual(saved["assembly_component_consumption"], {"state": "consumed"})
         self.assertEqual(
             await self.db[pieces.PIECE_EVENTS].count_documents({
                 "piece_id": physical["piece_id"],
                 "event_type": "assembly_piece_marked_ready",
             }), 1,
         )
+
+    async def test_reviewed_supplier_superseded_review_keeps_current_component_consumption(self):
+        physical = await self._reviewed_supplier_piece_fixture()
+        operation = await self.db[completion.OPERATIONS].find_one({})
+        self.assertIsNotNone(operation)
+        await self.db[completion.OPERATIONS].update_one({"_id": operation["_id"]}, {
+            "$set": {"superseded_by": "later"},
+        })
+        before_quantity = await self.on_hand()
+        row, _ = await self._reviewed_supplier_search(physical["piece_id"])
+        self.assertTrue(row["can_mark_ready"])
+
+        result = await self.mark(physical["piece_id"])
+
+        self.assertFalse(result["idempotent"])
+        self.assertFalse(result["progress"]["order_completed"])
+        self.assertEqual(await self.on_hand(), before_quantity - 2)
+        saved = await self.db[pieces.PIECES].find_one({"piece_id": physical["piece_id"]})
+        self.assertEqual(saved["assembly_component_consumption"], {"state": "consumed"})
+        self.assertEqual((await self.db[completion.OPERATIONS].find_one({"_id": operation["_id"]}))["superseded_by"], "later")
+        self.assertEqual(await self.db[pieces.PIECE_EVENTS].count_documents({
+            "piece_id": physical["piece_id"], "event_type": "assembly_piece_marked_ready",
+        }), 1)
 
     async def test_reviewed_supplier_without_employee_receipt_stays_blocked(self):
         physical = await self._reviewed_supplier_piece_fixture(receive=False)
@@ -528,30 +569,40 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
             "event_type": "assembly_piece_marked_ready",
         }), 0)
 
-    async def test_reviewed_supplier_missing_approved_source_revision_blocks_ready(self):
+    async def _supplier_component_documents(self):
+        return {name: await self.db[name].find({}).sort("_id", 1).to_list(1000)
+                for name in (LOCATIONS, PLANS, UNITS, fulfillment.COMPONENT_LIFECYCLES)}
+
+    async def test_reviewed_supplier_missing_approved_source_revision_still_becomes_ready(self):
         physical = await self._reviewed_supplier_piece_fixture()
         lifecycle = await self.db[fulfillment.COMPONENT_LIFECYCLES].find_one({
             "user_id": "owner", "order_number": "local-assembly",
         })
         self.assertIsNotNone(lifecycle)
         self.assertIsNotNone(lifecycle.get("snapshot_revision"))
-        before_stock = await self.on_hand()
         await self.db[fulfillment.COMPONENT_LIFECYCLES].update_one(
             {"_id": lifecycle["_id"]},
             {"$unset": {"snapshot_revision": ""}},
         )
+        before_stock = await self._supplier_component_documents()
+        before_source = await self.db.unified_orders.find_one({"order_number": "local-assembly"})
         row, _ = await self._reviewed_supplier_search(physical["piece_id"])
-        self.assertFalse(row["can_mark_ready"])
-        self.assertEqual(row["assembly_blocker_code"], "component_source_snapshot_stale")
-        blocked = await self.mark_piece(physical["piece_id"])
-        self.assertEqual(blocked.status_code, 409, blocked.text)
-        self.assertEqual(
-            blocked.json()["detail"]["code"], "component_source_snapshot_stale",
-        )
-        self.assertEqual(await self.on_hand(), before_stock)
-        self.assertEqual((await self.workflow())["stage"], "reviewed")
+        self.assertTrue(row["can_mark_ready"])
+        self.assertIsNone(row["assembly_blocker_code"])
+        self.assertFalse((await self.mark(physical["piece_id"]))["idempotent"])
+        self.assertTrue((await self.mark(physical["piece_id"]))["idempotent"])
+        self.assertEqual(await self._supplier_component_documents(), before_stock)
+        saved = await self.db[pieces.PIECES].find_one({"piece_id": physical["piece_id"]})
+        self.assertEqual(saved["assembly_component_consumption"], {
+            "state": "deferred", "reason": "component_source_snapshot_stale",
+        })
+        self.assertEqual(await self.db.unified_orders.find_one({"order_number": "local-assembly"}), before_source)
+        self.assertEqual((await self.workflow())["stage"], "in_progress")
+        self.assertEqual(await self.db[pieces.PIECE_EVENTS].count_documents({
+            "piece_id": physical["piece_id"], "event_type": "assembly_piece_marked_ready",
+        }), 1)
 
-    async def test_reviewed_supplier_stale_component_plan_blocks_search_and_write(self):
+    async def test_reviewed_supplier_cancelled_component_plan_still_becomes_ready(self):
         physical = await self._reviewed_supplier_piece_fixture()
         plan = await self.db[PLANS].find_one({
             "user_id": "owner", "order_id": "local-assembly",
@@ -560,11 +611,41 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
         await self.db[PLANS].update_one({"_id": plan["_id"]}, {
             "$set": {"state": "cancelled"},
         })
+        before_stock = await self._supplier_component_documents()
         row, _ = await self._reviewed_supplier_search(physical["piece_id"])
-        self.assertFalse(row["can_mark_ready"])
-        rejected = await self.mark_piece(physical["piece_id"])
-        self.assertEqual(rejected.status_code, 409, rejected.text)
-        self.assertEqual((await self.workflow())["stage"], "reviewed")
+        self.assertTrue(row["can_mark_ready"])
+        self.assertIsNone(row["assembly_blocker_code"])
+        result = await self.mark(physical["piece_id"])
+        self.assertFalse(result["idempotent"])
+        self.assertFalse(result["progress"]["order_completed"])
+        self.assertEqual(await self._supplier_component_documents(), before_stock)
+        self.assertEqual((await self.workflow())["stage"], "in_progress")
+
+    async def test_reviewed_supplier_missing_component_plan_still_becomes_ready(self):
+        physical = await self._reviewed_supplier_piece_fixture()
+        await self.db[PLANS].delete_many({"user_id": "owner", "order_id": "local-assembly"})
+        before_stock = await self._supplier_component_documents()
+        row, _ = await self._reviewed_supplier_search(physical["piece_id"])
+        self.assertTrue(row["can_mark_ready"])
+        result = await self.mark(physical["piece_id"])
+        self.assertFalse(result["progress"]["order_completed"])
+        self.assertEqual(await self._supplier_component_documents(), before_stock)
+        self.assertEqual(await self.db[pieces.SHIPPING_BATCHES].count_documents({}), 0)
+
+    async def test_received_supplier_policy_rechecks_actor_permission_inside_transaction(self):
+        physical = await self._reviewed_supplier_piece_fixture()
+        before_piece = await self.db[pieces.PIECES].find_one({"piece_id": physical["piece_id"]})
+        before_stock = await self._supplier_component_documents()
+        allowed = deepcopy(self.context)
+        revoked = {**deepcopy(self.context), "is_owner": False, "permissions": set(), "responsibilities": set()}
+        with patch.object(pieces, "_actor_context", AsyncMock(side_effect=[allowed, revoked])):
+            rejected = await self.mark_piece(physical["piece_id"])
+        self.assertEqual(rejected.status_code, 403, rejected.text)
+        self.assertEqual(await self.db[pieces.PIECES].find_one({"piece_id": physical["piece_id"]}), before_piece)
+        self.assertEqual(await self._supplier_component_documents(), before_stock)
+        self.assertEqual(await self.db[pieces.PIECE_EVENTS].count_documents({
+            "piece_id": physical["piece_id"], "event_type": "assembly_piece_marked_ready",
+        }), 0)
 
 
     async def test_partial_receipt_preserves_mixed_remaining_units_then_completes(self):
@@ -696,7 +777,7 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await self.workflow())["stage"], "reviewed")
         self.assertEqual(len(await self.catalog_cards()), 1)
 
-    async def test_custody_is_independent_but_ready_keeps_component_review_payment_guards(self):
+    async def test_supplier_custody_and_ready_ignore_component_approval_but_keep_payment_and_status_guards(self):
         self.mount_assignment()
         await self.complete_review(direct=False)
         self.assertEqual((await self.assign_cards((await self.catalog_cards())[:1], "guarded-receipt")).status_code, 200)
@@ -709,10 +790,10 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
             (fulfillment.COMPONENT_LIFECYCLES, {"generation": "changed"}),
             (fulfillment.COMPONENT_LIFECYCLES, {"retry_required": True}),
             ("unified_orders", {"g47_salla_snapshot.revision": 999}),
-            # These flags stay unchanged during custody; Ready must still block.
+            # The owner's supplier policy leaves these flags unchanged and
+            # permits actual received work without claiming a component match.
             ("unified_orders", {"g47_salla_snapshot.component_pending": True,
                                 "g47_salla_snapshot.requires_authoritative_refresh": True}),
-            (completion.OPERATIONS, {"superseded_by": "later"}),
         ]
         for collection, change in mutations:
             with self.subTest(collection=collection, change=change):
@@ -721,13 +802,29 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
                 try:
                     result = await self.receive(piece)
                     self.assertEqual(result.status_code, 200, result.text)
-                    await self.mark(piece["piece_id"], status=409)
-                    self.assertEqual(await self.on_hand(), 20)
+                    stock_before_ready = await self._supplier_component_documents()
+                    source_before_ready = await self.db.unified_orders.find_one({"order_number": "local-assembly"})
+                    result = await self.mark(piece["piece_id"])
+                    self.assertFalse(result["idempotent"])
+                    self.assertFalse(result["progress"]["order_completed"])
+                    self.assertEqual(await self._supplier_component_documents(), stock_before_ready)
+                    saved = await self.db[pieces.PIECES].find_one({"piece_id": piece["piece_id"]})
+                    self.assertEqual(saved["assembly_component_consumption"], {
+                        "state": "deferred",
+                        "reason": ("component_source_snapshot_stale" if "g47_salla_snapshot.revision" in change
+                                   else "component_execution_blocked"),
+                    })
+                    self.assertEqual(await self.db.unified_orders.find_one({"order_number": "local-assembly"}), source_before_ready)
+                    self.assertEqual(await self.db[pieces.PIECE_EVENTS].count_documents({
+                        "piece_id": piece["piece_id"], "event_type": "assembly_piece_marked_ready",
+                    }), 1)
                 finally:
                     await self.db[collection].replace_one({"_id": original["_id"]}, original)
                     await self.db[pieces.PIECES].replace_one({"_id": before["_id"]}, before)
                     await self.db[completion.WORKFLOWS].replace_one({"_id": workflow["_id"]}, workflow)
-                    await self.db[pieces.PIECE_EVENTS].delete_many({"event_type": "preparation_piece_received_for_assembly"})
+                    await self.db[pieces.PIECE_EVENTS].delete_many({"event_type": {"$in": [
+                        "preparation_piece_received_for_assembly", "assembly_piece_marked_ready",
+                    ]}})
         current = await pieces._current_assembly_order(self.db, user_id="owner", order_number="local-assembly")
         unpaid = current.model_copy(update={"payment": PaymentDTO(method="card", status="pending", collection_status="unpaid")})
         with patch.object(pieces, "_current_assembly_order", AsyncMock(return_value=unpaid)):

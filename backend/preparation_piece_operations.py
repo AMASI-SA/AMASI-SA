@@ -29,6 +29,11 @@ from operational_atomic import operational_owner
 from mobile_operational_flow_policy import FIELD_PREPARATION, is_optional
 from assembly_status_policy import canonical_status
 from assembly_board_groups import assembly_queue_group
+from supplier_receipt_ready_policy import (
+    POLICY as SUPPLIER_RECEIPT_READY_POLICY, supplier_ready_eligible,
+    supplier_completion_covered_current, completed_supplier_policy, supplier_status,
+    supplier_receipt_blocker, supplier_current_units, supplier_current_piece_blocker,
+)
 
 from fulfillment_v2_routes import (
     BATCHES as SHIPPING_BATCHES,
@@ -2805,7 +2810,7 @@ async def _assembly_progress(
             ],
         },
         {"_id": 0, "image_b64": 0},
-    ).to_list(10000)
+    ).to_list(10001)
     pieces.extend(
         _workflow_assembly_pieces(
             workflow,
@@ -2816,14 +2821,39 @@ async def _assembly_progress(
     ready_count = sum(
         1 for piece in pieces if _text(piece.get("assembly_status")) == "ready"
     )
+    supplier_receipt_policy = any(
+        piece.get("assembly_ready_basis") == SUPPLIER_RECEIPT_READY_POLICY for piece in pieces
+    )
+    current_order = eligible_order
     # A partially received order may assemble individual pieces, but it must
     # not create a shipment until the complete order leaves preparation.
     completed = bool(
         total_count and total_count == ready_count
         and _text(workflow.get("stage")) in {"ready_to_ship", "completed"}
     )
+    if supplier_receipt_policy:
+        # Received supplier work is independent of component reservations and
+        # approval snapshots. Complete only the exact current product units,
+        # including unfinished direct/operational work in a mixed order.
+        source = await db["unified_orders"].find_one({"user_id": user_id, "order_number": order_number})
+        current_order = eligible_order or await _current_assembly_order(
+            db, user_id=user_id, order_number=order_number,
+        )
+        completed = bool(
+            supplier_status(source) == "in_progress"
+            and current_order is not None and _assembly_in_progress(current_order)
+            and shipping_address_is_complete(getattr(current_order, "shipping", None))
+            and await supplier_completion_covered_current(
+                db, source, workflow, pieces, owner=user_id, number=order_number,
+            )
+        )
+        if completed:
+            await enforce_stage_instructions(
+                db, user_id=user_id, order_number=order_number,
+                stage="assembly_labeling", actor_id=actor_id, order_wide=True,
+            )
     historical_reviewed_completion = False
-    if (not completed and total_count and total_count == ready_count
+    if (not supplier_receipt_policy and not completed and total_count and total_count == ready_count
             and workflow.get("completion_mode") is None
             and workflow.get("assembly_reviewed_physical_started") is True
             and _text(workflow.get("stage")) == "in_progress"):
@@ -2865,9 +2895,8 @@ async def _assembly_progress(
                 completed = True
                 historical_reviewed_completion = True
     local_decision = None
-    current_order = eligible_order
     expanded_review = workflow.get("source_additions_reviewed") is True
-    if workflow.get("completion_mode") is not None or expanded_review:
+    if not supplier_receipt_policy and (workflow.get("completion_mode") is not None or expanded_review):
         # Reuse the eligible order read in this same owner transaction. Piece
         # writes do not change its source; component consumption remains guarded.
         if current_order is None:
@@ -2918,7 +2947,7 @@ async def _assembly_progress(
                     db, user_id=user_id, order_number=order_number,
                     stage="assembly_labeling", actor_id=actor_id, order_wide=True,
                 )
-    if completed:
+    if completed and not supplier_receipt_policy:
         if current_order is None:
             current_order = await _current_assembly_order(db, user_id=user_id, order_number=order_number)
         if current_order is not None:
@@ -2937,6 +2966,12 @@ async def _assembly_progress(
         workflow_patch.update({
             "ready_to_ship_at": now,
             "ready_to_ship_source": "historical_reviewed_assembly",
+        })
+    if supplier_receipt_policy and completed:
+        workflow_patch.update({
+            "assembly_completion_basis": SUPPLIER_RECEIPT_READY_POLICY,
+            "ready_to_ship_at": now,
+            "ready_to_ship_source": "supplier_receipt_assembly",
         })
     if local_decision is not None:
         workflow_patch["fulfillment_decision"] = local_decision
@@ -2997,9 +3032,11 @@ async def _assembly_progress(
         from assembly_completion_delivery import pending_operation, source_fingerprint, workflow_fingerprint
         workflow_patch["assembly_delivery"] = pending_operation(actor_id, actor_name)
         source = await db["unified_orders"].find_one({"user_id": user_id, "order_number": order_number})
+        if supplier_receipt_policy:
+            workflow_patch["assembly_delivery"]["ready_basis"] = SUPPLIER_RECEIPT_READY_POLICY
         workflow_patch["assembly_delivery"].update(
             workflow_revision=int(workflow.get("revision") or 0) + 1,
-            source_fingerprint=source_fingerprint(source),
+            source_fingerprint=source_fingerprint(source, supplier_receipt=supplier_receipt_policy),
             workflow_fingerprint=workflow_fingerprint({**workflow, **workflow_patch}))
         if workflow.get("assembly_status") == "completed":
             workflow_patch["assembly_delivery"].update(
@@ -3010,6 +3047,16 @@ async def _assembly_progress(
             **workflow["assembly_delivery"],
             "workflow_revision": int(workflow.get("revision") or 0) + 1,
         }
+        if supplier_receipt_policy:
+            # Explicit Ready retry revalidates all current work. Preserve every
+            # provider-attempt marker while binding its current receipt basis.
+            from assembly_completion_delivery import source_fingerprint, workflow_fingerprint
+            source = await db["unified_orders"].find_one({"user_id": user_id, "order_number": order_number})
+            workflow_patch["assembly_delivery"].update(
+                ready_basis=SUPPLIER_RECEIPT_READY_POLICY,
+                source_fingerprint=source_fingerprint(source, supplier_receipt=True),
+                workflow_fingerprint=workflow_fingerprint({**workflow, **workflow_patch}),
+            )
     await db[WORKFLOWS].update_one(
         {
             "user_id": user_id,
@@ -3166,11 +3213,12 @@ async def _assembly_search(
     source = await db["unified_orders"].find_one({
         "user_id": user_id, "order_number": order_number,
     }) or {}
+    supplier_units = supplier_current_units(source, workflow)
     canonical = canonical_status(source)
     snapshot = source.get("g47_salla_snapshot") or {}
     # Explain a source hold only when the remaining canonical status evidence
-    # is independently in progress. This projection is display-only; Ready
-    # still uses canonical_status(source), including both source fences.
+    # is independently in progress. Received supplier work uses its own receipt
+    # policy below; other paths retain the canonical component/source fences.
     source_reconciliation_pending = bool(
         status_allowed
         and (snapshot.get("component_pending") or snapshot.get("requires_authoritative_refresh"))
@@ -3213,6 +3261,10 @@ async def _assembly_search(
             )
     for row, piece in zip(rows, pieces):
         virtual = bool(row["is_direct_assembly"] or row["is_operational_item"])
+        supplier_receipt_eligible = not virtual and supplier_ready_eligible(
+            source, workflow, piece, preparation_optional=preparation_shortcut_enabled,
+            current_order=current_order, current_units=supplier_units,
+        )
         received_physical = (
             workflow.get("stage") == "reviewed"
             and not virtual and _reviewed_received_physical_piece(piece)
@@ -3233,6 +3285,15 @@ async def _assembly_search(
             row_eligible and status_allowed
             and not (received_physical and reviewed_physical_component_blocker)
         )
+        if supplier_receipt_eligible:
+            row_eligible = True
+            source_hold_for_row = False
+        receipt_evidence_blocker = supplier_receipt_blocker(
+            piece, preparation_optional=preparation_shortcut_enabled,
+        ) or supplier_current_piece_blocker(source, workflow, piece, current_units=supplier_units)
+        if receipt_evidence_blocker:
+            row_eligible = False
+            source_hold_for_row = False
         # Optional receipt removes only the employee custody prerequisite. It
         # does not manufacture a receipt or bypass supplier/service/hold checks.
         row["preparation_receipt_optional"] = preparation_shortcut_enabled
@@ -3255,7 +3316,8 @@ async def _assembly_search(
                         or source_hold_blocker == "assembly_piece_already_ready"):
                     source_hold_blocker = "assembly_source_reconciliation_pending"
             row["assembly_blocker_code"] = (
-                component_blocker
+                receipt_evidence_blocker
+                or component_blocker
                 or (reviewed_physical_component_blocker if received_physical else None)
                 or source_hold_blocker
                 or "assembly_order_not_ready"
@@ -3266,9 +3328,14 @@ async def _assembly_search(
                     if snapshot.get("requires_authoritative_refresh")
                     else "بانتظار مطابقة بيانات الطلب مع النسخة المعتمدة"
                 )
-        elif (local_contract or workflow.get("source_additions_reviewed") is True) and row["assembly_ready"] and workflow.get("stage") in {"in_progress", "ready_to_ship"}:
-            # An address correction may need a readiness retry after all pieces
-            # were already assembled. The write path verifies consumed units.
+        elif row["assembly_ready"] and (
+            ((local_contract or workflow.get("source_additions_reviewed") is True)
+             and workflow.get("stage") in {"in_progress", "ready_to_ship"})
+            or (supplier_receipt_eligible
+                and workflow.get("stage") in {"reviewed", "in_progress", "ready_to_ship"})
+        ):
+            # An interrupted stage or address correction may need an explicit
+            # retry. Save revalidates the applicable receipt/component policy.
             row["can_mark_ready"] = True
             row["assembly_blocker_code"] = None
     actionable = [row for row in rows if row["can_mark_ready"] or row["can_receive_from_preparation"]]
@@ -3334,6 +3401,9 @@ async def _assembly_search(
         "print_data": workflow.get("carrier_label_print_data"),
     }
     from assembly_completion_delivery import public_status
+    if (canonical is None and workflow.get("assembly_completion_basis") == SUPPLIER_RECEIPT_READY_POLICY
+            and await completed_supplier_policy(db, user_id, order_number, workflow=workflow, source=source)):
+        canonical = supplier_status(source)
     delivery_status = public_status(workflow, canonical=canonical)
     carrier_label["ready"] = carrier_label["ready"] and delivery_status["ready"]
     carrier_label["order_status_completed"] = delivery_status["order_status_completed"]
@@ -3482,7 +3552,19 @@ async def _assembly_order_board(
             local_stages = {"in_progress", "ready_to_ship"} if board_state == "in_progress" else {"completed"}
             if board_state == "in_progress" and _workflow_assembly_pieces(workflow, order_number=order_number):
                 local_stages.add("reviewed")
-            if not local_review_stage_eligible(order, local_workflows.get(order_number), local_stages):
+            received_supplier_work = any(
+                piece.get("supplier_dispatch_status") == "received" and piece.get("received_at")
+                for piece in physical_by_order.get(order_number, [])
+            )
+            if board_state == "in_progress" and received_supplier_work and _assembly_in_progress(order):
+                local_stages.add("reviewed")
+            receipt_board = (
+                (received_supplier_work and _assembly_in_progress(order))
+                or workflow.get("assembly_completion_basis") == SUPPLIER_RECEIPT_READY_POLICY
+            )
+            if not local_review_stage_eligible(
+                order, workflow if receipt_board else local_workflows.get(order_number), local_stages,
+            ):
                 continue
         elif _text(order.status).casefold() != board_state:
             continue
@@ -3805,6 +3887,32 @@ async def _consume_piece_components(db: Any, *, user_id: str, piece: dict[str, A
     )
 
 
+async def _consume_received_supplier_components(
+    db: Any, *, user_id: str, piece: dict[str, Any], actor_id: str,
+) -> dict[str, Any]:
+    """Keep valid stock consumption without making it a supplier Ready gate.
+
+    The inventory service can defer a business validation only before its first
+    write. A failed mutation still aborts the whole owner transaction; no partial
+    inventory operation is hidden behind a successful Ready response.
+    """
+    from stock_component_consumption_service import consume_component_stock
+    line_id = _text(piece.get("order_item_id"))
+    try:
+        unit_index = int(piece.get("unit_index") or 0)
+    except (ValueError, TypeError, OverflowError):
+        unit_index = 0
+    if not line_id or unit_index < 1:
+        return {"state": "deferred", "reason": "component_piece_identity_required"}
+    result = await consume_component_stock(
+        db, merchant_id=user_id, order_id=_text(piece.get("order_number")),
+        units={line_id: [unit_index]}, actor_id=actor_id, defer_unavailable=True,
+    )
+    if result.get("deferred") is True:
+        return {"state": "deferred", "reason": result.get("reason")}
+    return {"state": "consumed"}
+
+
 async def _assert_ready_piece_components(db: Any, *, user_id: str, piece: dict[str, Any]) -> None:
     if piece.get("virtual_kind") == "operational":
         return
@@ -3836,6 +3944,19 @@ async def _mark_assembly_piece_ready(
             client_request_id=client_request_id, actor_id=actor_id, actor_name=actor_name,
         )
     return await operational_owner(db, user_id, complete)
+
+
+async def _promote_reviewed_assembly(db, *, user_id, order_number, workflow, actor_id, now):
+    changed = await db[WORKFLOWS].update_one(
+        {"user_id": user_id, "order_number": order_number,
+         "revision": int(workflow.get("revision") or 0), "stage": "reviewed"},
+        {"$set": {"stage": "in_progress", "in_progress_at": now,
+                  "assembly_reviewed_physical_started": True,
+                  "updated_at": now, "updated_by": actor_id},
+         "$inc": {"revision": 1}},
+    )
+    if not changed.matched_count:
+        raise HTTPException(409, detail={"code": "assembly_piece_ready_conflict"})
 
 
 async def _mark_assembly_piece_ready_in_transaction(
@@ -3890,12 +4011,41 @@ async def _mark_assembly_piece_ready_in_transaction(
         user_id=user_id,
         order_number=order_number,
     )
-    local_contract = await _ensure_assembly_order_eligible(
-        db, user_id=user_id, workflow=workflow or {}, current_order=current_order, piece=piece,
+    preparation_optional = await is_optional(db, user_id, FIELD_PREPARATION)
+    receipt_evidence_blocker = supplier_receipt_blocker(piece, preparation_optional=preparation_optional)
+    if receipt_evidence_blocker:
+        raise HTTPException(409, detail={"code": receipt_evidence_blocker})
+    source = await db["unified_orders"].find_one({"user_id": user_id, "order_number": order_number})
+    supplier_units = supplier_current_units(source, workflow)
+    current_piece_blocker = supplier_current_piece_blocker(source, workflow, piece, current_units=supplier_units)
+    if current_piece_blocker:
+        raise HTTPException(409, detail={"code": current_piece_blocker})
+    supplier_receipt_policy = supplier_ready_eligible(
+        source, workflow, piece, preparation_optional=preparation_optional,
+        current_order=current_order, current_units=supplier_units,
     )
+    if not supplier_receipt_policy:
+        await _ensure_assembly_order_eligible(
+            db, user_id=user_id, workflow=workflow or {}, current_order=current_order, piece=piece,
+        )
     now = _now()
     if _text(piece.get("assembly_status")) == "ready":
-        await _assert_ready_piece_components(db, user_id=user_id, piece=piece)
+        if supplier_receipt_policy:
+            if workflow.get("stage") == "reviewed":
+                await _promote_reviewed_assembly(
+                    db, user_id=user_id, order_number=order_number,
+                    workflow=workflow, actor_id=actor_id, now=now,
+                )
+            # An explicit retry may adopt the new policy for an existing Ready
+            # fact. It never repeats the Ready event or consumes stock.
+            if piece.get("assembly_ready_basis") != SUPPLIER_RECEIPT_READY_POLICY:
+                await db[PIECES].update_one(
+                    {"user_id": user_id, "piece_id": normalized_piece_id, "assembly_status": "ready"},
+                    {"$set": {"assembly_ready_basis": SUPPLIER_RECEIPT_READY_POLICY}},
+                )
+                piece = {**piece, "assembly_ready_basis": SUPPLIER_RECEIPT_READY_POLICY}
+        else:
+            await _assert_ready_piece_components(db, user_id=user_id, piece=piece)
         progress = await _assembly_progress(
             db,
             user_id=user_id,
@@ -3912,7 +4062,7 @@ async def _mark_assembly_piece_ready_in_transaction(
             "progress": progress,
         }
     blocker = assembly_piece_blocker(piece)
-    optional_receipt = (await is_optional(db, user_id, FIELD_PREPARATION)
+    optional_receipt = (preparation_optional
                         and assembly_direct_preparation_receipt_eligible(piece))
     if blocker and not optional_receipt:
         raise HTTPException(status_code=409, detail={"code": blocker})
@@ -3925,28 +4075,21 @@ async def _mark_assembly_piece_ready_in_transaction(
         stage="assembly_labeling",
         actor_id=actor_id,
     )
-    await _consume_piece_components(db, user_id=user_id, piece=piece, actor_id=actor_id)
-    if workflow.get("stage") == "reviewed" and _reviewed_received_physical_piece(piece):
-        # Same operational_owner transaction as unit consumption and Ready.
-        # Applies to independently proved local and accepted historical plans.
-        # The revision fence refuses concurrent review/source transitions.
-        changed = await db[WORKFLOWS].update_one(
-            {
-                "user_id": user_id, "order_number": order_number,
-                "revision": int(workflow.get("revision") or 0),
-                "stage": "reviewed",
-            },
-            {
-                "$set": {
-                    "stage": "in_progress", "in_progress_at": now,
-                    "assembly_reviewed_physical_started": True,
-                    "updated_at": now, "updated_by": actor_id,
-                },
-                "$inc": {"revision": 1},
-            },
+    component_consumption = None
+    if supplier_receipt_policy:
+        component_consumption = await _consume_received_supplier_components(
+            db, user_id=user_id, piece=piece, actor_id=actor_id,
         )
-        if not changed.matched_count:
-            raise HTTPException(409, detail={"code": "assembly_piece_ready_conflict"})
+    else:
+        await _consume_piece_components(db, user_id=user_id, piece=piece, actor_id=actor_id)
+    if workflow.get("stage") == "reviewed" and (
+            supplier_receipt_policy or _reviewed_received_physical_piece(piece)):
+        # The same owner transaction records actual Ready and promotes the
+        # interrupted local stage, independently of component plan approval.
+        await _promote_reviewed_assembly(
+            db, user_id=user_id, order_number=order_number,
+            workflow=workflow, actor_id=actor_id, now=now,
+        )
     result = await db[PIECES].update_one(
         {
             "user_id": user_id,
@@ -3956,6 +4099,8 @@ async def _mark_assembly_piece_ready_in_transaction(
         },
         {"$set": {
             "assembly_status": "ready",
+            **({"assembly_ready_basis": SUPPLIER_RECEIPT_READY_POLICY} if supplier_receipt_policy else {}),
+            **({"assembly_component_consumption": component_consumption} if component_consumption else {}),
             "assembly_preparation_receipt_optional": bool(optional_receipt),
             "assembly_ready_at": now,
             "assembly_ready_by": actor_id,
@@ -4003,6 +4148,8 @@ async def _mark_assembly_piece_ready_in_transaction(
         "file_number": _text(piece.get("file_number")) or None,
         "order_number": order_number,
         "event_type": "assembly_piece_marked_ready",
+        **({"ready_basis": SUPPLIER_RECEIPT_READY_POLICY} if supplier_receipt_policy else {}),
+        **({"component_consumption": component_consumption} if component_consumption else {}),
         "client_request_id": client_request_id,
         "actor_id": actor_id,
         "actor_name": actor_name,

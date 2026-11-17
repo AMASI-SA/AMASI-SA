@@ -182,16 +182,33 @@ async def test_label_incomplete_or_cancelled_never_dispatches(monkeypatch):
 @pytest.mark.asyncio
 @pytest.mark.parametrize('optional', [False, True])
 async def test_optional_ready_writes_no_fictitious_employee_receipt(monkeypatch, optional):
+    from order_engine.mapper import map_salla_order
+    import stock_component_consumption_service as stock
     db = AsyncMongoMockClient().test
-    piece = {**deepcopy(PIECE), 'user_id':'merchant', 'order_item_id':'line', 'unit_index':1}
+    raw = {'id':123, 'reference_id':PIECE['order_number'], 'created_at':PIECE['received_at'],
+           'status':{'slug':'in_progress'},
+           'items':[{'id':77, 'name':'Product', 'quantity':1, 'product':{'id':9}}]}
+    order = map_salla_order(raw)
+    piece = {**deepcopy(PIECE), 'user_id':'merchant',
+             'order_item_id':order.items[0].order_item_id, 'unit_index':1}
     await db[ops.PIECES].insert_one(piece)
     await db[ops.WORKFLOWS].insert_one({'user_id':'merchant','order_number':piece['order_number'],'stage':'in_progress'})
-    monkeypatch.setattr(ops, '_current_assembly_order', AsyncMock(return_value=object()))
+    await db.unified_orders.insert_one({'user_id':'merchant', 'order_number':piece['order_number'],
+        'order_status':'in_progress', 'raw_by_source':{'salla_direct':raw}})
+    monkeypatch.setattr(ops, '_current_assembly_order', AsyncMock(return_value=order))
     monkeypatch.setattr(ops, '_ensure_assembly_order_eligible', AsyncMock())
     monkeypatch.setattr(ops, 'is_optional', AsyncMock(return_value=optional))
     monkeypatch.setattr(ops, 'enforce_stage_instructions', AsyncMock())
     monkeypatch.setattr(ops, '_consume_piece_components', AsyncMock())
     monkeypatch.setattr(ops, '_assembly_progress', AsyncMock(return_value={'ready_count':1,'order_completed':False}))
+
+    async def invoke_owner_callback(database, owner, callback):
+        assert owner == 'merchant'
+        return await callback(database)
+
+    # Preserve actual missing-plan validation; this in-memory test substitutes
+    # only the owner transaction boundary, not current-source membership.
+    monkeypatch.setattr(stock, 'operational_owner', invoke_owner_callback)
     args = dict(user_id='merchant',piece_id=piece['piece_id'],client_request_id='once',actor_id='employee',actor_name='Employee')
     if not optional:
         with pytest.raises(HTTPException):
@@ -204,6 +221,10 @@ async def test_optional_ready_writes_no_fictitious_employee_receipt(monkeypatch,
         assert 'preparation_received_by' not in saved
         assert 'preparation_receipt_status' not in saved
         assert saved['status'] == piece['status']
+        assert saved['assembly_component_consumption'] == {
+            'state':'deferred', 'reason':'component_reservation_missing'}
+        ops._ensure_assembly_order_eligible.assert_not_awaited()
+        ops._consume_piece_components.assert_not_awaited()
 
 
 def test_manual_label_fence_allows_expected_status_webhook_only():
