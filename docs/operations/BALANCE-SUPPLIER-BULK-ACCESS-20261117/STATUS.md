@@ -26,7 +26,7 @@ The separate employee/courier actor-picker classification issue remains unchange
 
 - `frontend/src/pages/operational/SimpleBalanceAccess.jsx`: general bulk scope, independent draft merge and scope reset.
 - `frontend/src/pages/operational/SimpleBalanceAccess.test.jsx`: 19 permission tests including global balances/movements, individual exceptions, overlapping IDs, scope changes, and newly added resources.
-- `frontend/src/pages/operational/simpleBalances.css`: existing responsive bulk layout from the supplier checkpoint, unchanged in this follow-up.
+- `frontend/src/pages/operational/simpleBalances.css`: responsive bulk layout and full-width type/search filters on mobile so the complete selected scope stays readable.
 - `scripts/testing/simple_balances/fixtures.cjs`: synthetic suppliers, drivers and a shipping company, with deliberately overlapping IDs across kinds.
 - `scripts/testing/simple_balances/browser.cjs`: extends the existing permission scenario to all resources, independent fields, driver isolation, exceptions, one versioned save, reload persistence and 390px control bounds. Scenario count remains eight; no gate was relaxed.
 
@@ -43,7 +43,7 @@ Pinned toolchain: Node `22.23.2`, Yarn `1.22.22`.
 5. Browser/fixture syntax and `git diff --check`: exit 0.
 6. Independent source, tests and browser-fixture review: no actionable defect. Approval covers checkpointing and CI review; browser execution is still outstanding.
 7. Backend compatibility review: explicit resource grants, read/write authorization and versioned Save support this feature without a schema change. A separate in-memory backend-test attempt could not start because this local Python lacks pytest; it is not counted as passed.
-8. Local Chromium previously failed before page launch because the runtime denied its singleton socket. The sandbox is unchanged. Exact-source CI browser acceptance for this extension remains outstanding at this checkpoint.
+8. Local Chromium previously failed before page launch because the runtime denied its singleton socket. The sandbox is unchanged. Intermediate source `333c807e2c438c0175be783fbb6bda79c0daedc1` passed 984 operational frontend tests, all 8 simple-balances and 14 report browser scenarios. Root verified the browser ZIP digest and all 16 source hashes, then visually found the long all-resource scope label clipped in the two-column mobile filter. This follow-up stacks those two filters on mobile and adds a text-width assertion to the existing scenario. CI must run on the final source again; the intermediate results do not prove this final CSS/browser change.
 
 Focused test command from repository root:
 
@@ -53,10 +53,12 @@ CI=true python scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend
 
 ## Existing release blocker
 
-On the preceding source, Security Gate run `44159187708`, job `134308099197`, failed the production dependency audit for high-severity picomatch advisory `GHSA-fc5q-39xc-vjpf` / `CVE-2026-112366` (five paths, existing locked versions 2.3.2 and 4.0.7). The dependency manifest/lockfile and security gate were unchanged from Production and remain unchanged here. Subsequent spreadsheet-runtime and security-manifest/CSP steps did not execute after that failure. No exception, bypass or unrelated dependency remediation was introduced. Prior test success does not establish release readiness.
+Security Gate run `44168261320`, job `134340050967`, on intermediate source `333c807e2c438c0175be783fbb6bda79c0daedc1` repeated the existing production dependency audit failure for high-severity picomatch advisory `GHSA-fc5q-39xc-vjpf` / `CVE-2026-112366` (five paths, existing locked versions 2.3.2 and 4.0.7). The full frontend regression before that audit passed 4,230 tests / 417 suites. The dependency manifest/lockfile and security gate were unchanged from Production and remain unchanged here. Subsequent spreadsheet-runtime and security-manifest/CSP steps did not execute after that failure. No exception, bypass or unrelated dependency remediation was introduced. Prior test success does not establish release readiness.
 
 ## Next safe action
 
 Preserve this source on the existing task branch, update Draft PR #1968 and the task's own Issue #1006 ledger entry, then inspect CI for the exact new source. Download browser evidence, verify its source hashes and inspect desktop/mobile screenshots. Preserve final verification evidence separately from the tested source head.
+
+The Issue #1006 update endpoint acknowledged the task entry, but subsequent normalized and raw reads still returned the older body and timestamp without it. Ledger read-back is therefore unconfirmed; the task branch, PR and this status document are the verified durable continuation record. Preserve the unrelated ledger body when reconciling this discrepancy.
 
 Any later release requires resolving the existing security gate failure and following the repository's v5 A/B intent, clean rehearsal, serial guard and live verification protocol. No new live permission grant or release is part of this source checkpoint.

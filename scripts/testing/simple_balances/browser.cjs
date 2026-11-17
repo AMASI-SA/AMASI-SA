@@ -329,6 +329,17 @@ async function capture(page, name) {
       await page.setViewportSize({ width: 390, height: 844 });
       const cards = page.locator('.sb-access-table tbody tr');
       assert.equal(await cards.count(), f.catalog.resources.length);
+      const filters = await page.locator('.sb-access-resources > .sb-form-two input,.sb-access-resources > .sb-form-two select').evaluateAll(nodes => nodes.map(node => {
+        const style = getComputedStyle(node), rect = node.getBoundingClientRect();
+        const context = document.createElement('canvas').getContext('2d');
+        context.font = style.font;
+        const text = node.tagName === 'SELECT' ? node.selectedOptions[0].textContent : node.value || node.placeholder;
+        return { text, textWidth: context.measureText(text).width, left: rect.left, right: rect.right, viewport: innerWidth,
+          available: node.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) - (node.tagName === 'SELECT' ? 24 : 0) };
+      }));
+      assert.equal(filters.length, 2);
+      for (const filter of filters) assert(filter.left >= 0 && filter.right <= filter.viewport && filter.textWidth <= filter.available,
+        `Clipped mobile permission filter text: ${JSON.stringify(filter)}`);
       const bulkControls = await page.locator('.sb-access-bulk select,.sb-access-bulk button').evaluateAll(nodes => nodes.map(node => {
         const rect = node.getBoundingClientRect();
         return { left: rect.left, right: rect.right, width: rect.width, height: rect.height, viewport: innerWidth };
