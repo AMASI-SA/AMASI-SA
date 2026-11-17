@@ -12,6 +12,7 @@ const operationLabels = {
   ads: 'الإعلانات', courier: 'الشحن والتوصيل', customer: 'العملاء', entities: 'إضافة الحسابات',
 };
 const emptyGrant = resource => ({ kind: resource.kind, id: resource.id, use: false, movements: 'none', balance: false });
+const emptySupplierBulk = () => ({ use: '', movements: '', balance: '' });
 
 function AccessEditor({ user, catalog, identity }) {
   const key = JSON.stringify([identity, user.id]);
@@ -29,13 +30,14 @@ function AccessEditor({ user, catalog, identity }) {
   const [conflict, setConflict] = useState(false);
   const [kind, setKind] = useState('');
   const [query, setQuery] = useState('');
+  const [supplierBulk, setSupplierBulk] = useState(emptySupplierBulk);
   const lock = useRef(false);
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => {
     if (!read.data) return;
     setDraft({ ...read.data.access, operations: [...read.data.access.operations], resources: read.data.access.resources.map(row => ({ ...row })) });
-    setDirty(false); setConflict(false); setError('');
+    setDirty(false); setConflict(false); setError(''); setMessage(''); setSupplierBulk(emptySupplierBulk());
   }, [read.data]);
   const change = update => {
     if (busy || !draft) return;
@@ -49,6 +51,31 @@ function AccessEditor({ user, catalog, identity }) {
   const updateOperation = (operation, checked) => change({ operations: checked
     ? [...new Set([...draft.operations, operation])]
     : draft.operations.filter(value => value !== operation) });
+  const suppliers = catalog.resources.filter(resource => resource.kind === 'supplier');
+  const hasSupplierBulk = Object.values(supplierBulk).some(Boolean);
+  const applySupplierBulk = () => {
+    if (busy || lock.current || conflict || !draft || !suppliers.length || !hasSupplierBulk) return;
+    const patch = {};
+    if (supplierBulk.use) patch.use = supplierBulk.use === 'allow';
+    if (supplierBulk.movements) patch.movements = supplierBulk.movements;
+    if (supplierBulk.balance) patch.balance = supplierBulk.balance === 'allow';
+    const resources = new Map(draft.resources.map(resource => [resourceKey(resource), resource]));
+    let changed = 0;
+    for (const supplier of suppliers) {
+      const key = resourceKey(supplier);
+      const current = resources.get(key) || emptyGrant(supplier);
+      if (Object.keys(patch).some(field => current[field] !== patch[field])) {
+        resources.set(key, { ...current, ...patch });
+        changed += 1;
+      }
+    }
+    if (changed) change({ resources: [...resources.values()] });
+    setSupplierBulk(emptySupplierBulk());
+    setKind('supplier'); setQuery('');
+    setMessage(changed
+      ? `طُبقت اختياراتك على جميع الموردين الحاليين (${suppliers.length}). يمكنك تعديل أي مورد في الجدول، ثم حفظ الصلاحيات.`
+      : 'الموردون الحاليون لديهم هذه الصلاحيات بالفعل.');
+  };
   async function save(event) {
     event.preventDefault();
     if (lock.current || !draft || !dirty || conflict) return;
@@ -94,6 +121,17 @@ function AccessEditor({ user, catalog, identity }) {
     {!draft.enabled && <p className="sb-small-note">الدخول متوقف. تبقى الاختيارات أدناه محفوظة حتى تعيد تفعيل الدخول.</p>}
     <section className="sb-access-resources"><h3>الحسابات والجهات المسموحة</h3><p>اختر الحسابات التي يستخدمها الموظف، والحركات التي يمكنه رؤيتها، وصلاحية عرض الرصيد بصورة مستقلة.</p>
       <div className="sb-form-two"><label className="sb-field"><span>نوع الحساب أو الجهة</span><select value={kind} onChange={event => setKind(event.target.value)}><option value="">جميع الأنواع</option>{catalog.resource_kinds.map(item => <option key={item.key} value={item.key}>{item.label}</option>)}</select></label><label className="sb-field"><span>بحث في الحسابات</span><input value={query} onChange={event => setQuery(event.target.value)} placeholder="اسم البنك أو الموظف أو الجهة" /></label></div>
+      {(!kind || kind === 'supplier') && <fieldset className="sb-access-bulk" disabled={busy || conflict || !suppliers.length} aria-describedby="sb-supplier-bulk-note">
+        <legend>صلاحيات جميع الموردين</legend>
+        <p id="sb-supplier-bulk-note">يشمل {suppliers.length} من الموردين الحاليين، بما فيهم غير الظاهرين في البحث. المورد الجديد يحتاج تحديد صلاحيته لاحقًا.</p>
+        <div className="sb-access-bulk-fields">
+          <label className="sb-field"><span>استخدام الموردين</span><select value={supplierBulk.use} onChange={event => setSupplierBulk(value => ({ ...value, use: event.target.value }))}><option value="">بدون تغيير</option><option value="allow">مسموح</option><option value="deny">غير مسموح</option></select></label>
+          <label className="sb-field"><span>حركات الموردين</span><select value={supplierBulk.movements} onChange={event => setSupplierBulk(value => ({ ...value, movements: event.target.value }))}><option value="">بدون تغيير</option><option value="none">لا يعرضها</option><option value="own">التي سجّلها بنفسه</option><option value="all">حركات جميع الموظفين</option></select></label>
+          <label className="sb-field"><span>أرصدة الموردين</span><select value={supplierBulk.balance} onChange={event => setSupplierBulk(value => ({ ...value, balance: event.target.value }))}><option value="">بدون تغيير</option><option value="allow">مسموح</option><option value="deny">غير مسموح</option></select></label>
+        </div>
+        <button type="button" className="sb-secondary" disabled={busy || conflict || !suppliers.length || !hasSupplierBulk} onClick={applySupplierBulk}>تطبيق على جميع الموردين ({suppliers.length})</button>
+        <p className="sb-small-note">راجع الاختيارات في الجدول ثم اضغط «حفظ صلاحيات الموظف» لتفعيلها.</p>
+      </fieldset>}
       <div className="sb-table-wrap sb-access-resource-list"><table className="sb-access-table" aria-label="صلاحيات الحسابات والجهات"><thead><tr><th scope="col">الحساب</th><th scope="col">استخدامه</th><th scope="col">الحركات المعروضة</th><th scope="col">الرصيد</th></tr></thead><tbody>{matching.map(resource => {
         const grant = grantFor(resource);
         return <tr key={resourceKey(resource)}><th scope="row"><strong>{resource.name}</strong><small>{resourceLabels[resource.kind] || resource.kind}</small></th>

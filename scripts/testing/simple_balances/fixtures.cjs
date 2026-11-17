@@ -13,6 +13,7 @@ const resources = [
   resource('external_person', 'external-demo', 'جهة خارجية توضيحية', '400.00', 'for_party', ['external.pay', 'external.receive', 'external.salary', 'external.household', 'external.personal']),
   resource('employee', 'employee-demo', 'موظف توضيحي', '1000.00', 'for_party', ['employee.accrual', 'employee.payment']),
   resource('supplier', 'supplier-demo', 'مورد توضيحي', '2000.00', 'for_party', ['supplier.payment']),
+  resource('supplier', 'supplier-extra', 'مورد إضافي للاختبار', '500.00', 'for_party', ['supplier.payment']),
   resource('employee_custody', 'custody-demo', 'عهدة الموظف التوضيحي', '500.00', 'for_us', []),
   resource('owner_withdrawal', 'owner-demo', 'حساب المالك التوضيحي', '0.00', 'balanced', []),
   resource('bank', 'bank-demo', 'بنك المؤسسة التوضيحي', '5000.00', 'for_us', ['accounts.transfer']),
