@@ -93,6 +93,25 @@ test.each(['scope_changed', 'scope_missing', 'not_targeted', 'other_order', 'dup
     expect(courierRecoveryMessage(result, '8101')).not.toContain('تم التحقق من دليل الطلب وحفظه');
   });
 
+test.each([
+  ['native_evidence_access_denied', 'رفضت سلة قراءة دليل هذا الطلب'],
+  ['native_evidence_request_timeout', 'انتهت مهلة الاتصال بسلة'],
+])('a scoped unavailable receipt explains %s without exposing provider text', async (reason, expected) => {
+  const api = {refreshBalances: jest.fn().mockRejectedValue({response: {status: 409, data: {detail: {
+    code: 'operational_source_setup_incomplete', session_scope: 'a'.repeat(64),
+    native_evidence: {courier: {status: 'deferred', selected: 1, outcomes: [
+      {order_id: '8101', status: 'unavailable', reason, message: 'PRIVATE-PROVIDER'},
+    ]}},
+  }}}})};
+  const result = await refreshVisibleSnapshot(api, {courierOrderId: '8101', expectedSessionScope: 'a'.repeat(64)});
+  expect(result.native_evidence.courier.outcomes[0].reason).toBe(reason);
+  const message = courierRecoveryMessage(result, '8101');
+  expect(message).toContain(expected);
+  expect(message).toContain('لم تُثبت المطابقة');
+  expect(message).not.toMatch(/PRIVATE|أُعيد احتساب الأرصدة|تم التحقق/);
+  expect(api.refreshBalances).toHaveBeenCalledTimes(1);
+});
+
 test('hidden mount does no work; one visible completion never polls or refreshes on focus/visibility', async () => {
   visibility.mockReturnValue('hidden');
   const read = jest.fn().mockResolvedValue('saved'), onData = jest.fn();

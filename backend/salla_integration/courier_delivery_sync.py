@@ -265,11 +265,17 @@ async def acquire_missing(db, owner, issues, *, started_at, limit=4):
                 except ValueError:
                     shipments = await _complete_pages(db, owner, "/shipments", {"order_id": identity}, max_pages=1)
                     accepted = verified_delivery(source, shipments, histories, owner, now)
-        except (SallaError, httpx.RequestError):
+        except (SallaError, httpx.RequestError) as error:
             # One unavailable order must not abandon the other bounded claims.
-            # Cancellation and authorization errors deliberately escape.
+            # Classify structured failures only; provider text is never evidence.
+            # Cancellation and local authorization errors deliberately escape.
+            reason = "native_evidence_unavailable"
+            if isinstance(error, SallaError) and error.status_code == 403 and error.needs_reauth is False:
+                reason = "native_evidence_access_denied"
+            elif isinstance(error, httpx.TimeoutException):
+                reason = "native_evidence_request_timeout"
             result["status"] = "deferred"
-            outcome(identity, "unavailable", "native_evidence_unavailable")
+            outcome(identity, "unavailable", reason)
             continue
         except (ValueError, KeyError, TypeError, AttributeError) as error:
             outcome(identity, "blocked", rejection(error))

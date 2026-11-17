@@ -168,6 +168,7 @@ const COURIER_OUTCOME_REASONS = new Set([
     "courier_native_order_mismatch", "courier_native_carrier_missing", "courier_native_source_changed",
     "courier_native_evidence_invalid", "native_evidence_unavailable", "courier_native_response_invalid",
     "courier_native_clock_in_future", "courier_native_order_transition_missing",
+    "native_evidence_access_denied", "native_evidence_request_timeout",
 ]);
 
 // A failed aggregate may still follow a completed native acquisition. Accept
@@ -255,7 +256,15 @@ function courierNativeRecoveryMessage(result, orderId, refreshed) {
         ? "دليل الطلب المحفوظ مستوفٍ لهذا الفحص؛ أُعيد احتساب الأرصدة للتحقق من حالته."
         : "دليل الطلب المحفوظ مستوفٍ لهذا الفحص.";
     if (outcome?.status === "source_changed") return "تغيرت بيانات الطلب أثناء المطابقة؛ لم يُحفظ دليل على بيانات قديمة. راجع الحالة المحدثة قبل إعادة المحاولة.";
-    if (outcome?.status === "unavailable") return "تعذرت قراءة دليل هذا الطلب من سلة. لم تُثبت المطابقة؛ أعد المحاولة عند الحاجة بعد مهلة إعادة المحاولة.";
+    if (outcome?.status === "unavailable") {
+        if (outcome.reason === "native_evidence_access_denied") {
+            return "رفضت سلة قراءة دليل هذا الطلب. لم تُثبت المطابقة؛ راجع صلاحيات ربط سلة وإتاحة المصدر قبل إعادة المحاولة.";
+        }
+        if (outcome.reason === "native_evidence_request_timeout") {
+            return "انتهت مهلة الاتصال بسلة أثناء قراءة دليل هذا الطلب. لم تُثبت المطابقة؛ أعد المحاولة عند الحاجة بعد مهلة إعادة المحاولة.";
+        }
+        return "تعذرت قراءة دليل هذا الطلب من سلة. لم تُثبت المطابقة؛ أعد المحاولة عند الحاجة بعد مهلة إعادة المحاولة.";
+    }
     if (outcome?.status === "blocked") {
         const reasons = {
             courier_native_shipment_ambiguous: "توجد بوالص متعددة أو مستبدلة؛ يلزم تحديد البوليصة التي أُنجز تسليمها.",
