@@ -1,0 +1,234 @@
+{
+  "schema_version": 1,
+  "task_id": "POST-RELEASE-LATENCY-20261118",
+  "kind": "independent_merge_ci_acceptance",
+  "verdict": "pass",
+  "repository": "AMASI-SA/AMASI-SA",
+  "pull_request": 1980,
+  "reviewed_base_git_sha": "b009ee50a6b932368be8ad104c8c1b75e584b4e2",
+  "source_git_sha": "a48657447dfb5bff48013ece455b745920403458",
+  "intent_git_sha": "89690ba6fbff16d54b01a101e0c0de58803f2cab",
+  "deployment_git_sha": "f2d806efc18964a2cc7c3a475346590cbe8b1262",
+  "deployment_tree_sha": "cc07de471d47eab2dc0a2e695fb54fe4a302b444",
+  "deployment_parents": [
+    "b009ee50a6b932368be8ad104c8c1b75e584b4e2",
+    "89690ba6fbff16d54b01a101e0c0de58803f2cab"
+  ],
+  "source_history_evidence": "Read local fetched Git commit; M tree exactly equals reviewed B tree. No source change introduced by merge.",
+  "observed_at": "2026-11-17T22:54:58Z",
+  "checks": [
+    {
+      "id": 134429794200,
+      "name": "Emergent manual redeploy required",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44193306056/job/134429794200"
+    },
+    {
+      "id": 134428558347,
+      "name": "Emergent Host Node 24.19.0 clean-clone adapter rehearsal",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44193306056/job/134428558347"
+    },
+    {
+      "id": 134428558258,
+      "name": "Emergent Host Node 20.20.2 clean-clone adapter rehearsal",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44193306056/job/134428558258"
+    },
+    {
+      "id": 134428071145,
+      "name": "Host Node 20.20.2 engine and dispatcher contract",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44193306056/job/134428071145"
+    },
+    {
+      "id": 134428071123,
+      "name": "Backend preflight",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44193306056/job/134428071123"
+    },
+    {
+      "id": 134428070986,
+      "name": "Host Node 24.19.0 engine and dispatcher contract",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44193306056/job/134428070986"
+    },
+    {
+      "id": 134428070686,
+      "name": "Frontend build",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44193306056/job/134428070686"
+    },
+    {
+      "id": 134428070464,
+      "name": "Frontend dependency and CSP checks",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44193305930/job/134428070464"
+    },
+    {
+      "id": 134428069782,
+      "name": "Backend security contracts",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44193305930/job/134428069782"
+    },
+    {
+      "id": 134428069289,
+      "name": "CodeQL (javascript-typescript)",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44193305929/job/134428069289"
+    },
+    {
+      "id": 134428068834,
+      "name": "CodeQL (python)",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44193305929/job/134428068834"
+    }
+  ],
+  "check_summary": {
+    "success": 11,
+    "pending": 0,
+    "failure": 0,
+    "skipped": 0
+  },
+  "workflows": [
+    {
+      "id": 44193306056,
+      "name": "Mezan Release Readiness",
+      "conclusion": "success"
+    },
+    {
+      "id": 44193305930,
+      "name": "Security Gate",
+      "conclusion": "success"
+    },
+    {
+      "id": 44193305929,
+      "name": "CodeQL",
+      "conclusion": "success"
+    }
+  ],
+  "host_rehearsals": [
+    {
+      "host_node": "20.20.2",
+      "job_id": 134428558258,
+      "evidence_artifact_id": 14378710302,
+      "evidence_zip_bytes": 46940,
+      "evidence_zip_sha256": "f7ed50f639fd28150f746ae43cb6b70eeea9871f4d90edb89129776ebb85fd16"
+    },
+    {
+      "host_node": "24.19.0",
+      "job_id": 134428558347,
+      "evidence_artifact_id": 14377817550,
+      "evidence_zip_bytes": 46940,
+      "evidence_zip_sha256": "6a56ddd2e0482d8e9d964a309b920df551e55bd89d076f741a30269902653126"
+    }
+  ],
+  "rehearsal_evidence": {
+    "actual_completed_job_logs_inspected": true,
+    "evidence_zip_digests_match_api": true,
+    "stages": [
+      "exact-M checkout",
+      "clean tracked-source clone",
+      "generated inputs absent",
+      "outer host frozen install",
+      "Git metadata removed",
+      "configured yarn build adapter",
+      "governed Node22.23.2/Yarn1.22.22",
+      "fresh frozen dependency install",
+      "two clean governed builds",
+      "artifact/proof/identity verification",
+      "isolated Backend package without Git or sibling Frontend",
+      "isolated Frontend package",
+      "exact canonical and cache-busted build-meta JSON with application/json and wildcard Accept",
+      "production and Preview Host JSON routes",
+      "immutable hashed asset cache",
+      "no-store SPA shell"
+    ],
+    "expected_runtime": "rg5-5903cd2b08dd34d72afa632fce3c189767c18b4428bb9e403cc45d25b20543fa",
+    "frontend_artifact_tree_sha256": "feca50cf723178a51482b5552d3b5d994ad735e3a946ca067f0256c2814bfae5",
+    "reproducibility_proof_sha256": "4b63a391cfed62b2eb4a1391034bb1cfb5fbc5aca05227997cf06b9321673bea",
+    "backend": {
+      "file_count": 1240,
+      "package_tree_sha256": "249b2fda1fb2e4d9084355fb8c185868425abc93c3092b1bc0b49ca971b3937f",
+      "identity_bytes": 446159,
+      "identity_sha256": "d5d9a365e8aca165d79f0ea76564fe7e7fa033cb15a269fda53e5a03112a2112",
+      "isolated_verified": true,
+      "health_verified": true
+    },
+    "frontend": {
+      "file_count": 1536,
+      "package_tree_sha256": "641d6b159c3a25f278c126fe1827c6115052efef2126ed1ec7fd9986ac016c10",
+      "metadata_bytes": 493187,
+      "metadata_sha256": "dd707be83869b54737474ccaf13146cb8d37b09d1ad1a765025500bb40651951",
+      "isolated_runtime_artifact_verified": true
+    }
+  },
+  "security": {
+    "backend_job_id": 134428069782,
+    "frontend_job_id": 134428070464,
+    "actual_completed_logs_inspected": true,
+    "backend_dependency_audit": "No known vulnerabilities found",
+    "backend_compatibility": {
+      "passed": 88,
+      "deselected": 1,
+      "explicit_deselection": "test_success_cache_survives_fresh_database_client"
+    },
+    "bootstrap_unittest_passed": 26,
+    "security_contracts_passed": 83,
+    "inherited_cases_passed": 216,
+    "inherited_subtests_passed": 29,
+    "sensitive_logging_passed": 57,
+    "frontend_security_contracts": {
+      "passed": 210,
+      "failed": 0
+    },
+    "frontend_regression": {
+      "suites": 417,
+      "tests": 4260,
+      "all_passed": true
+    },
+    "production_dependency_audit": {
+      "dependencies": 409,
+      "reported_vulnerabilities": 0
+    },
+    "csp_and_manifests": "passed"
+  },
+  "release_preflight": {
+    "job_id": 134428071123,
+    "unit_cases": 156,
+    "result": "OK"
+  },
+  "codeql": {
+    "merge_run_id": 44193305929,
+    "python_job_id": 134428068834,
+    "javascript_typescript_job_id": 134428069289,
+    "both_actual_logs_inspected": true,
+    "both_uploads_and_processing_complete": true,
+    "both_conclusions": "success",
+    "prior_exact_B_pr_aggregate": {
+      "check_id": 134414440085,
+      "head_sha": "89690ba6fbff16d54b01a101e0c0de58803f2cab",
+      "conclusion": "success",
+      "title": "No new alerts in code changed by this pull request",
+      "annotations_count": 0
+    },
+    "interpretation": "Fresh M analyses completed successfully. The no-new-alerts differential verdict is the directly re-read exact-B PR aggregate, whose tree equals M; no new aggregate was present among M's eleven push checks. This does not claim zero pre-existing repository alerts."
+  },
+  "limitations": [
+    "CI acceptance only; no hosted latency or production recovery claim.",
+    "Actual shared-workspace adapter, own release lease and production publication/three-probe verification are root-owned and not performed by this reviewer.",
+    "No test reruns, source mutations, real financial/provider calls, live requests, shared /app/status commands or UI actions performed.",
+    "Outer Emergent Cloud Build argv/install/snapshot boundary remains unobserved; CI rehearsal does not establish it."
+  ]
+}

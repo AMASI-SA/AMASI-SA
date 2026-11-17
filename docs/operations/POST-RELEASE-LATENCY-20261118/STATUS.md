@@ -1,5 +1,47 @@
 # Post-release availability and balances latency — 18 November 2026
 
+## Merged-release checks accepted — 17 November 2026, 22:55 UTC
+
+All **11 checks on actual merge M
+`f2d806efc18964a2cc7c3a475346590cbe8b1262` are complete and successful**, with
+zero pending, failed or skipped merge checks. Root freshly read the full check
+inventory after independent inspection of completed logs and both actual host
+rehearsal artifacts. The accepted M tree remains exactly reviewed B's tree.
+
+Completed workflows: Readiness44193306056, Security44193305930 and
+CodeQL44193305929. Both Node20.20.2/job134428558258 and
+Node24.19.0/job134428558347 rehearsals prove the configured adapter, no-Git
+materialization, governed Node22.23.2/Yarn1.22.22, isolated packages and exact
+canonical/cache-busted JSON metadata. Both complete CodeQL analyses uploaded
+and processed results successfully. The explicit no-new-alerts differential
+verdict belongs to the accepted exact-B PR aggregate, whose tree equals M;
+M's push checks contain no separate PR-differential aggregate.
+
+The complete sanitized record is `evidence/accepted-merge-ci.json`, retained
+byte-for-byte from the independent reviewer, SHA256
+`52d1c14b0e8d87ad1772e94a5dcd0d91780be0df8357190030dd1925e183b177`.
+Backend package digest:
+`249b2fda1fb2e4d9084355fb8c185868425abc93c3092b1bc0b49ca971b3937f`;
+Frontend package digest:
+`641d6b159c3a25f278c126fe1827c6115052efef2126ed1ec7fd9986ac016c10`.
+The runtime, source, metadata and reproducibility-proof identities remain those
+of the exact frozen candidate below.
+
+The preceding Android owner records one official verification started at
+22:46:11 UTC, verifier PID104351, with final acceptance and lease closure still
+pending. Do not issue another verifier or a status request while that operation
+holds its lock. Root has recovered an independent CodeServer tab and Terminal7;
+only `pwd` was executed there. No shared source, service, release lease or live
+publication has been changed by this task. Next: wait for the owner's three
+successful probes and inactive handoff, freshly check official inactive status,
+preserve unrelated files, then run the actual configured adapter on exact M.
+
+The prior durable evidence checkpoint is
+`3d1246edfa9de91be63fd89bb9b56dc76d2862e6` on
+`codex/balances-latency-final-evidence-20261118`. This branch remains evidence
+only and is not deployable. CI acceptance is complete; hosted performance is
+still unverified.
+
 ## Current accepted final candidate — 17 November 2026, 22:47 UTC
 
 [PR1980](https://github.com/AMASI-SA/AMASI-SA/pull/1980) was merged normally at
