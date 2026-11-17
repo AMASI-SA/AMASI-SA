@@ -64,3 +64,9 @@ The companion PRs contain actual implementation and regression tests. The web CI
 See `STATUS.json` and the PR checks for the checkpoint's verification state. Local synthetic tests are explicitly distinguished from real-Mongo and browser acceptance. No test fixture imports a live production server or uses live financial records.
 
 The owner explicitly authorized merge and publication on 2026-11-17. Release requires the compatible scoped backend and clients, explicit staff grants, and the repository's governed source/intent/build/verification process. Physical-device acceptance is recorded separately from source CI and APK verification. The companion PRs and `STATUS.json` record the actual merge, build and deployment milestones; source readiness alone is not proof of publication.
+
+### Router compatibility and concurrency diagnostics
+
+Recovery collection access is deferred until an authenticated pending-command request, so constructing the operational router does not acquire unrelated database capabilities. Existing read-only, cancellation and report tests keep their original assertions.
+
+The real-Mongo concurrent driver-approval test joins all attempts before dropping its disposable database. Every attempt must still succeed, return the identical result and preserve the original exactly-once money/history checks. Bounded scalar diagnostics are emitted on failure without financial rows or receipt contents. The one observed409 on the superseded source is not attributed to a speculative cause or declared fixed; a fresh complete CI pass is required.

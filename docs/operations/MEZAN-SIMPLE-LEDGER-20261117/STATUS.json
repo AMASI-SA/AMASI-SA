@@ -17,7 +17,8 @@
     "Independent review fixes: exact native permission DTO, own matching actor visibility, Arabic order search and safe pagination clamp after permission changes.",
     "Legacy route tests migrated to explicit workspace grants or owner specialist flows while preserving monetary, concurrency, tenant, stock and audit assertions.",
     "Actual-screen browser harness and CI collection checks added without removing or relaxing existing gates.",
-    "Actor-bound immutable server recovery replaces clear-text browser financial commands. Only a hashed slot and opaque UUID persist locally; fresh recovery is read-only, retries keep the exact request, and retirement erases the saved payload without altering financial history."
+    "Actor-bound immutable server recovery replaces clear-text browser financial commands. Only a hashed slot and opaque UUID persist locally; fresh recovery is read-only, retries keep the exact request, and retirement erases the saved payload without altering financial history.",
+    "Pending recovery routes initialize without acquiring their collection; existing read-only, authorization and cancellation routes retain their prior construction behavior."
   ],
   "verification": [
     {
@@ -61,14 +62,24 @@
     {
       "check": "Authenticated recovery repair",
       "result": "Backend116 focused tests passed, including33 new HTTP/security/concurrency cases; root independently reran33/33 on the frozen files. Web50tests/6suites passed, including11 recovery cases, scope changes during writes, explicit retries and no financial submission before registration. Isolated actual-component harness build and diff/syntax checks passed. Fresh full real-Mongo/browser/security CI is required for this new source checkpoint."
+    },
+    {
+      "check": "Authenticated recovery full CI and compatibility repair",
+      "head_sha": "7d429b8d97d77638b87d4cf82addf19bcb6414f9",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43995254103",
+      "result": "Web62suites/970tests,14existing+8simplebrowser scenarios,8screenshots and16/16simple+20/20legacy source hashes PASS. JavaScript, Python and aggregate CodeQL PASS. Backend5045passed/81failed:80 failures from eager pending collection acquisition during unrelated router construction, plus one intermittent real-Mongo concurrent driver approval409. The candidate intent for7d429 is superseded and must not deploy."
+    },
+    {
+      "check": "Lazy recovery route initialization and joined concurrency diagnostics",
+      "result": "Pending collection is acquired only within authenticated pending requests; no unrelated router construction touches it.159 related read/recovery cases passed, covering the80 initializer failures and33 recovery cases;60 driver unit contracts passed. Both real-Mongo concurrency cases collect. Independent diff review PASS: all original every-attempt-success, equal-result, exactly-once money/history assertions remain. The concurrency test now joins every attempt before database teardown and emits bounded scalar diagnostics only on failure. Its original409 cause is unproven; no money-service, DDL, retry policy or assertion was changed to hide it. Fresh full isolated-Mongo CI is required."
     }
   ],
   "remaining": [
-    "Pass fresh affected backend, web, browser and aggregate security checks on the new exact source.",
-    "Freeze an intent-only v5 commit from this source, verify rehearsal, merge and publish through the existing guard; require exact deployed identity and inactive final lease.",
-    "Complete APK1.0.20/code23 binary inspection and deliver its install link after backend publication. Physical-device acceptance is not yet performed."
+    "Pass fresh affected backend, web, browser and aggregate security checks on the new exact source, including every concurrent driver approval.",
+    "Freeze an intent-only v5 commit from this source, verify clean-clone rehearsals, merge and publish through the existing guard; require exact deployed identity and inactive final lease.",
+    "Deliver verified APK1.0.20/code23 after compatible backend publication; distinguish unperformed physical-device update acceptance."
   ],
-  "next_safe_action": "Run the new source checkpoint through all affected CI and the independent aggregated CodeQL check, then freeze its newly generated v5 intent. The earlier4fbfa candidate is superseded and must not be deployed.",
+  "next_safe_action": "Run fresh full backend/web/browser/security CI for this repaired source. Every concurrent driver attempt must succeed. If it fails, use the new bounded diagnostics to identify the cause; do not waive it or blindly rerun. Only after all gates pass may this source produce a new intent-onlyB and governed deployment.",
   "pull_request": "https://github.com/AMASI-SA/AMASI-SA/pull/1966",
   "companion_native": {
     "repository": "AMASI-SA/amasi-mobile",
@@ -83,10 +94,13 @@
     "version": "1.0.20",
     "version_code": 23,
     "apk_workflow": "https://github.com/AMASI-SA/amasi-mobile/actions/runs/43993219682",
-    "apk_status": "Build in progress; no duplicate manual dispatch. The merge tree exactly matches the reviewed source tree.",
-    "ota_enabled": false
+    "apk_status": "PASS: EAS5a39f3d2-491f-4f39-bba5-76d2f23a3558 built APK1.0.20/code23. Actual package/runtime/project/productionAPI, ZIPCRC, OTA-disabled manifest and valid v2 signature verified. Physical device update not tested.",
+    "ota_enabled": false,
+    "apk_sha256": "c1ad75f4671f06703612cb4378b25a1088e37d6724a9a9b0f530f9060156006b",
+    "apk_signer_sha256": "f09151d74dca30a265f4b0bd49a8ba6b94acccdf5d1500f5da36654fc929b22f",
+    "signing_continuity": "APK22 and23 build logs retain the same existing EAS remote keystore configuration. APK22 binary expiredNov16, so direct certificate comparison is unavailable. Historical locally built codes14–18 use a different documented certificate. No signing credentials were changed; in-place upgrade compatibility is not claimed."
   },
-  "parent_source_sha": "4fbfa5df408dd02c5d3893520decd1bfad9a181f",
+  "parent_source_sha": "7d429b8d97d77638b87d4cf82addf19bcb6414f9",
   "release_preflight": {
     "production_branch_sha": "71125711d8181da3b4e35d9129fd51c048ba2bdd",
     "emergent_workspace_sha": "71125711d8181da3b4e35d9129fd51c048ba2bdd",

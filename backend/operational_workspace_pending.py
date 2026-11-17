@@ -152,8 +152,6 @@ def _reply(row):
 
 
 def install_pending_command_routes(router, db, current_user, scope):
-    collection = db[PENDING_COMMANDS]
-
     async def load(user, recovery_id, expected):
         actor, owner, _ = await scope(db, user, "workspace")
         policy = await load_access(db, actor, owner)
@@ -166,6 +164,7 @@ def install_pending_command_routes(router, db, current_user, scope):
 
     async def existing_reply(actor, owner, bound, row, expected_hash=None):
         async with _authorized(db, owner, actor, row):
+            collection = db[PENDING_COMMANDS]
             current = await collection.find_one(bound)
             if current is None:
                 _not_found()
@@ -179,6 +178,7 @@ def install_pending_command_routes(router, db, current_user, scope):
     async def register(recovery_id: UUID4, payload: PendingRegistration, user=Depends(current_user)):
         normalized = _normalize(payload)
         actor, owner, policy, bound = await load(user, recovery_id, normalized["command"]["expected_session_scope"])
+        collection = db[PENDING_COMMANDS]
         command_hash = digest(normalized)
         previous = await collection.find_one(bound)
         if previous is not None:
@@ -205,6 +205,7 @@ def install_pending_command_routes(router, db, current_user, scope):
     @router.get("/workspace/pending-commands/{recovery_id}")
     async def retrieve(recovery_id: UUID4, expected_session_scope: str = Query(pattern=r"^[a-f0-9]{64}$"), user=Depends(current_user)):
         actor, owner, _, bound = await load(user, recovery_id, expected_session_scope)
+        collection = db[PENDING_COMMANDS]
         row = await collection.find_one(bound)
         if row is None:
             _not_found()
@@ -213,6 +214,7 @@ def install_pending_command_routes(router, db, current_user, scope):
     @router.delete("/workspace/pending-commands/{recovery_id}")
     async def retire(recovery_id: UUID4, payload: PendingScope, user=Depends(current_user)):
         actor, owner, _, bound = await load(user, recovery_id, payload.expected_session_scope)
+        collection = db[PENDING_COMMANDS]
         row = await collection.find_one(bound)
         if row is None:
             _not_found()
