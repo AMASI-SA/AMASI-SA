@@ -33,6 +33,7 @@ def _uses_unified_sender_projection(actor: str) -> bool:
     return str(actor or "").startswith((
         "auto-plan-b:",
         "manual-ui",
+        "manual-job:",
         "failed-retry-ui",
     ))
 
@@ -91,6 +92,9 @@ async def _prepare_sender_projection(
             "يحتاج الطلب إلى تحقق دفع مباشر من سلة قبل الإرسال."
             if code == "authoritative_payment_needs_verification"
             else (
+                "اسم العميل غير متوفر في بيانات سلة؛ حدّث بيانات الطلب قبل الإرسال."
+                if code == "authoritative_customer_identity_missing"
+                else
                 "تعذر تجهيز بيانات الطلب الموحدة قبل الإرسال؛ "
                 "لم يتم إرسال أي شيء إلى قيود."
             )

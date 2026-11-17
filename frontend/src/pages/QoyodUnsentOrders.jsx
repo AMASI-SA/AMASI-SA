@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import api from "../lib/api";
-import { sendQoyodManualJob } from "../lib/qoyodManualSendJobs";
+import {
+  QOYOD_MANUAL_BATCH_LIMIT, sendQoyodManualBatch, sendQoyodManualJob,
+} from "../lib/qoyodManualSendJobs";
 import QoyodTotalsDiagnosis from "../components/qoyod/QoyodTotalsDiagnosis";
 import Qoyod404Recovery from "../components/qoyod/Qoyod404Recovery";
 import {
@@ -49,6 +51,7 @@ export default function QoyodUnsentOrders() {
   const [retryConfirmOrder, setRetryConfirmOrder] = useState(null);
   const [retryingOrder, setRetryingOrder] = useState(null);
   const [retryNotice, setRetryNotice] = useState(null);
+  const [orderSendResults, setOrderSendResults] = useState({});
   const sendControllersRef = useRef(new Set());
   const sendFlowRef = useRef(null);
   useEffect(() => () => {
@@ -70,35 +73,38 @@ export default function QoyodUnsentOrders() {
     if (sendFlowRef.current === controller) sendFlowRef.current = null;
   };
   const sendFlowBusy = recoveryRunning || retryingOrder !== null;
-  const showSendProgress = (job) => {
-    if (["queued", "running"].includes(job.status)) setRetryNotice({
-      type: "pending",
-      message: `الطلب ${job.order_number}: ${job.status === "queued" ? "مهمة الإرسال محفوظة بانتظار التنفيذ" : "جارٍ التحقق والإرسال في الخلفية"}. لا تكرر الإرسال.`,
+  const showSendProgress = (job, showNotice = true) => {
+    if (!["queued", "running"].includes(job.status)) return;
+    const message = job.status === "queued"
+      ? "مهمة الإرسال محفوظة بانتظار التنفيذ" : "جارٍ التحقق والإرسال في الخلفية";
+    const orderNumber = String(job.order_number);
+    setOrderSendResults((previous) => {
+      const current = previous[orderNumber];
+      // Unchanged polling results must not redraw the entire order table.
+      if (current?.outcome === job.status && current.message === message) return previous;
+      return { ...previous, [orderNumber]: { outcome: job.status, message } };
     });
+    if (showNotice) {
+      const noticeMessage = `الطلب ${job.order_number}: ${message}. لا تكرر الإرسال.`;
+      setRetryNotice((previous) => previous?.type === "pending" && previous.message === noticeMessage
+        ? previous : { type: "pending", message: noticeMessage });
+    }
   };
   const [diagnosisOrder, setDiagnosisOrder] = useState(null);
   const [paymentCheckRunning, setPaymentCheckRunning] = useState(false);
   const [paymentCheckOrder, setPaymentCheckOrder] = useState(null);
   const [paymentCheckResults, setPaymentCheckResults] = useState([]);
   const unifiedReadModel = data?.source_authority === "unified_orders";
-  const verifiedReadyOrderNumbers = Array.from(new Set(
-    paymentCheckResults
-      .filter((result) => result.outcome === "ready")
-      .map((result) => String(result.order_number || "").trim())
-      .filter((value) => /^\d+$/.test(value)),
-  ));
-
   const allUnsentOrderNumbers = Array.from(new Set(
     (data?.orders || [])
-      .filter((order) => order.status === "لم يُرسل")
+      .filter((order) => order.status === "لم يُرسل"
+        && !["sent", "review"].includes(orderSendResults[String(order.order_number)]?.outcome))
       .map((order) => String(order.order_number || "").trim())
       .filter((value) => /^\d+$/.test(value)),
   ));
-  const recoveryOrderNumbers = unifiedReadModel
-    ? verifiedReadyOrderNumbers
-    : allUnsentOrderNumbers;
-  const bulkRecoveryAvailable = Boolean(data)
-    && (!unifiedReadModel || verifiedReadyOrderNumbers.length > 0);
+  const recoveryOrderNumbers = allUnsentOrderNumbers.slice(0, QOYOD_MANUAL_BATCH_LIMIT);
+  const recoverySelectionCount = recoveryRunning ? recoveryTotal : recoveryOrderNumbers.length;
+  const bulkRecoveryAvailable = Boolean(data);
   const paymentCheckOrderNumbers = Array.from(new Set(
     (data?.orders || [])
       .filter((order) => ["لم يُرسل", "فشل"].includes(order.status))
@@ -173,47 +179,50 @@ export default function QoyodUnsentOrders() {
     setRecoveryRunning(true);
     setRecoveryResults([]);
     setRecoveryTotal(recoveryOrderNumbers.length);
+    setRetryNotice(null);
     setError(null);
-    const next = [];
     try {
-      for (const orderNumber of recoveryOrderNumbers) {
-        if (controller.signal.aborted) break;
-        try {
-          const sent = await sendQoyodManualJob(orderNumber, {
-            signal: controller.signal, onProgress: showSendProgress,
+      await sendQoyodManualBatch(recoveryOrderNumbers, {
+        signal: controller.signal,
+        retryOrderNumbers: (data?.orders || []).filter((order) => order.retry_allowed === true)
+          .map((order) => order.order_number),
+        onProgress: (job) => showSendProgress(job, false),
+        onResult: (result, completed) => {
+          const outcomes = completed.map(({ orderNumber, status, value: sent, reason }) => {
+            if (status === "fulfilled") return { orderNumber,
+              outcome: "sent",
+              invoiceId: sent?.invoice_id || sent?.invoice_number || "—",
+              paymentId: sent?.payment_id || null,
+              invoiceOnly: !!sent?.invoice_only,
+              alreadySent: sent?.retry_outcome === "already_sent",
+            };
+            const detail = reason?.response?.data?.detail;
+            return { orderNumber, outcome: "review", code: detail?.code || "unexpected_error",
+              message: typeof detail === "string" ? detail : detail?.message || "تعذر تأكيد نتيجة الإرسال",
+            };
           });
-          if (controller.signal.aborted) break;
-          next.push({
-            orderNumber,
-            outcome: "sent",
-            invoiceId: sent?.invoice_id || sent?.invoice_number || "—",
-            paymentId: sent?.payment_id || null,
-            invoiceOnly: !!sent?.invoice_only,
-          });
-        } catch (requestError) {
-          if (controller.signal.aborted) break;
-          const detail = requestError?.response?.data?.detail || {};
-          const code = detail?.code || "unexpected_error";
-          next.push({
-            orderNumber,
-            outcome: "review",
-            code,
-            message: detail?.message || String(detail || "فشل الإرسال"),
-          });
-        }
-        setRecoveryResults([...next]);
-      }
+          setRecoveryResults(outcomes);
+          const outcome = outcomes.find((item) => item.orderNumber === result.orderNumber);
+          setOrderSendResults((previous) => ({ ...previous,
+            [result.orderNumber]: { ...outcome, message: outcome.outcome === "sent"
+              ? (outcome.alreadySent ? "الفاتورة موجودة مسبقًا في قيود" : "تم الإرسال إلى قيود")
+              : outcome.message },
+          }));
+        },
+      });
 
       if (controller.signal.aborted) return;
       setRetryNotice(null);
       await fetchAll(days, sallaStatus, search, { force: true });
+    } catch (requestError) {
+      if (!controller.signal.aborted) setError(requestError?.message || "تعذرت متابعة الدفعة");
     } finally {
       finishSendFlow(controller);
       if (!controller.signal.aborted) setRecoveryRunning(false);
     }
   };
 
-  const retryFailedOrder = async (orderNumber) => {
+  const sendOrder = async (orderNumber, { retry = false } = {}) => {
     const controller = beginSendFlow();
     if (!controller) return;
     setRetryingOrder(orderNumber);
@@ -221,10 +230,14 @@ export default function QoyodUnsentOrders() {
     setError(null);
     try {
       const result = await sendQoyodManualJob(orderNumber, {
-        retry: true, signal: controller.signal, onProgress: showSendProgress,
+        retry, signal: controller.signal, onProgress: showSendProgress,
       });
       if (controller.signal.aborted) return;
       const alreadySent = result?.retry_outcome === "already_sent";
+      setOrderSendResults((previous) => ({ ...previous, [String(orderNumber)]: {
+        outcome: "sent", message: alreadySent ? "الفاتورة موجودة مسبقًا في قيود" : "تم الإرسال إلى قيود",
+        invoiceId: result?.invoice_id || result?.invoice_number,
+      } }));
       setRetryNotice({
         type: "success",
         message: alreadySent
@@ -239,6 +252,9 @@ export default function QoyodUnsentOrders() {
       const message = typeof detail === "string"
         ? detail
         : (detail?.message || "تعذر إعادة فحص الطلب وإرساله");
+      setOrderSendResults((previous) => ({ ...previous,
+        [String(orderNumber)]: { outcome: "review", message, code: detail?.code },
+      }));
       setRetryNotice({ type: "error", message });
     } finally {
       finishSendFlow(controller);
@@ -318,8 +334,8 @@ export default function QoyodUnsentOrders() {
               </span>
             )}
             {unifiedReadModel && (
-              <span className="mr-2 text-xs text-amber-700" data-testid="unsent-unified-readonly-note">
-                (المصدر: الطلبات الموحدة؛ إعادة الإرسال الجماعي متوقفة حتى موافقة منفصلة)
+              <span className="mr-2 text-xs text-slate-500" data-testid="unsent-unified-source-note">
+                (المصدر: الطلبات الموحدة؛ يُفحص كل طلب من سلة عند الإرسال)
               </span>
             )}
             {(data?.excluded_not_eligible ?? 0) > 0 && (
@@ -380,10 +396,8 @@ export default function QoyodUnsentOrders() {
               data-testid="qoyod-recovery-toggle"
               className="rounded-lg border border-rose-300 bg-rose-50 px-4 py-2 text-sm font-bold text-rose-800 hover:bg-rose-100">
               {recoveryOpen
-                ? "إغلاق إعادة الإرسال"
-                : unifiedReadModel
-                  ? `إرسال المفحوصة الجاهزة (${recoveryOrderNumbers.length})`
-                  : `إعادة إرسال الكل (${recoveryOrderNumbers.length})`}
+                ? "إغلاق الإرسال الجماعي"
+                : `إرسال جماعي (${recoverySelectionCount})`}
             </button>
           )}
         </div>
@@ -398,29 +412,26 @@ export default function QoyodUnsentOrders() {
              data-testid="qoyod-recovery-panel">
           <div>
             <h2 className="font-bold text-rose-950">
-              {unifiedReadModel
-                ? "إرسال الطلبات المفحوصة والجاهزة فقط"
-                : "إعادة إرسال جميع الطلبات غير المرسلة"}
+              إرسال الطلبات غير المرسلة — حتى 100 طلب في المحاولة
             </h2>
             <p className="mt-1 text-xs leading-5 text-rose-800">
-              {unifiedReadModel
-                ? `اختير فقط ${recoveryOrderNumbers.length} طلبًا أعاد فحص الدفع ووسمها جاهزة في هذه الجلسة. `
-                : `سيأخذ النظام تلقائيًا كل الطلبات المصنفة «لم يُرسل» ضمن الفترة والفلاتر الحالية، وعددها ${recoveryOrderNumbers.length}. `}
+              {`اختير ${recoverySelectionCount} طلبًا من الطلبات المصنفة «لم يُرسل» ضمن الفترة والفلاتر الحالية. `}
               لا تحتاج
               إلى إدخال أرقام الطلبات. يعيد الخادم قراءة كل طلب من سلة، ولا يقبل
               إلا «تم التنفيذ» أو «جاري التوصيل» أو «تم التوصيل»، ثم يطبق حواجز
-              التكرار والمبلغ. «تم التجهيز» يُقبل فقط عندما تصنّفه سلة بالحالة
-              الموثوقة completed. إذا تعذر طلب واحد يبقى «لم يُرسل» ويواصل
-              النظام بقية الطلبات.
+              التكرار والمبلغ والدفع وبيانات العميل. «تم التجهيز» يُقبل فقط عندما تصنّفه سلة بالحالة
+              الموثوقة completed. إذا تعذر تأكيد نتيجة طلب، تظهر تفاصيله للمراجعة
+              ويواصل النظام بقية الطلبات.
+              {" "}الطلبات التي تحتاج مراجعة تُتابَع من زر الطلب، ولا تدخل الدفعة التالية تلقائيًا.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="min-w-72 flex-1 rounded-lg border border-rose-200 bg-white px-3 py-2 text-sm text-rose-900"
                  data-testid="qoyod-recovery-selection-count">
-              سيتم إرسال {recoveryOrderNumbers.length} طلب إلى قيود تلقائيًا
-              {recoveryOrderNumbers.length === 1000 && (
+              سيتم إرسال {recoverySelectionCount} طلب إلى قيود تلقائيًا
+              {allUnsentOrderNumbers.length > QOYOD_MANUAL_BATCH_LIMIT && (
                 <span className="mr-1 text-xs text-rose-700">
-                  (الحد الظاهر 1000؛ حدّث الصفحة بعد الانتهاء لإرسال أي دفعة متبقية)
+                  (الحد 100 في المحاولة؛ بعد الانتهاء يمكنك إرسال الدفعة التالية)
                 </span>
               )}
             </div>
@@ -457,7 +468,7 @@ export default function QoyodUnsentOrders() {
                     <tr key={result.orderNumber} className="border-t border-rose-100">
                       <td className="px-2 py-2 font-mono">{result.orderNumber}</td>
                       <td className="px-2 py-2">
-                        {result.outcome === "sent" ? "تم الإرسال"
+                        {result.outcome === "sent" ? (result.alreadySent ? "موجودة مسبقًا" : "تم الإرسال")
                           : "نتيجة الإرسال تحتاج مراجعة"}
                       </td>
                       <td className="px-2 py-2 font-mono">{result.invoiceId || "—"}</td>
@@ -629,11 +640,23 @@ export default function QoyodUnsentOrders() {
                       {paymentCheckOrder === o.order_number
                         ? "جاري الفحص فقط…" : "فحص الدفع فقط"}
                     </button>
-                    {o.retry_allowed === true ? (
+                    {o.status === "لم يُرسل" && o.order_number ? (
+                      <button type="button"
+                        onClick={() => sendOrder(o.order_number, { retry: o.retry_allowed === true })}
+                        disabled={sendFlowBusy || orderSendResults[String(o.order_number)]?.outcome === "sent"}
+                        data-testid={`qoyod-manual-send-${o.order_number}`}
+                        className="mb-1 rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-800 disabled:opacity-50">
+                        {orderSendResults[String(o.order_number)]?.outcome === "sent"
+                          ? "تم الإرسال"
+                          : retryingOrder === o.order_number ? "جاري الفحص والإرسال…"
+                            : orderSendResults[String(o.order_number)]?.code?.startsWith("manual_job_")
+                              ? "متابعة نتيجة الإرسال" : "إرسال إلى قيود"}
+                      </button>
+                    ) : o.status === "فشل" && o.retry_allowed === true ? (
                       retryConfirmOrder === o.order_number ? (
                         <div className="flex items-center gap-2">
                           <button
-                            onClick={() => retryFailedOrder(o.order_number)}
+                            onClick={() => sendOrder(o.order_number, { retry: true })}
                             disabled={sendFlowBusy}
                             data-testid={`qoyod-failed-retry-confirm-${o.order_number}`}
                             className="rounded-lg bg-red-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-800 disabled:opacity-50">
@@ -662,6 +685,17 @@ export default function QoyodUnsentOrders() {
                         </button>
                       )
                     ) : "—"}
+                    {orderSendResults[String(o.order_number)] && (
+                      <div role="status"
+                        data-testid={`qoyod-send-result-${o.order_number}`}
+                        className={`mt-1 text-xs ${orderSendResults[String(o.order_number)].outcome === "sent"
+                          ? "text-emerald-800" : orderSendResults[String(o.order_number)].outcome === "review"
+                            ? "text-amber-800" : "text-sky-800"}`}>
+                        {orderSendResults[String(o.order_number)].message}
+                        {orderSendResults[String(o.order_number)].invoiceId
+                          && ` — فاتورة ${orderSendResults[String(o.order_number)].invoiceId}`}
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}

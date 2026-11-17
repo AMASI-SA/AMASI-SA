@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import ast
 import asyncio
+from contextlib import asynccontextmanager
 from contextvars import ContextVar
 import os
 from typing import Any, Optional
@@ -33,6 +34,7 @@ MEZAN_MANUAL_VERSION = "plan-b-manual-1.0"
 # Set only by the durable manual-job executor. Existing sender callers retain
 # their exact behavior. A job must still own its lease before every POST.
 _JOB_WRITE_GUARD = ContextVar("qoyod_manual_job_write_guard", default=None)
+_JOB_HTTP_SCOPE = ContextVar("qoyod_manual_http_scope", default=None)
 
 
 def begin_job_write_guard(guard):
@@ -41,6 +43,60 @@ def begin_job_write_guard(guard):
 
 def end_job_write_guard(token):
     _JOB_WRITE_GUARD.reset(token)
+
+
+class _ManualHttpScope:
+    """Connection pools belong to one execution, never to later jobs."""
+
+    def __init__(self):
+        self.clients = {}
+        self.closed = False
+
+    def client_for(self, *, base_url, api_key, timeout):
+        if self.closed:
+            raise RuntimeError("manual_qoyod_http_scope_closed")
+        # Keep credentials, origins and transport policies isolated even if
+        # an execution constructs several ManualQoyodClient instances.
+        key = (base_url, api_key, timeout)
+        if key not in self.clients:
+            self.clients[key] = (
+                httpx.AsyncClient(timeout=timeout, follow_redirects=True),
+                asyncio.Lock(),
+            )
+        return self.clients[key]
+
+    async def aclose(self):
+        self.closed = True
+        results = await asyncio.gather(
+            *(http.aclose() for http, _lock in self.clients.values()),
+            return_exceptions=True,
+        )
+        for result in results:
+            if isinstance(result, BaseException):
+                raise result
+
+
+@asynccontextmanager
+async def manual_qoyod_http_scope():
+    """Reuse HTTP connections inside one job without sharing lookup caches.
+
+    Pools are lazy and isolated by provider identity. Nested executions get
+    their own pools. All callers outside this scope retain per-request clients.
+    """
+    scope = _ManualHttpScope()
+    token = _JOB_HTTP_SCOPE.set(scope)
+    try:
+        yield
+    finally:
+        _JOB_HTTP_SCOPE.reset(token)
+        scope.closed = True
+        cleanup = asyncio.create_task(scope.aclose())
+        try:
+            await asyncio.shield(cleanup)
+        except asyncio.CancelledError:
+            # A cancellation while closing must not abandon an open pool.
+            await cleanup
+            raise
 
 # Qoyod's supported invoice-list endpoint is the fail-closed fallback when
 # the optional exact-reference filter responds with 404.  The same complete
@@ -152,20 +208,48 @@ class ManualQoyodClient:
     ) -> Any:
         url = f"{self._base_url}{path}"
         guard = _JOB_WRITE_GUARD.get()
-        if guard is not None and method.upper() not in {"GET", "HEAD", "OPTIONS"}:
+        scope = _JOB_HTTP_SCOPE.get()
+        guarded_write = guard is not None and method.upper() not in {
+            "GET", "HEAD", "OPTIONS",
+        }
+        if scope is None and guarded_write:
             await guard()
+
+        async def request(http):
+            return await http.request(
+                method,
+                url,
+                headers=self._headers(idem=idem),
+                json=json_body,
+                params=params,
+            )
+
         try:
-            async with httpx.AsyncClient(
-                timeout=self._timeout,
-                follow_redirects=True,
-            ) as http:
-                resp = await http.request(
-                    method,
-                    url,
-                    headers=self._headers(idem=idem),
-                    json=json_body,
-                    params=params,
+            if scope is None:
+                async with httpx.AsyncClient(
+                    timeout=self._timeout,
+                    follow_redirects=True,
+                ) as http:
+                    resp = await request(http)
+            else:
+                http, lock = scope.client_for(
+                    base_url=self._base_url, api_key=self._api_key,
+                    timeout=self._timeout,
                 )
+                async with lock:
+                    if scope.closed:
+                        raise RuntimeError("manual_qoyod_http_scope_closed")
+                    # Check current authority after any wait for the pool.
+                    if guarded_write:
+                        await guard()
+                    # Per-request clients never carried response cookies into
+                    # a later API request. Retain that isolation while reusing
+                    # connections; headers/idempotency are supplied each time.
+                    http.cookies.clear()
+                    try:
+                        resp = await request(http)
+                    finally:
+                        http.cookies.clear()
         except httpx.RequestError as exc:
             raise ManualQoyodError(
                 status_code=0,
