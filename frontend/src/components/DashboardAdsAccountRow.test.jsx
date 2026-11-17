@@ -58,7 +58,8 @@ test.each([0, 1, 2, 3, 4, 5, 6])("hovering table cell %s opens the two Riyadh pe
     expect(popup.textContent).toContain("USD 26.67");
     expect(popup.textContent).toContain("إجمالي التكاليف");
     expect(popup.textContent).toContain("صافي الأرباح");
-    expect(popup.textContent).not.toMatch(/تكلفة المنتجات|تكلفة الشحن|عمولات طرق الدفع|التشغيلية|التشغيل|عمولة البنك/);
+    expect(popup.textContent).not.toMatch(/تكلفة المنتجات|تكلفة الشحن|عمولات طرق الدفع/);
+    expect(popup.textContent).toContain("الأرباح قبل المصروفات التشغيلية");
     expect(row.getAttribute("aria-expanded")).toBe("true");
 });
 
@@ -72,6 +73,34 @@ test("both periods and the daily summary each show canonical CPA, ROAS and total
     const summary = details().querySelector('[data-testid="dashboard-ads-daily-summary"]');
     expect(summary.textContent.match(/تكلفة الطلب/g)).toHaveLength(1);
     expect(summary.textContent.match(/العائد/g)).toHaveLength(1);
+});
+
+test.each([
+    [2.3, 2.3, "2.30 ر.س"],
+    [0, 0, "0.00 ر.س"],
+    [null, null, "—"],
+    [undefined, undefined, "—"],
+    [null, 1.25, "1.25 ر.سالمتاح"],
+    [-1, null, "—"],
+])("bank commissions remain explicit in daily and period details (%s, known %s)", (bankFees, knownBankFees, expected) => {
+    const stats = sampleStats();
+    Object.assign(stats.profit, { bankFees, knownBankFees });
+    enter(renderRow(stats));
+    const fees = financialRows("منها عمولات البنك");
+    expect(fees).toHaveLength(3);
+    fees.forEach((row) => expect(row.querySelector("dd").textContent).toBe(expected));
+    expect(details().textContent).toContain("عمولات البنك المعروضة ضمن إجمالي التكاليف ومخصومة مرة واحدة");
+    expect(details().textContent).toContain("الأرباح قبل المصروفات التشغيلية");
+});
+
+test("displaying a bank commission does not deduct it again from canonical costs or profit", () => {
+    const stats = sampleStats();
+    Object.assign(stats.profit, { bankFees: 2.3, knownBankFees: 2.3, totalCost: 202.3, netProfit: 197.7 });
+    const before = JSON.parse(JSON.stringify(stats));
+    enter(renderRow(stats));
+    financialRows("إجمالي التكاليف").forEach((row) => expect(row.querySelector("dd").textContent).toBe("202.30 ر.س"));
+    financialRows("صافي الأرباح").forEach((row) => expect(row.querySelector("dd").textContent).toBe("197.70 ر.ستقديري"));
+    expect(stats).toEqual(before);
 });
 
 test("the afternoon remains an empty card before noon, even with a malformed zero payload", () => {

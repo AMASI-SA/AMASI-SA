@@ -1,5 +1,6 @@
 """Account outcomes reuse the executive cohort and require unique evidence."""
 from copy import deepcopy
+from datetime import datetime, timezone
 
 import mongomock
 import pytest
@@ -125,6 +126,148 @@ async def test_unassigned_snapchat_orders_never_repeat_provider_totals_on_accoun
 
 
 @pytest.mark.asyncio
+async def test_unassigned_row_reconciles_four_orders_without_reallocating_them():
+    db = Db([campaign("usd", "c-usd"), campaign("sar", "c-sar")])
+    orders = [order("c-usd", 100), order("c-sar", 200),
+              order(None, 50, source_native="store"), order(None, 70, source_native="meta")]
+    orders += [order(None, value) for value in (400, 500, 326, 400.01)]
+    before = deepcopy(orders)
+    snapshot = await build(db, orders)
+    unassigned = snapshot["unassigned_result"]
+    assert unassigned["provider"] == "snapchat"
+    assert unassigned["cohort_basis"] == "snapchat_unassigned_orders"
+    assert unassigned["ad_spend_allocation_complete"] is False
+    assert unassigned["attribution_complete"] is False
+    assert "account_id" not in unassigned
+    assert unassigned["salla_orders"] is unassigned["salla_sales_sar"] is None
+    assert unassigned["known_salla_orders"] == snapshot["coverage"]["unassigned_orders"] == 4
+    assert unassigned["known_salla_sales_sar"] == 1626.01
+    assert unassigned["sales_currency_conversion_complete"] is True
+    represented = snapshot["accounts"] + list(snapshot["provider_results"].values()) + [snapshot["direct_result"], unassigned]
+    assert sum(row["known_salla_orders"] for row in represented) == snapshot["daily_total"]["salla_orders"] == 8
+    assert round(sum(row["known_salla_sales_sar"] for row in represented), 2) == snapshot["daily_total"]["salla_sales_sar"] == 2046.01
+    assert [row["known_salla_orders"] for row in snapshot["accounts"]] == [1, 1]
+    assert orders == before
+    assert len(db.catalog.reads) == 1
+
+
+@pytest.mark.asyncio
+async def test_unassigned_row_excludes_known_outside_accounts_and_direct_orders():
+    db = Db([campaign("usd", "c-usd"), campaign("outside", "c-outside")])
+    snapshot = await build(db, [order("c-usd", 100), order(None, 300), order("c-outside", 400),
+                                order(None, 50, source_native="store"), order(None, 25, source_native="google")])
+    unassigned = snapshot["unassigned_result"]
+    assert (unassigned["known_salla_orders"], unassigned["known_salla_sales_sar"]) == (1, 300)
+    assert snapshot["coverage"]["outside_account_scope_orders"] == 1
+    assert snapshot["coverage"]["unrepresented_orders"] == 2
+    assert snapshot["direct_result"]["salla_sales_sar"] == 50
+    assert snapshot["provider_results"]["google"]["salla_sales_sar"] == 25
+    assert (snapshot["daily_total"]["salla_orders"], snapshot["daily_total"]["salla_sales_sar"]) == (5, 875)
+
+
+@pytest.mark.asyncio
+async def test_unassigned_row_keeps_unverified_currency_out_of_known_sar_sales():
+    snapshot = await build(Db([campaign("usd", "c-usd")]), [
+        order(None, 100), order(None, 28.84, currency="KWD"),
+        order(None, 302.20, currency="QAR", total_amount_sar=311.01,
+              accounting_currency="SAR", currency_conversion_status="verified"),
+    ])
+    unassigned = snapshot["unassigned_result"]
+    assert unassigned["known_salla_orders"] == 3
+    assert unassigned["known_salla_sales_sar"] == 411.01
+    assert unassigned["sales_currency_conversion_complete"] is False
+    assert unassigned["salla_sales_sar"] is None
+
+
+@pytest.mark.asyncio
+async def test_unassigned_row_reuses_collected_costs_without_claiming_allocated_spend():
+    orders = [order(None, value, payment_method="mada", shipping_company="carrier",
+                    products=[{"quantity": 1}]) for value in (100, 200)]
+    collector = DashboardAdsCostCollector()
+    collector.capture_settings({
+        "payment_methods": [{"name": "mada", "commission_percent": 1, "fixed_fee": 1, "vat_percent": 15}],
+        "shipping_companies": [{"name": "carrier", "cost_per_order": 10, "vat_percent": 0}],
+    })
+    for item, cost in zip(orders, (10, 20)):
+        collector.begin_order(item)
+        collector.observe_line(item, item["products"][0], {"base_complete": True, "quantity": 1})
+        collector.finish_order(item, cost)
+    before = deepcopy(collector.product_orders)
+    db = Db([campaign("usd", "c-usd")])
+    snapshot = await results.build_dashboard_ads_account_results(
+        db, OWNER, orders, snapchat_account_ids=["usd", "sar"], date_from=DAY, date_to=DAY,
+        cost_collector=collector,
+    )
+    summary = snapshot["unassigned_result"]["hover_summary"]
+    assert summary["known_pieces"] == 2
+    assert summary["known_product_cost_sar"] == 30
+    assert summary["known_shipping_cost_sar"] == 20
+    assert summary["known_payment_fees_sar"] == 5.75
+    assert summary["complete"] is False
+    assert summary["total_cost_sar"] is None
+    assert "account_attribution_incomplete" in summary["reason_codes"]
+    assert snapshot["daily_total"]["hover_summary"]["total_cost_sar"] == 55.75
+    assert not any("spend" in key for key in snapshot["unassigned_result"] if key != "ad_spend_allocation_complete")
+    assert collector.product_orders == before
+    assert len(db.catalog.reads) == 1
+
+
+@pytest.mark.asyncio
+async def test_unassigned_half_days_use_riyadh_source_times_without_duplication():
+    snapshot = await results.build_dashboard_ads_account_results(
+        Db([campaign("usd", "c-usd")]), OWNER,
+        [order(None, 400, order_date_raw=f"{DAY}T08:59:59+00:00"),
+         order(None, 500, order_date_raw=f"{DAY}T09:00:00+00:00")],
+        snapchat_account_ids=["usd", "sar"], date_from=DAY, date_to=DAY,
+        now=datetime(2026, 11, 16, 12, tzinfo=timezone.utc),
+    )
+    assert snapshot["unassigned_result"]["known_salla_orders"] == 2
+    assert snapshot["unassigned_result"]["known_salla_sales_sar"] == 900
+    segments = snapshot["segments"]
+    assert [segment["coverage"]["unassigned_orders"] for segment in segments] == [1, 1]
+    assert [segment["unassigned_result"]["known_salla_orders"] for segment in segments] == [1, 1]
+    assert [segment["unassigned_result"]["known_salla_sales_sar"] for segment in segments] == [400, 500]
+    assert all(segment["unassigned_result"]["time_assignment_complete"] for segment in segments)
+    assert all(segment["unassigned_result"]["attribution_complete"] is False for segment in segments)
+
+
+@pytest.mark.asyncio
+async def test_unknown_order_time_stays_in_day_but_cannot_complete_either_half_day():
+    snapshot = await results.build_dashboard_ads_account_results(
+        Db([campaign("usd", "c-usd")]), OWNER,
+        [order(None, 100, order_date_raw=f"{DAY}T10:00:00+03:00"), order(None, 200, order_date=DAY)],
+        snapchat_account_ids=["usd", "sar"], date_from=DAY, date_to=DAY,
+        now=datetime(2026, 11, 16, 12, tzinfo=timezone.utc),
+    )
+    assert snapshot["unassigned_result"]["known_salla_orders"] == 2
+    assert snapshot["unassigned_result"]["known_salla_sales_sar"] == 300
+    assert snapshot["unassigned_result"]["time_assignment_complete"] is True
+    assert [segment["unassigned_result"]["known_salla_orders"] for segment in snapshot["segments"]] == [1, 0]
+    for segment in snapshot["segments"]:
+        unassigned = segment["unassigned_result"]
+        assert unassigned["time_assignment_complete"] is False
+        assert "order_time_unverified" in unassigned["hover_summary"]["reason_codes"]
+        assert unassigned["salla_orders"] is unassigned["salla_sales_sar"] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("future", [False, True])
+async def test_unassigned_future_or_multiday_segments_do_not_claim_observed_zero(future):
+    snapshot = await results.build_dashboard_ads_account_results(
+        Db([campaign("usd", "c-usd")]), OWNER, [order(None, 100, order_date_raw=f"{DAY}T10:00:00+03:00")],
+        snapchat_account_ids=["usd", "sar"], date_from=DAY, date_to=DAY if future else "2026-11-16",
+        now=datetime(2026, 11, 15, 8, tzinfo=timezone.utc),
+    )
+    segments = snapshot["segments"][1:] if future else snapshot["segments"]
+    assert all(segment["status"] == ("not_started" if future else "unavailable") for segment in segments)
+    for segment in segments:
+        unassigned = segment["unassigned_result"]
+        assert unassigned["known_salla_orders"] == 0
+        assert unassigned["salla_orders"] is unassigned["salla_sales_sar"] is None
+        assert unassigned["hover_summary"]["complete"] is False
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("kind", ["name", "id", "conflicting_ids", "clickid"])
 async def test_ambiguous_or_click_only_evidence_stays_unassigned(kind):
     catalog = [campaign("usd", "c-usd", "Winter"), campaign("sar", "c-sar", "Winter")]
@@ -237,6 +380,8 @@ async def test_no_snapchat_orders_prove_zero_without_reading_the_catalog(orders)
     assert snapshot["coverage"]["catalog_complete"] is True
     assert all(row["salla_orders"] == 0 and row["salla_sales_sar"] == 0
                for row in snapshot["accounts"])
+    assert snapshot["unassigned_result"]["known_salla_orders"] == 0
+    assert snapshot["unassigned_result"]["known_salla_sales_sar"] == 0
 
 
 @pytest.mark.asyncio
@@ -250,6 +395,9 @@ async def test_unavailable_or_truncated_catalog_never_certifies_a_partial_match(
     assert snapshot["coverage"]["unassigned_orders"] == 1
     assert all(row["salla_orders"] is None and row["known_salla_orders"] == 0
                for row in snapshot["accounts"])
+    assert snapshot["unassigned_result"]["known_salla_orders"] == 1
+    assert snapshot["unassigned_result"]["known_salla_sales_sar"] == 100
+    assert snapshot["unassigned_result"]["attribution_complete"] is False
 
 
 @pytest.mark.asyncio
@@ -320,7 +468,8 @@ async def test_legacy_routes_do_not_capture_or_emit_account_results_or_pass_new_
 
 
 @pytest.mark.asyncio
-async def test_executive_snapshot_reuses_filtered_orders_and_its_existing_cache(card_app, monkeypatch):
+@pytest.mark.parametrize("matched", [False, True])
+async def test_executive_snapshot_reuses_filtered_orders_and_its_existing_cache(card_app, monkeypatch, matched):
     env = card_app
     original_ads = dashboard.build_mezan_v2_ads
 
@@ -331,7 +480,8 @@ async def test_executive_snapshot_reuses_filtered_orders_and_its_existing_cache(
         return result
 
     monkeypatch.setattr(dashboard, "build_mezan_v2_ads", ads)
-    await env.db[results.CAMPAIGN_COLLECTION].insert_one(campaign("usd", "c-usd", user_id="a"))
+    if matched:
+        await env.db[results.CAMPAIGN_COLLECTION].insert_one(campaign("usd", "c-usd", user_id="a"))
     await env.db.unified_orders.update_many({"user_id": "a"}, {"$set": {
         "source_native": "snapchat", "campaign_id": "c-usd",
     }})
@@ -339,9 +489,13 @@ async def test_executive_snapshot_reuses_filtered_orders_and_its_existing_cache(
     assert response.status_code == 200, response.text
     snapshot = response.json()["ads_v2"]["account_results"]
     assert snapshot["date_from"] == snapshot["date_to"] == PARAMS["from_date"]
-    assert rows_by_id(snapshot)["usd"]["salla_orders"] == 1
-    assert rows_by_id(snapshot)["usd"]["salla_sales_sar"] == 100
-    assert rows_by_id(snapshot)["sar"]["salla_orders"] == 0
+    assert rows_by_id(snapshot)["usd"]["salla_orders"] == (1 if matched else None)
+    assert rows_by_id(snapshot)["usd"]["salla_sales_sar"] == (100 if matched else None)
+    assert rows_by_id(snapshot)["sar"]["salla_orders"] == (0 if matched else None)
+    assert snapshot["unassigned_result"]["known_salla_orders"] == (0 if matched else 1)
+    assert snapshot["unassigned_result"]["known_salla_sales_sar"] == (0 if matched else 100)
+    assert snapshot["unassigned_result"]["hover_summary"]["known_product_cost_sar"] == (0 if matched else 10)
+    assert snapshot["daily_total"]["salla_orders"] == 1
     assert len(env.reads) == 1
     assert env.reads[0][1]["payment_methods"] == PARAMS["payment_methods"]
     assert env.reads[0][1]["shipping_companies"] == PARAMS["shipping_companies"]

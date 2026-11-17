@@ -42,7 +42,7 @@ function NetProfit({ profit = {} }) {
     </span>;
 }
 
-function metricEntries(stats = {}) {
+function metricEntries(stats = {}, includeBankFees = false) {
     const profit = stats?.profit || {};
     return [
         { key: "spend", label: "الصرف الإعلاني", value: <Spend profit={profit} /> },
@@ -50,6 +50,8 @@ function metricEntries(stats = {}) {
         { key: "orders", label: "الطلبات", value: <Value value={stats?.orders} available={stats?.knownOrders} integer /> },
         { key: "cpa", label: "متوسط تكلفة الطلب", unit: "ر.س", value: <Value value={profit.adSpendApplicable === false ? null : stats?.cpa} /> },
         { key: "costs", label: "إجمالي التكاليف", unit: "ر.س", value: <Value value={profit.totalCost} available={profit.knownTotalCost} /> },
+        ...(includeBankFees ? [{ key: "bankFees", label: "منها عمولات البنك", unit: "ر.س",
+            value: <Value value={profit.bankFees} available={profit.knownBankFees} /> }] : []),
         { key: "roas", label: "العائد الإعلاني", unit: "×", value: <Value value={profit.adSpendApplicable === false ? null : profit.roas} /> },
         { key: "net", label: "صافي الأرباح", unit: "ر.س", value: <NetProfit profit={profit} /> },
     ];
@@ -253,7 +255,7 @@ export default function DashboardAdsPeriodsOverview({ children, records = [], to
             <section data-testid="dashboard-ads-overview-total" className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50/50 p-3">
                 <h4 className="mb-2 mt-0 text-xs font-extrabold text-emerald-800">{singleDay ? "إجمالي اليوم" : "إجمالي الفترة"}</h4>
                 <dl className="m-0 grid grid-cols-2 gap-2 text-center sm:grid-cols-3">
-                    {metricEntries(total).map((entry) => <div key={entry.key} data-metric={entry.key}
+                    {metricEntries(total, true).map((entry) => <div key={entry.key} data-metric={entry.key}
                         className={entry.key === "net" ? "col-span-full border-t border-emerald-200 pt-2" : ""}>
                         <dt className="mb-1 text-[9px] text-slate-600">{entry.label}{entry.unit && ` (${entry.unit})`}</dt>
                         <dd className="m-0 text-[11px] font-bold">{entry.value}</dd>
@@ -261,6 +263,7 @@ export default function DashboardAdsPeriodsOverview({ children, records = [], to
                 </dl>
             </section>
             <p className="mb-0 mt-2 text-[9px] leading-4 text-slate-500">صافي الأرباح = المبيعات − الصرف الإعلاني − إجمالي التكاليف.</p>
+            <p className="mb-0 mt-1 text-[9px] leading-4 text-slate-500">عمولات البنك المعروضة ضمن إجمالي التكاليف ومخصومة مرة واحدة. الأرباح قبل المصروفات التشغيلية.</p>
         </div>, document.body)}
     </>;
 }

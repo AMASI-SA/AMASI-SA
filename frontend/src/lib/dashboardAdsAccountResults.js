@@ -495,6 +495,53 @@ function withDetails(stats, context, provider, id = null) {
     };
 }
 
+function unassignedRowStats(container) {
+    const row = container?.unassigned_result;
+    const orders = count(container?.coverage?.unassigned_orders);
+    if (!record(row) || row.provider !== "snapchat" || row.cohort_basis !== "snapchat_unassigned_orders"
+        || row.account_id != null || row.attribution_complete !== false || row.ad_spend_allocation_complete !== false
+        || orders === null || count(row.known_salla_orders) !== orders) return null;
+    const timed = row.time_assignment_complete === true;
+    const knownSales = amount(row.known_salla_sales_sar);
+    const stats = { orders: timed ? orders : null,
+        sales: timed && row.sales_currency_conversion_complete === true ? knownSales : null,
+        cpa: null, knownOrders: orders, knownSales,
+        partial: !timed || row.sales_currency_conversion_complete !== true || knownSales === null };
+    // This is a source-identified cohort, not another advertising account.
+    // Costs remain known subtotals; neither spend nor bank fees can be allocated.
+    const profit = withBankFees(profitMetrics(stats, row.hover_summary, unallocatedSpend(), false,
+        { attributed: false, timed }), null);
+    return { ...stats, accountUnassigned: true, adSpendApplicable: true, profit };
+}
+
+function withUnassignedDetails(context) {
+    if (!context.accountMode || !context.accountsReady) return null;
+    const stats = unassignedRowStats(context.result);
+    if (!stats || stats.knownOrders === 0) return null;
+    return { ...stats, segments: SEGMENT_IDS.map((id) => {
+        const unavailable = (reason, status = "unavailable", segment = null) =>
+            unavailableSegment(id, "SAR", reason, status, segment);
+        if (context.range.fromDate !== context.range.toDate) return unavailable("single_day_required");
+        const candidates = Array.isArray(context.result.segments)
+            ? context.result.segments.filter((segment) => segment?.id === id) : [];
+        const segment = candidates.length === 1 ? candidates[0] : null;
+        if (!segment || segment.source_only !== true || segment.timezone !== "Asia/Riyadh"
+            || !dashboardSpendPeriodMatches(segment, context.range)) return unavailable("segment_unavailable");
+        const window = segmentWindow(segment, context.range.fromDate, id);
+        if (!window) return unavailable("segment_boundary_unverified");
+        if (segment.status === "not_started" && window.cutoff === window.start) {
+            return unavailable("not_started", "not_started", segment);
+        }
+        if (!["active", "completed", "complete", "partial"].includes(segment.status)) {
+            return unavailable("segment_unavailable", "unavailable", segment);
+        }
+        const period = unassignedRowStats(segment);
+        return period ? { ...period, id, status: "partial", startAt: segment.start_at, endAt: segment.end_at,
+            cutoffAt: segment.cutoff_at, reasonCodes: period.profit.reasonCodes }
+            : unavailable("unassigned_cohort_unverified", "unavailable", segment);
+    }) };
+}
+
 function aggregateProfit(stats, entries, basisMatches) {
     const total = (field, integer = false, complete = true) => sum(entries.map((entry) => entry[field]), { integer, complete });
     const paid = entries.filter((entry) => entry.adSpendApplicable !== false);
@@ -694,7 +741,7 @@ export function buildDashboardAdsTableMetrics({
                 range.fromDate !== range.toDate ? "single_day_required" : "executive_period_pending", "unavailable", null, adSpendApplicable)) });
         accounts.forEach((_, id) => accounts.set(id, pendingStats(currencyCode(displayed.get(id)?.currency) || "SAR")));
         DASHBOARD_ADS_PROVIDERS.forEach((provider) => { providers[provider] = pendingStats(); });
-        return { accounts, providers, direct: pendingStats("SAR", false), total: pendingStats(),
+        return { accounts, providers, direct: pendingStats("SAR", false), unassigned: null, total: pendingStats(),
             unassignedOrders: null, unrepresentedOrders: null, pending: true };
     }
 
@@ -751,6 +798,9 @@ export function buildDashboardAdsTableMetrics({
         accounts,
         providers,
         direct,
+        // The verified all-order total already includes this cohort. Keep it
+        // out of the account/spend aggregation to avoid counting it twice.
+        unassigned: withUnassignedDetails(context),
         total: withTotalDetails(totalMetrics(rows, spends, basisMatches), rows, context),
         unassignedOrders,
         unrepresentedOrders,
