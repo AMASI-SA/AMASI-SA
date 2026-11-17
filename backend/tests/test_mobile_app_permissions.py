@@ -79,6 +79,8 @@ def test_employee_may_have_mobile_pages_with_zero_mezan_permissions():
         "configured": True,
         "enabled": True,
         "owner_override": False,
+        "owner_baseline": False,
+        "manager": False,
         "permissions": ["app.page.orders"],
     }
     assert effective_mobile_app_permissions(access) == ["app.page.orders"]

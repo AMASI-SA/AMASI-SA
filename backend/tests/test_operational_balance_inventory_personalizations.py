@@ -1,4 +1,6 @@
 """Name allocations are immutable purchase annotations, never additional stock/debt."""
+# Specialized inventory routes are owner-only; preserve the money and stock assertions.
+from functools import partial
 import asyncio
 from copy import deepcopy
 import pytest
@@ -12,6 +14,9 @@ from operational_balance_inventory import save_purchase, inventory_view
 from operational_supplier_adjustments import save_adjustment
 from operational_balance_store import read
 from operational_balance_service import report
+
+command = partial(command, actor="owner")
+adjustment = partial(adjustment, actor="owner")
 
 
 async def name_option(db):
@@ -38,7 +43,7 @@ def test_exact_user_example_concurrent_retry_readback_money_and_stock_parity():
     async def scenario(db):
         await seed_variants(db); await grant(db,[WRITE,READ])
         original=await db.mezan_products_v2.find_one({})
-        async with client(db) as c:
+        async with client(db, 'owner') as c:
             base='/api/operational-balances'
             results=await asyncio.gather(*[c.post(base+'/inventory-purchases',json=personalized()) for _ in range(4)])
             assert all(r.status_code==200 for r in results),[r.text for r in results]
@@ -79,10 +84,10 @@ def test_invalid_allocations_reject_atomically_at_service_and_http(allocation):
         await seed_variants(db); await grant(db,[WRITE])
         p=personalized();p['lines'][0]['personalizations']=allocation
         before=await read(db,'owner')
-        with pytest.raises(HTTPException): await save_purchase(db,'owner','staff',p,clock=NOW)
+        with pytest.raises(HTTPException): await save_purchase(db,'owner','owner',p,clock=NOW)
         assert await read(db,'owner')==before
         p['request_id']='http-validation-separate'
-        async with client(db) as c:
+        async with client(db, 'owner') as c:
             r=await c.post('/api/operational-balances/inventory-purchases',json=p)
             assert r.status_code==422,r.text
         assert await read(db,'owner')==before
@@ -94,10 +99,10 @@ def test_component_rejects_names_and_names_trim_on_product():
         await seed(db)
         p=command();p['lines'][1]['personalizations']=[{'name':'عبير','quantity':1}]
         before=await read(db,'owner')
-        with pytest.raises(HTTPException):await save_purchase(db,'owner','staff',p,clock=NOW)
+        with pytest.raises(HTTPException):await save_purchase(db,'owner','owner',p,clock=NOW)
         assert await read(db,'owner')==before
         p=command(request_id='product-trim-new');p['lines'][0]['personalizations']=[{'name':' عبير ','quantity':1}]
-        invoice=await save_purchase(db,'owner','staff',p,clock=NOW)
+        invoice=await save_purchase(db,'owner','owner',p,clock=NOW)
         assert invoice['lines'][0]['personalizations']==[{'name':'عبير','quantity':1}]
     run(scenario)
 
@@ -105,9 +110,9 @@ def test_component_rejects_names_and_names_trim_on_product():
 def test_return_keeps_original_distribution_without_guessing_returned_names():
     async def scenario(db):
         await seed_variants(db)
-        saved=await save_purchase(db,'owner','staff',personalized(),clock=NOW)
+        saved=await save_purchase(db,'owner','owner',personalized(),clock=NOW)
         p=adjustment(saved);p['lines']=[{'kind':'product','item_id':'product','variant_id':'gold','quantity':2}]
-        await save_adjustment(db,'owner','staff',p,clock=NOW)
+        await save_adjustment(db,'owner','owner',p,clock=NOW)
         row=inventory_view(await read(db,'owner'))['items'][0]['lines'][0]
         assert row['quantity']==10 and row['remaining_quantity']==8
         assert row['personalizations']==[{'name':'عبير','quantity':4}] and row['unallocated_quantity']==6
@@ -117,10 +122,10 @@ def test_return_keeps_original_distribution_without_guessing_returned_names():
 def test_omitted_and_empty_allocations_keep_original_fingerprint_and_legacy_readback():
     async def scenario(db):
         await seed(db);await grant(db,[WRITE])
-        old=command(); saved=await save_purchase(db,'owner','staff',old,clock=NOW)
+        old=command(); saved=await save_purchase(db,'owner','owner',old,clock=NOW)
         empty=deepcopy(old)
         for line in empty['lines']:line['personalizations']=[]
-        async with client(db) as c:
+        async with client(db, 'owner') as c:
             for payload in [old,empty]:
                 response=await c.post('/api/operational-balances/inventory-purchases',json=payload)
                 assert response.status_code==200,response.text

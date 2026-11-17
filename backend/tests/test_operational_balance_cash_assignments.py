@@ -6,7 +6,8 @@ from operational_balance_service import report
 from operational_balance_store import read
 from test_operational_balance_integration import run, started
 from test_operational_balance_app_permissions import client, grant, WRITE
-from test_operational_balance_assigned_banks import command
+from test_operational_balance_assigned_banks import workspace_command, workspace_access
+from test_operational_balance_workspace import BASE, resource
 
 
 def test_cash_assignment_must_be_owner_mz2_cash():
@@ -21,17 +22,17 @@ def test_cash_assignment_must_be_owner_mz2_cash():
 
 def test_funding_cash_supplier_payment_and_bank_return_are_once_only():
     async def scenario(db):
-        await started(db); await grant(db,[WRITE])
-        await db.mezan_mobile_app_access_v1.update_one({'user_id':'staff'}, {'$set':{'operational_banks.cash_ids':['cash']}})
+        await started(db)
+        await workspace_access(db, operations=['supplier.payment','accounts.transfer'], resources=[resource('supplier','supplier'),resource('bank','bank'),resource('cash','cash')])
         async with client(db) as c:
-            assert [r['id'] for r in (await c.get('/api/operational-balances/entities/cash')).json()['items']] == ['cash']
-            funding=command(party_type='cash',party_id='cash',kind='transfer',amount='200',request_id='cash-funding-1')
-            replies=await asyncio.gather(*[c.post('/api/operational-balances/movements',json=funding) for _ in range(5)])
+            assert [r['id'] for r in (await c.get(BASE + '/parties?kind=cash')).json()['items']] == ['cash']
+            funding=workspace_command(party_type='cash',party_id='cash',reason='transfer',amount='200',request_id='cash-funding-1')
+            replies=await asyncio.gather(*[c.post(BASE + '/entries',json=funding) for _ in range(5)])
             assert all(r.status_code==200 for r in replies),[r.text for r in replies]
-            payment=command(bank_id='cash',source_account_type='cash',amount='50',request_id='cash-payment-1')
-            assert (await c.post('/api/operational-balances/movements',json=payment)).status_code==200
-            returned={**funding,'direction':'incoming','amount':'30','request_id':'cash-return-1'}
-            assert (await c.post('/api/operational-balances/movements',json=returned)).status_code==200
+            payment=workspace_command(source_id='cash',source_type='cash',amount='50',request_id='cash-payment-1')
+            assert (await c.post(BASE + '/entries',json=payment)).status_code==200
+            returned={**funding,'party_type':'bank','party_id':'bank','source_type':'cash','source_id':'cash','amount':'30','request_id':'cash-return-1'}
+            assert (await c.post(BASE + '/entries',json=returned)).status_code==200
         state=await read(db,'owner'); result=report(state)
         assert len(state['movements'])==3
         balances={p['party_id']:p['actual'] for p in result['parties']}
@@ -44,10 +45,10 @@ def test_funding_cash_supplier_payment_and_bank_return_are_once_only():
 
 def test_unassigned_destination_and_revoked_cash_reject_without_writes():
     async def scenario(db):
-        await started(db); await grant(db,[WRITE])
+        await started(db); await workspace_access(db, operations=['supplier.payment','accounts.transfer'])
         async with client(db) as c:
-            for payload in [command(party_type='cash',party_id='cash',kind='transfer'),command(bank_id='cash',source_account_type='cash')]:
-                assert (await c.post('/api/operational-balances/movements',json=payload)).status_code==403
+            for payload in [workspace_command(party_type='cash',party_id='cash',reason='transfer'),workspace_command(source_id='cash',source_type='cash')]:
+                assert (await c.post(BASE + '/entries',json=payload)).status_code==403
         assert (await read(db,'owner'))['movements']==[]
     run(scenario)
 
@@ -56,14 +57,14 @@ def test_cash_to_cash_preserves_liquidity_and_rejects_same_account():
     async def scenario(db):
         await started(db); await grant(db,[WRITE])
         await db.mz2_financial_accounts.insert_one({'id':'cash2','user_id':'owner','name':'Second cashbox','account_type':'cash','currency':'SAR','status':'active'})
-        await db.mezan_mobile_app_access_v1.update_one({'user_id':'staff'},{'$set':{'operational_banks.cash_ids':['cash','cash2']}})
+        await workspace_access(db, operations=['accounts.transfer'], resources=[resource('bank','bank'),resource('cash','cash'),resource('cash','cash2')])
         async with client(db) as c:
-            funding=command(party_type='cash',party_id='cash',kind='transfer',amount='100',request_id='fund-cash')
-            assert (await c.post('/api/operational-balances/movements',json=funding)).status_code==200
-            transfer={**funding,'party_id':'cash2','bank_id':'cash','source_account_type':'cash','amount':'30','request_id':'cash-to-cash'}
-            assert (await c.post('/api/operational-balances/movements',json=transfer)).status_code==200
-            rejected=await c.post('/api/operational-balances/movements',json={**transfer,'party_id':'cash','request_id':'same-account'})
-            assert rejected.status_code==409,rejected.text
+            funding=workspace_command(party_type='cash',party_id='cash',reason='transfer',amount='100',request_id='fund-cash')
+            assert (await c.post(BASE + '/entries',json=funding)).status_code==200
+            transfer={**funding,'party_id':'cash2','source_id':'cash','source_type':'cash','amount':'30','request_id':'cash-to-cash'}
+            assert (await c.post(BASE + '/entries',json=transfer)).status_code==200
+            rejected=await c.post(BASE + '/entries',json={**transfer,'party_id':'cash','request_id':'same-account'})
+            assert rejected.status_code==422 and rejected.json()['detail']['code']=='operational_workspace_same_account',rejected.text
         result=report(await read(db,'owner'))
         balances={p['party_id']:p['actual'] for p in result['parties']}
         assert balances['cash']=='70.00' and balances['cash2']=='30.00'

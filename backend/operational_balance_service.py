@@ -22,6 +22,8 @@ _LOG = logging.getLogger(__name__)
 
 DEFINITIVE_MOVEMENT_REJECTIONS = {
     "operational_workspace_source_insufficient",
+    "operational_workspace_owner_return_limit",
+    "operational_salary_adjustment_required",
     "operational_future_business_date", "operational_business_date_invalid",
     "operational_supplier_payment_exceeds_payable",
     "operational_ad_debt_priority_required",
@@ -285,8 +287,15 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
                 if amount > Decimal(balance.get("custody_remaining", "0")):
                     fail("operational_custody_insufficient", "مبلغ الإرجاع يتجاوز المتبقي في العهدة")
         if row["kind"] in {"operating_expense", "owner_withdrawal"} and payload["kind"] != "correction":
-            if payload["direction"] != "outgoing" or payload["kind"] not in {"payment", "settlement"}:
+            owner_return = (row["kind"] == "owner_withdrawal" and payload.get("workspace_operation") == "owner.return"
+                            and payload["direction"] == "incoming" and payload["kind"] == "collection")
+            if not owner_return and (payload["direction"] != "outgoing" or payload["kind"] not in {"payment", "settlement"}):
                 fail("operational_expense_direction_invalid", "المصروف أو السحب حركة صادرة")
+            if owner_return:
+                owner_balance = next((r for r in report(state)["parties"]
+                    if r["party_type"] == "owner_withdrawal" and r["party_id"] == row["id"] and r["currency"] == currency), {})
+                if amount > Decimal(owner_balance.get("owner_withdrawals", "0")):
+                    fail("operational_workspace_owner_return_limit", "المبلغ يتجاوز السحوبات القابلة للإعادة", 409)
         if payload["kind"] != "correction" and bank is None:
             fail("operational_bank_required", "حدد البنك أو الصندوق الذي تحرك منه أو إليه المبلغ")
         if (payload.get("workspace_operation") and bank and payload["direction"] == "outgoing"):
@@ -790,8 +799,10 @@ def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=Fa
                 party[opposite] -= reduced
                 party[field] += amount - reduced
         elif movement["party_type"] in {"operating_expense", "owner_withdrawal"}:
-            party["actual"] += amount
-            party["expense_paid" if movement["party_type"] == "operating_expense" else "owner_withdrawals"] += amount
+            effect = -amount if (movement["party_type"] == "owner_withdrawal" and movement.get("workspace_operation") == "owner.return"
+                                 and movement["direction"] == "incoming") else amount
+            party["actual"] += effect
+            party["expense_paid" if movement["party_type"] == "operating_expense" else "owner_withdrawals"] += effect
         elif movement["party_type"] not in {"bank", "cash"}:
             party["actual"] -= signed
             unallocated = amount - sum((Decimal(a["amount"]) for a in movement.get("allocations", [])), Decimal(0))

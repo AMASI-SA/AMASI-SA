@@ -96,8 +96,11 @@ export function entryChoices(kind, side, operations) {
 export function isPage(value, requestedPage, focused = false) {
   return Boolean(value && Array.isArray(value.items) && value.items.length <= BALANCE_PAGE_SIZE
     && value.page_size === BALANCE_PAGE_SIZE && Number.isInteger(value.page) && value.page >= 1
-    && (focused || value.page === requestedPage) && Number.isInteger(value.total) && value.total >= value.items.length
-    && Number.isInteger(value.total_pages) && value.total_pages >= 0);
+    && Number.isInteger(value.total_pages) && value.total_pages >= 1 && value.page <= value.total_pages
+    // The server clamps a stale page to the last remaining page, including
+    // after an all-to-own permission change. Other page mismatches stay invalid.
+    && (focused || value.page === Math.min(requestedPage, value.total_pages))
+    && Number.isInteger(value.total) && value.total >= value.items.length);
 }
 
 export function validContext(value) {

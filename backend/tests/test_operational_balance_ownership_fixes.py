@@ -6,6 +6,8 @@ from operational_balance_routes import make_operational_balance_router
 from operational_balance_store import read, digest, OPERATION_CLAIMS
 from operational_balance_service import save_opening, report
 from test_operational_balance_integration import run, started, movement, opening, START
+from test_operational_balance_assigned_banks import workspace_command, workspace_access
+from test_operational_balance_workspace import BASE, resource
 
 
 def client_for(db):
@@ -23,19 +25,20 @@ def test_owner_change_cannot_rebind_same_intent_even_with_new_scope_and_concurre
         await db.mz2_financial_accounts.insert_one({"id": "bank", "user_id": "other", "name": "بنك معزول", "account_type": "bank", "currency": "SAR", "status": "active"})
         await save_opening(db,"other","other",opening(),clock=START)
         await save_opening(db,"other","other",{"request_id":"start-other-01"},finish=True,clock=START)
-        payload = {**movement(), "expected_session_scope": digest(["owner", "staff"])}
+        await workspace_access(db)
+        payload = workspace_command()
         async with client_for(db) as client:
-            url = "/api/operational-balances/movements"
+            url = BASE + "/entries"
             first = await client.post(url,json=payload)
             assert first.status_code == 200, first.text
-            await db.users.update_one({"id":"staff"},{"$set":{"created_by":"other"}})
+            await db.users.update_one({"id":"staff"},{"$set":{"created_by":"other","operational_balance_access.owner_id":"other"}})
             old = await client.post(url,json=payload)
             assert old.status_code == 409 and not old.json()["detail"].get("not_applied")
             rebound = {**payload,"expected_session_scope":digest(["other","staff"])}
             retried = await asyncio.gather(*[client.post(url,json=rebound) for _ in range(8)])
             assert all(r.status_code == 409 for r in retried)
             assert all(r.json()["detail"]["code"] == "operational_request_scope_conflict" for r in retried)
-            await db.users.update_one({"id":"staff"},{"$set":{"created_by":"owner"}})
+            await db.users.update_one({"id":"staff"},{"$set":{"created_by":"owner","operational_balance_access.owner_id":"owner"}})
             same = await asyncio.gather(*[client.post(url,json=payload) for _ in range(8)])
             assert all(r.status_code == 200 and r.json() == first.json() for r in same)
         assert len((await read(db,"owner"))["movements"]) == 1
@@ -49,15 +52,19 @@ def test_owner_change_cannot_rebind_same_intent_even_with_new_scope_and_concurre
 def test_api_scope_required_and_definitive_business_rejection_has_no_cash_effect():
     async def scenario(db):
         await started(db)
+        # A once-authorized account was deleted after assignment; this exercises
+        # a definitive financial validation failure after permission checks.
+        await workspace_access(db, resources=[resource("supplier","supplier"),resource("bank","bank"),resource("bank","missing")])
         async with client_for(db) as client:
-            url = "/api/operational-balances/movements"
-            assert (await client.post(url,json=movement())).status_code == 422
-            payload = {**movement(),"expected_session_scope":digest(["owner","staff"]),"bank_id":"missing"}
+            url = BASE + "/entries"
+            missing_scope = workspace_command(); missing_scope.pop("expected_session_scope")
+            assert (await client.post(url,json=missing_scope)).status_code == 422
+            payload = workspace_command(source_id="missing")
             denied = await client.post(url,json=payload)
             assert denied.status_code == 409
             assert denied.json()["detail"]["not_applied"] is True
             assert (await read(db,"owner"))["movements"] == []
-            corrected = {**payload,"request_id":"corrected-intent-01","bank_id":"bank"}
+            corrected = {**payload,"request_id":"corrected-intent-01","source_id":"bank"}
             assert (await client.post(url,json=corrected)).status_code == 200
             conflict = await client.post(url,json={**corrected,"amount":"100"})
             assert conflict.status_code == 409 and not conflict.json()["detail"].get("not_applied")

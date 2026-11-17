@@ -4,6 +4,7 @@ import { useOptionalAuth } from '../../context/AuthContext';
 import { todaySA } from '../../lib/dates';
 import { simpleBalancesApi as api, simpleBalanceError } from './simpleBalancesApi';
 import { authIdentity, useBalanceRead } from './simpleBalancesHooks';
+import SimpleOrderRefunds from './SimpleOrderRefunds';
 import {
   BALANCE_PAGE_SIZE, afterBalance, balanceText, decimalAmount, entryChoices, isMoneyAccount,
   isPage, minorUnits, money, permittedOperations, resourceKey, resourceLabels, validContext,
@@ -17,8 +18,8 @@ const reasonLabels = { accrual: 'مستحق', payment: 'دفع', collection: 'ت
   charity_owner: 'صدقات على المالك', household: 'مصروفات منزلية', personal: 'مصروفات شخصية',
   transfer: 'تحويل بين الحسابات', settlement: 'تسوية', correction: 'تصحيح موثق', refund: 'رد مبلغ' };
 const operationGroups = [
-  { title: 'الطلبات ورد المبالغ', text: 'ابحث برقم الطلب وراجع الردود المرتبطة به.', to: '/operational-balances/customer-returns', keys: ['customer.refund_request', 'customer.refund_execute', 'customer.return'] },
-  { title: 'الاستبدال', text: 'مراجعة الأصناف وفرق الاستبدال.', to: '/operational-balances/customer-exchanges', keys: ['customer.exchange'] },
+  { title: 'مرتجعات الأصناف', text: 'إرجاع المنتجات ومراجعة شحنة الاسترجاع.', to: '/operational-balances/customer-returns', owner: true },
+  { title: 'الاستبدال', text: 'مراجعة الأصناف وفرق الاستبدال.', to: '/operational-balances/customer-exchanges', owner: true },
   { title: 'المشتريات والمخزون', text: 'الفواتير والأصناف والاستلام من المورد.', to: '/inventory-v2', owner: true },
   { title: 'مطابقة كشوف مزودي الدفع', text: 'مراجعة الكشوف والتسويات المعتمدة.', to: '/operational-balances/provider-statements', keys: ['provider.settle'] },
   { title: 'المركز المالي', text: 'الأرصدة والتفاصيل المالية الكاملة.', to: '/operational-balances/financial-position', owner: true },
@@ -175,7 +176,7 @@ function EntryForm({ context, resource, onCancel, onSaved }) {
   const needsExpense = external && reason === 'charity' && form.charity_account === 'company';
   const direct = external && directReasons.has(reason);
   const needsSource = Boolean(choice) && !direct && !['accrual', 'adjustment'].includes(reason);
-  const available = context.resources.filter(item => item.access?.use === true);
+  const available = context.resources.filter(item => item.access?.use === true && (item.currency || 'SAR') === 'SAR');
   const employees = available.filter(item => item.kind === 'employee');
   const owners = available.filter(item => item.kind === 'owner_withdrawal');
   const expenses = available.filter(item => item.kind === 'operating_expense');
@@ -273,6 +274,7 @@ function Workspace({ context, identity, reloadContext }) {
   const requestedPage = Math.max(1, Number.parseInt(params.get('page') || '1', 10) || 1);
   const focusId = params.get('focus_id') || '';
   const adding = params.get('action') === 'add';
+  const refunds = params.get('panel') === 'refunds';
   const selected = context.resources.find(resource => resource.kind === kind && resource.id === id);
   const queryKey = JSON.stringify([identity, context.session_scope, context.permission_version, tab, kind, id, requestedPage, focusId, adding]);
   const read = useBalanceRead(async config => {
@@ -281,7 +283,7 @@ function Workspace({ context, identity, reloadContext }) {
     if (!isPage(result, requestedPage, Boolean(focusId))) throw new Error('invalid ledger page');
     if (selected && (result.resource?.id !== selected.id || result.resource?.kind !== selected.kind)) throw new Error('wrong ledger resource');
     return result;
-  }, queryKey, !adding && (Boolean(selected) ? selected.access?.movements !== 'none' : !id && tab === 'movements'));
+  }, queryKey, !refunds && !adding && (Boolean(selected) ? selected.access?.movements !== 'none' : !id && tab === 'movements'));
   const resource = read.data?.resource || selected;
   const operations = permittedOperations(context, resource);
   const canAdd = resource && resource.access?.use === true && context.status === 'active'
@@ -295,16 +297,19 @@ function Workspace({ context, identity, reloadContext }) {
     reloadContext();
   };
   const granted = new Set(context.operations.map(operation => typeof operation === 'string' ? operation : operation.key));
+  const canRefund = granted.has('customer.refund_request') || granted.has('customer.refund_execute');
+  const openRefunds = () => { setNotice(''); go({ tab: 'parties', panel: 'refunds' }); };
   return <main className="sb-workspace" dir="rtl" aria-label="الأرصدة والحركات المالية">
     <header className="sb-header"><div><span>ميزان</span><h1>الحركات المالية</h1></div><button type="button" className="sb-menu" aria-expanded={sections} aria-label="جميع الأقسام" onClick={() => setSections(value => !value)}>الأقسام</button></header>
-    {sections ? <section className="sb-content"><h2>جميع الأقسام</h2><div className="sb-section-links">{[...new Set(context.resources.map(item => item.kind))].filter(item => !isMoneyAccount(item)).map(item => <button type="button" key={item} onClick={() => go({ tab: 'parties', filter: item })}>{resourceLabels[item] || item}</button>)}{context.actor.is_owner && operationGroups.filter(item => item.owner || item.keys.some(key => granted.has(key))).map(item => <Link key={item.to} to={item.to}><strong>{item.title}</strong><span>{item.text}</span></Link>)}{context.capabilities?.manage_access === true && <Link to="/operational-balances/access"><strong>صلاحيات الموظفين</strong><span>الحسابات المتاحة لكل موظف والعمليات المسموحة له.</span></Link>}</div></section>
+    {sections ? <section className="sb-content"><h2>جميع الأقسام</h2><div className="sb-section-links">{[...new Set(context.resources.map(item => item.kind))].filter(item => !isMoneyAccount(item)).map(item => <button type="button" key={item} onClick={() => go({ tab: 'parties', filter: item })}>{resourceLabels[item] || item}</button>)}{canRefund && <button type="button" onClick={openRefunds}><strong>الطلبات ورد المبالغ</strong><span>ابحث برقم الطلب، ثم سجّل استرجاعًا جزئيًا أو كامل المتاح.</span></button>}{context.actor.is_owner && operationGroups.filter(item => item.owner || item.keys.some(key => granted.has(key))).map(item => <Link key={item.to} to={item.to}><strong>{item.title}</strong><span>{item.text}</span></Link>)}{context.capabilities?.manage_access === true && <Link to="/operational-balances/access"><strong>صلاحيات الموظفين</strong><span>الحسابات المتاحة لكل موظف والعمليات المسموحة له.</span></Link>}</div></section>
       : <div className="sb-content"><Notice>{notice}</Notice>{context.status !== 'active' && <Notice>{context.status === 'draft' ? 'النظام في مرحلة الأرصدة الافتتاحية. تسجيل الحركات يبدأ بعد اعتماد البداية.' : 'النظام متاح للمراجعة، وتسجيل حركات جديدة متوقف حاليًا.'}</Notice>}
-        {id && !selected ? <Notice error="هذا الحساب غير متاح ضمن صلاحياتك الحالية." />
+        {refunds ? <SimpleOrderRefunds context={context} identity={identity} onBalancesChanged={reloadContext} onExit={() => go({ tab: 'parties' })} />
+          : id && !selected ? <Notice error="هذا الحساب غير متاح ضمن صلاحياتك الحالية." />
           : selected && [403, 404].includes(read.status) ? <><Notice error={read.error} /><button type="button" className="sb-secondary" onClick={reloadContext}>تحديث الصلاحيات</button></>
           : adding && selected ? <EntryForm key={`${context.session_scope}:${resourceKey(selected)}`} context={context} resource={selected} onCancel={() => open(selected)} onSaved={saved} />
             : selected ? <><button type="button" className="sb-text" onClick={() => { setNotice(''); go({ tab }); }}>العودة إلى {tab === 'accounts' ? 'الحسابات' : 'الأطراف'}</button><div className="sb-identity"><span className="sb-avatar" aria-hidden="true">{resource.name.slice(0, 1)}</span><div><p>{resourceLabels[resource.kind] || 'حساب'}</p><h1>{resource.name}</h1></div></div><BalanceCard resource={resource} />{canAdd && <button type="button" className="sb-primary" onClick={() => go({ tab, kind, id, action: 'add' })}>{isMoneyAccount(resource.kind) ? 'تحويل إلى هذا الحساب' : '＋ إضافة مبلغ'}</button>}{resource.access?.movements === 'own' && <p className="sb-small-note">يعرض السجل الحركات التي سجّلتها أنت فقط.</p>}{resource.access?.movements === 'none' ? <p className="sb-small-note">عرض حركات هذا الحساب غير متاح ضمن صلاحياتك.</p> : <><Loading {...read} retry={read.reload} />{read.data && <Ledger result={read.data} resource={resource} focusId={focusId} onPage={page} />}</>}</>
               : tab === 'movements' ? <><div className="sb-title"><h1>الحركات اليومية</h1><p>الحركات المتاحة لك، مع اسم الموظف الذي سجّلها.</p></div><div className="sb-actions">{context.capabilities?.create_entries === true && <button type="button" className="sb-primary" onClick={() => go({ tab: 'parties' })}>إضافة مبلغ إلى حساب</button>}<button type="button" className="sb-secondary" onClick={read.reload}>تحديث السجل</button></div><Loading {...read} retry={read.reload} />{read.data && <Ledger result={read.data} focusId={focusId} onPage={page} />}</>
-                : <ResourceList key={`${tab}:${params.get('filter') || ''}`} context={context} tab={tab} identity={identity} onOpen={open} initialKind={params.get('filter') || ''} />}
+                : <>{tab === 'parties' && canRefund && <button type="button" className="sb-secondary" onClick={openRefunds}>بحث برقم الطلب</button>}<ResourceList key={`${tab}:${params.get('filter') || ''}`} context={context} tab={tab} identity={identity} onOpen={open} initialKind={params.get('filter') || ''} /></>}
       </div>}
     <nav className="sb-tabs" aria-label="صفحات الأرصدة">{[['movements', 'الحركات'], ['parties', 'الأطراف'], ['accounts', 'الحسابات']].map(([value, label]) => <button type="button" key={value} aria-current={!sections && tab === value ? 'page' : undefined} onClick={() => { setNotice(''); go({ tab: value }); }}>{label}</button>)}</nav>
   </main>;

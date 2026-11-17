@@ -92,6 +92,15 @@
 .sb-ledger tr:last-child td { border-bottom: 0; }
 .sb-ledger td:not(:first-child) { font-size: .92rem; font-variant-numeric: tabular-nums; }
 .sb-currency { display: block; color: var(--sb-muted); font-size: .75rem; }
+.sb-order-totals { display: grid; gap: 0; margin: 18px 0 24px; border: 1px solid var(--sb-line); border-radius: 13px; background: var(--sb-panel); }
+.sb-order-totals > div { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 13px 16px; border-bottom: 1px solid var(--sb-line); }
+.sb-order-totals > div:last-child { border-bottom: 0; }
+.sb-order-totals dt { color: var(--sb-muted); }
+.sb-order-totals dd { margin: 0; font-weight: 600; }
+.sb-refund-modes { display: flex; gap: 10px; margin: 20px 0; }
+.sb-refund-modes > button { flex: 1; }
+.sb-refund-modes > button[aria-pressed="true"] { color: var(--sb-brand); background: var(--sb-brand-soft); border-color: var(--sb-brand); }
+.sb-refund-create, .sb-refund-detail { margin-top: 22px; }
 .sb-row-button { display: block; background: transparent; border: 0; padding: 0; text-align: right; color: var(--sb-text); width: 100%; }
 .sb-row-button strong, .sb-row-button span, .sb-row-button small { display: block; }
 .sb-row-button strong { font-size: .93rem; font-weight: 600; margin-bottom: 6px; }

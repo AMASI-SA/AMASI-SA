@@ -10,8 +10,8 @@ jest.mock('react-router-dom', () => ({
   Link: ({ to, children, ...props }) => <a href={to} {...props}>{children}</a>,
   useSearchParams: () => {
     const ReactModule = require('react');
-    const [params, setParams] = ReactModule.useState(() => new URLSearchParams(window.location.search));
-    return [params, values => { const next = new URLSearchParams(values); window.history.replaceState({}, '', `/?${next}`); setParams(next); }];
+    const [params, setParams] = ReactModule.useState(() => new URLSearchParams(globalThis.window.location.search));
+    return [params, values => { const next = new URLSearchParams(values); globalThis.window.history.replaceState({}, '', `/?${next}`); setParams(next); }];
   },
 }));
 global.IS_REACT_ACT_ENVIRONMENT = true;
@@ -53,7 +53,7 @@ beforeEach(() => {
   jest.clearAllMocks(); localStorage.clear(); window.history.replaceState({}, '', '/');
   Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
   Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
-  uuid = 0; Object.defineProperty(global.crypto, 'randomUUID', { configurable: true, value: () => `request-${++uuid}` });
+  uuid = 0; Object.defineProperty(globalThis, 'crypto', { configurable: true, value: { randomUUID: () => `request-${++uuid}` } });
   host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host); saved = jest.fn();
   useOptionalAuth.mockReturnValue({ user: { id: 'staff' } });
   api.context.mockResolvedValue(context()); api.movements.mockImplementation(query => Promise.resolve(page(query.page)));
@@ -71,6 +71,36 @@ test('the daily list renders five records, recorder names, and real pagination',
   await click('التالي');
   expect(api.movements).toHaveBeenLastCalledWith({ page: 2, page_size: 5 }, expect.objectContaining({ signal: expect.any(AbortSignal) }));
   expect(host.querySelectorAll('[data-testid="simple-movement-row"]')).toHaveLength(1);
+});
+
+test('a stale daily-page link renders the server-clamped last page without retrying', async () => {
+  window.history.replaceState({}, '', '/?tab=movements&page=9');
+  api.movements.mockResolvedValue(page(2));
+  await render(<SimpleBalances />);
+  expect(api.movements).toHaveBeenCalledTimes(1);
+  expect(api.movements).toHaveBeenCalledWith({ page: 9, page_size: 5 }, expect.objectContaining({ signal: expect.any(AbortSignal) }));
+  expect(host.querySelectorAll('[data-testid="simple-movement-row"]')).toHaveLength(1);
+  expect(host.querySelector('button[aria-label="الصفحة 2"]').getAttribute('aria-current')).toBe('page');
+  expect(host.querySelector('[role="alert"]')).toBeNull();
+});
+
+test('an old ledger-page link still opens after permissions shrink from all movements to own', async () => {
+  window.history.replaceState({}, '', '/?tab=parties&kind=external_person&id=external&page=3');
+  const ctx = context();
+  const limited = { ...external(), access: { use: true, movements: 'own', balance: true } };
+  ctx.permission_version += 1; ctx.resources[0] = limited;
+  api.context.mockResolvedValue(ctx);
+  api.ledger.mockResolvedValue(page(1, { resource: limited, total: 1, total_pages: 1,
+    items: [{ id: 'own-row', description: 'حركتي المتاحة', amount: '10.00', side: 'for_party', recorded_by: { id: 'staff', name: 'محمد' } }],
+  }));
+  await render(<SimpleBalances />);
+  expect(api.ledger).toHaveBeenCalledTimes(1);
+  expect(api.ledger).toHaveBeenCalledWith('external_person', 'external', { page: 3, page_size: 5 }, expect.objectContaining({ signal: expect.any(AbortSignal) }));
+  expect(host.querySelectorAll('[data-testid="simple-movement-row"]')).toHaveLength(1);
+  expect(host.textContent).toContain('حركتي المتاحة');
+  expect(host.textContent).toContain('الحركات التي سجّلتها أنت فقط');
+  expect(host.querySelector('button[aria-label="الصفحة 1"]').getAttribute('aria-current')).toBe('page');
+  expect(host.querySelector('[role="alert"]')).toBeNull();
 });
 
 test('changing external direction clears salary fields, keeps amount and note, and submits one custody payment', async () => {

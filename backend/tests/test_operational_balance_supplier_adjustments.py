@@ -11,8 +11,8 @@ from operational_balance_store import read, digest
 from operational_balance_service import report, refresh, create_movement
 
 
-def adjustment(invoice,**patch):
-    return dict(request_id='supplier-credit-1',expected_session_scope=digest(['owner','staff']),invoice_id=invoice['id'],kind='return',accepted=True,reference='CREDIT-1',business_date='2026-10-07',amount=None,lines=[dict(kind='product',item_id='product',quantity=1)],note='',**patch)
+def adjustment(invoice,*,actor='staff',**patch):
+    return dict(request_id='supplier-credit-1',expected_session_scope=digest(['owner',actor]),invoice_id=invoice['id'],kind='return',accepted=True,reference='CREDIT-1',business_date='2026-10-07',amount=None,lines=[dict(kind='product',item_id='product',quantity=1)],note='',**patch)
 
 
 def test_return_concurrent_retry_tax_projection_refresh_no_bank_write():
@@ -79,21 +79,22 @@ def test_api_permission_exact_lookup_no_report_grant(permissions):
         async with client(db) as c:
             path='/api/operational-balances/supplier-adjustments'
             response=await c.get(path+'/entry/supplier/STOCK-1')
-            assert response.status_code==(200 if WRITE in permissions else 403),response.text
+            assert response.status_code==403,response.text
             response=await c.post(path,json=adjustment(inv))
-            assert response.status_code==(200 if WRITE in permissions else 403),response.text
-            assert (await c.get('/api/operational-balances/reports')).status_code==(200 if READ in permissions else 403)
+            assert response.status_code==403,response.text
+            assert (await c.get('/api/operational-balances/reports')).status_code==403
     run(scenario)
 
 
-def test_write_only_refunded_shipment_continuation_keeps_refund_immutable():
+def test_owner_refunded_shipment_continuation_keeps_refund_immutable():
     from test_operational_balance_customer_returns import fixture, command as return_command
     async def scenario(db):
         await fixture(db);await grant(db,[WRITE])
-        async with client(db) as c:
+        async with client(db, 'owner') as c:
             base='/api/operational-balances/customer-returns'
             quote=(await c.get(base+'/shipping-quote/courier/carrier?order_number=1001')).json()
             p=return_command(status='refunded',amount='50',shipping_kind='courier',shipping_id='carrier',shipping_quote_hash=quote['quote_hash'],shipment_reference='RETURN-SHIP-1')
+            p['expected_session_scope'] = digest(['owner','owner'])
             r=await c.post(base,json=p);assert r.status_code==200,r.text
             entry=(await c.get(base+'/entry/1001')).json()['items'][0]
             assert entry['amount']=='50.00' and entry['refund_source_id']=='bank'
@@ -106,7 +107,7 @@ def test_write_only_refunded_shipment_continuation_keeps_refund_immutable():
             assert all(r.status_code==200 for r in replies),[r.text for r in replies]
             assert (await c.get(base+'/entry/1001')).json()['items']==[]
             assert report(await read(db,'owner'))['summary']['actual_liquidity']==before
-            assert (await c.get('/api/operational-balances/reports')).status_code==403
+            assert (await c.get('/api/operational-balances/reports')).status_code==200
     run(scenario)
 
 

@@ -6,6 +6,7 @@ from operational_balance_store import read
 from test_operational_balance_integration import run, started, movement, opening, START
 from test_operational_balance_app_permissions import client, grant, WRITE
 from test_operational_balance_assigned_banks import command
+from test_operational_balance_workspace import grant as workspace_grant, resource
 
 
 def test_supplier_payment_requires_payable_and_concurrent_requests_cannot_overpay():
@@ -49,11 +50,16 @@ def test_future_business_date_rejects_persistently_and_riyadh_midnight_is_allowe
 def test_entry_balances_do_not_grant_reports_and_beneficiaries_do_not_create_users():
     async def scenario(db):
         await started(db); await grant(db,[WRITE])
+        await workspace_grant(db, operations=['supplier.payment'], resources=[
+            resource('supplier', 'supplier', balance=True), resource('bank', 'bank')])
         before = await db.users.count_documents({})
         async with client(db) as c:
-            supplier=(await c.get('/api/operational-balances/entities/supplier')).json()['items'][0]
-            assert supplier['outstanding_payable']=='500.00'
-            assert supplier['available_to_pay']=='500.00'
+            response = await c.get('/api/operational-balances/workspace/parties', params={'kind': 'supplier'})
+            assert response.status_code == 200, response.text
+            supplier=response.json()['items'][0]
+            assert supplier['balance']=={'amount':'500.00','side':'for_party','visible':True}
+            assert supplier['operations']==['supplier.payment']
+            assert (await c.get('/api/operational-balances/entities/supplier')).status_code==403
             assert (await c.get('/api/operational-balances/reports')).status_code==403
             assert (await c.post('/api/operational-balances/entities/owner_withdrawal',json={'request_id':'owner-add-1','name':'Arafat','currency':'SAR'})).status_code==403
         async with client(db,actor='owner') as c:
@@ -98,13 +104,16 @@ def test_assigned_custody_entry_card_shows_only_own_balance():
     from test_operational_balance_custody_payments import fixture
     async def scenario(db):
         await fixture(db)
+        await workspace_grant(db, operations=[], resources=[
+            resource('employee_custody', 'employee', use=False, movements='none', balance=True)])
         async with client(db) as c:
-            response=await c.get('/api/operational-balances/entities/employee_custody')
-            assert response.status_code==200
+            response=await c.get('/api/operational-balances/workspace/parties', params={'kind':'employee_custody'})
+            assert response.status_code==200,response.text
             rows=response.json()['items']
             assert len(rows)==1 and rows[0]['id']=='employee'
-            assert rows[0]['custody_remaining']=='200.00'
+            assert rows[0]['balance']=={'amount':'200.00','side':'for_us','visible':True}
             assert 'movements' not in rows[0] and 'audit' not in rows[0]
+            assert (await c.get('/api/operational-balances/workspace/ledger/employee_custody/employee')).status_code==404
     run(scenario)
 
 
@@ -140,11 +149,14 @@ def test_account_statement_read_grant_and_exact_tenant_account_required():
         async with client(db) as c:
             assert (await c.get('/api/operational-balances/accounts/bank/bank')).status_code==403
         await grant(db,[READ])
+        await workspace_grant(db, operations=[], resources=[
+            resource('bank','bank',use=False,movements='all',balance=True)])
         async with client(db) as c:
-            response=await c.get('/api/operational-balances/accounts/bank/bank')
+            assert (await c.get('/api/operational-balances/accounts/bank/bank')).status_code==403
+            response=await c.get('/api/operational-balances/workspace/ledger/bank/bank')
             assert response.status_code==200,response.text
-            assert response.json()['account']['actual']=='1000.00'
-            assert (await c.get('/api/operational-balances/accounts/bank/foreign')).status_code==409
+            assert response.json()['resource']['balance']=={'amount':'1000.00','side':'for_us','visible':True}
+            assert (await c.get('/api/operational-balances/workspace/ledger/bank/foreign')).status_code==404
     run(scenario)
 
 

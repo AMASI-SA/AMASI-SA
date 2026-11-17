@@ -26,29 +26,25 @@ def client(db, actor="staff", mobile=True):
 
 @pytest.mark.parametrize("permissions", [[],[WRITE],[READ],[WRITE,READ]])
 @pytest.mark.parametrize("direction", ["incoming","outgoing"])
-def test_independent_native_permission_matrix(permissions, direction):
+def test_legacy_native_flags_never_grant_scoped_or_unscoped_access(permissions, direction):
     async def scenario(db):
         await started(db); await grant(db, permissions)
         async with client(db) as c:
             ctx=await c.get("/api/operational-balances/context")
-            assert ctx.status_code==(200 if permissions else 403)
-            if permissions:
-                assert ctx.json()["permissions"]=={"view":True,"move":WRITE in permissions,"manage":False,"reports":READ in permissions}
+            assert ctx.status_code == 403
+            assert (await c.get("/api/operational-balances/workspace/context")).status_code == 403
             for path in ["reports","movements","obligations?party_type=supplier&party_id=supplier"]:
                 r=await c.get("/api/operational-balances/"+path)
-                assert r.status_code==(200 if READ in permissions else 403), (path,r.text)
-            assert (await c.get("/api/operational-balances/entities/bank")).status_code==(200 if permissions else 403)
+                assert r.status_code == 403, (path,r.text)
+            assert (await c.get("/api/operational-balances/entities/bank")).status_code == 403
             payload={**movement(),"expected_session_scope":digest(["owner","staff"]),"direction":direction,"kind":"collection" if direction=="incoming" else "payment"}
             r=await c.post("/api/operational-balances/movements",json=payload)
-            assert r.status_code==(200 if WRITE in permissions else 403),r.text
+            assert r.status_code == 403,r.text
             again=await c.post("/api/operational-balances/movements",json=payload)
             assert again.status_code==r.status_code
-            if WRITE in permissions: assert again.json()==r.json()
+            assert again.json()==r.json()
         state=await read(db,"owner")
-        assert len(state["movements"])==(1 if WRITE in permissions else 0)
-        if WRITE in permissions:
-            assert state["movements"][0]["actor_id"]=="staff"
-            assert state["movements"][0]["receipt_id"] is None
+        assert state["movements"] == []
     run(scenario)
 
 @pytest.mark.parametrize("actor", ["staff","owner"])
@@ -73,17 +69,27 @@ def test_native_correction_is_not_movement_entry():
     run(scenario)
 
 def test_live_permission_revocation_at_persistence(monkeypatch):
-    import operational_balance_routes as routes
-    original=routes.create_movement
+    import operational_balance_workspace as workspace
+    original=workspace.create_movement
+    called = []
     async def revoke(db,*args,**kwargs):
-        await grant(db,[READ])
+        called.append(True)
+        await db.users.update_one({"id":"staff"}, {"$set":{"operational_balance_access.enabled":False}})
         return await original(db,*args,**kwargs)
-    monkeypatch.setattr(routes,"create_movement",revoke)
+    monkeypatch.setattr(workspace,"create_movement",revoke)
     async def scenario(db):
         await started(db);await grant(db,[WRITE])
+        await db.users.update_one({"id":"staff"}, {"$set":{"operational_balance_access":{
+            "owner_id":"owner", "version":1, "enabled":True, "operations":["supplier.payment"],
+            "resources":[{"kind":kind,"id":identity,"use":True,"movements":"own","balance":False}
+                         for kind,identity in [("supplier","supplier"),("bank","bank")]]}}})
         async with client(db) as c:
-            r=await c.post("/api/operational-balances/movements",json={**movement(),"expected_session_scope":digest(["owner","staff"])})
+            r=await c.post("/api/operational-balances/workspace/entries",json={
+                "request_id":"revoked-before-persistence", "expected_session_scope":digest(["owner","staff"]),
+                "party_type":"supplier", "party_id":"supplier", "side":"for_us", "reason":"payment",
+                "amount":"300", "business_date":"2026-10-07", "source_type":"bank", "source_id":"bank"})
             assert r.status_code==403,r.text
+            assert called == [True]
         assert (await read(db,"owner"))["movements"]==[]
     run(scenario)
 
@@ -110,13 +116,15 @@ def test_grants_have_no_parent_or_implicit_manager_expansion(permissions):
     granted=effective_mobile_app_permissions({"enabled":True,"permissions":["app.role.manager",*permissions]})
     assert set(granted)&{WRITE,READ}==set(permissions)
 
-def test_browser_contract_stays_permission_free():
+def test_browser_staff_cannot_bypass_explicit_policy_via_legacy_routes():
     async def scenario(db):
         await started(db); await grant(db,[])
         async with client(db,mobile=False) as c:
-            assert (await c.get("/api/operational-balances/reports")).status_code==200
-            assert (await c.get("/api/operational-balances/audit")).status_code==200
-            assert (await c.post("/api/operational-balances/movements",json={**movement(),"expected_session_scope":digest(["owner","staff"])})).status_code==200
+            assert (await c.get("/api/operational-balances/reports")).status_code==403
+            assert (await c.get("/api/operational-balances/audit")).status_code==403
+            assert (await c.get("/api/operational-balances/workspace/context")).status_code==403
+            assert (await c.post("/api/operational-balances/movements",json={**movement(),"expected_session_scope":digest(["owner","staff"])})).status_code==403
+        assert (await read(db,"owner"))["movements"] == []
     run(scenario)
 
 
@@ -136,7 +144,9 @@ def test_owner_grants_and_revokes_both_permissions_independently(monkeypatch):
                 stored = await db.mezan_mobile_app_access_v1.find_one({"owner_user_id":"owner","user_id":"staff"})
                 assert stored["operational_banks"] == ({"bank_ids":["bank"],"default_bank_id":"bank"} if WRITE in permissions else {"bank_ids":[],"default_bank_id":None})
                 access=await mobile_app_access_for_user(db,await db.users.find_one({"id":"staff"}))
-                assert set(access["permissions"])==set(permissions)
+                # Legacy checkboxes alone no longer grant the balances app.
+                # The dedicated resource policy supplies its navigation flags.
+                assert not set(access["permissions"]) & {WRITE, READ}
                 assert (await db.users.find_one({"id":"staff"}))["role"]=="employee"
     run(scenario)
 

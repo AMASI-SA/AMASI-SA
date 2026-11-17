@@ -36,3 +36,16 @@ test('permission save is an explicit version-checked PUT and preserves denial', 
   await expect(api.context()).rejects.toBe(denied);
   expect(http.post).not.toHaveBeenCalled();
 });
+
+test('refund requests bind the order and confirmations do not add editable source fields', async () => {
+  const request = { request_id: 'refund-intent', expected_session_scope: 'scope', order_number: '2044',
+    amount: '50.00', method: 'bank', bank_id: 'bank', reason: 'رد جزئي' };
+  await api.requestRefund(request);
+  expect(http.post).toHaveBeenLastCalledWith('/operational-balances/workspace/refunds', request, { timeout: 30000 });
+  const confirmation = { request_id: 'confirm-intent', expected_session_scope: 'scope', confirmed: true, reference: '', executed_at: '2026-11-17T10:00:00Z' };
+  await api.confirmRefund('refund/one', confirmation);
+  expect(http.post).toHaveBeenLastCalledWith('/operational-balances/workspace/refunds/refund%2Fone/confirm', confirmation, { timeout: 30000 });
+  const proof = { request_id: 'match-intent', expected_session_scope: 'scope', evidence_id: 'fact', expected_evidence_hash: 'a'.repeat(64) };
+  await api.reconcileRefund('refund/one', proof);
+  expect(http.post).toHaveBeenLastCalledWith('/operational-balances/workspace/refunds/refund%2Fone/reconcile', proof, { timeout: 30000 });
+});

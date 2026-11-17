@@ -1,6 +1,6 @@
 {
   "task": "MEZAN-SIMPLE-LEDGER-20261117",
-  "status": "WIP_IMPLEMENTATION_AND_VERIFICATION",
+  "status": "SOURCE_COMPLETE_INTEGRATED_CI_PENDING",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/mezan-simple-ledger-permissions-20261117",
   "base_sha": "71125711d8181da3b4e35d9129fd51c048ba2bdd",
@@ -12,28 +12,50 @@
     "Existing saved operational aggregate supplies five-row party/account ledgers, full authorized balances and backdated-save focus.",
     "Bank, cash and custody movements reuse the canonical movement service; linked external payroll, charity and owner drawings commit atomically in the same aggregate.",
     "Immutable recorder name/id snapshot from authenticated user; legacy missing names remain undocumented.",
-    "Web Arabic RTL simple workspace and owner policy editor are implemented; frontend verification is in progress."
+    "Arabic RTL web and native workspaces with three primary tabs, contextual amount forms, explicit blank choices and owner policy editors.",
+    "Financial-only order refunds: Arabic/Persian order digits, confirmed-payment caps, pending reservations, bank confirmation, cancellation and existing-provider-proof reconciliation without duplicate financial effects.",
+    "Independent review fixes: exact native permission DTO, own matching actor visibility, Arabic order search and safe pagination clamp after permission changes.",
+    "Legacy route tests migrated to explicit workspace grants or owner specialist flows while preserving monetary, concurrency, tenant, stock and audit assertions.",
+    "Actual-screen browser harness and CI collection checks added without removing or relaxing existing gates."
   ],
   "verification": [
     {
-      "command": "PYTHONPATH=backend:backend/tests python -B -m pytest --noconftest -q backend/tests/test_operational_balance_workspace.py backend/tests/test_operational_balance_access.py",
-      "exit_status": 0,
-      "result": "45 passed; actual FastAPI routes/services with synthetic mongomock-motor database; no production server imported. The workspace suite switches to dedicated local Mongo when OPERATIONAL_TEST_MONGO_URI is set (as in existing CI)."
+      "check": "Focused backend",
+      "result": "83 passed locally: access29 + workspace21 + financial refunds33, including the final external-history before-CAS race test. Actual FastAPI/services with isolated mongomock-motor; no production server imported."
     },
     {
-      "check": "Real MongoDB local runtime",
-      "result": "NOT_RUN: MongoDB 8.0.12 aborts in CPU discovery because this executor has no sys CPU surface; 7.0.16 reports open Operation not permitted at startup. No sandbox override or alternate production database used."
+      "check": "Focused web",
+      "result": "5 suites /35 tests passed after all review fixes; adjacent navigation25 passed. Isolated Vite harness build, syntax and diff checks passed."
     },
     {
-      "check": "Frontend",
-      "result": "NOT_RUN at this checkpoint; frozen Yarn installation in progress."
+      "check": "Native",
+      "result": "25 workspace groups,22 standalone checks and focused TypeScript passed. Remote AMASI Mobile CI TypeScript/ESLint passed at b791a088caab7e12be45a599ff07db786dd6f7f6."
+    },
+    {
+      "check": "Initial full backend/web CI",
+      "head_sha": "6fbeb9a3092f2659581eed75e42e8a25e2a4e574",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43984481540",
+      "result": "Backend4906 passed/141 failed: legacy staff authorization expectations plus one timing-sensitive diagnostic-index test. Frontend59 suites passed/one compile error. Existing browser and canonical worker gates passed. Staff tests are now migrated to the new explicit contract; the Jest mock compile issue is fixed; no timing assertion was weakened. A fresh complete run is required for this checkpoint."
+    },
+    {
+      "check": "Local environment limits",
+      "result": "Real Mongo process startup and sandboxed Chromium process sockets are unavailable in this executor. Full real-Mongo and browser verification runs on the existing isolated GitHub CI runner; no override or production fallback used."
     }
   ],
   "remaining": [
-    "Complete customer financial-only refund request/execution adapter and confirm caps against existing refunds.",
-    "Complete standalone native operational app patch on AMASI-SA/amasi-mobile branch feature/operational-order-compensation-20261101 at 982a38a60ea77ef09f4e2924766c085ea0523bfd.",
-    "Run fresh integrated frontend/native and actual-Mongo CI checks; independent review of permissions and linked financial effects.",
-    "APK, physical-device acceptance, production merge and governed deployment are not performed by this source checkpoint."
+    "Fresh full backend/web CI on this checkpoint, including real Mongo replica-set contracts and the new actual-screen browser harness.",
+    "Inspect generated desktop/mobile screenshots and resolve any observed acceptance failure.",
+    "APK/signing, physical-device acceptance, merge and governed production deployment remain outside this source checkpoint."
   ],
-  "next_safe_action": "Continue task branch source implementation, run targeted verification and preserve the next reviewed source checkpoint; do not run release adapters, create a production lease or mutate live financial data."
+  "next_safe_action": "Run and inspect existing isolated CI on this task branch, fix only concrete remaining failures, then report exact source and verification. Do not trigger release adapters or mutate production data.",
+  "pull_request": "https://github.com/AMASI-SA/AMASI-SA/pull/1966",
+  "companion_native": {
+    "repository": "AMASI-SA/amasi-mobile",
+    "pull_request": "https://github.com/AMASI-SA/amasi-mobile/pull/359",
+    "head_sha": "b791a088caab7e12be45a599ff07db786dd6f7f6",
+    "base_branch": "feature/operational-order-compensation-20261101",
+    "base_sha": "982a38a60ea77ef09f4e2924766c085ea0523bfd",
+    "ci": "https://github.com/AMASI-SA/amasi-mobile/actions/runs/43987800175",
+    "ci_status": "PASS: TypeScript and ESLint on exact native source"
+  }
 }

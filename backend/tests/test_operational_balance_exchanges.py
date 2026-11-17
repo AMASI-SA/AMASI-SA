@@ -143,23 +143,24 @@ def test_shipping_confirmation_does_not_debit_bank_and_survives_refresh():
     run(scenario)
 
 
-def test_browser_api_and_native_write_without_reports_and_source_unchanged():
+def test_owner_exchange_api_preserves_source_and_staff_cannot_bypass_workspace():
     async def scenario(db):
         await seed(db);await grant(db,[WRITE])
         source_before=await db.unified_orders.find_one({'user_id':'owner'})
-        async with client(db,mobile=False) as c:
+        async with client(db,actor='owner',mobile=False) as c:
             order=(await c.get('/api/operational-balances/customer-exchanges/order/1001')).json()
             assert order['items'][0]['unit_estimate']=='50.00'
             q=(await c.get('/api/operational-balances/customer-returns/shipping-quote/courier/carrier?order_number=1001')).json()
-            result=await c.post('/api/operational-balances/customer-exchanges',json=command(shipping_quote_hash=q['quote_hash']))
+            result=await c.post('/api/operational-balances/customer-exchanges',json=command(expected_session_scope=digest(['owner','owner']),shipping_quote_hash=q['quote_hash']))
             assert result.status_code==200,result.text
             case=result.json()
             p=purchase(case)
+            p['expected_session_scope'] = digest(['owner','owner'])
             result=await c.post(f'/api/operational-balances/customer-exchanges/{case["id"]}/actions',json=p)
             assert result.status_code==200,result.text
         async with client(db) as c:
             assert (await c.get('/api/operational-balances/customer-exchanges')).status_code==403
-            assert (await c.post('/api/operational-balances/customer-exchanges',json={})).status_code==422
+            assert (await c.post('/api/operational-balances/customer-exchanges',json={})).status_code in (403,422)
         async with client(db,actor='other',mobile=False) as c:
             assert (await c.get('/api/operational-balances/customer-exchanges')).json()['items']==[]
             assert (await c.post(f'/api/operational-balances/customer-exchanges/{case["id"]}/actions',json=p)).status_code in (403,409)

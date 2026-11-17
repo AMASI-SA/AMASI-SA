@@ -1345,4 +1345,6 @@ def make_operational_balance_router(db, current_user):
     install_access_routes(router, db, current_user, scope)
     from operational_balance_workspace import install_workspace_routes
     install_workspace_routes(router, db, current_user, scope)
+    from operational_workspace_refunds import install_refund_routes
+    install_refund_routes(router, db, current_user, scope)
     return router

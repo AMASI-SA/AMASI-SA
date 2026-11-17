@@ -190,8 +190,7 @@ def test_mobile_read_grant_is_checked_for_real_actor(monkeypatch):
     db = ReadOnlyDB()
     actor = {"id": "owner", "role": "owner", "_session_client": "amasi_mobile", "_mobile_actor_id": "staff"}
     response = asyncio.run(get(db, actor))
-    assert response.status_code == 200, response.text
-    assert response.json()["permissions"] == {"reports": True, "confirm_delivery_after_start": False}
+    assert response.status_code == 403, response.text
     db.data["mezan_mobile_app_access_v1"][0]["permissions"] = []
     assert asyncio.run(get(db, actor)).status_code == 403
 

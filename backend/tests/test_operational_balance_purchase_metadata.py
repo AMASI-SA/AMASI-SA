@@ -1,4 +1,6 @@
 """Operational purchases never prove or mutate physical warehouse stock."""
+# Specialized inventory routes are owner-only; preserve the money and stock assertions.
+from functools import partial
 import asyncio
 from copy import deepcopy
 import pytest
@@ -11,6 +13,9 @@ from operational_balance_inventory import save_purchase
 from operational_balance_store import read
 from operational_balance_service import report
 from operational_inventory_projection import projection
+
+command = partial(command, actor="owner")
+adjustment = partial(adjustment, actor="owner")
 
 OPTIONS=[{'id':'color','name':'اللون','type':'select','required':True,'values':[{'id':'gold','name':'ذهبي'},{'id':'silver','name':'فضي'}]}, {'id':'size','name':'المقاس','type':'select','required':False,'values':[{'id':'s','name':'صغير'},{'id':'m','name':'وسط'}]}, {'id':'name','name':'الاسم','type':'text','required':True}]
 RAW={'state':'raw','selections':[{'option_id':'color','value_id':'gold'}],'inputs':[]}
@@ -33,7 +38,7 @@ def test_configured_catalog_and_purchase_do_not_require_legacy_variant_labels():
   await db.mezan_products_v2.update_one({'mezan_product_id':'product'}, {'$set':{
    'variants_count':1,'variants':[{'id':'legacy-id','display_name':'123'}]}})
   original=await db.mezan_products_v2.find_one({});physical=await snapshot(db)
-  async with client(db) as c:
+  async with client(db, 'owner') as c:
    base='/api/operational-balances'
    legacy=await c.get(base+'/inventory-catalog')
    assert legacy.status_code==409
@@ -59,7 +64,7 @@ def test_configured_catalog_and_purchase_do_not_require_legacy_variant_labels():
 def test_raw10_ready100_cost_retry_returns_and_physical_separation():
  async def scenario(db):
   await setup(db);before=await snapshot(db)
-  async with client(db) as c:
+  async with client(db, 'owner') as c:
    url='/api/operational-balances/inventory-purchases'
    replies=await asyncio.gather(*[c.post(url,json=purchase()) for _ in range(4)])
    assert all(r.status_code==200 for r in replies),[r.text for r in replies]
@@ -97,7 +102,7 @@ def test_rejected_metadata_atomic(bad):
   if bad=='image_file':await db.mezan_products_v2.update_many({}, {'$set':{'options':OPTIONS+[{'id':'photo','name':'صورة','type':'file','required':True}],'options_count':4}})
   if bad=='mixed_variant':p['lines'][0]['variant_id']='gold'
   before=await read(db,'owner');physical=await snapshot(db)
-  async with client(db) as c:
+  async with client(db, 'owner') as c:
    r=await c.post('/api/operational-balances/inventory-purchases',json=p);assert r.status_code in (409,422),r.text
   assert await read(db,'owner')==before and await snapshot(db)==physical
  run(scenario)
@@ -108,15 +113,15 @@ def test_mid_save_failure_rolls_back_operational_document_and_never_touches_ware
   def broken(state):raise RuntimeError('synthetic failure after in-memory invoice append')
   with monkeypatch.context() as m:
    m.setattr('operational_balance_inventory.project_inventory',broken)
-   with pytest.raises(RuntimeError):await save_purchase(db,'owner','staff',purchase(),clock=NOW)
+   with pytest.raises(RuntimeError):await save_purchase(db,'owner','owner',purchase(),clock=NOW)
   assert await read(db,'owner')==before and await snapshot(db)==physical
-  saved=await save_purchase(db,'owner','staff',purchase(),clock=NOW);assert saved['gross']=='2150.00'
+  saved=await save_purchase(db,'owner','owner',purchase(),clock=NOW);assert saved['gross']=='2150.00'
  run(scenario)
 
 def test_component_no_sku_location_and_no_phantom_custom_name():
  async def scenario(db):
   await setup(db);p=purchase();p['lines']=[{'kind':'component','item_id':'component','quantity':4,'unit_price':'3','tax':'0','location_id':'location','purchase_configuration':{'state':'raw','selections':[],'inputs':[]}}]
-  async with client(db) as c:
+  async with client(db, 'owner') as c:
    r=await c.post('/api/operational-balances/inventory-purchases',json=p);assert r.status_code==200,r.text
    assert r.json()['gross']=='12.00'
    catalog=(await c.get('/api/operational-balances/inventory-catalog')).json()
@@ -131,7 +136,7 @@ def test_free_ready_name_remains_purchase_metadata_without_catalog_or_physical_c
   await setup(db);p=purchase();p['lines']=[p['lines'][1]];p['lines'][0]['quantity']=1
   p['lines'][0]['purchase_configuration']['inputs'][0]['value']='نورة'
   before=await snapshot(db);product=await db.mezan_products_v2.find_one({})
-  saved=await save_purchase(db,'owner','staff',p,clock=NOW)
+  saved=await save_purchase(db,'owner','owner',p,clock=NOW)
   assert saved['gross']=='20.00' and saved['lines'][0]['purchase_option_labels'][-1]['value']=='نورة'
   assert await snapshot(db)==before and await db.mezan_products_v2.find_one({})==product
   assert await db.mezan_products_v2.count_documents({})==1

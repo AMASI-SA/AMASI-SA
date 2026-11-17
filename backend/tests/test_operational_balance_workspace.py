@@ -139,9 +139,17 @@ def test_external_salary_is_atomic_linked_and_never_debits_bank_or_records_salar
         assert all(m["bank_id"] is None and m["recorded_by"]["id"] == "owner" for m in state["movements"])
         assert len({m["workspace_group"] for m in state["movements"]}) == 1
         assert (await client.post(BASE + "/entries", json=payload)).json() == response.json()
-        assert (await client.post(BASE + "/entries", json={**payload, "request_id": "salary-over-limit", "amount": "141"})).status_code == 409
+        rejected_payload = {**payload, "request_id": "salary-over-limit", "amount": "141"}
+        rejected = await client.post(BASE + "/entries", json=rejected_payload)
+        assert rejected.status_code == 409 and rejected.json()["detail"]["not_applied"] is True
         assert len((await read(db, "owner"))["movements"]) == 2
         assert await db.general_ledger.count_documents({}) == 0
+        credit = entry(party_type="employee", party_id="employee", reason="accrual", side="for_party",
+                       amount="100", source_type=None, source_id=None)
+        assert (await client.post(BASE + "/entries", json=credit)).status_code == 200
+        retried = await client.post(BASE + "/entries", json=rejected_payload)
+        assert retried.status_code == 409 and retried.json() == rejected.json()
+        assert balance(await read(db, "owner"), "employee", "employee")["outstanding_payable"] == "240.00"
     run(scenario)
 
 
@@ -241,6 +249,24 @@ def test_home_and_personal_money_is_owner_draw_not_operating_expense():
     run(scenario)
 
 
+def test_company_charity_is_one_expense_with_one_external_credit_and_no_bank_leg():
+    async def scenario(db, client):
+        await db.expense_categories.insert_one({"id": "charity-id", "user_id": "owner", "code": "charity",
+            "name": "صدقات", "source": "operational_balance", "status": "active"})
+        payload = entry(side="for_party", reason="charity_company", expense_id="charity",
+                        amount="35", source_type=None, source_id=None)
+        response = await client.post(BASE + "/entries", json=payload)
+        assert response.status_code == 200, response.text
+        assert (await client.post(BASE + "/entries", json=payload)).json() == response.json()
+        state = await read(db, "owner")
+        assert len(state["movements"]) == 2
+        assert balance(state, "operating_expense", "charity")["expense_paid"] == "35.00"
+        assert balance(state, "external_person", "external")["outstanding_payable"] == "435.00"
+        assert balance(state, "bank", "bank")["actual"] == "1000.00"
+        assert not any(row["party_type"] == "owner_withdrawal" for row in report(state)["parties"])
+    run(scenario)
+
+
 def test_concurrent_external_salary_never_overpays_or_leaves_one_leg():
     async def scenario(db, client):
         payloads = [entry(side="for_party", reason="salary_settlement", employee_id="employee",
@@ -263,4 +289,92 @@ def test_two_concurrent_cash_payments_cannot_overdraw_bank():
         assert len(state["movements"]) == 1
         assert balance(state, "bank", "bank")["actual"] == "300.00"
     run(scenario)
+
+
+def test_owner_return_restores_bank_and_reduces_drawings_without_new_expense():
+    async def scenario(db, client):
+        draw = entry(party_type="owner_withdrawal", party_id="owner", reason="payment", amount="100")
+        assert (await client.post(BASE + "/entries", json=draw)).status_code == 200
+        returned = entry(party_type="owner_withdrawal", party_id="owner", side="for_party", reason="collection", amount="40")
+        response = await client.post(BASE + "/entries", json=returned)
+        assert response.status_code == 200, response.text
+        state = await read(db, "owner")
+        assert balance(state, "bank", "bank")["actual"] == "940.00"
+        assert balance(state, "owner_withdrawal", "owner")["owner_withdrawals"] == "60.00"
+        assert (await client.post(BASE + "/entries", json={**returned, "request_id": "owner-return-too-large", "amount": "61"})).status_code == 409
+        assert len((await read(db, "owner"))["movements"]) == 2
+    run(scenario)
+
+
+def test_external_salary_respects_existing_source_conflict_guard():
+    async def scenario(db, client):
+        await db[STATES].update_one({"owner_id": "owner"}, {"$set": {
+            "engine.salary_conflicts.salary:employee:2026-11": {"reason": "changed_source"}}})
+        response = await client.post(BASE + "/entries", json=entry(
+            side="for_party", reason="salary_settlement", employee_id="employee",
+            source_type=None, source_id=None))
+        assert response.status_code == 409, response.text
+        assert response.json()["detail"]["code"] == "operational_salary_adjustment_required"
+        assert (await read(db, "owner"))["movements"] == []
+    run(scenario)
+
+
+def test_executed_refund_ledger_uses_confirmer_not_requester_or_request_date():
+    from operational_balance_access import AccessPolicy
+    from operational_balance_workspace import ledger_items
+    bank = {"kind": "bank", "id": "bank", "name": "الإنماء", "currency": "SAR",
+            "access": {"use": False, "movements": "own", "balance": False}}
+    policy = AccessPolicy({"id": "staff"}, "owner", False, True, 1, (), [
+        resource("bank", "bank", use=False)])
+    confirmed = {"id": "confirmed", "amount": "40.00", "currency": "SAR", "status": "refunded",
+                 "refund_source_type": "bank", "refund_source_id": "bank", "actor_id": "owner",
+                 "recorded_by": {"id": "owner", "name": "طالب الاسترجاع"},
+                 "business_date": "2026-11-01", "created_at": "2026-11-01T12:00:00+00:00",
+                 "refunded_at": "2026-11-10T12:00:00+00:00", "confirmed_by": "staff",
+                 "confirmed_by_snapshot": {"id": "staff", "name": "من سجّل التنفيذ"}}
+    state = {"customer_returns": [confirmed,
+        {**confirmed, "id": "pending", "status": "pending"},
+        {**confirmed, "id": "someone-else", "actor_id": "staff", "confirmed_by": "owner"}]}
+    rows = ledger_items(state, {"obligations": []}, bank, policy)
+    assert len(rows) == 1
+    assert rows[0]["id"] == "customer_return:confirmed"
+    assert rows[0]["recorded_by"] == {"id": "staff", "name": "من سجّل التنفيذ"}
+    assert rows[0]["business_date"] == "2026-11-10"
+    assert rows[0]["amount"] == "40.00" and rows[0]["side"] == "for_party"
+
+
+def test_matched_provider_refund_ledger_requires_evidence_and_tracks_matching_actor_without_posting():
+    from fastapi import HTTPException
+    from operational_balance_access import AccessPolicy
+    from operational_balance_workspace import ledger_items
+    provider = {"kind": "provider", "id": "tamara", "name": "تمارا", "currency": "SAR",
+                "access": {"use": False, "movements": "own", "balance": False}}
+    policy = AccessPolicy({"id": "staff"}, "owner", False, True, 1, (), [
+        resource("provider", "tamara", use=False)])
+    fact = {"order_id": "order", "amount": "40.00"}
+    case = {"id": "matched", "amount": "40.00", "order_id": "order", "currency": "SAR",
+            "status": "provider_matched", "method": "original",
+            "refund_source_type": "provider", "refund_source_id": "tamara",
+            "provider_evidence_id": "refund:tamara:REF", "provider_evidence_reference": "REF",
+            "provider_evidence_hash": digest(fact), "actor_id": "owner",
+            "created_at": "2026-11-01T12:00:00+00:00", "business_date": "2026-11-01",
+            "matched_by": "staff", "matched_by_snapshot": {"id": "staff", "name": "مسجّل المطابقة"},
+            "matched_at": "2026-11-10T12:00:00+00:00", "refunded_at": None}
+    state = {"customer_returns": [case], "engine": {"facts": {"refund:tamara:REF": fact}}, "movements": []}
+    before = deepcopy(state)
+    rows = ledger_items(state, {"obligations": []}, provider, policy)
+    assert state == before
+    assert len(rows) == 1 and rows[0]["id"] == "customer_return:matched"
+    assert rows[0]["recorded_by"] == {"id": "staff", "name": "مسجّل المطابقة"}
+    assert rows[0]["recorded_at"] == case["matched_at"]
+    assert rows[0]["business_date"] == ""  # Unknown provider execution date stays unknown.
+    case["refunded_at"] = "2026-11-08T22:00:00+00:00"
+    assert ledger_items(state, {"obligations": []}, provider, policy)[0]["business_date"] == "2026-11-09"
+    case["matched_by"] = "owner"
+    assert ledger_items(state, {"obligations": []}, provider, policy) == []
+    case["matched_by"] = "staff"
+    state["engine"]["facts"]["refund:tamara:REF"] = {"order_id": "another-order", "amount": "40.00"}
+    with pytest.raises(HTTPException) as error:
+        ledger_items(state, {"obligations": []}, provider, policy)
+    assert error.value.detail["code"] == "operational_refund_evidence_changed"
 

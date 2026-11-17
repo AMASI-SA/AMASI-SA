@@ -212,11 +212,12 @@ def test_http_checks_current_page_grant_even_for_prepared_page():
     async def scenario():
         db = await database(state)
         await db.users.update_one({"id": "staff"}, {"$set": {"accounting_permissions": ["accounting.movements.view"]}})
-        async with client(db, mobile=False) as browser:
+        async with client(db, actor="owner", mobile=False) as browser:
             path = "/api/operational-balances/daily-financial-movements"
             params = {"from_date": "2026-11-07", "to_date": "2026-11-07"}
             first = await browser.get(path, params=params)
             assert first.status_code == 200, first.text
+        async with client(db, mobile=False) as browser:
             await db.users.update_one({"id": "staff"}, {"$set": {"accounting_permissions": []}})
             denied = await browser.get(path, params={**params, "page": 2, "snapshot": first.json()["snapshot"]})
             assert denied.status_code == 403 and "items" not in denied.json()

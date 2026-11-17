@@ -226,7 +226,7 @@ def test_http_mobile_permissions_remain_actor_scoped(mode):
             if mode=='disabled':await db.users.update_one({'id':'staff'},{'$set':{'disabled':True}})
             p={'id':'owner','role':'owner','_session_client':'amasi_mobile','_mobile_actor_id':'staff'}
             r=await request(db,p)
-            assert r.status_code==(200 if mode=='read' else 403),r.text
+            assert r.status_code==403,r.text
     run(test())
 
 

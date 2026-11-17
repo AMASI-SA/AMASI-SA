@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from operational_balance_store import AUTHORIZATION_GUARD, fail
 
@@ -41,12 +41,8 @@ OPERATION_LABELS = {
     "ads.fund": "شحن أو سداد حساب إعلاني",
     "courier.receive": "استلام مبلغ من موصل أو شركة شحن",
     "courier.pay": "دفع مبلغ لموصل أو شركة شحن",
-    "courier.review": "مراجعة تحصيل الموصل",
     "customer.refund_request": "تسجيل طلب استرجاع عميل",
     "customer.refund_execute": "تنفيذ رد مبلغ لعميل",
-    "customer.return": "تسجيل إرجاع عميل",
-    "customer.exchange": "تسجيل استبدال عميل",
-    "entities.create": "إضافة جهة",
 }
 RESOURCE_KIND_LABELS = {
     "bank": "الحسابات البنكية",
@@ -136,6 +132,12 @@ class AccessPolicy:
     version: int
     operations: tuple[str, ...]
     resources: list[dict]
+    _resource_index: dict = field(init=False, repr=False, compare=False)
+
+    def __post_init__(self):
+        object.__setattr__(self, "_resource_index", {
+            (row["kind"], row["id"]): dict(row) for row in self.resources
+        })
 
     def can_operation(self, key):
         return key in OPERATION_LABELS and self.enabled and (
@@ -146,7 +148,7 @@ class AccessPolicy:
             return dict(DENIED_RESOURCE)
         if self.owner_override:
             return dict(OWNER_RESOURCE)
-        row = next((row for row in self.resources if row["kind"] == kind and row["id"] == identity), None)
+        row = self._resource_index.get((kind, identity))
         return {key: row[key] for key in DENIED_RESOURCE} if row else dict(DENIED_RESOURCE)
 
     def can_reference(self, kind, identity):

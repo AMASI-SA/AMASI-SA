@@ -1,4 +1,4 @@
-import { afterBalance, balanceText, decimalAmount, entryChoices, minorUnits, money, permittedOperations } from './simpleBalancesModel';
+import { afterBalance, balanceText, decimalAmount, entryChoices, isPage, minorUnits, money, permittedOperations } from './simpleBalancesModel';
 
 test('amounts retain decimal accuracy, Arabic digits, and large integer money', () => {
   expect(decimalAmount('١٠٠٫١٠')).toBe('100.10');
@@ -28,4 +28,21 @@ test('resource restrictions cannot be widened by the global operation catalogue'
   expect([...permittedOperations(context, { operations: ['supplier.payment'] })]).toEqual(['supplier.payment']);
   expect([...permittedOperations(context, { operations: [] })]).toEqual([]);
   expect(entryChoices('supplier', 'for_us', permittedOperations(context, { operations: ['supplier.payment'] })).map(row => row.reason)).toEqual(['payment']);
+});
+
+test('a stale or reduced result page accepts only the exact server clamp', () => {
+  const result = { items: [{ id: 'remaining-row' }], page: 2, page_size: 5, total: 6, total_pages: 2 };
+  expect(isPage(result, 9)).toBe(true);
+  expect(isPage({ ...result, page: 1, total: 1, total_pages: 1 }, 3)).toBe(true);
+  expect(isPage({ ...result, page: 1, items: [], total: 0, total_pages: 1 }, 9)).toBe(true);
+  expect(isPage({ ...result, page: 1 }, 9)).toBe(false);
+  expect(isPage(result, 1)).toBe(false);
+  expect(isPage({ ...result, page: 1, total_pages: 3 }, 3)).toBe(false);
+});
+
+test('an explicit focus may choose a different valid page but never one outside the result', () => {
+  const result = { items: [{ id: 'backdated-row' }], page: 2, page_size: 5, total: 6, total_pages: 2 };
+  expect(isPage(result, 1, true)).toBe(true);
+  expect(isPage({ ...result, page: 3 }, 1, true)).toBe(false);
+  expect(isPage({ ...result, total_pages: 0 }, 1, true)).toBe(false);
 });

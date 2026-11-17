@@ -150,7 +150,7 @@ def test_accounting_activation_returns_read_status_without_refresh(monkeypatch):
     assert db.writes == []
 
 
-def test_real_router_native_refresh_uses_real_actor_report_grant(monkeypatch):
+def test_real_router_native_legacy_refresh_requires_owner_and_preserves_real_actor(monkeypatch):
     from mobile_app_permissions import OPERATIONAL_APP_READ
     from operational_balance_routes import make_operational_balance_router
     import operational_balance_service
@@ -165,8 +165,9 @@ def test_real_router_native_refresh_uses_real_actor_report_grant(monkeypatch):
                   "permissions": [OPERATIONAL_APP_READ]}
         db.data["mezan_mobile_app_access_v1"] = {"access": access}
 
+        current_actor = "staff"
         async def principal():
-            return {"id": "owner", "_mobile_actor_id": "staff", "_session_client": "amasi_mobile"}
+            return {"id": "owner", "_mobile_actor_id": current_actor, "_session_client": "amasi_mobile"}
 
         async def refresh(db, owner):
             async def apply(state):
@@ -179,12 +180,15 @@ def test_real_router_native_refresh_uses_real_actor_report_grant(monkeypatch):
         app.include_router(make_operational_balance_router(db, principal), prefix="/api")
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://isolated") as client:
             response = await client.post(PATH, json={"visible": True})
-            assert response.status_code == 200, response.text
-            assert response.json()["session_scope"] == digest(["owner", "staff"])
+            assert response.status_code == 403, response.text
             writes_before = len(db.writes)
             access["permissions"] = []
             response = await client.post(PATH, json={"visible": True})
             assert response.status_code == 403
-            assert response.json()["detail"]["code"] == "operational_app_permission_required"
+            assert response.json()["detail"]["code"] == "operational_workspace_route_required"
             assert len(db.writes) == writes_before
+            current_actor = "owner"
+            response = await client.post(PATH, json={"visible": True})
+            assert response.status_code == 200, response.text
+            assert response.json()["session_scope"] == digest(["owner", "owner"])
     asyncio.run(scenario())

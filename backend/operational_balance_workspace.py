@@ -12,7 +12,7 @@ from math import ceil
 from typing import Literal
 from zoneinfo import ZoneInfo
 
-from fastapi import Depends, Query, Request
+from fastapi import Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from operational_balance_service import (
@@ -38,7 +38,7 @@ KIND_OPERATIONS = {
                         "external.charity_owner", "external.household", "external.personal"],
     "bank": ["accounts.transfer"], "cash": ["accounts.transfer"],
     "employee_custody": ["custody.fund", "custody.return"],
-    "operating_expense": ["expense.pay"], "owner_withdrawal": ["owner.withdraw"],
+    "operating_expense": ["expense.pay"], "owner_withdrawal": ["owner.withdraw", "owner.return"],
     "provider": ["provider.settle"], "pos_receivable": ["provider.settle"],
     "ad_account": ["ads.fund"], "courier": ["courier.pay", "courier.receive"],
     "store_driver": ["courier.pay", "courier.receive"],
@@ -138,6 +138,7 @@ def entry_intent(payload):
             ("employee_custody", "collection"): ("custody.return", "for_party"),
             ("operating_expense", "payment"): ("expense.pay", "for_us"),
             ("owner_withdrawal", "payment"): ("owner.withdraw", "for_us"),
+            ("owner_withdrawal", "collection"): ("owner.return", "for_party"),
             ("provider", "collection"): ("provider.settle", "for_party"),
             ("pos_receivable", "collection"): ("provider.settle", "for_party"),
             ("ad_account", "payment"): ("ads.fund", "for_us"),
@@ -178,7 +179,7 @@ async def _linked_external_entry(db, owner, actor, payload, operation, resources
     action = "workspace-linked:" + actor["id"]
     stamp = now()
 
-    async def apply(state):
+    async def validate_and_apply(state):
         previous = replay(state, action, payload)
         if previous is not None:
             return previous
@@ -191,6 +192,10 @@ async def _linked_external_entry(db, owner, actor, payload, operation, resources
         amount = money(payload["amount"])
         allocations = []
         if target_kind == "employee":
+            if any(key.startswith("salary:" + target_id + ":")
+                   for key in state.get("engine", {}).get("salary_conflicts", {})):
+                fail("operational_salary_adjustment_required",
+                     "تغير مصدر استحقاق محفوظ؛ يلزم حل فرق الراتب بتسوية موثقة قبل تسجيل حركة جديدة")
             balances = report(state)
             employee = next((r for r in balances["parties"] if r["party_type"] == target_kind
                              and r["party_id"] == target_id and r["currency"] == "SAR"), {})
@@ -231,7 +236,23 @@ async def _linked_external_entry(db, owner, actor, payload, operation, resources
         remember(state, action, payload, result)
         return result
 
-    return await mutate(db, owner, apply)
+    async def apply(state):
+        try:
+            return await validate_and_apply(state)
+        except HTTPException as exc:
+            if not isinstance(exc.detail, dict) or exc.detail.get("code") not in {
+                    "operational_workspace_salary_limit", "operational_salary_adjustment_required",
+                    "operational_future_business_date"}:
+                raise
+            rejection = {"_operational_rejected": True, "status": exc.status_code,
+                         "detail": {**exc.detail, "not_applied": True}}
+            remember(state, action, payload, rejection)
+            return rejection
+
+    result = await mutate(db, owner, apply)
+    if result.get("_operational_rejected"):
+        raise HTTPException(result["status"], detail=result["detail"])
+    return result
 
 
 async def save_entry(db, owner, actor, payload, source):
@@ -393,7 +414,25 @@ def ledger_items(state, computed, resource, policy):
         for case in state.get("customer_returns", []):
             if (case.get("refund_source_type"), case.get("refund_source_id"), case.get("currency")) != (kind, identity, currency):
                 continue
-            if case.get("status") not in {"refunded", "salla_refund_confirmed"} or not _can_row(policy, resource, case):
+            if case.get("status") == "provider_matched":
+                if kind != "provider":
+                    continue
+                from operational_workspace_refunds import validate_provider_match
+                validate_provider_match(state, case)
+                # Matching acknowledges an existing provider effect. It must
+                # neither post another movement nor invent an execution date.
+                item = {**case, "id": "customer_return:" + case["id"],
+                        "party_type": kind, "party_id": identity,
+                        "actor_id": case.get("matched_by"),
+                        "recorded_by": case.get("matched_by_snapshot"),
+                        "business_date": None, "occurred_at": case.get("matched_at"),
+                        "kind": "refund", "note": "", "order_number": None}
+                if _can_row(policy, resource, item):
+                    row = _row(policy, resource, item, Decimal(case["amount"]), "for_party", "رد مبلغ طلب")
+                    row["business_date"] = _business_day({"occurred_at": case["refunded_at"]}) if case.get("refunded_at") else ""
+                    result.append(row)
+                continue
+            if case.get("status") not in {"refunded", "salla_refund_confirmed"}:
                 continue
             if case["status"] == "salla_refund_confirmed":
                 from operational_provider_statement_reconciliation import fact_backed_employee_refund
@@ -401,9 +440,15 @@ def ledger_items(state, computed, resource, policy):
                     continue
             elif kind != "bank":
                 continue
+            execution_stamp = case.get("refunded_at") or case.get("updated_at") or case.get("created_at")
+            confirmer = case.get("confirmed_by")
             item = {**case, "id": "customer_return:" + case["id"], "party_type": kind, "party_id": identity,
-                    "occurred_at": case.get("refunded_at") or case.get("updated_at") or case.get("created_at"),
+                    "actor_id": confirmer or case.get("actor_id"),
+                    "recorded_by": case.get("confirmed_by_snapshot") if confirmer else case.get("recorded_by"),
+                    "business_date": None, "occurred_at": execution_stamp,
                     "kind": "refund", "note": "", "order_number": None}
+            if not _can_row(policy, resource, item):
+                continue
             result.append(_row(policy, resource, item, Decimal(case["amount"]), "for_party", "رد مبلغ طلب"))
     result.sort(key=lambda item: (item["business_date"], item["recorded_at"], item["id"]), reverse=True)
     return result

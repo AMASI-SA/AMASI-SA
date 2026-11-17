@@ -4,27 +4,47 @@ from fastapi import FastAPI
 
 from test_operational_balance_integration import run, started, movement
 import operational_balance_routes as routes
+import operational_balance_workspace as workspace
+
+
+async def workspace_grant(db, *, resources=None, operations=None, version=1):
+    await db.users.update_one({"id": "staff"}, {"$set": {"operational_balance_access": {
+        "owner_id": "owner", "enabled": True, "version": version,
+        "operations": ["supplier.payment"] if operations is None else operations,
+        "resources": ([{"kind": kind, "id": identity, "use": True, "movements": "own", "balance": False}
+                       for kind, identity in [("supplier", "supplier"), ("bank", "bank")]]
+                      if resources is None else resources)}}})
+
+
+def workspace_payment():
+    return {"request_id": "scoped-security-payment", "expected_session_scope": routes.digest(["owner", "staff"]),
+            "party_type": "supplier", "party_id": "supplier", "side": "for_us", "reason": "payment",
+            "amount": "300", "business_date": "2026-10-07", "source_type": "bank", "source_id": "bank"}
 
 
 def test_revoked_actor_cannot_persist_after_endpoint_authorization(monkeypatch):
     """Simulate revocation during a source read after endpoint scope succeeds."""
-    original = routes.create_movement
+    original = workspace.create_movement
+    called = []
 
     async def revoke_then_create(db, owner, actor, payload, **kwargs):
+        called.append(True)
         await db.users.update_one({"id": actor}, {"$set": {"disabled": True, "operational_balance_permissions": []}})
         return await original(db, owner, actor, payload, **kwargs)
 
-    monkeypatch.setattr(routes, "create_movement", revoke_then_create)
+    monkeypatch.setattr(workspace, "create_movement", revoke_then_create)
 
     async def scenario(db):
         await started(db)
+        await workspace_grant(db)
         app = FastAPI()
         async def principal():
             return {"id": "staff"}
         app.include_router(routes.make_operational_balance_router(db, principal), prefix="/api")
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
-            response = await client.post("/api/operational-balances/movements", json={**movement(), "expected_session_scope": routes.digest(["owner", "staff"])})
+            response = await client.post("/api/operational-balances/workspace/entries", json=workspace_payment())
         assert response.status_code == 403, response.text
+        assert called == [True]
         state = await routes.read(db, "owner")
         assert state["movements"] == []
     run(scenario)
@@ -41,31 +61,21 @@ async def mobile_client(db, *, browser=False):
     return httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test")
 
 
-def test_active_member_needs_no_operational_grants_for_reports_or_choices():
+def test_active_membership_never_grants_unscoped_reports_or_choices():
     async def scenario(db):
         await started(db)
         async with await mobile_client(db, browser=True) as client:
             for path in ("reports", "audit", "obligations?party_type=employee&party_id=employee"):
                 response = await client.get("/api/operational-balances/" + path)
-                assert response.status_code == 200, response.text
-            context = (await client.get("/api/operational-balances/context")).json()
-            assert context["permissions"]["reports"] is True
-            assert context["issues"] == []
-            assert context["session_scope"] == routes.digest(["owner", "staff"])
-            assert context["session_scope"] != routes.digest(["different-owner", "staff"])
-            assert context["session_scope"] != routes.digest(["owner", "other-staff"])
+                assert response.status_code == 403, response.text
+            assert (await client.get("/api/operational-balances/context")).status_code == 403
+            assert (await client.get("/api/operational-balances/workspace/context")).status_code == 403
             choices = await client.get("/api/operational-balances/obligations?party_type=supplier&party_id=supplier")
-            assert choices.status_code == 200
-            assert choices.json()["items"]
-            # Settlement choices expose payable/estimated portions, not source
-            # facts, audit payloads, employee salaries or unrelated parties.
-            assert set(choices.json()["items"][0]) <= {"id", "kind", "party_type", "party_id", "currency", "direction", "outstanding", "expected", "available_to_pay", "pending_confirmation", "label", "business_date"}
-            assert all(row["party_type"] == "supplier" and row["party_id"] == "supplier"
-                       for row in choices.json()["items"])
+            assert choices.status_code == 403 and "items" not in choices.json()
     run(scenario)
 
 
-def test_active_members_share_operational_history_within_same_owner():
+def test_explicit_all_movements_grant_shares_only_assigned_bank_and_revokes_live():
     async def scenario(db):
         await started(db)
         await routes.create_movement(db, "owner", "owner", movement())
@@ -76,27 +86,25 @@ def test_active_members_share_operational_history_within_same_owner():
             {"_id": "ownerreceipt", "owner_id": "owner", "actor_id": "owner", "content": b"%PDF-safe", "mime": "application/pdf"},
             {"_id": "staffreceipt", "owner_id": "owner", "actor_id": "staff", "content": b"%PDF-safe", "mime": "application/pdf"},
         ])
+        await workspace_grant(db, resources=[], operations=[])
         async with await mobile_client(db) as client:
-            # Active membership and a report-page grant do not assign financial
-            # accounts. History is shared by actor only within the granted bank.
-            before_assignment = await client.get("/api/operational-balances/movements")
+            before_assignment = await client.get("/api/operational-balances/workspace/movements")
             assert before_assignment.status_code == 200, before_assignment.text
             assert before_assignment.json()["items"] == []
-            await db.mezan_mobile_app_access_v1.update_one(
-                {"owner_user_id": "owner", "user_id": "staff"},
-                {"$set": {"operational_banks": {"bank_ids": [], "read_bank_ids": ["bank"], "read_cash_ids": []}}})
-            response = await client.get("/api/operational-balances/movements")
+            await workspace_grant(db, operations=[], version=2, resources=[{
+                "kind": "bank", "id": "bank", "use": False, "movements": "all", "balance": False}])
+            response = await client.get("/api/operational-balances/workspace/ledger/bank/bank")
             assert response.status_code == 200, response.text
             items = response.json()["items"]
-            assert len(items) == 2 and {m["id"] for m in items} == {m["id"] for m in recorded}
-            assert all("actor_id" not in item and item["receipt_id"] is None for item in items)
-            assert all(item["bank_id"] == "bank" for item in items)
+            money_rows = [item for item in items if item["reason"] != "opening"]
+            assert {m["id"] for m in recorded}.issubset({m["id"] for m in money_rows})
+            assert response.json()["resource"]["balance"] is None
+            assert all(item["party_id"] == "bank" and "receipt_id" not in item for item in items)
             assert (await client.get("/api/operational-balances/receipts/ownerreceipt")).status_code == 403
             assert (await client.get("/api/operational-balances/receipts/staffreceipt")).status_code == 403
-            await db.mezan_mobile_app_access_v1.update_one(
-                {"owner_user_id": "owner", "user_id": "staff"},
-                {"$set": {"operational_banks.read_bank_ids": []}})
-            assert (await client.get("/api/operational-balances/movements")).json()["items"] == []
+            await workspace_grant(db, operations=[], resources=[], version=3)
+            assert (await client.get("/api/operational-balances/workspace/movements")).json()["items"] == []
+            assert (await client.get("/api/operational-balances/workspace/ledger/bank/bank")).status_code == 404
     run(scenario)
 
 
@@ -104,60 +112,64 @@ def test_guard_checks_again_after_source_reads_and_resets_after_failure(monkeypa
     import operational_balance_service as service
     from operational_balance_store import AUTHORIZATION_GUARD
     original = service.entity
+    called = []
     async def revoke_during_source(db, owner, kind, identity, currency):
+        called.append((kind, identity))
         row = await original(db, owner, kind, identity, currency)
         await db.users.update_one({"id": "staff"}, {"$set": {"disabled": True}})
         return row
     async def scenario(db):
         await started(db)
+        await workspace_grant(db)
         monkeypatch.setattr(service, "entity", revoke_during_source)
         app = FastAPI()
         async def principal():
             return {"id": "staff"}
         app.include_router(routes.make_operational_balance_router(db, principal), prefix="/api")
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
-            response = await client.post("/api/operational-balances/movements", json={**movement(), "expected_session_scope": routes.digest(["owner", "staff"])})
+            response = await client.post("/api/operational-balances/workspace/entries", json=workspace_payment())
             assert response.status_code == 403
+        assert called
         assert AUTHORIZATION_GUARD.get() is None
         assert (await routes.read(db, "owner"))["movements"] == []
     run(scenario)
 
 
-def test_inactive_owner_blocks_staff_and_browser_view_still_reports():
+def test_inactive_owner_blocks_an_otherwise_authorized_staff_workspace():
     async def scenario(db):
         await started(db)
+        await workspace_grant(db)
         app = FastAPI()
         async def principal():
             return {"id": "staff"}
         app.include_router(routes.make_operational_balance_router(db, principal), prefix="/api")
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
-            assert (await client.get("/api/operational-balances/reports")).status_code == 200
+            assert (await client.get("/api/operational-balances/workspace/context")).status_code == 200
             await db.users.update_one({"id": "owner"}, {"$set": {"disabled": True}})
-            assert (await client.post("/api/operational-balances/movements", json={**movement(), "expected_session_scope": routes.digest(["owner", "staff"])})).status_code == 403
+            assert (await client.post("/api/operational-balances/workspace/entries", json=workspace_payment())).status_code == 403
     run(scenario)
 
-def test_independent_mobile_report_grant_allows_reports():
+def test_old_mobile_report_flag_does_not_grant_unscoped_reports():
     async def scenario(db):
         await started(db)
         async with await mobile_client(db) as client:
             await db.mezan_mobile_app_access_v1.update_one({"user_id": "staff"}, {"$push": {"permissions": "operational_balance_reports_read"}})
             response = await client.get("/api/operational-balances/reports")
-            assert response.status_code == 200, response.text
-            assert (await client.get("/api/operational-balances/context")).json()["permissions"]["reports"] is True
+            assert response.status_code == 403, response.text
+            assert (await client.get("/api/operational-balances/context")).status_code == 403
     run(scenario)
 
 
-def test_active_member_without_any_operational_grants_has_all_functions():
+def test_active_member_without_policy_cannot_read_or_write_financial_data():
     async def scenario(db):
         await started(db)
         await db.users.update_one({'id':'staff'},{'$unset':{'operational_balance_permissions':''}})
         async with await mobile_client(db, browser=True) as client:
             await db.mezan_mobile_app_access_v1.update_one({'user_id':'staff'},{'$set':{'permissions':[]}})
-            context=(await client.get('/api/operational-balances/context')).json()
-            assert all(context['permissions'].values())
+            assert (await client.get('/api/operational-balances/context')).status_code == 403
             response=await client.post('/api/operational-balances/movements',json={**movement(),'expected_session_scope':routes.digest(['owner','staff'])})
-            assert response.status_code==200, response.text
-            assert (await routes.read(db,'owner'))['movements'][0]['actor_id']=='staff'
+            assert response.status_code==403, response.text
+            assert (await routes.read(db,'owner'))['movements'] == []
     run(scenario)
 
 
