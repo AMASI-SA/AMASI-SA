@@ -11,6 +11,71 @@ export const resourceLabels = {
 export const resourceKey = resource => JSON.stringify([resource.kind, resource.id]);
 export const isMoneyAccount = kind => kind === 'bank' || kind === 'cash';
 
+export function movementDate(row, full = false) {
+  // Date-only business records do not establish a time. A timestamp without a
+  // timezone is likewise not evidence of the user's local timezone.
+  const timestamp = row?.recorded_at;
+  if (typeof timestamp === 'string' && /T\d{2}:\d{2}.*(?:Z|[+-]\d{2}:?\d{2})$/i.test(timestamp)) {
+    const date = new Date(timestamp);
+    if (!Number.isNaN(date.getTime())) {
+      const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Riyadh', year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+      }).formatToParts(date).map(part => [part.type, part.value]));
+      const recordedDay = `${parts.year}-${parts.month}-${parts.day}`;
+      const businessDay = /^\d{4}-\d{2}-\d{2}$/.test(row?.business_date || '') ? row.business_date : null;
+      if (businessDay && businessDay !== recordedDay) {
+        return full ? `${businessDay} · سُجّلت ${recordedDay} ${parts.hour}:${parts.minute} · الرياض` : businessDay.slice(5);
+      }
+      return `${full ? `${parts.year}-` : ''}${parts.month}-${parts.day} ${parts.hour}:${parts.minute}${full ? ' · الرياض' : ''}`;
+    }
+  }
+  const date = row?.business_date;
+  return /^\d{4}-\d{2}-\d{2}$/.test(date || '') ? (full ? date : date.slice(5)) : 'تاريخ غير موثق';
+}
+
+export function movementTitle(row, compact = false) {
+  if (compact && row.automatic_history === 'salary') return 'آخر راتب مسجل';
+  if (compact && row.automatic_history === 'delivery') return 'آخر أجرة توصيل';
+  if (row.customer_name) return row.customer_name;
+  if (row.order_number) return `طلب ${row.order_number}`;
+  if (row.counterparty_name) return row.counterparty_name;
+  const description = row.description || '';
+  if (description && !/^(استلام مبلغ|دفع مبلغ|مستحق من المصدر|تسجيل مستحق)(?:\s|$)/.test(description)) return description;
+  return row.source_label || row.party_name || description || 'حركة مالية';
+}
+
+export function movementRecorder(row) {
+  return ['salary', 'delivery'].includes(row.automatic_history) ? 'النظام تلقائيًا' : row.recorded_by?.name || 'غير موثق';
+}
+
+export function signedResourceBalance(resource) {
+  const balance = resource?.balance;
+  if (resource?.access?.balance !== true || !balance || balance.visible === false) return null;
+  const amount = minorUnits(balance.amount);
+  if (amount === null) return null;
+  const cash = isMoneyAccount(resource.kind) || resource.kind === 'employee_custody';
+  const negative = cash ? balance.side === 'for_party' : balance.side === 'for_us';
+  const value = negative ? -amount : amount;
+  const absolute = value < 0n ? -value : value;
+  return `${value < 0n ? '-' : ''}${absolute / 100n}.${String(absolute % 100n).padStart(2, '0')}`;
+}
+
+export function canReadStatement(context, resource) {
+  return Boolean(resource && resource.access?.movements !== 'none'
+    && (context?.actor?.is_owner === true || resource.access?.report === true));
+}
+
+export function isStatement(value, resource, query) {
+  return Boolean(value && value.resource?.kind === resource.kind && value.resource?.id === resource.id
+    && value.date_from === query.date_from && value.date_to === query.date_to
+    && ['all', 'own'].includes(value.scope) && typeof value.currency === 'string'
+    && Array.isArray(value.items) && value.items.every(row => row.id != null && minorUnits(row.amount) !== null)
+    && minorUnits(value.totals?.for_party) !== null && minorUnits(value.totals?.for_us) !== null
+    && [value.opening_balance, value.closing_balance].every(balance => balance === null || minorUnits(balance) !== null)
+    && typeof value.can_print === 'boolean');
+}
+
 export function minorUnits(value) {
   const text = String(value ?? '').trim()
     .replace(/[٠-٩]/g, digit => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)))

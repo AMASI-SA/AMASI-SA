@@ -69,6 +69,7 @@ jobs:
           backend/tests/test_operational_refresh_parallel_profit.py
           backend/tests/test_operational_refresh_party_issue_index.py
           backend/tests/test_operational_workspace_refunds.py
+          backend/tests/test_operational_workspace_statements.py
           backend/tests/test_operational_completed_shipping*.py
           backend/tests/test_operational_read_runtime.py
           backend/tests/test_operational_financial_review_groups.py
@@ -96,6 +97,9 @@ jobs:
                         'test_operational_refresh_party_issue_index'):
               assert any(suite in c.get('classname', '') for c in cases), suite + ' not collected'
           assert len([c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_workspace_refunds']) >= 23, 'Scoped financial-only refund contracts missing'
+          assert len([c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_workspace_statements']) >= 10, 'Scoped period statements missing'
+          assert len([c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_balance_reviews']) >= 7, 'Scoped receipt-review permissions missing'
+          assert len([c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_balance_review_mongo']) == 3, 'Real scoped review transactions missing'
           assert len([c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_balance_pending_commands']) >= 33, 'Authenticated pending-command recovery contracts missing'
           assert any('test_operational_open_cost_exposure' in c.get('classname', '') for c in cases), 'Historical open-cost tests were not collected'
           bundle_cases = [c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_bundle_cost_projection']
@@ -205,6 +209,7 @@ jobs:
               r.numPendingTestSuites || r.numTodoTests) process.exit(1);
           for (const suffix of ['SalaryStart.test.jsx', 'EmployeesV2Management.test.jsx', 'OperationalSupplierAccount.test.jsx',
                                 'SimpleBalances.test.jsx', 'SimpleBalanceAccess.test.jsx', 'SimpleOrderRefunds.test.jsx',
+                                'SimpleBalanceStatement.test.jsx', 'SimpleBalanceReviews.test.jsx',
                                 'simpleBalancesApi.test.js', 'simpleBalancesModel.test.js', 'simpleBalancesPending.test.jsx',
                                 'OperationalFinancialPosition.test.jsx', 'DriverPaymentReview.test.jsx',
                                 'NativePurchaseReview.test.jsx', 'nativePurchaseLinkApi.test.js',
@@ -372,14 +377,17 @@ jobs:
           const out = process.env.SIMPLE_BALANCES_UAT_OUTPUT;
           const evidence = JSON.parse(fs.readFileSync(path.join(out, 'browser-evidence.json')));
           if (evidence.synthetic_only !== true || evidence.actual_components !== true ||
-              evidence.chromium_sandbox !== true || evidence.results.length !== 8 ||
+              evidence.chromium_sandbox !== true || evidence.results.length !== 11 ||
               evidence.results.some(result => result.status !== 'PASS') || evidence.errors.length) {
-            throw Error('All eight simple balances browser scenarios must execute and pass');
+            throw Error('All eleven simple balances browser scenarios must execute and pass');
           }
           for (const name of ['ledger', 'external-form', 'refund', 'access']) {
             for (const size of ['desktop', 'mobile']) {
               if (!fs.statSync(path.join(out, `${name}-${size}.png`)).size) throw Error('Missing component screenshot');
             }
+          }
+          for (const name of ['salary-compact-mobile', 'salary-history-mobile', 'statement-mobile', 'reviews-approved-mobile']) {
+            if (!fs.statSync(path.join(out, `${name}.png`)).size) throw Error('Missing period/review screenshot');
           }
           JS
           git diff --exit-code
