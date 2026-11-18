@@ -1372,12 +1372,14 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
             max_rows=MAX_ROWS, order_numbers=plan_orders) if plan_orders else {}
     with refresh_stage('source_delivery_history'):
         from operational_delivery_evidence import conflicting_shipments, created_after_start_delivery, status_delivery
+        from operational_aramex_status_shipping import status_reference_conflicts
         from operational_delivery_confirmation import PREFIX as DELIVERY_CONFIRMATION_PREFIX, date_gap_identity
         confirmation_facts = (operational_state or {}).get('engine', {}).get('facts', {})
         manual_driver_numbers = {str(record.get('order_number')) for key, record in confirmation_facts.items()
                                 if key.startswith(DELIVERY_CONFIRMATION_PREFIX) and isinstance(record, dict)
                                 and record.get('party_type') == 'store_driver'}
         shipment_conflicts = conflicting_shipments(data['unified_orders'], operational_state)
+        status_shipment_conflicts = await prepare_in_thread(status_reference_conflicts, data['unified_orders'], operational_state)
         undated_drivers = {str(a.get('order_number')) for a in data['store_delivery_assignments']
                            if a.get('active') is True and a.get('delivered_at') in (None, '')
                            and a.get('status') in {'assigned', 'out_for_delivery', 'delivered'}}
@@ -1469,7 +1471,8 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                     try:
                         prepaid, charge = source_event(data, setup, source, raw, operational_state, owner, start, now,
                                                        delivery_history.get(order_number, ()), shipment_conflicts,
-                                                       review_index=completion_review_index)
+                                                       review_index=completion_review_index,
+                                                       status_shipment_conflicts=status_shipment_conflicts)
                         if not prepaid:
                             data['_prepaid_orders'].discard(identity)
                         if charge:
@@ -1480,7 +1483,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                     except (ValueError, TypeError, KeyError, InvalidOperation) as exc:
                         code = str(exc) if str(exc).startswith(('operational_prepaid_shipping_', 'operational_shipping_completion_')) else 'operational_prepaid_shipping_evidence_incomplete'
                         issue(out, code, identity, component='prepaid_shipping',
-                              required_action='راجع إثبات تنفيذ الطلب وتعرفة الشحن والصندوق المعتمد قبل احتساب الخصم.')
+                              required_action='راجع حالة الطلب وإسناد شركة الشحن والتعرفة والصندوق المعتمد قبل احتساب الخصم.')
                         courier_issue(out, code, raw, source, setup=setup, owner=owner)
                 if identity not in data['_prepaid_orders']:
                     from operational_completed_shipping import deferred_source_event
