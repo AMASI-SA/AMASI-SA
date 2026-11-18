@@ -1,12 +1,60 @@
 # Direct and operational Ready — 19 November 2026
 
+## Current release handoff — 2026-11-18 22:59 UTC
+
+Canonical release PR: https://github.com/AMASI-SA/AMASI-SA/pull/2001.
+Release branch: codex/operational-ready-release-20261119.
+Source A: 213a284901fb49b8c79948669cf67cc37cabb409.
+Intent-only B: 1418ea245eec1fad69bf959292480e46d0b72fb2.
+Source tree: 6e36ac7239f030228cc793f66dbbbca6563296d3.
+Deployment tree: 3ec825afd58535d4e00670dfdd1179734d72effe.
+Reviewed production base J: 77d824a780df582b5c32f4dda87a959e35e1ed1e.
+Runtime release: rg5-e8739283dad7f69c42c3f535cc32ea514fd505e8e65daedd82a785200b75d03c.
+Intent SHA256: b852bc5798708a28b63d306955cb6dc9195d909c5b872c44fed02867f04890c1.
+
+All twenty applicable exact-B CI runs passed, including G47, Stock Eligibility,
+Review Completion, Operational Balance, both CodeQL languages, Security Gate,
+and Mezan Release Readiness. Both Host Node20.20.2 and24.19.0 clean-clone adapter
+rehearsals passed. Their downloaded ZIP SHA256 values were checked; each tar
+matches the frozen intent, complete runtime identity, proof and all294 Frontend
+artifact records. Independent source manifests matched all1242 Backend and307
+release-control records. Latest focused local Ready/supplier tests:87 passed.
+Supplier function/default progress AST preservation was independently verified.
+
+No production merge, own lease, shared source mutation or publication has been
+performed by this task. Production changed by this task: no. The last original
+shared guard result supplied by the owner was ACTIVE for another conversation:
+actor codex-aramex-refresh-2000-20261119, prepared2026-11-18T22:26:19.151229Z,
+sourcec0ce20a1273574be833261218335a4b6e527d658, deployment77d824a780df582b5c32f4dda87a959e35e1ed1e,
+release rg5-d3c749f37ff1300718cedce39b78a6277b440812946c7308fad91ec4d6bf3601.
+Our isolated rehearsal stopped before fetch/clone because that lease was active.
+Public health now serves that other release, but its owner still needs explicit
+Deployment Succeeded plus original verify3/lease closure. The user was asked to
+relay to that conversation. Never clear or reuse its lease.
+
+Next safe action: obtain fresh original /app status active:false, confirm remote
+production still matches the reviewed base, normal merge PR2001 with expected
+head B and preserve its exact tree, then tracked-clean /app fast-forward, original
+host yarn build adapter with PYTHONDONTWRITEBYTECODE=1 and the reviewed public
+client origin, own prepare/prepublish, one authorized publication and mandatory
+newer Deployment Succeeded plus official verify3/active:false. Then inspect an
+in-progress affected order read-only through ADB. Do not mark a real order Ready
+merely to test the fix. Supplier conditions and unrelated files remain preserved.
+
+This final task record is maintained on the diagnostic branch so the immutable
+A/B release chain stays unchanged. Diagnostic PR1999 is superseded and must not
+be deployed. The PR2001 body is the current cross-branch continuation pointer.
+Issue1006 is at its comment limit. No new source build or implementation work is
+required unless remote production or the source tree has changed.
+
 The owner requests that an unfinished internal operational item or product
 directed to assembly can be marked Ready whenever its current Salla order is
 in progress. Other Salla statuses block the action. Supplier-product Ready
 conditions must remain unchanged. The owner explicitly authorizes publication.
 
 Production base: `77d824a780df582b5c32f4dda87a959e35e1ed1e`.
-Task branch: `codex/operational-ready-status-20261119`.
+Task branch: `codex/operational-ready-release-20261119`.
+Preserved diagnostic branch: `codex/operational-ready-status-20261119` (PR 1999).
 
 ## Working checkpoint
 
@@ -69,12 +117,15 @@ two existing real-Mongo failures remain the regression checks. Latest focused
 local Ready/supplier-consumption run after this change: 87 passed, zero skips.
 
 Production advanced through PR 2000 while this task was testing. Its thirteen
-disjoint changed files are retained in this source checkpoint and merge
-ancestry. An Operational Balance CI failure used the newer base workflow with
-the older head, so its two newly referenced test files did not exist; bringing
-the current production tree into this branch resolves that source mismatch
-without weakening the workflow. All candidate intents through 67d5646c are
-superseded. Fresh integrated CI and a fresh intent-only B are required.
+disjoint changed files form the current production baseline. An Operational
+Balance job used the newer base workflow with the older head and could not find
+its added tests. The 8fdad087 integration checkpoint retains those files, but
+the original Release Guard correctly rejected its merge history because that
+history changed the prior intent. No guard or workflow is weakened. Preserve
+that diagnostic checkpoint, and start this release branch directly from
+77d824a780df582b5c32f4dda87a959e35e1ed1e with the same reviewed runtime and tests.
+Only the task record differs from 8fdad087. All earlier candidate intents are
+superseded. Fresh exact-source CI and a fresh intent-only B remain required.
 
 Windows test command (from backend, with dotenv disabled and PYTHONPATH set):
 `python -B -m pytest --noconftest -p no:cacheprovider tests/test_operational_item_ready_policy.py -q --tb=short`.
@@ -82,8 +133,11 @@ Windows test command (from backend, with dotenv disabled and PYTHONPATH set):
 The Windows browser-control tool refused further UI access because it could
 not establish the browser URL. In-app browser operations also timed out. No
 shared `/app` changes, release lease, merge or publication have occurred.
-An existing authorized terminal/project access route is needed for the shared
-guard and final publication. Production changed by this task: **no**.
+The owner provides authorized Emergent Terminal output: shared tracked files
+are clean at production 77d824a780df582b5c32f4dda87a959e35e1ed1e, Node24.19.0,
+Yarn1.22.22, and unrelated untracked files are retained. The shared guard was
+inactive. Final commands will use that terminal route. Production changed by
+this task: **no**.
 
 Next: finish exact-source tests, preserve source A remotely, governed Linux
 build/frozen intent-only B, exact-B CI, then shared inactive guard, adapter,
