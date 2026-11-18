@@ -220,6 +220,82 @@ async def test_unassigned_afternoon_account_does_not_hide_proven_morning(bundle_
 
 
 @pytest.mark.asyncio
+async def test_known_cohort_costs_remain_proven_without_completing_account_attribution(bundle_db):
+    orders = [ad_order("mapped", quantity=2, payment_method="bank_transfer"),
+              ad_order("unassigned", hour="12:30:00", campaign_id=None, payment_method="bank_transfer")]
+    before = deepcopy(orders)
+    result, _, identities = await snapshot(bundle_db, orders)
+    mapped = rows_by_id(result)["usd"]
+    unassigned = result["unassigned_result"]
+    for row, pieces, total in ((mapped, 2, 29.5), (unassigned, 1, 20.5)):
+        summary = row["hover_summary"]
+        assert row["attribution_complete"] is False
+        assert row["salla_orders"] is row["salla_sales_sar"] is None
+        assert summary["complete"] is False
+        assert summary["total_cost_sar"] is None
+        assert summary["known_pieces"] == pieces
+        assert summary["known_total_cost_sar"] == total
+        assert summary["known_total_cost_complete"] is True
+        for flag in ("pieces_complete", "product_cost_complete", "shipping_cost_complete", "payment_fees_complete"):
+            assert summary[flag] is False
+            assert summary["known_" + flag] is True
+    assert result["coverage"]["unassigned_orders"] == 1
+    assert result["daily_total"]["hover_summary"]["total_cost_sar"] == 50
+    afternoon_unknown = result["segments"][1]["unassigned_result"]["hover_summary"]
+    assert afternoon_unknown["known_total_cost_sar"] == 20.5
+    assert afternoon_unknown["known_total_cost_complete"] is True
+    assert afternoon_unknown["complete"] is False
+    assert orders == before
+    assert len(identities.catalog.reads) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("missing", ["product", "shipping", "payment", "currency"])
+async def test_known_cohort_completeness_does_not_certify_missing_costs_as_zero(bundle_db, missing):
+    mapped = ad_order("incomplete")
+    if missing == "product":
+        mapped["products"] = [{"product_id": "unpriced", "quantity": 1, "total": 50}]
+    elif missing == "shipping":
+        mapped["shipping_company"] = "unconfigured"
+    elif missing == "payment":
+        mapped["payment_method"] = "unconfigured"
+    else:
+        mapped["currency"] = "KWD"
+    result, _, _ = await snapshot(bundle_db, [mapped, ad_order("unassigned", campaign_id=None)])
+    summary = rows_by_id(result)["usd"]["hover_summary"]
+    failed_flag = {"product": "known_product_cost_complete", "shipping": "known_shipping_cost_complete",
+                   "payment": "known_payment_fees_complete", "currency": "known_payment_fees_complete"}[missing]
+    assert summary[failed_flag] is False
+    assert summary["known_total_cost_complete"] is False
+    assert summary["known_total_cost_sar"] is None
+    assert summary["complete"] is False
+    assert summary["total_cost_sar"] is None
+    if missing != "currency":
+        known_value = {"product": "known_product_cost_sar", "shipping": "known_shipping_cost_sar",
+                       "payment": "known_payment_fees_sar"}[missing]
+        assert summary[known_value] == 0
+
+
+@pytest.mark.asyncio
+async def test_known_cost_flags_distinguish_unobserved_orders_from_an_empty_cohort():
+    costs = DashboardAdsCostCollector()
+    costs.capture_settings(SETTINGS)
+    missing = await costs.summary([ad_order("not-observed")], scope_complete=False)
+    assert missing["known_pieces"] == missing["known_product_cost_sar"] == 0
+    assert missing["known_pieces_complete"] is False
+    assert missing["known_product_cost_complete"] is False
+    assert missing["known_total_cost_complete"] is False
+    assert missing["known_total_cost_sar"] is None
+    empty = await costs.summary([], scope_complete=False)
+    assert empty["known_total_cost_sar"] == 0
+    assert empty["known_total_cost_complete"] is True
+    assert all(empty["known_" + flag] for flag in (
+        "pieces_complete", "product_cost_complete", "shipping_cost_complete", "payment_fees_complete"))
+    assert empty["complete"] is False
+    assert empty["total_cost_sar"] is None
+
+
+@pytest.mark.asyncio
 async def test_direct_hover_and_all_order_costs_include_unrepresented_paid_orders_once(bundle_db):
     orders = [
         ad_order("direct-am", provider="store"),

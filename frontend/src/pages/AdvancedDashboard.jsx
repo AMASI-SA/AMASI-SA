@@ -29,8 +29,9 @@ import { orderCityLabel } from "../lib/orderCityLabel";
 import OrderCurrencyAmount from "../components/OrderCurrencyAmount";
 import { mergeDashboardWithPlatformSpend, needsCanonicalDashboardSpendRefresh } from "../lib/dashboardPlatformSpendMerge";
 import { dashboardRequestRangeKey } from "../lib/dashboardLatestResponseBroker";
+import { dashboardExecutiveProfitState } from "../lib/dashboardExecutiveProfit";
 import { createDashboardFetchAdmission } from "../lib/dashboardFetchAdmission";
-import { dashboardAvailableAmount, dashboardKnownIncompleteAmount, dashboardCanonicalSpendMatches,
+import { dashboardAvailableAmount, dashboardCanonicalSpendMatches,
     getDashboardAdsSpend } from "../services/dashboardAdsSpend";
 import {
     DASHBOARD_CARD_REQUEST_TIMEOUT_MS,
@@ -648,48 +649,16 @@ function OperatingProfitDetails({ totals = {}, total = 0 }) {
 export function ProfitCard({ data, loading = false, fromDate, toDate, platformSpend }) {
     const [expanded, setExpanded] = useState(null);
     const t = data?.totals || {};
-    const productCostComplete = typeof t.product_cost_complete === "boolean"
-        ? t.product_cost_complete
-        : Number(t.incomplete_profit_orders_count || data?.product_cost_v2?.incomplete_orders_count || 0) === 0;
+    const profitState = dashboardExecutiveProfitState({
+        executiveSnapshot: data, spendSnapshot: platformSpend, fromDate, toDate,
+    });
+    const { productCostComplete, salesConversionComplete, platformSnapshot, currentPlatformIncomplete,
+        sharedAdsTotal, adsSpendAvailable, adsSpendProvisional, knownAdsTotal, summarySpendPending,
+        displaySpendProvisional, netProfit } = profitState;
     const adsQuality = data?.ads_v2?.spend_quality || {};
-    const adsTotal = finiteFinancialValue(t.total_ads_cost, { nonnegative: true });
-    const platformSnapshot = platformSpend === undefined ? data?.dashboard_platform_spend : platformSpend;
-    const currentPlatformIncomplete = platformSpend !== undefined && fromDate
-        && platformSnapshot?.date_from === fromDate && platformSnapshot?.date_to === (toDate || fromDate)
-        && platformSnapshot?.spend_quality?.status === "incomplete"
-        && platformSnapshot?.spend_quality?.amount_available === false;
-    const sharedAdsTotal = platformSpend !== undefined
-        ? dashboardAvailableAmount(platformSnapshot, { fromDate, toDate }) : null;
-    const sharedAdsChanged = sharedAdsTotal !== null
-        && !dashboardCanonicalSpendMatches(data, platformSnapshot);
-    const adsSpendComplete = (
-        !currentPlatformIncomplete && !sharedAdsChanged && adsTotal !== null
-        && t.ads_spend_data_complete === true
-        && adsQuality.status === "complete"
-        && adsQuality.amount_complete === true
-    );
-    const adsSpendAvailable = (
-        !currentPlatformIncomplete && !sharedAdsChanged && (adsSpendComplete
-        || (
-            adsTotal !== null
-            && t.ads_spend_amount_available === true
-            && adsQuality.amount_available === true
-        ))
-    );
-    const adsSpendProvisional = (
-        adsSpendAvailable
-        && !adsSpendComplete
-        && t.ads_spend_provisional === true
-        && adsQuality.provisional === true
-    );
     const operationalNoActivityObserved = adsSpendProvisional
         && Array.isArray(adsQuality.snapchat?.reason_codes)
         && adsQuality.snapchat.reason_codes.includes("snapchat_operational_no_activity_observed");
-    const knownAdsTotal = !adsSpendAvailable
-        ? dashboardKnownIncompleteAmount(platformSnapshot, { fromDate, toDate }) : null;
-    const summarySpendPending = sharedAdsTotal !== null && !adsSpendAvailable;
-    const displaySpendProvisional = sharedAdsTotal !== null
-        ? platformSnapshot.spend_quality.status === "provisional" : adsSpendProvisional;
     const accountRangeMatches = (!fromDate || platformSnapshot?.date_from === fromDate)
         && (!(toDate || fromDate) || platformSnapshot?.date_to === (toDate || fromDate));
     const snapchatAccounts = accountRangeMatches ? platformSnapshot?.providers?.snapchat?.accounts : null;
@@ -705,14 +674,11 @@ export function ProfitCard({ data, loading = false, fromDate, toDate, platformSp
         { key: "operating", label: "المصروفات التشغيلية (رواتب وإيجارات وغيرها)", value: t.operating_expenses_total, Icon: BriefcaseBusiness, color: "text-orange-700", expandable: true },
     ];
     const salesValue = finiteFinancialValue(t.total_sales);
-    const salesConversionComplete = t.sales_currency_conversion_complete !== false
-        && data?.currency_conversion?.conversion_complete !== false;
     const sales = salesValue ?? 0;
     const orderCount = Number(t.total_orders || 0);
     const averageBasket = salesConversionComplete && salesValue !== null && orderCount > 0
         ? sales / orderCount
         : null;
-    const netProfit = finiteFinancialValue(t.net_profit);
     const netMargin = adsSpendAvailable && sales > 0 && netProfit !== null ? (netProfit / sales * 100).toFixed(2) : null;
     const details = {
         ads: <ProfitDetailBox testid="advanced-profit-ads-details"><AdsExecutiveBreakdownTable data={data?.ads_v2?.executive_breakdown} snapchatAccounts={Array.isArray(snapchatAccounts) ? snapchatAccounts : null} googleSpendEvidence={googleSpendEvidence} platformSpendEvidence={platformSpend !== undefined || !adsSpendAvailable ? platformSnapshot : null} fromDate={fromDate} toDate={toDate} financialMetricsPending={Boolean(currentPlatformIncomplete || summarySpendPending)} /></ProfitDetailBox>,
@@ -724,7 +690,7 @@ export function ProfitCard({ data, loading = false, fromDate, toDate, platformSp
     return <Panel className="border-emerald-200" testid="advanced-profit-summary" title="الملخص التنفيذي للأرباح"><div className="flex h-14 items-center justify-between border-b border-emerald-800 bg-emerald-700 px-4 text-white"><h2 className="flex items-center gap-2 font-extrabold"><TrendingUp className="h-5 w-5" />الملخص التنفيذي للأرباح</h2><span className="text-[9px] font-bold text-emerald-100">{initialLoading ? "جارٍ مزامنة الفترة…" : !salesConversionComplete ? "تحويل العملات غير مكتمل" : adsSpendProvisional ? "الفترة المحددة · مؤقت" : "الفترة المحددة"}</span></div>
         {operationalNoActivityObserved && <p className="border-b border-amber-100 bg-amber-50 px-4 py-2 text-[10px] font-semibold text-amber-800" data-testid="advanced-profit-no-activity-hint">لم يُرصد نشاط في أحد الحسابات حتى آخر فحص. الأرقام أولية وقد تتأخر تقارير سناب.</p>}
         {!initialLoading && !adsSpendAvailable && <p className="border-b border-amber-100 bg-amber-50 px-4 py-2 text-[10px] font-semibold text-amber-800" data-testid="advanced-profit-ads-incomplete-hint">{summarySpendPending ? "تم تحديث الصرف؛ تكلفة الطلب والعائد بانتظار تحديث الملخص" : <>{knownAdsTotal !== null && "المتاح لا يشمل الصرف غير المتوفر، وليس إجماليًا نهائيًا. "}تكلفة الطلب والعائد بانتظار اكتمال الصرف</>}</p>}
-        <div data-testid="advanced-profit-kpis" className="grid grid-cols-2 gap-2 border-b border-emerald-100 bg-emerald-50/40 p-3 sm:grid-cols-4"><Metric label="تكلفة الطلب" value={initialLoading || !adsSpendAvailable || t.avg_cost_per_order == null ? "—" : `${money(t.avg_cost_per_order)} ر.س`} Icon={ShoppingBag} tone="bg-blue-50 text-blue-700" /><Metric label="عدد الطلبات" value={initialLoading ? "—" : integer(orderCount)} Icon={ShoppingCart} tone="bg-emerald-50 text-emerald-700" /><Metric label="العائد" value={initialLoading || !salesConversionComplete || !adsSpendAvailable || t.overall_roas == null ? "—" : `${Number(t.overall_roas).toFixed(2)}×`} Icon={TrendingUp} tone="bg-violet-50 text-violet-700" /><Metric label="متوسط قيمة سلة المشتريات" value={initialLoading || averageBasket == null ? "—" : `${money(averageBasket)} ر.س`} Icon={ShoppingBag} tone="bg-rose-50 text-rose-600" /></div><div data-testid="advanced-profit-expenses" className="px-4 py-2">{rows.map((row, index) => { const rowValue = finiteFinancialValue(row.value); const rowIncomplete = (row.key === "ads" && !adsSpendAvailable) || (row.key === "sales" && !salesConversionComplete); const rowPartial = row.key === "ads" && knownAdsTotal !== null; const rowShared = row.key === "ads" && sharedAdsTotal !== null; const percentage = index > 0 && sales > 0 && rowValue !== null && !rowIncomplete ? (rowValue / sales * 100).toFixed(2) : null; return <div key={row.key}><button type="button" disabled={!row.expandable} onClick={() => row.expandable && setExpanded((value) => value === row.key ? null : row.key)} aria-expanded={row.expandable ? expanded === row.key : undefined} data-testid={`advanced-profit-row-${row.key}`} dir="rtl" className={`flex min-h-[56px] w-full items-center gap-3 border-b text-right last:border-0 ${row.expandable ? "cursor-pointer rounded-lg hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-emerald-200" : "cursor-default"}`}><span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-50 ${row.color}`}><row.Icon className="h-4 w-4" /></span><p className="flex min-w-0 flex-1 items-center gap-1 text-right text-xs font-extrabold text-slate-700">{row.label}{row.expandable && <ChevronDown className={`h-3 w-3 shrink-0 transition-transform ${expanded === row.key ? "rotate-180" : ""}`} />}</p><div dir="ltr" className={`num flex shrink-0 items-baseline gap-1 text-left text-base font-black ${row.color}`}><span>{initialLoading ? "—" : rowPartial ? money(knownAdsTotal) : rowShared ? money(sharedAdsTotal) : rowIncomplete ? "غير مكتمل" : optionalMoney(row.value)}</span>{!initialLoading && (rowPartial || rowShared || !rowIncomplete && rowValue !== null) && <span className="text-[11px] font-extrabold">ر.س</span>}{!initialLoading && rowPartial && <span className="rounded bg-amber-50 px-1 py-0.5 text-[9px] font-bold text-amber-800">غير مكتمل</span>}{percentage && <span className="ml-1 rounded-md bg-current/10 px-1.5 py-0.5 text-[9px] opacity-80">{percentage}%</span>}</div></button>{row.expandable && expanded === row.key && details[row.key]}</div>; })}</div><div data-testid="advanced-profit-net-hero" dir="ltr" className="m-4 flex min-h-[64px] items-center justify-between rounded-xl bg-emerald-600 px-5 text-white"><p className="num flex items-baseline gap-1 text-xl font-black">{!initialLoading && productCostComplete && netMargin && <span data-testid="advanced-profit-net-margin" title="هامش صافي الأرباح">{netMargin}%</span>}<span>{initialLoading ? "—" : !productCostComplete ? "ناقص التكلفة" : !salesConversionComplete || !adsSpendAvailable ? "غير مكتمل" : optionalMoney(t.net_profit)}</span>{!initialLoading && productCostComplete && salesConversionComplete && adsSpendAvailable && netProfit !== null && <span className="text-sm">ر.س</span>}</p><div dir="rtl"><p className="font-black">صافي الأرباح</p><p className="text-[9px] text-emerald-100">{!initialLoading && !productCostComplete ? "بانتظار حسم خيارات المنتجات وتكاليفها" : !initialLoading && !salesConversionComplete ? "بانتظار سعر صرف موثّق من طلب سلة" : !initialLoading && summarySpendPending ? "بانتظار تحديث الملخص وفق الصرف الحالي" : !initialLoading && !adsSpendAvailable ? "بانتظار اكتمال بيانات الإعلانات" : adsSpendProvisional ? "تقديري حتى آخر مزامنة للإعلانات" : "بعد جميع التكاليف والمصروفات"}</p></div></div></Panel>;
+        <div data-testid="advanced-profit-kpis" className="grid grid-cols-2 gap-2 border-b border-emerald-100 bg-emerald-50/40 p-3 sm:grid-cols-4"><Metric label="تكلفة الطلب" value={initialLoading || !adsSpendAvailable || t.avg_cost_per_order == null ? "—" : `${money(t.avg_cost_per_order)} ر.س`} Icon={ShoppingBag} tone="bg-blue-50 text-blue-700" /><Metric label="عدد الطلبات" value={initialLoading ? "—" : integer(orderCount)} Icon={ShoppingCart} tone="bg-emerald-50 text-emerald-700" /><Metric label="العائد" value={initialLoading || !salesConversionComplete || !adsSpendAvailable || t.overall_roas == null ? "—" : `${Number(t.overall_roas).toFixed(2)}×`} Icon={TrendingUp} tone="bg-violet-50 text-violet-700" /><Metric label="متوسط قيمة سلة المشتريات" value={initialLoading || averageBasket == null ? "—" : `${money(averageBasket)} ر.س`} Icon={ShoppingBag} tone="bg-rose-50 text-rose-600" /></div><div data-testid="advanced-profit-expenses" className="px-4 py-2">{rows.map((row, index) => { const rowValue = finiteFinancialValue(row.value); const rowIncomplete = (row.key === "ads" && !adsSpendAvailable) || (row.key === "sales" && !salesConversionComplete); const rowPartial = row.key === "ads" && knownAdsTotal !== null; const rowShared = row.key === "ads" && sharedAdsTotal !== null; const percentage = index > 0 && sales > 0 && rowValue !== null && !rowIncomplete ? (rowValue / sales * 100).toFixed(2) : null; return <div key={row.key}><button type="button" disabled={!row.expandable} onClick={() => row.expandable && setExpanded((value) => value === row.key ? null : row.key)} aria-expanded={row.expandable ? expanded === row.key : undefined} data-testid={`advanced-profit-row-${row.key}`} dir="rtl" className={`flex min-h-[56px] w-full items-center gap-3 border-b text-right last:border-0 ${row.expandable ? "cursor-pointer rounded-lg hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-emerald-200" : "cursor-default"}`}><span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-50 ${row.color}`}><row.Icon className="h-4 w-4" /></span><p className="flex min-w-0 flex-1 items-center gap-1 text-right text-xs font-extrabold text-slate-700">{row.label}{row.expandable && <ChevronDown className={`h-3 w-3 shrink-0 transition-transform ${expanded === row.key ? "rotate-180" : ""}`} />}</p><div dir="ltr" className={`num flex shrink-0 items-baseline gap-1 text-left text-base font-black ${row.color}`}><span>{initialLoading ? "—" : rowPartial ? money(knownAdsTotal) : rowShared ? money(sharedAdsTotal) : rowIncomplete ? "غير مكتمل" : optionalMoney(row.value)}</span>{!initialLoading && (rowPartial || rowShared || !rowIncomplete && rowValue !== null) && <span className="text-[11px] font-extrabold">ر.س</span>}{!initialLoading && rowPartial && <span className="rounded bg-amber-50 px-1 py-0.5 text-[9px] font-bold text-amber-800">غير مكتمل</span>}{percentage && <span className="ml-1 rounded-md bg-current/10 px-1.5 py-0.5 text-[9px] opacity-80">{percentage}%</span>}</div></button>{row.expandable && expanded === row.key && details[row.key]}</div>; })}</div><div data-testid="advanced-profit-net-hero" dir="ltr" className="m-4 flex min-h-[64px] items-center justify-between rounded-xl bg-emerald-600 px-5 text-white"><p className="num flex items-baseline gap-1 text-xl font-black">{!initialLoading && productCostComplete && netMargin && <span data-testid="advanced-profit-net-margin" title="هامش صافي الأرباح">{netMargin}%</span>}<span>{initialLoading ? "—" : !productCostComplete ? "ناقص التكلفة" : !salesConversionComplete || !adsSpendAvailable ? "غير مكتمل" : optionalMoney(netProfit)}</span>{!initialLoading && productCostComplete && salesConversionComplete && adsSpendAvailable && netProfit !== null && <span className="text-sm">ر.س</span>}</p><div dir="rtl"><p className="font-black">صافي الأرباح</p><p className="text-[9px] text-emerald-100">{!initialLoading && !productCostComplete ? "بانتظار حسم خيارات المنتجات وتكاليفها" : !initialLoading && !salesConversionComplete ? "بانتظار سعر صرف موثّق من طلب سلة" : !initialLoading && profitState.sharedSpendPeriodPending ? "بانتظار بيانات صرف الإعلانات للفترة المحددة" : !initialLoading && summarySpendPending ? "بانتظار تحديث الملخص وفق الصرف الحالي" : !initialLoading && !adsSpendAvailable ? "بانتظار اكتمال بيانات الإعلانات" : adsSpendProvisional ? "تقديري حتى آخر مزامنة للإعلانات" : "بعد جميع التكاليف والمصروفات"}</p></div></div></Panel>;
 }
 
 function orderSource(order) {

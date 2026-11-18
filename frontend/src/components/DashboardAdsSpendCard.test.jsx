@@ -663,7 +663,7 @@ describe("net profit column and footer period overview", () => {
         expect(table.querySelectorAll("thead th")).toHaveLength(7);
         expect(table.querySelector("thead").textContent).toContain("العائد×");
         expect(table.querySelector("thead th:last-child").textContent).toBe("الأرباحر.س");
-        [...table.rows].forEach((row) => expect(row.cells).toHaveLength(7));
+        [...table.rows].forEach((row) => expect([...row.cells].reduce((count, cell) => count + cell.colSpan, 0)).toBe(7));
         expect(roasCell(host, "dashboard-snapchat-account-USD.A").textContent).toBe("8.00 ×");
         expect(roasCell(host, "dashboard-ads-provider-direct").textContent).toBe("—");
         expect(roasCell(host, "dashboard-ads-account-total").textContent).toBe("4.20 ×");
@@ -690,17 +690,31 @@ describe("net profit column and footer period overview", () => {
         const row = host.querySelector('[data-testid="dashboard-snapchat-unassigned"]');
         expect(row).not.toBeNull();
         expect([...row.cells].map((cell) => cell.textContent)).toEqual([
-            "سناب غير محدد", "—", "1,626.01", "4", "—", "—", "—",
+            "سناب غير محدد", "—", "1,626.01", "4", "—", "—", "—بانتظار توزيع الصرف",
         ]);
         expect(row.previousElementSibling.dataset.testid).toBe("dashboard-snapchat-account-__proto__");
         expect(row.nextElementSibling.dataset.testid).toBe("dashboard-ads-provider-google");
         expect(host.querySelector('[data-testid="dashboard-ads-unassigned-orders"]')).toBeNull();
         expect(host.querySelector('[data-testid="dashboard-ads-unassigned-note"]').textContent).toContain("محتسبة مرة واحدة");
         expect(host.querySelector('[data-testid="dashboard-ads-profit-basis"]').textContent)
-            .toBe("الأرباح بعد عمولات البنك وقبل المصروفات التشغيلية.");
+            .toBe("أرباح الحسابات والإجمالي بعد عمولات البنك وقبل التشغيل؛ الصافي في السطر الأخير بعد المصروفات التشغيلية.");
         expect(profitCell(host, "dashboard-ads-account-total").textContent).toBe("1,611.11تقديري");
         [...host.querySelector('[data-testid="dashboard-ads-account-table"]').rows]
-            .forEach((entry) => expect(entry.cells).toHaveLength(7));
+            .forEach((entry) => expect([...entry.cells].reduce((count, cell) => count + cell.colSpan, 0)).toBe(7));
+    });
+
+    test("mapped-order partial profit is visible and labelled without promoting or recounting the account total", () => {
+        const result = metrics();
+        Object.assign(result.accounts.get("USD.A").profit, { complete: false, netProfit: null,
+            assignedOrdersProfitAvailable: true, assignedOrdersProfit: -25.15 });
+        metricsSpy.mockReturnValue(result);
+        const host = independentAccountMarkup(independentAccountData(true));
+        expect(profitCell(host, "dashboard-snapchat-account-USD.A").textContent).toBe("-25.15جزئي: الطلبات المسندة");
+        expect(profitCell(host, "dashboard-snapchat-account-USD.A").querySelector("bdi").className).toContain("text-rose-700");
+        expect(host.querySelector('[data-testid="dashboard-ads-assigned-profit-note"]').textContent)
+            .toContain("بعد خصم كامل صرفه وعمولة البنك");
+        expect(profitCell(host, "dashboard-ads-account-total").textContent).toBe("1,611.11تقديري");
+        expect(result.accounts.get("USD.A").profit.complete).toBe(false);
     });
 
     test("an absent unknown cohort stays hidden and a proven outside account remains in the warning", () => {
