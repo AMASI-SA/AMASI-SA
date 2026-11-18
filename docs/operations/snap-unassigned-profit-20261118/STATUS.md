@@ -73,6 +73,10 @@ The official filtered status call returned **active:false**, observed around 202
 - Actual-host adapter rehearsal, owned lease, UI publication and official verification remain pending. The live site is still the previous published version.
 - Next: fresh official guard status must be inactive, then run the configured adapter with `REACT_APP_BACKEND_URL=https://mezansalla.com yarn --cwd frontend build` and retain sanitized output. Only after it matches the frozen intent may this task prepare an owned v5 lease.
 
+## Actual-host rehearsal attempt 1
+
+Configured command started at 18:42:52 UTC and exited 1 at 18:42:54 UTC before a governed build: `EMERGENT_DEPLOYMENT_REFUSED: ... Backend runtime source contains prepackaged bytecode: __pycache__`. Tracked source and all 120 unrelated untracked paths remain unchanged. No lease/publication occurred. Read-only inspection found exactly `backend/__pycache__`, 2 generated ignored bytecode files, 120563 bytes. The preceding plain-Python guard imports can generate those caches. Next safe action: require fresh inactive status via Python `-B`, preserve those verified ignored generated caches in the task-owned `/tmp` quarantine, and retry the unchanged configured adapter with bytecode generation disabled. Preserve attempt-1 logs and do not change reviewed source or validation rules.
+
 ## Exact next safe actions
 
 1. Read AGENTS.md and current PR #1993, fetch and verify exact A2 and current production base J2.
