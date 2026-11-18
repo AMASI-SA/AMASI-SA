@@ -145,3 +145,12 @@ prepare/prepublish and one publication. Require a newer visible successful
 deployment and the unchanged official three-probe verifier. Do not use a
 GitHub merge or a publish-button state as deployment proof. Issue 1006 is at
 its comment limit; retain continuation in this task document and task PR.
+
+
+## Publication takeover checkpoint — 2026-11-19
+
+The owner explicitly authorized this continuation to publish PR2001 urgently after the Aramex lease closed. Original shared guard status was freshly inactive; original Aramex verifier had completed verified:true/checks:3. Shared `/app` was tracked-clean at J with AGENTS.md blob 0e0bbff4d9625f9323affae84b620a0cf12eb209 and no Coordinator marker. SHA256 values for 120 unrelated untracked files were preserved.
+
+Normal merge succeeded as c3c1cd26d93ab24d6e08003278b9910526055cc7. GitHub independently reports exact B tree 3ec825afd58535d4e00670dfdd1179734d72effe and parents J/B. Shared `/app` fetched and fast-forwarded to that merge; tree matches B, tracked status remains clean, and all 120 unrelated files retain their hashes. A/B and the frozen intent are unchanged. The original host `yarn build` adapter is being run with the reviewed public origin and PYTHONDONTWRITEBYTECODE=1; its log is /tmp/mezan-ready-2001-adapter.log, with exit status /tmp/mezan-ready-2001-adapter.exit.
+
+Production source is merged; the public runtime has not been published by this continuation. No new lease exists yet. Next: confirm original adapter exit0 and identity/proof, prepare a new own lease, prepublish immediately before one authorized publication, then newer visible Deployment Succeeded, original verify three probes and status active:false. Finally inspect the Ready affordance on an in-progress order in the emulator without a fulfillment write. Preserve supplier policy and all unrelated work. PR2001 is the cross-branch continuation ledger because Issue1006 is full.
