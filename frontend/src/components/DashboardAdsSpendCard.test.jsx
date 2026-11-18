@@ -690,7 +690,7 @@ describe("net profit column and footer period overview", () => {
         const row = host.querySelector('[data-testid="dashboard-snapchat-unassigned"]');
         expect(row).not.toBeNull();
         expect([...row.cells].map((cell) => cell.textContent)).toEqual([
-            "سناب غير محدد", "—", "1,626.01", "4", "—", "—", "—بانتظار توزيع الصرف",
+            "سناب غير محدد", "—", "1,626.01", "4", "—", "—", "—بيانات الربح غير مكتملة",
         ]);
         expect(row.previousElementSibling.dataset.testid).toBe("dashboard-snapchat-account-__proto__");
         expect(row.nextElementSibling.dataset.testid).toBe("dashboard-ads-provider-google");
@@ -715,6 +715,27 @@ describe("net profit column and footer period overview", () => {
             .toContain("بعد خصم كامل صرفه وعمولة البنك");
         expect(profitCell(host, "dashboard-ads-account-total").textContent).toBe("1,611.11تقديري");
         expect(result.accounts.get("USD.A").profit.complete).toBe(false);
+    });
+
+    test.each([120.25, 0, -44.5])("unassigned order contribution %s is visible without allocating spend or recounting totals", (value) => {
+        const result = metrics();
+        result.unassignedOrders = result.unrepresentedOrders = 2;
+        result.unassigned = { ...stats(null, { complete: false, spendSar: null, roas: null, bankFees: null,
+            unassignedOrdersContributionAvailable: true, unassignedOrdersContribution: value }),
+        orders: 2, sales: 200, knownOrders: 2, knownSales: 200, cpa: null, accountUnassigned: true };
+        metricsSpy.mockReturnValue(result);
+        const host = independentAccountMarkup(independentAccountData(true));
+        const row = host.querySelector('[data-testid="dashboard-snapchat-unassigned"]');
+        const profit = profitCell(host, "dashboard-snapchat-unassigned");
+        expect(profit.textContent).toBe(`${value.toFixed(2)}مساهمة الطلبات`);
+        expect(profit.querySelector("bdi").className).toContain(value < 0 ? "text-rose-700" : "text-emerald-700");
+        expect([row.cells[1], row.cells[4], row.cells[5]].map((cell) => cell.textContent)).toEqual(["—", "—", "—"]);
+        expect(row.textContent).not.toContain("بانتظار توزيع الصرف");
+        expect(host.querySelector('[data-testid="dashboard-ads-unassigned-note"]').textContent).toContain("محتسبة مرة واحدة");
+        expect(profitCell(host, "dashboard-ads-account-total").textContent).toBe("1,611.11تقديري");
+        expect(result.unassigned.profit).toMatchObject({ complete: false, netProfit: null, spendSar: null, bankFees: null });
+        expect(host.querySelector('[data-testid="dashboard-ads-operating-expenses"]')).not.toBeNull();
+        expect(host.querySelector('[data-testid="dashboard-ads-final-net-profit"]')).not.toBeNull();
     });
 
     test("an absent unknown cohort stays hidden and a proven outside account remains in the warning", () => {

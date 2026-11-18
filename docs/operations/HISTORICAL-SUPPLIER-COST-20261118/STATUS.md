@@ -186,6 +186,53 @@ must not be presented as measured production latency.
 
 Production branch advanced again to
 `d3632a33843e076dd7824933528dcc7d897bc32a` while this branch remained isolated.
-The additional upstream source must be preserved and integrated before any
-eventual publication; the prior exact-head evidence is not evidence for a new
-merge identity. The latest task checkpoint SHA is recorded in the PR body.
+The performance candidate integrates that upstream source without conflicts
+and preserves its unrelated changes. The prior exact-head evidence is not
+evidence for this new merge identity. The latest task checkpoint SHA is
+recorded in the PR body.
+
+### Calculation reuse and benchmark candidate
+
+The shared reader now retains only pure allocation/digest results for exact
+type-sensitive equality of the complete projected invoice. Each batch still
+reads complete invoices, suppliers and native journal/reversal evidence; no
+accepted financial authority is retained between batches or requests.
+The request-local LRU accounts at most 64 entries / 8 MiB of retained objects,
+and single-batch requests do not retain entries. Eviction or oversized invoices
+recompute normally. A validated piece lookup avoids rewalking irrelevant
+invoice units while preserving original order and full-invoice allocation.
+
+The reproduced 501-order shared-invoice case changed from three allocations
+and three digests to one each, with all 18 fresh scoped reads and the complete
+independently calculated financial result unchanged. Twenty-five new tests
+cover changed/removed/duplicate evidence between batches, same-total line
+edits, native reversals, numeric/boolean differences, memory limits and
+cross-request isolation. Original empty-receipt read shapes remain exact.
+
+The new `supplier-cost-report-performance.yml` workflow seeds two separate
+disposable loopback Mongo databases with identical synthetic data. It compares
+the frozen bcdd6 helper/index set against the candidate on 3,000 and 6,000
+sales orders: 12,000 sold units, 7,500 received units, 4,500 estimated units,
+selected direct/service options, separate packaging, partial receipts and
+200-piece invoices spanning order batches. Unselected historical rows expose
+index scan costs. The fixture contains no merchant/customer data.
+
+The workflow requires exact financial output equality and an independent cost
+oracle, strict pure-work savings, unchanged fresh read/document counts, actual
+new-index plans and reduced examined keys/documents. It records five timing
+samples per surface, three concurrent builds, event-loop delay, sampled RSS
+and a separate allocation-memory profile. These measure report cost functions,
+not live HTTP latency, production p95 or production memory capacity.
+
+Fresh integrated local verification after upstream integration: **432 passed,
+5 subtests passed**, two existing Pydantic deprecation warnings, no skips or
+failures. Independent helper/benchmark review: **230 passed, 5 subtests**;
+source and financial guards preserved. Both staged/unstaged diff checks pass.
+Real-Mongo performance and exact-head broader CI remain pending this checkpoint;
+the PR body must record their actual results before completion is claimed.
+
+Next safe action: save the reviewed combined task branch and inspect its new
+performance, report, native invoice and runtime workflows. Fix any reproduced
+failure without weakening financial or measurement gates. No production
+publication is authorized by this performance follow-up, and the inherited
+upstream release intent is not an intent for this candidate.

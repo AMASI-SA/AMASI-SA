@@ -115,6 +115,25 @@ test("mapped-order contribution is explicitly partial in the daily and both half
     expect(JSON.stringify(stats)).toBe(before);
 });
 
+test("unassigned contribution appears in daily and half-day details with its own cost formula", () => {
+    const stats = sampleStats();
+    Object.assign(stats.profit, { complete: false, netProfit: null, spendSar: null, knownSpendSar: null,
+        nativeSpend: null, bankFees: null, knownBankFees: null, roas: null,
+        unassignedOrdersContributionAvailable: true, unassignedOrdersContribution: -20.5 });
+    [stats, ...stats.segments].forEach((row) => Object.assign(row, { accountUnassigned: true, cpa: null }));
+    const before = JSON.stringify(stats);
+    enter(renderRow(stats, { label: "سناب غير محدد" }));
+    financialRows("الربح قبل التشغيل").forEach((row) => expect(row.querySelector("dd").textContent)
+        .toBe("-20.50 ر.سمساهمة الطلبات"));
+    for (const label of ["الصرف الإعلاني", "منها عمولات البنك", "تكلفة الطلب", "العائد الإعلاني"]) {
+        financialRows(label).forEach((row) => expect(row.querySelector("dd").textContent).toBe("—"));
+    }
+    expect(details().textContent).toContain("مساهمة الطلبات = المبيعات − تكلفة المنتجات والشحن وعمولات الدفع");
+    expect(details().textContent).toContain("الصرف وعمولات البنك يُحتسبان على حسابات سناب مرة واحدة");
+    expect(details().textContent).not.toContain("بانتظار توزيع الصرف");
+    expect(JSON.stringify(stats)).toBe(before);
+});
+
 test("the afternoon remains an empty card before noon, even with a malformed zero payload", () => {
     const stats = sampleStats();
     stats.segments[0].cutoffAt = `${day}T03:00:00+03:00`;

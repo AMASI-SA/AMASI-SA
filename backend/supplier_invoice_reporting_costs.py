@@ -6,11 +6,12 @@ product and services. Internal materials remain separately evidenced costs.
 """
 from __future__ import annotations
 
-from collections import Counter, defaultdict
+from collections import Counter, OrderedDict, defaultdict
 from copy import deepcopy
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
+import sys
 import unicodedata
 
 from order_cost_authority import decimal, economic_item, item_dict, line_aliases, line_fingerprint, line_id, order_items
@@ -23,6 +24,8 @@ PRODUCTS = "mezan_products_v2"
 CHUNK_SIZE = 250
 MAX_ROWS = 50000
 MAX_COST_UNITS = 10000
+INVOICE_MEMO_MAX_ENTRIES = 64
+INVOICE_MEMO_MAX_BYTES = 8 * 1024 * 1024
 PIECE_FIELDS = {"_id": 0, **dict.fromkeys(("id", "piece_id", "order_number", "order_item_id", "unit_index", "product_id",
     "variant_id", "salla_variant_id", "experiment_mode", "experiment_run_id", "services", "service_plan_status",
     "remaining_service_count", "supplier_dispatch_status", "received_at", "supplier_receiving_history.invoice_id",
@@ -86,6 +89,99 @@ def _money(value):
 
 def _amount(value):
     return float(value.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP))
+
+
+def _same_invoice_value(left, right):
+    """Type-sensitive equality, including values whose JSON digest differs.
+
+    Plain dict equality considers True, 1 and 1.0 interchangeable. Reusing a
+    validated numeric amount for a later boolean would bypass its validation.
+    Unknown BSON/application value types simply miss this optional memo.
+    """
+    if type(left) is not type(right):
+        return False
+    if isinstance(left, dict):
+        return (left.keys() == right.keys()
+                and all(_same_invoice_value(value, right[key]) for key, value in left.items()))
+    if isinstance(left, list):
+        return len(left) == len(right) and all(_same_invoice_value(a, b) for a, b in zip(left, right))
+    if isinstance(left, datetime):
+        return left.isoformat() == right.isoformat()
+    if isinstance(left, Decimal):
+        return left.as_tuple() == right.as_tuple()
+    if isinstance(left, float):
+        return left.hex() == right.hex()
+    return type(left) in (str, int, bool, bytes, type(None)) and left == right
+
+
+def _retained_size(value, limit):
+    """Bound retained pure-work objects, stopping early for a large invoice."""
+    pending, seen, total = [value], set(), 0
+    while pending:
+        current = pending.pop()
+        identity = id(current)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        total += sys.getsizeof(current)
+        if total > limit:
+            return total
+        if isinstance(current, dict):
+            pending.extend(current.keys())
+            pending.extend(current.values())
+        elif isinstance(current, (list, tuple, set, frozenset)):
+            pending.extend(current)
+    return total
+
+
+class _InvoiceCalculationMemo:
+    """Request-local LRU of pure work, never accepted financial authority.
+
+    Every batch still reads current complete invoices, suppliers and journal /
+    reversal evidence. Only identical complete projected content can reuse the
+    allocation and digest. Entries and retained bytes are bounded; eviction or
+    an oversized invoice only causes recomputation, never a missing cost.
+    """
+    def __init__(self, *, enabled=True):
+        self.enabled = enabled
+        self.entries = OrderedDict()
+        self.retained_bytes = 0
+
+    def get(self, invoice):
+        key = _text(invoice.get("id"))
+        cached = self.entries.get(key)
+        if cached is None:
+            return None
+        entry, size = cached
+        if not _same_invoice_value(entry["invoice"], invoice):
+            self.entries.pop(key)
+            self.retained_bytes -= size
+            return None
+        self.entries.move_to_end(key)
+        return entry
+
+    def remember(self, invoice, amounts, digest):
+        pieces = {pid: (position, line) for position, (pid, line) in enumerate(
+            (pid, line) for line in invoice["lines"] for pid in line["piece_ids"])}
+        entry = {"invoice": invoice, "amounts": amounts, "digest": digest, "pieces": pieces}
+        key = _text(invoice.get("id"))
+        if not self.enabled or not key or INVOICE_MEMO_MAX_ENTRIES <= 0 or INVOICE_MEMO_MAX_BYTES <= 0:
+            return entry
+        # Include conservative per-entry LRU/key bookkeeping. Shared immutable
+        # objects in different entries are deliberately counted again.
+        size = _retained_size(entry, INVOICE_MEMO_MAX_BYTES) + sys.getsizeof(key) + 256
+        if size > INVOICE_MEMO_MAX_BYTES:
+            return entry
+        previous = self.entries.pop(key, None)
+        if previous:
+            self.retained_bytes -= previous[1]
+        while self.entries and (len(self.entries) >= INVOICE_MEMO_MAX_ENTRIES
+                or self.retained_bytes + size > INVOICE_MEMO_MAX_BYTES):
+            _, (_, removed_size) = self.entries.popitem(last=False)
+            self.retained_bytes -= removed_size
+        self.entries[key] = (entry, size)
+        self.retained_bytes += size
+        return entry
 
 
 async def _read(db, collection, query, *, projection=None):
@@ -237,6 +333,7 @@ async def load_supplier_invoice_reporting_costs(db: Any, user_id: str, orders: l
         if order.get("order_number"):
             orders_by_number[_text(order["order_number"])].append(order)
     numbers = sorted(orders_by_number)
+    invoice_memo = _InvoiceCalculationMemo(enabled=len(numbers) > CHUNK_SIZE)
     for offset in range(0, len(numbers), CHUNK_SIZE):
         selected = numbers[offset:offset + CHUNK_SIZE]
         items, aliases = {}, defaultdict(set)
@@ -276,6 +373,7 @@ async def load_supplier_invoice_reporting_costs(db: Any, user_id: str, orders: l
             await _checkpoint(budget, index)
             piece_groups[_text(piece.get("piece_id") or piece.get("id"))].append(piece)
         known_piece_ids = sorted(pid for pid in piece_groups if pid)
+        known_piece_id_set = set(known_piece_ids)
         invoice_ids = {_text(event.get("supplier_invoice_id")) for event in events if event.get("supplier_invoice_id")}
         for piece in pieces:
             invoice_ids.update(_text(row.get("invoice_id")) for row in piece.get("supplier_receiving_history") or [] if row.get("invoice_id"))
@@ -319,7 +417,9 @@ async def load_supplier_invoice_reporting_costs(db: Any, user_id: str, orders: l
             if budget is not None:
                 await budget.checkpoint()
             identity = _text(invoice.get("id"))
-            related = {pid for line in invoice.get("lines") or [] for pid in line.get("piece_ids") or []} & set(known_piece_ids)
+            cached = invoice_memo.get(invoice)
+            related = (cached["pieces"].keys() if cached else
+                       {pid for line in invoice.get("lines") or [] for pid in line.get("piece_ids") or []}) & known_piece_id_set
 
             def problem(reason):
                 for pid in related:
@@ -349,61 +449,66 @@ async def load_supplier_invoice_reporting_costs(db: Any, user_id: str, orders: l
                 raw_gid = invoice.get("mz2_txn_group_id")
                 if (invoice.get("mz2_financial_contract") or raw_gid is not None and raw_gid != "") and not gid:
                     raise ValueError("supplier_invoice_journal_evidence_missing")
+                digest = None
                 if gid:
                     from supplier_native_invoice_v2 import invoice_digest
                     groups = journal_groups[gid]
-                    if (gid in reversals or len(groups) != 1 or groups[0].get("status") != "posted"
-                            or (groups[0].get("metadata") or {}).get("invoice_digest") != invoice_digest(invoice)
+                    if gid in reversals or len(groups) != 1 or groups[0].get("status") != "posted":
+                        raise ValueError("supplier_invoice_journal_evidence_invalid")
+                    digest = cached["digest"] if cached else invoice_digest(invoice)
+                    if ((groups[0].get("metadata") or {}).get("invoice_digest") != digest
                             or (groups[0].get("metadata") or {}).get("supplier_invoice_id") != identity):
                         raise ValueError("supplier_invoice_journal_evidence_invalid")
-                amounts = _invoice_amounts(invoice)
+                if cached is None:
+                    cached = invoice_memo.remember(invoice, _invoice_amounts(invoice), digest)
+                amounts = cached["amounts"]
             except (ValueError, TypeError, KeyError, ArithmeticError):
                 problem("supplier_invoice_evidence_invalid")
                 continue
-            for invoice_line in invoice["lines"]:
-                for index, pid in enumerate(invoice_line["piece_ids"]):
-                    await _checkpoint(budget, index)
-                    if pid not in piece_groups:
-                        continue  # Allocation above included the entire invoice.
-                    rows, receipts = piece_groups[pid], event_groups[(identity, pid)]
-                    if len(rows) != 1 or len(receipts) != 1:
-                        problem("supplier_receipt_identity_ambiguous" if len(rows) > 1 or len(receipts) > 1 else "supplier_receipt_finalization_missing")
-                        continue
-                    piece, event = rows[0], receipts[0]
-                    found, event_found = record_for(piece), record_for(event)
-                    if not found:
-                        continue
-                    key, unit, record = found
-                    item = items[key]
-                    try:
-                        finalized = _instant(event.get("finalized_at"))
-                        if (event_found is None or event_found[:2] != found[:2] or not event.get("id") or event_counts[_text(event["id"])] != 1
-                                or event.get("experiment_mode") or event.get("experiment_run_id")
-                                or event.get("financial_invoice_created") is not True or event.get("liability_created") is not True
-                                or finalized != approved or finalized > now
-                                or not event.get("session_id") or event.get("session_id") != invoice.get("session_id")
-                                or (event.get("supplier_context") or {}).get("id", invoice.get("supplier_id")) != invoice.get("supplier_id")
-                                or not product_matches(piece.get("product_id"), item) or not product_matches(event.get("product_id"), item)
-                                or any(invoice_line.get(name) and not product_matches(invoice_line[name], item) for name in ("product_id", "product_v2_id"))
-                                or _selection_conflict(piece, item) or _selection_conflict(event, item)
-                                or len({_text(row.get("variant_id") or row.get("salla_variant_id")) for row in (item, piece, event, invoice_line)
-                                        if row.get("variant_id") or row.get("salla_variant_id")}) > 1):
-                            raise ValueError("supplier_receipt_source_mismatch")
-                    except (ValueError, TypeError):
-                        record["issues"].append("supplier_receipt_source_mismatch")
-                        continue
-                    accepted_events.add((identity, pid))
-                    service_rows = invoice_line.get("services") or []
-                    product_claim = (invoice_line.get("product_charge_eligible") is True or
-                                     invoice_line.get("product_charge_eligible") is not False and
-                                     (_number(invoice_line["product_unit_price_halalas"]) > 0 or not service_rows))
-                    components = [("product", None)] if product_claim else []
-                    components += [("service:" + _text(service["service_id"]), service) for service in service_rows]
-                    for component, service in components:
-                        claims[(key, unit, component)].append({"amount": amounts[(pid, component)]["net_amount"],
-                            "invoice_id": identity, "piece_id": pid, "approved_at": approved,
-                            "label": (service or {}).get("service_name") or invoice_line.get("product_name"),
-                            "quantity": (service or {}).get("quantity_per_piece")})
+            # Keep original invoice piece order, but inspect only this batch's
+            # pieces after the complete invoice has been validated/allocated.
+            for index, pid in enumerate(sorted(related, key=lambda value: cached["pieces"][value][0])):
+                await _checkpoint(budget, index)
+                invoice_line = cached["pieces"][pid][1]
+                rows, receipts = piece_groups[pid], event_groups[(identity, pid)]
+                if len(rows) != 1 or len(receipts) != 1:
+                    problem("supplier_receipt_identity_ambiguous" if len(rows) > 1 or len(receipts) > 1 else "supplier_receipt_finalization_missing")
+                    continue
+                piece, event = rows[0], receipts[0]
+                found, event_found = record_for(piece), record_for(event)
+                if not found:
+                    continue
+                key, unit, record = found
+                item = items[key]
+                try:
+                    finalized = _instant(event.get("finalized_at"))
+                    if (event_found is None or event_found[:2] != found[:2] or not event.get("id") or event_counts[_text(event["id"])] != 1
+                            or event.get("experiment_mode") or event.get("experiment_run_id")
+                            or event.get("financial_invoice_created") is not True or event.get("liability_created") is not True
+                            or finalized != approved or finalized > now
+                            or not event.get("session_id") or event.get("session_id") != invoice.get("session_id")
+                            or (event.get("supplier_context") or {}).get("id", invoice.get("supplier_id")) != invoice.get("supplier_id")
+                            or not product_matches(piece.get("product_id"), item) or not product_matches(event.get("product_id"), item)
+                            or any(invoice_line.get(name) and not product_matches(invoice_line[name], item) for name in ("product_id", "product_v2_id"))
+                            or _selection_conflict(piece, item) or _selection_conflict(event, item)
+                            or len({_text(row.get("variant_id") or row.get("salla_variant_id")) for row in (item, piece, event, invoice_line)
+                                    if row.get("variant_id") or row.get("salla_variant_id")}) > 1):
+                        raise ValueError("supplier_receipt_source_mismatch")
+                except (ValueError, TypeError):
+                    record["issues"].append("supplier_receipt_source_mismatch")
+                    continue
+                accepted_events.add((identity, pid))
+                service_rows = invoice_line.get("services") or []
+                product_claim = (invoice_line.get("product_charge_eligible") is True or
+                                 invoice_line.get("product_charge_eligible") is not False and
+                                 (_number(invoice_line["product_unit_price_halalas"]) > 0 or not service_rows))
+                components = [("product", None)] if product_claim else []
+                components += [("service:" + _text(service["service_id"]), service) for service in service_rows]
+                for component, service in components:
+                    claims[(key, unit, component)].append({"amount": amounts[(pid, component)]["net_amount"],
+                        "invoice_id": identity, "piece_id": pid, "approved_at": approved,
+                        "label": (service or {}).get("service_name") or invoice_line.get("product_name"),
+                        "quantity": (service or {}).get("quantity_per_piece")})
         for index, ((key, unit, component), values) in enumerate(claims.items()):
             await _checkpoint(budget, index)
             record = result["lines"][key]["units"][unit]

@@ -8,12 +8,13 @@ from operational_courier_transitions import COMPLETED_PROOF
 from operational_delivery_evidence import _courier, _current_shipping, _instant, _status
 from operational_completed_shipping_admission import build_review_index, require_admission
 from operational_order_completed_evidence import bind_completed_waybill, completion_time
+from operational_aramex_status_shipping import STATUS_EVENT, STATUS_FIELDS, accounting_time, status_recognition
 
 SCHEMA = 'operational_prepaid_shipping_v1'
 
 
 def source_event(data, setup, source, raw, state, owner, start, end, history, shipment_conflicts,
-                 *, review_only=False, review_index=None):
+                 *, review_only=False, review_index=None, status_shipment_conflicts=None):
     """Return (prepaid identity, new charge). Source reads never move money."""
     if source.get('user_id') != owner or not state or state.get('owner_id') != owner:
         raise ValueError('operational_prepaid_shipping_owner_mismatch')
@@ -45,8 +46,19 @@ def source_event(data, setup, source, raw, state, owner, start, end, history, sh
     party, carrier_key = _courier(setup, owner, current)
     if ('shipment', shipment) in shipment_conflicts or ('waybill', waybill) in shipment_conflicts:
         raise ValueError('operational_prepaid_shipping_shipment_shared_by_orders')
-    at = completion_time(raw, source, history, end)
-    bind_completed_waybill(raw, current, shipment, waybill, at)
+    recognition = {}
+    try:
+        at = completion_time(raw, source, history, end)
+        bind_completed_waybill(raw, current, shipment, waybill, at)
+    except ValueError as error:
+        if (str(error) != 'operational_prepaid_shipping_completion_timestamp_missing'
+                or review_only or status_shipment_conflicts is None):
+            raise
+        recognition = status_recognition(raw, source, current, party, owner, start, end,
+                                         shipment, waybill, status_shipment_conflicts | set(shipment_conflicts), setup=setup)
+        if recognition is None:
+            raise
+        at = end
     rates = [rate for rate in prepaid if rate.get('party_id') == party and rate.get('status') == 'approved'
              and _instant(rate['effective_from']) <= at
              and (not rate.get('effective_to') or at < _instant(rate['effective_to']))]
@@ -76,9 +88,10 @@ def source_event(data, setup, source, raw, state, owner, start, end, history, sh
         'order_number': str(raw.get('reference_id') or raw.get('order_number')), 'party_type': 'courier', 'party_id': party,
         'party_name': rate['name'], 'currency': 'SAR', 'amount': str(base['gross']),
         'net_amount': str(base['net']), 'tax_amount': str(base['vat']),
-        'completed_at': at.isoformat(), 'tariff_version_id': rate['version_id'],
-        'cash_account': deepcopy(account), 'shipment_id': shipment, 'waybill': waybill, 'source_carrier_key': carrier_key}
-    if not shipment or not waybill:
+        'completed_at': None if recognition else at.isoformat(), 'tariff_version_id': rate['version_id'],
+        'cash_account': deepcopy(account), 'shipment_id': shipment, 'waybill': waybill,
+        'source_carrier_key': carrier_key, **recognition}
+    if not recognition and (not shipment or not waybill):
         event['completion_admission_required'] = True
     if not review_only:
         require_admission(state, event, review_index=review_index)
@@ -107,9 +120,7 @@ def apply_events(state, events, start, now, issue):
                     raise ValueError('operational_prepaid_shipping_recorded_evidence_changed')
                 continue
             require_admission(state, event, review_index=review_index)
-            at = _instant(event['completed_at'])
-            if not start <= at <= now:
-                raise ValueError('operational_prepaid_shipping_completion_time_invalid')
+            at = accounting_time(event, start, now)
             versions = [row for row in state.get('courier_tariffs', []) if row.get('id') == event.get('party_id')]
             valid = [row for row in versions if row.get('version_id') == event.get('tariff_version_id')]
             if len(valid) != 1:
@@ -121,6 +132,11 @@ def apply_events(state, events, start, now, issue):
                     or any(_instant(rate['effective_from']) < _instant(row['effective_from']) <= at for row in versions)
                     or rate.get('cash_account') != event.get('cash_account') or event.get('party_type') != 'courier'):
                 raise ValueError('operational_prepaid_shipping_event_invalid')
+            if event.get('recognition_basis'):
+                key, aliases = event['source_carrier_key'], rate.get('keys') or []
+                if (key not in aliases if rate.get('identity_match') == 'exact'
+                        else key.casefold() not in {str(alias).casefold() for alias in aliases}):
+                    raise ValueError('operational_prepaid_shipping_status_evidence_invalid')
             account = event['cash_account']
             if account.get('kind') != 'cash' or account.get('currency') != 'SAR' or not account.get('id'):
                 raise ValueError('operational_prepaid_shipping_cash_binding_required')
@@ -135,9 +151,11 @@ def apply_events(state, events, start, now, issue):
             if mutable & review_index.allocated:
                 raise ValueError('operational_prepaid_shipping_existing_charge_review_required')
             gross = format(price['gross'], '.2f')
-            metadata = {'payment_mode': 'prepaid', 'recognition_event': 'order_completed', 'order_id': oid,
+            by_status = bool(event.get('recognition_basis'))
+            metadata = {'payment_mode': 'prepaid', 'recognition_event': STATUS_EVENT if by_status else 'order_completed', 'order_id': oid,
                         'order_number': event['order_number'], 'completed_at': event['completed_at'],
-                        'tariff_version_id': rate['version_id'], 'cash_account_id': account['id']}
+                        'tariff_version_id': rate['version_id'], 'cash_account_id': account['id'],
+                        **({key: event[key] for key in STATUS_FIELDS} if by_status else {})}
             charge = {'id': charge_id, 'kind': 'shipping', 'party_type': 'courier', 'party_id': event['party_id'],
                       'name': event['party_name'], 'currency': 'SAR', 'direction': 'payable', 'expected': '0.00',
                       'confirmed': gross, 'business_date': at.astimezone(ZoneInfo('Asia/Riyadh')).date().isoformat(),
@@ -147,8 +165,9 @@ def apply_events(state, events, start, now, issue):
                         'kind': 'payment', 'bank_kind': 'cash', 'bank_id': account['id'], 'bank_name': account['name'],
                         'source_account_type': 'cash', 'allocations': [{'obligation_id': charge_id, 'amount': gross}],
                         'actual_fee_amount': '0.00', 'actor_id': 'operational_order_worker', 'source': 'mezan2',
-                        'occurred_at': event['completed_at'], 'business_date': charge['business_date'],
-                        'receipt_id': None, 'reference': 'أجرة شحن مدفوعة عند تنفيذ الطلب ' + event['order_number'],
+                        'occurred_at': at.isoformat(), 'business_date': charge['business_date'],
+                        'receipt_id': None, 'reference': ('أجرة أرامكس المعتمدة بحالة الطلب ' if by_status
+                                                        else 'أجرة شحن مدفوعة عند تنفيذ الطلب ') + event['order_number'],
                         'automatic_prepaid_shipping': True, **metadata}
         except (ValueError, KeyError, TypeError, ArithmeticError) as error:
             code = str(error) if str(error).startswith(('operational_prepaid_shipping_', 'operational_shipping_completion_')) else 'operational_prepaid_shipping_event_invalid'
@@ -164,4 +183,5 @@ def apply_events(state, events, start, now, issue):
         review_index.record(event, charge, movement)
         state.setdefault('audit', [])
         audit(state, 'operational_order_worker', 'prepaid_shipping_paid', None, deepcopy(movement),
-              'أجرة الشحن المسبقة عند انتقال الطلب إلى تم التنفيذ وفق العقد والصندوق المعتمدين', 'mz2', event['completed_at'])
+              ('أجرة أرامكس المسبقة بحالة الطلب المنشأ بعد بدء التشغيل وفق العقد والصندوق المعتمدين' if by_status
+               else 'أجرة الشحن المسبقة عند انتقال الطلب إلى تم التنفيذ وفق العقد والصندوق المعتمدين'), 'mz2', at.isoformat())

@@ -129,6 +129,21 @@ const server = http.createServer(async (request, response) => {
         assert.equal(body.expected_version, access.version); assert.equal(body.enabled, true);
         const bank = body.resources.find(item => item.id === 'bank-demo');
         assert.equal(bank.use, false); assert.equal(bank.movements, 'all'); assert.equal(bank.balance, true);
+        assert.deepEqual(body.operations, f.access.operations, 'Bulk resource selection must not enable operations');
+        const byResource = (a, b) => JSON.stringify([a.kind, a.id]).localeCompare(JSON.stringify([b.kind, b.id]));
+        assert.deepEqual([...body.resources].sort(byResource), [
+          { kind: 'external_person', id: 'external-demo', use: true, movements: 'own', balance: true },
+          { kind: 'employee', id: 'employee-demo', use: false, movements: 'all', balance: false },
+          { kind: 'supplier', id: 'supplier-demo', use: true, movements: 'all', balance: true },
+          { kind: 'supplier', id: 'supplier-extra', use: true, movements: 'own', balance: false },
+          { kind: 'store_driver', id: 'employee-demo', use: true, movements: 'own', balance: true },
+          { kind: 'store_driver', id: 'driver-extra', use: true, movements: 'own', balance: false },
+          { kind: 'courier', id: 'employee-demo', use: false, movements: 'all', balance: true },
+          { kind: 'employee_custody', id: 'custody-demo', use: false, movements: 'all', balance: true },
+          { kind: 'owner_withdrawal', id: 'owner-demo', use: false, movements: 'all', balance: true },
+          { kind: 'bank', id: 'bank-demo', use: false, movements: 'all', balance: true },
+          { kind: 'cash', id: 'cash-demo', use: false, movements: 'none', balance: true },
+        ].sort(byResource));
         access = { version: access.version + 1, enabled: body.enabled, operations: body.operations, resources: body.resources };
       }
       return send(200, { user: f.staff, access });
@@ -240,22 +255,98 @@ async function capture(page, name) {
       assert.equal(calls.filter(call => call.path.endsWith('/confirm')).length, 0);
       assert.equal(f.resources.find(item => item.kind === 'bank').balance.amount, '5000.00');
     });
-    await check('Owner permissions keep use, own/all movements and balance independent until explicit save', async () => {
+    await check('Owner applies all-resource and per-kind permissions with individual exceptions before one versioned save', async () => {
       await page.setViewportSize({ width: 1440, height: 1000 }); await page.goto(`${origin}/operational-balances/access`);
       await field(page, 'الموظف').selectOption(f.staff.id); await page.locator('.sb-access-table').waitFor();
       assert(!await field(page, 'الموظف').locator('option').evaluateAll(nodes => nodes.some(node => node.value === 'synthetic-owner')));
       await page.getByLabel('استخدام بنك المؤسسة التوضيحي', { exact: true }).uncheck();
       await page.getByLabel('حركات بنك المؤسسة التوضيحي', { exact: true }).selectOption('all');
       await page.getByLabel('رصيد بنك المؤسسة التوضيحي', { exact: true }).check();
+      await field(page, 'نوع الحساب أو الجهة').selectOption('supplier');
+      await field(page, 'بحث في الحسابات').fill('مورد توضيحي');
+      assert.equal(await page.locator('.sb-access-table tbody tr').count(), 1);
+      await field(page, 'استخدام الحسابات والأطراف').selectOption('allow');
+      await field(page, 'عرض الحركات').selectOption('all');
+      await field(page, 'عرض الأرصدة').selectOption('allow');
+      await page.getByRole('button', { name: 'تطبيق على جميع الموردين (2)', exact: true }).click();
+      assert.equal(await page.locator('.sb-access-table tbody tr').count(), 2);
+      for (const name of ['مورد توضيحي', 'مورد إضافي للاختبار']) {
+        assert.equal(await page.getByLabel(`استخدام ${name}`, { exact: true }).isChecked(), true);
+        assert.equal(await page.getByLabel(`حركات ${name}`, { exact: true }).inputValue(), 'all');
+        assert.equal(await page.getByLabel(`رصيد ${name}`, { exact: true }).isChecked(), true);
+      }
+      await page.getByLabel('حركات مورد إضافي للاختبار', { exact: true }).selectOption('own');
+      // Unapplied choices cannot silently widen when the scope changes.
+      await field(page, 'استخدام الحسابات والأطراف').selectOption('allow');
+      await field(page, 'نوع الحساب أو الجهة').selectOption('');
+      for (const label of ['استخدام الحسابات والأطراف', 'عرض الحركات', 'عرض الأرصدة']) {
+        assert.equal(await field(page, label).inputValue(), '');
+      }
+      const applyAll = page.getByRole('button', { name: `تطبيق على جميع الحسابات والأطراف (${f.catalog.resources.length})`, exact: true });
+      assert.equal(await applyAll.isDisabled(), true);
+      await field(page, 'عرض الأرصدة').selectOption('allow');
+      await applyAll.click();
+      for (const item of f.catalog.resources) assert.equal(await page.getByLabel(`رصيد ${item.name}`, { exact: true }).isChecked(), true);
+      assert.equal(await page.getByLabel('استخدام موظف توضيحي', { exact: true }).isChecked(), false);
+      assert.equal(await page.getByLabel('حركات موظف توضيحي', { exact: true }).inputValue(), 'none');
+      assert.equal(await page.getByLabel('حركات مورد إضافي للاختبار', { exact: true }).inputValue(), 'own');
+      await page.getByLabel('رصيد موظف توضيحي', { exact: true }).uncheck();
+      await page.getByLabel('رصيد مورد إضافي للاختبار', { exact: true }).uncheck();
+      await field(page, 'عرض الحركات').selectOption('all');
+      await applyAll.click();
+      await page.getByLabel('حركات مورد إضافي للاختبار', { exact: true }).selectOption('own');
+      await page.getByLabel('حركات جهة خارجية توضيحية', { exact: true }).selectOption('own');
+      await page.getByLabel('حركات صندوق المؤسسة التوضيحي', { exact: true }).selectOption('none');
+      // All drivers include search-hidden drivers, without granting same-ID employees or shipping companies use.
+      await field(page, 'نوع الحساب أو الجهة').selectOption('store_driver');
+      await field(page, 'بحث في الحسابات').fill('موصل توضيحي');
+      assert.equal(await page.locator('.sb-access-table tbody tr').count(), 1);
+      await field(page, 'استخدام الحسابات والأطراف').selectOption('allow');
+      await field(page, 'عرض الحركات').selectOption('own');
+      await page.getByRole('button', { name: 'تطبيق على جميع الموصلين (2)', exact: true }).click();
+      assert.equal(await page.locator('.sb-access-table tbody tr').count(), 2);
+      for (const name of ['موصل توضيحي', 'موصل إضافي للاختبار']) {
+        assert.equal(await page.getByLabel(`استخدام ${name}`, { exact: true }).isChecked(), true);
+        assert.equal(await page.getByLabel(`حركات ${name}`, { exact: true }).inputValue(), 'own');
+      }
+      await page.getByLabel('رصيد موصل إضافي للاختبار', { exact: true }).uncheck();
+      await field(page, 'نوع الحساب أو الجهة').selectOption('');
+      assert.equal(await page.getByLabel('استخدام موظف توضيحي', { exact: true }).isChecked(), false);
+      assert.equal(await page.getByLabel('استخدام شركة شحن توضيحية', { exact: true }).isChecked(), false);
+      assert.equal(await page.getByLabel('رصيد موظف توضيحي', { exact: true }).isChecked(), false);
+      assert.equal(await page.getByLabel('رصيد مورد إضافي للاختبار', { exact: true }).isChecked(), false);
       assert.equal(calls.filter(call => call.method === 'PUT').length, 0); await capture(page, 'access-desktop');
       await page.getByRole('button', { name: 'حفظ صلاحيات الموظف', exact: true }).click();
       await page.getByText('تم حفظ صلاحيات موظف الاختبار. تُطبق على الطلبات التالية مباشرة.', { exact: true }).waitFor();
       assert.equal(calls.filter(call => call.method === 'PUT').length, 1);
+      await page.reload(); await field(page, 'الموظف').selectOption(f.staff.id); await page.locator('.sb-access-table').waitFor();
+      for (const name of ['موظف توضيحي', 'مورد إضافي للاختبار', 'موصل إضافي للاختبار']) {
+        assert.equal(await page.getByLabel(`رصيد ${name}`, { exact: true }).isChecked(), false);
+      }
+      assert.equal(await page.getByLabel('حركات مورد إضافي للاختبار', { exact: true }).inputValue(), 'own');
     });
     await check('Mobile permission cards expose every account label and control inside the viewport', async () => {
       await page.setViewportSize({ width: 390, height: 844 });
       const cards = page.locator('.sb-access-table tbody tr');
       assert.equal(await cards.count(), f.catalog.resources.length);
+      const filters = await page.locator('.sb-access-resources > .sb-form-two input,.sb-access-resources > .sb-form-two select').evaluateAll(nodes => nodes.map(node => {
+        const style = getComputedStyle(node), rect = node.getBoundingClientRect();
+        const context = document.createElement('canvas').getContext('2d');
+        context.font = style.font;
+        const text = node.tagName === 'SELECT' ? node.selectedOptions[0].textContent : node.value || node.placeholder;
+        return { text, textWidth: context.measureText(text).width, left: rect.left, right: rect.right, viewport: innerWidth,
+          available: node.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) - (node.tagName === 'SELECT' ? 24 : 0) };
+      }));
+      assert.equal(filters.length, 2);
+      for (const filter of filters) assert(filter.left >= 0 && filter.right <= filter.viewport && filter.textWidth <= filter.available,
+        `Clipped mobile permission filter text: ${JSON.stringify(filter)}`);
+      const bulkControls = await page.locator('.sb-access-bulk select,.sb-access-bulk button').evaluateAll(nodes => nodes.map(node => {
+        const rect = node.getBoundingClientRect();
+        return { left: rect.left, right: rect.right, width: rect.width, height: rect.height, viewport: innerWidth };
+      }));
+      assert.equal(bulkControls.length, 4);
+      for (const box of bulkControls) assert(box.width > 0 && box.height > 0 && box.left >= 0 && box.right <= box.viewport,
+        `Clipped mobile resource bulk control: ${JSON.stringify(box)}`);
       // A bounded body alone can conceal a horizontally clipped table. Inspect
       // every permission and its visible label before any horizontal scrolling.
       const horizontal = await cards.evaluateAll(nodes => nodes.flatMap(card =>

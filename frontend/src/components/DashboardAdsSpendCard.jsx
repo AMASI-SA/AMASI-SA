@@ -243,7 +243,7 @@ function SallaMetricCells({ stats = {} }) {
         <td className="px-1 py-2 text-center"><SallaMetric value={stats.cpa} /></td>
         <td className="px-1 py-2 text-center" data-metric="roas"><RoasMetric profit={stats.profit} /></td>
         <td className="px-1 py-2 text-center"><DashboardAdsProfitValue profit={stats.profit}
-            unavailableReason={stats.accountUnassigned ? "بانتظار توزيع الصرف" : undefined} /></td>
+            unavailableReason={stats.accountUnassigned ? "بيانات الربح غير مكتملة" : undefined} /></td>
     </>;
 }
 
@@ -413,7 +413,7 @@ function AdsAccountResultsTable({ data, accounts, accountMode, ready, singleDay,
         <p className="text-[9px] leading-4 text-slate-500">أشّر على أي صف لتفاصيله، أو على الإجمالي لمقارنة المنصات صباحًا ومساءً. اضغط لتثبيت التفاصيل.</p>
         {filtered && <p className="text-[9px] leading-4 text-slate-500">طلبات ومبيعات سلة حسب الفلاتر؛ الصرف إجمالي الفترة.</p>}
         {unassigned && <p className="text-[9px] leading-4 text-amber-700" data-testid="dashboard-ads-unassigned-note">
-            طلبات «سناب غير محدد» محتسبة مرة واحدة ضمن الإجمالي؛ لم يتحدد حسابها لتوزيع الصرف وعمولاته عليها.
+            طلبات «سناب غير محدد» محتسبة مرة واحدة ضمن الإجمالي. مساهمتها = مبيعاتها − تكلفة المنتجات والشحن وعمولات الدفع؛ صرف سناب وعمولات البنك يُحتسبان على الحسابات الإعلانية.
         </p>}
         {remainingUnrepresentedOrders > 0 && <p className="text-[9px] leading-4 text-amber-700" data-testid="dashboard-ads-unassigned-orders">
             {remainingUnrepresentedOrders.toLocaleString("en-US")} طلبات ضمن الإجمالي لم يُحدد لها حساب إعلاني معروض؛ تفاصيل الحسابات تعرض المتاح.

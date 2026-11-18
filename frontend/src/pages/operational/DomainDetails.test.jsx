@@ -100,20 +100,40 @@ test('prepaid shipping at completion shows paid cost without declaring the order
  expect(text).toContain('طلبات في كشف الأجور: 1');
  expect(text).toContain('تواصيل مثبتة: 0');
  expect(text).toContain('أجرة الشحن المؤكدة: 34.50');
- expect(text).toContain('المدفوع مقدمًا عند «تم التنفيذ»: 34.50 SAR');
+ expect(text).toContain('أجرة الشحن المدفوعة مقدمًا: 34.50 SAR');
  expect(text).toContain('المتبقي: 0.00');
  await render({...report,details:{facts:{...report.details.facts,'shipping:one':{id:'aramex',party_type:'courier',delivered_at:'2026-11-06T10:00:00Z'}}}});
  text=section('الشحن ومناديب المتجر').textContent;
  expect(text).toContain('طلبات في كشف الأجور: 1');
  expect(text).toContain('تواصيل مثبتة: 1');
- expect(text).toContain('المدفوع مقدمًا عند «تم التنفيذ»: 34.50 SAR');
+ expect(text).toContain('أجرة الشحن المدفوعة مقدمًا: 34.50 SAR');
 });
 test('prepaid delivery proof belongs to the actual carrier and missing payment stays unknown',async()=>{
  const party={party_type:'courier',party_id:'aramex',currency:'SAR',name:'أرامكس'};
  await render({parties:[party],obligations:[{...party,id:'shipping-prepaid:one',kind:'shipping',order_id:'one',payment_mode:'prepaid',recognition_event:'order_completed',confirmed:'34.50'}],details:{facts:{'shipping:one':{id:'another-courier',party_type:'courier',delivered_at:'2026-11-06T10:00:00Z'}}}});
  const text=section('الشحن ومناديب المتجر').textContent;
  expect(text).toContain('تواصيل مثبتة: 0');
- expect(text).toContain('المدفوع مقدمًا عند «تم التنفيذ»: غير مكتمل SAR');
+ expect(text).toContain('أجرة الشحن المدفوعة مقدمًا: غير مكتمل SAR');
+});
+
+test('Aramex status charges count all eligible fee orders and only independently proved deliveries', async()=>{
+ const party={party_type:'courier',party_id:'aramex',currency:'SAR',name:'أرامكس',settled:'103.50',outstanding_payable:'0.00'};
+ const charges=['completed','out_for_delivery','delivered'].map((status,index)=>({...party,
+   id:`shipping-prepaid:${index}`,order_id:String(index),kind:'shipping',payment_mode:'prepaid',
+   recognition_event:'aramex_status_eligible',recognition_basis:'aramex_status_created_after_start',
+   observed_order_status:status,recorded_at:'2026-11-05T10:00:00Z',completed_at:null,
+   confirmed:'34.50',settled:'34.50'}));
+ await render({parties:[party],obligations:[...charges,charges[0]],details:{facts:{
+   'delivery_event:2':{party_id:'aramex',party_type:'courier',order_id:'2',
+     recognition_basis:'delivered_order_created_after_start',recorded_at:'2026-11-05T11:00:00Z',delivered_at:null},
+ }}});
+ const text=section('الشحن ومناديب المتجر').textContent;
+ expect(text).toContain('طلبات في كشف الأجور: 3');
+ expect(text).toContain('تواصيل مثبتة: 1');
+ expect(text).toContain('أجرة الشحن المؤكدة: 103.50');
+ expect(text).toContain('أجرة الشحن المدفوعة مقدمًا: 103.50 SAR');
+ expect(text).toContain('المتبقي: 0.00');
+ expect(text).not.toContain('عند «تم التنفيذ»');
 });
 test('shipping fee components count once per order while preserving their total cost',async()=>{
  const party={party_type:'courier',party_id:'courier',currency:'SAR',name:'شركة الشحن'};
