@@ -28,3 +28,5 @@ Limits / next steps:
 - Reply to Salla about order matching remains independent; this card does not measure orders/profit or prove checkout coverage.
 - Review draft and CI; deploy only through repository v5 protocol after authorization. No release intent is frozen in this feature branch.
 - GitHub issue #1006 body read. Fetching its full comments failed (transport closed); new task has no prior task checkpoint known. Record this branch's exact commit in the ledger after push.
+
+Owner authorized deployment. Refreshed source onto production 8761f7b2f80faec29638e1438b8fedefcec64a28 preserving Aramex and Snapchat releases. Next: governed A/B build, intent-only B, CI, merge and guarded deploy. PR #1990 is continuation ledger (issue #1006 reached comment limit). Production changed by this task: no.

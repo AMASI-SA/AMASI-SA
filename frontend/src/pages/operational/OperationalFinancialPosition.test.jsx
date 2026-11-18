@@ -1180,6 +1180,33 @@ test("prepaid execution shows the cashbox and execution date without claiming de
     expect(row.cells[1].textContent).toContain("صندوق الخصم: صندوق سلة التجريبي");
 });
 
+test.each([
+    ["completed", "تم التنفيذ"], ["out_for_delivery", "جاري التوصيل"], ["delivered", "تم التوصيل"],
+])("Aramex %s shows the fee recording time and wallet without inventing execution or delivery dates", async (status, label) => {
+    const payload = fixture("couriers");
+    payload.currencies.SAR.deliveries.rows = [{ id: "prepaid-status", order_id: "status-order", order_number: "A-101",
+        party_type: "courier", party_name: "أرامكس", payment_mode: "prepaid", recognition_event: "aramex_status_eligible",
+        fee_recognition_basis: "aramex_status_created_after_start", fee_recorded_at: "2026-11-01T08:00:00Z",
+        fee_observed_order_status: status, completed_at: null, delivered_at: null,
+        recognition_basis: "delivered_order_created_after_start", recorded_at: "2026-11-02T10:00:00Z",
+        cash_account_name: "صندوق سلة التجريبي", shipping_confirmed: "34.50", shipping_settled: "34.50", shipping_outstanding: "0.00" }];
+    operationalApi.financialPosition.mockResolvedValue(payload);
+    await render("couriers");
+    const row = host.querySelector('[data-testid="financial-delivery-row"]');
+    const dates = [...row.cells[0].querySelectorAll("small")].map(node => node.textContent);
+    expect(dates).toContain("وقت التنفيذ الفعلي: غير متاح");
+    expect(dates).toContain("التسليم: غير متاح");
+    expect(dates.find(value => value.startsWith("وقت احتساب الأجرة:"))).toContain("11:00");
+    expect(dates.find(value => value.startsWith("وقت التسجيل:"))).toContain("13:00");
+    expect(row.cells[1].textContent).toContain("مدفوع مقدمًا وفق حالة طلب أرامكس بعد بدء التشغيل");
+    expect(row.cells[1].textContent).toContain(`حالة الطلب عند احتساب الأجرة: ${label}`);
+    expect(row.cells[1].textContent).toContain("إثبات التسليم: طلب تم توصيله وأُنشئ بعد بدء التشغيل");
+    expect(row.cells[1].textContent).toContain("صندوق الخصم: صندوق سلة التجريبي");
+    expect(row.cells[4].textContent).toBe("34.50");
+    expect(row.cells[5].textContent).toBe("34.50");
+    expect(row.cells[6].textContent).toBe("0.00");
+});
+
 
 test.each([
     ["delivered_order_created_after_start", "طلب تم توصيله وأُنشئ بعد بدء التشغيل"],

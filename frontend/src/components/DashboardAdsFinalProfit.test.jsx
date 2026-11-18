@@ -47,6 +47,55 @@ function render(input) {
         executive: host.querySelector('[data-testid="advanced-profit-net-hero"]') };
 }
 
+function unassignedFixture(contribution = 160) {
+    const input = fixture();
+    const sales = contribution + 40;
+    input.data.providers.snapchat.accounts = [{ account_id: "snap-sar", currency: "SAR",
+        projection_timezone: "Asia/Riyadh", total_sar: 100, total_native: 100,
+        quality: { ...input.data.spend_quality } }];
+    input.executiveSnapshot.ads_v2.account_results = {
+        source_only: true, timezone: "Asia/Riyadh", date_from: input.fromDate, date_to: input.toDate,
+        accounts: [{ provider: "snapchat", account_id: "snap-sar", attribution_complete: false,
+            known_salla_orders: 2, known_salla_sales_sar: 1000 - sales }],
+        coverage: { catalog_complete: true, status: "partial", unassigned_orders: 2, unrepresented_orders: 2 },
+        unassigned_result: { provider: "snapchat", cohort_basis: "snapchat_unassigned_orders", account_id: null,
+            attribution_complete: false, ad_spend_allocation_complete: false, time_assignment_complete: true,
+            sales_currency_conversion_complete: true, known_salla_orders: 2, known_salla_sales_sar: sales,
+            hover_summary: { basis: "executive_order_costs_v1", currency: "SAR", complete: false,
+                known_pieces: 2, known_pieces_complete: true,
+                known_product_cost_sar: 30, known_product_cost_complete: true,
+                known_shipping_cost_sar: 8, known_shipping_cost_complete: true,
+                known_payment_fees_sar: 2, known_payment_fees_complete: true,
+                known_total_cost_sar: 40, known_total_cost_complete: true } },
+    };
+    return input;
+}
+
+test.each([160, 0, -40])("real unassigned contribution %s preserves operating expenses and the shared final net", (contribution) => {
+    const input = unassignedFixture(contribution);
+    const before = JSON.stringify(input);
+    const { host, net, operating, executive } = render(input);
+    const row = host.querySelector('[data-testid="dashboard-snapchat-unassigned"]');
+    expect(row.lastElementChild.textContent).toBe(`${contribution.toFixed(2)}مساهمة الطلبات`);
+    expect([row.cells[1], row.cells[4], row.cells[5]].map((cell) => cell.textContent)).toEqual(["—", "—", "—"]);
+    expect(net.querySelector("td").textContent).toBe("420.75");
+    expect(executive.textContent).toContain("420.75");
+    expect(operating.querySelector("td").textContent).toBe("−75.25");
+    expect(row.textContent).not.toContain("بانتظار توزيع الصرف");
+    expect(JSON.stringify(input)).toBe(before);
+});
+
+test("missing cohort cost evidence cannot be filled from the otherwise available executive net", () => {
+    const input = unassignedFixture();
+    delete input.executiveSnapshot.ads_v2.account_results.unassigned_result.hover_summary.known_product_cost_complete;
+    const { host, net, operating, executive } = render(input);
+    expect(host.querySelector('[data-testid="dashboard-snapchat-unassigned"]').lastElementChild.textContent)
+        .toBe("—بيانات الربح غير مكتملة");
+    expect(net.querySelector("td").textContent).toBe("420.75");
+    expect(executive.textContent).toContain("420.75");
+    expect(operating.querySelector("td").textContent).toBe("−75.25");
+});
+
 test("the account table and executive summary show the same server net after operating and bank fees exactly once", () => {
     const input = fixture();
     const before = JSON.stringify(input);

@@ -523,6 +523,28 @@ function withDetails(stats, context, provider, id = null) {
     };
 }
 
+// Order costs can be proven before an advertising account is assigned. This
+// contribution excludes advertising and bank fees, which remain on the actual
+// account rows; it must never complete or be added again to the canonical total.
+function withUnassignedOrdersContribution(profit, stats, row, coverage) {
+    const unavailable = { ...profit, unassignedOrdersContribution: null, unassignedOrdersContributionAvailable: false };
+    const summary = row?.hover_summary;
+    const validCoverage = coverage?.status === "partial" || stats.orders === 0 && coverage?.status === "complete";
+    if (stats.partial || stats.orders === null || stats.sales === null
+        || coverage?.catalog_complete !== true || !validCoverage
+        || summary?.basis !== "executive_order_costs_v1" || summary.currency !== "SAR"
+        || summary.known_pieces_complete !== true || count(summary.known_pieces) === null
+        || summary.known_total_cost_complete !== true) return unavailable;
+    const fields = ["product_cost", "shipping_cost", "payment_fees"];
+    if (fields.some((field) => summary[`known_${field}_complete`] !== true)) return unavailable;
+    const costs = sum(fields.map((field) => amount(summary[`known_${field}_sar`])), { complete: true });
+    if (costs === null || costs !== amount(summary.known_total_cost_sar)
+        || stats.orders === 0 && (stats.sales !== 0 || costs !== 0 || count(summary.known_pieces) !== 0)) return unavailable;
+    const value = signedMoney(stats.sales - costs);
+    return value === null ? unavailable : { ...unavailable,
+        unassignedOrdersContribution: value, unassignedOrdersContributionAvailable: true };
+}
+
 function unassignedRowStats(container) {
     const row = container?.unassigned_result;
     const orders = count(container?.coverage?.unassigned_orders);
@@ -535,10 +557,11 @@ function unassignedRowStats(container) {
         sales: timed && row.sales_currency_conversion_complete === true ? knownSales : null,
         cpa: null, knownOrders: orders, knownSales,
         partial: !timed || row.sales_currency_conversion_complete !== true || knownSales === null };
-    // This is a source-identified cohort, not another advertising account.
-    // Costs remain known subtotals; neither spend nor bank fees can be allocated.
-    const profit = withBankFees(profitMetrics(stats, row.hover_summary, unallocatedSpend(), false,
-        { attributed: false, timed }), null);
+    // Keep full profit unavailable while exposing an independently verified
+    // order contribution; no advertising spend or bank fee is allocated here.
+    const profit = withUnassignedOrdersContribution(withBankFees(
+        profitMetrics(stats, row.hover_summary, unallocatedSpend(), false, { attributed: false, timed }), null),
+        stats, row, container.coverage);
     return { ...stats, accountUnassigned: true, adSpendApplicable: true, profit };
 }
 
@@ -547,8 +570,11 @@ function withUnassignedDetails(context) {
     const stats = unassignedRowStats(context.result);
     if (!stats || stats.knownOrders === 0) return null;
     return { ...stats, segments: SEGMENT_IDS.map((id) => {
-        const unavailable = (reason, status = "unavailable", segment = null) =>
-            unavailableSegment(id, "SAR", reason, status, segment);
+        const unavailable = (reason, status = "unavailable", segment = null) => {
+            const period = unavailableSegment(id, "SAR", reason, status, segment);
+            return { ...period, profit: { ...period.profit,
+                unassignedOrdersContribution: null, unassignedOrdersContributionAvailable: false } };
+        };
         if (context.range.fromDate !== context.range.toDate) return unavailable("single_day_required");
         const candidates = Array.isArray(context.result.segments)
             ? context.result.segments.filter((segment) => segment?.id === id) : [];

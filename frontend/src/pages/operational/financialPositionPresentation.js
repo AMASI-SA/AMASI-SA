@@ -90,11 +90,23 @@ export function deliveryOrderLabel(row) {
     return positionText(row?.order_id) !== UNAVAILABLE ? `معرف الطلب: ${row.order_id}` : UNAVAILABLE;
 }
 
-export function shippingRecognitionLabel(row) {
-    if (row?.recognition_event === "order_completed") return row.payment_mode === "deferred" ? "أجرة مستحقة عند تم التنفيذ" : "مدفوع مقدمًا عند تم التنفيذ";
+export const isAramexStatusFee = row => row?.fee_recognition_basis === "aramex_status_created_after_start";
+
+export function shippingFeeStatusLabel(row) {
+    const label = { completed: "تم التنفيذ", out_for_delivery: "جاري التوصيل", delivered: "تم التوصيل" }[row?.fee_observed_order_status];
+    return typeof label === "string" ? label : UNAVAILABLE;
+}
+
+export function deliveryRecognitionLabel(row) {
     if (row?.recognition_basis === "owner_confirmed_after_start") return "تأكيد المالك بالتوصيل بعد بدء التشغيل";
     if (row?.recognition_basis === "delivered_order_created_after_start") return "طلب تم توصيله وأُنشئ بعد بدء التشغيل";
     return row?.delivered_at ? "عند تم التوصيل" : UNAVAILABLE;
+}
+
+export function shippingRecognitionLabel(row) {
+    if (isAramexStatusFee(row)) return "مدفوع مقدمًا وفق حالة طلب أرامكس بعد بدء التشغيل";
+    if (row?.recognition_event === "order_completed") return row.payment_mode === "deferred" ? "أجرة مستحقة عند تم التنفيذ" : "مدفوع مقدمًا عند تم التنفيذ";
+    return deliveryRecognitionLabel(row);
 }
 
 export function deliveryParties(rows = []) {
@@ -255,14 +267,16 @@ export function buildFinancialPositionWorkbook(report, currency, filters = {}, {
             ...readableMessages([DELIVERY_SCOPE_NOTE, ...(data.deliveries?.notes || [])]).map(note => [note]),
             [],
             ["رقم الطلب", "معرف الطلب", "جهة التنفيذ", "نوع المنفذ", "تاريخ التسليم — الرياض", "وقت التسجيل — الرياض", "طريقة الدفع", "جهة التحصيل", "حالة التحصيل",
-                "أساس احتساب أجرة الشحن", "تاريخ التنفيذ — الرياض", "صندوق خصم الأجرة", ...DELIVERY_MONEY_COLUMNS.map(column => column.label)],
+                "أساس احتساب أجرة الشحن", "تاريخ التنفيذ — الرياض", "صندوق خصم الأجرة", "وقت احتساب الأجرة — الرياض", "حالة الطلب عند احتساب الأجرة", "أساس إثبات التسليم", ...DELIVERY_MONEY_COLUMNS.map(column => column.label)],
             ...orderRows.map(row => [positionText(row.order_number), positionText(row.order_id), positionText(row.party_name), PARTY_LABELS[row.party_type] || UNAVAILABLE,
                 row.delivered_at ? formatRiyadhDateTime(row.delivered_at) : UNAVAILABLE,
                 row.recorded_at ? formatRiyadhDateTime(row.recorded_at) : UNAVAILABLE, paymentLabel(row.payment_method),
                 [destinationLabel(row.collection_destination), row.destination_name].filter(Boolean).join(" · "), collectionLabel(row.collection_status),
                 shippingRecognitionLabel(row), row.completed_at ? formatRiyadhDateTime(row.completed_at) : UNAVAILABLE, positionText(row.cash_account_name),
+                row.fee_recorded_at ? formatRiyadhDateTime(row.fee_recorded_at) : UNAVAILABLE,
+                shippingFeeStatusLabel(row), deliveryRecognitionLabel(row),
                 ...DELIVERY_MONEY_COLUMNS.map(column => exportValue(row[column.key], "money"))]),
-        ], [24, 38, 32, 24, 26, 26, 24, 52, 32, 34, 26, 32, ...DELIVERY_MONEY_COLUMNS.map(() => 26)]);
+        ], [24, 38, 32, 24, 26, 26, 24, 52, 32, 34, 26, 32, 28, 34, 40, ...DELIVERY_MONEY_COLUMNS.map(() => 26)]);
     }
     return workbook;
 }

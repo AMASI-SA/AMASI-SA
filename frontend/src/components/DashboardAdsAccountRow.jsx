@@ -47,7 +47,7 @@ function FinancialRows({ stats = {}, detailed = true }) {
             value={known(report.bankFees) && report.bankFees >= 0 ? report.bankFees : null}
             available={known(report.knownBankFees) && report.knownBankFees >= 0 ? report.knownBankFees : null} />],
         ["الربح قبل التشغيل", <DashboardAdsProfitValue profit={report} inline currency
-            unavailableReason={stats.accountUnassigned ? "بانتظار توزيع الصرف" : undefined} />, true],
+            unavailableReason={stats.accountUnassigned ? "بيانات الربح غير مكتملة" : undefined} />, true],
     ];
     return <dl className="text-[11px] leading-5">{rows.map(([label, value, emphasis]) =>
         <div key={label} className={`flex items-center justify-between gap-2 border-t py-1 ${emphasis
@@ -212,10 +212,14 @@ export default function DashboardAdsAccountRow({ label, stats = {}, fromDate, to
                     <span>القطع <MetricValue value={report.pieces} available={report.knownPieces} suffix="" digits={0} maximumDigits={2} /></span>
                 </div>}
             </section>
-            <p className="mb-0 mt-2 text-[9px] leading-4 text-slate-500">{report.adSpendApplicable === false
+            <p className="mb-0 mt-2 text-[9px] leading-4 text-slate-500">{stats.accountUnassigned
+                ? "مساهمة الطلبات = المبيعات − تكلفة المنتجات والشحن وعمولات الدفع."
+                : report.adSpendApplicable === false
                 ? "صافي الأرباح = المبيعات − إجمالي التكاليف."
                 : "صافي الأرباح = المبيعات − الصرف الإعلاني − إجمالي التكاليف."}</p>
-            <p className="mb-0 mt-1 text-[9px] leading-4 text-slate-500">عمولات البنك المعروضة ضمن إجمالي التكاليف ومخصومة مرة واحدة. الأرباح قبل المصروفات التشغيلية.</p>
+            <p className="mb-0 mt-1 text-[9px] leading-4 text-slate-500">{stats.accountUnassigned
+                ? "الصرف وعمولات البنك يُحتسبان على حسابات سناب مرة واحدة. المصروفات التشغيلية تُخصم في الصافي الإجمالي."
+                : "عمولات البنك المعروضة ضمن إجمالي التكاليف ومخصومة مرة واحدة. الأرباح قبل المصروفات التشغيلية."}</p>
             {report.provisional && report.complete && <p className="mb-0 mt-1 text-[9px] leading-4 text-amber-700">صافي الأرباح تقديري حتى اكتمال بيانات الصرف.</p>}
         </div>, document.body)}
     </>;
