@@ -91,6 +91,47 @@ beforeEach(() => {
 });
 afterEach(() => { act(() => root.unmount()); host.remove(); });
 
+test('legacy grants keep report and print denied and changing a report grant never enables money use or balances', async () => {
+  api.userAccess.mockResolvedValue({ user, access: { version: 7, enabled: true, operations: [], resources: [
+    { kind: 'bank', id: 'bank', use: true, movements: 'own', balance: false },
+  ] } });
+  await render(<AccessEditor user={user} catalog={catalog} identity="owner" />);
+  expect(labeledControl('كشف فترة بنك المؤسسة').checked).toBe(false);
+  expect(labeledControl('طباعة بنك المؤسسة').checked).toBe(false);
+  await click(labeledControl('كشف فترة شركة آفاق'));
+  expect(labeledControl('طباعة شركة آفاق').checked).toBe(false);
+  expect(labeledControl('استخدام شركة آفاق').checked).toBe(false);
+  expect(labeledControl('رصيد شركة آفاق').checked).toBe(false);
+  expect(labeledControl('حركات شركة آفاق').value).toBe('none');
+  await submit();
+  expect(api.saveUserAccess).toHaveBeenCalledWith('staff', {
+    expected_version: 7, enabled: true, operations: [], resources: [
+      { kind: 'bank', id: 'bank', use: true, movements: 'own', balance: false, report: false, print: false },
+      { kind: 'external_person', id: 'external', use: false, movements: 'none', balance: false, report: true, print: false },
+    ],
+  });
+});
+
+test('bulk report and print grants preserve individual exceptions and do not cross the selected kind', async () => {
+  await render(<AccessEditor user={user} catalog={supplierCatalog} identity="owner" />);
+  await changeValue(labeledControl('نوع الحساب أو الجهة'), 'supplier');
+  await changeValue(labeledControl('تجهيز كشوف الفترة'), 'allow');
+  await changeValue(labeledControl('طباعة وحفظ الكشوف'), 'allow');
+  await click(applySuppliers());
+  await click(labeledControl('طباعة المورد الثاني'));
+  expect(api.saveUserAccess).not.toHaveBeenCalled();
+  await submit();
+  const saved = api.saveUserAccess.mock.calls[0][1];
+  expect(saved.resources).toHaveLength(3);
+  expect(saved).toEqual({
+    expected_version: 3, enabled: true, operations: [], resources: expect.arrayContaining([
+      { kind: 'supplier', id: 'shared', use: false, movements: 'none', balance: false, report: true, print: true },
+      { kind: 'supplier', id: 'supplier-b', use: false, movements: 'none', balance: false, report: true, print: false },
+      { kind: 'supplier', id: 'supplier-c', use: false, movements: 'none', balance: false, report: true, print: true },
+    ]),
+  });
+});
+
 test('resource use, own-movement visibility, balance, and operation are independently saved with the loaded version', async () => {
   await render(<AccessEditor user={user} catalog={catalog} identity="owner" />);
   await click(host.querySelector('[aria-label="استخدام بنك المؤسسة"]'));
@@ -106,8 +147,8 @@ test('resource use, own-movement visibility, balance, and operation are independ
   expect(api.saveUserAccess).toHaveBeenCalledTimes(1);
   expect(api.saveUserAccess).toHaveBeenCalledWith('staff', {
     expected_version: 3, enabled: true, operations: ['external.pay'], resources: [
-      { kind: 'bank', id: 'bank', use: true, movements: 'none', balance: false },
-      { kind: 'external_person', id: 'external', use: false, movements: 'own', balance: false },
+      { kind: 'bank', id: 'bank', use: true, movements: 'none', balance: false, report: false, print: false },
+      { kind: 'external_person', id: 'external', use: false, movements: 'own', balance: false, report: false, print: false },
     ],
   });
   expect(host.textContent).toContain('تم حفظ صلاحيات محمد');
@@ -133,8 +174,8 @@ test('each responsive account row has one labeled control per permission and bal
   for (const [index, row] of rows.entries()) {
     expect(row.querySelector('th[scope="row"]').textContent).toContain(catalog.resources[index].name);
     expect([...row.querySelectorAll('.sb-access-mobile-label')].map(label => label.textContent))
-      .toEqual(['استخدام الحساب', 'الحركات المعروضة', 'عرض الرصيد']);
-    expect(row.querySelectorAll('input,select')).toHaveLength(3);
+      .toEqual(['استخدام الحساب', 'الحركات المعروضة', 'عرض الرصيد', 'تجهيز كشف الفترة', 'طباعة وحفظ الكشف']);
+    expect(row.querySelectorAll('input,select')).toHaveLength(5);
     expect([...row.querySelectorAll('label')].every(label => label.querySelectorAll('input,select').length === 1)).toBe(true);
   }
   const bankBalance = rows[0].querySelector('[aria-label="رصيد بنك المؤسسة"]');
@@ -144,7 +185,7 @@ test('each responsive account row has one labeled control per permission and bal
   expect(rows[0].querySelector('select').value).toBe('none');
   await submit();
   expect(api.saveUserAccess.mock.calls[0][1].resources).toEqual([
-    { kind: 'bank', id: 'bank', use: false, movements: 'none', balance: true },
+    { kind: 'bank', id: 'bank', use: false, movements: 'none', balance: true, report: false, print: false },
   ]);
 });
 
@@ -164,10 +205,10 @@ test('the owner account is not offered as a configurable employee', async () => 
 
 test('bulk use covers every current supplier despite search, preserves mixed grants and same-ID accounts, and waits for save', async () => {
   const existing = [
-    { kind: 'supplier', id: 'shared', use: false, movements: 'own', balance: true },
-    { kind: 'supplier', id: 'supplier-b', use: true, movements: 'all', balance: false },
-    { kind: 'bank', id: 'shared', use: true, movements: 'none', balance: false },
-    { kind: 'external_person', id: 'external', use: false, movements: 'all', balance: true },
+    { kind: 'supplier', id: 'shared', use: false, movements: 'own', balance: true, report: false, print: false },
+    { kind: 'supplier', id: 'supplier-b', use: true, movements: 'all', balance: false, report: false, print: false },
+    { kind: 'bank', id: 'shared', use: true, movements: 'none', balance: false, report: false, print: false },
+    { kind: 'external_person', id: 'external', use: false, movements: 'all', balance: true, report: false, print: false },
   ];
   api.userAccess.mockResolvedValue({ user, access: { version: 11, enabled: true, operations: ['external.pay'], resources: existing } });
   await render(<AccessEditor user={user} catalog={supplierCatalog} identity="owner" />);
@@ -197,11 +238,11 @@ test('bulk use covers every current supplier despite search, preserves mixed gra
   expect(payload).toEqual({ expected_version: 11, enabled: true, operations: ['external.pay'], resources: expect.any(Array) });
   expect(payload.resources).toHaveLength(5);
   expect(payload.resources).toEqual(expect.arrayContaining([
-    { kind: 'supplier', id: 'shared', use: true, movements: 'own', balance: true },
-    { kind: 'supplier', id: 'supplier-b', use: true, movements: 'all', balance: false },
-    { kind: 'supplier', id: 'supplier-c', use: true, movements: 'none', balance: false },
-    { kind: 'bank', id: 'shared', use: true, movements: 'none', balance: false },
-    { kind: 'external_person', id: 'external', use: false, movements: 'all', balance: true },
+    { kind: 'supplier', id: 'shared', use: true, movements: 'own', balance: true, report: false, print: false },
+    { kind: 'supplier', id: 'supplier-b', use: true, movements: 'all', balance: false, report: false, print: false },
+    { kind: 'supplier', id: 'supplier-c', use: true, movements: 'none', balance: false, report: false, print: false },
+    { kind: 'bank', id: 'shared', use: true, movements: 'none', balance: false, report: false, print: false },
+    { kind: 'external_person', id: 'external', use: false, movements: 'all', balance: true, report: false, print: false },
   ]));
 });
 
@@ -217,19 +258,19 @@ test('bulk movement visibility permits a per-supplier exception without granting
   expect(payload.operations).toEqual([]);
   expect(payload.resources).toHaveLength(3);
   expect(payload.resources).toEqual(expect.arrayContaining([
-    { kind: 'supplier', id: 'shared', use: false, movements: 'all', balance: false },
-    { kind: 'supplier', id: 'supplier-b', use: false, movements: 'own', balance: false },
-    { kind: 'supplier', id: 'supplier-c', use: false, movements: 'all', balance: false },
+    { kind: 'supplier', id: 'shared', use: false, movements: 'all', balance: false, report: false, print: false },
+    { kind: 'supplier', id: 'supplier-b', use: false, movements: 'own', balance: false, report: false, print: false },
+    { kind: 'supplier', id: 'supplier-c', use: false, movements: 'all', balance: false, report: false, print: false },
   ]));
 });
 
 test('bulk deny applies false permissions and save omits fully denied supplier grants without revoking other accounts', async () => {
-  const bank = { kind: 'bank', id: 'shared', use: true, movements: 'all', balance: true };
+  const bank = { kind: 'bank', id: 'shared', use: true, movements: 'all', balance: true, report: false, print: false };
   api.userAccess.mockResolvedValue({ user, access: {
     version: 4, enabled: true, operations: ['supplier.payment'], resources: [
-      { kind: 'supplier', id: 'shared', use: true, movements: 'all', balance: true },
-      { kind: 'supplier', id: 'supplier-b', use: true, movements: 'own', balance: true },
-      { kind: 'supplier', id: 'supplier-c', use: false, movements: 'none', balance: true }, bank,
+      { kind: 'supplier', id: 'shared', use: true, movements: 'all', balance: true, report: false, print: false },
+      { kind: 'supplier', id: 'supplier-b', use: true, movements: 'own', balance: true, report: false, print: false },
+      { kind: 'supplier', id: 'supplier-c', use: false, movements: 'none', balance: true, report: false, print: false }, bank,
     ],
   } });
   await render(<AccessEditor user={user} catalog={supplierCatalog} identity="owner" />);
@@ -266,9 +307,9 @@ test('bulk controls cannot apply to an empty selected kind or save an untouched 
 test('applying an already matching bulk setting leaves the saved draft clean', async () => {
   api.userAccess.mockResolvedValue({ user, access: {
     version: 3, enabled: true, operations: [], resources: [
-      { kind: 'supplier', id: 'shared', use: true, movements: 'own', balance: true },
-      { kind: 'supplier', id: 'supplier-b', use: true, movements: 'none', balance: false },
-      { kind: 'supplier', id: 'supplier-c', use: true, movements: 'all', balance: false },
+      { kind: 'supplier', id: 'shared', use: true, movements: 'own', balance: true, report: false, print: false },
+      { kind: 'supplier', id: 'supplier-b', use: true, movements: 'none', balance: false, report: false, print: false },
+      { kind: 'supplier', id: 'supplier-c', use: true, movements: 'all', balance: false, report: false, print: false },
     ],
   } });
   await render(<AccessEditor user={user} catalog={supplierCatalog} identity="owner" />);
@@ -306,10 +347,10 @@ test('bulk selections reset on reload and cannot change the draft during a pendi
 test('all balances apply across current resource kinds with individual exceptions and no other permission changes', async () => {
   api.userAccess.mockResolvedValue({ user, access: {
     version: 12, enabled: false, operations: ['external.pay', 'supplier.payment'], resources: [
-      { kind: 'supplier', id: 'shared', use: true, movements: 'own', balance: false },
-      { kind: 'bank', id: 'shared', use: true, movements: 'all', balance: false },
-      { kind: 'employee', id: 'shared', use: false, movements: 'all', balance: true },
-      { kind: 'employee_custody', id: 'shared', use: true, movements: 'none', balance: false },
+      { kind: 'supplier', id: 'shared', use: true, movements: 'own', balance: false, report: false, print: false },
+      { kind: 'bank', id: 'shared', use: true, movements: 'all', balance: false, report: false, print: false },
+      { kind: 'employee', id: 'shared', use: false, movements: 'all', balance: true, report: false, print: false },
+      { kind: 'employee_custody', id: 'shared', use: true, movements: 'none', balance: false, report: false, print: false },
     ],
   } });
   await render(<AccessEditor user={user} catalog={allKindsCatalog} identity="owner" />);
@@ -336,22 +377,22 @@ test('all balances apply across current resource kinds with individual exception
   expect(payload).toEqual({ expected_version: 12, enabled: false, operations: ['external.pay', 'supplier.payment'], resources: expect.any(Array) });
   expect(payload.resources).toHaveLength(16);
   expect(payload.resources).toEqual(expect.arrayContaining([
-    { kind: 'supplier', id: 'shared', use: true, movements: 'own', balance: false },
-    { kind: 'supplier', id: 'supplier-b', use: false, movements: 'none', balance: true },
-    { kind: 'bank', id: 'shared', use: true, movements: 'all', balance: true },
-    { kind: 'external_person', id: 'external', use: false, movements: 'none', balance: true },
-    { kind: 'employee', id: 'shared', use: false, movements: 'all', balance: false },
-    { kind: 'employee', id: 'employee-b', use: false, movements: 'none', balance: true },
-    { kind: 'employee_custody', id: 'shared', use: true, movements: 'none', balance: true },
-    { kind: 'store_driver', id: 'shared', use: false, movements: 'none', balance: true },
-    { kind: 'store_driver', id: 'driver-b', use: false, movements: 'none', balance: true },
-    { kind: 'courier', id: 'shared', use: false, movements: 'none', balance: true },
-    { kind: 'cash', id: 'shared', use: false, movements: 'none', balance: true },
-    { kind: 'provider', id: 'tamara', use: false, movements: 'none', balance: true },
-    { kind: 'ad_account', id: 'ads', use: false, movements: 'none', balance: true },
-    { kind: 'pos_receivable', id: 'pos', use: false, movements: 'none', balance: true },
-    { kind: 'operating_expense', id: 'rent', use: false, movements: 'none', balance: true },
-    { kind: 'owner_withdrawal', id: 'owner', use: false, movements: 'none', balance: true },
+    { kind: 'supplier', id: 'shared', use: true, movements: 'own', balance: false, report: false, print: false },
+    { kind: 'supplier', id: 'supplier-b', use: false, movements: 'none', balance: true, report: false, print: false },
+    { kind: 'bank', id: 'shared', use: true, movements: 'all', balance: true, report: false, print: false },
+    { kind: 'external_person', id: 'external', use: false, movements: 'none', balance: true, report: false, print: false },
+    { kind: 'employee', id: 'shared', use: false, movements: 'all', balance: false, report: false, print: false },
+    { kind: 'employee', id: 'employee-b', use: false, movements: 'none', balance: true, report: false, print: false },
+    { kind: 'employee_custody', id: 'shared', use: true, movements: 'none', balance: true, report: false, print: false },
+    { kind: 'store_driver', id: 'shared', use: false, movements: 'none', balance: true, report: false, print: false },
+    { kind: 'store_driver', id: 'driver-b', use: false, movements: 'none', balance: true, report: false, print: false },
+    { kind: 'courier', id: 'shared', use: false, movements: 'none', balance: true, report: false, print: false },
+    { kind: 'cash', id: 'shared', use: false, movements: 'none', balance: true, report: false, print: false },
+    { kind: 'provider', id: 'tamara', use: false, movements: 'none', balance: true, report: false, print: false },
+    { kind: 'ad_account', id: 'ads', use: false, movements: 'none', balance: true, report: false, print: false },
+    { kind: 'pos_receivable', id: 'pos', use: false, movements: 'none', balance: true, report: false, print: false },
+    { kind: 'operating_expense', id: 'rent', use: false, movements: 'none', balance: true, report: false, print: false },
+    { kind: 'owner_withdrawal', id: 'owner', use: false, movements: 'none', balance: true, report: false, print: false },
   ]));
 });
 
@@ -374,34 +415,34 @@ test('all movements allow own and none exceptions without granting balances or u
   expect(payload).toEqual({ expected_version: 3, enabled: true, operations: [], resources: expect.any(Array) });
   expect(payload.resources).toHaveLength(15);
   expect(payload.resources).toEqual(expect.arrayContaining([
-    { kind: 'supplier', id: 'shared', use: false, movements: 'own', balance: false },
-    { kind: 'supplier', id: 'supplier-b', use: false, movements: 'all', balance: false },
-    { kind: 'supplier', id: 'supplier-c', use: false, movements: 'all', balance: false },
-    { kind: 'bank', id: 'shared', use: false, movements: 'all', balance: false },
-    { kind: 'external_person', id: 'external', use: false, movements: 'all', balance: false },
-    { kind: 'employee', id: 'employee-b', use: false, movements: 'all', balance: false },
-    { kind: 'employee_custody', id: 'shared', use: false, movements: 'all', balance: false },
-    { kind: 'store_driver', id: 'driver-b', use: false, movements: 'all', balance: false },
-    { kind: 'courier', id: 'shared', use: false, movements: 'all', balance: false },
-    { kind: 'cash', id: 'shared', use: false, movements: 'all', balance: false },
-    { kind: 'provider', id: 'tamara', use: false, movements: 'all', balance: false },
-    { kind: 'ad_account', id: 'ads', use: false, movements: 'all', balance: false },
-    { kind: 'pos_receivable', id: 'pos', use: false, movements: 'all', balance: false },
-    { kind: 'operating_expense', id: 'rent', use: false, movements: 'all', balance: false },
-    { kind: 'owner_withdrawal', id: 'owner', use: false, movements: 'all', balance: false },
+    { kind: 'supplier', id: 'shared', use: false, movements: 'own', balance: false, report: false, print: false },
+    { kind: 'supplier', id: 'supplier-b', use: false, movements: 'all', balance: false, report: false, print: false },
+    { kind: 'supplier', id: 'supplier-c', use: false, movements: 'all', balance: false, report: false, print: false },
+    { kind: 'bank', id: 'shared', use: false, movements: 'all', balance: false, report: false, print: false },
+    { kind: 'external_person', id: 'external', use: false, movements: 'all', balance: false, report: false, print: false },
+    { kind: 'employee', id: 'employee-b', use: false, movements: 'all', balance: false, report: false, print: false },
+    { kind: 'employee_custody', id: 'shared', use: false, movements: 'all', balance: false, report: false, print: false },
+    { kind: 'store_driver', id: 'driver-b', use: false, movements: 'all', balance: false, report: false, print: false },
+    { kind: 'courier', id: 'shared', use: false, movements: 'all', balance: false, report: false, print: false },
+    { kind: 'cash', id: 'shared', use: false, movements: 'all', balance: false, report: false, print: false },
+    { kind: 'provider', id: 'tamara', use: false, movements: 'all', balance: false, report: false, print: false },
+    { kind: 'ad_account', id: 'ads', use: false, movements: 'all', balance: false, report: false, print: false },
+    { kind: 'pos_receivable', id: 'pos', use: false, movements: 'all', balance: false, report: false, print: false },
+    { kind: 'operating_expense', id: 'rent', use: false, movements: 'all', balance: false, report: false, print: false },
+    { kind: 'owner_withdrawal', id: 'owner', use: false, movements: 'all', balance: false, report: false, print: false },
   ]));
 });
 
 test('bulk driver permissions cover hidden drivers and preserve same-ID shipping companies and employees', async () => {
   const otherGrants = [
-    { kind: 'courier', id: 'shared', use: false, movements: 'own', balance: true },
-    { kind: 'employee', id: 'shared', use: true, movements: 'none', balance: false },
-    { kind: 'employee_custody', id: 'shared', use: false, movements: 'all', balance: false },
-    { kind: 'bank', id: 'shared', use: true, movements: 'all', balance: true },
+    { kind: 'courier', id: 'shared', use: false, movements: 'own', balance: true, report: false, print: false },
+    { kind: 'employee', id: 'shared', use: true, movements: 'none', balance: false, report: false, print: false },
+    { kind: 'employee_custody', id: 'shared', use: false, movements: 'all', balance: false, report: false, print: false },
+    { kind: 'bank', id: 'shared', use: true, movements: 'all', balance: true, report: false, print: false },
   ];
   api.userAccess.mockResolvedValue({ user, access: {
     version: 8, enabled: true, operations: ['courier.pay'], resources: [
-      ...otherGrants, { kind: 'store_driver', id: 'shared', use: false, movements: 'none', balance: true },
+      ...otherGrants, { kind: 'store_driver', id: 'shared', use: false, movements: 'none', balance: true, report: false, print: false },
     ],
   } });
   await render(<AccessEditor user={user} catalog={allKindsCatalog} identity="owner" />);
@@ -426,21 +467,21 @@ test('bulk driver permissions cover hidden drivers and preserve same-ID shipping
   expect(payload.resources).toHaveLength(6);
   expect(payload.resources).toEqual(expect.arrayContaining([
     ...otherGrants,
-    { kind: 'store_driver', id: 'shared', use: true, movements: 'all', balance: true },
-    { kind: 'store_driver', id: 'driver-b', use: true, movements: 'all', balance: false },
+    { kind: 'store_driver', id: 'shared', use: true, movements: 'all', balance: true, report: false, print: false },
+    { kind: 'store_driver', id: 'driver-b', use: true, movements: 'all', balance: false, report: false, print: false },
   ]));
 });
 
 test.each([
   { kind: 'employee', label: 'الموظفين', expected: [
-    { kind: 'employee', id: 'shared', use: true, movements: 'none', balance: false },
-    { kind: 'employee', id: 'employee-b', use: true, movements: 'none', balance: false },
+    { kind: 'employee', id: 'shared', use: true, movements: 'none', balance: false, report: false, print: false },
+    { kind: 'employee', id: 'employee-b', use: true, movements: 'none', balance: false, report: false, print: false },
   ] },
   { kind: 'employee_custody', label: 'عهد الموظفين', expected: [
-    { kind: 'employee_custody', id: 'shared', use: true, movements: 'none', balance: false },
+    { kind: 'employee_custody', id: 'shared', use: true, movements: 'none', balance: false, report: false, print: false },
   ] },
   { kind: 'courier', label: 'شركات الشحن', expected: [
-    { kind: 'courier', id: 'shared', use: true, movements: 'none', balance: false },
+    { kind: 'courier', id: 'shared', use: true, movements: 'none', balance: false, report: false, print: false },
   ] },
 ])('bulk $kind use never grants other resource kinds with the same ID', async ({ kind, label, expected }) => {
   await render(<AccessEditor user={user} catalog={allKindsCatalog} identity="owner" />);
@@ -484,9 +525,9 @@ test('changing kind resets staged bulk choices without losing already applied dr
   await submit();
   expect(api.saveUserAccess).toHaveBeenCalledWith('staff', {
     expected_version: 3, enabled: true, operations: [], resources: [
-      { kind: 'supplier', id: 'shared', use: true, movements: 'none', balance: false },
-      { kind: 'supplier', id: 'supplier-b', use: true, movements: 'none', balance: false },
-      { kind: 'supplier', id: 'supplier-c', use: true, movements: 'none', balance: false },
+      { kind: 'supplier', id: 'shared', use: true, movements: 'none', balance: false, report: false, print: false },
+      { kind: 'supplier', id: 'supplier-b', use: true, movements: 'none', balance: false, report: false, print: false },
+      { kind: 'supplier', id: 'supplier-c', use: true, movements: 'none', balance: false, report: false, print: false },
     ],
   });
 });
