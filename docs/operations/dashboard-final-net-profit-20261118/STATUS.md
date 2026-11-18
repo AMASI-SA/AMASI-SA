@@ -1,4 +1,4 @@
-# Dashboard final net profit — publication approval handoff
+# Dashboard final net profit — published and verified
 
 ## Task and exact release identity
 
@@ -20,7 +20,7 @@ This documentation-only handoff is on a separate branch based on M. It is **not 
 
 ## Completed behavior
 
-The latest user screenshot confirms that the existing unassigned Snapchat row appears, but mapped account profit is still blank and the existing total is before operating expenses.
+The reported issue was that the existing unassigned Snapchat row appeared, but mapped account profit was blank and the existing total was before operating expenses. The new production UI has now passed acceptance for these corrections.
 
 The correction exposes independent known-cohort cost completeness without changing full-account attribution completeness. It displays a separately labelled contribution for mapped Snapchat orders only when identity, catalog, time, currency, costs, account spend and bank-fee evidence are valid. It subtracts the full account spend and bank fee once. Full-account profit remains incomplete while unknown orders exist. Unknown orders stay separate and are counted once in authoritative totals; no invented spend/profit allocation or total aggregation is introduced.
 
@@ -43,32 +43,74 @@ Two rows are added inside the existing seven-column table: operating expenses an
 - After an inactive-guard check, /app fast-forwarded J→M with unrelated untracked files preserved. Its actual configured adapter passed exit0.
 - Guard prepare and prepublish passed for M and the exact runtime identity above.
 
-Suite counts overlap and must not be added as a deduplicated total. Local rehearsal evidence is not a Cloud Build transcript; no new Cloud Build was submitted.
+Suite counts overlap and must not be added as a deduplicated total. Local rehearsal evidence is not a Cloud Build transcript. The separately authorized production publication and official verification are recorded below.
 
-## Publication blocked by automatic approval review
+## Completed publication — 2026-11-18
 
-The last attempted action was Emergent **Publish changes** for the existing https://mezansalla.com website. Automatic approval review rejected the action before execution because there was no explicit authorization for publishing this new PR1987 fix; the earlier authorization was scoped to PR1969.
+The user explicitly approved publishing this PR1987 correction to the existing https://mezansalla.com website. This resolved the previous automatic approval rejection. The same normal Emergent publication route was used; no alternate route or approval bypass occurred.
 
-Do not retry the publication, use an alternate deployment route, or treat this document as authorization. Ask the user explicitly to approve publishing PR1987 to the existing website. This is the only remaining authorization boundary; code implementation, merge and release preparation are complete.
+Immediately before publication:
+- An independent GitHub check confirmed production still at M and PR1987 merged at M. All 11 postmerge check-runs passed.
+- Postmerge Security Gate 44341161203, Release Readiness 44341161303 and CodeQL 44341161352 all succeeded.
+- Official /app guard status was inactive, tracked files were clean, the production branch was correct and HEAD was M.
+- Fresh task-owned v5 lease actor:`codex-pr1987-dashboard-final-net-profit`.
+- Prepared at:`2026-11-18T16:45:48.756242+00:00`.
+- Prepare revalidated the frozen source/deployment/runtime and materialized artifact bindings.
+- Prepublish returned `ready_to_publish:true` for source A, deployment M and the exact runtime identity above.
 
-The task-owned lease had actor `codex-pr1987-dashboard-final-net-profit`. After the rejection, the owner safely aborted it with the exact deployment SHA and runtime ID. The official status then reported **active:false**. No other lease was cleared.
+Emergent accepted **Publish changes** and displayed **Deployment Started Nov 18, 07:47 PM**. The UI later showed a newer explicit **Deployment finished Nov 18, 07:57 PM** (Asia/Riyadh), with platform version `8abac0f`. The observed stages were packaging, building, and publishing to the cloud.
 
-- Production Git branch changed:yes, merged M.
-- Shared /app source/build changed:yes, M and verified local adapter output.
-- Running production website changed by this task:no.
-- Publication submitted:no — final click rejected by automatic review.
-- New production identity/live table acceptance:pending publication; do not claim the visible issue is fixed.
-- Advertising/provider refresh, budget, financial data and attribution writes:none.
+The UI exposed recent runtime logs with zero reported error/warning log entries. It did not expose a complete Cloud Build argv/cwd transcript or adapter stdout. Do not claim those unobserved platform details; local rehearsal and deployed byte/source verification are separate evidence.
 
-## Exact next safe continuation
+## Official production verification — passed
 
-1. Read AGENTS.md, this record and PR1987. Confirm the user's new explicit publication approval.
-2. Fetch production and the task branch; confirm M/A/B/tree/runtime identity still match. If production advanced, do not silently publish this older candidate.
-3. In /app run `PYTHONDONTWRITEBYTECODE=1 python -B scripts/production_release_guard.py status`; require active:false. Verify the branch/head and preserve unrelated files.
-4. Revalidate current materialized artifacts; rerun the configured adapter if state changed. Do not reuse a lease from this handoff.
-5. Run `prepare --actor codex-pr1987-dashboard-final-net-profit`, then `prepublish` immediately before the authorized Emergent Publish changes action.
-6. Observe a newer explicit Deployment finished success, then run the official `verify --url https://mezansalla.com`. Require all three probes, intended release/source identity, critical hashes, frontend verification and exact JSON build metadata/MIME. Require final status active:false.
-7. Reload the authenticated dashboard normally. Confirm mapped partial Snapchat profit appears where eligible and the table final net equals the executive net for the same period. Verify operating expenses and single bank-fee deduction; unknown orders remain separate. Do not use provider refresh merely to replace an old UI snapshot.
-8. Record the actual deployment/live acceptance and final checkpoint.
+Command:
 
-Emergent remains at the Publish changes confirmation for the existing website. The browser tab is marked for continuation. The user need only authorize the new publication; no code work needs to be restarted.
+```bash
+PYTHONDONTWRITEBYTECODE=1 python -B scripts/production_release_guard.py verify --url https://mezansalla.com
+```
+
+The official command completed successfully. The owner parsed its JSON and asserted the exact source SHA, deployment SHA and runtime ID. A subsequent official status check reported inactive.
+
+- `verified:true`
+- `checks:3`
+- Protocol:`5`
+- Source:`f8bf7be75dbd4976a04c1f77b0722267427ab889`
+- Deployment:`68035e55018d5b75bdd6b9e0ab6000d7528a956f`
+- Runtime:`rg5-c63a56a1935d1a8493c3751adfb9d721c651f137183132ccda139c2cdaf67b0b`
+- Backend boot:`2026-11-18T16:56:34.209657+00:00`
+- Frontend artifact tree:`a79500c615ace0792560a52004407e9b7773c0b529d2a24cf6f3a466cf548be3`
+- Verification completed:`2026-11-18T17:11:00.093804+00:00`
+- Final lease state:`active:false`
+
+The unchanged official verifier requires three consecutive successful health/source/runtime checks, verified Backend source and release-control bindings, matching critical file hashes and Frontend build proof. It checks the reviewed 293 public files, the SPA shell routes, and exact build metadata bytes/MIME under canonical and cache-busted requests. It also checks safe shell/service-worker cache behavior. No shortened or substitute verification was used.
+
+## Live UI acceptance — passed
+
+The authenticated https://mezansalla.com/dashboard-advanced page was reloaded after deployment. Acceptance was repeated after official verification, with the date control showing **18 November 2026**.
+
+- Both mapped Snapchat account rows display signed partial profit with **جزئي: الطلبات المسندة**.
+- The positive and negative values both render correctly.
+- **سناب غير محدد** remains separate with **بانتظار توزيع الصرف**. Unknown orders are not allocated an invented spend/profit and are counted once in the authoritative total.
+- Operating expenses appear in the new table footer.
+- **صافي الربح بعد جميع المصروفات** appears and exactly equals the executive net in the same live DOM snapshot.
+- The table total before operating expenses minus the displayed operating expense equals that final net.
+- The UI explicitly states that bank fees are counted once.
+- The current-period final net retains the same estimate-until-ad-sync status as the executive summary.
+- The live dashboard tab was preserved for the user to review.
+
+Live business amounts, customer/order details, credentials and environment values are intentionally excluded from this repository record.
+
+## Final state and next safe action
+
+- Production Git branch changed:yes, ordinary merge M.
+- Running production website changed:yes, explicitly successful new Emergent publication and all three official probes.
+- Live requested behavior:accepted.
+- Task-owned lease:closed automatically by successful official verification; status inactive.
+- Provider synchronization, financial-data, advertising, budget and attribution writes:none.
+- Unrelated Emergent files and the user's existing editor state were preserved.
+- No remaining blocker for this publication.
+
+The task is complete. Do not republish, recreate the completed lease or rerun a deployment to resume this record. If the user still has the prepublication page open, a normal reload shows the new UI. Future changes require a new task and the ordinary AGENTS.md release protocol.
+
+This record is on the documentation-only handoff branch and is not a new release candidate. Frozen A/B/M and the production branch are not changed by this status update. PR1987 is the current continuation ledger because Issue1006 has reached its comment limit.
