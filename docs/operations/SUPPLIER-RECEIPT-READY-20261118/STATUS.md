@@ -1,3 +1,17 @@
+# Supplier Ready active publication
+
+## Active own lease and one publication attempt — 2026-11-18 01:14 UTC
+
+Prepare passed01:12:15.464196UTC, protocol5, actorSUPPLIER-RECEIPT-READY-20261118, sourceA17262103506180b417f7ad5b88e518faf5ed4d5e, deploymentD557c6c52857b0a09feccacd0cdf9bf6ce9d4476e, runtimerg5-717a2715d8c7db60ea64885f2daab9b3b269c0daa2d284c118537041470c7323. Prepublish exited0, ready_to_publish:true, sameidentities.
+
+Root activated EmergentManage→Republish→freePublishchanges exactlyonce. LiveUI shows Publishing and DeploymentStarted Nov18 04:14AM Asia/Riyadh; detail Workspace ready / Packaging your latest changes / Taking a snapshot of your latest code. Baselineversion1c7c3f5, priorfinished03:46Riyadh. No paidchat, purchase, orautotopup.
+
+Publication andofficialverificationremainpending. Do notclickPublishagain, altersharedsource/build, clearlease, orruncompetingguard/status/verifier. Nextobserve newer greendeployment/version thenlaunchunchangedofficial threeprobe verifier detached withretainedstdout/stderr/exit; finalsuccessmustincludeverified:true/checks:3/exactA/D/runtime andsubsequentactive:false. Evidencefiles prepare/prepublish JSON/stderr/exit arein /tmp/supplier-ready-1984-release. Nevermergeordeploythisevidence-onlybranch.
+
+---
+
+## Prior accepted checkpoints
+
 # Supplier Ready publication continuation
 
 ## Actual build accepted — 2026-11-18 01:10 UTC
