@@ -3,6 +3,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { DashboardAdsSpendCardContent } from "./DashboardAdsSpendCard";
 import { ProfitCard } from "../pages/AdvancedDashboard";
 
+// The financial rendering contract does not require navigation. Match the
+// existing executive-card suites at Jest's unsupported router export boundary.
+jest.mock("react-router-dom", () => ({
+    Link: ({ children, to, ...props }) => <a href={to} {...props}>{children}</a>,
+}));
+
 jest.mock("recharts", () => ({
     ResponsiveContainer: ({ children }) => <div>{children}</div>,
     LineChart: ({ children }) => <div>{children}</div>,
