@@ -1,6 +1,7 @@
 import DashboardPanel from "./DashboardPanel";
 import DashboardAdsAccountRow from "./DashboardAdsAccountRow";
 import DashboardAdsPeriodsOverview from "./DashboardAdsPeriodsOverview";
+import DashboardAdsProfitValue from "./DashboardAdsProfitValue";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ArrowsClockwise,
@@ -18,6 +19,7 @@ import {
 } from "recharts";
 import { addDaysISO, todaySA } from "../lib/dates";
 import { buildDashboardAdsTableMetrics } from "../lib/dashboardAdsAccountResults";
+import { dashboardExecutiveProfitState } from "../lib/dashboardExecutiveProfit";
 import {
     DASHBOARD_ADS_PROVIDERS,
     dashboardKnownIncompleteAmount,
@@ -224,19 +226,6 @@ function SallaMetric({ value, known, integer = false }) {
     </>;
 }
 
-function NetProfitMetric({ profit }) {
-    const value = profit?.netProfit;
-    if (profit?.complete !== true || typeof value !== "number" || !Number.isFinite(value)) {
-        return <span className="text-slate-400">—</span>;
-    }
-    return <>
-        <bdi dir="ltr" className={`block whitespace-nowrap font-bold tabular-nums ${value < 0 ? "text-rose-700" : "text-emerald-700"}`}>
-            {value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-        </bdi>
-        {profit.provisional === true && <span className="block text-[8px] font-normal text-amber-700">تقديري</span>}
-    </>;
-}
-
 function RoasMetric({ profit }) {
     const value = profit?.roas;
     if (profit?.adSpendApplicable === false || typeof value !== "number" || !Number.isFinite(value) || value < 0) {
@@ -253,7 +242,40 @@ function SallaMetricCells({ stats = {} }) {
         <td className="px-1 py-2 text-center"><SallaMetric value={stats.orders} known={stats.knownOrders} integer /></td>
         <td className="px-1 py-2 text-center"><SallaMetric value={stats.cpa} /></td>
         <td className="px-1 py-2 text-center" data-metric="roas"><RoasMetric profit={stats.profit} /></td>
-        <td className="px-1 py-2 text-center"><NetProfitMetric profit={stats.profit} /></td>
+        <td className="px-1 py-2 text-center"><DashboardAdsProfitValue profit={stats.profit}
+            unavailableReason={stats.accountUnassigned ? "بانتظار توزيع الصرف" : undefined} /></td>
+    </>;
+}
+
+const FINAL_PROFIT_PENDING_LABELS = {
+    executive_pending: "بانتظار الملخص",
+    executive_period_pending: "بانتظار بيانات الفترة",
+    product_cost_incomplete: "ناقص التكلفة",
+    sales_currency_incomplete: "تحويل العملات غير مكتمل",
+    spend_period_pending: "بانتظار صرف الفترة",
+    spend_basis_pending: "بانتظار تحديث الملخص",
+    ads_spend_incomplete: "بيانات الإعلانات غير مكتملة",
+    net_profit_unavailable: "غير متاح",
+};
+
+function FinalProfitRows({ state }) {
+    return <>
+        <tr className="border-t border-orange-100 bg-orange-50/70" data-testid="dashboard-ads-operating-expenses">
+            <th scope="row" colSpan={6} className="px-2 py-2 text-right text-[10px] font-semibold text-orange-800">المصروفات التشغيلية</th>
+            <td className="px-1 py-2 text-center text-orange-800"><bdi dir="ltr" className="whitespace-nowrap tabular-nums">
+                {state.operatingExpenses === null ? "—" : `${state.operatingExpenses > 0 ? "−" : ""}${state.operatingExpenses.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+            </bdi></td>
+        </tr>
+        <tr className="border-t border-emerald-200 bg-emerald-50" data-testid="dashboard-ads-final-net-profit">
+            <th scope="row" colSpan={6} className="px-2 py-3 text-right text-[11px] font-extrabold text-emerald-900">
+                صافي الربح بعد جميع المصروفات
+                <span className="block text-[9px] font-normal text-slate-600">مطابق للملخص التنفيذي · عمولات البنك محسوبة مرة واحدة</span>
+            </th>
+            <td className="px-1 py-3 text-center text-[11px]" data-state={state.ready ? "available" : state.reason}>
+                {state.ready ? <DashboardAdsProfitValue profit={{ complete: true, netProfit: state.netProfit, provisional: state.provisional }} />
+                    : <span className="text-[9px] font-medium text-amber-800">{FINAL_PROFIT_PENDING_LABELS[state.reason] || "بانتظار اكتمال البيانات"}</span>}
+            </td>
+        </tr>
     </>;
 }
 
@@ -264,6 +286,7 @@ function AdsAccountResultsTable({ data, accounts, accountMode, ready, singleDay,
         executiveSnapshot, spendSnapshot: data, fromDate, toDate,
         snapchatAccounts: accountMode ? accounts : null,
     }), [executiveSnapshot, data, fromDate, toDate, accountMode, accounts]);
+    const finalProfit = dashboardExecutiveProfitState({ executiveSnapshot, spendSnapshot: data, fromDate, toDate });
     const tableProviders = ["snapchat", "google", "tiktok", "meta"]
         .filter((provider) => !accountMode || provider !== "snapchat");
     const filtered = ["payment_methods", "shipping_companies", "report_statuses"]
@@ -300,7 +323,7 @@ function AdsAccountResultsTable({ data, accounts, accountMode, ready, singleDay,
                     <th scope="col" aria-label="طلبات سلة" className="px-1 py-2 text-center">طلبات</th>
                     <th scope="col" aria-label="متوسط تكلفة الطلب بالريال السعودي" className="px-1 py-2 text-center">متوسط<span className="block text-[8px] font-normal">ر.س</span></th>
                     <th scope="col" aria-label="العائد الإعلاني" className="px-1 py-2 text-center">العائد<span className="block text-[8px] font-normal">×</span></th>
-                    <th scope="col" aria-label="صافي الأرباح بالريال السعودي" className="px-1 py-2 text-center">الأرباح<span className="block text-[8px] font-normal">ر.س</span></th>
+                    <th scope="col" aria-label="الأرباح قبل المصروفات التشغيلية بالريال السعودي" className="px-1 py-2 text-center">الأرباح<span className="block text-[8px] font-normal">ر.س</span></th>
                 </tr></thead>
                 <tbody data-testid="dashboard-ads-provider-totals">
                     {accountMode && accounts.map((account, index) => {
@@ -378,11 +401,15 @@ function AdsAccountResultsTable({ data, accounts, accountMode, ready, singleDay,
                     <th scope="row" className="px-1.5 py-2 text-right">الإجمالي</th>
                     <td className="px-1 py-2 text-center" data-testid="dashboard-ads-spend-total"><bdi dir="ltr">{totalLabel}</bdi></td>
                     <SallaMetricCells stats={metrics.total} />
-                </DashboardAdsPeriodsOverview></tfoot>
+                </DashboardAdsPeriodsOverview><FinalProfitRows state={finalProfit} /></tfoot>
             </table>
         </div>
         <p className="mt-2 text-[9px] leading-4 text-slate-500">متوسط تكلفة الطلب = الصرف بالريال ÷ طلبات سلة.</p>
-        <p className="text-[9px] leading-4 text-slate-500" data-testid="dashboard-ads-profit-basis">الأرباح بعد عمولات البنك وقبل المصروفات التشغيلية.</p>
+        <p className="text-[9px] leading-4 text-slate-500" data-testid="dashboard-ads-profit-basis">أرباح الحسابات والإجمالي بعد عمولات البنك وقبل التشغيل؛ الصافي في السطر الأخير بعد المصروفات التشغيلية.</p>
+        {[...metrics.accounts.values()].some((row) => row.profit?.assignedOrdersProfitAvailable) && <p
+            className="text-[9px] leading-4 text-amber-700" data-testid="dashboard-ads-assigned-profit-note">
+            ربح سناب الجزئي يشمل الطلبات المسندة للحساب فقط، بعد خصم كامل صرفه وعمولة البنك. لا يشمل ربح أو خسارة الطلبات غير المسندة.
+        </p>}
         <p className="text-[9px] leading-4 text-slate-500">أشّر على أي صف لتفاصيله، أو على الإجمالي لمقارنة المنصات صباحًا ومساءً. اضغط لتثبيت التفاصيل.</p>
         {filtered && <p className="text-[9px] leading-4 text-slate-500">طلبات ومبيعات سلة حسب الفلاتر؛ الصرف إجمالي الفترة.</p>}
         {unassigned && <p className="text-[9px] leading-4 text-amber-700" data-testid="dashboard-ads-unassigned-note">

@@ -1103,6 +1103,99 @@ function unassignedFixture() {
     return input;
 }
 
+function assignedProfitFixture() {
+    const input = unassignedFixture();
+    const source = input.executiveSnapshot.ads_v2.account_results;
+    [source, ...source.segments].forEach((container) => container.accounts.forEach((row) => {
+        Object.assign(row, { attribution_complete: false, salla_orders: null, salla_sales_sar: null });
+        const summary = row.hover_summary;
+        Object.assign(summary, {
+            known_pieces_complete: true, known_product_cost_complete: true,
+            known_shipping_cost_complete: true, known_payment_fees_complete: true,
+            known_total_cost_complete: true,
+            known_total_cost_sar: Number((summary.known_product_cost_sar + summary.known_shipping_cost_sar
+                + summary.known_payment_fees_sar).toFixed(2)),
+            complete: false, pieces_complete: false, product_cost_complete: false,
+            shipping_cost_complete: false, payment_fees_complete: false,
+            pieces: null, product_cost_sar: null, shipping_cost_sar: null,
+            payment_fees_sar: null, total_cost_sar: null,
+        });
+    }));
+    return input;
+}
+
+test("mapped Snapchat orders expose a separate partial profit with one full account spend and bank fee deduction", () => {
+    const input = assignedProfitFixture();
+    const before = JSON.stringify(input);
+    const result = buildDashboardAdsTableMetrics(input);
+    // Independently: 1500 sales - 400 product - 20 shipping - 5 gateway - 375 ads - 8.62 bank.
+    expect(result.accounts.get("usd").profit).toMatchObject({
+        complete: false, netProfit: null, assignedOrdersProfitAvailable: true, assignedOrdersProfit: 691.38,
+    });
+    expect(result.accounts.get("sar").profit.assignedOrdersProfit).toBe(265.85);
+    expect(result.accounts.get("usd").profit.reasonCodes).toContain("account_attribution_incomplete");
+    expect(result.accounts.get("usd").segments.map((segment) => segment.profit.assignedOrdersProfit))
+        .toEqual([314.91, 376.47]);
+    expect(result.total.profit).toMatchObject({ netProfit: 3520.23, complete: true });
+    expect(result.unassigned.profit.netProfit).toBeNull();
+    expect(result.unassigned.profit.assignedOrdersProfitAvailable).not.toBe(true);
+    expect(JSON.stringify(input)).toBe(before);
+});
+
+test.each([
+    "product costs", "shipping costs", "payment fees", "pieces", "known total", "cost sum", "FX", "time",
+    "catalog", "coverage", "identity", "duplicate account", "bank fee", "spend period", "spend basis",
+])("%s uncertainty cannot be presented as mapped-order profit", (fault) => {
+    const input = assignedProfitFixture();
+    const source = input.executiveSnapshot.ads_v2.account_results;
+    const row = source.accounts[0];
+    const summary = row.hover_summary;
+    if (fault === "product costs") summary.known_product_cost_complete = false;
+    if (fault === "shipping costs") summary.known_shipping_cost_complete = false;
+    if (fault === "payment fees") summary.known_payment_fees_complete = false;
+    if (fault === "pieces") summary.known_pieces_complete = false;
+    if (fault === "known total") summary.known_total_cost_complete = false;
+    if (fault === "cost sum") summary.known_total_cost_sar += 0.01;
+    if (fault === "FX") row.sales_currency_conversion_complete = false;
+    if (fault === "time") row.time_assignment_complete = false;
+    if (fault === "catalog") source.coverage.catalog_complete = false;
+    if (fault === "coverage") source.coverage.unassigned_orders = 0;
+    if (fault === "identity") row.provider = "meta";
+    if (fault === "duplicate account") source.accounts.push({ ...row });
+    if (fault === "bank fee") input.executiveSnapshot.ads_v2.bank_commissions.coverage.complete = false;
+    if (fault === "spend period") input.spendSnapshot.date_from = "2026-11-14";
+    if (fault === "spend basis") input.snapchatAccounts[0].total_native += 1;
+    const profit = buildDashboardAdsTableMetrics(input).accounts.get("usd").profit;
+    expect(profit.netProfit).toBeNull();
+    expect(profit.assignedOrdersProfitAvailable).not.toBe(true);
+    expect(profit.assignedOrdersProfit ?? null).toBeNull();
+});
+
+test("verified zero mapped orders retains the account's advertising loss without inventing sales", () => {
+    const input = assignedProfitFixture();
+    const row = input.executiveSnapshot.ads_v2.account_results.accounts[0];
+    row.known_salla_orders = row.known_salla_sales_sar = 0;
+    Object.keys(row.hover_summary).filter((key) => key.startsWith("known_") && !key.endsWith("_complete"))
+        .forEach((key) => { row.hover_summary[key] = 0; });
+    expect(buildDashboardAdsTableMetrics(input).accounts.get("usd").profit).toMatchObject({
+        complete: false, netProfit: null, assignedOrdersProfitAvailable: true, assignedOrdersProfit: -383.62,
+    });
+});
+
+test("half-day mapped-order profit still requires reconciled hourly spend and verified order times", () => {
+    const input = assignedProfitFixture();
+    const source = input.executiveSnapshot.ads_v2.account_results;
+    source.segments[1].accounts[0].time_assignment_complete = false;
+    let result = buildDashboardAdsTableMetrics(input);
+    expect(result.accounts.get("usd").profit.assignedOrdersProfit).toBe(691.38);
+    expect(result.accounts.get("usd").segments[0].profit.assignedOrdersProfit).toBe(314.91);
+    expect(result.accounts.get("usd").segments[1].profit.assignedOrdersProfitAvailable).not.toBe(true);
+    input.snapchatAccounts[0].hourly_sar[DAY][0].spend_native += 1;
+    result = buildDashboardAdsTableMetrics(input);
+    expect(result.accounts.get("usd").segments.every((segment) => !segment.profit.assignedOrdersProfitAvailable)).toBe(true);
+    expect(result.accounts.get("usd").profit.assignedOrdersProfit).toBe(691.38);
+});
+
 test("unassigned Snapchat has its own sourced row without allocating spend, bank fees or profit or recounting the total", () => {
     const input = unassignedFixture();
     const before = JSON.parse(JSON.stringify(input));

@@ -269,6 +269,32 @@ function profitMetrics(stats, raw, spend, basisMatches, {
     };
 }
 
+// A proven mapped cohort is useful even when other Snapchat orders have no
+// account. Keep this contribution separate from a complete account profit:
+// its full account spend/fee is charged once, and no unknown order is assigned.
+function withAssignedOrdersProfit(profit, row, coverage, account, basisMatches, compatible = true) {
+    const unavailable = { ...profit, assignedOrdersProfit: null, assignedOrdersProfitAvailable: false };
+    const summary = row?.hover_summary;
+    if (profit.complete || !basisMatches || !compatible || !account
+        || row?.provider !== "snapchat" || row.account_id !== account.account_id
+        || row.attribution_complete !== false || row.time_assignment_complete !== true
+        || row.sales_currency_conversion_complete !== true
+        || coverage?.catalog_complete !== true || coverage.status !== "partial"
+        || !(count(coverage.unassigned_orders) > 0)
+        || count(row.known_salla_orders) === null || amount(row.known_salla_sales_sar) === null
+        || summary?.basis !== "executive_order_costs_v1" || summary.currency !== "SAR"
+        || summary.known_pieces_complete !== true || count(summary.known_pieces) === null
+        || summary.known_total_cost_complete !== true
+        || amount(profit.spendSar) === null || amount(profit.bankFees) === null) return unavailable;
+    const fields = ["product_cost", "shipping_cost", "payment_fees"];
+    if (fields.some((field) => summary[`known_${field}_complete`] !== true)) return unavailable;
+    const costs = sum(fields.map((field) => amount(summary[`known_${field}_sar`])), { complete: true });
+    if (costs === null || costs !== amount(summary.known_total_cost_sar)) return unavailable;
+    const value = signedMoney(amount(row.known_salla_sales_sar) - costs - profit.spendSar - profit.bankFees);
+    return value === null ? unavailable : { ...unavailable,
+        assignedOrdersProfit: value, assignedOrdersProfitAvailable: true };
+}
+
 function zonedTimestamp(value) {
     return typeof value === "string" && /T.+(?:Z|[+-]\d{2}:\d{2})$/.test(value)
         && Number.isFinite(Date.parse(value)) ? Date.parse(value) : null;
@@ -469,8 +495,9 @@ function segmentStats(context, provider, id, account) {
     let stats = metrics(row, spend.sar, basisMatches, { account: direct || Boolean(account), coverageComplete: direct || coverageComplete });
     if (!timed) stats = { ...stats, orders: null, sales: null, cpa: null,
         knownOrders: count(row?.known_salla_orders), knownSales: amount(row?.known_salla_sales_sar), partial: true };
-    const profit = withBankFees(profitMetrics(stats, row?.hover_summary, spend, basisMatches,
-        { attributed, timed, adSpendApplicable: !direct }), segmentBankFees(context, provider, account, id, spend));
+    const profit = withAssignedOrdersProfit(withBankFees(profitMetrics(stats, row?.hover_summary, spend, basisMatches,
+        { attributed, timed, adSpendApplicable: !direct }), segmentBankFees(context, provider, account, id, spend)),
+        row, segment.coverage, account, basisMatches);
     return { id, status: profit.complete ? window.cutoff < window.end ? "active" : "completed" : "partial",
         startAt: segment.start_at, endAt: segment.end_at, cutoffAt: segment.cutoff_at,
         ...stats, adSpendApplicable: !direct, profit, reasonCodes: reasonCodes(profit.reasonCodes, row?.reason_codes) };
@@ -489,8 +516,9 @@ function withDetails(stats, context, provider, id = null) {
     const compatible = record(row) && (stats.orders === null || count(row.salla_orders) === stats.orders)
         && (stats.sales === null || amount(row.salla_sales_sar) === stats.sales);
     return { ...stats, adSpendApplicable: !direct,
-        profit: withBankFees(profitMetrics(stats, row?.hover_summary, spend, context.basisMatches, { attributed, compatible,
+        profit: withAssignedOrdersProfit(withBankFees(profitMetrics(stats, row?.hover_summary, spend, context.basisMatches, { attributed, compatible,
             timed: !direct || row?.time_assignment_complete === true, adSpendApplicable: !direct }), dailyBankFees(context, provider, account)),
+            row, context.result?.coverage, account, context.basisMatches, compatible),
         segments: SEGMENT_IDS.map((segmentId) => segmentStats(context, provider, segmentId, account)),
     };
 }

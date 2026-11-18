@@ -175,10 +175,19 @@ class DashboardAdsCostCollector:
         for name, value in known.items():
             value = round(value, 2)
             output["known_" + name] = value
+            # The observed cohort can have complete costs even when additional
+            # orders have no account/time assignment. These flags prove only
+            # this cohort; they never complete the enclosing account scope.
+            output["known_" + flags[name]] = complete[name]
             output[flags[name]] = scope_complete and complete[name]
             output[name] = value if output[flags[name]] else None
             if not complete[name]:
                 reasons.add(missing[name])
+        known_financial_complete = all(complete[name] for name in (
+            "product_cost_sar", "shipping_cost_sar", "payment_fees_sar"))
+        output["known_total_cost_complete"] = known_financial_complete
+        output["known_total_cost_sar"] = round(sum(output["known_" + name] for name in (
+            "product_cost_sar", "shipping_cost_sar", "payment_fees_sar")), 2) if known_financial_complete else None
         financial_complete = all(output[flags[name]] for name in (
             "product_cost_sar", "shipping_cost_sar", "payment_fees_sar"))
         output["total_cost_sar"] = round(sum(output[name] for name in (

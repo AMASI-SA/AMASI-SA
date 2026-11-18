@@ -1,5 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import DashboardAdsProfitValue from "./DashboardAdsProfitValue";
 
 const EMPTY_TOTAL = Object.freeze({});
 const finite = (value) => typeof value === "number" && Number.isFinite(value);
@@ -34,14 +35,6 @@ function Spend({ profit = {} }) {
     </>;
 }
 
-function NetProfit({ profit = {} }) {
-    if (profit.complete !== true || !finite(profit.netProfit)) return <span className="text-slate-400">—</span>;
-    return <span className={profit.netProfit < 0 ? "text-rose-700" : "text-emerald-700"}>
-        <bdi dir="ltr" className="block whitespace-nowrap font-bold tabular-nums">{format(profit.netProfit)}</bdi>
-        {profit.provisional === true && <span className="block text-[8px] font-medium">تقديري</span>}
-    </span>;
-}
-
 function metricEntries(stats = {}, includeBankFees = false) {
     const profit = stats?.profit || {};
     return [
@@ -53,7 +46,8 @@ function metricEntries(stats = {}, includeBankFees = false) {
         ...(includeBankFees ? [{ key: "bankFees", label: "منها عمولات البنك", unit: "ر.س",
             value: <Value value={profit.bankFees} available={profit.knownBankFees} /> }] : []),
         { key: "roas", label: "العائد الإعلاني", unit: "×", value: <Value value={profit.adSpendApplicable === false ? null : profit.roas} /> },
-        { key: "net", label: "صافي الأرباح", unit: "ر.س", value: <NetProfit profit={profit} /> },
+        { key: "net", label: "الربح قبل التشغيل", unit: "ر.س", value: <DashboardAdsProfitValue profit={profit}
+            unavailableReason={stats.accountUnassigned ? "بانتظار توزيع الصرف" : undefined} /> },
     ];
 }
 

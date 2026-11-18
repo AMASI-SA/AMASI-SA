@@ -1,5 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import DashboardAdsProfitValue, { dashboardAdsDisplayProfit } from "./DashboardAdsProfitValue";
 
 const known = (value) => typeof value === "number" && Number.isFinite(value);
 const number = (value, digits = 2, maximumDigits = digits) => value.toLocaleString("en-US", {
@@ -26,7 +27,8 @@ function SpendValue({ report }) {
 
 function FinancialRows({ stats = {}, detailed = true }) {
     const report = stats.profit || {};
-    const profitReady = report.complete === true && known(report.netProfit);
+    const displayedProfit = dashboardAdsDisplayProfit(report);
+    const profitReady = displayedProfit.value !== null;
     const advertising = report.adSpendApplicable !== false;
     const cpa = advertising && known(stats.cpa) && stats.cpa >= 0 ? stats.cpa : null;
     const roas = advertising && known(report.roas) && report.roas >= 0 ? report.roas : null;
@@ -44,15 +46,15 @@ function FinancialRows({ stats = {}, detailed = true }) {
         ["منها عمولات البنك", <MetricValue
             value={known(report.bankFees) && report.bankFees >= 0 ? report.bankFees : null}
             available={known(report.knownBankFees) && report.knownBankFees >= 0 ? report.knownBankFees : null} />],
-        ["صافي الأرباح", <><MetricValue value={profitReady ? report.netProfit : null} />
-            {profitReady && report.provisional && <span className="mr-1 text-[9px] font-medium">تقديري</span>}</>, true],
+        ["الربح قبل التشغيل", <DashboardAdsProfitValue profit={report} inline currency
+            unavailableReason={stats.accountUnassigned ? "بانتظار توزيع الصرف" : undefined} />, true],
     ];
     return <dl className="text-[11px] leading-5">{rows.map(([label, value, emphasis]) =>
         <div key={label} className={`flex items-center justify-between gap-2 border-t py-1 ${emphasis
             ? "mt-0.5 border-emerald-200 font-extrabold" : "border-slate-100"}`}>
             <dt className={emphasis ? "text-slate-900" : "shrink-0 font-medium text-slate-600"}>{label}</dt>
             <dd className={`m-0 text-left font-bold ${emphasis && profitReady
-                ? report.netProfit < 0 ? "text-rose-700" : "text-emerald-700" : "text-slate-900"}`}>{value}</dd>
+                ? displayedProfit.value < 0 ? "text-rose-700" : "text-emerald-700" : "text-slate-900"}`}>{value}</dd>
         </div>)}</dl>;
 }
 
