@@ -13,7 +13,12 @@ does not authorize a new Production release or live financial transactions.
 - Companion: `AMASI-SA/amasi-mobile`, based on operational branch
   `feature/operational-order-compensation-20261101` at
   `a8a7a55e22b4f7430c7619bb792c5d7d540b4f43`.
-- Production changed: **no**. No Release Guard lease, intent, merge, deployment,
+- Main Draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/2003
+- Native Draft PR: https://github.com/AMASI-SA/amasi-mobile/pull/364
+- Integrated current Production `77d824a780df582b5c32f4dda87a959e35e1ed1e`
+  into task source `903e477bae520553bd0ca184d626b9c98694879b`, preserving
+  the already released intent byte-for-byte.
+- Production changed by this task: **no**. No Release Guard lease, intent, merge, deployment,
   APK build, live grant update or live financial write is part of this checkpoint.
 - Continuation: this task document and its task PR. Repository issue #1006 is
   already at its comment limit, as documented in the preceding bulk-access task.
@@ -57,9 +62,10 @@ side labels. Restricted scopes never gain balance information from this design.
 
 ## Verification checkpoints
 
-- Fresh integrated backend run: **199 passed in 34.62 seconds** across workspace,
+- Fresh backend run after integrating current Production: **230 passed in 35.99 seconds** across workspace,
   statements, access, refunds, receipt-review scope, existing noncash review
-  evidence and packed-state preservation. Synthetic isolated data only.
+  evidence, packed-state preservation and the inherited engine/refresh-budget
+  regressions. Synthetic isolated data only.
 - Fresh integrated web run: **1080 passed in 65 suites**, including the complete
   operational UI collection and adjacent navigation, shipping, supplier, employee
   and spreadsheet safety contracts.
@@ -71,10 +77,21 @@ side labels. Restricted scopes never gain balance information from this design.
   bank/POS exactly-once approval and rollback when the grant is revoked before
   commit. They require a disposable replica set and are pending remote CI.
 - Manual mobile-width inspection verified compact layout and no 320px body
-  overflow. A Back discrepancy seen in the iframe is still being investigated;
-  actual BrowserRouter tests pass. No physical phone acceptance is claimed.
-- Independent implementation review and native companion verification are in
-  progress. These results are not a Production-release authorization.
+  overflow. Direct-browser history → detail → browser Back → history Back
+  returned to the original employee ledger correctly. A 390px statement showed
+  all five headers, original note, 1900 opening +200 credits −100 payments =2000
+  closing, and the exact selected period. No physical phone acceptance is claimed.
+- Independent web/backend and native reviews finished with their confirmed
+  findings fixed. Native source `16e5ac699440249fd9d9dd5fc9788a323cb76150`
+  (tree `034c98bdbfd1212db5b0436508744cab9301345d`) is remotely verified,
+  clean locally and passed Mobile CI run `44414785378`, including TypeScript,
+  ESLint and 45 balance groups. The baseline native install has no frozen-lock
+  gate; no dependency change was introduced. No APK/OTA was built.
+- Main Security Gate passed on `903e477`. Browser acceptance exposed a
+  navigation assertion racing the new sections panel; explicit element/response
+  waits retain all assertions. Fresh CI on the final task head remains required.
+- The final exact-money/detail-date display fix passed 27 affected web tests.
+  These results are not a Production-release authorization.
 
 ## Data limits retained deliberately
 
@@ -87,5 +104,5 @@ other original notes remain separate from descriptive labels.
 
 ## Next safe steps
 
-Finish independent review and the native companion checks, complete browser
-inspection, and run the remotely saved Draft PR gates on its exact source SHA. Preserve release intent and unrelated files. Do not publish this WIP source.
+Finish the main Draft PR gates on its exact source SHA, record their conclusions
+in the PR, and keep both task branches available for a separately authorized release. Preserve release intent and unrelated files. Do not publish this WIP source.

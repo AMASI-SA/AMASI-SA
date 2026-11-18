@@ -34,6 +34,7 @@ const ledger = Array.from({ length: 7 }, (_, index) => ({ id: `movement-${index 
   business_date: `2026-11-${String(17 - index).padStart(2, '0')}`, recorded_at: '2026-11-17T10:00:00Z',
   recorded_by: { id: staff.id, name: staff.name }, amount: `${(index + 1) * 50}.00`, currency: 'SAR',
   side: index % 2 ? 'for_us' : 'for_party', reason: index % 2 ? 'payment' : 'receipt', order_number: null,
+  note: index === 0 ? 'تسوية الدفعة حسب الاتفاق' : '',
   party_type: 'external_person', party_id: 'external-demo', party_name: resources[0].name,
 }));
 const order = { id: 'order-demo', order_number: '2044', total: '300.00', currency: 'SAR', paid_amount: '300.00',

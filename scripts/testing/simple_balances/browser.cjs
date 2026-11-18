@@ -295,6 +295,7 @@ async function capture(page, name) {
     await check('Owner sees specialized routes without deleted grant keys and exactly three primary tabs', async () => {
       await page.getByRole('button', { name: 'الأطراف', exact: true }).click();
       await page.getByRole('button', { name: 'جميع الأقسام', exact: true }).click();
+      await page.getByRole('link', { name: /مرتجعات الأصناف/ }).waitFor();
       assert.equal(await page.getByRole('link', { name: /مرتجعات الأصناف/ }).count(), 1);
       assert.equal(await page.getByRole('link', { name: /^الاستبدال/ }).count(), 1);
       assert.deepEqual(await page.locator('.sb-tabs button').allTextContents(), ['الحركات', 'الأطراف', 'الحسابات']);
@@ -440,6 +441,7 @@ async function capture(page, name) {
       actor = f.staff; await page.goto(ledgerUrl); await page.locator('.sb-ledger tbody tr').first().waitFor();
       await page.getByRole('button', { name: 'الأطراف', exact: true }).click();
       await page.getByRole('button', { name: 'جميع الأقسام', exact: true }).click();
+      await page.getByRole('heading', { name: 'جميع الأقسام', exact: true }).waitFor();
       assert.equal(await page.getByRole('link', { name: /مرتجعات الأصناف|الاستبدال|صلاحيات الموظفين/ }).count(), 0);
       const before = calls.length; await page.goto(`${origin}/operational-balances/access`);
       await page.getByText('إدارة صلاحيات الأرصدة متاحة لمالك الحساب.', { exact: true }).waitFor();
@@ -458,7 +460,8 @@ async function capture(page, name) {
       await dialog.locator('.sb-ledger tbody tr').first().waitFor();
       assert.equal(await dialog.locator('.sb-ledger').first().locator('tbody tr').count(), 2);
       await capture(page, 'salary-history-mobile');
-      await page.goBack(); await page.locator('.sb-header h1').waitFor();
+      await page.goBack(); await dialog.waitFor({ state: 'hidden' });
+      await page.locator('.sb-ledger tbody tr').first().waitFor();
       assert.equal(await page.getByRole('dialog').count(), 0);
       assert.equal(await page.locator('.sb-ledger tbody tr').count(), 3);
     });
@@ -474,18 +477,32 @@ async function capture(page, name) {
       await dialog.locator('.sb-statement-table tbody tr').first().waitFor();
       assert.equal(await dialog.locator('.sb-statement-table tbody tr').count(), 7);
       assert.equal(await dialog.getByText('الرصيد الافتتاحي', { exact: true }).count(), 1);
+      assert.deepEqual(await dialog.locator('.sb-statement-table th').allTextContents(), ['البيان', 'له', 'عليه', 'الرصيد بعد الحركة', 'الملاحظة']);
+      assert.equal(await dialog.getByText('تسوية الدفعة حسب الاتفاق', { exact: true }).count(), 1);
+      await dialog.getByText('الصافي بنهاية الفترة', { exact: true }).waitFor();
+      await page.setViewportSize({ width: 390, height: 1800 });
       await capture(page, 'statement-mobile');
+      await page.setViewportSize({ width: 390, height: 844 });
       await page.evaluate(() => { window.__statementPrints = 0; window.print = () => { window.__statementPrints += 1; }; });
       await dialog.getByRole('button', { name: 'طباعة / حفظ PDF', exact: true }).click();
       await page.waitForFunction(() => window.__statementPrints === 1);
       assert.equal(calls.filter(call => call.path.includes('/statements/') && call.params.purpose === 'print').length, 1);
-      await page.goBack(); assert.equal(await page.getByRole('dialog').count(), 0);
+      await page.goBack(); await dialog.waitFor({ state: 'hidden' });
+      await page.locator('.sb-ledger tbody tr').first().waitFor();
+      assert.equal(await page.getByRole('dialog').count(), 0);
       assert.equal(await page.locator('.sb-ledger tbody tr').count(), 5);
     });
     await check('Scoped review proof Back keeps the draft and approved history leaves courier balance unchanged', async () => {
       await page.goto(`${origin}${basePath}?tab=parties&panel=reviews`);
       await page.locator('.sbr-row').first().waitFor();
+      const filteredReviews = page.waitForResponse(response => {
+        const url = new URL(response.url());
+        return url.pathname === '/api/operational-balances/workspace/reviews'
+          && url.searchParams.get('driver_id') === 'employee-demo';
+      });
       await field(page, 'الموصل').selectOption('employee-demo');
+      assert.equal((await filteredReviews).status(), 200);
+      await page.locator('.sbr-row').first().waitFor();
       assert.equal(await field(page, 'الموصل').count(), 1, 'Changing a general filter must not lock it');
       await page.locator('.sbr-row').first().click();
       await field(page, 'البنك المستلم').selectOption('bank-demo');
@@ -495,12 +512,22 @@ async function capture(page, name) {
       await page.locator('.sbr-proof img').waitFor();
       assert.equal(await page.getByRole('button', { name: 'رجوع', exact: true }).count(), 1);
       await page.goBack();
+      await page.locator('.sbr-proof').waitFor({ state: 'hidden' });
+      await page.locator('.sbr-bank-candidate input').first().waitFor();
       assert.equal(await page.locator('.sbr-bank-candidate input').first().isChecked(), true);
       await page.getByLabel('راجعت الإيصال وطابقت المبلغ', { exact: true }).check();
       await page.getByRole('button', { name: 'اعتماد الإيصال', exact: true }).click();
       await page.getByText('تم الاعتماد.', { exact: false }).waitFor();
       assert.equal(f.resources.find(row => row.kind === 'store_driver' && row.id === 'employee-demo').balance.amount, balance);
-      await page.goBack(); await page.getByRole('button', { name: 'معتمدة', exact: true }).click();
+      await page.goBack();
+      await page.getByRole('button', { name: 'معتمدة', exact: true }).waitFor();
+      const approvedReviews = page.waitForResponse(response => {
+        const url = new URL(response.url());
+        return url.pathname === '/api/operational-balances/workspace/reviews'
+          && url.searchParams.get('status') === 'approved';
+      });
+      await page.getByRole('button', { name: 'معتمدة', exact: true }).click();
+      assert.equal((await approvedReviews).status(), 200);
       await page.locator('.sbr-row').first().waitFor();
       assert.equal(await page.locator('.sbr-row').count(), 1);
       await capture(page, 'reviews-approved-mobile');
