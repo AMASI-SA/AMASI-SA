@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 from typing import Any, Callable
+import asyncio
+import time
+from .live_sources import read_live_sources
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -57,6 +60,34 @@ def make_first_party_attribution_router(
     get_current_user: Callable[..., Any],
 ) -> APIRouter:
     router = APIRouter(prefix="/first-party-attribution/v1", tags=["attribution"])
+
+    live_cache = {}
+    live_inflight = {}
+
+    async def load_live(user_id):
+        try:
+            result = await read_live_sources(db, user_id)
+            if len(live_cache) >= 128:
+                live_cache.pop(next(iter(live_cache)))
+            live_cache[user_id] = (time.monotonic(), result)
+            return result
+        finally:
+            live_inflight.pop(user_id, None)
+
+    @router.get("/live-sources")
+    async def live_sources(user: dict = Depends(get_current_user)):
+        user_id = str(user["id"])
+        cached = live_cache.get(user_id)
+        if cached and time.monotonic() - cached[0] < 30:
+            return cached[1]
+        if user_id not in live_inflight:
+            if len(live_inflight) >= 16:
+                raise HTTPException(status_code=503, detail="live_sources_busy")
+            live_inflight[user_id] = asyncio.create_task(load_live(user_id))
+        try:
+            return await asyncio.shield(live_inflight[user_id])
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="live_sources_unavailable") from exc
 
     @router.post("/events")
     async def capture_event(payload: StorefrontEventInput, request: Request):
