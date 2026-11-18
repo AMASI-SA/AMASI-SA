@@ -169,16 +169,16 @@ def verified_webhook_transition(body, raw, current, owner):
             "shipment_id": shipment, "waybill": waybill, "at": at.isoformat()}
 
 
-def order_delivery_time(raw, source, history, end, *, provenance=None, allow_undated=False, undated_before=None):
-    """Require agreement of authoritative order status, explicit dates and history."""
+def validate_delivered_order_source(raw, source, end, *, created=None):
+    """Validate current source authority independently of delivery chronology."""
     order_id, number = _text(raw.get("id")), _text(raw.get("reference_id") or raw.get("order_number"))
     if any(source.get(k) is not None and _text(source[k]) != value
            for k, value in (("salla_order_id", order_id), ("order_number", number))):
         _fail("order_identity_conflict")
     date = raw.get("date") if isinstance(raw.get("date"), dict) else {}
     version = raw.get("updated_at") or date.get("updated") or raw.get("date_updated")
-    watermark = source.get("g47_salla_snapshot") or {}
-    if watermark.get("cancelled") or watermark.get("component_pending") or watermark.get("requires_authoritative_refresh") or (
+    watermark = source.get("g47_salla_snapshot", {})
+    if not isinstance(watermark, dict) or watermark.get("cancelled") or watermark.get("component_pending") or watermark.get("requires_authoritative_refresh") or (
             watermark.get("source_updated_at") is not None and
             _instant(watermark["source_updated_at"]) != _instant(version)):
         _fail("canonical_source_stale")
@@ -188,6 +188,15 @@ def order_delivery_time(raw, source, history, end, *, provenance=None, allow_und
     if _state(effective) is not True or any(_state(value) is not True for value in (
             raw.get("status_slug"), source.get("order_status"), source.get("order_status_slug")) if value is not None):
         _fail("order_shipment_status_conflict")
+    if created is not None and version is not None and not _instant(created) <= _instant(version) <= _instant(end):
+        _fail("canonical_source_stale")
+    return version, effective
+
+
+def order_delivery_time(raw, source, history, end, *, provenance=None, allow_undated=False, undated_before=None):
+    """Require agreement of authoritative order status, explicit dates and history."""
+    order_id, number = _text(raw.get("id")), _text(raw.get("reference_id") or raw.get("order_number"))
+    version, effective = validate_delivered_order_source(raw, source, end)
     # A parent status's date cannot establish when a customized child changed.
     status_time = effective.get("changed_at") if isinstance(effective, dict) else None
     times = {_instant(value) for value in (status_time, raw.get("status_changed_at")) if value is not None}

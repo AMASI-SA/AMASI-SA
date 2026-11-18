@@ -96,11 +96,6 @@ def _recorded_delivery(base, end, frozen_event, **identity):
             "delivered_at": None, "recorded_at": recorded.isoformat()}
 
 
-def _check_recorded_time(at, frozen_event):
-    if status_delivery(frozen_event) and at > _instant(frozen_event['recorded_at']):
-        _fail('confirmed_evidence_changed')
-
-
 def delivery_time_matches(frozen, delivered_at, *, order_id, native_driver_earning=None):
     """Match a validated native earning to an unpriced legacy second timestamp."""
     saved_at = frozen.get("delivered_at")
@@ -303,22 +298,6 @@ def _order_waybill(raw, current, shipment, waybill, created_through):
         _fail('order_waybill_unproven')
 
 
-def _check_known_shipment_times(raw, shipment, created, start, end, frozen_event):
-    """An optional clock may be absent, but an impossible present date conflicts."""
-    _, selected, _ = _shipment_rows(raw, shipment)
-    times = set()
-    for row in selected:
-        for key in ('delivered_at', 'actual_delivered_at'):
-            if row.get(key) is not None:
-                at = _window(row[key], created, start, end)
-                _check_recorded_time(at, frozen_event)
-                if row.get('created_at') is not None and _instant(row['created_at']) > at:
-                    _fail('timestamp_before_shipment')
-                times.add(at)
-    if len(times) > 1:
-        _fail('timestamp_ambiguous')
-
-
 def _shipment_time(raw, current, shipment, waybill, *, include_nested=True, order_transition=None):
     candidates, selected, nested = _shipment_rows(raw, shipment, include_nested=include_nested)
     timestamps = []
@@ -471,44 +450,85 @@ def resolve_delivery_event(raw, *, source, owner, assignments, setup, started_at
     base = {"schema": "operational_delivery_event_v1", "order_id": order_id, "order_number": number,
             "order_created_at": created.isoformat()}
     status_eligible = created_after_start_delivery(raw, start, end)
-    if status_eligible and any(_status(value) not in DELIVERED for value in (
-            raw.get('status_slug'), source.get('order_status'), source.get('order_status_slug')) if value is not None):
-        _fail('order_shipment_status_conflict')
+    if status_eligible:
+        from operational_courier_transitions import validate_delivered_order_source
+        validate_delivered_order_source(raw, source, end, created=created)
+    # Existing dated facts retain their immutable dates and settlement keys.
+    # Only a new admission or an already recorded status proof can use this
+    # representation; it never rewrites a priced or unpriced dated fact.
+    status_admission = status_eligible and (status_delivery(frozen_event) or (
+        frozen_event is None and frozen_shipping is None and not recorded_fee))
     if assignment is not None:
         if _status(assignment.get("status")) not in DELIVERED and not status_eligible:
             return None
         assignment_id = _text(assignment["id"])
-        if status_eligible and (assignment.get("delivered_at") in (None, "") or status_delivery(frozen_event)):
+        if status_eligible and not status_admission and assignment.get("delivered_at") in (None, ""):
+            # A legacy dated fee keeps its established evidence diagnostics.
+            # This path cannot convert that recorded fact into a status event.
             from operational_courier_transitions import order_delivery_time
-            order_at = order_delivery_time(raw, source, history, end, allow_undated=True,
-                undated_before=frozen_event.get('recorded_at') if status_delivery(frozen_event) else None)
+            order_at = order_delivery_time(raw, source, history, end, allow_undated=True)
             if order_at is not None:
                 _window(order_at, created, start, end)
-                _check_recorded_time(order_at, frozen_event)
-            if assignment.get("delivered_at") not in (None, ""):
-                _check_recorded_time(_window(assignment["delivered_at"], created, start, end), frozen_event)
-            return _recorded_delivery(base, end, frozen_event, id="store-delivery:" + assignment_id,
-                party_type="store_driver", party_id=_text(assignment["driver_id"]),
-                currency=_currency(raw, assignment), assignment_id=assignment_id)
-        delivered = _window(assignment.get("delivered_at"), created, start, end)
-        if delivered is None:
+        if status_admission and (assignment.get("delivered_at") in (None, "") or status_delivery(frozen_event)):
+            delivered = None
+        else:
+            try:
+                delivered = _window(assignment.get("delivered_at"), created, start, end)
+            except ValueError:
+                if not status_admission:
+                    raise
+                delivered = None
+        if delivered is None and not status_admission:
             return None
-        return {**base, "id": "store-delivery:" + assignment_id, "delivered_at": delivered.isoformat(),
-                "party_type": "store_driver", "party_id": _text(assignment["driver_id"]),
-                "currency": _currency(raw, assignment), "assignment_id": assignment_id}
+        binding = {"id": "store-delivery:" + assignment_id, "party_type": "store_driver",
+                   "party_id": _text(assignment["driver_id"]), "currency": _currency(raw, assignment),
+                   "assignment_id": assignment_id}
+        if delivered is None:
+            return _recorded_delivery(base, end, frozen_event, **binding)
+        return {**base, **binding, "delivered_at": delivered.isoformat()}
     current = source.get("salla_shipping_current") or raw.get("salla_shipping_current") or {}
     if not isinstance(current, dict):
         _fail("current_shipment_required")
-    if _status(raw.get("status")) not in DELIVERED and _status(current.get("status")) not in DELIVERED:
+    if not status_eligible and _status(raw.get("status")) not in DELIVERED and _status(current.get("status")) not in DELIVERED:
         return None
     current, shipment, waybill = _current_shipping(raw, source, require_delivered=False)
     if ("shipment", shipment) in shipment_conflicts or ("waybill", waybill) in shipment_conflicts:
         _fail("shipment_shared_by_orders")
+    if not status_admission:
+        dated = _dated_courier_event(raw, source, current, shipment, waybill, history,
+            dict(base), created, start, end, frozen_event, recorded_fee)
+        if dated is None:
+            return None
+    party, carrier_key = _courier(setup, owner, current)
+    identity = sha256(json.dumps([order_id, shipment], ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
+    binding = {"id": "courier-delivery:" + identity, "party_type": "courier", "party_id": party,
+               "currency": _currency(raw), "shipment_id": shipment, "waybill": waybill,
+               "source_carrier_key": carrier_key}
+    if not status_admission:
+        return {**dated, **binding}
+    if status_delivery(frozen_event):
+        return _recorded_delivery(base, end, frozen_event, **binding)
+    try:
+        dated = _dated_courier_event(raw, source, current, shipment, waybill, history,
+            dict(base), created, start, end, frozen_event, recorded_fee)
+    except (ValueError, TypeError, KeyError):
+        if not status_admission:
+            raise
+        # Authority, current executor, shared labels and currency were checked
+        # above. Optional history cannot veto the owner's post-start rule or
+        # leak a rejected timestamp/provenance into the status-only event.
+        return _recorded_delivery(base, end, frozen_event, **binding)
+    return {**dated, **binding} if dated is not None else None
+
+
+def _dated_courier_event(raw, source, current, shipment, waybill, history,
+                         base, created, start, end, frozen_event, recorded_fee):
+    """Resolve dated evidence without assigning its financial recipient."""
     from operational_courier_transitions import CARRIER_HISTORY, WEBHOOK_PROOF, carrier_history_snapshot, order_delivery_time
     provenance = {}
     evidence_raw = raw
     observation = current.get(WEBHOOK_PROOF) or {}
-    if observation.get("source") == CARRIER_HISTORY:
+    if isinstance(observation, dict) and observation.get("source") == CARRIER_HISTORY:
         # The separately fetched shipment is newer than an order-only payload.
         # Its complete native history and binding are checked before use.
         order_delivery_time(raw, source, history, end, provenance=provenance)
@@ -525,21 +545,7 @@ def resolve_delivery_event(raw, *, source, owner, assignments, setup, started_at
         at, from_order = _shipment_time(evidence_raw, current, shipment, waybill,
             order_transition=lambda: order_delivery_time(raw, source, history, end, provenance=provenance))
     else:
-        at = order_delivery_time(raw, source, history, end, provenance=provenance, allow_undated=status_eligible,
-            undated_before=frozen_event.get('recorded_at') if status_delivery(frozen_event) else None)
-        if status_eligible and (at is None or status_delivery(frozen_event)):
-            if at is not None:
-                _window(at, created, start, end)
-                _check_recorded_time(at, frozen_event)
-            # The unique current waybill still establishes the executor. The
-            # observation boundary only checks that its label already exists.
-            _order_waybill(evidence_raw, current, shipment, waybill, end)
-            _check_known_shipment_times(evidence_raw, shipment, created, start, end, frozen_event)
-            party, carrier_key = _courier(setup, owner, current)
-            identity = sha256(json.dumps([order_id, shipment], ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
-            return _recorded_delivery(base, end, frozen_event, id="courier-delivery:" + identity,
-                party_type="courier", party_id=party, currency=_currency(raw), shipment_id=shipment,
-                waybill=waybill, source_carrier_key=carrier_key)
+        at = order_delivery_time(raw, source, history, end, provenance=provenance)
         _order_waybill(evidence_raw, current, shipment, waybill, at)
         from_order = True
         # Preserve the separate pre-existing native delivery/COD contract when
@@ -574,8 +580,4 @@ def resolve_delivery_event(raw, *, source, owner, assignments, setup, started_at
         base.update(timestamp_source="salla_carrier_history", source_history_id=event["history_id"],
                     source_actor_id=event["actor"]["id"], source_actor_name=event["actor"]["name"],
                     source_native_type=event["native_type"], source_dispatch_history_id=provenance["dispatch"]["history_id"])
-    party, carrier_key = _courier(setup, owner, current)
-    identity = sha256(json.dumps([order_id, shipment], ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
-    return {**base, "id": "courier-delivery:" + identity, "delivered_at": delivered.isoformat(),
-            "party_type": "courier", "party_id": party, "currency": _currency(raw),
-            "shipment_id": shipment, "waybill": waybill, "source_carrier_key": carrier_key}
+    return {**base, "delivered_at": delivered.isoformat()}

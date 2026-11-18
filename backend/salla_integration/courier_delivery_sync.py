@@ -7,9 +7,9 @@ import httpx
 
 from operational_courier_transitions import (
     CARRIER_HISTORY, ORDER_HISTORY, WEBHOOK_PROOF, _state, carrier_activity_transition, native_status_transition,
-    order_delivery_time,
+    order_delivery_time, validate_delivered_order_source,
 )
-from operational_delivery_evidence import (DELIVERED, _inactive, _instant, _order_waybill, _shipment_time,
+from operational_delivery_evidence import (DELIVERED, _current_shipping, _inactive, _instant, _order_waybill, _shipment_time,
                                            _status, _text, created_after_start_delivery)
 from operational_balance_store import check_authorization
 from salla_shipping import CURRENT_SHIPPING, SHIPPING_FIELDS, accept_shipping, extract_shipping, same_carrier, shipping_root_fields
@@ -151,7 +151,7 @@ def verified_order_delivery(source, histories, owner, now):
     return result
 
 
-async def acquire_missing(db, owner, issues, *, started_at, limit=4):
+async def acquire_missing(db, owner, issues, *, started_at, limit=4, status_excluded_order_ids=()):
     """Refresh identified post-opening delivery gaps, without financial/workflow hooks."""
     result = {"status": "completed", "selected": 0, "verified": 0, "saved": 0,
               "unchanged": 0, "blocked": 0, "conflicted": 0, "unavailable": 0, "outcomes": []}
@@ -176,8 +176,6 @@ async def acquire_missing(db, owner, issues, *, started_at, limit=4):
         if row.get('code') in ISSUE_CODES and row.get('source_id'):
             target_codes.setdefault(str(row['source_id']), set()).add(row['code'])
     targets = set(target_codes)
-    date_only = {identity for identity, codes in target_codes.items()
-                 if codes == {'operational_delivery_timestamp_missing'}}
     completed_targets = {str(row['source_id']) for row in issues
                          if row.get('code') == 'operational_prepaid_shipping_completion_timestamp_missing' and row.get('source_id')}
     if not targets:
@@ -224,20 +222,20 @@ async def acquire_missing(db, owner, issues, *, started_at, limit=4):
                 raise ValueError("courier_native_carrier_missing")
             if any(source[key] != value for key, value in shipping_root_fields(current).items() if key in source):
                 raise ValueError("courier_native_source_conflict")
+            if (not completed and identity not in status_excluded_order_ids
+                    and created_after_start_delivery(raw, start, now)):
+                # Saved delivery-only gaps from the earlier contract cannot
+                # require provider history for an already delivered new order.
+                # Source authority and the canonical executor remain required;
+                # completion/capture evidence retains its separate contract.
+                # Existing dated/recorded fees still need their dated recovery.
+                validate_delivered_order_source(raw, source, now,
+                    created=_instant(raw.get('date') or raw.get('created_at') or raw.get('order_date')))
+                _current_shipping(raw, source, require_delivered=False)
+                outcome(identity, "already_eligible")
+                continue
             if current.get("superseded_shipment_ids"):
                 raise ValueError("courier_native_shipment_ambiguous")
-            if identity in date_only and created_after_start_delivery(raw, start, now):
-                # A saved issue from the earlier contract does not justify
-                # downloading an order history just to date an already eligible
-                # new delivery. A different missing proof still uses its own
-                # acquisition path. Keep the exact existing waybill binding.
-                try:
-                    _order_waybill(raw, current, current['shipment_id'], current['tracking_number'], now)
-                except ValueError:
-                    pass  # Current native shipment evidence is still needed.
-                else:
-                    outcome(identity, "already_eligible")
-                    continue
             if completed:
                 from operational_completed_capture import recover_completed_capture
                 async def load_shipments():
@@ -265,11 +263,17 @@ async def acquire_missing(db, owner, issues, *, started_at, limit=4):
                 except ValueError:
                     shipments = await _complete_pages(db, owner, "/shipments", {"order_id": identity}, max_pages=1)
                     accepted = verified_delivery(source, shipments, histories, owner, now)
-        except (SallaError, httpx.RequestError):
+        except (SallaError, httpx.RequestError) as error:
             # One unavailable order must not abandon the other bounded claims.
-            # Cancellation and authorization errors deliberately escape.
+            # Classify structured failures only; provider text is never evidence.
+            # Cancellation and local authorization errors deliberately escape.
+            reason = "native_evidence_unavailable"
+            if isinstance(error, SallaError) and error.status_code == 403 and error.needs_reauth is False:
+                reason = "native_evidence_access_denied"
+            elif isinstance(error, httpx.TimeoutException):
+                reason = "native_evidence_request_timeout"
             result["status"] = "deferred"
-            outcome(identity, "unavailable", "native_evidence_unavailable")
+            outcome(identity, "unavailable", reason)
             continue
         except (ValueError, KeyError, TypeError, AttributeError) as error:
             outcome(identity, "blocked", rejection(error))
