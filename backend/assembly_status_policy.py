@@ -31,7 +31,21 @@ def canonical_status(source):
 
 async def source_status(db, owner, number):
     source = await db["unified_orders"].find_one({"user_id": owner, "order_number": number})
-    return canonical_status(source)
+    return await _status_with_completed_supplier_policy(db, owner, number, source)
+
+
+async def _status_with_completed_supplier_policy(db, owner, number, source):
+    status = canonical_status(source)
+    if status is not None:
+        return status
+    from supplier_receipt_ready_policy import POLICY, completed_supplier_policy, supplier_status
+    # No general relaxation: only a saved server-owned completion with current
+    # product, Ready and custody evidence can omit local component flags.
+    workflow = await db["order_review_workflows"].find_one({"user_id": owner, "order_number": number})
+    if (not workflow or workflow.get("assembly_completion_basis") != POLICY
+            or not await completed_supplier_policy(db, owner, number, workflow=workflow, source=source)):
+        return None
+    return supplier_status(source)
 
 
 def component_refresh_pending(source):
@@ -49,7 +63,7 @@ def component_refresh_pending(source):
 
 async def invalidate_shipping_if_blocked(db, owner, number):
     source = await db["unified_orders"].find_one({"user_id": owner, "order_number": number})
-    if canonical_status(source) in {"in_progress", "completed"}:
+    if await _status_with_completed_supplier_policy(db, owner, number, source) in {"in_progress", "completed"}:
         return
     if component_refresh_pending(source):
         # A source transaction and its component reconciliation are separate

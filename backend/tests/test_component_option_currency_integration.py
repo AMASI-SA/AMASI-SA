@@ -140,7 +140,7 @@ class OptionPriceCurrencyTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(audit["proof_kind"], "native_minor_unit_equivalence")
         self.assertEqual(audit["exchange_rate_to_sar"], "12.07292044")
 
-    async def test_existing_pending_dry_run_is_read_only_then_only_received_pieces_become_eligible(self):
+    async def test_existing_pending_dry_run_is_read_only_and_preserves_received_piece_eligibility(self):
         selector, native, _ = await self.seed_currency_order()
         with patch("fulfillment_v2_routes.revalidate_unchanged_component_snapshot",
                    AsyncMock(return_value={"accepted": False, "reason": "component_reconciliation_required"})):
@@ -151,7 +151,13 @@ class OptionPriceCurrencyTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(source["g47_salla_snapshot"]["component_pending"])
         search = await self.client.get("/preparation-work-v1/assembly/search?q=intake-order")
         self.assertEqual(search.status_code, 200, search.text)
-        self.assertFalse(any(row["can_mark_ready"] for row in search.json()["pieces"]))
+        before_rows = {row["piece_id"]: row for row in search.json()["pieces"]}
+        # Supplier custody and optional employee handoff already permit Ready;
+        # currency reconciliation retains its own source proof and write rules.
+        self.assertTrue(before_rows["piece-0"]["can_mark_ready"])
+        self.assertTrue(before_rows["piece-1"]["can_mark_ready"])
+        self.assertFalse(before_rows["piece-2"]["can_mark_ready"])
+        self.assertEqual(before_rows["piece-2"]["assembly_blocker_code"], "assembly_piece_supplier_receipt_required")
         args = {**selector, "source_revision": source["g47_salla_snapshot"]["revision"]}
         preview = await revalidate_unchanged_component_snapshot(self.db, **args, dry_run=True)
         self.assertTrue(preview.get("eligible_for_revalidation"), preview)
@@ -160,6 +166,7 @@ class OptionPriceCurrencyTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.db.mezan_component_order_lifecycle_v1.find_one(selector), lifecycle)
         self.assertEqual(await self.frozen_business_state(selector), frozen)
         self.assertTrue((await revalidate_unchanged_component_snapshot(self.db, **args))["accepted"])
+        self.assertFalse((await self.db.unified_orders.find_one(selector))["g47_salla_snapshot"]["component_pending"])
         search = await self.client.get("/preparation-work-v1/assembly/search?q=intake-order")
         self.assertEqual(search.status_code, 200, search.text)
         rows = {row["piece_id"]: row for row in search.json()["pieces"]}
@@ -167,6 +174,9 @@ class OptionPriceCurrencyTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(rows["piece-1"]["can_mark_ready"])
         self.assertFalse(rows["piece-2"]["can_mark_ready"])
         self.assertEqual(rows["piece-2"]["assembly_blocker_code"], "assembly_piece_supplier_receipt_required")
+        for piece_id in before_rows:
+            self.assertEqual(rows[piece_id]["can_mark_ready"], before_rows[piece_id]["can_mark_ready"])
+            self.assertEqual(rows[piece_id]["assembly_blocker_code"], before_rows[piece_id]["assembly_blocker_code"])
         self.assertEqual(await self.frozen_business_state(selector), frozen)
 
     async def test_repeated_currency_switches_keep_original_approval_and_do_not_repeat_work(self):

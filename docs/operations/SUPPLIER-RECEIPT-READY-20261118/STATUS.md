@@ -1,0 +1,216 @@
+# Supplier receipt Ready policy
+
+## Authorized takeover and current-base preparation — 2026-11-18 UTC
+
+The owner explicitly authorized taking over and publishing the supplier Ready
+update. Actual publication remains pending. The production branch advanced
+independently through PR #1969 (unassigned Snapchat orders and bank commissions)
+to reviewed base J `8d7591f2908bd58aa006470236e693a1d40155fa`. PR #1969 is the
+current publisher at this checkpoint; root owns the shared-host handoff/takeover,
+remote writes, release lease and publication sequence.
+
+This new source starts directly from J and transplants exactly the supplier
+delta from old J `f2d806efc18964a2cc7c3a475346590cbe8b1262` to old A
+`46187a1b22b550db9d2b6bb2bb0caf5831d29bdd`: seven runtime files, eleven test
+modules and the Review CI workflow. All 19 file blobs are unchanged from old A.
+There is no overlap with PR #1969. Its dashboard/frontend changes and reviewed
+release intent remain intact. Only this task record is refreshed for the new
+source checkpoint; no runtime or test behavior is changed during transplantation.
+
+- New local branch: `codex/ready-supplier-receipt-current-20261118-2`.
+- Isolated worktree: `/workspace/scratch/a9a8e6bdaba9/mezan-ready-release-current`.
+- Previous PR #1982 is retained in Draft as a safe fence, recorded at
+  `2026-11-18 00:20:34 UTC`. Its source A above and frozen B
+  `b10192a88fc8a0cda621c9f0a2922ed4081620cd` remain recoverable and untouched.
+- B's successful readiness run `44196296814`, including both Host 20/24
+  clean-clone rehearsals, is prior-base evidence only. Its candidate artifact
+  `14379505190` and deterministic runtime identity must not be reused for this J.
+- The earlier verified `627cd57eea162c32d475fe99a33ffb11d84e4574` handoff remains
+  at `2d8b2bca9507f8abd121d569fd49aeb5c045ab3e` and PR #1981.
+- J's release-intent Git blob is retained exactly:
+  `3402ab24ec6c10cd5e2f9b05d6e806067c3233a9`.
+- The exact new A SHA/tree must be recorded in root's remote checkpoint/PR after
+  committing this source. No new intent-only B is frozen at this checkpoint.
+- New exact-source CI, a fresh candidate intent, B rehearsal, merge, shared-host
+  guarded publication and three live identity probes are pending.
+- No new Android APK is needed; Ready eligibility is supplied by the server.
+
+### Current-base local verification
+
+The bounded suite completed successfully: **205 passed, 24 subtests passed,
+zero skips**, exit 0, in 5.65 seconds. It selected:
+
+- `backend/tests/test_supplier_receipt_ready_policy.py`
+- `backend/tests/test_supplier_component_consumption_deferral.py`
+- `backend/tests/test_supplier_receipt_bundle_coverage.py`
+- `backend/tests/test_supplier_receipt_delivery_policy.py`
+- `backend/tests/test_assembly_source_pending_message.py`
+
+It used `/workspace/scratch/a9a8e6bdaba9/ready-policy-venv/bin/python`,
+`PYTHONDONTWRITEBYTECODE=1`, `PYTHONPATH=backend:backend/tests`, and
+`pytest --noconftest -p no:cacheprovider --asyncio-mode=auto -q --tb=short`.
+The runner explicitly bound the local `tests` package namespace before invoking
+pytest so the environment's unrelated installed package could not shadow it.
+These deterministic/in-memory tests do not claim real-Mongo transaction
+acceptance. Required exact-source CI must execute those integration cases.
+
+`git diff --check` and exact blob/source-scope checks passed before the local
+A checkpoint: all 19 reused blobs match old A, the full delta is limited to those
+files plus this record, and J's intent blob is unchanged. Root will preserve A
+remotely and start the required CI.
+No remote API, original-checkout mutation, shared-host build, lease, order
+mutation or publication is part of this isolated preparation.
+
+Production changed by the supplier Ready task: **no** at this checkpoint.
+
+## Contract
+
+The owner explicitly removed component/source-approval prerequisites from Ready
+for a physical product already received from its supplier while the current
+Salla order is in progress. This supersedes the former business requirement
+that matching component revisions and approved source hashes gate this path.
+
+Current status evidence, tenant/actor authorization, actual receipt, required
+services, configured employee custody, explicit holds/instructions and current
+whole-order product/unit coverage remain independent requirements. Other
+direct/virtual Ready paths retain their existing policy.
+
+## Source checkpoint
+
+- Repository: `AMASI-SA/AMASI-SA`.
+- Source task branch: `codex/ready-supplier-receipt-current-20261118-2`.
+- Prior verified source retained on
+  `codex/ready-supplier-receipt-current-20261118` at
+  `627cd57eea162c32d475fe99a33ffb11d84e4574` (PR #1981).
+- Previous source checkpoint retained on
+  `codex/ready-supplier-receipt-source-20261118` at
+  `67487226d664140ff6ea2ea1bc64fc5b0c8a4605` (PR #1978).
+- Original WIP branch retained: `codex/ready-supplier-receipt-policy-20261118`.
+- Initial production source: `d7c9ed77137bed0948f4d32a34c6bf571d75e6f8`.
+- Current integrated production base: `8d7591f2908bd58aa006470236e693a1d40155fa`.
+- First remote stock checkpoint: `2a1fb9db5633f9d3a5aa6c14bb9ae389de96063d`.
+- Original WIP PR: https://github.com/AMASI-SA/AMASI-SA/pull/1975 . Its body
+  links the active source PR, whose body records the latest exact source SHA
+  and CI evidence. Both branches remain recoverable.
+- The local checkout is isolated from concurrent mobile printing work.
+- **WIP — new exact-source CI and publication pending.** The previous A/B are
+  retained as historical evidence. This new source preserves J's reviewed
+  intent and has no new intent-only B or supplier publication yet.
+
+## Implementation
+
+- One supplier receipt predicate drives search and the actual Ready transaction.
+- A saved receipt basis supports complete current product coverage without
+  depending on approval/component acceptance. Missing/extra/duplicate units and
+  incomplete mixed-order work cannot complete an order.
+- The same proven basis is retained through the existing delivery outbox,
+  status display and shipping invalidation. Provider identity, status,
+  shipping/material evidence, claim ownership and effect journaling remain.
+- Healthy component consumption must remain correct. Unavailable component
+  evidence may defer only during strictly read-only validation, before any
+  inventory write; the Ready record/event records that inventory outcome.
+  Mutation failures cannot be swallowed. No new background worker is added.
+- Source flags, supplier receipts and approved snapshots are not rewritten to
+  manufacture eligibility.
+- Explicit Ready retries can resume an interrupted reviewed workflow without
+  repeating Ready events or consumption. The card exposes the same retry.
+- Existing non-piece bundle parents retain their read-only bundle proof. An
+  unavailable bundle leaves the supplier piece Ready and the order incomplete;
+  it does not manufacture a physical bundle piece or ignore missing products.
+
+## Verification history
+
+- Initial remote checkpoint preserves the independently reviewed inventory
+  preflight/deferral service and its regression tests. The integrated source
+  checkpoint adds the shared Ready predicate, completion/printing consumers,
+  current-unit coverage and guarded retries.
+- Stock-focused verification: 27 tests and 7 subtests passed, zero skips. Tests
+  include all-location validation before writes, healthy consumption/retry,
+  and propagation of mutation failures after the first write. They replace
+  only the owner boundary and do not claim real-Mongo rollback evidence.
+
+- The first search regression was RED on the prior code: four failures for
+  received supplier pieces under local source flags, eight retained negatives
+  passed. The revised search suite then passed twelve tests.
+- The isolated test interpreter uses the exact direct pins from the existing
+  Review Completion Resumable CI workflow. No application dependencies were
+  changed.
+- Local MongoDB 8.0.12 cannot start: its allocator fails before server startup
+  because `/sys/devices/system/cpu/possible` is unavailable; Docker is absent.
+  Real transaction and API race acceptance must execute in the existing CI
+  disposable replica set. Skips are not acceptance.
+- Independent review corrected healthy-stock preservation, legacy read-only
+  outbox compatibility, claimed-versus-current source fingerprints, current
+  unit membership, the scan overflow sentinel, durable post-handoff printing,
+  real inner courier generation and reachable reviewed-workflow retries.
+- An affected local run passed 283 tests plus 90 subtests; 160 real-Mongo cases
+  were skipped and are not acceptance. Later targeted Ready/search/bundle tests
+  passed 142 cases without skips. The inventory snapshot preflight correction
+  first reproduced ten unsafe-consumption failures, then passed 117 targeted
+  Ready/stock cases. Missing or stale approved snapshot revisions now defer
+  inventory consumption before writes and do not block the supplier Ready fact.
+- Final integrated local run: **339 passed, 161 skipped, 90 subtests passed**,
+  exit 0. Skipped replica-set cases remain explicitly unverified locally.
+  The command selected the four supplier policy suites, source-pending search,
+  preparation/search/custody, local assembly, delivery/status/print/legacy/v2
+  readback, courier compatibility and stock consumption. It used the pinned
+  test interpreter with `--noconftest -p no:cacheprovider --asyncio-mode=auto`.
+  The CI gate requires all 41 local assembly integration tests and explicit
+  minimums for each new supplier suite, with zero skips/failures/errors.
+- The first WIP candidate run 44182130589 failed after production advanced.
+  Integrated checkpoint `0d1a18d0fcd3da185ae6d68fc7b49b40bbfc4cd7` preserved
+  the new base but run 44183973577 rejected its full intent-file merge history.
+  The final source branch starts directly from the reviewed b92d3eb8 base and
+  carries the integrated source tree, preserving the WIP separately. No reset,
+  force push or release-guard change is used. No intent is frozen yet.
+- At checkpoint 0d1a18d0, real-Mongo Review run 44183973477 passed 35 refresh
+  cases but stopped in Android recovery: one optional-Ready unit fixture had
+  no current canonical source. The fixture now contains a real mapped source
+  and unit and retains real missing-plan inventory deferral; its focused local
+  module passed 16 tests with one explicitly Mongo-only skip.
+- Other 0d1a18d0 compatibility evidence: preparation backend 168 passed,
+  frontend 64 passed with build; assembly settings 15 passed; performance
+  backend 33/frontend 49 passed; shipping groups 26, 231 and 597 passed (one
+  existing skip in the last group). These do not replace exact-source main
+  replica-set acceptance. The active PR records the final run conclusions.
+- Exact checkpoint `67487226d664140ff6ea2ea1bc64fc5b0c8a4605`, tree
+  `39a09f6ccde614c71dc14c7d3baa89e88727baba`, passed 17 of 19 workflows.
+  Operational Stock Eligibility run 44185118022 executed **4,833 tests plus
+  7 subtests**, zero skips/failures/errors. Release Readiness 44185117920
+  passed candidate classification and reproducible builds. Shipping Print
+  Boundary 44185117827, Security Gate and CodeQL also passed.
+- Review Completion Resumable run 44185117929 passed 35 refresh and 329
+  Android recovery cases, then executed all 1,029 main cases with 16 failures,
+  zero skips/errors. All **184 new supplier cases** passed: Ready 82,
+  inventory deferral 35, bundle coverage 39, delivery/fingerprint 28.
+  G47 run 44185117739 had five matching legacy fixture/expectation failures;
+  Review also inherits those five cases in the zero-price suite.
+- The followup changes tests only: five G47 cases now seed real canonical
+  items before reservation and full receipt evidence; missing-address/unit,
+  stock totals, event idempotency and cancelled virtual-work assertions remain.
+  Two LocalAssembly fixtures add the required employee receipt timestamp/actor.
+  Instruction fixtures use real current item quantities, canonical line IDs
+  and actual custody without relaxing batching/instruction/actor assertions.
+  Currency reconciliation now asserts that already received supplier products
+  are eligible both before and after repair while an unreceived product stays
+  blocked; dry-run and financial proof assertions remain unchanged.
+- The Review gate's delivery minimum remains 28, applied to the whole module
+  (25 delivery tests plus three fingerprint tests). Zero-skip/failure/error
+  gates and disposable real-Mongo execution remain unchanged.
+- The fixture checkpoint passed **205 local tests plus 24 subtests**, exit 0;
+  four instruction cases require Mongo and were explicitly skipped locally.
+  Collection found 89 cases across the four changed integration modules.
+  Independent read-only review found no remaining fixture/gate blocker.
+- Production source advanced independently to b009ee50 through Android
+  shipping-label parity PR #1974. This source checkpoint carries that complete
+  reviewed base, including its mobile read behavior/tests and release intent,
+  then applies the supplier policy and fixture changes. Earlier task branches
+  and PRs are retained; no release-intent history is rewritten or bypassed.
+- Next: verify the new source branch's exact SHA/tree and retained intent,
+  complete real-Mongo Review/G47 and release-candidate CI, and record final
+  exact-head evidence in the active PR. Source readiness and production
+  deployment remain separate. Production changed by this task: **no**.
+
+Issue #1006 is full. This task document and its draft PR are the continuation
+record. Keep any source checkpoint explicitly WIP until the required evidence
+is complete. No customer payload or credentials belong in this record.
