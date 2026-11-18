@@ -5,7 +5,7 @@ directed to assembly can be marked Ready whenever its current Salla order is
 in progress. Other Salla statuses block the action. Supplier-product Ready
 conditions must remain unchanged. The owner explicitly authorizes publication.
 
-Production base: `80b43ca2f4699fecd895f34a24f77fc997234417`.
+Production base: `77d824a780df582b5c32f4dda87a959e35e1ed1e`.
 Task branch: `codex/operational-ready-status-20261119`.
 
 ## Working checkpoint
@@ -56,6 +56,25 @@ policy. Stock remains deferred and no supplier Ready condition is changed.
 The next checkpoint changes only this test and this status record; runtime
 blobs remain identical. Its new source SHA requires a fresh candidate intent.
 Latest focused local Ready/supplier consumption run: 87 passed, zero skips.
+
+Source `67d5646cc119aa37ad2486636aa4ea311a00fbd1` passed the exact-source
+G47 suite and governed candidate build. Review Completion exposed two actual
+regressions: the early pending-order return prevented the existing local
+preparation promotion after every direct/operational item was Ready and all
+supplier pieces had been received. Keep the original promotion path whenever
+its existing eligibility holds, even while individual supplier Ready work is
+unfinished. Whole-order instructions still apply when all pieces are Ready;
+business holds still save virtual Ready without completing the order. The
+two existing real-Mongo failures remain the regression checks. Latest focused
+local Ready/supplier-consumption run after this change: 87 passed, zero skips.
+
+Production advanced through PR 2000 while this task was testing. Its thirteen
+disjoint changed files are retained in this source checkpoint and merge
+ancestry. An Operational Balance CI failure used the newer base workflow with
+the older head, so its two newly referenced test files did not exist; bringing
+the current production tree into this branch resolves that source mismatch
+without weakening the workflow. All candidate intents through 67d5646c are
+superseded. Fresh integrated CI and a fresh intent-only B are required.
 
 Windows test command (from backend, with dotenv disabled and PYTHONPATH set):
 `python -B -m pytest --noconftest -p no:cacheprovider tests/test_operational_item_ready_policy.py -q --tb=short`.

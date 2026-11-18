@@ -142,11 +142,16 @@ def reconcile(state, sources, as_of):
     from operational_configured_provider_fees import refresh_provider_fee_inputs
     refresh_provider_fee_inputs(result, sources)
     issues = deepcopy(sources.get("issues", []))
+    from operational_issue_index import append_unique_issue, enable_issue_index
+    # Only this attempt owns the lookup. The persisted diagnostics remain an
+    # ordinary list with the same ordering and full-row equality semantics.
+    issue_scope = {"issues": issues}
+    enable_issue_index(issue_scope)
 
     def issue(code, identity):
         entry = {"code": str(code), "source_id": str(identity)}
-        if entry not in issues:
-            issues.append(entry)
+        issue_scope["issues"] = issues
+        append_unique_issue(issue_scope, entry)
 
     shipping_keys = {}
     supplier_keys = {}

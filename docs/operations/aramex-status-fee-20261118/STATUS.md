@@ -1,6 +1,22 @@
 # Aramex current-status prepaid shipping recognition
 
-## Active checkpoint — source complete, release gates pending
+## Current state — published; refresh-budget acceptance follow-up
+
+PR1991 merged as `ce94ce01b0e631a6373ee3524119f26959bf89a4`. Its exact tested
+application files reached production unchanged through verified descendant
+PR1993, deployment `8761f7b2f80faec29638e1438b8fedefcec64a28`. The unchanged
+official verifier completed three rounds at `2026-11-18T19:11:43Z`; a fresh
+live identity read matched that source before financial acceptance.
+
+Two authorized UI refreshes then reached the unchanged request deadline before
+the financial snapshot commit. The old saved report therefore remains the
+last accepted result. Continue from the dedicated
+[refresh-budget recovery record](../aramex-refresh-budget-20261118/STATUS.md)
+and branch `codex/aramex-refresh-budget-20261118`; do not republish an obsolete
+standalone Aramex release. The earlier implementation/release checkpoint below
+is retained as historical evidence, not the current next action.
+
+## Historical checkpoint — source complete, release gates pending
 
 The owner requested that an order created after operational accounting starts,
 currently assigned to Aramex and shipped through Aramex, incur the approved

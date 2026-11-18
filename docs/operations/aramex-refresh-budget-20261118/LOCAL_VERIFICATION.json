@@ -1,0 +1,26 @@
+{
+  "scope": "local integrated verification; no live financial acceptance",
+  "base_git_sha": "d3632a33843e076dd7824933528dcc7d897bc32a",
+  "test_counts": {
+    "tests": 632,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "exit_code": 0,
+  "junit_sha256": "b18195f40075bc9fb7b5d0276c33ac69e6796eaf8a40657b299d561168af049e",
+  "source_sha256": {
+    "backend/operational_balance_engine.py": "35c33cb12deddabe8045c023a0ad4df9f463ac345ed386d505ddfec00bf37238",
+    "backend/operational_balance_service.py": "642cd94647afa365f3468882d917334ab4b3aacbce171ba6909eba2f2eaf3ca7",
+    "backend/tests/test_operational_balance_engine_issue_index.py": "2a6ad75df62c684ed06dbf54cc81f4ee043d9249a8625b892871a77f9a30fcb6",
+    "backend/tests/test_operational_refresh_party_issue_index.py": "ed8f7aa954299472d78553cb8b23ef9bf3a847acc7644719b107b14e853c0703",
+    "backend/tests/test_operational_refresh_parallel_profit.py": "ceb18fa7be57295d5ff723d56782826d930717f1b5c8767a36d83c96348fce2f"
+  },
+  "independent_review": "No unresolved static blockers after shielding and joining both request-owned preparations.",
+  "negative_controls": [
+    "Original sequential refresh fails overlap gate.",
+    "Unshielded preparation group fails repeated cancellation cleanup.",
+    "Original reducer exceeds deterministic diagnostic work budget."
+  ],
+  "production_changed_by_this_followup": false
+}

@@ -2839,13 +2839,14 @@ async def _assembly_progress(
         # Saving a direct/operational Ready fact has only the current Salla status
         # gate. Whole-order completion retains its independent requirements;
         # an unfinished/blocked order must not roll back that Ready fact.
-        defer_completion = not total_count or ready_count != total_count
+        defer_completion = not total_count
         if not defer_completion:
             try:
-                await enforce_stage_instructions(
-                    db, user_id=user_id, order_number=order_number,
-                    stage="assembly_labeling", actor_id=actor_id, order_wide=True,
-                )
+                if ready_count == total_count:
+                    await enforce_stage_instructions(
+                        db, user_id=user_id, order_number=order_number,
+                        stage="assembly_labeling", actor_id=actor_id, order_wide=True,
+                    )
                 source = await db["unified_orders"].find_one({
                     "user_id": user_id, "order_number": order_number,
                 }) or {}
