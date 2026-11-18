@@ -64,7 +64,14 @@ The preceding PR #1968 verification used this owned lease, retained here for tra
 
 The manager shows its 100th publication/version `8a0d442`, finished Nov18 21:06 Asia/Riyadh. Attempt1 timed out fetching one asset, with no reported identity/artifact mismatch. A bounded diagnostic succeeded, then the owner restarted the unchanged official verifier without reprepare, abort or republish. PR #1968 is the authoritative ongoing release record.
 
-The official filtered status call returned **active:false**, observed around 2026-11-18 18:28 UTC. This is a point-in-time observation; recheck it before any live staging because PR #1991 is also waiting to publish. Do not clear, reuse or alter another lease or interrupt another rehearsal. No `/app` files were changed by this task. Preserve unrelated workspace files and never use `git reset --hard`.
+The official filtered status call returned **active:false**, observed around 2026-11-18 18:28 UTC. This is a point-in-time observation; recheck it before any live staging because PR #1991 is also waiting to publish. Do not clear, reuse or alter another lease or interrupt another rehearsal. After fresh inactive-guard and idle-host checks, this task fast-forwarded `/app` to exact M at 2026-11-18 18:38:46 UTC. The receipt confirms tree `b8bfb1aece57f3f89282216e4171398bd8854c9d`, a clean tracked worktree, and all 120 unrelated untracked paths preserved (inventory SHA-256 `2a0200fc4ebb665ebc1fec275ef8db46870809282ef7fcc40a931e631f74eb04`). No lease or publication has occurred yet. Preserve unrelated workspace files and never use `git reset --hard`.
+
+## Latest release milestone
+
+- `/app` staging succeeded at M `8761f7b2f80faec29638e1438b8fedefcec64a28`; receipt `/tmp/snap-unassigned-1993-release/staging.json` records 18:38:46 UTC. All unrelated work is preserved.
+- Post-merge M checks: **11/11 success**, none pending or failing.
+- Actual-host adapter rehearsal, owned lease, UI publication and official verification remain pending. The live site is still the previous published version.
+- Next: fresh official guard status must be inactive, then run the configured adapter with `REACT_APP_BACKEND_URL=https://mezansalla.com yarn --cwd frontend build` and retain sanitized output. Only after it matches the frozen intent may this task prepare an owned v5 lease.
 
 ## Exact next safe actions
 
