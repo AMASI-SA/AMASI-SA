@@ -1,0 +1,64 @@
+{
+  "synthetic_only": true,
+  "database_access": false,
+  "network_access": false,
+  "python": "3.12.14",
+  "baseline_git_sha": "d3632a33843e076dd7824933528dcc7d897bc32a",
+  "baseline_source_sha256": "d6550cc8a420514f3c3c640f75784164d025d2978fae26f7f0e97e931ccdeb94",
+  "candidate_source_sha256": "35c33cb12deddabe8045c023a0ad4df9f463ac345ed386d505ddfec00bf37238",
+  "measurements": [
+    {
+      "orders": 1000,
+      "source_issues": 1000,
+      "final_issues": 2000,
+      "baseline": {
+        "cpu_seconds": 0.04631564499999996,
+        "wall_seconds": 0.04639359000066179
+      },
+      "candidate": {
+        "cpu_seconds": 0.011430653999999985,
+        "wall_seconds": 0.011430356997152558
+      },
+      "complete_outputs_equal": true,
+      "inputs_unchanged": true,
+      "baseline_membership_row_visits_derived_from_unique_cohort": 1499500
+    },
+    {
+      "orders": 6000,
+      "source_issues": 6000,
+      "final_issues": 12000,
+      "baseline": {
+        "cpu_seconds": 1.108804887,
+        "wall_seconds": 1.1123355050003738
+      },
+      "candidate": {
+        "cpu_seconds": 0.08203456000000031,
+        "wall_seconds": 0.08361685999989277
+      },
+      "complete_outputs_equal": true,
+      "inputs_unchanged": true,
+      "baseline_membership_row_visits_derived_from_unique_cohort": 53997000
+    },
+    {
+      "orders": 12000,
+      "source_issues": 12000,
+      "final_issues": 24000,
+      "baseline": {
+        "cpu_seconds": 4.463353953,
+        "wall_seconds": 4.465029950999451
+      },
+      "candidate": {
+        "cpu_seconds": 0.20156946799999975,
+        "wall_seconds": 0.20157362300233217
+      },
+      "complete_outputs_equal": true,
+      "inputs_unchanged": true,
+      "baseline_membership_row_visits_derived_from_unique_cohort": 215994000
+    }
+  ],
+  "limits": [
+    "Single local observations, not production latency evidence.",
+    "Membership row visits are a derived count; the timing workloads use ordinary dicts/lists.",
+    "This workload isolates diagnostic deduplication, not every live reconciliation phase."
+  ]
+}
