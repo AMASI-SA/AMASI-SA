@@ -1,3 +1,5 @@
+// This suite measures executive-card reads; live-source polling has its own lifecycle tests.
+jest.mock("../components/MezanLiveSourcesCard", () => () => null);
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import AdvancedDashboard, { loadDashboardPeriodSnapshot } from "./AdvancedDashboard";

@@ -569,6 +569,10 @@ async def link_order_attribution(
 
 async def ensure_first_party_attribution_indexes(db: Any) -> None:
     await db[EVENT_COLLECTION].create_index(
+        [("user_id", 1), ("store_scope", 1), ("received_at", 1)],
+        name="mezan_first_party_live_sources",
+    )
+    await db[EVENT_COLLECTION].create_index(
         [("user_id", 1), ("event_id", 1)], unique=True,
         name="mezan_first_party_event_unique",
     )
