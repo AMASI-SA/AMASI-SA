@@ -2190,6 +2190,18 @@ async def ensure_accounting_ledger_v2_indexes(db: Any) -> None:
     audit = db[AUDIT_COLLECTION]
     sequences = db[SEQUENCES_COLLECTION]
 
+    # Report proof intentionally sees every matching header and reversal,
+    # including duplicates and malformed rows from another operation/status.
+    # These nonunique indexes must not narrow that evidence with a partial filter.
+    await groups.create_index(
+        [("user_id", 1), ("txn_group_id", 1)],
+        name="ix_accounting_v2_group_identity",
+    )
+    await groups.create_index(
+        [("user_id", 1), ("reversal_of_txn_group_id", 1)],
+        name="ix_accounting_v2_group_reversal_proof",
+    )
+
     await groups.create_index(
         [("user_id", 1), ("operation_id", 1), ("idempotency_key", 1)],
         unique=True,

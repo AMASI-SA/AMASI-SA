@@ -238,7 +238,7 @@ async def test_simultaneous_board_polls_initialize_indexes_once_per_router():
             for _ in range(4)
         ])
     assert all(response.status_code == 200 and response.json()["total"] == 3 for response in responses)
-    assert sum(db.index_calls.values()) == 5
+    assert sum(db.index_calls.values()) == 6
 
 
 @pytest.mark.asyncio
@@ -263,4 +263,4 @@ async def test_index_failure_can_retry_without_marking_the_router_ready(monkeypa
         responses = [await client.get("/preparation-work-v1/assembly/orders", params={"state": "in_progress"}) for _ in range(3)]
     assert [response.status_code for response in responses] == [500, 200, 200]
     assert attempts == 2
-    assert sum(db.index_calls.values()) == 5
+    assert sum(db.index_calls.values()) == 6

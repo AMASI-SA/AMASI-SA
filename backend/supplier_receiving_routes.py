@@ -2676,8 +2676,17 @@ async def _apply_permanent_supplier_invoice_service(
     }
 
 
+async def ensure_supplier_invoice_identity_index(db: Any) -> None:
+    """Support owner-scoped invoice proof without hiding duplicate identities."""
+    await db[SUPPLIER_INVOICES].create_index(
+        [("user_id", ASCENDING), ("id", ASCENDING)],
+        name="ix_supplier_invoice_identity_v2",
+    )
+
+
 @profiled("indexes")
 async def ensure_supplier_receiving_indexes(db: Any) -> None:
+    await ensure_supplier_invoice_identity_index(db)
     # Both open/cancelling lookup and closed history are personal. The legacy
     # tenant/date index scans colleagues' drafts as the shared tenant grows;
     # the unique open-only index cannot answer an open-or-cancelling read.
@@ -6778,6 +6787,7 @@ __all__ = [
     "SupplierReceivingSessionCloseRequest",
     "SupplierReceivingSessionCreateRequest",
     "ensure_supplier_receiving_indexes",
+    "ensure_supplier_invoice_identity_index",
     "make_supplier_receiving_router",
     "piece_scan_blocker",
     "build_supplier_receiving_invoice",

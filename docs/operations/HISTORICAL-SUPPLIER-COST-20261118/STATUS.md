@@ -134,3 +134,58 @@ branch. Next: save the final reviewed candidate and Draft PR, run required CI
 Production publication requires the owner's
 authorization for this new change and the repository's unchanged protocol-v5
 release procedure.
+
+## Authorized performance follow-up
+
+The owner approved implementing the performance improvements after the load
+review. The previously tested candidate is
+`bcdd6e501e629ee715667c39d1b43aab5b263914`; its exact-head CI completed with
+51 successful and six explicitly nonapplicable skipped jobs, no failed or
+pending checks. The PR body preserves the detailed immutable CI links.
+
+The performance work remains source/testing only. Production changed: **NO**.
+No new publication, production benchmark, data migration or index operation
+has been executed. No scheduler, provider synchronization or report refresh
+cadence is added or changed.
+
+### Index milestone
+
+Four nonunique, unfiltered query indexes match the owner/order, owner/invoice
+identity and owner/journal identity/reversal selectors. Narrow piece/invoice
+index builders run during existing release-global startup before readiness,
+without invoking unrelated unique operational indexes. Canonical domain index
+builders use the same definitions. Accounting indexes use the existing
+accounting startup path. Report GETs still do not perform DDL.
+
+Duplicate, draft and cross-operation financial evidence remains visible;
+these indexes do not turn contradictory records into acceptable proof.
+The preparation router's once-per-instance/retry test now expects six index
+definitions instead of five. Existing supplier index profiling still wraps
+the complete original initializer.
+
+Local verification: 50 index, fulfillment-read and accounting tests passed.
+Independent review: 59 tests and five subtests passed across those boundaries,
+financial hashes and exact dashboard source contracts. A review caught and
+corrected decorator placement before checkpoint. Real-Mongo query plans and
+receipt-heavy performance measurements remain pending.
+
+### Remaining performance work
+
+Preserve fresh invoice/journal reads. Reusing a prior Mongo document ID or
+stored digest without comparing current full invoice content could hide an
+edit; use only bounded request-local memoization of pure allocation/digest
+work for exact-equal invoice content. Keep the standalone sold report fresh:
+the current cost revision does not version all order/snapshot changes, so
+adding a persistent report cache would change its freshness contract.
+
+Next: complete and independently review the exact-content optimization; run
+synthetic month/two-month receipt-heavy A/B measurements, concurrency, memory
+and real-Mongo explain checks in a disposable CI database; repeat financial
+parity gates and save a remote checkpoint. Timings from synthetic fixtures
+must not be presented as measured production latency.
+
+Production branch advanced again to
+`d3632a33843e076dd7824933528dcc7d897bc32a` while this branch remained isolated.
+The additional upstream source must be preserved and integrated before any
+eventual publication; the prior exact-head evidence is not evidence for a new
+merge identity. The latest task checkpoint SHA is recorded in the PR body.
