@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field, StrictBool
 from accounting_financial_identity import find_financial_account, list_financial_accounts
 from order_tracking_notes import enforce_stage_instructions
 from store_delivery_current_status import is_current_driver_delivery
+from order_engine.recipient_enrichment import resolve_salla_recipient
 
 
 async def enforce_driver_instruction_gate(db, *, merchant_id, actor_id, assignment):
@@ -32,6 +33,7 @@ from store_delivery_domain import (
     PAYMENT_METHOD_BANK_TRANSFER,
     PAYMENT_METHOD_CARD_TERMINAL,
     StoreDeliveryRuleError,
+    assignment_carrier_changed,
     collection_requirements,
     driver_earning,
     normalize_text,
@@ -39,7 +41,7 @@ from store_delivery_domain import (
 from store_delivery_driver_routes import STORE_DRIVERS
 from store_delivery_handover_routes import (
     ASSIGNMENTS, EVENTS, ORDERS, SESSIONS, SessionCreate, ScanIn,
-    _barcode_candidates, _order_id, _order_number, create_session_service,
+    _barcode_candidates, _order_id, _order_number, _order_shipping_company, create_session_service,
     scan_shipment_service, confirm_session_service,
 )
 from store_courier_domain import (
@@ -547,6 +549,8 @@ async def _enrich_assignments_with_order_state(
             "payment_collection_status": 1,
             "order_status": 1,
             "order_status_slug": 1,
+            "shipping_company": 1,
+            "salla_shipping_current": 1,
             "g47_salla_snapshot.requires_authoritative_refresh": 1,
             "raw_by_source.salla_direct": 1,
             "customer_name": 1,
@@ -581,6 +585,7 @@ async def _enrich_assignments_with_order_state(
         if not historical and (
             row.get("status") not in {DELIVERY_STATUS_ASSIGNED, DELIVERY_STATUS_OUT_FOR_DELIVERY}
             or not is_current_driver_delivery(order)
+            or assignment_carrier_changed(row, _order_shipping_company(order))
         ):
             continue
         if order:
@@ -590,8 +595,14 @@ async def _enrich_assignments_with_order_state(
             except StoreDeliveryRuleError:
                 row["outstanding_amount"] = None
                 row["outstanding_amount_available"] = False
-            row["customer_name"] = order.get("customer_name")
-            row["customer_mobile"] = order.get("customer_mobile")
+            recipient = resolve_salla_recipient(raw)
+            if recipient is None:
+                recipient = {"name": order.get("customer_name"), "mobile": order.get("customer_mobile")}
+            row["recipient_name"] = recipient.get("name")
+            row["recipient_mobile"] = recipient.get("mobile")
+            # Installed courier apps use these original keys for delivery contact.
+            row["customer_name"] = row["recipient_name"]
+            row["customer_mobile"] = row["recipient_mobile"]
             row["shipping_district"] = order.get("shipping_district")
             row["shipping_street"] = order.get("shipping_street")
             row["total_amount"] = order.get("total_amount")
@@ -1899,6 +1910,11 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
                 receipt_reference=normalize_text(payload.receipt_reference), bank_account_id=normalize_text(payload.bank_account_id))
             result.pop("_cash_capture_replayed", None)
             return result
+        if (current == DELIVERY_STATUS_DELIVERED and target == DELIVERY_STATUS_DELIVERED
+                and payload.payment_method in {PAYMENT_METHOD_BANK_TRANSFER, PAYMENT_METHOD_CARD_TERMINAL}):
+            from store_delivery_noncash_retry import noncash_delivery_retry
+            return await noncash_delivery_retry(db, owner=merchant_id, actor=actor,
+                driver=driver, assignment=assignment, payload=payload)
         if target not in DRIVER_STATUS_TRANSITIONS.get(current, frozenset()):
             raise HTTPException(status_code=409, detail={"code": "driver_delivery_status_transition_invalid"})
         await enforce_driver_instruction_gate(db, merchant_id=merchant_id,
