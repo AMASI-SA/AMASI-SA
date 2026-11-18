@@ -46,6 +46,17 @@ The actual prebuilt/purchased stock and conflicting-status assertions are
 retained. Latest local affected suite: 145 passed. Fresh exact-source real-Mongo
 and full CI remain required before freezing any new intent.
 
+Canonical follow-up source `3ce1aaba367476d750253662b0b96b1670228ea2`,
+tree `0d0aa572e6c169031d307aa76adeddd88a025c83`, passed the governed candidate
+build and 329 G47 cases plus 127 subtests. Two remaining G47 assertions expected
+an actually supplier-receipted order to remain incomplete after every direct
+and operational item became Ready. Existing supplier completion policy allows
+that fully covered order to complete; those assertions now preserve that
+policy. Stock remains deferred and no supplier Ready condition is changed.
+The next checkpoint changes only this test and this status record; runtime
+blobs remain identical. Its new source SHA requires a fresh candidate intent.
+Latest focused local Ready/supplier consumption run: 87 passed, zero skips.
+
 Windows test command (from backend, with dotenv disabled and PYTHONPATH set):
 `python -B -m pytest --noconftest -p no:cacheprovider tests/test_operational_item_ready_policy.py -q --tb=short`.
 
