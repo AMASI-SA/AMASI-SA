@@ -66,6 +66,8 @@ jobs:
         run: >-
           python -B -m pytest --noconftest -q
           backend/tests/test_operational_balance*.py
+          backend/tests/test_operational_refresh_parallel_profit.py
+          backend/tests/test_operational_refresh_party_issue_index.py
           backend/tests/test_operational_workspace_refunds.py
           backend/tests/test_operational_completed_shipping*.py
           backend/tests/test_operational_read_runtime.py
@@ -90,6 +92,9 @@ jobs:
           import xml.etree.ElementTree as ET
           cases = ET.parse('operational-backend.xml').findall('.//testcase')
           assert len(cases) >= 3500, 'Operational test collection incomplete'
+          for suite in ('test_operational_refresh_parallel_profit',
+                        'test_operational_refresh_party_issue_index'):
+              assert any(suite in c.get('classname', '') for c in cases), suite + ' not collected'
           assert len([c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_workspace_refunds']) >= 23, 'Scoped financial-only refund contracts missing'
           assert len([c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_balance_pending_commands']) >= 33, 'Authenticated pending-command recovery contracts missing'
           assert any('test_operational_open_cost_exposure' in c.get('classname', '') for c in cases), 'Historical open-cost tests were not collected'
