@@ -6,7 +6,7 @@ Current PR: [#1993](https://github.com/AMASI-SA/AMASI-SA/pull/1993), **merged**,
 
 PR #1992 was closed without merging because production advanced during the preceding release's verification. Its frozen source/intent pair remains preserved and must not be deployed. The previous complete record is [07322bbdb2c8c58d8f276b3176cdd942faba1df6](https://github.com/AMASI-SA/AMASI-SA/blob/07322bbdb2c8c58d8f276b3176cdd942faba1df6/docs/operations/snap-unassigned-profit-20261118/STATUS.md).
 
-**Production GitHub branch changed: yes**, merge M `8761f7b2f80faec29638e1438b8fedefcec64a28`. Live publication has not occurred. Shared-host staging and the exact governed adapter rehearsal have succeeded. Owned v5 lease prepared successfully at 18:46:36 UTC. Next: prepublish immediately before the authorized UI publish, then official verification.
+**Production GitHub branch changed: yes**, merge M `8761f7b2f80faec29638e1438b8fedefcec64a28`. Live publication is **in progress**. Shared-host staging and the exact governed adapter rehearsal passed; owned v5 lease prepared at 18:46:36 UTC; prepublish passed at 18:47:07 UTC; the ordinary free Publish changes action was submitted once. Await a newer explicit deployment success before running official verification.
 
 ## Scope and integration
 
@@ -93,6 +93,12 @@ Configured command started at 18:42:52 UTC and exited 1 at 18:42:54 UTC before a
 `python -B scripts/production_release_guard.py prepare --actor snap-unassigned-1993-20261118` passed, exit 0, after fresh inactive status. Prepared at **2026-11-18T18:46:36.083348+00:00**. The lease binds exact source A2, deployment M, protocol 5 and runtime listed above. Both reproducibility passes have artifact tree `1f7da282b51120ea6954d2a799092e07464dd6576e0e9abb994107ec1b3e19be` and build-meta SHA `2c9dd4e546c6ead76090b0afe1d74b8d190aeff51cba1437597616797980f306`, 494297 bytes. Prepare receipt SHA-256 `6e92a4b8784b070f965e1d446d61b6e8953c8109ea6c958cdf8eb03dcfe1cb68`.
 
 **This task owns the active lease. Do not prepare again or change source.** Prepublish and UI publication are next; no publication yet. Existing manager version remains `8a0d442` (100th publication, Nov18 21:06 Riyadh).
+
+## Publication started
+
+Prepublish passed at **2026-11-18T18:47:07.944577+00:00**, exit 0, `ready_to_publish:true`, exact A2/M/runtime/protocol5. The existing user publish approval remains applicable. The Emergent UI showed ordinary **Free republishes**, and this task clicked **Publish changes once**. The next observed state is **Publishing…**; no newer success/version is confirmed yet. No paid chat, purchase, Preview, provider sync or financial write was used. Do not submit another publication.
+
+Next: wait for explicit newer success/version, then run the unchanged official `python -B scripts/production_release_guard.py verify --url https://mezansalla.com` on this owned lease. Save original stdout/stderr/exit status and start/end timestamps. Require `verified:true`, `checks:3`, correct identities and separate final `status active:false`; then verify numeric unknown-row contribution and unchanged operating/final footer in the live dashboard.
 
 ## Exact next safe actions
 
