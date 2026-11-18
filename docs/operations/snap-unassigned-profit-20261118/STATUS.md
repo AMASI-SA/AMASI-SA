@@ -6,7 +6,7 @@ Current PR: [#1993](https://github.com/AMASI-SA/AMASI-SA/pull/1993), **merged**,
 
 PR #1992 was closed without merging because production advanced during the preceding release's verification. Its frozen source/intent pair remains preserved and must not be deployed. The previous complete record is [07322bbdb2c8c58d8f276b3176cdd942faba1df6](https://github.com/AMASI-SA/AMASI-SA/blob/07322bbdb2c8c58d8f276b3176cdd942faba1df6/docs/operations/snap-unassigned-profit-20261118/STATUS.md).
 
-**Production GitHub branch changed: yes**, merge M `8761f7b2f80faec29638e1438b8fedefcec64a28`. Live publication is **in progress**. Shared-host staging and the exact governed adapter rehearsal passed; owned v5 lease prepared at 18:46:36 UTC; prepublish passed at 18:47:07 UTC; the ordinary free Publish changes action was submitted once. Await a newer explicit deployment success before running official verification.
+**Production GitHub branch changed: yes**, merge M `8761f7b2f80faec29638e1438b8fedefcec64a28`. Live publication completed: new version **`ed5f35c`**, green **Deployment finished Nov 18, 09:56 PM** (Asia/Riyadh), newer than `8a0d442`. Official three-round verification is next; this task still owns its original lease. Production is published but not yet fully verified.
 
 ## Scope and integration
 
@@ -99,6 +99,12 @@ Configured command started at 18:42:52 UTC and exited 1 at 18:42:54 UTC before a
 Prepublish passed at **2026-11-18T18:47:07.944577+00:00**, exit 0, `ready_to_publish:true`, exact A2/M/runtime/protocol5. The existing user publish approval remains applicable. The Emergent UI showed ordinary **Free republishes**, and this task clicked **Publish changes once**. The next observed state is **Publishing…**; no newer success/version is confirmed yet. No paid chat, purchase, Preview, provider sync or financial write was used. Do not submit another publication.
 
 Next: wait for explicit newer success/version, then run the unchanged official `python -B scripts/production_release_guard.py verify --url https://mezansalla.com` on this owned lease. Save original stdout/stderr/exit status and start/end timestamps. Require `verified:true`, `checks:3`, correct identities and separate final `status active:false`; then verify numeric unknown-row contribution and unchanged operating/final footer in the live dashboard.
+
+## New deployment observed
+
+At approximately 18:57:49 UTC, Manage showed new published version **`ed5f35c`** and the green **Deployment finished Nov 18, 09:56 PM** entry. This is the current UI's explicit successful completion label. The publish control returned to Republish. View Logs exposes recent runtime logs (100 entries), not a Cloud Build transcript; the observed health requests were 200 and UI reported 0 error/0 warning entries. Do not infer build argv or snapshot order from runtime logs or retain unrelated request/customer data.
+
+Next immediate command: unchanged official `python -B scripts/production_release_guard.py verify --url https://mezansalla.com` for the original owned lease, recording full output, exit status, all three checks and final inactive status. Do not republish or reprepare. Dashboard confirmation remains pending.
 
 ## Exact next safe actions
 
