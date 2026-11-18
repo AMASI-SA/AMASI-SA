@@ -1,307 +1,125 @@
-# Supplier Ready publication verification
+# Supplier receipt Ready policy — publication handoff
 
-## Platform publication succeeded; official verification running — 2026-11-18 01:24 UTC
+## Current state
 
-Emergent displayed Deployment successful, restoredRepublish andnewliveversion9f62e46 replacing1c7c3f5. Root usedonefreePublishattemptonly. Screenshot publication-20261118.jpg records greenpublishedversion and projectidentity; SHA256988270abdae46da04b0a85753a7dce0cc8b1acae3a8cadccb3f3971dad1e87a4.
+**Platform published; official verification attempt 2 is running. Final acceptance is pending.**
 
-Theunchangedofficial production_release_guard.py verify --url https://mezansalla.com isrunningin detachedwrapperPID183940. Output,stderr,exitandfinal-status records areunder /tmp/supplier-ready-1984-release. Onlyafterofficialexit0willwrapperrequireverified:true/checks:3/exactsourceA17262103506180b417f7ad5b88e518faf5ed4d5e/deploymentD557c6c52857b0a09feccacd0cdf9bf6ce9d4476e/runtimerg5-717a2715d8c7db60ea64885f2daab9b3b269c0daa2d284c118537041470c7323, theninvokestaticstatusandrequireactive:false, cleanDandpreservedinventory.
+Task: `SUPPLIER-RECEIPT-READY-20261118`. Repository: `AMASI-SA/AMASI-SA`.
+Canonical release PR: https://github.com/AMASI-SA/AMASI-SA/pull/1984 .
 
-Do notclaimfinalacceptanceyet. No competingguard/status/verifier/build/publish; do notrestartthiscommand. Nextread-onlypollverification-result.json. ThepublicationleaseisstillreservedbySUPPLIER-RECEIPT-READY-20261118.
+The owner explicitly authorized publishing the supplier Ready fix and then authorized continuation after the proposed takeover of the stalled balances pre-lease handoff. A newer reviewed Snapchat/dashboard release appeared before shared-source mutation; this task preserved it as its direct base and waited for its official publication, three-probe acceptance, inactive guard, and completed-owner handoff.
 
----
+This is an **evidence-only branch**: `codex/ready-supplier-receipt-latest-handoff-20261118`. Never merge or deploy this branch. The source and intent are frozen on `codex/ready-supplier-receipt-latest-20261118`; neither was rewritten after freezing.
 
-## Previous accepted milestones
+## Exact release identities
 
-# Supplier Ready active publication
+| Item | Value |
+| --- | --- |
+| Reviewed base J | `8d7591f2908bd58aa006470236e693a1d40155fa` |
+| Source A | `17262103506180b417f7ad5b88e518faf5ed4d5e` |
+| A tree | `73813740fe206b83aea5a355f85e56d24c23b7a0` |
+| Intent-only B | `4529555e9c301277370df4cb0e60ceb8f69e45c3` |
+| Production merge D | `557c6c52857b0a09feccacd0cdf9bf6ce9d4476e` |
+| B / D tree | `8e40056c8d18e6108c76fcc8569fb57e048f8f43` |
+| Intent Git blob | `936a0a4534af90b9d48a199ae84f0913e17ab7fe` |
+| Runtime release | `rg5-717a2715d8c7db60ea64885f2daab9b3b269c0daa2d284c118537041470c7323` |
+| Frontend artifact tree | `d25fc1f9052d3af82cf4cbf3c79c7dd19ccd0be842c9c22bb5d1a1de8f79b8f8` |
+| Build metadata SHA-256 | `3a1c50ebfbc5108d2bf9421f3b230f176f90dc732b240d8159f4f67a99c5c046` |
+| Reproducibility proof SHA-256 | `addd1a3b705d88e168c42c0cd725ea6df68050fab72cba508776c010977304e8` |
+| Backend identity SHA-256 | `d60f2f26910ff4017047046adcd2df5147e9c21351e1fe7a299cd7395a74e29e` |
+| Emergent published version | `9f62e46`, replacing `1c7c3f5` |
 
-## Active own lease and one publication attempt — 2026-11-18 01:14 UTC
+B has A as its sole parent. D is an ordinary merge with parents J then B, and exactly B's tree. A is an ancestor of D; A→D changes only `release/release-intent-v5.json`. Root and an independent reviewer verified these properties against the remote repository.
 
-Prepare passed01:12:15.464196UTC, protocol5, actorSUPPLIER-RECEIPT-READY-20261118, sourceA17262103506180b417f7ad5b88e518faf5ed4d5e, deploymentD557c6c52857b0a09feccacd0cdf9bf6ce9d4476e, runtimerg5-717a2715d8c7db60ea64885f2daab9b3b269c0daa2d284c118537041470c7323. Prepublish exited0, ready_to_publish:true, sameidentities.
+Candidate Readiness run: `44208344775`; artifact: `14385291213`. Candidate ZIP SHA-256: `4860489fe80eb9dfd197423d2e4d95be3df8d8c847e299fcc6d3cd88ef03d9cf`. Candidate JSON SHA-256: `d32d52c4535b4008a104632e3c191725d656ac42a7a9b0a8082f82bfa5743224`. The exact A/J candidate was independently validated twice before B was frozen.
 
-Root activated EmergentManage→Republish→freePublishchanges exactlyonce. LiveUI shows Publishing and DeploymentStarted Nov18 04:14AM Asia/Riyadh; detail Workspace ready / Packaging your latest changes / Taking a snapshot of your latest code. Baselineversion1c7c3f5, priorfinished03:46Riyadh. No paidchat, purchase, orautotopup.
+## Completed behavior and source scope
 
-Publication andofficialverificationremainpending. Do notclickPublishagain, altersharedsource/build, clearlease, orruncompetingguard/status/verifier. Nextobserve newer greendeployment/version thenlaunchunchangedofficial threeprobe verifier detached withretainedstdout/stderr/exit; finalsuccessmustincludeverified:true/checks:3/exactA/D/runtime andsubsequentactive:false. Evidencefiles prepare/prepublish JSON/stderr/exit arein /tmp/supplier-ready-1984-release. Nevermergeordeploythisevidence-onlybranch.
+A physically received supplier product can become Ready while its current Salla order is `in_progress` without component/source-approval prerequisites. Shared search and transaction predicates use the same policy.
 
----
+Actual receipt, completed required services, configured employee custody, current canonical product/unit membership, holds/instructions, and exact whole-order coverage remain required. Delivery and printing retain provider identity, actor/claim ownership, source fingerprints and idempotency safeguards. Healthy inventory is consumed once; unavailable pre-write component evidence is recorded as a deferral. A write failure cannot be converted into a successful deferral.
 
-## Prior accepted checkpoints
+Seven runtime files implement the change:
 
-# Supplier Ready publication continuation
+- `backend/supplier_receipt_ready_policy.py`
+- `backend/preparation_piece_operations.py`
+- `backend/stock_component_consumption_service.py`
+- `backend/assembly_completion_delivery.py`
+- `backend/assembly_status_policy.py`
+- `backend/fulfillment_carrier_label.py`
+- `backend/order_engine/amasi_shipping_compat.py`
 
-## Actual build accepted — 2026-11-18 01:10 UTC
+The source also contains eleven regression-test modules, the Review CI workflow update, and the frozen task STATUS record. Those nineteen runtime/test/workflow blobs match the prior reviewed supplier source exactly; the task record is the twentieth source file. J's twelve newer dashboard paths have zero overlap and were preserved. B changes only the release intent. No new Android APK is required.
 
-Production mergeD `557c6c52857b0a09feccacd0cdf9bf6ce9d4476e` preserves exactBtree `8e40056c8d18e6108c76fcc8569fb57e048f8f43`, sourceA `17262103506180b417f7ad5b88e518faf5ed4d5e`, and A→D intent-only. Root and independent remote review passed. Shared /app fast-forward completed01:07:05.051929UTC after inactive guard; tracked clean and all120untracked paths preserved.
+## Accepted source and CI verification
 
-The actual configured `cd /app/frontend && yarn build` v5 adapter passed first attempt, **01:08:46.757464→01:10:00.498211UTC**, exit0. Outer process removed GitHub markers and inherited reviewed origin plus PYTHONDONTWRITEBYTECODE=1. Follow-up official frontend and isolated package verification passed; exact runtimeidentity equals reviewed intent. Build-meta/proof/backendidentity byte hashes match reviewedCI; generated outputs remain ignored/untracked. Accepted runtime `rg5-717a2715d8c7db60ea64885f2daab9b3b269c0daa2d284c118537041470c7323`; artifact `d25fc1f9052d3af82cf4cbf3c79c7dd19ccd0be842c9c22bb5d1a1de8f79b8f8`. FinalHEAD exactD; trackedclean; unrelatedinventorypreserved.
+Local bounded policy acceptance: **205 tests +24 subtests**, zero skips, exit 0.
 
-All53currentchecks aregreen or expectedconditional:43success+10skip;24workflows=23success+oneconditional. Balance single bounded retry passed5163+16tests+18subtests with zero acceptance skips/failures/errors; failed first attempt remains recorded. PR1969 officialverified3+inactivehandoff completed and is not an active owner.
+Exact B after ready-for-review checks: **24 workflows —23 successful and one conditional TikTok skip; 53 checks —43 successful and ten conditional skips; no pending, failed or cancelled current checks.** Conditional job skips are separate from acceptance-test skips.
 
-Next: own protocol5prepare, prepublish immediately before one authorized free Publish, newer green Deployment finished/version, officialthreeprobeverify, finalactivefalse. **Supplier publication is pending; no supplier lease exists at this checkpoint.** This task owns the next shared publication; do not overlap source/build/guard/publish. Host evidence at `/tmp/supplier-ready-1984-release` (adapter-result.json, adapter.log, verify-build.log, verify-packages.json, preflight and fast-forward records).
+| Suite | Result |
+| --- | --- |
+| Review main | 1029 tests +596 subtests |
+| Preparation refresh recovery | 35 tests +35 subtests |
+| Android operations | 348 tests +59 subtests |
+| Source snapshot recovery | 124 tests +28 subtests |
+| Review acceptance guard | 1 test |
+| Operational Stock Eligibility | 4844 tests +7 subtests |
+| Operational Balance backend, attempt 2 | 5163 tests |
+| Balance shipping SSOT/calculator | 16 tests +18 subtests |
 
----
+All listed XML acceptance gates verified zero skipped, failed, or errored cases.
 
-## Previous checkpoint and historical source record
+Review run `44209391496`, artifact `14385991629`. Stock run `44209391506`, artifact `14385926579`. Balance run `44209391718`, successful attempt-2 backend job `134490625969`, artifact `14387135335`.
 
-# Supplier receipt Ready policy — release handoff
+Balance attempt 1 had 5162 passed and one failed worker-entry precondition in the inherited deadline test. The test sets a 0.15-second whole-request deadline before the collector reaches its worker. Its relevant test, runtime, collector, index, fixture and workflow blobs were unchanged from J; A's same suite had passed. Root retried only the failed backend job once, with no source, test timing or gate change. Attempt 1 and artifact `14385841856` remain preserved.
 
-## Current canonical checkpoint — 2026-11-18 00:53 UTC
+Readiness run `44209391677` passed both clean-clone Host Node 20 and 24 rehearsals, governed Node 22.23.2 / Yarn 1.22.22, complete artifact/proof equality, isolated Backend/Frontend package verification, and exact metadata route checks. Backend package: 1241 files; frontend package: 1536 files. Both isolated verification flags and backend health verification passed.
 
-This is an evidence-only continuation branch. **Never merge or deploy this documentation branch.** It does not alter the frozen source/intent pair.
+## Actual host and one publication
 
-- Task: SUPPLIER-RECEIPT-READY-20261118. Repository: AMASI-SA/AMASI-SA.
-- Explicit owner authorization: publish the Ready fix; subsequent continuation authorizes taking over PR1980's stalled pre-lease balances handoff and publishing the combined reviewed version. PR1969 independently became the active publisher; its actual lease must finish normally.
-- Canonical release branch: `codex/ready-supplier-receipt-latest-20261118`.
-- Current PR: https://github.com/AMASI-SA/AMASI-SA/pull/1984 .
-- Source A: `17262103506180b417f7ad5b88e518faf5ed4d5e`, direct parent J `8d7591f2908bd58aa006470236e693a1d40155fa`.
-- Intent-only B: `4529555e9c301277370df4cb0e60ceb8f69e45c3`.
-- B tree: `8e40056c8d18e6108c76fcc8569fb57e048f8f43`. A→B changes only release/release-intent-v5.json.
-- Runtime: `rg5-717a2715d8c7db60ea64885f2daab9b3b269c0daa2d284c118537041470c7323`.
-- Candidate artifact14385291213 from Readiness44208344775; JSON SHA256 d32d52c4535b4008a104632e3c191725d656ac42a7a9b0a8082f82bfa5743224; intent blob936a0a4534af90b9d48a199ae84f0913e17ab7fe.
-- Exact remote B fetched, preserved local predecessor, correct sole parent/tree/intent-only diff, clean tracked source. load_release_intent + verify_release_intent_git passed exit0 with bytecode prevention. One bytecode file generated by root's initial local validator invocation was preserved outside the checkout; validation reran unchanged and passed.
+All times below are UTC unless explicitly labeled Riyadh.
 
-## Completed verification
+1. PR1969 finished its official three-probe verification at 00:59:34.914052, exited 0, then reported inactive guard and completed ownership handoff.
+2. Root's fresh preflight at 01:05:00.737812 observed inactive guard, exact J, correct production branch, clean tracked source and all 120 unrelated untracked paths. Inventory SHA-256: `2a0200fc4ebb665ebc1fec275ef8db46870809282ef7fcc40a931e631f74eb04`.
+3. Shared `/app` safely fast-forwarded to D at 01:07:05.051929 after another inactive-guard check. Source remained clean and the inventory was preserved.
+4. The actual configured `cd /app/frontend && yarn build` adapter passed on its first attempt, 01:08:46.757464–01:10:00.498211, exit 0. GitHub markers were absent; reviewed origin and bytecode prevention were inherited. Official frontend and isolated package verification passed. Generated outputs remained ignored/untracked, and their exact hashes matched reviewed CI.
+5. Prepare passed at 01:12:15.464196, actor `SUPPLIER-RECEIPT-READY-20261118`, protocol 5, exact A/D/runtime. Prepublish exited 0 and returned `ready_to_publish:true` with the same identities.
+6. Root used Manage→Republish→free Publish changes **exactly once**. UI recorded Deployment Started Nov18 04:14 AM Riyadh, then packaging, building, cloud installation, an explicit **Deployment successful** notification, restored Republish, and new live version `9f62e46`.
+7. No paid chat, purchase, auto-top-up, customer/order mutation, or financial-data write was performed.
 
-Local policy acceptance:205 tests +24subtests, zero skips.
-Exact-B Review44209391496: main1029 tests +596subtests; refresh35+35; Android348+59; source snapshot124+28; guard1. Every acceptance XML gate reports zero skips/failures/errors.
-Exact-B Stock44209391506:4844 tests +7subtests; zero skips/failures/errors. Artifact14385926579.
-Exact-B Readiness44209391677 succeeded; independent detailed Host20/24 evidence review is underway.
-At00:51:45UTC:19 successful workflows, one conditional TikTok skip, one failure;44checks=37success+6conditional skips+onefailure.
+Publication proof: [publication-20261118.jpg](publication-20261118.jpg), SHA-256 `988270abdae46da04b0a85753a7dce0cc8b1acae3a8cadccb3f3971dad1e87a4`.
 
-## One bounded CI retry in progress
+## Official verification attempts
 
-Operational Balance Web44209391718 attempt1 backend134483566058:5162 passed/one failed. The only failure was test_actual_visible_collector_joins_assignment_worker_and_releases_own_lease[deadline] asserting worker entry before its intended cancellation assertions.
-Its inherited test sets REQUEST_SECONDS=0.15 before source collection reaches that worker. The actual scheduling delay is not proven by logs. Test, runtime, collector, index, fixture and workflow blobs are unchanged from J; A's Balance44208344847 passed5163 tests, then16+18subtests, with zero skips.
-Root requested exactly one rerun of only failed backend job134483566058 on unchanged B, preserving the first failure. No source, test timing, gate or intent was modified. Do not count the rerun as passed before its completed evidence. If it fails again, investigate; do not loop retries.
+### Attempt 1 — preserved refusal
 
-## Shared host / publication
+The official verifier ran 01:24:15.366493–01:24:17.572014 and exited 1. Backend identity checks passed, but the first canonical `/build-meta.json` request with `Accept: application/json` returned previous J's exact metadata hash:
 
-PR1969 owns an active protocol5 lease, actor snap-unassigned-row-20261117. Its sourceA23bacee592967ca3ea5264cbbe09d46410e4cf2c, deploymentJ8d7591f2908bd58aa006470236e693a1d40155fa, runtimerg5-61f80b582f20bbcd74860f23ee92a7e68729a1da8f22516565736f1545995031.
-Its prepublish passed and its owner clicked the free Republish confirmation once; last PR update00:37:03UTC says Publishing. Supplier task must not call competing guard/status, alter /app, run adapter, clear lease or publish over it.
-Supplier task has performed no shared-host source/build/lease/Publish or customer/order/financial writes. Production changed by supplier task: **no**.
+`05130a632647192a628ef09189f62d22248c6d1afdde31b454ec5a61c5f4da9c`
 
-## Exact next safe sequence
+The JSON MIME and object checks had passed; the byte hash correctly failed. The verifier did not reach later metadata variants or three rounds, and did not remove the lease. First-attempt stdout/stderr/exit/result files remain intact.
 
-Complete exact-B CI retry and both host rehearsal acceptance. Wait for PR1969 explicit newer Deployment Succeeded, official verified:true/checks:3 and final active:false handoff. Then recheck production remains J8d and fresh shared status/inventory. Ordinary-merge PR1984 preserving A/B; verify merge tree equals B and A→merge only intent. Fast-forward clean /app, preserve unrelated120untracked paths, run actual configured v5 adapter with PYTHONDONTWRITEBYTECODE=1, validate package/build identities, prepare own lease, prepublish, one authorized free Publish, official three-probe verification, final inactive status. No new Android APK is needed.
+### Convergence diagnosis
 
-Issue1006 is saturated; PR1984 and this evidence branch retain current continuation. Prior PR1982 is closed/superseded and preserves old f2-based A/B. Never reuse its runtime identity for current J.
+At 01:29:05.240547, the guard's unchanged read-only transport returned HTTP 200, valid JSON MIME, 493187 bytes, source A, and the expected new metadata hash for all four canonical/cache-busted × application/json/*/* variants. Responses declared no-cache/no-store/must-revalidate/max-age=0. Current health reported exact A/runtime with all required identity/source flags true. Observed boot: `2026-11-18T01:24:17.389680+00:00`.
 
----
+Independent review confirmed the first hash was exactly J's metadata. J and D share identical frontend asset bytes; metadata release-source identity differs. Current delivery converged, but the precise reason for the old first response—cache propagation or frontend rollout routing—was not established. No expected hash or guard was relaxed.
 
-## Frozen source history (historical; current checkpoint above governs continuation)
+### Attempt 2 — currently running
 
-# Supplier receipt Ready policy
+Root launched the unchanged official verifier once more, wrapper PID `186843`, after the fresh four-variant convergence evidence. Evidence directory:
 
-## Authorized takeover and current-base preparation — 2026-11-18 UTC
+`/tmp/supplier-ready-1984-release/verify-attempt2`
 
-The owner explicitly authorized taking over and publishing the supplier Ready
-update. Actual publication remains pending. The production branch advanced
-independently through PR #1969 (unassigned Snapchat orders and bank commissions)
-to reviewed base J `8d7591f2908bd58aa006470236e693a1d40155fa`. PR #1969 is the
-current publisher at this checkpoint; root owns the shared-host handoff/takeover,
-remote writes, release lease and publication sequence.
+The wrapper retains `verify.json`, `verify.stderr`, `verify.exit`, timestamps, and `verification-result.json`. Only after the official command exits will it run guard status and require `active:false`, exact clean D and preserved inventory. The first attempt remains in the parent evidence directory.
 
-This new source starts directly from J and transplants exactly the supplier
-delta from old J `f2d806efc18964a2cc7c3a475346590cbe8b1262` to old A
-`46187a1b22b550db9d2b6bb2bb0caf5831d29bdd`: seven runtime files, eleven test
-modules and the Review CI workflow. All 19 file blobs are unchanged from old A.
-There is no overlap with PR #1969. Its dashboard/frontend changes and reviewed
-release intent remain intact. Only this task record is refreshed for the new
-source checkpoint; no runtime or test behavior is changed during transplantation.
+## Exact next safe action
 
-- New local branch: `codex/ready-supplier-receipt-current-20261118-2`.
-- Isolated worktree: `/workspace/scratch/a9a8e6bdaba9/mezan-ready-release-current`.
-- Previous PR #1982 is retained in Draft as a safe fence, recorded at
-  `2026-11-18 00:20:34 UTC`. Its source A above and frozen B
-  `b10192a88fc8a0cda621c9f0a2922ed4081620cd` remain recoverable and untouched.
-- B's successful readiness run `44196296814`, including both Host 20/24
-  clean-clone rehearsals, is prior-base evidence only. Its candidate artifact
-  `14379505190` and deterministic runtime identity must not be reused for this J.
-- The earlier verified `627cd57eea162c32d475fe99a33ffb11d84e4574` handoff remains
-  at `2d8b2bca9507f8abd121d569fd49aeb5c045ab3e` and PR #1981.
-- J's release-intent Git blob is retained exactly:
-  `3402ab24ec6c10cd5e2f9b05d6e806067c3233a9`.
-- The exact new A SHA/tree must be recorded in root's remote checkpoint/PR after
-  committing this source. No new intent-only B is frozen at this checkpoint.
-- New exact-source CI, a fresh candidate intent, B rehearsal, merge, shared-host
-  guarded publication and three live identity probes are pending.
-- No new Android APK is needed; Ready eligibility is supplied by the server.
+Read only the attempt-2 completion evidence. While its wrapper runs, **do not run a competing guard/status/verifier, alter shared source/build, clear a lease, or click Publish again**.
 
-### Current-base local verification
+Completion requires official exit 0, `verified:true`, `checks:3`, exact A/D/runtime and frontend identity, followed by inactive guard, unchanged clean D and the preserved untracked inventory. Then update this evidence document and PR1984 with final acceptance, mark the useful live administration page, complete the UI task, and report publication to the owner.
 
-The bounded suite completed successfully: **205 passed, 24 subtests passed,
-zero skips**, exit 0, in 5.65 seconds. It selected:
+If the wrapper exits without accepted completion, inspect its retained evidence before deciding any next action. Do not assume publication success from the platform notification alone.
 
-- `backend/tests/test_supplier_receipt_ready_policy.py`
-- `backend/tests/test_supplier_component_consumption_deferral.py`
-- `backend/tests/test_supplier_receipt_bundle_coverage.py`
-- `backend/tests/test_supplier_receipt_delivery_policy.py`
-- `backend/tests/test_assembly_source_pending_message.py`
-
-It used `/workspace/scratch/a9a8e6bdaba9/ready-policy-venv/bin/python`,
-`PYTHONDONTWRITEBYTECODE=1`, `PYTHONPATH=backend:backend/tests`, and
-`pytest --noconftest -p no:cacheprovider --asyncio-mode=auto -q --tb=short`.
-The runner explicitly bound the local `tests` package namespace before invoking
-pytest so the environment's unrelated installed package could not shadow it.
-These deterministic/in-memory tests do not claim real-Mongo transaction
-acceptance. Required exact-source CI must execute those integration cases.
-
-`git diff --check` and exact blob/source-scope checks passed before the local
-A checkpoint: all 19 reused blobs match old A, the full delta is limited to those
-files plus this record, and J's intent blob is unchanged. Root will preserve A
-remotely and start the required CI.
-No remote API, original-checkout mutation, shared-host build, lease, order
-mutation or publication is part of this isolated preparation.
-
-Production changed by the supplier Ready task: **no** at this checkpoint.
-
-## Contract
-
-The owner explicitly removed component/source-approval prerequisites from Ready
-for a physical product already received from its supplier while the current
-Salla order is in progress. This supersedes the former business requirement
-that matching component revisions and approved source hashes gate this path.
-
-Current status evidence, tenant/actor authorization, actual receipt, required
-services, configured employee custody, explicit holds/instructions and current
-whole-order product/unit coverage remain independent requirements. Other
-direct/virtual Ready paths retain their existing policy.
-
-## Source checkpoint
-
-- Repository: `AMASI-SA/AMASI-SA`.
-- Source task branch: `codex/ready-supplier-receipt-current-20261118-2`.
-- Prior verified source retained on
-  `codex/ready-supplier-receipt-current-20261118` at
-  `627cd57eea162c32d475fe99a33ffb11d84e4574` (PR #1981).
-- Previous source checkpoint retained on
-  `codex/ready-supplier-receipt-source-20261118` at
-  `67487226d664140ff6ea2ea1bc64fc5b0c8a4605` (PR #1978).
-- Original WIP branch retained: `codex/ready-supplier-receipt-policy-20261118`.
-- Initial production source: `d7c9ed77137bed0948f4d32a34c6bf571d75e6f8`.
-- Current integrated production base: `8d7591f2908bd58aa006470236e693a1d40155fa`.
-- First remote stock checkpoint: `2a1fb9db5633f9d3a5aa6c14bb9ae389de96063d`.
-- Original WIP PR: https://github.com/AMASI-SA/AMASI-SA/pull/1975 . Its body
-  links the active source PR, whose body records the latest exact source SHA
-  and CI evidence. Both branches remain recoverable.
-- The local checkout is isolated from concurrent mobile printing work.
-- **WIP — new exact-source CI and publication pending.** The previous A/B are
-  retained as historical evidence. This new source preserves J's reviewed
-  intent and has no new intent-only B or supplier publication yet.
-
-## Implementation
-
-- One supplier receipt predicate drives search and the actual Ready transaction.
-- A saved receipt basis supports complete current product coverage without
-  depending on approval/component acceptance. Missing/extra/duplicate units and
-  incomplete mixed-order work cannot complete an order.
-- The same proven basis is retained through the existing delivery outbox,
-  status display and shipping invalidation. Provider identity, status,
-  shipping/material evidence, claim ownership and effect journaling remain.
-- Healthy component consumption must remain correct. Unavailable component
-  evidence may defer only during strictly read-only validation, before any
-  inventory write; the Ready record/event records that inventory outcome.
-  Mutation failures cannot be swallowed. No new background worker is added.
-- Source flags, supplier receipts and approved snapshots are not rewritten to
-  manufacture eligibility.
-- Explicit Ready retries can resume an interrupted reviewed workflow without
-  repeating Ready events or consumption. The card exposes the same retry.
-- Existing non-piece bundle parents retain their read-only bundle proof. An
-  unavailable bundle leaves the supplier piece Ready and the order incomplete;
-  it does not manufacture a physical bundle piece or ignore missing products.
-
-## Verification history
-
-- Initial remote checkpoint preserves the independently reviewed inventory
-  preflight/deferral service and its regression tests. The integrated source
-  checkpoint adds the shared Ready predicate, completion/printing consumers,
-  current-unit coverage and guarded retries.
-- Stock-focused verification: 27 tests and 7 subtests passed, zero skips. Tests
-  include all-location validation before writes, healthy consumption/retry,
-  and propagation of mutation failures after the first write. They replace
-  only the owner boundary and do not claim real-Mongo rollback evidence.
-
-- The first search regression was RED on the prior code: four failures for
-  received supplier pieces under local source flags, eight retained negatives
-  passed. The revised search suite then passed twelve tests.
-- The isolated test interpreter uses the exact direct pins from the existing
-  Review Completion Resumable CI workflow. No application dependencies were
-  changed.
-- Local MongoDB 8.0.12 cannot start: its allocator fails before server startup
-  because `/sys/devices/system/cpu/possible` is unavailable; Docker is absent.
-  Real transaction and API race acceptance must execute in the existing CI
-  disposable replica set. Skips are not acceptance.
-- Independent review corrected healthy-stock preservation, legacy read-only
-  outbox compatibility, claimed-versus-current source fingerprints, current
-  unit membership, the scan overflow sentinel, durable post-handoff printing,
-  real inner courier generation and reachable reviewed-workflow retries.
-- An affected local run passed 283 tests plus 90 subtests; 160 real-Mongo cases
-  were skipped and are not acceptance. Later targeted Ready/search/bundle tests
-  passed 142 cases without skips. The inventory snapshot preflight correction
-  first reproduced ten unsafe-consumption failures, then passed 117 targeted
-  Ready/stock cases. Missing or stale approved snapshot revisions now defer
-  inventory consumption before writes and do not block the supplier Ready fact.
-- Final integrated local run: **339 passed, 161 skipped, 90 subtests passed**,
-  exit 0. Skipped replica-set cases remain explicitly unverified locally.
-  The command selected the four supplier policy suites, source-pending search,
-  preparation/search/custody, local assembly, delivery/status/print/legacy/v2
-  readback, courier compatibility and stock consumption. It used the pinned
-  test interpreter with `--noconftest -p no:cacheprovider --asyncio-mode=auto`.
-  The CI gate requires all 41 local assembly integration tests and explicit
-  minimums for each new supplier suite, with zero skips/failures/errors.
-- The first WIP candidate run 44182130589 failed after production advanced.
-  Integrated checkpoint `0d1a18d0fcd3da185ae6d68fc7b49b40bbfc4cd7` preserved
-  the new base but run 44183973577 rejected its full intent-file merge history.
-  The final source branch starts directly from the reviewed b92d3eb8 base and
-  carries the integrated source tree, preserving the WIP separately. No reset,
-  force push or release-guard change is used. No intent is frozen yet.
-- At checkpoint 0d1a18d0, real-Mongo Review run 44183973477 passed 35 refresh
-  cases but stopped in Android recovery: one optional-Ready unit fixture had
-  no current canonical source. The fixture now contains a real mapped source
-  and unit and retains real missing-plan inventory deferral; its focused local
-  module passed 16 tests with one explicitly Mongo-only skip.
-- Other 0d1a18d0 compatibility evidence: preparation backend 168 passed,
-  frontend 64 passed with build; assembly settings 15 passed; performance
-  backend 33/frontend 49 passed; shipping groups 26, 231 and 597 passed (one
-  existing skip in the last group). These do not replace exact-source main
-  replica-set acceptance. The active PR records the final run conclusions.
-- Exact checkpoint `67487226d664140ff6ea2ea1bc64fc5b0c8a4605`, tree
-  `39a09f6ccde614c71dc14c7d3baa89e88727baba`, passed 17 of 19 workflows.
-  Operational Stock Eligibility run 44185118022 executed **4,833 tests plus
-  7 subtests**, zero skips/failures/errors. Release Readiness 44185117920
-  passed candidate classification and reproducible builds. Shipping Print
-  Boundary 44185117827, Security Gate and CodeQL also passed.
-- Review Completion Resumable run 44185117929 passed 35 refresh and 329
-  Android recovery cases, then executed all 1,029 main cases with 16 failures,
-  zero skips/errors. All **184 new supplier cases** passed: Ready 82,
-  inventory deferral 35, bundle coverage 39, delivery/fingerprint 28.
-  G47 run 44185117739 had five matching legacy fixture/expectation failures;
-  Review also inherits those five cases in the zero-price suite.
-- The followup changes tests only: five G47 cases now seed real canonical
-  items before reservation and full receipt evidence; missing-address/unit,
-  stock totals, event idempotency and cancelled virtual-work assertions remain.
-  Two LocalAssembly fixtures add the required employee receipt timestamp/actor.
-  Instruction fixtures use real current item quantities, canonical line IDs
-  and actual custody without relaxing batching/instruction/actor assertions.
-  Currency reconciliation now asserts that already received supplier products
-  are eligible both before and after repair while an unreceived product stays
-  blocked; dry-run and financial proof assertions remain unchanged.
-- The Review gate's delivery minimum remains 28, applied to the whole module
-  (25 delivery tests plus three fingerprint tests). Zero-skip/failure/error
-  gates and disposable real-Mongo execution remain unchanged.
-- The fixture checkpoint passed **205 local tests plus 24 subtests**, exit 0;
-  four instruction cases require Mongo and were explicitly skipped locally.
-  Collection found 89 cases across the four changed integration modules.
-  Independent read-only review found no remaining fixture/gate blocker.
-- Production source advanced independently to b009ee50 through Android
-  shipping-label parity PR #1974. This source checkpoint carries that complete
-  reviewed base, including its mobile read behavior/tests and release intent,
-  then applies the supplier policy and fixture changes. Earlier task branches
-  and PRs are retained; no release-intent history is rewritten or bypassed.
-- Next: verify the new source branch's exact SHA/tree and retained intent,
-  complete real-Mongo Review/G47 and release-candidate CI, and record final
-  exact-head evidence in the active PR. Source readiness and production
-  deployment remain separate. Production changed by this task: **no**.
-
-Issue #1006 is full. This task document and its draft PR are the continuation
-record. Keep any source checkpoint explicitly WIP until the required evidence
-is complete. No customer payload or credentials belong in this record.
+Issue1006 is saturated; PR1984 and this remotely recoverable evidence branch are the active continuation. Historical checkpoints remain in Git history and superseded PR1982. Production was changed by this task: **yes, version9f62e46 was published; official final acceptance remains pending.**
