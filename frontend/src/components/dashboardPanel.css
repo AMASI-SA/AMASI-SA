@@ -107,3 +107,14 @@
         outline-offset: -2px;
     }
 }
+
+.dashboard-panel.mezan-live-sources-compact > .dashboard-panel-header {
+    min-height: 2.75rem;
+    padding-block: 0.25rem;
+    gap: 0.4rem;
+}
+.mezan-live-sources-compact .dashboard-panel-toggle {
+    min-height: 2rem;
+    min-width: 2rem;
+    padding: 0.25rem;
+}

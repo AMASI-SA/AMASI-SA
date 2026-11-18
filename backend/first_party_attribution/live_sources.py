@@ -57,6 +57,42 @@ def classify_entry(event):
         return 'unknown', False
 
 
+def realtime_summary(events, now):
+    visitors, recent = set(), set()
+    buckets = [set() for _ in range(30)]
+    pages = Counter()
+    for event in events:
+        if not event.get('visitor_id'):
+            continue
+        try:
+            age = (now - datetime.fromisoformat(event['received_at'].replace('Z', '+00:00'))).total_seconds()
+        except (KeyError, ValueError, TypeError):
+            continue
+        if not 0 <= age < 1800:
+            continue
+        key = (event.get('store_id'), event['visitor_id'])
+        visitors.add(key)
+        buckets[int(age // 60)].add(key)
+        if age < 300:
+            recent.add(key)
+        if event.get('event_name') == 'page_view':
+            try:
+                url = urlsplit(event.get('page_url') or '')
+                if url.scheme in ('http', 'https') and url.hostname:
+                    # Do not expose query strings, fragments, checkout/order tokens.
+                    path = url.path or '/'
+                    if any(word in path.lower() for word in ('checkout', 'order', 'account', 'customer', 'payment')):
+                        path = '/صفحة خاصة'
+                    pages[(url.hostname, path)] += 1
+            except ValueError:
+                pass
+    return {'top_pages': [{'title': host + path, 'views': count}
+                          for (host, path), count in pages.most_common(6)],
+            'active_users': {'last_30_minutes': len(visitors), 'last_5_minutes': len(recent),
+                             'per_minute': [{'minutes_ago': i, 'active_users': len(buckets[i])}
+                                            for i in range(29, -1, -1)]}}
+
+
 def summarize(events, now):
     # Rows arrive oldest first. One first observed entry per store/visitor/session.
     sessions = {}
@@ -69,6 +105,7 @@ def summarize(events, now):
     paid = Counter(channel for channel, evidence in sessions.values() if evidence)
     total = len(sessions)
     return {
+        'realtime': realtime_summary(events, now),
         'window_minutes': 30, 'metric': 'observed_sessions',
         'generated_at': now.isoformat(), 'window_start': (now - timedelta(minutes=30)).isoformat(),
         'last_event_at': events[-1].get('received_at') if events else None,
@@ -88,7 +125,7 @@ async def read_live_sources(db, user_id, now=None):
     query = {'user_id': user_id, 'store_scope': 'production',
              'received_at': {'$gte': start, '$lte': now.isoformat()}}
     projection = {'_id': 0, 'store_id': 1, 'visitor_id': 1, 'session_id': 1,
-                  'page_url': 1, 'referrer': 1, 'received_at': 1}
+                  'page_url': 1, 'referrer': 1, 'received_at': 1, 'event_name': 1}
     events = await db[EVENT_COLLECTION].find(query, projection).sort(
         'received_at', 1).limit(20001).max_time_ms(2500).to_list(20001)
     if len(events) > 20000:

@@ -1,6 +1,6 @@
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
-import { LatestOrders, ProfitCard } from "./AdvancedDashboard";
+import { LatestOrders, ProfitCard, GaLive } from "./AdvancedDashboard";
 
 jest.mock("react-router-dom", () => ({
     Link: ({ children, to, ...props }) => <a href={to} {...props}>{children}</a>,
@@ -84,3 +84,29 @@ test.each([
 });
 
 test.each(["snapchat", "tiktok", "meta", "google"])("%s badge shows only its campaign without fetching", (channel) => { const spy = jest.fn(); const original = global.fetch; global.fetch = spy; try { act(() => root.render(<LatestOrders orders={[{ order_number: "hover-test", source: { channel, campaign_name: "Winter campaign" } }]} />)); const badge = host.querySelector("span[title=\"Winter campaign\"]"); expect(badge).not.toBeNull(); badge.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })); expect(spy).not.toHaveBeenCalled(); } finally { global.fetch = original; } });
+
+
+test("minute bars expose their own count on hover, focus and touch click", () => {
+    act(() => root.render(<GaLive data={{active_users: {per_minute: [
+        {minutes_ago: 5, active_users: 24}, {minutes_ago: 0, active_users: 0}
+    ]}}} />));
+    const bars = host.querySelectorAll('[data-testid="advanced-ga-active-chart"] button');
+    act(() => bars[0].dispatchEvent(new MouseEvent("mouseover", {bubbles: true})));
+    expect(host.querySelector('[role="tooltip"]').textContent).toBe("قبل 5 دقيقة: 24 مستخدم نشط");
+    act(() => bars[1].focus());
+    expect(host.querySelector('[role="tooltip"]').textContent).toBe("الدقيقة الحالية: 0 مستخدم نشط");
+    act(() => bars[0].click());
+    expect(host.querySelector('[role="tooltip"]').textContent).toContain("24 مستخدم نشط");
+});
+
+
+test("source switch clears Google values while Mezan data is unavailable", () => {
+    act(() => root.render(<GaLive data={{top_pages: [{title: "Google page", views: 99}], active_users: {last_30_minutes: 123, last_5_minutes: 45, per_minute: []}}} />));
+    const toggle = host.querySelector('[aria-label="مصدر بيانات الزيارات"]');
+    expect(host.textContent).toContain("Google page");
+    act(() => toggle.querySelectorAll('button')[1].click());
+    expect(host.textContent).not.toContain("Google page");
+    expect(host.textContent).toContain("بيانات ميزان اللحظية غير متاحة بعد");
+    act(() => toggle.querySelectorAll('button')[0].click());
+    expect(host.textContent).toContain("Google page");
+});
