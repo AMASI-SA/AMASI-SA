@@ -20,7 +20,6 @@ EVENTS = "mezan_supplier_receiving_events_v1"
 INVOICES = "mezan_supplier_invoices_v2"
 SUPPLIERS = "mezan_suppliers_v2"
 PRODUCTS = "mezan_products_v2"
-JOURNALS = "accounting_journal_groups_v2"
 CHUNK_SIZE = 250
 MAX_ROWS = 50000
 MAX_COST_UNITS = 10000
@@ -38,12 +37,16 @@ INVOICE_FIELDS = {"_id": 0, **dict.fromkeys(("id", "session_id", "supplier_id", 
     "financial_invoice_created", "liability_created", "financial_integrity_verified", "reversed_at", "reversal_id",
     "cancelled_at", "voided_at", "mz2_txn_group_id", "mz2_financial_contract", "mz2_effective_at",
     "mz2_close_payload_hash", "mz2_debit_mapping_snapshots"), 1)}
-JOURNAL_FIELDS = {"_id": 0, **dict.fromkeys(("txn_group_id", "reversal_of_txn_group_id", "status",
-    "metadata.invoice_digest", "metadata.supplier_invoice_id"), 1)}
 
 
 def _text(value):
     return str(value).strip() if isinstance(value, (str, int)) and not isinstance(value, bool) else ""
+
+
+def _journal_id(value):
+    """Exclude malformed stored IDs from the API query, never from validation."""
+    identity = value.strip() if isinstance(value, str) else ""
+    return identity if identity and len(identity) <= 240 and "\x00" not in identity else ""
 
 
 def _now():
@@ -296,8 +299,9 @@ async def load_supplier_invoice_reporting_costs(db: Any, user_id: str, orders: l
             direct = {_text(item.get(key)) for key in ("parent_product_id", "product_id", "salla_product_id") if item.get(key)}
             return bool(identity and (identity in direct or len(product_aliases[identity]) == 1 and direct.intersection(product_aliases[identity][0])))
 
-        journal_ids = sorted({_text(row.get("mz2_txn_group_id")) for row in invoices if row.get("mz2_txn_group_id")})
-        journals = await _read(db, JOURNALS, {"user_id": user_id, "$or": [{"txn_group_id": {"$in": journal_ids}}, {"reversal_of_txn_group_id": {"$in": journal_ids}}]}, projection=JOURNAL_FIELDS) if journal_ids else []
+        journal_ids = sorted({identity for row in invoices if (identity := _journal_id(row.get("mz2_txn_group_id")))})
+        from accounting_ledger_v2 import read_supplier_invoice_journal_evidence_v2
+        journals = await read_supplier_invoice_journal_evidence_v2(db, user_id=user_id, txn_group_ids=journal_ids) if journal_ids else []
         journal_groups = defaultdict(list)
         reversals = set()
         for journal in journals:
@@ -341,8 +345,9 @@ async def load_supplier_invoice_reporting_costs(db: Any, user_id: str, orders: l
                         or invoice.get("financial_integrity_verified") is False
                         or (invoice.get("supplier_snapshot") or {}).get("id", invoice.get("supplier_id")) != invoice.get("supplier_id")):
                     raise ValueError("supplier_invoice_approval_invalid")
-                gid = _text(invoice.get("mz2_txn_group_id"))
-                if invoice.get("mz2_financial_contract") and not gid:
+                gid = _journal_id(invoice.get("mz2_txn_group_id"))
+                raw_gid = invoice.get("mz2_txn_group_id")
+                if (invoice.get("mz2_financial_contract") or raw_gid is not None and raw_gid != "") and not gid:
                     raise ValueError("supplier_invoice_journal_evidence_missing")
                 if gid:
                     from supplier_native_invoice_v2 import invoice_digest

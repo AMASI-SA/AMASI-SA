@@ -88,6 +88,41 @@ modified badge test and production build.
 
 ## Release state and next action
 
+PR: https://github.com/AMASI-SA/AMASI-SA/pull/1989.
+
+### First exact-head CI and reviewed follow-up
+
+Candidate `6664a4600fa7218189666ab07e4a7b126fdedbf9` passed the sold-report
+workflow (379 backend tests, 131 frontend tests across 8 suites), the supplier
+display frontend (58 tests and production build), and the native dashboard
+runtime gate. That gate compared exactly 164 responses in each of three arms;
+all four XML reports had zero failures, errors and skips. Its regression step
+passed 271 tests and 5 subtests.
+
+All four new native invoice/report revision tests passed on the disposable
+Mongo replica set. Three other assertions correctly blocked the first candidate:
+one duplicate dashboard source pin, the raw accounting collection boundary,
+and the protected invoice-close source hash. These were resolved as follows:
+
+- The duplicate pin now names the same independently reviewed reducer; its
+  observer, cooperative parity and read-count assertions remain intact.
+- Journal proof now passes through a narrow public accounting API with fixed
+  owner/ID/reversal scope and projection. The raw-access gate is unchanged.
+- Only the exact reviewed transactional revision condition is normalized in
+  the invoice-close gate; every original financial function/file hash remains.
+
+The follow-up accounting/helper/report suite passed 142 tests. The observer and
+financial-boundary checks passed 21 tests. Independent review approved the
+follow-up with 108 focused tests passing. The new consumer has no accounting
+AST access violations. The optional repository-wide validator's six private
+imports in four unrelated modules were confirmed unchanged from the production
+base; those modules and that validator were not modified.
+
+The native invoice workflow now runs the new proof and revision tests when
+the accounting API changes. Clean final-head CI, including the previously
+blocked 200-piece close/concurrency/rollback stages, remains required. The PR
+body records the latest exact candidate SHA and final CI handoff evidence.
+
 Production changed: **NO**. No merge, Release Guard lease, adapter rehearsal,
 publish, database repair, supplier write, or application release performed.
 The earlier Android/shipping publication belongs to a different completed task

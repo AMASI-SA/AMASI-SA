@@ -6,6 +6,9 @@ from decimal import Decimal
 import pytest
 from mongomock_motor import AsyncMongoMockClient
 
+from accounting_ledger_v2 import (
+    GROUPS_COLLECTION, AccountingLedgerV2Error, read_supplier_invoice_journal_evidence_v2,
+)
 import supplier_invoice_reporting_costs as reporting
 from order_cost_authority import calculate_catalog_line_cost, line_fingerprint
 
@@ -463,7 +466,8 @@ async def test_legacy_missing_variant_is_not_a_source_contradiction(monkeypatch)
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("bad", [None, "missing_group", "missing_id", "draft", "reversal", "hash"])
+@pytest.mark.parametrize("bad", [None, "missing_group", "missing_id", "draft", "reversal", "hash",
+    "boolean_id", "object_id", "long_id", "nul_id"])
 async def test_native_journal_digest_and_reversal_guard(monkeypatch, bad):
     from supplier_native_invoice_v2 import invoice_digest
     row, inv = item(), invoice()
@@ -475,13 +479,21 @@ async def test_native_journal_digest_and_reversal_guard(monkeypatch, bad):
         groups = []
     elif bad == "missing_id":
         inv.pop("mz2_txn_group_id")
+    elif bad == "boolean_id":
+        inv["mz2_txn_group_id"] = True
+    elif bad == "object_id":
+        inv["mz2_txn_group_id"] = {"$ne": None}
+    elif bad == "long_id":
+        inv["mz2_txn_group_id"] = "g" * 241
+    elif bad == "nul_id":
+        inv["mz2_txn_group_id"] = "bad\x00identity"
     elif bad == "draft":
         group["status"] = "draft"
     elif bad == "reversal":
         groups.append({"user_id": OWNER, "txn_group_id": "reverse", "status": "posted", "reversal_of_txn_group_id": "native-group"})
     elif bad == "hash":
         group["metadata"]["invoice_digest"] = "not-the-invoice"
-    result = resolve(row, catalog(row), await authority(monkeypatch, row, invoices=[inv], extra={reporting.JOURNALS: groups}))
+    result = resolve(row, catalog(row), await authority(monkeypatch, row, invoices=[inv], extra={GROUPS_COLLECTION: groups}))
     assert result["calculation_cost_available"] is (bad is None)
 
 
@@ -538,3 +550,108 @@ async def test_fractional_current_quantity_cannot_hide_received_unit_contradicti
     result = resolve(row, cost, proof)
     assert result["calculation_cost_available"] is False
     assert "supplier_receipt_quantity_mismatch" in result["missing_cost_reasons"]
+
+
+class JournalProofDB:
+    """The public proof API gets one projected read and no storage mutations."""
+    def __init__(self, db):
+        self.db, self.calls = db, []
+
+    def __getitem__(self, name):
+        assert name == GROUPS_COLLECTION
+        return self
+
+    def find(self, query, projection):
+        self.calls.append((deepcopy(query), deepcopy(projection)))
+        return self.db[GROUPS_COLLECTION].find(query, projection)
+
+
+class NoJournalReads:
+    def __getitem__(self, name):
+        raise AssertionError("Empty or invalid proof scopes must not read storage")
+
+
+@pytest.mark.asyncio
+async def test_public_supplier_journal_proof_is_scoped_projected_and_keeps_conflicts():
+    db = AsyncMongoMockClient()["supplier-journal-proof"]
+    await db[GROUPS_COLLECTION].insert_many([
+        {"user_id": OWNER, "txn_group_id": "g1", "status": "posted", "notes": "excluded",
+         "metadata": {"invoice_digest": "digest", "supplier_invoice_id": "invoice", "other": "excluded"}},
+        {"user_id": OWNER, "txn_group_id": "g1", "status": "draft", "operation_id": "unexpected"},
+        {"user_id": OWNER, "txn_group_id": "reverse", "status": "draft", "reversal_of_txn_group_id": "g1"},
+        {"user_id": "foreign-owner", "txn_group_id": "g1", "status": "posted"},
+        {"user_id": "foreign-owner", "txn_group_id": "foreign-reversal", "reversal_of_txn_group_id": "g1"},
+        {"user_id": OWNER, "txn_group_id": "unrelated", "status": "posted"},
+    ])
+    readonly = JournalProofDB(db)
+    rows = await read_supplier_invoice_journal_evidence_v2(readonly, user_id=OWNER, txn_group_ids=["g1", "g1"])
+    assert len(rows) == 3
+    assert [row["txn_group_id"] for row in rows] == ["g1", "g1", "reverse"]
+    assert rows[1]["status"] == "draft"
+    assert rows[2]["reversal_of_txn_group_id"] == "g1"
+    assert rows[0]["metadata"] == {"invoice_digest": "digest", "supplier_invoice_id": "invoice"}
+    assert all(set(row) <= {"txn_group_id", "reversal_of_txn_group_id", "status", "metadata"} for row in rows)
+    assert readonly.calls == [(
+        {"user_id": OWNER, "$or": [{"txn_group_id": {"$in": ["g1"]}}, {"reversal_of_txn_group_id": {"$in": ["g1"]}}]},
+        {"_id": 0, "txn_group_id": 1, "reversal_of_txn_group_id": 1, "status": 1,
+         "metadata.invoice_digest": 1, "metadata.supplier_invoice_id": 1},
+    )]
+
+
+@pytest.mark.asyncio
+async def test_public_supplier_journal_proof_empty_scope_performs_no_read():
+    assert await read_supplier_invoice_journal_evidence_v2(NoJournalReads(), user_id=OWNER, txn_group_ids=[]) == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("ids", ["g1", {"$ne": None}, [""], [True], [7], [None], [{"$ne": None}]])
+async def test_public_supplier_journal_proof_rejects_nonidentities_without_storage_access(ids):
+    with pytest.raises(AccountingLedgerV2Error):
+        await read_supplier_invoice_journal_evidence_v2(NoJournalReads(), user_id=OWNER, txn_group_ids=ids)
+
+
+@pytest.mark.asyncio
+async def test_public_supplier_journal_proof_rejects_invalid_owner_without_storage_access():
+    with pytest.raises(AccountingLedgerV2Error, match="user_id"):
+        await read_supplier_invoice_journal_evidence_v2(NoJournalReads(), user_id={"$ne": None}, txn_group_ids=["g1"])
+
+
+@pytest.mark.asyncio
+async def test_public_supplier_journal_proof_bounds_input_and_never_truncates_conflicts(monkeypatch):
+    import accounting_ledger_v2 as ledger
+    monkeypatch.setattr(ledger, "MAX_SUPPLIER_INVOICE_PROOF_GROUPS", 1)
+    with pytest.raises(AccountingLedgerV2Error) as input_error:
+        await read_supplier_invoice_journal_evidence_v2(NoJournalReads(), user_id=OWNER, txn_group_ids=["g1", "g2"])
+    assert input_error.value.code == "accounting_v2_supplier_invoice_proof_scope_too_large"
+    db = AsyncMongoMockClient()["supplier-journal-proof-overflow"]
+    await db[GROUPS_COLLECTION].insert_many([
+        {"user_id": OWNER, "txn_group_id": "g1", "status": "posted"},
+        {"user_id": OWNER, "txn_group_id": "g1", "status": "draft"},
+    ])
+    with pytest.raises(AccountingLedgerV2Error) as output_error:
+        await read_supplier_invoice_journal_evidence_v2(JournalProofDB(db), user_id=OWNER, txn_group_ids=["g1"])
+    assert output_error.value.code == "accounting_v2_supplier_invoice_proof_scope_too_large"
+
+
+@pytest.mark.asyncio
+async def test_non_native_invoice_never_calls_journal_proof_api(monkeypatch):
+    import accounting_ledger_v2 as ledger
+
+    async def forbidden(*args, **kwargs):
+        raise AssertionError("No native transaction IDs means no journal proof call")
+
+    monkeypatch.setattr(ledger, "read_supplier_invoice_journal_evidence_v2", forbidden)
+    row = item()
+    proof = await authority(monkeypatch, row)
+    assert resolve(row, catalog(row), proof)["calculation_cost_available"] is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stored_gid, complete", [(0, False), (False, False), ([], False), ({}, False), (None, True), ("", True)])
+async def test_explicit_malformed_native_identity_cannot_disappear_as_legacy(monkeypatch, stored_gid, complete):
+    row, inv = item(), invoice()
+    inv["mz2_txn_group_id"] = stored_gid
+    # No native contract tag: only absent/None/empty text retain compatibility
+    # with legacy invoices; an explicit malformed ID is contradictory proof.
+    proof = await authority(monkeypatch, row, invoices=[inv])
+    assert resolve(row, catalog(row), proof)["calculation_cost_available"] is complete
