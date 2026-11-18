@@ -34,18 +34,22 @@ def current_status(value):
     return states.pop() if len(states) == 1 else None
 
 
-def _reference_rows(raw):
+def _reference_rows(raw, *, include_projections=True):
     """Enumerate provider reference locations, never the order's own id."""
     shipping = raw.get('shipping') or {}
     shipments = raw.get('shipments') or []
     rows = list(shipments) if isinstance(shipments, list) else [shipments] if shipments else []
-    rows.extend(row for row in (raw.get('shipment'), raw.get('salla_shipping_current')) if row is not None)
+    rows.extend(row for row in (raw.get('shipment'),) if row is not None)
+    if include_projections and raw.get('salla_shipping_current') is not None:
+        rows.append(raw['salla_shipping_current'])
     if isinstance(shipping, dict):
         rows.extend(row for row in (shipping.get('shipment'), {**shipping, 'id': shipping.get('shipment_id')}) if row is not None)
     elif shipping:
         rows.append(shipping)
-    rows.append({'id': raw.get('salla_shipment_id'), **{key: raw.get(key) for key in (
-        'tracking_number', 'tracking_id', 'shipping_number', 'awb', 'tracking', 'shipping_company_code', 'shipping_company')}})
+    if include_projections:
+        rows.append({'id': raw.get('salla_shipment_id'), **{key: raw.get(key) for key in (
+            'tracking_number', 'tracking_id', 'shipping_number', 'awb', 'tracking', 'shipping_company_code', 'shipping_company')}})
+        rows.extend({'status': raw[key]} for key in ('shipping_status', 'shipment_status') if raw.get(key) is not None)
     return rows
 
 
@@ -96,12 +100,20 @@ def _same_status_carrier(current, observed, setup, owner):
         return False
 
 
-def _bind_status_identity(raw, current, shipment, waybill, version, shipment_conflicts, *, setup, owner):
+def _bind_status_identity(raw, current, shipment, waybill, version, shipment_conflicts, *, setup, owner, as_of):
     """Require agreement of every present reference without inventing a label."""
     observed = extract_shipping(raw)
-    if current.get('superseded_shipment_ids') or not observed or not _same_status_carrier(current, observed, setup, owner):
+    if (current.get('superseded_shipment_ids') or not _same_status_carrier(current, current, setup, owner)
+            or observed and not _same_status_carrier(current, observed, setup, owner)):
         _fail('status_identity_conflict')
-    rows = [*_reference_rows(raw), {**observed, 'id': observed.get('shipment_id')}]
+    # Canonical current shipping is independently maintained by shipment reads;
+    # sparse order envelopes need not repeat its carrier, AWB, or provider clock.
+    if any(_instant(current[key]) > as_of for key in ('provider_updated_at', 'carrier_updated_at', 'shipment_updated_at')
+           if current.get(key) is not None):
+        _fail('status_identity_conflict')
+    rows = _reference_rows(raw)
+    if observed:
+        rows.append({**observed, 'id': observed.get('shipment_id')})
     identities = {'shipment': {shipment} if shipment else set(), 'waybill': {waybill} if waybill else set()}
     for row in rows:
         if not isinstance(row, dict) or _inactive(row):
@@ -124,7 +136,10 @@ def _bind_status_identity(raw, current, shipment, waybill, version, shipment_con
         _fail('status_identity_conflict')
     if any((kind, value) in shipment_conflicts for kind, values in identities.items() for value in values):
         _fail('shipment_shared_by_orders')
-    if shipment and waybill:
+    native_label = any(isinstance(row, dict) and _text(row.get('id') or row.get('shipment_id'))
+                       and any(kind == 'waybill' and _text(value) for kind, value in _references(row))
+                       for row in _reference_rows(raw, include_projections=False))
+    if shipment and waybill and native_label:
         candidates, selected, nested = _shipment_rows(raw, shipment)
         # The generic display extractor can omit a code-only shipment beneath
         # a name-only carrier. Every selected native row was independently
@@ -132,8 +147,8 @@ def _bind_status_identity(raw, current, shipment, waybill, version, shipment_con
         original_awb = any(kind == 'waybill' and _text(value) == waybill
                            for row in selected for kind, value in _references(row))
         if (len(selected) != len(candidates) or not original_awb
-                or observed.get('shipment_id') not in (None, shipment)
-                or observed.get('tracking_number') not in (None, waybill)
+                or (observed or {}).get('shipment_id') not in (None, shipment)
+                or (observed or {}).get('tracking_number') not in (None, waybill)
                 or nested and _text(nested.get('id') or nested.get('shipment_id')) != shipment):
             _fail('status_identity_conflict')
     return {key: next(iter(identities[kind]), None) for key, kind in (('shipment_id', 'shipment'), ('waybill', 'waybill'))}
@@ -165,7 +180,8 @@ def status_recognition(raw, source, current, party, owner, start, end, shipment,
               source.get('order_status_native'))
     if any(current_status(value) != status for value in copies if value is not None):
         _fail('order_status_conflict')
-    references = _bind_status_identity(raw, current, shipment, waybill, version, shipment_conflicts, setup=setup, owner=owner)
+    references = _bind_status_identity(raw, current, shipment, waybill, version, shipment_conflicts,
+                                       setup=setup, owner=owner, as_of=end)
     return {'recognition_basis': STATUS_BASIS, 'recorded_at': end.isoformat(),
             'order_created_at': created.isoformat(), 'observed_order_status': status,
             'source_updated_at': version.isoformat(), 'identity_scope': 'order_status', **references}

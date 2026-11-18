@@ -299,3 +299,87 @@ def test_apply_boundary_rejects_corrupted_status_evidence_atomically(change):
     assert state == before
     assert len(issues) == 1
 
+
+def sparse_order_fixture(status='completed'):
+    data, state = fixture(old=False, current=status, at=None)
+    source = data['unified_orders'][0]
+    raw = source['raw_by_source']['salla_direct']
+    raw.pop('shipping')
+    raw.pop('shipments')
+    raw.update(delivery_method='shipping', shipping_status='delivering')
+    source['salla_shipping_current'].update(source_kind='shipment', company_code='synthetic-aramex-code',
+        company_name='أرامكس - شحن دولي', provider_updated_at=NOW, shipment_updated_at=NOW)
+    state['courier_tariffs'][0].update(keys=['synthetic-aramex-code'],
+        identity_match='exact', salla_carrier_key='synthetic-aramex-code')
+    return data, state
+
+
+@pytest.mark.parametrize('status', ['completed', 'out_for_delivery', 'delivered'])
+def test_trusted_separate_current_shipment_does_not_require_a_duplicate_order_envelope(status):
+    data, state = sparse_order_fixture(status)
+    saved = calculate(data, state)
+    movement, = saved['movements']
+    fact = saved['engine']['facts']['prepaid_shipping:100']
+    assert movement['amount'] == '34.50' and movement['bank_id'] == 'salla-cash'
+    assert fact['completed_at'] is None and fact['recorded_at'] == NOW
+    assert (fact['shipment_id'], fact['waybill']) == ('shipment', 'TEST-AWB')
+    assert fact['source_carrier_key'] == 'synthetic-aramex-code'
+    assert calculate(data, saved)['movements'] == saved['movements']
+
+
+@pytest.mark.parametrize('shape', ['carrier', 'shipment_id', 'waybill', 'shipment_without_awb', 'root_references'])
+def test_sparse_present_raw_evidence_can_agree_without_repeating_the_complete_current_label(shape):
+    data, state = sparse_order_fixture()
+    raw = data['unified_orders'][0]['raw_by_source']['salla_direct']
+    if shape == 'carrier':
+        raw['shipping'] = {'company_code': 'synthetic-aramex-code', 'company': 'Aramex International'}
+    elif shape == 'shipment_id':
+        raw['shipping'] = {'shipment_id': 'shipment'}
+    elif shape == 'waybill':
+        raw['shipping'] = {'tracking_number': 'TEST-AWB'}
+    elif shape == 'shipment_without_awb':
+        raw['shipments'] = [{'id': 'shipment', 'company': {'code': 'synthetic-aramex-code'}}]
+    else:
+        raw.update(salla_shipment_id='shipment', tracking_number='TEST-AWB')
+    assert calculate(data, state)['movements'][0]['amount'] == '34.50'
+
+
+@pytest.mark.parametrize('conflict', ['raw_carrier', 'raw_waybill', 'raw_shipment', 'raw_inactive',
+    'native_future', 'current_missing', 'current_unapproved', 'current_source_kind', 'current_inactive',
+    'current_future', 'stale_canonical'])
+def test_sparse_order_does_not_erase_present_contradictions_or_current_authority(conflict):
+    data, state = sparse_order_fixture()
+    source = data['unified_orders'][0]
+    raw = source['raw_by_source']['salla_direct']
+    if conflict == 'raw_carrier':
+        raw['shipping_company'] = 'iMile'
+    elif conflict == 'raw_waybill':
+        raw['tracking_number'] = 'another-waybill'
+    elif conflict == 'raw_shipment':
+        raw['salla_shipment_id'] = 'another-shipment'
+    elif conflict == 'raw_inactive':
+        raw['shipping_status'] = 'cancelled'
+    elif conflict == 'native_future':
+        raw['shipments'] = [{'id': 'shipment', 'created_at': '2026-10-08T00:00:00+00:00'}]
+    elif conflict == 'current_missing':
+        source.pop('salla_shipping_current')
+    elif conflict == 'current_unapproved':
+        source['salla_shipping_current']['company_code'] = 'another-code'
+    elif conflict == 'current_source_kind':
+        source['salla_shipping_current']['source_kind'] = 'display_guess'
+    elif conflict == 'current_inactive':
+        source['salla_shipping_current']['status'] = 'cancelled'
+    elif conflict == 'current_future':
+        source['salla_shipping_current']['shipment_updated_at'] = '2026-10-08T00:00:00+00:00'
+    else:
+        source['g47_salla_snapshot']['requires_authoritative_refresh'] = True
+    assert not calculate(data, state)['movements']
+
+
+def test_independent_current_shipment_clock_can_follow_the_order_clock():
+    data, state = sparse_order_fixture()
+    source = data['unified_orders'][0]
+    source['raw_by_source']['salla_direct']['updated_at'] = '2026-10-07T09:00:00+00:00'
+    source['g47_salla_snapshot']['source_updated_at'] = '2026-10-07T09:00:00+00:00'
+    assert calculate(data, state)['movements'][0]['amount'] == '34.50'
+

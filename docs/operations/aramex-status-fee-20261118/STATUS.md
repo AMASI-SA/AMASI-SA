@@ -65,7 +65,7 @@ the accounting rule. No new external messaging is authorized or needed.
   lockfile. Independent review found no blocking report/frontend issue.
 - Fresh read-only inspection of the shared host confirmed base J, no tracked
   changes and `active:false`; no shared source mutation or publication occurred.
-- Final integrated backend slice: **490 passed, zero failures/skips**, including
+- Final integrated backend slice: **510 passed, zero failures/skips**, including
   source-to-ledger policy, all three undated statuses, optional/full labels,
   approved name/code variants, strict dates, source/identity conflicts, tariffs,
   foreign customer currency, native overlap, immutable replay and existing
@@ -78,6 +78,18 @@ the accounting rule. No new external messaging is authorized or needed.
   Review corrections closed omitted raw references, cross-order raw/current
   reference conflicts, contradictory/legitimate Aramex name variants and
   approved name-only/code-only representation mismatches.
+- A final native-source inspection exposed a valid sparse order response whose
+  shipping details arrive independently. Twenty added regressions cover this
+  shape and present contradictions; nine positive cases first failed against
+  source checkpoint `588d251e2ee664e3aa826211037f572b9d1a269b`.
+  The approved current projection is now sufficient when duplicate raw shipping
+  fields are absent. Present raw fields remain validated, and full native-label
+  proof is required when a full native label actually exists. Independent
+  shipment clocks are bounded by the report observation, not the order clock.
+  Independent review approved this narrow correction without a blocking issue.
+- The earlier A588 candidate intent and readiness run are superseded. No intent
+  B was created from them and no production action occurred. Generate and
+  validate a fresh candidate artifact for the commit containing this correction.
 - Local Mongo was not running on `127.0.0.1:27305`: ten additional real-Mongo
   review cases failed at connection setup before application assertions. No
   waiver or skip was added. The official real-Mongo CI gate must pass.
