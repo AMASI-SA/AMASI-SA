@@ -65,8 +65,9 @@ async def snapshot(bundle_db, orders, *, settings=None, now=PAST_NOW, date_to=DA
 
 def test_default_observer_hooks_preserve_the_exact_frozen_product_oracle():
     source = inspect.getsource(dashboard.build_mezan_v2_product_cost)
-    # Existing reviewed oracle bytes; no replacement of its business policy.
-    assert hashlib.sha256(source.rstrip().encode()).hexdigest() == "9328bb53c707ed88b66b7b72c23ec466039215e715e8d1c0ec06c316f9040daa"
+    # Exact independently reviewed received-unit invoice cost rule. Observer
+    # hooks must preserve the shared reducer, its output and all read counts.
+    assert hashlib.sha256(source.rstrip().encode()).hexdigest() == "0d5a1726a6cb805a464ab6c0d0fa450e6e5e35cad67e8bf338fa8249502fc196"
     before = ast.parse(source).body[0]
     adopted = ast.parse(inspect.getsource(dashboard.build_mezan_v2_product_cost_cooperative)).body[0]
     assert [arg.arg for arg in adopted.args.kwonlyargs] == ["include_product_rows", "cost_collector"]

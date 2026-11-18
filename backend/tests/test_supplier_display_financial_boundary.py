@@ -5,6 +5,7 @@ excludes those transport fields from the historic native financial payload hash.
 Close now checks earlier invoices for the same piece and charge component
 before posting. The transactional duplicate tests cover this pinned change.
 The remaining posting/integrity/display functions stay pinned independently.
+The received-cost report extension changes only the transactional cache revision.
 accounting_atomic is pinned to current Production 8c9ef8cd, unchanged here.
 """
 import ast, hashlib
@@ -53,6 +54,21 @@ def test_approved_close_posting_and_service_linkage_are_unchanged():
             assert segment.count(current_lock_check) == 1
             assert original_lock_check not in segment
             segment = segment.replace(current_lock_check, original_lock_check, 1)
+            # Received supplier invoices now change report authority even at
+            # the configured price. Admit only this reviewed invalidation
+            # condition, inside the same close transaction. The native report
+            # revision suite proves once-only replay, experiment exclusion and
+            # rollback. Preserve the ORIGINAL hash for posting and linkage.
+            current_revision_check = '''            # A committed supplier invoice now replaces the report's expected
+            # cost even when its price equals today's configuration. Publish
+            # that authority change with the same transaction as the receipt.
+            if not is_experiment:'''
+            original_revision_check = '''            if not is_experiment and (
+                invoice.get("price_changes") or added_pairs
+            ):'''
+            assert segment.count(current_revision_check) == 1
+            assert original_revision_check not in segment
+            segment = segment.replace(current_revision_check, original_revision_check, 1)
         actual[node.name] = hashlib.sha256(segment.encode()).hexdigest()
     assert actual==FUNCTION_HASHES
     for path,expected in FILE_HASHES.items():

@@ -4,6 +4,10 @@ on:
     branches: [hotfix/prod-snap-meta-final]
     paths:
       - backend/supplier_native_invoice_v2.py
+      - backend/accounting_ledger_v2.py
+      - backend/supplier_invoice_reporting_costs.py
+      - backend/tests/test_supplier_invoice_reporting_costs.py
+      - backend/tests/test_supplier_invoice_report_revision.py
       - backend/supplier_debit_identity_v2.py
       - backend/supplier_debit_setup_atomic.py
       - backend/supplier_receiving_routes.py
@@ -70,6 +74,8 @@ jobs:
           python -m pytest -q backend/tests/test_supplier_debit_identity_v2.py
           backend/tests/test_supplier_debit_setup_atomic.py
           backend/tests/test_supplier_native_invoice_v2.py
+          backend/tests/test_supplier_invoice_reporting_costs.py
+          backend/tests/test_supplier_invoice_report_revision.py
           backend/tests/test_supplier_receiving.py
           backend/tests/test_supplier_refresh_safety.py
           backend/tests/test_supplier_refresh_wrapper.py

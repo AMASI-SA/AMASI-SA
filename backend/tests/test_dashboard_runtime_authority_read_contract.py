@@ -47,8 +47,8 @@ def evidence_pair(orders=None):
 def test_exact_cost_and_traffic_reads_preserve_the_raw_evidence_and_original_oracle():
     runtime, baseline = evidence_pair()
     original = copy.deepcopy((runtime, baseline))
-    assert runtime['commands'] == {'find': 49, 'aggregate': 2}
-    assert len(runtime['cost_authority_audit']['commands']) == 6
+    assert runtime['commands'] == {'find': 51, 'aggregate': 2}
+    assert len(runtime['cost_authority_audit']['commands']) == 8
     assert set(runtime['collections']) - set(baseline['collections']) == AUTHORITY_COLLECTIONS | {TRAFFIC_LEDGER}
     assert_runtime_read_contract(runtime, baseline)
     assert (runtime, baseline) == original
@@ -67,18 +67,58 @@ def test_empty_cohort_and_permission_failure_permit_no_authority_queries():
     assert_runtime_read_contract(runtime, baseline)
 
 
-def test_two_bounded_batches_have_eleven_queries_and_exact_disjoint_order_scopes():
+def test_two_bounded_batches_have_fifteen_queries_and_exact_disjoint_order_scopes():
     orders = [{'user_id': 'owner', 'order_number': str(i).zfill(3),
                'products': [{'order_item_id': 'line-' + str(i)}]} for i in range(251)]
     runtime, baseline = evidence_pair(orders)
     commands = runtime['cost_authority_audit']['commands']
-    assert len(commands) == 11
+    assert len(commands) == 15
     first, second = commands[1]['filter'], commands[6]['filter']
     assert len(first['order_number']['$in']) == 250
     assert second['order_number']['$in'] == ['250']
     assert second['order_item_id']['$in'] == ['line-250']
     assert set(first['order_number']['$in']).isdisjoint(second['order_number']['$in'])
+    assert [(row['collection'], row['filter']['order_number']['$in']) for row in commands[11:]] == [
+        ('mezan_preparation_pieces_v1', first['order_number']['$in']),
+        ('mezan_supplier_receiving_events_v1', first['order_number']['$in']),
+        ('mezan_preparation_pieces_v1', second['order_number']['$in']),
+        ('mezan_supplier_receiving_events_v1', second['order_number']['$in']),
+    ]
     assert_runtime_read_contract(runtime, baseline)
+
+
+@pytest.mark.parametrize('collection', [
+    'mezan_preparation_pieces_v1', 'mezan_supplier_receiving_events_v1',
+])
+@pytest.mark.parametrize('defect', [
+    'owner', 'order_scope', 'projection', 'event_type', 'extra_read',
+    'nonempty_receipt', 'invoice_read', 'missing_empty_evidence',
+])
+def test_supplier_receipt_extension_rejects_unreviewed_evidence(collection, defect):
+    runtime, baseline = evidence_pair()
+    commands = runtime['cost_authority_audit']['commands']
+    command = next(row for row in commands if row['collection'] == collection)
+    if defect == 'owner':
+        command['filter']['user_id'] = 'foreign'
+    elif defect == 'order_scope':
+        command['filter']['order_number']['$in'].append('outside-report')
+    elif defect == 'projection':
+        command['projection']['unreviewed_customer_payload'] = 1
+    elif defect == 'event_type':
+        command['filter']['event_type'] = 'unfinalized_scan'
+    elif defect == 'extra_read':
+        commands.append(copy.deepcopy(command))
+        runtime['commands']['find'] += 1
+    elif defect == 'nonempty_receipt':
+        runtime['collections'][collection] = 1
+        runtime['documents'] += 1
+    elif defect == 'invoice_read':
+        runtime['collections']['mezan_supplier_invoices_v2'] = 0
+        runtime['commands']['find'] += 1
+    elif defect == 'missing_empty_evidence':
+        del runtime['collections'][collection]
+    with pytest.raises(AssertionError):
+        assert_runtime_read_contract(runtime, baseline)
 
 
 @pytest.mark.parametrize('defect', [
