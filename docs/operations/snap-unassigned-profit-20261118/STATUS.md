@@ -2,11 +2,11 @@
 
 ## Current state
 
-Current PR: [#1993](https://github.com/AMASI-SA/AMASI-SA/pull/1993), branch `codex/snap-unassigned-profit-20261118-r2`.
+Current PR: [#1993](https://github.com/AMASI-SA/AMASI-SA/pull/1993), **merged**, branch `codex/snap-unassigned-profit-20261118-r2`.
 
 PR #1992 was closed without merging because production advanced during the preceding release's verification. Its frozen source/intent pair remains preserved and must not be deployed. The previous complete record is [07322bbdb2c8c58d8f276b3176cdd942faba1df6](https://github.com/AMASI-SA/AMASI-SA/blob/07322bbdb2c8c58d8f276b3176cdd942faba1df6/docs/operations/snap-unassigned-profit-20261118/STATUS.md).
 
-**Production changed by this task: no.** No live source changes, lease creation or publication by this task.
+**Production GitHub branch changed: yes**, merge M `8761f7b2f80faec29638e1438b8fedefcec64a28`. Live publication has not occurred. Shared-host staging is in progress after fresh inactive-guard and idle-rehearsal checks.
 
 ## Scope and integration
 
@@ -26,6 +26,8 @@ Current production PR #1991 introduced 17 changed/added paths. An independent Gi
 - Source tree: `da532bd626f20662fa7840963d4f183f7f3c2918`
 - Intent-only B2: `7268ab80e0781c288943f290ea020b1b27f1e57d`
 - Deployment B2 tree: `b8bfb1aece57f3f89282216e4171398bd8854c9d`
+- Production merge M: `8761f7b2f80faec29638e1438b8fedefcec64a28`
+- M tree equals B2; A2 → M changes exactly the release intent. Fresh production ref was verified at M.
 - Candidate runtime ID: `rg5-c8f8108755b4a5d612b50e91902fbe83b014b80ce076b3372408f1bf41fc286b`
 - Candidate frontend artifact tree: `1f7da282b51120ea6954d2a799092e07464dd6576e0e9abb994107ec1b3e19be`
 - Candidate build-meta SHA-256: `2c9dd4e546c6ead76090b0afe1d74b8d190aeff51cba1437597616797980f306`
@@ -43,7 +45,8 @@ A2 retained J2's tracked intent; B2 changes only that intent file to the validat
 - Source A2 dashboard checks [44368961767](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44368961767) passed.
 - Candidate artifact `14457802088`, archive digest `5bdc2a62ab3629f519c67ab3e398c4b16590b5ed17254be5e93b34364927a65a`.
 - `load_candidate_release_intent` at exact A2 verified archive digest, source/base, schema and full manifests, exit 0.
-- Required source-A2 security/build checks passed before B2 was frozen. Exact-B2 CI is running in release readiness [44369862714](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44369862714) and the other repository workflows; both host adapter rehearsals have started.
+- Required source-A2 security/build checks passed before B2 was frozen. Exact-B2 release readiness [44369862714](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44369862714), both host adapter rehearsals, required security/build checks, focused dashboard acceptance and review passed before merging.
+- Latest exact-B2 check read at 18:37 UTC: 44 checks, 33 success, 10 skipped, 1 neutral, none pending or failing.
 
 Focused command from `frontend`:
 
@@ -68,7 +71,7 @@ The official filtered status call returned **active:false**, observed around 202
 1. Read AGENTS.md and current PR #1993, fetch and verify exact A2 and current production base J2.
 2. Verify exact B2 above and its local intent-only acceptance; never reconstruct it from the superseded pair.
 3. Collect exact-B2 checks and both host adapter rehearsals. If production advanced again, preserve the frozen pair and produce a new source/intent pair on the new base.
-4. Under existing publication authorization, merge only the reviewed exact B2 on the verified current base. A GitHub merge is not publication; keep shared-host staging separate.
+4. Merge is complete. Recheck production M above and its tree/intent-only contract before any publication; do not merge or rebuild a superseded pair.
 5. Before any change or rehearsal in `/app`, require official guard `active:false`, confirm the current production merge/tree and preserve unrelated work. Never interrupt the preceding release owner.
 6. Run the configured governed adapter, prepare an owned lease only after rehearsal, then prepublish and publish through the ordinary Emergent management controls. Do not use paid chat or Preview.
 7. Require a newer deployment success, official three-round verification and matching lease closure; inspect the live unknown contribution and unchanged operating/final footer.
