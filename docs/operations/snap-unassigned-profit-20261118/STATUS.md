@@ -6,7 +6,7 @@ Current PR: [#1993](https://github.com/AMASI-SA/AMASI-SA/pull/1993), **merged**,
 
 PR #1992 was closed without merging because production advanced during the preceding release's verification. Its frozen source/intent pair remains preserved and must not be deployed. The previous complete record is [07322bbdb2c8c58d8f276b3176cdd942faba1df6](https://github.com/AMASI-SA/AMASI-SA/blob/07322bbdb2c8c58d8f276b3176cdd942faba1df6/docs/operations/snap-unassigned-profit-20261118/STATUS.md).
 
-**Production GitHub branch changed: yes**, merge M `8761f7b2f80faec29638e1438b8fedefcec64a28`. Live publication has not occurred. Shared-host staging and the exact governed adapter rehearsal have succeeded. Next: prepare this task's owned v5 lease, run prepublish immediately before the authorized UI publish, then official verification.
+**Production GitHub branch changed: yes**, merge M `8761f7b2f80faec29638e1438b8fedefcec64a28`. Live publication has not occurred. Shared-host staging and the exact governed adapter rehearsal have succeeded. Owned v5 lease prepared successfully at 18:46:36 UTC. Next: prepublish immediately before the authorized UI publish, then official verification.
 
 ## Scope and integration
 
@@ -87,6 +87,12 @@ Configured command started at 18:42:52 UTC and exited 1 at 18:42:54 UTC before a
 - Frontend package: 1540 files; isolated runtime artifact verified; package tree `d14f725c5f4954c0a59bc726369aaf278af2de30002f935375731713716e90ee`. Build-meta 494297 bytes, SHA-256 `2c9dd4e546c6ead76090b0afe1d74b8d190aeff51cba1437597616797980f306`, application/json contract.
 - Sanitized adapter log SHA-256 `3b615204d31d168901f78697b5288611ec77ac64cfc43bac6fe58280e32efabe`; receipt/proof retained in `/tmp/snap-unassigned-1993-release/adapter-attempt2-result.json` and `adapter-verified-proof.json`. This durable checkpoint records the material evidence.
 - No lease or publication yet; next `python -B scripts/production_release_guard.py prepare --actor snap-unassigned-1993-20261118`, only after another fresh inactive status. Then `prepublish` immediately before one ordinary authorized publication.
+
+## Owned release lease
+
+`python -B scripts/production_release_guard.py prepare --actor snap-unassigned-1993-20261118` passed, exit 0, after fresh inactive status. Prepared at **2026-11-18T18:46:36.083348+00:00**. The lease binds exact source A2, deployment M, protocol 5 and runtime listed above. Both reproducibility passes have artifact tree `1f7da282b51120ea6954d2a799092e07464dd6576e0e9abb994107ec1b3e19be` and build-meta SHA `2c9dd4e546c6ead76090b0afe1d74b8d190aeff51cba1437597616797980f306`, 494297 bytes. Prepare receipt SHA-256 `6e92a4b8784b070f965e1d446d61b6e8953c8109ea6c958cdf8eb03dcfe1cb68`.
+
+**This task owns the active lease. Do not prepare again or change source.** Prepublish and UI publication are next; no publication yet. Existing manager version remains `8a0d442` (100th publication, Nov18 21:06 Riyadh).
 
 ## Exact next safe actions
 
