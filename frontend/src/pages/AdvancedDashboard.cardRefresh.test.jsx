@@ -154,6 +154,7 @@ test.each(["complete", "provisional"])("shared %s spend updates both totals and 
     const platform = () => ({ ...sharedSpend(savedAmount, { complete: true }), spend_quality: quality });
     getDashboardAdsSpend.mockImplementation(async () => platform());
     api.get.mockImplementation(async (url) => url.startsWith(paths.executive) ? { data: {
+        range: { from_date: "2026-11-11", to_date: "2026-11-11" },
         totals: { total_sales: 1000, total_orders: 10, total_ads_cost: canonicalAmount,
             ads_spend_data_complete: status === "complete", ads_spend_amount_available: true,
             ads_spend_provisional: status === "provisional", avg_cost_per_order: canonicalAmount / 10,
@@ -234,7 +235,8 @@ test.each(["complete", "provisional"])("an admitted executive read restores %s p
         if (!url.startsWith(paths.executive)) return responseFor(url);
         const refreshed = new URLSearchParams(url.split("?")[1]).get("refresh") === "true";
         const spend = refreshed ? 200 : 100;
-        return { data: { totals: { total_sales: 1000, total_orders: 10, total_ads_cost: spend,
+        return { data: { range: { from_date: "2026-11-11", to_date: "2026-11-11" },
+        totals: { total_sales: 1000, total_orders: 10, total_ads_cost: spend,
             ads_spend_data_complete: status === "complete", ads_spend_amount_available: true,
             ads_spend_provisional: status === "provisional", avg_cost_per_order: spend / 10,
             overall_roas: 1000 / spend, net_profit: refreshed ? 594 : 697,

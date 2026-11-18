@@ -37,8 +37,12 @@ on:
       - "frontend/src/components/DashboardAdsAccountRow.test.jsx"
       - "frontend/src/components/DashboardAdsPeriodsOverview.jsx"
       - "frontend/src/components/DashboardAdsPeriodsOverview.test.jsx"
+      - "frontend/src/components/DashboardAdsProfitValue.jsx"
+      - "frontend/src/components/DashboardAdsFinalProfit.test.jsx"
       - "frontend/src/lib/dashboardAdsAccountResults.js"
       - "frontend/src/lib/dashboardAdsAccountResults.test.js"
+      - "frontend/src/lib/dashboardExecutiveProfit.js"
+      - "frontend/src/lib/dashboardExecutiveProfit.test.js"
       - "frontend/src/pages/AdvancedDashboard.jsx"
       - "frontend/src/components/PaymentMethodSetupNotice.jsx"
       - "frontend/src/components/PaymentMethodSetupNotice.test.jsx"
@@ -164,8 +168,12 @@ jobs:
           src/components/DashboardAdsSpendCard.manualRefresh.test.jsx
           src/components/DashboardAdsAccountRow.test.jsx
           src/components/DashboardAdsPeriodsOverview.test.jsx
+          src/components/DashboardAdsFinalProfit.test.jsx
           src/lib/dashboardAdsAccountResults.test.js
+          src/lib/dashboardExecutiveProfit.test.js
           src/pages/AdvancedDashboard.cardRefresh.test.jsx
+          src/pages/AdvancedDashboard.latestOrders.test.jsx
+          src/pages/AdvancedDashboard.profitLayout.test.jsx
           src/lib/dashboardPlatformSpendClient.test.js
           src/services/dashboardAdsSpend.test.js
           src/components/DashboardAnalyticsPlacement.test.js

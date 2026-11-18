@@ -103,6 +103,18 @@ test("displaying a bank commission does not deduct it again from canonical costs
     expect(stats).toEqual(before);
 });
 
+test("mapped-order contribution is explicitly partial in the daily and both half-day details", () => {
+    const stats = sampleStats();
+    Object.assign(stats.profit, { complete: false, netProfit: null,
+        assignedOrdersProfitAvailable: true, assignedOrdersProfit: -20.5 });
+    const before = JSON.stringify(stats);
+    enter(renderRow(stats));
+    const rows = financialRows("الربح قبل التشغيل");
+    expect(rows).toHaveLength(3);
+    rows.forEach((row) => expect(row.querySelector("dd").textContent).toBe("-20.50 ر.سجزئي: الطلبات المسندة"));
+    expect(JSON.stringify(stats)).toBe(before);
+});
+
 test("the afternoon remains an empty card before noon, even with a malformed zero payload", () => {
     const stats = sampleStats();
     stats.segments[0].cutoffAt = `${day}T03:00:00+03:00`;

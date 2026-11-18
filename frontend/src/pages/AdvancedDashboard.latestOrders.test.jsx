@@ -812,6 +812,7 @@ function accountProfitPayload(sarAvailable) {
             quality: { status: sarAvailable ? "provisional" : "incomplete", amount_available: sarAvailable, provisional: sarAvailable } },
     ];
     return {
+        range: { from_date: "2026-10-26", to_date: "2026-10-26" },
         totals: { total_sales: 1000, total_orders: 3, total_product_cost: 50, total_shipping_cost: 20,
             total_payment_fees: 5, operating_expenses_total: 10, total_ads_cost: sarAvailable ? 81.32 : null,
             net_profit: sarAvailable ? 700.19 : null, ads_spend_data_complete: false,
@@ -862,11 +863,24 @@ test.each([false, true])("profit detail uses independent saved account expenses,
 test("period changes suppress prior-period account values while waiting for the new saved snapshot", () => {
     const payload = accountProfitPayload(true);
     inspectAccountProfit(payload, (container, root) => {
+        expect(container.querySelector('[data-testid="advanced-profit-net-hero"]').textContent).toContain("700.19");
         act(() => root.render(<ProfitCard data={payload} fromDate="2026-10-27" toDate="2026-10-27" loading />));
         const details = container.querySelector('[data-testid="advanced-profit-ads-details"]');
         expect(details.querySelector('[data-testid="ads-executive-snapchat-account-table"]')).toBeNull();
         expect(details.textContent).toContain("بانتظار بيانات حسابات سناب");
         expect(details.textContent).not.toContain("999");
+        expect(container.querySelector('[data-testid="advanced-profit-net-hero"]').textContent).not.toContain("700.19");
+    });
+});
+
+test.each(["missing", "different"])("an explicit selection hides final net from a %s executive range", (fault) => {
+    const payload = accountProfitPayload(true);
+    if (fault === "missing") delete payload.range;
+    else payload.range = { from_date: "2026-10-25", to_date: "2026-10-25" };
+    inspectAccountProfit(payload, (container) => {
+        expect(container.querySelector('[data-testid="advanced-profit-net-hero"]').textContent).not.toContain("700.19");
+        expect(container.querySelector('[data-testid="advanced-profit-net-margin"]')).toBeNull();
+        expect(payload.totals.net_profit).toBe(700.19);
     });
 });
 

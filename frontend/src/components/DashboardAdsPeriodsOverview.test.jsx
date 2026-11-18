@@ -101,6 +101,17 @@ test("footer cells open two eight-column tables with all accounts and authoritat
     expect(globalThis.fetch).not.toHaveBeenCalled();
 });
 
+test("a mapped-order contribution is labelled partial and cannot replace canonical period totals", () => {
+    const props = fixture();
+    Object.assign(props.records[0].stats.segments[0].profit, { complete: false, netProfit: null,
+        assignedOrdersProfitAvailable: true, assignedOrdersProfit: 0 });
+    click(render(props));
+    expect(cell(row(), "net").textContent).toBe("0.00جزئي: الطلبات المسندة");
+    expect(period("morning").querySelector("thead").textContent).toContain("الربح قبل التشغيل");
+    expect(cell(period("morning").querySelector("tfoot tr"), "net").textContent).toBe("4,677.00");
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+});
+
 test.each([
     [288.53, 288.53, "288.53"],
     [0, 0, "0.00"],

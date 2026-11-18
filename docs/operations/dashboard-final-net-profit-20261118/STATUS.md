@@ -7,7 +7,7 @@
 - Task branch: `codex/dashboard-final-net-profit-20261118`.
 - Reviewed production base: `37a8211c383079711839557ecad6d5f3f0cdd51f`.
 - Follow-up to merged and verified PR #1969. The user reports that Snapchat profit is still unavailable and the account table does not show final net profit after operating expenses.
-- **WIP implementation checkpoint. Frontend validation and integrated review are pending.** The task PR is the canonical record of the exact remote checkpoint SHA and subsequent verification.
+- **WIP implementation checkpoint. Integrated frontend/build acceptance is pending.** Draft [PR #1987](https://github.com/AMASI-SA/AMASI-SA/pull/1987) is the canonical record of the exact remote checkpoint SHA and subsequent verification. Initial remote checkpoint: `7675051cfc746c64bbb0a6208cac64fc822e4621`.
 - **Production changed by this task: no.** No release intent, production merge, lease, deployment, provider refresh, advertising write or financial-data write was performed.
 
 ## Verified diagnosis
@@ -32,8 +32,10 @@ Mapped contributions are not a lower bound: unassigned orders may add either pro
 - Six new backend regression cases first failed on the missing completeness evidence and then passed.
 - Full affected backend suite: **85 passed**, exit 0, with two existing Pydantic warnings.
 - `git diff --check`: passed.
-- Frontend regression cases have been written, including paired real table/executive rendering, partial mapped contributions, negative/zero values, single bank-fee deduction and stale/incomplete source rejection. Execution is pending while the frozen-lockfile dependency installation completes.
-- Independent integrated source review is running. No complete frontend/build/CI acceptance is claimed at this checkpoint.
+- Initial checkpoint CI: the four-platform backend contract job passed. The frontend job ran 444 cases: 440 passed and four existing card-refresh fixtures failed because they omitted the executive period now required for an explicit date selection. The executive-date job ran 173 cases: 171 passed and two existing account-profit fixtures failed for the same missing-period reason.
+- Corrected those fixtures to include their real selected period, preserved all financial assertions, and added explicit missing/mismatched-period rejection cases. Added daily/half-day partial-profit presentation tests and included both new canonical-net suites in the existing four-platform workflow. The initial CI did not execute those new suites; acceptance requires the follow-up checkpoint to run them.
+- Independent integrated source review found and resolved an explicit shared-spend snapshot edge case: a matching date with unavailable total/quality must not expose stale canonical profit. Seven direct helper checks passed after the fix. No remaining blocking source finding was reported. Follow-up fixture/workflow review is pending.
+- Local frozen-lockfile dependency installation is still in progress. No complete frontend/build/CI acceptance is claimed at this checkpoint.
 
 Backend command:
 
@@ -49,6 +51,6 @@ Frontend uses the governed Node 22.23.2 / Yarn 1.22.22 toolchain and the existin
 
 ## Next safe action
 
-Finish dependency installation, run the new and affected frontend suites, resolve concrete failures, inspect the integrated diff and update this checkpoint. Then run the repository-required CI/build gates against the exact reviewed head. Any release must follow the current production-base and v5 A/B procedure; do not reuse PR #1969's release intent or claim that this source-only checkpoint has been published.
+Preserve the fixture/workflow corrections on the task branch, run the expanded frontend suites in exact-head CI and resolve concrete failures. Finish local dependency installation and the repository-required governed build/release rehearsal, then update this checkpoint. Any release must follow the current production-base and v5 A/B procedure; do not reuse PR #1969's release intent or claim that this source-only checkpoint has been published.
 
 Issue #1006 is at its established comment limit. Preserve its body and use this task's PR for the canonical continuation record.
