@@ -6,7 +6,7 @@ Current PR: [#1993](https://github.com/AMASI-SA/AMASI-SA/pull/1993), **merged**,
 
 PR #1992 was closed without merging because production advanced during the preceding release's verification. Its frozen source/intent pair remains preserved and must not be deployed. The previous complete record is [07322bbdb2c8c58d8f276b3176cdd942faba1df6](https://github.com/AMASI-SA/AMASI-SA/blob/07322bbdb2c8c58d8f276b3176cdd942faba1df6/docs/operations/snap-unassigned-profit-20261118/STATUS.md).
 
-**Production GitHub branch changed: yes**, merge M `8761f7b2f80faec29638e1438b8fedefcec64a28`. Live publication completed: new version **`ed5f35c`**, green **Deployment finished Nov 18, 09:56 PM** (Asia/Riyadh), newer than `8a0d442`. Official three-round verification is next; this task still owns its original lease. Production is published but not yet fully verified.
+**Production GitHub branch changed: yes**, merge M `8761f7b2f80faec29638e1438b8fedefcec64a28`. Live publication completed: new version **`ed5f35c`**, green **Deployment finished Nov 18, 09:56 PM** (Asia/Riyadh), newer than `8a0d442`. Official three-round verification started at **18:59:10 UTC** and is running on the original owned lease. Live UI confirmation has passed; production integrity verification is still pending.
 
 ## Scope and integration
 
@@ -105,6 +105,15 @@ Next: wait for explicit newer success/version, then run the unchanged official `
 At approximately 18:57:49 UTC, Manage showed new published version **`ed5f35c`** and the green **Deployment finished Nov 18, 09:56 PM** entry. This is the current UI's explicit successful completion label. The publish control returned to Republish. View Logs exposes recent runtime logs (100 entries), not a Cloud Build transcript; the observed health requests were 200 and UI reported 0 error/0 warning entries. Do not infer build argv or snapshot order from runtime logs or retain unrelated request/customer data.
 
 Next immediate command: unchanged official `python -B scripts/production_release_guard.py verify --url https://mezansalla.com` for the original owned lease, recording full output, exit status, all three checks and final inactive status. Do not republish or reprepare. Dashboard confirmation remains pending.
+
+## Official verification running; live UI passed
+
+- Official verify attempt1 started at **2026-11-18T18:59:10.955811+00:00**, unchanged guard and original owned lease. Receipt directory `/tmp/snap-unassigned-1993-release`, files `verify-attempt1-start.json`, `verify-attempt1.stdout.json`, `verify-attempt1.stderr`; completion will create `verify-attempt1-run.json` and on success `verify-attempt1-summary.json`, `post-verify-status.json`.
+- **Do not start a duplicate verify or call blocking status while it holds the operation mutex.** Observe the task-owned result files/process from an idle terminal. No final verdict yet.
+- Reloaded live dashboard `/dashboard-advanced` on Nov18: the unknown row now displays a numeric **مساهمة الطلبات**. Its own cost breakdown independently explains the number. Morning empty cohort displays 0.00, evening and whole-day contribution agree; advertising spend/bank fields remain unavailable for the unassigned cohort.
+- Operating-expense and final-net footer remained visible; the final net matched the executive summary for the same rendered data snapshot. Only read-only navigation/row expansion was used; no provider refresh or financial write.
+- A customer-free table screenshot was captured as private conversation evidence. No customer data or financial amounts are added to this repository record.
+- Next: collect official verify completion, exact identities/artifact/3checks, and final `active:false`, then finalize this record/PR and user response. Do not merge, reprepare, rebuild or republish.
 
 ## Exact next safe actions
 
