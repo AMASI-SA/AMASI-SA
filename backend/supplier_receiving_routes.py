@@ -2676,8 +2676,17 @@ async def _apply_permanent_supplier_invoice_service(
     }
 
 
+async def ensure_supplier_invoice_identity_index(db: Any) -> None:
+    """Support owner-scoped invoice proof without hiding duplicate identities."""
+    await db[SUPPLIER_INVOICES].create_index(
+        [("user_id", ASCENDING), ("id", ASCENDING)],
+        name="ix_supplier_invoice_identity_v2",
+    )
+
+
 @profiled("indexes")
 async def ensure_supplier_receiving_indexes(db: Any) -> None:
+    await ensure_supplier_invoice_identity_index(db)
     # Both open/cancelling lookup and closed history are personal. The legacy
     # tenant/date index scans colleagues' drafts as the shared tenant grows;
     # the unique open-only index cannot answer an open-or-cancelling read.
@@ -6699,9 +6708,10 @@ def make_supplier_receiving_router(
                     audit_events,
                     session=mongo_session,
                 )
-            if not is_experiment and (
-                invoice.get("price_changes") or added_pairs
-            ):
+            # A committed supplier invoice now replaces the report's expected
+            # cost even when its price equals today's configuration. Publish
+            # that authority change with the same transaction as the receipt.
+            if not is_experiment:
                 await bump_product_cost_revision(
                     db,
                     merchant_id,
@@ -6777,6 +6787,7 @@ __all__ = [
     "SupplierReceivingSessionCloseRequest",
     "SupplierReceivingSessionCreateRequest",
     "ensure_supplier_receiving_indexes",
+    "ensure_supplier_invoice_identity_index",
     "make_supplier_receiving_router",
     "piece_scan_blocker",
     "build_supplier_receiving_invoice",

@@ -21,6 +21,9 @@ on:
       - 'backend/tests/test_sold_financial_report.py'
       - 'frontend/src/components/SoldFinancialReport*'
       - 'backend/order_cost_authority.py'
+      - 'backend/supplier_invoice_reporting_costs.py'
+      - 'backend/tests/test_supplier_invoice_reporting_costs.py'
+      - 'backend/tests/test_supplier_invoice_report_integration.py'
       - 'backend/product_option_cost_routes.py'
       - 'backend/tests/test_product_option_cost_alias_guard.py'
       - 'frontend/src/components/products/ProductOptionCostEditor*'
@@ -77,6 +80,8 @@ jobs:
           backend/tests/test_sold_financial_report.py
           backend/tests/test_sold_products_report_v2.py
           backend/tests/test_order_cost_authority.py
+          backend/tests/test_supplier_invoice_reporting_costs.py
+          backend/tests/test_supplier_invoice_report_integration.py
           backend/tests/test_product_option_cost_alias_guard.py
           backend/tests/test_current_bundle_cost_details.py
           backend/tests/test_report_option_identity.py

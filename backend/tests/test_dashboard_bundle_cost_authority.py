@@ -198,7 +198,7 @@ async def test_refund_policy_is_applied_once_after_frozen_full_cost(db):
 
 
 @pytest.mark.asyncio
-async def test_catalog_components_and_options_are_shared_for_ordinary_products(db):
+async def test_unreceived_ordinary_products_share_current_components_and_options(db):
     await db[RESOURCES].insert_one({"user_id": OWNER, "id": "pack", "unit_cost": 3})
     await db[PRODUCT_RESOURCE_BINDINGS].insert_one({"user_id": OWNER,
         "salla_product_id": "plain", "id": "pack-binding", "resource_id": "pack", "quantity": 2})
@@ -213,9 +213,11 @@ async def test_catalog_components_and_options_are_shared_for_ordinary_products(d
     await db[BINDINGS].update_one({"id": "personalized"}, {"$set": {"direct_amount": 100}})
     result = await build_mezan_v2_product_cost(ReadOnlyDB(db), OWNER, [order])
     sold = await load_sold_products(ReadOnlyDB(db), OWNER, [order])
-    assert result["total"] == 40  # (9 + 2*3 + 5) * 2
-    assert sold[0]["total_cost"] == 40
-    assert sold[0]["unit_cost"] == 20
+    # Report policy uses current costs until a linked supplier receipt exists;
+    # the generic immutable historical resolver keeps its separate contract.
+    assert result["total"] == 618  # (9 + 2*100 + 100) * 2
+    assert sold[0]["total_cost"] == 618
+    assert sold[0]["unit_cost"] == 309
 
 
 @pytest.mark.asyncio
@@ -235,9 +237,11 @@ async def test_current_configured_bundle_cost_applies_to_all_unpriced_sold_units
     assert result["product_rows"][0]["units_sold"] == 4
     assert result["product_rows"][0]["average_unit_cost"] == 55
     assert sold[0]["total_cost"] == 220
-    # New composite estimate adds bounded catalog reads; never N+1 reads
-    # per order. Legacy frozen-order read limits remain unchanged.
-    assert sum(readonly.reads.values()) <= 20
+    # Preserve the catalog-read budget and allow exactly one piece/event pair
+    # for this selected cohort, independent of the number of sold units.
+    for collection in ("mezan_preparation_pieces_v1", "mezan_supplier_receiving_events_v1"):
+        assert readonly.reads[(collection, "find")] == 1
+    assert sum(readonly.reads.values()) - 2 <= 20
     # No snapshot/revision/journal is written by a profitability report.
     assert await db["mezan_order_cost_corrections_v1"].count_documents({}) == 0
     assert await db["mezan_order_item_cost_snapshots_v2"].count_documents({}) == 0
@@ -283,7 +287,13 @@ async def test_reporting_reads_are_batched_instead_of_growing_per_bundle(db):
         single = await builder(single_db, OWNER, orders[:1])
         many = await builder(many_db, OWNER, orders)
         assert single_db.reads == many_db.reads
-        assert sum(many_db.reads.values()) <= 15
+        # One bounded preparation-piece and final-receipt read covers the
+        # selected cohort. Empty receipt evidence must not load invoices.
+        for collection in ("mezan_preparation_pieces_v1", "mezan_supplier_receiving_events_v1"):
+            assert many_db.reads[(collection, "find")] == 1
+        for collection in ("mezan_supplier_invoices_v2", "mezan_suppliers_v2", "accounting_journal_groups_v2"):
+            assert not any(count for (name, _), count in many_db.reads.items() if name == collection)
+        assert sum(many_db.reads.values()) <= 17
         if isinstance(many, list):
             assert many[0]["total_cost"] == 17600
         else:
@@ -567,7 +577,9 @@ async def test_unpriced_current_bundle_reads_are_constant_across_order_count(db)
     assert one_cost["total"] == 55
     assert many_cost["total"] == 1650
     assert first_db.reads == many_db.reads
-    assert sum(many_db.reads.values()) <= 20
+    for collection in ("mezan_preparation_pieces_v1", "mezan_supplier_receiving_events_v1"):
+        assert many_db.reads[(collection, "find")] == 1
+    assert sum(many_db.reads.values()) - 2 <= 20
 
 
 @pytest.mark.asyncio

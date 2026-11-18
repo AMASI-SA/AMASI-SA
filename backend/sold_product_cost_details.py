@@ -44,15 +44,17 @@ def detail_group(cost, item, quantity):
             cells = [{"key": "unresolved-cost", "label": "بيانات التكلفة",
                       "kind": "product", "status": "unresolved", "unit_cost": None}]
     # Group by the priced composition, not customer-entered names, messages,
-    # colour labels, order identities or the provenance of an equal price.
-    # Distinct services and applicability states remain distinct even when
-    # their overall unit totals happen to match.
+    # colour labels or order identities. Received invoice costs and unreceived
+    # estimates remain distinguishable even when their unit prices happen to
+    # match; one must not inherit the other's receipt stage during grouping.
     signature = {"cells": sorted([
                     {**{k: c.get(k) for k in ("key", "kind", "status")},
                      "unit_cost": str(decimal(c["unit_cost"]).normalize())
                      if decimal(c.get("unit_cost")) is not None else None}
                     for c in cells], key=lambda c: c["key"]),
                  "complete": complete, "unit": str((known / quantity).normalize()),
+                 "cost_stage": cost.get("cost_stage"),
+                 "cost_detail_scope_complete": cost.get("cost_detail_scope_complete") is True,
                  "reasons": sorted(cost.get("missing_cost_reasons") or [])}
     key = hashlib.sha256(json.dumps(signature, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
     return {"key": key, "cells": cells, "quantity": float(quantity),
@@ -60,19 +62,23 @@ def detail_group(cost, item, quantity):
             "total_cost": float(known) if complete else None,
             "known_unit_cost": float(known / quantity), "known_total_cost": float(known),
             "complete": complete, "cost_stage": cost.get("cost_stage"),
+            "cost_detail_scope_complete": cost.get("cost_detail_scope_complete") is True,
             "missing_cost_reasons": cost.get("missing_cost_reasons") or []}
 
 
 def detail_groups(cost, item, quantity):
-    """Split proven actual units only when their coverage matches authority."""
+    """Keep received and estimated units when their known amounts reconcile."""
     entries = cost.get("cost_detail_units") or []
-    if entries and cost.get("calculation_cost_available"):
+    if entries and all(isinstance(entry, dict) for entry in entries):
         counts = [decimal(entry.get("quantity")) for entry in entries]
         amounts = [decimal(entry.get("line_total")) for entry in entries]
+        complete = bool(cost.get("calculation_cost_available"))
+        entry_complete = [bool(entry.get("calculation_cost_available", complete)) for entry in entries]
         if (all(count is not None and count > 0 for count in counts)
-                and all(amount is not None for amount in amounts)
+                and all(amount is not None and amount >= 0 for amount in amounts)
                 and sum(counts, Decimal(0)) == quantity
                 and sum(amounts, Decimal(0)) == decimal(cost.get("line_total"))
+                and all(entry_complete) == complete
                 and all(entry.get("cost_detail_cells") for entry in entries)):
             return [detail_group({**cost, **entry}, item, count)
                     for entry, count in zip(entries, counts)]
@@ -102,6 +108,17 @@ def finish_groups(row, resources=None):
                 if resource.get("kind") == "service":
                     cell["kind"] = "service"
             columns.setdefault(cell["key"], {k: cell.get(k) for k in ("key", "label", "kind", "resource_id")})
+    for group in groups:
+        # The report resolver can prove that this slice's entire priced
+        # composition is present. A service charged only on another received
+        # piece then has no additional charge here. Legacy frozen totals do not
+        # prove a breakdown and must keep missing cells explicitly unavailable.
+        if not group["complete"] or not group.get("cost_detail_scope_complete"):
+            continue
+        present = {cell["key"] for cell in group["cells"]}
+        for key, column in columns.items():
+            if key not in present:
+                group["cells"].append({**column, "status": "not_required", "unit_cost": None})
     row["cost_columns"] = list(columns.values())
     row["cost_groups"] = groups
     row["missing_cost_reasons"] = sorted(row.pop("_reasons"))
