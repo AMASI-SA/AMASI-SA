@@ -166,7 +166,11 @@ def install_workspace_review_routes(router, db, current_user, scope):
             value = exact_money(review.get('amount'))
             # The importer stores fixed two-decimal strings. Numeric and
             # unpadded legacy values are accepted without widening the amount.
-            amount_values = [value, format(Decimal(value).normalize(), 'f'), float(value)]
+            decimal_value = Decimal(value)
+            amount_values = [value, format(decimal_value.normalize(), 'f')]
+            legacy_numeric = float(value)
+            if Decimal(str(legacy_numeric)) == decimal_value:
+                amount_values.append(legacy_numeric)
             query = {'user_id': owner, 'bank_account_id': bank, 'status': 'unclassified',
                 'direction': 'in', 'currency': 'SAR', 'amount': {'$in': amount_values},
                 'source': {'$in': ['bank_statement_import', 'manual_reconciled_bank_statement']},

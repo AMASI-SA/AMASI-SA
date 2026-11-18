@@ -9,12 +9,13 @@ does not authorize a new Production release or live financial transactions.
 
 - Repository: `AMASI-SA/AMASI-SA`
 - Task branch: `codex/balances-statements-source-20261119`
-- Verified Production baseline: `80b43ca2f4699fecd895f34a24f77fc997234417`
+- Initial verified Production baseline: `80b43ca2f4699fecd895f34a24f77fc997234417`
+- Current integrated Production baseline: `77d824a780df582b5c32f4dda87a959e35e1ed1e`
 - Companion: `AMASI-SA/amasi-mobile`, based on operational branch
   `feature/operational-order-compensation-20261101` at
   `a8a7a55e22b4f7430c7619bb792c5d7d540b4f43`.
 - Preserved earlier Draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/2003
-- The current review is the PR from `codex/balances-statements-source-20261119`.
+- Current Draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/2004
 - Native Draft PR: https://github.com/AMASI-SA/amasi-mobile/pull/364
 - Integrated current Production `77d824a780df582b5c32f4dda87a959e35e1ed1e`
   into task source `903e477bae520553bd0ca184d626b9c98694879b`, preserving
@@ -71,12 +72,14 @@ side labels. Restricted scopes never gain balance information from this design.
   operational UI collection and adjacent navigation, shipping, supplier, employee
   and spreadsheet safety contracts.
 - The source-bound real-component preview built successfully (101 modules).
-- Seven scoped review HTTP tests include exact-amount, bank-bound candidate
+- Ten scoped review HTTP tests include exact-amount, bank-bound candidate
   pagination and reviewer metadata. Candidate selection does not import or
   classify anything; the existing writer revalidates original statement bytes.
 - Three new real-Mongo acceptance cases are collected for the scoped callback:
   bank/POS exactly-once approval and rollback when the grant is revoked before
-  commit. They require a disposable replica set and are pending remote CI.
+  commit. They require a disposable replica set; the preceding source passed
+  all three in remote CI with 5496 backend tests. Exact final-head results are
+  recorded in the task PR.
 - Manual mobile-width inspection verified compact layout and no 320px body
   overflow. Direct-browser history → detail → browser Back → history Back
   returned to the original employee ledger correctly. A 390px statement showed
@@ -88,11 +91,20 @@ side labels. Restricted scopes never gain balance information from this design.
   clean locally and passed Mobile CI run `44414785378`, including TypeScript,
   ESLint and 45 balance groups. The baseline native install has no frozen-lock
   gate; no dependency change was introduced. No APK/OTA was built.
-- Main Security Gate passed on `903e477`. Browser acceptance exposed a
-  navigation assertion racing the new sections panel; explicit element/response
-  waits retain all assertions. Fresh CI on the final task head remains required.
+- Main source `add94d64ab41978dc772036f5e6a6deb1a191813` passed Security Gate,
+  CodeQL, Release Readiness and Operational Frontend. All 11 real-component
+  browser scenarios passed, including statements, original notes, fresh print
+  authorization and review/history Back behavior. Screenshot artifact
+  `14480500175` has a source manifest matching all 20 preview source files.
+  Browser locator/wait repairs retain every assertion. Fresh CI results for
+  the final exact-money query patch are recorded in the task PR.
 - The final exact-money/detail-date display fix passed 27 affected web tests.
   These results are not a Production-release authorization.
+- The final review-candidate patch rejects a legacy numeric amount whose
+  float conversion changes its exact decimal value, before query counting or
+  pagination. Three HTTP regressions cover a rounded large amount and valid
+  numeric integer/fractional legacy amounts; the ten-test scoped suite passed.
+  The canonical writer's existing exact-decimal approval check is unchanged.
 
 ## Data limits retained deliberately
 

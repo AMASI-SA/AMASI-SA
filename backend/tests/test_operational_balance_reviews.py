@@ -1,6 +1,8 @@
 """Scoped workspace receipt queue and canonical-writer authorization contract."""
 from hashlib import sha256
 
+import pytest
+
 from test_operational_balance_workspace import BASE, grant, resource, run
 
 
@@ -170,6 +172,41 @@ def test_bank_candidates_are_exact_paged_scoped_and_read_only():
         await grant(db, operations=['courier.review'], resources=[
             resource('store_driver', 'driver', movements='all'), resource('bank', 'bank', movements='own')], version=3)
         assert (await http.get(url, headers=STAFF)).status_code == 403
+    run(scenario)
+
+
+@pytest.mark.parametrize('review_amount,legacy_amount,expected_total', [
+    ('9007199254740993.25', 9007199254740994.0, 1),
+    ('100.25', 100.25, 7),
+    ('100.00', 100, 7),
+])
+def test_bank_candidate_numeric_compatibility_preserves_exact_amount_before_counting_and_paging(
+        review_amount, legacy_amount, expected_total):
+    async def scenario(db, http):
+        await seed(db)
+        await reviewer(db)
+        await db.store_delivery_payment_reviews.update_one({'assignment_id': 'assignment-0'},
+            {'$set': {'amount': review_amount}})
+        normal = {'user_id': 'owner', 'bank_account_id': 'bank', 'currency': 'SAR',
+            'status': 'unclassified', 'source': 'bank_statement_import', 'direction': 'in',
+            'movement_date': '2026-11-10'}
+        await db.mz2_daily_movements.insert_many([
+            {**normal, 'id': 'exact-string', 'amount': review_amount},
+            *[{**normal, 'id': f'numeric-{n}', 'amount': legacy_amount} for n in range(6)],
+        ])
+        url = BASE + '/reviews/assignment-0/bank-movements'
+        response = await http.get(url, headers=STAFF)
+        assert response.status_code == 200, response.text
+        first = response.json()
+        assert first['total'] == expected_total
+        assert (first['total_pages'], len(first['items'])) == ((1, 1) if expected_total == 1 else (2, 5))
+        if expected_total == 1:
+            assert first['items'][0]['id'] == 'exact-string'
+        else:
+            second = (await http.get(url, params={'page': 2}, headers=STAFF)).json()
+            assert second['total'] == expected_total and len(second['items']) == 2
+            assert {row['id'] for row in first['items'] + second['items']} == {
+                'exact-string', *{f'numeric-{n}' for n in range(6)}}
     run(scenario)
 
 
