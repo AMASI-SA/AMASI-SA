@@ -6699,9 +6699,10 @@ def make_supplier_receiving_router(
                     audit_events,
                     session=mongo_session,
                 )
-            if not is_experiment and (
-                invoice.get("price_changes") or added_pairs
-            ):
+            # A committed supplier invoice now replaces the report's expected
+            # cost even when its price equals today's configuration. Publish
+            # that authority change with the same transaction as the receipt.
+            if not is_experiment:
                 await bump_product_cost_revision(
                     db,
                     merchant_id,

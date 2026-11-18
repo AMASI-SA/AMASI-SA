@@ -2,8 +2,9 @@
 
 The response intentionally preserves the legacy dashboard contract so the same
 UI can be reused. Orders/sales come from ``unified_orders``; product costs are
-resolved from frozen order costs with Mezan V2 catalog fallback; bundle
-recipes replace the parent cost once; ad spend comes from the native V2 reporting
+resolved from approved supplier invoice components for received units and current
+catalog costs for uncovered units; bundle and approved correction authority is
+preserved. Ad spend comes from the native V2 reporting
 facts (with Google kept as an explicitly labelled transitional read). Salaries, shipping configuration and
 payment fee formulae stay inherited from the legacy dashboard response.
 """
@@ -73,6 +74,10 @@ from salla_marketing_attribution import (
     attach_projected_salla_attribution,
 )
 from sold_products_report_v2 import SELECTABLE_STATUSES, load_sold_products, order_matches_status, summarize
+from supplier_invoice_reporting_costs import (
+    load_supplier_invoice_reporting_costs,
+    resolve_supplier_invoice_reporting_cost,
+)
 from salla_integration.abandoned_carts import (
     AbandonedCartScopeError,
     parse_salla_datetime,
@@ -593,6 +598,9 @@ async def build_mezan_v2_product_cost(
     authority = await load_order_cost_authority(
         db, user_id, orders, budget=CPUWorkBudget(COST_PROFIT_BUDGET_MS),
     )
+    supplier_authority = await load_supplier_invoice_reporting_costs(
+        db, user_id, orders, budget=CPUWorkBudget(COST_PROFIT_BUDGET_MS),
+    )
     traffic_by_order = await load_product_traffic_sources(db, user_id, orders, budget=CPUWorkBudget(COST_PROFIT_BUDGET_MS))
 
     totals = defaultdict(float)
@@ -626,7 +634,7 @@ async def build_mezan_v2_product_cost(
                 products_by_sku=products_by_sku,
             )
             product_id = str((product or {}).get("salla_product_id") or "")
-            result = calculate_mezan_v2_line_cost(
+            catalog_result = calculate_mezan_v2_line_cost(
                 item,
                 product=product,
                 profile=profile_map.get(product_id),
@@ -637,9 +645,16 @@ async def build_mezan_v2_product_cost(
             result = resolve_order_line_cost(
                 item,
                 order_number=str(order.get("order_number") or ""),
-                catalog_cost=result,
+                catalog_cost=catalog_result,
                 authority=authority,
                 product_id=product_id,
+            )
+            result = resolve_supplier_invoice_reporting_cost(
+                item,
+                order_number=str(order.get("order_number") or ""),
+                catalog_cost=catalog_result,
+                historical_cost=result,
+                supplier_authority=supplier_authority,
             )
             uses_historical_authority |= result.get("cost_authority") != "catalog_estimate"
             identity = str(
@@ -827,13 +842,17 @@ async def build_mezan_v2_product_cost(
             # Describe historical rules when this cohort actually uses them.
             **({
                 "catalog_additions": ["product_components", "selected_option_components"],
-                "historical_cost_authority": "frozen order line; complete bundle replaces parent and catalog additions once",
+                "historical_cost_authority": "preserved bundle and approved correction authority; received ordinary components use approved supplier invoices",
                 "missing_bundle_authority": "incomplete; never current parent fallback",
                 "cost_currency": "SAR; independent of order sales currency",
             } if uses_historical_authority else {
                 "always_added": ["product_components", "selected_option_components"],
             }),
-            "mezan_completion_sources": (["order_snapshot", "bundle_snapshot"] if uses_historical_authority else []) + ["mezan_v2_variant", "mezan_v2_base"],
+            **({
+                "supplier_receipt_cost_authority": "approved invoice net cost once per received component; current catalog for uncovered units",
+                "supplier_receipt_date_basis": "selected sales cohort; no invoice approval range filter",
+            } if "supplier_invoice" in source_lines else {}),
+            "mezan_completion_sources": (["order_snapshot", "bundle_snapshot"] if uses_historical_authority else []) + (["supplier_invoice"] if "supplier_invoice" in source_lines else []) + ["mezan_v2_variant", "mezan_v2_base"],
             "salla_fallback_is_missing_mezan_cost": True,
             "product_sales": "native order lines converted by verified Salla order FX to SAR",
             "product_profit": "product sales minus Mezan V2 product cost; ads/shipping/payment fees are not allocated per product",
@@ -908,6 +927,9 @@ async def build_mezan_v2_product_cost_cooperative(
     authority = await load_order_cost_authority(
         db, user_id, orders, budget=CPUWorkBudget(COST_PROFIT_BUDGET_MS),
     )
+    supplier_authority = await load_supplier_invoice_reporting_costs(
+        db, user_id, orders, budget=CPUWorkBudget(COST_PROFIT_BUDGET_MS),
+    )
     traffic_by_order = (
         await load_product_traffic_sources(db, user_id, orders, budget=CPUWorkBudget(COST_PROFIT_BUDGET_MS))
         if include_product_rows else {}
@@ -948,7 +970,7 @@ async def build_mezan_v2_product_cost_cooperative(
                 products_by_sku=products_by_sku,
             )
             product_id = str((product or {}).get("salla_product_id") or "")
-            result = calculate_mezan_v2_line_cost(
+            catalog_result = calculate_mezan_v2_line_cost(
                 item,
                 product=product,
                 profile=profile_map.get(product_id),
@@ -959,9 +981,16 @@ async def build_mezan_v2_product_cost_cooperative(
             result = resolve_order_line_cost(
                 item,
                 order_number=str(order.get("order_number") or ""),
-                catalog_cost=result,
+                catalog_cost=catalog_result,
                 authority=authority,
                 product_id=product_id,
+            )
+            result = resolve_supplier_invoice_reporting_cost(
+                item,
+                order_number=str(order.get("order_number") or ""),
+                catalog_cost=catalog_result,
+                historical_cost=result,
+                supplier_authority=supplier_authority,
             )
             if cost_collector is not None:
                 cost_collector.observe_line(order, item, result)
@@ -1160,13 +1189,17 @@ async def build_mezan_v2_product_cost_cooperative(
             # Describe historical rules when this cohort actually uses them.
             **({
                 "catalog_additions": ["product_components", "selected_option_components"],
-                "historical_cost_authority": "frozen order line; complete bundle replaces parent and catalog additions once",
+                "historical_cost_authority": "preserved bundle and approved correction authority; received ordinary components use approved supplier invoices",
                 "missing_bundle_authority": "incomplete; never current parent fallback",
                 "cost_currency": "SAR; independent of order sales currency",
             } if uses_historical_authority else {
                 "always_added": ["product_components", "selected_option_components"],
             }),
-            "mezan_completion_sources": (["order_snapshot", "bundle_snapshot"] if uses_historical_authority else []) + ["mezan_v2_variant", "mezan_v2_base"],
+            **({
+                "supplier_receipt_cost_authority": "approved invoice net cost once per received component; current catalog for uncovered units",
+                "supplier_receipt_date_basis": "selected sales cohort; no invoice approval range filter",
+            } if "supplier_invoice" in source_lines else {}),
+            "mezan_completion_sources": (["order_snapshot", "bundle_snapshot"] if uses_historical_authority else []) + (["supplier_invoice"] if "supplier_invoice" in source_lines else []) + ["mezan_v2_variant", "mezan_v2_base"],
             "salla_fallback_is_missing_mezan_cost": True,
             "product_sales": "native order lines converted by verified Salla order FX to SAR",
             "product_profit": "product sales minus Mezan V2 product cost; ads/shipping/payment fees are not allocated per product",
@@ -2574,7 +2607,7 @@ def make_dashboard_v2_router(
             "complete_count": sum(row["cost_status"] == "complete" for row in rows),
             "incomplete_count": sum(row["cost_status"] != "complete" for row in rows),
             "totals": summarize(rows),
-            "source": "unified_orders.quantity + frozen_order_cost_authority_with_catalog_fallback",
+            "source": "unified_orders.quantity + received_supplier_invoice_cost_and_current_unreceived_cost_with_preserved_bundle_and_correction_authority",
         }
 
     @router.get("/dashboard-v2/snapchat-accounts-summary")

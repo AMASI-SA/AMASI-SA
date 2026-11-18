@@ -1,8 +1,8 @@
 """Read-only sold-products report over canonical orders and Mezan/Salla costs.
 
-Order quantity and date belong to unified_orders. Historical order cost is
-authoritative; ordinary catalog fallback includes selected components. A bundle
-cost replaces the complete parent calculation once.
+Order quantity and date belong to unified_orders. Ordinary received components
+use approved supplier invoices; uncovered units use current selected catalog
+costs. Bundle costs and approved historical corrections retain their authority.
 """
 from __future__ import annotations
 
@@ -25,6 +25,10 @@ from product_v2_details_routes import COST_PROFILES
 from product_v2_routes import PRODUCTS
 from product_traffic_sources import load_product_traffic_sources, resolve_traffic_source, add_traffic_units, traffic_sources
 from sold_product_cost_details import detail_group, detail_groups, add_group, finish_groups
+from supplier_invoice_reporting_costs import (
+    load_supplier_invoice_reporting_costs,
+    resolve_supplier_invoice_reporting_cost,
+)
 
 CATALOG_FIELDS = {
     "_id": 0, "id": 1, "salla_product_id": 1, "mezan_product_id": 1,
@@ -95,6 +99,7 @@ def aggregate_sold_products(
     bundle_costs: dict[tuple[str, str], dict | None] | None = None,
     *,
     authority: Any = None,
+    supplier_authority: dict[str, Any] | None = None,
     catalog_context: dict[str, Any] | None = None,
     traffic_by_order: dict | None = None,
 ) -> list[dict]:
@@ -126,7 +131,7 @@ def aggregate_sold_products(
             if quantity is None or quantity <= 0:
                 continue
             product_id = str((product or {}).get("salla_product_id") or "")
-            cost = calculate_catalog_line_cost(
+            catalog_cost = calculate_catalog_line_cost(
                 item,
                 product=product,
                 profile=profile_map.get(product_id),
@@ -136,16 +141,23 @@ def aggregate_sold_products(
                 current_report=True,
             )
             order_number = str(order.get("order_number") or "")
+            cost = catalog_cost
             if authority is not None:
                 cost = resolve_order_line_cost(
                     item, order_number=order_number, catalog_cost=cost,
                     authority=authority, product_id=product_id,
                 )
+            if supplier_authority is not None:
+                cost = resolve_supplier_invoice_reporting_cost(
+                    item, order_number=order_number, catalog_cost=catalog_cost,
+                    historical_cost=cost, supplier_authority=supplier_authority,
+                )
             amount = _decimal(cost["line_total"]) if cost["calculation_cost_available"] else None
             unit = amount / quantity if amount is not None else None
             source = str(cost.get("calculation_cost_source") or cost["base_cost_source"])
             cost_source = (
-                source if cost["base_cost_source"] in {"bundle_snapshot", "order_snapshot"}
+                str(cost.get("cost_authority") or source) if source == "supplier_invoice"
+                else source if cost["base_cost_source"] in {"bundle_snapshot", "order_snapshot"}
                 else "mezan" if cost["mezan_cost_complete"] else "salla"
             )
             # Retain the public pure helper's historical explicit-map API. The
@@ -172,7 +184,7 @@ def aggregate_sold_products(
                 "image_url": (product or {}).get("main_image") or item.get("image_url") or item.get("image") or "",
                 "units_sold": Decimal(0), "_known_cost": Decimal(0),
                 "unit_cost": None, "cost_status": "complete", "cost_source": "",
-                "_groups": {}, "_reasons": set(),
+                "_groups": {}, "_reasons": set(), "_cost_sources": set(),
             })
             groups = detail_groups(cost, item, quantity)
             # The legacy explicit bundle map is used by pure-helper callers.
@@ -185,6 +197,7 @@ def aggregate_sold_products(
                 add_group(row, group)
                 row["_known_cost"] += _decimal(group["known_total_cost"]) or Decimal(0)
             row["units_sold"] += quantity
+            row["_cost_sources"].add(cost_source)
             add_traffic_units(row, traffic, quantity)
             if unit is None:
                 row["cost_status"] = "incomplete"
@@ -200,6 +213,9 @@ def aggregate_sold_products(
         row["traffic_sources"] = traffic_sources(row)
         row.pop("_traffic_sources", None)
         row["total_cost"] = round(float(known_cost), 2) if row["cost_status"] == "complete" else None
+        sources = row.pop("_cost_sources")
+        if any(source.startswith("supplier_invoice") for source in sources):
+            row["cost_source"] = "supplier_invoice" if sources == {"supplier_invoice"} else "supplier_invoice_mixed"
         if row["cost_status"] == "complete":
             row["unit_cost"] = round(float(known_cost / Decimal(str(row["units_sold"]))), 2)
         if row["cost_status"] != "complete":
@@ -238,5 +254,12 @@ async def load_sold_products(db: Any, user_id: str, orders: list[dict]) -> list[
     authority = await load_order_cost_authority(
         db, user_id, orders, budget=CPUWorkBudget(COST_PROFIT_BUDGET_MS),
     )
+    supplier_authority = await load_supplier_invoice_reporting_costs(
+        db, user_id, orders, budget=CPUWorkBudget(COST_PROFIT_BUDGET_MS),
+    )
     traffic = await load_product_traffic_sources(db, user_id, orders, budget=CPUWorkBudget(COST_PROFIT_BUDGET_MS))
-    return aggregate_sold_products(orders, products, profiles, authority=authority, catalog_context=context, traffic_by_order=traffic)
+    return aggregate_sold_products(
+        orders, products, profiles, authority=authority,
+        supplier_authority=supplier_authority, catalog_context=context,
+        traffic_by_order=traffic,
+    )
