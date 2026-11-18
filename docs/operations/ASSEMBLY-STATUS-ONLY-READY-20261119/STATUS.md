@@ -163,3 +163,10 @@ Original shared host adapter succeeded with exit0 in63.60s and exact source213a2
 Own v5 lease prepared at2026-11-18T23:16:40.561907+00:00, actor codex-ready-2001-publish-20261119, deployment c3c1cd26d93ab24d6e08003278b9910526055cc7. Original prepublish reported ready_to_publish:true twice, with the final run immediately before Publish changes. The final Publish changes control was submitted once; UI confirms Deployment Started Nov19 02:20AM Riyadh and Publishing. Merely opening the Republish confirmation did not publish. Current own lease must remain until official completion.
 
 Next: observe newer explicit Deployment Succeeded, run unchanged original python -B scripts/production_release_guard.py verify --url https://mezansalla.com, retain verified:true/checks:3 and inactive status, then read-only Ready UI acceptance. No real order Ready mutation is authorized for testing. Android emulator is not exposed in the current Linux surface; no adb executable or reliable remote emulator target is available. Do not claim emulator acceptance from server-only or web evidence.
+
+
+## Runtime publication observed — 2026-11-18 23:30 UTC
+
+Emergent completed the new publication with short deployment ID 8583b5b, newer than Aramex dbe53a6. After a fresh page reload the visible event is green `Deployment finished`, dated Nov 19, 02:30 AM Riyadh. This UI does not expose the literal text `Deployment Succeeded`; do not claim that literal was captured. The latest published row is 8583b5b (the UI caps/relabels its visible ordinal at 100th). Runtime logs show Backend started successfully. This is UI publication evidence, not a substitute for official identity verification.
+
+Next safe command, using this task's still-active own lease: `python -B scripts/production_release_guard.py verify --url https://mezansalla.com`. Preserve its complete output, require verified:true and checks:3, then original status active:false. No repeat publication is needed. Live Ready acceptance and unavailable Android emulator limitation remain as above.
