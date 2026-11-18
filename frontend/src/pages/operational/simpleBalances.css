@@ -148,6 +148,12 @@
 .sb-check input, .sb-access-table input[type="checkbox"] { accent-color: var(--sb-brand); width: 19px; height: 19px; margin-top: 4px; flex-shrink: 0; }
 .sb-access-editor section { margin-top: 26px; }
 .sb-access-editor section > p { color: var(--sb-muted); font-size: .9rem; margin: 6px 0 16px; }
+.sb-access-bulk { min-width: 0; border: 1px solid var(--sb-line); border-radius: 12px; padding: 16px; margin: 0 0 20px; background: var(--sb-page); }
+.sb-access-bulk legend { padding: 0 6px; font-weight: 700; }
+.sb-access-bulk p { color: var(--sb-muted); font-size: .85rem; margin: 8px 0 16px; }
+.sb-access-bulk p:last-child { margin-bottom: 0; }
+.sb-access-bulk-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.sb-access-bulk-fields .sb-field { margin-bottom: 12px; }
 .sb-access-table { width: 100%; border-collapse: collapse; min-width: 520px; }
 .sb-access-table th, .sb-access-table td { text-align: right; padding: 12px; border-bottom: 1px solid var(--sb-line); }
 .sb-access-table th small { display: block; color: var(--sb-muted); font-weight: 400; font-size: .75rem; }
@@ -168,6 +174,9 @@
   .sb-resource { padding: 15px 12px; gap: 10px; }
   .sb-resource-balance { font-size: .82rem; }
   .sb-operation-groups { grid-template-columns: 1fr; }
+  .sb-access-resources > .sb-form-two { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .sb-access-bulk-fields { grid-template-columns: 1fr; gap: 0; }
+  .sb-access-bulk > button { width: 100%; }
   .sb-access-resource-list { overflow: visible; border: 0; border-radius: 0; background: transparent; }
   .sb-access-table { display: block; min-width: 0; }
   .sb-access-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
