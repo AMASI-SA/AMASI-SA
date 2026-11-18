@@ -1,32 +1,34 @@
-# MEZAN-LIVE-SOURCES-20261118
+# MEZAN-LIVE-SOURCES-20261118 — deployed and verified
 
-Scope: add a first-party visit-source card immediately below active GA4 users in AdvancedDashboard. Production changed: no. No /app writes, release lease, snippet publication, ad writes, or order-attribution changes.
+Final checkpoint: 2026-11-18 (Asia/Riyadh). PR #1994 merged and published.
+PR: https://github.com/AMASI-SA/AMASI-SA/pull/1994
 
-Branch: codex/mezan-live-visit-sources-20261118
-Base: 68035e55 (origin/hotfix/prod-snap-meta-final at initial fetch).
+## Release identity
+- Source A: a206a3ede48ab84690bd3d1b055f8e3babbfec0e
+- Intent-only B: 4b32064f55fbf3aad85d6953209ae4b256ba6ee6
+- Merge/deployment: d3632a33843e076dd7824933528dcc7d897bc32a
+- Previous production: 8761f7b2f80faec29638e1438b8fedefcec64a28
+- Release: rg5-9a4b94923b15b4c3d25e35c7af4efe8dea5e1de595286e8bec8fd317b70761d8
+- Emergent published version: b314650
+- Publish clicked once at 22:29 Riyadh; UI showed Deployment finished at 22:40 Riyadh.
 
-Implemented:
-- Authenticated tenant-scoped GET /api/first-party-attribution/v1/live-sources.
-- Production events only, server received_at rolling 30-minute window; compound index; max 20,000 events and 2.5-second Mongo limit. Exceeding the limit returns unavailable, never partial counts.
-- Unique store/visitor/session tuples, classified from first observed URL/referrer inside window; no use of the snippet's 90-day acquisition source as current traffic evidence.
-- Snapchat, Meta, TikTok, Google paid/organic/unspecified, direct/no visible referrer, other referrals/campaigns, unknown. UTM/click signals are browser-reported evidence, not independently verified ad conversions.
-- 30-second per-owner process cache; per-owner single flight, up to 16 in-flight owners; max 128 cache entries. No background scan or platform calls.
-- Card reads on mount/visible-tab return and every 60 seconds while visible; abort on unmount; no overlapping reads; empty/error/stale distinctions and reading timestamp.
+## Verification
+- 16 backend and 43 frontend feature tests passed.
+- All 24 applicable CI workflows passed.
+- Governed double build and clean-clone rehearsal passed; CI clean clone Node 20.20.2 and 24.19.0 passed.
+- /app fast-forward, adapter build, prepare and prepublish passed.
+- verify --url https://mezansalla.com returned exit 0, verified=true, checks=3.
+- All three production rounds matched frozen source/deployment/release and frontend artifacts.
+- Health: verified_identity_available=true, critical_file_hashes_match=true, frontend_build_verified=true.
+- Final production_release_guard.py status: active=false.
+- Frontend artifact tree: c7b4cdb4f6717c54b22508e593869b97b5a50106d82468b1013c9fb8444d49b3.
+- Live card visible below active users and automatic refresh observed. Example at 22:42:38 Riyadh: 1104 sessions, Snap 411, Meta 82, TikTok 18, organic Google 6, direct/no referrer 549, unknown 38.
 
-Verification:
-- PYTHONPATH=backend python -m pytest backend/tests/test_first_party_live_sources.py -q: 16 passed using existing mezan-profit-py environment.
-- CI=true react-scripts test --watch=false --runInBand --runTestsByPath src/components/MezanLiveSourcesCard.test.jsx src/pages/AdvancedDashboard.mobile.test.jsx src/pages/AdvancedDashboard.cardRefresh.test.jsx: 43 passed. Existing frontend node_modules reused read-only via symlink.
-- Existing backend/tests/test_first_party_attribution_v1.py: 7 passed, 2 failed both on pristine base and working branch. Those tests use August fixed event times outside current 30-day matching window. No changes to matching behavior.
-- Local `vite build --outDir /workspace/scratch/47769d1a75d9/mezan-ui-check`: PASS (exit 0, 8.38s); existing large-chunk/dynamic-import warnings. This is not a governed deployment artifact.
+## Semantics and limits
+Authenticated tenant/store-scoped production events, rolling 30 minutes by received_at, distinct store/visitor/session tuples. Source from earliest observed URL/referrer in window, not 90-day acquisition source. Classification percentage is not accuracy. Direct means no visible referrer. Sessions are not GA4 users or attributed orders. No order/profit attribution or snippet change.
 
-Limits / next steps:
-- No production or real Mongo explain/live-event verification yet; post-deploy check must verify index usage, latency and a tagged session counted once while navigating.
-- First entry can predate the 30-minute read window; internal-referrer-only evidence then stays unknown. No claim of full journey attribution.
-- Direct means no visible referrer, not proven direct navigation. Unknown aliases remain other campaigns. Browser blockers/consent may limit collection.
-- Pilot excluded; older events missing production store_scope are deliberately excluded. No collection schema or production snippet update required.
-- Requests are frontend-visible-tab scoped, not viewport/intersection or collapsed-card scoped.
-- Reply to Salla about order matching remains independent; this card does not measure orders/profit or prove checkout coverage.
-- Review draft and CI; deploy only through repository v5 protocol after authorization. No release intent is frozen in this feature branch.
-- GitHub issue #1006 body read. Fetching its full comments failed (transport closed); new task has no prior task checkpoint known. Record this branch's exact commit in the ledger after push.
+30-second bounded owner cache/single flight, 20k-event and 2.5-second Mongo limits; 60-second visible-tab polling with cancellation. No ad-platform calls or background worker.
 
-Owner authorized deployment. Refreshed source onto production 8761f7b2f80faec29638e1438b8fedefcec64a28 preserving Aramex and Snapchat releases. Next: governed A/B build, intent-only B, CI, merge and guarded deploy. PR #1990 is continuation ledger (issue #1006 reached comment limit). Production changed by this task: no.
+Still separate follow-up: real Mongo explain/index latency verification and controlled tagged-session navigation/dedup end-to-end test. Unit coverage and live data do not prove full journey accuracy or checkout coverage.
+
+Issue #1006 is full; PR #1994 comments are continuation ledger. This docs-only handoff is kept on a separate branch to preserve frozen A/B and the deployed production commit.
