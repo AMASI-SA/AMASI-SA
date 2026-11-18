@@ -462,6 +462,13 @@ def resolve_delivery_event(raw, *, source, owner, assignments, setup, started_at
         if _status(assignment.get("status")) not in DELIVERED and not status_eligible:
             return None
         assignment_id = _text(assignment["id"])
+        if status_eligible and not status_admission and assignment.get("delivered_at") in (None, ""):
+            # A legacy dated fee keeps its established evidence diagnostics.
+            # This path cannot convert that recorded fact into a status event.
+            from operational_courier_transitions import order_delivery_time
+            order_at = order_delivery_time(raw, source, history, end, allow_undated=True)
+            if order_at is not None:
+                _window(order_at, created, start, end)
         if status_admission and (assignment.get("delivered_at") in (None, "") or status_delivery(frozen_event)):
             delivered = None
         else:

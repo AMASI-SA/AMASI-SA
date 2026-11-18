@@ -168,6 +168,28 @@ def test_later_optional_timestamp_cannot_disqualify_or_redate_a_frozen_status(ki
     assert not any(issue['code'].startswith('operational_delivery_') for issue in result['engine']['issues'])
 
 
+@pytest.mark.parametrize('method', ['cash', 'bank_transfer', 'card_terminal'])
+def test_legacy_paid_delivery_keeps_its_dated_diagnostic_and_collection(method):
+    data = undated('contract_driver', cash_proof=True)
+    assignment = data['store_delivery_assignments'][0]
+    assignment.pop('order_id')
+    assignment.pop('active')
+    collection = data['store_delivery_collections'][0]
+    collection.update(payment_method=method, cod_custody_amount='200' if method == 'cash' else '0')
+    first = calculate(data)
+    assert first['engine']['facts']['cod_collection:100']['amount'] == ('200.00' if method == 'cash' else '0.00')
+    assert 'delivery_event:100' not in first['engine']['facts']
+    assignment.update(order_id='100', active=True)
+    data['unified_orders'][0]['raw_by_source']['salla_direct'].update(status_changed_at=START, paid_amount='200')
+    held = calculate(data, first)
+    assert any(issue['code'] == 'operational_delivery_timestamp_before_order' for issue in held['engine']['issues'])
+    assert held['engine']['facts']['cod_collection:100'] == first['engine']['facts']['cod_collection:100']
+    assert held['engine']['facts']['shipping:100'] == first['engine']['facts']['shipping:100']
+    assert held['engine']['cod_reports'] == first['engine']['cod_reports']
+    assert held['engine']['obligations']['cod:100'] == first['engine']['obligations']['cod:100']
+    assert held['movements'] == first['movements'] == []
+
+
 @pytest.mark.parametrize('delivered', [True, False])
 def test_effective_customized_status_controls_poststart_eligibility(delivered):
     data = undated()
