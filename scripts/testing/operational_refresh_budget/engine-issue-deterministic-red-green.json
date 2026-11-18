@@ -1,0 +1,16 @@
+{
+  "synthetic_only": true,
+  "baseline_git_sha": "d3632a33843e076dd7824933528dcc7d897bc32a",
+  "orders": 1000,
+  "seed_issues": 1000,
+  "linear_inspection_budget": 40000,
+  "baseline": {
+    "baseline_detected": true,
+    "measured_work": {
+      "whole_list_rows": 1499500,
+      "key_inspections": 0
+    }
+  },
+  "candidate_passed": true,
+  "clock_assertion": false
+}
