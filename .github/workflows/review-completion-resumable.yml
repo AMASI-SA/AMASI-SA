@@ -40,6 +40,7 @@ on:
       - "backend/preparation_piece_operations.py"
       - "backend/supplier_receipt_ready_policy.py"
       - "backend/tests/test_supplier_receipt_ready_policy.py"
+      - "backend/tests/test_operational_item_ready_policy.py"
       - "backend/tests/test_supplier_receipt_delivery_policy.py"
       - "backend/tests/test_supplier_component_consumption_deferral.py"
       - "backend/tests/test_supplier_receipt_bundle_coverage.py"
@@ -263,6 +264,7 @@ jobs:
           tests/test_review_local_completion.py
           tests/test_review_local_downstream.py
           tests/test_review_local_assembly.py
+          tests/test_operational_item_ready_policy.py
           tests/test_supplier_receipt_ready_policy.py
           tests/test_supplier_receipt_delivery_policy.py
           tests/test_supplier_component_consumption_deferral.py

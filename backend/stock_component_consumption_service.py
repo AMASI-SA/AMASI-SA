@@ -684,7 +684,8 @@ _SUPPLIER_DEFER_REASONS = frozenset({
 
 async def consume_component_stock(db: Any, *, merchant_id: str, order_id: str,
                                   units: dict | None = None, actor_id: str = "system",
-                                  defer_unavailable: bool = False) -> dict:
+                                  defer_unavailable: bool = False,
+                                  require_reviewed_snapshot: bool = True) -> dict:
     owner, order = _text(merchant_id), _text(order_id)
     if not owner or not order:
         _fail("owner_order_required")
@@ -702,10 +703,11 @@ async def consume_component_stock(db: Any, *, merchant_id: str, order_id: str,
                 # Supplier custody authorizes Ready independently. Inventory
                 # still needs the exact approved/current canonical revision,
                 # checked read-only before pins, deductions or unit writes.
-                from preparation_piece_operations import _assert_reviewed_physical_snapshot_current
-                await _assert_reviewed_physical_snapshot_current(
-                    scoped, user_id=owner, order_number=order,
-                )
+                if require_reviewed_snapshot:
+                    from preparation_piece_operations import _assert_reviewed_physical_snapshot_current
+                    await _assert_reviewed_physical_snapshot_current(
+                        scoped, user_id=owner, order_number=order,
+                    )
             rows = await _selected_units(scoped, owner, plan_id, units)
             # Validate all active reservations before consuming the selected
             # units. In deferrable mode even the location pins wait until every
