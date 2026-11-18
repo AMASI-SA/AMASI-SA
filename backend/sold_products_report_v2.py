@@ -184,6 +184,7 @@ def aggregate_sold_products(
                 "image_url": (product or {}).get("main_image") or item.get("image_url") or item.get("image") or "",
                 "units_sold": Decimal(0), "_known_cost": Decimal(0),
                 "unit_cost": None, "cost_status": "complete", "cost_source": "",
+                "uses_salla_fallback": False,
                 "_groups": {}, "_reasons": set(), "_cost_sources": set(),
             })
             groups = detail_groups(cost, item, quantity)
@@ -198,6 +199,7 @@ def aggregate_sold_products(
                 row["_known_cost"] += _decimal(group["known_total_cost"]) or Decimal(0)
             row["units_sold"] += quantity
             row["_cost_sources"].add(cost_source)
+            row["uses_salla_fallback"] |= bool(cost.get("uses_salla_fallback"))
             add_traffic_units(row, traffic, quantity)
             if unit is None:
                 row["cost_status"] = "incomplete"

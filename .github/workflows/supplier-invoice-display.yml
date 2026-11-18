@@ -5,6 +5,7 @@ on:
       - 'backend/supplier_invoice_display*.py'
       - 'backend/supplier_invoice_pdf.py'
       - 'backend/supplier_receiving_routes.py'
+      - 'backend/supplier_invoice_reporting_costs.py'
       - 'backend/tests/test_supplier_invoice_report_revision.py'
       - 'backend/tests/test_supplier*display*.py'
       - 'backend/tests/fixtures/supplier_invoice_display_cases.json'

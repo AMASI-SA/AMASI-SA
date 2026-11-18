@@ -504,9 +504,10 @@ async def test_read_limit_fails_instead_of_silently_truncating_evidence(monkeypa
 
 
 @pytest.mark.asyncio
-async def test_completed_service_quantity_contradiction_cannot_become_complete(monkeypatch):
+@pytest.mark.parametrize("complete", [True, False])
+async def test_completed_service_quantity_contradiction_cannot_become_complete(monkeypatch, complete):
     row = item(selections=[{"option_id": "new-parent", "value_id": "yes"}])
-    received = piece(services=[{"service_id": "embroidery", "required_quantity": 2, "completed_quantity": 2,
+    received = piece(complete=complete, services=[{"service_id": "embroidery", "required_quantity": 2, "completed_quantity": 2,
         "status": "completed", "supplier_invoice_id": "invoice"}])
     inv = invoice(services=[{"service_id": "embroidery", "unit_price_halalas": 600, "quantity_per_piece": 1}])
     result = resolve(row, catalog(row), await authority(monkeypatch, row, pieces=[received], invoices=[inv]))
@@ -517,10 +518,11 @@ async def test_completed_service_quantity_contradiction_cannot_become_complete(m
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("kind", ["option", "field"])
-async def test_shared_explicit_input_identity_detects_changed_typed_value_without_name(monkeypatch, kind):
+@pytest.mark.parametrize("new_text", ["New customer text", ""])
+async def test_shared_explicit_input_identity_detects_changed_typed_value_without_name(monkeypatch, kind, new_text):
     row, received = item(), piece()
     field, identity = ("custom_fields", "field_id") if kind == "field" else ("options_raw", "option_id")
-    row[field] = [{identity: "input1", "value": "New customer text"}]
+    row[field] = [{identity: "input1", "value": new_text}]
     received[field] = [{identity: "input1", "value": "Old customer text"}]
     result = resolve(row, catalog(row, future_service=False), await authority(monkeypatch, row, pieces=[received]))
     assert result["calculation_cost_available"] is False

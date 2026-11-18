@@ -288,6 +288,7 @@ async def test_selected_sales_share_current_or_received_cost_in_all_three_surfac
     assert responses["sold"]["items"][0]["cost_source"] == (
         "supplier_invoice_mixed" if received == (1,) else "supplier_invoice" if received else "mezan"
     )
+    assert responses["sold"]["items"][0]["uses_salla_fallback"] is False
     if received == (1,):
         groups = responses["sold"]["items"][0]["cost_groups"]
         assert sorted((group["cost_stage"], group["quantity"], group["total_cost"]) for group in groups) == [
@@ -336,6 +337,21 @@ async def test_current_cost_revision_refreshes_estimates_without_repricing_recei
     await env.db[COST_PROFILES].update_one({"user_id": OWNER}, {"$set": {"base_cost": 60}})
     await bump_product_cost_revision(env.db, OWNER)
     _assert_costs(await _read_surfaces(env), 110)
+
+
+@pytest.mark.asyncio
+async def test_partial_receipt_retains_salla_fallback_alongside_invoice_provenance(report_app):
+    from product_v2_details_routes import COST_PROFILES
+    from product_v2_routes import PRODUCTS
+    env = report_app
+    await env.db[COST_PROFILES].delete_many({"user_id": OWNER})
+    await env.db[PRODUCTS].update_one({"user_id": OWNER}, {"$set": {"cost_price_from_salla": 40}})
+    await env.receive((1,))
+    responses = await _read_surfaces(env)
+    _assert_costs(responses, 90)
+    row = responses["sold"]["items"][0]
+    assert row["cost_source"] == "supplier_invoice_mixed"
+    assert row["uses_salla_fallback"] is True
 
 
 @pytest.mark.asyncio
@@ -426,21 +442,26 @@ async def test_supplier_product_and_service_cost_preserve_internal_material_brea
 
 
 @pytest.mark.asyncio
-async def test_separate_received_and_unreceived_sales_keep_mixed_product_source(report_app):
+@pytest.mark.parametrize("fallback,received_first", [(False, True), (True, True), (True, False)])
+async def test_separate_received_and_unreceived_sales_keep_mixed_product_source(report_app, fallback, received_first):
+    from product_v2_details_routes import COST_PROFILES
+    from product_v2_routes import PRODUCTS
     env = report_app
+    if fallback:
+        await env.db[COST_PROFILES].delete_many({"user_id": OWNER})
+        await env.db[PRODUCTS].update_one({"user_id": OWNER}, {"$set": {"cost_price_from_salla": 40}})
     first = deepcopy(env.order)
     first["total_amount"] = 100
     first["products"][0].update(quantity=1, total=100)
-    await env.db.unified_orders.update_one({"user_id": OWNER, "order_number": "sale"}, {"$set": {
-        "total_amount": first["total_amount"], "products": first["products"],
-    }})
     second = {**deepcopy(first), "order_number": "unreceived-sale"}
-    await env.db.unified_orders.insert_one(second)
+    await env.db.unified_orders.delete_many({"user_id": OWNER})
+    await env.db.unified_orders.insert_many([first, second] if received_first else [second, first])
     await env.receive((1,))
     responses = await _read_surfaces(env)
     _assert_costs(responses, 90)
     row = responses["sold"]["items"][0]
     assert row["cost_source"] == "supplier_invoice_mixed"
+    assert row["uses_salla_fallback"] is fallback
     assert {(group["cost_stage"], group["quantity"], group["total_cost"]) for group in row["cost_groups"]} == {
         ("actual", 1, 40), ("expected", 1, 50),
     }

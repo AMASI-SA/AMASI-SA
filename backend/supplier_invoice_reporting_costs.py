@@ -129,7 +129,7 @@ def _choices(rows):
                 # Preserve typed value case for a stable input identity. Display
                 # renames of a stable selected value are handled by IDs above.
                 context = " ".join(unicodedata.normalize("NFKC", _text(text)).split())
-                if context:
+                if context or any(key in row for key in ("value", "value_name", "values", "text", "answer")):
                     contexts[("option:" + oid) if oid else "field:" + fid].add(context)
     return ids, names, names_by_id, contexts
 
@@ -437,6 +437,10 @@ async def load_supplier_invoice_reporting_costs(db: Any, user_id: str, orders: l
                     previous = required_by_id.get(service_id)
                     if previous and decimal(previous.get("required_quantity")) != decimal(service.get("required_quantity")):
                         record["issues"].append("supplier_receipt_service_scope_ambiguous")
+                    actual = record["services"].get(service_id)
+                    required_quantity = decimal(service.get("required_quantity"))
+                    if actual and (required_quantity is None or required_quantity <= 0 or decimal(actual.get("quantity")) != required_quantity):
+                        record["issues"].append("supplier_receipt_service_quantity_mismatch:" + service_id)
                     required_by_id[service_id] = deepcopy(service)
                 record["required_services"] = list(required_by_id.values())
             if not received:
