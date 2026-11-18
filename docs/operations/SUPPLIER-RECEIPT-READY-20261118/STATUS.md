@@ -2,7 +2,7 @@
 
 ## Current state
 
-**Platform published; official verification attempt 2 is running. Final acceptance is pending.**
+**Published and verified. Official three-probe acceptance passed, and the matching owned lease is closed.**
 
 Task: `SUPPLIER-RECEIPT-READY-20261118`. Repository: `AMASI-SA/AMASI-SA`.
 Canonical release PR: https://github.com/AMASI-SA/AMASI-SA/pull/1984 .
@@ -106,20 +106,26 @@ At 01:29:05.240547, the guard's unchanged read-only transport returned HTTP 200,
 
 Independent review confirmed the first hash was exactly J's metadata. J and D share identical frontend asset bytes; metadata release-source identity differs. Current delivery converged, but the precise reason for the old first response—cache propagation or frontend rollout routing—was not established. No expected hash or guard was relaxed.
 
-### Attempt 2 — currently running
+### Attempt 2 — completed successfully
 
-Root launched the unchanged official verifier once more, wrapper PID `186843`, after the fresh four-variant convergence evidence. Evidence directory:
+The unchanged official verifier ran **01:30:17.524964–01:41:05.876126 UTC**, exit **0**, and returned **`verified:true`, `checks:3`**. Each probe verified **594 frontend request variants**, including canonical and cache-busted bytes, exact JSON MIME, asset hashes, shell cache rules and service-worker retirement. All runtime/backend/release-control identities and verification flags matched the prepared source A and runtime.
 
-`/tmp/supplier-ready-1984-release/verify-attempt2`
+The wrapper then invoked the official status command after verification had exited and confirmed **`active:false`**. Shared HEAD remained exact D, tracked source was clean, and all 120 unrelated untracked paths were preserved. No other lease was cleared.
 
-The wrapper retains `verify.json`, `verify.stderr`, `verify.exit`, timestamps, and `verification-result.json`. Only after the official command exits will it run guard status and require `active:false`, exact clean D and preserved inventory. The first attempt remains in the parent evidence directory.
+- Observed completion: `2026-11-18T01:41:54.865947+00:00`.
+- Verified boot: `2026-11-18T01:24:17.389680+00:00`.
+- Official verifier stdout SHA-256: `98b102920406365a136609976b6872dbd198cc42f7357e1810444ac23ed8e808`.
+- Sanitized permanent result: [release-result.json](release-result.json).
+- Full host evidence remains under `/tmp/supplier-ready-1984-release/verify-attempt2`; first-attempt evidence remains in the parent directory.
 
-## Exact next safe action
+The transient first metadata response is preserved as part of the release history. No guard, expected identity, source, or validation requirement was weakened, and there was no second Publish.
 
-Read only the attempt-2 completion evidence. While its wrapper runs, **do not run a competing guard/status/verifier, alter shared source/build, clear a lease, or click Publish again**.
+## Completed ownership handoff
 
-Completion requires official exit 0, `verified:true`, `checks:3`, exact A/D/runtime and frontend identity, followed by inactive guard, unchanged clean D and the preserved untracked inventory. Then update this evidence document and PR1984 with final acceptance, mark the useful live administration page, complete the UI task, and report publication to the owner.
+**No supplier Ready merge, build, publication, verification or lease action remains pending.** The source/intent pair is unchanged and remotely recoverable. The useful live administration page was marked for review, the publication proof was retained, and the UI task was completed.
 
-If the wrapper exits without accepted completion, inspect its retained evidence before deciding any next action. Do not assume publication success from the platform notification alone.
+During verification, courier successor [PR1986](https://github.com/AMASI-SA/AMASI-SA/pull/1986) advanced the remote production Git branch to `37a8211c383079711839557ecad6d5f3f0cdd51f` at 01:36:13 UTC. Its explicit 01:37:10 checkpoint records a Git-only queued merge with D as its first parent and no shared-host source/build/guard/lease/Publish action. This queued Git reference is separate from the **accepted live deployment D** recorded above. Root did not fast-forward or publish that successor.
 
-Issue1006 is saturated; PR1984 and this remotely recoverable evidence branch are the active continuation. Historical checkpoints remain in Git history and superseded PR1982. Production was changed by this task: **yes, version9f62e46 was published; official final acceptance remains pending.**
+The next authorized publisher may now perform its own fresh inactive-guard, shared-source and remote-reference checks before taking over. Do not repeat this completed supplier publication.
+
+Issue1006 is saturated; PR1984 and this remotely recoverable evidence branch are the canonical completed record. Historical checkpoints remain in Git history and superseded PR1982. Production changed by this task: **yes — version `9f62e46`, officially verified with three successful probes and final inactive status.**
