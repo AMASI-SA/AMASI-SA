@@ -10,7 +10,7 @@ import httpx
 
 from operational_balance_archive import ArchiveError, ISSUES, SNAPSHOT, unpack_financial_snapshot, unpack_issues
 from operational_balance_store import STATES, check_authorization, fail
-from operational_demand_refresh import checkpoint, demand_context, run_calculation
+from operational_demand_refresh import calculation_checkpoint, checkpoint, demand_context, run_calculation
 
 
 ACQUISITION_SECONDS = 25
@@ -20,11 +20,35 @@ _COLLECTIONS = frozenset({STATES, "unified_orders", "salla_integrations", "salla
 _LOCAL_PROOF_READS = frozenset({'mz2_shipping_setup_v2', 'store_delivery_assignments', 'order_activity_events_v2'})
 _PROJECTION = {"_id": 0, "owner_id": 1, "status": 1, "started_at": 1,
                "engine.issues": 1, "engine.customer_tender_coverage": 1, 'engine.facts': 1,
+               'engine.obligations': 1, 'movements.allocations': 1,
                'courier_tariffs': 1, ISSUES: 1, SNAPSHOT: 1}
 
 
 def _gaps(stored):
-    return unpack_issues(unpack_financial_snapshot(stored, selected={"customer_tender_coverage", 'facts'}))
+    return unpack_issues(unpack_financial_snapshot(stored,
+        selected={"customer_tender_coverage", 'facts', 'obligations'}))
+
+
+def _courier_status_exclusions(state, issues):
+    """Keep dated financial history on the same recovery path as the resolver."""
+    from operational_courier_fee_history import build_recorded_courier_fee_lookup
+    from operational_delivery_evidence import status_delivery
+    facts = state.get('engine', {}).get('facts', {})
+    recorded_fee = build_recorded_courier_fee_lookup(state)
+    excluded, seen = set(), set()
+    for row in issues:
+        calculation_checkpoint()
+        identity = str(row.get('source_id') or '')
+        if not identity or identity in seen:
+            continue
+        seen.add(identity)
+        frozen_event = facts.get('delivery_event:' + identity)
+        # A prior status event remains eligible even after its fee was saved.
+        if not status_delivery(frozen_event) and (
+                frozen_event is not None or facts.get('shipping:' + identity) is not None
+                or recorded_fee(identity)):
+            excluded.add(identity)
+    return frozenset(excluded)
 
 
 class _Cursor:
@@ -180,8 +204,10 @@ async def acquire_visible_evidence(db, owner, *, courier_order_id=None):
                         elif name == "courier":
                             pending = await _unconfirmed_courier_dates(guarded, owner, state, pending)
                             if pending:
+                                excluded = await run_calculation(_courier_status_exclusions, state, pending)
                                 receipt = await acquire_courier(guarded, owner, pending, started_at=state["started_at"],
-                                    limit=1 if courier_order_id is not None else LIMIT_PER_SOURCE)
+                                    limit=1 if courier_order_id is not None else LIMIT_PER_SOURCE,
+                                    status_excluded_order_ids=excluded)
                                 result["courier"] = receipt
                                 if receipt and receipt.get("status") == "deferred":
                                     result.update(status="deferred", reason="native_evidence_unavailable")

@@ -152,9 +152,8 @@ def test_missing_source_version_clock_does_not_become_an_optional_delivery_time(
 
 
 @pytest.mark.parametrize('kind', ['courier', 'native_driver', 'contract_driver'])
-@pytest.mark.parametrize('at,reason', [(START, 'operational_delivery_timestamp_before_order'),
-                                     (LATER, 'operational_delivery_event_in_future')])
-def test_present_contradictory_delivery_date_is_not_treated_as_missing(kind, at, reason):
+@pytest.mark.parametrize('at', [START, LATER])
+def test_optional_contradictory_delivery_date_does_not_veto_poststart_status(kind, at):
     data = undated(kind)
     raw = data['unified_orders'][0]['raw_by_source']['salla_direct']
     if kind == 'courier':
@@ -162,36 +161,32 @@ def test_present_contradictory_delivery_date_is_not_treated_as_missing(kind, at,
     else:
         raw['status_changed_at'] = at
     result = calculate(data)
-    assert fee_total(result) == 0
-    assert 'delivery_event:100' not in result['engine']['facts']
-    assert any(issue['code'] == reason for issue in result['engine']['issues'])
+    assert fee_total(result) == (12 if kind == 'contract_driver' else 10)
+    assert result['engine']['facts']['delivery_event:100']['delivered_at'] is None
+    assert not any(issue['code'].startswith('operational_delivery_') for issue in result['engine']['issues'])
 
 
-def test_conflicting_present_native_shipment_times_stay_pending():
+def test_conflicting_optional_shipment_times_do_not_become_a_delivery_date():
     data = undated()
     raw = data['unified_orders'][0]['raw_by_source']['salla_direct']
     raw['shipping']['delivered_at'] = DELIVERED
     raw['shipments'][0]['actual_delivered_at'] = NOW
     result = calculate(data)
-    assert fee_total(result) == 0
-    assert any(i['code'] == 'operational_delivery_timestamp_ambiguous' for i in result['engine']['issues'])
+    assert fee_total(result) == 10
+    assert result['engine']['facts']['delivery_event:100']['delivered_at'] is None
+    assert not any(i['code'].startswith('operational_delivery_') for i in result['engine']['issues'])
 
 
 @pytest.mark.parametrize('kind', ['courier', 'native_driver', 'contract_driver'])
-@pytest.mark.parametrize('at,reason', [(DELIVERED, None), (NOW, 'operational_delivery_timestamp_ambiguous'),
-                                     (LATER, 'operational_delivery_event_in_future')])
-def test_negative_local_history_is_older_than_the_current_positive_source(kind, at, reason):
+@pytest.mark.parametrize('at', [DELIVERED, NOW, LATER])
+def test_optional_local_history_cannot_replace_current_authoritative_delivered_status(kind, at):
     data = undated(kind)
     data['order_activity_events_v2'] = [row(order_number='10', provider_order_id='100', source='salla_history',
         source_event_id='negative', native_status_transition=[{'delivered': False, 'at': at}])]
     result = calculate(data)
-    if reason:
-        assert fee_total(result) == 0
-        assert 'delivery_event:100' not in result['engine']['facts']
-        assert any(i['code'] == reason for i in result['engine']['issues'])
-    else:
-        assert result['engine']['obligations']['shipping:100:base_shipping']['confirmed'] == '10.00'
-        assert result['engine']['facts']['delivery_event:100']['delivered_at'] is None
+    assert result['engine']['obligations']['shipping:100:base_shipping']['confirmed'] == '10.00'
+    assert result['engine']['facts']['delivery_event:100']['delivered_at'] is None
+    assert not any(i['code'].startswith('operational_delivery_') for i in result['engine']['issues'])
 
 
 def test_undated_driver_history_reads_are_bounded_and_dated_driver_selection_is_unchanged():
@@ -213,7 +208,7 @@ def test_undated_driver_history_reads_are_bounded_and_dated_driver_selection_is_
 
 
 @pytest.mark.parametrize('kind', ['courier', 'native_driver'])
-def test_later_actual_time_cannot_claim_delivery_after_its_already_recorded_status(kind):
+def test_later_optional_time_cannot_rewrite_its_already_recorded_status(kind):
     data = undated(kind)
     first = calculate(data)
     raw = data['unified_orders'][0]['raw_by_source']['salla_direct']
@@ -226,7 +221,7 @@ def test_later_actual_time_cannot_claim_delivery_after_its_already_recorded_stat
     assert result['engine']['facts'] == first['engine']['facts']
     assert result['engine']['obligations'] == first['engine']['obligations']
     assert fee_total(result) == 10
-    assert any(i['code'] == 'operational_delivery_confirmed_evidence_changed' for i in result['engine']['issues'])
+    assert not any(i['code'].startswith('operational_delivery_') for i in result['engine']['issues'])
 
 
 def test_unknown_delivery_time_requires_an_unambiguous_tariff_for_the_whole_possible_period():
@@ -333,7 +328,7 @@ def test_legacy_confirmed_shipping_fee_still_supplies_compatible_delivery_count(
     assert party(state, 'store_driver')['confirmed_orders'] == 1
 
 
-@pytest.mark.parametrize('created,other_gap,expected_reads', [(CREATED, False, 0), (START, False, 1), (CREATED, True, 1)])
+@pytest.mark.parametrize('created,other_gap,expected_reads', [(CREATED, False, 0), (START, False, 1), (CREATED, True, 0)])
 def test_acquisition_does_not_download_history_just_to_date_a_qualifying_new_delivery(monkeypatch, created, other_gap, expected_reads):
     from salla_integration import courier_delivery_sync as sync
     from test_operational_balance_courier_acquisition import fixture as native_source

@@ -40,6 +40,78 @@ test('saved execution evidence and unchanged evidence are reported without asser
   for (const status of ['saved', 'unchanged']) expect(result(status)).not.toContain('دليل التوصيل');
 });
 
+test.each([
+  ['saved', undefined, 'تم التحقق من دليل الطلب وحفظه'],
+  ['unchanged', undefined, 'لم يحتج إلى تغيير'],
+  ['already_eligible', undefined, 'مستوفٍ لهذا الفحص'],
+  ['blocked', 'courier_native_shipment_mismatch', 'لم تتطابق البوليصة'],
+  ['unavailable', undefined, 'تعذرت قراءة دليل'],
+  ['source_changed', undefined, 'تغيرت بيانات الطلب'],
+])('a failed aggregate preserves the %s native result without claiming recalculation', (status, reason, expected) => {
+  const warning = 'تعذر تحديث المصادر؛ تُعرض آخر أرصدة محفوظة بتاريخها.';
+  const message = courierRecoveryMessage({refresh_warning: warning, native_evidence: {courier: {
+    status: 'completed', selected: 1, outcomes: [{order_id: '8101', status, reason}],
+  }}}, '8101');
+  expect(message).toContain(expected);
+  expect(message).toContain(warning);
+  expect(message).not.toMatch(/أُعيد احتساب الأرصدة|أُعيدت قراءة الأرصدة/);
+});
+
+test.each([[409, 'operational_source_setup_incomplete'], [408, 'operational_refresh_timeout']])(
+  'a scoped %s failure retains only the selected native receipt', async (status, code) => {
+    const native_evidence = {private_payload: 'PRIVATE-NATIVE', courier: {
+      status: 'completed', selected: 1, private_payload: 'PRIVATE-COURIER',
+      outcomes: [{order_id: '8101', status: 'blocked', reason: 'courier_native_shipment_mismatch', raw: 'PRIVATE-ORDER'}],
+    }};
+    const api = {refreshBalances: jest.fn().mockRejectedValue({response: {status, data: {detail: {
+      code, message: 'تعذر احتساب التقرير', session_scope: 'a'.repeat(64), native_evidence,
+    }}}})};
+    const result = await refreshVisibleSnapshot(api, {courierOrderId: '8101', expectedSessionScope: 'a'.repeat(64)});
+    expect(result.native_evidence).toEqual({courier: {status: 'completed', selected: 1,
+      outcomes: [{order_id: '8101', status: 'blocked', reason: 'courier_native_shipment_mismatch'}]}});
+    expect(result.refresh_warning).toContain('تعذر احتساب التقرير');
+    expect(JSON.stringify(result)).not.toContain('PRIVATE');
+    expect(api.refreshBalances).toHaveBeenCalledTimes(1);
+  });
+
+test.each(['scope_changed', 'scope_missing', 'not_targeted', 'other_order', 'duplicate', 'unknown_status', 'unknown_failure'])(
+  'an error receipt with %s cannot become selected-order evidence', async variant => {
+    const detail = {code: 'operational_source_setup_incomplete', session_scope: 'a'.repeat(64),
+      native_evidence: {courier: {status: 'completed', selected: 1, outcomes: [{order_id: '8101', status: 'saved'}]}}};
+    const config = {courierOrderId: '8101', expectedSessionScope: 'a'.repeat(64)};
+    if (variant === 'scope_changed') detail.session_scope = 'b'.repeat(64);
+    if (variant === 'scope_missing') delete detail.session_scope;
+    if (variant === 'not_targeted') delete config.courierOrderId;
+    if (variant === 'other_order') detail.native_evidence.courier.outcomes[0].order_id = 'other-order';
+    if (variant === 'duplicate') detail.native_evidence.courier.outcomes.push({order_id: '8101', status: 'saved'});
+    if (variant === 'unknown_status') detail.native_evidence.courier.outcomes[0].status = 'PRIVATE-STATUS';
+    if (variant === 'unknown_failure') detail.code = 'operational_refresh_lease_lost';
+    const api = {refreshBalances: jest.fn().mockRejectedValue({response: {status: 409, data: {detail}}})};
+    const result = await refreshVisibleSnapshot(api, config);
+    expect(result.native_evidence).toBeUndefined();
+    expect(result.refresh_warning).toBeTruthy();
+    expect(courierRecoveryMessage(result, '8101')).not.toContain('تم التحقق من دليل الطلب وحفظه');
+  });
+
+test.each([
+  ['native_evidence_access_denied', 'رفضت سلة قراءة دليل هذا الطلب'],
+  ['native_evidence_request_timeout', 'انتهت مهلة الاتصال بسلة'],
+])('a scoped unavailable receipt explains %s without exposing provider text', async (reason, expected) => {
+  const api = {refreshBalances: jest.fn().mockRejectedValue({response: {status: 409, data: {detail: {
+    code: 'operational_source_setup_incomplete', session_scope: 'a'.repeat(64),
+    native_evidence: {courier: {status: 'deferred', selected: 1, outcomes: [
+      {order_id: '8101', status: 'unavailable', reason, message: 'PRIVATE-PROVIDER'},
+    ]}},
+  }}}})};
+  const result = await refreshVisibleSnapshot(api, {courierOrderId: '8101', expectedSessionScope: 'a'.repeat(64)});
+  expect(result.native_evidence.courier.outcomes[0].reason).toBe(reason);
+  const message = courierRecoveryMessage(result, '8101');
+  expect(message).toContain(expected);
+  expect(message).toContain('لم تُثبت المطابقة');
+  expect(message).not.toMatch(/PRIVATE|أُعيد احتساب الأرصدة|تم التحقق/);
+  expect(api.refreshBalances).toHaveBeenCalledTimes(1);
+});
+
 test('hidden mount does no work; one visible completion never polls or refreshes on focus/visibility', async () => {
   visibility.mockReturnValue('hidden');
   const read = jest.fn().mockResolvedValue('saved'), onData = jest.fn();
@@ -109,10 +181,10 @@ test('refresh timeout evidence logs only allowed finite stage fields, once for t
     code: 'operational_refresh_timeout', stage_timings: timings, secret: 'PRIVATE-DETAIL'}}}, config: {headers: {Authorization: 'PRIVATE-TOKEN'}}})};
   expect((await refreshVisibleSnapshot(api, {})).refresh_warning).toBeTruthy();
   expect(info).toHaveBeenCalledTimes(1);
-  expect(info).toHaveBeenCalledWith('operational_refresh_timeout_stage_timings', [
+  expect(info).toHaveBeenCalledWith('operational_refresh_timeout_stage_timings ' + JSON.stringify([
     {stage: 'source_orders', duration_ms: 12.345, outcome: 'complete'},
     {stage: 'aggregate', duration_ms: 85000, outcome: 'cancelled'},
-  ]);
+  ]));
   expect(JSON.stringify(info.mock.calls)).not.toContain('PRIVATE');
   window.dispatchEvent(new Event('focus')); window.dispatchEvent(new Event('online')); await flush();
   expect(info).toHaveBeenCalledTimes(1);
@@ -135,10 +207,10 @@ test('source failure evidence uses its own label and preserves the saved-report 
     refresh_warning: 'تعذر تحديث المصادر؛ تُعرض آخر أرصدة محفوظة بتاريخها. انتهت مهلة قراءة الطلبات',
   });
   expect(info).toHaveBeenCalledTimes(1);
-  expect(info).toHaveBeenCalledWith('operational_refresh_source_stage_timings', [
+  expect(info).toHaveBeenCalledWith('operational_refresh_source_stage_timings ' + JSON.stringify([
     {stage: 'source_primary_reads', duration_ms: 15001, outcome: 'failed'},
     {stage: 'aggregate', duration_ms: 35000, outcome: 'failed'},
-  ]);
+  ]));
   expect(JSON.stringify(info.mock.calls)).not.toContain('PRIVATE');
   window.dispatchEvent(new Event('focus')); window.dispatchEvent(new Event('online')); await flush();
   expect(api.refreshBalances).toHaveBeenCalledTimes(1);
@@ -150,9 +222,11 @@ test('timing evidence keeps at most the final 64 valid stages, including termina
   const stage_timings = Array.from({length: 70}, (_, index) => ({stage: 'source_orders', duration_ms: index, outcome: 'complete'}));
   stage_timings.push({stage: 'aggregate', duration_ms: 300000, outcome: 'cancelled'});
   logOperationalRefreshTimeoutTimings({stage_timings});
-  expect(info.mock.calls[0][1]).toHaveLength(64);
-  expect(info.mock.calls[0][1][0].duration_ms).toBe(7);
-  expect(info.mock.calls[0][1].at(-1)).toEqual({stage: 'aggregate', duration_ms: 300000, outcome: 'cancelled'});
+  expect(info.mock.calls[0]).toHaveLength(1);
+  const retained = JSON.parse(info.mock.calls[0][0].slice('operational_refresh_timeout_stage_timings '.length));
+  expect(retained).toHaveLength(64);
+  expect(retained[0].duration_ms).toBe(7);
+  expect(retained.at(-1)).toEqual({stage: 'aggregate', duration_ms: 300000, outcome: 'cancelled'});
   info.mockClear();
   [undefined, {}, {stage_timings: {}}, {stage_timings: [null, {stage: 'private'}]}].forEach(logOperationalRefreshTimeoutTimings);
   expect(info).not.toHaveBeenCalled();
