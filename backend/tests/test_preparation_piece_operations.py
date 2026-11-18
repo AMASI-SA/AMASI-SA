@@ -400,7 +400,6 @@ def test_assembly_search_reopens_work_when_current_salla_status_returns_in_progr
     module = __import__("preparation_piece_operations")
     search_source = inspect.getsource(module._assembly_search)
     physical_source = inspect.getsource(module._mark_assembly_piece_ready_in_transaction)
-    virtual_source = inspect.getsource(module._mark_virtual_assembly_piece_ready)
 
     from review_local_policy import assembly_execution_allowed
     order = SimpleNamespace(status="in_progress", status_native="in_progress")
@@ -408,7 +407,6 @@ def test_assembly_search_reopens_work_when_current_salla_status_returns_in_progr
     assert assembly_execution_allowed(order, {"stage": "reviewed"}, virtual=True)
     assert "assembly_execution_allowed" in search_source
     assert "_ensure_assembly_order_eligible" in physical_source
-    assert "_ensure_assembly_order_eligible" in virtual_source
     assert '"order_created_at": order.created_at if order else None' in search_source
     assert '"shipping_company": (' in search_source
 

@@ -1071,9 +1071,14 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
                 await self.db[ORDER_TRACKING_INSTRUCTIONS].update_one(
                     {"id": "late-instruction"}, {"$set": {"enforcement": enforcement, "status": state}},
                 )
-                result = await self.mark(retry_id, status=409)
-                self.assertEqual(result["detail"]["code"], "customer_service_instruction_action_required")
-                self.assertEqual(await self.workflow(), before)
+                if physical:
+                    result = await self.mark(retry_id, status=409)
+                    self.assertEqual(result["detail"]["code"], "customer_service_instruction_action_required")
+                    self.assertEqual(await self.workflow(), before)
+                else:
+                    result = await self.mark(retry_id)
+                    self.assertTrue(result["idempotent"])
+                    self.assertFalse(result["progress"]["order_completed"])
                 self.assertEqual(await self.on_hand(), stock_before)
                 self.assertEqual(await self.db[pieces.SHIPPING_BATCHES].count_documents({}), 0)
         await self.db[ORDER_TRACKING_INSTRUCTIONS].update_one(
@@ -1092,7 +1097,7 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
     async def test_physical_ready_retry_preserves_new_mandatory_instructions(self):
         await self.assert_ready_retry_instruction_guard(physical=True)
 
-    async def test_invalid_local_proofs_and_unknown_modes_block_both_write_paths(self):
+    async def test_invalid_local_proofs_block_supplier_but_allow_status_only_direct_ready(self):
         workflow = await self.complete_review()
         await self.db[completion.WORKFLOWS].update_one({"order_number": "local-assembly"}, {"$set": {"stage": "in_progress"}})
         await self.db[pieces.PIECES].insert_one({
@@ -1109,44 +1114,47 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
             for mutation in mutations:
                 with self.subTest(mutation=mutation):
                     await self.db[completion.OPERATIONS].replace_one({"_id": operation["_id"]}, {**deepcopy(operation), **mutation})
-                    for piece_id in (self.ids[0], "physical-proof"):
-                        await self.mark(piece_id, status=409)
+                    await self.mark(self.ids[0])
+                    await self.mark("physical-proof", status=409)
             await self.db[completion.OPERATIONS].replace_one({"_id": operation["_id"]}, operation)
             for mode in ("future", ""):
                 await self.db[completion.WORKFLOWS].update_one({"order_number": "local-assembly"}, {"$set": {"completion_mode": mode}})
-                for piece_id in (self.ids[0], "physical-proof"):
-                    result = await self.mark(piece_id, status=409)
-                    self.assertEqual(result["detail"]["code"], "review_completion_mode_unknown")
-        self.assertEqual(await self.on_hand(), 20)
-        self.assertEqual(await self.db[pieces.PIECE_EVENTS].count_documents({}), 0)
+                await self.mark(self.ids[0])
+                result = await self.mark("physical-proof", status=409)
+                self.assertEqual(result["detail"]["code"], "review_completion_mode_unknown")
+        self.assertEqual(await self.on_hand(), 18)
+        self.assertEqual(await self.db[pieces.PIECE_EVENTS].count_documents({}), 1)
 
-    async def test_ready_retry_rechecks_proof_payment_cancellation_and_source_fence(self):
+    async def test_direct_retry_checks_status_while_order_proof_and_payment_remain_separate(self):
         workflow = await self.complete_review()
         await self.mark(self.ids[0])
         op_id = workflow["review_completion_operation_id"]
         await self.db[completion.OPERATIONS].update_one({"_id": op_id}, {"$set": {"superseded_by": "new-operation"}})
-        await self.mark(self.ids[0], status=409)
+        self.assertTrue((await self.mark(self.ids[0]))["idempotent"])
         await self.db[completion.OPERATIONS].update_one({"_id": op_id}, {"$unset": {"superseded_by": ""}})
         current = await pieces._current_assembly_order(self.db, user_id="owner", order_number="local-assembly")
-        for changed in (
-            current.model_copy(update={"status": "cancelled", "status_native": "cancelled"}),
-            current.model_copy(update={"payment": PaymentDTO(method="card", status="pending", collection_status="unpaid")}),
-        ):
-            with patch.object(pieces, "_current_assembly_order", AsyncMock(return_value=changed)):
-                await self.mark(self.ids[0], status=409)
+        cancelled = current.model_copy(update={"status": "cancelled", "status_native": "cancelled"})
+        with patch.object(pieces, "_current_assembly_order", AsyncMock(return_value=cancelled)):
+            await self.mark(self.ids[0], status=409)
+        unpaid = current.model_copy(update={"payment": PaymentDTO(method="card", status="pending", collection_status="unpaid")})
+        with patch.object(pieces, "_current_assembly_order", AsyncMock(return_value=unpaid)):
+            self.assertTrue((await self.mark(self.ids[0]))["idempotent"])
         await self.db.unified_orders.update_one({"order_number": "local-assembly"}, {"$set": {"g47_salla_snapshot.component_pending": True}})
-        result = await self.mark(self.ids[0], status=409)
-        self.assertEqual(result["detail"]["code"], "component_execution_blocked")
+        result = await self.mark(self.ids[0])
+        self.assertTrue(result["idempotent"])
+        self.assertFalse(result["progress"]["order_completed"])
         self.assertEqual(await self.on_hand(), 18)
         self.assertEqual(await self.db[pieces.PIECE_EVENTS].count_documents({}), 1)
 
-    async def test_operational_last_piece_observes_source_fence(self):
+    async def test_operational_ready_saves_while_source_fence_defers_order_completion(self):
         await self.complete_review(operational=True)
         for piece_id in self.ids:
             result = await self.mark(piece_id)
             self.assertFalse(result["progress"]["order_completed"])
         await self.db.unified_orders.update_one({"order_number": "local-assembly"}, {"$set": {"g47_salla_snapshot.component_pending": True}})
-        await self.mark("operational-piece", status=409)
+        result = await self.mark("operational-piece")
+        self.assertTrue(result["piece"]["assembly_ready"])
+        self.assertFalse(result["progress"]["order_completed"])
         self.assertEqual(await self.db[pieces.SHIPPING_BATCHES].count_documents({}), 0)
         await self.db.unified_orders.update_one({"order_number": "local-assembly"}, {"$set": {"g47_salla_snapshot.component_pending": False}})
         result = await self.mark("operational-piece")

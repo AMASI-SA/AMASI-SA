@@ -325,8 +325,8 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
         workflow = await self.db[fulfillment.WORKFLOWS].find_one({"order_number": "order-1"})
         self.assertEqual(workflow["stage"], "in_progress")
 
-        # Component cancellation still blocks virtual work. The current Salla
-        # order remains in progress, so actual supplier Ready can be retried.
+        # The current Salla order remains in progress. Virtual Ready is allowed
+        # independently of component cancellation; stock consumption stays deferred.
         await self.db[fulfillment.COMPONENT_LIFECYCLES].update_one(
             {"user_id": "owner", "order_number": "order-1"},
             {"$set": {"cancelled": True}},
@@ -337,19 +337,21 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(cancelled_rows["piece-1"]["can_mark_ready"])
         self.assertIsNone(cancelled_rows["piece-1"]["assembly_blocker_code"])
         for piece_id in ("direct-regression", "operational-regression"):
-            self.assertFalse(cancelled_rows[piece_id]["can_mark_ready"], piece_id)
-            self.assertEqual(cancelled_rows[piece_id]["assembly_blocker_code"], "component_execution_blocked")
-            blocked = await self.mark_piece(piece_id)
-            self.assertEqual(blocked.status_code, 409, blocked.text)
-            self.assertEqual(blocked.json()["detail"]["code"], "component_execution_blocked")
+            self.assertTrue(cancelled_rows[piece_id]["can_mark_ready"], piece_id)
+            self.assertIsNone(cancelled_rows[piece_id]["assembly_blocker_code"])
+            ready = await self.mark_piece(piece_id)
+            self.assertEqual(ready.status_code, 200, ready.text)
+            self.assertTrue(ready.json()["piece"]["assembly_ready"])
+            self.assertEqual(ready.json()["progress"]["order_completed"],
+                             piece_id == "operational-regression")
         retry = await self.mark_piece("piece-1")
         self.assertEqual(retry.status_code, 200, retry.text)
         self.assertTrue(retry.json()["idempotent"])
-        self.assertFalse(retry.json()["progress"]["order_completed"])
+        self.assertTrue(retry.json()["progress"]["order_completed"])
         self.assertEqual(await self.on_hand(), before_stock)
         self.assertEqual(await self.db[UNITS].count_documents({"state": "consumed"}), 0)
-        self.assertEqual(await self.db[pieces.PIECE_EVENTS].count_documents({}), 1)
-        self.assertEqual(await self.db[pieces.SHIPPING_BATCHES].count_documents({}), 0)
+        self.assertEqual(await self.db[pieces.PIECE_EVENTS].count_documents({}), 3)
+        self.assertEqual(await self.db[pieces.SHIPPING_BATCHES].count_documents({}), 1)
 
     async def test_reviewed_historical_missing_revision_preserves_virtual_readiness(self):
         await self._assert_reviewed_historical_snapshot_preserves_virtual_gates(missing=True)
