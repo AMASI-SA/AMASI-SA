@@ -1,68 +1,50 @@
-# SNAP-UNASSIGNED-PROFIT-20261118
+# SNAP-UNASSIGNED-PROFIT-20261118 — current production integration
 
-## State
+## Current state
 
-Implementation and release preparation are complete. PR [#1992](https://github.com/AMASI-SA/AMASI-SA/pull/1992) is open and ready for review. All exact-head checks are complete: **30 successful, 6 intentionally skipped, no failures**.
+Current PR: [#1993](https://github.com/AMASI-SA/AMASI-SA/pull/1993), branch `codex/snap-unassigned-profit-20261118-r2`.
 
-**Production changed by this task: no.** No production merge, live source changes, lease creation, or publication has been performed for this task.
+PR #1992 was closed without merging because production advanced during the preceding release's verification. Its frozen source/intent pair remains preserved and must not be deployed. The previous complete record is [07322bbdb2c8c58d8f276b3176cdd942faba1df6](https://github.com/AMASI-SA/AMASI-SA/blob/07322bbdb2c8c58d8f276b3176cdd942faba1df6/docs/operations/snap-unassigned-profit-20261118/STATUS.md).
 
-The shared Emergent workspace is still completing verification for the preceding PR #1968 release. Do not alter or clear that release's lease. The official status command must report `active: false` before work in `/app` or a release rehearsal.
+**Production changed by this task: no.** No live source changes, lease creation or publication by this task.
 
-## User scope and resulting behavior
+## Scope and integration
 
-The user explicitly retained the operating-expense and final-net footer and asked to fix the unassigned Snapchat row that still showed “بانتظار توزيع الصرف”.
+The user retained the operating-expense and final-net footer and requested a numeric contribution for “سناب غير محدد” instead of “بانتظار توزيع الصرف”.
 
-The row now displays **مساهمة الطلبات** from its own verified sales minus product, shipping and customer-payment costs. It supports positive, zero and negative amounts in the daily table, row details and half-day overview. Missing or inconsistent evidence displays “بيانات الربح غير مكتملة”.
+The contribution is the cohort's own verified sales minus product, shipping and customer-payment costs. It supports positive, zero and negative amounts in daily and half-day views. Missing evidence displays “بيانات الربح غير مكتملة”.
 
-Advertising spend and advertising bank fees remain on the actual Snapchat accounts and are deducted once. The unassigned cohort remains unassigned; its full net-profit, spend, bank-fee, CPA and ROAS availability are not invented. The contribution is already included in the canonical aggregate and is not added again. Operating expenses and the authoritative final-net footer are unchanged.
+Advertising spend/bank fees remain on actual accounts and are counted once. Full account profit stays unavailable for the unknown cohort. Canonical aggregate, operating expenses and final net are unchanged; no residual or second addition is used.
 
-No new backend/provider reads, syncs, financial writes, or operating-expense logic were introduced.
+Current production PR #1991 introduced 17 changed/added paths. An independent Git review verified every one is byte-identical in this candidate, with no overlapping path. All 10 dashboard source/test blobs remain byte-identical to the previously reviewed change. Backend and AdvancedDashboard source are unchanged versus the new production base.
 
-## Repository and immutable release contract
+## Current source candidate
 
-- Repository: `AMASI-SA/AMASI-SA`
-- Production branch: `hotfix/prod-snap-meta-final`
-- Task branch: `codex/snap-unassigned-profit-20261118`
-- Production base J: `19527acf5ad97976e1d5f773a95bf9ff6dc4cca8`
-- Source A: `ca0e17ec90b9c22cf435b40b77d40bad96f69f2d`
-- Source A tree: `3053de536853f8de3bfea4a95897da829acc4d4d`
-- Intent-only B: `9b68eac44d21f00aaaefd038d44fe6bb646a35fa`
-- Deployment B tree: `1d6909e4a0c2cb4cea7f116290433e2b435ef736`
-- Runtime release ID: `rg5-f199658227e21a372caefa5ed6fa21fabc09718c5d07bece9de975df62590feb`
-- Frontend artifact tree: `2dfa5fcd78384ca4e05e3fd4a618909c9b97469f70646a4f7c5c8b7fecce63ef`
-- Build-meta SHA-256: `da84ccdf14ee9e9887364a595659d1fafd4816e795e5b4c3a42f2a99b2bf3385`
-- Intent SHA-256: `d7659525bb304414ded88a8b274da2efc635b0035807386437de50359cb0c14b`
+- Production base J2: `ce94ce01b0e631a6373ee3524119f26959bf89a4`
+- Base production release: PR #1991 (approved Aramex status-fee work)
+- Source A2: `84ae882f78ae954449cc4f3380b17a8ff808cb3a`
+- Source tree: `da532bd626f20662fa7840963d4f183f7f3c2918`
+- Intent B2: **not yet committed**
+- Candidate runtime ID: `rg5-c8f8108755b4a5d612b50e91902fbe83b014b80ce076b3372408f1bf41fc286b`
+- Candidate frontend artifact tree: `1f7da282b51120ea6954d2a799092e07464dd6576e0e9abb994107ec1b3e19be`
+- Candidate build-meta SHA-256: `2c9dd4e546c6ead76090b0afe1d74b8d190aeff51cba1437597616797980f306`
+- Candidate intent SHA-256: `6f1297fd5a11d96c2a2fee094f542b4f51f121a4b681d70ec3f3d50d07ec1165`
 
-Source A includes the concurrent reviewed PR #1968 as its base without changing that work. A to B changes exactly `release/release-intent-v5.json`. Do not squash, rebase, or add source changes after A. This handoff lives on a separate documentation branch and is not a deployment candidate.
+A2 retains J2's tracked release intent. The newly verified candidate intent is external until the intent-only B2 commit. Do not copy the superseded PR #1992 intent or rebase its frozen pair.
 
-## Changed source and test files
+## Verification
 
-- `frontend/src/components/DashboardAdsAccountRow.jsx`
-- `frontend/src/components/DashboardAdsAccountRow.test.jsx`
-- `frontend/src/components/DashboardAdsFinalProfit.test.jsx`
-- `frontend/src/components/DashboardAdsPeriodsOverview.jsx`
-- `frontend/src/components/DashboardAdsPeriodsOverview.test.jsx`
-- `frontend/src/components/DashboardAdsProfitValue.jsx`
-- `frontend/src/components/DashboardAdsSpendCard.jsx`
-- `frontend/src/components/DashboardAdsSpendCard.test.jsx`
-- `frontend/src/lib/dashboardAdsAccountResults.js`
-- `frontend/src/lib/dashboardAdsAccountResults.test.js`
+- Regression reproduced the defect before implementation.
+- Five focused frontend suites: **328 tests passed, exit 0**, both before and after integration on J2. The current-A2 rerun completed in 6.54 seconds.
+- Independent integration/financial-contract review: no blockers.
+- Exact Git checks: all 10 dashboard blobs preserved; all 17 newer production paths preserved; no overlap; `git diff --check` passed.
+- Source A2 release readiness [44368961758](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44368961758) passed.
+- Source A2 dashboard checks [44368961767](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44368961767) passed.
+- Candidate artifact `14457802088`, archive digest `5bdc2a62ab3629f519c67ab3e398c4b16590b5ed17254be5e93b34364927a65a`.
+- `load_candidate_release_intent` at exact A2 verified archive digest, source/base, schema and full manifests, exit 0.
+- Remaining source-A2 security/repository checks are still running. Exact-B2 CI/rehearsals must follow once B2 is committed.
 
-## Verification evidence
-
-- Regression reproduced the original missing contribution before implementation.
-- Focused integrated frontend execution: **5 suites, 328 tests passed, exit 0**.
-- Independent complete-diff review found no blockers.
-- `git diff --check`: exit 0.
-- Coverage includes signed/zero contribution, cohort identity and count, currency/time/period boundaries, complete cost evidence, malformed values, unchanged canonical totals and bank fees, empty elapsed periods, no input mutation, and independent cohort fee rounding.
-- Source readiness [run 44364846635](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44364846635) passed its governed two-build artifact validation.
-- Candidate intent artifact: `14456765383`; archive SHA-256 `f625a9375ea36bc0cf878ea8a19c0f96b132eb9b7c9db8f94a3daf2d3a1bb8be`. Archive digest, source/base, schema and complete manifests were verified using `load_candidate_release_intent` at A.
-- Reviewed-intent `load_release_intent` validation at B passed, exit 0. The local worktree was clean; the A-to-B diff was intent-only.
-- Exact-B release readiness [run 44366012474](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44366012474) passed, including both Node 20.20.2 and 24.19.0 host clean-clone adapter rehearsals.
-- Exact-B focused dashboard [run 44366012284](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44366012284) passed.
-- Required checks, CodeQL, operational backend/frontend/browser, and remaining repository checks passed. At 2026-11-18 18:15:41 UTC: 36 checks, 30 success and 6 skipped.
-
-Focused command, from `frontend`:
+Focused command from `frontend`:
 
 ```bash
 CI=true node node_modules/react-scripts/bin/react-scripts.js test --watchAll=false --runInBand --runTestsByPath src/lib/dashboardAdsAccountResults.test.js src/components/DashboardAdsSpendCard.test.jsx src/components/DashboardAdsAccountRow.test.jsx src/components/DashboardAdsPeriodsOverview.test.jsx src/components/DashboardAdsFinalProfit.test.jsx
@@ -70,20 +52,25 @@ CI=true node node_modules/react-scripts/bin/react-scripts.js test --watchAll=fal
 
 ## Shared release coordination
 
-The Emergent manager visibly shows the previous publication as the 100th publish, platform version `8a0d442`, finished Nov 18 at 21:06 Asia/Riyadh. This is the PR #1968 release, not this task.
+PR #1968's unchanged official verification attempt 2 is still running under its own lease:
+- Owner: `bulk-permissions-1968-20261118`
+- Source: `2707f66fd0fa701cc904496c176304b1a373c8c3`
+- Deployment: `19527acf5ad97976e1d5f773a95bf9ff6dc4cca8`
+- Runtime: `rg5-4ab5ccc21f961f4ab6a50d9d9f60f966706f8565dd2d2fd529c418b851bf68dc`
 
-The official `python /app/scripts/production_release_guard.py status` waited behind an existing verification process and then returned the prior lease for source `2707f66fd0fa701cc904496c176304b1a373c8c3`, runtime `rg5-4ab5ccc21f961f4ab6a50d9d9f60f966706f8565dd2d2fd529c418b851bf68dc`. A subsequent filtered official status call is waiting behind verification again. No lease was changed.
+The manager shows its 100th publication/version `8a0d442`, finished Nov18 21:06 Asia/Riyadh. Attempt1 timed out fetching one asset, with no reported identity/artifact mismatch. A bounded diagnostic succeeded, then the owner restarted the unchanged official verifier without reprepare, abort or republish. PR #1968 is the authoritative ongoing release record.
 
-The live workspace contains unrelated pending/untracked work. Preserve it. Do not use `git reset --hard`, remove another task's files, clear another owner’s lease, or use paid Emergent chat/Preview.
+An official filtered status call in the shared code-server is waiting behind that verification. Do not clear, reuse or alter the lease. PR #1991 has meanwhile merged on GitHub but its shared-host publication must follow lease closure. No `/app` files were changed by this task. Preserve unrelated workspace files and never use `git reset --hard`.
 
 ## Exact next safe actions
 
-1. Read `AGENTS.md`, this status and PR #1992. Fetch the task branch and verify exact B above; recheck the current production ref and exact-B checks.
-2. Wait for the preceding release owner to finish. Run the official guard status and proceed only on `active: false`. Do not infer availability from the manager's publication badge.
-3. Before merging, verify production is still J. If production advanced, preserve this checkpoint and create a newly reviewed source/intent pair on the new base rather than editing the frozen pair.
-4. Under the user's publication authorization, merge PR #1992 using a merge commit with expected head B. Verify the production merge tree equals B and that A-to-merge changes only the intent.
-5. Recheck the guard and preserve unrelated `/app` work. Fetch and fast-forward only to the verified production merge; run the configured governed package adapter rehearsal, then `prepare` and immediate `prepublish`.
-6. Publish through the Emergent management UI. Require a newer explicit deployment success and official three-round `verify --url https://mezansalla.com`, followed by `active: false`.
-7. Check the live dashboard contribution and retained operating/final footer, then update this handoff and the PR body with the exact production evidence.
+1. Read AGENTS.md and current PR #1993, fetch and verify exact A2 and current production base J2.
+2. Complete A2 source gates, freeze only the validated candidate intent as B2, and validate A2 → B2 changes only `release/release-intent-v5.json`.
+3. Collect exact-B2 checks and both host adapter rehearsals. If production advanced again, preserve the frozen pair and produce a new source/intent pair on the new base.
+4. Under existing publication authorization, merge only the reviewed exact B2 on the verified current base. A GitHub merge is not publication; keep shared-host staging separate.
+5. Before any change or rehearsal in `/app`, require official guard `active:false`, confirm the current production merge/tree and preserve unrelated work. Never interrupt the preceding release owner.
+6. Run the configured governed adapter, prepare an owned lease only after rehearsal, then prepublish and publish through the ordinary Emergent management controls. Do not use paid chat or Preview.
+7. Require a newer deployment success, official three-round verification and matching lease closure; inspect the live unknown contribution and unchanged operating/final footer.
+8. Update this document and current PR with full identities, CI, merge, guard and publication evidence.
 
-Issue #1006 has reached its comment limit; this status document and the PR body are the durable continuation record. Do not overwrite that issue or retry posting comments there.
+This is a documentation-only continuation branch, not a deployment candidate. Issue #1006 is full; use this record and the current PR without overwriting that issue.
