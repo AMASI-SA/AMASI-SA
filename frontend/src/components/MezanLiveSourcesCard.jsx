@@ -5,6 +5,7 @@ import DashboardPanel from "./DashboardPanel";
 
 export default function MezanLiveSourcesCard() {
     const [data, setData] = useState(null);
+    const [page, setPage] = useState(0);
     const [failed, setFailed] = useState(false);
     useEffect(() => {
         let stopped = false;
@@ -35,14 +36,16 @@ export default function MezanLiveSourcesCard() {
             document.removeEventListener("visibilitychange", refresh);
         };
     }, []);
+    const pageCount = Math.max(1, Math.ceil((data?.sources.length || 0) / 5));
+    const currentPage = Math.min(page, pageCount - 1);
     return <DashboardPanel title="مصادر الزيارات — تتبع ميزان"
-        data-testid="mezan-live-sources" className="overflow-hidden rounded-2xl border border-teal-200 bg-white shadow-sm">
+        data-testid="mezan-live-sources" className="mezan-live-sources-compact overflow-hidden rounded-2xl border border-teal-200 bg-white shadow-sm">
         <div className="flex min-h-14 items-center gap-2 bg-teal-700 px-4 py-3 text-white">
             <BarChart3 className="h-5 w-5 shrink-0" />
             <h2 className="text-sm font-black">مصادر الزيارات — تتبع ميزان</h2>
         </div>
-        <div className="space-y-3 p-4 text-sm" dir="rtl">
-            <p className="text-xs text-slate-500">جلسات رُصد لها نشاط خلال آخر 30 دقيقة · مستقلة عن فلتر التاريخ</p>
+        <div className="space-y-2 px-3 py-2 text-sm" dir="rtl">
+            <p className="text-[11px] text-slate-500" title="مستقلة عن فلتر التاريخ">آخر 30 دقيقة</p>
             {failed && <p role="alert" className="rounded bg-amber-50 p-2 text-amber-800">
                 تعذر تحديث مصادر الزيارات. {data ? "المعروض آخر قراءة ناجحة وليس بيانات مباشرة." : "البيانات غير متاحة؛ لا تعني صفر زيارات."}
             </p>}
@@ -52,18 +55,20 @@ export default function MezanLiveSourcesCard() {
                 {data.total_sessions === 0 && <p role="status">لم تُرصد أحداث خلال النافذة؛ هذا لا يثبت عدم وجود زوار.</p>}
                 <table className="w-full text-right text-xs">
                     <caption className="sr-only">مصادر جلسات ميزان خلال آخر 30 دقيقة</caption>
-                    <thead><tr className="border-b text-slate-500"><th className="py-2">المصدر</th><th>الجلسات</th><th>النسبة</th></tr></thead>
-                    <tbody>{data.sources.map(row => <tr key={row.key} className="border-b border-slate-100">
-                        <th className="py-2 font-medium">{row.label}
-                            {row.paid_evidence_sessions > 0 && <span className="block text-[10px] text-teal-700">منها {row.paid_evidence_sessions} بإشارة إعلان في الرابط</span>}
+                    <thead><tr className="border-b text-slate-500"><th className="py-1">المصدر</th><th>الجلسات</th><th>النسبة</th></tr></thead>
+                    <tbody>{data.sources.slice(currentPage * 5, currentPage * 5 + 5).map(row => <tr key={row.key} className="border-b border-slate-100">
+                        <th className="py-1 font-medium">{row.label}
+                            {row.paid_evidence_sessions > 0 && <span className="sr-only">منها {row.paid_evidence_sessions} بإشارة إعلان في الرابط</span>}
                         </th><td>{row.sessions}</td><td>{row.percent}%</td>
                     </tr>)}</tbody>
                 </table>
-                <p>المصدر المصنّف: {data.known_source_percent == null ? "—" : `${data.known_source_percent}%`}</p>
-                <p className="text-[11px] text-slate-500">آخر قراءة: {new Date(data.generated_at).toLocaleTimeString("ar-SA", { timeZone: "Asia/Riyadh" })} · الرياض</p>
-                <p className="text-[11px] text-slate-500">آخر حدث ضمن النافذة: {data.last_event_at ? new Date(data.last_event_at).toLocaleTimeString("ar-SA", { timeZone: "Asia/Riyadh" }) : "لا يوجد"}</p>
+                {pageCount > 1 && <nav aria-label="صفحات مصادر الزيارات" className="flex items-center justify-between gap-2 text-xs">
+                    <button type="button" className="rounded border px-3 py-1 disabled:opacity-40" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>السابق</button>
+                    <span aria-live="polite">{currentPage + 1} / {pageCount}</span>
+                    <button type="button" className="rounded border px-3 py-1 disabled:opacity-40" disabled={currentPage === pageCount - 1} onClick={() => setPage(currentPage + 1)}>التالي</button>
+                </nav>}
             </>}
-            <p className="text-[11px] leading-5 text-slate-500">المصدر من أول رابط أو إحالة مرصودة للجلسة داخل النافذة. التنقل بين الصفحات لا يكرر الجلسة. المصدر غير المتاح يبقى غير معروف؛ وغياب الإحالة لا يثبت دخولًا مباشرًا. هذه الجلسات ليست مستخدمي GA4 أو طلبات شراء، ونسبة التصنيف ليست نسبة دقة مثبتة.</p>
+
         </div>
     </DashboardPanel>;
 }

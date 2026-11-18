@@ -66,3 +66,20 @@ test('slow reads do not overlap and unmount cancels the request', async () => {
     view.unmount();
     expect(signal.aborted).toBe(true);
 });
+
+test('pages through five sources locally without another request', async () => {
+    api.get.mockResolvedValue({data: {...data, sources: Array.from({length: 10}, (_, i) => ({key: String(i), label: `مصدر ${i}`, sessions: i, percent: i}))}});
+    render(<MezanLiveSourcesCard />); await flush();
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(5);
+    expect(container.textContent).toContain('مصدر 0');
+    expect(container.textContent).not.toContain('مصدر 5');
+    const buttons = () => [...container.querySelectorAll('nav button')];
+    expect(buttons()[0].disabled).toBe(true);
+    act(() => buttons()[1].click());
+    expect(container.textContent).toContain('مصدر 9');
+    expect(container.textContent).not.toContain('مصدر 0');
+    expect(buttons()[1].disabled).toBe(true);
+    act(() => buttons()[0].click());
+    expect(container.textContent).toContain('مصدر 0');
+    expect(api.get).toHaveBeenCalledTimes(1);
+});
