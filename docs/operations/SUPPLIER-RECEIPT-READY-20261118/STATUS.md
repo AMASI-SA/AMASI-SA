@@ -1,3 +1,17 @@
+# Supplier Ready publication verification
+
+## Platform publication succeeded; official verification running — 2026-11-18 01:24 UTC
+
+Emergent displayed Deployment successful, restoredRepublish andnewliveversion9f62e46 replacing1c7c3f5. Root usedonefreePublishattemptonly. Screenshot publication-20261118.jpg records greenpublishedversion and projectidentity; SHA256988270abdae46da04b0a85753a7dce0cc8b1acae3a8cadccb3f3971dad1e87a4.
+
+Theunchangedofficial production_release_guard.py verify --url https://mezansalla.com isrunningin detachedwrapperPID183940. Output,stderr,exitandfinal-status records areunder /tmp/supplier-ready-1984-release. Onlyafterofficialexit0willwrapperrequireverified:true/checks:3/exactsourceA17262103506180b417f7ad5b88e518faf5ed4d5e/deploymentD557c6c52857b0a09feccacd0cdf9bf6ce9d4476e/runtimerg5-717a2715d8c7db60ea64885f2daab9b3b269c0daa2d284c118537041470c7323, theninvokestaticstatusandrequireactive:false, cleanDandpreservedinventory.
+
+Do notclaimfinalacceptanceyet. No competingguard/status/verifier/build/publish; do notrestartthiscommand. Nextread-onlypollverification-result.json. ThepublicationleaseisstillreservedbySUPPLIER-RECEIPT-READY-20261118.
+
+---
+
+## Previous accepted milestones
+
 # Supplier Ready active publication
 
 ## Active own lease and one publication attempt — 2026-11-18 01:14 UTC
