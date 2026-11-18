@@ -779,7 +779,7 @@ def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=Fa
             party["expense_paid"] += sum((Decimal(a["amount"]) for a in movement.get("allocations", [])
                 if (state.get("engine", {}).get("obligations", {}).get(a["obligation_id"], {}).get("kind") == "recurring"
                     or movement.get('automatic_prepaid_shipping') is True
-                    and state.get('engine', {}).get('obligations', {}).get(a['obligation_id'], {}).get('recognition_event') == 'order_completed'
+                    and state.get('engine', {}).get('obligations', {}).get(a['obligation_id'], {}).get('recognition_event') in {'order_completed', 'aramex_status_eligible'}
                     and state.get('engine', {}).get('obligations', {}).get(a['obligation_id'], {}).get('payment_mode') == 'prepaid')), Decimal(0))
         if movement["party_type"] == "employee_custody" and movement["kind"] != "correction":
             party["actual"] -= signed

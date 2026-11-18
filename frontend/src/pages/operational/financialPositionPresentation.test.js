@@ -1,7 +1,7 @@
 import ExcelJS from "exceljs";
 import {
     buildFinancialPositionWorkbook, collectionLabel, currencyCodes, deliveryOrderLabel, deliveryPartyKey,
-    destinationLabel, filterDeliveries, formatPositionCount, formatPositionMoney, shippingRecognitionLabel,
+    deliveryRecognitionLabel, destinationLabel, filterDeliveries, formatPositionCount, formatPositionMoney, shippingFeeStatusLabel, shippingRecognitionLabel,
 } from "./financialPositionPresentation";
 
 function report() {
@@ -108,6 +108,37 @@ test("post-start delivered status identifies recognition without supplying a del
     expect(shippingRecognitionLabel({ ...recognized, recognition_basis: "unknown" })).toBe("غير متاح");
     expect(shippingRecognitionLabel({ ...recognized, recognition_event: "order_completed", payment_mode: "deferred" }))
         .toBe("أجرة مستحقة عند تم التنفيذ");
+});
+
+test.each([
+    ["completed", "تم التنفيذ"], ["out_for_delivery", "جاري التوصيل"], ["delivered", "تم التوصيل"],
+])("Aramex %s fee exports its first recognition separately from later delivery proof", (status, label) => {
+    const payload = report();
+    const detail = { id: "prepaid-status", order_id: "status-order", order_number: "A-101",
+        party_type: "courier", party_name: "أرامكس", payment_mode: "prepaid", recognition_event: "aramex_status_eligible",
+        fee_recognition_basis: "aramex_status_created_after_start", fee_recorded_at: "2026-11-01T08:00:00Z",
+        fee_observed_order_status: status, completed_at: null, delivered_at: null,
+        recognition_basis: "delivered_order_created_after_start", recorded_at: "2026-11-02T10:00:00Z",
+        cash_account_name: "صندوق سلة التجريبي", shipping_confirmed: "34.50", shipping_settled: "34.50", shipping_outstanding: "0.00" };
+    payload.currencies.SAR.deliveries.rows = [detail];
+    const before = JSON.stringify(payload);
+    const values = buildFinancialPositionWorkbook(payload, "SAR").getWorksheet("تفاصيل الطلبات").getSheetValues().filter(Boolean);
+    const header = values.find(row => row[1] === "رقم الطلب");
+    const order = values.find(row => row[1] === "A-101");
+    expect(order[header.indexOf("أساس احتساب أجرة الشحن")]).toBe("مدفوع مقدمًا وفق حالة طلب أرامكس بعد بدء التشغيل");
+    expect(order[header.indexOf("وقت احتساب الأجرة — الرياض")]).toContain("11:00");
+    expect(order[header.indexOf("حالة الطلب عند احتساب الأجرة")]).toBe(label);
+    expect(order[header.indexOf("وقت التسجيل — الرياض")]).toContain("13:00");
+    expect(order[header.indexOf("أساس إثبات التسليم")]).toBe("طلب تم توصيله وأُنشئ بعد بدء التشغيل");
+    expect(order[header.indexOf("تاريخ التنفيذ — الرياض")]).toBe("غير متاح");
+    expect(order[header.indexOf("تاريخ التسليم — الرياض")]).toBe("غير متاح");
+    expect(order[header.indexOf("صندوق خصم الأجرة")]).toBe("صندوق سلة التجريبي");
+    expect(order[header.indexOf("المسدد من الأجرة")]).toBe("34.50");
+    expect(order[header.indexOf("المتبقي من الأجرة")]).toBe("0.00");
+    expect(deliveryRecognitionLabel({ ...detail, recognition_basis: null })).toBe("غير متاح");
+    expect(shippingFeeStatusLabel({ fee_observed_order_status: "unknown" })).toBe("غير متاح");
+    expect(shippingFeeStatusLabel({ fee_observed_order_status: "toString" })).toBe("غير متاح");
+    expect(JSON.stringify(payload)).toBe(before);
 });
 
 test.each([
