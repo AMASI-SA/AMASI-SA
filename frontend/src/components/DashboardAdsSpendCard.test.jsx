@@ -680,6 +680,72 @@ describe("net profit column and footer period overview", () => {
         expect(profitCell(host, "dashboard-ads-account-total").textContent).toBe("1,611.11تقديري");
     });
 
+    test("unassigned Snapchat follows the account rows without inventing spend or changing the supplied total", () => {
+        const result = metrics();
+        result.unassignedOrders = result.unrepresentedOrders = 4;
+        result.unassigned = { ...stats(null, { complete: false, spendSar: null, roas: null, bankFees: null }),
+            orders: 4, sales: 1626.01, knownOrders: 4, knownSales: 1626.01, cpa: null, accountUnassigned: true };
+        metricsSpy.mockReturnValue(result);
+        const host = independentAccountMarkup(independentAccountData(true));
+        const row = host.querySelector('[data-testid="dashboard-snapchat-unassigned"]');
+        expect(row).not.toBeNull();
+        expect([...row.cells].map((cell) => cell.textContent)).toEqual([
+            "سناب غير محدد", "—", "1,626.01", "4", "—", "—", "—",
+        ]);
+        expect(row.previousElementSibling.dataset.testid).toBe("dashboard-snapchat-account-__proto__");
+        expect(row.nextElementSibling.dataset.testid).toBe("dashboard-ads-provider-google");
+        expect(host.querySelector('[data-testid="dashboard-ads-unassigned-orders"]')).toBeNull();
+        expect(host.querySelector('[data-testid="dashboard-ads-unassigned-note"]').textContent).toContain("محتسبة مرة واحدة");
+        expect(host.querySelector('[data-testid="dashboard-ads-profit-basis"]').textContent)
+            .toBe("الأرباح بعد عمولات البنك وقبل المصروفات التشغيلية.");
+        expect(profitCell(host, "dashboard-ads-account-total").textContent).toBe("1,611.11تقديري");
+        [...host.querySelector('[data-testid="dashboard-ads-account-table"]').rows]
+            .forEach((entry) => expect(entry.cells).toHaveLength(7));
+    });
+
+    test("an absent unknown cohort stays hidden and a proven outside account remains in the warning", () => {
+        let host = independentAccountMarkup(independentAccountData(true));
+        expect(host.querySelector('[data-testid="dashboard-snapchat-unassigned"]')).toBeNull();
+        const result = metrics();
+        result.unrepresentedOrders = 5;
+        result.unassignedOrders = 4;
+        result.unassigned = { ...stats(null, { complete: false, spendSar: null, roas: null }),
+            orders: 4, knownOrders: 4, sales: 1626.01, cpa: null };
+        metricsSpy.mockReturnValue(result);
+        host = independentAccountMarkup(independentAccountData(true));
+        expect(host.querySelector('[data-testid="dashboard-ads-unassigned-orders"]').textContent)
+            .toMatch(/^1 طلبات ضمن الإجمالي/);
+    });
+
+    test("unassigned hover and the half-day overview reuse the supplied cohort without a network read", () => {
+        const result = metrics();
+        result.unassignedOrders = result.unrepresentedOrders = 4;
+        result.unassigned = { ...stats(null, { complete: false, spendSar: null, roas: null, bankFees: null }),
+            orders: 4, sales: 1626.01, knownOrders: 4, cpa: null, accountUnassigned: true };
+        metricsSpy.mockReturnValue(result);
+        globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+        const host = document.createElement("div"); document.body.appendChild(host);
+        const root = createRoot(host);
+        const reads = getDashboardAdsSpend.mock.calls.length;
+        const hover = (element) => act(() => element.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
+        try {
+            act(() => root.render(<DashboardAdsSpendCardContent data={independentAccountData(true)}
+                fromDate={day} toDate={day} />));
+            hover(host.querySelector('[data-testid="dashboard-snapchat-unassigned"]'));
+            const detail = document.querySelector('[data-testid="dashboard-ads-account-tooltip"]');
+            expect(detail).not.toBeNull();
+            expect(detail.textContent).toContain("سناب غير محدد");
+            expect(detail.querySelector('[data-testid="dashboard-ads-daily-summary"]').textContent).toContain("1,626.01");
+            hover(host.querySelector('[data-testid="dashboard-ads-account-total"]'));
+            const overview = document.querySelector('[data-testid="dashboard-ads-periods-overview"]');
+            expect(overview.querySelectorAll("tbody tr")).toHaveLength(14);
+            expect([...overview.querySelectorAll("tbody th")].filter((cell) => cell.textContent === "سناب غير محدد")).toHaveLength(2);
+            expect(getDashboardAdsSpend.mock.calls.length).toBe(reads);
+        } finally {
+            act(() => root.unmount()); host.remove(); globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+        }
+    });
+
     test.each([
         ["known ROAS without complete costs", 2.75, false, "2.75 ×"],
         ["verified zero", 0, true, "0.00 ×"],

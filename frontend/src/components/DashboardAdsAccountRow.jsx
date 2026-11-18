@@ -41,6 +41,9 @@ function FinancialRows({ stats = {}, detailed = true }) {
         ["تكلفة الطلب", <MetricValue value={cpa} />],
         ["العائد الإعلاني", <MetricValue value={roas} suffix="×" />],
         ["إجمالي التكاليف", <MetricValue value={report.totalCost} available={report.knownTotalCost} />],
+        ["منها عمولات البنك", <MetricValue
+            value={known(report.bankFees) && report.bankFees >= 0 ? report.bankFees : null}
+            available={known(report.knownBankFees) && report.knownBankFees >= 0 ? report.knownBankFees : null} />],
         ["صافي الأرباح", <><MetricValue value={profitReady ? report.netProfit : null} />
             {profitReady && report.provisional && <span className="mr-1 text-[9px] font-medium">تقديري</span>}</>, true],
     ];
@@ -210,6 +213,7 @@ export default function DashboardAdsAccountRow({ label, stats = {}, fromDate, to
             <p className="mb-0 mt-2 text-[9px] leading-4 text-slate-500">{report.adSpendApplicable === false
                 ? "صافي الأرباح = المبيعات − إجمالي التكاليف."
                 : "صافي الأرباح = المبيعات − الصرف الإعلاني − إجمالي التكاليف."}</p>
+            <p className="mb-0 mt-1 text-[9px] leading-4 text-slate-500">عمولات البنك المعروضة ضمن إجمالي التكاليف ومخصومة مرة واحدة. الأرباح قبل المصروفات التشغيلية.</p>
             {report.provisional && report.complete && <p className="mb-0 mt-1 text-[9px] leading-4 text-amber-700">صافي الأرباح تقديري حتى اكتمال بيانات الصرف.</p>}
         </div>, document.body)}
     </>;

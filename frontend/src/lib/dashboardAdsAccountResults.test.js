@@ -1079,3 +1079,102 @@ test("legacy warning metadata uses unassigned count without inventing a larger u
     input.executiveSnapshot.ads_v2.account_results.coverage.unassigned_orders = 3;
     expect(buildDashboardAdsTableMetrics(input).unrepresentedOrders).toBe(3);
 });
+
+function unassignedFixture() {
+    const input = withBankFees(allCohortFixture());
+    const source = input.executiveSnapshot.ads_v2.account_results;
+    const unknown = (orders, sales) => ({ provider: "snapchat", cohort_basis: "snapchat_unassigned_orders",
+        ad_spend_allocation_complete: false, attribution_complete: false, time_assignment_complete: true,
+        salla_orders: null, salla_sales_sar: null, known_salla_orders: orders, known_salla_sales_sar: sales,
+        sales_currency_conversion_complete: true, hover_summary: { ...costs(orders, 600, 80, 16.01),
+            complete: false, pieces_complete: false, product_cost_complete: false, shipping_cost_complete: false,
+            payment_fees_complete: false, pieces: null, product_cost_sar: null, shipping_cost_sar: null,
+            payment_fees_sar: null, total_cost_sar: null } });
+    Object.assign(source.coverage, { status: "partial", unassigned_orders: 4, unrepresented_orders: 4 });
+    source.accounts.forEach((row) => Object.assign(row, {
+        attribution_complete: false, salla_orders: null, salla_sales_sar: null,
+    }));
+    source.unassigned_result = unknown(4, 1626.01);
+    Object.assign(source.daily_total, salla(23, 6726.01), { hover_summary: costs(29, 2340, 190, 41.01) });
+    source.segments.forEach((segment, index) => {
+        Object.assign(segment.coverage, { status: "partial", unassigned_orders: 2, unrepresented_orders: 2 });
+        segment.unassigned_result = unknown(2, index ? 1026.01 : 600);
+    });
+    return input;
+}
+
+test("unassigned Snapchat has its own sourced row without allocating spend, bank fees or profit or recounting the total", () => {
+    const input = unassignedFixture();
+    const before = JSON.parse(JSON.stringify(input));
+    const result = buildDashboardAdsTableMetrics(input);
+    expect(result.unassigned).toMatchObject({ orders: 4, sales: 1626.01, knownOrders: 4, knownSales: 1626.01,
+        cpa: null, profit: { spendSar: null, knownSpendSar: null, bankFees: null, knownBankFees: null,
+            roas: null, netProfit: null, complete: false, knownTotalCost: 696.01 } });
+    expect(result.unassigned.segments.map((row) => [row.orders, row.sales])).toEqual([[2, 600], [2, 1026.01]]);
+    expect(result.total).toMatchObject({ orders: 23, sales: 6726.01,
+        profit: { bankFees: 9.77, totalCost: 2580.78, netProfit: 3520.23, complete: true } });
+    expect(result.accounts.get("usd").profit.bankFees).toBe(8.62);
+    expect(result.accounts.get("sar").profit.bankFees).toBe(1.15);
+    expect(result.direct.orders).toBe(4);
+    expect(input).toEqual(before);
+    delete input.executiveSnapshot.ads_v2.account_results.unassigned_result;
+    expect(buildDashboardAdsTableMetrics(input).total).toEqual(result.total);
+});
+
+test.each(["missing", "count", "provider", "cohort", "account", "allocation", "old period", "legacy mode", "zero"])(
+    "%s unassigned evidence cannot create a visible Snapchat row", (fault) => {
+        const input = unassignedFixture();
+        const source = input.executiveSnapshot.ads_v2.account_results;
+        if (fault === "missing") delete source.unassigned_result;
+        if (fault === "count") source.unassigned_result.known_salla_orders = 5;
+        if (fault === "provider") source.unassigned_result.provider = "meta";
+        if (fault === "cohort") source.unassigned_result.cohort_basis = "executive_filtered_orders";
+        if (fault === "account") source.unassigned_result.account_id = "usd";
+        if (fault === "allocation") source.unassigned_result.ad_spend_allocation_complete = true;
+        if (fault === "old period") source.date_from = "2026-01-01";
+        if (fault === "legacy mode") input.snapchatAccounts = null;
+        if (fault === "zero") source.coverage.unassigned_orders = source.unassigned_result.known_salla_orders = 0;
+        expect(buildDashboardAdsTableMetrics(input).unassigned).toBeNull();
+    },
+);
+
+test("unassigned row excludes proven outside accounts and cannot hide their financial scope warning", () => {
+    const input = unassignedFixture();
+    const source = input.executiveSnapshot.ads_v2.account_results;
+    source.coverage.outside_account_scope_orders = 1;
+    source.coverage.unrepresented_orders = 5;
+    Object.assign(source.daily_total, salla(24, 6926.01));
+    const result = buildDashboardAdsTableMetrics(input);
+    expect(result.unassigned).toMatchObject({ orders: 4, sales: 1626.01 });
+    expect(result.unrepresentedOrders).toBe(5);
+    expect(result.total.profit.netProfit).toBeNull();
+});
+
+test("unassigned counts survive unavailable FX and incomplete catalog without making a complete sales claim", () => {
+    const input = unassignedFixture();
+    const source = input.executiveSnapshot.ads_v2.account_results;
+    Object.assign(source.coverage, { catalog_complete: false, status: "unavailable" });
+    source.unassigned_result.sales_currency_conversion_complete = false;
+    expect(buildDashboardAdsTableMetrics(input).unassigned).toMatchObject({ orders: 4, sales: null,
+        knownSales: 1626.01, partial: true, profit: { netProfit: null } });
+});
+
+test.each(["unknown time", "future", "wrong boundary", "duplicate", "multi-day"])(
+    "%s unassigned half-day cannot masquerade as complete while daily data remains available", (fault) => {
+        const input = unassignedFixture();
+        const source = input.executiveSnapshot.ads_v2.account_results;
+        const segment = source.segments[1];
+        if (fault === "unknown time") segment.unassigned_result.time_assignment_complete = false;
+        if (fault === "future") Object.assign(segment, { status: "not_started", cutoff_at: segment.start_at });
+        if (fault === "wrong boundary") segment.start_at = source.segments[0].start_at;
+        if (fault === "duplicate") source.segments.push({ ...segment });
+        if (fault === "multi-day") {
+            input.toDate = source.date_to = input.executiveSnapshot.range.to_date = "2026-11-16";
+        }
+        const result = buildDashboardAdsTableMetrics(input);
+        expect(result.unassigned.orders).toBe(4);
+        expect(result.unassigned.segments[1].orders).toBeNull();
+        expect(result.unassigned.segments[1].sales).toBeNull();
+        expect(result.unassigned.segments[1].profit.netProfit).toBeNull();
+    },
+);

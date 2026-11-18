@@ -271,11 +271,14 @@ function AdsAccountResultsTable({ data, accounts, accountMode, ready, singleDay,
             ? salesFilters[key].some((value) => String(value).trim())
             : Boolean(salesFilters?.[key]));
     const unrepresentedOrders = metrics.unrepresentedOrders ?? metrics.unassignedOrders;
+    const unassigned = accountMode ? metrics.unassigned : null;
+    const remainingUnrepresentedOrders = Math.max(0, (unrepresentedOrders || 0) - (unassigned?.knownOrders || 0));
     const overviewRecords = [
         ...(accountMode ? accounts.map((account, index) => ({
             key: `snapchat:${account.account_id}`, label: accountName(account),
             color: ACCOUNT_COLORS[index % ACCOUNT_COLORS.length], stats: metrics.accounts.get(account.account_id),
         })) : []),
+        ...(unassigned ? [{ key: "snapchat:unassigned", label: "سناب غير محدد", color: "#d97706", stats: unassigned }] : []),
         ...tableProviders.map((provider) => ({ key: provider,
             label: provider === "google" ? "جوجل" : PROVIDER_META[provider].label,
             color: PROVIDER_META[provider].stroke, stats: metrics.providers[provider] })),
@@ -317,6 +320,19 @@ function AdsAccountResultsTable({ data, accounts, accountMode, ready, singleDay,
                             <SallaMetricCells stats={metrics.accounts.get(account.account_id)} />
                         </DashboardAdsAccountRow>;
                     })}
+                    {unassigned && <DashboardAdsAccountRow className="border-t border-slate-100"
+                        label="سناب غير محدد" stats={unassigned} fromDate={fromDate} toDate={toDate}
+                        active={activeDetails === "snapchat:unassigned"} onActivate={() => setActiveDetails("snapchat:unassigned")}
+                        data-testid="dashboard-snapchat-unassigned">
+                        <th scope="row" className="px-1.5 py-2 text-right font-bold">
+                            <div className="flex min-w-0 items-center gap-1">
+                                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-600" />
+                                <span>سناب غير محدد</span>
+                            </div>
+                        </th>
+                        <td className="px-1 py-2 text-center font-medium text-slate-400">—</td>
+                        <SallaMetricCells stats={unassigned} />
+                    </DashboardAdsAccountRow>}
                     {tableProviders.map((provider) => {
                         const meta = PROVIDER_META[provider];
                         const state = data?.providers?.[provider] || {};
@@ -366,10 +382,14 @@ function AdsAccountResultsTable({ data, accounts, accountMode, ready, singleDay,
             </table>
         </div>
         <p className="mt-2 text-[9px] leading-4 text-slate-500">متوسط تكلفة الطلب = الصرف بالريال ÷ طلبات سلة.</p>
+        <p className="text-[9px] leading-4 text-slate-500" data-testid="dashboard-ads-profit-basis">الأرباح بعد عمولات البنك وقبل المصروفات التشغيلية.</p>
         <p className="text-[9px] leading-4 text-slate-500">أشّر على أي صف لتفاصيله، أو على الإجمالي لمقارنة المنصات صباحًا ومساءً. اضغط لتثبيت التفاصيل.</p>
         {filtered && <p className="text-[9px] leading-4 text-slate-500">طلبات ومبيعات سلة حسب الفلاتر؛ الصرف إجمالي الفترة.</p>}
-        {unrepresentedOrders > 0 && <p className="text-[9px] leading-4 text-amber-700" data-testid="dashboard-ads-unassigned-orders">
-            {unrepresentedOrders.toLocaleString("en-US")} طلبات ضمن الإجمالي لم يُحدد لها حساب إعلاني معروض؛ تفاصيل الحسابات تعرض المتاح.
+        {unassigned && <p className="text-[9px] leading-4 text-amber-700" data-testid="dashboard-ads-unassigned-note">
+            طلبات «سناب غير محدد» محتسبة مرة واحدة ضمن الإجمالي؛ لم يتحدد حسابها لتوزيع الصرف وعمولاته عليها.
+        </p>}
+        {remainingUnrepresentedOrders > 0 && <p className="text-[9px] leading-4 text-amber-700" data-testid="dashboard-ads-unassigned-orders">
+            {remainingUnrepresentedOrders.toLocaleString("en-US")} طلبات ضمن الإجمالي لم يُحدد لها حساب إعلاني معروض؛ تفاصيل الحسابات تعرض المتاح.
         </p>}
         {metrics.pending && <p className="text-[9px] leading-4 text-slate-500" data-testid="dashboard-ads-results-pending">بانتظار بيانات سلة المطابقة للفترة.</p>}
     </div>;
