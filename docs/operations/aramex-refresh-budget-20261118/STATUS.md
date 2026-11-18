@@ -1,6 +1,6 @@
 # Visible refresh budget recovery after Aramex publication
 
-## Active checkpoint — implementation and focused verification
+## Active checkpoint — source complete; release verification pending
 
 The owner authorized the Aramex current-status rule, implementation, merge,
 publication and live reconciliation. The accounting rule is published and its
@@ -23,8 +23,11 @@ No new financial result is inferred from completed intermediate calculations.
   `2026-11-18T19:11:43Z`. Fresh live health/source hashes matched before the
   two refresh attempts. PR1994 has an independent release owner; this task has
   not changed the shared host or its release lease.
-- This checkpoint is WIP, not a reviewed release candidate or deployment input.
-  The exact recoverable commit is recorded in its GitHub task PR.
+- The preceding WIP checkpoint is remotely recoverable as
+  `22ba0a50bbac59f664156e0ffe04690cd8424421`.
+- The commit containing this updated record is the completed source candidate A.
+  Its exact remote SHA is recorded in the task PR before any intent is frozen.
+  Source A alone is not a deployment input.
 
 ## Observed failure boundary
 
@@ -66,23 +69,38 @@ profit quality/source errors as well as the new saved timestamp.
 
 ## Verification at this checkpoint
 
-- Initial focused service, demand-lifetime, stage-timing and party-index tests:
-  **67 passed**, exit 0.
-- Reducer diagnostic regressions first reproduced repeated whole-list work and
-  absence of indexed cooperative cancellation; the focused reducer/index slice
-  passed after the fix. Final exact-source totals and measured artifacts follow.
+- Final integrated suite: **632 passed**, zero failures/errors/skips, exit 0.
+  This includes the earlier 67/392 service slices, the affected reducer/provider
+  coverage, Aramex prepaid/report invariants, profit projection/source/salary,
+  request lifetimes, source cancellation, archive batches and all new regressions.
+  Two pre-existing Pydantic deprecation warnings were emitted.
+- Nine new reducer tests preserve full issue-list behavior. The deterministic
+  workload test failed on the frozen base with 1,499,500 containment-row visits
+  for 1,000 existing plus 1,000 new issues; the candidate passes its 40,000-work
+  budget. There is no elapsed-time assertion in the test.
+- Seven party-name cases preserve exact names, duplicate/rich/unusual review
+  rows, money/facts, linear index work and cooperative cancellation.
+- Fifteen parallel-preparation cases pass: both completion orders, exact copied
+  period, either fatal failure and secondary cleanup errors, deadline/disconnect,
+  repeated parent cancellation, revoked permission, fresh preparations per CAS
+  retry, unchanged ordinary/session serial behavior and explicit incomplete
+  profit output on its existing soft source timeout.
 - An independent reviewer identified a repeated-cancellation risk in an initial
   unshielded group and it was corrected before source freeze.
-- Joined parallel preparations, failure identity, deadline/disconnect,
-  authorization, retry and serial-fallback tests are being completed.
+- Process-local negative controls prove the original sequential path fails the
+  overlap test and removing the new shield fails repeated-cancellation cleanup.
+- Independent static review of both app files found no remaining blocker.
+- Synthetic measurements and their reproducible runner are retained under
+  `scripts/testing/operational_refresh_budget/`. With 12,000 seed issues and
+  12,000 new issues, baseline/candidate whole reducer CPU was 4.463/0.202 seconds
+  with entire output equality and unchanged inputs. This is not live latency.
 - No deployment of this follow-up has occurred. No fee/payment arithmetic,
   tariff, wallet binding or historical pending classification was changed.
 
 ## Next safe actions
 
-Complete the focused and independent review, preserve the tested source in a
-new source A, then build/freeze a fresh v5 intent-only B on a current reviewed
-production base. Run all required exact-source gates. Before any shared-host
+Preserve the tested source A, then build/freeze a fresh v5 intent-only B on the
+current reviewed production base. Run all required exact-source gates. Before any shared-host
 work inspect Release Guard and honor the current owner's active lease.
 After an authorized deployment and unchanged official verification, perform
 the explicit live refresh, compare the same private order cohort and fees, and
