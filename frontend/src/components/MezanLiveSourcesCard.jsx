@@ -3,7 +3,7 @@ import { BarChart3 } from "lucide-react";
 import api from "../lib/api";
 import DashboardPanel from "./DashboardPanel";
 
-export default function MezanLiveSourcesCard() {
+export default function MezanLiveSourcesCard({ onData }) {
     const [data, setData] = useState(null);
     const [page, setPage] = useState(0);
     const [failed, setFailed] = useState(false);
@@ -21,9 +21,9 @@ export default function MezanLiveSourcesCard() {
                 });
                 if (!Array.isArray(response.data?.sources) || !Number.isFinite(response.data?.total_sessions)
                     || !response.data?.generated_at) throw new Error("Invalid live sources response");
-                if (!stopped) { setData(response.data); setFailed(false); }
+                if (!stopped) { setData(response.data); setFailed(false); onData?.(response.data.realtime || null); }
             } catch (_) {
-                if (!stopped) setFailed(true);
+                if (!stopped) { setFailed(true); onData?.(null); }
             } finally { busy = false; }
         }
         refresh();
@@ -35,7 +35,7 @@ export default function MezanLiveSourcesCard() {
             controller?.abort();
             document.removeEventListener("visibilitychange", refresh);
         };
-    }, []);
+    }, [onData]);
     const pageCount = Math.max(1, Math.ceil((data?.sources.length || 0) / 5));
     const currentPage = Math.min(page, pageCount - 1);
     return <DashboardPanel title="مصادر الزيارات — تتبع ميزان"

@@ -88,3 +88,17 @@ async def test_route_requires_authentication():
     app = FastAPI(); app.include_router(make_first_party_attribution_router({}, deny))
     async with AsyncClient(transport=ASGITransport(app=app), base_url='http://test') as client:
         assert (await client.get('/first-party-attribution/v1/live-sources')).status_code == 401
+
+
+def test_realtime_counts_visitors_per_window_and_pages_without_query_tokens():
+    from datetime import timedelta
+    e = {'store_id': 'one', 'visitor_id': 'v1', 'session_id': 's1', 'event_name': 'page_view',
+         'received_at': NOW.isoformat(), 'page_url': 'https://amasi-sa.com/product?token=secret'}
+    result = summarize([e, {**e, 'session_id': 's2'},
+        {**e, 'visitor_id': 'v2', 'received_at': (NOW-timedelta(minutes=6)).isoformat()},
+        {**e, 'event_name': 'purchase', 'page_url': 'https://amasi-sa.com/order/secret'}], NOW)['realtime']
+    assert result['active_users']['last_30_minutes'] == 2
+    assert result['active_users']['last_5_minutes'] == 1
+    assert result['active_users']['per_minute'][-1]['active_users'] == 1
+    assert result['top_pages'] == [{'title': 'amasi-sa.com/product', 'views': 3}]
+    assert 'secret' not in str(result)

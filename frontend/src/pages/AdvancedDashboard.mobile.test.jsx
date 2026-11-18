@@ -98,3 +98,15 @@ test("minute bars expose their own count on hover, focus and touch click", () =>
     act(() => bars[0].click());
     expect(host.querySelector('[role="tooltip"]').textContent).toContain("24 مستخدم نشط");
 });
+
+
+test("source switch clears Google values while Mezan data is unavailable", () => {
+    act(() => root.render(<GaLive data={{top_pages: [{title: "Google page", views: 99}], active_users: {last_30_minutes: 123, last_5_minutes: 45, per_minute: []}}} />));
+    const toggle = host.querySelector('[aria-label="مصدر بيانات الزيارات"]');
+    expect(host.textContent).toContain("Google page");
+    act(() => toggle.querySelectorAll('button')[1].click());
+    expect(host.textContent).not.toContain("Google page");
+    expect(host.textContent).toContain("بيانات ميزان اللحظية غير متاحة بعد");
+    act(() => toggle.querySelectorAll('button')[0].click());
+    expect(host.textContent).toContain("Google page");
+});

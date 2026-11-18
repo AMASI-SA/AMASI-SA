@@ -1,11 +1,9 @@
-# Live sources compact layout follow-up
+# Live traffic source toggle and compact cards — 2026-11-18
 
-2026-11-18. Previous PR1994 production release d3632a33843e076dd7824933528dcc7d897bc32a verified three times, inactive lease. Historical evidence: PR1994 comment6989860812 and handoff0806066f490f709983069389f35df44f1ab0d673.
+PR1997, branch codex/live-sources-compact-20261118; original deployed release PR1994 merge d3632a33843e076dd7824933528dcc7d897bc32a. Prior compact checkpoint8ff4452842a4cfa74b9aba808d41243f7e2898b1.
 
-Current branch codex/live-sources-compact-20261118: five source rows per page; local previous/next; remove footer explanations/timestamps; compact header/spacing. GA active minute bars expose exact minute/count via hover, focus and click. No additional network requests.
+Implemented: source card five rows/page, local pagination, compact spacing/header, footer removed. Per-minute hover/focus/click count tooltip. Shared Google/Mezan source switch for top pages and active visitors. Mezan aggregates reuse existing bounded/cache-protected30-minute read; distinct store/visitor counts5/30min and minute buckets; page_view counts by host/path with query/fragment stripped and sensitive routes grouped. No page_title exists; explicit path fallback. No extra polling, snippet change or external platform writes.
 
-Validation: 44 tests passed across live sources/mobile/cardRefresh suites, then new tooltip test added and all9 mobile tests passed (45 total unique tests). git diff --check passed. Existing unrelated CampaignHoverBadge act warnings remain. Height reduction target about70%, not yet browser-measured. Production changed by this follow-up: no. No new release intent, lease or deployment.
+17 backend tests PASS. Frontend46 tests across three relevant suites PASS. Existing unrelated act warnings. git diff --check PASS. Visual size target70% not yet measured. Source switch does not mix providers or show Google values under Mezan; unavailable data uses dash, on fetch error Mezan aggregate cleared.
 
-User additionally asks for Mezan/Google source toggle shared by top pages and active users cards. Feasibility inspected: first-party events contain page_view, page_url, visitor_id and received_at, but no page_title. Needs a bounded aggregate for distinct visitors and minute buckets, page-view counts, page names from safe catalog mapping or sanitized path fallback. Must distinguish observed Mezan visitors from GA active users. Not implemented yet.
-
-Next: review compact UI, implement source toggle if proceeding, then fresh v5 A/B build and CI before any deployment. Keep original frozen A/B unchanged. Issue1006 full; follow-up PR is continuation ledger.
+Owner explicitly authorized publication. No merge, new intent, lease or publish yet. Shared Emergent terminal disconnected; reload showed preview sleeping, Wake up servers clicked. Next recover terminal/read guard status and HEAD, finish visual acceptance, fresh governed sourceA build + intent-onlyB, clean clone rehearsal, CI, merge preservingA/B, FF/build/prepare/prepublish/singlepublish/verify3/finalinactive. Preserve unrelated work. Issue1006 full; use PR1997 comments ledger. Production changed by this followup: no.
