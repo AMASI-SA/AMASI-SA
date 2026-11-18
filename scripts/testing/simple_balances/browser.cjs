@@ -4,8 +4,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const http = require('node:http');
 const crypto = require('node:crypto');
-const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const f = require('./fixtures.cjs');
+const feature = require('./features.cjs');
 const root = path.resolve(__dirname, '../../..');
 const out = process.env.SIMPLE_BALANCES_UAT_OUTPUT;
 if (!out || !path.isAbsolute(out) || path.resolve(out) === root || path.resolve(out).startsWith(root + path.sep)) throw Error('Absolute repo-external output required');
@@ -34,6 +34,15 @@ const dist = path.join(out, 'dist');
 const server = http.createServer(async (request, response) => {
   const url = new URL(request.url, 'http://127.0.0.1');
   const send = (status, value) => { response.writeHead(status, { 'content-type': 'application/json' }); response.end(JSON.stringify(value)); };
+  if (process.env.SIMPLE_BALANCES_SERVE_ONLY === '1' && url.pathname === '/__qa') {
+    const screens = { employee: '/operational-balances/daily-movements?tab=parties&kind=employee&id=employee-demo',
+      reviews: '/operational-balances/daily-movements?tab=parties&panel=reviews',
+      movements: '/operational-balances/daily-movements?tab=movements', access: '/operational-balances/access' };
+    const src = screens[url.searchParams.get('screen')] || screens.employee;
+    const width = Math.min(1440, Math.max(320, Number(url.searchParams.get('width')) || 390));
+    response.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+    response.end(`<!doctype html><html lang="ar"><head><title>معاينة مكونات الأرصدة الفعلية</title></head><body style="margin:0;background:#eee"><iframe title="التطبيق ببيانات توضيحية" src="${src.replaceAll('&', '&amp;')}" style="display:block;width:${width}px;max-width:100%;height:1100px;border:0;margin:0 auto"></iframe></body></html>`); return;
+  }
   if (!url.pathname.startsWith('/api/')) {
     const requested = path.resolve(dist, url.pathname.slice(1));
     const file = requested.startsWith(dist + path.sep) && fs.existsSync(requested) && fs.statSync(requested).isFile() ? requested : path.join(dist, 'index.html');
@@ -78,7 +87,59 @@ const server = http.createServer(async (request, response) => {
     if (url.pathname.startsWith(admin) && !actor.is_owner) return send(403, { detail: { message: 'صلاحيات المالك مطلوبة' } });
     if (url.pathname === `${base}/context`) return send(200, f.context(actor));
     if (url.pathname === `${base}/parties`) return send(200, { items: f.resources.filter(item => (!url.searchParams.get('kind') || item.kind === url.searchParams.get('kind')) && (!url.searchParams.get('q') || item.name.includes(url.searchParams.get('q')))) });
-    if (url.pathname === `${base}/movements`) return send(200, pageResult(rows, url.searchParams));
+    if (url.pathname === `${base}/movements`) {
+      const selected = url.searchParams.get('kind');
+      const identity = url.searchParams.get('id');
+      const account = f.resources.find(row => row.kind === selected && row.id === identity);
+      return send(200, pageResult(account ? rows.map(row => ({ ...row, party_type: account.kind,
+        party_id: account.id, party_name: account.name, balance_after: account.balance.amount })) : rows, url.searchParams));
+    }
+    if (url.pathname.startsWith(`${base}/statements/`)) {
+      const [kind, id] = url.pathname.split('/').slice(-2);
+      const resource = f.resources.find(row => row.kind === kind && row.id === decodeURIComponent(id));
+      assert(resource, 'Statement resource must exist');
+      return send(200, feature.statement(resource, kind === 'employee' ? feature.employeeFull : rows, Object.fromEntries(url.searchParams), actor));
+    }
+    if (url.pathname === `${base}/history/employee/employee-demo`) return send(200, feature.employeeHistory);
+    if (url.pathname === `${base}/ledger/employee/employee-demo`) return send(200, {
+      ...pageResult(feature.employeeLedger, url.searchParams), resource: feature.employeeHistory.resource,
+    });
+    if (url.pathname.startsWith(`${base}/ledger/store_driver/`)) {
+      const id = url.pathname.split('/').at(-1);
+      return send(200, { ...pageResult([], url.searchParams), resource: f.resources.find(row => row.kind === 'store_driver' && row.id === id),
+        expected_collections: { total: 1, amount: '300.00', items: [{ id: 'expected-demo', order_number: '3999', amount: '300.00' }] } });
+    }
+    if (url.pathname === `${base}/reviews`) return send(200, pageResult(feature.reviews.filter(row =>
+      row.status === (url.searchParams.get('status') || 'pending')
+      && (!url.searchParams.get('driver_id') || row.driver_id === url.searchParams.get('driver_id'))
+      && (!url.searchParams.get('method') || row.payment_method === url.searchParams.get('method'))
+      && (!url.searchParams.get('bank_id') || row.bank_account_id === url.searchParams.get('bank_id'))), url.searchParams));
+    if (url.pathname.startsWith(`${base}/reviews/`)) {
+      const segments = url.pathname.split('/');
+      const item = feature.reviews.find(row => row.assignment_id === segments[5]);
+      assert(item, 'Known synthetic review');
+      if (segments[6] === 'options') return send(200, { financial_source: 'operational', session_scope: f.scope,
+        expected_review_revision: 1, can_approve: true, can_reject: true,
+        banks: [{ id: 'bank-demo', name: 'بنك المؤسسة التوضيحي' }], pos_receivables: [] });
+      if (segments[6] === 'bank-movements') return send(200, pageResult([
+        { id: 'synthetic-imported-bank-1', movement_date: '2026-11-19', amount: '300.00', currency: 'SAR',
+          reference: 'BANK-DEMO-001', description: 'تحويل العميل التوضيحي', bank_account_id: 'bank-demo' },
+      ], url.searchParams));
+      if (segments[6] === 'receipt') {
+        response.writeHead(200, { 'content-type': 'image/png' });
+        response.end(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aN6kAAAAASUVORK5CYII=', 'base64')); return;
+      }
+      if (request.method === 'POST') {
+        assert.equal(body.expected_session_scope, f.scope);
+        assert.equal(body.expected_financial_source, 'operational');
+        if (body.decision === 'approved') { assert.equal(body.destination_financial_id, 'bank-demo'); assert(body.settlement_reference); }
+        else assert(body.note.trim());
+        item.status = body.decision; item.review_note = body.note;
+        item.reviewed_by_name = actor.name; item.reviewed_at = '2026-11-19T12:00:00Z';
+        return send(200, { decision: body.decision, financial_source: 'operational' });
+      }
+      return send(200, item);
+    }
     if (url.pathname === `${base}/ledger/external_person/external-demo`) {
       const params = new URLSearchParams(url.search);
       if (params.get('focus_id')) params.set('page', String(Math.floor(rows.findIndex(item => item.id === params.get('focus_id')) / 5) + 1));
@@ -132,17 +193,17 @@ const server = http.createServer(async (request, response) => {
         assert.deepEqual(body.operations, f.access.operations, 'Bulk resource selection must not enable operations');
         const byResource = (a, b) => JSON.stringify([a.kind, a.id]).localeCompare(JSON.stringify([b.kind, b.id]));
         assert.deepEqual([...body.resources].sort(byResource), [
-          { kind: 'external_person', id: 'external-demo', use: true, movements: 'own', balance: true },
-          { kind: 'employee', id: 'employee-demo', use: false, movements: 'all', balance: false },
-          { kind: 'supplier', id: 'supplier-demo', use: true, movements: 'all', balance: true },
-          { kind: 'supplier', id: 'supplier-extra', use: true, movements: 'own', balance: false },
-          { kind: 'store_driver', id: 'employee-demo', use: true, movements: 'own', balance: true },
-          { kind: 'store_driver', id: 'driver-extra', use: true, movements: 'own', balance: false },
-          { kind: 'courier', id: 'employee-demo', use: false, movements: 'all', balance: true },
-          { kind: 'employee_custody', id: 'custody-demo', use: false, movements: 'all', balance: true },
-          { kind: 'owner_withdrawal', id: 'owner-demo', use: false, movements: 'all', balance: true },
-          { kind: 'bank', id: 'bank-demo', use: false, movements: 'all', balance: true },
-          { kind: 'cash', id: 'cash-demo', use: false, movements: 'none', balance: true },
+          { kind: 'external_person', id: 'external-demo', use: true, movements: 'own', balance: true, report: false, print: false },
+          { kind: 'employee', id: 'employee-demo', use: false, movements: 'all', balance: false, report: false, print: false },
+          { kind: 'supplier', id: 'supplier-demo', use: true, movements: 'all', balance: true, report: false, print: false },
+          { kind: 'supplier', id: 'supplier-extra', use: true, movements: 'own', balance: false, report: false, print: false },
+          { kind: 'store_driver', id: 'employee-demo', use: true, movements: 'own', balance: true, report: false, print: false },
+          { kind: 'store_driver', id: 'driver-extra', use: true, movements: 'own', balance: false, report: false, print: false },
+          { kind: 'courier', id: 'employee-demo', use: false, movements: 'all', balance: true, report: false, print: false },
+          { kind: 'employee_custody', id: 'custody-demo', use: false, movements: 'all', balance: true, report: false, print: false },
+          { kind: 'owner_withdrawal', id: 'owner-demo', use: false, movements: 'all', balance: true, report: false, print: false },
+          { kind: 'bank', id: 'bank-demo', use: false, movements: 'all', balance: true, report: false, print: false },
+          { kind: 'cash', id: 'cash-demo', use: false, movements: 'none', balance: true, report: false, print: false },
         ].sort(byResource));
         access = { version: access.version + 1, enabled: body.enabled, operations: body.operations, resources: body.resources };
       }
@@ -168,8 +229,13 @@ async function capture(page, name) {
   const filename = `${name}.png`; await page.screenshot({ path: path.join(out, filename), fullPage: true }); screenshots.push(filename);
 }
 (async () => {
-  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const serveOnly = process.env.SIMPLE_BALANCES_SERVE_ONLY === '1';
+  const portIndex = process.argv.indexOf('--port');
+  const port = serveOnly ? Number(portIndex >= 0 ? process.argv[portIndex + 1] : process.env.SIMPLE_BALANCES_UAT_PORT || 4174) : 0;
+  await new Promise(resolve => server.listen(port, serveOnly ? '0.0.0.0' : '127.0.0.1', resolve));
   const origin = `http://127.0.0.1:${server.address().port}`;
+  if (serveOnly) { console.log(`Synthetic balances fixture: ${origin}`); return; }
+  const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   const browser = await chromium.launch({ headless: true, chromiumSandbox: true,
     ...(process.env.SIMPLE_BALANCES_UAT_CHROMIUM ? { executablePath: process.env.SIMPLE_BALANCES_UAT_CHROMIUM } : {}) });
   try {
@@ -194,7 +260,7 @@ async function capture(page, name) {
       assert.equal(await page.getByRole('button', { name: 'الصفحة 2', exact: true }).count(), 1);
     });
     await check('External reasons and custody source are conditional; save returns to the actual backdated page', async () => {
-      await page.getByRole('button', { name: '＋ إضافة مبلغ', exact: true }).click();
+      await page.getByRole('button', { name: '+ إضافة', exact: true }).click();
       await page.locator('.sb-direction [data-side="for_us"]').click();
       assert.equal(await field(page, 'سبب المبلغ').count(), 0);
       await field(page, 'المبلغ بالريال').fill('50'); await field(page, 'ملاحظة (اختياري)').fill('صرف توضيحي من العهدة');
@@ -227,6 +293,7 @@ async function capture(page, name) {
       assert.equal(calls.filter(call => call.path.endsWith('/entries') && call.method === 'POST').length, 1);
     });
     await check('Owner sees specialized routes without deleted grant keys and exactly three primary tabs', async () => {
+      await page.getByRole('button', { name: 'الأطراف', exact: true }).click();
       await page.getByRole('button', { name: 'جميع الأقسام', exact: true }).click();
       assert.equal(await page.getByRole('link', { name: /مرتجعات الأصناف/ }).count(), 1);
       assert.equal(await page.getByRole('link', { name: /^الاستبدال/ }).count(), 1);
@@ -344,7 +411,7 @@ async function capture(page, name) {
         const rect = node.getBoundingClientRect();
         return { left: rect.left, right: rect.right, width: rect.width, height: rect.height, viewport: innerWidth };
       }));
-      assert.equal(bulkControls.length, 4);
+      assert.equal(bulkControls.length, 6);
       for (const box of bulkControls) assert(box.width > 0 && box.height > 0 && box.left >= 0 && box.right <= box.viewport,
         `Clipped mobile resource bulk control: ${JSON.stringify(box)}`);
       // A bounded body alone can conceal a horizontally clipped table. Inspect
@@ -355,7 +422,7 @@ async function capture(page, name) {
           return { name: node.getAttribute('aria-label') || node.textContent, left: rect.left, right: rect.right,
             width: rect.width, height: rect.height, viewport: innerWidth };
         })));
-      assert.equal(horizontal.length, f.catalog.resources.length * 7);
+      assert.equal(horizontal.length, f.catalog.resources.length * 11);
       for (const box of horizontal) assert(box.width > 0 && box.height > 0 && box.left >= 0 && box.right <= box.viewport,
         `Clipped mobile permission: ${JSON.stringify(box)}`);
       for (let index = 0; index < await cards.count(); index++) {
@@ -371,13 +438,74 @@ async function capture(page, name) {
     });
     await check('Staff cannot see owner tools or fetch the owner permission catalog', async () => {
       actor = f.staff; await page.goto(ledgerUrl); await page.locator('.sb-ledger tbody tr').first().waitFor();
+      await page.getByRole('button', { name: 'الأطراف', exact: true }).click();
       await page.getByRole('button', { name: 'جميع الأقسام', exact: true }).click();
       assert.equal(await page.getByRole('link', { name: /مرتجعات الأصناف|الاستبدال|صلاحيات الموظفين/ }).count(), 0);
       const before = calls.length; await page.goto(`${origin}/operational-balances/access`);
       await page.getByText('إدارة صلاحيات الأرصدة متاحة لمالك الحساب.', { exact: true }).waitFor();
       assert.equal(calls.slice(before).filter(call => call.path.startsWith('/api/operational-balances/access')).length, 0);
     });
-    assert.deepEqual(errors, []); assert.equal(results.length, 8); assert.equal(screenshots.length, 8);
+    await check('Automatic salary is compact and history Back preserves the ledger', async () => {
+      actor = f.owner; await page.setViewportSize({ width: 390, height: 844 });
+      await page.goto(`${origin}${basePath}?tab=parties&kind=employee&id=employee-demo`);
+      await page.locator('.sb-ledger tbody tr').first().waitFor();
+      assert.equal(await page.locator('.sb-ledger tbody tr').count(), 3);
+      assert.equal(await page.locator('.sb-header h1').textContent(), 'موظف توضيحي');
+      assert.equal(await page.locator('.sb-running[data-sign="positive"]').count(), 4);
+      await capture(page, 'salary-compact-mobile');
+      await page.getByRole('button', { name: /آخر راتب مسجل/ }).click();
+      const dialog = page.getByRole('dialog', { name: 'سجل الرواتب' });
+      await dialog.locator('.sb-ledger tbody tr').first().waitFor();
+      assert.equal(await dialog.locator('.sb-ledger').first().locator('tbody tr').count(), 2);
+      await capture(page, 'salary-history-mobile');
+      await page.goBack(); await page.locator('.sb-header h1').waitFor();
+      assert.equal(await page.getByRole('dialog').count(), 0);
+      assert.equal(await page.locator('.sb-ledger tbody tr').count(), 3);
+    });
+    await check('Period statement is explicit, complete and reauthorized before printing', async () => {
+      await page.goto(ledgerUrl); await page.locator('.sb-ledger tbody tr').first().waitFor();
+      const before = calls.filter(call => call.path.includes('/statements/')).length;
+      await page.getByRole('button', { name: 'كشف فترة', exact: true }).click();
+      const dialog = page.getByRole('dialog', { name: 'كشف فترة' });
+      await dialog.getByRole('button', { name: 'عرض الكشف', exact: true }).waitFor();
+      assert.equal(calls.filter(call => call.path.includes('/statements/')).length, before);
+      await field(dialog, 'من تاريخ').fill('2026-11-01'); await field(dialog, 'إلى تاريخ').fill('2026-11-30');
+      await dialog.getByRole('button', { name: 'عرض الكشف', exact: true }).click();
+      await dialog.locator('.sb-statement-table tbody tr').first().waitFor();
+      assert.equal(await dialog.locator('.sb-statement-table tbody tr').count(), 7);
+      assert.equal(await dialog.getByText('الرصيد الافتتاحي', { exact: true }).count(), 1);
+      await capture(page, 'statement-mobile');
+      await page.evaluate(() => { window.__statementPrints = 0; window.print = () => { window.__statementPrints += 1; }; });
+      await dialog.getByRole('button', { name: 'طباعة / حفظ PDF', exact: true }).click();
+      await page.waitForFunction(() => window.__statementPrints === 1);
+      assert.equal(calls.filter(call => call.path.includes('/statements/') && call.params.purpose === 'print').length, 1);
+      await page.goBack(); assert.equal(await page.getByRole('dialog').count(), 0);
+      assert.equal(await page.locator('.sb-ledger tbody tr').count(), 5);
+    });
+    await check('Scoped review proof Back keeps the draft and approved history leaves courier balance unchanged', async () => {
+      await page.goto(`${origin}${basePath}?tab=parties&panel=reviews`);
+      await page.locator('.sbr-row').first().waitFor();
+      await field(page, 'الموصل').selectOption('employee-demo');
+      assert.equal(await field(page, 'الموصل').count(), 1, 'Changing a general filter must not lock it');
+      await page.locator('.sbr-row').first().click();
+      await field(page, 'البنك المستلم').selectOption('bank-demo');
+      await page.locator('.sbr-bank-candidate input').first().check();
+      const balance = f.resources.find(row => row.kind === 'store_driver' && row.id === 'employee-demo').balance.amount;
+      await page.getByRole('button', { name: 'عرض الإيصال', exact: true }).click();
+      await page.locator('.sbr-proof img').waitFor();
+      assert.equal(await page.getByRole('button', { name: 'رجوع', exact: true }).count(), 1);
+      await page.goBack();
+      assert.equal(await page.locator('.sbr-bank-candidate input').first().isChecked(), true);
+      await page.getByLabel('راجعت الإيصال وطابقت المبلغ', { exact: true }).check();
+      await page.getByRole('button', { name: 'اعتماد الإيصال', exact: true }).click();
+      await page.getByText('تم الاعتماد.', { exact: false }).waitFor();
+      assert.equal(f.resources.find(row => row.kind === 'store_driver' && row.id === 'employee-demo').balance.amount, balance);
+      await page.goBack(); await page.getByRole('button', { name: 'معتمدة', exact: true }).click();
+      await page.locator('.sbr-row').first().waitFor();
+      assert.equal(await page.locator('.sbr-row').count(), 1);
+      await capture(page, 'reviews-approved-mobile');
+    });
+    assert.deepEqual(errors, []); assert.equal(results.length, 11); assert.equal(screenshots.length, 12);
     await context.close();
   } finally {
     fs.writeFileSync(path.join(out, 'browser-evidence.json'), JSON.stringify({ synthetic_only: true, actual_components: true, chromium_sandbox: true, results, errors, screenshots, calls }, null, 2));

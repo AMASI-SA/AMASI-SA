@@ -41,6 +41,7 @@ OPERATION_LABELS = {
     "ads.fund": "شحن أو سداد حساب إعلاني",
     "courier.receive": "استلام مبلغ من موصل أو شركة شحن",
     "courier.pay": "دفع مبلغ لموصل أو شركة شحن",
+    "courier.review": "مراجعة إيصالات الموصلين",
     "customer.refund_request": "تسجيل طلب استرجاع عميل",
     "customer.refund_execute": "تنفيذ رد مبلغ لعميل",
 }
@@ -61,8 +62,8 @@ RESOURCE_KIND_LABELS = {
 }
 RESOURCE_KINDS = frozenset(RESOURCE_KIND_LABELS)
 MOVEMENT_SCOPES = frozenset({"none", "own", "all"})
-DENIED_RESOURCE = {"use": False, "movements": "none", "balance": False}
-OWNER_RESOURCE = {"use": True, "movements": "all", "balance": True}
+DENIED_RESOURCE = {"use": False, "movements": "none", "balance": False, "report": False, "print": False}
+OWNER_RESOURCE = {"use": True, "movements": "all", "balance": True, "report": True, "print": True}
 
 
 def policy_version(value):
@@ -92,6 +93,7 @@ def normalized_policy(value, *, owner=None):
                 or not isinstance(identity, str) or not identity.strip() or len(identity) > 200
                 or identity != identity.strip()
                 or type(row.get("use")) is not bool or type(row.get("balance")) is not bool
+                or type(row.get("report", False)) is not bool or type(row.get("print", False)) is not bool
                 or not isinstance(row.get("movements"), str) or row["movements"] not in MOVEMENT_SCOPES):
             return empty
         key = (kind, identity)
@@ -99,7 +101,8 @@ def normalized_policy(value, *, owner=None):
             return empty
         seen.add(key)
         clean.append({"kind": kind, "id": identity, "use": row["use"],
-                      "movements": row["movements"], "balance": row["balance"]})
+                      "movements": row["movements"], "balance": row["balance"],
+                      "report": row.get("report", False), "print": row.get("print", False)})
     return {"version": empty["version"], "enabled": value["enabled"],
             "operations": list(operations), "resources": clean}
 
@@ -149,7 +152,7 @@ class AccessPolicy:
         if self.owner_override:
             return dict(OWNER_RESOURCE)
         row = self._resource_index.get((kind, identity))
-        return {key: row[key] for key in DENIED_RESOURCE} if row else dict(DENIED_RESOURCE)
+        return {key: row.get(key, default) for key, default in DENIED_RESOURCE.items()} if row else dict(DENIED_RESOURCE)
 
     def can_reference(self, kind, identity):
         access = self.resource(kind, identity)

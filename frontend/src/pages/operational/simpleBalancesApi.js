@@ -13,6 +13,18 @@ export const simpleBalancesApi = {
     `${workspace}/ledger/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`,
     { ...read(config), params },
   )),
+  history: (kind, id, params, config) => data(http.get(
+    `${workspace}/history/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`, { ...read(config), params },
+  )),
+  statement: (kind, id, params, config) => data(http.get(
+    `${workspace}/statements/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`, { ...read(config), params },
+  )),
+  reviews: (params, config) => data(http.get(`${workspace}/reviews`, { ...read(config), params })),
+  review: (id, config) => data(http.get(`${workspace}/reviews/${encodeURIComponent(id)}`, read(config))),
+  reviewOptions: (id, config) => data(http.get(`${workspace}/reviews/${encodeURIComponent(id)}/options`, read(config))),
+  reviewBankMovements: (id, params, config) => data(http.get(`${workspace}/reviews/${encodeURIComponent(id)}/bank-movements`, { ...read(config), params })),
+  reviewReceipt: (id, config) => data(http.get(`${workspace}/reviews/${encodeURIComponent(id)}/receipt`, { ...read(config), responseType: 'blob' })),
+  reviewDecision: (id, body) => data(http.post(`${workspace}/reviews/${encodeURIComponent(id)}`, body, { timeout: 30000 })),
   entry: body => data(http.post(`${workspace}/entries`, body, { timeout: 30000 })),
   registerPending: (id, body) => data(http.post(`${workspace}/pending-commands/${encodeURIComponent(id)}`, body, { timeout: 30000 })),
   pendingCommand: (id, scope, config) => data(http.get(`${workspace}/pending-commands/${encodeURIComponent(id)}`, {

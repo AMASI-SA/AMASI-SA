@@ -4,14 +4,16 @@ import SimpleBalances, { EntryForm } from './SimpleBalances';
 import { simpleBalancesApi as api } from './simpleBalancesApi';
 import { useOptionalAuth } from '../../context/AuthContext';
 
-jest.mock('./simpleBalancesApi', () => ({ simpleBalancesApi: { context: jest.fn(), parties: jest.fn(), ledger: jest.fn(), movements: jest.fn(), entry: jest.fn(), registerPending: jest.fn(), pendingCommand: jest.fn(), retirePending: jest.fn() }, simpleBalanceError: error => error?.localMessage || (error?.response?.status === 403 ? 'لا توجد صلاحية لهذا الحساب' : 'لم يتأكد الحفظ') }));
+jest.mock('./simpleBalancesApi', () => ({ simpleBalancesApi: { context: jest.fn(), parties: jest.fn(), ledger: jest.fn(), movements: jest.fn(), history: jest.fn(), statement: jest.fn(), entry: jest.fn(), registerPending: jest.fn(), pendingCommand: jest.fn(), retirePending: jest.fn() }, simpleBalanceError: error => error?.localMessage || (error?.response?.status === 403 ? 'لا توجد صلاحية لهذا الحساب' : 'لم يتأكد الحفظ') }));
 jest.mock('../../context/AuthContext', () => ({ useOptionalAuth: jest.fn() }));
 jest.mock('react-router-dom', () => ({
   Link: ({ to, children, ...props }) => <a href={to} {...props}>{children}</a>,
+  useLocation: () => ({ pathname: globalThis.window.location.pathname, search: globalThis.window.location.search, state: globalThis.window.history.state }),
+  useNavigate: () => value => { if (value === -1) globalThis.window.history.back(); },
   useSearchParams: () => {
     const ReactModule = require('react');
     const [params, setParams] = ReactModule.useState(() => new URLSearchParams(globalThis.window.location.search));
-    return [params, values => { const next = new URLSearchParams(values); globalThis.window.history.replaceState({}, '', `/?${next}`); setParams(next); }];
+    return [params, (values, options = {}) => { const next = new URLSearchParams(values); globalThis.window.history.replaceState(options.state || {}, '', `/?${next}`); setParams(next); }];
   },
 }));
 global.IS_REACT_ACT_ENVIRONMENT = true;
