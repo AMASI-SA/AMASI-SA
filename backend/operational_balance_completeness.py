@@ -133,7 +133,7 @@ def apply_table_coverage(tables, parties, obligations, issues, facts, *, currenc
                            and (fee_proof.get("currency") or fee_proof.get("fee_currency")) == currency)
             if row.get("kind") == "shipping" and (_positive(row.get("confirmed")) or proved_zero):
                 counted[context].add(identity)
-                if row.get("recognition_event") != "order_completed":
+                if row.get("recognition_event") not in {"order_completed", "aramex_status_eligible"}:
                     # Older snapshots may have retained the confirmed delivery
                     # fee before the richer event contract existed.
                     delivered[context].add(identity)

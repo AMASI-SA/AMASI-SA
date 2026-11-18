@@ -1480,7 +1480,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                     except (ValueError, TypeError, KeyError, InvalidOperation) as exc:
                         code = str(exc) if str(exc).startswith(('operational_prepaid_shipping_', 'operational_shipping_completion_')) else 'operational_prepaid_shipping_evidence_incomplete'
                         issue(out, code, identity, component='prepaid_shipping',
-                              required_action='راجع إثبات تنفيذ الطلب وتعرفة الشحن والصندوق المعتمد قبل احتساب الخصم.')
+                              required_action='راجع حالة الطلب وإسناد شركة الشحن والتعرفة والصندوق المعتمد قبل احتساب الخصم.')
                         courier_issue(out, code, raw, source, setup=setup, owner=owner)
                 if identity not in data['_prepaid_orders']:
                     from operational_completed_shipping import deferred_source_event

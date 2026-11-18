@@ -625,13 +625,24 @@ def _deliveries(obligations, details, currency, names, source_issues, *, coverag
         fee_rows = shipping.get(context, [])
         completed_rows = [row for row in fee_rows if row.get("recognition_event") == "order_completed"]
         prepaid_rows = [row for row in fee_rows if row.get("payment_mode") == "prepaid"]
+        status_prepaid_rows = [row for row in prepaid_rows
+                              if row.get("recognition_event") == "aramex_status_eligible"
+                              and row.get("recognition_basis") == "aramex_status_created_after_start"]
+        status_prepaid = status_prepaid_rows[0] if status_prepaid_rows else None
         prepaid = prepaid_rows[0] if prepaid_rows else None
         completed = completed_rows[0] if completed_rows else None
         completed_times = {row.get("completed_at") for row in completed_rows}
         completed_at = next(iter(completed_times)) if len(completed_times) == 1 else None
         cash_accounts = {row.get("cash_account_id") for row in prepaid_rows}
         cash_account_id = next(iter(cash_accounts)) if len(cash_accounts) == 1 else None
-        if prepaid and (not completed_at or not cash_account_id):
+        prepaid_time_proved = all(
+            row.get("recognition_event") == "order_completed" and bool(row.get("completed_at"))
+            or row.get("recognition_event") == "aramex_status_eligible"
+            and row.get("recognition_basis") == "aramex_status_created_after_start"
+            and row.get("completed_at") is None and bool(row.get("recorded_at"))
+            and row.get("observed_order_status") in {"completed", "out_for_delivery", "delivered"}
+            for row in prepaid_rows)
+        if prepaid and (not prepaid_time_proved or not cash_account_id):
             incomplete_reasons.add("prepaid_payment_evidence_incomplete")
         original = facts.get("cod_collection:" + order) or {}
         proof = facts.get("cod_customer_confirmation:" + order) or original
@@ -699,9 +710,13 @@ def _deliveries(obligations, details, currency, names, source_issues, *, coverag
                      "party_id": party_id, "party_type": party_type,
                      "party_name": names.get((party_type, party_id), party_id),
                      "payment_mode": "prepaid" if prepaid else "deferred" if completed else None,
-                     "recognition_event": "order_completed" if completed else None,
+                     "recognition_event": "order_completed" if completed else "aramex_status_eligible" if status_prepaid else None,
                      "completed_at": completed_at, "cash_account_id": cash_account_id,
                      "cash_account_name": names.get(("cash", cash_account_id)) if cash_account_id else None,
+                     **({"fee_recognition_basis": status_prepaid.get("recognition_basis"),
+                         "fee_recorded_at": status_prepaid.get("recorded_at"),
+                         "fee_observed_order_status": status_prepaid.get("observed_order_status")}
+                        if status_prepaid else {}),
                      "delivered_at": frozen.get("delivered_at"), "payment_method": method,
                      **({key: frozen.get(key) for key in ("recognition_basis", "recorded_at", "business_date_basis")}
                         if frozen.get("recognition_basis") in {"delivered_order_created_after_start", "owner_confirmed_after_start"} else {}),
@@ -716,7 +731,7 @@ def _deliveries(obligations, details, currency, names, source_issues, *, coverag
     return {"complete": not coverage_issues and all(row["complete"] for row in rows),
             "coverage_contract_version": 1, "coverage_issues": coverage_issues, "rows": rows, "notes": [
         "الرسوم من التزامات الشحن التشغيلية فقط؛ لا تضاف أرباح تطبيق المندوب مرة أخرى.",
-        "الشحن المدفوع مقدمًا يُخصم من الصندوق عند تم التنفيذ. تاريخ التنفيذ مستقل عن تاريخ التسليم، والتسليم اللاحق لا يكرر الخصم. دفع أجرة الشحن لا يثبت تحصيل قيمة الطلب من العميل.",
+        "أجرة أرامكس للطلب المنشأ بعد بداية التشغيل تُعتمد مرة واحدة عند إثبات حالته: تم التنفيذ أو جاري التوصيل أو تم التوصيل. عند غياب وقت التنفيذ الفعلي يظهر وقت احتساب الأجرة مستقلًا، وتُستخدم التعرفة والصندوق المعتمدان وقت الاحتساب. التسليم اللاحق لا يكرر الخصم، ودفع أجرة الشحن لا يثبت تحصيل قيمة الطلب من العميل.",
         "ذمة شركة الشحن تتبع مبلغ الدفع عند الاستلام المسجل عليها. السداد المخصص يخفّض المتبقي، وإثبات تحصيل الشركة من العميل يحتاج مستندًا مستقلًا.",
         "عهدة المندوب هي المسؤولية المثبتة في المصدر وليست إثباتًا لمقدار النقد الفعلي في يده.",
         "التحويل البنكي والشبكة لا ينشئان عهدة نقدية للمندوب. لا يثبت اعتماد التحصيل من حالة تسليم الطلب وحدها.",
