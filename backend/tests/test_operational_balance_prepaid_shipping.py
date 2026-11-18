@@ -233,12 +233,14 @@ def test_existing_shipping_payment_or_confirmed_charge_holds_new_prepaid_debit_f
     assert any(row['code'] == 'operational_prepaid_shipping_existing_charge_review_required' for row in result['engine']['issues'])
 
 
-def test_idle_worker_never_posts_and_explicit_refresh_cas_records_completed_charge_once():
+@pytest.mark.parametrize('undated_status', [None, 'completed', 'out_for_delivery', 'delivered'])
+def test_idle_worker_never_posts_and_explicit_refresh_cas_records_completed_charge_once(undated_status):
     from operational_balance_worker import tick
     from operational_balance_service import refresh
     async def scenario():
         db = AsyncMongoMockClient()['synthetic_prepaid_worker']
-        data, state = fixture()
+        data, state = fixture(old=undated_status is None, current=undated_status or 'completed',
+                              at=COMPLETED if undated_status is None else None)
         for collection, rows in data.items():
             if rows:
                 await db[collection].insert_many(deepcopy(rows))
@@ -246,10 +248,14 @@ def test_idle_worker_never_posts_and_explicit_refresh_cas_records_completed_char
         await db[STATES].insert_one(seeded)
         await asyncio.gather(tick(db), tick(db))
         assert (await read(db, 'owner'))['movements'] == []
-        await refresh(db, 'owner', clock=NOW)
+        await asyncio.gather(refresh(db, 'owner', clock=NOW), refresh(db, 'owner', clock=NOW))
         saved = await read(db, 'owner')
         assert len(saved['movements']) == 1 and saved['movements'][0]['amount'] == '34.50'
         assert saved['engine']['obligations']['shipping-prepaid:100']['confirmed'] == '34.50'
+        fact = saved['engine']['facts']['prepaid_shipping:100']
+        if undated_status is not None:
+            assert fact['completed_at'] is None and fact['recorded_at'] == NOW
+            assert fact['recognition_basis'] == 'aramex_status_created_after_start'
         await tick(db)
         await refresh(db, 'owner', clock=NOW)
         assert (await read(db, 'owner'))['movements'] == saved['movements']
@@ -343,11 +349,12 @@ def test_later_deferred_period_does_not_inherit_an_expired_prepaid_mode():
     assert 'shipping-prepaid:100' not in result['engine']['obligations']
 
 
-def test_native_shipping_posting_prevents_second_prepaid_charge(monkeypatch):
+@pytest.mark.parametrize('undated_status', [False, True])
+def test_native_shipping_posting_prevents_second_prepaid_charge(monkeypatch, undated_status):
     async def existing(db, owner, candidates, *, max_rows):
         return {row['order_number']: 'Existing shipping posting' for row in candidates}
     monkeypatch.setattr('operational_historical_shipping_fee.native_conflicts', existing)
-    data, state = fixture()
+    data, state = fixture(old=not undated_status, at=None if undated_status else COMPLETED)
     result = calculate(data, state)
     assert result['movements'] == []
     assert any(row['code'] == 'operational_prepaid_shipping_native_overlap' for row in result['engine']['issues'])
