@@ -1,7 +1,7 @@
 # Courier delivered-status release — completion record
 
-**Task:** `COURIER-DELIVERED-STATUS-20261118`  
-**Repository / PR:** [AMASI-SA/AMASI-SA #1986](https://github.com/AMASI-SA/AMASI-SA/pull/1986)  
+**Task:** `COURIER-DELIVERED-STATUS-20261118`
+**Repository / PR:** [AMASI-SA/AMASI-SA #1986](https://github.com/AMASI-SA/AMASI-SA/pull/1986)
 **Release evidence:** canonical PR checkpoint updated **2026-11-18 02:27:54 UTC**, checked against the owner's compact verification result. Subsequent live UI observations, saved exports and the final independent cohort comparison are recorded below from the owner's confirmed results. All times below are UTC unless explicitly marked Riyadh.
 
 **Current state:** production publication, selected live functional acceptance and the independent saved-cohort comparison are **accepted and complete**. The single unchanged official verifier exited 0 with `verified:true`, `checks:3` and 594 public requests per probe; subsequent official status exited 0 with `active:false`. The shared-host publication handoff is complete. The selected case's pending state was resolved and remained resolved after a full browser reload. This record and its verification receipt form the final evidence-only Git checkpoint. No further code change or release is required for the accepted behavior.
