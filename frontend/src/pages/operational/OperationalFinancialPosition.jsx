@@ -8,8 +8,8 @@ import { fileStampSA, formatRiyadhArabicLong, formatRiyadhDateTime } from "../..
 import { operationalApi } from "./api";
 import {
     buildFinancialPositionWorkbook, collectionLabel, currencyCodes, DELIVERY_MONEY_COLUMNS, DELIVERY_SCOPE_NOTE,
-    deliveryOrderLabel, deliveryParties, destinationLabel, filterDeliveries, formatPositionCount, formatPositionMoney,
-    isPositionContract, PARTY_LABELS, paymentLabel, positionText, readableMessages, shippingRecognitionLabel, UNAVAILABLE,
+    deliveryOrderLabel, deliveryParties, deliveryRecognitionLabel, destinationLabel, filterDeliveries, formatPositionCount, formatPositionMoney,
+    isAramexStatusFee, isPositionContract, PARTY_LABELS, paymentLabel, positionText, readableMessages, shippingFeeStatusLabel, shippingRecognitionLabel, UNAVAILABLE,
 } from "./financialPositionPresentation";
 import "./financialPosition.css";
 import NativePurchaseReview from "./NativePurchaseReview";
@@ -148,11 +148,14 @@ function DeliveryDetails({ delivery, filters, onFiltersChange, currency }) {
         </tr></thead><tbody>{pageRows.map(row => <tr key={row.id} data-testid="financial-delivery-row">
             <td><strong>{deliveryOrderLabel(row)}</strong>
                 {row.recognition_event === "order_completed" && <small>تم التنفيذ: {row.completed_at ? formatRiyadhDateTime(row.completed_at) : UNAVAILABLE}</small>}
+                {isAramexStatusFee(row) && <><small>وقت التنفيذ الفعلي: {row.completed_at ? formatRiyadhDateTime(row.completed_at) : UNAVAILABLE}</small><small>وقت احتساب الأجرة: {row.fee_recorded_at ? formatRiyadhDateTime(row.fee_recorded_at) : UNAVAILABLE}</small></>}
                 <small>التسليم: {row.delivered_at ? formatRiyadhDateTime(row.delivered_at) : UNAVAILABLE}</small>
                 {["delivered_order_created_after_start", "owner_confirmed_after_start"].includes(row.recognition_basis) && <small>وقت التسجيل: {row.recorded_at ? formatRiyadhDateTime(row.recorded_at) : UNAVAILABLE}</small>}</td>
             <td><strong>{positionText(row.party_name)}</strong><small>{PARTY_LABELS[row.party_type] || UNAVAILABLE}</small>
-                {(row.recognition_event === "order_completed" || ["delivered_order_created_after_start", "owner_confirmed_after_start"].includes(row.recognition_basis)) && <small>{shippingRecognitionLabel(row)}</small>}
-                {row.recognition_event === "order_completed" && row.payment_mode === "prepaid" && <small>صندوق الخصم: {positionText(row.cash_account_name)}</small>}</td>
+                {(isAramexStatusFee(row) || row.recognition_event === "order_completed" || ["delivered_order_created_after_start", "owner_confirmed_after_start"].includes(row.recognition_basis)) && <small>{shippingRecognitionLabel(row)}</small>}
+                {isAramexStatusFee(row) && <small>حالة الطلب عند احتساب الأجرة: {shippingFeeStatusLabel(row)}</small>}
+                {isAramexStatusFee(row) && deliveryRecognitionLabel(row) !== UNAVAILABLE && <small>إثبات التسليم: {deliveryRecognitionLabel(row)}</small>}
+                {row.payment_mode === "prepaid" && <small>صندوق الخصم: {positionText(row.cash_account_name)}</small>}</td>
             <td><strong>{paymentLabel(row.payment_method)}</strong><small>{destinationLabel(row.collection_destination)}</small>{row.destination_name && <small>{row.destination_name}</small>}</td>
             <td><CollectionStatus value={row.collection_status} /></td>
             {DELIVERY_MONEY_COLUMNS.map(column => <td key={column.key}><Money value={row[column.key]} role={column.role} /></td>)}

@@ -13,6 +13,7 @@ merge, publication and live reconciliation. The current instruction refines
 the accounting rule. No new external messaging is authorized or needed.
 
 - Task branch: `codex/aramex-status-fee-20261118`.
+- Draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/1988.
 - Base J: `68035e55018d5b75bdd6b9e0ab6000d7528a956f`.
 - Predecessor PR1987 is published, officially verified in three rounds, and its
   lease is inactive according to the final PR handoff.
@@ -31,7 +32,7 @@ the accounting rule. No new external messaging is authorized or needed.
   `recorded_at` is the accounting recognition time and selects the approved
   tariff/cash binding then effective. Actual `completed_at` stays absent.
 - Deterministic fact, charge and payment IDs remain per order. Existing
-  charges, allocated forecasts, native fees and payouts must prevent a second
+  charges, allocated forecasts, native fees and order-linked payouts must prevent a second
   debit. Later status transitions cannot reprice or repeat the recorded charge.
 - Fee recognition is independent of actual delivery proof and customer COD
   collection. Completed/in-transit charges must not inflate delivered counts.
@@ -46,11 +47,18 @@ the accounting rule. No new external messaging is authorized or needed.
   `fee_observed_order_status` separate from delivery recognition fields.
 - The prepaid expense-paid summary includes the new recognition event; courier
   delivery counts exclude it unless a separate delivery fact exists.
+- The courier table exposes its existing distinct `confirmed_orders` count as
+  "طلبات محتسبة الأجرة" alongside independently proved deliveries. A fully paid
+  prepaid fee therefore remains visibly counted even with zero payable balance.
 - New report regressions first reproduced four failures on the prior code.
   The focused report, existing prepaid-position, party-coverage and financial
   position suites now pass: **53 tests**.
-- Frontend labels/export are being updated and checked separately. Governed
-  Node 22.23.2 / Yarn 1.22.22 dependencies installed with the frozen lockfile.
+- Frontend fee time/status, independent delivery basis, approved cash account,
+  export fields and neutral prepaid subtotal pass **149 tests / 3 suites**.
+  Governed Node 22.23.2 / Yarn 1.22.22 dependencies installed with the frozen
+  lockfile. Independent review found no blocking report/frontend issue.
+- Fresh read-only inspection of the shared host confirmed base J, no tracked
+  changes and `active:false`; no shared source mutation or publication occurred.
 
 ## Remaining work
 

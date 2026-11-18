@@ -237,6 +237,9 @@ def apply_table_coverage(tables, parties, obligations, issues, facts, *, currenc
                        complete=bool(as_of) and not failed_snapshot and context not in party_warnings and not details and not unassigned[kind], balance_basis="recorded")
             all_pending.update(item["order_id"] for item in details)
         table["unassigned_order_details"] = sorted(unassigned[kind].values(), key=lambda value: value["order_id"])
+        if kind == "courier":
+            table["columns"].append({"key": "confirmed_orders", "label": "طلبات محتسبة الأجرة", "type": "count"})
+            table["notes"].append("طلبات محتسبة الأجرة تشمل أجور الشحن المثبتة مرة واحدة، ومنها الدفع المقدم قبل التسليم. تواصيل مثبتة تعتمد دليل التوصيل المستقل.")
         table["columns"] += [{"key": "delivered_orders", "label": "تواصيل مثبتة", "type": "count"},
                               {"key": "pending_orders", "label": "طلبات غير مؤكدة", "type": "exceptions"}]
         table["totals"].update(confirmed_orders=len(set().union(*(counted[(kind, party)] for party in by_party))) if by_party else 0,

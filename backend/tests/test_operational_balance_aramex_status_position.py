@@ -44,6 +44,7 @@ def test_status_paid_fee_has_its_own_time_and_cash_without_implying_delivery(sta
     assert row["collection_status"] == "unavailable"
     assert table(result, "couriers")["totals"]["confirmed_orders"] == 1
     assert table(result, "couriers")["totals"]["delivered_orders"] == 0
+    assert {"key": "confirmed_orders", "label": "طلبات محتسبة الأجرة", "type": "count"} in table(result, "couriers")["columns"]
     courier = next(p for p in report(state)["parties"] if p["party_type"] == "courier")
     assert courier["expense_paid"] == "34.50"
     assert state == before
