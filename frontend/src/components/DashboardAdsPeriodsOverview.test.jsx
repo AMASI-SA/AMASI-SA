@@ -112,6 +112,23 @@ test("a mapped-order contribution is labelled partial and cannot replace canonic
     expect(globalThis.fetch).not.toHaveBeenCalled();
 });
 
+test("unassigned contribution uses its own label and never changes the canonical half-day total", () => {
+    const props = fixture();
+    props.records[0].label = "سناب غير محدد";
+    const segment = props.records[0].stats.segments[0];
+    Object.assign(segment, { accountUnassigned: true, cpa: null });
+    Object.assign(segment.profit, { complete: false, netProfit: null, spendSar: null, knownSpendSar: null,
+        nativeSpend: null, bankFees: null, knownBankFees: null, roas: null,
+        unassignedOrdersContributionAvailable: true, unassignedOrdersContribution: 0 });
+    const before = JSON.stringify(props);
+    click(render(props));
+    expect(cell(row(), "net").textContent).toBe("0.00مساهمة الطلبات");
+    for (const key of ["spend", "cpa", "roas"]) expect(cell(row(), key).textContent).toBe("—");
+    expect(cell(period("morning").querySelector("tfoot tr"), "net").textContent).toBe("4,677.00");
+    expect(JSON.stringify(props)).toBe(before);
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+});
+
 test.each([
     [288.53, 288.53, "288.53"],
     [0, 0, "0.00"],
