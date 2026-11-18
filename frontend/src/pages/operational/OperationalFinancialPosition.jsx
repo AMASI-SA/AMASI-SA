@@ -433,6 +433,11 @@ export default function OperationalFinancialPosition() {
                 if (update?.status === "refreshed" && update.session_scope !== expected.session_scope) {
                     throw new Error("Courier refresh scope changed");
                 }
+                // The failed aggregate kept the saved snapshot. Its freshly
+                // authorized target receipt must not depend on another read.
+                if (update?.refresh_warning && update?.native_evidence?.courier) {
+                    return { update, received: expected };
+                }
                 const received = await operationalApi.financialPosition({ ...config, params: { view } });
                 if (!stillCurrent() || config.signal?.aborted) throw new DOMException("Page is not active", "AbortError");
                 if (received?.session_scope !== expected.session_scope || received?.started_at !== expected.started_at

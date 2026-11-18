@@ -1564,7 +1564,9 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                         out['delivery_events'].append(order)
                     continue
                 status_obj = raw.get('status')
-                status = (status_obj.get('slug') or status_obj.get('name')) if isinstance(status_obj, dict) else status_obj
+                if isinstance(status_obj, dict):
+                    status_obj = status_obj.get('customized') or status_obj
+                status = (status_obj.get('slug') or status_obj.get('code') or status_obj.get('name')) if isinstance(status_obj, dict) else status_obj
                 source_total = (raw.get('amounts') or {}).get('total')
                 order = {'id': identity, 'order_number': order_number, 'created_at': created.isoformat(),
                          'updated_at': instant(raw.get('updated_at') or raw.get('date_updated') or created).isoformat(),
@@ -1691,8 +1693,9 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                 saved_delivery_proof = ('delivery_event:' + identity in confirmation_facts
                                         or DELIVERY_CONFIRMATION_PREFIX + identity in confirmation_facts)
                 if saved_delivery_proof or native_driver or status in DELIVERED or (isinstance(current, dict) and _status(current.get('status')) in DELIVERED):
-                    # Legacy drivers have a separate native collection contract. External
-                    # couriers must prove this exact current waybill and delivery instant.
+                    # Legacy drivers retain their native collection contract.
+                    # Post-start delivered orders use current Salla status;
+                    # earlier orders still need an actual delivery instant.
                     assigned = active_assignments_for_number(data['store_delivery_assignments'], order_number,
                         owner=owner, assignment_index=assignment_index)
                     # The earlier contract-only producer binds one owner-scoped

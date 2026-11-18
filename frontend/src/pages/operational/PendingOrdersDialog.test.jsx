@@ -58,6 +58,22 @@ test.each(["permission", "reason", "identity"])("courier matching stays unavaila
     expect(controls.onMatch).not.toHaveBeenCalled();
 });
 
+test("the selected-order notice separates saved proof from an unsuccessful report calculation", async () => {
+    const onMatch = jest.fn().mockResolvedValue({refresh_warning: "تعذر احتساب التقرير؛ بقيت اللقطة السابقة.",
+        native_evidence: {courier: {status: "completed", selected: 1, outcomes: [{order_id: "8101", status: "saved"}]}}});
+    await act(async () => root.render(<PendingOrdersDialog count={1} details={[courierRow()]}
+        courierControl={courierControls(onMatch)} />));
+    await click("طلبات غير مؤكدة"); await click("مطابقة مع سلة");
+    const notice = document.querySelector('[data-testid="courier-match-result"]');
+    expect(notice.closest("table")).toBeNull();
+    expect(notice.textContent).toContain("تم التحقق من دليل الطلب وحفظه");
+    expect(notice.textContent).toContain("تعذر احتساب التقرير؛ بقيت اللقطة السابقة.");
+    expect(notice.textContent).not.toContain("أُعيد احتساب الأرصدة");
+    expect(document.querySelector("tbody").textContent).toContain("9101");
+    expect(onMatch).toHaveBeenCalledTimes(1);
+    expect(operationalApi.confirmDeliveryAfterStart).not.toHaveBeenCalled();
+});
+
 test("closing courier matching aborts its native request and cannot present a late saved result", async () => {
     let resolve;
     const onMatch = jest.fn().mockReturnValue(new Promise(done => { resolve = done; }));

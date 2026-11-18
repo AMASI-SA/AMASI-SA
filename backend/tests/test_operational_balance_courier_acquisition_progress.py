@@ -4,6 +4,7 @@ from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 
 import httpx
+import pytest
 
 from operational_balance_store import STATES
 from operational_courier_transitions import WEBHOOK_PROOF
@@ -125,16 +126,32 @@ def test_oldest_due_deliveries_progress_with_cap_cooldown_and_owner_isolation(mo
     run_real_mongo(scenario)
 
 
-def test_one_native_read_timeout_does_not_discard_remaining_four_order_allowance(monkeypatch):
-    freeze_acquisition_clock(monkeypatch)
+@pytest.mark.parametrize("error, reason", [
+    pytest.param(sync.SallaError("synthetic sensitive provider body", status_code=403),
+                 "native_evidence_access_denied", id="access-denied"),
+    pytest.param(httpx.ReadTimeout("synthetic sensitive provider body"),
+                 "native_evidence_request_timeout", id="request-timeout"),
+    pytest.param(sync.SallaError("synthetic permission timeout body", status_code=502),
+                 "native_evidence_unavailable", id="provider-unavailable"),
+    pytest.param(sync.SallaError("synthetic sensitive provider body", status_code=403, needs_reauth=True),
+                 "native_evidence_unavailable", id="reauth-forbidden"),
+    pytest.param(sync.SallaError("synthetic sensitive provider body", status_code=401, needs_reauth=True),
+                 "native_evidence_unavailable", id="reauth-required"),
+    pytest.param(httpx.ConnectError("synthetic permission timeout body"),
+                 "native_evidence_unavailable", id="network-unavailable"),
+])
+@pytest.mark.parametrize("failed_source", ["histories", "shipments"])
+def test_native_read_failure_reason_preserves_remaining_four_order_allowance(monkeypatch, error, reason, failed_source):
+    clock = freeze_acquisition_clock(monkeypatch)
     snapshots, calls = {}, []
     native_provider(monkeypatch, snapshots, calls)
     successful_native = sync.call_salla
 
     async def native(db, owner, method, path, *, params):
-        if path == "/orders/8600/histories":
+        if ((failed_source == "histories" and path == "/orders/8600/histories")
+                or (failed_source == "shipments" and path == "/shipments" and params["order_id"] == "8600")):
             calls.append(("8600", path))
-            raise httpx.ReadTimeout("synthetic unavailable order history")
+            raise error
         return await successful_native(db, owner, method, path, params=params)
 
     monkeypatch.setattr(sync, "call_salla", native)
@@ -148,20 +165,67 @@ def test_one_native_read_timeout_does_not_discard_remaining_four_order_allowance
             await seed(db, source)
         before = deepcopy(db.data[STATES])
 
-        await visible(db)
+        result = await visible(db)
 
         attempted = {identity for identity, _ in calls}
         assert attempted == {"8600", "8601", "8602", "8603"}, (
             "One order's native read failure must not discard the rest of the bounded batch"
         )
+        assert result["courier"] == {
+            "status": "deferred", "selected": 4, "verified": 3, "saved": 3,
+            "unchanged": 0, "blocked": 0, "conflicted": 0, "unavailable": 1,
+            "outcomes": [{"order_id": "8600", "status": "unavailable", "reason": reason},
+                         *({"order_id": identity, "status": "saved"} for identity in ("8601", "8602", "8603"))],
+        }
+        assert "synthetic" not in repr(result)
         for identity in ("8601", "8602", "8603"):
             saved = await db.sources.unified_orders.find_one({"user_id": "owner", "order_id": identity})
             assert WEBHOOK_PROOF in saved[CURRENT_SHIPPING]
         failed = await db.sources.unified_orders.find_one({"user_id": "owner", "order_id": "8600"})
         untouched = await db.sources.unified_orders.find_one({"user_id": "owner", "order_id": "8604"})
         assert WEBHOOK_PROOF not in failed[CURRENT_SHIPPING]
-        assert sync._RETRY in failed and sync._RETRY not in untouched
+        assert failed[sync._RETRY] == (clock.instant + timedelta(minutes=15)).replace(tzinfo=None)
+        assert sync._RETRY not in untouched
         assert db.data[STATES] == before and db.data[LEASES] == {}
+
+    asyncio.run(scenario())
+
+
+def test_native_read_cancellation_joins_without_returning_unavailable_or_claiming_next_order(monkeypatch):
+    clock = freeze_acquisition_clock(monkeypatch)
+
+    async def scenario():
+        db = LocalProofDB()
+        for index in range(2):
+            _, source, _, _ = binding_gap(str(8700 + index), str(9700 + index))
+            await seed(db, source)
+        before = deepcopy(db.data[STATES])
+        reading, joined = asyncio.Event(), asyncio.Event()
+        calls = []
+
+        async def native(db, owner, method, path, *, params):
+            calls.append(path)
+            reading.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                joined.set()
+
+        monkeypatch.setattr(sync, "call_salla", native)
+        task = asyncio.create_task(visible(db))
+        await reading.wait()
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert joined.is_set()
+        assert calls == ["/orders/8700/histories"]
+        selected = await db.sources.unified_orders.find_one({"user_id": "owner", "order_id": "8700"})
+        untouched = await db.sources.unified_orders.find_one({"user_id": "owner", "order_id": "8701"})
+        assert selected[sync._RETRY] == (clock.instant + timedelta(minutes=15)).replace(tzinfo=None)
+        assert sync._RETRY not in untouched
+        assert all(WEBHOOK_PROOF not in row[CURRENT_SHIPPING] for row in (selected, untouched))
+        assert db.data[STATES] == before and db.data[LEASES] == {}
+        assert not [task for task in asyncio.all_tasks() if task is not asyncio.current_task()]
 
     asyncio.run(scenario())
 
