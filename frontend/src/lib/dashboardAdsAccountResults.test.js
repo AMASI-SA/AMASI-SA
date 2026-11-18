@@ -1124,6 +1124,163 @@ function assignedProfitFixture() {
     return input;
 }
 
+function unassignedContributionFixture() {
+    const input = assignedProfitFixture();
+    const source = input.executiveSnapshot.ads_v2.account_results;
+    [source, ...source.segments].forEach((container, index) => {
+        const summary = container.unassigned_result.hover_summary;
+        const [product, shipping, payment, total] = [
+            [600, 80, 16.01, 696.01], [200, 40, 6, 246], [400, 40, 10.01, 450.01],
+        ][index];
+        Object.assign(summary, {
+            known_pieces_complete: true, known_product_cost_complete: true,
+            known_shipping_cost_complete: true, known_payment_fees_complete: true,
+            known_total_cost_complete: true, known_total_cost_sar: total,
+            known_product_cost_sar: product, known_shipping_cost_sar: shipping,
+            known_payment_fees_sar: payment,
+        });
+    });
+    Object.assign(source.segments[0].total, salla(10, 2750), { hover_summary: costs(12, 945, 88, 16.83) });
+    Object.assign(source.segments[1].total, salla(13, 3976.01), { hover_summary: costs(17, 1395, 102, 24.18) });
+    return input;
+}
+
+test("unassigned order contribution exposes verified order margin without allocating advertising or changing totals", () => {
+    const input = unassignedContributionFixture();
+    Object.assign(input.executiveSnapshot.ads_v2.account_results.unassigned_result.hover_summary,
+        { operating_expenses_sar: 9999, ad_bank_fees_sar: 8888, ad_spend_sar: 7777 });
+    const before = JSON.parse(JSON.stringify(input));
+    const result = buildDashboardAdsTableMetrics(input);
+    // 1626.01 sales - 600 product - 80 shipping - 16.01 payment fees = 930.
+    expect(result.unassigned.profit).toMatchObject({
+        unassignedOrdersContributionAvailable: true, unassignedOrdersContribution: 930,
+        netProfit: null, complete: false, spendSar: null, bankFees: null, roas: null,
+    });
+    expect(result.unassigned.cpa).toBeNull();
+    expect(result.unassigned.segments.map((segment) => segment.profit.unassignedOrdersContribution))
+        .toEqual([354, 576]);
+    expect(result.accounts.get("usd").profit).toMatchObject({ bankFees: 8.62, assignedOrdersProfit: 691.38 });
+    expect(result.accounts.get("sar").profit).toMatchObject({ bankFees: 1.15, assignedOrdersProfit: 265.85 });
+    expect(result.total.profit).toMatchObject({ bankFees: 9.77, netProfit: 3520.23, complete: true });
+    expect(input).toEqual(before);
+    delete input.executiveSnapshot.ads_v2.account_results.unassigned_result;
+    expect(buildDashboardAdsTableMetrics(input).total).toEqual(result.total);
+});
+
+test.each([
+    ["daily", 1626.01, 930], ["daily", 696.01, 0], ["daily", 675.5, -20.51],
+    ["morning", 300.25, 54.25], ["morning", 246, 0], ["morning", 200, -46],
+])("unassigned order contribution keeps the signed %s margin for sales %s", (scope, sales, expected) => {
+    const input = unassignedContributionFixture();
+    const source = input.executiveSnapshot.ads_v2.account_results;
+    const container = scope === "daily" ? source : source.segments[0];
+    container.unassigned_result.known_salla_sales_sar = sales;
+    const result = buildDashboardAdsTableMetrics(input).unassigned;
+    const profit = (scope === "daily" ? result : result.segments[0]).profit;
+    expect(profit).toMatchObject({ unassignedOrdersContributionAvailable: true,
+        unassignedOrdersContribution: expected, netProfit: null, complete: false });
+});
+
+test.each([
+    "product", "shipping", "payment", "pieces", "known total", "cost sum", "basis", "currency",
+    "FX", "time", "catalog", "coverage", "missing summary", "invalid pieces", "unknown sales",
+])("unassigned order contribution remains unavailable with %s uncertainty", (fault) => {
+    const input = unassignedContributionFixture();
+    const source = input.executiveSnapshot.ads_v2.account_results;
+    const row = source.unassigned_result;
+    const summary = row.hover_summary;
+    if (fault === "product") summary.known_product_cost_complete = false;
+    if (fault === "shipping") summary.known_shipping_cost_complete = false;
+    if (fault === "payment") summary.known_payment_fees_complete = false;
+    if (fault === "pieces") summary.known_pieces_complete = false;
+    if (fault === "known total") summary.known_total_cost_complete = false;
+    if (fault === "cost sum") summary.known_total_cost_sar += 0.01;
+    if (fault === "basis") summary.basis = "unverified_order_costs";
+    if (fault === "currency") summary.currency = "USD";
+    if (fault === "FX") row.sales_currency_conversion_complete = false;
+    if (fault === "time") row.time_assignment_complete = false;
+    if (fault === "catalog") source.coverage.catalog_complete = false;
+    if (fault === "coverage") source.coverage.status = "complete";
+    if (fault === "missing summary") delete row.hover_summary;
+    if (fault === "invalid pieces") summary.known_pieces = 1.5;
+    if (fault === "unknown sales") row.known_salla_sales_sar = null;
+    expect(buildDashboardAdsTableMetrics(input).unassigned.profit).toMatchObject({
+        unassignedOrdersContributionAvailable: false, unassignedOrdersContribution: null,
+        netProfit: null, complete: false,
+    });
+});
+
+test.each([undefined, null, " ", true, [], {}, Infinity, -1, Number.MAX_SAFE_INTEGER + 1])(
+    "unassigned order contribution rejects invalid known cost %p", (value) => {
+        const input = unassignedContributionFixture();
+        input.executiveSnapshot.ads_v2.account_results.unassigned_result.hover_summary.known_product_cost_sar = value;
+        expect(buildDashboardAdsTableMetrics(input).unassigned.profit).toMatchObject({
+            unassignedOrdersContributionAvailable: false, unassignedOrdersContribution: null,
+        });
+    },
+);
+
+test.each(["missing spend", "stale spend", "changed spend basis", "unverified bank fees", "missing hourly"])(
+    "unassigned order contribution is independent of %s and does not complete advertising profit", (fault) => {
+        const input = unassignedContributionFixture();
+        if (fault === "missing spend") input.spendSnapshot = null;
+        if (fault === "stale spend") input.spendSnapshot.date_from = "2026-11-14";
+        if (fault === "changed spend basis") input.executiveSnapshot.totals.total_ads_cost += 1;
+        if (fault === "unverified bank fees") input.executiveSnapshot.ads_v2.bank_commissions.coverage.complete = false;
+        if (fault === "missing hourly") {
+            input.snapchatAccounts.forEach((account) => { delete account.hourly_sar; });
+            delete input.spendSnapshot.hourly_spend;
+        }
+        const result = buildDashboardAdsTableMetrics(input);
+        expect(result.unassigned.profit).toMatchObject({ unassignedOrdersContributionAvailable: true,
+            unassignedOrdersContribution: 930, netProfit: null, spendSar: null, bankFees: null });
+        expect(result.unassigned.segments.map((segment) => segment.profit.unassignedOrdersContribution))
+            .toEqual([354, 576]);
+        if (fault !== "missing hourly") expect(result.total.profit).toMatchObject({ complete: false, netProfit: null });
+        expect(result.total.segments.every((segment) => segment.profit.netProfit === null)).toBe(true);
+    },
+);
+
+test("unassigned order contribution preserves cohort fee rounding instead of absorbing the total residual", () => {
+    const input = unassignedContributionFixture();
+    const summary = input.executiveSnapshot.ads_v2.account_results.daily_total.hover_summary;
+    // The all-order payment fee rounds one halala higher than separate cohorts.
+    summary.payment_fees_sar = summary.known_payment_fees_sar = 41.02;
+    summary.total_cost_sar = 2571.02;
+    const result = buildDashboardAdsTableMetrics(input);
+    expect(result.total.profit.netProfit).toBe(3520.22);
+    // Other displayed contributions sum to 2590.23; their residual is 929.99.
+    expect(result.total.profit.netProfit - 2590.23).toBeCloseTo(929.99, 2);
+    expect(result.unassigned.profit.unassignedOrdersContribution).toBe(930);
+});
+
+test.each(["outside account", "missing total cost"])(
+    "unassigned order contribution cannot complete an aggregate with %s uncertainty", (fault) => {
+        const input = unassignedContributionFixture();
+        const source = input.executiveSnapshot.ads_v2.account_results;
+        if (fault === "outside account") {
+            Object.assign(source.coverage, { outside_account_scope_orders: 1, unrepresented_orders: 5 });
+            Object.assign(source.daily_total, salla(24, 6926.01));
+        } else source.daily_total.hover_summary.product_cost_complete = false;
+        const result = buildDashboardAdsTableMetrics(input);
+        expect(result.unassigned.profit.unassignedOrdersContribution).toBe(930);
+        expect(result.total.profit).toMatchObject({ complete: false, netProfit: null });
+    },
+);
+
+test("a proven empty elapsed half-day has zero unassigned contribution without claiming allocated spend", () => {
+    const input = unassignedContributionFixture();
+    const segment = input.executiveSnapshot.ads_v2.account_results.segments[0];
+    Object.assign(segment.coverage, { status: "complete", unassigned_orders: 0, unrepresented_orders: 0 });
+    segment.unassigned_result.known_salla_orders = segment.unassigned_result.known_salla_sales_sar = 0;
+    Object.keys(segment.unassigned_result.hover_summary)
+        .filter((key) => key.startsWith("known_") && !key.endsWith("_complete"))
+        .forEach((key) => { segment.unassigned_result.hover_summary[key] = 0; });
+    const profit = buildDashboardAdsTableMetrics(input).unassigned.segments[0].profit;
+    expect(profit).toMatchObject({ unassignedOrdersContributionAvailable: true, unassignedOrdersContribution: 0,
+        netProfit: null, complete: false, spendSar: null, bankFees: null });
+});
+
 test("mapped Snapchat orders expose a separate partial profit with one full account spend and bank fee deduction", () => {
     const input = assignedProfitFixture();
     const before = JSON.stringify(input);
@@ -1196,13 +1353,14 @@ test("half-day mapped-order profit still requires reconciled hourly spend and ve
     expect(result.accounts.get("usd").profit.assignedOrdersProfit).toBe(691.38);
 });
 
-test("unassigned Snapchat has its own sourced row without allocating spend, bank fees or profit or recounting the total", () => {
+test("legacy unassigned Snapchat evidence preserves the row without claiming a verified contribution or recounting the total", () => {
     const input = unassignedFixture();
     const before = JSON.parse(JSON.stringify(input));
     const result = buildDashboardAdsTableMetrics(input);
     expect(result.unassigned).toMatchObject({ orders: 4, sales: 1626.01, knownOrders: 4, knownSales: 1626.01,
         cpa: null, profit: { spendSar: null, knownSpendSar: null, bankFees: null, knownBankFees: null,
-            roas: null, netProfit: null, complete: false, knownTotalCost: 696.01 } });
+            roas: null, netProfit: null, complete: false, knownTotalCost: 696.01,
+            unassignedOrdersContribution: null, unassignedOrdersContributionAvailable: false } });
     expect(result.unassigned.segments.map((row) => [row.orders, row.sales])).toEqual([[2, 600], [2, 1026.01]]);
     expect(result.total).toMatchObject({ orders: 23, sales: 6726.01,
         profit: { bankFees: 9.77, totalCost: 2580.78, netProfit: 3520.23, complete: true } });
@@ -1216,7 +1374,7 @@ test("unassigned Snapchat has its own sourced row without allocating spend, bank
 
 test.each(["missing", "count", "provider", "cohort", "account", "allocation", "old period", "legacy mode", "zero"])(
     "%s unassigned evidence cannot create a visible Snapchat row", (fault) => {
-        const input = unassignedFixture();
+        const input = unassignedContributionFixture();
         const source = input.executiveSnapshot.ads_v2.account_results;
         if (fault === "missing") delete source.unassigned_result;
         if (fault === "count") source.unassigned_result.known_salla_orders = 5;
@@ -1254,7 +1412,7 @@ test("unassigned counts survive unavailable FX and incomplete catalog without ma
 
 test.each(["unknown time", "future", "wrong boundary", "duplicate", "multi-day"])(
     "%s unassigned half-day cannot masquerade as complete while daily data remains available", (fault) => {
-        const input = unassignedFixture();
+        const input = unassignedContributionFixture();
         const source = input.executiveSnapshot.ads_v2.account_results;
         const segment = source.segments[1];
         if (fault === "unknown time") segment.unassigned_result.time_assignment_complete = false;
@@ -1266,8 +1424,11 @@ test.each(["unknown time", "future", "wrong boundary", "duplicate", "multi-day"]
         }
         const result = buildDashboardAdsTableMetrics(input);
         expect(result.unassigned.orders).toBe(4);
+        expect(result.unassigned.profit.unassignedOrdersContribution).toBe(930);
         expect(result.unassigned.segments[1].orders).toBeNull();
         expect(result.unassigned.segments[1].sales).toBeNull();
         expect(result.unassigned.segments[1].profit.netProfit).toBeNull();
+        expect(result.unassigned.segments[1].profit.unassignedOrdersContribution).toBeNull();
+        expect(result.unassigned.segments[1].profit.unassignedOrdersContributionAvailable).toBe(false);
     },
 );

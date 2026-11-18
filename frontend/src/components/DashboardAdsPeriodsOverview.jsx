@@ -47,7 +47,7 @@ function metricEntries(stats = {}, includeBankFees = false) {
             value: <Value value={profit.bankFees} available={profit.knownBankFees} /> }] : []),
         { key: "roas", label: "العائد الإعلاني", unit: "×", value: <Value value={profit.adSpendApplicable === false ? null : profit.roas} /> },
         { key: "net", label: "الربح قبل التشغيل", unit: "ر.س", value: <DashboardAdsProfitValue profit={profit}
-            unavailableReason={stats.accountUnassigned ? "بانتظار توزيع الصرف" : undefined} /> },
+            unavailableReason={stats.accountUnassigned ? "بيانات الربح غير مكتملة" : undefined} /> },
     ];
 }
 
