@@ -535,11 +535,76 @@ def _bank_credit_actions(orders, recorded):
     return actions
 
 
+async def _reconcile_with_profit_snapshot(db, owner, state, sources, stamp):
+    """Join independent visible-request preparations before any financial save.
+
+    Profit reads depend only on the owner and observation period. They do not
+    read the prepared ledger, and reconciliation performs no source I/O. Each
+    child retains the same request deadline and must finish its cleanup before
+    the caller can release its lease or admit the aggregate commit.
+    """
+    from operational_balance_engine import reconcile
+    from operational_demand_refresh import checkpoint, demand_context, refresh_stage, run_calculation
+    from operational_financial_activity_runtime import join_task
+    from operational_profit_sources import load_profit_snapshot
+    from operational_read_runtime import _snapshot_session
+
+    async def calculate():
+        with refresh_stage("reconciliation"):
+            return await run_calculation(reconcile, state, sources, stamp)
+
+    async def profit(period):
+        with refresh_stage("profit_snapshot"):
+            return await load_profit_snapshot(db, owner, period, as_of=stamp)
+
+    # Ordinary callers do not own cancellable CPU threads. Snapshot-session
+    # readers also retain their serial contract, including authorization reads.
+    if demand_context() is None or _snapshot_session(db):
+        result = await calculate()
+        await checkpoint()
+        result["engine"]["profit_snapshot"] = await profit(result)
+        return result
+
+    period = {"owner_id": state["owner_id"], "started_at": state["started_at"]}
+    tasks = [asyncio.create_task(calculate()), asyncio.create_task(profit(period))]
+    group = asyncio.gather(*tasks)
+    try:
+        result, snapshot = await asyncio.shield(group)
+    finally:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        # A second cancellation must not detach a source cursor or CPU thread.
+        # Cleanup exceptions cannot replace the first preparation outcome.
+        await join_task(asyncio.gather(group, *tasks, return_exceptions=True))
+    result["engine"]["profit_snapshot"] = snapshot
+    return result
+
+
+def _apply_refreshed_party_names(result, names):
+    """Keep exact diagnostics while avoiding a whole-list scan per obligation."""
+    from operational_demand_refresh import calculation_checkpoint
+    from operational_issue_index import append_unique_issue, enable_issue_index
+
+    issue_scope = None
+    for obligation in result["engine"].get("obligations", {}).values():
+        calculation_checkpoint()
+        kind, identity = obligation["party_type"], obligation["party_id"]
+        if kind == "supplier" and not identity:
+            obligation["name"] = "تكلفة منتجات لم تُستلم من المورد"
+        else:
+            obligation["name"] = names.get(kind, {}).get(identity, "جهة غير مكتملة الإعداد")
+            if identity not in names.get(kind, {}):
+                if issue_scope is None:
+                    issue_scope = {"issues": result["engine"]["issues"]}
+                    enable_issue_index(issue_scope)
+                append_unique_issue(issue_scope, {
+                    "code": "operational_obligation_entity_incomplete", "source_id": obligation["id"]})
+
+
 async def refresh(db, owner, *, clock=None):
     from operational_balance_sources import collect_sources
-    from operational_balance_engine import reconcile
     from operational_demand_refresh import calculation_checkpoint, checkpoint, refresh_stage, run_calculation
-    from operational_profit_sources import load_profit_snapshot
     stamp = clock or now()
 
     async def apply(state):
@@ -569,14 +634,7 @@ async def refresh(db, owner, *, clock=None):
         sources.setdefault("supplier_returns", []).extend(state.get("supplier_returns", []))
         from operational_customer_returns import attach_returns
         attach_returns(state, sources)
-        # Pure calculation returns an independent state and performs no I/O.
-        # The visible request owns calculation and cancellation. Authorization
-        # and the final atomic save remain on the original event loop.
-        with refresh_stage("reconciliation"):
-            result = await run_calculation(reconcile, state, sources, stamp)
-        await checkpoint()
-        with refresh_stage("profit_snapshot"):
-            result["engine"]["profit_snapshot"] = await load_profit_snapshot(db, owner, result, as_of=stamp)
+        result = await _reconcile_with_profit_snapshot(db, owner, state, sources, stamp)
         await checkpoint()
         with refresh_stage("bank_claims"):
             bank_actions = await run_calculation(_bank_credit_actions, sources.get("orders", []), result["movements"])
@@ -608,16 +666,7 @@ async def refresh(db, owner, *, clock=None):
                     names[kind] = {r["id"]: r["name"] for r in await entities(db, owner, kind, **options)}
                 except ValueError:
                     names[kind] = {}
-        for obligation in result["engine"].get("obligations", {}).values():
-            kind, identity = obligation["party_type"], obligation["party_id"]
-            if kind == "supplier" and not identity:
-                obligation["name"] = "تكلفة منتجات لم تُستلم من المورد"
-            else:
-                obligation["name"] = names.get(kind, {}).get(identity, "جهة غير مكتملة الإعداد")
-                if identity not in names.get(kind, {}):
-                    issue = {"code": "operational_obligation_entity_incomplete", "source_id": obligation["id"]}
-                    if issue not in result["engine"]["issues"]:
-                        result["engine"]["issues"].append(issue)
+            await run_calculation(_apply_refreshed_party_names, result, names)
         state.update(result)
         state["engine"]["as_of"] = stamp
         await checkpoint()
