@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "task_id": "POST-RELEASE-LATENCY-20261118",
+  "kind": "root_observed_live_fix_inclusion_in_later_release",
+  "health": {
+    "observed_at_utc": "2026-11-18T01:26:07.901374+00:00",
+    "http_status": 200,
+    "ok": true,
+    "source_git_sha": "17262103506180b417f7ad5b88e518faf5ed4d5e",
+    "release_id": "rg5-717a2715d8c7db60ea64885f2daab9b3b269c0daa2d284c118537041470c7323",
+    "verified_identity_available": true,
+    "critical_file_hashes_match": true,
+    "frontend_build_verified": true,
+    "backend_runtime_source_verified": true,
+    "boot_started_at": "2026-11-18T01:23:13.042648+00:00"
+  },
+  "source_comparison": {
+    "observed_source": "17262103506180b417f7ad5b88e518faf5ed4d5e",
+    "reviewed_source": "a48657447dfb5bff48013ece455b745920403458",
+    "path": "backend/operational_balance_workspace.py",
+    "exact_content_equal": true,
+    "characters": 34007
+  },
+  "ancestry": {
+    "status": "ahead",
+    "ahead_by": 4,
+    "behind_by": 0,
+    "merge_base": "f2d806efc18964a2cc7c3a475346590cbe8b1262",
+    "total_commits": 4,
+    "workspace_file_changed": false
+  },
+  "publisher": {
+    "pr": 1984,
+    "url": "https://github.com/AMASI-SA/AMASI-SA/pull/1984",
+    "updated_at": "2026-11-18T01:27:54Z",
+    "deployment_git_sha": "557c6c52857b0a09feccacd0cdf9bf6ce9d4476e",
+    "platform_version": "9f62e46",
+    "reported_platform_completion": "Deployment successful",
+    "first_official_verify": {
+      "started_at": "2026-11-18T01:24:15.366493+00:00",
+      "finished_at": "2026-11-18T01:24:17.572014+00:00",
+      "exit_code": 1,
+      "failed_route": "/build-meta.json",
+      "accept": "application/json",
+      "expected_sha256": "3a1c50ebfbc5108d2bf9421f3b230f176f90dc732b240d8159f4f67a99c5c046",
+      "observed_sha256": "05130a632647192a628ef09189f62d22248c6d1afdde31b454ec5a61c5f4da9c"
+    },
+    "owner_lease_still_active": true,
+    "diagnosis_in_progress": true
+  },
+  "limitations": [
+    "Direct health and source equality prove inclusion of the reviewed backend fix; they do not replace the full official frontend publication verifier.",
+    "No hosted balances response-time measurement or incident recovery is accepted.",
+    "This task did not launch the later publication or a competing build, lease, status or verification."
+  ],
+  "next_actions": [
+    "Await the active publisher's diagnosis and complete exact three-probe official verification plus inactive lease handoff.",
+    "Then perform read-only hosted balances responsiveness and permission-preservation checks; do not republish old PR1980 separately."
+  ]
+}

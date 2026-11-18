@@ -1,5 +1,40 @@
 # Post-release availability and balances latency — 18 November 2026
 
+## Fix included in later live release; final verification refused — 18 November 2026, 01:28 UTC
+
+The earlier publication-UI blocker is superseded by the combined PR1984
+publication. Root directly observed production health at 01:26:07.901374 UTC:
+HTTP 200, ok=true, live source `17262103506180b417f7ad5b88e518faf5ed4d5e`,
+runtime `rg5-717a2715d8c7db60ea64885f2daab9b3b269c0daa2d284c118537041470c7323`,
+and all reported identity, critical-hash, frontend-build and backend-source
+flags true. This is not the complete official frontend/publication verifier.
+
+Root independently compared the entire `backend/operational_balance_workspace.py`
+file at that live source with reviewed A `a48657447dfb5bff48013ece455b745920403458`:
+exact content equality. GitHub's source comparison is ahead by four commits,
+behind by zero, with merge base equal to our accepted M
+`f2d806efc18964a2cc7c3a475346590cbe8b1262`; the workspace module is unchanged.
+The reviewed balances repair is therefore included in the live backend.
+
+The production branch is now PR1984 merge
+`557c6c52857b0a09feccacd0cdf9bf6ce9d4476e`. Root read PR1984 directly after
+its 01:27:54 UTC update: the publisher records platform success/version
+`9f62e46`, but its first official verification exited 1 at 01:24:17.572014 UTC.
+Canonical `/build-meta.json` with Accept application/json returned a SHA256
+different from the reviewed metadata. The owner is diagnosing that mismatch
+and explicitly retains its active lease. Final release acceptance is incomplete.
+
+Do not start a competing build, guard/status/verifier, lease or publication,
+and do not independently republish old PR1980. Await the current publisher's
+successful three-probe verification and inactive handoff, then perform separate
+read-only hosted balances responsiveness checks. No hosted speed improvement
+or whole-system recovery has yet been established. Exact root observations and
+the publisher's reported failure are retained in
+`evidence/live-inclusion-20261118T012607Z.json`.
+
+This is an evidence-only checkpoint; no production mutation was made by this
+status review. The following records retain their original observation times.
+
 ## Publication UI blocker — 17 November 2026, 23:40 UTC
 
 This is a resumable blocked-publication checkpoint. The actual shared adapter
