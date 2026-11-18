@@ -22,13 +22,29 @@ Operational items never consume inventory. Supplier Ready functions are not
 modified. Saving Ready does not bypass independent whole-order completion and
 shipment requirements; an order-level business hold leaves Ready saved.
 
-Fresh focused local tests: 48 passed, zero skips. The prior implementation
+Fresh focused local tests: 52 passed, zero skips. The prior implementation
 reproduced false `can_mark_ready` for in-progress orders with source or review
 holds. A broader local run found one obsolete source-string assertion after
 321 passing tests and 24 passing subtests; that assertion was removed because
-the new regression suite verifies behavior. Final broader and real-Mongo
-verification are pending. Existing direct integration expectations are updated
+the new regression suite verifies behavior. The corrected broader run passed
+322 tests and 24 subtests. Existing direct integration expectations are updated
 for the explicitly requested contract; supplier expectations remain intact.
+
+The first remotely recoverable source checkpoint is
+`c7aebc86f72c2d9dfc1465000ff32c5916d2919b`, Draft PR 1999. Its governed Linux
+candidate build passed, but real G47 CI exposed six failures. The candidate
+artifact from that SHA is superseded and must not be published.
+
+The follow-up reads coherent saved provider/root status even when an unrelated
+invalid creation date prevents DTO mapping, and still rejects contradictory
+or absent status evidence. Direct stock deferral retains the previously
+accepted historical-plan consumption contract; the new optional stock-service
+argument defaults to the existing strict reviewed-snapshot check for supplier
+callers. Their functions and conditions are unchanged. The two historical
+virtual-readiness expectations are updated for the owner's status-only rule.
+The actual prebuilt/purchased stock and conflicting-status assertions are
+retained. Latest local affected suite: 145 passed. Fresh exact-source real-Mongo
+and full CI remain required before freezing any new intent.
 
 Windows test command (from backend, with dotenv disabled and PYTHONPATH set):
 `python -B -m pytest --noconftest -p no:cacheprovider tests/test_operational_item_ready_policy.py -q --tb=short`.

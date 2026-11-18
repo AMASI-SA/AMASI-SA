@@ -306,3 +306,39 @@ async def test_revalidated_authorization_remains_required_inside_owner_transacti
         )
     assert error.value.status_code == 403
     assert await database[operations.PIECE_EVENTS].count_documents({}) == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("identity", ["op:wrap", "direct:ready"])
+async def test_unmappable_order_date_does_not_hide_proven_in_progress_status(database, monkeypatch, identity):
+    if identity.startswith("direct"):
+        await seed_direct(database)
+    else:
+        await seed(database)
+    await database.unified_orders.update_one({}, {"$set": {"raw_by_source.salla_direct.date": "invalid"}})
+    monkeypatch.setattr(operations, "_current_assembly_order", AsyncMock(return_value=None))
+    result = await operations._assembly_search(database, user_id=OWNER, query=NUMBER)
+    card = next(row for row in result["pieces"] if row["piece_id"] == identity)
+    assert card["can_mark_ready"] is True
+    saved = await mark(database, identity=identity)
+    assert saved["piece"]["assembly_ready"] is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("identity", ["op:wrap", "direct:ready"])
+async def test_conflicting_or_missing_provider_status_is_not_in_progress(database, identity):
+    if identity.startswith("direct"):
+        await seed_direct(database)
+    else:
+        await seed(database)
+    await database.unified_orders.update_one({}, {"$set": {"order_status_slug": "cancelled"}})
+    result = await operations._assembly_search(database, user_id=OWNER, query=NUMBER)
+    assert next(row for row in result["pieces"] if row["piece_id"] == identity)["can_mark_ready"] is False
+    with pytest.raises(HTTPException) as error:
+        await mark(database, identity=identity)
+    assert error.value.detail["code"] == "assembly_salla_in_progress_required"
+    await database.unified_orders.update_one({}, {"$set": {"order_status_slug": "in_progress"},
+                                                   "$unset": {"raw_by_source.salla_direct.status": ""}})
+    with pytest.raises(HTTPException):
+        await mark(database, identity=identity)
+    assert await database[operations.PIECE_EVENTS].count_documents({}) == 0

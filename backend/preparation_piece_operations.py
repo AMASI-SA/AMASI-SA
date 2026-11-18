@@ -2553,6 +2553,15 @@ def _assembly_in_progress(order: Any) -> bool:
     return bool(values) and values.issubset({"in progress", "قيد التنفيذ"})
 
 
+def _status_only_assembly_in_progress(source: dict | None, order: Any) -> bool:
+    # Reconciliation flags and a missing/unmappable creation date are not an
+    # order status. Keep coherent provider/root status evidence and reject a
+    # contradictory mapped current order when one is available.
+    source = source or {}
+    status = canonical_status({**source, "g47_salla_snapshot": {}})
+    return status == "in_progress" and (order is None or _assembly_in_progress(order))
+
+
 async def _ensure_assembly_order_eligible(
     db: Any, *, user_id: str, workflow: dict[str, Any], current_order: Any,
     allow_reviewed_virtual: bool = False, piece: dict | None = None,
@@ -3324,7 +3333,7 @@ async def _assembly_search(
     for row, piece in zip(rows, pieces):
         virtual = bool(row["is_direct_assembly"] or row["is_operational_item"])
         if virtual:
-            row["can_mark_ready"] = _assembly_in_progress(current_order)
+            row["can_mark_ready"] = _status_only_assembly_in_progress(source, current_order)
             row["assembly_blocker_code"] = (
                 None if row["can_mark_ready"] else "assembly_salla_in_progress_required"
             )
@@ -3755,7 +3764,8 @@ async def _mark_virtual_assembly_piece_ready(
     if piece is None:
         return None
     operational = _text(piece.get("virtual_kind")) == "operational"
-    if not _assembly_in_progress(current_order):
+    source = await db["unified_orders"].find_one({"user_id": user_id, "order_number": order_number})
+    if not _status_only_assembly_in_progress(source, current_order):
         raise HTTPException(409, detail={"code": "assembly_salla_in_progress_required"})
     local_contract = workflow.get("completion_mode") == LOCAL_COMPLETION_MODE
     now = _now()
@@ -3955,6 +3965,7 @@ async def _consume_direct_assembly_components(
     result = await consume_component_stock(
         db, merchant_id=user_id, order_id=_text(piece.get("order_number")),
         units={line_id: [unit_index]}, actor_id=actor_id, defer_unavailable=True,
+        require_reviewed_snapshot=False,
     )
     if result.get("deferred") is True:
         return {"state": "deferred", "reason": result.get("reason")}
