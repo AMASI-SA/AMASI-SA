@@ -40,7 +40,7 @@ def pending_operation(actor_id, actor_name):
             "actor_id": actor_id, "actor_name": actor_name}
 
 
-def source_fingerprint(source):
+def source_fingerprint(source, *, supplier_receipt=False):
     # Fence source/material changes while permitting the expected status update.
     raw = ((source or {}).get("raw_by_source") or {}).get("salla_direct") or {}
     evidence = {key: raw.get(key) for key in ("id", "reference_id", "items", "shipping_address", "payment_method", "payment_status")}
@@ -49,8 +49,9 @@ def source_fingerprint(source):
     evidence["carrier"] = {key: carrier.get(key) for key in ("company_name", "company_code")}
     shipping_source = raw.get("shipping") if isinstance(raw.get("shipping"), dict) else {}
     evidence["shipping_recipient"] = {key: shipping_source.get(key) for key in ("address", "recipient", "receiver")}
-    evidence["component_pending"] = ((source or {}).get("g47_salla_snapshot") or {}).get("component_pending")
-    evidence["requires_authoritative_refresh"] = ((source or {}).get("g47_salla_snapshot") or {}).get("requires_authoritative_refresh")
+    if not supplier_receipt:
+        evidence["component_pending"] = ((source or {}).get("g47_salla_snapshot") or {}).get("component_pending")
+        evidence["requires_authoritative_refresh"] = ((source or {}).get("g47_salla_snapshot") or {}).get("requires_authoritative_refresh")
     return hashlib.sha256(json.dumps(evidence, sort_keys=True, default=str).encode()).hexdigest()
 
 
@@ -65,6 +66,10 @@ def workflow_fingerprint(workflow):
             "items", "operational_items", "fulfillment_decision", "assembly_status",
             "assembly_ready_piece_count", "assembly_total_piece_count", "preparation_receipt_status",
             "shipping_print_batch_id", "experiment_mode", "experiment_delivery_flow")
+    # Existing outboxes retain their exact hash. New receipt-based completions
+    # bind their server-owned policy rather than changing every legacy digest.
+    if workflow.get("assembly_completion_basis") is not None:
+        keys += ("assembly_completion_basis",)
     return hashlib.sha256(json.dumps({key: workflow.get(key) for key in keys},
                                     sort_keys=True, default=str).encode()).hexdigest()
 
@@ -76,12 +81,31 @@ async def guard_effect(db, operation, *, effect=None, patch=None):
         current = await shipping_workflow(scoped, owner, number)
         outbox = current.get(FIELD) or {}
         source = await scoped["unified_orders"].find_one({"user_id": owner, "order_number": number})
-        if component_refresh_pending(source):
+        from supplier_receipt_ready_policy import POLICY, completed_supplier_policy, supplier_status
+        policy_markers = (
+            current.get("assembly_completion_basis"), outbox.get("ready_basis"),
+            operation.get("assembly_completion_basis"), operation[FIELD].get("ready_basis"),
+        )
+        supplier_receipt = POLICY in policy_markers
+        legacy = outbox.get("legacy_readback_only") is True
+        if supplier_receipt and (
+            any(marker != POLICY for marker in policy_markers)
+            or outbox.get("version") not in {1, 2}
+            or outbox.get("version") != operation[FIELD].get("version")
+            or legacy != (operation[FIELD].get("legacy_readback_only") is True)
+            or (outbox.get("version") == 1 and not legacy)
+        ):
+            raise shipping.ShippingLabelError("assembly_completion_evidence_changed", "تغيرت أدلة التجهيز؛ يلزم التحقق.")
+        if not supplier_receipt and component_refresh_pending(source):
             raise shipping.ShippingLabelError("completion_source_refresh_pending", "جارٍ التحقق من بيانات التجهيز المحدثة.")
         if (outbox.get("claim") != operation[FIELD]["claim"]
                 or outbox.get("lease_until", "") <= now().isoformat()):
             raise shipping.ShippingLabelError("completion_lease_lost", "انتهت صلاحية محاولة الاستكمال.")
-        current_status = canonical_status(source)
+        if supplier_receipt and not await completed_supplier_policy(
+            scoped, owner, number, workflow=current, source=source,
+        ):
+            raise shipping.ShippingLabelError("assembly_completion_evidence_changed", "تغيرت أدلة التجهيز؛ يلزم التحقق.")
+        current_status = supplier_status(source) if supplier_receipt else canonical_status(source)
         if current_status not in {"in_progress", "completed"}:
             raise shipping.ShippingLabelError("assembly_canonical_status_blocked", "حالة الطلب الحالية غير مؤكدة أو لا تسمح بالشحن.")
         shipping_fence = {
@@ -92,20 +116,23 @@ async def guard_effect(db, operation, *, effect=None, patch=None):
         }
         if "_shipping_fence" in operation and shipping_fence != operation["_shipping_fence"]:
             raise shipping._stale_label()
-        legacy = outbox.get("legacy_readback_only") is True
         material = outbox.get("workflow_fingerprint")
         unchanged_workflow = (
             material == operation[FIELD].get("workflow_fingerprint")
             and workflow_fingerprint(current) == material
         ) if material else current.get("revision") == outbox.get("workflow_revision")
-        if not legacy and (not unchanged_workflow or not source
-                or source_fingerprint(source) != outbox.get("source_fingerprint")):
+        # A Ready retry may reseal current material while this claim is inside
+        # provider IO. It cannot make the older claimed proof current again.
+        if outbox.get("source_fingerprint") != operation[FIELD].get("source_fingerprint"):
+            raise shipping.ShippingLabelError("assembly_completion_evidence_changed", "تغيرت أدلة التجهيز؛ يلزم التحقق.")
+        if (not legacy or supplier_receipt) and (not unchanged_workflow or not source
+                or source_fingerprint(source, supplier_receipt=supplier_receipt) != outbox.get("source_fingerprint")):
             raise shipping.ShippingLabelError("assembly_completion_evidence_changed", "تغيرت أدلة التجهيز؛ يلزم التحقق.")
         if "_recovery_evidence" in operation:
             from assembly_evidence_recovery import _capture, blocked, same_evidence
             if not same_evidence(operation["_recovery_evidence"], await _capture(scoped, operation)):
                 raise blocked()
-        if not legacy:
+        if not legacy and not supplier_receipt:
             from fulfillment_v2_routes import assert_component_execution, allow_legacy_component_execution
             from stock_component_consumption_service import PLANS
             plan = await scoped[PLANS].find_one({"user_id": owner, "order_id": number})
@@ -278,6 +305,12 @@ async def _deliver_with_recovery(db, operation):
         return await _deliver(db, operation)
     except shipping.ShippingLabelError as exc:
         if exc.code != "assembly_completion_evidence_changed":
+            raise
+        from supplier_receipt_ready_policy import POLICY
+        if (operation.get("assembly_completion_basis") == POLICY
+                or (operation.get(FIELD) or {}).get("ready_basis") == POLICY):
+            # Receipt policy revalidates actual current units. Its failure must
+            # not be resealed through the former approval/component recovery.
             raise
         from assembly_evidence_recovery import recover_evidence
         renewed = await recover_evidence(db, operation)

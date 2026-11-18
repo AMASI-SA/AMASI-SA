@@ -882,9 +882,11 @@ async def test_assembly_search_offers_ready_directly_in_optional_mode(monkeypatc
         ),
     ))
     number = "288407432"
+    line = f"salla:{number}:supplier-line"
     piece_id = "a" * 32
     piece = {
-        "piece_id": piece_id, "order_number": number,
+        "piece_id": piece_id, "user_id": "merchant-1", "order_number": number,
+        "order_item_id": line, "unit_index": 1,
         "status": PIECE_STATUS_RECEIVED,
         "execution_status": "received_from_supplier",
         "supplier_dispatch_status": "received",
@@ -906,12 +908,17 @@ async def test_assembly_search_offers_ready_directly_in_optional_mode(monkeypatc
 
     class DB(dict):
         def __init__(self, mode):
+            source = _canonical_assembly_source(number)
+            source.row["raw_by_source"]["salla_direct"].update({
+                "date": "2026-11-03T09:00:00+00:00",
+                "items": [{"id": "supplier-line", "quantity": 1}],
+            })
             super().__init__({
                 WORKFLOWS: _AssemblySearchCollection(row={
-                    "order_number": number, "stage": "in_progress",
+                    "user_id": "merchant-1", "order_number": number, "stage": "in_progress",
                 }),
                 PIECES: _AssemblySearchCollection(row=piece, rows=[piece]),
-                "unified_orders": _canonical_assembly_source(number),
+                "unified_orders": source,
             })
             self.settings = PolicySettings(mode)
 
