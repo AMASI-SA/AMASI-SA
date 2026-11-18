@@ -27,11 +27,13 @@ if (!out || !path.isAbsolute(out) || path.resolve(out) === root || path.resolve(
   const files = [
     'frontend/src/pages/operational/SimpleBalances.jsx', 'frontend/src/pages/operational/SimpleBalanceAccess.jsx',
     'frontend/src/pages/operational/SimpleOrderRefunds.jsx', 'frontend/src/pages/operational/simpleBalancesApi.js',
+    'frontend/src/pages/operational/SimpleBalanceStatement.jsx', 'frontend/src/pages/operational/SimpleBalanceReviews.jsx',
+    'frontend/src/pages/operational/simpleBalanceReviews.css',
     'frontend/src/pages/operational/simpleBalancesModel.js', 'frontend/src/pages/operational/simpleBalancesHooks.js',
     'frontend/src/pages/operational/simpleBalancesPending.js',
     'frontend/src/pages/operational/simpleBalances.css', 'frontend/src/pages/operational/visibleOperationalRead.js',
     'frontend/src/context/AuthContext.jsx', 'frontend/src/lib/api.js',
-    ...['main.jsx', 'index.html', 'build.cjs', 'browser.cjs', 'fixtures.cjs'].map(file => `scripts/testing/simple_balances/${file}`),
+    ...['main.jsx', 'index.html', 'build.cjs', 'browser.cjs', 'fixtures.cjs', 'features.cjs'].map(file => `scripts/testing/simple_balances/${file}`),
   ];
   fs.writeFileSync(path.join(out, 'source-manifest.json'), JSON.stringify({ synthetic_only: true,
     sha256: Object.fromEntries(files.map(file => [file, crypto.createHash('sha256').update(fs.readFileSync(path.join(root, file))).digest('hex')])),

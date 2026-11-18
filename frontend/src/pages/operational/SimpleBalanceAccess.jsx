@@ -11,8 +11,8 @@ const operationLabels = {
   custody: 'العهد', expense: 'المصروفات', owner: 'المالك', provider: 'مزودو الدفع',
   ads: 'الإعلانات', courier: 'الشحن والتوصيل', customer: 'العملاء', entities: 'إضافة الحسابات',
 };
-const emptyGrant = resource => ({ kind: resource.kind, id: resource.id, use: false, movements: 'none', balance: false });
-const emptyBulk = () => ({ use: '', movements: '', balance: '' });
+const emptyGrant = resource => ({ kind: resource.kind, id: resource.id, use: false, movements: 'none', balance: false, report: false, print: false });
+const emptyBulk = () => ({ use: '', movements: '', balance: '', report: '', print: '' });
 const bulkScopeLabels = { ...resourceLabels, employee: 'الموظفين', supplier: 'الموردين', provider: 'مزودي الدفع', store_driver: 'الموصلين' };
 
 function AccessEditor({ user, catalog, identity }) {
@@ -44,7 +44,7 @@ function AccessEditor({ user, catalog, identity }) {
     if (busy || !draft) return;
     setDraft(value => ({ ...value, ...update })); setDirty(true); setMessage(''); setError('');
   };
-  const grantFor = resource => draft?.resources.find(row => resourceKey(row) === resourceKey(resource)) || emptyGrant(resource);
+  const grantFor = resource => ({ ...emptyGrant(resource), ...draft?.resources.find(row => resourceKey(row) === resourceKey(resource)) });
   const updateGrant = (resource, patch) => {
     const grant = { ...grantFor(resource), ...patch };
     change({ resources: [...draft.resources.filter(row => resourceKey(row) !== resourceKey(resource)), grant] });
@@ -61,6 +61,8 @@ function AccessEditor({ user, catalog, identity }) {
     if (bulk.use) patch.use = bulk.use === 'allow';
     if (bulk.movements) patch.movements = bulk.movements;
     if (bulk.balance) patch.balance = bulk.balance === 'allow';
+    if (bulk.report) patch.report = bulk.report === 'allow';
+    if (bulk.print) patch.print = bulk.print === 'allow';
     const resources = new Map(draft.resources.map(resource => [resourceKey(resource), resource]));
     let changed = 0;
     for (const resource of scopedResources) {
@@ -86,8 +88,8 @@ function AccessEditor({ user, catalog, identity }) {
         expected_version: draft.version,
         enabled: draft.enabled === true,
         operations: [...draft.operations],
-        resources: draft.resources.filter(row => row.use || row.balance || row.movements !== 'none')
-          .map(({ kind: resourceKind, id, use, movements, balance }) => ({ kind: resourceKind, id, use: use === true, movements, balance: balance === true })),
+        resources: draft.resources.filter(row => row.use || row.balance || row.report || row.print || row.movements !== 'none')
+          .map(({ kind: resourceKind, id, use, movements, balance, report, print }) => ({ kind: resourceKind, id, use: use === true, movements, balance: balance === true, report: report === true, print: print === true })),
       };
       const result = await api.saveUserAccess(user.id, body);
       if (result?.user?.id !== user.id || !Number.isInteger(result?.access?.version)) throw new Error('invalid saved access');
@@ -128,16 +130,21 @@ function AccessEditor({ user, catalog, identity }) {
           <label className="sb-field"><span>استخدام الحسابات والأطراف</span><select value={bulk.use} onChange={event => setBulk(value => ({ ...value, use: event.target.value }))}><option value="">بدون تغيير</option><option value="allow">مسموح</option><option value="deny">غير مسموح</option></select></label>
           <label className="sb-field"><span>عرض الحركات</span><select value={bulk.movements} onChange={event => setBulk(value => ({ ...value, movements: event.target.value }))}><option value="">بدون تغيير</option><option value="none">لا يعرضها</option><option value="own">التي سجّلها بنفسه</option><option value="all">حركات جميع الموظفين</option></select></label>
           <label className="sb-field"><span>عرض الأرصدة</span><select value={bulk.balance} onChange={event => setBulk(value => ({ ...value, balance: event.target.value }))}><option value="">بدون تغيير</option><option value="allow">مسموح</option><option value="deny">غير مسموح</option></select></label>
+          <label className="sb-field"><span>تجهيز كشوف الفترة</span><select value={bulk.report} onChange={event => setBulk(value => ({ ...value, report: event.target.value }))}><option value="">بدون تغيير</option><option value="allow">مسموح</option><option value="deny">غير مسموح</option></select></label>
+          <label className="sb-field"><span>طباعة وحفظ الكشوف</span><select value={bulk.print} onChange={event => setBulk(value => ({ ...value, print: event.target.value }))}><option value="">بدون تغيير</option><option value="allow">مسموح</option><option value="deny">غير مسموح</option></select></label>
         </div>
         <button type="button" className="sb-secondary" disabled={busy || conflict || !scopedResources.length || !hasBulk} onClick={applyBulk}>تطبيق على جميع {scopeLabel} ({scopedResources.length})</button>
         <p className="sb-small-note">يمكنك تعديل أي اسم في الجدول بعد التطبيق. اضغط «حفظ صلاحيات الموظف» لتفعيل الاختيارات.</p>
       </fieldset>
-      <div className="sb-table-wrap sb-access-resource-list"><table className="sb-access-table" aria-label="صلاحيات الحسابات والجهات"><thead><tr><th scope="col">الحساب</th><th scope="col">استخدامه</th><th scope="col">الحركات المعروضة</th><th scope="col">الرصيد</th></tr></thead><tbody>{matching.map(resource => {
+      <p className="sb-small-note">كشف الفترة يعرض الحركات المسموح بها فقط. الطباعة والحفظ يتطلبان السماح بتجهيز الكشف أيضًا. حركات الموظف نفسه تنتج تقرير نشاط محدودًا؛ الأرصدة الكاملة تحتاج السماح بكل الحركات وبالرصيد.</p>
+      <div className="sb-table-wrap sb-access-resource-list"><table className="sb-access-table" aria-label="صلاحيات الحسابات والجهات"><thead><tr><th scope="col">الحساب</th><th scope="col">استخدامه</th><th scope="col">الحركات المعروضة</th><th scope="col">الرصيد</th><th scope="col">كشف فترة</th><th scope="col">طباعة وحفظ</th></tr></thead><tbody>{matching.map(resource => {
         const grant = grantFor(resource);
         return <tr key={resourceKey(resource)}><th scope="row"><strong>{resource.name}</strong><small>{resourceLabels[resource.kind] || resource.kind}</small></th>
           <td><label className="sb-access-toggle"><span className="sb-access-mobile-label">استخدام الحساب</span><input aria-label={`استخدام ${resource.name}`} type="checkbox" disabled={busy} checked={grant.use} onChange={event => updateGrant(resource, { use: event.target.checked })} /></label></td>
           <td><label className="sb-access-control"><span className="sb-access-mobile-label">الحركات المعروضة</span><select aria-label={`حركات ${resource.name}`} value={grant.movements} disabled={busy} onChange={event => updateGrant(resource, { movements: event.target.value })}><option value="none">لا يعرضها</option><option value="own">التي سجّلها بنفسه</option><option value="all">حركات جميع الموظفين</option></select></label></td>
-          <td><label className="sb-access-toggle"><span className="sb-access-mobile-label">عرض الرصيد</span><input aria-label={`رصيد ${resource.name}`} type="checkbox" disabled={busy} checked={grant.balance} onChange={event => updateGrant(resource, { balance: event.target.checked })} /></label></td></tr>;
+          <td><label className="sb-access-toggle"><span className="sb-access-mobile-label">عرض الرصيد</span><input aria-label={`رصيد ${resource.name}`} type="checkbox" disabled={busy} checked={grant.balance} onChange={event => updateGrant(resource, { balance: event.target.checked })} /></label></td>
+          <td><label className="sb-access-toggle"><span className="sb-access-mobile-label">تجهيز كشف الفترة</span><input aria-label={`كشف فترة ${resource.name}`} type="checkbox" disabled={busy} checked={grant.report === true} onChange={event => updateGrant(resource, { report: event.target.checked })} /></label></td>
+          <td><label className="sb-access-toggle"><span className="sb-access-mobile-label">طباعة وحفظ الكشف</span><input aria-label={`طباعة ${resource.name}`} type="checkbox" disabled={busy} checked={grant.print === true} onChange={event => updateGrant(resource, { print: event.target.checked })} /></label></td></tr>;
       })}</tbody></table></div>{!matching.length && <p className="sb-empty">لا توجد حسابات مطابقة للبحث.</p>}
     </section>
     <section><h3>العمليات المسموحة</h3><p>تُنفذ هذه العمليات على الحسابات المختارة أعلاه فقط. اختيار الحساب وحده لا يمنح صلاحية الدفع منه.</p><div className="sb-operation-groups">{groups.map(group => <fieldset key={group} disabled={busy}><legend>{operationLabels[group] || group}</legend>{catalog.operations.filter(operation => operation.key.startsWith(`${group}.`)).map(operation => <label key={operation.key} className="sb-check"><input type="checkbox" checked={draft.operations.includes(operation.key)} onChange={event => updateOperation(operation.key, event.target.checked)} /><span>{operation.label}</span></label>)}</fieldset>)}</div></section>

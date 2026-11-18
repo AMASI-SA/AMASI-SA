@@ -6,12 +6,13 @@ const operations = [
   ['external.household', 'مصروفات منزلية'], ['external.personal', 'مصروفات شخصية'],
   ['custody.spend', 'الدفع من العهدة'], ['accounts.transfer', 'تحويل بين الحسابات'],
   ['customer.refund_request', 'طلب استرجاع مبلغ'], ['customer.refund_execute', 'تسجيل رد المبلغ'],
+  ['courier.review', 'مراجعة إيصالات الموصلين'],
 ].map(([key, label]) => ({ key, label }));
 const resource = (kind, id, name, amount, side, permitted = []) => ({ kind, id, name, currency: 'SAR',
-  balance: { amount, side, visible: true }, access: { use: true, movements: 'all', balance: true }, operations: permitted });
+  balance: { amount, side, visible: true }, access: { use: true, movements: 'all', balance: true, report: true, print: true }, operations: permitted });
 const resources = [
   resource('external_person', 'external-demo', 'جهة خارجية توضيحية', '400.00', 'for_party', ['external.pay', 'external.receive', 'external.salary', 'external.household', 'external.personal']),
-  resource('employee', 'employee-demo', 'موظف توضيحي', '1000.00', 'for_party', ['employee.accrual', 'employee.payment']),
+  resource('employee', 'employee-demo', 'موظف توضيحي', '2000.00', 'for_party', ['employee.accrual', 'employee.payment']),
   resource('supplier', 'supplier-demo', 'مورد توضيحي', '2000.00', 'for_party', ['supplier.payment']),
   resource('supplier', 'supplier-extra', 'مورد إضافي للاختبار', '500.00', 'for_party', ['supplier.payment']),
   // Repeated IDs deliberately exercise the boundary between resource kinds.
@@ -33,6 +34,7 @@ const ledger = Array.from({ length: 7 }, (_, index) => ({ id: `movement-${index 
   business_date: `2026-11-${String(17 - index).padStart(2, '0')}`, recorded_at: '2026-11-17T10:00:00Z',
   recorded_by: { id: staff.id, name: staff.name }, amount: `${(index + 1) * 50}.00`, currency: 'SAR',
   side: index % 2 ? 'for_us' : 'for_party', reason: index % 2 ? 'payment' : 'receipt', order_number: null,
+  note: index === 0 ? 'تسوية الدفعة حسب الاتفاق' : '',
   party_type: 'external_person', party_id: 'external-demo', party_name: resources[0].name,
 }));
 const order = { id: 'order-demo', order_number: '2044', total: '300.00', currency: 'SAR', paid_amount: '300.00',
