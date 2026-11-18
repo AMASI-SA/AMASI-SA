@@ -1,58 +1,74 @@
-# Dashboard final net profit — 2026-11-18
+# Dashboard final net profit — publication approval handoff
 
-## Scope and current state
+## Task and exact release identity
 
 - Task: `dashboard-final-net-profit-20261118`.
 - Repository: `AMASI-SA/AMASI-SA`.
-- Task branch: `codex/dashboard-final-net-profit-20261118`.
-- Reviewed production base: `37a8211c383079711839557ecad6d5f3f0cdd51f`.
-- Follow-up to merged and verified PR #1969. The user reports that Snapchat profit is still unavailable and the account table does not show final net profit after operating expenses.
-- **WIP implementation checkpoint. Integrated frontend/build acceptance is pending.** Draft [PR #1987](https://github.com/AMASI-SA/AMASI-SA/pull/1987) is the canonical record of the exact remote checkpoint SHA and subsequent verification. Initial remote checkpoint: `7675051cfc746c64bbb0a6208cac64fc822e4621`.
-- **Production changed by this task: no.** No release intent, production merge, lease, deployment, provider refresh, advertising write or financial-data write was performed.
+- Implementation branch: `codex/dashboard-final-net-profit-20261118`.
+- PR: https://github.com/AMASI-SA/AMASI-SA/pull/1987 — merged ordinarily.
+- Reviewed production base J: `37a8211c383079711839557ecad6d5f3f0cdd51f`.
+- Reviewed source A: `f8bf7be75dbd4976a04c1f77b0722267427ab889`.
+- Intent-only B: `e5c4df4ab7431ca28309d8de1f14288b87109329`.
+- Production merge M: `68035e55018d5b75bdd6b9e0ab6000d7528a956f`.
+- B and M have the exact same tree: `2afebe36d1cf92c1709896260e02b2e680e805e4`.
+- M parents are exactly J and B. A-to-M changes only the tracked release intent.
+- Runtime ID: `rg5-c63a56a1935d1a8493c3751adfb9d721c651f137183132ccda139c2cdaf67b0b`.
+- Frontend artifact tree: `a79500c615ace0792560a52004407e9b7773c0b529d2a24cf6f3a466cf548be3`.
+- Build metadata SHA-256: `f47d9d29dd2096be4aea4ea33ae5621bcde9dd765e342b5b27fa89840aa49f3a`.
 
-## Verified diagnosis
+This documentation-only handoff is on a separate branch based on M. It is **not a deployment candidate** and must not be merged into the immutable A/B/M release merely to update a status document. PR1987 records this handoff's full commit SHA. Issue1006 is at its comment limit; do not overwrite its body or retry comments.
 
-The current production source retains PR #1969. A fresh read of the current dashboard showed the unassigned Snapchat row and existing bank-fee explanation. The supplied screenshot does not include that unconditional explanation; no row-visibility regression or rollback was established.
+## Completed behavior
 
-The remaining profit gap is reproducible in source. A globally incomplete Snapchat attribution scope suppresses complete-account profit even when a mapped cohort has complete order costs. The table also displays profit before operating expenses, while the executive summary already has canonical final net in `totals.net_profit`.
+The latest user screenshot confirms that the existing unassigned Snapchat row appears, but mapped account profit is still blank and the existing total is before operating expenses.
 
-## Implementation
+The correction exposes independent known-cohort cost completeness without changing full-account attribution completeness. It displays a separately labelled contribution for mapped Snapchat orders only when identity, catalog, time, currency, costs, account spend and bank-fee evidence are valid. It subtracts the full account spend and bank fee once. Full-account profit remains incomplete while unknown orders exist. Unknown orders stay separate and are counted once in authoritative totals; no invented spend/profit allocation or total aggregation is introduced.
 
-1. Expose additive known-cohort cost completeness in the existing cost collector. Existing scope/attribution completeness fields are unchanged. No new I/O or provider access.
-2. Calculate a separate mapped-order contribution only for exact Snapchat account identity, complete known-cohort costs, currency and time evidence, a complete catalog, matching spend basis and verified account bank fee. It deducts the full account spend and bank charge once. Full account `profit.complete` remains false, and full `netProfit` remains unavailable while attribution is incomplete.
-3. Label mapped contributions **جزئي: الطلبات المسندة**. The unknown cohort still has no allocated advertising spend or final profit. Its unavailable value now explains that spend allocation is pending.
-4. Add operating expenses and final net to the existing table footer without adding columns. The final value comes directly from the same executive snapshot as the executive summary; it does not subtract fees or operating costs again.
-5. Share final-net eligibility between both displays, preserving signed values, cost/currency completeness, selected-period correspondence and current spending reconciliation.
-6. Label account and half-day detail profit as before operating expenses. No operating-expense allocation to accounts or half-days is introduced. Existing bank-fee rounding and authoritative all-order totals remain unchanged.
+Two rows are added inside the existing seven-column table: operating expenses and final net after all expenses. Final net is taken directly from the same canonical executive snapshot and eligibility helper as the executive summary. Fees and operating costs are not subtracted again. Missing/currently mismatched dates, spend, costs or currency hide stale profit. Signed zero and negative values remain valid. Account and half-day contributions are labelled as before operating expenses.
 
-Mapped contributions are not a lower bound: unassigned orders may add either profit or loss. Independently rounded cohort gateway fees need not add exactly to the authoritative total; no residual is redistributed.
+## Verification completed
 
-## Verification checkpoint
+- Focused backend locally:85tests passed.
+- Actual executive-route ASGI/cache round-trip: all six new evidence fields survive JSON and the process-local60s cache, including false/null and true/zero. No migration or cache purge is required.
+- Source-A four-platform run44339059541:580frontend tests /17suites, production build/UI contract;362backend tests +5subtests.
+- Source-A executive-date run44339059601:175tests /9suites, build/contract.
+- Source-A profit-date run44339059362:81tests /6suites, build/contract.
+- Source-A readiness44339059874:57build-contract tests, reproducible A/B build/proof, candidate freeze, backend preflight and host20/24dispatcher contracts.
+- Candidate artifact14441654390 ZIP SHA-256 `d77e03705b4509245e61fa59a7bc6323d66bbdd0966cd51a67323541acfc13fa`; downloaded bytes and official local `load_candidate_release_intent` validation passed.
+- Reviewed-B readiness44340048729:successful frontend build, backend preflight, both host dispatchers, and clean-clone deployment-adapter rehearsals under host Node20.20.2 and24.19.0.
+- Reviewed-B Security Gate44340049506:backend contracts passed; frontend419suites /4,408tests passed; zero production dependency vulnerabilities and both CSP builds passed.
+- Reviewed-B CodeQL44340049454:Python and JavaScript/TypeScript both passed.
+- Independent integrated source review and follow-up fixture/workflow review found no remaining blocking issue.
+- Independent clean clone in Emergent:actual configured `cd frontend; yarn build` passed, exit0 in102.41s, observed host Node24.19.0/Yarn1.22.22 and governed Node22.23.2 linux-arm64. Intended runtime/artifact/build-meta hashes matched; package boundaries passed and clone stayed clean.
+- After an inactive-guard check, /app fast-forwarded J→M with unrelated untracked files preserved. Its actual configured adapter passed exit0.
+- Guard prepare and prepublish passed for M and the exact runtime identity above.
 
-- Six new backend regression cases first failed on the missing completeness evidence and then passed.
-- Full affected backend suite: **85 passed**, exit 0, with two existing Pydantic warnings.
-- `git diff --check`: passed.
-- Initial checkpoint CI: the four-platform backend contract job passed. The frontend job ran 444 cases: 440 passed and four existing card-refresh fixtures failed because they omitted the executive period now required for an explicit date selection. The executive-date job ran 173 cases: 171 passed and two existing account-profit fixtures failed for the same missing-period reason.
-- Corrected those fixtures to include their real selected period, preserved all financial assertions, and added explicit missing/mismatched-period rejection cases. Added daily/half-day partial-profit presentation tests and included both new canonical-net suites in the existing four-platform workflow. The initial CI did not execute those new suites; acceptance requires the follow-up checkpoint to run them.
-- Independent integrated source review found and resolved an explicit shared-spend snapshot edge case: a matching date with unavailable total/quality must not expose stale canonical profit. Seven direct helper checks passed after the fix. No remaining blocking source finding was reported. Follow-up fixture/workflow review is pending.
-- Local frozen-lockfile dependency installation is still in progress. No complete frontend/build/CI acceptance is claimed at this checkpoint.
-- Follow-up checkpoint `dd616962ad02285df4b602673fcb5f1a4076c867`: executive-date CI passed 175 tests across nine suites and its build; four-platform backend passed 362 tests plus five subtests. Expanded frontend passed 569 tests across 16 suites, but the new paired component suite could not initialize because Jest could not resolve `react-router/dom`. Added the same narrow `Link` router-boundary mock used by the passing real executive profit-layout suite; neither financial component nor the shared helper is mocked. Fresh execution is required.
-- Follow-up independent review found no blocking fixture/workflow issue. Release readiness on `dd616962` passed the governed A/B build and candidate-intent checks. That candidate is historical after the router test setup change and must not be used for the next source head.
+Suite counts overlap and must not be added as a deduplicated total. Local rehearsal evidence is not a Cloud Build transcript; no new Cloud Build was submitted.
 
-Backend command:
+## Publication blocked by automatic approval review
 
-```bash
-PYTHONDONTWRITEBYTECODE=1 PYTHON_DOTENV_DISABLED=1 PYTHONPATH=backend:backend/tests \
-python -B -m pytest --noconftest -p no:cacheprovider -q \
-  backend/tests/test_dashboard_ads_account_results.py \
-  backend/tests/test_dashboard_ads_costs.py \
-  backend/tests/test_dashboard_ads_periods.py --tb=short
-```
+The last attempted action was Emergent **Publish changes** for the existing https://mezansalla.com website. Automatic approval review rejected the action before execution because there was no explicit authorization for publishing this new PR1987 fix; the earlier authorization was scoped to PR1969.
 
-Frontend uses the governed Node 22.23.2 / Yarn 1.22.22 toolchain and the existing lockfile. Neither dependencies nor audit policy were changed.
+Do not retry the publication, use an alternate deployment route, or treat this document as authorization. Ask the user explicitly to approve publishing PR1987 to the existing website. This is the only remaining authorization boundary; code implementation, merge and release preparation are complete.
 
-## Next safe action
+The task-owned lease had actor `codex-pr1987-dashboard-final-net-profit`. After the rejection, the owner safely aborted it with the exact deployment SHA and runtime ID. The official status then reported **active:false**. No other lease was cleared.
 
-Preserve the fixture/workflow corrections on the task branch, run the expanded frontend suites in exact-head CI and resolve concrete failures. Finish local dependency installation and the repository-required governed build/release rehearsal, then update this checkpoint. Any release must follow the current production-base and v5 A/B procedure; do not reuse PR #1969's release intent or claim that this source-only checkpoint has been published.
+- Production Git branch changed:yes, merged M.
+- Shared /app source/build changed:yes, M and verified local adapter output.
+- Running production website changed by this task:no.
+- Publication submitted:no — final click rejected by automatic review.
+- New production identity/live table acceptance:pending publication; do not claim the visible issue is fixed.
+- Advertising/provider refresh, budget, financial data and attribution writes:none.
 
-Issue #1006 is at its established comment limit. Preserve its body and use this task's PR for the canonical continuation record.
+## Exact next safe continuation
+
+1. Read AGENTS.md, this record and PR1987. Confirm the user's new explicit publication approval.
+2. Fetch production and the task branch; confirm M/A/B/tree/runtime identity still match. If production advanced, do not silently publish this older candidate.
+3. In /app run `PYTHONDONTWRITEBYTECODE=1 python -B scripts/production_release_guard.py status`; require active:false. Verify the branch/head and preserve unrelated files.
+4. Revalidate current materialized artifacts; rerun the configured adapter if state changed. Do not reuse a lease from this handoff.
+5. Run `prepare --actor codex-pr1987-dashboard-final-net-profit`, then `prepublish` immediately before the authorized Emergent Publish changes action.
+6. Observe a newer explicit Deployment finished success, then run the official `verify --url https://mezansalla.com`. Require all three probes, intended release/source identity, critical hashes, frontend verification and exact JSON build metadata/MIME. Require final status active:false.
+7. Reload the authenticated dashboard normally. Confirm mapped partial Snapchat profit appears where eligible and the table final net equals the executive net for the same period. Verify operating expenses and single bank-fee deduction; unknown orders remain separate. Do not use provider refresh merely to replace an old UI snapshot.
+8. Record the actual deployment/live acceptance and final checkpoint.
+
+Emergent remains at the Publish changes confirmation for the existing website. The browser tab is marked for continuation. The user need only authorize the new publication; no code work needs to be restarted.
