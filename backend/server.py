@@ -4776,6 +4776,13 @@ async def _global_startup() -> None:
     # schema work or recalculates orders, inventory or approved journals.
     from order_cost_authority import ensure_order_cost_indexes
     await ensure_order_cost_indexes(db)
+    # Install the supplier-report selectors before readiness, including stores
+    # whose first request is a report rather than a supplier/preparation screen.
+    # Only these nonunique indexes are needed here; report GETs perform no DDL.
+    from preparation_piece_operations import ensure_piece_order_cost_index
+    from supplier_receiving_routes import ensure_supplier_invoice_identity_index
+    await ensure_piece_order_cost_index(db)
+    await ensure_supplier_invoice_identity_index(db)
     # Ads V2 (Phase 0) — create indexes on the 3 new collections.
     await _ads_v2_ensure_indexes(db)
     # Apps & Integrations V2 — isolated metadata, health, activity,
