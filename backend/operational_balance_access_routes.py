@@ -22,6 +22,8 @@ class ResourceGrant(BaseModel):
     use: StrictBool
     movements: Literal["none", "own", "all"]
     balance: StrictBool
+    report: StrictBool = False
+    print: StrictBool = False
 
     @field_validator("kind")
     @classmethod

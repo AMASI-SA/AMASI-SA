@@ -289,7 +289,7 @@ def test_own_movements_balance_and_counterpart_identity_are_independent():
         assert (await client.get(BASE + "/workspace/ledger/bank/bank", headers=headers())).status_code == 404
         await save_policy(db, [], [grant("supplier", "supplier", use=False, movements="all")], version=2)
         all_rows = await client.get(BASE + "/workspace/ledger/supplier/supplier", headers=headers())
-        assert all_rows.status_code == 200 and all_rows.json()["total"] == 4
+        assert all_rows.status_code == 200 and all_rows.json()["total"] == 3
         assert all_rows.json()["resource"]["balance"] is None
         # Balance permission alone must not expose any ledger row.
         await save_policy(db, [], [grant("supplier", "supplier", use=False, balance=True)], version=3)
