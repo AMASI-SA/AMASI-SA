@@ -2,16 +2,16 @@
 
 ## Current state
 
-**Published; official verification running; live UI confirmation passed.**
+**Completed — published, official verification passed, live UI confirmed.**
 
 - Repository: `AMASI-SA/AMASI-SA`.
 - Production branch: `hotfix/prod-snap-meta-final`.
 - Source branch: `codex/snap-unassigned-profit-20261118-r2`.
 - [PR #1993](https://github.com/AMASI-SA/AMASI-SA/pull/1993) is merged as M `8761f7b2f80faec29638e1438b8fedefcec64a28`.
 - Publication: **`ed5f35c`**, green **Deployment finished Nov18 21:56 Asia/Riyadh**, newer than `8a0d442`. One ordinary free publication was submitted under the user's existing explicit approval.
-- Owned v5 lease: `snap-unassigned-1993-20261118`, prepared 2026-11-18T18:46:36.083348+00:00.
-- Official verify attempt1 started **2026-11-18T18:59:10.955811+00:00** and is still running. No final verification result or lease closure has been asserted.
-- **Production changed: yes**, GitHub source M, staged host M and new published version above. Integrity verification remains pending.
+- Owned v5 lease: `snap-unassigned-1993-20261118`, prepared 2026-11-18T18:46:36.083348+00:00; closed by successful official verification. Separate final status: **active:false**.
+- Official verify attempt1 **passed**, exit0, **verified:true, checks:3**, from 2026-11-18T18:59:10.955811+00:00 through **2026-11-18T19:11:43.662447+00:00**. Exact A2/M/runtime/artifact matched; the original matching lease closed.
+- **Production changed: yes**, GitHub source M, staged host M and new published version above. Integrity verification and live acceptance are complete.
 - This documentation-only handoff branch is not a deployment candidate. Its exact commits are in Git history; the prior full chronological checkpoint is [4ad1b107c88d075235a41c395f7c8eb50381e36a](https://github.com/AMASI-SA/AMASI-SA/blob/4ad1b107c88d075235a41c395f7c8eb50381e36a/docs/operations/snap-unassigned-profit-20261118/STATUS.md). Issue #1006 is full, so this record and PR #1993 provide continuity.
 
 ## User requirement and behavior
@@ -108,7 +108,9 @@ The preceding PR1968 owned lease completed and official status was inactive befo
 python -B scripts/production_release_guard.py verify --url https://mezansalla.com
 ```
 
-**Running; no final result yet.** It holds the operation mutex. Do not start another verify or a blocking status call while it runs, and do not reprepare/rebuild/republish.
+**Passed on attempt1, exit0, at 2026-11-18T19:11:43.662447+00:00.** The official result reports `verified:true`, `checks:3`, exact A2/M/runtime/artifact above and boot `2026-11-18T18:56:28.104911+00:00`. Its first-round request list has **594 labels**, including canonical/cache-busted build-meta under application/json and */* Accept modes. The separate post-verify official status returned **active:false**. No retry, reprepare or republish was required.
+
+Material output fields are durably preserved in [PRODUCTION_VERIFICATION_SUMMARY.json](PRODUCTION_VERIFICATION_SUMMARY.json). Original stdout SHA-256: `85c698cbadc69e435f62287715c796cf40650ae6d3f32575a5f3db7e35a6911c`. Stderr was empty (SHA-256 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`).
 
 Receipt directory: `/tmp/snap-unassigned-1993-release`.
 - Start: `verify-attempt1-start.json`.
@@ -116,7 +118,7 @@ Receipt directory: `/tmp/snap-unassigned-1993-release`.
 - Completion metadata: `verify-attempt1-run.json` (created on process completion).
 - On success: `verify-attempt1-summary.json`, `post-verify-status.json`.
 
-The official success output must have `verified:true`,`checks:3`,exact identities/artifact, followed by official `status active:false`. The guard enforces verified health identity,critical hashes,frontend proof,and exact canonical/cache-busted JSON/asset bytes in every round. It serializes an aggregate3check success and first-round request/header arrays; do not claim separately emitted per-round arrays.
+The official success output has `verified:true`,`checks:3`,exact identities/artifact, followed by official `status active:false`, all observed. The guard enforces verified health identity,critical hashes,frontend proof,and exact canonical/cache-busted JSON/asset bytes in every round. It serializes an aggregate3check success and first-round request/header arrays; do not claim separately emitted per-round arrays.
 
 ## Live UI confirmation
 
@@ -129,8 +131,8 @@ The new production dashboard was reloaded after publication:
 - Only read-only navigation and row expansion; no provider-refresh action.
 - Customer-free table screenshot retained privately in the conversation workspace; no customer details or live financial amounts are committed here.
 
-## Exact next safe action
+## Completion and future continuation
 
-Observe the running verify attempt's task-owned result files from the idle terminal. If it fails, preserve the failed receipt and inspect the actual cause before any bounded diagnostic or unchanged retry. Never weaken the verifier or create a new lease to sidestep a failure.
+No work remains for this request. The source branch, merged PR, immutable identities, published version, passing official verification, final inactive status and live UI acceptance are all recorded above. The user-facing result includes the observed contribution and its independent cost explanation, with operating expenses and final net preserved.
 
-If it succeeds, record full identity/artifact/checks3/start/end/output-hash evidence and the separate inactive status, update this document and PR1993 to completed, and deliver the verified UI result. Do not repeat already completed merge/staging/rehearsal/publication.
+Do not repeat the merge, staging, rehearsal, prepare, publication or verification for this completed task. For any new request, start from the latest remote production source and a fresh official guard status; the recorded inactive result is a point-in-time observation, not authorization to interrupt a subsequent release owner.

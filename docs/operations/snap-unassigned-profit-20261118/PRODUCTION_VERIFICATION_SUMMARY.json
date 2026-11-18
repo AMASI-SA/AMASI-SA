@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "kind": "observed_official_production_guard_summary",
+  "task": "SNAP-UNASSIGNED-PROFIT-20261118",
+  "published_version": "ed5f35c",
+  "ui_completion_label": "Deployment finished Nov 18, 09:56 PM",
+  "ui_timezone": "Asia/Riyadh",
+  "command": "python -B scripts/production_release_guard.py verify --url https://mezansalla.com",
+  "started_at": "2026-11-18T18:59:10.955811+00:00",
+  "finished_at": "2026-11-18T19:11:43.662447+00:00",
+  "exit_code": 0,
+  "stdout_sha256": "85c698cbadc69e435f62287715c796cf40650ae6d3f32575a5f3db7e35a6911c",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "verification": {
+    "verified": true,
+    "checks": 3,
+    "url": "https://mezansalla.com",
+    "protocol_version": 5,
+    "source_git_sha": "84ae882f78ae954449cc4f3380b17a8ff808cb3a",
+    "source_base_git_sha": "ce94ce01b0e631a6373ee3524119f26959bf89a4",
+    "deployment_git_sha": "8761f7b2f80faec29638e1438b8fedefcec64a28",
+    "release_id": "rg5-c8f8108755b4a5d612b50e91902fbe83b014b80ce076b3372408f1bf41fc286b",
+    "boot_started_at": "2026-11-18T18:56:28.104911+00:00",
+    "boot_started_at_observations": [
+      "2026-11-18T18:56:28.104911+00:00"
+    ],
+    "frontend_artifact_tree_sha256": "1f7da282b51120ea6954d2a799092e07464dd6576e0e9abb994107ec1b3e19be",
+    "frontend_checked_request_count": 594,
+    "build_meta_request_labels": [
+      "/build-meta.json [accept=application/json]",
+      "/build-meta.json?release_check [accept=application/json]",
+      "/build-meta.json [accept=*/*]",
+      "/build-meta.json?release_check [accept=*/*]"
+    ]
+  },
+  "post_verify_status": {
+    "active": false
+  },
+  "evidence_note": "This preserves the observed official output's material fields, not the full raw stdout. checks:3 is the official aggregate attestation; request/header arrays in the raw output describe round one and boot observations are deduplicated.",
+  "raw_receipt_directory": "/tmp/snap-unassigned-1993-release",
+  "raw_receipt_files": [
+    "verify-attempt1.stdout.json",
+    "verify-attempt1.stderr",
+    "verify-attempt1-run.json",
+    "verify-attempt1-summary.json",
+    "post-verify-status.json"
+  ],
+  "live_ui_confirmation": {
+    "numeric_unassigned_contribution": true,
+    "independent_cost_breakdown_matches": true,
+    "empty_morning_zero": true,
+    "evening_and_day_contribution_agree": true,
+    "operating_expense_footer_preserved": true,
+    "final_net_matches_executive_summary": true,
+    "provider_refresh_used": false,
+    "financial_write_used": false
+  }
+}
