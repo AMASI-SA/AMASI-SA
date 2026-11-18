@@ -2794,6 +2794,7 @@ async def _assembly_progress(
     actor_name: str,
     now: datetime,
     eligible_order: Any = None,
+    status_only_piece: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     workflow = await db[WORKFLOWS].find_one(
         {"user_id": user_id, "order_number": order_number},
@@ -2825,6 +2826,67 @@ async def _assembly_progress(
         piece.get("assembly_ready_basis") == SUPPLIER_RECEIPT_READY_POLICY for piece in pieces
     )
     current_order = eligible_order
+    if status_only_piece is not None:
+        # Saving a direct/operational Ready fact has only the current Salla status
+        # gate. Whole-order completion retains its independent requirements;
+        # an unfinished/blocked order must not roll back that Ready fact.
+        defer_completion = not total_count or ready_count != total_count
+        if not defer_completion:
+            try:
+                await enforce_stage_instructions(
+                    db, user_id=user_id, order_number=order_number,
+                    stage="assembly_labeling", actor_id=actor_id, order_wide=True,
+                )
+                source = await db["unified_orders"].find_one({
+                    "user_id": user_id, "order_number": order_number,
+                }) or {}
+                if supplier_receipt_policy:
+                    current_units = supplier_current_units(source, workflow)
+                    defer_completion = not any(
+                        row.get("assembly_ready_basis") == SUPPLIER_RECEIPT_READY_POLICY
+                        and supplier_ready_eligible(
+                            source, workflow, row, current_order=current_order,
+                            preparation_optional=row.get("assembly_preparation_receipt_optional") is True,
+                            current_units=current_units,
+                        ) for row in pieces
+                    )
+                else:
+                    if canonical_status(source) != "in_progress":
+                        defer_completion = True
+                    else:
+                        await _ensure_assembly_order_eligible(
+                            db, user_id=user_id, workflow=workflow,
+                            current_order=current_order, allow_reviewed_virtual=True,
+                            piece=status_only_piece,
+                        )
+                        if workflow.get("assembly_reviewed_physical_started") is True:
+                            await _assert_reviewed_physical_snapshot_current(
+                                db, user_id=user_id, order_number=order_number,
+                            )
+            except HTTPException as exc:
+                if exc.status_code != 409:
+                    raise
+                defer_completion = True
+        if defer_completion:
+            changed = await db[WORKFLOWS].update_one(
+                {"user_id": user_id, "order_number": order_number,
+                 "revision": int(workflow.get("revision") or 0)},
+                {"$set": {
+                    "assembly_status": "in_progress",
+                    "assembly_ready_piece_count": ready_count,
+                    "assembly_piece_count": total_count,
+                    "assembly_updated_at": now, "updated_at": now,
+                }, "$inc": {"revision": 1}},
+            )
+            if not changed.matched_count:
+                raise HTTPException(409, detail={"code": "assembly_piece_ready_conflict"})
+            return {
+                "order_number": order_number, "ready_count": ready_count,
+                "total_count": total_count, "order_completed": False,
+                "order_completion_status": "pending", "label_status": "pending",
+                "stage": _text(workflow.get("stage")),
+                "print_batch_id": _text(workflow.get("shipping_print_batch_id")) or None,
+            }
     # A partially received order may assemble individual pieces, but it must
     # not create a shipment until the complete order leaves preparation.
     completed = bool(
@@ -3261,6 +3323,14 @@ async def _assembly_search(
             )
     for row, piece in zip(rows, pieces):
         virtual = bool(row["is_direct_assembly"] or row["is_operational_item"])
+        if virtual:
+            row["can_mark_ready"] = _assembly_in_progress(current_order)
+            row["assembly_blocker_code"] = (
+                None if row["can_mark_ready"] else "assembly_salla_in_progress_required"
+            )
+            row["can_receive_from_preparation"] = False
+            row["preparation_employee_name_for_receipt"] = None
+            continue
         supplier_receipt_eligible = not virtual and supplier_ready_eligible(
             source, workflow, piece, preparation_optional=preparation_shortcut_enabled,
             current_order=current_order, current_units=supplier_units,
@@ -3338,7 +3408,8 @@ async def _assembly_search(
             # retry. Save revalidates the applicable receipt/component policy.
             row["can_mark_ready"] = True
             row["assembly_blocker_code"] = None
-    actionable = [row for row in rows if row["can_mark_ready"] or row["can_receive_from_preparation"]]
+    actionable = [row for row in rows if not (row["is_operational_item"] or row["is_direct_assembly"])
+                  and (row["can_mark_ready"] or row["can_receive_from_preparation"])]
     if actor_id and actionable:
         # Each eligible piece previously repeated this identical order-stage read.
         # Scope/actor filtering remains per piece; save performs its own fresh read.
@@ -3683,13 +3754,16 @@ async def _mark_virtual_assembly_piece_ready(
     )
     if piece is None:
         return None
-    local_contract = await _ensure_assembly_order_eligible(
-        db, user_id=user_id, workflow=workflow, current_order=current_order,
-        allow_reviewed_virtual=True, piece=piece,
-    )
+    operational = _text(piece.get("virtual_kind")) == "operational"
+    if not _assembly_in_progress(current_order):
+        raise HTTPException(409, detail={"code": "assembly_salla_in_progress_required"})
+    local_contract = workflow.get("completion_mode") == LOCAL_COMPLETION_MODE
     now = _now()
     if _text(piece.get("assembly_status")) == "ready":
-        await _assert_ready_piece_components(db, user_id=user_id, piece=piece)
+        if not operational:
+            await _consume_direct_assembly_components(
+                db, user_id=user_id, piece=piece, actor_id=actor_id,
+            )
         if local_contract and workflow.get("stage") == "reviewed":
             changed = await db[WORKFLOWS].update_one(
                 {"user_id": user_id, "order_number": order_number,
@@ -3707,6 +3781,7 @@ async def _mark_virtual_assembly_piece_ready(
             actor_name=actor_name,
             now=now,
             eligible_order=current_order,
+            status_only_piece=piece,
         )
         return {
             "ok": True,
@@ -3715,15 +3790,6 @@ async def _mark_virtual_assembly_piece_ready(
             "progress": progress,
         }
 
-    await enforce_stage_instructions(
-        db,
-        user_id=user_id,
-        order_number=order_number,
-        order_item_id=_text(piece.get("order_item_id")),
-        piece_id=piece_id,
-        stage="assembly_labeling",
-        actor_id=actor_id,
-    )
     operational_items = [
         dict(row) for row in (workflow.get("operational_items") or [])
     ]
@@ -3791,7 +3857,11 @@ async def _mark_virtual_assembly_piece_ready(
             "updated_by": actor_id,
         })
 
-    await _consume_piece_components(db, user_id=user_id, piece=piece, actor_id=actor_id)
+    component_consumption = None
+    if not operational:
+        component_consumption = await _consume_direct_assembly_components(
+            db, user_id=user_id, piece=piece, actor_id=actor_id,
+        )
     revision = int(workflow.get("revision") or 0)
     assembly_patch = {
         "operational_items": operational_items, "items": items,
@@ -3804,7 +3874,7 @@ async def _mark_virtual_assembly_piece_ready(
             "user_id": user_id,
             "order_number": order_number,
             "revision": revision,
-            "stage": {"$in": ["in_progress", "ready_to_ship", "completed"] + (["reviewed"] if local_contract else [])},
+            "stage": workflow.get("stage"),
         },
         {
             "$set": assembly_patch,
@@ -3842,6 +3912,7 @@ async def _mark_virtual_assembly_piece_ready(
             else "direct_assembly_product_marked_ready"
         ),
         "client_request_id": client_request_id,
+        **({"component_consumption": component_consumption} if component_consumption else {}),
         "actor_id": actor_id,
         "actor_name": actor_name,
         "occurred_at": now,
@@ -3857,6 +3928,7 @@ async def _mark_virtual_assembly_piece_ready(
         actor_name=actor_name,
         now=now,
         eligible_order=current_order,
+        status_only_piece=piece,
     )
     return {
         "ok": True,
@@ -3864,6 +3936,29 @@ async def _mark_virtual_assembly_piece_ready(
         "piece": _assembly_piece_public(updated_piece),
         "progress": progress,
     }
+
+
+async def _consume_direct_assembly_components(
+    db: Any, *, user_id: str, piece: dict[str, Any], actor_id: str,
+) -> dict[str, Any]:
+    """Apply available direct stock once; missing stock proof cannot block Ready.
+
+    The existing consumption service defers unavailable business prerequisites
+    before its first write. A database/mutation failure still rolls back Ready
+    in the owner transaction. Supplier-piece rules are not used or changed.
+    """
+    from stock_component_consumption_service import consume_component_stock
+    line_id = _text(piece.get("order_item_id"))
+    unit_index = int(piece.get("unit_index") or 0)
+    if not line_id or unit_index < 1:
+        return {"state": "deferred", "reason": "component_piece_identity_required"}
+    result = await consume_component_stock(
+        db, merchant_id=user_id, order_id=_text(piece.get("order_number")),
+        units={line_id: [unit_index]}, actor_id=actor_id, defer_unavailable=True,
+    )
+    if result.get("deferred") is True:
+        return {"state": "deferred", "reason": result.get("reason")}
+    return {"state": "consumed"}
 
 
 async def _consume_piece_components(db: Any, *, user_id: str, piece: dict[str, Any], actor_id: str) -> None:
