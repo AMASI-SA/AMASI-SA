@@ -15,9 +15,9 @@ from typing import Any, Callable
 from bson.binary import Binary
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
 
-from store_delivery_domain import StoreDeliveryRuleError, money, normalize_text
+from store_delivery_domain import StoreDeliveryRuleError, assignment_carrier_changed, money, normalize_text
 from store_delivery_driver_routes import STORE_DRIVERS
-from store_delivery_handover_routes import ASSIGNMENTS, ORDERS
+from store_delivery_handover_routes import ASSIGNMENTS, ORDERS, _order_shipping_company
 
 RECEIPTS = "store_delivery_receipts"
 DELIVERY_PROOFS = "store_delivery_delivery_proofs"
@@ -171,6 +171,12 @@ async def canonical_order_for_assignment(db: Any, *, user_id: str, assignment: d
     order = await db[ORDERS].find_one({"user_id": user_id, "$or": clauses}, {"_id": 0})
     if not order:
         raise HTTPException(status_code=409, detail={"code": "canonical_order_not_found"})
+    if (assignment.get("status") in {"assigned", "out_for_delivery"}
+            and assignment_carrier_changed(assignment, _order_shipping_company(order))):
+        raise HTTPException(status_code=409, detail={
+            "code": "shipment_shipping_company_changed",
+            "message": "تغيرت شركة شحن الطلب؛ ألغِ الإسناد القديم من إدارة الموصلين.",
+        })
     return order
 
 
