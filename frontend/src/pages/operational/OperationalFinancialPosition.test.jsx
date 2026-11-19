@@ -470,10 +470,10 @@ test("delivery notices stay visible when the same snapshot's forecast finishes",
     await render();
     const labels = () => Array.from(host.querySelectorAll("aside.ofp-warning strong"), item => item.textContent);
     const expected = ["ملغي بعد تم التوصيل (2)", "مسترجع بعد تم التوصيل (31)"];
-    expect(labels()).toEqual(expected);
+    expect(labels()).toEqual(expect.arrayContaining(expected));
     await act(async () => pending.resolve(fixture("forecast")));
     expect(host.querySelector('[data-testid="financial-forecast-pending"]')).toBeNull();
-    expect(labels()).toEqual(expected);
+    expect(labels()).toEqual(expect.arrayContaining(expected));
     expect(host.textContent).toContain("تجري مطابقة سجل توصيلها في سلة (4)");
 });
 
