@@ -180,6 +180,10 @@ async def acquire_visible_evidence(db, owner, *, courier_order_id=None):
               "sar_candidates": len(sar)}
     jobs = [(name, pending) for name, pending in (("bank", bank), ("courier", courier), ("sar", sar)) if pending]
     if courier_order_id is None:
+        from operational_return_waybills import MISSING
+        returns = [i for i in issues if i.get("code") == MISSING]
+        if returns:
+            jobs.append(("return_waybills", returns))
         from operational_delivery_register import POLICY
         pending_history = state.get("engine", {}).get("delivery_register", {}).get(POLICY, {}).get("history_candidates")
         if pending_history:
@@ -206,6 +210,9 @@ async def acquire_visible_evidence(db, owner, *, courier_order_id=None):
                     async with asyncio.timeout(source_budget):
                         if name == "bank":
                             await acquire_bank(guarded, owner, pending, limit=LIMIT_PER_SOURCE)
+                        elif name == "return_waybills":
+                            from salla_integration.return_waybill_sync import acquire
+                            result[name] = await acquire(guarded, owner, pending, limit=LIMIT_PER_SOURCE)
                         elif name == "delivery_history":
                             from salla_integration.retained_delivery_history import acquire
                             result[name] = await acquire(guarded, owner, pending, limit=LIMIT_PER_SOURCE)

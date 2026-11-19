@@ -87,7 +87,7 @@ REFRESH_ORDER_FIELDS = (
     'order_status', 'order_status_slug', 'last_salla_direct_status_source_updated_at',
     'merchant', 'merchant_id', 'store_id', 'salla_shipment_id', 'tracking_number',
     'shipping_number', 'shipping_company_code', 'shipping_company',
-    'shipping_status', 'shipment_status', 'salla_first_delivered', 'salla_delivery_history_check',
+    'shipping_status', 'shipment_status', 'salla_operational_return_waybills', 'salla_first_delivered', 'salla_delivery_history_check',
 )
 # Existing MZ2 daily-movement codes plus explicitly requested operational types.
 # The physical registry is shared. Only explicit operational provenance or a
@@ -1351,6 +1351,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
             issue(out, 'operational_ad_funding_authority_conflict', identity)
         setup_rows = data['mz2_shipping_setup_v2']
         setup = setup_rows[0] if len(setup_rows) == 1 else {}
+        tariff_conflicts = []
         if len(setup_rows) > 1:
             issue(out, 'shipping_setup_ambiguous')
         else:
@@ -1519,6 +1520,10 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                 watermark = source.get('g47_salla_snapshot') or {}
                 if not retained and watermark.get('requires_authoritative_refresh'):
                     raise ValueError('canonical_salla_refresh_required')
+                if not watermark.get('requires_authoritative_refresh'):
+                    from operational_return_waybills import collect as collect_return_waybills
+                    collect_return_waybills(out, source, raw, setup, owner, start, now,
+                                            engine=(operational_state or {}).get('engine'), tariff_conflicts=tariff_conflicts)
                 current_shipping = source.get('salla_shipping_current') or raw.get('salla_shipping_current') or {}
                 from operational_completed_shipping_admission import CompletionReviewRequired
                 from operational_completed_shipping_sources import completion_issue

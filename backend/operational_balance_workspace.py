@@ -617,6 +617,10 @@ def ledger_items(state, computed, resource, policy, *, sources=None):
             if item.get("kind") == "supplier_invoice":
                 row.update(invoice_id=item["invoice_id"], invoice_gross=item["invoice_gross"], invoice_returns=item["invoice_returns"],
                            description=item["invoice_label"])
+            if item.get("salla_return_shipment_id"):
+                row.update(description="أجرة بوليصة رجيع", salla_return_waybill=True,
+                           system_recorded=not item.get("return_confirmed_manually"),
+                           return_business_at=item.get("return_business_at"))
             if family:
                 row.update(automatic_history=family, automatic_group=group)
                 row["description"] = "راتب تلقائي" if family == "salary" else "أجرة توصيل"
