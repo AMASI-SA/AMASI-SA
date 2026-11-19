@@ -158,3 +158,12 @@ def scrub_shipping_company(raw: str | None) -> str:
     """
     _, display = normalize_shipping_company(raw)
     return display
+
+
+def matches_courier_alias(row, key):
+    aliases = row.get('salla_carrier_keys') or []
+    if row.get('identity_match') == 'exact':
+        return key in aliases
+    if row.get('source') == 'operational_courier_tariff':
+        return bool(key) and str(key).strip().casefold() in {s.casefold() for s in aliases}
+    return key in aliases

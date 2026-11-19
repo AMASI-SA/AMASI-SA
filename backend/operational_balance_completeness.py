@@ -6,6 +6,7 @@ are distinct order IDs, not issue rows or fee components.
 """
 from collections import defaultdict
 from decimal import Decimal, InvalidOperation
+from operational_delivery_register import POLICY, PREFIX
 from operational_delivery_evidence import status_delivery
 from operational_delivery_confirmation import annotate_pending
 
@@ -115,7 +116,7 @@ def _add_order(target, identity, number, reason):
         item["reasons"].append(reason)
 
 
-def apply_table_coverage(tables, parties, obligations, issues, facts, *, currency, as_of):
+def apply_table_coverage(tables, parties, obligations, issues, facts, *, currency, as_of, delivery_register=None):
     """Annotate a report already filtered by owner and currency, in linear passes."""
     by_id = {str(row["id"]): row for row in obligations}
     contexts, counted, delivered = defaultdict(set), defaultdict(set), defaultdict(set)
@@ -158,6 +159,19 @@ def apply_table_coverage(tables, parties, obligations, issues, facts, *, currenc
             if (event_proved or legacy_proved) and (fee_currency == currency
                     or fee_currency is None and context in names):
                 delivered[context].add(identity)
+
+    if delivery_register is not None and POLICY in delivery_register:
+        # Counts are units of service. Show each order once in the SAR operating
+        # book even when a foreign customer currency has its own COD position.
+        delivered.clear()
+        if currency == 'SAR':
+            for key, record in delivery_register.items():
+                if key.startswith(PREFIX) and record.get('party_id'):
+                    context = (record['party_type'], str(record['party_id']))
+                    delivered[context].add(record['order_id'])
+                    contexts[record['order_id']].add(context)
+                    if record.get('party_name'):
+                        names.setdefault(context, record['party_name'])
 
     pending, unassigned, relevant = defaultdict(dict), defaultdict(dict), defaultdict(list)
     party_warnings = set()
@@ -241,7 +255,7 @@ def apply_table_coverage(tables, parties, obligations, issues, facts, *, currenc
             table["columns"].append({"key": "confirmed_orders", "label": "طلبات محتسبة الأجرة", "type": "count"})
             table["notes"].append("طلبات محتسبة الأجرة تشمل أجور الشحن المثبتة مرة واحدة، ومنها الدفع المقدم قبل التسليم. تواصيل مثبتة تعتمد دليل التوصيل المستقل.")
         table["columns"] += [{"key": "delivered_orders", "label": "تواصيل مثبتة", "type": "count"},
-                              {"key": "pending_orders", "label": "طلبات غير مؤكدة", "type": "exceptions"}]
+                              {"key": "pending_orders", "label": "طلبات تحتاج مطابقة مالية" if delivery_register is not None else "طلبات غير مؤكدة", "type": "exceptions"}]
         table["totals"].update(confirmed_orders=len(set().union(*(counted[(kind, party)] for party in by_party))) if by_party else 0,
                                delivered_orders=len(set().union(*(delivered[(kind, party)] for party in by_party))) if by_party else 0,
                                pending_orders=len(all_pending))
@@ -265,6 +279,8 @@ def annotate_report_coverage(projection):
             currency = shipping.get("fee_currency") or proof.get("currency")
             if currency:
                 currencies.add(currency)
+    if POLICY in details.get('delivery_register', {}):
+        currencies.add('SAR')
     projection["unassigned_order_details"] = {}
     for currency in currencies:
         scoped = [row for row in parties if row["currency"] == currency]
@@ -275,7 +291,7 @@ def annotate_report_coverage(projection):
                    "columns": [], "totals": {}, "notes": []}
                   for kind, identity in (("courier", "couriers"), ("store_driver", "drivers"))]
         apply_table_coverage(tables, scoped, obligations, projection.get("issues", []), details.get("facts", {}),
-                             currency=currency, as_of=projection.get("as_of"))
+                             currency=currency, as_of=projection.get("as_of"), delivery_register=details.get("delivery_register"))
         existing = {(row["party_type"], str(row["party_id"])): row for row in scoped}
         for kind, table in zip(("courier", "store_driver"), tables):
             for covered in table["rows"]:

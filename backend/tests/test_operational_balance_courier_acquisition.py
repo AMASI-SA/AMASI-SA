@@ -222,6 +222,8 @@ def test_visible_refresh_recovers_seven_deliveries_with_one_fee_each_and_preserv
     from test_operational_balance_integration import run, started
     from test_operational_balance_visible_evidence import visible_refresh
 
+    # This is an October replay. The HTTP refresh must use the same clock as the fixture.
+    monkeypatch.setattr("operational_balance_service.now", lambda: NOW)
     snapshots, calls = {}, []
     native_provider(monkeypatch, snapshots, calls)
     async def scenario(db):

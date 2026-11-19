@@ -22,7 +22,7 @@ ISSUE_MARK = {"code": "operational_source_issues_packed"}
 MAX_ISSUE_BSON = 64 * 1024 * 1024
 SNAPSHOT = "packed_financial_snapshot_v1"
 SNAPSHOT_MARK = {"stored_in_financial_snapshot_v1": True}
-SNAPSHOT_FIELDS = frozenset({"facts", "obligations", "provider_fee_inputs", "provider_reports",
+SNAPSHOT_FIELDS = frozenset({"facts", "delivery_register", "obligations", "provider_fee_inputs", "provider_reports",
     "cod_reports", "order_versions", "profit_snapshot", "customer_tender_coverage"})
 MAX_SNAPSHOT_BSON = 64 * 1024 * 1024
 VISIBLE_AUDIT_GATE_PAGES = 8

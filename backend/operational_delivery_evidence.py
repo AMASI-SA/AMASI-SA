@@ -351,7 +351,7 @@ def _shipment_time(raw, current, shipment, waybill, *, include_nested=True, orde
 
 def delivery_requires_cod_proof(raw, event):
     """Nested and order-level delivery proofs alone do not establish collected cash."""
-    if status_delivery(event) or event.get("timestamp_source") == "order_status_transition":
+    if str(event.get("id", "")).startswith("salla-delivery:") or status_delivery(event) or event.get("timestamp_source") == "order_status_transition":
         return True
     try:
         _shipment_time(raw, {}, event["shipment_id"], event["waybill"], include_nested=False)

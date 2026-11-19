@@ -171,21 +171,36 @@ def status_recognition(raw, source, current, party, owner, start, end, shipment,
             or any(source.get(key) is not None and _text(source[key]) != expected
                    for key, expected in (('order_id', oid), ('salla_order_id', oid), ('order_number', number)))):
         _fail('order_identity_conflict')
-    version = _source_version(raw)
-    watermark = source.get('g47_salla_snapshot')
-    if (not isinstance(watermark, dict) or watermark.get('source_updated_at') is None
-            or any(watermark.get(key) for key in ('cancelled', 'component_pending', 'requires_authoritative_refresh'))
-            or _instant(watermark['source_updated_at']) != version or not created <= version <= end):
-        _fail('source_stale')
-    copies = (raw.get('status_slug'), source.get('order_status'), source.get('order_status_slug'),
-              source.get('order_status_native'))
-    if any(current_status(value) != status for value in copies if value is not None):
-        _fail('order_status_conflict')
-    references = _bind_status_identity(raw, current, shipment, waybill, version, shipment_conflicts,
-                                       setup=setup, owner=owner, as_of=end)
+    from operational_delivery_register import uses_retained_deliveries
+    if not uses_retained_deliveries(end):
+        version = _source_version(raw)
+        watermark = source.get('g47_salla_snapshot')
+        if (not isinstance(watermark, dict) or watermark.get('source_updated_at') is None
+                or any(watermark.get(key) for key in ('cancelled', 'component_pending', 'requires_authoritative_refresh'))
+                or _instant(watermark['source_updated_at']) != version or not created <= version <= end):
+            _fail('source_stale')
+        copies = (raw.get('status_slug'), source.get('order_status'), source.get('order_status_slug'),
+                  source.get('order_status_native'))
+        if any(current_status(value) != status for value in copies if value is not None):
+            _fail('order_status_conflict')
+        references = _bind_status_identity(raw, current, shipment, waybill, version, shipment_conflicts,
+                                           setup=setup, owner=owner, as_of=end)
+        return {'recognition_basis': STATUS_BASIS, 'recorded_at': end.isoformat(),
+                'order_created_at': created.isoformat(), 'observed_order_status': status,
+                'source_updated_at': version.isoformat(), 'identity_scope': 'order_status', **references}
+    if created > end:
+        return None
+    # Execution of an order assigned to Aramex earns one prepaid charge.
+    # References are descriptive: replaced labels and pending component refreshes
+    # cannot undo an observed eligible Salla order state.
+    try:
+        version = _source_version(raw)
+    except (TypeError, ValueError, KeyError):
+        version = None
     return {'recognition_basis': STATUS_BASIS, 'recorded_at': end.isoformat(),
             'order_created_at': created.isoformat(), 'observed_order_status': status,
-            'source_updated_at': version.isoformat(), 'identity_scope': 'order_status', **references}
+            'source_updated_at': version.isoformat() if version and created <= version <= end else None,
+            'identity_scope': 'order_status', 'shipment_id': shipment, 'waybill': waybill}
 
 
 def owner_rule_active(state, owner):
@@ -229,7 +244,10 @@ def accounting_time(event, start, now):
             or event.get('completion_admission_required')):
         _fail('status_evidence_invalid')
     created, at = (_instant(event[key]) for key in ('order_created_at', 'recorded_at'))
-    version = created if event.get('recognition_basis') == OWNER_STATUS_BASIS else _instant(event['source_updated_at'])
-    if not start < created <= version <= at <= now:
+    from operational_delivery_register import uses_retained_deliveries
+    owner_approved = event.get('recognition_basis') == OWNER_STATUS_BASIS
+    version = None if owner_approved else event.get('source_updated_at')
+    if (not start < created <= at <= now or (not owner_approved and not uses_retained_deliveries(now) and not version)
+            or version and not created <= _instant(version) <= at):
         _fail('status_evidence_invalid')
     return at
