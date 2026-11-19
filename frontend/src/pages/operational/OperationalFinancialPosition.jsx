@@ -644,6 +644,18 @@ export default function OperationalFinancialPosition() {
                 {report?.status === "active" && !data && <div className="ofp-page-notice" role="status">لا توجد بيانات عملة جاهزة للعرض حتى آخر احتساب.</div>}
                 {report?.status === "active" && !data && view === "summary" && pendingForecast && <ForecastPending message={forecastMessage} loading={forecastState.phase === "loading"} retry={reload} />}
                 {report?.refresh_warning && <p role="alert" className="ofp-warning">{report.refresh_warning}</p>}
+                {report?.delivered_status_notice?.groups?.map(group => <aside className="ofp-warning" role="status" key={group.status}>
+                    <strong>{group.status === "canceled" ? "ملغي بعد تم التوصيل" : "مسترجع بعد تم التوصيل"} ({group.count})</strong>
+                    {group.orders.length > 0 && <details>
+                        <summary>عرض الطلبات المحسوبة</summary>
+                        <ul>{group.orders.map(order => <li key={order.order_id}>
+                            طلب {order.order_number} · {order.current_status_name} · {order.party_name || order.party_id || "جهة التوصيل غير محددة"}
+                        </li>)}</ul>
+                    </details>}
+                </aside>)}
+                {report?.delivered_status_notice?.unassigned > 0 && <p className="ofp-warning" role="status">
+                    تواصيل محسوبة تحتاج تحديد الجهة المنفذة ({report.delivered_status_notice.unassigned})
+                </p>}
                 {report?.courier_notice && <p role="status" className="ofp-warning ofp-no-print">{report.courier_notice}</p>}
                 {confirmationNotice && <p role="status" className="ofp-warning ofp-no-print">{confirmationNotice}</p>}
                 {data && user?.role === "owner" && view === "providers" && <div className="ofp-owner-controls ofp-no-print">

@@ -5,16 +5,7 @@ from decimal import Decimal, InvalidOperation
 from courier_cod_fee_rules import (calculate_courier_cod_fee_decimal, split_tax_amount,
                                   validate_courier_cod_fee_tiers)
 from operational_balance_store import audit, digest, fail, mutate, now, read, remember, replay
-from shipping_companies import SHIPPING_ALIASES, normalize_shipping_company
-
-
-def matches(row, key):
-    aliases = row.get('salla_carrier_keys') or []
-    if row.get('identity_match') == 'exact':
-        return key in aliases
-    if row.get('source') == 'operational_courier_tariff':
-        return bool(key) and str(key).strip().casefold() in {s.casefold() for s in aliases}
-    return key in aliases
+from shipping_companies import SHIPPING_ALIASES, matches_courier_alias as matches, normalize_shipping_company
 
 
 def decimal_field(value, upper=None):

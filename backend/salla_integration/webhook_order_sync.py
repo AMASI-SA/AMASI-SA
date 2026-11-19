@@ -472,6 +472,19 @@ async def sync_order_from_verified_webhook(
         if result.get("blocked"):
             return {"attempted": True, "synced": False, "order_number": order_number, **result}
         if result.get("stale"):
+            # A later cancellation can arrive before its earlier delivery webhook.
+            # Retain the observed transition without rolling back canonical status.
+            if event_name == "order.status.updated":
+                from operational_delivery_register import MARKER, first_observation
+                target = _event_data(event_body)
+                status = target.get("to_status") or target.get("new_status") or payload.get("status")
+                marker = first_observation({**payload, "status": status}, shipping_snapshot)
+                if marker:
+                    await db.unified_orders.update_one(
+                        {"user_id": user_id, "order_number": order_number,
+                         "raw_by_source.salla_direct.id": payload["id"], MARKER: {"$exists": False}},
+                        {"$set": {MARKER: marker}},
+                    )
             stale = {"attempted": True, "synced": False, "reason": "stale_salla_snapshot",
                      "order_number": order_number, "no_salla_api_calls": True, "no_qoyod_calls": True}
             if event_name == "order.created":

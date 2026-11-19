@@ -155,7 +155,7 @@ class DriverEarnings:
                 or _text(e.get("order_number")) != num or e.get("status") != "due"
                 or e.get("financial_source") != NATIVE or e.get("financial_handoff_status") != PENDING
                 or e.get("accounting_status") != "operational_only" or e.get("ledger_txn_group_id")
-                or e.get("accounting_operation_id") or order.get("currency") != "SAR"
+                or e.get("accounting_operation_id")
                 or any(row.get("currency", "SAR") != "SAR" for row in [a, e])):
                 raise ValueError("driver_fee_evidence_conflict")
             earned = _instant(e.get("earned_at"))

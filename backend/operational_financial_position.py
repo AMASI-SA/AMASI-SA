@@ -12,6 +12,16 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None, vi
         include_forecast=view in FORECAST_VIEWS,
         include_delivery_details=view in DETAIL_VIEWS or bool(state.get("driver_payment_review_facts")),
         detail_tables=None if view == "all" else TABLES[view])
+    from operational_delivery_register import POLICY, notice
+    register = state.get("engine", {}).get("delivery_register", {})
+    if view in {"all", "summary", "couriers", "drivers"} and POLICY in register:
+        summary = notice(register, view)
+        # The summary surfaces the number. Order identities stay on detail pages.
+        result["delivered_status_notice"] = {
+            "count": len(summary["changed"]), "unassigned": summary["unassigned"],
+            "groups": [{"status": status, "count": len(items), "orders": items if view != "summary" else []}
+                       for status, items in summary["groups"].items() if items],
+        }
     for currency, data in result["currencies"].items():
         preparation_checkpoint()
         if currency != "SAR":
