@@ -5,7 +5,7 @@ import asyncio
 
 import pytest
 
-from operational_ad_balance_sar import COLLECTION, saved_basis
+from operational_ad_balance_sar import COLLECTION, saved_basis, workspace_amounts
 from operational_balance_engine import reconcile
 from operational_balance_service import report
 from operational_financial_position import build_financial_position
@@ -141,3 +141,19 @@ def test_source_binds_saved_cost_terms_to_the_exact_connected_account():
     db.data[COLLECTION].append({**setting, "exchange_rate_to_sar": "4.00"})
     ambiguous = asyncio.run(collect_sources(db, "owner", state["started_at"], NOW))
     assert ambiguous["ad_balance_sar_basis"] == {}
+
+
+@pytest.mark.parametrize("direction", ["for_party", "for_us"])
+def test_workspace_balance_uses_the_same_sar_valuation_as_the_report(direction):
+    state = ad_state(direction=direction)
+    row = report(state)["parties"][0]
+    amount = workspace_amounts(row, configured_basis())
+    detailed = table(build_financial_position(state), "ads")["rows"][0]
+    assert amount["currency"] == "SAR"
+    assert amount["payable"] == detailed["payable"]
+    assert amount["prepaid"] == detailed["prepaid"]
+    assert amount["native"]["currency"] == "USD"
+    assert amount["native"]["payable"] == row["outstanding_payable"]
+    assert workspace_amounts(row, {}) == amount["native"]
+    assert workspace_amounts(row, configured_basis(), has_sar_row=True) == amount["native"]
+    assert workspace_amounts(None, {}) is None

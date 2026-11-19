@@ -336,6 +336,7 @@ def _balance(row, kind):
 
 
 async def resource_catalog(db, owner, policy, state, *, ad_bank_fx=False, reviewed_counts=None, selected_resource=None):
+    from operational_ad_balance_sar import workspace_amounts
     from operational_workspace_order_issues import issue_badge, navigation_counts
     from operational_balance_service import prepaid_shipping_cash
     from operational_balance_sources import entities
@@ -372,10 +373,17 @@ async def resource_catalog(db, owner, policy, state, *, ad_bank_fx=False, review
                 }}
             elif currency != "SAR":
                 operations = []
+            financials = {}
+            if kind == "ad_account" and access["balance"]:
+                native = balances.get((kind, row["id"], currency))
+                basis = state.get("engine", {}).get("ad_balance_sar_basis", {}).get(row["id"]) or {}
+                financials = {
+                    "ad_wallet_balance": native.get("ad_wallet_balance") if native else None,
+                    "ad_amounts": workspace_amounts(native, basis, (kind, row["id"], "SAR") in balances),
+                }
             items.append({"kind": kind, "id": row["id"], "name": row.get("name") or row["id"],
                           "currency": currency, "access": access, "operations": operations, **ad_funding,
-                          **({"ad_wallet_balance": balances.get((kind, row["id"], currency), {}).get("ad_wallet_balance")}
-                             if kind == "ad_account" and access["balance"] else {}),
+                          **financials,
                           **issue_badge(kind, row["id"], access, bool(computed.get("as_of")), bool(computed["issues"]), review_counts, reviewed_counts or {}),
                           **({"prepaid_shipping_cash": True} if kind == "cash" and prepaid_shipping_cash(state, row["id"]) else {}),
                           "balance": _balance(balances.get((kind, row["id"], currency), {}), kind) if access["balance"] else None})

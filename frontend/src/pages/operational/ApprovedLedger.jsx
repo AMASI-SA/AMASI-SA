@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { todaySA } from '../../lib/dates';
-import { Amount, Heading, Icon, IconBox, MovementIcon, isAsset, issueLabel, styleOf } from './ApprovedFinanceUI';
+import { AdBalance, Amount, Heading, Icon, IconBox, MovementIcon, isAsset, issueLabel, styleOf } from './ApprovedFinanceUI';
 import { simpleBalancesApi as api, simpleBalanceError } from './simpleBalancesApi';
 import { useBalanceRead } from './simpleBalancesHooks';
 import { isStatement, minorUnits, movementDate, movementRecorder, movementTitle, resourceKey, signedResourceBalance } from './simpleBalancesModel';
@@ -163,7 +163,8 @@ function LedgerPage({ context, identity, resource, onDetail, onAdd, onBack, onRe
     {resource && readable && <section className="panel sheet"><div className="section-head"><h2>كشف الفترة</h2><Icon name="calendar-days" /></div>
       <Range value={period} start={context.ledger_start} onChange={changePeriod} /></section>}
     {summary && <Metrics period={summary} resource={resource} />}
-    {resource?.access?.balance && (!resource.access.report || !readable) && <div className="metrics"><div className="metric accent">
+    {resource?.kind === 'ad_account' && resource.access?.balance && <div className="metric accent"><small>الرصيد الحالي</small><strong><AdBalance resource={resource} /></strong></div>}
+    {resource?.kind !== 'ad_account' && resource?.access?.balance && (!resource.access.report || !readable) && <div className="metrics"><div className="metric accent">
       <small>الرصيد الحالي</small><strong><LedgerBalance value={signedResourceBalance(resource)} resource={resource} /></strong></div></div>}
     {resource?.access?.movements === 'own' && <p className="note">يعرض هذا الكشف الحركات التي سجّلتها أنت.</p>}
     {result?.balance_note && <p className="note">{result.balance_note}</p>}

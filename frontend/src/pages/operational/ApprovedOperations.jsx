@@ -5,7 +5,7 @@ import { grantedWebLink } from '../../lib/webPageAccess';
 import { operationalApi } from './api';
 import { useBalanceRead } from './simpleBalancesHooks';
 import { minorUnits, resourceKey, signedResourceBalance } from './simpleBalancesModel';
-import { Amount, formatMinor, Heading, Icon, IconBox, assetGroups, partyGroups, isAsset, styleOf } from './ApprovedFinanceUI';
+import { AdBalance, Amount, formatMinor, Heading, Icon, IconBox, assetGroups, partyGroups, isAsset, styleOf } from './ApprovedFinanceUI';
 import './approvedOperations.css';
 
 const base = '/operational-balances';
@@ -89,11 +89,10 @@ function PositionLine({ resource, onOpen, enabled=true }) {
     amount = resource.balance.amount;
     if (isAccount && resource.balance.side === 'for_party') amount = '-' + amount;
   }
-  if (resource.kind === 'ad_account') amount = resource.access?.balance === true ? resource.ad_wallet_balance : null;
   return <button type="button" className="review-item mz-position-line" disabled={!enabled} onClick={() => onOpen(resource)}>
     <IconBox name={icon} tone={tone} />
-    <span>{resource.name}<small className="under">{resource.kind === 'ad_account' ? 'رصيد المحفظة الإعلانية' : type}</small></span>
-    <strong className="end"><Amount value={amount} currency={resource.currency}/> {description && <small>{description}</small>}</strong>
+    <span>{resource.name}<small className="under">{type}</small></span>
+    <strong className="end">{resource.kind === 'ad_account' ? <AdBalance resource={resource} /> : <Amount value={amount} currency={resource.currency}/>} {description && <small>{description}</small>}</strong>
   </button>;
 }
 

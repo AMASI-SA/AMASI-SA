@@ -49,7 +49,7 @@ def state():
 
 
 @pytest.mark.parametrize('method,provider', [('tamara_installment','tamara'),('tabby_installment','tabby'),
-    ('credit_card','salla'),('debit_card','salla'),('mada','salla'),('apple_pay','salla'),('stcpay','salla'),
+    ('emkan_installment','emkan'),('credit_card','salla'),('debit_card','salla'),('mada','salla'),('apple_pay','salla'),('stcpay','salla'),
     ('google_pay','salla'),('تمارا','tamara'),('تابي','tabby'),('مدى','salla'),(' TAMARA_INSTALLMENT ','tamara')])
 def test_native_alias_is_known_but_observation_is_not_a_dated_capture(method,provider):
     p,issues=normalize(native(method))
@@ -59,7 +59,7 @@ def test_native_alias_is_known_but_observation_is_not_a_dated_capture(method,pro
     assert issues[0]['missing_fields']==['capture_status','capture_timestamp']
 
 
-@pytest.mark.parametrize('method', ['tamara_installment','tabby_installment','credit_card'])
+@pytest.mark.parametrize('method', ['tamara_installment','tabby_installment','credit_card','emkan_installment'])
 def test_real_native_page_amount_reaches_confirmed_balance_without_invented_transaction(method):
     s=source(native(method));assert s['orders'][0]['payment']['provider']==provider_for(method)
     assert not any(i['code']=='provider_capture_evidence_incomplete' for i in s['issues'])
@@ -72,7 +72,7 @@ def test_real_native_page_amount_reaches_confirmed_balance_without_invented_tran
     assert reconcile(result,s,NOW)['engine']['obligations']==result['engine']['obligations']
 
 
-@pytest.mark.parametrize('method', ['tamara_installment','tabby_installment','credit_card'])
+@pytest.mark.parametrize('method', ['tamara_installment','tabby_installment','credit_card','emkan_installment'])
 def test_complete_capture_is_recognized_while_awaiting_review_once(method):
     raw=native(method,payment={'method':method,'status':'paid','paid_at':PAID})
     p,issues=normalize(raw);assert not issues

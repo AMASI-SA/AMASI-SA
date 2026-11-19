@@ -18,7 +18,7 @@ PAYMENT_METHODS = {
               'salla_pay', 'salla_payments', 'salla payments'},
     'tabby': {'tabby', 'tabby_installment', 'تابي'},
     'tamara': {'tamara', 'tamara_installment', 'تمارا'},
-    'emkan': {'emkaninstallment', 'emkan', 'imkan', 'إمكان', 'امكان'},
+    'emkan': {'emkan_installment', 'emkaninstallment', 'emkan', 'imkan', 'إمكان', 'امكان'},
 }
 CENT = Decimal('.01')
 LIMIT = Decimal('999999999999.99')
