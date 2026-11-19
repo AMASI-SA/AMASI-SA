@@ -56,6 +56,44 @@ def saved_basis(binding, account, settings, as_of):
     }
 
 
+def bank_charges(net, pct, vat_pct):
+    commission = _money(net * pct / HUNDRED)
+    return commission, _money(commission * vat_pct / HUNDRED)
+
+
+def funding_quote(amount, currency, basis):
+    """Quote a payment using the same rounded charges as the account valuation."""
+    if not basis or not isinstance(basis.get("apply_bank_commission"), bool):
+        raise ValueError("missing_terms")
+    rate = _decimal(basis.get("exchange_rate_to_sar"))
+    pct = _decimal(basis.get("bank_commission_pct"))
+    vat_pct = _decimal(basis.get("bank_commission_vat_pct"))
+    if not 2 <= rate <= 6 or not 0 <= pct <= 20 or not 0 <= vat_pct <= 100:
+        raise ValueError("invalid_terms")
+    if not basis["apply_bank_commission"]:
+        pct = Decimal(0)
+    if currency == "USD":
+        usd = amount
+        net = _money(usd * rate)
+        fee, vat = bank_charges(net, pct, vat_pct)
+        gross = net + fee + vat
+    else:
+        gross = amount
+        approximate = _money(gross / (1 + pct / HUNDRED * (1 + vat_pct / HUNDRED)))
+        for net in (approximate, approximate - CENT, approximate + CENT):
+            fee, vat = bank_charges(net, pct, vat_pct)
+            if net > 0 and net + fee + vat == gross:
+                break
+        else:
+            raise ValueError("receipt_required")
+        usd = _money(net / rate)
+    if usd <= 0 or not 2 <= net / usd <= 6:
+        raise ValueError("receipt_required")
+    return {"amount_usd": format(usd, ".2f"), "gross_sar": format(gross, ".2f"),
+            "fee_sar": format(fee + vat, ".2f"), "commission_sar": format(fee, ".2f"),
+            "fee_vat_sar": format(vat, ".2f"), "exchange_rate": str(rate)}
+
+
 def project_parties(parties, bases, issues):
     """Convert the current unpaid balance once after native funding allocation."""
     for key, party in list(parties.items()):
@@ -83,8 +121,7 @@ def project_parties(parties, bases, issues):
         converted = {field: _money(value * rate) if isinstance(value, Decimal) else value
                      for field, value in party.items()}
         payable = converted["outstanding_payable"]
-        commission = _money(payable * pct / HUNDRED) if basis["apply_bank_commission"] else Decimal("0.00")
-        vat = _money(commission * vat_pct / HUNDRED)
+        commission, vat = bank_charges(payable, pct if basis["apply_bank_commission"] else Decimal(0), vat_pct)
         converted["outstanding_payable"] += commission + vat
         converted["confirmed_payable"] += commission + vat
         converted["ad_payable"] += commission + vat
