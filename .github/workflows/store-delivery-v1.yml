@@ -59,6 +59,8 @@ jobs:
           openpyxl==3.1.5
           cryptography
           reportlab
+          PyMuPDF==1.28.2
+          qrcode==8.2
           python-dotenv
           PyMuPDF==1.28.2
           python-multipart==0.0.31

@@ -200,7 +200,7 @@ async def catalog(db, owner):
     state = await read(db, owner)
     accounts = await cash_choices(db, owner)
     return {'items': await choices(db, owner, state, cash_accounts=accounts), 'cash_accounts': accounts,
-            'started_at': state.get('started_at')}
+            'started_at': state.get('started_at'), 'session_scope': digest([owner, owner])}
 
 
 async def approve(db, owner, actor, payload):

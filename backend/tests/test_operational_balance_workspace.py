@@ -651,3 +651,30 @@ def test_workspace_report_reads_fail_closed_on_corrupt_financial_packets_or_audi
             assert "items" not in response.json() and "resources" not in response.json()
     run(scenario)
 
+
+
+def test_prepaid_cash_transfer_requires_reference_and_survives_retries():
+    from operational_balance_store import mutate
+
+    async def scenario(db, client):
+        async def configure(state):
+            state['courier_tariffs'] = [{'payment_mode': 'prepaid', 'cash_account': {'id': 'cash'}}]
+
+        await mutate(db, 'owner', configure)
+        command = entry(party_type='cash', party_id='cash', reason='transfer', amount='120.00')
+        missing = await client.post(BASE + '/entries', json=command)
+        assert missing.status_code == 422
+        command.update(request_id='documented-wallet-topup', reference='TEST-TOPUP')
+        saved = await client.post(BASE + '/entries', json=command)
+        assert saved.status_code == 200, saved.text
+        replay = await client.post(BASE + '/entries', json=command)
+        assert replay.json()['movement_id'] == saved.json()['movement_id']
+        repeated_reference = await client.post(BASE + '/entries', json={**command, 'request_id': 'another-topup-command'})
+        assert repeated_reference.status_code == 409
+        assert len((await read(db, 'owner'))['movements']) == 1
+        for kind, expected in [('bank', '880.00'), ('cash', '620.00')]:
+            ledger = (await client.get(f'{BASE}/ledger/{kind}/{kind}')).json()
+            row = next(item for item in ledger['items'] if item['id'] == saved.json()['movement_id'])
+            assert row['balance_after'] == expected and row['reference'] == 'TEST-TOPUP'
+
+    run(scenario)

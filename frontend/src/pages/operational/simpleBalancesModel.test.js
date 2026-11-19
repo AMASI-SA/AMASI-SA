@@ -97,3 +97,9 @@ test('statement validation accepts complete unpaginated periods but refuses the 
   expect(isStatement({ ...statement, resource: { ...resource, id: 'other' } }, resource, query)).toBe(false);
   expect(isStatement({ ...statement, date_from: '2026-10-01' }, resource, query)).toBe(false);
 });
+
+test('prepaid shipping on the wallet names the approved carrier and order', () => {
+  const row = { prepaid_shipping: true, counterparty_name: 'أرامكس', order_number: '123', customer_name: 'عميل' };
+  expect(movementTitle(row, true)).toBe('أرامكس · 123');
+  expect(movementTitle({ ...row, prepaid_shipping: false })).toBe('عميل');
+});

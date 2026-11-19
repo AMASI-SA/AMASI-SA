@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import api from '../../lib/api';
+import AramexOrderStatus from './AramexOrderStatus';
 
 const endpoint = '/operational-balances/courier-tariffs';
 
 export default function CourierTariffApproval() {
     const [items, setItems] = useState(null);
+    const [sessionScope, setSessionScope] = useState('');
     const [cashAccounts, setCashAccounts] = useState([]);
     const [selected, setSelected] = useState('');
     const [cashAccountId, setCashAccountId] = useState('');
@@ -31,6 +33,7 @@ export default function CourierTariffApproval() {
         try {
             const { data } = await api.get(endpoint);
             setItems(data.items);
+            setSessionScope(data.session_scope || '');
             setCashAccounts((data.cash_accounts || []).filter(account => account.kind === 'cash'
                 && account.currency === 'SAR' && account.ready === true
                 && (!account.status || account.status === 'active')));
@@ -91,6 +94,7 @@ export default function CourierTariffApproval() {
             <label className="block">مرجع التعرفة أو سبب الاعتماد <input value={reason} maxLength={400} onChange={e => setReason(e.target.value)} /></label>
             <button type="button" disabled={!canApprove} onClick={approve}>اعتماد تعرفة هذه الشركة للفترة المحددة</button>
         </>}</div>}
+        {item?.id === 'aramex' && prepaid && item.same_terms && !item.unavailable && <AramexOrderStatus sessionScope={sessionScope} />}
         {message && <p role="status">{message}</p>}
     </section>;
 }

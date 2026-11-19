@@ -116,6 +116,7 @@ def test_pos_opening_is_receivable_not_cash_and_settles_once():
         key = next(iter(state['openings']))
         transfer = movement(); transfer.update(request_id='pos-bank-arrival', party_type='pos_receivable',
             party_id=fact['id'], amount='250', direction='incoming', kind='settlement',
+            bank_arrival_confirmed=True, business_date=NOW[:10], reference='TEST-BANK-ARRIVAL',
             allocations=[{'obligation_id':key, 'amount':'250'}])
         await create_movement(db, 'owner', 'owner', transfer, clock=NOW)
         await create_movement(db, 'owner', 'owner', transfer, clock=NOW)

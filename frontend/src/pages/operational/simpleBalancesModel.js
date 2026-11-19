@@ -37,6 +37,7 @@ export function movementDate(row, full = false) {
 export function movementTitle(row, compact = false) {
   if (compact && row.automatic_history === 'salary') return 'آخر راتب مسجل';
   if (compact && row.automatic_history === 'delivery') return 'آخر أجرة توصيل';
+  if (row.prepaid_shipping && row.counterparty_name && row.order_number) return `${row.counterparty_name} · ${row.order_number}`;
   if (row.customer_name) return row.customer_name;
   if (row.order_number) return `طلب ${row.order_number}`;
   if (row.counterparty_name) return row.counterparty_name;
@@ -152,7 +153,7 @@ export function entryChoices(kind, side, operations) {
     courier: [['for_party', 'collection', 'استلام تحصيل', 'courier.receive'], ['for_us', 'payment', 'دفع مستحق', 'courier.pay']],
     store_driver: [['for_party', 'collection', 'استلام من الموصل', 'courier.receive'], ['for_us', 'payment', 'دفع مستحق', 'courier.pay']],
     provider: [['for_party', 'collection', 'تسجيل تحصيل', 'provider.settle']],
-    pos_receivable: [['for_party', 'collection', 'تسجيل تحصيل الشبكة', 'provider.settle']],
+    pos_receivable: [['for_party', 'collection', 'موازنة / تحويل إلى بنك', 'provider.settle']],
   };
   return (mapping[kind] || []).filter(([direction, , , operation]) => direction === side && has(operation))
     .map(([, reason, label, operation]) => ({ reason, label, operation }));

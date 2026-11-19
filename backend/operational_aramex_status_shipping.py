@@ -8,6 +8,7 @@ from shipping_companies import normalize_shipping_company
 
 STATUS_BASIS = 'aramex_status_created_after_start'
 STATUS_EVENT = 'aramex_status_eligible'
+OWNER_STATUS_BASIS = 'aramex_owner_approved_status_v2'
 STATUS_FIELDS = ('recognition_basis', 'recorded_at', 'order_created_at', 'observed_order_status',
                  'source_updated_at', 'identity_scope')
 _ALIASES = {
@@ -187,6 +188,34 @@ def status_recognition(raw, source, current, party, owner, start, end, shipment,
             'source_updated_at': version.isoformat(), 'identity_scope': 'order_status', **references}
 
 
+def owner_rule_active(state, owner):
+    policy = (state or {}).get('aramex_order_status_rule') or {}
+    return bool(owner and policy.get('approved_by') == owner and policy.get('approved_at')
+                and policy.get('started_at') == state.get('started_at') and policy.get('version') == 1)
+
+
+def owner_status_observation(raw, source, party, owner, start, end, current):
+    # Eligibility belongs to the merchant's Salla order. A missing historic AWB,
+    # component refresh or a later delivery scan is not a second financial event.
+    status = current_status(raw.get('status'))
+    if party != 'aramex' or not status:
+        return None
+    oid, number = _text(raw.get('id')), _text(raw.get('reference_id') or raw.get('order_number'))
+    if (not oid or not number or source.get('user_id') != owner
+            or (source.get('raw_by_source') or {}).get('salla_direct') != raw
+            or any(source.get(key) is not None and _text(source[key]) != value
+                   for key, value in (('salla_order_id', oid), ('order_number', number)))):
+        _fail('order_identity_conflict')
+    created = _instant(raw.get('date') or raw.get('created_at') or raw.get('order_date'))
+    if not start < created <= end:
+        return None
+    return {'recognition_basis': OWNER_STATUS_BASIS, 'identity_scope': 'order_status',
+            'recorded_at': end.isoformat(), 'order_created_at': created.isoformat(),
+            'observed_order_status': status, 'source_updated_at': None,
+            'shipment_id': _text(current.get('shipment_id')) or None,
+            'waybill': _text(current.get('tracking_number')) or None}
+
+
 def accounting_time(event, start, now):
     """Validate the new basis independently before its charge/payment pair is applied."""
     if event.get('recognition_basis') is None:
@@ -194,12 +223,13 @@ def accounting_time(event, start, now):
         if not start <= at <= now:
             _fail('completion_time_invalid')
         return at
-    if (event.get('recognition_basis') != STATUS_BASIS or event.get('completed_at') is not None
+    if (event.get('recognition_basis') not in {STATUS_BASIS, OWNER_STATUS_BASIS} or event.get('completed_at') is not None
             or event.get('party_id') != 'aramex' or event.get('identity_scope') != 'order_status'
             or event.get('observed_order_status') not in _ALIASES or not _text(event.get('source_carrier_key'))
             or event.get('completion_admission_required')):
         _fail('status_evidence_invalid')
-    created, version, at = (_instant(event[key]) for key in ('order_created_at', 'source_updated_at', 'recorded_at'))
+    created, at = (_instant(event[key]) for key in ('order_created_at', 'recorded_at'))
+    version = created if event.get('recognition_basis') == OWNER_STATUS_BASIS else _instant(event['source_updated_at'])
     if not start < created <= version <= at <= now:
         _fail('status_evidence_invalid')
     return at
