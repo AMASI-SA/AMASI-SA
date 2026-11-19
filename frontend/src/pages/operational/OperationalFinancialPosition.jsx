@@ -338,6 +338,7 @@ export default function OperationalFinancialPosition() {
                 setState(previous => previous.scope === scope && previous.view === view
                     && sameFinancialSnapshot(expected, previous.report)
                     ? { ...previous, report: { ...received,
+                        delivered_status_notice: previous.report.delivered_status_notice,
                         ...(previous.report.refresh_warning ? { refresh_warning: previous.report.refresh_warning } : {}) } } : previous);
                 setForecast({ key, phase: "ready", error: "" });
             },
