@@ -458,6 +458,25 @@ test("saved confirmation presentation is bound to its operational period even wh
     expect(operationalApi.confirmDeliveryAfterStart).toHaveBeenCalledTimes(1);
 });
 
+test("delivery notices stay visible when the same snapshot's forecast finishes", async () => {
+    const pending = deferred();
+    const summary = fixture("summary");
+    summary.delivered_status_notice = { groups: [
+        { status: "canceled", count: 2, orders: [] },
+        { status: "restored", count: 31, orders: [] },
+    ], pending_history: 4 };
+    operationalApi.financialPosition.mockImplementation(config =>
+        config.params.view === "forecast" ? pending.promise : Promise.resolve(summary));
+    await render();
+    const labels = () => Array.from(host.querySelectorAll("aside.ofp-warning strong"), item => item.textContent);
+    const expected = ["ملغي بعد تم التوصيل (2)", "مسترجع بعد تم التوصيل (31)"];
+    expect(labels()).toEqual(expected);
+    await act(async () => pending.resolve(fixture("forecast")));
+    expect(host.querySelector('[data-testid="financial-forecast-pending"]')).toBeNull();
+    expect(labels()).toEqual(expected);
+    expect(host.textContent).toContain("تجري مطابقة سجل توصيلها في سلة (4)");
+});
+
 test("summary renders four saved results before its bound forecast, without refreshing sources", async () => {
     const pending = deferred();
     operationalApi.financialPosition.mockImplementation(config => config.params.view === "forecast" ? pending.promise : Promise.resolve(fixture(config.params.view)));
