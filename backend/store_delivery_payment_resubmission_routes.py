@@ -35,7 +35,7 @@ async def _driver_for_user(db: Any, user: dict[str, Any]) -> dict[str, Any]:
 class ResubmitPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
     receipt_reference: str = Field(min_length=1, max_length=500)
-    bank_account_id: str | None = Field(default=None, max_length=120)
+    bank_account_id: str | None = Field(default=None, max_length=200)
 
 
 def make_store_delivery_payment_resubmission_router(db: Any, current_user: Callable[..., Any]) -> APIRouter:
@@ -55,6 +55,13 @@ def make_store_delivery_payment_resubmission_router(db: Any, current_user: Calla
         review = await db[DRIVER_PAYMENT_REVIEWS].find_one(
             {"user_id": user_id, "assignment_id": assignment_id}, {"_id": 0}
         )
+        from operational_driver_payment_review import financial_source
+        if review and review.get("payment_method") == "bank_transfer" and (
+                review.get("bank_financial_source") == "operational" or await financial_source(db, user_id) == "operational"):
+            from operational_driver_payment_resubmission import resubmit
+            return await resubmit(db, owner=user_id, actor=normalize_text(user.get("id")), driver=driver["id"],
+                assignment_id=assignment_id, receipt_reference=normalize_text(payload.receipt_reference),
+                bank_account_id=normalize_text(payload.bank_account_id))
         if not review or review.get("status") != "rejected":
             raise HTTPException(status_code=409, detail={"code": "payment_review_not_rejected"})
 

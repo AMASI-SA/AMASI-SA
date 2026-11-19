@@ -1194,16 +1194,8 @@ def _mobile_label_carrier(row: dict[str, Any]) -> dict[str, str]:
 
 
 def _mobile_store_courier(name, app_id):
-    from store_delivery_domain import is_city_courier_company, normalize_shipping_carrier
-    from shipping_companies import normalize_shipping_company
-
-    normalized = normalize_shipping_carrier(name)
-    if is_city_courier_company(normalized) or normalized in {"مندوب", "مندوب المتجر", "مندوب المحل", "mandoob"}:
-        return True
-    # Salla identifies other merchant-operated custom carriers with app_id=0.
-    # A generic transport mode or a known external carrier cannot establish it.
-    key, _ = normalize_shipping_company(normalized)
-    return bool(normalized and normalized != "shipping" and key.startswith("other:") and app_id in (0, "0"))
+    from store_courier_domain import is_salla_store_courier
+    return is_salla_store_courier(name, app_id)
 
 
 def _internal_carrier(row: dict[str, Any] | None) -> bool:

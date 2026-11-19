@@ -1,7 +1,7 @@
 """Bulk handover sessions for Amasi store drivers.
 
 The operator selects one driver, scans shipment barcodes, and the backend validates
-city coverage before any assignment is created. Accepted rows are committed in one
+the current Salla status and merchant carrier before creating an assignment. Accepted rows are committed in one
 explicit confirmation step with immutable driver/fee snapshots.
 
 The canonical order source is ``unified_orders`` (orders_db SSOT). Never use a
@@ -17,14 +17,15 @@ from typing import Any, Callable
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
+from store_delivery_assignment_history import released_assignment
 from store_delivery_domain import (
-    StoreDeliveryRuleError, carrier_assignment_snapshot, normalize_shipping_carrier, normalize_text,
+    store_courier_snapshot, normalize_text,
 )
 from order_tracking_notes import ORDER_TRACKING_INSTRUCTIONS, active_stage_instructions, enforce_instruction_rows
 from store_courier_domain import (
     ASSIGNED_WAITING_PICKUP,
     WORKFLOWS,
-    store_courier_assignment_blocker,
+    active_account_assignment, current_carrier, eligibility_fence, store_courier_assignment_blocker,
 )
 from store_delivery_customer_instruction_routes import STORE_DELIVERY_INSTRUCTIONS
 from store_delivery_driver_routes import STORE_DRIVERS
@@ -90,17 +91,7 @@ def _order_city(order: dict[str, Any]) -> str:
 
 
 def _order_shipping_company(order: dict[str, Any]) -> str:
-    """Use the current carrier identity; never infer a company from city.
-
-    If the canonical carrier has a code but no name, no stale fallback is safe.
-    """
-    current = order.get("salla_shipping_current")
-    if isinstance(current, dict) and (current.get("company_name") or current.get("company_code")):
-        return normalize_text(current.get("company_name")) if isinstance(current.get("company_name"), str) else ""
-    value = order.get("shipping_company")
-    if isinstance(value, dict):
-        value = value.get("name") or value.get("name_ar")
-    return normalize_text(value) if isinstance(value, str) else ""
+    return current_carrier(order)[0]
 
 
 def _order_number(order: dict[str, Any]) -> str:
@@ -245,7 +236,8 @@ async def scan_shipment_service(db: Any, *, actor: dict, user_id: str, session_i
     if any(normalize_text(row.get("order_id")) == canonical_order_id for row in session.get("accepted") or []):
         return {"accepted": False, "barcode": barcode, "code": "shipment_already_scanned"}
     active = await db[ASSIGNMENTS].find_one(
-        {"user_id": user_id, "order_id": canonical_order_id, "active": True},
+        {"user_id": user_id, "active": True, "$or": [{"order_id": canonical_order_id},
+                                                    {"order_number": _order_number(order)}]},
         {
             "_id": 0,
             "id": 1,
@@ -255,6 +247,20 @@ async def scan_shipment_service(db: Any, *, actor: dict, user_id: str, session_i
             "order_number": 1,
         },
     )
+    async def reject(code, **details):
+        rejected = {"barcode": barcode, "order_number": _order_number(order), "code": code,
+                    "scanned_at": _now(), **details}
+        await db[SESSIONS].update_one({"user_id": user_id, "id": session_id, "status": "open"},
+                                      {"$push": {"rejected": rejected}})
+        return {"accepted": False, **rejected}
+
+    if not driver or driver.get("status") != "active":
+        return await reject("driver_inactive")
+    previous = None if active else await released_assignment(
+        db, owner=user_id, order=order, driver_id=driver["id"])
+    blocker = store_courier_assignment_blocker(order, transfer=bool(active or previous))
+    if blocker:
+        return await reject(blocker)
     if active:
         active_status = normalize_text(active.get("status"))
         same_driver = normalize_text(active.get("driver_id")) == normalize_text(driver.get("id"))
@@ -282,54 +288,21 @@ async def scan_shipment_service(db: Any, *, actor: dict, user_id: str, session_i
     order_number = _order_number(order)
     selector = {"user_id": user_id, "order_number": order_number}
     workflow = await db[WORKFLOWS].find_one(selector, {"_id": 0})
-    if not workflow:
-        return {"accepted": False, "barcode": barcode, "code": "store_courier_shipment_not_found"}
-    blocker = store_courier_assignment_blocker(workflow)
-    company = _order_shipping_company(order)
-    label_missing = blocker in {"store_courier_label_required", "store_courier_label_not_ready"}
-    if (label_missing and workflow.get("stage") == "completed"
-            and workflow.get("assembly_status") == "completed"
-            and not normalize_text(workflow.get("store_courier_assignee_id"))
-            and not normalize_text(workflow.get("store_delivery_assignment_id"))
-            and driver and driver.get("status") == "active"
-            and normalize_shipping_carrier(company)
-            and normalize_shipping_carrier(company) == normalize_shipping_carrier(driver.get("shipping_company"))):
-        from fulfillment_carrier_label import recover_store_courier_label_for_handover
-        from order_engine.shipping_label_service import ShippingLabelError
-
-        try:
-            recovered = await recover_store_courier_label_for_handover(db, user_id=user_id, order_number=order_number)
-        except ShippingLabelError as exc:
-            return {"accepted": False, "barcode": barcode, "order_number": order_number, "code": exc.code}
-        if recovered:
-            # Recovery may have refreshed the canonical carrier or destination.
-            order = await db[ORDERS].find_one(selector, {"_id": 0})
-            if not order or _order_id(order) != canonical_order_id:
-                return {"accepted": False, "barcode": barcode, "code": "canonical_order_not_found"}
-            workflow = await db[WORKFLOWS].find_one(selector, {"_id": 0})
-            if not workflow:
-                return {"accepted": False, "barcode": barcode, "code": "store_courier_shipment_not_found"}
-            blocker = store_courier_assignment_blocker(workflow)
-            company = _order_shipping_company(order)
-    if blocker:
-        return {"accepted": False, "barcode": barcode, "code": blocker}
-    if normalize_text(workflow.get("store_courier_assignee_id")):
-        return {"accepted": False, "barcode": barcode, "code": "store_courier_already_assigned"}
-
+    if active_account_assignment(workflow or {}):
+        return await reject("store_courier_already_assigned")
     city = _order_city(order)
-    try:
-        snapshot = carrier_assignment_snapshot(driver=driver, shipping_company=company, shipping_city=city)
-    except StoreDeliveryRuleError as exc:
-        rejected = {"barcode": barcode, "order_id": canonical_order_id, "order_number": _order_number(order),
-                    "shipping_city": city, "shipping_company": company,
-                    "driver_shipping_company": (driver or {}).get("shipping_company"),
-                    "code": str(exc), "scanned_at": _now()}
-        await db[SESSIONS].update_one({"user_id": user_id, "id": session_id}, {"$push": {"rejected": rejected}})
-        return {"accepted": False, **rejected}
+    company = _order_shipping_company(order)
+    snapshot = store_courier_snapshot(driver=driver, shipping_company=company, shipping_city=city)
 
     accepted = {"barcode": barcode, "order_id": canonical_order_id, "order_number": _order_number(order), "shipping_city": city,
                 "shipping_company": company, **snapshot, "scanned_at": _now()}
-    await db[SESSIONS].update_one({"user_id": user_id, "id": session_id}, {"$push": {"accepted": accepted}})
+    if previous:
+        accepted["reassigned_from_assignment_id"] = previous
+    added = await db[SESSIONS].update_one({"user_id": user_id, "id": session_id, "status": "open",
+                                          "accepted.order_id": {"$ne": canonical_order_id}},
+                                         {"$push": {"accepted": accepted}})
+    if not added.modified_count:
+        return {"accepted": False, "barcode": barcode, "code": "shipment_already_scanned"}
     return {"accepted": True, "shipment": accepted}
 
 
@@ -363,25 +336,19 @@ async def confirm_session_service(db: Any, *, actor: dict, user_id: str, session
         if not order or _order_id(order) != normalize_text(item.get("order_id")):
             raise HTTPException(status_code=409, detail={"code": "canonical_order_not_found"})
         company = _order_shipping_company(order)
-        if normalize_shipping_carrier(company) != normalize_shipping_carrier(
-            item.get("shipping_company_snapshot") or item.get("shipping_company")
-        ):
-            raise HTTPException(status_code=409, detail={"code": "shipment_shipping_company_changed",
-                                                         "order_id": item.get("order_id")})
-        order_carrier_fences[item["order_id"]] = {
-            "shipping_company": order.get("shipping_company"),
-            "salla_shipping_current": order.get("salla_shipping_current"),
-        }
-        try:
-            current_snapshot = carrier_assignment_snapshot(
-                driver=driver, shipping_company=company, shipping_city=_order_city(order),
-            )
-        except StoreDeliveryRuleError as exc:
-            raise HTTPException(status_code=409, detail={"code": str(exc), "order_id": item.get("order_id")}) from exc
+        previous = await released_assignment(db, owner=user_id, order=order, driver_id=driver["id"])
+        if previous != item.get("reassigned_from_assignment_id"):
+            raise HTTPException(status_code=409, detail={"code": "salla_assignment_changed_rescan"})
+        blocker = store_courier_assignment_blocker(order, transfer=bool(previous))
+        if blocker:
+            raise HTTPException(status_code=409, detail={"code": blocker, "order_id": item["order_id"]})
+        order_carrier_fences[item["order_id"]] = eligibility_fence(order)
+        current_snapshot = store_courier_snapshot(driver=driver, shipping_company=company, shipping_city=_order_city(order))
         rows.append({
             "id": str(uuid.uuid4()), "user_id": user_id, "session_id": session_id,
             "order_id": item["order_id"], "order_number": item.get("order_number"), "barcode": item.get("barcode"),
             **current_snapshot,
+            **({"reassigned_from_assignment_id": previous} if previous else {}),
             "status": "assigned", "active": True, "assigned_at": now,
             "assigned_by": normalize_text(actor.get("id")), "delivered_at": None,
         })
@@ -396,19 +363,9 @@ async def confirm_session_service(db: Any, *, actor: dict, user_id: str, session
                 {"user_id": user_id, "order_number": row.get("order_number")},
                 {"_id": 0},
             )
-            if not workflow:
-                raise HTTPException(status_code=409, detail={"code": "store_courier_shipment_not_found"})
-            blocker = store_courier_assignment_blocker(workflow)
-            if blocker:
-                raise HTTPException(status_code=409, detail={"code": blocker, "order_number": row.get("order_number")})
-            if normalize_text(workflow.get("store_courier_assignee_id")):
-                raise HTTPException(status_code=409, detail={"code": "store_courier_already_assigned", "order_number": row.get("order_number")})
-            await enforce_assignment_instructions(
-                db,
-                user_id=user_id,
-                order_number=normalize_text(row.get("order_number")),
-                actor_id=normalize_text(actor.get("id")),
-            )
+            workflow = workflow or {"user_id": user_id, "order_number": row["order_number"]}
+            if active_account_assignment(workflow):
+                raise HTTPException(status_code=409, detail={"code": "store_courier_already_assigned"})
             await db[ASSIGNMENTS].insert_one(row)
             inserted_ids.append(row["id"])
             tracking_rows = await db[ORDER_TRACKING_INSTRUCTIONS].find(
@@ -468,43 +425,17 @@ async def confirm_session_service(db: Any, *, actor: dict, user_id: str, session
                 "store_courier_assigned_at": now,
                 "store_courier_assigned_by_id": normalize_text(actor.get("id")),
                 "store_courier_assignment_barcode": row.get("barcode"),
-                "store_courier_label_verified_at": now,
-                "store_courier_label_verified_by_id": normalize_text(actor.get("id")),
-                # The handover scanner is reading the physical printed
-                # store-courier label now, so a prior separate print-confirm
-                # scan is not required.
-                "carrier_label_print_confirmed": True,
-                "carrier_label_print_confirmed_at": (
-                    workflow.get("carrier_label_print_confirmed_at") or now
-                ),
-                "carrier_label_print_confirmed_by": (
-                    workflow.get("carrier_label_print_confirmed_by")
-                    or normalize_text(actor.get("id"))
-                ),
-                "carrier_label_print_confirmed_by_name": (
-                    workflow.get("carrier_label_print_confirmed_by_name")
-                    or normalize_text(actor.get("name") or actor.get("email"))
-                ),
                 "updated_at": now,
             }
-            if not physical_label_scanned:
-                for key in tuple(workflow_patch):
-                    if key.startswith("carrier_label_print_confirmed"):
-                        workflow_patch.pop(key)
+            workflow_key = {"user_id": user_id, "order_number": row["order_number"]}
+            # The identity-only upsert permits a missing workflow without
+            # manufacturing any assembly or label evidence.
+            await db[WORKFLOWS].update_one(workflow_key, {"$setOnInsert": workflow_key}, upsert=True)
             workflow_result = await db[WORKFLOWS].update_one(
-                {
-                    "user_id": user_id,
-                    "order_number": row.get("order_number"),
-                    "carrier_label_type": "store_courier",
-                    "carrier_label_ready": True,
-                    "stage": "completed",
-                    "assembly_status": "completed",
-                    "$or": [
-                        {"store_courier_assignee_id": {"$exists": False}},
-                        {"store_courier_assignee_id": None},
-                        {"store_courier_assignee_id": ""},
-                    ],
-                },
+                {**workflow_key,
+                 "store_delivery_assignment_id": workflow.get("store_delivery_assignment_id"),
+                 "store_courier_assignee_id": workflow.get("store_courier_assignee_id"),
+                 "store_courier_assignment_state": workflow.get("store_courier_assignment_state")},
                 {"$set": workflow_patch},
             )
             if workflow_result.modified_count != 1:
@@ -537,15 +468,12 @@ async def confirm_session_service(db: Any, *, actor: dict, user_id: str, session
                 "store_delivery_assigned_at": now,
                 "store_delivery_updated_at": now,
             }
-            frozen_carrier = order_carrier_fences[row["order_id"]]
             order_result = await db[ORDERS].update_one(
-                {"$and": [order_filter,
-                          {"shipping_company": {"$eq": frozen_carrier["shipping_company"]}},
-                          {"salla_shipping_current": {"$eq": frozen_carrier["salla_shipping_current"]}}]},
+                {"$and": [order_filter, order_carrier_fences[row["order_id"]]]},
                 {"$set": order_patch},
             )
             if order_result.matched_count != 1:
-                raise RuntimeError("canonical_order_update_conflict_during_handover_confirm")
+                raise HTTPException(status_code=409, detail={"code": "salla_assignment_changed_rescan"})
             updated_orders.append((prior, order_patch))
 
     except Exception:
@@ -565,7 +493,7 @@ async def confirm_session_service(db: Any, *, actor: dict, user_id: str, session
         raise
 
     session_update = await db[SESSIONS].update_one(
-        {"user_id": user_id, "id": session_id, "status": "open"},
+        {"user_id": user_id, "id": session_id, "status": "open", "accepted": accepted},
         {"$set": {"status": "confirmed", "confirmed_at": now, "confirmed_by": normalize_text(actor.get("id")), "assigned_count": len(rows)}},
     )
     if session_update.modified_count != 1:

@@ -9,7 +9,7 @@ from fastapi import HTTPException
 from motor.motor_asyncio import AsyncIOMotorClient
 
 from store_delivery_reassignment_routes import (
-    UnassignPayload, _assert_unassignment_safe, make_store_delivery_reassignment_router,
+    ReassignPayload, UnassignPayload, _assert_unassignment_safe, make_store_delivery_reassignment_router,
 )
 from store_delivery_handover_routes import ASSIGNMENTS, EVENTS, ORDERS
 from store_courier_domain import WORKFLOWS, ASSIGNED_WAITING_PICKUP
@@ -38,6 +38,7 @@ async def _fixture():
     }
     order = {
         "user_id": "merchant", "order_id": "salla-101", "order_number": "101",
+        "order_status_slug": "completed",
         "store_delivery_assignment_id": "assignment-A", "store_delivery_driver_id": "driver-R",
         "store_delivery_driver_name": "R", "store_delivery_status": "assigned",
         "store_delivery_fee_snapshot": 20.0,
@@ -62,6 +63,169 @@ async def _fixture():
 async def _shutdown(client, db):
     await client.drop_database(db.name)
     client.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status,carrier,expected", [
+    ("delivering", "أرامكس", "salla_store_courier_required"),
+    ("completed", "سمسا", "salla_store_courier_required"),
+    ("delivered", "مندوب الرياض", "salla_transfer_status_ineligible"),
+    ("in_progress", "مندوب المتجر", "salla_transfer_status_ineligible"),
+])
+async def test_ineligible_transfer_keeps_original_assignment_and_history(status, carrier, expected):
+    client, db = await _fixture()
+    try:
+        await db[ORDERS].update_one({"order_number": "101"}, {"$set": {
+            "order_status_slug": status, "salla_shipping_current.company_name": carrier}})
+        await db["store_drivers"].insert_one({
+            "user_id": "merchant", "id": "next", "name": "Next driver", "status": "active", "delivery_fee": 25})
+        router = make_store_delivery_reassignment_router(db, lambda: ACTOR)
+        transfer = next(r.endpoint for r in router.routes if r.path.endswith("/{assignment_id}/reassign"))
+        old = await db[ASSIGNMENTS].find_one({})
+        with pytest.raises(HTTPException) as error:
+            await transfer("assignment-A", ReassignPayload(driver_id="next"), user=ACTOR)
+        assert error.value.status_code == 409 and error.value.detail["code"] == expected
+        assert await db[ASSIGNMENTS].find({}).to_list(2) == [old]
+        assert await db[EVENTS].count_documents({}) == 0
+    finally:
+        await _shutdown(client, db)
+
+
+@pytest.mark.asyncio
+async def test_transfer_from_in_transit_resets_workflow_and_can_be_cancelled_again():
+    client, db = await _fixture()
+    try:
+        await db[ASSIGNMENTS].update_one({"id": "assignment-A"}, {"$set": {"status": "out_for_delivery"}})
+        await db[ORDERS].update_one({"order_number": "101"}, {"$set": {
+            "order_status_slug": "delivering", "store_delivery_status": "out_for_delivery", "shipping_company": "مندوب الرياض",
+        }})
+        await db[WORKFLOWS].update_one({"order_number": "101"}, {"$set": {
+            "stage": "delivering", "store_courier_assignment_state": "delivering",
+            "store_courier_picked_up_at": "2026-11-02T12:00:00Z",
+        }})
+        await db["store_drivers"].insert_one({
+            "user_id": "merchant", "id": "driver-J", "name": "New driver", "status": "active",
+            "shipping_company": "مندوب جدة", "delivery_fee": 25,
+        })
+        router = make_store_delivery_reassignment_router(db, lambda: ACTOR)
+        transfer = next(r.endpoint for r in router.routes if r.path.endswith("/{assignment_id}/reassign"))
+        result = await transfer("assignment-A", ReassignPayload(driver_id="driver-J"), user=ACTOR)
+        new_id = result["assignment"]["id"]
+        workflow = await db[WORKFLOWS].find_one({"order_number": "101"})
+        assert workflow["stage"] == "completed"
+        assert workflow["store_courier_assignment_state"] == ASSIGNED_WAITING_PICKUP
+        assert not workflow.get("store_courier_picked_up_at")
+        cancelled = await _route(db)(new_id, UnassignPayload(expected_driver_id="driver-J"), user=ACTOR)
+        assert cancelled["ok"]
+        assert await db[ASSIGNMENTS].count_documents({"active": True}) == 0
+    finally:
+        await _shutdown(client, db)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["delivering", "delivered"])
+@pytest.mark.parametrize("financial_evidence", [False, True])
+async def test_cancel_stale_assignment_preserves_replacement_carrier_workflow(status, financial_evidence):
+    from carrier_handoff import advance_carrier_handoff_from_salla_status
+
+    client, db = await _fixture()
+    try:
+        await db[ASSIGNMENTS].update_one({"id": "assignment-A"}, {"$set": {
+            "shipping_company_snapshot": "مندوب الرياض",
+        }})
+        await db[ORDERS].update_one({"order_number": "101"}, {"$set": {
+            "shipping_company": "External carrier",
+            "salla_shipping_current": {"company_name": "External carrier", "shipment_id": "new-shipment"},
+        }})
+        await db[WORKFLOWS].update_one({"order_number": "101"}, {"$set": {
+            "carrier_label_type": "carrier", "carrier_name": "External carrier",
+            "carrier_shipment_id": "new-shipment", "carrier_handoff_state": "awaiting_carrier_handoff",
+        }})
+        advanced = await advance_carrier_handoff_from_salla_status(
+            db, user_id="merchant", order_number="101", status_slug=status,
+        )
+        assert advanced["advanced"]
+        before = await db[WORKFLOWS].find_one({"order_number": "101"})
+        if financial_evidence:
+            await db["store_delivery_collections"].insert_one({
+                "user_id": "merchant", "assignment_id": "assignment-A", "amount": 100,
+            })
+            with pytest.raises(HTTPException) as error:
+                await _route(db)("assignment-A", UnassignPayload(expected_driver_id="driver-R"), user=ACTOR)
+            assert error.value.detail["code"] == "assignment_financial_evidence_exists"
+            assert (await db[ASSIGNMENTS].find_one({"id": "assignment-A"}))["active"] is True
+            assert await db[WORKFLOWS].find_one({"order_number": "101"}) == before
+            return
+        result = await _route(db)("assignment-A", UnassignPayload(expected_driver_id="driver-R"), user=ACTOR)
+        assert result["ok"]
+        after = await db[WORKFLOWS].find_one({"order_number": "101"})
+        for key in ("stage", "carrier_label_type", "carrier_name", "carrier_shipment_id",
+                    "carrier_handoff_state", "delivered_at", "delivering_at", "carrier_label_print_confirmed"):
+            assert after.get(key) == before.get(key)
+        assert not after.get("store_delivery_assignment_id")
+        assert (await db[ASSIGNMENTS].find_one({"id": "assignment-A"}))["active"] is False
+        assert (await db[ORDERS].find_one({"order_number": "101"}))["salla_shipping_current"]["shipment_id"] == "new-shipment"
+        assert await db["store_delivery_driver_earnings"].count_documents({}) == 0
+    finally:
+        await _shutdown(client, db)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("picked_up", [False, True])
+async def test_legacy_transfer_stage_can_be_revoked_only_before_new_driver_pickup(picked_up):
+    client, db = await _fixture()
+    try:
+        await db[ASSIGNMENTS].update_one({"id": "assignment-A"}, {"$set": {
+            "reassigned_from_assignment_id": "previous-assignment",
+        }})
+        patch = {"stage": "delivering"}
+        if picked_up:
+            patch["store_courier_picked_up_at"] = "2026-11-02T12:00:00Z"
+        await db[WORKFLOWS].update_one({"order_number": "101"}, {"$set": patch})
+        if picked_up:
+            with pytest.raises(HTTPException) as error:
+                await _route(db)("assignment-A", UnassignPayload(expected_driver_id="driver-R"), user=ACTOR)
+            assert error.value.detail["code"] == "assignment_in_custody_cannot_unassign"
+            assert (await db[ASSIGNMENTS].find_one({"id": "assignment-A"}))["active"] is True
+        else:
+            assert (await _route(db)("assignment-A", UnassignPayload(expected_driver_id="driver-R"), user=ACTOR))["ok"]
+            assert (await db[WORKFLOWS].find_one({"order_number": "101"}))["stage"] == "completed"
+    finally:
+        await _shutdown(client, db)
+
+
+@pytest.mark.asyncio
+async def test_unassign_pending_assembly_preserves_all_fulfillment_evidence():
+    client, db = await _fixture()
+    try:
+        await db[WORKFLOWS].update_one({"order_number": "101"}, {
+            "$set": {"stage": "in_progress", "assembly_status": "pending", "carrier_label_ready": False}})
+        result = await _route(db)("assignment-A", UnassignPayload(expected_driver_id="driver-R"), user=ACTOR)
+        assert result["ok"]
+        workflow = await db[WORKFLOWS].find_one({"order_number": "101"})
+        assert (workflow["stage"], workflow["assembly_status"], workflow["carrier_label_ready"]) == (
+            "in_progress", "pending", False)
+    finally:
+        await _shutdown(client, db)
+
+
+@pytest.mark.asyncio
+async def test_released_transfer_requires_its_own_release_and_a_different_driver():
+    from store_delivery_assignment_history import released_assignment
+    client, db = await _fixture()
+    try:
+        await _route(db)("assignment-A", UnassignPayload(expected_driver_id="driver-R"), user=ACTOR)
+        order = await db[ORDERS].find_one({"order_number": "101"})
+        assert await released_assignment(db, owner="merchant", order=order, driver_id="next") == "assignment-A"
+        for owner, current, candidate in (
+            ("other-owner", order, "next"), ("merchant", order, "driver-R"),
+            ("merchant", {**order, "store_delivery_updated_at": "old"}, "next"),
+            ("merchant", {**order, "store_delivery_status": "assigned"}, "next"),
+            ("merchant", {**order, "order_number": "102"}, "next"),
+        ):
+            assert await released_assignment(db, owner=owner, order=current, driver_id=candidate) is None
+    finally:
+        await _shutdown(client, db)
 
 
 @pytest.mark.asyncio
@@ -198,7 +362,7 @@ async def test_in_transit_can_unassign_without_return_attestation_and_reassign_l
         )
         await db[ORDERS].update_one(
             {"order_number": "101"},
-            {"$set": {"store_delivery_status": "out_for_delivery"}},
+            {"$set": {"store_delivery_status": "out_for_delivery", "order_status_slug": "delivering"}},
         )
         await db[WORKFLOWS].update_one(
             {"order_number": "101"},
@@ -247,12 +411,10 @@ async def test_in_transit_can_unassign_without_return_attestation_and_reassign_l
         # driver after revocation, without claiming prior physical return.
         # Not a synthetic
         # direct database insertion that would mask a workflow blocker.
-        from store_courier_domain import store_courier_assignment_blocker
         from store_delivery_handover_routes import (
             SessionCreate, ScanIn, create_session_service, scan_shipment_service,
             confirm_session_service,
         )
-        assert store_courier_assignment_blocker(workflow) is None
         await db[ORDERS].update_one(
             {"order_number": "101"}, {"$set": {"shipping_company": "مندوب الرياض"}},
         )
@@ -274,6 +436,7 @@ async def test_in_transit_can_unassign_without_return_attestation_and_reassign_l
             db, actor=ACTOR, user_id="merchant", session_id=session["id"],
         )
         assert confirmation["assigned_count"] == 1
+        assert confirmation["assignments"][0]["reassigned_from_assignment_id"] == "assignment-A"
         assert await db[ASSIGNMENTS].count_documents(
             {"order_id": "salla-101", "active": True, "driver_id": "driver-J"},
         ) == 1

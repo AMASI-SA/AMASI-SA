@@ -45,6 +45,33 @@ async function uploadReceipt(assignmentId, file) {
   })).data;
 }
 
+const RECOVERY_FIELDS = new Set(["barcode", "target_status", "payment_method", "delivery_proof_reference",
+  "receipt_reference", "bank_account_id", "conversation_evidence_reference", "physical_cash_amount", "physical_cash_confirmed"]);
+
+function pendingCompletion(assignment) {
+  const saved = assignment?.pending_delivery_completion;
+  const payload = saved?.payload;
+  const reference = value => typeof value === "string" && value.trim().length > 0;
+  const optionalReference = value => value === null || reference(value);
+  if (!saved || saved.version !== 1 || saved.assignment_id !== assignment.id || assignment.active === false ||
+      !["assigned", "out_for_delivery"].includes(assignment.status) ||
+      typeof saved.order_number !== "string" || !saved.order_number ||
+      saved.order_number !== String(assignment.order_number ?? "").trim() ||
+      typeof saved.collection_amount !== "string" || !/^(0|[1-9]\d*)(\.\d{1,2})?$/.test(saved.collection_amount) ||
+      !Number.isFinite(Number(saved.collection_amount)) || !payload || typeof payload !== "object" ||
+      Object.keys(payload).some(key => !RECOVERY_FIELDS.has(key)) ||
+      payload.barcode !== saved.order_number || payload.target_status !== "delivered" ||
+      ![null, "cash", "bank_transfer", "card_terminal"].includes(payload.payment_method) ||
+      !reference(payload.delivery_proof_reference) || !optionalReference(payload.receipt_reference) ||
+      !optionalReference(payload.bank_account_id) || !optionalReference(payload.conversation_evidence_reference) ||
+      payload.physical_cash_amount !== null || payload.physical_cash_confirmed !== false) return null;
+  if (Number(saved.collection_amount) > 0 && (
+      !["bank_transfer", "card_terminal"].includes(payload.payment_method) || !reference(payload.receipt_reference) ||
+      (payload.payment_method === "bank_transfer" && !reference(payload.bank_account_id)))) return null;
+  return {payload: {...payload}, collection_amount: saved.collection_amount,
+    bank_name_snapshot: typeof saved.bank_name_snapshot === "string" ? saved.bank_name_snapshot : ""};
+}
+
 export default function AmasiDeliveryApp() {
   const { logout } = useAuth();
   const [tab, setTab] = useState("deliveries");
@@ -143,7 +170,7 @@ export default function AmasiDeliveryApp() {
   }
 
   async function setOutForDelivery() {
-    if (!selected) return;
+    if (!selected || selected.pending_delivery_completion) return;
     setBusy(true);
     try {
       const response = await api.post("/store-delivery/app/deliveries/status", {
@@ -172,6 +199,7 @@ export default function AmasiDeliveryApp() {
 
   const selectedInstruction = selected ? instructionByOrder.get(selected.order_id) : null;
   const currentPaymentAssignment = paymentAssignment && deliveries.find(row => row.id === paymentAssignment.id);
+  const selectedRecovery = useMemo(() => pendingCompletion(selected), [selected]);
 
   return (
     <main className="min-h-screen bg-slate-50 pb-24" dir="rtl">
@@ -203,11 +231,14 @@ export default function AmasiDeliveryApp() {
               <section className="rounded-3xl border bg-white p-5 shadow-sm">
                 <div className="flex items-center justify-between"><div><div className="text-xs font-bold text-slate-500">الطلب</div><div className="text-2xl font-black">#{selected.order_number || selected.order_id}</div></div><Package size={34} className="text-emerald-700" /></div>
                 {selectedInstruction && <div className={`mt-4 rounded-2xl border p-3 text-sm font-black ${selectedInstruction.priority === "urgent" ? "border-rose-200 bg-rose-50 text-rose-900" : "border-amber-200 bg-amber-50 text-amber-900"}`}><WarningCircle className="ml-1 inline" />{selectedInstruction.note || "تعليمات من خدمة العملاء"}{(selectedInstruction.delivery_date || selectedInstruction.delivery_time) && <div className="mt-1 text-xs">الموعد: {selectedInstruction.delivery_date || ""} {selectedInstruction.delivery_time || ""}</div>}{!selectedInstruction.acknowledged_at && <button onClick={() => acknowledge(selectedInstruction.id)} className="mt-3 rounded-xl bg-white px-3 py-2 text-xs font-black">تم الاطلاع</button>}</div>}
-                <div className="mt-4 grid grid-cols-2 gap-2 text-sm font-bold"><div className="rounded-xl bg-slate-50 p-3">المدينة<br/><b>{selected.shipping_city_snapshot}</b></div><div className="rounded-xl bg-slate-50 p-3">أجرة التوصيل<br/><b>{money(selected.delivery_fee_snapshot)}</b></div><div className="rounded-xl bg-slate-50 p-3">العميل<br/><b>{selected.customer_name || "—"}</b></div><div className="rounded-xl bg-slate-50 p-3">المبلغ المتبقي<br/><b>{selected.outstanding_amount_available ? money(selected.outstanding_amount) : "يحتاج تحديث"}</b></div></div>
+                <div className="mt-4 grid grid-cols-2 gap-2 text-sm font-bold"><div className="rounded-xl bg-slate-50 p-3">المدينة<br/><b>{selected.shipping_city_snapshot}</b></div><div className="rounded-xl bg-slate-50 p-3">أجرة التوصيل<br/><b>{money(selected.delivery_fee_snapshot)}</b></div><div className="rounded-xl bg-slate-50 p-3">العميل<br/><b>{selected.customer_name || "—"}</b></div><div className="rounded-xl bg-slate-50 p-3">{selectedRecovery ? "المبلغ المحفوظ للمحاولة" : "المبلغ المتبقي"}<br/><b>{selectedRecovery ? money(selectedRecovery.collection_amount) : selected.outstanding_amount_available ? money(selected.outstanding_amount) : "يحتاج تحديث"}</b></div></div>
                 <div className="mt-4 rounded-xl bg-slate-50 p-3 text-sm font-bold">الحالة: {deliveryStatusLabel(selected.status)}</div>
+                {selected.pending_delivery_completion && <p role={selectedRecovery ? "status" : "alert"} className="mt-3 rounded-xl bg-amber-50 p-3 text-sm font-bold text-amber-900">{selectedRecovery
+                  ? "توجد محاولة تسليم محفوظة بانتظار الاستكمال. يمكنك إعادة التأكيد بنفس الإثبات والإيصال."
+                  : "تعذر استعادة محاولة التسليم. حدّث القائمة للتحقق من بيانات الشحنة قبل المتابعة."}</p>}
                 {selected.status === "delivered" && <LateDeliveryEvidence key={selected.id} assignment={selected} />}
                 {selected.payment_review_status === "rejected" && <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 p-3 text-sm font-black text-rose-900">الإيصال مرفوض: {selected.payment_review_note || "راجع المحاسب"}<button onClick={() => setResubmitOpen(true)} className="mt-3 block w-full rounded-xl bg-white px-3 py-2">رفع إيصال بديل</button></div>}
-                <div className="mt-4 grid gap-2 sm:grid-cols-2"><button disabled={busy || selected.status !== "assigned"} onClick={setOutForDelivery} className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 font-black text-amber-900 disabled:opacity-40"><Clock className="ml-1 inline" />جاري التوصيل</button><button disabled={busy || selected.status !== "out_for_delivery" || selected.outstanding_amount_available === false} onClick={() => setPaymentAssignment(selected)} className="rounded-2xl bg-emerald-700 px-4 py-3 font-black text-white disabled:opacity-40"><CheckCircle className="ml-1 inline" />تم التوصيل</button></div>
+                <div className="mt-4 grid gap-2 sm:grid-cols-2"><button disabled={busy || selected.status !== "assigned" || Boolean(selected.pending_delivery_completion)} onClick={setOutForDelivery} className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 font-black text-amber-900 disabled:opacity-40"><Clock className="ml-1 inline" />جاري التوصيل</button><button disabled={busy || (selected.pending_delivery_completion ? !selectedRecovery : selected.status !== "out_for_delivery" || selected.outstanding_amount_available === false)} onClick={() => setPaymentAssignment(selected)} className="rounded-2xl bg-emerald-700 px-4 py-3 font-black text-white disabled:opacity-40"><CheckCircle className="ml-1 inline" />{selected.pending_delivery_completion ? "استكمال تأكيد التسليم" : "تم التوصيل"}</button></div>
               </section>
             )}
 
@@ -221,31 +252,43 @@ export default function AmasiDeliveryApp() {
 
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t bg-white p-3"><div className="mx-auto grid max-w-xl grid-cols-2 gap-2"><button onClick={() => setTab("deliveries")} className={`rounded-2xl px-4 py-3 font-black ${tab === "deliveries" ? "bg-emerald-700 text-white" : "bg-slate-100 text-slate-700"}`}>تواصيلي</button><button onClick={() => setTab("accounts")} className={`rounded-2xl px-4 py-3 font-black ${tab === "accounts" ? "bg-emerald-700 text-white" : "bg-slate-100 text-slate-700"}`}>حساباتي</button></div></nav>
 
-      {paymentAssignment && <DeliveryPaymentModal assignment={currentPaymentAssignment || paymentAssignment} isCurrent={currentPaymentAssignment?.status === "out_for_delivery"} banks={banks} busy={busy} setBusy={setBusy} onClose={() => setPaymentAssignment(null)} onSaved={async (result) => { setPaymentAssignment(null); setSelected(result); await refresh({ silent: true }); }} />}
+      {paymentAssignment && <DeliveryPaymentModal key={paymentAssignment.id} assignment={currentPaymentAssignment || paymentAssignment} isCurrent={currentPaymentAssignment?.status === "out_for_delivery" || Boolean(pendingCompletion(currentPaymentAssignment))} banks={banks} busy={busy} setBusy={setBusy} onClose={() => setPaymentAssignment(null)} onSaved={async (result) => { setPaymentAssignment(null); setSelected(result); await refresh({ silent: true }); }} />}
       {resubmitOpen && selected && <ResubmitModal assignment={selected} banks={banks} busy={busy} setBusy={setBusy} onClose={() => setResubmitOpen(false)} onSaved={async () => { setResubmitOpen(false); await refresh({ silent: true }); }} />}
     </main>
   );
 }
 
 export function DeliveryPaymentModal({ assignment, isCurrent = true, banks, onClose, onSaved, busy, setBusy }) {
-  const [method, setMethod] = useState("");
+  const recovery = useMemo(() => pendingCompletion(assignment), [assignment]);
+  const [method, setMethod] = useState(() => recovery?.payload.payment_method || "");
   const [receiptFile, setReceiptFile] = useState(null);
   const [proofFile, setProofFile] = useState(null);
-  const [bankId, setBankId] = useState("");
+  const [bankId, setBankId] = useState(() => recovery?.payload.bank_account_id || "");
   const [actualCash, setActualCash] = useState("");
   const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState("");
-  const [pending, setPending] = useState(null);
-  const pendingSource = useRef(null);
+  const [pending, setPending] = useState(() => recovery?.payload || null);
+  const pendingSource = useRef(recovery ? {...assignment, outstanding_amount: recovery.collection_amount,
+    bank_name_snapshot: recovery.bank_name_snapshot, restored: true} : null);
+  const inFlight = useRef(false);
   const currentEligibility = useRef(isCurrent);
-  currentEligibility.current = isCurrent;
+  currentEligibility.current = isCurrent && !assignment.pending_delivery_completion;
   const amount = Number((pending ? pendingSource.current : assignment)?.outstanding_amount || 0);
-  const locked = busy || Boolean(pending);
+  const invalidRecovery = Boolean(assignment.pending_delivery_completion) && !recovery && !pending;
+  const locked = busy || Boolean(pending) || Boolean(assignment.pending_delivery_completion);
+  useEffect(() => {
+    if (pending || busy || !recovery) return;
+    pendingSource.current = {...assignment, outstanding_amount: recovery.collection_amount,
+      bank_name_snapshot: recovery.bank_name_snapshot, restored: true};
+    setMethod(recovery.payload.payment_method || "");
+    setBankId(recovery.payload.bank_account_id || "");
+    setPending(recovery.payload);
+  }, [assignment, recovery, pending, busy]);
   useEffect(() => {
     // An unresolved write keeps its exact payload/proof available for recovery.
     // An untouched form cannot submit a delivery removed by a current refresh.
-    if (!isCurrent && !pending && !busy) onClose();
-  }, [isCurrent, pending, busy, onClose]);
+    if (!isCurrent && !pending && !recovery && !busy) onClose();
+  }, [isCurrent, pending, recovery, busy, onClose]);
   useEffect(() => {
     if (!pending) return undefined;
     const warn = event => { event.preventDefault(); event.returnValue = ""; };
@@ -258,8 +301,9 @@ export function DeliveryPaymentModal({ assignment, isCurrent = true, banks, onCl
   async function submit(event) {
     event.preventDefault();
     setError("");
+    if (invalidRecovery) return setError("تعذر استعادة محاولة التسليم. حدّث القائمة قبل المتابعة.");
     if (!currentEligibility.current && !pending) return;
-    if (busy) return;
+    if (busy || inFlight.current) return;
     if (!pending) {
     if (amount > 0 && !method) return setError("حدد طريقة استلام المبلغ");
     if (isCash && (!validCash || !confirmed)) return setError("أدخل النقد الذي استلمته فعليًا وأكد استلامه");
@@ -267,6 +311,7 @@ export function DeliveryPaymentModal({ assignment, isCurrent = true, banks, onCl
     if (amount > 0 && ["card_terminal", "bank_transfer"].includes(method) && !receiptFile) return setError("صورة الإيصال مطلوبة");
     if (amount > 0 && method === "bank_transfer" && !bankId) return setError("اختر حساب المؤسسة الذي تم التحويل إليه");
     }
+    inFlight.current = true;
     setBusy(true);
     try {
       let payload = pending;
@@ -292,7 +337,8 @@ export function DeliveryPaymentModal({ assignment, isCurrent = true, banks, onCl
         bank_account_id: method === "bank_transfer" ? bankId : null,
         ...(isCash ? { physical_cash_amount: actualCash, physical_cash_confirmed: true } : {}),
       };
-      pendingSource.current = assignment;
+      pendingSource.current = {...assignment,
+        bank_name_snapshot: banks.find(bank => bank.id === bankId)?.name || assignment.bank_name_snapshot};
       setPending(payload);
       }
       const response = await api.post("/store-delivery/app/deliveries/status", payload);
@@ -303,15 +349,16 @@ export function DeliveryPaymentModal({ assignment, isCurrent = true, banks, onCl
       const status = failure?.response?.status;
       // A rejected retry does not establish the earlier uncertain write's result.
       if (!pending && status >= 400 && status < 500 && status !== 408) setPending(null);
-      setError(failure?.response?.data?.detail?.code || "تعذر إكمال التوصيل؛ تحقق من الحالة قبل إعادة المحاولة");
+      setError(failure?.response?.data?.detail?.message || failure?.response?.data?.detail?.code || "تعذر إكمال التوصيل؛ تحقق من الحالة قبل إعادة المحاولة");
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   }
 
   return <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/70 sm:items-center sm:p-4"><form onSubmit={submit} className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-white p-5 sm:rounded-3xl" dir="rtl">
-    <div className="flex items-center justify-between"><h2 className="text-lg font-black">إكمال التوصيل والتحصيل</h2><button type="button" disabled={locked} onClick={onClose} aria-label="إغلاق" className="rounded-xl p-2"><X size={20} /></button></div>
-    <p className="mt-4 rounded-xl bg-sky-50 p-3">المبلغ المتوقع تحصيله: <b dir="ltr">{money(amount)}</b><br/>مصدره الطلب ولا يتغير بإدخال النقد الفعلي.</p>
+    <div className="flex items-center justify-between"><h2 className="text-lg font-black">إكمال التوصيل والتحصيل</h2><button type="button" disabled={busy || Boolean(pending)} onClick={onClose} aria-label="إغلاق" className="rounded-xl p-2"><X size={20} /></button></div>
+    <p className="mt-4 rounded-xl bg-sky-50 p-3">{pendingSource.current?.restored ? "المبلغ المحفوظ لمحاولة التسليم" : "المبلغ المتوقع تحصيله"}: <b dir="ltr">{money(amount)}</b><br/>{pendingSource.current?.restored ? "تُستكمل المحاولة بنفس الإثبات والإيصال المحفوظين." : "مصدره الطلب ولا يتغير بإدخال النقد الفعلي."}</p>
     {amount > 0 && <>
       <div className="mt-4 grid grid-cols-3 gap-2">{[{ key: "cash", label: "كاش" }, { key: "card_terminal", label: "شبكة" }, { key: "bank_transfer", label: "تحويل بنكي" }].map(item => <button type="button" disabled={locked} key={item.key} aria-pressed={method === item.key} onClick={() => { setMethod(item.key); setConfirmed(false); }} className={`rounded-xl border p-3 ${method === item.key ? "bg-emerald-50" : "bg-white"}`}>{item.label}</button>)}</div>
       {isCash && <div className="mt-4 space-y-3 rounded-xl border p-3">
@@ -321,12 +368,13 @@ export function DeliveryPaymentModal({ assignment, isCurrent = true, banks, onCl
         <p className="text-xs">هذا إقرار بالنقد الفعلي؛ لا يغيّر المبلغ المستحق على الطلب ولا يسجل توريدًا للمؤسسة.</p>
       </div>}
       {["card_terminal", "bank_transfer"].includes(method) && <label className="mt-4 block">صورة إيصال الشبكة/التحويل<input aria-label="صورة إيصال الدفع" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" disabled={locked} onChange={e => setReceiptFile(e.target.files?.[0] || null)} className="mt-1 block w-full border p-3" /></label>}
-      {method === "bank_transfer" && <label className="mt-4 block">حساب المؤسسة<select aria-label="حساب المؤسسة" value={bankId} disabled={locked} onChange={e => setBankId(e.target.value)} className="mt-1 block w-full border p-3"><option value="">اختر البنك</option>{banks.map(bank => <option key={bank.id} value={bank.id}>{bank.name || bank.provider} {bank.iban || ""}</option>)}</select></label>}
+      {method === "bank_transfer" && <label className="mt-4 block">حساب المؤسسة<select aria-label="حساب المؤسسة" value={bankId} disabled={locked} onChange={e => setBankId(e.target.value)} className="mt-1 block w-full border p-3"><option value="">اختر البنك</option>{pending && bankId && !banks.some(bank => bank.id === bankId) && <option value={bankId}>{pendingSource.current?.bank_name_snapshot || "البنك المحفوظ للمحاولة"}</option>}{banks.map(bank => <option key={bank.id} value={bank.id}>{bank.name || bank.provider} {bank.iban || ""}</option>)}</select></label>}
     </>}
     <label className="mt-4 block">صورة إثبات تسليم الطلب<input aria-label="صورة إثبات تسليم الطلب" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" disabled={locked} onChange={e => setProofFile(e.target.files?.[0] || null)} className="mt-1 block w-full border p-3" /></label>
     {error && <p role="alert" className="mt-3 text-rose-800">{error}</p>}
+    {invalidRecovery && <p role="alert" className="mt-3 text-rose-800">تعذر استعادة محاولة التسليم. حدّث القائمة قبل المتابعة.</p>}
     {pending && <p role="status">لم تتأكد نتيجة الطلب؛ أعد إرسال البيانات نفسها دون تغيير الإثبات أو المبلغ.</p>}
-    <button disabled={busy} className="mt-5 w-full rounded-2xl bg-emerald-700 p-4 font-black text-white disabled:opacity-40">{pending ? "إعادة إرسال التأكيد نفسه" : "تأكيد تم التوصيل"}</button>
+    <button disabled={busy || invalidRecovery || (Boolean(assignment.pending_delivery_completion) && !pending)} className="mt-5 w-full rounded-2xl bg-emerald-700 p-4 font-black text-white disabled:opacity-40">{pending ? "إعادة إرسال التأكيد نفسه" : "تأكيد تم التوصيل"}</button>
   </form></div>;
 }
 
