@@ -3,15 +3,15 @@ import { flushSync } from "react-dom";
 import { ArrowClockwise, CalendarBlank, Info, MagnifyingGlass, MicrosoftExcelLogo, Printer, WarningCircle } from "@phosphor-icons/react";
 import { useReactToPrint } from "react-to-print";
 import { useOptionalAuth } from "../../context/AuthContext";
-import XLSX from "../../lib/safeSpreadsheet";
 import { fileStampSA, formatRiyadhArabicLong, formatRiyadhDateTime } from "../../lib/dates";
 import { operationalApi } from "./api";
 import {
-    buildFinancialPositionWorkbook, collectionLabel, currencyCodes, DELIVERY_MONEY_COLUMNS, DELIVERY_SCOPE_NOTE,
+    collectionLabel, currencyCodes, DELIVERY_MONEY_COLUMNS, DELIVERY_SCOPE_NOTE,
     deliveryOrderLabel, deliveryParties, deliveryRecognitionLabel, destinationLabel, filterDeliveries, formatPositionCount, formatPositionMoney,
     isAramexStatusFee, isPositionContract, PARTY_LABELS, paymentLabel, positionText, readableMessages, shippingFeeStatusLabel, shippingRecognitionLabel, UNAVAILABLE,
-} from "./financialPositionPresentation";
+} from "./financialPositionDisplay";
 import "./financialPosition.css";
+import OperationalToolBack from './OperationalToolBack';
 import NativePurchaseReview from "./NativePurchaseReview";
 import HistoricalShippingFeeReview from "./HistoricalShippingFeeReview";
 import ProviderHistoryReview from "./ProviderHistoryReview";
@@ -23,6 +23,11 @@ import CompletedShippingFeeReview from "./CompletedShippingFeeReview";
 import { canMatchCourierOrder, canReadOperationalPage, courierRecoveryMessage, visibleOperationalRead, refreshVisibleSnapshot } from "./visibleOperationalRead";
 import { FINANCIAL_PAGES, financialPage, financialViewFromSearch, financialViewHref,
     financialSnapshotKey, financialSnapshotParams, hasFinancialSnapshot, sameFinancialSnapshot } from "./financialPositionViews";
+
+async function downloadWorkbook(report, currency, filters, page, filename, shouldContinue) {
+    const { downloadFinancialPositionWorkbook } = await import("./financialPositionPresentation");
+    return downloadFinancialPositionWorkbook(report, currency, filters, page, filename, shouldContinue);
+}
 
 const emptyFilters = () => ({ order: "", party: "", payment: "" });
 const inactiveMessages = {
@@ -559,8 +564,8 @@ export default function OperationalFinancialPosition() {
         setExporting("page"); setExportError("");
         const finishActivity = watchExportActivity(generation);
         try {
-            const workbook = buildFinancialPositionWorkbook(report, activeCurrency, filters, { view, title: page.label });
-            const downloaded = await XLSX.writeFile(workbook, `operational-financial-position-${view}-${activeCurrency}-${fileStampSA()}.xlsx`, { shouldContinue: current });
+            const downloaded = await downloadWorkbook(report, activeCurrency, filters, { view, title: page.label },
+                `operational-financial-position-${view}-${activeCurrency}-${fileStampSA()}.xlsx`, current);
             if (downloaded === false && exportGeneration.current === generation) setExportError("أُلغي التصدير عند مغادرة الصفحة أو تغير بياناتها.");
         } catch {
             if (exportGeneration.current === generation) setExportError("تعذر تصدير هذه الصفحة. أعد المحاولة.");
@@ -592,17 +597,11 @@ export default function OperationalFinancialPosition() {
                     setExportError("لم يطابق التقرير الكامل الجلسة واللقطة المعروضة؛ أعد قراءة الصفحة قبل التصدير.");
                     finishActivity(); setExporting(false); return;
                 }
-                try {
-                    const workbook = buildFinancialPositionWorkbook(received, selectedCurrency, {}, { view: "all", title: "جميع أقسام التقرير" });
-                    if (!current()) { finishActivity(); return; }
-                    Promise.resolve(XLSX.writeFile(workbook, `operational-financial-position-all-${selectedCurrency}-${fileStampSA()}.xlsx`, { shouldContinue: current }))
-                        .then(downloaded => { if (downloaded === false && exportGeneration.current === generation) setExportError("أُلغي التصدير عند مغادرة الصفحة أو تغير بياناتها."); })
-                        .catch(() => { if (current()) setExportError("تعذر تصدير التقرير الكامل. أعد المحاولة."); })
-                        .finally(() => { finishActivity(); if (exportGeneration.current === generation) setExporting(false); });
-                } catch {
-                    finishActivity();
-                    if (current()) { setExportError("تعذر تصدير التقرير الكامل. أعد المحاولة."); setExporting(false); }
-                }
+                downloadWorkbook(received, selectedCurrency, {}, { view: "all", title: "جميع أقسام التقرير" },
+                    `operational-financial-position-all-${selectedCurrency}-${fileStampSA()}.xlsx`, current)
+                    .then(downloaded => { if (downloaded === false && exportGeneration.current === generation) setExportError("أُلغي التصدير عند مغادرة الصفحة أو تغير بياناتها."); })
+                    .catch(() => { if (current()) setExportError("تعذر تصدير التقرير الكامل. أعد المحاولة."); })
+                    .finally(() => { finishActivity(); if (exportGeneration.current === generation) setExporting(false); });
             },
             onError: error => {
                 finishActivity();
@@ -624,7 +623,8 @@ export default function OperationalFinancialPosition() {
     const pendingForecast = report?.forecast_pending === true;
     const forecastMessage = forecastState.error || (refreshing ? "تبقى توقعات اللقطة السابقة غير مكتملة أثناء تحديث المصادر." : "جارٍ قراءة توقعات نفس لقطة الأرصدة؛ يمكنك متابعة الملخص الحالي.");
 
-    return <main className="ofp-page" dir="rtl" aria-label="تقرير المركز المالي التشغيلي" data-testid="operational-financial-position">
+    return <main className="ofp-page mz-finance-tool" dir="rtl" aria-label="تقرير المركز المالي التشغيلي" data-testid="operational-financial-position">
+        <OperationalToolBack/>
         <div className="ofp-toolbar ofp-no-print"><div><span className="ofp-eyebrow">الأرصدة التشغيلية / التقارير</span><h1>المركز المالي التشغيلي</h1><p className="ofp-navigation-note">تقرأ الصفحات آخر احتساب محفوظ. تحديث المصادر إجراء واحد مشترك لكل الأقسام.</p></div><div className="ofp-actions">
             <button type="button" className="ofp-button" onClick={refresh} disabled={loading || refreshing || authMissing || authLoading}><ArrowClockwise size={19} aria-hidden="true" />{refreshing ? "جارٍ تحديث المصادر…" : "تحديث المصادر والأرصدة"}</button>
             <button type="button" className="ofp-button" onClick={printReport} disabled={!data}><Printer size={20} aria-hidden="true" />طباعة هذه الصفحة</button>
@@ -670,7 +670,7 @@ export default function OperationalFinancialPosition() {
                 {data && user?.role === "owner" && view === "suppliers" && <NativePurchaseReview key={scope + report.session_scope} sessionScope={report.session_scope} onRefresh={refresh} />}
                 {data && user?.role === "owner" && view === "other" && <CustomerWalletBalance key={"wallet" + scope + report.session_scope} sessionScope={report.session_scope} onSaved={refresh} />}
                 {data && user?.role === "owner" && ["couriers", "drivers"].includes(view) && <div className="ofp-owner-controls ofp-no-print">
-                    {view === "couriers" && <a className="ofp-button" href="/shipping-settings-v2">مراجعة تعرفة شركات الشحن</a>}
+                    {view === "couriers" && <a className="ofp-button" href="/shipping-settings-v2?from=operational-tools">مراجعة تعرفة شركات الشحن</a>}
                     <HistoricalShippingFeeReview key={scope + report.session_scope + activeCurrency} orders={data.shipping_fee_review_orders} />
                     <CompletedShippingFeeReview key={`completed:${scope}:${report.session_scope}:${activeCurrency}`} sessionScope={report.session_scope} orders={data.shipping_fee_review_orders} />
                 </div>}

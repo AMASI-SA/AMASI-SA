@@ -6,7 +6,7 @@
  * unified ledger.
  */
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import api from "../lib/api";
 import CourierTariffApproval from "./operational/CourierTariffApproval";
@@ -16,6 +16,9 @@ const fmt = (v) => Number(v || 0).toLocaleString("en-US", { minimumFractionDigit
 
 
 export default function ShippingCompanySettings({ mezan2 = false }) {
+    const location = useLocation();
+    const financeTools = mezan2 && new URLSearchParams(location.search).get("from") === "operational-tools";
+    const backPath = financeTools ? "/operational-balances?view=tools" : mezan2 ? "/operational-balances" : "/shipping/ledger";
     const [settings, setSettings] = useState(null);
     const [busy, setBusy] = useState(false);
     const [settingsRevision, setSettingsRevision] = useState(0);
@@ -157,8 +160,8 @@ export default function ShippingCompanySettings({ mezan2 = false }) {
         <div className="p-6 max-w-6xl mx-auto space-y-5" dir="rtl" data-testid="shipping-settings-page">
             <header className="flex items-center justify-between gap-2 flex-wrap">
                 <h1 className="text-2xl font-extrabold text-slate-900">⚙️ إعدادات شركات الشحن</h1>
-                <Link to={mezan2 ? "/operational-balances" : "/shipping/ledger"} className="px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-bold rounded-lg" data-testid="settings-back">
-                    ← الأرصدة
+                <Link to={backPath} className="px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-bold rounded-lg" data-testid="settings-back">
+                    {financeTools ? "العمليات والكشوف" : "← الأرصدة"}
                 </Link>
             </header>
             {mezan2 && <p role="status" className="rounded-xl bg-amber-50 p-3 text-sm">هذه الإعدادات مشتركة مع تقارير الأرباح الحالية؛ تعديل الأسعار يؤثر على الحسابات التي تعتمد عليها. لا تُنقل أرصدة أو حركات قديمة عند فتح الصفحة. أرصدة مندوبي المتجر تُدار من مسار المناديب، وليست ضمن شركات الشحن الخارجية.</p>}

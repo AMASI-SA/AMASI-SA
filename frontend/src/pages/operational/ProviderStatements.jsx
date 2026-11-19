@@ -13,6 +13,7 @@ import {
 } from "./providerStatementPresentation";
 import "./operational.css";
 import "./providerStatements.css";
+import OperationalToolBack from './OperationalToolBack';
 
 const date = value => typeof value === "string" && value && Number.isFinite(Date.parse(value)) ? formatRiyadhDateTime(value) : "غير متاح";
 const accepts = row => Boolean(statementConfirmationAction(row));
@@ -76,8 +77,8 @@ function AverageSummary({ value, provider, currency, compact = false }) {
 }
 
 function Frame({ children }) {
-    return <main className="op-page op-statements" dir="rtl" data-testid="provider-statements-page">
-        <header><span className="op-eyebrow">ميزان 2 · الأرصدة التشغيلية</span><h1>مطابقة كشوف منصات الدفع</h1>
+    return <main className="op-page op-statements mz-finance-tool" dir="rtl" data-testid="provider-statements-page">
+        <OperationalToolBack/><header><span className="op-eyebrow">ميزان 2 · الأرصدة التشغيلية</span><h1>مطابقة كشوف منصات الدفع</h1>
             <p>ارفع كشف تابي أو تمارا أو سلة. نتعرف على المنصة تلقائيًا ونطابق عمليات الكشف مع سجلات الدفع والرد المحفوظة.</p>
             <a className="op-statement-link" href="/operational-balances/financial-position?view=providers">عرض أرصدة منصات الدفع</a>
         </header>{children}
@@ -95,6 +96,14 @@ export default function ProviderStatements() {
 }
 
 function StatementWorkspace() {
+    const focusSection = useRef(window.location.hash.slice(1));
+    function revealAnchor(node) {
+        if (node && node.id === focusSection.current) {
+            focusSection.current = '';
+            node.focus({ preventScroll: true });
+            node.scrollIntoView?.({ block: 'start' });
+        }
+    }
     const [history, setHistory] = useState(null), [detail, setDetail] = useState(null);
     const [savedFilesOpen, setSavedFilesOpen] = useState(false), [savedFiles, setSavedFiles] = useState(null);
     const [selectedSavedId, setSelectedSavedId] = useState("");
@@ -356,7 +365,7 @@ function StatementWorkspace() {
                             <button type="submit" className="op-primary" disabled={!canUseSaved || !selectedSavedId}>استخدام الكشف المختار ومطابقته</button>
                         </form>}
                 </section>}
-                <form onSubmit={upload} className="op-statement-upload" data-testid="provider-statement-upload">
+                <form id="upload" tabIndex={-1} ref={revealAnchor} onSubmit={upload} className="op-statement-upload" data-testid="provider-statement-upload">
                     <h2>رفع كشف للمطابقة</h2>
                     <label className="op-field">ملف كشف المنصة
                         <input key={fileKey} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -426,7 +435,7 @@ function StatementWorkspace() {
                     </form>
                     <button type="button" onClick={() => read("review", detail.statement.id)} disabled={Boolean(busy) || !readable}>إعادة قراءة مطابقة هذا الكشف</button>
                 </section>}
-                <section className="op-statement-history" aria-label="الكشوف المحفوظة"><h2>الكشوف المحفوظة</h2>
+                <section id="history" tabIndex={-1} ref={revealAnchor} className="op-statement-history" aria-label="الكشوف المحفوظة"><h2>الكشوف المحفوظة</h2>
                     {history.has_more === true && <p className="op-muted">يعرض السجل أحدث {history.items.length} كشفًا. توجد كشوف أقدم محفوظة.</p>}
                     {!history.items.length ? <p className="op-muted">لم تُرفع كشوف في هذه الصفحة بعد.</p> : <PaginatedReportTable rows={history.items} label="الكشوف المحفوظة" resetKey={history.session_scope}>
                         {rows => <div className="op-table"><table><thead><tr><th>المنصة والكشف</th><th>وقت الرفع</th><th>العمليات</th><th>آخر نتيجة مطابقة</th><th>فتح</th></tr></thead>

@@ -19,10 +19,11 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from operational_balance_access import guard_access, load_access
 from operational_balance_service import active_gate, entity, fmt, money, report
-from operational_balance_sources import instant, rows
+from operational_balance_sources import instant
 from operational_balance_store import AUTHORIZATION_GUARD, audit, claim_movement, digest, fail, mutate, now, read, remember, replay
 from operational_payment_evidence import _amount, _instant, resolve_provider
 from operational_provider_transaction_evidence import load_transaction_rows, normalize_operational_payment
+from operational_read_runtime import read_source_cursor, source_read_is_owned
 from operational_visible_report_read import run_visible_report_read
 from salla_payment_collection import provider_order_page_balance, provider_order_page_current
 
@@ -294,14 +295,28 @@ async def refund_order(db, owner, number_text, *, stamp=None):
     """Financial evidence only; no product quantities or customer PII are read out."""
     stamp = stamp or now()
     number_text = _order_number(number_text)
-    matches = []
-    for source in await rows(db, owner, "unified_orders"):
-        raw = (source.get("raw_by_source") or {}).get("salla_direct")
-        if isinstance(raw, dict) and str(raw.get("reference_id") or raw.get("order_number") or "") == number_text:
-            matches.append((source, raw))
-    if len(matches) != 1:
+    number_values = [number_text]
+    if number_text.isascii() and number_text.isdecimal() and len(number_text) <= 19:
+        numeric = int(number_text)
+        if str(numeric) == number_text and numeric <= 2**63 - 1:
+            number_values.append(numeric)
+    reference_field = "raw_by_source.salla_direct.reference_id"
+    fallback_field = "raw_by_source.salla_direct.order_number"
+    selector = {"user_id": owner, "$or": [
+        {reference_field: {"$in": number_values}},
+        {reference_field: {"$in": [None, "", 0]}, fallback_field: {"$in": number_values}},
+    ]}
+    # Two matching documents already establish ambiguity. No unrelated order
+    # payload reaches Python when an employee opens a single refund.
+    projection = {"_id": 0, "raw_by_source.salla_direct.items": 0, "raw_by_source.salla_direct.customer": 0}
+    cursor = db["unified_orders"].find(selector, projection).limit(2)
+    matches = await read_source_cursor(cursor, 2) if source_read_is_owned() else await cursor.to_list(2)
+    if len(matches) != 1 or matches[0].get("user_id") != owner:
         fail("operational_refund_order_not_found", "الطلب غير متاح أو هويته غير مكتملة", 404)
-    source, raw = matches[0]
+    source = matches[0]
+    raw = (source.get("raw_by_source") or {}).get("salla_direct")
+    if not isinstance(raw, dict) or str(raw.get("reference_id") or raw.get("order_number") or "") != number_text:
+        fail("operational_refund_order_not_found", "الطلب غير متاح أو هويته غير مكتملة", 404)
     identity = str(raw.get("id") or "")
     amounts = raw.get("amounts") or {}
     total_value = amounts.get("total", raw.get("total")) if isinstance(amounts, dict) else None
@@ -600,6 +615,17 @@ async def reconcile_refund(db, owner, actor, case_id, payload, *, source="mezan2
         return await _decide(db, owner, action, payload, apply)
 
 
+def refund_history_page(state, policy, *, page, page_size, order_number=None):
+    cases = [case for case in state.get("customer_returns", [])
+             if case.get("case_type") == CASE_TYPE and (order_number is None or case.get("order_number") == order_number)
+             and _visible(policy, case)]
+    cases.sort(key=lambda case: (case["created_at"], case["id"]), reverse=True)
+    total_pages = max(1, ceil(len(cases) / page_size))
+    page = min(page, total_pages)
+    return {"items": [_case_dto(case, policy, state) for case in cases[(page - 1) * page_size:page * page_size]],
+            "page": page, "page_size": page_size, "total": len(cases), "total_pages": total_pages}
+
+
 def install_refund_routes(router, db, current_user, scope):
     async def load(user):
         actor, owner, source = await scope(db, user, "workspace")
@@ -622,7 +648,7 @@ def install_refund_routes(router, db, current_user, scope):
         return {"saved": True, "item": _case_dto(_find_case(state, case["id"], current), current, state)}
 
     @router.get("/workspace/refunds/order/{number}")
-    async def order_lookup(number: str, request: Request, user=Depends(current_user)):
+    async def order_lookup(number: str, request: Request, include_history: bool = False, user=Depends(current_user)):
         async def project():
             _, owner, _, policy = await load(user)
             order = await refund_order(db, owner, number)
@@ -637,23 +663,22 @@ def install_refund_routes(router, db, current_user, scope):
             result.update(capacity, methods=methods, banks=banks,
                           can_request=bool(methods) and money(capacity["available_amount"], zero=True) > 0
                               and policy.can_operation("customer.refund_request"))
+            if include_history:
+                result["history"] = refund_history_page(state, policy, page=1, page_size=8,
+                                                       order_number=order["order_number"])
             await recheck(user, owner, policy)
             return result
         return await run_visible_report_read(request, project)
 
     @router.get("/workspace/refunds")
     async def refund_list(request: Request, page: int = Query(default=1, ge=1),
-                          page_size: int = Query(default=5, ge=1, le=5), user=Depends(current_user)):
+                          page_size: int = Query(default=5, ge=1, le=8), order_number: str | None = Query(default=None, max_length=160),
+                          user=Depends(current_user)):
         async def project():
             _, owner, _, policy = await load(user)
             state = await read(db, owner)
-            cases = [case for case in state.get("customer_returns", [])
-                     if case.get("case_type") == CASE_TYPE and _visible(policy, case)]
-            cases.sort(key=lambda case: (case["created_at"], case["id"]), reverse=True)
-            total_pages = max(1, ceil(len(cases) / page_size))
-            current_page = min(page, total_pages)
-            result = {"items": [_case_dto(case, policy, state) for case in cases[(current_page - 1) * page_size:current_page * page_size]],
-                      "page": current_page, "page_size": page_size, "total": len(cases), "total_pages": total_pages}
+            result = refund_history_page(state, policy, page=page, page_size=page_size,
+                                         order_number=_order_number(order_number) if order_number else None)
             await recheck(user, owner, policy)
             return result
         return await run_visible_report_read(request, project)

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { Amount, Icon } from './ApprovedFinanceUI';
 import { simpleBalancesApi as api } from './simpleBalancesApi';
 import { useBalanceRead } from './simpleBalancesHooks';
 import { usePendingBalanceCommand } from './simpleBalancesPending';
@@ -37,7 +38,7 @@ function MutationStatus({ mutation }) {
     {mutation.command && <p className="sb-notice" role="status">هناك عملية بانتظار تأكيد النتيجة. إعادة المحاولة تستخدم المرجع نفسه.</p>}</>;
 }
 
-export function RefundRequestForm({ context, order, onSaved, onRecoveryRetired }) {
+export function RefundRequestForm({ context, order, onSaved, onRecoveryRetired, approved = false, showForm = true }) {
   const operations = permittedOperations(context);
   const permitted = context.status === 'active' && operations.has('customer.refund_request');
   const allowed = permitted && order.can_request === true;
@@ -72,6 +73,27 @@ export function RefundRequestForm({ context, order, onSaved, onRecoveryRetired }
       return { order_number: order.order_number, amount, method: form.method, reason: form.reason.trim(),
         ...(form.method === 'bank' ? { bank_id: form.bank_id } : {}), ...(form.reference.trim() ? { reference: form.reference.trim() } : {}) };
     });
+  }
+  if (approved) {
+    const original = order.methods.find(item => item.id === 'original');
+    return <><section className="panel rf-block"><div className="between rf-head"><h2>طلب <bdi>#{order.order_number}</bdi></h2>
+      {original && <span className="rf-tag"><Icon name="credit-card"/>طريقة الدفع الأصلية · {original.label}</span>}</div>
+      <div className="rf-metrics">{[['دفع العميل', order.paid_amount], ['سبق إرجاعه', order.refunded_amount], ['بانتظار الرد', order.reserved_amount], ['تقدر ترجع', order.available_amount]].map(([label, value], index) =>
+        <div key={label} className={'metric' + (index === 3 ? ' accent' : '')}><small>{label}</small><strong><Amount value={value} currency={order.currency}/></strong></div>)}</div>
+    </section>{showForm && <><MutationStatus mutation={mutation} />
+      {(allowed && canRequestAmount || mutation.command) ? <form className="panel rf-block" onSubmit={submit}>
+        <div className="between rf-head"><h2>تفاصيل الإرجاع</h2></div><div className="fields">
+        <fieldset className="rf-mode"><legend>كم تبغى ترجع؟</legend><div className="tabset">
+          <button className={mode === 'partial' ? 'on' : ''} type="button" aria-pressed={mode === 'partial'} disabled={disabled} onClick={() => setMode('partial')}>جزء من المبلغ</button>
+          <button className={mode === 'full' ? 'on' : ''} type="button" aria-pressed={mode === 'full'} disabled={disabled} onClick={() => setMode('full')}>كامل المتاح</button></div></fieldset>
+        <label className="field"><span>المبلغ ({unit(order.currency)})</span><input inputMode="decimal" placeholder="0.00" value={mode === 'full' ? order.available_amount : form.amount} readOnly={mode === 'full'} disabled={disabled} onChange={e => choose({ amount: e.target.value })} required /></label>
+        <label className="field"><span>كيف بترجع المبلغ؟</span><select value={form.method} required disabled={disabled} onChange={e => choose({ method: e.target.value, bank_id: '' })}><option value="">اختر طريقة الإرجاع</option>{order.methods.map(item => <option key={item.id} value={item.id}>{item.id === 'bank' ? 'تحويل من بنك المؤسسة' : 'عن طريق ' + item.label}</option>)}</select></label>
+        {form.method === 'bank' && <label className="field"><span>البنك الذي بيخرج منه المبلغ</span><select value={form.bank_id} required disabled={disabled} onChange={e => choose({ bank_id: e.target.value })}><option value="">اختر بنك المؤسسة</option>{order.banks.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></label>}
+        <label className="field"><span>سبب الإرجاع</span><input required minLength="3" maxLength="1000" value={form.reason} disabled={disabled} onChange={e => choose({ reason: e.target.value })} placeholder="مثلاً فرق سعر التغليف" /></label>
+        <label className="field"><span>مرجع العملية (اختياري)</span><input maxLength="160" value={form.reference} disabled={disabled} onChange={e => choose({ reference: e.target.value })} /></label>
+        </div><div className="rf-foot"><span className="rf-quiet"><Icon name="clock-3"/> الحفظ يحجز المبلغ حتى توثيق ردّه.</span>
+          <button className="button primary" type="submit" disabled={mutation.busy || mutation.blocked || mutation.recovering || !(mutation.command ? permitted : allowed)}>{mutation.busy ? 'جارٍ الحفظ…' : mutation.command ? 'إعادة محاولة العملية نفسها' : 'حفظ طلب الإرجاع'}</button>
+        </div></form> : <p className="note">{!canRequestAmount ? 'ما فيه مبلغ متاح لإرجاع جديد.' : 'إنشاء طلب إرجاع غير متاح ضمن صلاحياتك الحالية.'}</p>}</>}</>;
   }
   return <section className="sb-refund-create"><div className="sb-title"><h2>طلب {order.order_number}</h2><p>الاسترجاع من المبلغ المحصّل المؤكد</p></div>
     <dl className="sb-order-totals">{[['المدفوع المؤكد', order.paid_amount], ['سبق رده', order.refunded_amount], ['بانتظار الرد', order.reserved_amount], ['المتاح للاسترجاع', order.available_amount]].map(([label, value]) => <div key={label}><dt>{label}</dt><dd><bdi>{money(value)}</bdi> {unit(order.currency)}</dd></div>)}</dl>

@@ -5,6 +5,7 @@ import { simpleBalancesApi as api, simpleBalanceError } from './simpleBalancesAp
 import { authIdentity, useBalanceRead } from './simpleBalancesHooks';
 import { resourceKey, resourceLabels } from './simpleBalancesModel';
 import './simpleBalances.css';
+import './operationalToolTheme.css';
 
 const operationLabels = {
   employee: 'الموظفون', supplier: 'الموردون', external: 'الجهات الخارجية', accounts: 'الحسابات',
@@ -164,7 +165,7 @@ export default function SimpleBalanceAccess() {
     return { catalog, users: users.items.filter(item => item.role !== 'owner' && item.id !== auth.user.id) };
   }, identity, owner && !auth?.loading);
   const user = read.data?.users.find(item => item.id === selectedId);
-  return <main className="sb-workspace sb-access-page" dir="rtl"><header className="sb-header"><div><span>ميزان · إدارة الحساب</span><h1>صلاحيات الموظفين</h1></div><Link className="sb-header-link" to="/operational-balances/daily-movements">العودة للأرصدة</Link></header><div className="sb-content">
+  return <main className="sb-workspace sb-access-page mz-finance-tool" dir="rtl"><header className="sb-header"><div><span>ميزان · إدارة الحساب</span><h1>صلاحيات الموظفين</h1></div><Link className="sb-header-link" to="/operational-balances?view=tools">العمليات والكشوف</Link></header><div className="sb-content">
     {!owner ? <p role="alert" className="sb-notice sb-error">إدارة صلاحيات الأرصدة متاحة لمالك الحساب.</p>
       : <><p>حدد الموظف، ثم الحسابات التي يتعامل معها والعمليات المسموحة له. الحفظ يتم بعد مراجعة اختياراتك.</p>
         {read.error && <><p role="alert" className="sb-notice sb-error">{read.error}</p><button type="button" className="sb-secondary" onClick={read.reload}>إعادة التحميل</button></>}

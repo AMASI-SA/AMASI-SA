@@ -1,5 +1,5 @@
 import { formatRiyadhDateTime } from "../../lib/dates";
-import { formatPositionCount, formatPositionMoney, positionText, readableMessages, UNAVAILABLE } from "./financialPositionPresentation";
+import { formatPositionCount, formatPositionMoney, positionText, readableMessages, UNAVAILABLE } from "./financialPositionDisplay";
 import { isStatementAverage, statementEstimatedAmount, statementRate } from "./providerStatementPresentation";
 
 const STATUS_LABELS = {

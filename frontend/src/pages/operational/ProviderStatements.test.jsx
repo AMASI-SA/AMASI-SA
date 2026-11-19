@@ -623,3 +623,17 @@ test.each([{ active: false }, { permissions: { upload: false } }])("saved-file r
     expect(host.textContent).toContain("SAVED-TABBY"); expect(host.querySelector('[aria-label="اختيار الكشف المحفوظ saved-tabby.xlsx"]').disabled).toBe(true);
     await submit('[data-testid="provider-saved-file-use"]'); expect(api.useSavedProviderStatement).not.toHaveBeenCalled();
 });
+
+test.each(['upload', 'history'])('directory bookmark opens the %s section after the original single read', async section => {
+    const previous = window.location.href;
+    try {
+        window.history.replaceState(null, '', '/operational-balances/provider-statements#' + section);
+        await render();
+        expect(document.activeElement.id).toBe(section);
+        expect(api.providerStatements).toHaveBeenCalledTimes(1);
+        expect(api.providerStatementReview).not.toHaveBeenCalled();
+        expect(api.providerStatementSavedFiles).not.toHaveBeenCalled();
+        expect(api.uploadProviderStatement).not.toHaveBeenCalled();
+        expect(api.confirmProviderStatement).not.toHaveBeenCalled();
+    } finally { window.history.replaceState(null, '', previous); }
+});
