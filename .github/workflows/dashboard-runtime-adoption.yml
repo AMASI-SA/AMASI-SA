@@ -14,6 +14,13 @@ on:
       - 'backend/orders_db.py'
       - 'backend/order_currency.py'
       - 'backend/order_cost_authority.py'
+      - 'backend/report_option_recovery.py'
+      - 'backend/report_option_identity.py'
+      - 'backend/tests/test_report_raw_option_recovery.py'
+      - 'backend/tests/test_historical_service_applicability.py'
+      - 'backend/supplier_invoice_reporting_costs.py'
+      - 'backend/tests/test_supplier_invoice_reporting_costs.py'
+      - 'backend/tests/test_supplier_invoice_report_integration.py'
       - 'backend/server.py'
       - 'backend/tests/*dashboard_runtime*'
       - '.github/workflows/dashboard-runtime-adoption.yml'
@@ -125,6 +132,7 @@ jobs:
           tests/test_dashboard_runtime_google_read_contract.py
           tests/test_dashboard_runtime_reducers.py
           tests/test_dashboard_v2_product_cost.py
+          tests/test_historical_service_applicability.py
           tests/test_report_option_identity.py
           tests/test_report_raw_option_recovery.py
           tests/test_dashboard_v2_arabic_status_normalization.py

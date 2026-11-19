@@ -512,7 +512,16 @@ def _piece_upsert_update(
     }
 
 
+async def ensure_piece_order_cost_index(db: Any) -> None:
+    """Install the report selector without running operational uniqueness DDL."""
+    await db[PIECES].create_index(
+        [("user_id", ASCENDING), ("order_number", ASCENDING)],
+        name="ix_preparation_piece_order_cost_v1",
+    )
+
+
 async def ensure_piece_operation_indexes(db: Any) -> None:
+    await ensure_piece_order_cost_index(db)
     await db[PIECES].create_index(
         [
             ("user_id", ASCENDING),
@@ -4938,6 +4947,7 @@ __all__ = [
     "build_duration_history",
     "build_piece_documents",
     "ensure_piece_operation_indexes",
+    "ensure_piece_order_cost_index",
     "inherit_required_services",
     "validate_materialized_piece_count",
     "install_preparation_piece_operations",

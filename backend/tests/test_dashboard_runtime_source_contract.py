@@ -151,11 +151,16 @@ class SourceContract(unittest.TestCase):
                     # MZ2 bundle-cost correction intentionally reads immutable
                     # order authority in one batch before the existing reducer.
                     # PR1795 also adds audited unit attribution; financial amounts stay unchanged.
-                    # Keep exact reviewed source and cooperative scheduling
-                    # parity; behavioral acceptance is in the bundle-cost suite.
+                    # The owner-requested received-unit change adds the shared
+                    # invoice resolver after historical authority. Exact empty
+                    # receipt reads are audited by the native runtime gate;
+                    # synthetic integration proves all three report surfaces.
+                    # Positive frozen service scope is re-priced only after
+                    # exact line-fingerprint verification; no extra reads.
+                    # Keep cooperative scheduling parity and all fixed budgets.
                     reviewed = ast.get_source_segment(current, current_function)
                     self.assertEqual(hashlib.sha256(reviewed.encode('utf8')).hexdigest(),
-                        '9328bb53c707ed88b66b7b72c23ec466039215e715e8d1c0ec06c316f9040daa')
+                        '9f4a48249a8fe861da0af2b4f5f56ca2132d2113c5566ed7ae479663a0d75423')
                     before = current_function
                 else:
                     self.assertEqual(ast.dump(before), ast.dump(current_function))
@@ -226,6 +231,14 @@ class SourceContract(unittest.TestCase):
                     '6f41bf4e48896bcea839d16369cbb85bb1be5e33467c702379b2e926bbfe9be0',
                     # PR1797: owner-requested parent summaries; per-item cost authority unchanged.
                     '031d9a792d3a6d6f9d29af4401ea2d3f6d888c7641f53a7cd50418df591a3bd3',
+                    # Reviewed received-unit invoice resolver and mixed Salla
+                    # provenance; same sales cohort and preserved bundle rules.
+                    '9dbb52654bb908c16bddabf03b946d6bea7cafff2a4aa39bc72a43d8e6d08642',
+                    # Exact original-service applicability recovery, using
+                    # current prices and the same loaded historical authority.
+                    'df7866a261074d8ad9f14f8992e010fe4766b14db51c5091f8eb08ac784b4859',
+                    # Explicit purchase selections exclude unpurchased catalog extras.
+                    'b572e675d60a8206388cab02dd08d236df4a1c337d88c9e97c2b509e417d957a',
                 })
             else:
                 self.assertEqual(before.replace(b'\r\n', b'\n'), current)

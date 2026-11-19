@@ -61,6 +61,66 @@ def catalog_options(product):
     return result
 
 
+def recorded_question_keys(options):
+    """Describe an explicit Salla list without storing customer answers.
+
+    A checkout-row id alone cannot identify a catalog question. A malformed
+    row may represent any question, so the list cannot establish omissions.
+    """
+    if not isinstance(options, list):
+        return None
+    keys = set()
+    for entry in options:
+        if not isinstance(entry, dict):
+            return None
+        row = entry.get("raw") if isinstance(entry.get("raw"), dict) else entry
+        nested = row.get("option") if isinstance(row.get("option"), dict) else {}
+        strong = {_id(row.get("option_id")), _id(row.get("product_option_id")), _id(nested.get("id"))} - {""}
+        name = row.get("option_name") or row.get("field_name") or row.get("name") or nested.get("name")
+        label = _label(name) if isinstance(name, str) else ""
+        if len(strong) > 1 or not (strong or label):
+            return None
+        keys.update(("id", value) for value in strong)
+        if _id(row.get("id")):
+            keys.add(("id", _id(row["id"])))
+        if label:
+            keys.add(("label", label))
+            if not strong:
+                keys.add(("label_only", label))
+    return keys
+
+
+def omit_unordered_report_options(row, product, bindings, decisions, provider_keys):
+    """A matched purchase line can exclude later catalog extras from its estimate."""
+    normalized = row.get("options_normalized")
+    if normalized is not None and not isinstance(normalized, dict):
+        return
+    local_keys = recorded_question_keys(row.get("options_raw") or [])
+    if local_keys is None:
+        return
+    fields = row.get("custom_fields") or []
+    for field in fields:
+        nested = field.get("field") if isinstance(field.get("field"), dict) else {}
+        for name in (field.get("name"), field.get("field_name"), nested.get("name")):
+            if isinstance(name, str):
+                local_keys.add(("label", _label(name)))
+    selected = provider_keys | local_keys | {("label", _label(key)) for key in normalized or {}}
+    catalog = catalog_options(product or {})
+    known_labels = {label for question in catalog.values() for label in question["labels"]}
+    if any(kind == "label_only" and label not in known_labels for kind, label in selected):
+        return
+    for index, binding in enumerate(bindings):
+        if decisions[index] is not None:
+            continue
+        oid, vid = _id(binding.get("option_id")), _id(binding.get("value_id"))
+        question = catalog.get(oid)
+        if not question or oid.startswith("field:") or vid not in question["values"]:
+            continue
+        labels = question["labels"] | {_label(binding.get("option_name"))}
+        if ("id", oid) not in selected and not any(("label", label) in selected for label in labels if label):
+            decisions[index] = False
+
+
 def _option_visibility(oid, catalog, selected, present, invalid, active=frozenset()):
     """Prove a saved Salla condition from known choices, never from absence."""
     if oid in active or len(active) >= 100 or oid not in catalog:
