@@ -105,7 +105,7 @@ async def read_source_cursor(cursor, count):
         raise
 
 
-async def load_collections(db, owner, names, *, reader, concurrency=4, per_read_timeout=15):
+async def load_collections(db, owner, names, *, reader, concurrency=4, per_read_timeout=15, on_source_error=None):
     names = tuple(names)
     if len(names) != len(set(names)):
         raise ValueError('operational_source_duplicate_collection')
@@ -156,7 +156,18 @@ async def load_collections(db, owner, names, *, reader, concurrency=4, per_read_
                     code = 'operational_source_read_invalid'
                 raise SourceReadError(code, name) from None
 
-    tasks = [asyncio.create_task(load(name)) for name in names]
+    async def collect(name):
+        try:
+            return await load(name)
+        except SourceReadError as error:
+            if on_source_error is None:
+                raise
+            # Independent report components may finish within the remaining
+            # budget. Financial source collections still fail as a group.
+            on_source_error(name, error)
+            return name, None
+
+    tasks = [asyncio.create_task(collect(name)) for name in names]
     try:
         return dict(await asyncio.gather(*tasks))
     finally:

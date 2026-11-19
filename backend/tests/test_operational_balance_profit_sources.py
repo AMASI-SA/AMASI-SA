@@ -199,3 +199,60 @@ def test_cancelling_page_request_cleans_all_profit_read_tasks(monkeypatch):
         assert cleaned.is_set()
         assert not [other for other in asyncio.all_tasks() if other is not asyncio.current_task()]
     asyncio.run(scenario())
+
+
+def test_one_reader_timing_out_does_not_cancel_independent_inflight_product_cost(monkeypatch):
+    async def scenario():
+        product_started = asyncio.Event()
+
+        async def context(*args):
+            return {"orders": [], "settings": {}, "coverage": {"orders": 1, "complete": True}}
+
+        async def products():
+            product_started.set()
+            await asyncio.sleep(.03)
+            return values()["products"]
+
+        async def timed_out_order_costs():
+            await product_started.wait()
+            raise asyncio.TimeoutError
+
+        monkeypatch.setattr(source, "_load_context", context)
+        monkeypatch.setattr(source, "_component_readers", lambda *_: {
+            "products": products, "order_costs": timed_out_order_costs})
+        result = await source.load_profit_snapshot(object(), "owner",
+            {"owner_id": "owner", "started_at": START}, as_of=END, budget_seconds=2)
+        assert result["components"]["cost_of_goods"]["known_subtotal"] == "20.00"
+        assert result["components"]["cost_of_goods"]["amount"] is None
+        assert result["quality"]["source_errors"] == {"order_costs": "operational_source_read_timeout"}
+
+    asyncio.run(scenario())
+
+
+def test_period_fee_reader_preserves_single_order_fees_and_separates_merchant_settings():
+    from marketing_report_costs import period_fee_estimator
+    from order_profitability_summary import single_order_costs
+
+    settings = {"payment_methods": [
+        {"name": "مدى", "commission_percent": 1.45, "fixed_fee": 1, "vat_percent": 15},
+        {"name": "تابي", "commission_percent": 6.99, "fixed_fee": 1.5, "vat_percent": 15}]}
+    estimate = period_fee_estimator(settings["payment_methods"])
+    for method in ["مدى", "mada", "تابي", "", "غير معروف"]:
+        for amount in [0, -22.75, 118.45, 118.455]:
+            row = {"order_number": "1", "currency": "SAR", "total_amount": amount, "payment_method": method}
+            assert single_order_costs(row, settings, {}, estimate_fee=estimate) == single_order_costs(row, settings, {})
+    for extra in [{"payment_fee_status": "actual", "actual_payment_fee": 7.70},
+                  {"payment_fee_status": "actual"}, {"currency": "KWD"}]:
+        row = {"total_amount": 120, "currency": "SAR", "payment_method": "مدى", **extra}
+        assert single_order_costs(row, settings, {}, estimate_fee=estimate) == single_order_costs(row, settings, {})
+    assert period_fee_estimator([])("مدى", 118.45) is None
+
+
+def test_saved_incomplete_profit_explains_reader_failure_without_changing_posted_amounts():
+    context = {"coverage": {"orders": 1, "complete": True}}
+    errors = {"products": "operational_profit_source_unavailable", "order_costs": "operational_source_read_timeout"}
+    snapshot = source.assemble_snapshot("owner", _instant(START), _instant(END), context, {}, errors)
+    state = {"owner_id": "owner", "started_at": START, "engine": {"as_of": END, "profit_snapshot": snapshot}}
+    rows = {r["id"]: r for r in project_profit(state, "SAR")["rows"]}
+    assert rows["cost_of_goods"]["amount"] is None and "لم ترجع قراءة" in rows["cost_of_goods"]["reason"]
+    assert rows["shipping"]["known_subtotal"] is None and "مهلة" in rows["shipping"]["reason"]

@@ -20,9 +20,9 @@ def money_sum(values):
     return float(sum((Decimal(str(value)) for value in values), Decimal(0)).quantize(Decimal("0.01")))
 
 
-def single_order_costs(order, settings, configs):
+def single_order_costs(order, settings, configs, *, estimate_fee=None):
     """Merchant settings are SAR; a provider fallback remains in order currency."""
-    costs = order_costs(order, settings, configs)
+    costs = order_costs(order, settings, configs, estimate_fee=estimate_fee)
     company = str(order.get("shipping_company") or "").strip().strip("'\"")
     config = configs.get(company) or configs.get(company.lower()) or {}
     configured = config.get("cost_per_order")

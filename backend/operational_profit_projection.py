@@ -41,6 +41,19 @@ def valid_snapshot(state):
     return snapshot
 
 
+def _read_issue(snapshot, identity):
+    readers = {"cost_of_goods": "products", "shipping": "order_costs", "payment_fees": "order_costs"}
+    if not snapshot or identity not in readers:
+        return None
+    errors = (snapshot.get("quality") or {}).get("source_errors") or {}
+    code = errors.get(readers[identity]) or errors.get("context")
+    if code == "operational_source_read_timeout":
+        return "انتهت مهلة قراءة هذا المصدر عند احتساب الفترة."
+    if code == "operational_profit_source_unavailable":
+        return "لم ترجع قراءة هذا المصدر بنتيجة عند احتساب الفترة."
+    return None
+
+
 def project_profit(state, currency):
     snapshot = valid_snapshot(state) if currency == "SAR" else None
     components = snapshot.get("components", {}) if snapshot else {}
@@ -58,7 +71,7 @@ def project_profit(state, currency):
         amounts[identity] = amount if complete else None
         rows.append({"id": identity, "label": label, "amount": money(amount) if complete else None,
             "known_subtotal": money(known), "complete": complete,
-            "source": source.get("source"), "reason": source.get("reason") or (
+            "source": source.get("source"), "reason": (None if complete else _read_issue(snapshot, identity)) or source.get("reason") or (
                 "المصدر المحفوظ يخص مجموعة الطلبات والفترة المعروضة." if complete else "مصدر هذا البند لنفس الفترة غير مكتمل؛ لا يفترض صفرًا."),
             "coverage": deepcopy(source.get("coverage") or {})})
     if not snapshot:
