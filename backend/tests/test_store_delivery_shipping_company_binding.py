@@ -57,3 +57,15 @@ def test_strict_company_labels_do_not_collapse_different_local_couriers():
         "shipping_company": "مندوب الرياض",
         "salla_shipping_current": {"company_code": "unknown"},
     }) == ""
+
+
+def test_raw_salla_carrier_on_orders_without_current_projection():
+    from store_courier_domain import store_courier_assignment_blocker
+    order = {"order_status_slug": "completed", "raw_by_source": {"salla_direct": {
+        "shipping": {"company_name": "مندوب الرياض"}}}}
+    assert store_courier_assignment_blocker(order) is None
+    order["shipping_company"] = "مندوب الرياض"
+    order["raw_by_source"]["salla_direct"]["shipping"]["company_name"] = "أرامكس"
+    assert store_courier_assignment_blocker(order) == "salla_store_courier_required"
+    order["salla_shipping_current"] = {"company_name": "مندوب المتجر"}
+    assert store_courier_assignment_blocker(order) is None

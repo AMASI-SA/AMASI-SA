@@ -22,7 +22,7 @@ async def assignment_count(db):
     return await db[ASSIGNMENTS].count_documents({})
 
 
-def setup(monkeypatch, *, city="الرياض", shipping_company="مندوب الرياض", stage="completed", existing=None, provider_fails=False):
+def setup(monkeypatch, *, city="الرياض", shipping_company="مندوب الرياض", stage="completed", status="completed", existing=None, provider_fails=False):
     mongo_uri = os.environ.get("MZ2_TEST_MONGO_URI")
     if mongo_uri:
         from motor.motor_asyncio import AsyncIOMotorClient
@@ -46,7 +46,7 @@ def setup(monkeypatch, *, city="الرياض", shipping_company="مندوب ال
         monkeypatch.setattr(collection_type, "find_one_and_update", find_and_update)
     async def seed():
         await db[STORE_DRIVERS].insert_one(dict(DRIVER))
-        await db[ORDERS].insert_one({"user_id": "merchant", "order_id": "salla-1", "order_number": "101", "shipping_barcode": "LABEL-1", "shipping_city": city, "shipping_company": shipping_company, "outstanding_amount": 0})
+        await db[ORDERS].insert_one({"user_id": "merchant", "order_id": "salla-1", "order_number": "101", "shipping_barcode": "LABEL-1", "shipping_city": city, "order_status_slug": status, "shipping_company": shipping_company, "outstanding_amount": 0})
         await db[WORKFLOWS].insert_one({"user_id": "merchant", "order_number": "101", "carrier_label_type": "store_courier", "carrier_label_ready": True, "stage": stage, "assembly_status": stage})
         if existing:
             await db[ASSIGNMENTS].insert_one({"user_id": "merchant", "id": "prior", "order_id": "salla-1", "order_number": "101", "active": True, "assigned_at": "2026-10-25T10:00:00+00:00", **existing})
@@ -109,7 +109,7 @@ def test_other_driver_is_reported_without_transfer_or_customer_data(monkeypatch)
     assert asyncio.run(assignment_count(db)) == 1
 
 
-@pytest.mark.parametrize("kwargs,code", [({"shipping_company": "مندوب جدة"}, "driver_shipping_company_mismatch"), ({"stage": "in_progress"}, "store_courier_order_not_completed")])
+@pytest.mark.parametrize("kwargs,code", [({"shipping_company": "أرامكس"}, "salla_store_courier_required"), ({"status": "in_progress"}, "salla_assignment_status_ineligible")])
 def test_not_eligible_has_no_assignment_or_provider_write(monkeypatch, kwargs, code):
     db, scan, calls = setup(monkeypatch, **kwargs)
     body = scan().json()
@@ -171,16 +171,14 @@ def test_unknown_shipment_has_no_effect(monkeypatch):
     assert asyncio.run(assignment_count(db)) == 0
 
 
-def test_missing_courier_label_snapshot_recovers_before_self_assignment(monkeypatch):
+def test_missing_courier_label_is_independent_of_self_assignment(monkeypatch):
     import fulfillment_carrier_label as labels
     db, scan, calls = setup(monkeypatch)
     async def remove_label_snapshot():
         await db[WORKFLOWS].update_one({}, {"$unset": {"carrier_label_type": "", "carrier_label_ready": ""}})
     asyncio.run(remove_label_snapshot())
     async def recover(db, *, user_id, order_number):
-        await db[WORKFLOWS].update_one({"user_id": user_id, "order_number": order_number},
-            {"$set": {"carrier_label_type": "store_courier", "carrier_label_ready": True}})
-        return True
+        raise AssertionError("assignment must not generate a label")
     monkeypatch.setattr(labels, "recover_store_courier_label_for_handover", recover)
     assert scan("101").json()["accepted"] is True
     assert calls == ["delivering"]
