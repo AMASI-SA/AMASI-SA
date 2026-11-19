@@ -146,8 +146,8 @@ test('notes do not restore a balance column when that permission is absent', asy
 test.each([
   ['employee', 'خالد', '120.00', 'له', 'positive'],
   ['employee', 'خالد', '-120.00', 'عليه', 'negative'],
-  ['bank', 'بنك الإنماء', '120.00', 'عليه', 'positive'],
-  ['bank', 'بنك الإنماء', '-120.00', 'له', 'negative'],
+  ['bank', 'بنك الإنماء', '120.00', 'له', 'positive'],
+  ['bank', 'بنك الإنماء', '-120.00', 'عليه', 'negative'],
 ])('closing %s balance %s uses the source sign and its correct side', async (kind, name, closing, side, sign) => {
   const account = { ...resource(), kind, name };
   const ctx = context(); ctx.resources = [account];
@@ -167,4 +167,26 @@ test('a successful print response with can_print false still cannot open printin
   api.statement.mockResolvedValueOnce(report({ can_print: false }));
   await click('طباعة');
   expect(window.print).not.toHaveBeenCalled(); expect(host.textContent).toContain('لا توجد صلاحية للطباعة');
+});
+
+test.each([
+  ['bank', 'for_party', '0.00', '120.00', ['—', '120']],
+  ['cash', 'for_us', '120.00', '0.00', ['120', '—']],
+])('a bank top-up prints its signed %s transfer leg in the same column as the on-screen statement', async (kind, side, credit, debit, cells) => {
+  const account = { ...resource(), kind, name: 'حساب تجريبي' };
+  const ctx = context(); ctx.resources = [account];
+  const totals = { for_party: side === 'for_party' ? debit : '0.00', for_us: side === 'for_us' ? credit : '0.00' };
+  const data = report({ resource: account, totals, items: [
+    { id: 'test-transfer', side, amount: '120.00', description: 'تعبئة المحفظة', balance_after: '200.00' },
+  ] });
+  api.statement.mockResolvedValue(data);
+  await render({ context: ctx, resource: account }); await click('عرض الكشف');
+  const renderedStatement = host.querySelector('.sb-statement-document');
+  expect([...renderedStatement.querySelectorAll('tbody td')].slice(1, 3).map(td => td.textContent)).toEqual(cells);
+  expect(renderedStatement.querySelector('.sb-statement-summary').textContent).toContain('إجمالي له' + Number(credit));
+  expect(renderedStatement.querySelector('.sb-statement-summary').textContent).toContain('إجمالي عليه' + Number(debit));
+  let printedSnapshot;
+  window.print.mockImplementation(() => { printedSnapshot = document.querySelector('.sb-print-root').cloneNode(true); });
+  await click('طباعة');
+  expect([...printedSnapshot.querySelectorAll('tbody td')].slice(1, 3).map(td => td.textContent)).toEqual(cells);
 });
