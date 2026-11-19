@@ -268,3 +268,32 @@ test('failed report can be retried manually without a polling timer', async () =
   expect(api.context).toHaveBeenCalledTimes(2); expect(api.reports).toHaveBeenCalledTimes(2);
   expect(host.textContent).toContain('123.45 SAR');
 });
+
+test.each([
+  ['salary-start', true, 'بداية الرواتب'], ['salary-start', false, null], ['openings', true, null],
+])('specialized link to %s honors permission %s before mounting reports', async (section, allowed, title) => {
+  const previous = window.location.href;
+  try {
+    window.history.replaceState(null, '', '/operational-balances?view=specialized&section=' + section);
+    api.context.mockResolvedValue({...context(), can_manage_salary_start: allowed});
+    await render();
+    expect(api.context).toHaveBeenCalledTimes(1);
+    expect(api.refreshBalances).not.toHaveBeenCalled();
+    expect(api.reports).not.toHaveBeenCalled();
+    if (title) expect(host.querySelector('button[aria-current="page"]').textContent).toBe(title);
+    else expect(host.querySelector('[role=alert]').textContent).toContain('غير متاح');
+  } finally { window.history.replaceState(null, '', previous); }
+});
+
+test('detailed Reports reached through the approved directory reads saved balances; source refresh remains manual', async () => {
+  const previous = window.location.href;
+  try {
+    window.history.replaceState(null, '', '/operational-balances?view=specialized&section=reports');
+    await render();
+    expect(api.reports).toHaveBeenCalledTimes(1); expect(api.refreshBalances).not.toHaveBeenCalled();
+    await click('تحديث الأرصدة');
+    expect(api.reports).toHaveBeenCalledTimes(2); expect(api.refreshBalances).toHaveBeenCalledTimes(1);
+    await advance(90000);
+    expect(api.refreshBalances).toHaveBeenCalledTimes(1);
+  } finally { window.history.replaceState(null, '', previous); }
+});

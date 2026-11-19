@@ -127,9 +127,10 @@ export default function Layout({ children }) {
         content = <ProductIntakeWorkspace accessMode={page.mode} canOpenCatalogue={pages.some((entry) => entry.id === "products.catalog")} />;
     } else if (page?.id === "products.warehouses") {
         content = <WarehouseHierarchyWorkspace accessMode={page.mode} />;
-    } else if (["products.inventory", "products.receiving", "products.components"].includes(page?.id)) {
+    } else if (["products.inventory", "products.receiving", "products.components", "finance.obligations", "suppliers.directory"].includes(page?.id)) {
         content = cloneElement(children, { accessMode: page.mode });
     }
+    if (page?.id === "fulfillment.handover" && new URLSearchParams(location.search).get("workspace") === "store-driver-handover") content = <StoreDriverHandover />;
     return <EmployeeWebLayout pages={pages}>{content}</EmployeeWebLayout>;
 }
 

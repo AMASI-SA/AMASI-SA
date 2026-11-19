@@ -1,4 +1,4 @@
-"""Visible owner-only weekly statement upload, read and explicit confirmation."""
+"""Scoped weekly statement upload, read and explicit confirmation."""
 from typing import Literal
 
 from fastapi import Depends, File, Form, Path, Query, Request, UploadFile
@@ -40,9 +40,9 @@ def attach_provider_statement_routes(router, db, current_user, scope, guarded):
     @router.get('/provider-statements/saved-files')
     async def statement_saved_files(request: Request, limit: int = Query(default=50, ge=1, le=100), user=Depends(current_user)):
         async def read_page():
-            actor, owner, _ = await scope(db, user, 'bank_manage')
+            actor, owner, _ = await scope(db, user, 'provider_statements')
             result = await saved_files(db, owner, actor['id'], limit=limit)
-            fresh, fresh_owner, _ = await scope(db, user, 'bank_manage')
+            fresh, fresh_owner, _ = await scope(db, user, 'provider_statements')
             if (fresh['id'], fresh_owner) != (actor['id'], owner):
                 fail('operational_actor_scope_changed', 'تغير الحساب؛ أعد فتح الصفحة', 403)
             return result
@@ -50,16 +50,16 @@ def attach_provider_statement_routes(router, db, current_user, scope, guarded):
 
     @router.post('/provider-statements/saved-files/{file_id}/use')
     async def statement_use_saved(payload: SavedStatementUse, file_id: str = Path(min_length=1, max_length=160),
-                                  user=Depends(guarded('bank_manage'))):
-        actor, owner, _ = await scope(db, user, 'bank_manage')
+                                  user=Depends(guarded('provider_statements'))):
+        actor, owner, _ = await scope(db, user, 'provider_statements')
         return await use_saved_file(db, owner, actor['id'], file_id, payload.model_dump())
 
     @router.get('/provider-statements')
     async def statement_history(request: Request, limit: int = Query(default=50, ge=1, le=100), user=Depends(current_user)):
         async def read_page():
-            actor, owner, _ = await scope(db, user, 'bank_manage')
+            actor, owner, _ = await scope(db, user, 'provider_statements')
             result = await history(db, owner, actor['id'], limit=limit)
-            fresh, fresh_owner, _ = await scope(db, user, 'bank_manage')
+            fresh, fresh_owner, _ = await scope(db, user, 'provider_statements')
             if (fresh['id'], fresh_owner) != (actor['id'], owner):
                 fail('operational_actor_scope_changed', 'تغير الحساب؛ أعد فتح الصفحة', 403)
             return result
@@ -71,9 +71,9 @@ def attach_provider_statement_routes(router, db, current_user, scope, guarded):
         request_id: str = Form(..., min_length=8, max_length=160),
         expected_session_scope: str = Form(..., pattern=r'^[a-f0-9]{64}$'),
         expected_started_at: str = Form(..., min_length=16, max_length=40),
-        user=Depends(guarded('bank_manage')),
+        user=Depends(guarded('provider_statements')),
     ):
-        actor, owner, _ = await scope(db, user, 'bank_manage')
+        actor, owner, _ = await scope(db, user, 'provider_statements')
         content = await read_safe_xlsx_upload(file, max_bytes=MAX_FILE_BYTES)
         return await upload(db, owner, actor['id'], content=content,
             filename=file.filename or 'statement.xlsx', request_id=request_id,
@@ -82,15 +82,15 @@ def attach_provider_statement_routes(router, db, current_user, scope, guarded):
     @router.get('/provider-statements/{statement_id}/review')
     async def statement_review(request: Request, statement_id: str, user=Depends(current_user)):
         async def read_page():
-            actor, owner, _ = await scope(db, user, 'bank_manage')
+            actor, owner, _ = await scope(db, user, 'provider_statements')
             result = await review(db, owner, actor['id'], statement_id)
-            fresh, fresh_owner, _ = await scope(db, user, 'bank_manage')
+            fresh, fresh_owner, _ = await scope(db, user, 'provider_statements')
             if (fresh['id'], fresh_owner) != (actor['id'], owner):
                 fail('operational_actor_scope_changed', 'تغير الحساب؛ أعد فتح الصفحة', 403)
             return result
         return await run_visible_report_read(request, read_page)
 
     @router.post('/provider-statements/{statement_id}/confirm')
-    async def statement_confirm(statement_id: str, payload: StatementConfirmation, user=Depends(guarded('bank_manage'))):
-        actor, owner, _ = await scope(db, user, 'bank_manage')
+    async def statement_confirm(statement_id: str, payload: StatementConfirmation, user=Depends(guarded('provider_statements'))):
+        actor, owner, _ = await scope(db, user, 'provider_statements')
         return await confirm(db, owner, actor['id'], statement_id, payload.model_dump())

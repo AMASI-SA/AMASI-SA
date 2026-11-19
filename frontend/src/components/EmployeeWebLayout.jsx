@@ -1,22 +1,22 @@
-import { Cube, Package, Receipt, SignOut } from "@phosphor-icons/react";
+import { Cube, Package, Receipt, SignOut, SquaresFour, House, Queue, UsersThree, Buildings, Wallet, Megaphone, Plug, Robot, Truck } from "@phosphor-icons/react";
 import { Link, useLocation } from "react-router-dom";
 import { useOptionalAuth } from "../context/AuthContext";
+import { webPageSections } from "../lib/webPageAccess";
 import NavigationShell from "./MezanV2NavigationShellLegacy";
 
-const GROUPS = {
-    products: { label: "المنتجات", Icon: Cube },
-    orders: { label: "الطلبات", Icon: Package },
-    accounting: { label: "المحاسبة", Icon: Receipt },
+const groupIcons = {
+    home: House, products: Cube, orders: Package, fulfillment: Queue, employees: UsersThree,
+    suppliers: Buildings, finance: Wallet, accounting: Receipt, balances: Wallet, marketing: Megaphone,
+    apps: Plug, intelligence: Robot, shipping: Truck,
 };
 
 export default function EmployeeWebLayout({ pages, children }) {
     const location = useLocation();
     const { logout } = useOptionalAuth() || {};
-    const sections = Object.entries(GROUPS).flatMap(([id, group]) => {
-        const items = pages.filter((page) => page.section === id)
-            .map(({ to, label }) => ({ to, label }));
-        return items.length ? [{ id, ...group, items }] : [];
-    });
+    const sections = webPageSections(pages).map(({ id, label, pages: items }) => ({
+        id, label, Icon: groupIcons[id] || SquaresFour,
+        items: items.map(({ to, label: text }) => ({ to, label: text })),
+    }));
 
     return (
         <div className="min-h-screen bg-background" dir="rtl" data-testid="employee-web-layout">

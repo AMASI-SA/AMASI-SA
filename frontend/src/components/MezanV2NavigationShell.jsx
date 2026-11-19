@@ -118,10 +118,11 @@ export default function MezanV2NavigationShell(props) {
         () => {
             const sections = navigationSectionsForAccountingAccess(effectiveAccess);
             if (userId) {
-                const items = [{ to: "/operational-balances/daily-movements", label: "الأرصدة والحركات المالية" }];
+                const items = [{ to: "/operational-balances", label: "الأرصدة التشغيلية" },
+                    { to: "/operational-balances/daily-movements", label: "الأرصدة والحركات المالية" }];
                 if (effectiveAccess.is_owner) {
                     items.push({ to: "/operational-balances/access", label: "صلاحيات موظفي الأرصدة" });
-                    items.push({ to: "/operational-balances", label: "إعدادات وعمليات الأرصدة" });
+                    items.push({ to: "/operational-balances?view=tools", label: "إعدادات وعمليات الأرصدة" });
                     items.push({ to: "/operational-balances/financial-position", label: "المركز المالي التشغيلي" });
                     items.push({ to: "/operational-balances/customer-returns", label: "مرتجعات العملاء" });
                     items.push({ to: "/operational-balances/customer-exchanges", label: "الاستبدال التشغيلي" });

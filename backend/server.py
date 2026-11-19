@@ -260,10 +260,7 @@ async def readiness_check(response: Response):
 
 # ── Dependencies ──────────────────────────────────────────────────────────────
 async def current_user(request: Request) -> dict:
-    from web_page_access import enforce_web_catalog_access
-
     user = await get_current_user_from_db(request, db)
-    enforce_web_catalog_access(user, request.url.path, request.method)
     # Native employees authenticate as themselves, but Mezan's historical data
     # remains tenant-scoped by the merchant owner id. Bridge those identities
     # only for an explicit native-route allow-list and only after checking the
@@ -2081,6 +2078,16 @@ async def dashboard(
     allow_self_heal: bool = Query(default=True, include_in_schema=False),
     report_statuses: Optional[str] = None,
 ):
+    return await legacy_dashboard_for_tenant(
+        db, user["id"], from_date=from_date, to_date=to_date, payment_methods=payment_methods,
+        shipping_companies=shipping_companies, include_legacy_analyses=include_legacy_analyses,
+        allow_self_heal=allow_self_heal, report_statuses=report_statuses, persist_settings=True,
+    )
+
+
+async def legacy_dashboard_for_tenant(db, owner_id, *, from_date, to_date, payment_methods=None,
+                                      shipping_companies=None, include_legacy_analyses=False,
+                                      allow_self_heal=False, report_statuses=None, persist_settings=False):
     """Return aggregated totals from unified_orders (single source of truth).
 
     All KPI cards reflect actual order-level data filtered by each order's
@@ -2109,10 +2116,11 @@ async def dashboard(
                 return True
         return False
 
-    settings = await ensure_user_settings(db, user["id"])
+    settings = (await ensure_user_settings(db, owner_id) if persist_settings
+                else await ensure_user_settings(db, owner_id, persist_defaults=False))
 
     # ── Unified orders aggregation (THE source of truth) ─────────────────────
-    orders_q = {"user_id": user["id"]}
+    orders_q = {"user_id": owner_id}
     if from_date or to_date:
         orders_q["order_date"] = {}
         if from_date:
@@ -2156,7 +2164,7 @@ async def dashboard(
                     # Persist for next request so we don't repeat the work.
                     try:
                         await db.unified_orders.update_one(
-                            {"user_id": user["id"], "order_number": o["order_number"]},
+                            {"user_id": owner_id, "order_number": o["order_number"]},
                             {"$set": {"data_source": "make"}},
                         )
                     except Exception:
@@ -2180,9 +2188,9 @@ async def dashboard(
                     stale_indexes.append(i)
             for i in stale_indexes[:500]:  # cap heal-per-request for safety
                 o = all_orders[i]
-                patch = await _attach_pc(db, user["id"], o)
+                patch = await _attach_pc(db, owner_id, o)
                 await db.unified_orders.update_one(
-                    {"user_id": user["id"], "order_number": o["order_number"]},
+                    {"user_id": owner_id, "order_number": o["order_number"]},
                     {"$set": patch},
                 )
                 o.update(patch)  # refresh in-memory copy so totals use new values
@@ -2237,7 +2245,7 @@ async def dashboard(
         aggregate_breakdown as _ssot_agg,
         get_company_configs as _ssot_cfgs,
     )
-    _ssot_company_cfgs = await _ssot_cfgs(db, user["id"])
+    _ssot_company_cfgs = await _ssot_cfgs(db, owner_id)
     _ssot_agg_result = _ssot_agg(all_orders, _ssot_company_cfgs)
     _ssot_breakdown = []
     _ssot_deferred = 0.0
@@ -2415,7 +2423,7 @@ async def dashboard(
     )
     if include_legacy_analyses and not included_statuses:
         legacy_q: dict = {
-            "user_id": user["id"],
+            "user_id": owner_id,
             "$or": [
                 {"orders_imported": {"$exists": False}},
                 {"orders_imported": {"$in": [None, 0]}},
@@ -2461,7 +2469,7 @@ async def dashboard(
 
     # ── Shipping & COD balance splits (Phase 1) ──────────────────────────────
     from shipping_cost_ssot import get_company_configs as _ssot_get_cfgs
-    _ssot_cfgs = await _ssot_get_cfgs(db, user["id"])
+    _ssot_cfgs = await _ssot_get_cfgs(db, owner_id)
     balances = compute_balances(
         all_orders,
         settings.get("shipping_approved_statuses", DEFAULT_SHIPPING_APPROVED),
@@ -2474,7 +2482,7 @@ async def dashboard(
     cod_balance_unapproved = balances["cod"]["total_unapproved"]
 
     # ── Daily costs (still keyed by `date` field) ────────────────────────────
-    daily_q = {"user_id": user["id"]}
+    daily_q = {"user_id": owner_id}
     if from_date or to_date:
         date_filter = {}
         if from_date:
@@ -2485,7 +2493,7 @@ async def dashboard(
     daily = await db.daily_costs.find(daily_q, {"_id": 0}).to_list(1000)
 
     # ── TikTok Ads daily (pushed by Make.com via /api/webhook/tiktok/...) ────
-    tt_q = {"user_id": user["id"]}
+    tt_q = {"user_id": owner_id}
     if from_date or to_date:
         df = {}
         if from_date: df["$gte"] = from_date
@@ -2496,7 +2504,7 @@ async def dashboard(
     _fd = from_date or "0000-01-01"
     _td = to_date or "9999-12-31"
     _tt_ledger = await _spend_by_date_from_ledger(
-        db, user["id"], ("tiktok",), _fd, _td,
+        db, owner_id, ("tiktok",), _fd, _td,
     )
     tiktok_spend = sum(_tt_ledger.values())
     tiktok_purchases = sum(int(r.get("purchases") or 0) for r in tt_rows)
@@ -2504,7 +2512,7 @@ async def dashboard(
     tiktok_roas = round(tiktok_revenue / tiktok_spend, 2) if tiktok_spend > 0 else 0.0
 
     # ── Meta Ads daily (pulled via /api/meta/sync from Meta Marketing API) ──
-    meta_q = {"user_id": user["id"]}
+    meta_q = {"user_id": owner_id}
     if from_date or to_date:
         df = {}
         if from_date: df["$gte"] = from_date
@@ -2513,7 +2521,7 @@ async def dashboard(
     meta_rows = await db.meta_ads_daily.find(meta_q, {"_id": 0}).to_list(2000)
     # Iter-160 SSOT (Message #737): Meta spend from ledger only.
     _meta_ledger = await _spend_by_date_from_ledger(
-        db, user["id"], ("meta", "facebook", "instagram"), _fd, _td,
+        db, owner_id, ("meta", "facebook", "instagram"), _fd, _td,
     )
     meta_spend_total = sum(_meta_ledger.values())
     meta_purchases_total = sum(int(r.get("purchases") or 0) for r in meta_rows)
@@ -2526,12 +2534,12 @@ async def dashboard(
     # aggregate spend. Those manual-entry fields are deprecated for
     # accounting purposes — only the unified ledger counts.
     _snap_ledger = await _spend_by_date_from_ledger(
-        db, user["id"], ("snapchat", "snap"), _fd, _td,
+        db, owner_id, ("snapchat", "snap"), _fd, _td,
     )
     snap_spend_total = sum(_snap_ledger.values())
     # Other providers (google/twitter/other) from ledger as well.
     _other_ledger = await _spend_by_date_from_ledger(
-        db, user["id"], ("google", "twitter", "other"), _fd, _td,
+        db, owner_id, ("google", "twitter", "other"), _fd, _td,
     )
     other_spend_total = sum(_other_ledger.values())
     daily_ads_total = (snap_spend_total + tiktok_spend
@@ -2553,7 +2561,7 @@ async def dashboard(
         effective_product_cost as _effective_pc,
         get_policy_map as _get_policy_map,
     )
-    policy_overrides_pc = await _get_policy_map(db, user["id"])
+    policy_overrides_pc = await _get_policy_map(db, owner_id)
     computed_product_cost = round(sum(
         _effective_pc(o, policy_overrides_pc) for o in all_orders
     ), 2)
@@ -2604,7 +2612,7 @@ async def dashboard(
     td = _parse_date_or(to_date, today_d)
     if td < fd:
         fd, td = td, fd
-    op_range = await compute_operating_expenses_for_range(db, user["id"], fd, td)
+    op_range = await compute_operating_expenses_for_range(db, owner_id, fd, td)
     operating_expenses_total = float(op_range.get("operating_total") or 0)
     operating_salaries_total = float(op_range.get("salaries_total") or 0)
     operating_rentals_total = float(op_range.get("rentals_total") or 0)
@@ -2678,7 +2686,7 @@ async def dashboard(
 
     # Recent analyses (informational only — independent of date filter)
     recent = await db.analyses.find(
-        {"user_id": user["id"]},
+        {"user_id": owner_id},
         {"_id": 0, "report.orders_sample": 0},
     ).sort("created_at", -1).to_list(5)
 
@@ -2817,7 +2825,7 @@ async def dashboard(
     # behavior). This affects per-provider NET sales; gross sales remain
     # untouched so totals stay traceable to raw orders.
     settlements_by_provider = await aggregate_settlements_by_provider(
-        db, user["id"], from_date, to_date
+        db, owner_id, from_date, to_date
     )
     salla_adj         = settlements_by_provider["salla"]["total_adjustment"]
     tamara_adj        = settlements_by_provider["tamara"]["total_adjustment"]
@@ -2855,7 +2863,7 @@ async def dashboard(
     salla_settle_inside = salla_settle_outside = 0.0
     salla_settle_docs = await db.payment_adjustments.find(
         {
-            "user_id": user["id"],
+            "user_id": owner_id,
             "provider": "salla",
             **({"adjusted_at": {**({"$gte": from_date} if from_date else {}),
                                 **({"$lte": to_date} if to_date else {})}}
@@ -3028,6 +3036,9 @@ async def dashboard(
             } for a in recent
         ],
     }
+
+
+app.state.legacy_dashboard_reader = legacy_dashboard_for_tenant
 
 
 # ── Iter-207d — Excluded Orders Drill-down ────────────────────────────────

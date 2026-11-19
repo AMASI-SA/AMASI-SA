@@ -3,6 +3,7 @@ import {operationalApi as api, requestId, messageFor} from './api';
 import {Field, Notice} from './OpeningBalances';
 import {visibleOperationalRead} from './visibleOperationalRead';
 import './operational.css';
+import OperationalToolBack from './OperationalToolBack';
 
 const localTime = () => {const d=new Date();return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16);};
 const emptyPayment = () => ({amount:'',bank_id:'',reference:'',paid_at:localTime(),existing_movement_id:null});
@@ -23,6 +24,7 @@ function PaymentFields({value,onChange,banks,movements}){
     <Field label="وقت دفع العميل"><input type="datetime-local" value={value.paid_at} onChange={e=>onChange({...value,paid_at:e.target.value})}/></Field>
   </>;
 }
+
 
 export default function CustomerExchanges(){
   const [context,setContext]=useState(null),[error,setError]=useState('');
@@ -105,7 +107,7 @@ function ExchangeForm({context}){
       setError(e.response?messageFor(e):e.message||'تعذر تأكيد الحفظ؛ أعد المحاولة بالعملية نفسها.');
     }finally{lock.current=false;setBusy(false);}
   }
-  return <main className="op-page op-returns" dir="rtl"><h1>الاستبدال التشغيلي</h1><p>رقم الطلب الأصلي فقط — لا يُنشأ طلب بيع جديد.</p><Notice error={error} message={message}/>
+  return <main className="op-page op-returns mz-finance-tool" dir="rtl"><OperationalToolBack/><h1>الاستبدال التشغيلي</h1><p>رقم الطلب الأصلي فقط — لا يُنشأ طلب بيع جديد.</p><Notice error={error} message={message}/>
     {loading&&<p role="status">جارٍ تحميل البيانات…</p>}
     {!writable&&<p>التسجيل غير متاح في حالة النظام الحالية.</p>}
     {pending&&<section className="op-card"><p>عملية محفوظة بانتظار تأكيد النتيجة. إعادة المحاولة لا تكرر المبلغ.</p><button disabled={busy||!writable} onClick={save}>إعادة محاولة الحفظ</button></section>}

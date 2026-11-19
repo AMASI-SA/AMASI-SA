@@ -27,7 +27,7 @@ const operationGroups = [
   { title: 'المشتريات والمخزون', text: 'الفواتير والأصناف والاستلام من المورد.', to: '/inventory-v2', owner: true },
   { title: 'مطابقة كشوف مزودي الدفع', text: 'مراجعة الكشوف والتسويات المعتمدة.', to: '/operational-balances/provider-statements', keys: ['provider.settle'] },
   { title: 'المركز المالي', text: 'الأرصدة والتفاصيل المالية الكاملة.', to: '/operational-balances/financial-position', owner: true },
-  { title: 'الإعدادات والعمليات المتخصصة', text: 'الأرصدة الافتتاحية ومسارات المراجعة الحالية.', to: '/operational-balances', owner: true },
+  { title: 'الإعدادات والعمليات المتخصصة', text: 'الأرصدة الافتتاحية ومسارات المراجعة الحالية.', to: '/operational-balances?view=specialized', owner: true },
 ];
 
 function Notice({ error, children }) {
@@ -456,4 +456,4 @@ export default function SimpleBalances() {
   return <Workspace key={`${identity}:${read.data.session_scope}`} context={read.data} identity={identity} reloadContext={read.reload} />;
 }
 
-export { BalanceCard, EntryForm, Ledger, Pages, routeBase };
+export { AutomaticHistory, BalanceCard, EntryForm, Ledger, Pages, routeBase };

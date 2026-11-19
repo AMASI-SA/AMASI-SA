@@ -623,3 +623,30 @@ test.each([{ active: false }, { permissions: { upload: false } }])("saved-file r
     expect(host.textContent).toContain("SAVED-TABBY"); expect(host.querySelector('[aria-label="اختيار الكشف المحفوظ saved-tabby.xlsx"]').disabled).toBe(true);
     await submit('[data-testid="provider-saved-file-use"]'); expect(api.useSavedProviderStatement).not.toHaveBeenCalled();
 });
+
+test.each(['upload', 'history'])('directory bookmark opens the %s section after the original single read', async section => {
+    const previous = window.location.href;
+    try {
+        window.history.replaceState(null, '', '/operational-balances/provider-statements#' + section);
+        await render();
+        expect(document.activeElement.id).toBe(section);
+        expect(api.providerStatements).toHaveBeenCalledTimes(1);
+        expect(api.providerStatementReview).not.toHaveBeenCalled();
+        expect(api.providerStatementSavedFiles).not.toHaveBeenCalled();
+        expect(api.uploadProviderStatement).not.toHaveBeenCalled();
+        expect(api.confirmProviderStatement).not.toHaveBeenCalled();
+    } finally { window.history.replaceState(null, '', previous); }
+});
+
+test.each(["read","write"])("the configured employee statement mode %s uses authorized history and limits upload controls", async mode => {
+    const user = { id:"employee", role:"employee", web_page_access:{pages:[{
+        id:"balances.statements", to:"/operational-balances/provider-statements", section:"balances",mode,
+    }]} };
+    useOptionalAuth.mockReturnValue({user,loading:false,authStatus:"authenticated"});
+    await render();
+    expect(api.providerStatements).toHaveBeenCalledTimes(1);
+    expect(host.querySelector('[data-testid="provider-statement-upload"]') !== null).toBe(mode === "write");
+    expect(host.querySelector('a[href="/operational-balances/financial-position?view=providers"]')).toBeNull();
+    expect(api.uploadProviderStatement).not.toHaveBeenCalled();
+    expect(api.confirmProviderStatement).not.toHaveBeenCalled();
+});

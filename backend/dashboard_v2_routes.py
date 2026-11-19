@@ -1719,6 +1719,10 @@ def make_dashboard_v2_router(
     snapshots = DashboardSnapshotCache()
 
     def owner(user: dict[str, Any]) -> dict[str, Any]:
+        scope = user.get("_web_workspace_read")
+        if scope and scope[0] in {"home.dashboard", "home.summary", "home.charts", "products.sold"}:
+            # Dashboard queries take a tenant id. No privileged role or account data is lent.
+            return {"id": scope[1]}
         require_owner(user)
         return user
 
@@ -2174,12 +2178,17 @@ def make_dashboard_v2_router(
         report_statuses: str | None = None,
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
-        # Existing callers retain the complete, uncached response contract.
-        return await compute_dashboard_v2(
+        report = await compute_dashboard_v2(
             user=user, from_date=from_date, to_date=to_date,
             payment_methods=payment_methods, shipping_companies=shipping_companies,
             report_statuses=report_statuses,
         )
+        scope = user.get("_web_workspace_read")
+        if scope and scope[0] == "home.charts":
+            totals = report.get("totals") or {}
+            keys = ("total_product_cost", "total_operating_expenses", "total_operating_cost", "total_expenses")
+            return {"totals": {key: totals[key] for key in keys if key in totals}}
+        return report
 
     async def card_snapshot(
         section: str,
@@ -2387,7 +2396,9 @@ def make_dashboard_v2_router(
             "attempted": False,
             "reason": "historical_period",
         }
-        if end >= today_s:
+        if user.get("_web_workspace_read"):
+            live_sync = {"attempted": False, "reason": "employee_snapshot_read"}
+        elif end >= today_s:
             try:
                 live_sync = await asyncio.wait_for(
                     reconcile_recent_abandoned_carts(

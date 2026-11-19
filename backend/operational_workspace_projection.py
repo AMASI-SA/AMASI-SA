@@ -175,7 +175,7 @@ def report_resource(resource):
     return result
 
 
-def statement(resource, rows, *, date_from, date_to, actor, generated_at, purpose, started_at):
+def statement(resource, rows, *, date_from, date_to, actor, generated_at, purpose, started_at, already_projected=False):
     try:
         first, last = strict_day(date_from), strict_day(date_to)
         if first > last:
@@ -197,10 +197,15 @@ def statement(resource, rows, *, date_from, date_to, actor, generated_at, purpos
             strict_day(row["business_date"])
     except (ValueError, TypeError):
         fail("operational_statement_date_required", "توجد حركة بلا تاريخ موثق؛ راجع المصدر قبل إعداد كشف الفترة", 409)
-    projected, balance_status = with_running_balances(resource, safe_rows)
+    # ledger_items has already reconciled and sorted the full authorized ledger.
+    # Other callers can pass raw rows and retain the original validation path.
+    if already_projected:
+        projected, balance_status = safe_rows, projected_balance_status(resource, safe_rows)
+    else:
+        projected, balance_status = with_running_balances(resource, safe_rows)
     # An approved opening is the baseline, not turnover during the first day.
-    items = sorted((row for row in projected if row.get("reason") != "opening"
-                    and date_from <= row["business_date"] <= date_to), key=row_order)
+    items = [row for row in reversed(projected) if row.get("reason") != "opening"
+             and date_from <= row["business_date"] <= date_to]
     available = balance_status == "available"
     opening = sum((delta(row, resource["kind"]) for row in safe_rows
                    if row.get("reason") == "opening" or row["business_date"] < date_from), Decimal(0))

@@ -53,7 +53,7 @@ export function ProductDialog({ row, source, provider, onSource, onClose }) {
     return <div className="report-overlay" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
         <section className="report-dialog" role="dialog" aria-modal="true" aria-labelledby="report-product-title" ref={ref} dir="rtl" data-testid="report-products-dialog">
             <header><div><p>تفاصيل المنتجات والأرباح</p><h2 id="report-product-title">{row.name}</h2><small>{products.length} منتجات · {source === "salla" ? "طلبات سلة المطابقة" : "نتائج الحساب الإعلاني"}</small></div>
-                <SourceSwitch source={source} onChange={onSource} provider={provider} /><button className="report-close" type="button" aria-label="إغلاق تفاصيل المنتجات" onClick={onClose}><X size={25} /></button></header>
+                {onSource && <SourceSwitch source={source} onChange={onSource} provider={provider} />}<button className="report-close" type="button" aria-label="إغلاق تفاصيل المنتجات" onClick={onClose}><X size={25} /></button></header>
             <div className="report-dialog-body"><div className="report-cards">{cards.map(([key, label]) => <div key={key} className={`report-card ${["shipping_cost_sar", "payment_fees_sar"].includes(key) ? "added-cost" : ""}`}><span>{label}</span><Metric field={key} value={metrics[key]} /></div>)}</div>
                 <p className="report-explanation">{source === "salla" ? "صافي الأرباح بعد خصم تكلفة المنتجات والإعلان والشحن ورسوم الدفع. التكاليف الناقصة تظهر بشرطة حتى تكتمل." : "المنصة تعرض تحويلات وقيمة إجمالية ولا تحدد المنتجات لكل طلب. اختر نتائج سلة لعرض المنتجات وتكاليفها وأرباحها الفعلية."}</p>
                 {incompleteProducts && <p className="report-alert">بعض مبيعات الحملة لا تتوفر لها تفاصيل منتجات؛ إجمالي الحملة يشملها ولا يساوي مجموع المنتجات المتاحة فقط.</p>}
@@ -75,10 +75,10 @@ function downloadCsv(rows, filename) {
     const a = document.createElement("a"); a.href = url; a.download = filename; a.click(); URL.revokeObjectURL(url);
 }
 
-export default function MarketingReports() {
+export default function MarketingReports({ readOnly = false, fixedProvider = null } = {}) {
     const [params, setParams] = useSearchParams();
-    const provider = Object.hasOwn(LABELS, params.get("provider")) ? params.get("provider") : "snapchat";
-    const source = ORDER_SOURCES.has(provider) || params.get("source") === "salla" || (provider === "all" && params.get("source") !== "platform") ? "salla" : "platform";
+    const provider = fixedProvider || (Object.hasOwn(LABELS, params.get("provider")) ? params.get("provider") : "snapchat");
+    const source = fixedProvider ? "platform" : ORDER_SOURCES.has(provider) || params.get("source") === "salla" || (provider === "all" && params.get("source") !== "platform") ? "salla" : "platform";
     const orderSource = ORDER_SOURCES.has(provider);
     const statusScope = params.get("status_scope") === "report" ? "report" : "all";
     const accountId = params.get("account_id") || "";
@@ -108,11 +108,12 @@ export default function MarketingReports() {
     }, [provider, source, statusScope, accountId, from, to]);
     useEffect(() => { load(); return () => { request.current++; controller.current?.abort(); inFlight.current = false; }; }, [load]);
     useEffect(() => {
+        if (readOnly) return undefined;
         const tick = () => { if (document.visibilityState === "visible" && !syncing) load({ background: true }); };
         const timer = setInterval(tick, 60000);
         document.addEventListener("visibilitychange", tick);
         return () => { clearInterval(timer); document.removeEventListener("visibilitychange", tick); };
-    }, [load, syncing]);
+    }, [load, syncing, readOnly]);
     const currentReport = data?.reports?.[0];
     const rows = useMemo(() => {
         if (!data) return [];
@@ -152,17 +153,17 @@ export default function MarketingReports() {
         finally { setSallaSyncing(false); }
     }
     return <main className="marketing-reports" dir="rtl" data-testid="marketing-reports-page">
-        <header className="reports-heading"><div><p>التسويق</p><h1>التقارير</h1><small>{provider === "all" ? "إجماليات مصادر الطلبات والمنصات" : orderSource ? LABELS[provider] : `الحملات الإعلانية · ${LABELS[provider]}`}</small></div><SourceSwitch provider={provider} source={source} onChange={v => change({source:v})} /></header>
-        <section className="reports-filters" aria-label="فلاتر التقارير"><label>المنصة<select value={provider} onChange={e => { close(); change({ provider:e.target.value, account_id:"", ...(e.target.value === "all" || ORDER_SOURCES.has(e.target.value) ? {source:"salla"} : {}) }); }}>{Object.entries(LABELS).map(([key,label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+        <header className="reports-heading"><div><p>التسويق</p><h1>التقارير</h1><small>{provider === "all" ? "إجماليات مصادر الطلبات والمنصات" : orderSource ? LABELS[provider] : `الحملات الإعلانية · ${LABELS[provider]}`}</small></div>{!fixedProvider && <SourceSwitch provider={provider} source={source} onChange={v => change({source:v})} />}</header>
+        <section className="reports-filters" aria-label="فلاتر التقارير"><label>المنصة<select value={provider} disabled={!!fixedProvider} onChange={e => { close(); change({ provider:e.target.value, account_id:"", ...(e.target.value === "all" || ORDER_SOURCES.has(e.target.value) ? {source:"salla"} : {}) }); }}>{Object.entries(LABELS).map(([key,label]) => <option key={key} value={key}>{label}</option>)}</select></label>
             {provider === "snapchat" && <label>الحساب الإعلاني<select value={accountId || currentReport?.selected_account_id || ""} onChange={e => { close(); change({account_id:e.target.value}); }}><option value="" disabled>اختر الحساب</option>{(currentReport?.accounts || []).map(a => <option key={a.id} value={a.id}>{a.name} · {a.currency} · {a.timezone}</option>)}<option value="all">كل حسابات سناب</option></select></label>}
             {source === "salla" && <label>حالات الطلبات<select value={statusScope} onChange={e => change({status_scope:e.target.value})}><option value="all">جميع الحالات</option><option value="report">حسب إعدادات التقارير</option></select></label>}
             <label>من<input type="date" value={draftFrom} onChange={e => setDraftFrom(e.target.value)} /></label><label>إلى<input type="date" value={draftTo} min={draftFrom} onChange={e => setDraftTo(e.target.value)} /></label>
             <button type="button" className="report-primary" disabled={!draftFrom || !draftTo || draftTo < draftFrom} onClick={() => change({from:draftFrom,to:draftTo})}>تطبيق الفترة</button>
             <button type="button" disabled={busy || syncing} onClick={() => load({background:true})}><ArrowsClockwise size={17} />تحديث النتائج</button>
-            <button type="button" disabled={busy || sallaSyncing} onClick={syncSalla}><ArrowsClockwise size={17} />{sallaSyncing ? "جارٍ طلب المزامنة" : "مزامنة سلة الآن"}</button>
-            {provider === "snapchat" && <button type="button" disabled={busy || syncing || currentReport?.selected_account_id === "all"} onClick={sync}><ArrowsClockwise size={17} className={syncing ? "report-spin" : ""} />{syncing ? "جارٍ مزامنة سناب" : "مزامنة سناب الآن"}</button>}
+            {!readOnly && <button type="button" disabled={busy || sallaSyncing} onClick={syncSalla}><ArrowsClockwise size={17} />{sallaSyncing ? "جارٍ طلب المزامنة" : "مزامنة سلة الآن"}</button>}
+            {!readOnly && provider === "snapchat" && <button type="button" disabled={busy || syncing || currentReport?.selected_account_id === "all"} onClick={sync}><ArrowsClockwise size={17} className={syncing ? "report-spin" : ""} />{syncing ? "جارٍ مزامنة سناب" : "مزامنة سناب الآن"}</button>}
         </section>
-        <div className="report-context"><span>النتائج: <b>{source === "salla" ? "طلبات سلة المتزامنة دون تكرار" : "تحويلات المنصة"}</b> · الفترة بتوقيت {source === "salla" ? "Asia/Riyadh" : provider === "all" || accountId === "all" ? "كل حساب كما في مصدره" : currentReport?.rows?.[0]?.timezone || data?.range?.timezone || "الحساب"}</span><span>تحديث تلقائي كل دقيقة · آخر قراءة {data?.generated_at ? new Date(data.generated_at).toLocaleTimeString("ar-SA") : "—"}</span></div>
+        <div className="report-context"><span>النتائج: <b>{source === "salla" ? "طلبات سلة المتزامنة دون تكرار" : "تحويلات المنصة"}</b> · الفترة بتوقيت {source === "salla" ? "Asia/Riyadh" : provider === "all" || accountId === "all" ? "كل حساب كما في مصدره" : currentReport?.rows?.[0]?.timezone || data?.range?.timezone || "الحساب"}</span><span>{!readOnly && "تحديث تلقائي كل دقيقة · "}آخر قراءة {data?.generated_at ? new Date(data.generated_at).toLocaleTimeString("ar-SA") : "—"}</span></div>
         {data?.reports?.some(r => r.last_sync_at) && <p className="report-footnote">آخر مزامنة للمصدر: {data.reports.filter(r => r.last_sync_at).map(r => `${r.label}: ${new Date(r.last_sync_at).toLocaleString("ar-SA")}`).join(" · ")}</p>}
         {source === "salla" && data?.reconciliation && <div className="report-explanation" role="status" data-testid="salla-reconciliation">
             <strong>إجمالي طلبات سلة المتزامنة: {formatReportNumber(data.reconciliation.orders, 0)} طلب · {formatReportNumber(data.reconciliation.sales_sar)} ر.س</strong>
@@ -180,6 +181,6 @@ export default function MarketingReports() {
         </section>
         <p className="report-equation">صافي الأرباح = إجمالي المبيعات − تكلفة المنتجات − الصرف الإعلاني − تكلفة الشحن − رسوم الدفع</p>
         {source === "platform" && <p className="report-footnote">لعرض إجمالي طلبات المتجر، بما فيها المباشرة وغير المصنّفة، اختر «عرض نتائج سلة». تحويلات المنصة قد تختلف عن طلبات سلة بسبب الإسناد. تفاصيل المنتجات والتكاليف والأرباح متاحة عبر «عرض نتائج سلة»؛ لا يمكن استنتاجها من التحويلات الإجمالية.</p>}
-        {modalRow && <ProductDialog row={modalRow} source={source} provider={provider} onSource={v => change({source:v})} onClose={close} />}
+        {modalRow && <ProductDialog row={modalRow} source={source} provider={provider} onSource={fixedProvider ? null : v => change({source:v})} onClose={close} />}
     </main>;
 }

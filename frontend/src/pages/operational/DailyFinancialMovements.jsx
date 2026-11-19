@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useOptionalAuth } from "../../context/AuthContext";
 import { addDaysISO, formatRiyadhDateTime, todaySA } from "../../lib/dates";
 import { operationalApi, messageFor } from "./api";
-import { formatPositionMoney } from "./financialPositionPresentation";
+import { formatPositionMoney } from "./financialPositionDisplay";
 import { visibleOperationalRead } from './visibleOperationalRead';
 import "./financialPosition.css";
 

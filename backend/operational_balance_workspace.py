@@ -23,6 +23,7 @@ from operational_balance_store import (
 )
 from operational_financial_activity_runtime import checked_rows, preparation_checkpoint, prepare_in_thread
 from operational_visible_report_read import run_visible_report_read
+from operational_workspace_ledger_filters import check_period, filter_activity, movement_type
 from operational_workspace_projection import (
     automatic_source, balance_note, compact_rows, history as automatic_history, projected_balance_status, row_order,
     statement as period_statement, with_running_balances,
@@ -334,16 +335,24 @@ def _balance(row, kind):
     return {"amount": fmt(abs(signed)), "side": "for_party" if signed > 0 else "for_us" if signed < 0 else "balanced", "visible": True}
 
 
-async def resource_catalog(db, owner, policy, state, *, ad_bank_fx=False):
+async def resource_catalog(db, owner, policy, state, *, ad_bank_fx=False, reviewed_counts=None, selected_resource=None):
+    from operational_workspace_order_issues import issue_badge, navigation_counts
     from operational_balance_service import prepaid_shipping_cash
     from operational_balance_sources import entities
     computed = await prepare_in_thread(report, state)
+    review_counts = navigation_counts(computed)
     balances = {(r["party_type"], r["party_id"], r["currency"]): r for r in computed["parties"]}
     items = []
+    # A statement needs one real catalog identity. Its balance still comes
+    # from the complete canonical report and its counterpart ACL from policy.
     for kind in RESOURCE_KINDS:
+        if selected_resource and kind != selected_resource[0]:
+            continue
         if not policy.owner_override and not any(r["kind"] == kind for r in policy.resources):
             continue
         for row in await entities(db, owner, kind, operational_state=state):
+            if selected_resource and row["id"] != selected_resource[1]:
+                continue
             access = policy.resource(kind, row["id"])
             if not (access["use"] or access["balance"] or access["movements"] != "none"):
                 continue
@@ -365,6 +374,9 @@ async def resource_catalog(db, owner, policy, state, *, ad_bank_fx=False):
                 operations = []
             items.append({"kind": kind, "id": row["id"], "name": row.get("name") or row["id"],
                           "currency": currency, "access": access, "operations": operations, **ad_funding,
+                          **({"ad_wallet_balance": balances.get((kind, row["id"], currency), {}).get("ad_wallet_balance")}
+                             if kind == "ad_account" and access["balance"] else {}),
+                          **issue_badge(kind, row["id"], access, bool(computed.get("as_of")), bool(computed["issues"]), review_counts, reviewed_counts or {}),
                           **({"prepaid_shipping_cash": True} if kind == "cash" and prepaid_shipping_cash(state, row["id"]) else {}),
                           "balance": _balance(balances.get((kind, row["id"], currency), {}), kind) if access["balance"] else None})
     return items, computed
@@ -420,10 +432,17 @@ def _row(policy, resource, item, amount, side, description):
               "currency": resource["currency"], "reason": item.get("workspace_reason") or item.get("kind"),
               "order_number": item.get("order_number") if complete else None,
               "party_type": resource["kind"], "party_id": resource["id"], "party_name": resource["name"]}
+    if direction := movement_type(item):
+        result["movement_type"] = direction
     if note is not None:
         result["note"] = note
     if complete and item.get("bank_name"):
         result["source_label"] = item["bank_name"]
+        if item.get("name") and item.get("kind") in {"payment", "collection", "settlement", "transfer", "refund"}:
+            if item.get("direction") == "outgoing":
+                result.update(from_name=item["bank_name"], to_name=item["name"])
+            elif item.get("direction") == "incoming":
+                result.update(from_name=item["name"], to_name=item["bank_name"])
     if complete and item.get("reference"):
         result["reference"] = item["reference"]
     if complete:
@@ -444,7 +463,7 @@ def _row(policy, resource, item, amount, side, description):
 
 def _index_ledger_sources(state, computed, resources):
     """Group this request's rows once; ledger projection retains every access check."""
-    sources = {"openings": (), "obligations": (), "movements": (), "customer_returns": ()}
+    sources = {"openings": (), "obligations": (), "movements": (), "customer_returns": (), "driver_receipts": ()}
     indexed = {(row["kind"], row["id"], row["currency"]): {name: [] for name in sources}
                for row in checked_rows(resources) if row["access"]["movements"] != "none"}
     if not indexed:
@@ -470,8 +489,54 @@ def _index_ledger_sources(state, computed, resources):
             append("movements", cash, item)
     for item in checked_rows(state.get("customer_returns", [])):
         append("customer_returns", (item.get("refund_source_type"), item.get("refund_source_id"), item.get("currency")), item)
+    if any(key[0] == "store_driver" for key in indexed):
+        from operational_driver_review_report import validated_review_facts
+        facts, _ = validated_review_facts(state)
+        for fact in checked_rows(facts):
+            append("driver_receipts", ("store_driver", fact["driver_id"], fact["currency"]), fact)
     preparation_checkpoint()
     return indexed
+
+
+def _movement_rows(resource, policy, movements):
+    kind, identity, currency = resource["kind"], resource["id"], resource["currency"]
+    result = []
+    for item in checked_rows(movements):
+        primary = (item["party_type"], item["party_id"], item["currency"]) == (kind, identity, currency)
+        cash = (item.get("bank_kind"), item.get("bank_id"), item.get("bank_currency") or item["currency"]) == (kind, identity, currency)
+        if not (primary or cash) or not _can_row(policy, resource, item):
+            continue
+        amount = Decimal(item.get("bank_amount") or item["amount"]) if cash else Decimal(item["amount"])
+        direction = item["direction"]
+        if cash:
+            side = "for_us" if direction == "incoming" else "for_party"
+        elif kind in ACCOUNT_KINDS:
+            if item["kind"] == "correction":
+                side = "for_us" if direction == "incoming" else "for_party"
+            else:
+                side = "for_us" if direction == "outgoing" else "for_party"
+        elif item["kind"] == "correction":
+            side = "for_party" if direction == "outgoing" else "for_us"
+        else:
+            side = "for_us" if direction == "outgoing" else "for_party"
+        description = LABELS.get(item.get("workspace_reason")) or {
+            "payment": "دفعة", "collection": "استلام مبلغ", "settlement": "تسوية",
+            "transfer": "تحويل بين الحسابات", "correction": "تسوية موثقة",
+            "wallet_funding": "تمويل رصيد الإعلانات", "refund": "رد مبلغ",
+        }.get(item["kind"], "حركة مالية")
+        result.append(_row(policy, resource, item, amount, side, description))
+        fee = Decimal(item.get("actual_fee_amount", "0"))
+        if (primary and (kind == "provider" and item["kind"] == "settlement"
+                         or kind == "pos_receivable" and item["kind"] in {"collection", "settlement"}) and direction == "incoming"
+                and fee > 0 and sum((Decimal(a["amount"]) for a in item.get("allocations", [])), Decimal(0)) == amount + fee):
+            # Canonical settlement allocations clear cash plus the evidenced fee
+            # from the provider claim. The bank received only cash above.
+            fee_item = {**item, "id": item["id"] + ":actual_fee", "kind": "settlement_fee",
+                        "workspace_reason": "settlement_fee"}
+            fee_row = _row(policy, resource, fee_item, fee, "for_party", "رسوم تسوية فعلية")
+            fee_row.update(event_id=fee_item["id"], related_event_id=item.get("workspace_group") or item["id"])
+            result.append(fee_row)
+    return result
 
 
 def ledger_items(state, computed, resource, policy, *, sources=None):
@@ -518,41 +583,7 @@ def ledger_items(state, computed, resource, policy, *, sources=None):
                 row.update(automatic_history=family, automatic_group=group)
                 row["description"] = "راتب تلقائي" if family == "salary" else "أجرة توصيل"
             result.append(row)
-    for item in checked_rows(sources["movements"]):
-        primary = (item["party_type"], item["party_id"], item["currency"]) == (kind, identity, currency)
-        cash = (item.get("bank_kind"), item.get("bank_id"), item.get("bank_currency") or item["currency"]) == (kind, identity, currency)
-        if not (primary or cash) or not _can_row(policy, resource, item):
-            continue
-        amount = Decimal(item.get("bank_amount") or item["amount"]) if cash else Decimal(item["amount"])
-        direction = item["direction"]
-        if cash:
-            side = "for_us" if direction == "incoming" else "for_party"
-        elif kind in ACCOUNT_KINDS:
-            if item["kind"] == "correction":
-                side = "for_us" if direction == "incoming" else "for_party"
-            else:
-                side = "for_us" if direction == "outgoing" else "for_party"
-        elif item["kind"] == "correction":
-            side = "for_party" if direction == "outgoing" else "for_us"
-        else:
-            side = "for_us" if direction == "outgoing" else "for_party"
-        description = LABELS.get(item.get("workspace_reason")) or {
-            "payment": "دفعة", "collection": "استلام مبلغ", "settlement": "تسوية",
-            "transfer": "تحويل بين الحسابات", "correction": "تسوية موثقة",
-            "wallet_funding": "تمويل رصيد الإعلانات", "refund": "رد مبلغ",
-        }.get(item["kind"], "حركة مالية")
-        result.append(_row(policy, resource, item, amount, side, description))
-        fee = Decimal(item.get("actual_fee_amount", "0"))
-        if (primary and (kind == "provider" and item["kind"] == "settlement"
-                         or kind == "pos_receivable" and item["kind"] in {"collection", "settlement"}) and direction == "incoming"
-                and fee > 0 and sum((Decimal(a["amount"]) for a in item.get("allocations", [])), Decimal(0)) == amount + fee):
-            # Canonical settlement allocations clear cash plus the evidenced fee
-            # from the provider claim. The bank received only cash above.
-            fee_item = {**item, "id": item["id"] + ":actual_fee", "kind": "settlement_fee",
-                        "workspace_reason": "settlement_fee"}
-            fee_row = _row(policy, resource, fee_item, fee, "for_party", "رسوم تسوية فعلية")
-            fee_row.update(event_id=fee_item["id"], related_event_id=item.get("workspace_group") or item["id"])
-            result.append(fee_row)
+    result.extend(_movement_rows(resource, policy, sources["movements"]))
     if kind in {"bank", "provider"}:
         for case in checked_rows(sources["customer_returns"]):
             if (case.get("refund_source_type"), case.get("refund_source_id"), case.get("currency")) != (kind, identity, currency):
@@ -595,8 +626,11 @@ def ledger_items(state, computed, resource, policy, *, sources=None):
                 continue
             result.append(_row(policy, resource, item, Decimal(case["amount"]), "for_party", "رد مبلغ طلب"))
     if kind == "store_driver":
-        from operational_driver_review_report import validated_review_facts
-        facts, _ = validated_review_facts(state)
+        if "driver_receipts" in sources:
+            facts = sources["driver_receipts"]
+        else:
+            from operational_driver_review_report import validated_review_facts
+            facts, _ = validated_review_facts(state)
         for fact in checked_rows(facts):
             if fact["driver_id"] != identity or fact["currency"] != currency:
                 continue
@@ -615,6 +649,44 @@ def ledger_items(state, computed, resource, policy, *, sources=None):
     result, _ = with_running_balances(resource, result)
     preparation_checkpoint()
     return result
+
+
+def _recent_postings(state, resources, policy, limit=4):
+    """Four recorded events from the same snapshot, without assembling any account ledger."""
+    available = {(r["kind"], r["id"], r["currency"]): r for r in resources
+                 if r["access"]["movements"] != "none"}
+    if not available:
+        return []
+    # One bounded pass. Historical opening balances and accrued obligations are
+    # not posted movements. A linked posting is shown once in this preview.
+    latest = {}
+    floor = None
+    for item in checked_rows(reversed(state.get("movements", []))):
+        # Writes append, but a write can be backdated. Do not stop at the first
+        # old item. A saved business date alone can cheaply rule a candidate out.
+        day = item.get("business_date")
+        if floor is not None and isinstance(day, str) and day and day < floor[0]:
+            continue
+        stamp = item.get("occurred_at") or item.get("created_at") or ""
+        order = row_order({"id": item["id"], "business_date": day or _business_day(item), "recorded_at": stamp})
+        if floor is not None and order <= floor:
+            continue
+        keys = ((item["party_type"], item["party_id"], item["currency"]),
+                (item.get("bank_kind"), item.get("bank_id"), item.get("bank_currency") or item["currency"]))
+        resource = next((available[key] for key in keys
+                         if key in available and _can_row(policy, available[key], item)), None)
+        if resource is None:
+            continue
+        event = item.get("workspace_group") or item["id"]
+        if event in latest and latest[event][0] >= order:
+            continue
+        if len(latest) == limit and event not in latest:
+            del latest[min(latest, key=lambda k: latest[k][0])]
+        latest[event] = (order, resource, item)
+        if len(latest) == limit:
+            floor = min(entry[0] for entry in latest.values())
+    return [_movement_rows(resource, policy, [item])[0]
+            for _, resource, item in sorted(latest.values(), key=lambda entry: entry[0], reverse=True)]
 
 
 def expected_collections(state, computed, resource, policy):
@@ -651,22 +723,28 @@ def install_workspace_routes(router, db, current_user, scope):
     from operational_balance_access import load_access
     from operational_balance_reviews import install_workspace_review_routes
 
+    from operational_workspace_order_issues import ReviewSnapshots, read_order_issues, source_key
+
+    review_snapshots = ReviewSnapshots()
     install_workspace_review_routes(router, db, current_user, scope)
 
     async def load(user):
         actor, owner, source = await scope(db, user, "workspace")
         policy = await load_access(db, actor, owner)
         if not policy.owner_override and not policy.enabled:
-            fail("operational_workspace_access_required", "اطلب من المالك تحديد صلاحياتك في التطبيق", 403)
+            fail("operational_workspace_access_required", "اطلب من المالك تفعيل صلاحيات الأرصدة وتحديد الحسابات المتاحة لك", 403)
         return actor, owner, source, policy
 
-    async def checked_read(user, callback, *, ad_bank_fx=False):
+    async def checked_read(user, callback, *, ad_bank_fx=False, selected_resource=None):
         from operational_financial_position_state import read_financial_position_state
         actor, owner, source, policy = await load(user)
+        if selected_resource and policy.resource(*selected_resource)["movements"] == "none":
+            fail("operational_workspace_not_found", "الكشف غير متاح", 404)
         # Workspace reports need current financial proofs, not historical audit
         # pages or idempotency receipts. Writers keep the complete store reader.
         state = await read_financial_position_state(db, owner)
-        resources, computed = await resource_catalog(db, owner, policy, state, ad_bank_fx=ad_bank_fx)
+        resources, computed = await resource_catalog(db, owner, policy, state, ad_bank_fx=ad_bank_fx,
+            selected_resource=selected_resource, reviewed_counts=review_snapshots.counts.get((owner, source_key(state))))
         result = await prepare_in_thread(callback, actor, owner, policy, state, resources, computed)
         current_actor, current_owner, _, current = await load(user)
         if (actor["id"], owner, policy.version, policy.owner_override) != (current_actor["id"], current_owner, current.version, current.owner_override):
@@ -674,16 +752,31 @@ def install_workspace_routes(router, db, current_user, scope):
         return result
 
     @router.get("/workspace/context")
-    async def context(request: Request, ad_bank_fx: bool = False, user=Depends(current_user)):
+    async def context(request: Request, ad_bank_fx: bool = False, home_preview: bool = False, user=Depends(current_user)):
         def project(actor, owner, policy, state, resources, computed):
             from operational_balance_access import OPERATION_LABELS
             return {"actor": {**_actor_snapshot(actor), "is_owner": policy.owner_override},
                     "session_scope": digest([owner, actor["id"]]), "permission_version": policy.version,
                     "status": state["status"], "resources": resources,
+                    "ledger_start": _business_day({"occurred_at": state["started_at"]}) if state.get("started_at") else None,
+                    **({"recent_movements": _recent_postings(state, resources, policy)} if home_preview else {}),
                     "capabilities": {"manage_access": policy.owner_override,
                                      "create_entries": state["status"] == "active" and any(row["operations"] for row in resources)},
                     "operations": [{"key": key, "label": label} for key, label in OPERATION_LABELS.items() if policy.can_operation(key)]}
         return await run_visible_report_read(request, lambda: checked_read(user, project, ad_bank_fx=ad_bank_fx))
+
+    @router.get("/workspace/specialist/{which}")
+    async def specialist(request: Request, which: Literal["returns", "exchanges", "fees"],
+                         page: int = Query(default=1, ge=1), user=Depends(current_user)):
+        from operational_web_specialist_reads import specialist_page
+        return await run_visible_report_read(request, lambda: specialist_page(db, user, load, which, page))
+
+    @router.get("/workspace/order-issues")
+    async def order_issues(request: Request, kind: str | None = Query(default=None, max_length=50),
+                           id: str | None = Query(default=None, max_length=200), q: str = Query(default="", max_length=160),
+                           page: int = Query(default=1, ge=1), user=Depends(current_user)):
+        return await run_visible_report_read(request, lambda: read_order_issues(
+            db, user, load, review_snapshots, kind, id, q, page))
 
     @router.post("/workspace/ad-funding-quote")
     async def ad_quote(payload: AdQuoteRequest, user=Depends(current_user)):
@@ -720,7 +813,10 @@ def install_workspace_routes(router, db, current_user, scope):
 
     @router.get("/workspace/ledger/{kind}/{identity}")
     async def ledger(request: Request, kind: str, identity: str, page: int = Query(default=1, ge=1),
-                     page_size: int = Query(default=5, ge=1, le=5), focus_id: str | None = Query(default=None, max_length=250), ad_bank_fx: bool = False, user=Depends(current_user)):
+                     page_size: int = Query(default=5, ge=1, le=8), focus_id: str | None = Query(default=None, max_length=250),
+                     ad_bank_fx: bool = False, q: str = Query(default="", max_length=160),
+                     date_from: str | None = None, date_to: str | None = None, user=Depends(current_user)):
+        check_period(date_from, date_to)
         def project(actor, owner, policy, state, resources, computed):
             resource = next((r for r in resources if r["kind"] == kind and r["id"] == identity), None)
             if not resource or resource["access"]["movements"] == "none":
@@ -738,16 +834,32 @@ def install_workspace_routes(router, db, current_user, scope):
                 summary = {"pos_summary": {"approved": fmt(approved),
                            "bank_received": fmt(sum((Decimal(m["amount"]) for m in transfers), Decimal(0))),
                            "fees": fmt(sum((Decimal(m.get("actual_fee_amount", "0")) for m in transfers), Decimal(0)))}}
-            return {"resource": resource, **summary, **paginate(compact_rows(rows), page, page_size, focus_id),
-                    "balance_status": projected_balance_status(resource, rows),
-                    "balance_note": balance_note(projected_balance_status(resource, rows)),
+            balance_status = projected_balance_status(resource, rows)
+            if date_from and resource["access"].get("report"):
+                period = period_statement(resource, rows, date_from=date_from, date_to=date_to,
+                    actor=_actor_snapshot(actor), generated_at=now(), purpose="view", started_at=state.get("started_at"),
+                    already_projected=True)
+                entries = period.pop("items")
+                summary["period"] = {key: period[key] for key in ("date_from", "date_to", "currency", "scope",
+                    "can_print", "opening_balance", "closing_balance", "totals")}
+                summary["period"]["total"] = len(entries)
+                display = list(filter_activity(reversed(entries), q=q))
+            elif q or date_from:
+                display = list(filter_activity(rows, q=q, date_from=date_from, date_to=date_to))
+            else:
+                display = compact_rows(rows)
+            return {"resource": resource, **summary, **paginate(display, page, page_size, focus_id),
+                    "balance_status": balance_status, "balance_note": balance_note(balance_status),
                     "expected_collections": expected_collections(state, computed, resource, policy)}
-        return await run_visible_report_read(request, lambda: checked_read(user, project, ad_bank_fx=ad_bank_fx))
+        return await run_visible_report_read(request, lambda: checked_read(user, project, ad_bank_fx=ad_bank_fx, selected_resource=(kind, identity)))
 
     @router.get("/workspace/movements")
-    async def movements(request: Request, page: int = Query(default=1, ge=1), page_size: int = Query(default=5, ge=1, le=5),
+    async def movements(request: Request, page: int = Query(default=1, ge=1), page_size: int = Query(default=5, ge=1, le=8),
                         kind: str | None = Query(default=None, max_length=50), id: str | None = Query(default=None, max_length=200),
+                        q: str = Query(default="", max_length=160), date_from: str | None = None, date_to: str | None = None,
+                        direction: Literal["in", "out", "transfer"] | None = None, status: Literal["done", "info"] | None = None,
                         user=Depends(current_user)):
+        check_period(date_from, date_to)
         if (kind is None) != (id is None):
             fail("operational_account_filter_invalid", "اختر نوع الحساب والحساب معًا", 422)
         def project(actor, owner, policy, state, resources, computed):
@@ -760,14 +872,19 @@ def install_workspace_routes(router, db, current_user, scope):
                 if resource["access"]["movements"] == "none":
                     continue
                 sources = indexed[(resource["kind"], resource["id"], resource["currency"])]
-                for row in checked_rows(compact_rows(ledger_items(state, computed, resource, policy, sources=sources))):
+                rows = ledger_items(state, computed, resource, policy, sources=sources)
+                # Search prior to de-duplication. A second authorized account's
+                # projection can be the one that matches a name or reference.
+                display = filter_activity(rows, q=q, date_from=date_from, date_to=date_to, direction=direction, status=status) if (
+                    q or date_from or direction or status) else compact_rows(rows)
+                for row in checked_rows(display):
                     if row["event_id"] in seen:
                         continue
                     seen.add(row["event_id"])
                     items.append(row)
             items.sort(key=row_order, reverse=True)
             return paginate(items, page, page_size)
-        return await run_visible_report_read(request, lambda: checked_read(user, project))
+        return await run_visible_report_read(request, lambda: checked_read(user, project, selected_resource=(kind, id) if kind is not None else None))
 
     @router.get("/workspace/statements/{kind}/{identity}")
     async def statement(request: Request, kind: str, identity: str,
@@ -780,8 +897,8 @@ def install_workspace_routes(router, db, current_user, scope):
                 fail("operational_workspace_not_found", "الكشف غير متاح", 404)
             return period_statement(resource, ledger_items(state, computed, resource, policy),
                 date_from=date_from, date_to=date_to, actor=_actor_snapshot(actor), generated_at=now(),
-                purpose=purpose, started_at=state.get("started_at"))
-        return await run_visible_report_read(request, lambda: checked_read(user, project))
+                purpose=purpose, started_at=state.get("started_at"), already_projected=True)
+        return await run_visible_report_read(request, lambda: checked_read(user, project, selected_resource=(kind, identity)))
 
     @router.get("/workspace/history/{kind}/{identity}")
     async def history(request: Request, kind: str, identity: str, page: int = Query(default=1, ge=1),
@@ -793,7 +910,7 @@ def install_workspace_routes(router, db, current_user, scope):
                 fail("operational_workspace_not_found", "الكشف غير متاح", 404)
             return automatic_history(resource, ledger_items(state, computed, resource, policy),
                                      page=page, page_size=page_size, generated_at=now())
-        return await run_visible_report_read(request, lambda: checked_read(user, project))
+        return await run_visible_report_read(request, lambda: checked_read(user, project, selected_resource=(kind, identity)))
 
     @router.post("/workspace/entries")
     async def entry(payload: WorkspaceEntry, user=Depends(current_user)):

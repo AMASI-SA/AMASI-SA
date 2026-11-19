@@ -275,6 +275,9 @@ async def compute_recurring_obligations_for_range(
 
 
 def _require_owner(user: dict[str, Any]) -> dict[str, Any]:
+    scope = user.get("_web_workspace_read")
+    if scope and scope[0] == "finance.obligations":
+        return {"id": scope[1]}
     role = _text(user.get("role")).casefold()
     if role != "owner" and user.get("is_owner") is not True:
         raise HTTPException(

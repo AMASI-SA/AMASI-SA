@@ -1,7 +1,7 @@
 import React, {useState} from 'react';
 import {operationalApi as api, messageFor} from './api';
 import PaginatedReportTable from './PaginatedReportTable';
-import {formatPositionCount, formatPositionMoney} from './financialPositionPresentation';
+import {formatPositionCount, formatPositionMoney} from './financialPositionDisplay';
 import PendingOrdersDialog from './PendingOrdersDialog';
 
 const cents = value => {

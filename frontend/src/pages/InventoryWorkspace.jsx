@@ -5,6 +5,7 @@ import InventoryAvailability from './operational/InventoryAvailability';
 import StandaloneInventoryEntry from './operational/StandaloneInventoryEntry';
 import InventoryPurchases from './operational/InventoryPurchases';
 import './operational/operational.css';
+import OperationalToolBack from './operational/OperationalToolBack';
 
 // This workspace reuses existing inventory permissions and data. It never
 // activates writers, reserves order units or invokes fulfillment transitions.
@@ -38,8 +39,8 @@ function InventoryManagement() {
   const selected = requested || tabs[0]?.[0];
   const allowed = tabs.some(([id]) => id === selected);
   const navigate = value => setParams({tab: value});
-  return <main className="op-page" dir="rtl">
-    <header><span className="op-eyebrow">ميزان · المنتجات</span><h1>المخزون</h1>
+  return <main className="op-page mz-finance-tool" dir="rtl">
+    <OperationalToolBack/><header><span className="op-eyebrow">ميزان · المنتجات</span><h1>المخزون</h1>
       <p>بضاعة مخزنية للطلبات المستقبلية، مستقلة عن مشتريات تجهيز طلبات العملاء.</p>
       <p role="note">ربط هذه المرحلة بحجز وصرف طلبات العملاء مؤجل. إدخال الكميات لا يفعّل جاهزيتها تلقائيًا؛ تبقى ضوابط الاستلام والتقييم والاعتماد سارية.</p>
     </header>

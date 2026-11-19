@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useOptionalAuth } from "../../context/AuthContext";
+import { grantedWebLink, managedWebPages } from "../../lib/webPageAccess";
 import { formatRiyadhDateTime } from "../../lib/dates";
 import { operationalApi as api, requestId } from "./api";
 import PaginatedReportTable from "./PaginatedReportTable";
@@ -13,6 +14,7 @@ import {
 } from "./providerStatementPresentation";
 import "./operational.css";
 import "./providerStatements.css";
+import OperationalToolBack from './OperationalToolBack';
 
 const date = value => typeof value === "string" && value && Number.isFinite(Date.parse(value)) ? formatRiyadhDateTime(value) : "غير متاح";
 const accepts = row => Boolean(statementConfirmationAction(row));
@@ -76,10 +78,11 @@ function AverageSummary({ value, provider, currency, compact = false }) {
 }
 
 function Frame({ children }) {
-    return <main className="op-page op-statements" dir="rtl" data-testid="provider-statements-page">
-        <header><span className="op-eyebrow">ميزان 2 · الأرصدة التشغيلية</span><h1>مطابقة كشوف منصات الدفع</h1>
+    const pages = managedWebPages(useOptionalAuth()?.user);
+    return <main className="op-page op-statements mz-finance-tool" dir="rtl" data-testid="provider-statements-page">
+        <OperationalToolBack/><header><span className="op-eyebrow">ميزان 2 · الأرصدة التشغيلية</span><h1>مطابقة كشوف منصات الدفع</h1>
             <p>ارفع كشف تابي أو تمارا أو سلة. نتعرف على المنصة تلقائيًا ونطابق عمليات الكشف مع سجلات الدفع والرد المحفوظة.</p>
-            <a className="op-statement-link" href="/operational-balances/financial-position?view=providers">عرض أرصدة منصات الدفع</a>
+            {grantedWebLink(pages, "/operational-balances/financial-position?view=providers") && <a className="op-statement-link" href="/operational-balances/financial-position?view=providers">عرض أرصدة منصات الدفع</a>}
         </header>{children}
     </main>;
 }
@@ -88,13 +91,23 @@ export default function ProviderStatements() {
     const auth = useOptionalAuth();
     const user = auth?.user;
     const owner = user?.is_owner === true || String(user?.role || "").toLowerCase() === "owner";
-    const identity = JSON.stringify([user?.id, user?.created_by, user?.owner_id, user?.merchant_id, user?.tenant_id, user?.role, user?.is_owner, auth?.authStatus]);
+    const grant = managedWebPages(user)?.find(page => page.id === "balances.statements");
+    const identity = JSON.stringify([grant?.mode, user?.id, user?.created_by, user?.owner_id, user?.merchant_id, user?.tenant_id, user?.role, user?.is_owner, auth?.authStatus]);
     if (auth?.loading) return <Frame><p role="status">جارٍ التحقق من الجلسة…</p></Frame>;
-    if (!user || !owner) return <Frame><p role="alert" className="op-error">مطابقة كشوف المنصات متاحة لمالك الحساب فقط.</p></Frame>;
-    return <Frame><StatementWorkspace key={identity} /></Frame>;
+    if (!user || (!owner && !grant)) return <Frame><p role="alert" className="op-error">مطابقة كشوف المنصات متاحة لمالك الحساب فقط.</p></Frame>;
+    return <Frame><StatementWorkspace key={identity} writable={owner || grant?.mode === "write"} /></Frame>;
 }
 
-function StatementWorkspace() {
+function StatementWorkspace({ writable }) {
+    const pages = managedWebPages(useOptionalAuth()?.user);
+    const focusSection = useRef(window.location.hash.slice(1));
+    function revealAnchor(node) {
+        if (node && node.id === focusSection.current) {
+            focusSection.current = '';
+            node.focus({ preventScroll: true });
+            node.scrollIntoView?.({ block: 'start' });
+        }
+    }
     const [history, setHistory] = useState(null), [detail, setDetail] = useState(null);
     const [savedFilesOpen, setSavedFilesOpen] = useState(false), [savedFiles, setSavedFiles] = useState(null);
     const [selectedSavedId, setSelectedSavedId] = useState("");
@@ -209,7 +222,7 @@ function StatementWorkspace() {
     }, []);
 
     async function send(command) {
-        if (!command || writeLock.current || !alive.current || !canReadOperationalPage() || denied) return;
+        if (!writable || !command || writeLock.current || !alive.current || !canReadOperationalPage() || denied) return;
         const current = context.current;
         if (!current?.active || command.body.expected_session_scope !== current.session_scope
             || current.permissions[intake(command.kind) ? "upload" : "confirm"] !== true) return;
@@ -313,13 +326,13 @@ function StatementWorkspace() {
         && (!row.existing.length || row.existing.some(record => record.id === choices[row.id])));
     const recordsNewEvents = selected.some(createsEvent);
     const disabled = Boolean(busy || pending || !readable || !history?.active || denied);
-    const canConfirm = detail?.active && detail?.permissions.confirm && history?.session_scope === detail?.session_scope;
+    const canConfirm = writable && detail?.active && detail?.permissions.confirm && history?.session_scope === detail?.session_scope;
     const canUseSaved = !disabled && history?.permissions.upload && savedFiles?.active && savedFiles.permissions.upload
         && Boolean(savedFiles.started_at) && savedFiles.session_scope === history?.session_scope && savedFiles.started_at === history?.started_at;
     return <>
         {error && <p role="alert" className="op-error">{error}</p>}
         {notice && <p role="status" className="op-success">{notice}</p>}
-        {denied ? <p className="op-muted">أعد تسجيل الدخول بحساب المالك لعرض الكشوف.</p> : <>
+        {denied ? <p className="op-muted">تعذّر الوصول إلى كشوف المنصات ضمن صلاحيات هذا الحساب.</p> : <>
             <div className="op-statement-toolbar">
                 <button type="button" onClick={() => read("history")} disabled={Boolean(busy) || !readable}>قراءة سجل الكشوف</button>
                 {busy && <span role="status">{busy === "upload" ? "جارٍ رفع الكشف ومطابقته…" : busy === "saved" ? "جارٍ استخدام الكشف المحفوظ ومطابقته…" : busy === "confirm" ? "جارٍ حفظ الاعتماد…" : "جارٍ قراءة الكشوف…"}</span>}
@@ -332,9 +345,9 @@ function StatementWorkspace() {
             </section>}
             {history && <>
                 {!history.active && <p className="op-error">التشغيل غير نشط. يمكنك قراءة الكشوف المحفوظة، ويتاح الرفع والاعتماد أثناء التشغيل.</p>}
-                <button type="button" className="op-statement-saved-toggle" aria-expanded={savedFilesOpen} onClick={toggleSavedFiles}
+                {writable && <button type="button" className="op-statement-saved-toggle" aria-expanded={savedFilesOpen} onClick={toggleSavedFiles}
                     disabled={(Boolean(busy) && busy !== "saved_read") || Boolean(pending) || !readable}>
-                    {savedFilesOpen ? "إغلاق قائمة الكشوف السابقة" : "استخدام كشف مرفوع سابقًا"}</button>
+                    {savedFilesOpen ? "إغلاق قائمة الكشوف السابقة" : "استخدام كشف مرفوع سابقًا"}</button>}
                 {savedFilesOpen && <section className="op-statement-saved" aria-label="الكشوف المرفوعة سابقًا">
                     <h2>الكشوف المرفوعة سابقًا</h2><p>اختر ملفًا أصليًا محفوظًا من تابي أو تمارا أو سلة، ثم استخدمه لمطابقة العمليات والرسوم داخل الأرصدة التشغيلية.</p>
                     <button type="button" onClick={() => read("saved")} disabled={Boolean(busy) || !readable}>إعادة قراءة قائمة الكشوف السابقة</button>
@@ -356,7 +369,7 @@ function StatementWorkspace() {
                             <button type="submit" className="op-primary" disabled={!canUseSaved || !selectedSavedId}>استخدام الكشف المختار ومطابقته</button>
                         </form>}
                 </section>}
-                <form onSubmit={upload} className="op-statement-upload" data-testid="provider-statement-upload">
+                {writable && <form id="upload" tabIndex={-1} ref={revealAnchor} onSubmit={upload} className="op-statement-upload" data-testid="provider-statement-upload">
                     <h2>رفع كشف للمطابقة</h2>
                     <label className="op-field">ملف كشف المنصة
                         <input key={fileKey} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -365,7 +378,7 @@ function StatementWorkspace() {
                     <p className="op-muted">ملف Excel أصلي · حتى 10 ميجابايت و10,000 سطر. تُعتمد رسوم العمليات المطابقة من الكشف، وتبقى الفروق للمراجعة.</p>
                     <button type="submit" className="op-primary" disabled={disabled || !history.permissions.upload || !history.started_at || !file}>رفع الكشف ومطابقته</button>
                     <p className="op-muted">رفع الكشف أو اعتماد مطابقته لا يثبت وصول تحويل إلى البنك.</p>
-                </form>
+                </form>}
                 {detail && <section className="op-statement-review" aria-label="مطابقة الكشف" data-testid="provider-statement-review">
                     <header><h2>{STATEMENT_PROVIDERS[detail.statement.provider]} · مطابقة الكشف</h2>
                         <p>المرجع: <bdi>{statementText(detail.statement.statement_reference)}</bdi> · العملة: <bdi>{statementText(detail.statement.native_currency)}</bdi></p>
@@ -411,7 +424,7 @@ function StatementWorkspace() {
                                     </> : <span className="op-muted">لا يوجد سجل مقابل</span>}</td>
                                     <td><strong className={`op-statement-status op-statement-${row.status}`}>{STATEMENT_STATUSES[row.status]}</strong>
                                         <p>{statementRowMessage(row)}</p><ProposedEffect row={row} />
-                                        {action && <a className="op-statement-link" href={action}>{row.action_label || "فتح صفحة المعالجة"}</a>}</td>
+                                        {action && grantedWebLink(pages,action) && <a className="op-statement-link" href={action}>{row.action_label || "فتح صفحة المعالجة"}</a>}</td>
                                 </tr>;
                             })}</tbody></table></div>}
                         </PaginatedReportTable>
@@ -426,7 +439,7 @@ function StatementWorkspace() {
                     </form>
                     <button type="button" onClick={() => read("review", detail.statement.id)} disabled={Boolean(busy) || !readable}>إعادة قراءة مطابقة هذا الكشف</button>
                 </section>}
-                <section className="op-statement-history" aria-label="الكشوف المحفوظة"><h2>الكشوف المحفوظة</h2>
+                <section id="history" tabIndex={-1} ref={revealAnchor} className="op-statement-history" aria-label="الكشوف المحفوظة"><h2>الكشوف المحفوظة</h2>
                     {history.has_more === true && <p className="op-muted">يعرض السجل أحدث {history.items.length} كشفًا. توجد كشوف أقدم محفوظة.</p>}
                     {!history.items.length ? <p className="op-muted">لم تُرفع كشوف في هذه الصفحة بعد.</p> : <PaginatedReportTable rows={history.items} label="الكشوف المحفوظة" resetKey={history.session_scope}>
                         {rows => <div className="op-table"><table><thead><tr><th>المنصة والكشف</th><th>وقت الرفع</th><th>العمليات</th><th>آخر نتيجة مطابقة</th><th>فتح</th></tr></thead>

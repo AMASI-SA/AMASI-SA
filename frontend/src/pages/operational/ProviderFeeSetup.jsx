@@ -9,6 +9,7 @@ import PaginatedReportTable from "./PaginatedReportTable";
 import ObservedPaymentMethods from "./ObservedPaymentMethods";
 import { requestId } from "./api";
 import "./financialPosition.css";
+import OperationalToolBack from './OperationalToolBack';
 
 const providers = { salla: "سلة", tamara: "تمارا", tabby: "تابي", emkan: "إمكان" };
 const rails = { mada: "مدى", visa: "فيزا", mastercard: "ماستركارد", apple_pay: "Apple Pay", google_pay: "Google Pay", stc_pay: "STC Pay", credit_card: "بطاقة ائتمانية", debit_card: "بطاقة بنكية", salla_wallet: "محفظة سلة" };
@@ -177,7 +178,7 @@ function FeeForm() {
             setMessage(errors[detail?.code] || "تعذر حفظ التعرفة. تحقق من المستند والتواريخ ومجموع الأجزاء والنسب.");
         } finally { setBusy(false); }
     }
-    return <main dir="rtl" className="p-5 space-y-4 max-w-7xl mx-auto">
+    return <main dir="rtl" className="mz-finance-tool mz-fees-page p-5 space-y-4 max-w-7xl mx-auto"><OperationalToolBack/>
         <a href="/operational-balances/financial-position">العودة إلى المركز المالي التشغيلي</a>
         <h1 className="text-2xl font-bold">رسوم طرق الدفع في ميزان 2</h1>
         <p>يعرض الجدول تعرفات الرسوم وفترات سريانها، ويُحفظ كل تعديل مع إصدار التعرفة السابق. تعتمد الرسوم الفعلية عند توثيق كشف التسوية.</p>

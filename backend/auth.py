@@ -342,6 +342,12 @@ async def get_current_user_from_db(request: Request, db) -> dict:
         # Private request context used only by server-side native-app policy.
         # It is derived from the signed JWT and cannot be supplied by a header.
         user["_session_client"] = str(payload.get("client") or "").strip() or None
+        user.pop("_web_workspace_read", None)
+        if "web_page_access" in user and user["_session_client"] != "amasi_mobile":
+            # Legacy routers authenticate here directly, as do Mezan 2 dependencies.
+            from web_page_access import bind_workspace_reader, enforce_web_catalog_access
+            enforce_web_catalog_access(user, request.url.path, request.method, request.query_params)
+            await bind_workspace_reader(db, user, request.url.path, request.method, request.query_params)
         return user
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
@@ -503,7 +509,7 @@ DEFAULT_SHIPPING_COMPANIES = [
 ]
 
 
-async def ensure_user_settings(db, user_id: str) -> dict:
+async def ensure_user_settings(db, user_id: str, *, persist_defaults: bool = True) -> dict:
     settings = await db.settings.find_one({"user_id": user_id})
     if settings is None:
         settings = {
@@ -513,7 +519,8 @@ async def ensure_user_settings(db, user_id: str) -> dict:
             "shipping_companies": DEFAULT_SHIPPING_COMPANIES,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
-        await db.settings.insert_one(settings)
+        if persist_defaults:
+            await db.settings.insert_one(settings)
     else:
         # Backfill new canonical rails and upgrade only untouched historical
         # defaults.  Exact merchant edits survive the version migration.
@@ -529,10 +536,11 @@ async def ensure_user_settings(db, user_id: str) -> dict:
             update_fields["payment_fee_defaults_version"] = PAYMENT_FEE_DEFAULTS_VERSION
         if update_fields:
             update_fields["updated_at"] = datetime.now(timezone.utc).isoformat()
-            await db.settings.update_one(
-                {"user_id": user_id},
-                {"$set": update_fields},
-            )
+            if persist_defaults:
+                await db.settings.update_one(
+                    {"user_id": user_id},
+                    {"$set": update_fields},
+                )
             settings.update(update_fields)
     settings.pop("_id", None)
     return settings

@@ -1,7 +1,7 @@
 import ReceivingInvoiceCoverage from './ReceivingInvoiceCoverage';
 import {useEffect, useRef, useState} from 'react';
 import {operationalApi as api, requestId, messageFor} from './api';
-import {formatPositionMoney} from './financialPositionPresentation';
+import {formatPositionMoney} from './financialPositionDisplay';
 import PaginatedReportTable from './PaginatedReportTable';
 import {visibleOperationalRead} from './visibleOperationalRead';
 import './nativePurchaseReview.css';

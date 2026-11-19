@@ -47,7 +47,8 @@ async def build_client(store):
 
     async def current_user(request: Request):
         user = await store.users.find_one({"id": request.headers["test-actor"]}, {"_id": 0})
-        enforce_web_catalog_access(user, request.url.path, request.method)
+        if request.url.path != "/api/test-session-pages":
+            enforce_web_catalog_access(user, request.url.path, request.method, request.query_params)
         return user
 
     app = FastAPI()
@@ -91,7 +92,7 @@ async def test_only_the_merchant_owner_can_assign_known_pages_to_an_active_team_
         assert {row["section"] for row in listing.json()["pages"]} >= {"products", "orders", "accounting"}
         assert {row["id"] for row in listing.json()["pages"] if row["section"] == "products"} == {
             PRODUCTS_PAGE, INTAKE_PAGE, WAREHOUSES_PAGE, "products.components",
-            "products.inventory", "products.receiving",
+            "products.inventory", "products.receiving", "products.sold",
         }
 
         assert (await client.get(GRANTS, headers=actor("employee"))).status_code == 403

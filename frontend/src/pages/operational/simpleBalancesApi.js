@@ -6,7 +6,7 @@ const data = promise => promise.then(response => response.data);
 const read = config => ({ timeout: 30000, ...config });
 
 export const simpleBalancesApi = {
-  context: config => data(http.get(`${workspace}/context`, { ...read(config), params: { ad_bank_fx: true } })),
+  context: (config, { homePreview = false } = {}) => data(http.get(`${workspace}/context`, { ...read(config), params: { ad_bank_fx: true, ...(homePreview ? { home_preview: true } : {}) } })),
   parties: (params, config) => data(http.get(`${workspace}/parties`, { ...read(config), params })),
   movements: (params, config) => data(http.get(`${workspace}/movements`, { ...read(config), params })),
   ledger: (kind, id, params, config) => data(http.get(
