@@ -23,6 +23,7 @@ export const simpleBalancesApi = {
   review: (id, config) => data(http.get(`${workspace}/reviews/${encodeURIComponent(id)}`, read(config))),
   reviewOptions: (id, config) => data(http.get(`${workspace}/reviews/${encodeURIComponent(id)}/options`, read(config))),
   reviewBankMovements: (id, params, config) => data(http.get(`${workspace}/reviews/${encodeURIComponent(id)}/bank-movements`, { ...read(config), params })),
+  bindPos: body => data(http.post('/operational-balances/pos-receivable-binding', body, { timeout: 30000 })),
   reviewReceipt: (id, config) => data(http.get(`${workspace}/reviews/${encodeURIComponent(id)}/receipt`, { ...read(config), responseType: 'blob' })),
   reviewDecision: (id, body) => data(http.post(`${workspace}/reviews/${encodeURIComponent(id)}`, body, { timeout: 30000 })),
   entry: body => data(http.post(`${workspace}/entries`, body, { timeout: 30000 })),

@@ -140,13 +140,15 @@ function EntryForm({ context, resource, onCancel, onSaved }) {
     onSaved, onRetired: onCancel });
   const pending = mutation.pending?.command;
   const { error, busy } = mutation;
-  const [form, setForm] = useState(() => ({ side: isMoneyAccount(resource.kind) ? 'for_us' : '',
-    reason: isMoneyAccount(resource.kind) ? 'transfer' : '', amount: '', business_date: todaySA(), note: '',
+  const [form, setForm] = useState(() => ({ side: isMoneyAccount(resource.kind) ? 'for_us' : resource.kind === 'pos_receivable' ? 'for_party' : '',
+    reason: isMoneyAccount(resource.kind) ? 'transfer' : resource.kind === 'pos_receivable' ? 'collection' : '', reference: '', arrival: false, fee: '', feeReference: '', amount: '', business_date: todaySA(), note: '',
     source: '', employee_id: '', owner_id: '', expense_id: '', charity_account: '' }));
   useEffect(() => {
     if (!pending) return;
     setForm({ side: pending.side, reason: pending.reason?.startsWith('charity_') ? 'charity' : pending.reason || '',
       amount: pending.amount, business_date: pending.business_date, note: pending.note || '',
+      reference: pending.reference || '', arrival: pending.bank_arrival_confirmed === true,
+      fee: pending.actual_fee_amount || '', feeReference: pending.fee_reference || '',
       source: pending.source_id ? JSON.stringify([pending.source_type, pending.source_id]) : '',
       employee_id: pending.employee_id || '', owner_id: pending.owner_id || '', expense_id: pending.expense_id || '',
       charity_account: pending.reason === 'charity_company' ? 'company' : pending.reason === 'charity_owner' ? 'owner' : '' });
@@ -156,7 +158,8 @@ function EntryForm({ context, resource, onCancel, onSaved }) {
   const external = resource.kind === 'external_person';
   const account = isMoneyAccount(resource.kind);
   const choices = entryChoices(resource.kind, form.side, operations);
-  const implicit = account || external && form.side === 'for_us';
+  const pos = resource.kind === 'pos_receivable';
+  const implicit = account || pos || external && form.side === 'for_us';
   const choice = implicit ? choices[0] : choices.find(item => item.reason === form.reason);
   const reason = choice?.reason ?? '';
   const needsOwner = external && (['household', 'personal'].includes(reason) || reason === 'charity' && form.charity_account === 'owner');
@@ -167,7 +170,7 @@ function EntryForm({ context, resource, onCancel, onSaved }) {
   const employees = available.filter(item => item.kind === 'employee');
   const owners = available.filter(item => item.kind === 'owner_withdrawal');
   const expenses = available.filter(item => item.kind === 'operating_expense');
-  const sources = available.filter(item => (item.currency || 'SAR') === 'SAR' && (isMoneyAccount(item.kind) || item.kind === 'employee_custody' && globalOperations.has('custody.spend') && form.side === 'for_us' && ['external_person', 'supplier', 'operating_expense'].includes(resource.kind)) && resourceKey(item) !== resourceKey(resource));
+  const sources = available.filter(item => (!pos || item.kind === 'bank') && (item.currency || 'SAR') === 'SAR' && (isMoneyAccount(item.kind) || item.kind === 'employee_custody' && globalOperations.has('custody.spend') && form.side === 'for_us' && ['external_person', 'supplier', 'operating_expense'].includes(resource.kind)) && resourceKey(item) !== resourceKey(resource));
   const source = sources.find(item => resourceKey(item) === form.source);
   const employee = employees.find(item => item.id === form.employee_id);
   const owner = owners.find(item => item.id === form.owner_id);
@@ -203,6 +206,9 @@ function EntryForm({ context, resource, onCancel, onSaved }) {
           party_type: resource.kind, party_id: resource.id, side: form.side,
           amount, business_date: form.business_date, note: form.note.trim(),
           ...(reason ? { reason: reason === 'charity' ? `charity_${form.charity_account}` : reason } : {}),
+          ...((pos || account) && form.reference.trim() ? { reference: form.reference.trim() } : {}),
+          ...(pos && form.arrival ? { bank_arrival_confirmed: true } : {}),
+          ...(pos && form.fee.trim() ? { actual_fee_amount: form.fee.trim(), fee_reference: form.feeReference.trim() } : {}),
           ...(needsSource ? { source_type: source.kind, source_id: source.id } : {}),
           ...(reason === 'salary_settlement' ? { employee_id: employee.id } : {}),
           ...(needsOwner ? { owner_id: owner.id } : {}), ...(needsExpense ? { expense_id: expense.id } : {}),
@@ -210,17 +216,23 @@ function EntryForm({ context, resource, onCancel, onSaved }) {
     });
   }
 
-  return <section><button type="button" className="sb-text" disabled={busy} onClick={onCancel}>العودة إلى الحساب</button><div className="sb-title"><h1>{account ? 'تحويل إلى هذا الحساب' : 'إضافة مبلغ'}</h1><p>{resource.name}</p></div><BalanceCard resource={resource} label="الرصيد قبل الحركة" />
+  return <section><button type="button" className="sb-text" disabled={busy} onClick={onCancel}>العودة إلى الحساب</button><div className="sb-title"><h1>{pos ? 'موازنة الشبكة / تحويل إلى بنك' : account ? 'تحويل إلى هذا الحساب' : 'إضافة مبلغ'}</h1><p>{resource.name}</p></div><BalanceCard resource={resource} label="الرصيد قبل الحركة" />
     {!canWrite && <Notice error="إضافة الحركات غير متاحة لهذا الحساب في حالة النظام أو الصلاحيات الحالية." />}
     <form className="sb-entry" onSubmit={save} noValidate>
       <Notice error={error} />
       {mutation.recovering && <Notice>جارٍ استعادة العملية السابقة من الخادم…</Notice>}
       {mutation.blocked && <button className="sb-secondary" type="button" onClick={mutation.recover} disabled={busy || mutation.recovering}>استعادة العملية السابقة</button>}
       {pending && <Notice>هناك عملية بانتظار تأكيد النتيجة. إعادة المحاولة تستخدم العملية نفسها دون إنشاء قيد جديد.</Notice>}
-      {!account && <fieldset className="sb-direction" disabled={disabled}><legend>المبلغ يسجل</legend><div>{[['for_party', 'له', external ? 'أخذت منه مبلغًا أو دفع عنك' : 'يزيد ما له أو يقلل ما عليه'], ['for_us', 'عليه', external ? 'سلّمت له مبلغًا' : 'يقلل ما له أو يزيد ما عليه']].map(([side, label, help]) => <button type="button" key={side} data-side={side} aria-pressed={form.side === side} disabled={disabled || !entryChoices(resource.kind, side, operations).length} onClick={() => chooseSide(side)}><strong>{label}</strong><span>{help}</span></button>)}</div></fieldset>}
+      {!account && !pos && <fieldset className="sb-direction" disabled={disabled}><legend>المبلغ يسجل</legend><div>{[['for_party', 'له', external ? 'أخذت منه مبلغًا أو دفع عنك' : 'يزيد ما له أو يقلل ما عليه'], ['for_us', 'عليه', external ? 'سلّمت له مبلغًا' : 'يقلل ما له أو يزيد ما عليه']].map(([side, label, help]) => <button type="button" key={side} data-side={side} aria-pressed={form.side === side} disabled={disabled || !entryChoices(resource.kind, side, operations).length} onClick={() => chooseSide(side)}><strong>{label}</strong><span>{help}</span></button>)}</div></fieldset>}
       {!implicit && form.side && <Field label="سبب المبلغ"><select value={form.reason} disabled={disabled} onChange={event => change({ ...resetConditional, reason: event.target.value })} required><option value="">اختر سبب المبلغ</option>{choices.map(item => <option key={item.reason} value={item.reason}>{item.label}</option>)}</select></Field>}
-      <div className="sb-form-two"><Field label="المبلغ بالريال"><input inputMode="decimal" dir="ltr" value={form.amount} disabled={disabled} onChange={event => change({ amount: event.target.value })} placeholder="0.00" required /></Field><Field label="التاريخ"><input type="date" value={form.business_date} max={todaySA()} disabled={disabled} onChange={event => change({ business_date: event.target.value })} required /></Field></div>
+      <div className="sb-form-two"><Field label={pos ? "صافي المبلغ الوارد إلى البنك بالريال" : "المبلغ بالريال"}><input inputMode="decimal" dir="ltr" value={form.amount} disabled={disabled} onChange={event => change({ amount: event.target.value })} placeholder="0.00" required /></Field><Field label="التاريخ"><input type="date" value={form.business_date} max={todaySA()} disabled={disabled} onChange={event => change({ business_date: event.target.value })} required /></Field></div>
       {needsSource && <Field label={form.side === 'for_party' && !account ? 'الإيداع في' : 'الدفع من'}><select value={form.source} disabled={disabled} onChange={event => change({ source: event.target.value })} required><option value="">اختر الحساب</option>{sources.map(item => <option key={resourceKey(item)} value={resourceKey(item)}>{item.kind === 'employee_custody' ? 'عهدة · ' : ''}{item.name}{item.kind === 'employee_custody' && item.access?.balance && item.balance ? ` · المتبقي ${item.balance.side === 'for_us' ? money(item.balance.amount) : '0'} ريال` : ''}</option>)}</select>{!sources.length && <small>لا توجد مصادر مسموحة لهذه العملية. يحددها مسؤول الصلاحيات.</small>}</Field>}
+      {(pos || account) && <Field label="مرجع التحويل"><input maxLength={160} value={form.reference} required={pos || source?.kind === 'bank' && resource.prepaid_shipping_cash === true} disabled={disabled} onChange={event => change({ reference: event.target.value })} /></Field>}
+      {pos && <>
+        <Field label="رسوم الشبكة الفعلية إن وجدت"><input inputMode="decimal" value={form.fee} disabled={disabled} onChange={event => change({ fee: event.target.value })} /></Field>
+        {form.fee && <Field label="مرجع مستند الرسوم"><input required maxLength={160} value={form.feeReference} disabled={disabled} onChange={event => change({ feeReference: event.target.value })} /></Field>}
+        <label><input type="checkbox" required checked={form.arrival} disabled={disabled} onChange={event => change({ arrival: event.target.checked })} /> طابقت وصول صافي التحويل مع حساب البنك المحدد</label>
+      </>}
       {reason === 'salary_settlement' && <Field label="الموظف"><select value={form.employee_id} disabled={disabled} onChange={event => change({ employee_id: event.target.value })} required><option value="">اختر الموظف</option>{employees.map(item => <option key={item.id} value={item.id}>{item.name}{item.access?.balance && item.balance ? ` · المستحق ${item.balance.side === 'for_party' ? money(item.balance.amount) : '0'} ريال` : ''}</option>)}</select></Field>}
       {reason === 'charity' && <Field label="الصدقات على حساب"><select value={form.charity_account} disabled={disabled} onChange={event => change({ charity_account: event.target.value, owner_id: '', expense_id: '' })} required><option value="">اختر صاحب المصروف</option>{operations.has('external.charity_company') && <option value="company">المؤسسة</option>}{operations.has('external.charity_owner') && <option value="owner">المالك</option>}</select></Field>}
       {needsOwner && <Field label="حساب المالك"><select value={form.owner_id} disabled={disabled} onChange={event => change({ owner_id: event.target.value })} required><option value="">اختر حساب المالك</option>{owners.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>}
@@ -348,7 +360,7 @@ function Workspace({ context, identity, reloadContext }) {
   return <main className="sb-workspace sb-compact" dir="rtl" aria-label="الأرصدة والحركات المالية">
     <div inert={dialog ? true : undefined}>
       <header className="sb-header"><div><h1>{title}</h1><span>{subtitle}</span></div><div className="sb-header-actions">
-        {selected && canAdd && !adding && !panel && <button type="button" className="sb-menu" onClick={() => go({ ...values(), action: 'add' })}>+ إضافة</button>}
+        {selected && canAdd && !adding && !panel && <button type="button" className="sb-menu" onClick={() => go({ ...values(), action: 'add' })}>{resource.kind === 'pos_receivable' ? 'موازنة / تحويل إلى بنك' : '+ إضافة'}</button>}
         {panel !== 'reviews' && (selected || panel || adding || location.state?.sbReturn) && <button type="button" className="sb-menu" onClick={back}>رجوع</button>}
         {!selected && !panel && <button type="button" className="sb-menu" aria-label="جميع الأقسام" onClick={() => go({ ...values(), panel: 'sections' })}>الأقسام</button>}
       </div></header>
@@ -369,6 +381,7 @@ function Workspace({ context, identity, reloadContext }) {
           : selected && [403, 404].includes(read.status) ? <><Notice error={read.error} /><button type="button" className="sb-secondary" onClick={reloadContext}>تحديث الصلاحيات</button></>
           : adding && selected ? <EntryForm key={`${context.session_scope}:${resourceKey(selected)}`} context={context} resource={selected} onCancel={back} onSaved={saved} />
           : selected ? <><BalanceCard resource={resource} />
+            {result?.pos_summary && <dl className="sb-pos-summary"><dt>إيصالات الشبكة المعتمدة</dt><dd>{money(result.pos_summary.approved)} ريال</dd><dt>المحوّل إلى البنوك</dt><dd>{money(result.pos_summary.bank_received)} ريال</dd><dt>الرسوم الفعلية</dt><dd>{money(result.pos_summary.fees)} ريال</dd></dl>}
             {(canReviewDriver || result?.expected_collections?.total > 0) && <div className="sb-compact-actions">{canReviewDriver && <button type="button" className="sb-secondary" onClick={() => go({ ...values(), panel: 'reviews', review_driver: resource.id })}>مراجعاته</button>}{result?.expected_collections?.total > 0 && <button type="button" className="sb-secondary" onClick={() => openDialog('expected')}><strong>متوقع تحصيله · {money(result.expected_collections.amount)} {resource.currency || 'SAR'}</strong><small>{result.expected_collections.total} طلب · خارج الرصيد المؤكد</small></button>}</div>}
             {resource.access?.movements === 'own' && <p className="sb-small-note">يعرض السجل الحركات التي سجّلتها أنت فقط.</p>}
             {resource.access?.movements === 'none' ? <p className="sb-small-note">عرض حركات هذا الحساب غير متاح ضمن صلاحياتك.</p> : <><Loading {...read} retry={read.reload} />{result && <Ledger result={result} resource={resource} focusId={focusId} onPage={page} onDetail={row => openDialog('movement', row)} onHistory={row => openDialog('history', row)} onStatement={canReadStatement(context, resource) ? () => openDialog('statement') : undefined} />}</>}</>

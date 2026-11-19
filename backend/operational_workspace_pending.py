@@ -70,7 +70,8 @@ def _require_scope(expected, owner, actor):
 
 def _normalize(payload):
     try:
-        command = ACTION_MODELS[payload.action].model_validate(payload.command).model_dump()
+        parsed = ACTION_MODELS[payload.action].model_validate(payload.command)
+        command = parsed.command() if isinstance(parsed, WorkspaceEntry) else parsed.model_dump()
     except ValidationError:
         fail("operational_pending_command_invalid", "بيانات العملية المحفوظة غير صحيحة", 422)
     needs_target = payload.action not in {"entry", "refund.create"}

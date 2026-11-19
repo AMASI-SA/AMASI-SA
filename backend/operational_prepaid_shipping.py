@@ -8,7 +8,8 @@ from operational_courier_transitions import COMPLETED_PROOF
 from operational_delivery_evidence import _courier, _current_shipping, _instant, _status
 from operational_completed_shipping_admission import build_review_index, require_admission
 from operational_order_completed_evidence import bind_completed_waybill, completion_time
-from operational_aramex_status_shipping import STATUS_EVENT, STATUS_FIELDS, accounting_time, status_recognition
+from operational_aramex_status_shipping import (OWNER_STATUS_BASIS, STATUS_EVENT, STATUS_FIELDS, accounting_time, owner_rule_active,
+    owner_status_observation, status_recognition)
 
 SCHEMA = 'operational_prepaid_shipping_v1'
 
@@ -25,6 +26,10 @@ def source_event(data, setup, source, raw, state, owner, start, end, history, sh
     current = source.get('salla_shipping_current') or raw.get('salla_shipping_current') or {}
     prepaid = [rate for rate in setup.get('contracts', []) if rate.get('context') == 'order_completed'
                and rate.get('payment_mode') == 'prepaid']
+    if owner_rule_active(state, owner):
+        candidate = approved_aramex_charge(data, setup, source, raw, owner, start, end, current, prepaid)
+        if candidate is not None:
+            return True, candidate
     keys = {str(key).casefold() for rate in prepaid for key in rate.get('keys', [])}
     if not any(str(current.get(key) or '').casefold() in keys for key in ('company_code', 'company_name')):
         return False, None
@@ -69,6 +74,44 @@ def source_event(data, setup, source, raw, state, owner, start, end, history, sh
         if recognition is None:
             raise
         at = end
+    if at < start:
+        return True, None
+    event = priced_event(data, setup, raw, owner, start, at, party, carrier_key, shipment, waybill, recognition, prepaid)
+    if not event:
+        return False, None
+    if not review_only:
+        require_admission(state, event, review_index=review_index)
+    return True, event
+
+
+def approved_aramex_charge(data, setup, source, raw, owner, start, end, current, prepaid):
+    # The current carrier must match the owner's approved Aramex contract.
+    from shipping_companies import normalize_shipping_company
+    from salla_shipping import extract_shipping
+    current = current or extract_shipping(raw) or {}
+    if not isinstance(current, dict):
+        return None
+    rates = [r for r in prepaid if r.get('party_id') == 'aramex']
+    aliases = [str(k) for r in rates for k in r.get('keys', [])]
+    name = str(current.get('company_name') or '')
+    code = str(current.get('company_code') or '')
+    carrier = normalize_shipping_company(name)[0] if name else None
+    if carrier and carrier != 'aramex' and not carrier.startswith('other:'):
+        return None
+    key = next((k for k in aliases if k.casefold() in {code.casefold(), name.casefold()}), None)
+    if not key and carrier == 'aramex':
+        key = next((k for k in aliases if normalize_shipping_company(k)[0] == 'aramex'), None)
+    if not key:
+        return None
+    party = 'aramex'
+    observation = owner_status_observation(raw, source, party, owner, start, end, current)
+    if not observation:
+        return None
+    return priced_event(data, setup, raw, owner, start, end, party, key, observation['shipment_id'],
+                        observation['waybill'], observation, prepaid)
+
+
+def priced_event(data, setup, raw, owner, start, at, party, carrier_key, shipment, waybill, recognition, prepaid):
     rates = [rate for rate in prepaid if rate.get('party_id') == party and rate.get('status') == 'approved'
              and _instant(rate['effective_from']) <= at
              and (not rate.get('effective_to') or at < _instant(rate['effective_to']))]
@@ -77,12 +120,15 @@ def source_event(data, setup, source, raw, state, owner, start, end, history, sh
                and _instant(rate['effective_from']) <= at
                and (not rate.get('effective_to') or at < _instant(rate['effective_to']))]
     if not rates and overlap:
-        return False, None  # A later approved deferred period has its own delivery rule.
+        return None  # A later approved deferred period has its own delivery rule.
     if len(rates) != 1 or overlap:
         raise ValueError('operational_prepaid_shipping_tariff_ambiguous')
     if at < start:
-        return True, None
+        return None
     rate = rates[0]
+    if (recognition.get('recognition_basis') == OWNER_STATUS_BASIS
+            and _instant(rate['effective_from']) > _instant(recognition['order_created_at'])):
+        raise ValueError('operational_prepaid_shipping_tariff_period_requires_review')
     account = rate.get('cash_account') or {}
     if (rate.get('confirmed_by') != owner or not rate.get('confirmed_at') or rate.get('currency') != 'SAR'
             or account.get('kind') != 'cash' or account.get('currency') != 'SAR' or not account.get('id')):
@@ -94,7 +140,7 @@ def source_event(data, setup, source, raw, state, owner, start, end, history, sh
             or accounts[0].get('ready') is False or not (accounts[0].get('display_name') or accounts[0].get('name'))):
         raise ValueError('operational_prepaid_shipping_cash_account_unavailable')
     base = split_tax_amount(rate['terms']['cost_per_order'], rate['terms']['vat_percent'], inclusive=False)
-    event = {'schema': SCHEMA, 'owner_id': owner, 'order_id': oid,
+    event = {'schema': SCHEMA, 'owner_id': owner, 'order_id': str(raw['id']),
         'order_number': str(raw.get('reference_id') or raw.get('order_number')), 'party_type': 'courier', 'party_id': party,
         'party_name': rate['name'], 'currency': 'SAR', 'amount': str(base['gross']),
         'net_amount': str(base['net']), 'tax_amount': str(base['vat']),
@@ -103,9 +149,7 @@ def source_event(data, setup, source, raw, state, owner, start, end, history, sh
         'source_carrier_key': carrier_key, **recognition}
     if not recognition and (not shipment or not waybill):
         event['completion_admission_required'] = True
-    if not review_only:
-        require_admission(state, event, review_index=review_index)
-    return True, event
+    return event
 
 
 def apply_events(state, events, start, now, issue):
@@ -130,6 +174,8 @@ def apply_events(state, events, start, now, issue):
                     raise ValueError('operational_prepaid_shipping_recorded_evidence_changed')
                 continue
             require_admission(state, event, review_index=review_index)
+            if event.get('recognition_basis') == OWNER_STATUS_BASIS and not owner_rule_active(state, state['owner_id']):
+                raise ValueError('operational_prepaid_shipping_owner_rule_required')
             at = accounting_time(event, start, now)
             versions = [row for row in state.get('courier_tariffs', []) if row.get('id') == event.get('party_id')]
             valid = [row for row in versions if row.get('version_id') == event.get('tariff_version_id')]
@@ -165,6 +211,7 @@ def apply_events(state, events, start, now, issue):
             metadata = {'payment_mode': 'prepaid', 'recognition_event': STATUS_EVENT if by_status else 'order_completed', 'order_id': oid,
                         'order_number': event['order_number'], 'completed_at': event['completed_at'],
                         'tariff_version_id': rate['version_id'], 'cash_account_id': account['id'],
+                        **({key: event[key] for key in ('shipment_id', 'waybill') if event.get(key)}),
                         **({key: event[key] for key in STATUS_FIELDS} if by_status else {})}
             charge = {'id': charge_id, 'kind': 'shipping', 'party_type': 'courier', 'party_id': event['party_id'],
                       'name': event['party_name'], 'currency': 'SAR', 'direction': 'payable', 'expected': '0.00',

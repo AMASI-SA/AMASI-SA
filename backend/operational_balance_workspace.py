@@ -79,6 +79,16 @@ class WorkspaceEntry(BaseModel):
     note: str = Field(default="", max_length=1000)
     reference: str = Field(default="", max_length=160)
 
+    bank_arrival_confirmed: Literal[True] | None = None
+    actual_fee_amount: str | None = Field(default=None, max_length=30)
+    fee_reference: str | None = Field(default=None, min_length=1, max_length=160)
+
+    def command(self):
+        # Omit newly introduced fields from pre-existing pending-command hashes.
+        exclude = {key for key in ("bank_arrival_confirmed", "actual_fee_amount", "fee_reference")
+                   if getattr(self, key) is None}
+        return self.model_dump(exclude=exclude)
+
     @field_validator("amount")
     @classmethod
     def valid_amount(cls, value):
@@ -287,6 +297,8 @@ async def save_entry(db, owner, actor, payload, source):
             "workspace_reason": reason or "payment", "workspace_intent_hash": digest(payload),
             "workspace_resources": [{"kind": k, "id": i} for k, i in resources],
         }
+        body.update({key: payload[key] for key in ("bank_arrival_confirmed", "actual_fee_amount", "fee_reference")
+                     if key in payload})
         saved = await create_movement(db, owner, actor["id"], body, source=source)
         return {"saved": True, "movement_id": saved["id"], "party_type": saved["party_type"], "party_id": saved["party_id"]}
 
@@ -302,6 +314,7 @@ def _balance(row, kind):
 
 
 async def resource_catalog(db, owner, policy, state):
+    from operational_balance_service import prepaid_shipping_cash
     from operational_balance_sources import entities
     computed = await prepare_in_thread(report, state)
     balances = {(r["party_type"], r["party_id"], r["currency"]): r for r in computed["parties"]}
@@ -323,6 +336,7 @@ async def resource_catalog(db, owner, policy, state):
                 operations = []
             items.append({"kind": kind, "id": row["id"], "name": row.get("name") or row["id"],
                           "currency": currency, "access": access, "operations": operations,
+                          **({"prepaid_shipping_cash": True} if kind == "cash" and prepaid_shipping_cash(state, row["id"]) else {}),
                           "balance": _balance(balances.get((kind, row["id"], currency), {}), kind) if access["balance"] else None})
     return items, computed
 
@@ -392,6 +406,10 @@ def _row(policy, resource, item, amount, side, description):
         if ((item.get("party_type"), item.get("party_id")) != (resource["kind"], resource["id"])
                 and isinstance(item.get("name"), str) and item["name"].strip()):
             result["counterparty_name"] = item["name"].strip()
+            if (resource["kind"] == "cash" and item.get("automatic_prepaid_shipping") is True
+                    and item.get("party_type") == "courier" and item.get("direction") == "outgoing"
+                    and item.get("kind") == "payment" and result.get("order_number")):
+                result["prepaid_shipping"] = True
     return result
 
 
@@ -496,7 +514,8 @@ def ledger_items(state, computed, resource, policy, *, sources=None):
         }.get(item["kind"], "حركة مالية")
         result.append(_row(policy, resource, item, amount, side, description))
         fee = Decimal(item.get("actual_fee_amount", "0"))
-        if (primary and kind == "provider" and item["kind"] == "settlement" and direction == "incoming"
+        if (primary and (kind == "provider" and item["kind"] == "settlement"
+                         or kind == "pos_receivable" and item["kind"] in {"collection", "settlement"}) and direction == "incoming"
                 and fee > 0 and sum((Decimal(a["amount"]) for a in item.get("allocations", [])), Decimal(0)) == amount + fee):
             # Canonical settlement allocations clear cash plus the evidenced fee
             # from the provider claim. The bank received only cash above.
@@ -651,7 +670,19 @@ def install_workspace_routes(router, db, current_user, scope):
             if not resource or resource["access"]["movements"] == "none":
                 fail("operational_workspace_not_found", "الكشف غير متاح", 404)
             rows = ledger_items(state, computed, resource, policy)
-            return {"resource": resource, **paginate(compact_rows(rows), page, page_size, focus_id),
+            summary = {}
+            if kind == "pos_receivable" and resource["access"]["balance"] and resource["access"]["movements"] == "all":
+                from operational_driver_review_report import validated_review_facts
+                facts, _ = validated_review_facts(state)
+                approved = sum((Decimal(f["amount"]) for f in facts if f["destination_type"] == kind
+                                and f["destination_id"] == identity), Decimal(0))
+                transfers = [m for m in state["movements"] if m.get("party_type") == kind and m.get("party_id") == identity
+                             and m.get("kind") in {"collection", "settlement"} and m.get("direction") == "incoming"
+                             and m.get("bank_kind") == "bank"]
+                summary = {"pos_summary": {"approved": fmt(approved),
+                           "bank_received": fmt(sum((Decimal(m["amount"]) for m in transfers), Decimal(0))),
+                           "fees": fmt(sum((Decimal(m.get("actual_fee_amount", "0")) for m in transfers), Decimal(0)))}}
+            return {"resource": resource, **summary, **paginate(compact_rows(rows), page, page_size, focus_id),
                     "balance_status": projected_balance_status(resource, rows),
                     "balance_note": balance_note(projected_balance_status(resource, rows)),
                     "expected_collections": expected_collections(state, computed, resource, policy)}
@@ -711,5 +742,5 @@ def install_workspace_routes(router, db, current_user, scope):
     @router.post("/workspace/entries")
     async def entry(payload: WorkspaceEntry, user=Depends(current_user)):
         actor, owner, source, _ = await load(user)
-        return await save_entry(db, owner, actor, payload.model_dump(), source)
+        return await save_entry(db, owner, actor, payload.command(), source)
 

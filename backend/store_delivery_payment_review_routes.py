@@ -160,8 +160,19 @@ def make_store_delivery_payment_review_router(db: Any, current_user: Callable[..
         from operational_driver_payment_review import financial_source, options
         source = await financial_source(db, user_id)
         if source == "operational":
-            return await options(db, owner=user_id, actor=normalize_text(actor.get("id")),
-                                 assignment_id=normalize_text(assignment_id))
+            from operational_balance_reviews import review_access
+            async def allowed(database):
+                return await review_access(database, actor, expected_owner=user_id, assignment_id=assignment_id)
+            from operational_balance_reviews import bank_movement_access
+            async def allowed_bank(database, bank_id):
+                return await bank_movement_access(database, actor, owner=user_id, assignment_id=assignment_id,
+                                                  bank_id=bank_id)
+            _, _, policy, _ = await allowed(db)
+            result = await options(db, owner=user_id, actor=actor["id"], assignment_id=assignment_id,
+                                   authorize_review=allowed, authorize_bank_movements=allowed_bank)
+            result["pos_receivables"] = [r for r in result["pos_receivables"]
+                                         if policy.resource("pos_receivable", r["id"])["use"]]
+            return result
         review = await db[DRIVER_PAYMENT_REVIEWS].find_one(
             {
                 "user_id": user_id,
@@ -329,8 +340,16 @@ def make_store_delivery_payment_review_router(db: Any, current_user: Callable[..
             and prior.get("status") in {"approved", "rejected"}
             and prior.get("operational_review_revision") == prior.get("revision", 1))
         if payload.expected_financial_source == "operational" or prior_operational_decision:
-            return await review_payment(db, owner=user_id, actor=normalize_text(actor.get("id")),
-                                        assignment_id=assignment_id, payload=payload)
+            from operational_balance_reviews import review_access
+            async def allowed(database):
+                destination = payload.destination_financial_id if payload.decision == "approved" else None
+                _, _, policy, saved = await review_access(database, actor, expected_owner=user_id,
+                                                         assignment_id=assignment_id, destination=destination)
+                if payload.decision == 'approved' and saved.get('payment_method') == 'bank_transfer':
+                    from operational_balance_reviews import require_bank_movements
+                    require_bank_movements(policy, saved.get('bank_account_id'))
+            return await review_payment(db, owner=user_id, actor=actor["id"], assignment_id=assignment_id,
+                                        payload=payload, authorize_review=allowed)
         if source == "operational":
             raise HTTPException(409, detail={"code": "operational_driver_review_scope_required"})
         if prior.get("bank_financial_source") == "operational":

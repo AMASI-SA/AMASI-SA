@@ -455,6 +455,7 @@ def test_real_mongo_approved_bank_or_pos_is_one_fact_and_settlement_keeps_frozen
         assert approved["direction"] == ("incoming" if method == "bank_transfer" else "noncash")
         if method == "card_terminal":
             await create_movement(db, "owner", "owner", {"request_id": "pos-settle-daily", "party_type": "pos_receivable",
+                "bank_arrival_confirmed": True, "reference": "TEST-BANK-ARRIVAL", "business_date": NOW[:10],
                 "party_id": payload.destination_financial_id, "currency": "SAR", "direction": "incoming", "kind": "collection",
                 "amount": "150.00", "bank_id": "bank", "allocations": [{"obligation_id": result["obligation_id"], "amount": "150.00"}]}, clock=NOW)
             after = await feed(db)

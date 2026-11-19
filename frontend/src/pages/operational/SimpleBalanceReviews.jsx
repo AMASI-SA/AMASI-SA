@@ -84,9 +84,24 @@ function ReviewDetail({ id, identity, onProof, onChanged }) {
   const update = (field, value) => setDraft(previous => ({ ...previous, [field]: value }));
   const contextValid = options?.financial_source === 'operational' && options.session_scope && Number.isInteger(options.expected_review_revision);
   const bank = item?.payment_method === 'bank_transfer';
+  const defaultPos = options?.pos_receivables?.find(row => row.is_default);
+  const selectedPos = defaultPos?.id || draft.pos;
+  async function bindPos() {
+    if (lock.current || !options?.can_configure_pos) return;
+    lock.current = true; setBusy(true); setError('');
+    try {
+      await api.bindPos({ expected_session_scope: options.session_scope, existing_id: draft.pos || null, confirmed: true });
+      if (mounted.current) read.reload();
+    } catch (failure) {
+      if (mounted.current) setError(simpleBalanceError(failure));
+    } finally {
+      lock.current = false;
+      if (mounted.current) setBusy(false);
+    }
+  }
   const validTarget = bank
     ? options?.banks?.some(row => row.id === draft.bank) && draft.bank === item.bank_account_id && draft.movement.trim()
-    : options?.pos_receivables?.some(row => row.id === draft.pos) && cents(draft.amount) !== null && cents(draft.amount) === cents(item?.amount);
+    : options?.pos_receivables?.some(row => row.id === selectedPos) && cents(draft.amount) !== null && cents(draft.amount) === cents(item?.amount);
   const approved = Boolean(contextValid && options?.can_approve && item?.has_receipt && draft.matched && validTarget);
   async function decide(choice, retry = false) {
     if (lock.current || !item || !contextValid) return;
@@ -98,7 +113,7 @@ function ReviewDetail({ id, identity, onProof, onChanged }) {
       expected_session_scope: options.session_scope,
       ...(choice === 'approved' ? bank
         ? { destination_financial_id: draft.bank, settlement_reference: draft.movement.trim() }
-        : { destination_financial_id: draft.pos, pos_reviewed_amount: draft.amount.trim(), ...(draft.reference.trim() ? { settlement_reference: draft.reference.trim() } : {}) }
+        : { destination_financial_id: selectedPos, pos_reviewed_amount: draft.amount.trim(), ...(draft.reference.trim() ? { settlement_reference: draft.reference.trim() } : {}) }
         : {}),
     };
     if (!payload) return;
@@ -141,7 +156,8 @@ function ReviewDetail({ id, identity, onProof, onChanged }) {
           {options && !options.banks?.length && <p className="sb-small-note">يلزم السماح باستخدام البنك ومشاهدة حركاته لمطابقة هذا الإيصال.</p>}
           <BankMovements key={draft.bank} id={id} identity={identity} bank={draft.bank} selected={draft.movement} selectedLabel={draft.movementLabel} disabled={busy || Boolean(uncertain)} onSelect={(movement, movementLabel) => setDraft(previous => ({ ...previous, movement, movementLabel }))} />
         </> : <>
-          <label className="sb-field"><span>حساب الشبكة</span><select value={draft.pos} onChange={event => update('pos', event.target.value)}><option value="">اختر الشبكة</option>{(options?.pos_receivables || []).map(row => <option key={row.id} value={row.id}>{row.display_name}</option>)}</select></label>
+          <label className="sb-field"><span>حساب الشبكة</span><select value={selectedPos} disabled={Boolean(defaultPos)} onChange={event => update('pos', event.target.value)}><option value="">اختر الشبكة</option>{(options?.pos_receivables || []).map(row => <option key={row.id} value={row.id}>{row.display_name}</option>)}</select></label>
+          {options?.can_configure_pos && <button type="button" className="sb-secondary" disabled={busy || Boolean(options.pos_receivables?.length && !draft.pos)} onClick={bindPos}>{options.pos_receivables?.length ? 'اعتماد الذمة المختارة لتحصيلات الشبكة القادمة' : 'إنشاء وربط ذمة الشبكة دون رصيد افتتاحي'}</button>}
           <label className="sb-field"><span>مبلغ الإيصال</span><input inputMode="decimal" value={draft.amount} onChange={event => update('amount', event.target.value)} /></label>
           <label className="sb-field"><span>مرجع الشبكة · اختياري</span><input value={draft.reference} onChange={event => update('reference', event.target.value)} /></label>
         </>}

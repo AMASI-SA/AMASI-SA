@@ -286,17 +286,25 @@ async def options(db, *, owner, actor, assignment_id, clock=None, authorize_revi
             raise
         blocker = error.detail.get('code')
 
-    from operational_pos_identity import pos_candidates
-    from accounting_onboarding_ssot import FACTS as POS_FACTS
-    rows = await db[POS_FACTS].find({'user_id': owner, 'status': 'active', 'category': 'other_receivable'}).limit(1001).to_list(1001)
-    if len(rows) > 1000:
-        fail('operational_source_scope_too_large')
-    destinations = pos_candidates(rows, owner) if review['payment_method'] == 'card_terminal' else []
+    from operational_pos_identity import bound_identity, native_pos_candidates
+    destinations, default = [], None
+    if review['payment_method'] == 'card_terminal':
+        destinations = await native_pos_candidates(db, owner)
+        binding = bound_identity(state, owner)
+        if binding:
+            default = binding['id']
+            if binding['source'] == 'operational':
+                destinations = [{'id': default, 'name': binding['name']}]
+            else:
+                destinations = [r for r in destinations if r['id'] == default]
+    for row in destinations:
+        row['is_default'] = row['id'] == default
     return {'assignment_id': assignment_id, 'payment_method': review['payment_method'], 'amount': value,
             'financial_source': 'operational', 'can_approve': blocker is None, 'can_reject': can_reject,
             'blocker': blocker, 'expected_review_revision': review.get('revision', 1),
             'session_scope': digest([owner, actor]), 'bank_account_id': review.get('bank_account_id'),
-            'pos_receivables': [{'id': r['id'], 'display_name': r['name']} for r in destinations],
+            'pos_receivables': [{'id': r['id'], 'display_name': r['name'], 'is_default': r['is_default']} for r in destinations],
+            'can_configure_pos': actor == owner and not default and review['payment_method'] == 'card_terminal',
             'bank_movements': bank_movements, 'started_at': state['started_at'],
             'note': 'الشبكة ذمة للمتجر وليست نقدًا؛ التحويل يتطلب حركة بنك مثبتة بعد يوم القطع.'}
 
@@ -362,7 +370,12 @@ async def review_payment(db, *, owner, actor, assignment_id, payload, clock=None
                 name, dest_type = bank.get('name') or target, 'bank'
             else:
                 from accounting_driver_payment_port import require_driver_payment_destination
+                from operational_pos_identity import bound_identity
+                binding = bound_identity(state, owner)
+                if binding and binding['id'] != target:
+                    fail('operational_pos_binding_changed', 'تغير ربط الشبكة؛ أعد فتح الإيصال')
                 proof = await require_driver_payment_destination(scoped, owner, payment_method=method,
+                    operational_identity=binding if binding and binding['source'] == 'operational' else None,
                     financial_account_id=target, evidence_reference=payload.settlement_reference, amount=value,
                     receipt_hash=hashed, review=review, receipt=receipt, actor_id=actor,
                     reviewed_amount=payload.pos_reviewed_amount)
