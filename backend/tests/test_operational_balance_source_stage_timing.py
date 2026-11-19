@@ -204,6 +204,58 @@ def test_real_collection_stage_sequence_preserves_output_and_reads_and_is_silent
     assert_private_data_absent(caplog)
 
 
+def test_real_collection_notifies_once_after_primary_success_before_remaining_reads():
+    async def scenario():
+        ordinary = DB(require_visible=False)
+        expected = await collect(ordinary)
+        primary_started, primary_allowed = asyncio.Event(), asyncio.Event()
+        fee_started, fee_allowed = asyncio.Event(), asyncio.Event()
+        notifications = []
+
+        class Boundary:
+            async def read(self, collection):
+                if collection == 'unified_orders':
+                    primary_started.set()
+                    await primary_allowed.wait()
+                elif collection == 'settings':
+                    assert notifications == ['primary-complete']
+                    fee_started.set()
+                    await fee_allowed.wait()
+
+        database = DB(gate=Boundary())
+
+        def ready():
+            assert database.inflight == 0 and 'settings' not in database.sources.reads
+            assert [(row['stage'], row['outcome']) for row in demand_context().stage_timings] == [
+                ('source_primary_reads', 'complete')]
+            notifications.append('primary-complete')
+
+        work = asyncio.create_task(run_visible_refresh(
+            Request(), database, 'owner', ACTOR, allowed,
+            lambda: sources.collect_sources(
+                database, 'owner', START, NOW,
+                operational_state=database.data[STATES]['owner'],
+                on_primary_reads_complete=ready)))
+        try:
+            await asyncio.wait_for(primary_started.wait(), 5)
+            assert not notifications and not fee_started.is_set()
+            primary_allowed.set()
+            await asyncio.wait_for(fee_started.wait(), 5)
+            assert notifications == ['primary-complete'] and not work.done()
+            fee_allowed.set()
+            actual = await asyncio.wait_for(asyncio.shield(work), 5)
+        finally:
+            primary_allowed.set()
+            fee_allowed.set()
+            await asyncio.gather(work, return_exceptions=True)
+        assert notifications == ['primary-complete']
+        assert actual == expected and database.sources.reads == ordinary.sources.reads
+        assert database.sources.data == ordinary.sources.data
+        await assert_request_finished(database)
+
+    asyncio.run(scenario())
+
+
 @pytest.mark.parametrize('stage,collection', [
     ('source_collision', 'mezan_supplier_invoices_v2'),
     ('source_primary_reads', 'mezan_suppliers_v2'),
@@ -238,7 +290,10 @@ def test_real_source_read_exit_is_identified_and_joined(monkeypatch, caplog, sta
             assert gate.sibling_entered and gate.sibling_stopped
         assert database.data[STATES] == original_state
         assert database.sources.data == original_sources
-        assert profit == {'started': True, 'cancelled': True, 'stopped': True}
+        profit_started = stage not in {'source_collision', 'source_primary_reads'}
+        assert profit == {key: profit_started for key in ('started', 'cancelled', 'stopped')}
+        if not profit_started:
+            assert not any('stage=profit_snapshot ' in message for message in timing_messages(caplog))
         await assert_request_finished(database)
 
     asyncio.run(scenario())

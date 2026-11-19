@@ -55,9 +55,12 @@ def setup_sources(monkeypatch, database=None):
     async def no_collision(db, owner, operational_state):
         assert db is database and owner == operational_state["owner_id"] == OWNER
 
-    async def collect(db, owner, start, stamp, *, baselines, operational_state):
+    async def collect(db, owner, start, stamp, *, baselines, operational_state,
+                      on_primary_reads_complete=None):
         assert db is database and owner == operational_state["owner_id"] == OWNER
         assert start == operational_state["started_at"] == START and stamp == STAMP
+        if on_primary_reads_complete is not None:
+            on_primary_reads_complete()
         rows = {"orders": [], "attempt": len(collected) + 1}
         collected.append((operational_state, rows))
         return rows
@@ -157,12 +160,13 @@ class SourcePreparation:
 
     def __init__(self, monkeypatch, database, stage="collection"):
         self.database = database
+        self.stage = stage
         self.started, self.closing, self.finished = (asyncio.Event() for _ in range(3))
         self.allowed, self.cleanup_allowed = asyncio.Event(), asyncio.Event()
         self.hold_cleanup = False
         self.failure = self.cleanup_failure = self.context = None
         self.cleanup_interruptions = 0
-        if stage == "collection":
+        if stage in {"primary", "collection"}:
             self.operation = sources.collect_sources
             monkeypatch.setattr(sources, "collect_sources", self.collect)
         else:
@@ -170,11 +174,19 @@ class SourcePreparation:
             self.operation = inventory.assert_no_source_collision
             monkeypatch.setattr(inventory, "assert_no_source_collision", self.collision)
 
-    async def collect(self, db, owner, start, stamp, *, baselines, operational_state):
+    async def collect(self, db, owner, start, stamp, *, baselines, operational_state,
+                      on_primary_reads_complete=None):
         assert db is self.database and owner == operational_state["owner_id"] == OWNER
         assert start == operational_state["started_at"] == START and stamp == STAMP
+        readiness = {}
+        if on_primary_reads_complete is not None:
+            if self.stage == "collection":
+                # This gate represents work after the primary batch succeeded.
+                on_primary_reads_complete()
+            else:
+                readiness["on_primary_reads_complete"] = on_primary_reads_complete
         return await self.run(db, owner, start, stamp,
-                              baselines=baselines, operational_state=operational_state)
+                              baselines=baselines, operational_state=operational_state, **readiness)
 
     async def collision(self, db, owner, state):
         assert db is self.database and owner == state["owner_id"] == OWNER
@@ -229,14 +241,22 @@ def fully_joined(database, pair=None):
 
 
 @pytest.mark.parametrize("first", ["sources", "profit"])
-def test_visible_refresh_overlaps_source_collection_with_profit_before_reconciliation(monkeypatch, first):
+def test_visible_refresh_waits_for_primary_then_overlaps_remaining_collection_with_profit(monkeypatch, first):
     async def scenario():
         database, collected = setup_sources(monkeypatch)
         before = deepcopy(database.data[STATES])
         pair = PreparationPair(monkeypatch, database)
         source = SourcePreparation(monkeypatch, database)
+        primary = SourcePreparation(monkeypatch, database, "primary")
         work = asyncio.create_task(visible(database))
         try:
+            await reached(primary.started)
+            await asyncio.sleep(0)
+            assert not pair.started["profit"].is_set()
+            assert not source.started.is_set() and not pair.started["reconcile"].is_set()
+            assert not collected and not database.cas_entered.is_set()
+            unchanged(database, before)
+            primary.release()
             await reached(source.started)
             await reached(pair.started["profit"])
             assert source.context is pair.context
@@ -273,6 +293,8 @@ def test_visible_refresh_overlaps_source_collection_with_profit_before_reconcili
             assert saved["movements"] == prepared_state(before[OWNER], STAMP)["movements"]
             assert [row[1] for row in database.writes if row[0] == STATES] == ["replace"]
         finally:
+            primary.release()
+            primary.release_cleanup()
             source.release()
             source.release_cleanup()
             await pair.close(work)
@@ -280,7 +302,7 @@ def test_visible_refresh_overlaps_source_collection_with_profit_before_reconcili
     asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("stage", ["collision", "collection"])
+@pytest.mark.parametrize("stage", ["collision", "primary", "collection"])
 @pytest.mark.parametrize("failure_kind", ["read", "setup", "http"])
 def test_source_failure_keeps_its_error_contract_and_joins_profit_without_reconciliation(
         monkeypatch, stage, failure_kind):
@@ -297,19 +319,34 @@ def test_source_failure_keeps_its_error_contract_and_joins_profit_without_reconc
             "http": HTTPException(409, detail={"code": "fixture_collision_rejected"}),
         }
         source.failure = failures[failure_kind]
-        pair.hold_cleanup.add("profit")
-        pair.cleanup_failures["profit"] = RuntimeError("secondary profit cleanup failure")
+        profit_started = stage == "collection"
+        if profit_started:
+            pair.hold_cleanup.add("profit")
+            pair.cleanup_failures["profit"] = RuntimeError("secondary profit cleanup failure")
+        else:
+            source.hold_cleanup = True
         work = asyncio.create_task(visible(database))
         try:
             await reached(source.started)
-            await reached(pair.started["profit"])
+            if profit_started:
+                await reached(pair.started["profit"])
+            else:
+                await asyncio.sleep(0)
+                assert not pair.started["profit"].is_set()
             source.release()
-            await reached(source.finished)
-            await reached(pair.closing["profit"])
+            await reached(source.closing)
+            if profit_started:
+                await reached(source.finished)
+                await reached(pair.closing["profit"])
+            else:
+                assert not source.finished.is_set() and not pair.started["profit"].is_set()
             assert not pair.started["reconcile"].is_set() and not collected
             assert not work.done() and database.data[demand.LEASES]
             unchanged(database, before)
-            pair.release_cleanup("profit")
+            if profit_started:
+                pair.release_cleanup("profit")
+            else:
+                source.release_cleanup()
             with pytest.raises(HTTPException) as raised:
                 await asyncio.wait_for(asyncio.shield(work), WAIT)
             assert raised.value.status_code == 409
@@ -331,7 +368,9 @@ def test_source_failure_keeps_its_error_contract_and_joins_profit_without_reconc
             source.release()
             source.release_cleanup()
             await pair.close(work)
-        assert source.finished.is_set() and pair.finished["profit"].is_set()
+        assert source.finished.is_set()
+        assert pair.started["profit"].is_set() is profit_started
+        assert pair.finished["profit"].is_set() is profit_started
         assert pair.profit_cleanup_interruptions == 0
         unchanged(database, before)
         fully_joined(database)
@@ -377,7 +416,8 @@ def test_profit_failure_joins_inflight_collection_before_returning_without_save(
 
 
 @pytest.mark.parametrize("cause", ["disconnect", "deadline", "parent", "repeated_parent"])
-def test_cancellation_during_collection_joins_both_sources_before_lease_release(monkeypatch, cause):
+@pytest.mark.parametrize("stage", ["primary", "collection"])
+def test_cancellation_during_collection_joins_both_sources_before_lease_release(monkeypatch, cause, stage):
     if cause == "deadline":
         monkeypatch.setattr(demand, "REQUEST_SECONDS", 1)
 
@@ -386,19 +426,28 @@ def test_cancellation_during_collection_joins_both_sources_before_lease_release(
         before = deepcopy(database.data[STATES])
         request = Request()
         pair = PreparationPair(monkeypatch, database)
-        pair.hold_cleanup.add("profit")
-        source = SourcePreparation(monkeypatch, database)
+        profit_started = stage == "collection"
+        if profit_started:
+            pair.hold_cleanup.add("profit")
+        source = SourcePreparation(monkeypatch, database, stage)
         source.hold_cleanup = True
         work = asyncio.create_task(visible(database, request))
         try:
             await reached(source.started)
-            await reached(pair.started["profit"])
+            if profit_started:
+                await reached(pair.started["profit"])
+            else:
+                await asyncio.sleep(0)
+                assert not pair.started["profit"].is_set()
             if cause == "disconnect":
                 request.disconnect()
             elif cause in {"parent", "repeated_parent"}:
                 work.cancel()
             await reached(source.closing)
-            await reached(pair.closing["profit"])
+            if profit_started:
+                await reached(pair.closing["profit"])
+            else:
+                assert not pair.started["profit"].is_set()
             assert not pair.started["reconcile"].is_set() and not collected
             assert not work.done() and database.data[demand.LEASES]
             unchanged(database, before)
@@ -410,8 +459,9 @@ def test_cancellation_during_collection_joins_both_sources_before_lease_release(
                 assert not work.done() and not source.finished.is_set()
                 assert not pair.finished["profit"].is_set()
                 assert source.cleanup_interruptions == pair.profit_cleanup_interruptions == 0
-            pair.release_cleanup("profit")
-            await reached(pair.finished["profit"])
+            if profit_started:
+                pair.release_cleanup("profit")
+                await reached(pair.finished["profit"])
             assert not work.done() and database.data[demand.LEASES]
             source.release_cleanup()
             expected = HTTPException if cause in {"disconnect", "deadline"} else asyncio.CancelledError
@@ -425,7 +475,9 @@ def test_cancellation_during_collection_joins_both_sources_before_lease_release(
             source.release()
             source.release_cleanup()
             await pair.close(work)
-        assert source.finished.is_set() and pair.finished["profit"].is_set()
+        assert source.finished.is_set()
+        assert pair.started["profit"].is_set() is profit_started
+        assert pair.finished["profit"].is_set() is profit_started
         assert source.cleanup_interruptions == pair.profit_cleanup_interruptions == 0
         unchanged(database, before)
         fully_joined(database)
@@ -597,6 +649,14 @@ def test_nonvisible_and_snapshot_session_callers_retain_serial_result_state_cont
             database.session = object()
         pair = PreparationPair(monkeypatch, database)
         source = SourcePreparation(monkeypatch, database)
+        original_collect = sources.collect_sources
+
+        async def serial_collect(db, owner, start, stamp, *, baselines, operational_state):
+            return await original_collect(db, owner, start, stamp,
+                                          baselines=baselines, operational_state=operational_state)
+
+        # The ordinary/session boundary retains its original keyword contract.
+        monkeypatch.setattr(sources, "collect_sources", serial_collect)
         operation = visible(database) if mode == "snapshot_session" else service.refresh(database, OWNER, clock=STAMP)
         work = asyncio.create_task(operation)
         try:
@@ -629,7 +689,18 @@ def test_cas_retry_rebuilds_both_preparations_from_the_new_revision(monkeypatch)
     async def scenario():
         database, collected = setup_sources(monkeypatch)
         original_replace = Collection.replace_one
+        original_collect = sources.collect_sources
         revisions, periods = [], []
+        second_primary_started, second_primary_allowed = asyncio.Event(), asyncio.Event()
+
+        async def collect(db, owner, start, stamp, *, baselines, operational_state,
+                          on_primary_reads_complete):
+            if operational_state["revision"] == 2:
+                second_primary_started.set()
+                await second_primary_allowed.wait()
+            return await original_collect(
+                db, owner, start, stamp, baselines=baselines, operational_state=operational_state,
+                on_primary_reads_complete=on_primary_reads_complete)
 
         async def replace(collection, query, row):
             if collection.name == STATES and not revisions:
@@ -656,9 +727,20 @@ def test_cas_retry_rebuilds_both_preparations_from_the_new_revision(monkeypatch)
             return {"attempt": len(periods), "owner_id": owner, "as_of": as_of}
 
         monkeypatch.setattr(Collection, "replace_one", replace)
+        monkeypatch.setattr(sources, "collect_sources", collect)
         monkeypatch.setattr(engine, "reconcile", calculate)
         monkeypatch.setattr(profit_sources, "load_profit_snapshot", load_profit)
-        result = await visible(database)
+        work = asyncio.create_task(visible(database))
+        try:
+            await reached(second_primary_started)
+            await asyncio.sleep(0)
+            assert len(periods) == len(collected) == 1
+            assert revisions == [1] and not work.done()
+            second_primary_allowed.set()
+            result = await asyncio.wait_for(asyncio.shield(work), WAIT)
+        finally:
+            second_primary_allowed.set()
+            await asyncio.gather(work, return_exceptions=True)
         saved = database.data[STATES][OWNER]
         assert revisions == [1, 2] and len(collected) == len(periods) == 2
         assert periods[0] is not periods[1]

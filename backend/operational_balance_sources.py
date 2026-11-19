@@ -1281,7 +1281,8 @@ def _attach_delivery_sources(data, setup, owner, raw, order, out, now, total, co
               recognition_state='confirmed' if order.get('status') in {'delivered', 'تم التوصيل'} else 'expected')
 
 
-async def collect_sources(db, owner, started_at, as_of, baselines=None, operational_state=None, historical_fee_order=None):
+async def collect_sources(db, owner, started_at, as_of, baselines=None, operational_state=None,
+                          historical_fee_order=None, *, on_primary_reads_complete=None):
     calculation_checkpoint()
     cpu_budget = CPUWorkBudget(PARSER_BUDGET_MS)
     start, now = instant(started_at), instant(as_of)
@@ -1301,6 +1302,8 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
             DELIVERY_HISTORY, SHIPPING_EVENT_BLOCKERS, SHIPPING_V2_BLOCKERS, 'users', 'settings', 'expense_categories',
             'mezan_products_v2', 'mz2_opening_facts_v2', 'accounts', 'mz2_operational_bank_accounts'})
         data = await load_collections(db, owner, source_names, reader=refresh_source_rows)
+    if on_primary_reads_complete is not None:
+        on_primary_reads_complete()
     with refresh_stage('source_fee_settings'):
         fee_settings = await db['settings'].find({'user_id': owner}, {
             '_id': 0, 'user_id': 1, 'payment_methods': 1, 'updated_at': 1}).to_list(2)
