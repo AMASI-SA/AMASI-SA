@@ -434,9 +434,26 @@ def _build_line_cost(item: dict, root: str, definitions: dict, products: dict,
     }
 
 
+async def _gather_owned_reads(*reads):
+    """Keep gather's first observed error and drain every owned cursor."""
+    from operational_financial_activity_runtime import join_task
+    tasks = [asyncio.create_task(read) for read in reads]
+    group = asyncio.gather(*tasks)
+    try:
+        return await asyncio.shield(group)
+    except BaseException:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await join_task(asyncio.gather(*tasks, return_exceptions=True))
+        if group.done() and not group.cancelled():
+            group.exception()
+        raise
+
+
 async def load_current_bundle_estimates(
     db: Any, owner: str, orders: list[dict], authority: dict,
-    *, budget: Any = None,
+    *, budget: Any = None, owned_reads: bool = False,
 ) -> dict:
     """One tenant-scoped batch for missing bundle lines, without report writes.
 
@@ -444,6 +461,15 @@ async def load_current_bundle_estimates(
     protected Dashboard V2 / Sold Products reducer. In the absence of missing
     composite lines, it performs zero additional MongoDB reads.
     """
+    from order_cost_authority import _request_parallel_reads
+    owned_reads = _request_parallel_reads(db, owner, owned_reads)
+
+    def read(cursor):
+        if owned_reads:
+            from operational_read_runtime import read_source_cursor
+            return read_source_cursor(cursor, 10001)
+        return cursor.to_list(length=10001)
+
     composite = set(authority.get("composite_products") or [])
     if not composite:
         return {}
@@ -471,11 +497,11 @@ async def load_current_bundle_estimates(
     if budget is not None:
         await budget.checkpoint()
 
-    definitions_rows = await db["mezan_bundle_definitions_v2"].find(
+    definitions_rows = await read(db["mezan_bundle_definitions_v2"].find(
         {"user_id": owner, "product_type": "composite"},
         {"_id": 0, "product_id": 1, "items": 1,
          "schema_version": 1, "revision": 1},
-    ).to_list(length=10001)
+    ))
     if len(definitions_rows) > 10000:
         return {}
     definitions = {str(row["product_id"]): row for row in definitions_rows}
@@ -499,7 +525,7 @@ async def load_current_bundle_estimates(
     wanted = sorted(wanted)
     if budget is not None:
         await budget.checkpoint()
-    catalog = await db["mezan_products_v2"].find(
+    catalog = await read(db["mezan_products_v2"].find(
         {"user_id": owner, "$or": [
             {"salla_product_id": {"$in": wanted}},
             {"mezan_product_id": {"$in": wanted}},
@@ -509,7 +535,7 @@ async def load_current_bundle_estimates(
          "mezan_product_id": 1, "name": 1, "options": 1,
          "raw_salla": 1, "raw_salla_details": 1, "variants": 1,
          "cost_price_from_salla": 1, "cost_price": 1, "cost": 1},
-    ).to_list(length=10001)
+    ))
     if len(catalog) > 10000:
         return {}
     product_map = {}
@@ -519,16 +545,17 @@ async def load_current_bundle_estimates(
             return {}
         product_map[key] = product
     scope = {"user_id": owner, "salla_product_id": {"$in": wanted}}
-    profile_rows, option_rows, product_bindings = await asyncio.gather(
-        db["mezan_product_cost_profiles_v2"].find(
+    gather = _gather_owned_reads if owned_reads else asyncio.gather
+    profile_rows, option_rows, product_bindings = await gather(
+        read(db["mezan_product_cost_profiles_v2"].find(
             scope, {"_id": 0},
-        ).to_list(length=10001),
-        db["mezan_product_option_cost_bindings_v2"].find(
+        )),
+        read(db["mezan_product_option_cost_bindings_v2"].find(
             scope, {"_id": 0},
-        ).to_list(length=10001),
-        db["mezan_product_resource_bindings_v2"].find(
+        )),
+        read(db["mezan_product_resource_bindings_v2"].find(
             scope, {"_id": 0},
-        ).to_list(length=10001),
+        )),
     )
     if any(len(rows) > 10000 for rows in (
             profile_rows, option_rows, product_bindings)):
@@ -556,10 +583,10 @@ async def load_current_bundle_estimates(
                 resource_ids.add(str(row["resource_id"]))
     if budget is not None:
         await budget.checkpoint()
-    resource_rows = await db["mezan_cost_resources_v2"].find(
+    resource_rows = await read(db["mezan_cost_resources_v2"].find(
         {"user_id": owner, "id": {"$in": sorted(resource_ids)}},
         {"_id": 0},
-    ).to_list(length=10001) if resource_ids else []
+    )) if resource_ids else []
     if len(resource_rows) > 10000:
         return {}
     resources = {}

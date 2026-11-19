@@ -1,5 +1,189 @@
 # Visible refresh budget recovery after Aramex publication
 
+## Current continuation: defer profit until primary sources succeed — 19 November 2026
+
+Task branch: `codex/aramex-profit-after-primary-20261119`.
+Verified production base and parent of this candidate:
+`1583ea74b43c7055c9635f3836d58e544438af1c` (PR 2009).
+The frozen predecessor A/B pair remains unchanged and remotely recoverable.
+This continuation holds no publication lease and has not changed shared `/app`.
+
+### Published predecessor and actual live outcome
+
+PR 2009 source A `7bbd15a6855e314c8103f405b05275ee08e44c66`, intent-only B
+`88982f630870f07ff3f55d76dd31b575a3e2cc28`, and normal merge M above were
+independently checked. All eleven applicable exact-B workflows passed, including
+5,624 operational backend tests, 5,231 stock tests, 1,081 frontend tests,
+25 synthetic browser scenarios and four worker tests. These suite counts
+overlap and are not a distinct-test sum. Both clean-clone adapter hosts produced
+matching artifacts and the actual shared-host configured adapter passed.
+
+The single authorized publication displayed green `Deployment finished`,
+19 November 05:01 Aden time, platform version `b5b4299`. The original,
+unmodified three-probe verifier completed with exit 0, `verified: true`,
+`checks: 3`, the exact A/M above, and runtime
+`rg5-9fcc3a9a15aecbe2593725b729d19f0a69dbeb1b8c6d4e35f0f5d3ec690ecabb`.
+The following original guard status reported `active: false`. Verification
+closed the matching lease; no other actor's lease was cleared. Production
+changed: yes for PR 2009, no for this new continuation.
+
+Two normal visible refresh attempts on that exact release failed during
+`source_primary_reads`, before reconciliation or a financial aggregate save.
+The first started at `2026-11-19T02:08:04.528Z` and failed with a preparation
+pieces read deadline; the primary stage lasted 16.378 seconds. One controlled
+retry started at `2026-11-19T02:16:15.247Z` and failed with an orders read
+deadline; the primary stage lasted 18.746 seconds. The per-read budget remains
+15 seconds; stage duration also includes scheduling and cleanup. Both failures
+cancelled profit preparation and retained the old report. Neither reached the
+85-second overall deadline. The timings do not prove a specific database,
+network, decoding or contention cause. No further unchanged-code retry is
+planned and no new financial result is claimed.
+
+### Narrow implementation and independent verification
+
+Notify the owned visible-refresh orchestrator only after successful primary
+source reads. Its independent profit child waits for that request-local signal
+before entering profit timing or the existing read budget. Profit can overlap
+the remaining source preparation and reconciliation, without overlapping the
+primary batch. Ordinary and detected snapshot-session callers keep the serial
+path. The existing shield/cancel/join barrier still owns both children, and
+each CAS attempt owns a fresh signal. No deadline, query, projection, financial
+arithmetic, source authority, visibility requirement, or persistence gate is
+changed. Primary failure must cancel and join the waiting profit child without
+starting a profit read; later failure must settle the sibling before return.
+
+The six code/test files are complete and independently reviewed with no
+remaining blocker. The two application files change only the readiness
+notification and request-local wait. The four existing test modules preserve
+their source query/projection and financial assertions. The bank fixture now
+uses a strict owner/period-bound collector callback instead of a plain
+AsyncMock; its bank claims and permission assertions are unchanged.
+
+Final affected verification passed **434 unique cases** across thirteen modules:
+410 in the main affected run and 24 in the bank/ordinary-worker run, with
+zero failures, errors or skips; both commands exited 0. Two pre-existing
+Pydantic deprecation warnings remain. Independent reruns passed all 83
+parallel/timing cases and all 20 bank cases. The collector test verifies one
+notification after all primary reads drain and before fee settings, with full
+output and read-sequence equality. Failure, disconnect, deadline and repeated
+cancellation cover both sides of the readiness boundary. A held second CAS
+attempt proves its profit gate starts unready, and strict serial callers reject
+the new keyword. No production budget, query, projection or arithmetic changed.
+
+The frozen-production negative control ran the sources-first overlap case and
+failed specifically because profit had already started while primary reads
+were held. The other completion-order parameter was not run as a negative
+control; both completion orders pass on the final candidate. The six-file
+reviewed binary diff SHA256 is
+`6fc71124253fc1ed0359d580deae916098274c36516d189b78b4c71c3bd260d4`.
+The detailed local verification record SHA256 is
+`d1ecf28f2a65131f01581e4b1d370b95033be7e8b378d31dfafbdd8ed6894101`.
+These local results do not prove live source or total request latency.
+
+The commit containing this checkpoint is the new source candidate A; its
+exact remote SHA is recorded in the task PR before freezing the intent.
+The next command is the governed source-A build/freeze sequence, followed by
+the exact-B gates. No new intent, deployment, financial result or lease is
+claimed by this source checkpoint. All customer, order and financial evidence
+stays in the private report, outside Git.
+
+Before any later shared-host rehearsal or mutation, inspect the original guard
+again and honor an intervening owner's lease. Subsequent release acceptance
+requires exact-B CI and artifact verification, the configured adapter,
+prepare/prepublish, one authorized publication, the original three probes and
+inactive status. Financial acceptance then requires a successfully saved
+visible refresh, bound courier/accounts/movements captures, and a second
+successful comparison proving no duplicate debit.
+
+---
+
+## Previous checkpoint: profit preparation during source collection — 19 November 2026
+
+Task branch: `codex/aramex-profit-preparation-overlap-20261119`.
+Verified production base: `f91fc7bfbb60b47e5954f4178f9b7dea6eb7fa46` (PR2007).
+The source commit containing this checkpoint is the new source candidate A;
+its exact remote SHA will be recorded in the task PR before intent freeze.
+The prior source/intent pairs and unrelated compact-statements release remain
+unchanged and remotely recoverable.
+
+### Published predecessor and lease state
+
+PR2007 was merged normally, built through the configured adapter and published
+once. The UI displayed newer green `Deployment finished`, version17b9b08.
+The unchanged original production verifier completed exit0, verified:true,
+checks:3 with source `b983035c56b69c509d0e1895a5546cb4544d462a`, deployment
+`f91fc7bfbb60b47e5954f4178f9b7dea6eb7fa46`, runtime
+`rg5-cf3e6092b384d585d2dc4478f1f9a00591e237d1955ba2947dc47fa7df846a34`
+and boot `2026-11-19T01:06:39.793185+00:00`. The next original guard status
+returned active:false, actor:null. Our matching lease was closed by successful
+verification; no other actor's lease was cleared. Production changed:yes for
+the predecessor release; this follow-up has not changed shared `/app` or
+production and holds no lease.
+
+A normal visible refresh started at `2026-11-19T01:11:48.477Z` and reached the
+unchanged85-second deadline. The UI explicitly retained the last saved report.
+Sanitized timings: native evidence6.958s, snapshot load13.959s, source
+collection42.080s, reconciliation12.734s; profit was cancelled after21.898s.
+The latter is time until cancellation, not proof of completed profit latency.
+Nested stages must not be summed as independent durations. No new financial
+snapshot, changed cohort, wallet result or idempotency acceptance is claimed.
+
+### Narrow repair and independent verification
+
+The same fixed-period profit reader now starts beside source collection in
+an owned visible request. Collision checking, collection checkpoint/error
+mapping, return attachment and reconciliation stay ordered within the other
+child. The existing shield/cancel/join barrier must settle both children
+before bank claims, catalogs, aggregate mutation or CAS. Ordinary and detected
+snapshot-session callers retain the serial source→reconciliation→profit path.
+No deadline/read budget, financial arithmetic, source authority, tariff,
+wallet binding, history, route, scheduler or financial writer is changed.
+
+Changed application file: `backend/operational_balance_service.py`.
+Changed existing tests: `test_operational_refresh_parallel_profit.py`,
+`test_operational_balance_refresh_stage_timing.py`, and
+`test_operational_balance_source_stage_timing.py` under `backend/tests/`.
+The two diagnostic fixtures retain strict source query/projection oracles and
+explicitly hold and join the now-concurrent profit reader on source failure.
+
+Final affected ten-module suite:355 passed,0 failed,0 errors,0 skipped,
+exit0,13.97s; two pre-existing Pydantic warnings. Independent reviewer ran17
+ownership/overlap cases and15 changed timing cases, all passing, and verified
+final JUnit counts. Frozen-production negative control fails both new overlap
+orders specifically at the barrier waiting for early profit. `git diff --check`
+passes. Four-file reviewed binary diff SHA256:
+`cc6c9bb80abbf0d5130c98dad42d88038bc46ee41be11cd184a370274b01c3a4`.
+Reviewed service SHA256:
+`0cf3bb0585a266bf9deefaca7ff33a0b26665130dc4d12a70c4951949ef1c97d`.
+No blocking independent review finding remains.
+
+### Limits and exact next safe action
+
+Combined reads can reach8 across two separately bounded four-read groups;
+no additional reads are introduced. Earlier profit observation does not
+create a database snapshot. The existing raw Motor to_list and hidden-session
+detection limitations remain; the tests prove coroutine/cooperative-thread
+cleanup at this barrier, not every underlying Motor executor operation.
+The concrete visible production route introduces no hidden session here.
+The observed prior critical path leaves about9.27s for post-join work if profit
+finishes early and resource contention does not slow collection; only a live
+saved refresh can establish that this is sufficient. Normal incomplete-profit
+source results retain their existing explicit quality flags.
+
+Preserve source A remotely, run the governed two-pass A build and freeze a new
+intent-only B from this exact current production base. Run required exact-B
+CI and independent artifact review. Before any shared-host rehearsal or source
+mutation, inspect original Release Guard status and honor any new owner's
+lease. Follow the normal merge, configured adapter, own prepare/prepublish,
+one authorized publish, original three-probe verification and inactive-status
+sequence. Then perform two visible saved-report refresh acceptances with
+snapshot-bound private courier/accounts/movements evidence. Keep customer,
+order and financial data outside Git. The exact next command after source
+checkpoint is the governed toolchain ensure/install/build:release sequence;
+there is no current publish reservation.
+
+---
+
 ## Integrated with compact statements production — 19 November 2026
 
 Production advanced to PR2005 merge `27e29d3ab5c6c08548780e3dd1ac177021be65f1`

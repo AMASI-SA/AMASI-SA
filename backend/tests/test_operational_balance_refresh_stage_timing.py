@@ -51,14 +51,36 @@ def test_source_failure_http_response_contains_the_unwound_request_stages(monkey
         monkeypatch, SourceReadError('operational_source_read_timeout', 'unified_orders'))
     original_state = deepcopy(database.data[STATES])
     assert DemandRefreshContext(Request(), database, 'owner', 'staff', allowed).read_deadline is None
+    stamp = '2026-11-18T19:31:35+00:00'
+    monkeypatch.setattr('operational_balance_service.now', lambda: stamp)
+    profit = {'started': False, 'cancelled': False, 'stopped': False}
 
-    async def fail_read(*args, **kwargs):
+    async def fail_read(db, owner, started_at, as_of, *, baselines, operational_state,
+                        on_primary_reads_complete):
+        assert db is database and owner == operational_state['owner_id'] == 'owner'
+        assert started_at == original_state['owner']['started_at'] and as_of == stamp
+        assert callable(on_primary_reads_complete)
         deadline = demand_context().read_deadline
         assert type(deadline) is float and 0 < deadline - time.monotonic() <= REQUEST_SECONDS
         with refresh_stage('source_primary_reads'):
             raise SourceReadError('operational_source_read_timeout', 'unified_orders')
 
+    async def hold_profit(db, owner, period, *, as_of):
+        assert db is database and owner == 'owner' and as_of == stamp
+        assert period == {'owner_id': 'owner', 'started_at': original_state['owner']['started_at']}
+        assert demand_context().db is database and demand_context().owner == owner
+        profit['started'] = True
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            profit['cancelled'] = True
+            raise
+        finally:
+            assert database.data[LEASES] and not database.cas_entered.is_set()
+            profit['stopped'] = True
+
     monkeypatch.setattr(operational_balance_sources, 'collect_sources', fail_read)
+    monkeypatch.setattr('operational_profit_sources.load_profit_snapshot', hold_profit)
 
     async def principal():
         return {'id': 'actor-private-fixture'}
@@ -80,12 +102,15 @@ def test_source_failure_http_response_contains_the_unwound_request_stages(monkey
         assert {key: value for key, value in detail.items() if key != 'stage_timings'} == expected
         timings = detail['stage_timings']
         assert [(row['stage'], row['outcome']) for row in timings[-3:]] == [
-            ('source_primary_reads', 'failed'), ('source_collection', 'failed'), ('aggregate', 'failed')]
+            ('source_primary_reads', 'failed'), ('source_collection', 'failed'),
+            ('aggregate', 'failed')]
+        assert not any(row['stage'] == 'profit_snapshot' for row in timings)
         assert any(row['stage'] == 'native_evidence' and row['outcome'] == 'complete' for row in timings)
         assert any(row['stage'] == 'snapshot_load' and row['outcome'] == 'complete' for row in timings)
         assert all(set(row) == {'stage', 'duration_ms', 'outcome'}
                    and 0 <= row['duration_ms'] <= 300000 for row in timings)
         assert database.data[STATES] == original_state and database.data[LEASES] == {}
+        assert profit == {'started': False, 'cancelled': False, 'stopped': False}
         assert all(row[0] == LEASES for row in database.writes)
         assert demand_context() is None
         assert not [task for task in asyncio.all_tasks() if task is not asyncio.current_task()]

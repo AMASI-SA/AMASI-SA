@@ -69,7 +69,15 @@ def isolate_sources(monkeypatch, orders):
         result["engine"].update(obligations={}, issues=[])
         return result
 
-    monkeypatch.setattr(operational_balance_sources, "collect_sources", AsyncMock(return_value={"orders": orders}))
+    async def collect(db, owner, start, stamp, *, baselines, operational_state,
+                      on_primary_reads_complete):
+        assert owner == operational_state["owner_id"] == "owner" and stamp == NOW
+        assert start == operational_state["started_at"]
+        assert baselines == operational_state.get("source_baselines")
+        on_primary_reads_complete()
+        return {"orders": orders}
+
+    monkeypatch.setattr(operational_balance_sources, "collect_sources", collect)
     monkeypatch.setattr(operational_balance_inventory, "assert_no_source_collision", AsyncMock())
     monkeypatch.setattr(operational_customer_returns, "attach_returns", lambda *_: None)
     monkeypatch.setattr(operational_balance_engine, "reconcile", reconcile)

@@ -535,41 +535,71 @@ def _bank_credit_actions(orders, recorded):
     return actions
 
 
-async def _reconcile_with_profit_snapshot(db, owner, state, sources, stamp):
+async def _reconcile_with_profit_snapshot(db, owner, state, stamp):
     """Join independent visible-request preparations before any financial save.
 
     Profit reads depend only on the owner and observation period. They do not
-    read the prepared ledger, and reconciliation performs no source I/O. Each
-    child retains the same request deadline and must finish its cleanup before
-    the caller can release its lease or admit the aggregate commit.
+    read collected sources or the prepared ledger. Wait for the primary source
+    batch to finish before sharing read capacity with the remaining collection
+    and reconciliation. Both retain the same request deadline and must finish
+    cleanup before the caller can admit any financial write.
     """
     from operational_balance_engine import reconcile
+    from operational_balance_sources import collect_sources
     from operational_demand_refresh import checkpoint, demand_context, refresh_stage, run_calculation
     from operational_financial_activity_runtime import join_task
     from operational_profit_sources import load_profit_snapshot
     from operational_read_runtime import _snapshot_session
 
-    async def calculate():
+    async def calculate(on_primary_reads_complete=None):
+        try:
+            from operational_balance_inventory import assert_no_source_collision
+            with refresh_stage("source_collection"):
+                with refresh_stage("source_collision"):
+                    await assert_no_source_collision(db, owner, state)
+                readiness = ({"on_primary_reads_complete": on_primary_reads_complete}
+                             if on_primary_reads_complete is not None else {})
+                sources = await collect_sources(db, owner, state["started_at"], stamp,
+                                                baselines=state.get("source_baselines"),
+                                                operational_state=state, **readiness)
+            await checkpoint()
+        except ValueError as exc:
+            from operational_read_runtime import SourceReadError
+            if isinstance(exc, SourceReadError):
+                from operational_source_diagnostics import source_failure_detail
+                detail = source_failure_detail(exc.code, exc.collection)
+                _LOG.warning("operational_refresh_source_failure stage=source_collection outcome=failed "
+                             "cause=%s source_collection=%s", detail["cause"], detail["source_collection"])
+                raise HTTPException(409, detail=detail) from None
+            fail("operational_source_setup_incomplete", "مصادر ميزان 2 غير مكتملة أو تجاوزت حدود القراءة")
+        sources.setdefault("supplier_returns", []).extend(state.get("supplier_returns", []))
+        from operational_customer_returns import attach_returns
+        attach_returns(state, sources)
         with refresh_stage("reconciliation"):
-            return await run_calculation(reconcile, state, sources, stamp)
+            result = await run_calculation(reconcile, state, sources, stamp)
+        return result, sources
 
-    async def profit(period):
+    async def profit(period, primary_ready=None):
+        if primary_ready is not None:
+            await primary_ready.wait()
         with refresh_stage("profit_snapshot"):
             return await load_profit_snapshot(db, owner, period, as_of=stamp)
 
     # Ordinary callers do not own cancellable CPU threads. Snapshot-session
     # readers also retain their serial contract, including authorization reads.
     if demand_context() is None or _snapshot_session(db):
-        result = await calculate()
+        result, sources = await calculate()
         await checkpoint()
         result["engine"]["profit_snapshot"] = await profit(result)
-        return result
+        return result, sources
 
     period = {"owner_id": state["owner_id"], "started_at": state["started_at"]}
-    tasks = [asyncio.create_task(calculate()), asyncio.create_task(profit(period))]
+    primary_ready = asyncio.Event()
+    tasks = [asyncio.create_task(calculate(primary_ready.set)),
+             asyncio.create_task(profit(period, primary_ready))]
     group = asyncio.gather(*tasks)
     try:
-        result, snapshot = await asyncio.shield(group)
+        (result, sources), snapshot = await asyncio.shield(group)
     finally:
         for task in tasks:
             if not task.done():
@@ -578,7 +608,7 @@ async def _reconcile_with_profit_snapshot(db, owner, state, sources, stamp):
         # Cleanup exceptions cannot replace the first preparation outcome.
         await join_task(asyncio.gather(group, *tasks, return_exceptions=True))
     result["engine"]["profit_snapshot"] = snapshot
-    return result
+    return result, sources
 
 
 def _apply_refreshed_party_names(result, names):
@@ -603,7 +633,6 @@ def _apply_refreshed_party_names(result, names):
 
 
 async def refresh(db, owner, *, clock=None):
-    from operational_balance_sources import collect_sources
     from operational_demand_refresh import calculation_checkpoint, checkpoint, refresh_stage, run_calculation
     stamp = clock or now()
 
@@ -615,26 +644,7 @@ async def refresh(db, owner, *, clock=None):
             return state
         await active_gate(db, owner, state)
         await checkpoint()
-        try:
-            from operational_balance_inventory import assert_no_source_collision
-            with refresh_stage("source_collection"):
-                with refresh_stage("source_collision"):
-                    await assert_no_source_collision(db, owner, state)
-                sources = await collect_sources(db, owner, state["started_at"], stamp, baselines=state.get("source_baselines"), operational_state=state)
-            await checkpoint()
-        except ValueError as exc:
-            from operational_read_runtime import SourceReadError
-            if isinstance(exc, SourceReadError):
-                from operational_source_diagnostics import source_failure_detail
-                detail = source_failure_detail(exc.code, exc.collection)
-                _LOG.warning("operational_refresh_source_failure stage=source_collection outcome=failed "
-                             "cause=%s source_collection=%s", detail["cause"], detail["source_collection"])
-                raise HTTPException(409, detail=detail) from None
-            fail("operational_source_setup_incomplete", "مصادر ميزان 2 غير مكتملة أو تجاوزت حدود القراءة")
-        sources.setdefault("supplier_returns", []).extend(state.get("supplier_returns", []))
-        from operational_customer_returns import attach_returns
-        attach_returns(state, sources)
-        result = await _reconcile_with_profit_snapshot(db, owner, state, sources, stamp)
+        result, sources = await _reconcile_with_profit_snapshot(db, owner, state, stamp)
         await checkpoint()
         with refresh_stage("bank_claims"):
             bank_actions = await run_calculation(_bank_credit_actions, sources.get("orders", []), result["movements"])
