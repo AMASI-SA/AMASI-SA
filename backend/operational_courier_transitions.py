@@ -297,9 +297,10 @@ def carrier_history_snapshot(raw, current):
     return {**raw, "shipping": {}, "shipment": None, "shipments": [shipment]}
 
 
-async def load_delivery_history(db, owner, sources, *, max_rows, completion_keys=(), status_order_numbers=()):
+async def load_delivery_history(db, owner, sources, *, max_rows, completion_keys=(), status_order_numbers=(), historical_numbers=()):
     """Read only typed transition observations for delivered, identified orders."""
     numbers = set()
+    historical_numbers = set(historical_numbers)
     status_order_numbers = set(status_order_numbers)
     for source in sources:
         raw = (source.get("raw_by_source") or {}).get("salla_direct") or {}
@@ -333,6 +334,21 @@ async def load_delivery_history(db, owner, sources, *, max_rows, completion_keys
         for row in rows:
             if (row.get("user_id") != owner or row.get("order_number") not in batch
                     or row.get("source") != "salla_history"):
+                raise ValueError("operational_source_owner_mismatch")
+            groups[row["order_number"]].append(row)
+    # The additional query needs only a positive observation and its order identity.
+    # Keep negative timeline entries out of the historical backfill row budget.
+    missing = sorted(historical_numbers - set(numbers) - {''})
+    for offset in range(0, len(missing), 250):
+        batch = missing[offset:offset + 250]
+        query = {"user_id": owner, "source": "salla_history", "order_number": {"$in": batch},
+                 "native_status_transition.delivered": True}
+        rows = await db[COLLECTION].find(query, projection).to_list(max_rows - count + 1)
+        count += len(rows)
+        if count > max_rows:
+            raise ValueError("operational_source_scope_too_large")
+        for row in rows:
+            if row.get("user_id") != owner or row.get("order_number") not in batch or row.get("source") != "salla_history":
                 raise ValueError("operational_source_owner_mismatch")
             groups[row["order_number"]].append(row)
     return groups
