@@ -490,8 +490,14 @@ def _record(item: dict, cost: dict, **extra: Any) -> dict:
             "cost": deepcopy(cost), **extra}
 
 
-async def _read(db: Any, collection: str, query: dict, projection: dict, limit: int) -> list[dict]:
-    rows = await db[collection].find(query, projection).to_list(length=limit + 1)
+async def _read(db: Any, collection: str, query: dict, projection: dict, limit: int,
+                *, owned: bool = False) -> list[dict]:
+    cursor = db[collection].find(query, projection)
+    if owned:
+        from operational_read_runtime import read_source_cursor
+        rows = await read_source_cursor(cursor, limit + 1)
+    else:
+        rows = await cursor.to_list(length=limit + 1)
     if len(rows) > limit:
         # Truncation cannot silently turn missing components into zero cost.
         raise ValueError("order_cost_authority_read_limit:" + collection)
@@ -515,13 +521,18 @@ def _compact_snapshot_map(field: str) -> dict:
 
 
 async def _read_snapshots(db: Any, collection: str, query: dict, projection: dict,
-                          field: str, limit: int, *, full: bool) -> list[dict]:
+                          field: str, limit: int, *, full: bool, owned: bool = False) -> list[dict]:
     if full:
-        return await _read(db, collection, query, projection, limit)
-    rows = await db[collection].aggregate([
+        return await _read(db, collection, query, projection, limit, **({'owned': True} if owned else {}))
+    cursor = db[collection].aggregate([
         {"$match": query}, {"$limit": limit + 1},
         {"$project": {**projection, field: _compact_snapshot_map(field)}},
-    ]).to_list(length=limit + 1)
+    ])
+    if owned:
+        from operational_read_runtime import read_source_cursor
+        rows = await read_source_cursor(cursor, limit + 1)
+    else:
+        rows = await cursor.to_list(length=limit + 1)
     if len(rows) > limit:
         raise ValueError("order_cost_authority_read_limit:" + collection)
     return rows
@@ -584,10 +595,11 @@ async def load_order_cost_authority(db: Any, user_id: str, orders: list[dict], *
     if not order_map:
         return result
     parallel_reads = _request_parallel_reads(db, user_id, parallel_reads)
+    read_options = {'owned': True} if parallel_reads else {}
     # This small metadata read is tenant scoped. It only guards unknown bundles;
     # current catalog composition is never used as historical price evidence.
     definitions = await _read(db, BUNDLES, {"user_id": user_id, "product_type": "composite"},
-                              {"_id": 0, "product_id": 1}, 100000)
+                              {"_id": 0, "product_id": 1}, 100000, **read_options)
     result["composite_products"] = {str(row["product_id"]) for row in definitions}
     numbers = sorted(order_map)
     for offset in range(0, len(numbers), CHUNK_SIZE):
@@ -596,18 +608,20 @@ async def load_order_cost_authority(db: Any, user_id: str, orders: list[dict], *
         limit = max(1, sum(len(order_items(order_map[number])) for number in selected))
         aliases = {alias for number in selected for item in order_items(order_map[number]) for alias in line_aliases(item)}
         async def read_stored():
-            return await _read(db, SNAPSHOTS, {**keys, "order_item_id": {"$in": sorted(aliases)}}, {"_id": 0}, max(1, limit * 4))
+            return await _read(db, SNAPSHOTS, {**keys, "order_item_id": {"$in": sorted(aliases)}},
+                {"_id": 0}, max(1, limit * 4), **read_options)
 
         async def read_lifecycle():
             return await _read_snapshots(db, LIFECYCLES, keys,
                 {"_id": 0, "order_number": 1, "bundle_intake_snapshots": 1,
-                 "reporting_cost_snapshots": 1, "source_fingerprint": 1}, "bundle_intake_snapshots", len(selected), full=include_frozen_metadata)
+                 "reporting_cost_snapshots": 1, "source_fingerprint": 1}, "bundle_intake_snapshots", len(selected),
+                full=include_frozen_metadata, **read_options)
 
         async def read_plans():
             return await _read_snapshots(db, PLANS, {"user_id": user_id, "order_id": {"$in": selected},
                 "bundle_snapshots": {"$exists": True}},
                 {"_id": 1, "order_id": 1, "bundle_snapshots": 1, "reconciliation_required": 1, "lines": 1},
-                "bundle_snapshots", len(selected), full=include_frozen_metadata)
+                "bundle_snapshots", len(selected), full=include_frozen_metadata, **read_options)
 
         if parallel_reads:
             stored, lifecycle, plans = await _parallel_inputs((read_stored, read_lifecycle, read_plans))
@@ -618,9 +632,10 @@ async def load_order_cost_authority(db: Any, user_id: str, orders: list[dict], *
         units = await _read(db, UNITS, {"user_id": user_id, "plan_id": {"$in": [p["_id"] for p in plans]},
             "state": {"$ne": "released"}, "order_line_id": {"$in": sorted(aliases)}}, {"_id": 0, "plan_id": 1, "order_line_id": 1,
             "unit_index": 1, "state": 1, "selected_context": 1, "bundle_leaves": 1},
-            max(10000, sum(int(decimal(item.get("quantity", 1)) or 0) for number in selected for item in order_items(order_map[number]))) + limit) if plans or not parallel_reads else []
+            max(10000, sum(int(decimal(item.get("quantity", 1)) or 0) for number in selected for item in order_items(order_map[number]))) + limit,
+            **read_options) if plans or not parallel_reads else []
         corrections = await _read(db, CORRECTIONS, {**keys, "state": "applied", "order_item_id": {"$in": sorted(aliases)}},
-                                  {"_id": 0}, max(1, limit * 4)) if include_corrections else []
+                                  {"_id": 0}, max(1, limit * 4), **read_options) if include_corrections else []
         item_maps = {}
         for number in selected:
             candidates = defaultdict(list)
@@ -769,7 +784,7 @@ async def load_order_cost_authority(db: Any, user_id: str, orders: list[dict], *
     if current_profitability_estimate:
         from current_bundle_reporting_estimate import load_current_bundle_estimates
         estimates = await load_current_bundle_estimates(
-            db, user_id, orders, result, budget=budget,
+            db, user_id, orders, result, budget=budget, **({'owned_reads': True} if parallel_reads else {}),
         )
         if estimates:
             result["current_bundle_estimates"] = estimates

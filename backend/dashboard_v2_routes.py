@@ -848,6 +848,7 @@ async def build_mezan_v2_product_cost_cooperative(
     *,
     include_product_rows: bool = True,
     cost_collector: DashboardAdsCostCollector | None = None,
+    parallel_order_cost_reads: bool = False,
 ) -> dict[str, Any]:
     products = await _to_list(
         db[PRODUCTS].find(
@@ -907,6 +908,7 @@ async def build_mezan_v2_product_cost_cooperative(
     policy = await get_policy_map(db, user_id)
     authority = await load_order_cost_authority(
         db, user_id, orders, budget=CPUWorkBudget(COST_PROFIT_BUDGET_MS),
+        parallel_reads=parallel_order_cost_reads,
     )
     traffic_by_order = (
         await load_product_traffic_sources(db, user_id, orders, budget=CPUWorkBudget(COST_PROFIT_BUDGET_MS))
