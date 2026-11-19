@@ -173,6 +173,16 @@ def reconcile(state, sources, as_of):
     initialize_admission(result, as_of)
     obligations = engine.setdefault("obligations", {})
     facts = engine.setdefault("facts", {})
+    from operational_delivery_register import POLICY, PREFIX
+    if "delivery_register" in sources:
+        facts[POLICY] = {"started_at": start.isoformat()}
+        for oid, record in sources["delivery_register"].items():
+            calculation_checkpoint()
+            previous = facts.get(PREFIX + oid, {})
+            if previous.get("party_id"):
+                record = {**previous, "current_status": record.get("current_status"),
+                          "current_status_name": record.get("current_status_name")}
+            facts[PREFIX + oid] = deepcopy(record)
     versions = engine.setdefault("order_versions", {})
     engine.setdefault("salary_days", {})
     engine.setdefault("ad_days", {})
@@ -438,6 +448,8 @@ def reconcile(state, sources, as_of):
         checkpoint = {name: mapping.checkpoint() for name, mapping in order_maps.items()}
         try:
             created = instant(order["created_at"])
+            registered_service = bool(delivery_only and order.get("registered_service_only")
+                                      and PREFIX + oid in facts and start < created <= now)
             if delivery_only or order.get("delivery_event"):
                 event = order.get("delivery_event") or {}
                 carrier = order.get("carrier") or {}
@@ -451,11 +463,11 @@ def reconcile(state, sources, as_of):
                                and event.get('delivered_at') is None and order.get('delivered_at') is None
                                and max(start, created) <= recorded <= now
                                and delivery_only == (created <= start)) if manual else
-                              (not delivery_only and event.get("recognition_basis") == STATUS_BASIS
+                              ((not delivery_only or registered_service) and event.get("recognition_basis") == STATUS_BASIS
                                and event.get("delivered_at") is None and order.get("delivered_at") is None
                                and start < created <= recorded <= now) if undated else
                               (start <= delivered <= now and created <= delivered
-                               and not (created > start if delivery_only else created < start)
+                               and (registered_service or not (created > start if delivery_only else created < start))
                                and instant(order.get("delivered_at")) == delivered))
                 if (not oid or (not undated and event.get("schema") != "operational_delivery_event_v1")
                         or not event.get("id") or str(event.get("order_id")) != oid
@@ -465,7 +477,6 @@ def reconcile(state, sources, as_of):
                         or order.get("status") not in DELIVERED
                         or not isinstance(order.get("currency"), str) or not order["currency"]
                         or event.get("currency") != order["currency"]
-                        or (event.get("party_type") == "store_driver" and order["currency"] != "SAR")
                         or event.get("party_type") not in {"courier", "store_driver"}
                         or not event.get("party_id") or event.get("party_id") != carrier.get("id")
                         or event.get("party_type") != carrier.get("party_type", carrier.get("kind"))):
@@ -485,7 +496,7 @@ def reconcile(state, sources, as_of):
             elif not start <= created <= now:
                 continue
             updated = instant(order.get("updated_at", order["created_at"]))
-            if oid in versions and updated < instant(versions[oid]):
+            if not registered_service and oid in versions and updated < instant(versions[oid]):
                 continue
             currency = order["currency"]
             cancelled = order.get("status") in CANCELLED
@@ -843,7 +854,8 @@ def reconcile(state, sources, as_of):
                                        "order_page_balance_review": balance_review})
                     else:
                         issue(str(error), provider_key)
-            versions[oid] = updated.isoformat()
+            if not registered_service:
+                versions[oid] = updated.isoformat()
         except (ValueError, KeyError, TypeError, InvalidOperation) as error:
             for name, mapping in order_maps.items():
                 mapping.rollback(checkpoint[name])

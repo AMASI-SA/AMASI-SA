@@ -801,6 +801,9 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None,
         result["issues"].extend(_source_issue(row) for row in cost_exposure.get("issues", []))
     currencies = {row["currency"] for row in projection["parties"]}
     prestart_cod = snapshot_cod_preview(cost_exposure, projection["started_at"], projection["as_of"]) if include_forecast else {}
+    from operational_delivery_register import POLICY
+    if POLICY in state.get("engine", {}).get("facts", {}):
+        currencies.add("SAR")
     currencies.update(prestart_cod)
     customer_cod = (snapshot_cod_preview(cost_exposure, projection["started_at"], projection["as_of"], "open_customer_cod")
                     if include_forecast else {})
