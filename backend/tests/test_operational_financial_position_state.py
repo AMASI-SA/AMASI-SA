@@ -51,6 +51,21 @@ def test_new_report_reader_keeps_financial_projection_and_omits_audit_materializ
     assert db.data == before
 
 
+def test_narrow_query_drops_only_write_histories_before_transfer():
+    db = ArchivedDB()
+    stored = install_archive(db)
+    stored.update(requests={"test-receipt": {"actor": "staff"}}, audit=[{"action": "test-action"}])
+
+    class ProjectedCollection:
+        async def find_one(self, query, projection):
+            assert query == {"_id": "owner", "owner_id": "owner"}
+            assert projection == {"requests": 0, "audit": 0}
+            return {key: deepcopy(value) for key, value in stored.items() if key not in projection}
+
+    result = asyncio.run(read_financial_position_state({STATES: ProjectedCollection()}, "owner"))
+    assert result == _report_state(stored, "owner")
+
+
 def test_legacy_full_report_keeps_audit_failure_while_scoped_reader_checks_only_manifest(monkeypatch):
     monkeypatch.setitem(sys.modules, "operational_open_cost_exposure", None)
     db = ArchivedDB()
