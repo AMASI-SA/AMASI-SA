@@ -19,7 +19,7 @@ from tests.test_dashboard_bundle_cost_authority import (
     OWNER, ReadOnlyDB, db as bundle_db, freeze, sale, sale_line,
 )
 from tests.test_dashboard_runtime_source_contract import (
-    RemoveCheckpoints, SelectDefaultCostCollector, SelectDefaultProductRows,
+    RemoveCheckpoints, SelectDefaultAuthorityReads, SelectDefaultCostCollector, SelectDefaultProductRows,
 )
 
 
@@ -69,9 +69,12 @@ def test_default_observer_hooks_preserve_the_exact_frozen_product_oracle():
     assert hashlib.sha256(source.rstrip().encode()).hexdigest() == "9328bb53c707ed88b66b7b72c23ec466039215e715e8d1c0ec06c316f9040daa"
     before = ast.parse(source).body[0]
     adopted = ast.parse(inspect.getsource(dashboard.build_mezan_v2_product_cost_cooperative)).body[0]
-    assert [arg.arg for arg in adopted.args.kwonlyargs] == ["include_product_rows", "cost_collector"]
-    assert [ast.unparse(value) for value in adopted.args.kw_defaults] == ["True", "None"]
+    assert [arg.arg for arg in adopted.args.kwonlyargs] == ["include_product_rows", "cost_collector", "parallel_order_cost_reads"]
+    assert [ast.unparse(value) for value in adopted.args.kw_defaults] == ["True", "None", "False"]
     adopted.args.kwonlyargs, adopted.args.kw_defaults = [], []
+    authority_reads = SelectDefaultAuthorityReads()
+    adopted = authority_reads.visit(adopted)
+    assert authority_reads.calls == 1
     observer = SelectDefaultCostCollector()
     adopted = observer.visit(adopted)
     assert observer.calls == ["cost_collector.begin_order(order)",

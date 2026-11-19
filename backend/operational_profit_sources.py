@@ -105,27 +105,47 @@ async def _cohort_cooperative(orders, raw_rows, settings, owner, start, end, bud
 
 async def _load_context(db, owner, start, end):
     from dashboard_cpu_budget import CPUWorkBudget, PARSER_BUDGET_MS
+    from operational_read_runtime import read_source_cursor
+    from order_cost_authority import _parallel_inputs, _request_parallel_reads
     from order_currency import SALLA_RAW_CURRENCY_PROJECTION, hydrate_order_currency_fields_cooperative
     from report_option_recovery import SALLA_REPORT_OPTION_PROJECTION, attach_report_option_evidence_cooperative
 
-    settings_rows = await db["settings"].find({"user_id": owner}, {"_id": 0, "user_id": 1,
-        "report_included_statuses": 1, "hide_inferred_date_orders": 1, "payment_methods": 1, "shipping_companies": 1}).to_list(2)
-    if len(settings_rows) > 1 or any(row.get("user_id") != owner for row in settings_rows):
-        raise ValueError("profit_settings_ambiguous")
-    settings = settings_rows[0] if settings_rows else {}
-    # A one-day guard band covers historical date-only compatibility fields.
-    # Exact inclusion is decided from the original instant, not this index.
-    query = {"user_id": owner, "order_date": {
-        "$gte": (start.astimezone(RIYADH).date() - timedelta(days=1)).isoformat(),
-        "$lte": (end.astimezone(RIYADH).date() + timedelta(days=1)).isoformat()}}
-    orders = await db["unified_orders"].find(query, {"_id": 0, "raw_by_source": 0}).to_list(MAX_ORDERS + 1)
-    if len(orders) > MAX_ORDERS:
-        raise ValueError("profit_order_scope_too_large")
-    projection = {**SALLA_RAW_CURRENCY_PROJECTION, **SALLA_REPORT_OPTION_PROJECTION, "user_id": 1,
-        **{"raw_by_source.salla_direct." + field: 1 for field in ("id", "order_number", "date", "created_at", "order_date", "updated_at", "date_updated")}}
-    raw_rows = await db["unified_orders"].find(query, projection).to_list(MAX_ORDERS + 1) if orders else []
-    if len(raw_rows) > MAX_ORDERS:
-        raise ValueError("profit_order_scope_too_large")
+    parallel = _request_parallel_reads(db, owner, True)
+
+    async def read(collection, query, projection, limit):
+        cursor = db[collection].find(query, projection)
+        return (await read_source_cursor(cursor, limit) if parallel else await cursor.to_list(limit))
+
+    async def load_settings():
+        settings_rows = await read("settings", {"user_id": owner}, {"_id": 0, "user_id": 1,
+            "report_included_statuses": 1, "hide_inferred_date_orders": 1, "payment_methods": 1, "shipping_companies": 1}, 2)
+        if len(settings_rows) > 1 or any(row.get("user_id") != owner for row in settings_rows):
+            raise ValueError("profit_settings_ambiguous")
+        return settings_rows[0] if settings_rows else {}
+
+    async def load_orders():
+        # A one-day guard band covers historical date-only compatibility fields.
+        # Exact inclusion is decided from the original instant, not this index.
+        query = {"user_id": owner, "order_date": {
+            "$gte": (start.astimezone(RIYADH).date() - timedelta(days=1)).isoformat(),
+            "$lte": (end.astimezone(RIYADH).date() + timedelta(days=1)).isoformat()}}
+        orders = await read("unified_orders", query, {"_id": 0, "raw_by_source": 0}, MAX_ORDERS + 1)
+        if len(orders) > MAX_ORDERS:
+            raise ValueError("profit_order_scope_too_large")
+        projection = {**SALLA_RAW_CURRENCY_PROJECTION, **SALLA_REPORT_OPTION_PROJECTION, "user_id": 1,
+            **{"raw_by_source.salla_direct." + field: 1 for field in ("id", "order_number", "date", "created_at", "order_date", "updated_at", "date_updated")}}
+        raw_rows = await read("unified_orders", query, projection, MAX_ORDERS + 1) if orders else []
+        if len(raw_rows) > MAX_ORDERS:
+            raise ValueError("profit_order_scope_too_large")
+        return orders, raw_rows
+
+    if parallel:
+        # Settings do not depend on order reads. Observe settings first, as on
+        # the serial path, and join both owned chains before hydration or exit.
+        settings, (orders, raw_rows) = await _parallel_inputs((load_settings, load_orders))
+    else:
+        settings = await load_settings()
+        orders, raw_rows = await load_orders()
     budget = CPUWorkBudget(PARSER_BUDGET_MS)
     selected, coverage = await _cohort_cooperative(orders, raw_rows, settings, owner, start, end, budget)
     await attach_report_option_evidence_cooperative(selected, raw_rows, checkpoint=budget.checkpoint)
@@ -167,12 +187,14 @@ def _component_readers(db, owner, context, days):
     from expenses_routes import compute_operating_expenses_for_range
     from order_currency import summarize_orders_sar_cooperative
     from dashboard_cpu_budget import CPUWorkBudget, PARSER_BUDGET_MS
+    from order_cost_authority import _request_parallel_reads
     from recurring_obligations_routes import compute_recurring_obligations_for_range
 
     orders = context["orders"]
+    product_options = {"parallel_order_cost_reads": True} if _request_parallel_reads(db, owner, True) else {}
     readers = {
         "sales": lambda: summarize_orders_sar_cooperative(orders, checkpoint=CPUWorkBudget(PARSER_BUDGET_MS).checkpoint),
-        "products": lambda: build_mezan_v2_product_cost_cooperative(db, owner, orders, include_product_rows=False),
+        "products": lambda: build_mezan_v2_product_cost_cooperative(db, owner, orders, include_product_rows=False, **product_options),
         "order_costs": lambda: _order_cost_totals(orders, context["settings"]),
     }
     if days:

@@ -114,6 +114,21 @@ class SelectDefaultCostCollector(ast.NodeTransformer):
         return self.generic_visit(node)
 
 
+class SelectDefaultAuthorityReads(ast.NodeTransformer):
+    """Remove only the reviewed False-default scheduling argument."""
+    def __init__(self):
+        self.calls = 0
+
+    def visit_Call(self, node):
+        if isinstance(node.func, ast.Name) and node.func.id == 'load_order_cost_authority':
+            keywords = [keyword for keyword in node.keywords if keyword.arg == 'parallel_reads']
+            assert len(keywords) == 1
+            assert ast.dump(keywords[0].value) == ast.dump(ast.Name(id='parallel_order_cost_reads', ctx=ast.Load()))
+            node.keywords.remove(keywords[0])
+            self.calls += 1
+        return self.generic_visit(node)
+
+
 class SourceContract(unittest.TestCase):
     def test_reducers_and_unchanged_shared_apis(self):
         for file, name in PAIRS:
@@ -146,12 +161,17 @@ class SourceContract(unittest.TestCase):
                     self.assertEqual(ast.dump(before), ast.dump(current_function))
                 adopted = copy.deepcopy(function(current, name+'_cooperative'))
                 if name == 'build_mezan_v2_product_cost':
-                    self.assertEqual([arg.arg for arg in adopted.args.kwonlyargs], ['include_product_rows', 'cost_collector'])
+                    self.assertEqual([arg.arg for arg in adopted.args.kwonlyargs],
+                                     ['include_product_rows', 'cost_collector', 'parallel_order_cost_reads'])
                     self.assertEqual([ast.unparse(arg.annotation) for arg in adopted.args.kwonlyargs],
-                                     ['bool', 'DashboardAdsCostCollector | None'])
+                                     ['bool', 'DashboardAdsCostCollector | None', 'bool'])
                     self.assertEqual([ast.dump(value) for value in adopted.args.kw_defaults],
-                                     [ast.dump(ast.Constant(value=True)), ast.dump(ast.Constant(value=None))])
+                                     [ast.dump(ast.Constant(value=True)), ast.dump(ast.Constant(value=None)),
+                                      ast.dump(ast.Constant(value=False))])
                     adopted.args.kwonlyargs, adopted.args.kw_defaults = [], []
+                    authority_reads = SelectDefaultAuthorityReads()
+                    adopted = authority_reads.visit(adopted)
+                    self.assertEqual(authority_reads.calls, 1)
                     collector = SelectDefaultCostCollector()
                     adopted = collector.visit(adopted)
                     self.assertEqual(collector.calls, [
