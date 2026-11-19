@@ -43,6 +43,8 @@ def advance_obligations(state):
     """
     result = {}
     for row in state.get('movements', []):
+        if row.get('settlement_scope') == 'account':
+            continue
         if row.get('party_type') != 'external_person' or row.get('kind') not in {'payment', 'collection', 'refund', 'settlement'}:
             continue
         amount = _money(row['amount'])

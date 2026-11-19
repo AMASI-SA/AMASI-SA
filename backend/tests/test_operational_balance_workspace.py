@@ -886,7 +886,9 @@ def test_external_supplier_invoice_can_book_additional_services_without_touching
         state = await read(db, "owner")
         assert balance(state, "supplier", "supplier")["outstanding_payable"] == "0.00"
         assert balance(state, "bank", "bank")["actual"] == "685.00"
-        assert sum(a["amount"] == "115.00" and a["obligation_id"] == saved["movement_id"]
-                   for a in state["movements"][-1]["allocations"]) == 1
+        assert state["movements"][-1]["allocations"] == []
+        assert state["movements"][-1]["settlement_scope"] == "account"
+        purchase = next(r for r in report(state)["obligations"] if r["id"] == saved["movement_id"])
+        assert purchase["confirmed"] == "115.00" and purchase["settled"] == "0.00"
         assert (await client.get(url)).json() == doc
     run(scenario)

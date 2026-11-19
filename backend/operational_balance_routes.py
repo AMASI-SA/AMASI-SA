@@ -18,7 +18,7 @@ from operational_visible_report_read import run_visible_report_read
 from operational_financial_activity_runtime import checked_rows, prepare_in_thread
 from operational_financial_position_views import FinancialPositionView, FORECAST_VIEWS, LABEL_VIEWS
 
-from operational_balance_store import RECEIPTS, AUTHORIZATION_GUARD, check_authorization, audit, digest, fail, mutate, now, read
+from operational_balance_store import RECEIPTS, STATES, AUTHORIZATION_GUARD, check_authorization, audit, digest, fail, mutate, now, read
 from operational_balance_service import (entity, save_opening, create_movement, report, refresh, freeze, supplier_return)
 
 
@@ -978,7 +978,8 @@ def make_operational_balance_router(db, current_user):
         from operational_balance_service import movement_source, prepaid_shipping_cash
         operation = None
         if (payload.kind == "transfer" and payload.party_type == "cash"
-                and prepaid_shipping_cash(await read(db, owner), payload.party_id)):
+                and prepaid_shipping_cash(await db[STATES].find_one(
+                    {"_id": owner, "owner_id": owner}, {"courier_tariffs": 1}) or {}, payload.party_id)):
             account = await movement_source(db, owner, data, payload.currency)
             if account:
                 operation = "accounts.transfer"
@@ -986,12 +987,14 @@ def make_operational_balance_router(db, current_user):
         elif payload.party_type == "pos_receivable" and payload.kind != "correction":
             operation = "provider.settle"
             resources = [("pos_receivable", payload.party_id), ("bank", payload.bank_id)]
+        on_account = (not payload.allocations and not payload.external_operation
+                      and payload.kind in {"payment", "collection", "refund", "transfer", "correction", "wallet_funding"})
         if operation:
             from operational_balance_access import guard_access
             async with guard_access(db, actor, owner, operation, resources):
-                result = await create_movement(db, owner, actor["id"], data, source=source)
+                result = await create_movement(db, owner, actor["id"], data, source=source, on_account=on_account)
         else:
-            result = await create_movement(db, owner, actor["id"], data, source=source)
+            result = await create_movement(db, owner, actor["id"], data, source=source, on_account=on_account)
         if source == "employee_app" and result.get("external_balance_snapshot") is not None:
             # Reporting permission is independent from recording a movement.
             # Recheck it AFTER the commit; redact only balances on revocation,

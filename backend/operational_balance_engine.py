@@ -68,18 +68,24 @@ def fingerprint(value):
     return sha256(json.dumps(value, sort_keys=True, ensure_ascii=False, default=str).encode()).hexdigest()
 
 
-def reconcile_credits(state):
+def allocation_totals(state):
+    used = {}
+    for movement in state.get("movements", []):
+        for allocation in movement.get("allocations", []):
+            key = allocation["obligation_id"]
+            used[key] = used.get(key, ZERO) + money(allocation["amount"])
+    return used
+
+
+def reconcile_credits(state, *, used=None):
     """Derive return/refund credits from paid excess; no second cash movement.
 
     A credit uses its own allocation identity, retaining the original invoice or
     capture and its payments. Re-reading source evidence cannot recreate debt.
     """
     obligations = state.setdefault("engine", {}).setdefault("obligations", {})
-    used = {}
-    for movement in state.get("movements", []):
-        for allocation in movement.get("allocations", []):
-            key = allocation["obligation_id"]
-            used[key] = used.get(key, ZERO) + money(allocation["amount"])
+    if used is None:
+        used = allocation_totals(state)
     for key, obligation in list(obligations.items()):
         if obligation.get("derived_credit") or obligation.get("kind") not in {"supplier", "provider"}:
             continue

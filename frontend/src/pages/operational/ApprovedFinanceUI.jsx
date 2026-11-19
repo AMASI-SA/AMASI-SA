@@ -1,5 +1,5 @@
 import React from 'react';
-import { minorUnits } from './simpleBalancesModel';
+import { ledgerDisplayAmount, minorUnits } from './simpleBalancesModel';
 
 export function Icon({ name, className = '' }) {
   return <svg aria-hidden="true" className={`ico ${className}`}><use href={`/operational-ui/icons.svg#${name}`} /></svg>;
@@ -20,23 +20,29 @@ export function Amount({ value, currency = 'SAR' }) {
   const units = minorUnits(value);
   return units === null ? 'غير متاح' : <span className="amt"><bdi>{formatMinor(units)}</bdi> <span className="unit">{currency === 'SAR' ? 'ر.س' : currency}</span></span>;
 }
+export function AdAmount({ value, currency, payable = false }) {
+  const amount = payable ? ledgerDisplayAmount(value, 'ad_account') : value;
+  const units = minorUnits(amount);
+  const tone = units === null || units === 0n ? undefined : units < 0n ? 'debt' : 'credit';
+  return <span data-ad-balance={tone}><Amount value={amount} currency={currency} /></span>;
+}
 export function AdBalance({ resource }) {
   if (!resource.access?.balance || resource.balance?.visible === false) return null;
   const amounts = resource.ad_amounts;
   if (!amounts) {
-    return <>{resource.ad_wallet_balance != null && <span>رصيد مقدم <Amount value={resource.ad_wallet_balance} currency={resource.currency} /></span>}
+    return <>{resource.ad_wallet_balance != null && <span>رصيد مقدم <AdAmount value={resource.ad_wallet_balance} currency={resource.currency} /></span>}
       <small className="under">المبلغ المستحق غير متاح</small></>;
   }
   const prepaid = minorUnits(amounts.prepaid), payable = minorUnits(amounts.payable);
   if (prepaid === null || payable === null) return <span>الرصيد غير متاح</span>;
   const showPrepaid = prepaid !== 0n;
   return <>
-    {showPrepaid && <span>رصيد مقدم <Amount value={amounts.prepaid} currency={amounts.currency} /></span>}
+    {showPrepaid && <span>رصيد مقدم <AdAmount value={amounts.prepaid} currency={amounts.currency} /></span>}
     {showPrepaid && payable !== 0n && <br />}
-    {payable !== 0n && <span>علينا <Amount value={amounts.payable} currency={amounts.currency} /></span>}
+    {payable !== 0n && <span>علينا <AdAmount payable value={amounts.payable} currency={amounts.currency} /></span>}
     {!showPrepaid && payable === 0n && <span>الحساب متوازن <Amount value="0.00" currency={amounts.currency} /></span>}
-    {amounts.native && <small className="under">{showPrepaid && <>رصيد مقدم <Amount value={amounts.native.prepaid} currency="USD" /> </>}
-      {payable !== 0n && <>علينا <Amount value={amounts.native.payable} currency="USD" /> قبل الرسوم</>}</small>}
+    {amounts.native && <small className="under">{showPrepaid && <>رصيد مقدم <AdAmount value={amounts.native.prepaid} currency="USD" /> </>}
+      {payable !== 0n && <>علينا <AdAmount payable value={amounts.native.payable} currency="USD" /> قبل الرسوم</>}</small>}
     {amounts.currency === 'USD' && <small className="under">التحويل إلى الريال غير متاح</small>}
   </>;
 }
