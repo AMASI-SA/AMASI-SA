@@ -38,6 +38,7 @@ CURRENCY = "SAR"
 MAX_JOURNAL_LEGS = 10_000
 MAX_LEGACY_SCAN_SAMPLE = 100
 MAX_AGGREGATE_GROUPS = 10_000
+MAX_SUPPLIER_INVOICE_PROOF_GROUPS = 50_000
 MAX_AMOUNT_MINOR = (2**63) - 1
 _CENT = Decimal("0.01")
 _HEX_64 = re.compile(r"^[0-9a-f]{64}$")
@@ -1216,6 +1217,41 @@ async def read_verified_journal_metadata_v2(
     return deepcopy(journal["group"].get("metadata") or {})
 
 
+async def read_supplier_invoice_journal_evidence_v2(
+    db: Any,
+    *,
+    user_id: str,
+    txn_group_ids: Sequence[str],
+) -> list[dict[str, Any]]:
+    """Return bounded supplier invoice header evidence and reversal links.
+
+    This is not full journal verification. The supplier reporting consumer
+    must check the expected invoice digest/source, posted status, cardinality
+    and reversal evidence. Preserve conflicting rows: filtering by status or
+    operation could hide a duplicate or malformed header. Storage selectors
+    and projection are fixed here, never supplied by the consumer.
+    """
+    owner = _required_text(user_id, field="user_id")
+    if not isinstance(txn_group_ids, (list, tuple)):
+        _fail("supplier_invoice_group_ids_invalid", "Supplier invoice group IDs must be an explicit list")
+    if len(txn_group_ids) > MAX_SUPPLIER_INVOICE_PROOF_GROUPS:
+        _fail("accounting_v2_supplier_invoice_proof_scope_too_large", "Supplier invoice proof scope is too large")
+    group_ids = sorted({_required_text(value, field="txn_group_id") for value in txn_group_ids})
+    if not group_ids:
+        return []
+    rows = await db[GROUPS_COLLECTION].find(
+        {"user_id": owner, "$or": [
+            {"txn_group_id": {"$in": group_ids}},
+            {"reversal_of_txn_group_id": {"$in": group_ids}},
+        ]},
+        {"_id": 0, "txn_group_id": 1, "reversal_of_txn_group_id": 1,
+         "status": 1, "metadata.invoice_digest": 1, "metadata.supplier_invoice_id": 1},
+    ).to_list(length=MAX_SUPPLIER_INVOICE_PROOF_GROUPS + 1)
+    if len(rows) > MAX_SUPPLIER_INVOICE_PROOF_GROUPS:
+        _fail("accounting_v2_supplier_invoice_proof_scope_too_large", "Supplier invoice proof scope is too large")
+    return [_public(row) for row in rows]
+
+
 async def _post_prepared_v2(
     db: Any,
     *,
@@ -2267,6 +2303,7 @@ __all__ = [
     "post_opening_journal_v2",
     "query_entries_v2",
     "read_reporting_entries_v2",
+    "read_supplier_invoice_journal_evidence_v2",
     "reverse_journal_v2",
     "scan_mz2_rows_in_legacy_ledger",
     "verify_active_opening_v2",

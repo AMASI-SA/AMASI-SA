@@ -7,6 +7,8 @@ from collections import Counter, defaultdict
 from copy import deepcopy
 from decimal import Decimal, InvalidOperation
 
+from report_option_identity import recorded_question_keys
+
 _RAW = 'raw_by_source.salla_direct'
 SALLA_REPORT_OPTION_PROJECTION = {
     '_id': 0, 'order_number': 1,
@@ -19,6 +21,14 @@ SALLA_REPORT_OPTION_PROJECTION = {
 
 def _id(value):
     return str(value).strip() if isinstance(value, (str, int)) and not isinstance(value, bool) else ''
+
+
+def _native_line_id(item, number):
+    identity = _id(item.get('order_item_id'))
+    if identity.startswith('salla:'):
+        parts = identity.split(':')
+        return parts[2] if len(parts) == 3 and parts[1] == number else ''
+    return identity
 
 
 def _quantity(value):
@@ -46,6 +56,7 @@ def _attach_steps(orders, projected_rows):
         for item in order.get('products') or []:
             if isinstance(item, dict):
                 item.pop('_report_options_raw', None)
+                item.pop('_report_salla_question_keys', None)
         number = _id(order.get('order_number'))
         candidates = projected.get(number, [])
         if not number or counts[number] != 1 or len(candidates) != 1:
@@ -62,11 +73,11 @@ def _attach_steps(orders, projected_rows):
             if isinstance(row, dict) and _id(row.get('id')):
                 source[_id(row['id'])].append(row)
         items = [i for i in order.get('products') or [] if isinstance(i, dict)]
-        identities = Counter(_id(i.get('order_item_id')) for i in items)
+        identities = Counter(_native_line_id(i, number) for i in items)
         for item in items:
-            identity = _id(item.get('order_item_id'))
+            identity = _native_line_id(item, number)
             matched = source.get(identity, [])
-            if not identity or identities[identity] != 1 or len(matched) != 1 or _has_options(item):
+            if not identity or identities[identity] != 1 or len(matched) != 1:
                 continue
             provider = matched[0]
             product = provider.get('product') if isinstance(provider.get('product'), dict) else {}
@@ -76,10 +87,14 @@ def _attach_steps(orders, projected_rows):
             quantity = _quantity(item.get('quantity'))
             options = provider.get('options')
             if (pids != {pid} or parent and parent != pid or quantity is None or quantity != _quantity(provider.get('quantity'))
-                    or not isinstance(options, list) or not options or len(options) > 100
+                    or not isinstance(options, list) or len(options) > 100
                     or any(not isinstance(option, dict) for option in options)):
                 continue
-            item['_report_options_raw'] = deepcopy(options)
+            keys = recorded_question_keys(options)
+            if keys is not None:
+                item['_report_salla_question_keys'] = keys
+            if options and not _has_options(item):
+                item['_report_options_raw'] = deepcopy(options)
 
 
 def report_cost_item(item):

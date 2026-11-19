@@ -80,15 +80,38 @@ def _expected_traffic_commands(audit):
     return expected
 
 # This is an explicit read-contract extension for MZ2 historical cost authority,
-# not a new JSON oracle. The immutable fixtures contain no historical cost rows.
+# not a new JSON oracle. The immutable fixtures contain no historical cost rows
+# or supplier receipt evidence. The received-unit cost rule adds exactly two
+# empty, tenant/order-scoped receipt reads per batch, before any invoice reads.
 # Keep these names/shapes independent of production constants so an accidental
 # collection, scope, pipeline or batching change fails the gate.
 AUTHORITY_COLLECTIONS = frozenset({
     'mezan_bundle_definitions_v2', 'mezan_order_item_cost_snapshots_v2',
     'mezan_component_order_lifecycle_v1', 'mezan_component_consumption_plans_v1',
     'mezan_component_consumption_units_v1', 'mezan_order_cost_corrections_v1',
+    'mezan_preparation_pieces_v1', 'mezan_supplier_receiving_events_v1',
 })
 AUTHORITY_BATCH_SIZE = 250
+# Independently reviewed proof-only projections. Do not import the candidate's
+# constants: adding a field to a production query must require gate review.
+RECEIPT_PROJECTIONS = {
+    'mezan_preparation_pieces_v1': {'_id': 0, **dict.fromkeys((
+        'id', 'piece_id', 'order_number', 'order_item_id', 'unit_index', 'product_id',
+        'variant_id', 'salla_variant_id', 'experiment_mode', 'experiment_run_id',
+        'services', 'service_plan_status', 'remaining_service_count',
+        'supplier_dispatch_status', 'received_at', 'supplier_receiving_history.invoice_id',
+        'service_specifications_snapshot', 'options_raw', 'selected_options',
+        'options', 'custom_fields',
+    ), 1)},
+    'mezan_supplier_receiving_events_v1': {'_id': 0, **dict.fromkeys((
+        'id', 'piece_id', 'order_number', 'order_item_id', 'unit_index', 'product_id',
+        'variant_id', 'salla_variant_id', 'event_type', 'session_id',
+        'supplier_invoice_id', 'finalized_at', 'experiment_mode', 'experiment_run_id',
+        'financial_invoice_created', 'liability_created', 'supplier_context.id',
+        'service_specifications_snapshot', 'options_raw', 'selected_options',
+        'options', 'custom_fields', 'services.condition',
+    ), 1)},
+}
 
 
 def _cohort_evidence(user_id, orders):
@@ -189,7 +212,7 @@ def _expected_authority_commands(audit):
     def find(collection, query, projection):
         expected.append({'operation': 'find', 'collection': collection,
                          'database': database, 'command_database': database,
-                         'filter': query, 'projection': projection, 'limit': None,
+                         'filter': query, 'projection': copy.deepcopy(projection), 'limit': None,
                          'unreviewed_fields': []})
 
     def snapshots(collection, query, projection, field, limit):
@@ -233,6 +256,17 @@ def _expected_authority_commands(audit):
                   'state': 1, 'selected_context': 1, 'bundle_leaves': 1})
             find('mezan_order_cost_corrections_v1',
                  {**keys, 'state': 'applied', 'order_item_id': {'$in': aliases}}, {'_id': 0})
+        # The supplier reader runs after the historical reader completes all
+        # batches. With no receipt evidence it must not query invoices,
+        # suppliers, products or financial journal groups.
+        for offset in range(0, len(orders), AUTHORITY_BATCH_SIZE):
+            selected = [row['order_number'] for row in orders[offset:offset + AUTHORITY_BATCH_SIZE]]
+            keys = {'user_id': owner, 'order_number': {'$in': selected}}
+            find('mezan_preparation_pieces_v1', keys,
+                 RECEIPT_PROJECTIONS['mezan_preparation_pieces_v1'])
+            find('mezan_supplier_receiving_events_v1',
+                 {**keys, 'event_type': 'supplier_piece_service_recorded'},
+                 RECEIPT_PROJECTIONS['mezan_supplier_receiving_events_v1'])
     return expected
 
 

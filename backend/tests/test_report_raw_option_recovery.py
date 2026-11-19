@@ -191,3 +191,54 @@ def test_repeated_hydration_cannot_keep_stale_evidence():
     raw['raw_by_source']['salla_direct']['reference_id'] = 'different'
     attach_report_option_evidence([order], [raw])
     assert cost(order['products'][0])['mezan_cost_complete'] is False
+
+
+@pytest.mark.parametrize("base_profile,salla_cost,expected", [({"base_cost": 40}, 39, 45.5), ({}, 39, 44.5)])
+def test_unbilled_report_uses_catalog_base_and_bag_for_unordered_option(base_profile, salla_cost, expected):
+    order, provider = fixture()
+    item = order["products"][0]
+    item["quantity"] = 1
+    source = provider["raw_by_source"]["salla_direct"]["items"][0]
+    item["order_item_id"] = "salla:order1:line1"
+    source.update(quantity=1, options=[{"product_option_id": "size", "name": "Size", "value": "M"}])
+    attach_report_option_evidence([order], [provider])
+    kwargs = dict(product={"cost_price_from_salla": salla_cost, "options": [
+        {"id":"size", "name":"Size", "values":[{"id":"medium","name":"M"}]},
+        {"id":"emb", "name":"Embroidery", "values":[{"id":"yes","name":"Yes"}]}]},
+        profile=base_profile, product_bindings=[{"id":"bag", "resource_id":"bag"}],
+        option_bindings=[{"id":"rule", "option_id":"emb", "value_id":"yes","mode":"resource","resource_id":"svc"}],
+        resources={"bag":{"unit_cost":5.5}, "svc":{"kind":"service","unit_cost":8}})
+    result = calculate_catalog_line_cost(item, current_report=True, use_recorded_choices=True, **kwargs)
+    assert result["calculation_cost_available"] and result["line_total"] == expected
+    assert result["uses_salla_fallback"] == (not base_profile)
+    assert result["cost_detail_cells"][-1]["status"] == "not_required"
+    assert not calculate_catalog_line_cost(item, **kwargs)["calculation_cost_available"]
+    # A present but invalid answer in the provider payload must never be treated as an omission.
+    source["options"].append({"name":"Embroidery", "value":"unrecognized"})
+    attach_report_option_evidence([order], [provider])
+    assert not calculate_catalog_line_cost(item, current_report=True, use_recorded_choices=True, **kwargs)["calculation_cost_available"]
+
+
+@pytest.mark.parametrize("source_options,complete", [
+    ([], True), (None, False), ([{"id": "checkout-id"}], False),
+    ([{"name": "Unknown former question", "value": "Yes"}], False),
+    ([{"option_id": "unrelated", "product_option_id": "conflicting"}], False),
+])
+def test_unbilled_estimate_distinguishes_explicit_absence_from_unusable_provider_data(source_options, complete):
+    order, raw = fixture()
+    item = order["products"][0]
+    raw["raw_by_source"]["salla_direct"]["items"][0]["options"] = source_options
+    attach_report_option_evidence([order], [raw])
+    kwargs = dict(product={"options": [{"id": "emb", "name": "Embroidery",
+                                       "values": [{"id": "yes", "name": "Yes"}]}]},
+                  profile={"base_cost": 40}, product_bindings=[], resources={},
+                  option_bindings=[{"id": "emb-yes", "option_id": "emb", "value_id": "yes",
+                                    "mode": "direct", "direct_amount": 8}])
+    result = calculate_catalog_line_cost(item, current_report=True, use_recorded_choices=True, **kwargs)
+    assert result["calculation_cost_available"] is complete
+    if complete:
+        assert result["line_total"] == 80
+        kwargs["profile"] = {}
+        unpriced = calculate_catalog_line_cost(item, current_report=True, use_recorded_choices=True, **kwargs)
+        assert unpriced["calculation_cost_available"] is False
+        assert "base_cost_or_fx_missing" in unpriced["missing_cost_reasons"]
