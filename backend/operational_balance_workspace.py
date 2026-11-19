@@ -61,6 +61,19 @@ EXTERNAL_OPERATIONS = {
 }
 
 
+class AdQuoteRequest(BaseModel):
+    party_id: str = Field(min_length=1, max_length=200)
+    currency: Literal["SAR", "USD"]
+    amount: str = Field(min_length=1, max_length=30)
+
+
+class AdBankFunding(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    bank_amount: str = Field(min_length=1, max_length=30)
+    bank_fee_amount: str = Field(min_length=1, max_length=30)
+    kind: Literal["payment", "wallet_funding"]
+
+
 class WorkspaceEntry(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     request_id: str = Field(min_length=8, max_length=160)
@@ -83,9 +96,11 @@ class WorkspaceEntry(BaseModel):
     actual_fee_amount: str | None = Field(default=None, max_length=30)
     fee_reference: str | None = Field(default=None, min_length=1, max_length=160)
 
+    ad_bank_funding: AdBankFunding | None = None
+
     def command(self):
         # Omit newly introduced fields from pre-existing pending-command hashes.
-        exclude = {key for key in ("bank_arrival_confirmed", "actual_fee_amount", "fee_reference")
+        exclude = {key for key in ("bank_arrival_confirmed", "actual_fee_amount", "fee_reference", "ad_bank_funding")
                    if getattr(self, key) is None}
         return self.model_dump(exclude=exclude)
 
@@ -107,6 +122,10 @@ def entry_intent(payload):
     """Infer operation and all affected resources from the validated form."""
     kind, identity, side = payload["party_type"], payload["party_id"], payload["side"]
     reason = payload.get("reason") or ""
+    if payload.get("ad_bank_funding") and (
+            (kind, side, reason, payload.get("source_type")) != ("ad_account", "for_us", "payment", "bank")
+            or any(payload.get(key) is not None for key in ("actual_fee_amount", "fee_reference", "bank_arrival_confirmed"))):
+        fail("operational_ad_fx_invalid", "اختر حسابًا إعلانيًا بالدولار وبنكًا بالريال", 422)
     if kind not in KIND_OPERATIONS:
         fail("operational_workspace_kind", "اختر جهة صحيحة", 422)
     resources = [(kind, identity)]
@@ -299,6 +318,8 @@ async def save_entry(db, owner, actor, payload, source):
         }
         body.update({key: payload[key] for key in ("bank_arrival_confirmed", "actual_fee_amount", "fee_reference")
                      if key in payload})
+        if funding := payload.get("ad_bank_funding"):
+            body.update(currency="USD", bank_currency="SAR", **funding)
         saved = await create_movement(db, owner, actor["id"], body, source=source)
         return {"saved": True, "movement_id": saved["id"], "party_type": saved["party_type"], "party_id": saved["party_id"]}
 
@@ -313,7 +334,7 @@ def _balance(row, kind):
     return {"amount": fmt(abs(signed)), "side": "for_party" if signed > 0 else "for_us" if signed < 0 else "balanced", "visible": True}
 
 
-async def resource_catalog(db, owner, policy, state):
+async def resource_catalog(db, owner, policy, state, *, ad_bank_fx=False):
     from operational_balance_service import prepaid_shipping_cash
     from operational_balance_sources import entities
     computed = await prepare_in_thread(report, state)
@@ -330,12 +351,20 @@ async def resource_catalog(db, owner, policy, state):
                 continue
             currency = row.get("currency") or "SAR"
             operations = [key for key in KIND_OPERATIONS.get(kind, []) if access["use"] and policy.can_operation(key)]
-            # The simple amount input is explicitly SAR. Existing cross-currency
-            # funding stays in the original evidenced FX form.
-            if currency != "SAR":
+            # Older clients only understand same-currency entries.
+            ad_funding = {}
+            if ad_bank_fx and kind == "ad_account" and currency == "USD" and "ads.fund" in operations:
+                basis = state.get("engine", {}).get("ad_balance_sar_basis", {}).get(row["id"]) or {}
+                ad_funding = {"ad_bank_funding": {
+                    "mode": row.get("funding_mode"), "wallet_first": row.get("funding_policy") == "wallet_first",
+                    "terms": {key: basis[key] for key in (
+                        "exchange_rate_to_sar", "bank_commission_pct", "apply_bank_commission",
+                        "bank_commission_vat_pct") if key in basis} or None,
+                }}
+            elif currency != "SAR":
                 operations = []
             items.append({"kind": kind, "id": row["id"], "name": row.get("name") or row["id"],
-                          "currency": currency, "access": access, "operations": operations,
+                          "currency": currency, "access": access, "operations": operations, **ad_funding,
                           **({"prepaid_shipping_cash": True} if kind == "cash" and prepaid_shipping_cash(state, row["id"]) else {}),
                           "balance": _balance(balances.get((kind, row["id"], currency), {}), kind) if access["balance"] else None})
     return items, computed
@@ -631,13 +660,13 @@ def install_workspace_routes(router, db, current_user, scope):
             fail("operational_workspace_access_required", "اطلب من المالك تحديد صلاحياتك في التطبيق", 403)
         return actor, owner, source, policy
 
-    async def checked_read(user, callback):
+    async def checked_read(user, callback, *, ad_bank_fx=False):
         from operational_financial_position_state import read_financial_position_state
         actor, owner, source, policy = await load(user)
         # Workspace reports need current financial proofs, not historical audit
         # pages or idempotency receipts. Writers keep the complete store reader.
         state = await read_financial_position_state(db, owner)
-        resources, computed = await resource_catalog(db, owner, policy, state)
+        resources, computed = await resource_catalog(db, owner, policy, state, ad_bank_fx=ad_bank_fx)
         result = await prepare_in_thread(callback, actor, owner, policy, state, resources, computed)
         current_actor, current_owner, _, current = await load(user)
         if (actor["id"], owner, policy.version, policy.owner_override) != (current_actor["id"], current_owner, current.version, current.owner_override):
@@ -645,7 +674,7 @@ def install_workspace_routes(router, db, current_user, scope):
         return result
 
     @router.get("/workspace/context")
-    async def context(request: Request, user=Depends(current_user)):
+    async def context(request: Request, ad_bank_fx: bool = False, user=Depends(current_user)):
         def project(actor, owner, policy, state, resources, computed):
             from operational_balance_access import OPERATION_LABELS
             return {"actor": {**_actor_snapshot(actor), "is_owner": policy.owner_override},
@@ -654,7 +683,34 @@ def install_workspace_routes(router, db, current_user, scope):
                     "capabilities": {"manage_access": policy.owner_override,
                                      "create_entries": state["status"] == "active" and any(row["operations"] for row in resources)},
                     "operations": [{"key": key, "label": label} for key, label in OPERATION_LABELS.items() if policy.can_operation(key)]}
-        return await run_visible_report_read(request, lambda: checked_read(user, project))
+        return await run_visible_report_read(request, lambda: checked_read(user, project, ad_bank_fx=ad_bank_fx))
+
+    @router.post("/workspace/ad-funding-quote")
+    async def ad_quote(payload: AdQuoteRequest, user=Depends(current_user)):
+        from operational_ad_balance_sar import funding_quote
+
+        from operational_balance_sources import entities
+        from operational_balance_store import STATES
+        actor, owner, _, policy = await load(user)
+        policy.require_operation("ads.fund")
+        policy.require_use("ad_account", payload.party_id)
+        # Prices and bindings are top-level live terms, independent of ledger history.
+        state = await db[STATES].find_one(
+            {"_id": owner, "owner_id": owner}, {"owner_id": 1, "ad_funding": 1, "engine.ad_balance_sar_basis": 1})
+        accounts = await entities(db, owner, "ad_account", operational_state=state)
+        if not any(row["id"] == payload.party_id and row.get("currency") == "USD"
+                   and row.get("ready") is not False and row.get("settings_complete") is not False for row in accounts):
+            fail("operational_ad_fx_forbidden", "الحساب الإعلاني غير متاح", 403)
+        current_actor, current_owner, _, current_policy = await load(user)
+        if (current_actor["id"], current_owner) != (actor["id"], owner):
+            fail("operational_actor_scope_changed", "تغير ارتباط الحساب؛ أعد فتح الصفحة", 409)
+        current_policy.require_operation("ads.fund")
+        current_policy.require_use("ad_account", payload.party_id)
+        basis = (state or {}).get("engine", {}).get("ad_balance_sar_basis", {}).get(payload.party_id)
+        try:
+            return funding_quote(money(payload.amount), payload.currency, basis)
+        except ValueError:
+            fail("operational_ad_fx_receipt_required", "تعذر حساب المقابل بإعدادات الحساب. اختر إدخال مبالغ الإيصال.", 422)
 
     @router.get("/workspace/parties")
     async def parties(request: Request, kind: str | None = None, q: str = Query(default="", max_length=160), user=Depends(current_user)):
@@ -664,7 +720,7 @@ def install_workspace_routes(router, db, current_user, scope):
 
     @router.get("/workspace/ledger/{kind}/{identity}")
     async def ledger(request: Request, kind: str, identity: str, page: int = Query(default=1, ge=1),
-                     page_size: int = Query(default=5, ge=1, le=5), focus_id: str | None = Query(default=None, max_length=250), user=Depends(current_user)):
+                     page_size: int = Query(default=5, ge=1, le=5), focus_id: str | None = Query(default=None, max_length=250), ad_bank_fx: bool = False, user=Depends(current_user)):
         def project(actor, owner, policy, state, resources, computed):
             resource = next((r for r in resources if r["kind"] == kind and r["id"] == identity), None)
             if not resource or resource["access"]["movements"] == "none":
@@ -686,7 +742,7 @@ def install_workspace_routes(router, db, current_user, scope):
                     "balance_status": projected_balance_status(resource, rows),
                     "balance_note": balance_note(projected_balance_status(resource, rows)),
                     "expected_collections": expected_collections(state, computed, resource, policy)}
-        return await run_visible_report_read(request, lambda: checked_read(user, project))
+        return await run_visible_report_read(request, lambda: checked_read(user, project, ad_bank_fx=ad_bank_fx))
 
     @router.get("/workspace/movements")
     async def movements(request: Request, page: int = Query(default=1, ge=1), page_size: int = Query(default=5, ge=1, le=5),

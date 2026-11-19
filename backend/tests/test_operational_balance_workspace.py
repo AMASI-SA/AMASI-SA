@@ -406,9 +406,9 @@ def test_daily_projection_scans_saved_history_once_for_many_resources(monkeypatc
                 visits[self.source] += 1
                 yield row
 
-    async def measured_catalog(db, owner, policy, state):
+    async def measured_catalog(db, owner, policy, state, **options):
         # Count only the endpoint projection, after the real report and catalog.
-        resources, computed = await original_catalog(db, owner, policy, state)
+        resources, computed = await original_catalog(db, owner, policy, state, **options)
         for source, container in (("movements", state), ("obligations", computed)):
             source_sizes[source] = len(container[source])
             container[source] = CountedRows(container[source], source)
@@ -677,4 +677,92 @@ def test_prepaid_cash_transfer_requires_reference_and_survives_retries():
             row = next(item for item in ledger['items'] if item['id'] == saved.json()['movement_id'])
             assert row['balance_after'] == expected and row['reference'] == 'TEST-TOPUP'
 
+    run(scenario)
+
+
+def test_employee_usd_ad_funding_from_assigned_sar_bank_posts_both_legs_once():
+    from backend.tests.test_operational_balance_integration import seed_ad_account
+
+    async def scenario(db, client):
+        await seed_ad_account(db)
+        await db.mezan_integration_accounts_v2.update_one(
+            {"mezan_integration_account_id": "ia"}, {"$set": {"currency": "USD"}})
+        await db[STATES].update_one({"owner_id": "owner"}, {"$set": {"engine.ad_balance_sar_basis.ad": {
+            "exchange_rate_to_sar": "3.75", "bank_commission_pct": "2",
+            "apply_bank_commission": True, "bank_commission_vat_pct": "15"}}})
+        resources = [resource("ad_account", "ad"), resource("bank", "bank")]
+        await grant(db, operations=["ads.fund"], resources=resources)
+        headers = {"x-test-user": "staff", "x-test-mobile": "yes"}
+        async def catalog(params=""):
+            result = await client.get(BASE + "/context" + params, headers=headers)
+            assert result.status_code == 200, result.text
+            return next(r for r in result.json()["resources"] if r["kind"] == "ad_account")
+        assert (await catalog())["operations"] == []
+        ad = await catalog("?ad_bank_fx=true")
+        assert ad["operations"] == ["ads.fund"] and ad["ad_bank_funding"]["mode"] == "prepaid"
+        assert ad["ad_bank_funding"]["terms"]["exchange_rate_to_sar"] == "3.75"
+        for currency, amount in (("SAR", "383.63"), ("USD", "100.00")):
+            quote = await client.post(BASE + "/ad-funding-quote", headers=headers,
+                                      json={"party_id": "ad", "currency": currency, "amount": amount})
+            assert quote.status_code == 200, quote.text
+            assert quote.json() == {"amount_usd": "100.00", "gross_sar": "383.63", "fee_sar": "8.63",
+                                    "commission_sar": "7.50", "fee_vat_sar": "1.13", "exchange_rate": "3.75"}
+        body = entry(expected_session_scope=digest(["owner", "staff"]), party_type="ad_account",
+                     party_id="ad", reason="payment", reference="BANK-TEST-USD", amount="100",
+                     ad_bank_funding={"bank_amount": "383.63", "bank_fee_amount": "8.63", "kind": "wallet_funding"})
+        async def send(**changes):
+            return await client.post(BASE + "/entries", headers=headers, json={**body, **changes})
+        assert (await send(source_type="cash", source_id="cash")).status_code == 422
+        assert (await send(source_id="foreign")).status_code in {403, 404}
+        await grant(db, operations=[], resources=resources, version=2)
+        assert "ad_bank_funding" not in await catalog("?ad_bank_fx=true")
+        assert (await send()).status_code == 403
+        await grant(db, operations=["ads.fund"], resources=resources, version=3)
+        saved = await send()
+        assert saved.status_code == 200, saved.text
+        assert (await send()).json() == saved.json()
+        state = await read(db, "owner")
+        assert len(state["movements"]) == 1
+        row = state["movements"][0]
+        assert (row["currency"], row["amount"], row["bank_currency"], row["bank_amount"], row["bank_fee_amount"],
+                row["bank_net_amount"], row["actor_id"]) == ("USD", "100.00", "SAR", "383.63", "8.63", "375.00", "staff")
+        assert balance(state, "bank", "bank")["actual"] == "616.37"
+        for path, expected, currency in [("ad_account/ad", "100.00", "USD"), ("bank/bank", "383.63", "SAR")]:
+            res = await client.get(BASE + "/ledger/" + path + "?ad_bank_fx=true", headers=headers)
+            assert res.status_code == 200
+            movement = next(r for r in res.json()["items"] if r.get("recorded_by", {}) and r["recorded_by"]["id"] == "staff")
+            assert (movement["amount"], movement["currency"]) == (expected, currency)
+    run(scenario)
+
+
+@pytest.mark.parametrize("currency", ["USD", "SAR"])
+def test_owner_can_assign_operational_wallet_to_employee(currency):
+    from operational_ad_funding import party_id
+    from backend.tests.test_operational_balance_integration import seed_ad_account
+
+    async def scenario(db, client):
+        await seed_ad_account(db)
+        await db.mz2_ad_account_bindings_v2.delete_one({"_id": "ad"})
+        await db.mezan_integration_accounts_v2.update_one(
+            {"mezan_integration_account_id": "ia"}, {"$set": {"currency": currency}})
+        account = party_id("owner", "ia")
+        setting = {"mode": "wallet_first", "platform": "meta", "platform_account_id": "external",
+                   "integration_account_id": "ia", "confirmed_by": "owner", "confirmed_at": "2026-11-01T00:00:00Z",
+                   "currency": currency, "timezone": "Asia/Riyadh"}
+        await db[STATES].update_one({"_id": "owner"}, {"$set": {"ad_funding": {account: setting}}})
+        access = "/api/operational-balances/access"
+        rows = (await client.get(access + "/catalog")).json()["resources"]
+        assert [(r["id"], r["currency"]) for r in rows if r["kind"] == "ad_account"] == [(account, currency)]
+        command = {"enabled": True, "expected_version": 0, "operations": ["ads.fund"],
+                   "resources": [resource("ad_account", account), resource("bank", "bank")]}
+        saved = await client.put(access + "/users/staff", json=command)
+        assert saved.status_code == 200, saved.text
+        stored = (await client.get(access + "/users/staff")).json()["access"]
+        assert {r["id"] for r in stored["resources"]} == {"bank", account}
+        for headers in ({}, {"x-test-user": "staff", "x-test-mobile": "yes"}):
+            ledger = await client.get(BASE + "/ledger/ad_account/" + account + "?ad_bank_fx=true", headers=headers)
+            assert ledger.status_code == 200, ledger.text
+            assert ledger.json()["resource"]["operations"] == ["ads.fund"]
+        command.update(expected_version=1, resources=[resource("ad_account", "unbound:other")])
+        assert (await client.put(access + "/users/staff", json=command)).status_code == 422
     run(scenario)
