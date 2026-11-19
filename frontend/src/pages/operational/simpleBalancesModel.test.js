@@ -104,3 +104,13 @@ test('prepaid shipping on the wallet names the approved carrier and order', () =
   expect(movementTitle(row, true)).toBe('أرامكس · 123');
   expect(movementTitle({ ...row, prepaid_shipping: false })).toBe('عميل');
 });
+
+test('a native return shows the courier service date and its separate purpose', () => {
+  const row = { salla_return_waybill: true, system_recorded: true, order_number: '123',
+    return_business_at: '2026-11-07T22:10:00Z', business_date: '2026-11-08',
+    recorded_at: '2026-11-12T09:00:00Z' };
+  expect(movementDate(row)).toBe('11-08 01:10');
+  expect(movementTitle(row)).toBe('أجرة رجيع · طلب 123');
+  expect(movementRecorder(row)).toBe('النظام تلقائيًا');
+  expect(movementRecorder({ ...row, system_recorded: false })).toBe('اسم الموظف غير متوفر');
+});

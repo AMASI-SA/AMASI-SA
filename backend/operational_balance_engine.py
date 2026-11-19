@@ -1029,6 +1029,9 @@ def reconcile(state, sources, as_of):
         issues = [i for i in issues if (i.get("code"), i.get("source_id")) not in resolved_fees]
     from operational_customer_returns import shipping_obligations
     shipping_obligations(result)
+    if sources.get('return_waybills'):
+        from operational_return_waybills import project as project_return_waybills
+        project_return_waybills(obligations, sources['return_waybills'], now.isoformat(), issue)
     from operational_balance_exchanges import project_exchanges
     project_exchanges(result)
     from operational_balance_inventory import project_inventory
