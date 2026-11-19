@@ -1,0 +1,1150 @@
+{
+  "schema": "synthetic-receipt-return-profile-v1",
+  "observed_at": "2026-11-19T00:06:00.371302+00:00",
+  "baseline_git_sha": "c3c1cd26d93ab24d6e08003278b9910526055cc7",
+  "baseline_engine_sha256": "35c33cb12deddabe8045c023a0ad4df9f463ac345ed386d505ddfec00bf37238",
+  "candidate_engine_sha256": "a4ce2061a330bbd981f2e56e998d018c7625be86e32cc578f7d292f5567838e7",
+  "python_version": "3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]",
+  "ordinary_runs_per_engine_case": 1,
+  "profiled_runs_per_engine_case": 1,
+  "data_kind": "synthetic_only",
+  "production_actions": false,
+  "timing_note": "Local diagnostic timing; deterministic call counts establish work growth. No live latency claim.",
+  "cases": [
+    {
+      "orders": 256,
+      "receipt_facts": 256,
+      "source_returns": 256,
+      "facts": 1792,
+      "obligations": 1024,
+      "audit_rows": 1024,
+      "synthetic_history_target_mib": 0,
+      "input_bytes": 1219416,
+      "state_bytes": 1087300,
+      "input_sha256": "76a48f987fad04ab576035f55921863e111509248f5a7b42ef0406f80945159f",
+      "complete_ordered_output_sha256": "31c1aa180765b17a04b2a89185c386675aa71f6d33bcade4c78971e357c47c43",
+      "all_outputs_equal_saved_state": true,
+      "all_inputs_unchanged": true,
+      "ordinary_elapsed_seconds": {
+        "baseline": 0.068961,
+        "candidate": 0.051133
+      },
+      "separate_profiled_work": {
+        "baseline": {
+          "elapsed_seconds": 0.297791,
+          "string_prefix_checks": 476928,
+          "dictionary_get_calls": 282985,
+          "top": [
+            {
+              "function": "reconcile",
+              "module": "operational_balance_engine.py",
+              "line": 110,
+              "calls": 1,
+              "cumulative_seconds": 0.297338,
+              "self_seconds": 0.034936
+            },
+            {
+              "function": "deepcopy",
+              "module": "copy.py",
+              "line": 118,
+              "calls": 93990,
+              "cumulative_seconds": 0.105534,
+              "self_seconds": 0.052693
+            },
+            {
+              "function": "_deepcopy_dict",
+              "module": "copy.py",
+              "line": 217,
+              "calls": 6410,
+              "cumulative_seconds": 0.104086,
+              "self_seconds": 0.019607
+            },
+            {
+              "function": "<built-in method builtins.sum>",
+              "module": "builtin",
+              "line": null,
+              "calls": 512,
+              "cumulative_seconds": 0.10123,
+              "self_seconds": 0.001357
+            },
+            {
+              "function": "<genexpr>",
+              "module": "operational_balance_engine.py",
+              "line": 335,
+              "calls": 512,
+              "cumulative_seconds": 0.099216,
+              "self_seconds": 0.049291
+            },
+            {
+              "function": "<method 'startswith' of 'str' objects>",
+              "module": "builtin",
+              "line": null,
+              "calls": 476928,
+              "cumulative_seconds": 0.051616,
+              "self_seconds": 0.051616
+            },
+            {
+              "function": "_deepcopy_list",
+              "module": "copy.py",
+              "line": 191,
+              "calls": 1027,
+              "cumulative_seconds": 0.049578,
+              "self_seconds": 0.000981
+            },
+            {
+              "function": "<method 'get' of 'dict' objects>",
+              "module": "builtin",
+              "line": null,
+              "calls": 282985,
+              "cumulative_seconds": 0.02748,
+              "self_seconds": 0.02748
+            },
+            {
+              "function": "put",
+              "module": "operational_balance_engine.py",
+              "line": 185,
+              "calls": 1024,
+              "cumulative_seconds": 0.010838,
+              "self_seconds": 0.003744
+            },
+            {
+              "function": "<built-in method builtins.id>",
+              "module": "builtin",
+              "line": null,
+              "calls": 109122,
+              "cumulative_seconds": 0.007682,
+              "self_seconds": 0.007682
+            },
+            {
+              "function": "calculation_checkpoint",
+              "module": "operational_demand_refresh.py",
+              "line": 203,
+              "calls": 8974,
+              "cumulative_seconds": 0.007632,
+              "self_seconds": 0.004116
+            },
+            {
+              "function": "<method 'removeprefix' of 'str' objects>",
+              "module": "builtin",
+              "line": null,
+              "calls": 65536,
+              "cumulative_seconds": 0.006762,
+              "self_seconds": 0.006762
+            }
+          ]
+        },
+        "candidate": {
+          "elapsed_seconds": 0.197852,
+          "string_prefix_checks": 20224,
+          "dictionary_get_calls": 218474,
+          "top": [
+            {
+              "function": "reconcile",
+              "module": "operational_balance_engine.py",
+              "line": 154,
+              "calls": 1,
+              "cumulative_seconds": 0.197003,
+              "self_seconds": 0.015014
+            },
+            {
+              "function": "deepcopy",
+              "module": "copy.py",
+              "line": 118,
+              "calls": 93990,
+              "cumulative_seconds": 0.140956,
+              "self_seconds": 0.068817
+            },
+            {
+              "function": "_deepcopy_dict",
+              "module": "copy.py",
+              "line": 217,
+              "calls": 6410,
+              "cumulative_seconds": 0.139777,
+              "self_seconds": 0.027543
+            },
+            {
+              "function": "_deepcopy_list",
+              "module": "copy.py",
+              "line": 191,
+              "calls": 1027,
+              "cumulative_seconds": 0.059355,
+              "self_seconds": 0.001518
+            },
+            {
+              "function": "<method 'get' of 'dict' objects>",
+              "module": "builtin",
+              "line": null,
+              "calls": 218474,
+              "cumulative_seconds": 0.027455,
+              "self_seconds": 0.027455
+            },
+            {
+              "function": "<built-in method builtins.id>",
+              "module": "builtin",
+              "line": null,
+              "calls": 109122,
+              "cumulative_seconds": 0.009079,
+              "self_seconds": 0.009079
+            },
+            {
+              "function": "put",
+              "module": "operational_balance_engine.py",
+              "line": 229,
+              "calls": 1024,
+              "cumulative_seconds": 0.008454,
+              "self_seconds": 0.001886
+            },
+            {
+              "function": "calculation_checkpoint",
+              "module": "operational_demand_refresh.py",
+              "line": 203,
+              "calls": 8982,
+              "cumulative_seconds": 0.006784,
+              "self_seconds": 0.003846
+            },
+            {
+              "function": "_deepcopy_atomic",
+              "module": "copy.py",
+              "line": 172,
+              "calls": 86553,
+              "cumulative_seconds": 0.00554,
+              "self_seconds": 0.00554
+            },
+            {
+              "function": "_keep_alive",
+              "module": "copy.py",
+              "line": 231,
+              "calls": 7437,
+              "cumulative_seconds": 0.005048,
+              "self_seconds": 0.002929
+            },
+            {
+              "function": "money",
+              "module": "operational_balance_engine.py",
+              "line": 27,
+              "calls": 4096,
+              "cumulative_seconds": 0.004159,
+              "self_seconds": 0.00316
+            },
+            {
+              "function": "amount",
+              "module": "operational_balance_engine.py",
+              "line": 39,
+              "calls": 3584,
+              "cumulative_seconds": 0.003886,
+              "self_seconds": 0.001642
+            }
+          ]
+        }
+      }
+    },
+    {
+      "orders": 512,
+      "receipt_facts": 512,
+      "source_returns": 512,
+      "facts": 3584,
+      "obligations": 2048,
+      "audit_rows": 2048,
+      "synthetic_history_target_mib": 0,
+      "input_bytes": 2444120,
+      "state_bytes": 2179396,
+      "input_sha256": "64eaea3b4e137194f3491f9423e89c4ef284f031f9fdca2b9fbc6370c288b32c",
+      "complete_ordered_output_sha256": "94df70e8ae464d063b2f5285f86c32be8099e01d470f8e7674599bffbbf4c745",
+      "all_outputs_equal_saved_state": true,
+      "all_inputs_unchanged": true,
+      "ordinary_elapsed_seconds": {
+        "baseline": 0.364275,
+        "candidate": 0.128778
+      },
+      "separate_profiled_work": {
+        "baseline": {
+          "elapsed_seconds": 1.159965,
+          "string_prefix_checks": 1871360,
+          "dictionary_get_calls": 696937,
+          "top": [
+            {
+              "function": "reconcile",
+              "module": "operational_balance_engine.py",
+              "line": 110,
+              "calls": 1,
+              "cumulative_seconds": 1.159168,
+              "self_seconds": 0.137016
+            },
+            {
+              "function": "<built-in method builtins.sum>",
+              "module": "builtin",
+              "line": null,
+              "calls": 1024,
+              "cumulative_seconds": 0.551943,
+              "self_seconds": 0.001936
+            },
+            {
+              "function": "<genexpr>",
+              "module": "operational_balance_engine.py",
+              "line": 335,
+              "calls": 1024,
+              "cumulative_seconds": 0.548407,
+              "self_seconds": 0.281532
+            },
+            {
+              "function": "deepcopy",
+              "module": "copy.py",
+              "line": 118,
+              "calls": 187942,
+              "cumulative_seconds": 0.311009,
+              "self_seconds": 0.146255
+            },
+            {
+              "function": "_deepcopy_dict",
+              "module": "copy.py",
+              "line": 217,
+              "calls": 12810,
+              "cumulative_seconds": 0.307591,
+              "self_seconds": 0.067545
+            },
+            {
+              "function": "<method 'startswith' of 'str' objects>",
+              "module": "builtin",
+              "line": null,
+              "calls": 1871360,
+              "cumulative_seconds": 0.269378,
+              "self_seconds": 0.269378
+            },
+            {
+              "function": "_deepcopy_list",
+              "module": "copy.py",
+              "line": 191,
+              "calls": 2051,
+              "cumulative_seconds": 0.148456,
+              "self_seconds": 0.00367
+            },
+            {
+              "function": "<method 'get' of 'dict' objects>",
+              "module": "builtin",
+              "line": null,
+              "calls": 696937,
+              "cumulative_seconds": 0.093247,
+              "self_seconds": 0.093247
+            },
+            {
+              "function": "<method 'removeprefix' of 'str' objects>",
+              "module": "builtin",
+              "line": null,
+              "calls": 262144,
+              "cumulative_seconds": 0.034893,
+              "self_seconds": 0.034893
+            },
+            {
+              "function": "put",
+              "module": "operational_balance_engine.py",
+              "line": 185,
+              "calls": 2048,
+              "cumulative_seconds": 0.021299,
+              "self_seconds": 0.005924
+            },
+            {
+              "function": "<built-in method builtins.id>",
+              "module": "builtin",
+              "line": null,
+              "calls": 218178,
+              "cumulative_seconds": 0.021097,
+              "self_seconds": 0.021097
+            },
+            {
+              "function": "calculation_checkpoint",
+              "module": "operational_demand_refresh.py",
+              "line": 203,
+              "calls": 17945,
+              "cumulative_seconds": 0.015626,
+              "self_seconds": 0.008928
+            }
+          ]
+        },
+        "candidate": {
+          "elapsed_seconds": 0.497166,
+          "string_prefix_checks": 40448,
+          "dictionary_get_calls": 436842,
+          "top": [
+            {
+              "function": "reconcile",
+              "module": "operational_balance_engine.py",
+              "line": 154,
+              "calls": 1,
+              "cumulative_seconds": 0.496311,
+              "self_seconds": 0.040866
+            },
+            {
+              "function": "deepcopy",
+              "module": "copy.py",
+              "line": 118,
+              "calls": 187942,
+              "cumulative_seconds": 0.342744,
+              "self_seconds": 0.151448
+            },
+            {
+              "function": "_deepcopy_dict",
+              "module": "copy.py",
+              "line": 217,
+              "calls": 12810,
+              "cumulative_seconds": 0.339423,
+              "self_seconds": 0.078504
+            },
+            {
+              "function": "_deepcopy_list",
+              "module": "copy.py",
+              "line": 191,
+              "calls": 2051,
+              "cumulative_seconds": 0.172778,
+              "self_seconds": 0.003814
+            },
+            {
+              "function": "<method 'get' of 'dict' objects>",
+              "module": "builtin",
+              "line": null,
+              "calls": 436842,
+              "cumulative_seconds": 0.075979,
+              "self_seconds": 0.075979
+            },
+            {
+              "function": "<built-in method builtins.id>",
+              "module": "builtin",
+              "line": null,
+              "calls": 218178,
+              "cumulative_seconds": 0.021395,
+              "self_seconds": 0.021395
+            },
+            {
+              "function": "put",
+              "module": "operational_balance_engine.py",
+              "line": 229,
+              "calls": 2048,
+              "cumulative_seconds": 0.021098,
+              "self_seconds": 0.004978
+            },
+            {
+              "function": "calculation_checkpoint",
+              "module": "operational_demand_refresh.py",
+              "line": 203,
+              "calls": 17961,
+              "cumulative_seconds": 0.019832,
+              "self_seconds": 0.010848
+            },
+            {
+              "function": "_deepcopy_atomic",
+              "module": "copy.py",
+              "line": 172,
+              "calls": 173081,
+              "cumulative_seconds": 0.0122,
+              "self_seconds": 0.0122
+            },
+            {
+              "function": "_keep_alive",
+              "module": "copy.py",
+              "line": 231,
+              "calls": 14861,
+              "cumulative_seconds": 0.011752,
+              "self_seconds": 0.007551
+            },
+            {
+              "function": "money",
+              "module": "operational_balance_engine.py",
+              "line": 27,
+              "calls": 8192,
+              "cumulative_seconds": 0.010011,
+              "self_seconds": 0.007706
+            },
+            {
+              "function": "amount",
+              "module": "operational_balance_engine.py",
+              "line": 39,
+              "calls": 7168,
+              "cumulative_seconds": 0.01,
+              "self_seconds": 0.003244
+            }
+          ]
+        }
+      }
+    },
+    {
+      "orders": 1024,
+      "receipt_facts": 1024,
+      "source_returns": 1024,
+      "facts": 7168,
+      "obligations": 4096,
+      "audit_rows": 4096,
+      "synthetic_history_target_mib": 0,
+      "input_bytes": 4894296,
+      "state_bytes": 4364236,
+      "input_sha256": "a6e1dd78fdec2f78c40514dac620ec7f714a7c9f5fdc785e8ec8e2a0a4660777",
+      "complete_ordered_output_sha256": "c64609cd84d5a0703902ba445d51c4f69993411a4e2a40d2cf154c3c43640eca",
+      "all_outputs_equal_saved_state": true,
+      "all_inputs_unchanged": true,
+      "ordinary_elapsed_seconds": {
+        "baseline": 0.828654,
+        "candidate": 0.151824
+      },
+      "separate_profiled_work": {
+        "baseline": {
+          "elapsed_seconds": 3.211511,
+          "string_prefix_checks": 7412736,
+          "dictionary_get_calls": 1918057,
+          "top": [
+            {
+              "function": "reconcile",
+              "module": "operational_balance_engine.py",
+              "line": 110,
+              "calls": 1,
+              "cumulative_seconds": 3.210669,
+              "self_seconds": 0.425764
+            },
+            {
+              "function": "<built-in method builtins.sum>",
+              "module": "builtin",
+              "line": null,
+              "calls": 2048,
+              "cumulative_seconds": 1.853105,
+              "self_seconds": 0.003542
+            },
+            {
+              "function": "<genexpr>",
+              "module": "operational_balance_engine.py",
+              "line": 335,
+              "calls": 2048,
+              "cumulative_seconds": 1.847528,
+              "self_seconds": 0.98866
+            },
+            {
+              "function": "<method 'startswith' of 'str' objects>",
+              "module": "builtin",
+              "line": null,
+              "calls": 7412736,
+              "cumulative_seconds": 0.860084,
+              "self_seconds": 0.860084
+            },
+            {
+              "function": "deepcopy",
+              "module": "copy.py",
+              "line": 118,
+              "calls": 375846,
+              "cumulative_seconds": 0.516408,
+              "self_seconds": 0.225256
+            },
+            {
+              "function": "_deepcopy_dict",
+              "module": "copy.py",
+              "line": 217,
+              "calls": 25610,
+              "cumulative_seconds": 0.510426,
+              "self_seconds": 0.092331
+            },
+            {
+              "function": "_deepcopy_list",
+              "module": "copy.py",
+              "line": 191,
+              "calls": 4099,
+              "cumulative_seconds": 0.27146,
+              "self_seconds": 0.004572
+            },
+            {
+              "function": "<method 'get' of 'dict' objects>",
+              "module": "builtin",
+              "line": null,
+              "calls": 1918057,
+              "cumulative_seconds": 0.225724,
+              "self_seconds": 0.225724
+            },
+            {
+              "function": "<method 'removeprefix' of 'str' objects>",
+              "module": "builtin",
+              "line": null,
+              "calls": 1048576,
+              "cumulative_seconds": 0.120184,
+              "self_seconds": 0.120184
+            },
+            {
+              "function": "_keep_alive",
+              "module": "copy.py",
+              "line": 231,
+              "calls": 29709,
+              "cumulative_seconds": 0.068107,
+              "self_seconds": 0.062711
+            },
+            {
+              "function": "put",
+              "module": "operational_balance_engine.py",
+              "line": 185,
+              "calls": 4096,
+              "cumulative_seconds": 0.036034,
+              "self_seconds": 0.011128
+            },
+            {
+              "function": "calculation_checkpoint",
+              "module": "operational_demand_refresh.py",
+              "line": 203,
+              "calls": 35887,
+              "cumulative_seconds": 0.031959,
+              "self_seconds": 0.018394
+            }
+          ]
+        },
+        "candidate": {
+          "elapsed_seconds": 0.807807,
+          "string_prefix_checks": 80896,
+          "dictionary_get_calls": 873578,
+          "top": [
+            {
+              "function": "reconcile",
+              "module": "operational_balance_engine.py",
+              "line": 154,
+              "calls": 1,
+              "cumulative_seconds": 0.806103,
+              "self_seconds": 0.069567
+            },
+            {
+              "function": "deepcopy",
+              "module": "copy.py",
+              "line": 118,
+              "calls": 375846,
+              "cumulative_seconds": 0.542592,
+              "self_seconds": 0.25983
+            },
+            {
+              "function": "_deepcopy_dict",
+              "module": "copy.py",
+              "line": 217,
+              "calls": 25610,
+              "cumulative_seconds": 0.536699,
+              "self_seconds": 0.103892
+            },
+            {
+              "function": "_deepcopy_list",
+              "module": "copy.py",
+              "line": 191,
+              "calls": 4099,
+              "cumulative_seconds": 0.268523,
+              "self_seconds": 0.005192
+            },
+            {
+              "function": "<method 'get' of 'dict' objects>",
+              "module": "builtin",
+              "line": null,
+              "calls": 873578,
+              "cumulative_seconds": 0.121969,
+              "self_seconds": 0.121969
+            },
+            {
+              "function": "put",
+              "module": "operational_balance_engine.py",
+              "line": 229,
+              "calls": 4096,
+              "cumulative_seconds": 0.038415,
+              "self_seconds": 0.009653
+            },
+            {
+              "function": "<built-in method builtins.id>",
+              "module": "builtin",
+              "line": null,
+              "calls": 436290,
+              "cumulative_seconds": 0.034056,
+              "self_seconds": 0.034056
+            },
+            {
+              "function": "calculation_checkpoint",
+              "module": "operational_demand_refresh.py",
+              "line": 203,
+              "calls": 35919,
+              "cumulative_seconds": 0.030724,
+              "self_seconds": 0.016861
+            },
+            {
+              "function": "_keep_alive",
+              "module": "copy.py",
+              "line": 231,
+              "calls": 29709,
+              "cumulative_seconds": 0.021391,
+              "self_seconds": 0.015066
+            },
+            {
+              "function": "_deepcopy_atomic",
+              "module": "copy.py",
+              "line": 172,
+              "calls": 346137,
+              "cumulative_seconds": 0.020819,
+              "self_seconds": 0.020819
+            },
+            {
+              "function": "money",
+              "module": "operational_balance_engine.py",
+              "line": 27,
+              "calls": 16384,
+              "cumulative_seconds": 0.017124,
+              "self_seconds": 0.0133
+            },
+            {
+              "function": "amount",
+              "module": "operational_balance_engine.py",
+              "line": 39,
+              "calls": 14336,
+              "cumulative_seconds": 0.016381,
+              "self_seconds": 0.005863
+            }
+          ]
+        }
+      }
+    },
+    {
+      "orders": 2048,
+      "receipt_facts": 2048,
+      "source_returns": 2048,
+      "facts": 14336,
+      "obligations": 8192,
+      "audit_rows": 8192,
+      "synthetic_history_target_mib": 0,
+      "input_bytes": 9826360,
+      "state_bytes": 8760748,
+      "input_sha256": "a30488df640b91cba9572c9554d77f1e2424ac37c166dfeb75b8aa13f71c852e",
+      "complete_ordered_output_sha256": "6e8ca8ada1de64174ab8b5c3f53b0594eb449216bdded43e947b59edff280762",
+      "all_outputs_equal_saved_state": true,
+      "all_inputs_unchanged": true,
+      "ordinary_elapsed_seconds": {
+        "baseline": 3.506115,
+        "candidate": 0.66089
+      },
+      "separate_profiled_work": {
+        "baseline": {
+          "elapsed_seconds": 13.482652,
+          "string_prefix_checks": 29505536,
+          "dictionary_get_calls": 5933161,
+          "top": [
+            {
+              "function": "reconcile",
+              "module": "operational_balance_engine.py",
+              "line": 110,
+              "calls": 1,
+              "cumulative_seconds": 13.479765,
+              "self_seconds": 1.675999
+            },
+            {
+              "function": "<built-in method builtins.sum>",
+              "module": "builtin",
+              "line": null,
+              "calls": 4096,
+              "cumulative_seconds": 8.933885,
+              "self_seconds": 0.011777
+            },
+            {
+              "function": "<genexpr>",
+              "module": "operational_balance_engine.py",
+              "line": 335,
+              "calls": 4096,
+              "cumulative_seconds": 8.917792,
+              "self_seconds": 5.048707
+            },
+            {
+              "function": "<method 'startswith' of 'str' objects>",
+              "module": "builtin",
+              "line": null,
+              "calls": 29505536,
+              "cumulative_seconds": 3.867695,
+              "self_seconds": 3.867695
+            },
+            {
+              "function": "deepcopy",
+              "module": "copy.py",
+              "line": 118,
+              "calls": 751654,
+              "cumulative_seconds": 1.178346,
+              "self_seconds": 0.53076
+            },
+            {
+              "function": "_deepcopy_dict",
+              "module": "copy.py",
+              "line": 217,
+              "calls": 51210,
+              "cumulative_seconds": 1.162203,
+              "self_seconds": 0.287424
+            },
+            {
+              "function": "<method 'get' of 'dict' objects>",
+              "module": "builtin",
+              "line": null,
+              "calls": 5933161,
+              "cumulative_seconds": 1.007629,
+              "self_seconds": 1.007629
+            },
+            {
+              "function": "_deepcopy_list",
+              "module": "copy.py",
+              "line": 191,
+              "calls": 8195,
+              "cumulative_seconds": 0.569479,
+              "self_seconds": 0.010357
+            },
+            {
+              "function": "<method 'removeprefix' of 'str' objects>",
+              "module": "builtin",
+              "line": null,
+              "calls": 4194304,
+              "cumulative_seconds": 0.513347,
+              "self_seconds": 0.513347
+            },
+            {
+              "function": "put",
+              "module": "operational_balance_engine.py",
+              "line": 185,
+              "calls": 8192,
+              "cumulative_seconds": 0.089728,
+              "self_seconds": 0.03049
+            },
+            {
+              "function": "calculation_checkpoint",
+              "module": "operational_demand_refresh.py",
+              "line": 203,
+              "calls": 71771,
+              "cumulative_seconds": 0.079124,
+              "self_seconds": 0.046991
+            },
+            {
+              "function": "<built-in method builtins.id>",
+              "module": "builtin",
+              "line": null,
+              "calls": 872514,
+              "cumulative_seconds": 0.07434,
+              "self_seconds": 0.07434
+            }
+          ]
+        },
+        "candidate": {
+          "elapsed_seconds": 1.556734,
+          "string_prefix_checks": 161792,
+          "dictionary_get_calls": 1747050,
+          "top": [
+            {
+              "function": "reconcile",
+              "module": "operational_balance_engine.py",
+              "line": 154,
+              "calls": 1,
+              "cumulative_seconds": 1.554002,
+              "self_seconds": 0.10962
+            },
+            {
+              "function": "deepcopy",
+              "module": "copy.py",
+              "line": 118,
+              "calls": 751654,
+              "cumulative_seconds": 1.008433,
+              "self_seconds": 0.48558
+            },
+            {
+              "function": "_deepcopy_dict",
+              "module": "copy.py",
+              "line": 217,
+              "calls": 51210,
+              "cumulative_seconds": 0.998438,
+              "self_seconds": 0.194526
+            },
+            {
+              "function": "_deepcopy_list",
+              "module": "copy.py",
+              "line": 191,
+              "calls": 8195,
+              "cumulative_seconds": 0.467344,
+              "self_seconds": 0.009277
+            },
+            {
+              "function": "<method 'get' of 'dict' objects>",
+              "module": "builtin",
+              "line": null,
+              "calls": 1747050,
+              "cumulative_seconds": 0.217409,
+              "self_seconds": 0.217409
+            },
+            {
+              "function": "reconcile_credits",
+              "module": "operational_balance_engine.py",
+              "line": 71,
+              "calls": 1,
+              "cumulative_seconds": 0.119176,
+              "self_seconds": 0.111574
+            },
+            {
+              "function": "<built-in method builtins.id>",
+              "module": "builtin",
+              "line": null,
+              "calls": 872514,
+              "cumulative_seconds": 0.068526,
+              "self_seconds": 0.068526
+            },
+            {
+              "function": "put",
+              "module": "operational_balance_engine.py",
+              "line": 229,
+              "calls": 8192,
+              "cumulative_seconds": 0.061282,
+              "self_seconds": 0.015125
+            },
+            {
+              "function": "calculation_checkpoint",
+              "module": "operational_demand_refresh.py",
+              "line": 203,
+              "calls": 71835,
+              "cumulative_seconds": 0.052268,
+              "self_seconds": 0.028606
+            },
+            {
+              "function": "_deepcopy_atomic",
+              "module": "copy.py",
+              "line": 172,
+              "calls": 692249,
+              "cumulative_seconds": 0.042358,
+              "self_seconds": 0.042358
+            },
+            {
+              "function": "__init__",
+              "module": "operational_reconciliation_state.py",
+              "line": 18,
+              "calls": 4,
+              "cumulative_seconds": 0.035462,
+              "self_seconds": 0.013814
+            },
+            {
+              "function": "_keep_alive",
+              "module": "copy.py",
+              "line": 231,
+              "calls": 59405,
+              "cumulative_seconds": 0.033846,
+              "self_seconds": 0.021372
+            }
+          ]
+        }
+      }
+    },
+    {
+      "orders": 512,
+      "receipt_facts": 512,
+      "source_returns": 512,
+      "facts": 3584,
+      "obligations": 2048,
+      "audit_rows": 10838,
+      "synthetic_history_target_mib": 20,
+      "input_bytes": 21245930,
+      "state_bytes": 20981206,
+      "input_sha256": "49ebde3ced9773b1e406277d99bfd414faa70f5ce69efa291f72772926fbd08d",
+      "complete_ordered_output_sha256": "e3fc684e6a57472e585f4a128908b945b094ffe9de51ca9d088fe4c85ebfac63",
+      "all_outputs_equal_saved_state": true,
+      "all_inputs_unchanged": true,
+      "ordinary_elapsed_seconds": {
+        "baseline": 0.627878,
+        "candidate": 0.447833
+      },
+      "separate_profiled_work": {
+        "baseline": {
+          "elapsed_seconds": 2.467683,
+          "string_prefix_checks": 1871360,
+          "dictionary_get_calls": 2437357,
+          "top": [
+            {
+              "function": "reconcile",
+              "module": "operational_balance_engine.py",
+              "line": 110,
+              "calls": 1,
+              "cumulative_seconds": 2.46708,
+              "self_seconds": 0.134691
+            },
+            {
+              "function": "deepcopy",
+              "module": "copy.py",
+              "line": 118,
+              "calls": 1058152,
+              "cumulative_seconds": 1.71213,
+              "self_seconds": 0.760072
+            },
+            {
+              "function": "_deepcopy_dict",
+              "module": "copy.py",
+              "line": 217,
+              "calls": 135870,
+              "cumulative_seconds": 1.7092,
+              "self_seconds": 0.374013
+            },
+            {
+              "function": "_deepcopy_list",
+              "module": "copy.py",
+              "line": 191,
+              "calls": 10841,
+              "cumulative_seconds": 1.576374,
+              "self_seconds": 0.047959
+            },
+            {
+              "function": "<built-in method builtins.sum>",
+              "module": "builtin",
+              "line": null,
+              "calls": 1024,
+              "cumulative_seconds": 0.476767,
+              "self_seconds": 0.002153
+            },
+            {
+              "function": "<genexpr>",
+              "module": "operational_balance_engine.py",
+              "line": 335,
+              "calls": 1024,
+              "cumulative_seconds": 0.473476,
+              "self_seconds": 0.258288
+            },
+            {
+              "function": "<method 'get' of 'dict' objects>",
+              "module": "builtin",
+              "line": null,
+              "calls": 2437357,
+              "cumulative_seconds": 0.302254,
+              "self_seconds": 0.302254
+            },
+            {
+              "function": "<method 'startswith' of 'str' objects>",
+              "module": "builtin",
+              "line": null,
+              "calls": 1871360,
+              "cumulative_seconds": 0.2176,
+              "self_seconds": 0.2176
+            },
+            {
+              "function": "<built-in method builtins.id>",
+              "module": "builtin",
+              "line": null,
+              "calls": 1352088,
+              "cumulative_seconds": 0.110292,
+              "self_seconds": 0.110292
+            },
+            {
+              "function": "_keep_alive",
+              "module": "copy.py",
+              "line": 231,
+              "calls": 146711,
+              "cumulative_seconds": 0.084165,
+              "self_seconds": 0.053685
+            },
+            {
+              "function": "_deepcopy_atomic",
+              "module": "copy.py",
+              "line": 172,
+              "calls": 911441,
+              "cumulative_seconds": 0.059126,
+              "self_seconds": 0.059126
+            },
+            {
+              "function": "<method 'append' of 'list' objects>",
+              "module": "builtin",
+              "line": null,
+              "calls": 265075,
+              "cumulative_seconds": 0.030048,
+              "self_seconds": 0.030048
+            }
+          ]
+        },
+        "candidate": {
+          "elapsed_seconds": 1.99808,
+          "string_prefix_checks": 40448,
+          "dictionary_get_calls": 2177262,
+          "top": [
+            {
+              "function": "reconcile",
+              "module": "operational_balance_engine.py",
+              "line": 154,
+              "calls": 1,
+              "cumulative_seconds": 1.997311,
+              "self_seconds": 0.037565
+            },
+            {
+              "function": "deepcopy",
+              "module": "copy.py",
+              "line": 118,
+              "calls": 1058152,
+              "cumulative_seconds": 1.863722,
+              "self_seconds": 0.778822
+            },
+            {
+              "function": "_deepcopy_dict",
+              "module": "copy.py",
+              "line": 217,
+              "calls": 135870,
+              "cumulative_seconds": 1.860884,
+              "self_seconds": 0.470749
+            },
+            {
+              "function": "_deepcopy_list",
+              "module": "copy.py",
+              "line": 191,
+              "calls": 10841,
+              "cumulative_seconds": 1.696717,
+              "self_seconds": 0.054033
+            },
+            {
+              "function": "<method 'get' of 'dict' objects>",
+              "module": "builtin",
+              "line": null,
+              "calls": 2177262,
+              "cumulative_seconds": 0.295304,
+              "self_seconds": 0.295304
+            },
+            {
+              "function": "<built-in method builtins.id>",
+              "module": "builtin",
+              "line": null,
+              "calls": 1352088,
+              "cumulative_seconds": 0.114275,
+              "self_seconds": 0.114275
+            },
+            {
+              "function": "_keep_alive",
+              "module": "copy.py",
+              "line": 231,
+              "calls": 146711,
+              "cumulative_seconds": 0.084555,
+              "self_seconds": 0.052649
+            },
+            {
+              "function": "_deepcopy_atomic",
+              "module": "copy.py",
+              "line": 172,
+              "calls": 911441,
+              "cumulative_seconds": 0.060393,
+              "self_seconds": 0.060393
+            },
+            {
+              "function": "<method 'append' of 'list' objects>",
+              "module": "builtin",
+              "line": null,
+              "calls": 265587,
+              "cumulative_seconds": 0.03224,
+              "self_seconds": 0.03224
+            },
+            {
+              "function": "calculation_checkpoint",
+              "module": "operational_demand_refresh.py",
+              "line": 203,
+              "calls": 17961,
+              "cumulative_seconds": 0.017954,
+              "self_seconds": 0.010034
+            },
+            {
+              "function": "<method 'items' of 'dict' objects>",
+              "module": "builtin",
+              "line": null,
+              "calls": 137420,
+              "cumulative_seconds": 0.017917,
+              "self_seconds": 0.017917
+            },
+            {
+              "function": "put",
+              "module": "operational_balance_engine.py",
+              "line": 229,
+              "calls": 2048,
+              "cumulative_seconds": 0.017592,
+              "self_seconds": 0.004624
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

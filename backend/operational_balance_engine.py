@@ -107,6 +107,50 @@ from operational_order_page_payment import corroborated_refund_basis, observed_b
 from operational_reconciliation_state import ReconciliationMap
 
 
+def _receipt_return_source_index(rows, checkpoint):
+    """Select ordinary source rows once; keep validation and ordering lazy."""
+    if type(rows) not in (list, tuple):
+        return None
+    indexed = {}
+    for position, row in enumerate(rows):
+        if position % 256 == 0:
+            checkpoint()
+        if type(row) is not dict or any(type(key) is not str for key in row):
+            return None
+        identity = row.get("receipt_id")
+        if type(identity) not in (str, int, float, bool, type(None)):
+            return None
+        try:
+            identity = str(identity)
+        except ValueError:
+            # Very large integer conversion and unusual source shapes must
+            # fail, if reached, at the original per-receipt boundary.
+            return None
+        indexed.setdefault(identity, []).append(row)
+    return indexed
+
+
+def _receipt_return_fact_index(facts, checkpoint):
+    """Group only ordinary saved return identities, without reading amounts."""
+    if type(facts) is not dict:
+        return None
+    indexed = {}
+    for position, (key, row) in enumerate(facts.items()):
+        if position % 256 == 0:
+            checkpoint()
+        if type(key) is not str:
+            return None
+        if not key.startswith("return:"):
+            continue
+        if (type(row) is not dict or any(type(field) is not str for field in row)
+                or type(row.get("receipt_id")) is not str):
+            # Preserve the original scan/error order for malformed history,
+            # custom equality, and identities which cannot be ordinary keys.
+            return None
+        indexed.setdefault(row["receipt_id"], {})[key] = row
+    return indexed
+
+
 def reconcile(state, sources, as_of):
     """Return updated independent state; deterministic replay never duplicates money.
 
@@ -311,6 +355,12 @@ def reconcile(state, sources, as_of):
         except (ValueError, KeyError, TypeError, InvalidOperation) as error:
             issue(str(error), rid)
 
+    # These lookups belong only to this reconciliation attempt. The source
+    # rows retain their original order and duplicates; saved amounts remain
+    # lazy. Successful inserts and rollback below advance the same lookup.
+    return_sources = (_receipt_return_source_index(sources.get("supplier_returns", []), calculation_checkpoint)
+                      if type(sources) is dict and all(type(key) is str for key in sources) else None)
+    return_facts = _receipt_return_fact_index(facts, calculation_checkpoint)
     for rid, receipt in list(facts.items()):
         calculation_checkpoint()
         if not rid.startswith("receipt:"):
@@ -323,7 +373,8 @@ def reconcile(state, sources, as_of):
             continue
         new_returns = []
         try:
-            for ret in sources.get("supplier_returns", []):
+            for ret in (sources.get("supplier_returns", []) if return_sources is None or type(rid) is not str
+                        else return_sources.get(rid.removeprefix("receipt:"), ())):
                 if str(ret.get("receipt_id")) != rid.removeprefix("receipt:") or ret.get("accepted") is not True:
                     continue
                 if instant(ret["accepted_at"]) > now:
@@ -332,15 +383,21 @@ def reconcile(state, sources, as_of):
                 if return_key not in facts:
                     new_returns.append(return_key)
                 fact(return_key, {"receipt_id": rid, "amount": amount(money(ret["amount"]))})
-            returned = sum((money(v["amount"]) for k, v in facts.items()
+                if return_facts is not None:
+                    return_facts.setdefault(rid, {})[return_key] = facts[return_key]
+            returned = sum((money(v["amount"]) for k, v in (facts.items() if return_facts is None
+                            else return_facts.get(rid, {}).items())
                             if k.startswith("return:") and v["receipt_id"] == rid), ZERO)
             if returned > money(receipt["amount"]):
                 raise ValueError("supplier_return_exceeds_receipt")
         except (ValueError, KeyError, TypeError, InvalidOperation) as error:
             for return_key in new_returns:
                 facts.pop(return_key, None)
+                if return_facts is not None:
+                    return_facts.get(rid, {}).pop(return_key, None)
             issue(str(error), rid)
-            returned = sum((money(v["amount"]) for k, v in facts.items()
+            returned = sum((money(v["amount"]) for k, v in (facts.items() if return_facts is None
+                            else return_facts.get(rid, {}).items())
                             if k.startswith("return:") and v["receipt_id"] == rid), ZERO)
         provenance = {name: metadata.get(name) or previous.get(name)
                       for name in ("source_invoice_id", "source_invoice_number", "source_component_fully_invoiced")

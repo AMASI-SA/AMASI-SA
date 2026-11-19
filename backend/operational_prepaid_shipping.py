@@ -14,7 +14,7 @@ SCHEMA = 'operational_prepaid_shipping_v1'
 
 
 def source_event(data, setup, source, raw, state, owner, start, end, history, shipment_conflicts,
-                 *, review_only=False, review_index=None, status_shipment_conflicts=None):
+                 *, review_only=False, review_index=None, status_shipment_conflicts=None, assignment_index=None):
     """Return (prepaid identity, new charge). Source reads never move money."""
     if source.get('user_id') != owner or not state or state.get('owner_id') != owner:
         raise ValueError('operational_prepaid_shipping_owner_mismatch')
@@ -29,9 +29,19 @@ def source_event(data, setup, source, raw, state, owner, start, end, history, sh
     if not any(str(current.get(key) or '').casefold() in keys for key in ('company_code', 'company_name')):
         return False, None
     # Native store delivery remains governed by its assignment/earnings writer.
-    if any(str(row.get('order_number')) == str(raw.get('reference_id') or raw.get('order_number'))
-           and row.get('active') is not False and row.get('status') in {'assigned', 'out_for_delivery', 'delivered'}
-           for row in data['store_delivery_assignments']):
+    from operational_delivery_assignment_index import DeliveryAssignmentIndex, _plain_identity, has_active_assignment_for_number
+    assignments = data['store_delivery_assignments']
+    if (type(assignment_index) is DeliveryAssignmentIndex and assignment_index.matches(assignments, owner)
+            and type(raw) is dict
+            and _plain_identity(raw.get('reference_id')) and _plain_identity(raw.get('order_number'))):
+        native_assignment = has_active_assignment_for_number(assignments,
+            str(raw.get('reference_id') or raw.get('order_number')), owner=owner, assignment_index=assignment_index)
+    else:
+        # Keep ordinary callers and unusual identities at their original lazy conversion boundary.
+        native_assignment = any(str(row.get('order_number')) == str(raw.get('reference_id') or raw.get('order_number'))
+            and row.get('active') is not False and row.get('status') in {'assigned', 'out_for_delivery', 'delivered'}
+            for row in assignments)
+    if native_assignment:
         return False, None
     status = raw.get('status')
     has_completion = current.get(COMPLETED_PROOF) or any(
