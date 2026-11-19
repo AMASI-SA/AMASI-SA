@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
+from heapq import nlargest
 from math import ceil
 from typing import Literal
 from zoneinfo import ZoneInfo
@@ -707,16 +708,33 @@ def expected_collections(state, computed, resource, policy):
             "amount": fmt(sum((Decimal(row["amount"]) for row in rows), Decimal(0)))}
 
 
-def paginate(items, page, page_size, focus_id=None):
+def paginate(items, page, page_size, focus_id=None, *, total=None):
     preparation_checkpoint()
     if focus_id:
         match = next((index for index, row in enumerate(checked_rows(items)) if row["id"] == focus_id), None)
         if match is not None:
             page = match // page_size + 1
-    total_pages = max(1, ceil(len(items) / page_size))
+    total = len(items) if total is None else total
+    total_pages = max(1, ceil(total / page_size))
     page = min(page, total_pages)
     return {"items": items[(page - 1) * page_size:page * page_size], "page": page,
-            "page_size": page_size, "total": len(items), "total_pages": total_pages}
+            "page_size": page_size, "total": total, "total_pages": total_pages}
+
+
+def register_page(resource_rows, page, page_size):
+    """Count each visible posting once and keep only the newest requested prefix."""
+    seen = set()
+
+    def unique_rows():
+        for rows in resource_rows:
+            for row in checked_rows(rows):
+                identity = row["event_id"]
+                if identity not in seen:
+                    seen.add(identity)
+                    yield row
+
+    newest = nlargest(page * page_size, unique_rows(), key=row_order)
+    return paginate(newest, page, page_size, total=len(seen))
 
 
 def install_workspace_routes(router, db, current_user, scope):
@@ -868,27 +886,24 @@ def install_workspace_routes(router, db, current_user, scope):
         if (kind is None) != (id is None):
             fail("operational_account_filter_invalid", "اختر نوع الحساب والحساب معًا", 422)
         def project(actor, owner, policy, state, resources, computed):
-            items, seen = [], set()
             selected = [r for r in resources if kind is None or (r["kind"], r["id"]) == (kind, id)]
             if kind is not None and not any(r["access"]["movements"] != "none" for r in selected):
                 fail("operational_workspace_not_found", "الكشف غير متاح", 404)
             indexed = _index_ledger_sources(state, computed, selected)
-            for resource in checked_rows(selected):
-                if resource["access"]["movements"] == "none":
-                    continue
-                sources = indexed[(resource["kind"], resource["id"], resource["currency"])]
-                rows = ledger_items(state, computed, resource, policy, sources=sources)
-                # Search prior to de-duplication. A second authorized account's
-                # projection can be the one that matches a name or reference.
-                display = filter_activity(rows, q=q, date_from=date_from, date_to=date_to, direction=direction, status=status) if (
-                    q or date_from or direction or status) else compact_rows(rows)
-                for row in checked_rows(display):
-                    if row["event_id"] in seen:
+
+            def resource_rows():
+                for resource in checked_rows(selected):
+                    if resource["access"]["movements"] == "none":
                         continue
-                    seen.add(row["event_id"])
-                    items.append(row)
-            items.sort(key=row_order, reverse=True)
-            return paginate(items, page, page_size)
+                    sources = indexed[(resource["kind"], resource["id"], resource["currency"])]
+                    rows = ledger_items(state, computed, resource, policy, sources=sources)
+                    # Search prior to de-duplication. A second authorized account's
+                    # projection can be the one that matches a name or reference.
+                    display = filter_activity(rows, q=q, date_from=date_from, date_to=date_to, direction=direction, status=status) if (
+                        q or date_from or direction or status) else compact_rows(rows)
+                    yield display
+
+            return register_page(resource_rows(), page, page_size)
         return await run_visible_report_read(request, lambda: checked_read(user, project, selected_resource=(kind, id) if kind is not None else None))
 
     @router.get("/workspace/statements/{kind}/{identity}")

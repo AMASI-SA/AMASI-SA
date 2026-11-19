@@ -45,7 +45,9 @@ def _report_state(stored, owner):
 
 
 async def read_financial_position_state(db, owner):
-    stored = await db[STATES].find_one({"_id": owner, "owner_id": owner})
+    # These two write-only histories were discarded by _report_state. Keep
+    # engine.audit and its manifest for the existing integrity checks.
+    stored = await db[STATES].find_one({"_id": owner, "owner_id": owner}, {"requests": 0, "audit": 0})
     try:
         return await prepare_in_thread(_report_state, stored if stored is not None else initial(owner), owner)
     except ArchiveError:
