@@ -19,7 +19,8 @@ def invoice_actor(doc):
     actor = doc.get("approved_by") or doc.get("supplier_approved_by")
     if not actor or doc.get("supplier_approved_by") not in (None, actor):
         return None, None
-    return actor, doc.get("supplier_approved_by_name")
+    name = doc.get("supplier_approved_by_name")
+    return actor, name if isinstance(name, str) and name.strip() and "@" not in name and name != "غير موثق" else None
 
 
 def linked_claim(item):
@@ -87,7 +88,7 @@ async def fill_historical_headers(db, owner, resources, computed, state, policy)
         query = {"id": {"$in": batch}, "$or": [{"id": owner}, {"created_by": owner}]}
         users = await db["users"].find(query, {"_id": 0, "id": 1, "name": 1}).to_list(len(batch))
         for user in users:
-            if user.get("name"):
+            if user.get("name") and user["name"] != "غير موثق":
                 for item in missing_names.get(user["id"], ()):
                     item["source_invoice_actor_name"] = user["name"]
                 for item in manual.get(user["id"], ()):
@@ -116,10 +117,9 @@ def invoice_rows(obligations):
         net = sum((Decimal(c["confirmed"]) for c in components), Decimal(0))
         returns = sum((Decimal(c.get("returned_amount") or 0) for c in components), Decimal(0))
         identity = f"supplier_invoice:{party}:{invoice}:{day}"
-        yield {**base, "id": identity, "direction": "payable", "confirmed": str(net + returns)}
-        if returns:
-            yield {**base, "id": identity + ":returns", "kind": "supplier_invoice_return",
-                   "actor_id": None, "recorded_by": None, "direction": "receivable", "confirmed": str(returns)}
+        yield {**base, "id": identity, "direction": "payable", "confirmed": str(net),
+               "invoice_gross": format(net + returns, ".2f"), "invoice_returns": format(returns, ".2f")}
+
 
 
 async def read_invoice(db, owner, supplier, invoice_id, policy):

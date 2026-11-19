@@ -70,6 +70,7 @@ function ActivityTable({ result, resource, onDetail, onHistory }) {
     const credit = row.side === firstSide;
     return <tr key={row.id}><td><button type="button" className="tablelink" onClick={() => onDetail(row)}>
       <MovementIcon type={row.movement_type} /><span>{movementTitle(row)}<small>{movementDate(row)} · {movementRecorder(row)}</small>
+        {row.invoice_id && minorUnits(row.invoice_returns) > 0n && <small>إجمالي الفاتورة <Amount value={row.invoice_gross} currency={row.currency}/> · المرتجع <Amount value={row.invoice_returns} currency={row.currency}/></small>}
         {row.informational && resource && <small>إثبات للمؤسسة · <Amount value={row.amount} currency={row.currency} /></small>}</span></button>
       {onHistory && row.automatic_history && <button type="button" className="textbtn" onClick={() => onHistory(row)}>
         {row.automatic_history === 'salary' ? 'سجل الرواتب' : 'سجل التوصيلات'}</button>}</td>

@@ -70,7 +70,8 @@ test('movement titles name the known customer, order, or source without inventin
 test('only verified automatic provenance attributes a movement to the system', () => {
   expect(movementRecorder({ automatic_history: 'salary', recorded_by: null })).toBe('النظام تلقائيًا');
   expect(movementRecorder({ automatic_history: 'delivery' })).toBe('النظام تلقائيًا');
-  expect(movementRecorder({ description: 'راتب تلقائي' })).toBe('غير موثق');
+  expect(movementRecorder({ description: 'راتب تلقائي' })).toBe('اسم الموظف غير متوفر');
+  expect(movementRecorder({ system_recorded: true })).toBe('النظام تلقائيًا');
   expect(movementRecorder({ reason: 'salary', recorded_by: { name: 'محمد' } })).toBe('محمد');
 });
 

@@ -449,6 +449,8 @@ def _row(policy, resource, item, amount, side, description):
               "currency": resource["currency"], "reason": item.get("workspace_reason") or item.get("kind"),
               "order_number": item.get("order_number") if complete else None,
               "party_type": resource["kind"], "party_id": resource["id"], "party_name": resource["name"]}
+    if item.get("actor_id") in {"operational_order_worker", "operational_worker"}:
+        result["system_recorded"] = True
     if direction := movement_type(item):
         result["movement_type"] = direction
     if note is not None:
@@ -587,7 +589,7 @@ def ledger_items(state, computed, resource, policy, *, sources=None):
         if (item.get("party_type"), item.get("party_id"), item.get("currency")) != (kind, identity, currency) or not _can_row(policy, resource, item):
             continue
         amount = Decimal(item.get("confirmed", "0"))
-        if amount > 0:
+        if amount > 0 or (item.get("invoice_id") and Decimal(item["invoice_gross"]) > 0):
             family, group = automatic_source(state, item)
             source_item = item
             if family == "delivery":
@@ -601,8 +603,8 @@ def ledger_items(state, computed, resource, policy, *, sources=None):
             row = _row(policy, resource, source_item, amount,
                        "for_party" if item["direction"] == "payable" else "for_us", "مستحق من المصدر")
             if item.get("invoice_id"):
-                label = "مرتجع فاتورة" if item["kind"] == "supplier_invoice_return" else "فاتورة استلام"
-                row.update(invoice_id=item["invoice_id"], description=(label + " " + (item.get("reference") or "")).strip())
+                row.update(invoice_id=item["invoice_id"], invoice_gross=item["invoice_gross"], invoice_returns=item["invoice_returns"],
+                           description=("فاتورة استلام " + (item.get("reference") or "")).strip())
             if family:
                 row.update(automatic_history=family, automatic_group=group)
                 row["description"] = "راتب تلقائي" if family == "salary" else "أجرة توصيل"

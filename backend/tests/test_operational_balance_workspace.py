@@ -791,6 +791,11 @@ def test_supplier_invoice_is_one_searchable_row_with_recorded_approver_and_lazy_
         invoice = (await client.get(detail + "inv1")).json()
         assert invoice["total"] == "26.00" and invoice["lines"] == [
             {"name": "غلاف", "quantity": 2, "unit": "13.00", "total": "26.00", "services": []}]
+        await db[STATES].update_one({"_id":"owner"}, {"$set":{"engine.obligations.pieceA.returned_amount":"13.00",
+                                                              "engine.obligations.pieceA.confirmed":"0.00"}})
+        adjusted = (await client.get(path, params={"q":"SI-26"})).json()
+        assert adjusted["total"] == 1
+        assert (adjusted["items"][0]["amount"], adjusted["items"][0]["invoice_gross"]) == ("13.00", "26.00")
         await grant(db, operations=[], resources=[resource("supplier", "supplier", movements="own")])
         staff = {"x-test-user": "staff"}
         assert (await client.get(detail + "inv1", headers=staff)).status_code == 200
