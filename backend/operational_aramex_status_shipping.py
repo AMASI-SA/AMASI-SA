@@ -170,6 +170,23 @@ def status_recognition(raw, source, current, party, owner, start, end, shipment,
             or any(source.get(key) is not None and _text(source[key]) != expected
                    for key, expected in (('order_id', oid), ('salla_order_id', oid), ('order_number', number)))):
         _fail('order_identity_conflict')
+    from operational_delivery_register import uses_retained_deliveries
+    if not uses_retained_deliveries(end):
+        version = _source_version(raw)
+        watermark = source.get('g47_salla_snapshot')
+        if (not isinstance(watermark, dict) or watermark.get('source_updated_at') is None
+                or any(watermark.get(key) for key in ('cancelled', 'component_pending', 'requires_authoritative_refresh'))
+                or _instant(watermark['source_updated_at']) != version or not created <= version <= end):
+            _fail('source_stale')
+        copies = (raw.get('status_slug'), source.get('order_status'), source.get('order_status_slug'),
+                  source.get('order_status_native'))
+        if any(current_status(value) != status for value in copies if value is not None):
+            _fail('order_status_conflict')
+        references = _bind_status_identity(raw, current, shipment, waybill, version, shipment_conflicts,
+                                           setup=setup, owner=owner, as_of=end)
+        return {'recognition_basis': STATUS_BASIS, 'recorded_at': end.isoformat(),
+                'order_created_at': created.isoformat(), 'observed_order_status': status,
+                'source_updated_at': version.isoformat(), 'identity_scope': 'order_status', **references}
     if created > end:
         return None
     # Execution of an order assigned to Aramex earns one prepaid charge.
@@ -199,6 +216,8 @@ def accounting_time(event, start, now):
         _fail('status_evidence_invalid')
     created, at = (_instant(event[key]) for key in ('order_created_at', 'recorded_at'))
     version = event.get('source_updated_at')
-    if not start < created <= at <= now or version and not created <= _instant(version) <= at:
+    from operational_delivery_register import uses_retained_deliveries
+    if (not start < created <= at <= now or (not uses_retained_deliveries(now) and not version)
+            or version and not created <= _instant(version) <= at):
         _fail('status_evidence_invalid')
     return at

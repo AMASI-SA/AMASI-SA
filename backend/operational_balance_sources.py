@@ -1124,13 +1124,13 @@ def _attach_delivery_sources(data, setup, owner, raw, order, out, now, total, co
                 assignments = data['_driver_groups'].get(order_number, ())
             assignments = [a for a in assignments if a.get('id') == delivery_event.get('assignment_id')
                            and str(a.get('driver_id')) == str(party_id)]
-        if not assignments and not delivery_event and data['_driver_fee_review'].has_other_assignment(order):
+        if not assignments and (not delivery_event or '_driver_groups' not in data) and data['_driver_fee_review'].has_other_assignment(order):
             issue(out, 'driver_fee_evidence_conflict', identity, component='shipping_fee',
                   recognition_state='confirmed')
             return
         if party_id:
             order['carrier'] = {'id': party_id, 'kind': party_kind, 'cost': None, 'fee_complete': False}
-        prepaid_rate = delivery_event and any(rate.get('party_id') == party_id and rate.get('status') == 'approved'
+        prepaid_rate = '_driver_groups' in data and delivery_event and any(rate.get('party_id') == party_id and rate.get('status') == 'approved'
             and rate.get('context') == 'order_completed' and rate.get('payment_mode') == 'prepaid'
             and instant(rate['effective_from']) <= now and (not rate.get('effective_to') or now < instant(rate['effective_to']))
             for rate in setup.get('contracts', []))
@@ -1234,7 +1234,7 @@ def _attach_delivery_sources(data, setup, owner, raw, order, out, now, total, co
             and (assignments[0].get('status') == 'delivered' or undated)) else None
         quote = None
         if party_id and rate:
-            if (completed_assignment or (delivery_event and party_kind == 'store_driver')) and rate.get('currency') != 'SAR':
+            if (completed_assignment or (delivery_event and party_kind == 'store_driver')) and rate.get('currency') != ('SAR' if '_driver_groups' in data else order['currency']):
                 raise ValueError('operational_delivery_fee_currency_conflict')
             cod_incomplete = cod and 'cod' not in order
             quote = shipping_charge(rate, owner, party_id, when,
@@ -1300,8 +1300,10 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                                'ad_snapshots', 'recurring', 'fee_policies', 'issues')}
     enable_issue_index(out)
     out['delivery_event_coverage'] = {'version': 1, 'started_at': start.isoformat(), 'as_of': now.isoformat()}
-    from operational_delivery_register import assignment_groups, observe, service_event
-    out['delivery_register'] = {}
+    from operational_delivery_register import assignment_groups, observe, service_event, uses_retained_deliveries
+    retained = uses_retained_deliveries(now)
+    if retained:
+        out['delivery_register'] = {}
     out['ad_balance_sar_basis'] = {}
     # No service with side effects is called: collection access is allowlisted.
     # The inventory catalogue is read on demand, not on each financial sync.
@@ -1414,7 +1416,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                 pass  # The ordinary order parser retains its exact source issue.
         # Search saved order history even when a later Salla state has replaced delivery.
         historical_numbers = set()
-        for source in data['unified_orders']:
+        for source in (data['unified_orders'] if retained else ()):
             await cpu_budget.checkpoint()
             raw = (source.get('raw_by_source') or {}).get('salla_direct')
             if not isinstance(raw, dict) or source.get('salla_first_delivered') or (
@@ -1460,7 +1462,9 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
             source_numbers = Counter(str(r.get('reference_id') or r.get('order_number') or '') for r in raw_orders)
             bank_catalog = None
             recorded_fee_lookup = await prepare_in_thread(build_recorded_courier_fee_lookup, operational_state)
-            driver_groups = data['_driver_groups'] = await prepare_in_thread(assignment_groups, data['store_delivery_assignments'], owner)
+            driver_groups = {}
+            if retained:
+                driver_groups = data['_driver_groups'] = await prepare_in_thread(assignment_groups, data['store_delivery_assignments'], owner)
             assignment_index = await prepare_in_thread(build_delivery_assignment_index, data['store_delivery_assignments'], owner)
             data['_assignment_index'] = assignment_index
             cost_catalog_index = await prepare_in_thread(build_cost_catalog_index, data, unique_index)
@@ -1479,8 +1483,10 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                     continue
                 identity = str(raw.get('id') or '')
                 order_number = str(raw.get('reference_id') or raw.get('order_number') or '')
-                register = observe(source, raw, start, now, delivery_history.get(order_number, ()),
-                                   driver_groups.get(order_number, ()), setup, confirmation_facts, previous_register)
+                register = None
+                if retained:
+                    register = observe(source, raw, start, now, delivery_history.get(order_number, ()),
+                                       driver_groups.get(order_number, ()), setup, confirmation_facts, previous_register)
                 if register:
                     out['delivery_register'][identity] = register
                     service_candidates[identity] = (raw, register)
@@ -1492,6 +1498,9 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                     raise ValueError('order_identity_missing')
                 if source_ids[identity] != 1 or source_numbers[order_number] != 1:
                     raise ValueError('canonical_order_identity_ambiguous')
+                watermark = source.get('g47_salla_snapshot') or {}
+                if not retained and watermark.get('requires_authoritative_refresh'):
+                    raise ValueError('canonical_salla_refresh_required')
                 current_shipping = source.get('salla_shipping_current') or raw.get('salla_shipping_current') or {}
                 from operational_completed_shipping_admission import CompletionReviewRequired
                 from operational_completed_shipping_sources import completion_issue
@@ -1518,8 +1527,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                         issue(out, code, identity, component='prepaid_shipping',
                               required_action='راجع حالة الطلب وإسناد شركة الشحن والتعرفة والصندوق المعتمد قبل احتساب الخصم.')
                         courier_issue(out, code, raw, source, setup=setup, owner=owner)
-                watermark = source.get('g47_salla_snapshot') or {}
-                if watermark.get('requires_authoritative_refresh'):
+                if retained and watermark.get('requires_authoritative_refresh'):
                     raise ValueError('canonical_salla_refresh_required')
                 if identity not in data['_prepaid_orders']:
                     from operational_completed_shipping import deferred_source_event
@@ -1540,6 +1548,68 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                         courier_issue(out, code, raw, source, setup=setup, owner=owner)
                 order_numbers[order_number] = identity
                 if created <= start:
+                    if retained:
+                        continue
+                    from operational_delivery_evidence import resolve_delivery_event
+                    event = resolve_delivery_event(raw, source=source, owner=owner,
+                        assignments=data['store_delivery_assignments'], setup=setup,
+                        started_at=started_at, as_of=as_of, history=delivery_history.get(order_number, ()),
+                        shipment_conflicts=shipment_conflicts,
+                        frozen_event=(operational_state or {}).get('engine', {}).get('facts', {}).get('delivery_event:' + identity),
+                        frozen_shipping=(operational_state or {}).get('engine', {}).get('facts', {}).get('shipping:' + identity),
+                        recorded_fee=recorded_fee_lookup(identity),
+                        owner_confirmation=confirmation_facts.get(DELIVERY_CONFIRMATION_PREFIX + identity),
+                        assignment_index=assignment_index)
+                    if event is None:
+                        continue
+                    # Native drivers retain their SAR-only contract. A courier's
+                    # earned fee is independently denominated by its approved rate.
+                    if event['party_type'] == 'store_driver' and event['currency'] != 'SAR':
+                        raise ValueError('operational_delivery_currency_unsupported')
+                    order = {'id': identity, 'order_number': order_number, 'created_at': created.isoformat(),
+                        'updated_at': max(instant(raw.get('updated_at') or raw.get('date_updated') or created),
+                                          instant(event.get('delivered_at') or event.get('recorded_at'))).isoformat(),
+                        'delivered_at': event['delivered_at'], 'status': 'delivered',
+                        'currency': event['currency'], 'delivery_event': event}
+                    payment = raw.get('payment') if isinstance(raw.get('payment'), dict) else {}
+                    method = str(payment.get('method') or raw.get('payment_method') or '').lower()
+                    cod = method in {'cod', 'cash_on_delivery', 'cashondelivery', 'cash on delivery',
+                                     'الدفع عند الاستلام', 'دفع عند الاستلام', 'دفع عند الإستلام'}
+                    total = None
+                    if cod:
+                        order['cod_required'] = True
+                        try:
+                            total, order['cod'] = _old_delivery_cod(raw)
+                            order['cod_amount'] = order['cod']['outstanding']
+                            if event['party_type'] == 'courier' and total > 0 and number(order['cod_amount']) == 0:
+                                # Paid customer status does not prove remittance by
+                                # the carrier. Do not freeze an unproved zero debt.
+                                order.pop('cod')
+                                order.pop('cod_amount')
+                                raise ValueError('operational_delivery_cod_history_reconciliation_required')
+                        except (ValueError, TypeError) as exc:
+                            issue(out, str(exc) if str(exc).startswith('operational_delivery_') else
+                                  'cod_collection_contract_incomplete', identity)
+                    else:
+                        from operational_balance_bank_orders import transfer_bank
+                        if not transfer_bank(method)[0] and not any(method in aliases for aliases in PAYMENT_METHODS.values()):
+                            # Earned base shipping can be proved independently; do
+                            # not turn an unknown payment method into zero COD fees.
+                            cod = order['cod_required'] = True
+                            issue(out, 'operational_delivery_payment_method_incomplete', identity)
+                    _attach_delivery_sources(data, setup, owner, raw, order, out, now, total, cod,
+                                             delivery_event=event, started_at=started_at)
+                    if courier_hold_lookup(event, order.get('carrier')):
+                        courier_issue(out, 'courier_fee_historical_review_required', raw, source,
+                                     carrier=order.get('carrier'), event=event, setup=setup, owner=owner)
+                        if event.get('recognition_basis') == 'owner_confirmed_after_start':
+                            carrier = order.get('carrier')
+                            if carrier:
+                                carrier.update(cost=None, fee_complete=False, fee_recognition_held=True)
+                                carrier.pop('fee_components', None)
+                            out['delivery_events'].append(order)
+                    else:
+                        out['delivery_events'].append(order)
                     continue
                 status_obj = raw.get('status')
                 if isinstance(status_obj, dict):
@@ -1659,32 +1729,90 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                           message=DIAGNOSTICS.get(payment_issue['code'], 'بيانات الدفع تحتاج مطابقة؛ لا يعني ذلك أن المبلغ صفر'),
                           required_action='راجع إثبات التحصيل ومرجع العملية وتاريخها وخطة الدفع من المصدر المعتمد',
                           **{key: value for key, value in payment_issue.items() if key not in {'code', 'currency'}})
-                # Only Salla's order status admits a new delivery. Native assignments
-                # still supply money and the recipient, independently of admission.
-                event = service_event(register, raw, confirmation_facts) if register else None
-                delivered = register and register.get('current_status') in {'delivered', 'تم التوصيل'}
-                allow_shipping = bool(event and delivered) or not register
-                if event and delivered:
-                    # Retain any independently proven shipment / custody / clock from
-                    # the normal reader. Failure here cannot revoke Salla's delivery.
-                    from operational_delivery_evidence import resolve_delivery_event
-                    if not confirmation_facts.get('delivery_event:' + identity):
-                        try:
-                            detailed = resolve_delivery_event(raw, source=source, owner=owner,
-                                assignments=data['store_delivery_assignments'], setup=setup,
-                                started_at=started_at, as_of=as_of, history=delivery_history.get(order_number, ()),
-                                shipment_conflicts=shipment_conflicts,
-                                frozen_shipping=confirmation_facts.get('shipping:' + identity),
-                                recorded_fee=recorded_fee_lookup(identity), assignment_index=assignment_index)
-                        except (TypeError, ValueError, KeyError):
-                            detailed = None
-                        if detailed and (detailed['party_type'], detailed['party_id']) == (event['party_type'], event['party_id']):
-                            event = detailed
-                    order['delivered_at'] = event.get('delivered_at')
-                if register and not allow_shipping:
-                    order['shipping_evidence_held'] = True
+                delivered = False
+                if retained:
+                    # Only Salla's order status admits a new delivery. Native assignments
+                    # still supply money and the recipient, independently of admission.
+                    event = service_event(register, raw, confirmation_facts) if register else None
+                    delivered = register and register.get('current_status') in {'delivered', 'تم التوصيل'}
+                    allow_shipping = bool(event and delivered) or not register
+                    if event and delivered:
+                        # Retain any independently proven shipment / custody / clock from
+                        # the normal reader. Failure here cannot revoke Salla's delivery.
+                        from operational_delivery_evidence import resolve_delivery_event
+                        if not confirmation_facts.get('delivery_event:' + identity):
+                            try:
+                                detailed = resolve_delivery_event(raw, source=source, owner=owner,
+                                    assignments=data['store_delivery_assignments'], setup=setup,
+                                    started_at=started_at, as_of=as_of, history=delivery_history.get(order_number, ()),
+                                    shipment_conflicts=shipment_conflicts,
+                                    frozen_shipping=confirmation_facts.get('shipping:' + identity),
+                                    recorded_fee=recorded_fee_lookup(identity), assignment_index=assignment_index)
+                            except (TypeError, ValueError, KeyError):
+                                detailed = None
+                            if detailed and (detailed['party_type'], detailed['party_id']) == (event['party_type'], event['party_id']):
+                                event = detailed
+                        order['delivered_at'] = event.get('delivered_at')
+                    if register and not allow_shipping:
+                        order['shipping_evidence_held'] = True
+                else:
+                    event = None
+                    allow_shipping = True
+                    current = source.get('salla_shipping_current') or raw.get('salla_shipping_current') or {}
+                    from operational_delivery_evidence import (DELIVERED, _status, _text, created_after_start_delivery,
+                                                                resolve_delivery_event)
+                    native_driver = data['_driver_fee_review'].requires_delivery_proof(order)
+                    # Saved evidence must be revalidated even when a later source status
+                    # or assignment loses the fields that originally admitted delivery.
+                    # Test presence, so malformed saved proofs cannot restore a fallback.
+                    saved_delivery_proof = ('delivery_event:' + identity in confirmation_facts
+                                            or DELIVERY_CONFIRMATION_PREFIX + identity in confirmation_facts)
+                    if saved_delivery_proof or native_driver or status in DELIVERED or (isinstance(current, dict) and _status(current.get('status')) in DELIVERED):
+                        # Legacy drivers retain their native collection contract.
+                        # Post-start delivered orders use current Salla status;
+                        # earlier orders still need an actual delivery instant.
+                        assigned = active_assignments_for_number(data['store_delivery_assignments'], order_number,
+                            owner=owner, assignment_index=assignment_index)
+                        # The earlier contract-only producer binds one owner-scoped
+                        # assignment by the unique canonical order number. Retain its
+                        # independent collection contract without promoting a missing
+                        # order_id into the new strict delivery-status proof.
+                        legacy_driver = (not native_driver and len(assigned) == 1
+                            and assigned[0].get('user_id') == owner
+                            and assigned[0].get('order_id') in (None, '')
+                            and 'delivery_event:' + identity not in (operational_state or {}).get('engine', {}).get('facts', {})
+                            and 'owner_delivery_after_start:' + identity not in (operational_state or {}).get('engine', {}).get('facts', {})
+                            and _text(assigned[0].get('id')) and _text(assigned[0].get('driver_id'))
+                            and data['_driver_fee_review'].assignment_ids[assigned[0]['id']] == 1)
+                        if saved_delivery_proof or native_driver or not assigned or (created_after_start_delivery(raw, started_at, as_of) and not legacy_driver):
+                            try:
+                                if not native_driver and status not in DELIVERED:
+                                    raise ValueError('operational_delivery_order_shipment_status_conflict')
+                                event = resolve_delivery_event(raw, source=source, owner=owner,
+                                    assignments=data['store_delivery_assignments'], setup=setup, started_at=started_at, as_of=as_of,
+                                    history=delivery_history.get(order_number, ()), shipment_conflicts=shipment_conflicts,
+                                    frozen_event=(operational_state or {}).get('engine', {}).get('facts', {}).get('delivery_event:' + identity),
+                                    frozen_shipping=(operational_state or {}).get('engine', {}).get('facts', {}).get('shipping:' + identity),
+                                    recorded_fee=recorded_fee_lookup(identity),
+                                    owner_confirmation=confirmation_facts.get(DELIVERY_CONFIRMATION_PREFIX + identity),
+                                    assignment_index=assignment_index)
+                                if event is None:
+                                    raise ValueError('operational_delivery_timestamp_missing')
+                                saved = (operational_state or {}).get('engine', {}).get('facts', {}).get('delivery_event:' + identity)
+                                if saved is not None and saved != event:
+                                    raise ValueError('operational_delivery_confirmed_evidence_changed')
+                                order['delivered_at'] = event['delivered_at']
+                            except (ValueError, KeyError, TypeError) as exc:
+                                allow_shipping = False
+                                order['shipping_evidence_held'] = True
+                                code = str(exc) if str(exc).startswith('operational_delivery_') else 'operational_delivery_evidence_invalid'
+                                issue(out, code, identity, component='shipping_fee')
+                                courier_issue(out, code, raw, source, setup=setup, owner=owner)
+                                date_gap_identity(out, code, raw, data['store_delivery_assignments'], owner,
+                                    record=confirmation_facts.get(DELIVERY_CONFIRMATION_PREFIX + identity), started_at=started_at,
+                                    assignment_index=assignment_index)
                 if allow_shipping:
-                    legacy_assignment = event and event.get('party_type') == 'store_driver' and any(
+                    legacy_assignment = retained and event and event.get('party_type') == 'store_driver' and any(
                         a.get('id') == event.get('assignment_id') and a.get('order_id') in (None, '')
                         for a in driver_groups.get(order_number, ()))
                     _attach_delivery_sources(data, setup, owner, raw, order, out, now, total, cod,
@@ -1698,10 +1826,10 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                         if carrier:
                             carrier.update(cost=None, fee_complete=False, fee_recognition_held=True)
                             carrier.pop('fee_components', None)
-                    if not register and order.get('status') in {'delivered', 'تم التوصيل'}:
+                    if retained and not register and order.get('status') in {'delivered', 'تم التوصيل'}:
                         # A native driver update alone cannot advance the Salla order.
                         order['status'] = status
-                    if event and delivered and order.get('carrier'):
+                    if event and (delivered or not retained) and order.get('carrier'):
                         service_candidates.pop(identity, None)
                         if not legacy_assignment:
                             order['delivery_event'] = event

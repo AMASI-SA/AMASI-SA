@@ -478,6 +478,7 @@ def reconcile(state, sources, as_of):
                         or order.get("status") not in DELIVERED
                         or not isinstance(order.get("currency"), str) or not order["currency"]
                         or event.get("currency") != order["currency"]
+                        or (event.get("party_type") == "store_driver" and "delivery_register" not in sources and order["currency"] != "SAR")
                         or event.get("party_type") not in {"courier", "store_driver"}
                         or not event.get("party_id") or event.get("party_id") != carrier.get("id")
                         or event.get("party_type") != carrier.get("party_type", carrier.get("kind"))):

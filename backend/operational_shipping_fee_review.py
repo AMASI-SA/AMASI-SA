@@ -150,12 +150,14 @@ class DriverEarnings:
                 or _text(a.get("order_number")) != num or len(earning_rows) != 1):
                 raise ValueError("driver_fee_evidence_conflict")
             e = earning_rows[0]
+            from operational_delivery_register import uses_retained_deliveries
             if (not _text(e.get("id")) or self.earning_ids[e["id"]] != 1 or e.get("user_id") != self.owner
                 or e.get("driver_id") != a["driver_id"] or _text(e.get("order_id")) != oid
                 or _text(e.get("order_number")) != num or e.get("status") != "due"
                 or e.get("financial_source") != NATIVE or e.get("financial_handoff_status") != PENDING
                 or e.get("accounting_status") != "operational_only" or e.get("ledger_txn_group_id")
                 or e.get("accounting_operation_id")
+                or (not uses_retained_deliveries(self.as_of) and order.get("currency") != "SAR")
                 or any(row.get("currency", "SAR") != "SAR" for row in [a, e])):
                 raise ValueError("driver_fee_evidence_conflict")
             earned = _instant(e.get("earned_at"))

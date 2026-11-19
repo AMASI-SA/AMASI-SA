@@ -1,5 +1,6 @@
 """One Salla delivery per post-opening order, independent of money and later status."""
 from collections import defaultdict
+from datetime import datetime, timedelta, timezone
 
 from operational_delivery_evidence import DELIVERED, _instant, _status, _text
 from shipping_companies import matches_courier_alias, normalize_shipping_company
@@ -11,6 +12,16 @@ STATUS_LABELS = {'canceled': 'ملغي', 'cancelled': 'ملغي', 'returned': '�
                  'restored': 'مسترجع', 'completed': 'تم التنفيذ', 'delivered': 'تم التوصيل',
                  'delivering': 'جاري التوصيل', 'out_for_delivery': 'جاري التوصيل',
                  'in_progress': 'قيد التنفيذ', 'under_processing': 'قيد التنفيذ'}
+
+
+# The owner changed the operating rule for the November 2026 opening.
+# Choose the rules of an archived calculation by its reporting instant.
+# For current calculations, the actual configured opening is the only order cutoff.
+RULE_IN_FORCE_FROM = datetime(2026, 11, 1, tzinfo=timezone(timedelta(hours=3)))
+
+
+def uses_retained_deliveries(as_of):
+    return as_of >= RULE_IN_FORCE_FROM
 
 
 def order_status(raw):
@@ -139,7 +150,10 @@ def observe(source, raw, start, end, history, assignments, setup, facts, previou
                 record.update(party_type='store_driver', party_id=marker['driver_id'],
                               assignment_id=marker.get('assignment_id'), party_name=marker.get('driver_name'))
             else:
-                record.update(executor(carrier, assignments, oid, setup, historical=key not in DELIVERED))
+                original_carrier = normalize_shipping_company(marker.get('company_name') or marker.get('company_code'))[0]
+                captured_external = bool(marker and original_carrier not in {'unknown', 'mandoob', 'mandoob_riyadh', 'pickup'})
+                record.update(executor(carrier, () if captured_external else assignments, oid, setup,
+                                       historical=key not in DELIVERED))
     record.update(order_id=oid, order_number=number, order_created_at=created.isoformat(),
                   recorded_at=saved.get('recorded_at') or end.isoformat())
     if not saved and not frozen and not old:
