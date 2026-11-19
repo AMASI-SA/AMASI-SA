@@ -4,7 +4,7 @@ import SimpleBalances, { EntryForm } from './SimpleBalances';
 import { simpleBalancesApi as api } from './simpleBalancesApi';
 import { useOptionalAuth } from '../../context/AuthContext';
 
-jest.mock('./simpleBalancesApi', () => ({ simpleBalancesApi: { context: jest.fn(), parties: jest.fn(), ledger: jest.fn(), movements: jest.fn(), history: jest.fn(), statement: jest.fn(), entry: jest.fn(), registerPending: jest.fn(), pendingCommand: jest.fn(), retirePending: jest.fn() }, simpleBalanceError: error => error?.localMessage || (error?.response?.status === 403 ? 'لا توجد صلاحية لهذا الحساب' : 'لم يتأكد الحفظ') }));
+jest.mock('./simpleBalancesApi', () => ({ simpleBalancesApi: { context: jest.fn(), parties: jest.fn(), ledger: jest.fn(), movements: jest.fn(), history: jest.fn(), statement: jest.fn(), quoteAd: jest.fn(), entry: jest.fn(), registerPending: jest.fn(), pendingCommand: jest.fn(), retirePending: jest.fn() }, simpleBalanceError: error => error?.localMessage || (error?.response?.status === 403 ? 'لا توجد صلاحية لهذا الحساب' : 'لم يتأكد الحفظ') }));
 jest.mock('../../context/AuthContext', () => ({ useOptionalAuth: jest.fn() }));
 jest.mock('react-router-dom', () => ({
   Link: ({ to, children, ...props }) => <a href={to} {...props}>{children}</a>,
@@ -231,4 +231,27 @@ test('an invalid page larger than five rows is not presented as a valid ledger',
   await render(<SimpleBalances />);
   expect(host.querySelectorAll('[data-testid="simple-movement-row"]')).toHaveLength(0);
   expect(host.querySelector('[role="alert"]')).not.toBeNull();
+});
+
+
+test.each([true, false])('owner or granted employee can fund USD advertising from SAR, owner=%s', async isOwner => {
+  const ctx = context();
+  ctx.actor.is_owner = isOwner;
+  ctx.operations.push({ key: 'ads.fund', label: 'إعلانات' });
+  const ad = resource('ad_account', 'snap', 'سناب', { currency: 'USD', operations: ['ads.fund'],
+    ad_bank_funding: { mode: 'hybrid', wallet_first: true, terms: {} } });
+  ctx.resources.push(ad);
+  api.quoteAd.mockResolvedValue({ amount_usd: '100.00', gross_sar: '383.63', fee_sar: '8.63' });
+  await render(<EntryForm context={ctx} resource={ad} onCancel={() => {}} onSaved={saved} />);
+  await change('إجمالي الخصم بالريال شامل العمولة', '٣٨٣٫٦٣');
+  await click('احسب المقابل');
+  expect(api.quoteAd).toHaveBeenCalledWith({ party_id: 'snap', currency: 'SAR', amount: '383.63' });
+  expect(host.textContent).toContain('100.00 دولار');
+  const banks = byLabel('الدفع من');
+  expect([...banks.options].map(o => o.textContent)).not.toContain('الصندوق');
+  await change('الدفع من', JSON.stringify(['bank', 'bank']));
+  await change('مرجع العملية البنكية', 'BANK-TEST');
+  await submit();
+  expect(api.entry).toHaveBeenCalledWith(expect.objectContaining({ amount: '100.00', reference: 'BANK-TEST', source_id: 'bank',
+    ad_bank_funding: { bank_amount: '383.63', bank_fee_amount: '8.63', kind: 'payment' } }));
 });

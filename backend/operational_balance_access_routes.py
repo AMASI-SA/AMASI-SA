@@ -12,7 +12,7 @@ from operational_balance_access import (
     load_access, normalized_policy, policy_version,
 )
 from operational_balance_sources import entities
-from operational_balance_store import fail, now
+from operational_balance_store import STATES, fail, now
 
 
 class ResourceGrant(BaseModel):
@@ -69,6 +69,10 @@ def _access_view(user, owner):
 
 async def _resource_rows(db, owner, kind):
     try:
+        if kind == "ad_account":
+            state = await db[STATES].find_one({"_id": owner, "owner_id": owner}, {"owner_id": 1, "ad_funding": 1})
+            return [row for row in await entities(db, owner, kind, operational_state=state)
+                    if row.get("ready") is not False and row.get("settings_complete") is not False]
         return await entities(db, owner, kind)
     except ValueError:
         fail("operational_access_catalog_incomplete", "تعذر التحقق من هوية الحسابات؛ راجع إعدادات الجهات", 409)

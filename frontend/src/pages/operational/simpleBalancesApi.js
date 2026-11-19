@@ -6,12 +6,12 @@ const data = promise => promise.then(response => response.data);
 const read = config => ({ timeout: 30000, ...config });
 
 export const simpleBalancesApi = {
-  context: config => data(http.get(`${workspace}/context`, read(config))),
+  context: config => data(http.get(`${workspace}/context`, { ...read(config), params: { ad_bank_fx: true } })),
   parties: (params, config) => data(http.get(`${workspace}/parties`, { ...read(config), params })),
   movements: (params, config) => data(http.get(`${workspace}/movements`, { ...read(config), params })),
   ledger: (kind, id, params, config) => data(http.get(
     `${workspace}/ledger/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`,
-    { ...read(config), params },
+    { ...read(config), params: kind === 'ad_account' ? { ...params, ad_bank_fx: true } : params },
   )),
   history: (kind, id, params, config) => data(http.get(
     `${workspace}/history/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`, { ...read(config), params },
@@ -26,6 +26,7 @@ export const simpleBalancesApi = {
   bindPos: body => data(http.post('/operational-balances/pos-receivable-binding', body, { timeout: 30000 })),
   reviewReceipt: (id, config) => data(http.get(`${workspace}/reviews/${encodeURIComponent(id)}/receipt`, { ...read(config), responseType: 'blob' })),
   reviewDecision: (id, body) => data(http.post(`${workspace}/reviews/${encodeURIComponent(id)}`, body, { timeout: 30000 })),
+  quoteAd: body => data(http.post(`${workspace}/ad-funding-quote`, body, { timeout: 30000 })),
   entry: body => data(http.post(`${workspace}/entries`, body, { timeout: 30000 })),
   registerPending: (id, body) => data(http.post(`${workspace}/pending-commands/${encodeURIComponent(id)}`, body, { timeout: 30000 })),
   pendingCommand: (id, scope, config) => data(http.get(`${workspace}/pending-commands/${encodeURIComponent(id)}`, {
