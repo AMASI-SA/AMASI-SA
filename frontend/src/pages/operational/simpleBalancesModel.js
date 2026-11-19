@@ -47,7 +47,9 @@ export function movementTitle(row, compact = false) {
 }
 
 export function movementRecorder(row) {
-  return ['salary', 'delivery'].includes(row.automatic_history) ? 'النظام تلقائيًا' : row.recorded_by?.name || 'غير موثق';
+  if (['salary', 'delivery'].includes(row.automatic_history)) return 'النظام تلقائيًا';
+  if (row.invoice_id && !row.recorded_by?.name) return 'اسم الموظف غير متوفر';
+  return row.recorded_by?.name || 'غير موثق';
 }
 
 export function signedResourceBalance(resource) {

@@ -271,3 +271,17 @@ def test_page_and_capture_corroboration_never_count_customer_payment_twice():
     state["engine"]["facts"] = {"provider_order_balance:one": {"order_id": "one", "provider": "tamara",
         "currency": "SAR", "gross": "100.00", "paid": "100.00", "remaining": "0.00"}, **state["engine"]["facts"]}
     assert platform(state)["gross"] == "100.00"
+
+
+def test_paypal_foreign_order_requires_proven_fx_and_unique_fee_terms():
+    from operational_balance_service import paypal_available
+    terms = settings("PayPal", "4.9", "1.13", "0")
+    state, order = paid_state("paypal", "10.00", currency="KWD", method="paypal", terms=terms)
+    assert paypal_available(report(state, paypal_sar=True)) is None
+    order["customer_payment_sar"] = {"currency": "KWD", "native": {"paypal": "10.00"},
+        "shares": {"paypal": "100.00"}, "paid": "100.00", "basis": "salla_list_paid"}
+    refresh_basis(state, [order], state["engine"]["issues"])
+    refresh_provider_fee_inputs(state, {"provider_fee_settings": terms, "orders": [order]})
+    assert paypal_available(report(state, paypal_sar=True)) == Decimal("93.97")
+    terms["payment_methods"] *= 2
+    assert estimate_fee(terms, "paypal", "100") is None

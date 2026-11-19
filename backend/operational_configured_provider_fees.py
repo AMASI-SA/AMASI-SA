@@ -13,7 +13,7 @@ from payment_methods import KNOWN_PAYMENT_SUB_KEYS, normalize_payment_method
 
 CENT = Decimal(".01")
 ZERO = Decimal(0)
-PROVIDERS = {"salla", "tamara", "tabby", "emkan"}
+PROVIDERS = {"salla", "tamara", "tabby", "emkan", "paypal"}
 RIYADH = timezone(timedelta(hours=3))
 
 
@@ -33,6 +33,11 @@ def cash(value):
 
 def configured_payment_setting(settings, provider, method=None):
     """Use the same exact-name and canonical precedence as the settings export."""
+    if provider == "paypal":
+        from operational_payment_evidence import provider_for
+        matches = [row for row in settings.get("payment_methods") or []
+                   if isinstance(row, dict) and provider_for(row.get("name")) == "paypal"]
+        return matches[0] if len(matches) == 1 else None
     key = fee_rail(method) if provider == "salla" else provider
     if key is None:
         return None
@@ -90,7 +95,7 @@ def configured_projection(policies, provider, gross, *, currency="SAR", method=N
                           source_mode="legacy_settings", as_of=None):
     """Price a known amount with the existing policy engine, without posting facts."""
     if not has_capture_policies(policies, provider, currency):
-        if source_mode == 'mz2_policies':
+        if source_mode == 'mz2_policies' and provider != 'paypal':
             raise ValueError('provider_fee_policy_incomplete_or_ambiguous')
         return None
     source = payment or {}
@@ -139,7 +144,7 @@ def estimate_fee(settings, provider, gross, *, method=None, refunded=ZERO, polic
     if gross == 0:
         return ZERO
     rate, fixed, vat = terms
-    if provider == "salla":
+    if provider in {"salla", "paypal"}:
         if refunded:
             # Salla refund fee credits require their executed statement terms.
             return None

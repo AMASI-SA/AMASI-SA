@@ -211,26 +211,3 @@ def test_verified_bank_wallet_split_reports_all_customer_money_once(bank_paid, r
     assert (methods["bank"]["paid"], methods["wallet"]["paid"]) == (bank_paid, "15.00")
     assert (methods["bank"]["remaining"], methods["wallet"]["remaining"]) == (remaining, "0.00")
     assert "bank_credit" not in order
-
-
-def test_paypal_is_an_observed_customer_payment_without_a_settlement_or_bank_entry():
-    from operational_customer_tender_coverage import new_coverage, observe_nonprovider, paypal_customer_payments
-    from operational_financial_position import build_financial_position
-    from backend.tests.test_operational_balance_financial_position import state_for, opening, table
-    from operational_payment_evidence import provider_for
-    doc = tender("8431", "paypal", "100.00")
-    raw = doc["raw_by_source"]["salla_direct"]
-    coverage = new_coverage(START, NOW)
-    coverage.update(uninspected_source_orders=1, source_order_count=1)
-    assert paypal_customer_payments(coverage) is None
-    observe_nonprovider(coverage, raw, doc, {"id":raw["id"], "currency":"SAR", "order_number":doc["order_number"]},
-                        raw["total"], None, "owner")
-    assert paypal_customer_payments(coverage) == {"orders": 1, "paid": "100.00", "incomplete_orders": 0}
-    assert provider_for("paypal") is None
-    state = state_for()
-    opening(state, "bank", "bank", "125.00")
-    before = build_financial_position(state, view="providers")["currencies"]["SAR"]["debt_totals"]
-    state["engine"]["customer_tender_coverage"] = coverage
-    position = build_financial_position(state, view="providers")
-    assert table(position, "paypal_customer_payments")["rows"][0]["paid"] == "100.00"
-    assert position["currencies"]["SAR"]["debt_totals"] == before

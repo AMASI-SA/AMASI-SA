@@ -120,12 +120,7 @@ export function ApprovedPosition({ context, identity, onBack, onOpen, scoped=fal
   const currencies = Object.keys(report?.currencies || {});
   const currency = currencies.includes(selectedCurrency) ? selectedCurrency : currencies.includes('SAR') ? 'SAR' : currencies[0];
   const figures = report?.currencies?.[currency];
-  const positionRows = [...resources];
-  if (owner && context.paypal_customer_payments) {
-    const firstProvider = positionRows.findIndex(resource => resource.kind === 'provider');
-    positionRows.splice(firstProvider < 0 ? 0 : firstProvider, 0, {kind:'paypal_customer_payments'});
-  }
-  const pageSize = 24, pages = Math.max(1, Math.ceil(positionRows.length / pageSize));
+  const pageSize = 24, pages = Math.max(1, Math.ceil(resources.length / pageSize));
   const activePage = Math.min(page, pages);
   const from = (activePage - 1) * pageSize;
   // Prepaid shipping credit is spendable only on shipping, not available bank or till cash.
@@ -149,18 +144,13 @@ export function ApprovedPosition({ context, identity, onBack, onOpen, scoped=fal
           <PositionMetric title="مبالغ مستحقة للجهات" amount={figures.debt_totals?.payable} currency={currency}
             partial={figures.completeness?.actual === false && figures.debt_totals?.payable != null} /></div></>)}
     <section className="section panel sheet"><div className="section-head"><h2>تفاصيل الأرصدة</h2></div>
-      {positionRows.slice(from, from + pageSize).map(resource => resource.kind === 'paypal_customer_payments'
-        ? <Link key="paypal-receipts" className="review-item mz-position-line" to={positionView('providers')}>
-          <IconBox name="credit-card" tone="provider" /><span>باي بال<small className="under">مدفوعات العملاء · بانتظار تحديد جهة التسوية</small></span>
-          <strong className="end"><Amount value={context.paypal_customer_payments.paid} currency="SAR" />
-            <small className="under">عدد الطلبات {context.paypal_customer_payments.orders} · قبل خصم الرسوم</small></strong></Link>
-        : <PositionLine key={resourceKey(resource)} resource={resource} onOpen={onOpen} enabled={canOpen(resource)} />)}
+      {resources.slice(from, from + pageSize).map(resource => <PositionLine key={resourceKey(resource)} resource={resource} onOpen={onOpen} enabled={canOpen(resource)} />)}
       {pages > 1 && <nav className="movement-pages" aria-label="صفحات تفاصيل الأرصدة">
-        <span>عرض {from + 1}–{Math.min(from + pageSize, positionRows.length)} من {positionRows.length}</span><div>
+        <span>عرض {from + 1}–{Math.min(from + pageSize, resources.length)} من {resources.length}</span><div>
           <button type="button" className="button" onClick={() => setPage(activePage - 1)} disabled={activePage === 1}>السابق</button>
           <span>صفحة {activePage} من {pages}</span><button type="button" className="button" onClick={() => setPage(activePage + 1)} disabled={activePage === pages}>التالي</button>
         </div></nav>}
-      {!positionRows.length && <p className="empty">لا توجد حسابات متاحة للعرض.</p>}
+      {!resources.length && <p className="empty">لا توجد حسابات متاحة للعرض.</p>}
     </section>
   </>;
 }

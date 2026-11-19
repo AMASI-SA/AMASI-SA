@@ -32,10 +32,11 @@ function canTarget(context, resource, mode) {
   if ((resource.currency || 'SAR') !== 'SAR' && !resource.ad_bank_funding) return false;
   return entryChoices(resource.kind, side(mode), permittedOperations(context, resource)).some(item => item.reason === reasonFor(resource, mode));
 }
+const isPayPal = r => r?.kind === "provider" && r.id === "paypal";
 function sourcesFor(context, target, mode) {
   return context.resources.filter(item => {
     if (!item.access?.use || (item.currency || 'SAR') !== 'SAR' || target && resourceKey(item) === resourceKey(target)) return false;
-    if (target?.ad_bank_funding || target?.kind === 'pos_receivable') return item.kind === 'bank';
+    if (target?.ad_bank_funding || isPayPal(target) || target?.kind === 'pos_receivable') return item.kind === 'bank';
     if (cash(item)) return true;
     return mode === 'out' && ['supplier', 'external_person', 'operating_expense'].includes(target?.kind)
       && item.kind === 'employee_custody' && permittedOperations(context).has('custody.spend');
@@ -60,7 +61,7 @@ function EntryWorkflow({ context, resource, mode = 'choose', onBack, onSaved, on
   const bankSource = sources.some(r => r.kind === 'bank');
   const custodySource = sources.some(r => r.kind === 'employee_custody') && granted.has('custody.spend');
   const canFund = (r, key) => {
-    if (r.ad_bank_funding || r.kind === 'pos_receivable') return bankSource;
+    if (r.ad_bank_funding || isPayPal(r) || r.kind === 'pos_receivable') return bankSource;
     return moneySources.some(item => resourceKey(item) !== resourceKey(r))
       || key === 'out' && custodySource && ['supplier', 'external_person', 'operating_expense'].includes(r.kind);
   };
@@ -83,6 +84,7 @@ function MovementFields({ context, resource, mode, onBack, onChangeMode, onSaved
   const [form, setForm] = useState(baseForm), [review, setReview] = useState(null), [message, setMessage] = useState('');
   const [quote, setQuote] = useState(null), [quoting, setQuoting] = useState(false);
   const ad = target?.ad_bank_funding, pos = target?.kind === 'pos_receivable';
+  const bankArrival = pos || isPayPal(target);
   const quoteKey = JSON.stringify([targetKey, form.unit, form.amount, ad?.terms]);
   const visibleQuote = quote?.key === quoteKey ? quote : null;
   const editable = context.status === 'active';
@@ -106,10 +108,10 @@ function MovementFields({ context, resource, mode, onBack, onChangeMode, onSaved
     if (reason) command.reason = reason;
     if (reference) command.reference = reference;
     if (source.kind === 'bank' && target.prepaid_shipping_cash && reference.length < 3) return setMessage('أدخل مرجع عملية شحن الرصيد من البنك.');
-    if (pos) {
+    if (bankArrival) {
       if (!form.arrival || !reference) return setMessage('طابق وصول التحويل واكتب مرجعه.');
       command.bank_arrival_confirmed = true;
-      if (form.fee.trim()) {
+      if (pos && form.fee.trim()) {
         if (minorUnits(form.fee) === null || minorUnits(form.fee) < 0n || !form.receipt.trim()) return setMessage('راجع رسوم الشبكة ومرجع مستند الرسوم.');
         command.actual_fee_amount = form.fee.trim(); command.fee_reference = form.receipt.trim();
       }
@@ -140,14 +142,14 @@ function MovementFields({ context, resource, mode, onBack, onChangeMode, onSaved
       {field(mode === 'in' ? 'استلمت من' : 'خرج المبلغ من', mode === 'in' ? targetSelect : sourceSelect)}
       {field(mode === 'in' ? 'دخل المبلغ في' : mode === 'move' ? 'وصل المبلغ إلى حساب' : 'وصل المبلغ إلى', mode === 'in' ? sourceSelect : targetSelect)}
       {ad?.terms && field('طريقة إدخال الدفعة', <select value={form.unit} onChange={e => change({ unit: e.target.value, amount: '' })}><option value="receipt">من الإيصال البنكي</option><option value="SAR">احسب من المبلغ بالريال</option><option value="USD">احسب من المبلغ بالدولار</option></select>)}
-      {field(ad ? form.unit === 'USD' ? 'المبلغ بالدولار' : 'إجمالي ما خُصم من البنك (ريال)' : pos ? 'صافي المبلغ الوارد إلى البنك (ريال)' : 'المبلغ (ريال)', <input inputMode="decimal" value={form.amount} required placeholder="0.00" onChange={e => change({ amount: e.target.value })} />)}
+      {field(ad ? form.unit === 'USD' ? 'المبلغ بالدولار' : 'إجمالي ما خُصم من البنك (ريال)' : bankArrival ? 'صافي المبلغ الوارد إلى البنك (ريال)' : 'المبلغ (ريال)', <input inputMode="decimal" value={form.amount} required placeholder="0.00" onChange={e => change({ amount: e.target.value })} />)}
       {field('تاريخ الحركة', <input type="date" value={form.date} max={todaySA()} required onChange={e => change({ date: e.target.value })} />)}
       {ad && (form.unit === 'receipt' ? <>{field('المبلغ الذي وصل للمنصة (دولار)', <input required inputMode="decimal" value={form.usd} onChange={e => change({ usd: e.target.value })} />)}{field('الرسوم ضمن مبلغ البنك (ريال)', <input required inputMode="decimal" value={form.fee} onChange={e => change({ fee: e.target.value })} />)}</> :
         <div className="field"><button type="button" className="button" disabled={quoting} onClick={quoteAd}>احسب المقابل</button>{visibleQuote && <span>خصم البنك {visibleQuote.gross_sar} ريال، وصل للمنصة {visibleQuote.amount_usd} دولار.</span>}</div>)}
       {ad?.mode === 'hybrid' && !ad.wallet_first && field('نوع الدفعة', <select value={form.wallet ? 'wallet' : 'payment'} onChange={e => change({ wallet: e.target.value === 'wallet' })}><option value="payment">سداد المستحقات</option><option value="wallet">شحن المحفظة</option></select>)}
-      {field(ad || pos || target?.prepaid_shipping_cash && source?.kind === 'bank' ? 'مرجع العملية البنكية' : 'رقم مرجع أو طلب (اختياري)', <input maxLength="160" value={form.reference} onChange={e => change({ reference: e.target.value })} />)}
+      {field(ad || bankArrival || target?.prepaid_shipping_cash && source?.kind === 'bank' ? 'مرجع العملية البنكية' : 'رقم مرجع أو طلب (اختياري)', <input maxLength="160" value={form.reference} onChange={e => change({ reference: e.target.value })} />)}
       {field('بيان الحركة (اختياري)', <input maxLength="1000" value={form.note} onChange={e => change({ note: e.target.value })} />)}
-      {pos && <>{field('رسوم الشبكة الفعلية إن وجدت', <input inputMode="decimal" value={form.fee} onChange={e => change({ fee: e.target.value })} />)}{form.fee && field('مرجع مستند الرسوم', <input required value={form.receipt} onChange={e => change({ receipt: e.target.value })} />)}<label><input type="checkbox" required checked={form.arrival} onChange={e => change({ arrival: e.target.checked })} /> طابقت وصول صافي التحويل إلى البنك</label></>}
+      {pos && <>{field('رسوم الشبكة الفعلية إن وجدت', <input inputMode="decimal" value={form.fee} onChange={e => change({ fee: e.target.value })} />)}{form.fee && field('مرجع مستند الرسوم', <input required value={form.receipt} onChange={e => change({ receipt: e.target.value })} />)}</>}{bankArrival && <label><input type="checkbox" required checked={form.arrival} onChange={e => change({ arrival: e.target.checked })} /> طابقت وصول صافي التحويل إلى البنك</label>}
     </div>{message && <p className="note warning" role="alert">{message}</p>}
       <p className="note">{sourceName && destName && decimalAmount(form.amount) ? `من ${sourceName} إلى ${destName}.` : 'بعد إدخال التفاصيل يظهر لك أثر المبلغ على الحساب.'}</p>
       <div className="form-actions"><button className="button primary" type="submit" disabled={!editable}><Icon name="list-checks"/>مراجعة الحركة</button><button type="button" className="button" onClick={onChangeMode}>تغيير نوع الحركة</button></div>

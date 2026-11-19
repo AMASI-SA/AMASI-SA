@@ -6,7 +6,7 @@ from collections import defaultdict
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 CENT = Decimal(".01")
-PROVIDERS = {"salla", "tamara", "tabby", "emkan"}
+PROVIDERS = {"salla", "tamara", "tabby", "emkan", "paypal"}
 SOURCES = {"salla_order_fx", "salla_list_paid"}
 
 

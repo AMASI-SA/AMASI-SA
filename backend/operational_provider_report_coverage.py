@@ -4,7 +4,7 @@ from decimal import Decimal, InvalidOperation
 
 from operational_split_payment import provider_shares, split_reference_owners
 
-PLATFORMS = {"salla": "سلة", "tabby": "تابي", "tamara": "تمارا", "emkan": "إمكان"}
+PLATFORMS = {"salla": "سلة", "tabby": "تابي", "tamara": "تمارا", "emkan": "إمكان", "paypal": "باي بال"}
 LABELS = {
     "order_page": "لها مبلغ مدفوع مثبت في صفحة الطلب",
     "capture": "لها قيد تحصيل محفوظ", "settlement_allocation": "خُصص لها سداد كلي أو جزئي",

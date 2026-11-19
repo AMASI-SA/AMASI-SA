@@ -2,7 +2,7 @@
 from operational_balance_store import STATES, fail
 from operational_financial_activity_runtime import checked_rows, prepare_in_thread
 
-PROVIDER_NAMES = {"salla": "سلة", "tabby": "تابي", "tamara": "تمارا", "emkan": "إمكان"}
+PROVIDER_NAMES = {"salla": "سلة", "tabby": "تابي", "tamara": "تمارا", "emkan": "إمكان", "paypal": "باي بال"}
 RETURN_STATES = {"pending": "بانتظار استكمال المرتجع", "refunded": "تم رد المبلغ",
                  "salla_refund_recorded": "استرجاع مسجل في سلة", "salla_refund_confirmed": "مصدر الاسترجاع مؤكد"}
 

@@ -68,6 +68,8 @@ def enforce_operational_web_pages(modes, path, method, query=None):
     if path == "/workspace/parties" and method == "GET":
         kind = query.get("kind")
         return _allow(modes, "assets" if kind in ASSETS else "parties") if kind else _allow(modes, "assets", "parties")
+    if re.fullmatch(r"/workspace/supplier-invoices/[^/]+/[^/]+", path) and method == "GET":
+        return _allow(modes, "parties", "log")
     if path == "/workspace/movements" and method == "GET":
         return _allow(modes, "log")
     match = re.fullmatch(r"/workspace/specialist/(returns|exchanges|fees|reports|specialized|access)", path)

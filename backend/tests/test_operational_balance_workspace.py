@@ -766,3 +766,59 @@ def test_owner_can_assign_operational_wallet_to_employee(currency):
         command.update(expected_version=1, resources=[resource("ad_account", "unbound:other")])
         assert (await client.put(access + "/users/staff", json=command)).status_code == 422
     run(scenario)
+
+
+def test_supplier_invoice_is_one_searchable_row_with_recorded_approver_and_lazy_lines():
+    async def scenario(db, client):
+        stamp = "2026-11-14T12:00:00+00:00"
+        terms = {"kind": "supplier", "party_type": "supplier", "party_id": "supplier", "currency": "SAR",
+                 "direction": "payable", "confirmed": "13.00", "expected": "0.00", "gross_amount": "13.00",
+                 "business_date": "2026-11-14", "source_invoice_id": "inv1", "source_invoice_number": "SI-26",
+                 "source_invoice_approved_at": stamp}
+        await db[STATES].update_one({"_id": "owner"}, {"$set": {"engine.obligations": {
+            key: {**terms, "id": key} for key in ("pieceA", "pieceB")}}})
+        await db.mezan_supplier_invoices_v2.insert_one({"user_id": "owner", "supplier_id": "supplier", "id": "inv1",
+            "invoice_number": "SI-26", "approved_at": stamp, "approved_by": "staff", "total_halalas": 2600,
+            "lines": [{"product_name": "غلاف", "quantity": 2, "product_unit_price_halalas": 1300, "total_halalas": 2600}]})
+        path = BASE + "/ledger/supplier/supplier"
+        for route in (path, BASE + "/movements"):
+            page = (await client.get(route, params={"q": "خالد أحمد"})).json()
+            assert page["total"] == 1
+            row = page["items"][0]
+            assert (row["amount"], row["reference"], row["recorded_by"]["name"]) == ("26.00", "SI-26", "خالد أحمد")
+            assert row["invoice_id"] == "inv1" and "lines" not in row
+        detail = BASE + "/supplier-invoices/supplier/"
+        invoice = (await client.get(detail + "inv1")).json()
+        assert invoice["total"] == "26.00" and invoice["lines"] == [
+            {"name": "غلاف", "quantity": 2, "unit": "13.00", "total": "26.00", "services": []}]
+        await grant(db, operations=[], resources=[resource("supplier", "supplier", movements="own")])
+        staff = {"x-test-user": "staff"}
+        assert (await client.get(detail + "inv1", headers=staff)).status_code == 200
+        await db.mezan_supplier_invoices_v2.update_one({"id": "inv1"}, {"$set": {"approved_by": "owner"}})
+        assert (await client.get(detail + "inv1", headers=staff)).status_code == 404
+        assert (await client.get(detail + "absent")).status_code == 404
+    run(scenario)
+
+
+def test_paypal_payout_moves_net_to_bank_once_after_arrival():
+    from test_operational_balance_configured_provider_fees import paid_state, settings
+    async def scenario(db, client):
+        wallet, _ = paid_state("paypal", terms=settings("PayPal", "4.9", "1.13", "0"))
+        wallet["engine"]["provider_fee_inputs"]["source_mode"] = "mz2_policies"
+        await db[STATES].update_one({"_id": "owner"}, {"$set": {"engine": wallet["engine"]}})
+        async def available():
+            context = (await client.get(BASE + "/context")).json()
+            return next(r["balance"]["amount"] for r in context["resources"] if r["kind"] == "provider" and r["id"] == "paypal")
+        assert await available() == "93.97"
+        body = entry(party_type="provider", party_id="paypal", reason="collection", side="for_party",
+                     amount="93.97", reference="PP-1", bank_arrival_confirmed=True)
+        for bad in ({"source_type": "cash", "source_id": "cash"}, {"reference": ""}, {"amount": "100.00"}):
+            invalid = await client.post(BASE + "/entries", json={**body, **bad, "request_id": "entry-" + uuid4().hex})
+            assert invalid.status_code in {409, 422}
+        assert (await client.post(BASE + "/entries", json=body)).status_code == 200
+        assert (await client.post(BASE + "/entries", json=body)).status_code == 200
+        assert await available() == "0.00"
+        state = await read(db, "owner")
+        assert len(state["movements"]) == 1
+        assert balance(state, "bank", "bank")["actual"] == "1093.97"
+    run(scenario)

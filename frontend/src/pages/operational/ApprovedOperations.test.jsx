@@ -110,14 +110,3 @@ it('shows SAR debt with the native USD amount and keeps prepaid funds separate',
   expect(rows[1]).toContain('رصيد مقدم 420.00 ر.س');
   expect(rows[1]).not.toContain('علينا');
 });
-
-it('shows owner-only PayPal receipts apart from outstanding provider balances',async()=>{
-  const cashOnly = {...context,resources:[bank],paypal_customer_payments:{orders:2,paid:'152.11'}};
-  await show(<ApprovedPosition context={cashOnly} identity="owner" />);
-  const row = host.querySelector('a.mz-position-line');
-  expect(row.textContent).toContain('باي بال');
-  expect(row.textContent).toContain('152.11 ر.س');
-  expect(row.getAttribute('href')).toContain('view=providers');
-  await show(<ApprovedPosition context={{...cashOnly,actor:{is_owner:false}}} identity="staff" scoped />);
-  expect(host.textContent).not.toContain('باي بال');
-});
