@@ -172,16 +172,29 @@ def attach_returns(state, sources):
 
 def shipping_obligations(state):
     obligations = state.setdefault('engine', {}).setdefault('obligations', {})
+    if not state.get('customer_returns'):
+        return
+    native = {(r.get('order_id'), r['party_id'], r['shipment_reference'].strip().casefold()): r
+              for r in obligations.values() if r.get('salla_return_shipment_id')}
     for case in state.get('customer_returns', []):
         shipping = case['shipping']
         if shipping['kind'] != 'courier':
+            continue
+        existing = native.get((case['order_id'], shipping['id'], shipping['reference'].strip().casefold()))
+        if existing:
+            existing['return_case_id'] = case['id']
+            if (shipping['status'] == 'completed' and not existing.get('return_cancelled')
+                    and money(existing['confirmed'], zero=True) == 0 and existing.get('return_fee_amount')):
+                existing.update(expected='0.00', confirmed=existing['return_fee_amount'], return_confirmed_manually=True,
+                                business_date=case['created_at'][:10], return_business_at=None)
             continue
         key = 'customer-return-shipping:' + case['id']
         confirmed = shipping['status'] == 'completed'
         obligations[key] = {'id': key, 'kind': 'shipping', 'party_type': 'courier', 'party_id': shipping['id'], 'name': shipping['name'],
                             'currency': 'SAR', 'direction': 'payable', 'expected': '0.00' if confirmed else shipping['amount'],
                             'confirmed': shipping['amount'] if confirmed else '0.00', 'business_date': case['created_at'][:10],
-                            'return_case_id': case['id'], 'shipment_reference': shipping['reference']}
+                            'return_case_id': case['id'], 'shipment_reference': shipping['reference'],
+                            'order_id': case['order_id'], 'order_number': case['order_number'], 'reference': shipping['reference']}
 
 
 async def save_case(db, owner, actor, payload, *, case_id=None, clock=None):
@@ -349,7 +362,8 @@ async def save_case(db, owner, actor, payload, *, case_id=None, clock=None):
             shipping.update(reference=payload.get('shipment_reference', ''), status='completed' if payload.get('shipment_completed') else 'pending')
             if shipping['kind'] != 'none' and not shipping['reference']:
                 fail('customer_return_shipment_reference_required', 'أدخل مرجع شحنة الاسترجاع')
-            if shipping['kind'] != 'none' and any(r['shipping'].get('reference') == shipping['reference'] and r['shipping'].get('id') == shipping.get('id') for r in cases):
+            if shipping['kind'] != 'none' and any(r['shipping'].get('reference', '').strip().casefold() == shipping['reference'].strip().casefold()
+                                                and r['shipping'].get('id') == shipping.get('id') for r in cases):
                 fail('customer_return_shipment_duplicate', 'شحنة الاسترجاع مسجلة بالفعل')
             case = {'id': digest([owner, actor, payload['request_id']]), 'case_type': 'item_return',
                     'order_id': order['id'], 'order_number': order['order_number'],
