@@ -55,9 +55,11 @@ def test_source_failure_http_response_contains_the_unwound_request_stages(monkey
     monkeypatch.setattr('operational_balance_service.now', lambda: stamp)
     profit = {'started': False, 'cancelled': False, 'stopped': False}
 
-    async def fail_read(db, owner, started_at, as_of, *, baselines, operational_state):
+    async def fail_read(db, owner, started_at, as_of, *, baselines, operational_state,
+                        on_primary_reads_complete):
         assert db is database and owner == operational_state['owner_id'] == 'owner'
         assert started_at == original_state['owner']['started_at'] and as_of == stamp
+        assert callable(on_primary_reads_complete)
         deadline = demand_context().read_deadline
         assert type(deadline) is float and 0 < deadline - time.monotonic() <= REQUEST_SECONDS
         with refresh_stage('source_primary_reads'):
@@ -99,15 +101,16 @@ def test_source_failure_http_response_contains_the_unwound_request_stages(monkey
         expected = source_failure_detail('operational_source_read_timeout', 'unified_orders')
         assert {key: value for key, value in detail.items() if key != 'stage_timings'} == expected
         timings = detail['stage_timings']
-        assert [(row['stage'], row['outcome']) for row in timings[-4:]] == [
+        assert [(row['stage'], row['outcome']) for row in timings[-3:]] == [
             ('source_primary_reads', 'failed'), ('source_collection', 'failed'),
-            ('profit_snapshot', 'cancelled'), ('aggregate', 'failed')]
+            ('aggregate', 'failed')]
+        assert not any(row['stage'] == 'profit_snapshot' for row in timings)
         assert any(row['stage'] == 'native_evidence' and row['outcome'] == 'complete' for row in timings)
         assert any(row['stage'] == 'snapshot_load' and row['outcome'] == 'complete' for row in timings)
         assert all(set(row) == {'stage', 'duration_ms', 'outcome'}
                    and 0 <= row['duration_ms'] <= 300000 for row in timings)
         assert database.data[STATES] == original_state and database.data[LEASES] == {}
-        assert profit == {'started': True, 'cancelled': True, 'stopped': True}
+        assert profit == {'started': False, 'cancelled': False, 'stopped': False}
         assert all(row[0] == LEASES for row in database.writes)
         assert demand_context() is None
         assert not [task for task in asyncio.all_tasks() if task is not asyncio.current_task()]

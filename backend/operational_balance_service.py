@@ -539,9 +539,10 @@ async def _reconcile_with_profit_snapshot(db, owner, state, stamp):
     """Join independent visible-request preparations before any financial save.
 
     Profit reads depend only on the owner and observation period. They do not
-    read collected sources or the prepared ledger. The other child collects
-    sources before reconciliation. Both retain the same request deadline and
-    must finish cleanup before the caller can admit any financial write.
+    read collected sources or the prepared ledger. Wait for the primary source
+    batch to finish before sharing read capacity with the remaining collection
+    and reconciliation. Both retain the same request deadline and must finish
+    cleanup before the caller can admit any financial write.
     """
     from operational_balance_engine import reconcile
     from operational_balance_sources import collect_sources
@@ -550,13 +551,17 @@ async def _reconcile_with_profit_snapshot(db, owner, state, stamp):
     from operational_profit_sources import load_profit_snapshot
     from operational_read_runtime import _snapshot_session
 
-    async def calculate():
+    async def calculate(on_primary_reads_complete=None):
         try:
             from operational_balance_inventory import assert_no_source_collision
             with refresh_stage("source_collection"):
                 with refresh_stage("source_collision"):
                     await assert_no_source_collision(db, owner, state)
-                sources = await collect_sources(db, owner, state["started_at"], stamp, baselines=state.get("source_baselines"), operational_state=state)
+                readiness = ({"on_primary_reads_complete": on_primary_reads_complete}
+                             if on_primary_reads_complete is not None else {})
+                sources = await collect_sources(db, owner, state["started_at"], stamp,
+                                                baselines=state.get("source_baselines"),
+                                                operational_state=state, **readiness)
             await checkpoint()
         except ValueError as exc:
             from operational_read_runtime import SourceReadError
@@ -574,7 +579,9 @@ async def _reconcile_with_profit_snapshot(db, owner, state, stamp):
             result = await run_calculation(reconcile, state, sources, stamp)
         return result, sources
 
-    async def profit(period):
+    async def profit(period, primary_ready=None):
+        if primary_ready is not None:
+            await primary_ready.wait()
         with refresh_stage("profit_snapshot"):
             return await load_profit_snapshot(db, owner, period, as_of=stamp)
 
@@ -587,7 +594,9 @@ async def _reconcile_with_profit_snapshot(db, owner, state, stamp):
         return result, sources
 
     period = {"owner_id": state["owner_id"], "started_at": state["started_at"]}
-    tasks = [asyncio.create_task(calculate()), asyncio.create_task(profit(period))]
+    primary_ready = asyncio.Event()
+    tasks = [asyncio.create_task(calculate(primary_ready.set)),
+             asyncio.create_task(profit(period, primary_ready))]
     group = asyncio.gather(*tasks)
     try:
         (result, sources), snapshot = await asyncio.shield(group)

@@ -1,6 +1,103 @@
 # Visible refresh budget recovery after Aramex publication
 
-## Current continuation: profit preparation during source collection —19 November2026
+## Current continuation: defer profit until primary sources succeed — 19 November 2026
+
+Task branch: `codex/aramex-profit-after-primary-20261119`.
+Verified production base and parent of this candidate:
+`1583ea74b43c7055c9635f3836d58e544438af1c` (PR 2009).
+The frozen predecessor A/B pair remains unchanged and remotely recoverable.
+This continuation holds no publication lease and has not changed shared `/app`.
+
+### Published predecessor and actual live outcome
+
+PR 2009 source A `7bbd15a6855e314c8103f405b05275ee08e44c66`, intent-only B
+`88982f630870f07ff3f55d76dd31b575a3e2cc28`, and normal merge M above were
+independently checked. All eleven applicable exact-B workflows passed, including
+5,624 operational backend tests, 5,231 stock tests, 1,081 frontend tests,
+25 synthetic browser scenarios and four worker tests. These suite counts
+overlap and are not a distinct-test sum. Both clean-clone adapter hosts produced
+matching artifacts and the actual shared-host configured adapter passed.
+
+The single authorized publication displayed green `Deployment finished`,
+19 November 05:01 Aden time, platform version `b5b4299`. The original,
+unmodified three-probe verifier completed with exit 0, `verified: true`,
+`checks: 3`, the exact A/M above, and runtime
+`rg5-9fcc3a9a15aecbe2593725b729d19f0a69dbeb1b8c6d4e35f0f5d3ec690ecabb`.
+The following original guard status reported `active: false`. Verification
+closed the matching lease; no other actor's lease was cleared. Production
+changed: yes for PR 2009, no for this new continuation.
+
+Two normal visible refresh attempts on that exact release failed during
+`source_primary_reads`, before reconciliation or a financial aggregate save.
+The first started at `2026-11-19T02:08:04.528Z` and failed with a preparation
+pieces read deadline; the primary stage lasted 16.378 seconds. One controlled
+retry started at `2026-11-19T02:16:15.247Z` and failed with an orders read
+deadline; the primary stage lasted 18.746 seconds. The per-read budget remains
+15 seconds; stage duration also includes scheduling and cleanup. Both failures
+cancelled profit preparation and retained the old report. Neither reached the
+85-second overall deadline. The timings do not prove a specific database,
+network, decoding or contention cause. No further unchanged-code retry is
+planned and no new financial result is claimed.
+
+### Narrow implementation and independent verification
+
+Notify the owned visible-refresh orchestrator only after successful primary
+source reads. Its independent profit child waits for that request-local signal
+before entering profit timing or the existing read budget. Profit can overlap
+the remaining source preparation and reconciliation, without overlapping the
+primary batch. Ordinary and detected snapshot-session callers keep the serial
+path. The existing shield/cancel/join barrier still owns both children, and
+each CAS attempt owns a fresh signal. No deadline, query, projection, financial
+arithmetic, source authority, visibility requirement, or persistence gate is
+changed. Primary failure must cancel and join the waiting profit child without
+starting a profit read; later failure must settle the sibling before return.
+
+The six code/test files are complete and independently reviewed with no
+remaining blocker. The two application files change only the readiness
+notification and request-local wait. The four existing test modules preserve
+their source query/projection and financial assertions. The bank fixture now
+uses a strict owner/period-bound collector callback instead of a plain
+AsyncMock; its bank claims and permission assertions are unchanged.
+
+Final affected verification passed **434 unique cases** across thirteen modules:
+410 in the main affected run and 24 in the bank/ordinary-worker run, with
+zero failures, errors or skips; both commands exited 0. Two pre-existing
+Pydantic deprecation warnings remain. Independent reruns passed all 83
+parallel/timing cases and all 20 bank cases. The collector test verifies one
+notification after all primary reads drain and before fee settings, with full
+output and read-sequence equality. Failure, disconnect, deadline and repeated
+cancellation cover both sides of the readiness boundary. A held second CAS
+attempt proves its profit gate starts unready, and strict serial callers reject
+the new keyword. No production budget, query, projection or arithmetic changed.
+
+The frozen-production negative control ran the sources-first overlap case and
+failed specifically because profit had already started while primary reads
+were held. The other completion-order parameter was not run as a negative
+control; both completion orders pass on the final candidate. The six-file
+reviewed binary diff SHA256 is
+`6fc71124253fc1ed0359d580deae916098274c36516d189b78b4c71c3bd260d4`.
+The detailed local verification record SHA256 is
+`d1ecf28f2a65131f01581e4b1d370b95033be7e8b378d31dfafbdd8ed6894101`.
+These local results do not prove live source or total request latency.
+
+The commit containing this checkpoint is the new source candidate A; its
+exact remote SHA is recorded in the task PR before freezing the intent.
+The next command is the governed source-A build/freeze sequence, followed by
+the exact-B gates. No new intent, deployment, financial result or lease is
+claimed by this source checkpoint. All customer, order and financial evidence
+stays in the private report, outside Git.
+
+Before any later shared-host rehearsal or mutation, inspect the original guard
+again and honor an intervening owner's lease. Subsequent release acceptance
+requires exact-B CI and artifact verification, the configured adapter,
+prepare/prepublish, one authorized publication, the original three probes and
+inactive status. Financial acceptance then requires a successfully saved
+visible refresh, bound courier/accounts/movements captures, and a second
+successful comparison proving no duplicate debit.
+
+---
+
+## Previous checkpoint: profit preparation during source collection — 19 November 2026
 
 Task branch: `codex/aramex-profit-preparation-overlap-20261119`.
 Verified production base: `f91fc7bfbb60b47e5954f4178f9b7dea6eb7fa46` (PR2007).
