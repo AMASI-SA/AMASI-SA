@@ -64,11 +64,11 @@ function BankMovements({ id, identity, bank, selected, selectedLabel, disabled, 
   </section>;
 }
 
-function ReviewDetail({ id, identity, onProof, onChanged }) {
+function ReviewDetail({ id, identity, onProof, onChanged, readOnly }) {
   const read = useBalanceRead(async config => {
     const item = await api.review(id, config);
     if (item?.assignment_id !== id) throw new Error('invalid review');
-    const options = item.status === 'pending' ? await api.reviewOptions(id, config) : null;
+    const options = item.status === 'pending' && !readOnly ? await api.reviewOptions(id, config) : null;
     return { item, options };
   }, JSON.stringify([identity, id]));
   const [draft, setDraft] = useState(initialDraft);
@@ -146,7 +146,7 @@ function ReviewDetail({ id, identity, onProof, onChanged }) {
     <p className="sb-small-note">أثر مبلغ الإيصال على صافي مستحق الموصل: <bdi>0.00 ريال</bdi>. المبلغ محصل لحساب المنشأة.</p>
     {item.has_receipt && <button type="button" className="sb-secondary" onClick={onProof}>عرض الإيصال</button>}
     {item.review_note && <p>{item.review_note}</p>}
-    {currentStatus !== 'pending' ? <p role="status" className="sb-notice">{currentStatus === 'approved' ? 'تم الاعتماد. سيظهر الإيصال ضمن المعتمدة، وتُحدّث حالته عند قراءة الموصل لحسابه.' : 'الإيصال مرفوض. يظهر سبب الرفض للموصل.'}</p> : <>
+    {readOnly && currentStatus === 'pending' ? <p>بانتظار المراجعة</p> : currentStatus !== 'pending' ? <p role="status" className="sb-notice">{currentStatus === 'approved' ? 'تم الاعتماد. سيظهر الإيصال ضمن المعتمدة، وتُحدّث حالته عند قراءة الموصل لحسابه.' : 'الإيصال مرفوض. يظهر سبب الرفض للموصل.'}</p> : <>
       <p className="sb-small-note">{bank ? 'طابق الإيصال بحركة البنك الواردة المستوردة.' : 'الاعتماد يثبت المبلغ في ذمة الشبكة حتى تسويته للبنك.'} لا يضيف مبلغ العميل إلى أجرة الموصل.</p>
       {options?.blocker && <p role="alert" className="sb-notice sb-error">تعذر الاعتماد لعدم اكتمال دليل التحصيل أو التسليم. {options.note || ''}</p>}
       {!contextValid && <p role="alert" className="sb-notice sb-error">مسار الاعتماد غير متاح. حدّث تفاصيل الإيصال.</p>}
@@ -171,7 +171,7 @@ function ReviewDetail({ id, identity, onProof, onChanged }) {
   </article>;
 }
 
-export default function SimpleBalanceReviews({ context, driverId = '', identity = '', onBack, onChanged }) {
+export default function SimpleBalanceReviews({ context, driverId = '', identity = '', onBack, onChanged, readOnly=false }) {
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate(), location = useLocation();
   const id = params.get('review_id') || '';
@@ -200,7 +200,7 @@ export default function SimpleBalanceReviews({ context, driverId = '', identity 
   return <section className="sbr-page">
     {!proof && <header className="sb-section-title"><h2>مراجعات الإيصالات</h2><button type="button" className="sb-secondary" onClick={back}>رجوع</button></header>}
     {!allowed ? <p role="alert">لا توجد صلاحية مراجعة الإيصالات.</p> : id ? <>
-      <div hidden={proof}><ReviewDetail key={`${identity}:${context.session_scope}:${context.permission_version}:${id}`} id={id} identity={key} onProof={() => go({ review_proof: '1' })} onChanged={onChanged} /></div>
+      <div hidden={proof}><ReviewDetail readOnly={readOnly} key={`${identity}:${context.session_scope}:${context.permission_version}:${id}`} id={id} identity={key} onProof={() => go({ review_proof: '1' })} onChanged={onChanged} /></div>
       {proof && <Receipt id={id} identity={key} onBack={back} />}
     </> : <>
       <div className="sbr-tabs" role="group" aria-label="حالة المراجعة">{Object.entries(statusLabels).map(([value, label]) => <button type="button" key={value} aria-pressed={status === value} onClick={() => go({ review_status: value, review_page: null })}>{label}</button>)}</div>

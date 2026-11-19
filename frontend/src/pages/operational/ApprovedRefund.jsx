@@ -22,7 +22,7 @@ function Problems({ read }) {
   if (read.loading) return <p role="status">جارٍ تحميل البيانات…</p>;
   return null;
 }
-export default function ApprovedRefund({ context, identity, onBack, onSaved }) {
+export default function ApprovedRefund({ context, identity, onBack, onSaved, readOnly=false }) {
   const [params, setParams] = useSearchParams();
   const number = normalize(params.get('order') || ''), id = params.get('refund_id') || '';
   const page = Math.max(1, Number.parseInt(params.get('refund_page'), 10) || 1);
@@ -62,7 +62,7 @@ export default function ApprovedRefund({ context, identity, onBack, onSaved }) {
   };
   const refresh = () => {record.reload();history.reload();detail.reload();};
   const item = saved?.scope === scope && saved.item.order_number === number ? saved.item : null;
-  if (id) return <div className="panel rf-block rf-wrap"><Problems read={detail}/>{detail.data && <RefundDetails key={scope + id + detail.data.status} item={detail.data} context={context} onBack={() => go(all ? {refund_history:'all'} : {order:number})} onSaved={updated} onRecoveryRetired={refresh}/>}</div>;
+  if (id) return <div className="panel rf-block rf-wrap"><Problems read={detail}/>{detail.data && <RefundDetails key={scope + id + detail.data.status} item={detail.data} context={context} readOnly={readOnly} onBack={() => go(all ? {refund_history:'all'} : {order:number})} onSaved={updated} onRecoveryRetired={refresh}/>}</div>;
   const rows = all || page > 1 ? history.data : record.data?.history;
   return <><button type="button" className="textbtn back" onClick={onBack}><Icon name="chevron-left"/>الحركات المالية</button>
     <div className="heading"><div><h1>إرجاع مبلغ لعميل</h1><p className="subtitle">ابحث برقم الطلب لمعرفة كم دفع العميل وكم تقدر ترجع له.</p></div></div>
@@ -72,7 +72,7 @@ export default function ApprovedRefund({ context, identity, onBack, onSaved }) {
       {!number && !all && <button className="textbtn" type="button" onClick={() => go({refund_history:'all'})}>عرض سجل الإرجاعات</button>}</section>
     <Problems read={record}/>
     {item && <section className="rf-status" role="status"><IconBox name="circle-check" tone="c-in"/><div><h2>{item.status === 'pending' ? 'حُفظ طلب الإرجاع' : stateLabels[item.status]}</h2><p><Amount value={item.amount} currency={item.currency}/> · {item.status === 'pending' ? item.method === 'bank' ? 'بانتظار توثيق التحويل البنكي' : 'بانتظار تأكيد ' + (item.source?.name || 'منصة الدفع') : stateLabels[item.status]}</p></div></section>}
-    {record.data && <RefundRequestForm key={scope+number+record.data.available_amount+record.data.reserved_amount} approved showForm={!item} context={context} order={record.data} onSaved={updated} onRecoveryRetired={refresh}/>}
+    {record.data && <RefundRequestForm key={scope+number+record.data.available_amount+record.data.reserved_amount} approved showForm={!item && !readOnly} context={context} order={record.data} onSaved={updated} onRecoveryRetired={refresh}/>}
     {item && <section className="panel rf-block"><h2>الخطوة التالية</h2><p>{item.status === 'pending' ? item.method === 'bank' ? 'بعد التحويل الفعلي، افتح الطلب لتوثيق وقت التحويل.' : 'طابق تأكيد المنصة مع هذا الطلب عند وصوله.' : 'يمكنك مراجعة سجل إرجاعات الطلب.'}</p><button type="button" className="button" onClick={() => setSaved(null)}>العودة إلى الطلب</button></section>}
     {(record.data || all) && <section className="panel rf-block"><h2>{all ? 'سجل الإرجاعات' : 'سجل إرجاعات الطلب'}</h2><Problems read={history}/>
       {rows && (rows.items.length ? rows.items.map(row => <div className="rf-row" key={row.id}><div><button className="textbtn" type="button" onClick={() => go({order:row.order_number,refund_id:row.id,refund_history:all?'all':''})}>

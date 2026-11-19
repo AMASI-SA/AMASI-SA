@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { formatRiyadhArabicLong } from '../../lib/dates';
+import { grantedWebLink } from '../../lib/webPageAccess';
 import { operationalApi } from './api';
 import { useBalanceRead } from './simpleBalancesHooks';
 import { minorUnits, resourceKey, signedResourceBalance } from './simpleBalancesModel';
@@ -55,7 +56,7 @@ function ToolGroup({ name, links }) {
   </div></section>;
 }
 
-export default function ApprovedOperations({ context, onBack }) {
+export default function ApprovedOperations({ context, onBack, pages=null }) {
   const owner = context.actor?.is_owner === true;
   const workspace = useLocation().pathname;
   const grants = new Set((context.operations || []).map(operation => typeof operation === 'string' ? operation : operation.key));
@@ -66,17 +67,19 @@ export default function ApprovedOperations({ context, onBack }) {
   if (grants.has('courier.review') && context.resources.some(r => r.kind === 'store_driver' && r.access?.movements === 'all')) {
     employeeLinks.push(['مراجعة تحصيلات الموصلين', workspace + '?view=collections', 'list-checks']);
   }
+  const visibleGroups = tools.map(([name, links]) => [name, links.filter(([,to,,requirement]) =>
+    (owner || pages && grantedWebLink(pages,to) && (!to.endsWith('#upload') || pages.some(page=>page.id==='balances.statements'&&page.mode==='write'))) && (requirement === 'access' ? context.capabilities?.manage_access === true : !requirement || context.status === requirement))]);
+  const visibleEmployees = employeeLinks.filter(([,to])=>grantedWebLink(pages,to));
   return <>
     <button type="button" className="textbtn back" onClick={onBack}><Icon name="chevron-left" />الأرصدة التشغيلية</button>
     <Heading title="العمليات والكشوف" />
-    {owner && tools.map(([name, links]) => <ToolGroup key={name} name={name}
-      links={links.filter(([, , , grant]) => grant === 'access' ? context.capabilities?.manage_access === true : !grant || context.status === grant)} />)}
-    <ToolGroup name="عمليات الطلبات" links={employeeLinks} />
-    {!owner && !employeeLinks.length && <p className="empty">لا توجد عمليات إضافية متاحة ضمن صلاحياتك.</p>}
+    {visibleGroups.map(([name, links]) => <ToolGroup key={name} name={name} links={links} />)}
+    <ToolGroup name="عمليات الطلبات" links={visibleEmployees} />
+    {!owner && !visibleEmployees.length && !visibleGroups.some(([,links])=>links.length) && <p className="empty">لا توجد عمليات إضافية متاحة ضمن صلاحياتك.</p>}
   </>;
 }
 
-function PositionLine({ resource, onOpen }) {
+function PositionLine({ resource, onOpen, enabled=true }) {
   const [type, icon, tone] = styleOf(resource);
   const isAccount = isAsset(resource.kind);
   const signed = signedResourceBalance(resource);
@@ -87,7 +90,7 @@ function PositionLine({ resource, onOpen }) {
     if (isAccount && resource.balance.side === 'for_party') amount = '-' + amount;
   }
   if (resource.kind === 'ad_account') amount = resource.access?.balance === true ? resource.ad_wallet_balance : null;
-  return <button type="button" className="review-item mz-position-line" onClick={() => onOpen(resource)}>
+  return <button type="button" className="review-item mz-position-line" disabled={!enabled} onClick={() => onOpen(resource)}>
     <IconBox name={icon} tone={tone} />
     <span>{resource.name}<small className="under">{resource.kind === 'ad_account' ? 'رصيد المحفظة الإعلانية' : type}</small></span>
     <strong className="end"><Amount value={amount} currency={resource.currency}/> {description && <small>{description}</small>}</strong>
@@ -99,7 +102,7 @@ function PositionMetric({ title, amount, currency, partial }) {
     {partial && <small>الأرصدة المثبتة فقط</small>}</div>;
 }
 
-export function ApprovedPosition({ context, identity, onBack, onOpen }) {
+export function ApprovedPosition({ context, identity, onBack, onOpen, scoped=false, canOpen=()=>true }) {
   const owner = context.actor?.is_owner === true;
   const [selectedCurrency, setSelectedCurrency] = useState('');
   const [page, setPage] = useState(1);
@@ -113,7 +116,7 @@ export function ApprovedPosition({ context, identity, onBack, onOpen }) {
     }
     return report;
   }, JSON.stringify([identity, context.session_scope, context.permission_version, 'position']), owner && context.status === 'active');
-  if (!owner) return <p role="alert">المركز المالي متاح لمالك الحساب.</p>;
+  if (!owner && !scoped) return <p role="alert">المركز المالي متاح لمالك الحساب.</p>;
   const report = read.data;
   const currencies = Object.keys(report?.currencies || {});
   const currency = currencies.includes(selectedCurrency) ? selectedCurrency : currencies.includes('SAR') ? 'SAR' : currencies[0];
@@ -128,9 +131,9 @@ export function ApprovedPosition({ context, identity, onBack, onOpen }) {
   const date = report?.as_of && Number.isFinite(Date.parse(report.as_of)) ? formatRiyadhArabicLong(report.as_of) : '';
   return <>
     <button type="button" className="textbtn back" onClick={onBack}><Icon name="chevron-left" />الأرصدة التشغيلية</button>
-    <Heading title="المركز المالي" subtitle={date ? 'ملخص المالك في ' + date : 'ملخص المالك'}>
-      <Link to={positionView('summary')} className="textbtn">التقرير التفصيلي <Icon name="chevron-left" /></Link></Heading>
-    {context.status !== 'active' ? <p className="empty">يتاح ملخص المركز المالي أثناء التشغيل بعد اعتماد الأرصدة الافتتاحية.</p>
+    <Heading title="المركز المالي" subtitle={scoped ? 'أرصدة الحسابات والجهات المسموح لك بعرضها' : date ? 'ملخص المالك في ' + date : 'ملخص المالك'}>
+      {owner&&<Link to={positionView('summary')} className="textbtn">التقرير التفصيلي <Icon name="chevron-left" /></Link>}</Heading>
+    {!scoped && (context.status !== 'active' ? <p className="empty">يتاح ملخص المركز المالي أثناء التشغيل بعد اعتماد الأرصدة الافتتاحية.</p>
       : read.error ? <div role="alert" className="note warning">{read.error}{' '}<button type="button" className="textbtn" onClick={read.reload}>إعادة المحاولة</button></div>
       : !report ? <p role="status">جارٍ قراءة ملخص الأرصدة…</p> : !figures ? <p className="empty">لا توجد بيانات عملة متاحة لهذا الملخص.</p>
       : <>
@@ -140,9 +143,9 @@ export function ApprovedPosition({ context, identity, onBack, onOpen }) {
           <PositionMetric title="مبالغ عند منصات الدفع" amount={figures.debt_rows?.find(row => row.id === 'providers')?.receivable}
             currency={currency} partial={figures.completeness?.actual === false} />
           <PositionMetric title="مبالغ مستحقة للجهات" amount={figures.debt_totals?.payable} currency={currency}
-            partial={figures.completeness?.actual === false && figures.debt_totals?.payable != null} /></div></>}
+            partial={figures.completeness?.actual === false && figures.debt_totals?.payable != null} /></div></>)}
     <section className="section panel sheet"><div className="section-head"><h2>تفاصيل الأرصدة</h2></div>
-      {resources.slice(from, from + pageSize).map(resource => <PositionLine key={resourceKey(resource)} resource={resource} onOpen={onOpen} />)}
+      {resources.slice(from, from + pageSize).map(resource => <PositionLine key={resourceKey(resource)} resource={resource} onOpen={onOpen} enabled={canOpen(resource)} />)}
       {pages > 1 && <nav className="movement-pages" aria-label="صفحات تفاصيل الأرصدة">
         <span>عرض {from + 1}–{Math.min(from + pageSize, resources.length)} من {resources.length}</span><div>
           <button type="button" className="button" onClick={() => setPage(activePage - 1)} disabled={activePage === 1}>السابق</button>

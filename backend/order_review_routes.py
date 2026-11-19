@@ -243,6 +243,9 @@ def _require_reviewer(user: Any) -> dict:
             "mobile_app_permissions": user.get("_mobile_app_permissions") or [],
             "_review_session": user.get("_review_session"), "_session_client": "amasi_mobile",
         }
+    scope = user.get("_web_workspace_read") if isinstance(user, dict) else None
+    if scope and scope[0] in {"fulfillment.overview", "fulfillment.reviewed", "fulfillment.reviewed_files"} and "orders.manage" not in (user.get("denied_permissions") or []):
+        return user
     if not _can_review(user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -929,6 +932,8 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
                                 user: dict = Depends(current_user)) -> dict[str, Any]:
         reviewer = _require_reviewer(user)
         merchant_id = _merchant_user_id(reviewer)
+        if reviewer.get("_web_workspace_read"):
+            local_only = True
         session_context = None
         if readback_contract_version == 2:
             from review_session_fence import review_session_context

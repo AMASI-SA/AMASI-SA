@@ -260,10 +260,7 @@ async def readiness_check(response: Response):
 
 # ── Dependencies ──────────────────────────────────────────────────────────────
 async def current_user(request: Request) -> dict:
-    from web_page_access import enforce_web_catalog_access
-
     user = await get_current_user_from_db(request, db)
-    enforce_web_catalog_access(user, request.url.path, request.method)
     # Native employees authenticate as themselves, but Mezan's historical data
     # remains tenant-scoped by the merchant owner id. Bridge those identities
     # only for an explicit native-route allow-list and only after checking the

@@ -483,20 +483,21 @@ def make_preparation_file_registry_router(
         user_id = _merchant_user_id(reviewer)
         await ensure_preparation_file_registry_indexes(db)
 
-        drafts = await db[REGISTRY].find(
-            {"user_id": user_id, "status": "draft"},
-            {"_id": 0, "client_request_id": 1},
-        ).limit(100).to_list(100)
-        for draft in drafts:
-            try:
-                await _finalize_registry_row(
-                    db,
-                    user_id=user_id,
-                    client_request_id=_text(draft.get("client_request_id")),
-                    actor=reviewer,
-                )
-            except HTTPException:
-                continue
+        if not user.get("_web_workspace_read"):
+            drafts = await db[REGISTRY].find(
+                {"user_id": user_id, "status": "draft"},
+                {"_id": 0, "client_request_id": 1},
+            ).limit(100).to_list(100)
+            for draft in drafts:
+                try:
+                    await _finalize_registry_row(
+                        db,
+                        user_id=user_id,
+                        client_request_id=_text(draft.get("client_request_id")),
+                        actor=reviewer,
+                    )
+                except HTTPException:
+                    continue
 
         rows = await db[REGISTRY].find(
             {"user_id": user_id, "status": "ready"},

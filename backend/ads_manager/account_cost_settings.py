@@ -164,8 +164,9 @@ def _effective_item(account: dict[str, Any], setting: dict[str, Any] | None) -> 
     }
 
 
-async def list_account_cost_settings(db: Any, user_id: str) -> dict[str, Any]:
-    await ensure_account_cost_settings_indexes(db)
+async def list_account_cost_settings(db: Any, user_id: str, *, ensure_indexes: bool = True) -> dict[str, Any]:
+    if ensure_indexes:
+        await ensure_account_cost_settings_indexes(db)
     accounts = await _integration_accounts(db, user_id)
     ids = [row["mezan_integration_account_id"] for row in accounts]
     settings_cursor = db[COLLECTION].find(

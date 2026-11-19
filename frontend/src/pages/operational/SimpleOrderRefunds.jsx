@@ -113,7 +113,7 @@ export function RefundRequestForm({ context, order, onSaved, onRecoveryRetired, 
   </section>;
 }
 
-export function RefundDetails({ context, item, onSaved, onBack, onRecoveryRetired }) {
+export function RefundDetails({ context, item, onSaved, onBack, onRecoveryRetired, readOnly=false }) {
   const operations = permittedOperations(context);
   const mutation = useRefundMutation({ context, identity: `item:${item.id}`, targetId: item.id,
     validate: value => ['confirm', 'cancel', 'reconcile'].includes(value.action),
@@ -137,7 +137,7 @@ export function RefundDetails({ context, item, onSaved, onBack, onRecoveryRetire
     setExecutedAt(localTime(pendingBody.executed_at)); setConfirmed(pendingBody.confirmed === true);
     setReason(pendingAction === 'cancel' ? pendingBody.reason || '' : '');
   }, [pendingBody, pendingAction]);
-  const active = context.status === 'active';
+  const active = !readOnly && context.status === 'active';
   const canConfirm = active && item.method === 'bank' && item.status === 'pending' && item.can_confirm === true && operations.has('customer.refund_execute');
   const evidence = Array.isArray(item.provider_evidence) ? item.provider_evidence : [];
   const canReconcile = active && item.method === 'original' && item.status === 'pending' && item.can_reconcile === true

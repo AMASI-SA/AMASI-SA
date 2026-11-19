@@ -1,11 +1,18 @@
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import AmasiDeliveryApp from "../pages/AmasiDeliveryApp";
 import AuthLoadingScreen from "./AuthLoadingScreen";
 import AuthRecoveryScreen from "./AuthRecoveryScreen";
-import { EmployeePageUnavailable } from "./EmployeeWebLayout";
+import EmployeeWebLayout, { EmployeePageUnavailable } from "./EmployeeWebLayout";
 import { grantedPageAt, managedWebPages } from "../lib/webPageAccess";
+
+const EmployeeBalanceSpecialist = lazy(() => import("../pages/operational/EmployeeBalanceSpecialist"));
+const balanceReports = new Set(["balances.returns", "balances.exchanges", "balances.fees"]);
+const EmployeeLegacyRead = lazy(() => import("../pages/EmployeeLegacyRead"));
+const EmployeeMarketingRead = lazy(() => import("../pages/EmployeeMarketingRead"));
+const EmployeeOperationsReadPage = lazy(() => import("../pages/EmployeeOperationsReadPage"));
+const operationsReports = new Set(["employees.staff", "employees.drivers", "employees.migration", "finance.collections", "finance.settlements", "shipping.settings"]);
 
 export default function ProtectedRoute({ children }) {
     const { user, loading, authStatus, retryAuth } = useAuth();
@@ -61,10 +68,20 @@ export default function ProtectedRoute({ children }) {
     }
     const pages = managedWebPages(user);
     if (pages) {
-        if (pages.length > 0 && ["/", "/dashboard-advanced"].includes(location.pathname)) {
+        const page = grantedPageAt(pages, location);
+        if (!page && pages.length > 0 && ["/", "/dashboard-advanced"].includes(location.pathname) && !location.search) {
             return <Navigate to={pages[0].to} replace />;
         }
-        if (!grantedPageAt(pages, location)) return <EmployeePageUnavailable pages={pages} />;
+        if (!page) return <EmployeePageUnavailable pages={pages} />;
+        const Reader = page.review_component === "legacy_read" ? EmployeeLegacyRead
+            : page.review_component === "marketing_read" ? EmployeeMarketingRead
+            : balanceReports.has(page.id) ? EmployeeBalanceSpecialist
+            : operationsReports.has(page.id) ? EmployeeOperationsReadPage : null;
+        if (Reader) {
+            return <EmployeeWebLayout pages={pages}><Suspense fallback={<p role="status">جارٍ فتح الصفحة…</p>}>
+                <Reader key={JSON.stringify([user.id, user.created_by, page.id, page.mode])} pageId={page.id} page={page} />
+            </Suspense></EmployeeWebLayout>;
+        }
     }
     return children;
 }

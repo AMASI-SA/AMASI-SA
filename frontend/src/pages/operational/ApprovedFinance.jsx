@@ -1,7 +1,7 @@
 import React, { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useOptionalAuth } from '../../context/AuthContext';
-import { managedWebPages } from '../../lib/webPageAccess';
+import { grantedWebLink, managedWebPages } from '../../lib/webPageAccess';
 import { simpleBalancesApi as api } from './simpleBalancesApi';
 import { authIdentity, useBalanceRead } from './simpleBalancesHooks';
 import { movementDate, movementRecorder, movementTitle, validContext } from './simpleBalancesModel';
@@ -46,15 +46,17 @@ function Shell({context,view,title,active,to,user,children}) {
   const {search}=useLocation();
   useEffect(()=>{setDrawer(false);window.scrollTo(0,0)},[search]);
   useEffect(()=>{if(!drawer)return; const hide=e=>{if(e.key==='Escape')setDrawer(false)};document.addEventListener('keydown',hide);return()=>document.removeEventListener('keydown',hide)},[drawer]);
-  const backTo=managedWebPages(user)?.find(p=>!p.to.startsWith('/operational-balances'))?.to || (managedWebPages(user)?'/':'/dashboard-v2');
+  const pages=managedWebPages(user);
+  const firstFinance=pages?.find(p=>p.section==='balances')?.to || to('home');
+  const backTo=pages?.find(p=>!p.to.startsWith('/operational-balances'))?.to || (managedWebPages(user)?'/':'/dashboard-v2');
   return <div className="mz-finance" dir="rtl"><div className={'shell'+(drawer?' mobile-nav-open':'')}>
     {drawer&&<button className="mobile-mask" aria-label="إغلاق القائمة" onClick={()=>setDrawer(false)}/>}
-    <aside className="side"><Link className="brand" to={to('home')}><span className="brand-mark"><Icon name="scale"/></span><div><b>ميزان ٢</b><small>{user?.store_name||user?.company_name||'الأرصدة التشغيلية'}</small></div></Link>
-    <nav className="nav" aria-label="صفحات الأرصدة">{navigation.filter(([key])=>key!=='position'||context.actor.is_owner).map(([key,label,icon])=>
+    <aside className="side"><Link className="brand" to={firstFinance}><span className="brand-mark"><Icon name="scale"/></span><div><b>ميزان ٢</b><small>{user?.store_name||user?.company_name||'الأرصدة التشغيلية'}</small></div></Link>
+    <nav className="nav" aria-label="صفحات الأرصدة">{navigation.filter(([key])=>(key!=='position'||context.actor.is_owner||pages) && grantedWebLink(pages,to(key))).map(([key,label,icon])=>
       <Link key={key} to={to(key)} className={active===key?'on':''} aria-current={active===key?'page':undefined}><Icon name={icon}/>{label}</Link>)}</nav>
     <div className="side-foot"><div className="profile"><span className="avatar">{context.actor.name?.slice(0,1)||'م'}</span><div><b>{context.actor.name}</b><small>{context.actor.is_owner?'مالك المؤسسة':'موظف العمليات'}</small></div></div><Link to={backTo} className="textbtn finance-return"><Icon name="chevron-left"/>العودة إلى ميزان</Link></div></aside>
-    <div className="workspace"><header className="bar"><div className="trail"><button className="desktop-hide glyph-btn" aria-label="القائمة" aria-expanded={drawer} onClick={()=>setDrawer(!drawer)}><Icon name="menu"/></button><Link to={to('home')}>ميزان ٢</Link><span className="sep">/</span><b>{title}</b></div>
-      {view!=='tools'&&<Link className="textbtn" to={to('tools')}><Icon name="layers"/>العمليات والكشوف</Link>}</header>
+    <div className="workspace"><header className="bar"><div className="trail"><button className="desktop-hide glyph-btn" aria-label="القائمة" aria-expanded={drawer} onClick={()=>setDrawer(!drawer)}><Icon name="menu"/></button><Link to={firstFinance}>ميزان ٢</Link><span className="sep">/</span><b>{title}</b></div>
+      {view!=='tools'&&grantedWebLink(pages,to('tools'))&&<Link className="textbtn" to={to('tools')}><Icon name="layers"/>العمليات والكشوف</Link>}</header>
     <main className="content" id="finance-main">{children}</main></div></div></div>;
 }
 function Dialog({title,onClose,children}) {
@@ -75,12 +77,18 @@ function FinanceWorkspace({context,identity,user,view,to,params,reload}) {
   const refreshAfterReview=()=>{deferredRefresh.current=true;};
   const scoped=params.has('id') || params.has('kind');
   const selected=scoped?context.resources.find(r=>r.kind===params.get('kind')&&r.id===params.get('id')):null;
-  const go=(name,r,more)=>navigate(to(name,r,more));
+  const pages=managedWebPages(user);
+  const allowedTo=(viewName,resource)=>grantedWebLink(pages,to(viewName,resource));
+  const writePage=id=>!pages||pages.some(p=>p.id===id&&p.mode==='write');
+  const go=(name,r,more)=>{
+    const dest=to(name,r,more);
+    navigate(grantedWebLink(pages,dest)?dest:pages?.find(page=>page.section==='balances')?.to||'/');
+  };
   const home=()=>go('home'), open=r=>go('ledger',r), issues=r=>go('issues',r);
   const granted=new Set(context.operations.map(o=>typeof o==='string'?o:o.key));
-  const canRefund=granted.has('customer.refund_request')||granted.has('customer.refund_execute');
-  const canCollect=granted.has('courier.review')&&context.resources.some(r=>r.kind==='store_driver'&&r.access.movements==='all');
-  const addAvailable=context.status==='active'&&context.capabilities?.create_entries===true;
+  const canRefund=allowedTo('refund')&&(granted.has('customer.refund_request')||granted.has('customer.refund_execute'));
+  const canCollect=allowedTo('collections')&&granted.has('courier.review')&&context.resources.some(r=>r.kind==='store_driver'&&r.access.movements==='all');
+  const addAvailable=allowedTo('entry')&&writePage('balances.entry')&&context.status==='active'&&context.capabilities?.create_entries===true;
   const canAdd=addAvailable && (!selected||selected.access?.use&&selected.operations?.length>0);
   const add=r=>{
     const mode=r?.prepaid_shipping_cash?'wallet':r?.kind==='ad_account'?'ads':
@@ -106,25 +114,25 @@ function FinanceWorkspace({context,identity,user,view,to,params,reload}) {
   if(scoped&&!selected)content=unavailable;
   else switch(view){
     case 'assets':case 'parties':content=<ApprovedDirectory key={view} context={context} people={view==='parties'} to={to} onAdd={canAdd?()=>add(null):null}/>;break;
-    case 'log':case 'ledger':content=view==='ledger'&&!selected?unavailable:<Ledger key={JSON.stringify([view,selected?.kind,selected?.id])} {...shared} resource={selected} onAdd={canAdd?add:null} onBack={returnDirectory} onReviewOrders={issues}
+    case 'log':case 'ledger':content=view==='ledger'&&!selected?unavailable:<Ledger key={JSON.stringify([view,selected?.kind,selected?.id])} {...shared} resource={selected} onAdd={canAdd?add:null} onBack={returnDirectory} onReviewOrders={allowedTo('issues')?issues:undefined}
       onHistory={row=>{setHistoryPage(1);setModal({history:context.resources.find(r=>r.kind===row.party_type&&r.id===row.party_id)})}}
       onExpected={(r,summary)=>setModal({expected:summary,resource:r})} onReviewCollections={canCollect?collections:undefined}/>;break;
     case 'special-entry':content=!canAdd?unavailable:selected?<><Heading title={'عمليات '+selected.name}/><SpecializedEntry context={context} resource={selected} onCancel={back} onSaved={saved}/></>:
       <><Heading title="عمليات مالية أخرى" subtitle="اختر الحساب أو الجهة لتظهر العمليات المتاحة لك."/>
       <div className="panel sheet">{context.resources.filter(r=>r.access?.use && r.operations?.length).map(r=>
         <Link key={r.kind+':'+r.id} className="review-item" to={to('special-entry',r)}>{r.name}<Icon name="chevron-left" className="end"/></Link>)}</div></>;break;
-    case 'entry':content=<><Entry {...shared} resource={selected} mode={params.get('mode')||'choose'} onBack={back} onSaved={saved} onRefund={canRefund?()=>go('refund'):null}/>
+    case 'entry':content=!writePage('balances.entry')?<><Heading title="حركة مالية جديدة"/><p className="note">صلاحيتك للعرض. تسجيل حركة يتطلب صلاحية الكتابة على الصفحة والحساب.</p></>:<><Entry {...shared} resource={selected} mode={params.get('mode')||'choose'} onBack={back} onSaved={saved} onRefund={canRefund?()=>go('refund'):null}/>
       {canAdd && <p className="footnote"><Link className="textbtn" to={to('special-entry',selected)}><Icon name="layers"/>عمليات مالية أخرى</Link></p>}</>;break;
-    case 'refund':content=canRefund?<Refund {...shared} onBack={()=>go('entry')} onSaved={refreshAfterReview}/>:unavailable;break;
+    case 'refund':content=canRefund?<Refund {...shared} readOnly={!writePage('balances.refund')} onBack={()=>go('entry')} onSaved={refreshAfterReview}/>:unavailable;break;
     case 'issues':content=<Issues {...shared} resource={selected} onBack={()=>selected?open(selected):go('reviews')} onReviewCollections={canCollect?collections:undefined}/>;break;
-    case 'collections':content=canCollect?<ReviewCollections {...shared} driverId={selected?.kind==='store_driver'?selected.id:''} onBack={()=>go('reviews')} onChanged={refreshAfterReview}/>:unavailable;break;
+    case 'collections':content=canCollect?<ReviewCollections {...shared} readOnly={!writePage('balances.collections')} driverId={selected?.kind==='store_driver'?selected.id:''} onBack={()=>go('reviews')} onChanged={refreshAfterReview}/>:unavailable;break;
     case 'reviews':content=<><Heading title="تحتاج مراجعة" subtitle="افتح الطلب أو الحركة لمعرفة السبب ومراجعة المصدر."/>
-      {context.resources.some(r=>Object.hasOwn(r,'order_issues_count'))&&<Link to={to('issues')} className="issue-notice"><IconBox name="clipboard-list" tone="c-wait"/><span><strong>طلبات تحتاج مراجعة</strong><small>اعرض أرقام الطلبات وسبب المراجعة لكل طلب.</small></span><b>عرض الطلبات <Icon name="chevron-left"/></b></Link>}
+      {allowedTo('issues')&&context.resources.some(r=>Object.hasOwn(r,'order_issues_count'))&&<Link to={to('issues')} className="issue-notice"><IconBox name="clipboard-list" tone="c-wait"/><span><strong>طلبات تحتاج مراجعة</strong><small>اعرض أرقام الطلبات وسبب المراجعة لكل طلب.</small></span><b>عرض الطلبات <Icon name="chevron-left"/></b></Link>}
       {canCollect?<section className="panel sheet"><div className="section-head"><h2>حركات مالية تنتظر المراجعة</h2></div><Link className="review-item" to={to('collections')}><IconBox name="receipt-text" tone="provider"/><span><b>مراجعة تحصيلات الموصلين</b><small className="under">تحويلات العملاء وإيصالات الشبكة</small></span><Icon name="chevron-left" className="end"/></Link></section>:
       <p className="under">تظهر لك المراجعات المتاحة لحسابك.</p>}</>;break;
-    case 'position':content=context.actor.is_owner?<Position {...shared} onBack={home} onOpen={open}/>:unavailable;break;
-    case 'tools':content=<Tools {...shared} onBack={home}/>;break;
-    default:content=<ApprovedHome context={context} to={to} canAdd={canAdd} onDetail={row=>setModal({row})}/>;
+    case 'position':content=context.actor.is_owner||pages?<Position {...shared} scoped={!context.actor.is_owner} onBack={home} onOpen={r=>{if(allowedTo('ledger',r))open(r)}} canOpen={r=>allowedTo('ledger',r)}/>:unavailable;break;
+    case 'tools':content=<Tools {...shared} pages={pages} onBack={home}/>;break;
+    default:content=<ApprovedHome context={context} to={to} allowedTo={allowedTo} canAdd={canAdd} onDetail={row=>setModal({row})}/>;
   }
   const row=modal?.row;
   return <Shell context={context} user={user} view={view} title={title} active={active} to={to}><Suspense fallback={<p className="empty" role="status">جارٍ فتح الصفحة…</p>}>{content}</Suspense>
@@ -143,15 +151,16 @@ export default function ApprovedFinance({defaultView='home'}) {
   useEffect(()=>{if(view==='log'||view==='ledger')loadLedger().catch(()=>{});},[view]);
   const [homeRequested,setHomeRequested]=useState(view==='home');
   useEffect(()=>{if(view==='home')setHomeRequested(true)},[view]);
-  const requestPreview=homeRequested||view==='home';
+  const pages=managedWebPages(auth?.user);
+  const requestPreview=(homeRequested||view==='home') && (!pages||pages.some(p=>p.id==='balances.home'));
   const read=useBalanceRead(async config=>{
     const value=await api.context(config,{homePreview:requestPreview});
     if(!validContext(value)||auth?.user?.id&&auth.user.id!==value.actor.id)throw new Error('invalid finance context');
     return value;
-  },JSON.stringify([identity,requestPreview]),!auth||Boolean(auth.user?.id)&&!auth.loading);
+  },JSON.stringify([identity,requestPreview,pages?.map(p=>[p.id,p.mode])]),!auth||Boolean(auth.user?.id)&&!auth.loading);
   const to=(name,resource,extra)=>routeTo(location.pathname,name,resource,extra);
   if(!read.data)return <div className="mz-finance" dir="rtl"><main className="content"><Heading title="الأرصدة التشغيلية"/>{read.error?
     <><p role="alert" className="note">{read.error}</p><button className="button" onClick={read.reload}>إعادة المحاولة</button>
-    <Link className="textbtn" to="/operational-balances?view=specialized">الإعدادات والعمليات المتخصصة</Link></>:<p role="status">جارٍ تحميل الأرصدة…</p>}</main></div>;
+    {grantedWebLink(pages,'/operational-balances?view=specialized')&&<Link className="textbtn" to="/operational-balances?view=specialized">الإعدادات والعمليات المتخصصة</Link>}</>:<p role="status">جارٍ تحميل الأرصدة…</p>}</main></div>;
   return <FinanceWorkspace key={JSON.stringify([identity,read.data.session_scope,read.data.permission_version])} identity={identity} user={auth?.user} context={read.data} view={view} params={params} to={to} reload={read.reload}/>;
 }

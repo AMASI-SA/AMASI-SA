@@ -6,7 +6,7 @@ import { useOptionalAuth } from '../../context/AuthContext';
 
 jest.mock('./simpleBalancesApi', () => ({ simpleBalancesApi: { accessCatalog: jest.fn(), accessUsers: jest.fn(), userAccess: jest.fn(), saveUserAccess: jest.fn() }, simpleBalanceError: () => 'تعذر تحميل الصلاحيات' }));
 jest.mock('../../context/AuthContext', () => ({ useOptionalAuth: jest.fn() }));
-jest.mock('react-router-dom', () => ({ Link: ({ to, children, ...props }) => <a href={to} {...props}>{children}</a> }));
+jest.mock('react-router-dom', () => ({ useLocation: () => ({ search: globalThis.location.search }), Link: ({ to, children, ...props }) => <a href={to} {...props}>{children}</a> }));
 global.IS_REACT_ACT_ENVIRONMENT = true;
 const user = { id: 'staff', name: 'محمد', role: 'employee' };
 const catalog = {
@@ -552,4 +552,17 @@ test('a resource added after a saved bulk action has no implicit permissions', a
   expect(buttonNamed('تطبيق على جميع الموردين (4)').disabled).toBe(true);
   expect(buttonNamed('حفظ صلاحيات الموظف').disabled).toBe(true);
   expect(api.saveUserAccess).toHaveBeenCalledTimes(1);
+});
+
+test.each([['staff',true], ['not-in-this-store',false]])('permission deep link validates member %s against the accessible roster', async (member,matched) => {
+  global.history.replaceState(null, '', '/operational-balances/access?member='+member);
+  try {
+    await render(<SimpleBalanceAccess/>);
+    const back=host.querySelector('a[href^="/employees-v2?workspace=permissions"]');
+    expect(back.getAttribute('href')).toBe('/employees-v2?workspace=permissions'+(matched?'&member=staff':''));
+    expect(host.querySelector('.sb-content select').value).toBe(matched?'staff':'');
+    if(matched) expect(api.userAccess).toHaveBeenCalledWith('staff', expect.anything());
+    else expect(api.userAccess).not.toHaveBeenCalled();
+    expect(api.saveUserAccess).not.toHaveBeenCalled();
+  } finally {global.history.replaceState(null, '', '/');}
 });

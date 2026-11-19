@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useOptionalAuth } from '../../context/AuthContext';
 import { simpleBalancesApi as api, simpleBalanceError } from './simpleBalancesApi';
 import { authIdentity, useBalanceRead } from './simpleBalancesHooks';
@@ -154,10 +154,16 @@ function AccessEditor({ user, catalog, identity }) {
 }
 
 export default function SimpleBalanceAccess() {
+  const { search } = useLocation();
+  const memberId = new URLSearchParams(search).get('member') || '';
+  return <BalanceAccessPage key={memberId} initialMemberId={memberId}/>;
+}
+
+function BalanceAccessPage({initialMemberId}) {
   const auth = useOptionalAuth();
   const identity = authIdentity(auth);
   const owner = auth?.user?.is_owner === true;
-  const [selectedId, setSelectedId] = useState('');
+  const [selectedId, setSelectedId] = useState(initialMemberId);
   const read = useBalanceRead(async config => {
     const [catalog, users] = await Promise.all([api.accessCatalog(config), api.accessUsers(config)]);
     if (!Array.isArray(catalog?.operations) || !Array.isArray(catalog?.resources)
@@ -170,7 +176,9 @@ export default function SimpleBalanceAccess() {
       : <><p>حدد الموظف، ثم الحسابات التي يتعامل معها والعمليات المسموحة له. الحفظ يتم بعد مراجعة اختياراتك.</p>
         {read.error && <><p role="alert" className="sb-notice sb-error">{read.error}</p><button type="button" className="sb-secondary" onClick={read.reload}>إعادة التحميل</button></>}
         {!read.data && !read.error && <p role="status">جارٍ تحميل الموظفين والحسابات…</p>}
-        {read.data && <><label className="sb-field"><span>الموظف</span><select value={selectedId} onChange={event => setSelectedId(event.target.value)}><option value="">اختر الموظف</option>{read.data.users.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>{!read.data.users.length && <p>لا توجد حسابات موظفين متاحة لإدارة صلاحياتها.</p>}{user && <AccessEditor key={`${identity}:${user.id}`} identity={identity} user={user} catalog={read.data.catalog} />}</>}
+        {read.data && <><label className="sb-field"><span>الموظف</span><select value={user?.id || ''} onChange={event => setSelectedId(event.target.value)}><option value="">اختر الموظف</option>{read.data.users.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>{!read.data.users.length && <p>لا توجد حسابات موظفين متاحة لإدارة صلاحياتها.</p>}{selectedId && !user && <p role="status">لا يوجد حساب مطابق لهذا الموظف ضمن صلاحيات الأرصدة. اختر حسابًا من القائمة.</p>}
+        <Link className="sb-header-link" to={'/employees-v2?workspace=permissions' + (user ? '&member=' + encodeURIComponent(user.id) : '')}>إدارة صفحات {user ? user.name : 'ميزان'}</Link>
+        {user && <AccessEditor key={`${identity}:${user.id}`} identity={identity} user={user} catalog={read.data.catalog} />}</>}
       </>}
   </div></main>;
 }

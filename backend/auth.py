@@ -342,6 +342,12 @@ async def get_current_user_from_db(request: Request, db) -> dict:
         # Private request context used only by server-side native-app policy.
         # It is derived from the signed JWT and cannot be supplied by a header.
         user["_session_client"] = str(payload.get("client") or "").strip() or None
+        user.pop("_web_workspace_read", None)
+        if "web_page_access" in user and user["_session_client"] != "amasi_mobile":
+            # Legacy routers authenticate here directly, as do Mezan 2 dependencies.
+            from web_page_access import bind_workspace_reader, enforce_web_catalog_access
+            enforce_web_catalog_access(user, request.url.path, request.method, request.query_params)
+            await bind_workspace_reader(db, user, request.url.path, request.method, request.query_params)
         return user
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")

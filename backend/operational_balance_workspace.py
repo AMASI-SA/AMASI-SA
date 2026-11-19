@@ -732,7 +732,7 @@ def install_workspace_routes(router, db, current_user, scope):
         actor, owner, source = await scope(db, user, "workspace")
         policy = await load_access(db, actor, owner)
         if not policy.owner_override and not policy.enabled:
-            fail("operational_workspace_access_required", "اطلب من المالك تحديد صلاحياتك في التطبيق", 403)
+            fail("operational_workspace_access_required", "اطلب من المالك تفعيل صلاحيات الأرصدة وتحديد الحسابات المتاحة لك", 403)
         return actor, owner, source, policy
 
     async def checked_read(user, callback, *, ad_bank_fx=False, selected_resource=None):
@@ -764,6 +764,12 @@ def install_workspace_routes(router, db, current_user, scope):
                                      "create_entries": state["status"] == "active" and any(row["operations"] for row in resources)},
                     "operations": [{"key": key, "label": label} for key, label in OPERATION_LABELS.items() if policy.can_operation(key)]}
         return await run_visible_report_read(request, lambda: checked_read(user, project, ad_bank_fx=ad_bank_fx))
+
+    @router.get("/workspace/specialist/{which}")
+    async def specialist(request: Request, which: Literal["returns", "exchanges", "fees"],
+                         page: int = Query(default=1, ge=1), user=Depends(current_user)):
+        from operational_web_specialist_reads import specialist_page
+        return await run_visible_report_read(request, lambda: specialist_page(db, user, load, which, page))
 
     @router.get("/workspace/order-issues")
     async def order_issues(request: Request, kind: str | None = Query(default=None, max_length=50),

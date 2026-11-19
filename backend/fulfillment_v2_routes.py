@@ -2077,11 +2077,27 @@ async def _actor_context(
         owner_user_id=merchant_id,
         user_id=actor_id,
     )
+    permissions = set(effective_permissions(assignment))
+    reader = user.get("_web_workspace_read")
+    if reader and reader[1] == merchant_id:
+        read_permissions = {
+            "fulfillment.mine": {"preparation.assigned.read", "inventory.preparation.receive"},
+            "fulfillment.progress": {"preparation.assigned.read"},
+            "fulfillment.supplier_receipt": {"inventory.preparation.receive"},
+            "fulfillment.receiving": {"inventory.preparation.receive"},
+            "fulfillment.assembly": {"fulfillment.ready.read"},
+            "fulfillment.completed": {"fulfillment.ready.read"},
+            "fulfillment.delivering": {"fulfillment.ready.read"},
+            "fulfillment.delivered": {"fulfillment.ready.read"},
+        }
+        # Request-scoped GET only. The warehouse, employee and responsibility
+        # constraints below remain those of the logged-in account.
+        permissions |= read_permissions.get(reader[0], set())
     return {
         "actor_id": actor_id,
         "merchant_id": merchant_id,
         "is_owner": False,
-        "permissions": set(effective_permissions(assignment)),
+        "permissions": permissions,
         "warehouse_ids": set((assignment or {}).get("warehouse_ids") or []),
         "workplace_warehouse_id": _text(
             (assignment or {}).get("workplace_warehouse_id")

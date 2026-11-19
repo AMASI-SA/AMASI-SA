@@ -637,3 +637,16 @@ test.each(['upload', 'history'])('directory bookmark opens the %s section after 
         expect(api.confirmProviderStatement).not.toHaveBeenCalled();
     } finally { window.history.replaceState(null, '', previous); }
 });
+
+test.each(["read","write"])("the configured employee statement mode %s uses authorized history and limits upload controls", async mode => {
+    const user = { id:"employee", role:"employee", web_page_access:{pages:[{
+        id:"balances.statements", to:"/operational-balances/provider-statements", section:"balances",mode,
+    }]} };
+    useOptionalAuth.mockReturnValue({user,loading:false,authStatus:"authenticated"});
+    await render();
+    expect(api.providerStatements).toHaveBeenCalledTimes(1);
+    expect(host.querySelector('[data-testid="provider-statement-upload"]') !== null).toBe(mode === "write");
+    expect(host.querySelector('a[href="/operational-balances/financial-position?view=providers"]')).toBeNull();
+    expect(api.uploadProviderStatement).not.toHaveBeenCalled();
+    expect(api.confirmProviderStatement).not.toHaveBeenCalled();
+});

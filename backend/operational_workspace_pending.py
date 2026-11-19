@@ -123,7 +123,9 @@ async def _requirements(db, owner, actor, row, policy):
 
 @asynccontextmanager
 async def _authorized(db, owner, actor, row):
+    from operational_web_page_policy import enforce_pending_action
     async with guard_access(db, actor, owner, row["operations"], row["resources"]) as policy:
+        enforce_pending_action(policy.actor, row["action"])
         if row.get("target_id"):
             resource = await _case_resource(db, owner, actor, row, policy)
             if [list(resource)] != row["resources"]:

@@ -146,3 +146,43 @@ test("the owner can save a selection spanning sections in one request", async ()
     });
     expect(host.querySelector('[role="status"]').textContent).toBe("تم حفظ الصفحات.");
 });
+
+test("new global permission groups retain grants in other sections and link to the selected financial identity", async () => {
+    const member = { id: "employee/a", name: "موظف اختبار", revision: 2, page_modes: {[ORDERS.id]: "read"} };
+    const bank = { id:"balances.assets", to:"/operational-balances?view=assets", label:"الأصول والحسابات", section:"balances", section_label:"الأرصدة التشغيلية" };
+    const admin = { id:"balances.access", to:"/operational-balances/access", label:"إدارة حسابات الموظفين", section:"balances", owner_only:true };
+    api.get.mockResolvedValue({ data: { members: [member], pages: [ORDERS,bank,admin] } });
+    api.put.mockResolvedValue({ data:{member:{...member,page_modes:{[ORDERS.id]:"read",[bank.id]:"read"}}} });
+    await act(async () => root.render(<WebPagePermissions initialMemberId={member.id}/>));
+    const group=host.querySelectorAll("select")[1];
+    await act(async () => {group.value="balances";group.dispatchEvent(new Event("change",{bubbles:true}));});
+    expect(host.querySelector('a[href="/operational-balances/access?member=employee%2Fa"]')).toBeTruthy();
+    expect(host.querySelector('select[aria-label="إدارة حسابات الموظفين"]').disabled).toBe(true);
+    await act(async () => [...host.querySelectorAll("button")].find(b=>b.textContent==='قراءة للجميع').click());
+    await act(async () => host.querySelector('button[type="submit"]').click());
+    expect(api.put).toHaveBeenCalledWith("/web-page-access-v1/employee%2Fa", {expected_revision:2,page_modes:{[ORDERS.id]:"read",[bank.id]:"read"}});
+});
+
+test("Arabic search works across departments and bulk changes only its visible assignable rows", async () => {
+    const member = { id:"staff", name:"موظف", revision:1, page_modes:{[ORDERS.id]:"read"} };
+    const statement = {id:"balances.statements",section:"balances",section_label:"الأرصدة التشغيلية",label:"كشوف المنصات",to:"/operational-balances/provider-statements",write_label:"رفع الكشف"};
+    const payroll = {id:"employees.payroll",section:"employees",section_label:"الموظفون",label:"كشوف الرواتب",to:"/employees-v2?workspace=migration"};
+    const locked = {...payroll,id:"employees.private",label:"كشوف خاصة",owner_only:true};
+    api.get.mockClear().mockResolvedValue({data:{members:[member],pages:[ORDERS,statement,payroll,locked]}});
+    api.put.mockResolvedValue({data:{member}});
+    await act(async()=>root.render(<WebPagePermissions initialMemberId={member.id}/>));
+    const input=host.querySelector('input[type=search]');
+    await act(async()=>{
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set.call(input,"كُشُوف");
+        input.dispatchEvent(new Event("input",{bubbles:true}));
+    });
+    expect(host.querySelector('select[aria-label="كل الطلبات"]')).toBeNull();
+    expect(host.querySelector('select[aria-label="كشوف المنصات"]')).toBeTruthy();
+    expect(host.querySelector('select[aria-label="كشوف الرواتب"]')).toBeTruthy();
+    await act(async()=>[...host.querySelectorAll("button")].find(x=>x.textContent==="قراءة وكتابة للجميع").click());
+    await act(async()=>host.querySelector('button[type=submit]').click());
+    expect(api.get).toHaveBeenCalledTimes(1);
+    expect(api.put).toHaveBeenCalledWith("/web-page-access-v1/staff",{expected_revision:1,page_modes:{
+        [ORDERS.id]:"read",[statement.id]:"write",[payroll.id]:"read"
+    }});
+});
