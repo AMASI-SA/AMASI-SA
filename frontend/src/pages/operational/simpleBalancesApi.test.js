@@ -61,3 +61,21 @@ test('pending-command registration and recovery use scoped authenticated endpoin
   await api.retirePending('opaque/id', 'scope');
   expect(http.delete).toHaveBeenLastCalledWith('/operational-balances/workspace/pending-commands/opaque%2Fid', { timeout: 30000, data: { expected_session_scope: 'scope' } });
 });
+
+test('reports and printing each request a fresh cancellable GET without changing financial writes', async () => {
+  const signal = new AbortController().signal;
+  const query = { date_from: '2026-11-01', date_to: '2026-11-19', purpose: 'view' };
+  await api.statement('employee', 'a/b', query, { signal });
+  await api.statement('employee', 'a/b', { ...query, purpose: 'print' }, { signal });
+  expect(http.get).toHaveBeenNthCalledWith(1, '/operational-balances/workspace/statements/employee/a%2Fb', { timeout: 30000, signal, params: query });
+  expect(http.get).toHaveBeenNthCalledWith(2, '/operational-balances/workspace/statements/employee/a%2Fb', { timeout: 30000, signal, params: { ...query, purpose: 'print' } });
+  expect(http.post).not.toHaveBeenCalled();
+});
+
+test('automatic history and protected receipt reads retain their request scope and binary response', async () => {
+  const signal = new AbortController().signal;
+  await api.history('employee', 'a/b', { page: 2, page_size: 5 }, { signal });
+  expect(http.get).toHaveBeenLastCalledWith('/operational-balances/workspace/history/employee/a%2Fb', { timeout: 30000, signal, params: { page: 2, page_size: 5 } });
+  await api.reviewReceipt('review/one', { signal });
+  expect(http.get).toHaveBeenLastCalledWith('/operational-balances/workspace/reviews/review%2Fone/receipt', { timeout: 30000, signal, responseType: 'blob' });
+});

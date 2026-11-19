@@ -234,8 +234,13 @@ async def _bank_proof(db, owner, bank_id, movement_id, value, state, stamp):
                            'source_revision': bank_digest([owner, bank_id, hashed, fact])}
 
 
-async def options(db, *, owner, actor, assignment_id, clock=None):
-    await authorize(db, owner, actor)
+async def options(db, *, owner, actor, assignment_id, clock=None, authorize_review=None):
+    # The workspace supplies its stricter per-driver/account policy. Legacy
+    # callers keep the original accountant gate; the client cannot choose it.
+    if authorize_review is None:
+        await authorize(db, owner, actor)
+    else:
+        await authorize_review(db)
     if await financial_source(db, owner) != 'operational':
         fail('operational_driver_review_phase_changed')
     state = await read(db, owner)
@@ -269,7 +274,7 @@ async def options(db, *, owner, actor, assignment_id, clock=None):
             'note': 'الشبكة ذمة للمتجر وليست نقدًا؛ التحويل يتطلب حركة بنك مثبتة بعد يوم القطع.'}
 
 
-async def review_payment(db, *, owner, actor, assignment_id, payload, clock=None):
+async def review_payment(db, *, owner, actor, assignment_id, payload, clock=None, authorize_review=None):
     stamp = clock or now()
     if payload.expected_financial_source != 'operational' or payload.expected_session_scope != digest([owner, actor]):
         fail('operational_driver_review_scope_required')
@@ -409,4 +414,5 @@ async def review_payment(db, *, owner, actor, assignment_id, payload, clock=None
         if changed.matched_count != 1:
             fail('operational_concurrent_change')
         return result
-    return await transact(db, owner, commit, lambda scoped: authorize(scoped, owner, actor))
+    return await transact(db, owner, commit,
+                          authorize_review or (lambda scoped: authorize(scoped, owner, actor)))

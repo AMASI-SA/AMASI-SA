@@ -475,7 +475,7 @@ def test_indexed_ledger_preserves_currency_counterparts_redaction_and_actor_scop
     from operational_balance_access import AccessPolicy
     from operational_balance_workspace import _index_ledger_sources, ledger_items
     resources = [{"kind": kind, "id": identity, "name": identity, "currency": currency,
-                  "access": {"movements": mode}}
+                  "access": {"movements": mode, "balance": True}}
                  for kind, identity, currency in (("supplier", "supplier", "SAR"), ("supplier", "supplier", "USD"),
                                                   ("bank", "bank", "SAR"), ("bank", "bank", "USD"), ("cash", "cash", "SAR"))]
     policy = AccessPolicy({"id": "staff"}, "owner", False, True, 1, (), [
@@ -509,8 +509,9 @@ def test_indexed_ledger_preserves_currency_counterparts_redaction_and_actor_scop
         assert results[key] == ledger_items(state, computed, row, policy)
     assert (state, computed) == before
     supplier = {row["id"]: row for row in results[("supplier", "supplier", "SAR")]}
-    assert set(supplier) == {"opening", "accrual", "fx", "hidden"}
-    assert (supplier["opening"]["amount"], supplier["opening"]["side"]) == ("5.00", "for_party")
+    assert set(supplier) == ({"opening", "accrual", "fx", "hidden"} if mode == "all" else {"accrual", "fx", "hidden"})
+    if mode == "all":
+        assert (supplier["opening"]["amount"], supplier["opening"]["side"]) == ("5.00", "for_party")
     assert (supplier["accrual"]["amount"], supplier["accrual"]["side"]) == ("4.00", "for_party")
     assert (supplier["fx"]["amount"], supplier["fx"]["side"], supplier["fx"]["currency"]) == ("10.00", "for_us", "SAR")
     assert "Hidden" not in str(supplier["hidden"])

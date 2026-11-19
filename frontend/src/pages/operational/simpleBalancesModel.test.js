@@ -1,4 +1,5 @@
-import { afterBalance, balanceText, decimalAmount, entryChoices, isPage, minorUnits, money, permittedOperations } from './simpleBalancesModel';
+import { afterBalance, balanceText, decimalAmount, entryChoices, isPage, minorUnits, money, permittedOperations,
+  movementDate, movementRecorder, movementTitle, signedResourceBalance, canReadStatement, isStatement } from './simpleBalancesModel';
 
 test('amounts retain decimal accuracy, Arabic digits, and large integer money', () => {
   expect(decimalAmount('١٠٠٫١٠')).toBe('100.10');
@@ -45,4 +46,54 @@ test('an explicit focus may choose a different valid page but never one outside 
   expect(isPage(result, 1, true)).toBe(true);
   expect(isPage({ ...result, page: 3 }, 1, true)).toBe(false);
   expect(isPage({ ...result, total_pages: 0 }, 1, true)).toBe(false);
+});
+
+test('compact dates use real Riyadh time and never manufacture a time for a business date', () => {
+  expect(movementDate({ business_date: '2026-11-18' })).toBe('11-18');
+  expect(movementDate({ business_date: '2026-11-18', recorded_at: '2026-11-18T22:35:00Z' })).toBe('11-18');
+  expect(movementDate({ business_date: '2026-11-19', recorded_at: '2026-11-18T22:35:00Z' })).toBe('11-19 01:35');
+  expect(movementDate({ business_date: '2026-11-18' }, true)).toBe('2026-11-18');
+  expect(movementDate({ recorded_at: '2026-11-18T22:35:00Z' }, true)).toBe('2026-11-19 01:35 · الرياض');
+  expect(movementDate({ business_date: '2026-11-10', recorded_at: '2026-11-19T12:35:00Z' }, true)).toBe('2026-11-10 · سُجّلت 2026-11-19 15:35 · الرياض');
+});
+
+test('movement titles name the known customer, order, or source without inventing a platform', () => {
+  expect(movementTitle({ customer_name: 'خالد', order_number: '123', description: 'استلام مبلغ' })).toBe('خالد');
+  expect(movementTitle({ order_number: '123', description: 'دفع مبلغ' })).toBe('طلب 123');
+  expect(movementTitle({ source_label: 'بنك الإنماء', description: 'استلام مبلغ' })).toBe('بنك الإنماء');
+  expect(movementTitle({ automatic_history: 'delivery' }, true)).toBe('آخر أجرة توصيل');
+  expect(movementTitle({ description: 'ملاحظة موثقة' })).toBe('ملاحظة موثقة');
+  expect(movementTitle({ counterparty_name: 'سالم', source_label: 'الإنماء', description: 'دفع مبلغ' })).toBe('سالم');
+  expect(movementTitle({ description: 'فاتورة توريد موثقة', source_label: 'الإنماء' })).toBe('فاتورة توريد موثقة');
+});
+
+test('only verified automatic provenance attributes a movement to the system', () => {
+  expect(movementRecorder({ automatic_history: 'salary', recorded_by: null })).toBe('النظام تلقائيًا');
+  expect(movementRecorder({ automatic_history: 'delivery' })).toBe('النظام تلقائيًا');
+  expect(movementRecorder({ description: 'راتب تلقائي' })).toBe('غير موثق');
+  expect(movementRecorder({ reason: 'salary', recorded_by: { name: 'محمد' } })).toBe('محمد');
+});
+
+test('signed display respects party dues and available cash without changing entry calculations', () => {
+  expect(signedResourceBalance({ kind: 'employee', access: { balance: true }, balance: { visible: true, side: 'for_us', amount: '120.00' } })).toBe('-120.00');
+  expect(signedResourceBalance({ kind: 'bank', access: { balance: true }, balance: { visible: true, side: 'for_us', amount: '120.00' } })).toBe('120.00');
+  expect(signedResourceBalance({ kind: 'employee', access: { balance: false }, balance: { amount: '100', side: 'for_party' } })).toBeNull();
+});
+
+test('statement rights and print rights stay separate and old grants default to denied', () => {
+  const resource = { access: { movements: 'all', balance: true } };
+  expect(canReadStatement({}, resource)).toBe(false);
+  expect(canReadStatement({}, { access: { movements: 'own', report: true } })).toBe(true);
+  expect(canReadStatement({}, { access: { movements: 'none', report: true, print: true } })).toBe(false);
+  expect(canReadStatement({ actor: { is_owner: true } }, resource)).toBe(true);
+});
+
+test('statement validation accepts complete unpaginated periods but refuses the wrong resource or dates', () => {
+  const resource = { kind: 'employee', id: 'one' };
+  const query = { date_from: '2026-11-01', date_to: '2026-11-18' };
+  const statement = { resource, ...query, items: Array.from({ length: 12 }, (_, id) => ({ id, amount: '100.00' })),
+    scope: 'all', currency: 'SAR', opening_balance: '0.00', closing_balance: '1200.00', totals: { for_party: '1200.00', for_us: '0.00' }, can_print: false };
+  expect(isStatement(statement, resource, query)).toBe(true);
+  expect(isStatement({ ...statement, resource: { ...resource, id: 'other' } }, resource, query)).toBe(false);
+  expect(isStatement({ ...statement, date_from: '2026-10-01' }, resource, query)).toBe(false);
 });

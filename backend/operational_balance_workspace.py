@@ -23,6 +23,10 @@ from operational_balance_store import (
 )
 from operational_financial_activity_runtime import checked_rows, preparation_checkpoint, prepare_in_thread
 from operational_visible_report_read import run_visible_report_read
+from operational_workspace_projection import (
+    automatic_source, balance_note, compact_rows, history as automatic_history, projected_balance_status, row_order,
+    statement as period_statement, with_running_balances,
+)
 
 
 RESOURCE_KINDS = (
@@ -333,7 +337,7 @@ def _recorded_by(item):
 def _business_day(item):
     if item.get("business_date"):
         return str(item["business_date"])
-    stamp = item.get("occurred_at") or item.get("created_at") or item.get("approved_at") or ""
+    stamp = item.get("occurred_at") or item.get("created_at") or item.get("approved_at") or item.get("recorded_at") or item.get("delivered_at") or ""
     try:
         return datetime.fromisoformat(stamp.replace("Z", "+00:00")).astimezone(ZoneInfo("Asia/Riyadh")).date().isoformat()
     except (ValueError, TypeError):
@@ -345,6 +349,19 @@ def _can_row(policy, resource, item):
     return mode == "all" or mode == "own" and item.get("actor_id") == policy.actor["id"]
 
 
+def _original_note(item):
+    note = item.get("note")
+    if not isinstance(note, str) or not note.strip():
+        return None
+    if item.get("actor_id") in {"operational_order_worker", "operational_worker"}:
+        return None
+    # Older workspace writes stored this system label when no note was entered.
+    # Do not manufacture a fifth report column from that fallback description.
+    if item.get("workspace_operation") and note in {*LABELS.values(), "تسليم مبلغ للجهة"}:
+        return None
+    return note
+
+
 def _row(policy, resource, item, amount, side, description):
     related = item.get("workspace_resources") or [{"kind": item.get("party_type"), "id": item.get("party_id")}]
     if item.get("bank_id"):
@@ -352,19 +369,29 @@ def _row(policy, resource, item, amount, side, description):
     complete = all(r.get("kind") and r.get("id") and policy.can_reference(r["kind"], r["id"]) for r in related)
     # A free-text description can disclose an otherwise hidden counterpart.
     # Use structured labels whenever a connected resource is no longer allowed.
-    note = item.get("note") if complete else None
-    label = description if not note or note == description else description + " · " + note
+    note = _original_note(item) if complete else None
     result = {"id": item["id"], "event_id": item.get("workspace_group") or item["id"],
-              "description": label, "business_date": _business_day(item),
-              "recorded_at": item.get("occurred_at") or item.get("created_at") or item.get("approved_at") or "",
+              "description": description, "business_date": _business_day(item),
+              "recorded_at": item.get("occurred_at") or item.get("created_at") or item.get("approved_at") or item.get("recorded_at") or item.get("delivered_at") or "",
               "recorded_by": _recorded_by(item), "amount": fmt(amount), "side": side,
               "currency": resource["currency"], "reason": item.get("workspace_reason") or item.get("kind"),
               "order_number": item.get("order_number") if complete else None,
               "party_type": resource["kind"], "party_id": resource["id"], "party_name": resource["name"]}
+    if note is not None:
+        result["note"] = note
     if complete and item.get("bank_name"):
         result["source_label"] = item["bank_name"]
     if complete and item.get("reference"):
         result["reference"] = item["reference"]
+    if complete:
+        customer = item.get("customer_name_snapshot") or item.get("customer_name")
+        if isinstance(customer, dict):
+            customer = customer.get("name")
+        if isinstance(customer, str) and customer.strip():
+            result["customer_name"] = customer.strip()
+        if ((item.get("party_type"), item.get("party_id")) != (resource["kind"], resource["id"])
+                and isinstance(item.get("name"), str) and item["name"].strip()):
+            result["counterparty_name"] = item["name"].strip()
     return result
 
 
@@ -408,20 +435,42 @@ def ledger_items(state, computed, resource, policy, *, sources=None):
                    "movements": state.get("movements", []), "customer_returns": state.get("customer_returns", [])}
     result = []
     for item in checked_rows(sources["openings"]):
+        if resource["access"]["movements"] != "all" or not resource["access"].get("balance", False):
+            continue  # Neither own activity nor a hidden balance exposes the opening.
         if (item.get("party_type"), item.get("party_id"), item.get("currency")) != (kind, identity, currency) or not _can_row(policy, resource, item):
             continue
         amount = Decimal(item["amount"])
         if amount:
-            result.append(_row(policy, resource, item, amount, item["direction"], "رصيد افتتاحي"))
+            opening = {**item, "kind": "opening"}
+            if state.get("started_at"):
+                opening["business_date"] = _business_day({"occurred_at": state["started_at"]})
+            result.append(_row(policy, resource, opening, amount, item["direction"], "رصيد افتتاحي"))
     for item in checked_rows(sources["obligations"]):
-        if item.get("kind") in {"baseline", "external_advance", "advertising_balance"} or item.get("virtual"):
+        if (item.get("kind") in {"baseline", "external_advance", "advertising_balance"}
+                or item.get("virtual") or item.get("derived_credit")):
+            # A derived credit is an allocation identity for the excess already
+            # present in the original claim and cash. It is not another event.
             continue
         if (item.get("party_type"), item.get("party_id"), item.get("currency")) != (kind, identity, currency) or not _can_row(policy, resource, item):
             continue
         amount = Decimal(item.get("confirmed", "0"))
         if amount > 0:
-            result.append(_row(policy, resource, item, amount,
-                               "for_party" if item["direction"] == "payable" else "for_us", "مستحق من المصدر"))
+            family, group = automatic_source(state, item)
+            source_item = item
+            if family == "delivery":
+                facts = state.get("engine", {}).get("facts", {})
+                event = facts.get("delivery_event:" + group.removeprefix("shipping:"), {})
+                frozen = facts[group]
+                source_item = {**item, "delivered_at": frozen.get("delivered_at"),
+                               "recorded_at": item.get("recorded_at") or frozen.get("recorded_at")}
+                if (event.get("party_type"), event.get("party_id")) == (kind, identity):
+                    source_item["order_number"] = item.get("order_number") or event.get("order_number")
+            row = _row(policy, resource, source_item, amount,
+                       "for_party" if item["direction"] == "payable" else "for_us", "مستحق من المصدر")
+            if family:
+                row.update(automatic_history=family, automatic_group=group)
+                row["description"] = "راتب تلقائي" if family == "salary" else "أجرة توصيل"
+            result.append(row)
     for item in checked_rows(sources["movements"]):
         primary = (item["party_type"], item["party_id"], item["currency"]) == (kind, identity, currency)
         cash = (item.get("bank_kind"), item.get("bank_id"), item.get("bank_currency") or item["currency"]) == (kind, identity, currency)
@@ -446,6 +495,16 @@ def ledger_items(state, computed, resource, policy, *, sources=None):
             "wallet_funding": "تمويل رصيد الإعلانات", "refund": "رد مبلغ",
         }.get(item["kind"], "حركة مالية")
         result.append(_row(policy, resource, item, amount, side, description))
+        fee = Decimal(item.get("actual_fee_amount", "0"))
+        if (primary and kind == "provider" and item["kind"] == "settlement" and direction == "incoming"
+                and fee > 0 and sum((Decimal(a["amount"]) for a in item.get("allocations", [])), Decimal(0)) == amount + fee):
+            # Canonical settlement allocations clear cash plus the evidenced fee
+            # from the provider claim. The bank received only cash above.
+            fee_item = {**item, "id": item["id"] + ":actual_fee", "kind": "settlement_fee",
+                        "workspace_reason": "settlement_fee"}
+            fee_row = _row(policy, resource, fee_item, fee, "for_party", "رسوم تسوية فعلية")
+            fee_row.update(event_id=fee_item["id"], related_event_id=item.get("workspace_group") or item["id"])
+            result.append(fee_row)
     if kind in {"bank", "provider"}:
         for case in checked_rows(sources["customer_returns"]):
             if (case.get("refund_source_type"), case.get("refund_source_id"), case.get("currency")) != (kind, identity, currency):
@@ -464,7 +523,8 @@ def ledger_items(state, computed, resource, policy, *, sources=None):
                         "business_date": None, "occurred_at": case.get("matched_at"),
                         "kind": "refund", "note": "", "order_number": None}
                 if _can_row(policy, resource, item):
-                    row = _row(policy, resource, item, Decimal(case["amount"]), "for_party", "رد مبلغ طلب")
+                    row = _row(policy, resource, item, Decimal(case["amount"]), "informational", "مطابقة استرداد موثق")
+                    row["informational"] = True
                     row["business_date"] = _business_day({"occurred_at": case["refunded_at"]}) if case.get("refunded_at") else ""
                     result.append(row)
                 continue
@@ -486,10 +546,45 @@ def ledger_items(state, computed, resource, policy, *, sources=None):
             if not _can_row(policy, resource, item):
                 continue
             result.append(_row(policy, resource, item, Decimal(case["amount"]), "for_party", "رد مبلغ طلب"))
+    if kind == "store_driver":
+        from operational_driver_review_report import validated_review_facts
+        facts, _ = validated_review_facts(state)
+        for fact in checked_rows(facts):
+            if fact["driver_id"] != identity or fact["currency"] != currency:
+                continue
+            target_kind = "bank" if fact["destination_type"] == "bank" else "pos_receivable"
+            item = {"id": "driver-review-info:" + fact["id"], "kind": "driver_payment_review",
+                    "party_type": kind, "party_id": identity, "actor_id": fact.get("approved_by"),
+                    "approved_at": fact.get("approved_at"), "order_number": fact.get("order_number"),
+                    "reference": fact.get("transaction_reference"), "bank_name": fact.get("destination_name"),
+                    "workspace_resources": [{"kind": kind, "id": identity},
+                                            {"kind": target_kind, "id": fact["destination_id"]}]}
+            if _can_row(policy, resource, item):
+                row = _row(policy, resource, item, Decimal(fact["amount"]), "informational", "إثبات تحصيل للمؤسسة")
+                row["informational"] = True
+                result.append(row)
     preparation_checkpoint()
-    result.sort(key=lambda item: (item["business_date"], item["recorded_at"], item["id"]), reverse=True)
+    result, _ = with_running_balances(resource, result)
     preparation_checkpoint()
     return result
+
+
+def expected_collections(state, computed, resource, policy):
+    """Saved, unconfirmed COD forecasts are separate from the confirmed ledger."""
+    if resource["kind"] not in {"store_driver", "courier"} or resource["access"]["movements"] != "all":
+        return {"items": [], "total": 0, "amount": "0.00"}
+    rows = []
+    for item in checked_rows(computed["obligations"]):
+        if ((item.get("party_type"), item.get("party_id"), item.get("currency")) !=
+                (resource["kind"], resource["id"], resource["currency"]) or item.get("kind") != "cod"):
+            continue
+        if Decimal(item.get("confirmed", "0")) == 0 and Decimal(item.get("expected", "0")) > 0:
+            row = _row(policy, resource, item, Decimal(item["expected"]), "for_us", "تحصيل متوقع")
+            row.update(expected=True, balance_after=None)
+            rows.append(row)
+    rows.sort(key=row_order, reverse=True)
+    return {"items": rows[:5], "total": len(rows),
+            "amount": fmt(sum((Decimal(row["amount"]) for row in rows), Decimal(0)))}
 
 
 def paginate(items, page, page_size, focus_id=None):
@@ -506,6 +601,9 @@ def paginate(items, page, page_size, focus_id=None):
 
 def install_workspace_routes(router, db, current_user, scope):
     from operational_balance_access import load_access
+    from operational_balance_reviews import install_workspace_review_routes
+
+    install_workspace_review_routes(router, db, current_user, scope)
 
     async def load(user):
         actor, owner, source = await scope(db, user, "workspace")
@@ -552,25 +650,62 @@ def install_workspace_routes(router, db, current_user, scope):
             resource = next((r for r in resources if r["kind"] == kind and r["id"] == identity), None)
             if not resource or resource["access"]["movements"] == "none":
                 fail("operational_workspace_not_found", "الكشف غير متاح", 404)
-            return {"resource": resource, **paginate(ledger_items(state, computed, resource, policy), page, page_size, focus_id)}
+            rows = ledger_items(state, computed, resource, policy)
+            return {"resource": resource, **paginate(compact_rows(rows), page, page_size, focus_id),
+                    "balance_status": projected_balance_status(resource, rows),
+                    "balance_note": balance_note(projected_balance_status(resource, rows)),
+                    "expected_collections": expected_collections(state, computed, resource, policy)}
         return await run_visible_report_read(request, lambda: checked_read(user, project))
 
     @router.get("/workspace/movements")
-    async def movements(request: Request, page: int = Query(default=1, ge=1), page_size: int = Query(default=5, ge=1, le=5), user=Depends(current_user)):
+    async def movements(request: Request, page: int = Query(default=1, ge=1), page_size: int = Query(default=5, ge=1, le=5),
+                        kind: str | None = Query(default=None, max_length=50), id: str | None = Query(default=None, max_length=200),
+                        user=Depends(current_user)):
+        if (kind is None) != (id is None):
+            fail("operational_account_filter_invalid", "اختر نوع الحساب والحساب معًا", 422)
         def project(actor, owner, policy, state, resources, computed):
             items, seen = [], set()
-            indexed = _index_ledger_sources(state, computed, resources)
-            for resource in checked_rows(resources):
+            selected = [r for r in resources if kind is None or (r["kind"], r["id"]) == (kind, id)]
+            if kind is not None and not any(r["access"]["movements"] != "none" for r in selected):
+                fail("operational_workspace_not_found", "الكشف غير متاح", 404)
+            indexed = _index_ledger_sources(state, computed, selected)
+            for resource in checked_rows(selected):
                 if resource["access"]["movements"] == "none":
                     continue
                 sources = indexed[(resource["kind"], resource["id"], resource["currency"])]
-                for row in checked_rows(ledger_items(state, computed, resource, policy, sources=sources)):
+                for row in checked_rows(compact_rows(ledger_items(state, computed, resource, policy, sources=sources))):
                     if row["event_id"] in seen:
                         continue
                     seen.add(row["event_id"])
                     items.append(row)
-            items.sort(key=lambda row: (row["business_date"], row["recorded_at"], row["id"]), reverse=True)
+            items.sort(key=row_order, reverse=True)
             return paginate(items, page, page_size)
+        return await run_visible_report_read(request, lambda: checked_read(user, project))
+
+    @router.get("/workspace/statements/{kind}/{identity}")
+    async def statement(request: Request, kind: str, identity: str,
+                        date_from: str = Query(pattern=r"^\d{4}-\d{2}-\d{2}$"),
+                        date_to: str = Query(pattern=r"^\d{4}-\d{2}-\d{2}$"),
+                        purpose: Literal["view", "print"] = "view", user=Depends(current_user)):
+        def project(actor, owner, policy, state, resources, computed):
+            resource = next((r for r in resources if (r["kind"], r["id"]) == (kind, identity)), None)
+            if not resource or resource["access"]["movements"] == "none":
+                fail("operational_workspace_not_found", "الكشف غير متاح", 404)
+            return period_statement(resource, ledger_items(state, computed, resource, policy),
+                date_from=date_from, date_to=date_to, actor=_actor_snapshot(actor), generated_at=now(),
+                purpose=purpose, started_at=state.get("started_at"))
+        return await run_visible_report_read(request, lambda: checked_read(user, project))
+
+    @router.get("/workspace/history/{kind}/{identity}")
+    async def history(request: Request, kind: str, identity: str, page: int = Query(default=1, ge=1),
+                      page_size: int = Query(default=5, ge=1, le=5), user=Depends(current_user)):
+        def project(actor, owner, policy, state, resources, computed):
+            resource = next((r for r in resources if (r["kind"], r["id"]) == (kind, identity)), None)
+            if (not resource or resource["access"]["movements"] == "none"
+                    or kind not in {"employee", "store_driver", "courier"}):
+                fail("operational_workspace_not_found", "الكشف غير متاح", 404)
+            return automatic_history(resource, ledger_items(state, computed, resource, policy),
+                                     page=page, page_size=page_size, generated_at=now())
         return await run_visible_report_read(request, lambda: checked_read(user, project))
 
     @router.post("/workspace/entries")
