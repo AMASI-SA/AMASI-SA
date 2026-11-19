@@ -43,22 +43,77 @@ be added as independent work. The existing 85-second request budget,
 visibility/lifecycle checks, source coverage, immutable money evidence and
 atomic aggregate save remain requirements.
 
-The current investigation targets repeated whole-cohort scans in native
-assignment checks, bundle preparation-piece selection, and saved receipt
-return calculation. Each proposed change requires exact-output parity and a
-deterministic work-count regression against the current production baseline.
-The per-payment audit projector is deliberately unchanged: its synthetic
-cost alone did not establish the observed reconciliation bottleneck.
+The source repair now removes three repeated whole-cohort scans:
 
-This section is a work-in-progress source checkpoint, not release readiness.
-Next: finish focused measurements and independent review, run integrated
-financial/cancellation checks, preserve the verified source on the task branch,
-then follow a fresh v5 A/B handoff only if ready. Shared-host status must be
-checked again before any rehearsal or mutation. After deployment, require a
+1. Both fee producers reuse the collector's existing delivery assignment
+   index, keeping exact raw-number matching and the first-match predicate.
+2. The bundle adapter groups preparation pieces by its own raw receipt keys,
+   retaining original row references/order and the existing receipt mapper.
+3. The reducer groups source returns and saved return facts once per attempt.
+   Successful insertions and rollback advance that same lookup; amount
+   validation, receipt admission and summation order are unchanged.
+
+Each optional index falls back to the original scan for unsupported shapes.
+The lookups remain request-owned and observe cancellation; none enters saved
+state. Independent reviews found and verified corrections for two lazy-error
+compatibility cases before source completion. There are no outstanding review
+findings. The per-payment audit projector is deliberately unchanged: its
+synthetic cost alone did not establish the observed live bottleneck.
+
+The tested assignment/bundle milestone is remotely recoverable at
+`f972feda3f509d1fe6adc8bf41cd5d62871d8f09`, tree
+`49025f540ab1e23158e3c92b7ca9315d8fd79c33`, in
+[PR2006](https://github.com/AMASI-SA/AMASI-SA/pull/2006). The commit containing
+this completed source record is candidate A; its exact SHA is recorded in the
+PR before any intent-only B is frozen. The preceding WIP is not a deployment
+input. No source changes are made to the already frozen PR2000/2001 releases.
+
+### Fresh source evidence
+
+- Root integrated run: 1,021 cases collected in 33 affected modules;
+  **930 passed, 81 skipped, 10 environment failures**, exit 1. All ten failures
+  are the unchanged real-Mongo completed-shipping review cases: their explicit
+  isolated local target refused connection before assertions and during
+  cleanup. The 81 skips also require isolated Mongo. Do not treat these as
+  passes or silently exclude them; exact-B real-Mongo CI remains a release
+  gate. All 111 new regressions passed without skips, as did parallel-profit,
+  cancellation, fee/wallet, replay and source-coverage tests.
+- Independent review reran both original compatibility repros against the
+  frozen production code and confirmed their corrections. Source snapshots
+  and ordered full outputs remain equal; malformed values retain their
+  original validation/error boundary.
+- AST comparison against production confirms prepaid `apply_events`, deferred
+  `apply_deferred_events`, `reconcile_credits`, `_piece_map`, and
+  `map_financial_receipts` are unchanged. `git diff --check` passes.
+- The assignment benchmark compares full original producer modules, includes
+  index construction and checks entire events plus input immutability. For
+  5,000 calls / 20,000 unrelated assignments, three-run medians were
+  11.0340 to 0.6450 seconds (prepaid) and 8.7895 to 0.9469 seconds (deferred).
+  Separate 128-by-128 work counts fell from 16,384 to 1,152 row accesses.
+- The bundle regression uses actual frozen authority and receipt mapping:
+  80 lines / 320 pieces fell from 25,600 to 320 mapper row visits with identical
+  entire adapter output and unchanged synthetic database/input rows.
+- Full reducer replay with 2,048 saved receipts and 14,336 facts measured
+  3.506115 to 0.660890 seconds. Prefix checks fell from 29,505,536 to 161,792;
+  the candidate work doubles exactly as the cohort doubles. An additional
+  20,981,206-byte synthetic saved-history case retained the complete ordered
+  JSON and ran in 0.627878 to 0.447833 seconds.
+- Reproducible scripts, source hashes, ordinary timings and separate work
+  profiles are retained under `scripts/testing/operational_refresh_budget/`.
+  These measurements establish removed repeated work; they are not a claim
+  that the live full refresh now completes within 85 seconds.
+
+A fresh original shared `/app` guard returned `active: false` during this
+continuation. This task has made no new shared-host source change, lease,
+publication or financial snapshot save. Next: retain candidate A, build/freeze
+a fresh intent-only B, require all exact-B CI including real Mongo and the
+governed clean-clone adapter, then use the authorized v5 handoff. Shared-host
+status must be checked again before any rehearsal or mutation. After deployment, require a
 new saved snapshot and the same-cohort fee/wallet comparison, followed by a
 second visible refresh proving no duplicate debit. Private financial records
 remain outside Git. Issue1006 is full and its attempted body update did not
-persist in fresh reads; PR2000 is the reliable current remote checkpoint.
+persist in fresh reads; PR2006 and this task record are the current remote
+checkpoint. PR2000 retains the earlier publication and lease-closure evidence.
 
 ## Resumed on current production — 19 November 2026
 
