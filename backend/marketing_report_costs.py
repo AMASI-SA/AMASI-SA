@@ -5,6 +5,7 @@ halalas and reconcile exactly to the order/campaign amount.
 """
 from decimal import Decimal, ROUND_HALF_UP
 from math import isfinite
+from functools import lru_cache
 
 from excel_parser import match_settings
 from order_currency import order_total_sar
@@ -39,7 +40,23 @@ def allocate(amount, weights):
     return [p / 100 * (-1 if cents < 0 else 1) for p in parts]
 
 
-def order_costs(order, settings, company_configs):
+def period_fee_estimator(payment_settings):
+    """Reuse the single-order fee matcher for equivalent amounts in this report."""
+    @lru_cache(maxsize=2048)
+    def estimate(method, amount):
+        parsed = {
+            "payment_methods": [{"name": method, "orders_count": 1, "total_sales": round(amount, 2)}],
+            "orders_individual": [{"payment_method": method, "total_amount": amount}],
+            "shipping_companies": [],
+        }
+        matched = match_settings(parsed, payment_settings, [])
+        payment, = matched["payment_breakdown"]
+        return number(matched["total_payment_fees"]) if payment["matched"] else None
+
+    return estimate
+
+
+def order_costs(order, settings, company_configs, *, estimate_fee=None):
     shipping = shipping_breakdown(order, company_configs)
     shipping_cost = number(shipping.get("total")) if shipping.get("source") != "none" else None
     # An explicit free rate is evidence; an absent company/rate is not.
@@ -52,6 +69,12 @@ def order_costs(order, settings, company_configs):
     if order.get("payment_fee_status") == "actual":
         fee = number(order.get("actual_payment_fee"))
         fee_source = "actual" if fee is not None else "missing"
+    elif estimate_fee is not None:
+        amount = order_total_sar(order)
+        if amount is not None:
+            method = (order.get("payment_method") or "غير محدد").strip() or "غير محدد"
+            fee = estimate_fee(method, float(amount))
+            fee_source = "merchant_settings" if fee is not None else "missing"
     elif order_total_sar(order) is not None:
         matched = match_settings(orders_to_parsed([order]), settings.get("payment_methods") or [], [])
         breakdown = matched.get("payment_breakdown") or []

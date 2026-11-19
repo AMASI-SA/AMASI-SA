@@ -156,6 +156,7 @@ async def _load_context(db, owner, start, end):
 async def _order_cost_totals(orders, settings):
     from dashboard_cpu_budget import CPUWorkBudget, COST_PROFIT_BUDGET_MS
     from order_profitability_summary import single_order_costs
+    from marketing_report_costs import period_fee_estimator
     from order_status_policy import default_category_for
 
     configs = {}
@@ -165,13 +166,14 @@ async def _order_cost_totals(orders, settings):
             configs[name] = configs[name.lower()] = row
     result = {key: {"known": Decimal(0), "known_orders": 0, "pending_orders": 0} for key in ("shipping", "payment_fees")}
     adjusted = 0
+    estimate_fee = period_fee_estimator(settings.get("payment_methods") or [])
     budget = CPUWorkBudget(COST_PROFIT_BUDGET_MS)
     for order in orders:
         await budget.checkpoint()
         changed = default_category_for(order.get("order_status")) in {"cancelled", "refunded"} or any(
             (number(order.get(field)) or Decimal(0)) > 0 for field in ("actual_refund_amount", "actual_partial_refund_amount"))
         adjusted += int(changed)
-        costs = single_order_costs(order, settings, configs)
+        costs = single_order_costs(order, settings, configs, estimate_fee=estimate_fee)
         for key, field in (("shipping", "shipping_cost_sar"), ("payment_fees", "payment_fees_sar")):
             value = number(costs.get(field))
             if value is None or value < 0 or changed:
@@ -307,11 +309,20 @@ async def load_profit_snapshot(db, owner, state, *, as_of, budget_seconds=25):
                 value = await readers[name]()
                 values[name] = value
                 return value
-            except (ValueError, TypeError, KeyError, HTTPException, PyMongoError):
+            except SourceReadError:
+                raise
+            except PyMongoError as error:
+                errors[name] = "operational_source_read_timeout" if error.timeout else "operational_profit_source_incomplete"
+                return None
+            except (ValueError, TypeError, KeyError, HTTPException):
                 errors[name] = "operational_profit_source_incomplete"
                 return None
+        def record_error(name, error):
+            errors[name] = error.code
+
         try:
-            await load_collections(db, owner, readers, reader=read, per_read_timeout=20)
+            await load_collections(db, owner, readers, reader=read, per_read_timeout=20,
+                                   on_source_error=record_error)
         except SourceReadError as error:
             errors[error.collection] = error.code
         for name in readers:
