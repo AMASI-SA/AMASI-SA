@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from salla_shipping import extract_shipping
 from shipping_companies import normalize_shipping_company
 from store_delivery_domain import is_city_courier_company, normalize_shipping_carrier, normalize_text
 
@@ -36,7 +37,16 @@ def current_carrier(order: dict[str, Any]) -> tuple[str, Any]:
     name = order.get("shipping_company")
     if isinstance(name, dict):
         name = name.get("name") or name.get("name_ar")
-    return normalize_text(name) if isinstance(name, str) else "", order.get("shipping_company_code")
+    name = normalize_text(name) if isinstance(name, str) else ""
+    code = order.get("shipping_company_code")
+    # Older orders can predate the current shipping projection. Honor an
+    # explicit external provider on either legacy source before accepting.
+    sources = order.get("raw_by_source")
+    direct = sources.get("salla_direct") if isinstance(sources, dict) else None
+    observed = extract_shipping(direct) if isinstance(direct, dict) else None
+    if observed and (not name or is_salla_store_courier(name, code)):
+        return normalize_text(observed.get("company_name")), observed.get("company_code")
+    return name, code
 
 
 def _status(value: Any) -> str:
@@ -76,6 +86,10 @@ def eligibility_fence(order: dict[str, Any]) -> dict[str, Any]:
              "raw_by_source.salla_direct.status_slug", "salla_shipping_current.company_name",
              "salla_shipping_current.company_code", "shipping_company", "shipping_company_code",
              "store_delivery_assignment_id")
+    if not order.get("salla_shipping_current"):
+        paths += tuple("raw_by_source.salla_direct." + key for key in (
+            "shipping", "shipping_company", "shipping_company_code", "courier_name",
+            "shipping_company_name", "courier_id", "courier_code", "delivery_method", "shipments", "shipment"))
     result = {}
     for path in paths:
         value = order

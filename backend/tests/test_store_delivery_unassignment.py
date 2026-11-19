@@ -66,6 +66,32 @@ async def _shutdown(client, db):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("status,carrier,expected", [
+    ("delivering", "أرامكس", "salla_store_courier_required"),
+    ("completed", "سمسا", "salla_store_courier_required"),
+    ("delivered", "مندوب الرياض", "salla_transfer_status_ineligible"),
+    ("in_progress", "مندوب المتجر", "salla_transfer_status_ineligible"),
+])
+async def test_ineligible_transfer_keeps_original_assignment_and_history(status, carrier, expected):
+    client, db = await _fixture()
+    try:
+        await db[ORDERS].update_one({"order_number": "101"}, {"$set": {
+            "order_status_slug": status, "salla_shipping_current.company_name": carrier}})
+        await db["store_drivers"].insert_one({
+            "user_id": "merchant", "id": "next", "name": "Next driver", "status": "active", "delivery_fee": 25})
+        router = make_store_delivery_reassignment_router(db, lambda: ACTOR)
+        transfer = next(r.endpoint for r in router.routes if r.path.endswith("/{assignment_id}/reassign"))
+        old = await db[ASSIGNMENTS].find_one({})
+        with pytest.raises(HTTPException) as error:
+            await transfer("assignment-A", ReassignPayload(driver_id="next"), user=ACTOR)
+        assert error.value.status_code == 409 and error.value.detail["code"] == expected
+        assert await db[ASSIGNMENTS].find({}).to_list(2) == [old]
+        assert await db[EVENTS].count_documents({}) == 0
+    finally:
+        await _shutdown(client, db)
+
+
+@pytest.mark.asyncio
 async def test_transfer_from_in_transit_resets_workflow_and_can_be_cancelled_again():
     client, db = await _fixture()
     try:
@@ -79,7 +105,7 @@ async def test_transfer_from_in_transit_resets_workflow_and_can_be_cancelled_aga
         }})
         await db["store_drivers"].insert_one({
             "user_id": "merchant", "id": "driver-J", "name": "New driver", "status": "active",
-            "shipping_company": "مندوب الرياض", "delivery_fee": 25,
+            "shipping_company": "مندوب جدة", "delivery_fee": 25,
         })
         router = make_store_delivery_reassignment_router(db, lambda: ACTOR)
         transfer = next(r.endpoint for r in router.routes if r.path.endswith("/{assignment_id}/reassign"))
