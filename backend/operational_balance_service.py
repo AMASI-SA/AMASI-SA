@@ -21,7 +21,8 @@ from operational_ad_wallet_pool import enabled as wallet_pool_enabled, project_p
 _LOG = logging.getLogger(__name__)
 
 DEFINITIVE_MOVEMENT_REJECTIONS = {
-    "operational_workspace_source_insufficient",
+    "operational_workspace_source_insufficient", "operational_pos_bank_confirmation_required",
+    "operational_transfer_reference_required", "operational_pos_insufficient",
     "operational_workspace_owner_return_limit",
     "operational_salary_adjustment_required",
     "operational_future_business_date", "operational_business_date_invalid",
@@ -66,6 +67,32 @@ def fmt(value):
 
 def party_key(kind, identity, currency):
     return digest([kind, identity, currency])
+
+
+def prepaid_shipping_cash(state, identity):
+    return any(rate.get("payment_mode") == "prepaid" and (rate.get("cash_account") or {}).get("id") == identity
+               for rate in state.get("courier_tariffs", []))
+
+
+async def movement_source(db, owner, payload, currency):
+    bank = None
+    account_type = payload.get("source_account_type", "bank_auto")
+    if account_type not in {"bank_auto", "bank", "cash", "employee_custody"}:
+        fail("operational_source_account_type_invalid", "نوع مصدر الحركة غير صحيح", 422)
+    if payload.get("bank_id"):
+        # Exact catalog ID, only bank/cash. No name matching or imported balances.
+        from operational_balance_sources import entities
+        try:
+            account_kinds = ("bank", "cash") if account_type == "bank_auto" else (account_type,)
+            banks = [r for k in account_kinds for r in await entities(db, owner, k)
+                     if r["id"] == payload["bank_id"] and r.get("currency") == currency
+                     and r.get("ready") is not False and r.get("settings_complete") is not False]
+        except ValueError:
+            fail("operational_bank_setup_incomplete", "إعداد البنوك والصناديق في ميزان 2 غير مكتمل")
+        if len(banks) != 1:
+            fail("operational_bank_required", "اختر بنكًا أو صندوقًا معتمدًا من ميزان 2")
+        bank = banks[0]
+    return bank
 
 
 async def entity(db, owner, kind, identity, currency):
@@ -249,23 +276,7 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
                 key.startswith('salary:' + row['id'] + ':')
                 for key in state.get('engine', {}).get('salary_conflicts', {})):
             fail('operational_salary_adjustment_required', 'تغير مصدر استحقاق محفوظ؛ يلزم حل فرق الراتب بتسوية موثقة قبل تسجيل حركة جديدة')
-        bank = None
-        account_type = payload.get("source_account_type", "bank_auto")
-        if account_type not in {"bank_auto", "bank", "cash", "employee_custody"}:
-            fail("operational_source_account_type_invalid", "نوع مصدر الحركة غير صحيح", 422)
-        if payload.get("bank_id"):
-            # Exact catalog ID, only bank/cash. No name matching or imported balances.
-            from operational_balance_sources import entities
-            try:
-                account_kinds = ("bank", "cash") if account_type == "bank_auto" else (account_type,)
-                banks = [r for k in account_kinds for r in await entities(db, owner, k)
-                         if r["id"] == payload["bank_id"] and r.get("currency") == ("SAR" if has_fx else currency)
-                         and r.get("ready") is not False and r.get("settings_complete") is not False]
-            except ValueError:
-                fail("operational_bank_setup_incomplete", "إعداد البنوك والصناديق في ميزان 2 غير مكتمل")
-            if len(banks) != 1:
-                fail("operational_bank_required", "اختر بنكًا أو صندوقًا معتمدًا من ميزان 2")
-            bank = banks[0]
+        bank = await movement_source(db, owner, payload, "SAR" if has_fx else currency)
         if bank and bank["kind"] == "employee_custody":
             custody_targets = {"operating_expense", "supplier"}
             if payload.get("workspace_operation") == "external.pay":
@@ -330,6 +341,17 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
             except ValueError:
                 fail("operational_order_ineligible", "الطلب أو حالته أو إثباته غير مؤهل لاحتساب الحركة")
         reference = payload.get("reference", "").strip()
+        pos_settlement = row["kind"] == "pos_receivable" and payload["kind"] != "correction"
+        if pos_settlement and (not bank or bank["kind"] != "bank" or payload["direction"] != "incoming"
+                or payload["kind"] not in {"collection", "settlement"} or not payload.get("business_date")
+                or payload.get("bank_arrival_confirmed") is not True or not reference):
+            fail("operational_pos_bank_confirmation_required", "أكد مطابقة وصول الحوالة إلى البنك وأدخل مرجعها وتاريخها", 422)
+        if pos_settlement and date.fromisoformat(payload["business_date"]) < datetime.fromisoformat(
+                state["started_at"].replace("Z", "+00:00")).astimezone(ZoneInfo("Asia/Riyadh")).date():
+            fail("operational_business_date_invalid", "تاريخ وصول الحوالة يسبق بداية الأرصدة التشغيلية", 422)
+        if payload["kind"] == "transfer" and bank and bank["kind"] == "bank" and row["kind"] == "cash" and not reference:
+            if prepaid_shipping_cash(state, row["id"]):
+                fail("operational_transfer_reference_required", "أدخل مرجع التحويل إلى صندوق الشحن", 422)
         if reference and any(r.get("status") in {"refunded", "salla_refund_confirmed"} and r.get("refund_source_type") == "bank"
                              and r.get("refund_source_id") == payload.get("bank_id") and r.get("refund_reference") == reference
                              for r in state.get("customer_returns", [])):
@@ -338,7 +360,9 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
                              for m in state["movements"]):
             fail("operational_reference_duplicate", "مرجع الحركة مستخدم من قبل")
         fee = money(payload.get("actual_fee_amount", "0"), zero=True)
-        if fee and (payload["kind"] != "settlement" or row["kind"] != "provider"
+        if pos_settlement and fee and not (payload.get("fee_reference") or "").strip():
+            fail("operational_actual_fee_evidence_required", "أدخل مرجع مستند رسوم الشبكة الفعلية", 422)
+        if fee and not pos_settlement and (payload["kind"] != "settlement" or row["kind"] != "provider"
                     or payload["direction"] != "incoming"):
             fail("operational_actual_fee_evidence_required", "رسوم التسوية تخص تسوية واردة من المنصة")
         requested = payload.get("allocations", [])
@@ -348,14 +372,18 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
                             and r["party_id"] == row["id"] and r["currency"] == currency), {})
             field = "outstanding_receivable" if payload["direction"] == "incoming" else "outstanding_payable"
             party_available = Decimal(balance.get(field, "0"))
+        if pos_settlement and amount + fee > party_available:
+            fail("operational_pos_insufficient", "صافي التحويل والرسوم يتجاوزان المتبقي المثبت لدى الشبكة")
         if (row["kind"] == "supplier" and payload["direction"] == "outgoing"
                 and payload["kind"] in {"payment", "settlement"}
                 and amount > max(party_available - Decimal(balance.get("outstanding_receivable", "0")), Decimal(0))):
             fail("operational_supplier_payment_exceeds_payable", "لا يمكن سداد المورد دون مستحق، أو بأكثر من المبلغ المستحق")
         if (not wallet_pool and not requested and external_operation not in EXTERNAL_CREATION
-                and (payload["kind"] in {"payment", "collection", "refund"} or external_operation in EXTERNAL_REPAYMENT)
+                and (payload["kind"] in {"payment", "collection", "refund"} or pos_settlement or external_operation in EXTERNAL_REPAYMENT)
                 and row["kind"] not in {"bank", "cash", "employee_custody"}):
             left, requested = min(amount, party_available) if party_available is not None else amount, []
+            if pos_settlement:
+                left = amount + fee
             candidates = list(state["openings"]) + list(state.get("engine", {}).get("obligations", {}))
             if external_operation in EXTERNAL_REPAYMENT:
                 candidates += list(advance_obligations(state))
@@ -402,7 +430,7 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
         if party_available is not None and total > party_available + sum(promotions.values(), Decimal(0)):
             fail("operational_employee_net_over_settlement" if row["kind"] == "employee" else "operational_party_over_settlement",
                  "التخصيص يتجاوز المتبقي المستحق بعد التصحيحات والمقاصة المعتمدة")
-        if payload["kind"] == "settlement" and total != amount + fee:
+        if (payload["kind"] == "settlement" or pos_settlement) and total != amount + fee:
             fail("operational_settlement_allocation_required", "خصص مبلغ التسوية للالتزامات المستحقة")
         if (not wallet_pool and row["kind"] == "ad_account" and row.get("funding_mode") == "hybrid"
                 and payload["direction"] == "outgoing" and payload["kind"] == "payment"
@@ -820,6 +848,11 @@ def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=Fa
             row["actual"] += bank_amount if signed > 0 else -bank_amount
             if movement["bank_kind"] == "employee_custody":
                 row["custody_spent"] += amount
+        if (movement.get("party_type") == "pos_receivable" and movement.get("bank_arrival_confirmed") is True
+                and movement.get("fee_reference") and Decimal(movement.get("actual_fee_amount", "0")) > 0):
+            fee_account = get("operating_expense", "pos_settlement_fee", "SAR", "رسوم تسوية الشبكة")
+            fee_account["actual"] += Decimal(movement["actual_fee_amount"])
+            fee_account["expense_paid"] += Decimal(movement["actual_fee_amount"])
         if movement.get("bank_fee_amount") is not None:
             bank_fee = Decimal(movement["bank_fee_amount"])
             if bank_fee > 0:

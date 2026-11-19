@@ -6,6 +6,7 @@ its stage buckets replace overlapping estimates rather than being added to
 them. A recorded subtotal is not proof that an entire forecast is covered.
 """
 from operational_financial_activity_runtime import preparation_checkpoint
+from operational_aramex_status_shipping import STATUS_BASIS, OWNER_STATUS_BASIS
 from collections import Counter
 from copy import deepcopy
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
@@ -627,7 +628,7 @@ def _deliveries(obligations, details, currency, names, source_issues, *, coverag
         prepaid_rows = [row for row in fee_rows if row.get("payment_mode") == "prepaid"]
         status_prepaid_rows = [row for row in prepaid_rows
                               if row.get("recognition_event") == "aramex_status_eligible"
-                              and row.get("recognition_basis") == "aramex_status_created_after_start"]
+                              and row.get("recognition_basis") in {STATUS_BASIS, OWNER_STATUS_BASIS}]
         status_prepaid = status_prepaid_rows[0] if status_prepaid_rows else None
         prepaid = prepaid_rows[0] if prepaid_rows else None
         completed = completed_rows[0] if completed_rows else None
@@ -638,7 +639,7 @@ def _deliveries(obligations, details, currency, names, source_issues, *, coverag
         prepaid_time_proved = all(
             row.get("recognition_event") == "order_completed" and bool(row.get("completed_at"))
             or row.get("recognition_event") == "aramex_status_eligible"
-            and row.get("recognition_basis") == "aramex_status_created_after_start"
+            and row.get("recognition_basis") in {STATUS_BASIS, OWNER_STATUS_BASIS}
             and row.get("completed_at") is None and bool(row.get("recorded_at"))
             and row.get("observed_order_status") in {"completed", "out_for_delivery", "delivered"}
             for row in prepaid_rows)

@@ -39,6 +39,13 @@ PartyType = Literal["employee", "provider", "courier", "store_driver", "ad_accou
                     "operating_expense", "owner_withdrawal"]
 
 
+class AramexOrderStatus(Input):
+    order_numbers: list[str] = Field(min_length=1, max_length=250)
+    expected_session_scope: str = Field(pattern=r'^[a-f0-9]{64}$')
+    preview_hash: str | None = Field(default=None, pattern=r'^[a-f0-9]{64}$')
+    request_id: str | None = Field(default=None, min_length=1, max_length=120)
+
+
 class CourierTariffApproval(Request):
     party_id: str = Field(min_length=1, max_length=200)
     source_hash: str = Field(pattern=r'^[0-9a-f]{64}$')
@@ -55,6 +62,12 @@ class ProviderHistoryApproval(Request):
     evidence_id: str = Field(pattern=r"^[a-f0-9]{64}$")
     statement_reference: str = Field(min_length=3, max_length=250)
     confirmed_outstanding: bool
+
+
+class PosReceivableBinding(Input):
+    expected_session_scope: str = Field(pattern=r'^[a-f0-9]{64}$')
+    existing_id: str | None = Field(default=None, min_length=1, max_length=200)
+    confirmed: Literal[True]
 
 
 class CustomerWalletFlow(Input):
@@ -164,6 +177,8 @@ class Movement(Request):
     allocations: list[Allocation] = Field(default_factory=list, max_length=1000)
     source: Literal["mezan2", "employee_app"] = "mezan2"
     actual_fee_amount: str = Field(default="0.00", max_length=30)
+    bank_arrival_confirmed: Literal[True] | None = None
+    fee_reference: str | None = Field(default=None, min_length=1, max_length=160)
     # Optional cross-currency ad funding. The advertisement amount/currency stay
     # in USD; the debited SAR bank leg and its actual bank fee are distinct.
     # Presence of any FX field requires all three, validated atomically by service.
@@ -482,6 +497,15 @@ def make_operational_balance_router(db, current_user):
     manage_guard = guarded("manage")
     move_guard = guarded("move")
 
+    @router.post('/courier-tariffs/aramex-order-status')
+    async def aramex_order_status(payload: AramexOrderStatus, user=Depends(guarded('courier_tariff_manage'))):
+        from operational_aramex_owner_reconciliation import reconcile_selected
+        actor, owner, _ = await scope(db, user, 'courier_tariff_manage')
+        if bool(payload.preview_hash) != bool(payload.request_id):
+            fail('aramex_confirmation_invalid', 'مرجع الاعتماد مطلوب', 422)
+        return await reconcile_selected(db, owner, actor['id'], payload.order_numbers, payload.expected_session_scope,
+                                        preview_hash=payload.preview_hash, request_id=payload.request_id)
+
     @router.get('/courier-tariffs')
     async def courier_tariffs(request: HttpRequest, user=Depends(current_user)):
         async def read_page():
@@ -744,6 +768,12 @@ def make_operational_balance_router(db, current_user):
 
         return await run_visible_report_read(request, read_page)
 
+    @router.post('/pos-receivable-binding')
+    async def bind_pos(payload: PosReceivableBinding, user=Depends(guarded('bank_manage'))):
+        from operational_pos_identity import configure_pos
+        actor, owner, _ = await scope(db, user, 'bank_manage')
+        return await configure_pos(db, owner, actor['id'], payload.existing_id, payload.expected_session_scope)
+
     @router.get("/entities/{kind}")
     async def entities_route(request: HttpRequest, kind: PartyType, user=Depends(current_user)):
         async def read_page():
@@ -909,13 +939,29 @@ def make_operational_balance_router(db, current_user):
         if payload.business_date is None:
             data.pop("business_date")
         # Preserve existing request hashes for in-flight pre-FX mobile movements.
-        for field in ("bank_currency", "bank_amount", "bank_fee_amount", "external_operation"):
+        for field in ("bank_currency", "bank_amount", "bank_fee_amount", "external_operation", "bank_arrival_confirmed", "fee_reference"):
             if data[field] is None:
                 data.pop(field)
         if source == "employee_app":
             from operational_app_banks import require_assigned_bank
             await require_assigned_bank(db, owner, actor, data)
-        result = await create_movement(db, owner, actor["id"], data, source=source)
+        from operational_balance_service import movement_source, prepaid_shipping_cash
+        operation = None
+        if (payload.kind == "transfer" and payload.party_type == "cash"
+                and prepaid_shipping_cash(await read(db, owner), payload.party_id)):
+            account = await movement_source(db, owner, data, payload.currency)
+            if account:
+                operation = "accounts.transfer"
+                resources = [("cash", payload.party_id), (account["kind"], account["id"])]
+        elif payload.party_type == "pos_receivable" and payload.kind != "correction":
+            operation = "provider.settle"
+            resources = [("pos_receivable", payload.party_id), ("bank", payload.bank_id)]
+        if operation:
+            from operational_balance_access import guard_access
+            async with guard_access(db, actor, owner, operation, resources):
+                result = await create_movement(db, owner, actor["id"], data, source=source)
+        else:
+            result = await create_movement(db, owner, actor["id"], data, source=source)
         if source == "employee_app" and result.get("external_balance_snapshot") is not None:
             # Reporting permission is independent from recording a movement.
             # Recheck it AFTER the commit; redact only balances on revocation,

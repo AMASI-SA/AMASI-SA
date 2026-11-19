@@ -141,7 +141,11 @@ export default function StoreDeliveryPaymentReview() {
     }, () => { if (active) setPosError("تعذر تحميل الذمم الأصلية؛ اعتماد الشبكة غير متاح"); });
     return () => { active = false; };
   }, []);
-  const destination = item => destinations[item.assignment_id] || {};
+  const destination = item => {
+    const selected = destinations[item.assignment_id] || {};
+    const designated = posFor(item).find(row => row.is_default);
+    return designated ? { ...selected, pos: designated.id } : selected;
+  };
   const canUpload = item => validContext(item) && optionsFor(item)?.can_approve !== false &&
     statementContextMatches(statementContexts[item.assignment_id], optionsFor(item)) &&
     statementContexts[item.assignment_id].can_upload === true &&
@@ -411,7 +415,7 @@ export default function StoreDeliveryPaymentReview() {
                 {bankError && <p role="alert">{bankError}</p>}
               </>}
             </div> : item.payment_method === "card_terminal" ? <div className="mt-4 space-y-2">
-              <label>ذمة الشبكة المختارة<select value={destination(item).pos || ""} onChange={e => updateDestination(item, "pos", e.target.value)}><option value="">اختر ذمة موثقة من الذمم المدينة الأخرى</option>{posFor(item).map(fact => <option key={fact.id} value={fact.id}>{fact.display_name}{isPosDestination(fact) ? ` · ${fact.entity_type}/${fact.entity_id}/${fact.sub_account}` : ""}</option>)}</select></label>
+              <label>ذمة الشبكة المختارة<select disabled={posFor(item).some(row => row.is_default)} value={destination(item).pos || ""} onChange={e => updateDestination(item, "pos", e.target.value)}><option value="">اختر ذمة موثقة من الذمم المدينة الأخرى</option>{posFor(item).map(fact => <option key={fact.id} value={fact.id}>{fact.display_name}{isPosDestination(fact) ? ` · ${fact.entity_type}/${fact.entity_id}/${fact.sub_account}` : ""}</option>)}</select></label>
               <label>مبلغ إيصال الشبكة المطابق<input inputMode="decimal" value={destination(item).amount || ""} onChange={e => updateDestination(item, "amount", e.target.value)} /></label>
               <label>مرجع عملية الشبكة (اختياري)<input value={destination(item).reference || ""} onChange={e => updateDestination(item, "reference", e.target.value)} /></label>
               <p>راجع الإيصال المرتبط وطابق مبلغه مع مبلغ الطلب. اعتماد المحاسب ينقل مسؤولية COD إلى ذمة الشبكة المختارة ضمن الذمم المدينة الأخرى؛ لا يثبت وصول المبلغ إلى البنك.</p>

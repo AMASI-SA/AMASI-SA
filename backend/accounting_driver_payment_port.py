@@ -30,7 +30,7 @@ class DriverPaymentDestination(TypedDict):
 
 
 async def _manual_pos_destination(db, owner, *, financial_account_id, evidence_reference,
-        amount, receipt_hash, review, receipt, actor_id, reviewed_amount):
+        amount, receipt_hash, review, receipt, actor_id, reviewed_amount, operational_identity=None):
     from pydantic import ValidationError
     from accounting_onboarding_ssot import FACTS, TypedFactCreate, _key
     from accounting_shipping_native_contract import digest, money, fail
@@ -48,21 +48,33 @@ async def _manual_pos_destination(db, owner, *, financial_account_id, evidence_r
             or receipt.get("driver_id") != review.get("driver_id")
             or money(review.get("amount")) != money(amount)):
         fail("driver_pos_review_evidence_required")
-    rows = await db[FACTS].find({"user_id": owner, "id": financial_account_id,
-        "status": "active", "category": "other_receivable"}).limit(2).to_list(2)
-    if len(rows) != 1:
-        fail("driver_pos_receivable_identity_required")
-    fact = rows[0]
-    try:
-        contract = TypedFactCreate.model_validate({key: fact[key] for key in TypedFactCreate.model_fields if key in fact})
-    except (ValidationError, ValueError):
-        fail("driver_pos_receivable_identity_required")
-    identity = _key(owner, "other_receivable", contract.reference, str(contract.cutover_date))
-    if (fact.get("_id") != identity or fact.get("id") != identity or fact.get("entity_id") != identity
-            or (fact.get("entity_type"), fact.get("sub_account"), fact.get("side")) != ("asset", "other_receivable", "debit")
-            or contract.currency != "SAR" or fact.get("source") != "documented_opening_fact"
-            or not fact.get("created_by") or not fact.get("created_at") or fact.get("version") != 1):
-        fail("driver_pos_receivable_identity_required")
+    if operational_identity is not None:
+        from operational_pos_identity import bound_identity
+        operational_identity = bound_identity({'pos_receivable_binding': operational_identity}, owner)
+        identity = operational_identity['id']
+        if financial_account_id != identity or operational_identity['owner_id'] != owner:
+            fail("driver_pos_receivable_identity_required")
+        fact = operational_identity
+        name, namespace = fact['name'], 'operational_pos_receivable_binding'
+        identity_reference, identity_evidence = identity, fact['seal']
+    else:
+        rows = await db[FACTS].find({"user_id": owner, "id": financial_account_id,
+            "status": "active", "category": "other_receivable"}).limit(2).to_list(2)
+        if len(rows) != 1:
+            fail("driver_pos_receivable_identity_required")
+        fact = rows[0]
+        try:
+            contract = TypedFactCreate.model_validate({key: fact[key] for key in TypedFactCreate.model_fields if key in fact})
+        except (ValidationError, ValueError):
+            fail("driver_pos_receivable_identity_required")
+        identity = _key(owner, "other_receivable", contract.reference, str(contract.cutover_date))
+        if (fact.get("_id") != identity or fact.get("id") != identity or fact.get("entity_id") != identity
+                or (fact.get("entity_type"), fact.get("sub_account"), fact.get("side")) != ("asset", "other_receivable", "debit")
+                or contract.currency != "SAR" or fact.get("source") != "documented_opening_fact"
+                or not fact.get("created_by") or not fact.get("created_at") or fact.get("version") != 1):
+            fail("driver_pos_receivable_identity_required")
+        name, namespace = contract.display_name, FACTS
+        identity_reference, identity_evidence = contract.reference, contract.evidence
     # Selection is explicit for this review. A generic receivable's label never
     # makes it POS, and no account, opening fact or default binding is created.
     reference = str(evidence_reference or "").strip() or None
@@ -76,14 +88,14 @@ async def _manual_pos_destination(db, owner, *, financial_account_id, evidence_r
         source_record_id=digest(["transaction_reference", reference]) if reference else receipt_hash,
         source_revision=digest([review["id"], review.get("revision", 1), receipt_hash, fact]),
         verification="accountant_pos_review_approved", bank_movement_id=None,
-        display_name=contract.display_name, identity_source=FACTS,
-        identity_reference=contract.reference, identity_evidence=contract.evidence,
+        display_name=name, identity_source=namespace,
+        identity_reference=identity_reference, identity_evidence=identity_evidence,
         reviewed_by=actor_id, reviewed_amount=reviewed_amount, transaction_reference=reference)
 
 
 async def require_driver_payment_destination(db, owner, *, payment_method,
         financial_account_id, evidence_reference, amount, receipt_hash,
-        review=None, receipt=None, actor_id=None, reviewed_amount=None) -> DriverPaymentDestination:
+        review=None, receipt=None, actor_id=None, reviewed_amount=None, operational_identity=None) -> DriverPaymentDestination:
     """Bank transfer requires arrived funds; POS requires accountant review.
 
     The caller authorizes the accountant and verifies bound receipt bytes in
@@ -95,7 +107,7 @@ async def require_driver_payment_destination(db, owner, *, payment_method,
     if payment_method == "card_terminal":
         return await _manual_pos_destination(db, owner, financial_account_id=financial_account_id,
             evidence_reference=evidence_reference, amount=amount, receipt_hash=receipt_hash,
-            review=review, receipt=receipt, actor_id=actor_id, reviewed_amount=reviewed_amount)
+            review=review, receipt=receipt, actor_id=actor_id, reviewed_amount=reviewed_amount, operational_identity=operational_identity)
     if payment_method != "bank_transfer":
         raise HTTPException(503, detail={"code": "mz2_driver_payment_destination_not_integrated"})
     from accounting_financial_identity import require_financial_ledger_identity

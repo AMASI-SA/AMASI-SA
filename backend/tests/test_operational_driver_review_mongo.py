@@ -219,16 +219,39 @@ def test_real_failures_have_no_partial_financial_or_review_effect(case):
 def test_real_pos_settlement_uses_existing_operational_allocation_without_second_driver_cash():
     async def scenario(db):
         assignment, payload = await seed(db)
+        from operational_pos_identity import configure_pos
+        from operational_balance_store import digest
+        await db.mz2_opening_facts_v2.delete_many({'user_id': 'owner'})
+        before = await db[STATES].find_one({'_id': 'owner'})
+        binding = await configure_pos(db, 'owner', 'owner', None, digest(['owner', 'owner']))
+        assert await configure_pos(db, 'owner', 'owner', None, digest(['owner', 'owner'])) == binding
+        assert (await db[STATES].find_one({'_id': 'owner'}))['openings'] == before['openings']
+        assert await db.mz2_opening_facts_v2.count_documents({}) == 0
+        options = await service.options(db, owner='owner', actor='owner', assignment_id=assignment, clock=NOW)
+        assert options['pos_receivables'] == [{'id': binding['id'], 'display_name': 'ذمة الشبكة', 'is_default': True}]
+        payload.destination_financial_id = binding['id']
         result = await service.review_payment(db, owner='owner', actor='owner', assignment_id=assignment, payload=payload, clock=NOW)
+        assert result == await service.review_payment(db, owner='owner', actor='owner', assignment_id=assignment,
+                                                     payload=payload, clock=NOW)
         request = {'request_id': 'synthetic-pos-settlement', 'party_type': 'pos_receivable',
                    'party_id': payload.destination_financial_id, 'currency': 'SAR', 'direction': 'incoming',
                    'kind': 'collection', 'amount': '150.00', 'bank_id': 'bank', 'note': 'Synthetic received payment',
-                   'allocations': [{'obligation_id': result['obligation_id'], 'amount': '150.00'}]}
+                   'allocations': [], 'bank_arrival_confirmed': True, 'reference': 'TEST-BANK-REF',
+                   'business_date': NOW[:10], 'actual_fee_amount': '2.50', 'fee_reference': 'TEST-FEE'}
+        for change in ({'bank_arrival_confirmed': False}, {'amount': '201'}, {'reference': ''},
+                       {'fee_reference': ''}):
+            with pytest.raises(HTTPException):
+                await create_movement(db, 'owner', 'owner', {**request, 'request_id': digest(change), **change}, clock=NOW)
+        posted = await create_movement(db, 'owner', 'owner', request, clock=NOW)
+        assert posted == await create_movement(db, 'owner', 'owner', request, clock=NOW)
+        with pytest.raises(HTTPException) as duplicate:
+            await create_movement(db, 'owner', 'owner', {**request, 'request_id': 'synthetic-new-request'}, clock=NOW)
+        assert duplicate.value.detail['code'] == 'operational_reference_duplicate'
         await create_movement(db, 'owner', 'owner', request, clock=NOW)
         state = await db[STATES].find_one({'_id': 'owner'})
         result = report(state)
         assert result['summary']['actual_liquidity'] == '1150.00'
-        assert next(r for r in result['parties'] if r['party_type'] == 'pos_receivable')['outstanding_receivable'] == '50.00'
+        assert next(r for r in result['parties'] if r['party_type'] == 'pos_receivable')['outstanding_receivable'] == '47.50'
         assert next(r for r in result['parties'] if r['party_type'] == 'store_driver')['outstanding_receivable'] == '0.00'
     run(scenario)
 

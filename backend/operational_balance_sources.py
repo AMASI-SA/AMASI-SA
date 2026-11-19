@@ -608,8 +608,15 @@ async def entities(db, owner, kind, *, include_unready=False, operational_state=
         from operational_bank_catalog import bank_identities
         source = await bank_identities(db, owner)
     elif kind == 'pos_receivable':
-        from operational_pos_identity import pos_candidates
+        from operational_pos_identity import bound_identity, pos_candidates
+        from operational_balance_store import STATES
         source = pos_candidates(await rows(db, owner, 'mz2_opening_facts_v2'), owner)
+        state = operational_state
+        if state is None:
+            state = await db[STATES].find_one({'_id': owner, 'owner_id': owner}, {'pos_receivable_binding': 1})
+        binding = bound_identity(state or {}, owner)
+        if binding and binding['source'] == 'operational':
+            source.append({'id': binding['id'], 'name': binding['name'], 'currency': 'SAR', 'status': 'active'})
     elif kind in ENTITY_COLLECTIONS:
         source = await rows(db, owner, ENTITY_COLLECTIONS[kind])
         if kind in ('bank', 'cash'):
@@ -1353,6 +1360,8 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                 await cpu_budget.checkpoint()
                 calculation_checkpoint()
                 issue(out, 'operational_courier_tariff_authority_conflict', party, component='shipping_fee')
+        from operational_aramex_status_shipping import current_status, owner_rule_active
+        status_rule = owner_rule_active(operational_state, owner)
         prepaid_keys = {str(key).casefold() for rate in setup.get('contracts', [])
                         if rate.get('context') == 'order_completed' and rate.get('payment_mode') == 'prepaid'
                         for key in rate.get('keys', [])}
@@ -1513,7 +1522,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                 from operational_completed_shipping_admission import CompletionReviewRequired
                 from operational_completed_shipping_sources import completion_issue
                 saved_prepaid = (operational_state or {}).get('engine', {}).get('facts', {}).get('prepaid_shipping:' + identity)
-                if saved_prepaid or isinstance(current_shipping, dict) and any(
+                if saved_prepaid or (status_rule and created > start and current_status(raw.get('status'))) or isinstance(current_shipping, dict) and any(
                         str(current_shipping.get(key) or '').casefold() in prepaid_keys for key in ('company_code', 'company_name')):
                     data['_prepaid_orders'].add(identity)
                     from operational_prepaid_shipping import source_event
