@@ -176,7 +176,7 @@ def reconcile(state, sources, as_of):
     from operational_delivery_register import POLICY, PREFIX
     if "delivery_register" in sources:
         register = engine.setdefault("delivery_register", {})
-        register[POLICY] = {"started_at": start.isoformat()}
+        register[POLICY] = {"started_at": start.isoformat(), "history_candidates": sources.get("delivery_history_candidates", [])}
         for oid, record in sources["delivery_register"].items():
             calculation_checkpoint()
             previous = register.get(PREFIX + oid, {})

@@ -653,6 +653,9 @@ export default function OperationalFinancialPosition() {
                         </li>)}</ul>
                     </details>}
                 </aside>)}
+                {report?.delivered_status_notice?.pending_history > 0 && <p className="ofp-warning" role="status">
+                    طلبات ملغية أو مسترجعة تجري مطابقة سجل توصيلها في سلة ({report.delivered_status_notice.pending_history})
+                </p>}
                 {report?.delivered_status_notice?.unassigned > 0 && <p className="ofp-warning" role="status">
                     تواصيل محسوبة تحتاج تحديد الجهة المنفذة ({report.delivered_status_notice.unassigned})
                 </p>}

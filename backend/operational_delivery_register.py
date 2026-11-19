@@ -6,6 +6,7 @@ from operational_delivery_evidence import DELIVERED, _instant, _status, _text
 from shipping_companies import matches_courier_alias, normalize_shipping_company
 
 MARKER = 'salla_first_delivered'
+HISTORY_CHECK = 'salla_delivery_history_check'
 PREFIX = 'salla_delivered_order:'
 POLICY = 'salla_delivery_register_v1'
 STATUS_LABELS = {'canceled': 'ملغي', 'cancelled': 'ملغي', 'returned': 'مسترجع', 'refunded': 'مسترجع',
@@ -71,6 +72,24 @@ async def bind_first_driver(db, owner, number, marker):
         return {**marker, 'driver_id': party['party_id'], 'assignment_id': party.get('assignment_id'),
                 'driver_name': party.get('party_name')}
     return marker
+
+
+def history_version(raw):
+    date = raw.get('date') if isinstance(raw.get('date'), dict) else {}
+    version = raw.get('updated_at') or raw.get('date_updated') or date.get('updated')
+    return [order_status(raw)[0], str(version or '')]
+
+
+def observed_native_delivery(rows, oid):
+    # This is a status witness, not a claim about when a fee or cash receipt occurred.
+    for row in rows:
+        if (not isinstance(row, dict) or row.get('type') not in {'activity', 'status_changed', 'status_updated'}
+                or row.get('order_id') is not None and _text(row['order_id']) != oid):
+            continue
+        value = row.get('new_status') or row.get('to_status') or row.get('customized') or row.get('status')
+        if order_status({'status': value})[0] == 'delivered':
+            return {'order_id': oid, 'source': 'salla_order_history'}
+    return None
 
 
 def history_delivery(history, oid, number):
@@ -145,7 +164,7 @@ def observe(source, raw, start, end, history, assignments, setup, facts, previou
             if key not in DELIVERED and (current.get('superseded_shipment_ids')
                     or current.get('shipment_type') in {'return', 'reverse', 'return_shipment'}):
                 carrier = {}
-            carrier = marker or carrier
+            carrier = marker if marker.get('company_code') or marker.get('company_name') else carrier
             if marker.get('driver_id'):
                 record.update(party_type='store_driver', party_id=marker['driver_id'],
                               assignment_id=marker.get('assignment_id'), party_name=marker.get('driver_name'))

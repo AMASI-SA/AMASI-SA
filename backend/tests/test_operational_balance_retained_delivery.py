@@ -3,7 +3,7 @@ import unittest
 from datetime import datetime, timezone
 
 from operational_delivery_register import (PREFIX, first_observation, history_delivery, notice,
-                                            observe, service_event)
+                                            observe, observed_native_delivery, service_event)
 
 START = datetime(2026, 10, 31, 21, 30, 1, 284707, timezone.utc)
 END = datetime(2026, 11, 18, tzinfo=timezone.utc)
@@ -94,6 +94,14 @@ class RetainedDeliveryTests(unittest.TestCase):
         self.source['salla_shipping_current'] = {'company_name': 'SMSA'}
         self.raw['status'] = 'returned'
         self.assertEqual(self.refresh()['party_id'], 'aramex')
+
+    def test_history_uses_status_even_when_the_delivery_has_no_note_or_waybill(self):
+        for event in ({'type': 'activity', 'status': 'تم التوصيل', 'note': ''},
+                      {'type': 'activity', 'status': 'تم التوصيل', 'note': 'تم التسليم'},
+                      {'type': 'activity', 'customized': {'name': 'تم التوصيل'}, 'status': 'completed'}):
+            self.assertEqual(observed_native_delivery([event], '3')['order_id'], '3')
+        self.assertIsNone(observed_native_delivery([{'type': 'activity', 'status': 'مسترجع', 'note': 'تم التوصيل'}], '3'))
+        self.assertIsNone(observed_native_delivery([{'type': 'activity', 'status': 'تم التوصيل', 'order_id': '4'}], '3'))
 
     def test_missing_party_is_counted(self):
         self.source.pop('salla_shipping_current')

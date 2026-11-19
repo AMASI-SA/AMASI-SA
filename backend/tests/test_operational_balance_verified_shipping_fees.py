@@ -429,7 +429,7 @@ def test_booked_fee_and_its_payment_survive_later_native_overlap_report(monkeypa
     '2026-11-02T11:04:39Z', '2026-11-02T09:18:23Z', '2026-10-31T23:40:45Z',
     '2026-10-31T21:30:01.284707Z',
 ])
-def test_old_order_delivery_on_or_after_riyadh_start_accrues_native_driver_fee(delivered_at):
+def test_delivery_after_november_opening_does_not_accrue_a_fee_for_a_preopening_order(delivered_at):
     start='2026-11-01T00:30:01.284707+03:00'
     now='2026-11-04T12:00:00+03:00'
     data=fixture()
@@ -439,9 +439,9 @@ def test_old_order_delivery_on_or_after_riyadh_start_accrues_native_driver_fee(d
     prior=active(); prior.update(started_at=start, engine={'as_of':now})
     src=run(collect_sources(HardBoundaryDB(data), 'owner', start, now, operational_state=prior))
     result=reconcile(prior, src, now)
-    assert fee_total(result)==10
-    assert result['engine']['obligations']['shipping:100:base_shipping']['party_id']=='driver'
-    assert not review(result)
+    assert fee_total(result) == 0
+    assert 'shipping:100:base_shipping' not in result['engine']['obligations']
+    assert 'salla_delivered_order:100' not in result['engine']['delivery_register']
     assert result['movements']==prior['movements'] and result['openings']==prior['openings']
     assert reconcile(result, src, now)==result
 

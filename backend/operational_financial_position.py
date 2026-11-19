@@ -19,6 +19,7 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None, vi
         # The summary surfaces the number. Order identities stay on detail pages.
         result["delivered_status_notice"] = {
             "count": len(summary["changed"]), "unassigned": summary["unassigned"],
+            "pending_history": len(register[POLICY].get("history_candidates", [])) if view in {"all", "summary"} else 0,
             "groups": [{"status": status, "count": len(items), "orders": items if view != "summary" else []}
                        for status, items in summary["groups"].items() if items],
         }

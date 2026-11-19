@@ -92,3 +92,37 @@ def test_aramex_completion_and_later_delivery_keep_one_wallet_debit():
         assert state['movements'][0]['amount'] == '34.50'
     notice = build_financial_position(state, view='couriers')['delivered_status_notice']
     assert notice['count'] == 1 and notice['groups'][0]['status'] == 'restored'
+
+
+@pytest.mark.asyncio
+async def test_native_history_recovery_resumes_and_caches_positive_and_negative_results(monkeypatch):
+    from mongomock_motor import AsyncMongoMockClient
+    from operational_delivery_register import HISTORY_CHECK, MARKER, history_version
+    from salla_integration import retained_delivery_history as recovery
+    db = AsyncMongoMockClient().retained_delivery
+    rows = []
+    for oid in ['1', '2']:
+        raw = {'id': oid, 'status': 'canceled', 'updated_at': AS_OF}
+        row = {'user_id': 'owner', 'order_number': oid, 'raw_by_source': {'salla_direct': raw}}
+        await db.unified_orders.insert_one(row)
+        rows.append({'order_id': oid, 'order_number': oid, 'version': history_version(raw)})
+    calls = []
+
+    async def history(database, owner, method, path, params):
+        assert database is db and owner == 'owner' and method == 'GET'
+        page = params['page']
+        calls.append((path, page))
+        status = 'تم التوصيل' if path == '/orders/1/histories' and page == 2 else 'قيد التنفيذ'
+        return {'success': True, 'data': [{'type': 'activity', 'status': status}],
+                'pagination': {'currentPage': page, 'totalPages': 2, 'total': 2}}
+
+    monkeypatch.setattr(recovery, 'call_salla', history)
+    await recovery.acquire(db, 'owner', rows, limit=2)
+    await recovery.acquire(db, 'owner', rows, limit=2)
+    await recovery.acquire(db, 'owner', rows, limit=2)
+    assert len(calls) == 4
+    positive = await db.unified_orders.find_one({'order_number': '1'})
+    negative = await db.unified_orders.find_one({'order_number': '2'})
+    assert positive[MARKER]['order_id'] == '1'
+    assert negative[HISTORY_CHECK]['complete'] and MARKER not in negative
+    assert positive['raw_by_source']['salla_direct']['status'] == 'canceled'

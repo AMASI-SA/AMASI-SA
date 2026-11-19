@@ -87,7 +87,7 @@ REFRESH_ORDER_FIELDS = (
     'order_status', 'order_status_slug', 'last_salla_direct_status_source_updated_at',
     'merchant', 'merchant_id', 'store_id', 'salla_shipment_id', 'tracking_number',
     'shipping_number', 'shipping_company_code', 'shipping_company',
-    'shipping_status', 'shipment_status', 'salla_first_delivered',
+    'shipping_status', 'shipment_status', 'salla_first_delivered', 'salla_delivery_history_check',
 )
 # Existing MZ2 daily-movement codes plus explicitly requested operational types.
 # The physical registry is shared. Only explicit operational provenance or a
@@ -1300,10 +1300,11 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                                'ad_snapshots', 'recurring', 'fee_policies', 'issues')}
     enable_issue_index(out)
     out['delivery_event_coverage'] = {'version': 1, 'started_at': start.isoformat(), 'as_of': now.isoformat()}
-    from operational_delivery_register import assignment_groups, observe, service_event, uses_retained_deliveries
+    from operational_delivery_register import HISTORY_CHECK, assignment_groups, history_version, observe, service_event, uses_retained_deliveries
     retained = uses_retained_deliveries(now)
     if retained:
         out['delivery_register'] = {}
+        out['delivery_history_candidates'] = []
     out['ad_balance_sar_basis'] = {}
     # No service with side effects is called: collection access is allowlisted.
     # The inventory catalogue is read on demand, not on each financial sync.
@@ -1490,6 +1491,13 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                 if register:
                     out['delivery_register'][identity] = register
                     service_candidates[identity] = (raw, register)
+                elif retained and start < created and identity and order_number:
+                    version = history_version(raw)
+                    if version[0] in {'canceled', 'cancelled', 'restored', 'ملغي', 'ملغى', 'مسترجع'}:
+                        checked = source.get(HISTORY_CHECK) or {}
+                        if checked.get('version') != version or not checked.get('complete'):
+                            out['delivery_history_candidates'].append(
+                                {'order_id': identity, 'order_number': order_number, 'version': version})
                 if created > start and identity and identity not in counted_order_ids:
                     counted_order_ids.add(identity)
                     customer_tenders["source_order_count"] += 1
