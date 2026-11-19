@@ -17,12 +17,13 @@ from fastapi import Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from operational_balance_service import (
-    KINDS, active_gate, create_movement, entity, fmt, money, outstanding, report,
+    KINDS, active_gate, create_movement, entity, fmt, money, report,
 )
 from operational_balance_store import (
     audit, claim_movement, digest, fail, mutate, now, read, remember, replay,
 )
 from operational_financial_activity_runtime import checked_rows, preparation_checkpoint, prepare_in_thread
+from operational_party_projection_state import party_projection_state
 from operational_supplier_credit_purchase import CreditInvoice, record_purchase
 from operational_visible_report_read import run_visible_report_read
 from operational_workspace_ledger_filters import check_period, filter_activity, movement_type
@@ -234,28 +235,18 @@ async def _linked_external_entry(db, owner, actor, payload, operation, resources
         target_kind, target_id = resources[1]
         target = await entity(db, owner, target_kind, target_id, "SAR")
         amount = money(payload["amount"])
-        allocations = []
         if target_kind == "employee":
             if any(key.startswith("salary:" + target_id + ":")
                    for key in state.get("engine", {}).get("salary_conflicts", {})):
                 fail("operational_salary_adjustment_required",
                      "تغير مصدر استحقاق محفوظ؛ يلزم حل فرق الراتب بتسوية موثقة قبل تسجيل حركة جديدة")
-            balances = report(state)
+            employee_state = await prepare_in_thread(party_projection_state, state, target_kind, target_id)
+            balances = await prepare_in_thread(report, employee_state)
             employee = next((r for r in balances["parties"] if r["party_type"] == target_kind
                              and r["party_id"] == target_id and r["currency"] == "SAR"), {})
             available = Decimal(employee.get("outstanding_payable", "0")) - Decimal(employee.get("outstanding_receivable", "0"))
             if amount > max(available, Decimal(0)):
                 fail("operational_workspace_salary_limit", "المبلغ غير قابل للتسوية لهذا الموظف", 409)
-            remaining = amount
-            for row in balances["obligations"]:
-                if (row.get("party_type"), row.get("party_id"), row.get("currency"), row.get("direction")) != (target_kind, target_id, "SAR", "payable"):
-                    continue
-                if row.get("pending_confirmation"):
-                    continue
-                take = min(remaining, Decimal(row.get("outstanding", "0")))
-                if take > 0:
-                    allocations.append({"obligation_id": row["id"], "amount": fmt(take)})
-                    remaining -= take
         shared = {
             "amount": fmt(amount), "currency": "SAR", "request_id": payload["request_id"],
             "actor_id": actor["id"], "recorded_by": _actor_snapshot(actor), "occurred_at": stamp,
@@ -269,10 +260,9 @@ async def _linked_external_entry(db, owner, actor, payload, operation, resources
                         "name": external["name"], "kind": "correction", "direction": "outgoing", "allocations": []}
         counterpart = {**shared, "id": identity + ":counterpart", "party_type": target_kind,
                        "party_id": target_id, "name": target["name"], "kind": "payment",
-                       "direction": "outgoing", "allocations": allocations}
-        # Both rows are real legs of this one instruction. There is no bank leg
-        # and no new salary expense or accrual. The report's existing allocation
-        # logic pays recorded obligations, or offsets a prior manual credit.
+                       "direction": "outgoing", "allocations": []}
+        if target_kind == "employee":
+            counterpart["settlement_scope"] = "account"
         state["movements"].extend([external_row, counterpart])
         audit(state, actor["id"], "workspace_external_payment", None,
               {"id": identity, "movements": [external_row, counterpart]}, LABELS[payload["reason"]], source, stamp)
@@ -293,7 +283,7 @@ async def _linked_external_entry(db, owner, actor, payload, operation, resources
             remember(state, action, payload, rejection)
             return rejection
 
-    result = await mutate(db, owner, apply)
+    result = await mutate(db, owner, apply, threaded_preparation=True)
     if result.get("_operational_rejected"):
         raise HTTPException(result["status"], detail=result["detail"])
     return result
@@ -798,6 +788,8 @@ def install_workspace_routes(router, db, current_user, scope):
         # Workspace reports need current financial proofs, not historical audit
         # pages or idempotency receipts. Writers keep the complete store reader.
         state = await read_financial_position_state(db, owner)
+        if selected_resource and selected_resource[0] == "ad_account":
+            state = await prepare_in_thread(party_projection_state, state, *selected_resource)
         resources, computed = await resource_catalog(db, owner, policy, state, ad_bank_fx=ad_bank_fx,
             selected_resource=selected_resource, reviewed_counts=review_snapshots.counts.get((owner, source_key(state))))
         if invoice_headers:

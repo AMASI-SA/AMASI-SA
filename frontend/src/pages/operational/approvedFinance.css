@@ -87,6 +87,8 @@
 .mz-finance .resource .between{align-items:center}
 .mz-finance .resource strong{font-size:16px}
 .mz-finance .resource .number{font-size:23px}
+.mz-finance [data-ad-balance="debt"]{color:#ac344b}
+.mz-finance [data-ad-balance="credit"]{color:var(--teal)}
 .mz-finance .number .unit,.mz-finance .amt .unit{font:13px MzArabic;color:var(--muted);margin-inline-start:4px}
 .mz-finance .bank{background:#f5eae3;color:#895232}
 .mz-finance .cash{background:#e6f2ec;color:#306850}

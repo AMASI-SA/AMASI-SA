@@ -52,12 +52,20 @@ export function movementRecorder(row) {
   return name && name !== 'غير موثق' ? name : 'اسم الموظف غير متوفر';
 }
 
+export function ledgerDisplayAmount(value, kind) {
+  if (kind !== 'ad_account') return value;
+  const units = minorUnits(value);
+  if (units === null) return null;
+  const absolute = units < 0n ? -units : units;
+  return `${units > 0n ? '-' : ''}${absolute / 100n}.${String(absolute % 100n).padStart(2, '0')}`;
+}
+
 export function signedResourceBalance(resource) {
   const balance = resource?.balance;
   if (resource?.access?.balance !== true || !balance || balance.visible === false) return null;
   const amount = minorUnits(balance.amount);
   if (amount === null) return null;
-  const cash = isMoneyAccount(resource.kind) || resource.kind === 'employee_custody';
+  const cash = isMoneyAccount(resource.kind) || ['employee_custody', 'ad_account'].includes(resource.kind);
   const negative = cash ? balance.side === 'for_party' : balance.side === 'for_us';
   const value = negative ? -amount : amount;
   const absolute = value < 0n ? -value : value;

@@ -2,13 +2,14 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { todaySA } from '../../lib/dates';
 import { simpleBalancesApi as api, simpleBalanceError } from './simpleBalancesApi';
-import { canReadStatement, isMoneyAccount, isStatement, minorUnits, money, movementDate, movementRecorder, movementTitle,
+import { canReadStatement, isMoneyAccount, isStatement, ledgerDisplayAmount, minorUnits, money, movementDate, movementRecorder, movementTitle,
   resourceKey, resourceLabels } from './simpleBalancesModel';
 
-export function SignedAmount({ value, hidden = false }) {
-  const units = hidden ? null : minorUnits(value);
+export function SignedAmount({ value, hidden = false, kind }) {
+  const display = ledgerDisplayAmount(value, kind);
+  const units = hidden ? null : minorUnits(display);
   return <span className="sb-running" data-sign={units === null ? undefined : units > 0n ? 'positive' : units < 0n ? 'negative' : 'zero'}>
-    {units === null ? '—' : <bdi>{money(value)}</bdi>}
+    {units === null ? '—' : <bdi>{money(display)}</bdi>}
   </span>;
 }
 
@@ -58,7 +59,7 @@ export function StatementDocument({ statement, printing = false }) {
         <td><strong>{movementTitle(row)}</strong><small title={movementDate(row, true)}><bdi>{movementDate(row)}</bdi></small>{row.order_number && row.customer_name && <small>طلب {row.order_number}</small>}{row.informational && <small>إثبات للمؤسسة · {money(row.amount)} {row.currency || statement.currency}</small>}<small>سجّلها: {movementRecorder(row)}</small></td>
         <td data-side={creditSide}>{!row.informational && row.side === creditSide ? money(row.amount) : '—'}</td>
         <td data-side={debitSide}>{!row.informational && row.side === debitSide ? money(row.amount) : '—'}</td>
-        {balances && <td className="sb-statement-balance"><SignedAmount value={row.balance_after} /></td>}
+        {balances && <td className="sb-statement-balance"><SignedAmount kind={resource.kind} value={row.balance_after} /></td>}
         {notes && <td className="sb-statement-note">{savedNote(row) || '—'}</td>}
       </tr>)}</tbody>
     </table></div>
@@ -66,10 +67,10 @@ export function StatementDocument({ statement, printing = false }) {
     <section className="sb-statement-summary" aria-label="ملخص الكشف">
       <h3>ملخص الفترة</h3>
       <dl className="sb-statement-totals">
-        {balances && <div data-statement-total="opening"><dt>الرصيد الافتتاحي</dt><dd><SignedAmount value={statement.opening_balance} /> <span className="sb-balance-side">{balanceSide(statement.opening_balance, resource)}</span></dd></div>}
+        {balances && <div data-statement-total="opening"><dt>الرصيد الافتتاحي</dt><dd><SignedAmount kind={resource.kind} value={statement.opening_balance} /> <span className="sb-balance-side">{balanceSide(statement.opening_balance, resource)}</span></dd></div>}
         <div><dt>إجمالي له</dt><dd><bdi>{money(statement.totals[creditSide])}</bdi></dd></div>
         <div><dt>إجمالي عليه</dt><dd><bdi>{money(statement.totals[debitSide])}</bdi></dd></div>
-        {balances && <div data-statement-total="closing"><dt>الصافي بنهاية الفترة</dt><dd><SignedAmount value={statement.closing_balance} /> <span className="sb-balance-side">{balanceSide(statement.closing_balance, resource)}</span></dd></div>}
+        {balances && <div data-statement-total="closing"><dt>الصافي بنهاية الفترة</dt><dd><SignedAmount kind={resource.kind} value={statement.closing_balance} /> <span className="sb-balance-side">{balanceSide(statement.closing_balance, resource)}</span></dd></div>}
       </dl>
       {balances && <p className="sb-small-note">الصافي بنهاية الفترة يشمل الرصيد الافتتاحي وحركات الفترة.</p>}
     </section>

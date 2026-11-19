@@ -64,7 +64,7 @@ async def read(db, owner):
     return await logical_state(db, owner, await _raw_state(db, owner))
 
 
-async def mutate(db, owner, operation):
+async def mutate(db, owner, operation, *, threaded_preparation=False):
     """Operation is async and side-effect free outside the returned aggregate.
 
     Callers revalidate source identity/permissions on every retry. No process
@@ -77,6 +77,9 @@ async def mutate(db, owner, operation):
         # financial writers retain their existing admission and commit rules.
         if demand_context() is not None:
             return await run_calculation(function, *args)
+        if threaded_preparation:
+            from operational_financial_activity_runtime import prepare_in_thread
+            return await prepare_in_thread(function, *args)
         return function(*args)
 
     for _ in range(12):
