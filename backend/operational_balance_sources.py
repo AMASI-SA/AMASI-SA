@@ -1472,7 +1472,8 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                         prepaid, charge = source_event(data, setup, source, raw, operational_state, owner, start, now,
                                                        delivery_history.get(order_number, ()), shipment_conflicts,
                                                        review_index=completion_review_index,
-                                                       status_shipment_conflicts=status_shipment_conflicts)
+                                                       status_shipment_conflicts=status_shipment_conflicts,
+                                                       assignment_index=assignment_index)
                         if not prepaid:
                             data['_prepaid_orders'].discard(identity)
                         if charge:
@@ -1490,7 +1491,8 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                     try:
                         charge = deferred_source_event(data, setup, source, raw, operational_state, owner, start, now,
                                                        delivery_history.get(order_number, ()), shipment_conflicts,
-                                                       review_index=completion_review_index)
+                                                       review_index=completion_review_index,
+                                                       assignment_index=assignment_index)
                         if charge:
                             out['completed_shipping_events'].append(charge)
                     except CompletionReviewRequired as exc:

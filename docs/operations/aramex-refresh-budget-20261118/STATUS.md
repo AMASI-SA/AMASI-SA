@@ -1,5 +1,65 @@
 # Visible refresh budget recovery after Aramex publication
 
+## Continued from the real visible timeout — 19 November 2026
+
+PR2000 was merged normally as
+`77d824a780df582b5c32f4dda87a959e35e1ed1e`, published, and verified by the
+unchanged official guard with `verified: true`, `checks: 3`. Its own lease
+closed; the following original `status` returned `active: false`. The original
+source A `c0ce20a1273574be833261218335a4b6e527d658` and intent-only B
+`3965128df57168b3ce69a7f6f0cd0ce6fc16d8c5`
+remain immutable and are not used as a new release input.
+
+The independently authorized PR2001 deployment now serves source
+`213a284901fb49b8c79948669cf67cc37cabb409`, with all Aramex and refresh
+application files unchanged. Its normal production merge
+`c3c1cd26d93ab24d6e08003278b9910526055cc7` is the base of the isolated task
+branch `codex/aramex-refresh-source-cost-20261119`. The PR2001 owner has also
+recorded official three-probe verification and an inactive lease. No other
+conversation's lease or source is changed by this follow-up.
+
+The user explicitly requested that the assistant press the financial refresh.
+A visible request started at `2026-11-18T23:42:37.992Z`. Its UI and sanitized
+console trace at `23:44:05.160Z` confirmed the existing backend timeout before
+the aggregate save. The report remained at its previous saved timestamp.
+No newly charged cohort, wallet balance, or duplicate-debit acceptance is
+claimed. An earlier generic failed attempt is not attributed to visibility
+or the preceding deployment without evidence.
+
+| Stage | Milliseconds | Outcome |
+| --- | ---: | --- |
+| Native evidence | 9,103.782 | Complete |
+| Snapshot load | 12,752.149 | Complete |
+| Primary source reads | 14,633.703 | Complete |
+| Bundle sources | 7,823.014 | Complete |
+| Order sources | 17,207.289 | Complete |
+| Source collection | 42,797.508 | Complete |
+| Profit snapshot | 20,216.016 | Complete |
+| Reconciliation | 20,382.566 | Cancelled |
+| Aggregate | 76,009.020 | Cancelled |
+
+Stages are nested and the two preparations overlap; these durations must not
+be added as independent work. The existing 85-second request budget,
+visibility/lifecycle checks, source coverage, immutable money evidence and
+atomic aggregate save remain requirements.
+
+The current investigation targets repeated whole-cohort scans in native
+assignment checks, bundle preparation-piece selection, and saved receipt
+return calculation. Each proposed change requires exact-output parity and a
+deterministic work-count regression against the current production baseline.
+The per-payment audit projector is deliberately unchanged: its synthetic
+cost alone did not establish the observed reconciliation bottleneck.
+
+This section is a work-in-progress source checkpoint, not release readiness.
+Next: finish focused measurements and independent review, run integrated
+financial/cancellation checks, preserve the verified source on the task branch,
+then follow a fresh v5 A/B handoff only if ready. Shared-host status must be
+checked again before any rehearsal or mutation. After deployment, require a
+new saved snapshot and the same-cohort fee/wallet comparison, followed by a
+second visible refresh proving no duplicate debit. Private financial records
+remain outside Git. Issue1006 is full and its attempted body update did not
+persist in fresh reads; PR2000 is the reliable current remote checkpoint.
+
 ## Resumed on current production — 19 November 2026
 
 The owner requested continuation of the pending release and live accounting

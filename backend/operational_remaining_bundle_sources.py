@@ -9,6 +9,8 @@ from copy import deepcopy
 from decimal import Decimal, ROUND_HALF_UP
 
 from operational_bundle_cost_projection import project_bundle_costs, _leaf_key, _number
+from operational_demand_refresh import calculation_checkpoint
+from operational_financial_activity_runtime import prepare_in_thread
 
 READ_COLLECTIONS = frozenset({
     'mezan_bundle_definitions_v2', 'mezan_order_item_cost_snapshots_v2',
@@ -16,6 +18,31 @@ READ_COLLECTIONS = frozenset({
     'mezan_component_consumption_units_v1', 'mezan_inventory_receipts_v2', 'purchase_invoices',
 })
 CENT, ZERO, CHUNK = Decimal('.01'), Decimal(0), 250
+
+
+def _legacy_piece_index(pieces):
+    """Keep raw receipt keys and row order for one unchanged source cohort.
+
+    This is deliberately separate from the physical item's stripped identity.
+    Unsupported records retain the original full scan so optional preparation
+    cannot move custom conversion errors ahead of the legacy short circuit.
+    """
+    calculation_checkpoint()
+    if type(pieces) not in (list, tuple):
+        return None
+    result = {}
+    for piece in pieces:
+        calculation_checkpoint()
+        if type(piece) is not dict or any(type(key) is not str for key in piece):
+            return None
+        values = piece.get('order_number'), piece.get('order_item_id')
+        if any(value is not None and type(value) not in (str, bool, float)
+               and not (type(value) is int and value.bit_length() <= 1024) for value in values):
+            return None
+        key = str(values[0]), str(values[1])
+        result.setdefault(key, []).append(piece)
+    calculation_checkpoint()
+    return result
 
 
 def normalized_orders(raw_orders):
@@ -218,6 +245,7 @@ async def load_remaining_bundles(db, owner, raw_orders, as_of, *, preparation_pi
                 raise ValueError('bundle_legacy_piece_read_scope_invalid')
     if len(preparation_pieces) > 20000 or any(p.get('user_id') != owner for p in preparation_pieces):
         raise ValueError('bundle_legacy_piece_read_scope_invalid')
+    piece_index = await prepare_in_thread(_legacy_piece_index, preparation_pieces)
     unit_rows, plan_rows = [], []
     numbers = sorted({k[0] for k in selected})
     for i in range(0, len(numbers), CHUNK):
@@ -300,7 +328,8 @@ async def load_remaining_bundles(db, owner, raw_orders, as_of, *, preparation_pi
             try:
                 snapshot, native, legacy_items = map_financial_receipts(
                     owner=owner, number=key[0], item=item, snapshot=snapshot,
-                    pieces=preparation_pieces, native_units=native, as_of=as_of)
+                    pieces=preparation_pieces if piece_index is None else piece_index.get(key, ()),
+                    native_units=native, as_of=as_of)
             except (ValueError, TypeError, KeyError) as exc:
                 code = str(exc) if str(exc).startswith('bundle_') else 'bundle_financial_policy_operational_mapping_required'
                 problems.append(_problem(code, key[1]))

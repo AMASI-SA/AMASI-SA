@@ -118,3 +118,20 @@ def active_assignments_for_number(assignments, order_number, *, owner, assignmen
         return result
     return [row for row in assignments if str(row.get('order_number')) == order_number
             and row.get('active') is not False and row.get('status') in {'assigned', 'out_for_delivery', 'delivered'}]
+
+
+def has_active_assignment_for_number(assignments, order_number, *, owner, assignment_index=None):
+    """Keep the fee producers' first-match predicate and exact raw-number view."""
+    _checkpoint()
+    rows = assignments
+    if (type(assignment_index) is DeliveryAssignmentIndex and assignment_index.matches(assignments, owner)
+            and type(order_number) is str):
+        rows = assignment_index.raw_numbers.get(order_number, ())
+
+    def checked():
+        for row in rows:
+            _checkpoint()
+            yield row
+
+    return any(str(row.get('order_number')) == order_number and row.get('active') is not False
+               and row.get('status') in {'assigned', 'out_for_delivery', 'delivered'} for row in checked())
