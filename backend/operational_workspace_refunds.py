@@ -647,6 +647,21 @@ def install_refund_routes(router, db, current_user, scope):
         current = await recheck(user, owner, policy)
         return {"saved": True, "item": _case_dto(_find_case(state, case["id"], current), current, state)}
 
+    @router.get("/workspace/refund-alerts")
+    async def refund_alerts(request: Request, page: int = Query(default=1, ge=1),
+                            page_size: int = Query(default=5, ge=1, le=5), user=Depends(current_user)):
+        from operational_workspace_refund_alerts import read_alerts
+
+        async def project():
+            _, owner, _, policy = await load(user)
+            if not policy.owner_override:
+                fail("operational_refund_alerts_owner_required", "تنبيهات سلة متاحة للمالك فقط", 403)
+            result = await read_alerts(db, owner, page, page_size)
+            await recheck(user, owner, policy)
+            return result
+
+        return await run_visible_report_read(request, project)
+
     @router.get("/workspace/refunds/order/{number}")
     async def order_lookup(number: str, request: Request, include_history: bool = False, user=Depends(current_user)):
         async def project():

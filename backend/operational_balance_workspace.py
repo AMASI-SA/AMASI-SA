@@ -761,6 +761,7 @@ def install_workspace_routes(router, db, current_user, scope):
                     "ledger_start": _business_day({"occurred_at": state["started_at"]}) if state.get("started_at") else None,
                     **({"recent_movements": _recent_postings(state, resources, policy)} if home_preview else {}),
                     "capabilities": {"manage_access": policy.owner_override,
+                                     "refund_alerts": policy.owner_override,
                                      "create_entries": state["status"] == "active" and any(row["operations"] for row in resources)},
                     "operations": [{"key": key, "label": label} for key, label in OPERATION_LABELS.items() if policy.can_operation(key)]}
         return await run_visible_report_read(request, lambda: checked_read(user, project, ad_bank_fx=ad_bank_fx))
