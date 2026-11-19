@@ -1,5 +1,92 @@
 # Visible refresh budget recovery after Aramex publication
 
+## Current continuation: profit preparation during source collection —19 November2026
+
+Task branch: `codex/aramex-profit-preparation-overlap-20261119`.
+Verified production base: `f91fc7bfbb60b47e5954f4178f9b7dea6eb7fa46` (PR2007).
+The source commit containing this checkpoint is the new source candidate A;
+its exact remote SHA will be recorded in the task PR before intent freeze.
+The prior source/intent pairs and unrelated compact-statements release remain
+unchanged and remotely recoverable.
+
+### Published predecessor and lease state
+
+PR2007 was merged normally, built through the configured adapter and published
+once. The UI displayed newer green `Deployment finished`, version17b9b08.
+The unchanged original production verifier completed exit0, verified:true,
+checks:3 with source `b983035c56b69c509d0e1895a5546cb4544d462a`, deployment
+`f91fc7bfbb60b47e5954f4178f9b7dea6eb7fa46`, runtime
+`rg5-cf3e6092b384d585d2dc4478f1f9a00591e237d1955ba2947dc47fa7df846a34`
+and boot `2026-11-19T01:06:39.793185+00:00`. The next original guard status
+returned active:false, actor:null. Our matching lease was closed by successful
+verification; no other actor's lease was cleared. Production changed:yes for
+the predecessor release; this follow-up has not changed shared `/app` or
+production and holds no lease.
+
+A normal visible refresh started at `2026-11-19T01:11:48.477Z` and reached the
+unchanged85-second deadline. The UI explicitly retained the last saved report.
+Sanitized timings: native evidence6.958s, snapshot load13.959s, source
+collection42.080s, reconciliation12.734s; profit was cancelled after21.898s.
+The latter is time until cancellation, not proof of completed profit latency.
+Nested stages must not be summed as independent durations. No new financial
+snapshot, changed cohort, wallet result or idempotency acceptance is claimed.
+
+### Narrow repair and independent verification
+
+The same fixed-period profit reader now starts beside source collection in
+an owned visible request. Collision checking, collection checkpoint/error
+mapping, return attachment and reconciliation stay ordered within the other
+child. The existing shield/cancel/join barrier must settle both children
+before bank claims, catalogs, aggregate mutation or CAS. Ordinary and detected
+snapshot-session callers retain the serial source→reconciliation→profit path.
+No deadline/read budget, financial arithmetic, source authority, tariff,
+wallet binding, history, route, scheduler or financial writer is changed.
+
+Changed application file: `backend/operational_balance_service.py`.
+Changed existing tests: `test_operational_refresh_parallel_profit.py`,
+`test_operational_balance_refresh_stage_timing.py`, and
+`test_operational_balance_source_stage_timing.py` under `backend/tests/`.
+The two diagnostic fixtures retain strict source query/projection oracles and
+explicitly hold and join the now-concurrent profit reader on source failure.
+
+Final affected ten-module suite:355 passed,0 failed,0 errors,0 skipped,
+exit0,13.97s; two pre-existing Pydantic warnings. Independent reviewer ran17
+ownership/overlap cases and15 changed timing cases, all passing, and verified
+final JUnit counts. Frozen-production negative control fails both new overlap
+orders specifically at the barrier waiting for early profit. `git diff --check`
+passes. Four-file reviewed binary diff SHA256:
+`cc6c9bb80abbf0d5130c98dad42d88038bc46ee41be11cd184a370274b01c3a4`.
+Reviewed service SHA256:
+`0cf3bb0585a266bf9deefaca7ff33a0b26665130dc4d12a70c4951949ef1c97d`.
+No blocking independent review finding remains.
+
+### Limits and exact next safe action
+
+Combined reads can reach8 across two separately bounded four-read groups;
+no additional reads are introduced. Earlier profit observation does not
+create a database snapshot. The existing raw Motor to_list and hidden-session
+detection limitations remain; the tests prove coroutine/cooperative-thread
+cleanup at this barrier, not every underlying Motor executor operation.
+The concrete visible production route introduces no hidden session here.
+The observed prior critical path leaves about9.27s for post-join work if profit
+finishes early and resource contention does not slow collection; only a live
+saved refresh can establish that this is sufficient. Normal incomplete-profit
+source results retain their existing explicit quality flags.
+
+Preserve source A remotely, run the governed two-pass A build and freeze a new
+intent-only B from this exact current production base. Run required exact-B
+CI and independent artifact review. Before any shared-host rehearsal or source
+mutation, inspect original Release Guard status and honor any new owner's
+lease. Follow the normal merge, configured adapter, own prepare/prepublish,
+one authorized publish, original three-probe verification and inactive-status
+sequence. Then perform two visible saved-report refresh acceptances with
+snapshot-bound private courier/accounts/movements evidence. Keep customer,
+order and financial data outside Git. The exact next command after source
+checkpoint is the governed toolchain ensure/install/build:release sequence;
+there is no current publish reservation.
+
+---
+
 ## Integrated with compact statements production — 19 November 2026
 
 Production advanced to PR2005 merge `27e29d3ab5c6c08548780e3dd1ac177021be65f1`

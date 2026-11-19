@@ -126,6 +126,28 @@ async def refresh(database):
         return await service.refresh(database, 'owner', clock=NOW)
 
 
+def hold_profit_snapshot(monkeypatch, database):
+    """Isolate source diagnostics while retaining the concurrent profit lifetime."""
+    observed = {'started': False, 'cancelled': False, 'stopped': False}
+
+    async def hold(db, owner, period, *, as_of):
+        assert db is database and owner == 'owner' and as_of == NOW
+        assert period == {'owner_id': owner, 'started_at': START}
+        assert demand_context().db is database and demand_context().owner == owner
+        observed['started'] = True
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            observed['cancelled'] = True
+            raise
+        finally:
+            assert database.data[LEASES] and not database.cas_entered.is_set()
+            observed['stopped'] = True
+
+    monkeypatch.setattr('operational_profit_sources.load_profit_snapshot', hold)
+    return observed
+
+
 async def assert_request_finished(database):
     assert demand_context() is None
     assert database.inflight == 0
@@ -196,6 +218,7 @@ def test_real_source_read_exit_is_identified_and_joined(monkeypatch, caplog, sta
     async def scenario():
         gate = Gate(collection, outcome)
         database = DB(gate=gate)
+        profit = hold_profit_snapshot(monkeypatch, database)
         if stage == 'source_collision':
             database.data[STATES]['owner']['inventory_purchases'] = [
                 {'supplier_id': 'private-source-stage-supplier', 'invoice_number': 'private-source-stage-invoice'}]
@@ -215,6 +238,7 @@ def test_real_source_read_exit_is_identified_and_joined(monkeypatch, caplog, sta
             assert gate.sibling_entered and gate.sibling_stopped
         assert database.data[STATES] == original_state
         assert database.sources.data == original_sources
+        assert profit == {'started': True, 'cancelled': True, 'stopped': True}
         await assert_request_finished(database)
 
     asyncio.run(scenario())
@@ -247,6 +271,7 @@ def test_real_order_loop_exit_is_identified_without_saving_or_continuing(monkeyp
 
     async def scenario():
         database = DB()
+        profit = hold_profit_snapshot(monkeypatch, database)
         if stage == 'source_bank_catalog':
             from test_operational_balance_bank_orders import native_bank_order
             database.sources.data['unified_orders'] = [native_bank_order('private-source-stage-number')]
@@ -264,6 +289,7 @@ def test_real_order_loop_exit_is_identified_without_saving_or_continuing(monkeyp
         assert reached
         assert database.data[STATES] == original_state
         assert database.sources.data == original_sources
+        assert profit == {'started': True, 'cancelled': True, 'stopped': True}
         await assert_request_finished(database)
 
     asyncio.run(scenario())
