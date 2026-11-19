@@ -1,5 +1,29 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 import api from "../lib/api";
+
+const qoyodBase = "legacy.integrations_v2.qoyod";
+const qoyodTabLabels = {
+    [qoyodBase]: "الحالة",
+    [qoyodBase + ".exceptions"]: "الاستثناءات",
+    [qoyodBase + ".invoices"]: "فواتير قيود",
+    [qoyodBase + ".reconciliation"]: "المطابقة",
+    [qoyodBase + ".settings"]: "الإعدادات",
+};
+
+function QoyodNavigation({ selectedId }) {
+    const { user } = useAuth();
+    const tabs = (user?.web_page_access?.pages || []).filter(({ id }) => Object.hasOwn(qoyodTabLabels, id));
+    if (tabs.length < 2) return null;
+    return <nav aria-label="صفحات قيود" className="flex flex-wrap gap-2">
+        {tabs.map(({ id, to }) =>
+            <Link key={id} to={to} aria-current={selectedId === id ? "page" : undefined}
+                className={selectedId === id ? "rounded-lg bg-emerald-900 px-3 py-2 text-sm text-white" : "rounded-lg border px-3 py-2 text-sm"}>
+                {qoyodTabLabels[id]}
+            </Link>)}
+    </nav>;
+}
 
 export default function EmployeeLegacyRead({ page }) {
     const [day, setDay] = useState(() => new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Riyadh" }).format(new Date()));
@@ -27,6 +51,7 @@ export default function EmployeeLegacyRead({ page }) {
 
     return <section dir="rtl" className="space-y-4 rounded-2xl border bg-white p-5">
         <h1 className="text-xl font-extrabold">{page.label}</h1>
+        {Object.hasOwn(qoyodTabLabels, page.id) && <QoyodNavigation selectedId={page.id} />}
         {page.date_filter && <label className="inline-flex items-center gap-3">تاريخ التقرير
             <input type="date" value={day} onChange={event => {
                 if (event.target.value) { setNumber(1); setDay(event.target.value); }

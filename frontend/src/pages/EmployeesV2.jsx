@@ -14,6 +14,9 @@ import {
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
+import { useOptionalAuth } from "../context/AuthContext";
+import { managedWebPages } from "../lib/webPageAccess";
+import { EmployeePagePermissions } from "./WebPagePermissions";
 import StoreOperationsAccessWorkspace from "./StoreOperationsAccessWorkspace";
 import EmployeesV2Management from "./EmployeesV2Management";
 import {
@@ -562,6 +565,13 @@ function MigrationWorkspace() {
 export default function EmployeesV2() {
     const [searchParams] = useSearchParams();
     const workspace = searchParams.get("workspace") || "management";
+    const user = useOptionalAuth()?.user;
+    const pages = managedWebPages(user);
+    if (workspace === "permissions" && pages) {
+        return pages.some(page => page.id === "employees.permissions")
+            ? <EmployeePagePermissions user={user} pages={pages}/>
+            : <p role="alert">هذه الصفحة غير متاحة لحسابك.</p>;
+    }
     return (
         <div className="space-y-5" dir="rtl" data-testid="employees-v2-page">
             <nav className="flex flex-wrap gap-2 rounded-2xl border bg-white p-2 shadow-sm" aria-label="أقسام الموظفين">

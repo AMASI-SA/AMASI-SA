@@ -430,6 +430,12 @@ def make_operational_balance_router(db, current_user):
             return
         if path == "/workspace" or path.startswith("/workspace/"):
             from operational_balance_access import load_access
+            from operational_web_page_policy import SCOPE_REPORTS, request_modes
+            if (request.method == "GET" and path.startswith("/workspace/specialist/") and
+                    path.rsplit("/", 1)[-1] in SCOPE_REPORTS and request_modes(actor) is not None):
+                # A page-only grant can see its own empty state. The handler checks the
+                # financial scope again before reading any allocated account or opening.
+                return
             (await load_access(db, actor, owner)).require_enabled()
             return
         if actor.get("role") != "owner":

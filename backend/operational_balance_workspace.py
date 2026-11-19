@@ -728,10 +728,10 @@ def install_workspace_routes(router, db, current_user, scope):
     review_snapshots = ReviewSnapshots()
     install_workspace_review_routes(router, db, current_user, scope)
 
-    async def load(user):
+    async def load(user, *, allow_disabled=False):
         actor, owner, source = await scope(db, user, "workspace")
         policy = await load_access(db, actor, owner)
-        if not policy.owner_override and not policy.enabled:
+        if not allow_disabled and not policy.owner_override and not policy.enabled:
             fail("operational_workspace_access_required", "اطلب من المالك تفعيل صلاحيات الأرصدة وتحديد الحسابات المتاحة لك", 403)
         return actor, owner, source, policy
 
@@ -766,8 +766,13 @@ def install_workspace_routes(router, db, current_user, scope):
         return await run_visible_report_read(request, lambda: checked_read(user, project, ad_bank_fx=ad_bank_fx))
 
     @router.get("/workspace/specialist/{which}")
-    async def specialist(request: Request, which: Literal["returns", "exchanges", "fees"],
-                         page: int = Query(default=1, ge=1), user=Depends(current_user)):
+    async def specialist(request: Request, which: Literal["returns", "exchanges", "fees", "reports", "specialized", "access"],
+                         page: int = Query(default=1, ge=1), group: str | None = Query(default=None, max_length=32),
+                         user=Depends(current_user)):
+        from operational_web_page_policy import SCOPE_REPORTS
+        if which in SCOPE_REPORTS:
+            from operational_web_specialist_reads import assigned_finance_page
+            return await run_visible_report_read(request, lambda: assigned_finance_page(db, user, load, which, group, page))
         from operational_web_specialist_reads import specialist_page
         return await run_visible_report_read(request, lambda: specialist_page(db, user, load, which, page))
 

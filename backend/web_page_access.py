@@ -14,6 +14,8 @@ from operational_web_page_policy import OPERATIONAL_WEB_PAGES, enforce_operation
 from web_workspace_pages import CORE_WEB_PAGES, SECTION_LABELS, enforce_workspace_read, workspace_read_pages
 from web_marketing_page_policy import MARKETING_WEB_PAGES, enforce_marketing_web_pages, make_web_marketing_router
 from web_legacy_page_policy import LEGACY_WEB_PAGES, enforce_legacy_web_pages, make_legacy_web_router
+from web_detail_pages import DETAIL_WEB_PAGES, enforce_web_detail_pages, make_web_detail_router
+from web_extra_pages import EXTRA_WEB_PAGES, make_extra_web_router
 from web_employee_page_policy import enforce_web_employee_tool_boundary, make_web_employee_tools_router
 
 FIELD = "web_page_access"
@@ -22,13 +24,16 @@ INTAKE_PAGE = "products.intake"
 COMPONENTS_PAGE = "products.components"
 WAREHOUSES_PAGE = "products.warehouses"
 INVENTORY_PAGE = "products.inventory"
+MISSING_COST_PAGE = "products.missing_costs"
 RECEIVING_PAGE = "products.receiving"
 ORDERS_PAGE = "orders.list"
 
 PAGES = (
     {"id": PRODUCTS_PAGE, "section": "products", "label": "إدارة المنتجات",
      "to": "/products-v2", "write_label": "حفظ مسودات تعديل بيانات المنتج"},
-    {"id": INVENTORY_PAGE, "section": "products", "label": "المخزون", "to": "/inventory-v2"},
+    {"id": INVENTORY_PAGE, "section": "products", "label": "المخزون", "to": "/inventory-v2", "aliases": ["/inventory-v2?tab=stock"]},
+    {"id": MISSING_COST_PAGE, "section": "products", "label": "المنتجات بدون تكلفة",
+     "to": "/product-costs?tab=missing", "review_component": "missing_costs"},
     {"id": INTAKE_PAGE, "section": "products", "label": "استقبال المنتجات",
      "to": "/products-v2?workspace=intake", "write_label": "إعداد مسودات المنتجات الجديدة"},
     {"id": RECEIVING_PAGE, "section": "products", "label": "استلام المخزون", "to": "/inventory-receiving-v2"},
@@ -49,9 +54,27 @@ PAGES = (
         for row in ACCOUNTING_PAGES
     ),
 )
+# Retired routes were real bookmarks in the previous navigation. A managed
+# browser opens the currently granted destination using its existing page reader.
+_LEGACY_BOOKMARKS = {
+    "/shipping/orders-ledger": ("/shipping-accounts", "/shipping/ledger", "/shipping/cod-settlements"),
+    "/settlements-overview": ("/settlements",),
+    "/new-transaction": ("/transfers", "/financial-input-hub", "/advances"),
+    "/accounting/reconciliation": ("/reconciliation",),
+    "/financial-position-ledger": ("/financial-position",),
+    "/suppliers-new": ("/counterparties",),
+    "/suppliers-ledger": ("/suppliers-new?tab=balances",),
+    "/integrations-v2/qoyod?tab=settings": ("/integrations/qoyod/settings",),
+    "/integrations-v2/qoyod?tab=reconciliation": ("/integrations/qoyod/reconciliation",),
+    "/integrations-v2/qoyod?tab=exceptions": ("/integrations/qoyod/unsent-orders", "/admin/qoyod-manual-send"),
+}
 PAGES = tuple(
     {**page, "section_label": page.get("section_label") or SECTION_LABELS.get(page["section"], "صفحات ميزان القديم")}
-    for page in (*PAGES, *CORE_WEB_PAGES, *OPERATIONAL_WEB_PAGES, *MARKETING_WEB_PAGES, *LEGACY_WEB_PAGES)
+    for page in (*PAGES, *CORE_WEB_PAGES, *OPERATIONAL_WEB_PAGES, *MARKETING_WEB_PAGES, *LEGACY_WEB_PAGES, *EXTRA_WEB_PAGES, *DETAIL_WEB_PAGES)
+)
+PAGES = tuple(
+    {**page, "aliases": list(dict.fromkeys((*page.get("aliases", ()), *_LEGACY_BOOKMARKS[page["to"]])))}
+    if page["to"] in _LEGACY_BOOKMARKS else page for page in PAGES
 )
 PAGES_BY_ID = {page["id"]: page for page in PAGES}
 PageMode = Literal["read", "write"]
@@ -135,6 +158,7 @@ _COMPONENT = "/api/components-v2"
 _WAREHOUSE = "/api/warehouse-locations-v2"
 _CATALOG_ROUTES = (
     ("GET", r"/api/products-v2", PRODUCTS_PAGE, False),
+    ("GET", r"/api/product-costs/missing", MISSING_COST_PAGE, False),
     ("GET", rf"{_PRODUCT}/control-center", PRODUCTS_PAGE, True),
     ("PUT", rf"{_PRODUCT}/control-center/draft", PRODUCTS_PAGE, True),
     ("GET", _CREATION, INTAKE_PAGE, True),
@@ -174,12 +198,13 @@ def enforce_web_catalog_access(user: dict[str, Any], path: str, method: str, que
         return
     enforce_workspace_read(modes, path, method, query)
     enforce_operational_web_pages(modes, path, method, query)
+    detail_read = enforce_web_detail_pages(modes, path, method, query)
     marketing_read = enforce_marketing_web_pages(modes, path, method, query)
     enforce_legacy_web_pages(modes, path, method, query)
     enforce_web_employee_tool_boundary(user, path, method)
     normalized = path.rstrip("/")
     if not _CATALOG_SCOPE.match(path):
-        if marketing_read or workspace_read_pages(normalized, query) is not None:
+        if detail_read or marketing_read or workspace_read_pages(normalized, query) is not None:
             return
         if normalized.startswith("/api/operational-balances/"):
             return  # Fail-closed operational_web_page_policy checked above.
@@ -188,7 +213,7 @@ def enforce_web_catalog_access(user: dict[str, Any], path: str, method: str, que
         if normalized.startswith(("/api/financial-provider-apps/accounting-module/", "/api/accounting-module/")):
             # Existing accounting routes enforce independent page + action grants.
             return
-        if method == "GET" and re.fullmatch(r"/api/web-page-access-v1/(?:employee-tools|marketing-read|legacy-read)/[a-zA-Z0-9_.-]+", normalized):
+        if method == "GET" and re.fullmatch(r"/api/web-page-access-v1/(?:employee-tools|marketing-read|legacy-read|extra-read)/[a-zA-Z0-9_.-]+", normalized):
             return  # Each projection authorizes its exact selected page.
         if method == "GET" and re.fullmatch(r"/api/web-page-access-v1/employee-tools/employees[.]staff/[^/]+/events", normalized):
             return
@@ -259,6 +284,8 @@ def make_web_page_access_router(db: Any, current_user: Callable) -> APIRouter:
     router.include_router(make_web_employee_tools_router(db, current_user))
     router.include_router(make_web_marketing_router(db, current_user))
     router.include_router(make_legacy_web_router(db, current_user))
+    router.include_router(make_extra_web_router(db, current_user))
+    router.include_router(make_web_detail_router(db, current_user))
 
     @router.get("")
     async def list_members(response: Response, user: dict = Depends(current_user)) -> dict:

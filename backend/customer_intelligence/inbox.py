@@ -218,19 +218,8 @@ class CustomerIntelligenceInboxService:
         self._db = db
         self._now = now or (lambda: datetime.now(timezone.utc))
 
-    async def inbox(
-        self,
-        *,
-        owner_user_id: str,
-        actor_id: str | None = None,
-        is_owner: bool = True,
-        limit: int = 20,
-        messages_limit: int = 30,
-        offset: int = 0,
-    ) -> LiveInboxResponse:
-        generated_at = self._now()
-        owner_id = str(owner_user_id).strip()
-        resolved_actor_id = str(actor_id or owner_id).strip()
+    async def conversation_scope(self, owner_id: str, actor_id: str, *, is_owner: bool = False):
+        """Resolve the receive-only channels and threads this actor can actually read."""
         channel_collection = getattr(self._db, CHANNELS_COLLECTION)
         channel_projection = {
             "_id": 0,
@@ -292,7 +281,6 @@ class CustomerIntelligenceInboxService:
             )
         # ``connection`` remains the WhatsApp compatibility field for older
         # clients. New clients use the complete provider list above.
-        connection = connections[0]
         data_origin = (
             "channel_providers"
             if any(row.get("provider") == "tiktok" for row in channel_documents)
@@ -300,17 +288,6 @@ class CustomerIntelligenceInboxService:
             if any(row.get("provider") == "instagram" for row in channel_documents)
             else "whatsapp_webhook"
         )
-        if not receiving_channels:
-            return LiveInboxResponse(
-                generated_at=generated_at,
-                data_origin=data_origin,
-                connection=connection,
-                connections=connections,
-                conversation_count=0,
-                message_count=0,
-                conversations=[],
-            )
-
         scopes = [
             {
                 "user_id": owner_id,
@@ -320,18 +297,6 @@ class CustomerIntelligenceInboxService:
             for channel in receiving_channels
             if channel.get("merchant_id") and channel.get("channel_id")
         ]
-        if not scopes:
-            return LiveInboxResponse(
-                generated_at=generated_at,
-                data_origin=data_origin,
-                connection=connection,
-                connections=connections,
-                conversation_count=0,
-                message_count=0,
-                conversations=[],
-            )
-
-        conversation_collection = getattr(self._db, CONVERSATIONS_COLLECTION)
         conversation_query: dict[str, Any] = {"$or": scopes}
         if not is_owner:
             # Customer Service can work the shared unassigned queue and its
@@ -340,12 +305,38 @@ class CustomerIntelligenceInboxService:
             conversation_query["$and"] = [
                 {
                     "$or": [
-                        {"assigned_employee_id": resolved_actor_id},
+                        {"assigned_employee_id": actor_id},
                         {"assigned_employee_id": None},
                         {"assigned_employee_id": {"$exists": False}},
                     ]
                 }
             ]
+        return connections, data_origin, receiving_channels, conversation_query
+
+    async def inbox(
+        self,
+        *,
+        owner_user_id: str,
+        actor_id: str | None = None,
+        is_owner: bool = True,
+        limit: int = 20,
+        messages_limit: int = 30,
+        offset: int = 0,
+    ) -> LiveInboxResponse:
+        generated_at = self._now()
+        owner_id = str(owner_user_id).strip()
+        resolved_actor_id = str(actor_id or owner_id).strip()
+        connections, data_origin, receiving_channels, conversation_query = await self.conversation_scope(
+            owner_id, resolved_actor_id, is_owner=is_owner,
+        )
+        connection = connections[0]
+        scopes = conversation_query["$or"]
+        if not scopes:
+            return LiveInboxResponse(
+                generated_at=generated_at, data_origin=data_origin, connection=connection,
+                connections=connections, conversation_count=0, message_count=0, conversations=[],
+            )
+        conversation_collection = getattr(self._db, CONVERSATIONS_COLLECTION)
         conversation_count = await conversation_collection.count_documents(
             conversation_query
         )

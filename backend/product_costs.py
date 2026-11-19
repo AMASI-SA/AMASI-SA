@@ -928,7 +928,9 @@ def _build_router(db, current_user_dep) -> APIRouter:
         commonly Excel-imported orders). Those orders cannot be auto-cost
         matched until the merchant edits them manually.
         """
-        uid = user["id"]
+        from web_page_access import MISSING_COST_PAGE, delegated_page_owner
+
+        uid = await delegated_page_owner(db, user, MISSING_COST_PAGE) or user["id"]
         cutoff = (datetime.now(timezone.utc).date() - timedelta(days=days)).isoformat()
         # Fetch recent orders' products + their missing-lines arrays.
         cursor = db.unified_orders.find(

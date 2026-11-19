@@ -18,7 +18,7 @@ CORE_WEB_PAGES = (
     page("employees.staff", "employees", "إدارة الموظفين", "/employees-v2"),
     page("employees.drivers", "employees", "موصلو المتجر", "/employees-v2?workspace=drivers"),
     page("employees.migration", "employees", "تقرير الترحيل والرواتب", "/employees-v2?workspace=migration"),
-    page("employees.permissions", "employees", "إدارة الصلاحيات", "/employees-v2?workspace=permissions", owner_only=True),
+    page("employees.permissions", "employees", "إدارة الصلاحيات", "/employees-v2?workspace=permissions"),
     page("suppliers.directory", "suppliers", "الموردون والفواتير", "/suppliers-v2"),
     page("finance.obligations", "finance", "الالتزامات والمصاريف الدورية", "/recurring-obligations"),
     page("finance.collections", "finance", "مراجعة تحصيلات الموصلين", "/bank-transfer-review?workspace=store-delivery"),

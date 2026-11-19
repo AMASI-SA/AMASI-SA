@@ -13,9 +13,9 @@ PROVIDERS = frozenset({"tabby", "tamara", "salla"})
 WRITE_ENTRY = "تسجيل الحركات الممنوحة على الحسابات والجهات المحددة"
 
 
-def _page(key, label, url=None, *, write=None, owner=False):
+def _page(key, label, url=None, *, write=None):
     return {"id": "balances." + key, "label": label, "section": "balances", "section_label": "الأرصدة التشغيلية",
-            "to": url or f"{BASE}?view={key}", **({"owner_only": True} if owner else {}),
+            "to": url or f"{BASE}?view={key}",
             **({"write_label": write} if write else {})}
 
 
@@ -32,13 +32,14 @@ OPERATIONAL_WEB_PAGES = (
     _page("statements", "كشوف منصات الدفع ومطابقتها", BASE + "/provider-statements",
           write="رفع كشف المنصة المخصصة واعتماد مطابقته"),
     _page("fees", "إعداد عمولات المنصات", BASE + "/provider-fees"),
-    _page("reports", "المركز المالي الشامل والتقارير التفصيلية", BASE + "/financial-position", owner=True),
+    _page("reports", "المركز المالي الشامل والتقارير التفصيلية", BASE + "/financial-position"),
     _page("returns", "مرتجعات الأصناف", BASE + "/customer-returns"),
     _page("exchanges", "استبدال الأصناف", BASE + "/customer-exchanges"),
-    _page("specialized", "الأرصدة الافتتاحية والإعدادات المتخصصة", owner=True),
-    _page("access", "تحديد حسابات وعمليات الموظفين", BASE + "/access", owner=True),
+    _page("specialized", "الأرصدة الافتتاحية والإعدادات المتخصصة"),
+    _page("access", "تحديد حسابات وعمليات الموظفين", BASE + "/access"),
 )
-WORKSPACE = frozenset(p["id"] for p in OPERATIONAL_WEB_PAGES if not p.get("owner_only") and p["id"] != "balances.statements")
+SCOPE_REPORTS = frozenset({"reports", "specialized", "access"})
+WORKSPACE = frozenset(p["id"] for p in OPERATIONAL_WEB_PAGES if p["id"] != "balances.statements" and p["id"].split(".")[1] not in SCOPE_REPORTS)
 
 
 def _deny():
@@ -69,7 +70,7 @@ def enforce_operational_web_pages(modes, path, method, query=None):
         return _allow(modes, "assets" if kind in ASSETS else "parties") if kind else _allow(modes, "assets", "parties")
     if path == "/workspace/movements" and method == "GET":
         return _allow(modes, "log")
-    match = re.fullmatch(r"/workspace/specialist/(returns|exchanges|fees)", path)
+    match = re.fullmatch(r"/workspace/specialist/(returns|exchanges|fees|reports|specialized|access)", path)
     if match and method == "GET":
         return _allow(modes, match[1])
     if path == "/workspace/order-issues" and method == "GET":
@@ -142,6 +143,9 @@ def limit_workspace_policy(policy):
         return policy
     modes = request_modes(policy.actor)
     if modes is None:
+        return policy
+    if request.path.rstrip("/").rsplit("/", 1)[-1] in SCOPE_REPORTS and "/workspace/specialist/" in request.path:
+        # This endpoint projects only the current employee's detailed financial policy.
         return policy
     pages = {p.split(".", 1)[1] for p in modes if p in WORKSPACE}
     if pages & {"home", "log", "position", "entry"}:

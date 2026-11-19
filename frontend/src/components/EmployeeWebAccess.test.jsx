@@ -2,7 +2,8 @@ import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import api from "../lib/api";
-import { useAuth } from "../context/AuthContext";
+import { useAuth, useOptionalAuth } from "../context/AuthContext";
+import EmployeesV2 from "../pages/EmployeesV2";
 import WebPagePermissions from "../pages/WebPagePermissions";
 import EmployeeWebLayout from "./EmployeeWebLayout";
 import OwnerOnlyRoute from "./OwnerOnlyRoute";
@@ -17,7 +18,7 @@ jest.mock("react-router/dom", () => {
     const target = require(packagePath).exports["./dom"].node.default;
     return require(path.resolve(path.dirname(packagePath), target));
 }, { virtual: true });
-jest.mock("../context/AuthContext", () => ({ useAuth: jest.fn(), useOptionalAuth: () => ({}) }));
+jest.mock("../context/AuthContext", () => ({ useAuth: jest.fn(), useOptionalAuth: jest.fn() }));
 jest.mock("../pages/AmasiDeliveryApp", () => () => null);
 jest.mock("../lib/api", () => ({ get: jest.fn(), put: jest.fn() }));
 
@@ -34,6 +35,7 @@ let host;
 let root;
 
 beforeEach(() => {
+    useOptionalAuth.mockReturnValue({});
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
     host = document.createElement("div");
     document.body.appendChild(host);
@@ -150,25 +152,25 @@ test("the owner can save a selection spanning sections in one request", async ()
 test("new global permission groups retain grants in other sections and link to the selected financial identity", async () => {
     const member = { id: "employee/a", name: "موظف اختبار", revision: 2, page_modes: {[ORDERS.id]: "read"} };
     const bank = { id:"balances.assets", to:"/operational-balances?view=assets", label:"الأصول والحسابات", section:"balances", section_label:"الأرصدة التشغيلية" };
-    const admin = { id:"balances.access", to:"/operational-balances/access", label:"إدارة حسابات الموظفين", section:"balances", owner_only:true };
+    const admin = { id:"balances.access", to:"/operational-balances/access", label:"إدارة حسابات الموظفين", section:"balances" };
     api.get.mockResolvedValue({ data: { members: [member], pages: [ORDERS,bank,admin] } });
-    api.put.mockResolvedValue({ data:{member:{...member,page_modes:{[ORDERS.id]:"read",[bank.id]:"read"}}} });
+    api.put.mockResolvedValue({ data:{member:{...member,page_modes:{[ORDERS.id]:"read",[bank.id]:"read",[admin.id]:"read"}}} });
     await act(async () => root.render(<WebPagePermissions initialMemberId={member.id}/>));
     const group=host.querySelectorAll("select")[1];
     await act(async () => {group.value="balances";group.dispatchEvent(new Event("change",{bubbles:true}));});
     expect(host.querySelector('a[href="/operational-balances/access?member=employee%2Fa"]')).toBeTruthy();
-    expect(host.querySelector('select[aria-label="إدارة حسابات الموظفين"]').disabled).toBe(true);
+    expect(host.querySelector('select[aria-label="إدارة حسابات الموظفين"]').disabled).toBe(false);
     await act(async () => [...host.querySelectorAll("button")].find(b=>b.textContent==='قراءة للجميع').click());
     await act(async () => host.querySelector('button[type="submit"]').click());
-    expect(api.put).toHaveBeenCalledWith("/web-page-access-v1/employee%2Fa", {expected_revision:2,page_modes:{[ORDERS.id]:"read",[bank.id]:"read"}});
+    expect(api.put).toHaveBeenCalledWith("/web-page-access-v1/employee%2Fa", {expected_revision:2,page_modes:{[ORDERS.id]:"read",[bank.id]:"read",[admin.id]:"read"}});
 });
 
 test("Arabic search works across departments and bulk changes only its visible assignable rows", async () => {
     const member = { id:"staff", name:"موظف", revision:1, page_modes:{[ORDERS.id]:"read"} };
     const statement = {id:"balances.statements",section:"balances",section_label:"الأرصدة التشغيلية",label:"كشوف المنصات",to:"/operational-balances/provider-statements",write_label:"رفع الكشف"};
     const payroll = {id:"employees.payroll",section:"employees",section_label:"الموظفون",label:"كشوف الرواتب",to:"/employees-v2?workspace=migration"};
-    const locked = {...payroll,id:"employees.private",label:"كشوف خاصة",owner_only:true};
-    api.get.mockClear().mockResolvedValue({data:{members:[member],pages:[ORDERS,statement,payroll,locked]}});
+    const personalReport = {...payroll,id:"employees.private",label:"كشوف خاصة"};
+    api.get.mockClear().mockResolvedValue({data:{members:[member],pages:[ORDERS,statement,payroll,personalReport]}});
     api.put.mockResolvedValue({data:{member}});
     await act(async()=>root.render(<WebPagePermissions initialMemberId={member.id}/>));
     const input=host.querySelector('input[type=search]');
@@ -183,6 +185,44 @@ test("Arabic search works across departments and bulk changes only its visible a
     await act(async()=>host.querySelector('button[type=submit]').click());
     expect(api.get).toHaveBeenCalledTimes(1);
     expect(api.put).toHaveBeenCalledWith("/web-page-access-v1/staff",{expected_revision:1,page_modes:{
-        [ORDERS.id]:"read",[statement.id]:"write",[payroll.id]:"read"
+        [ORDERS.id]:"read",[statement.id]:"write",[payroll.id]:"read",[personalReport.id]:"read"
     }});
+});
+
+test("the owner grants the entire catalogue in one save, with write limited to supported operations", async () => {
+    const self = {id:"employees.permissions",section:"employees",label:"إدارة الصلاحيات",to:"/employees-v2?workspace=permissions"};
+    const member = {id:"staff",name:"موظف",revision:3,page_modes:{}};
+    api.get.mockResolvedValue({data:{members:[member],pages:[PRODUCTS, ORDERS, self]}});
+    api.put.mockClear().mockResolvedValue({data:{member}});
+    await act(async () => root.render(<WebPagePermissions initialMemberId="staff"/>));
+    const group = host.querySelectorAll("select")[1];
+    await act(async () => {group.value="*";group.dispatchEvent(new Event("change",{bubbles:true}));});
+    const button = label => [...host.querySelectorAll("button")].find(row => row.textContent === label);
+    await act(async () => button("قراءة للجميع").click());
+    await act(async () => button("إزالة جميع الصفحات").click());
+    expect(host.querySelector('select[aria-label="إدارة الصلاحيات"]').value).toBe("");
+    await act(async () => button("قراءة وكتابة للجميع").click());
+    expect(api.put).not.toHaveBeenCalled();
+    await act(async () => host.querySelector('button[type=submit]').click());
+    expect(api.put).toHaveBeenCalledWith("/web-page-access-v1/staff",{expected_revision:3,page_modes:{
+        [PRODUCTS.id]:"write",[ORDERS.id]:"read",[self.id]:"read",
+    }});
+});
+
+test.each(["", "&panel=roles&member=other", "&panel=accounting-actions&member=other"])("a grant to permissions shows only the authenticated employee's own pages: %s", async extra => {
+    const self = {id:"employees.permissions",section:"employees",section_label:"الموظفون",label:"إدارة الصلاحيات",to:"/employees-v2?workspace=permissions",mode:"read"};
+    const state = { user:{id:"staff",name:"سارة",role:"employee",web_page_access:{pages:[self,{...PRODUCTS,mode:"write"}]}},loading:false };
+    useAuth.mockReturnValue(state);
+    useOptionalAuth.mockReturnValue(state);
+    api.get.mockClear(); api.put.mockClear();
+    await act(async () => root.render(<MemoryRouter initialEntries={[self.to+extra]}>
+        <ProtectedRoute><OwnerOnlyRoute><EmployeesV2/></OwnerOnlyRoute></ProtectedRoute>
+    </MemoryRouter>));
+    expect(host.querySelector("h1").textContent).toBe("صلاحيات حسابي");
+    expect(host.textContent).toContain("سارة");
+    expect(host.textContent).toContain(PRODUCTS.write_label);
+    expect([...host.querySelectorAll("a")].map(link=>link.getAttribute("href"))).toEqual([self.to,PRODUCTS.to]);
+    expect(host.querySelector('form,select,input')).toBeNull();
+    expect(api.get).not.toHaveBeenCalled();
+    expect(api.put).not.toHaveBeenCalled();
 });

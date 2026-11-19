@@ -68,7 +68,7 @@ export default function ApprovedOperations({ context, onBack, pages=null }) {
     employeeLinks.push(['مراجعة تحصيلات الموصلين', workspace + '?view=collections', 'list-checks']);
   }
   const visibleGroups = tools.map(([name, links]) => [name, links.filter(([,to,,requirement]) =>
-    (owner || pages && grantedWebLink(pages,to) && (!to.endsWith('#upload') || pages.some(page=>page.id==='balances.statements'&&page.mode==='write'))) && (requirement === 'access' ? context.capabilities?.manage_access === true : !requirement || context.status === requirement))]);
+    (owner || pages && grantedWebLink(pages,to) && (!to.endsWith('#upload') || pages.some(page=>page.id==='balances.statements'&&page.mode==='write'))) && (requirement === 'access' ? (owner ? context.capabilities?.manage_access === true : grantedWebLink(pages,to)) : !requirement || context.status === requirement))]);
   const visibleEmployees = employeeLinks.filter(([,to])=>grantedWebLink(pages,to));
   return <>
     <button type="button" className="textbtn back" onClick={onBack}><Icon name="chevron-left" />الأرصدة التشغيلية</button>

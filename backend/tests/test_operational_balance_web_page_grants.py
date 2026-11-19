@@ -132,3 +132,51 @@ def test_specialist_read_views_are_paged_and_scoped_by_source_resource_and_actor
         assert (await client.get(BASE + "/workspace/specialist/returns", headers=headers())).status_code == 403
         assert (await client.get(BASE + "/customer-exchanges", headers=headers())).status_code == 403
     run(scenario)
+
+
+def test_financial_reports_openings_and_own_permissions_never_become_owner_management():
+    from operational_web_page_policy import OPERATIONAL_WEB_PAGES
+
+    assert all(not p.get("owner_only") for p in OPERATIONAL_WEB_PAGES)
+
+    async def scenario(db, client):
+        keys = ("reports", "access", "specialized")
+        await pages(db, *(("balances." + key, "read") for key in keys))
+        async def view(key, group=None):
+            return await client.get(BASE + "/workspace/specialist/" + key,
+                                    params={"group": group} if group else {}, headers=headers())
+        for key in keys:
+            response = await view(key)
+            assert response.status_code == 200 and response.json()["items"] == [] and "notice" in response.json()
+        await save_policy(db, ["supplier.payment"], [
+            {**grant("bank", "bank", movements="own", balance=True), "report": True},
+            grant("supplier", "supplier", movements="none", balance=False),
+            {**grant("bank", "foreign-bank", movements="all", balance=True), "report": True},
+        ])
+        for name in ("summary", "accounts", "expected"):
+            report = await view("reports", name)
+            assert report.status_code == 200, report.text
+            rows = report.json()["items"]
+            assert [(row["label"], row["status"]) for row in rows] == [("Private bank", "الحسابات البنكية")]
+            if name != "expected":
+                assert "1000.00 SAR" in rows[0]["detail"]
+        assert (await view("reports", "suppliers")).json()["items"] == []
+        assert (await view("reports", "all-users")).status_code == 422
+        opening = await view("specialized", "openings")
+        assert [(r["label"], r["detail"]) for r in opening.json()["items"]] == [("Private bank", "1000.00 SAR")]
+        for group in ("opening-stock", "salary-start", "movements"):
+            assert (await view("specialized", group)).json()["items"] == []
+        assert (await view("specialized", "reports")).json()["items"] == (await view("reports", "summary")).json()["items"]
+        permission_rows = (await view("access")).json()["items"]
+        assert {r["label"] for r in permission_rows} == {"Private bank", "Supplier", "دفع مبلغ لمورد"}
+        assert "حركاتي فقط" in next(r["detail"] for r in permission_rows if r["label"] == "Private bank")
+        assert not any("1000.00" in str(row) or "Foreign" in str(row) for row in permission_rows)
+        for path in ("/financial-position", "/access/catalog", "/access/users", "/access/users/viewer", "/reports"):
+            assert (await client.get(BASE + path, headers=headers())).status_code == 403
+        assert (await client.put(BASE + "/access/users/viewer", json={}, headers=headers())).status_code == 403
+        assert (await client.post(BASE + "/openings", json={}, headers=headers())).status_code == 403
+        await pages(db, ("balances.access", "read"), revision=2)
+        assert (await view("specialized", "openings")).status_code == 403
+        assert (await view("reports", "accounts")).status_code == 403
+        assert (await view("access")).status_code == 200
+    run(scenario)

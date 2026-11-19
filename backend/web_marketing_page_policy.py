@@ -12,24 +12,42 @@ def _page(key: str, section: str, label: str, to: str, **options) -> dict:
 
 
 PROVIDERS = {"snapchat": "سناب شات", "tiktok": "تيك توك", "meta": "ميتا", "google": "إعلانات Google"}
+PROVIDER_TABS = {"campaigns": "الحملات", "accounts": "الحسابات", "ai": "جاهزية الذكاء الاصطناعي"}
+CUSTOMER_TABS = {
+    "overview": "نظرة عامة", "customers": "العملاء", "followups": "المتابعات", "sales": "فرص البيع",
+    "drafts": "مسودات الطلبات", "market": "فرص المنتجات والمنافسين", "objections": "الاعتراضات",
+    "campaigns": "أثر الحملات", "knowledge": "المعرفة", "quality": "الجودة", "integrations": "تكاملات التواصل",
+    "audit": "سجل الإجراءات",
+}
+PROVIDER_WORKSPACES = {
+    **{f"marketing.{provider}.{tab}": (provider, tab) for provider in PROVIDERS for tab in PROVIDER_TABS},
+    "marketing.tiktok.content": ("tiktok", "content"),
+}
 MARKETING_WEB_PAGES = (
     _page("marketing.overview", "marketing", "جميع المنصات", "/ads-manager"),
     _page("marketing.reports", "marketing", "التقارير", "/ads-manager/reports"),
     _page("marketing.recommendations", "marketing", "توصيات الحملات", "/ads-manager/recommendations"),
     _page("marketing.cohorts", "marketing", "أفواج العملاء", "/ads-manager/customer-cohorts"),
-    *(_page("marketing." + name, "marketing", label,
-            "/snapchat-accounts" if name == "snapchat" else "/ads-manager?provider=" + name)
-      for name, label in PROVIDERS.items()),
+    _page("marketing.snapchat", "marketing", "حسابات سناب شات", "/snapchat-accounts"),
+    *(_page("marketing." + (name if name != "snapchat" else "snapchat.overview"), "marketing",
+            label + " · نظرة عامة", "/ads-manager?provider=" + name,
+            aliases=[f"/ads-manager?provider={name}&tab=overview"]) for name, label in PROVIDERS.items()),
+    *(_page(key, "marketing", PROVIDERS[provider] + " · " + PROVIDER_TABS.get(tab, "المنشورات"),
+            f"/ads-manager?provider={provider}&tab={tab}") for key, (provider, tab) in PROVIDER_WORKSPACES.items()),
     _page("marketing.costs", "marketing", "العمولات وسعر الصرف", "/ads-manager/cost-settings", aliases=["/settings/ads-currencies"]),
     _page("apps.integrations", "apps", "كل التطبيقات والتكاملات", "/integrations-v2"),
     _page("apps.instagram", "apps", "حالة تكامل إنستغرام", "/integrations-v2/instagram"),
     _page("apps.advertising", "apps", "الحسابات الإعلانية", "/integrations-v2?workspace=accounts"),
     _page("intelligence.assistant", "intelligence", "مساعد ميزان", "/assistant"),
-    _page("intelligence.inbox", "intelligence", "ذكاء العملاء", "/customer-intelligence", aliases=["/customer-intelligence?tab=conversations"]),
+    _page("intelligence.inbox", "intelligence", "ذكاء العملاء · المحادثات", "/customer-intelligence?tab=conversations",
+          aliases=["/customer-intelligence"]),
+    *(_page("intelligence." + tab, "intelligence", "ذكاء العملاء · " + label,
+            "/customer-intelligence?tab=" + tab) for tab, label in CUSTOMER_TABS.items()),
     _page("intelligence.delivery", "intelligence", "تعليمات توصيل الموصلين", "/customer-intelligence?workspace=store-delivery"),
     _page("intelligence.tracking", "intelligence", "متابعة الطلبات وتعليماتها", "/order-tracking-notes"),
 )
 _STAFF_READERS = frozenset({
+    *PROVIDER_WORKSPACES, *("intelligence." + tab for tab in CUSTOMER_TABS),
     "marketing.recommendations", "marketing.costs", "apps.integrations", "apps.advertising",
     "intelligence.delivery", "intelligence.tracking", "intelligence.inbox", "intelligence.assistant", "apps.instagram",
 })
@@ -45,6 +63,8 @@ def _report_page(modes, query):
     provider = query.get("provider") if query else None
     if provider not in PROVIDERS or query.get("source", "platform") != "platform":
         _denied()
+    if provider == "snapchat" and "marketing.snapchat.overview" in modes:
+        return "marketing.snapchat.overview"
     return "marketing." + provider
 
 
@@ -98,10 +118,20 @@ def _table(columns, rows, *, more=False):
 
 
 async def _read_page(db, owner, actor, page, q, offset):
+    if page in PROVIDER_WORKSPACES:
+        from web_marketing_workspace_reads import provider_workspace
+        return await provider_workspace(db, owner, *PROVIDER_WORKSPACES[page], offset=offset)
+    if page.startswith("intelligence.") and page.split(".")[1] in CUSTOMER_TABS:
+        from web_marketing_workspace_reads import customer_workspace
+        return await customer_workspace(db, owner, actor, page.split(".")[1], offset)
     if page in {"apps.integrations", "apps.advertising", "apps.instagram"}:
         from integrations_control_center.catalog import ADVERTISING_PROVIDERS
         from integrations_control_center.service import IntegrationsControlCenterService
         provider_ids = {"instagram"} if page == "apps.instagram" else (ADVERTISING_PROVIDERS if page == "apps.advertising" else None)
+        if q:
+            if page == "apps.instagram" or q not in ADVERTISING_PROVIDERS:
+                raise HTTPException(422, detail={"code": "invalid_integration_provider"})
+            provider_ids = {q}
         data = await IntegrationsControlCenterService(db).overview(owner, provider_ids=provider_ids)
         if page in {"apps.integrations", "apps.instagram"}:
             rows = [[p.get("name_ar") or p["provider"], p.get("connection_status"), p.get("last_sync_at")]
@@ -189,7 +219,7 @@ def make_web_marketing_router(db, current_user):
         owner = await marketing_read_owner(db, user, page_id)
         if owner is None:
             _denied()
-        if page_id == "intelligence.inbox" and "customer_intelligence.inbox.read" in (user.get("denied_permissions") or []):
+        if (page_id == "intelligence.inbox" or page_id.removeprefix("intelligence.") in CUSTOMER_TABS) and "customer_intelligence.inbox.read" in (user.get("denied_permissions") or []):
             _denied()
         response.headers["Cache-Control"] = "private, no-store"
         return await _read_page(db, owner, user["id"], page_id, q.strip(), offset)

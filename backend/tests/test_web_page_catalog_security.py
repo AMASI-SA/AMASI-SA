@@ -28,6 +28,16 @@ def test_every_visible_navigation_target_has_a_catalogue_decision():
     assert all(urlsplit(page["to"]).path.startswith("/") and page["label"] and page["section_label"] for page in PAGES)
 
 
+def test_all_authenticated_app_routes_are_grantable_or_go_to_their_reviewed_replacement():
+    app = Path(__file__).resolve().parents[2] / "frontend/src/App.js"
+    routes = set(re.findall(r'\bpath="([^"]+)"', app.read_text()))
+    visible_paths = {urlsplit(address).path for page in PAGES for address in (page["to"], *page.get("aliases", []))}
+    visible_paths.update(page["detail_route"] for page in PAGES if "detail_route" in page)
+    routing_only = {"/login", "/register", "/", "*", "/employee-detail/:pageId", "/integrations/qoyod/*"}
+    assert routes <= visible_paths | routing_only
+    assert all(not page.get("owner_only") for page in PAGES)
+
+
 @pytest.mark.asyncio
 async def test_one_signed_browser_session_observes_grant_revocation_and_exact_tenant(monkeypatch):
     monkeypatch.setenv("JWT_SECRET", "test-only-page-boundary-secret-for-signed-session")
@@ -66,13 +76,23 @@ async def test_one_signed_browser_session_observes_grant_revocation_and_exact_te
         assert (await client.get("/api/private-unregistered-workspace", headers=staff)).status_code == 403
         assert (await client.get("/api/web-page-access-v1", headers=staff)).status_code == 403
         assert (await client.post("/api/recurring-obligations", headers=staff, json={})).status_code == 403
-        for invalid in ({"employees.permissions": "read"}, {"finance.obligations": "write"}):
+        for invalid in ({"employees.permissions": "write"}, {"finance.obligations": "write"}):
             assert (await client.put(target, headers=owner, json={"page_modes": invalid, "expected_revision": 1})).status_code == 422
-        assert (await client.put(target, headers=owner, json={"page_modes": {}, "expected_revision": 1})).status_code == 200
+        catalogue = (await client.get("/api/web-page-access-v1", headers=owner)).json()["pages"]
+        all_pages = {page["id"]: "read" for page in catalogue}
+        assigned = await client.put(target, headers=owner, json={"page_modes": all_pages, "expected_revision": 1})
+        assert assigned.status_code == 200, assigned.text
+        assert assigned.json()["member"]["page_modes"] == all_pages
+        stored = await store.users.find_one({"id": "staff"})
+        assert {r["id"] for r in web_page_access_for_user(stored)["pages"]} == set(all_pages)
+        assert (await client.get("/api/web-page-access-v1", headers=staff)).status_code == 403
+        assert (await client.put(target, headers=staff, json={"page_modes": {}, "expected_revision": 2})).status_code == 403
+        assert (await client.post("/api/recurring-obligations", headers=staff, json={})).status_code == 403
+        assert (await client.put(target, headers=owner, json={"page_modes": {}, "expected_revision": 2})).status_code == 200
         assert (await client.get("/api/recurring-obligations/options", headers=staff)).status_code == 403
-    bad_member = {"id": "staff", "created_by": "owner", "role": "employee", FIELD: {
-        "owner_id": "owner", "grants": [{"id": "employees.permissions", "mode": "read"}]}}
-    assert web_page_access_for_user(bad_member) == {"pages": []}
+    invalid_grant = {"id": "staff", "created_by": "owner", "role": "employee", FIELD: {
+        "owner_id": "other", "grants": [{"id": "employees.permissions", "mode": "read"}]}}
+    assert web_page_access_for_user(invalid_grant) == {"pages": []}
 
 
 def test_self_service_is_actor_bound_even_without_store_pages():

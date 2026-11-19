@@ -15,6 +15,7 @@ _DATA = {
     "alerts": ("settlement_alerts", "created_at", {"alert_type": "نوع التنبيه", "title": "التنبيه", "severity": "الأهمية", "status": "الحالة", "created_at": "تاريخ التنبيه"}),
     "daily": ("daily_costs", "date", {"date": "التاريخ", "product_costs": "تكاليف المنتجات", "snapchat_ads": "إعلانات سناب", "tiktok_ads": "إعلانات تيك توك", "instagram_ads": "إعلانات إنستغرام", "google_ads": "إعلانات Google"}),
     "orders": ("unified_orders", "order_date", {"order_number": "رقم الطلب", "order_status": "الحالة", "order_date": "تاريخ الطلب"}),
+    "salla_events": ("salla_webhook_inbox", "last_received_at", {"event_name": "نوع الحدث", "state": "حالة المعالجة", "attempts": "محاولات المعالجة", "last_received_at": "آخر استلام"}),
     "imports": ("import_jobs", "created_at", {"filename": "الملف", "status": "الحالة", "processed_rows": "صفوف معالجة", "total_rows": "عدد الصفوف"}),
     "history": ("analyses", "created_at", {"name": "التحليل", "filename": "الملف", "created_at": "تاريخ الإنشاء"}),
     "products": ("products", "updated_at", {"name": "المنتج", "sku": "رمز المنتج", "product_id": "رقم المنتج"}),
@@ -240,6 +241,21 @@ async def read_legacy_page(db, owner, user, source, page, *, day=None, app_state
     offset = (page - 1) * SIZE
     from tz_utils import riyadh_today
     day = (day or riyadh_today()).isoformat()
+    if source.startswith("/"):
+        from web_legacy_config_read import CONFIG_PAGES, read_config_page
+        if source in CONFIG_PAGES:
+            return await read_config_page(db, owner, user, source, offset)
+        from web_legacy_operating_read import read_operating
+        return await read_operating(db, owner, user, source, offset, day)
+    if source == "salla_order_monitor":
+        return await _documents(db, owner, "orders", offset, {"$or": [
+            {"data_sources.source": "salla_direct"}, {"raw_by_source.salla_direct": {"$exists": True}},
+        ]}, "الطلبات التي وصلتها بيانات من ربط سلة المباشر وحالتها في ميزان.")
+    if source == "salla_events":
+        link = await db.salla_integrations.find_one({"user_id": owner}, {"store_id": 1})
+        merchant = str((link or {}).get("store_id") or "").strip()
+        return await _documents(db, owner, source, offset, {"merchant_id": merchant} if merchant else {},
+                                "أحداث سلة المستلمة في قائمة المعالجة وحالة كل حدث.")
     if source in {"dashboard", "sales_report", "ads_report", "usage", "shipping_settings", "salla_sources"}:
         from web_legacy_reports import shop_report
         return await shop_report(db, owner, source, offset, day, app_state)

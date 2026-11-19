@@ -38,7 +38,9 @@ async def test_legacy_list_paging_tenant_and_projection(store):
         assert len(second["rows"]) == 2
         assert "raw_by_source" not in str(first)
         assert (await client.get(f"{GRANTS}/legacy-read/legacy.accounts", headers=actor("employee"))).status_code == 403
-        assert (await save(client, {"legacy.team": "read"}, 1)).status_code == 422
+        assert (await save(client, {"legacy.team": "write"}, 1)).status_code == 422
+        assert (await save(client, {"legacy.team": "read"}, 1)).status_code == 200
+        assert (await read(client, "legacy.team"))["columns"]
 
 
 @pytest.mark.asyncio
@@ -90,12 +92,9 @@ def test_old_menu_pages_are_unique_and_reads_have_no_write_surface():
         grants = {p["id"]: "read"}
         with pytest.raises(HTTPException):
             enforce_legacy_web_pages(grants, url, "POST")
-        if p.get("owner_only") or p["to"] in {"/integrations/salla/orders", "/integrations/salla/events"}:
-            with pytest.raises(HTTPException):
-                enforce_legacy_web_pages(grants, url, "GET")
-        else:
-            assert p.get("review_component") == "legacy_read" or p["to"] in {"/profile", "/integrations/salla/orders", "/integrations/salla/events"}
-            enforce_legacy_web_pages(grants, url, "GET")
+        assert not p.get("owner_only")
+        assert p.get("review_component") == "legacy_read" or p["to"] == "/profile"
+        enforce_legacy_web_pages(grants, url, "GET")
 
 @pytest.mark.asyncio
 async def test_report_scope_and_reconciliation_use_legacy_bank_namespace_and_main_account(store):
@@ -157,3 +156,103 @@ def test_legacy_menu_inventory_covers_actual_sidebar_destinations():
     urls = set(re.findall(r'to:\s*"([^"]+)",\s*label:', sidebar))
     covered = {url for p in PAGES for url in [p["to"], *p.get("aliases", [])] if isinstance(url, str)}
     assert urls - covered == set()
+
+
+@pytest.mark.asyncio
+async def test_form_history_and_audits_restrict_participants_and_writes(store):
+    paths = ["legacy.employee_corrections", "legacy.salary_reversals", "legacy.expense_reversals",
+             "legacy.audit.employee_orphans", "legacy.audit.ad_account_forensic", "legacy.audit.post_migration",
+             "legacy.audit.ad_debt", "legacy.audit.ledger_health", "legacy.new_transaction",
+             "legacy.bnpl_settlements.register", "legacy.settlement_engine", "legacy.audit.balance_drift"]
+    async with await build_client(store) as client:
+        await prepare(client, store, paths, [access("employee", "worker", scope="own"), access("bank", "account:b1"),
+                                            access("ad_account", "ad"), access("provider", "tabby")])
+        await store.users.update_one({"id": "employee"}, {"$set": {"operational_balance_access.operations": ["supplier.payment"]}})
+        base = {"user_id": "owner", "currency": "SAR", "amount": 42, "status": "posted", "side": "credit",
+                "posted_at": "2026-11-18", "posted_by": "employee", "notes": "secret"}
+        def leg(no, kind, eid, op, sub, **values):
+            return {**base, "entry_no": no, "entry_type": op, "entity_type": kind, "entity_id": eid, "sub_account": sub, **values}
+        await store.general_ledger.insert_many([
+            leg(1, "employee", "worker", "correction", "salary"),
+            leg(2, "employee", "worker", "correction", "salary", posted_by="other"),
+            leg(3, "employee", "worker", "correction", "custody"),
+            leg(4, "bank", "b1", "reversal", "main", reversal_of_txn_group_id="g", metadata={"original_operation": "salary_payment"}),
+            leg(5, "bank", "b1", "reversal", "main", reversal_of_txn_group_id="g2", metadata={"original_operation": "expense_record"}),
+            leg(6, "employee", "worker", "opening_balance", "salary", metadata={"legacy_orphan": True}),
+            leg(7, "employee", "worker", "opening_balance", "salary"),
+            leg(8, "ad_account", "ad", "spend", "debt", metadata={"source": "ad_account_cron"}),
+            leg(9, "ad_account", "other", "spend", "debt", metadata={"source": "ad_account_cron"}),
+            leg(10, "bank", "b1", "payment", "main", metadata={"source": "account_transaction_double_write",
+                                                               "account_transaction_id": "t1"}),
+            leg(11, "payment_gateway", "tabby", "bnpl_settlement", "receivable"),
+            leg(12, "payment_gateway", "tamara", "bnpl_settlement", "receivable"),
+            leg(13, "employee", "worker", "correction", "salary", user_id="other-owner"),
+        ])
+        await store.account_transactions.insert_many([{"user_id": owner, "account_id": bank, "id": tid, "transaction_type": tid}
+            for owner, bank, tid in [("owner", "b1", "t1"), ("owner", "x", "secret"), ("other", "b1", "private")]])
+        await store.counterparties.insert_one({"user_id": "owner", "id": "ad", "kind": "ad_account", "name": "إعلان"})
+        await store.ad_account_ledger.insert_one({"user_id": "owner", "counterparty_id": "ad", "debt_after": 12})
+        await store.settlement_invoices.insert_many([{"user_id": owner, "provider_name": p, "invoice_no": n, "rules_snapshot": "secret"}
+            for owner, p, n in [("owner", "tabby", 101), ("owner", "tamara", 102), ("other", "tabby", 103)]])
+        for name, expected in zip(paths[:5], [1, 4, 5, 6, 8]):
+            result = await read(client, name)
+            assert [r["entry_no"] for r in result["rows"]] == [expected]
+            assert "secret" not in str(result)
+        row, = (await read(client, paths[5]))["rows"]
+        assert row["count"] == 2 and row["entity_name"] == "worker"
+        row, = (await read(client, paths[6]))["rows"]
+        assert (row["old"], row["live"], row["difference"]) == (12, 42, 30)
+        row, = (await read(client, paths[7]))["rows"]
+        assert row["transaction_type"] == "t1" and row["status"] == "موجود في الدفتر"
+        assert (await read(client, paths[8]))["rows"] == [{"operation": "دفع مبلغ لمورد"}]
+        assert [r["entry_no"] for r in (await read(client, paths[9]))["rows"]] == [11]
+        assert [r["invoice_no"] for r in (await read(client, paths[10]))["rows"]] == [101]
+        assert (await read(client, paths[11]))["columns"]
+        assert await store.general_ledger.count_documents({}) == 13
+        for name in paths:
+            assert (await client.post(f"{GRANTS}/legacy-read/{name}", headers=actor("employee"))).status_code in {403, 405}
+
+
+@pytest.mark.asyncio
+async def test_store_diagnostics_date_and_read_only_action_context(store):
+    paths = ["legacy.ai.control_center", "legacy.diagnostics.cod_source", "legacy.diagnostics",
+             "legacy.accounting.migration", "legacy.upload"]
+    async with await build_client(store) as client:
+        await prepare(client, store, paths, [])
+        await store.unified_orders.insert_many([{"user_id": owner, "order_date": day, "order_status": "جديد",
+            "customer": "secret", "payment_method": "cash_on_delivery"} for owner, day in [
+                ("owner", "2026-11-18"), ("owner", "2026-11-18"), ("owner", "2026-11-17"), ("other", "2026-11-18")]])
+        await store.analyses.insert_one({"user_id": "owner", "date": "2026-11-18", "orders_imported": 0,
+                                        "report": {"summary": {"total_orders": 3}}})
+        await store.import_jobs.insert_many([{"user_id": owner, "filename": name, "file_contents": "secret"}
+                                            for owner, name in [("owner", "orders.xlsx"), ("other", "secret")]])
+        async def day_view(name):
+            res = await client.get(f"{GRANTS}/legacy-read/{name}", params={"day": "2026-11-18"}, headers=actor("employee"))
+            assert res.status_code == 200, res.text
+            assert "secret" not in res.text
+            return res.json()["rows"]
+        assert [r["count"] for r in await day_view(paths[0])] == [2]
+        assert [r["count"] for r in await day_view(paths[1])] == [2]
+        assert [r["count"] for r in await day_view(paths[2])] == [2, 3]
+        assert (await read(client, paths[3]))["rows"][0]["status"] == "لم يُنفّذ الترحيل"
+        assert [r["filename"] for r in (await read(client, paths[4]))["rows"]] == ["orders.xlsx"]
+        assert await store.migration_cutoffs.count_documents({}) == 0
+
+
+@pytest.mark.asyncio
+async def test_salla_source_monitor_and_delivery_log_match_active_merchant(store):
+    pages = ["legacy.integrations.salla.orders", "legacy.integrations.salla.events"]
+    async with await build_client(store) as client:
+        await prepare(client, store, pages, [])
+        await store.salla_integrations.insert_one({"user_id": "owner", "store_id": "A"})
+        await store.salla_webhook_inbox.insert_many([
+            {"user_id": owner, "merchant_id": merchant, "event_name": label, "payload_ciphertext": "private"}
+            for owner, merchant, label in [("owner", "A", "order.updated"), ("owner", "B", "other"),
+                                           ("other", "A", "private")]])
+        await store.unified_orders.insert_many([
+            {"user_id": owner, "order_number": num, "raw_by_source": {source: {"customer": "private"}}}
+            for owner, num, source in [("owner", "s1", "salla_direct"), ("owner", "x1", "excel"),
+                                       ("other", "s2", "salla_direct")]])
+        assert [r["order_number"] for r in (await read(client, pages[0]))["rows"]] == ["s1"]
+        events = await read(client, pages[1])
+        assert [r["event_name"] for r in events["rows"]] == ["order.updated"] and "private" not in str(events)
