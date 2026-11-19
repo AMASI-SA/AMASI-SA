@@ -17,6 +17,7 @@ from typing import Any, Callable
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
+from store_delivery_assignment_history import released_assignment
 from store_delivery_domain import (
     store_courier_snapshot, normalize_text,
 )
@@ -255,7 +256,9 @@ async def scan_shipment_service(db: Any, *, actor: dict, user_id: str, session_i
 
     if not driver or driver.get("status") != "active":
         return await reject("driver_inactive")
-    blocker = store_courier_assignment_blocker(order, transfer=bool(active))
+    previous = None if active else await released_assignment(
+        db, owner=user_id, order=order, driver_id=driver["id"])
+    blocker = store_courier_assignment_blocker(order, transfer=bool(active or previous))
     if blocker:
         return await reject(blocker)
     if active:
@@ -293,6 +296,8 @@ async def scan_shipment_service(db: Any, *, actor: dict, user_id: str, session_i
 
     accepted = {"barcode": barcode, "order_id": canonical_order_id, "order_number": _order_number(order), "shipping_city": city,
                 "shipping_company": company, **snapshot, "scanned_at": _now()}
+    if previous:
+        accepted["reassigned_from_assignment_id"] = previous
     added = await db[SESSIONS].update_one({"user_id": user_id, "id": session_id, "status": "open",
                                           "accepted.order_id": {"$ne": canonical_order_id}},
                                          {"$push": {"accepted": accepted}})
@@ -331,7 +336,10 @@ async def confirm_session_service(db: Any, *, actor: dict, user_id: str, session
         if not order or _order_id(order) != normalize_text(item.get("order_id")):
             raise HTTPException(status_code=409, detail={"code": "canonical_order_not_found"})
         company = _order_shipping_company(order)
-        blocker = store_courier_assignment_blocker(order)
+        previous = await released_assignment(db, owner=user_id, order=order, driver_id=driver["id"])
+        if previous != item.get("reassigned_from_assignment_id"):
+            raise HTTPException(status_code=409, detail={"code": "salla_assignment_changed_rescan"})
+        blocker = store_courier_assignment_blocker(order, transfer=bool(previous))
         if blocker:
             raise HTTPException(status_code=409, detail={"code": blocker, "order_id": item["order_id"]})
         order_carrier_fences[item["order_id"]] = eligibility_fence(order)
@@ -340,6 +348,7 @@ async def confirm_session_service(db: Any, *, actor: dict, user_id: str, session
             "id": str(uuid.uuid4()), "user_id": user_id, "session_id": session_id,
             "order_id": item["order_id"], "order_number": item.get("order_number"), "barcode": item.get("barcode"),
             **current_snapshot,
+            **({"reassigned_from_assignment_id": previous} if previous else {}),
             "status": "assigned", "active": True, "assigned_at": now,
             "assigned_by": normalize_text(actor.get("id")), "delivered_at": None,
         })

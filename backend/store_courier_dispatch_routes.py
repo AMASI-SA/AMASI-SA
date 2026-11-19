@@ -28,6 +28,7 @@ from ai_store_access_contract import (
 from order_engine.repository import MongoOrderRepository
 from order_engine.service import OrderNotFoundError, get_order
 from order_tracking_notes import enforce_stage_instructions
+from store_delivery_assignment_history import released_assignment
 from store_courier_domain import (
     ASSIGNED_WAITING_PICKUP,
     CANCELLED,
@@ -690,7 +691,9 @@ def make_store_courier_dispatch_router(
             order = await db["unified_orders"].find_one(key, session=tx)
             if not order:
                 raise HTTPException(status_code=404, detail={"code": "store_courier_shipment_not_found"})
-            blocker = store_courier_assignment_blocker(order)
+            previous = await released_assignment(db, owner=key["user_id"], order=order,
+                                                 account_id=selected_courier_id, session=tx)
+            blocker = store_courier_assignment_blocker(order, transfer=bool(previous))
             if blocker:
                 raise HTTPException(status_code=409, detail={"code": blocker})
             active = await db["store_delivery_assignments"].find_one(
@@ -727,6 +730,7 @@ def make_store_courier_dispatch_router(
                 "id": uuid.uuid4().hex, **key, "event_type": "store_courier_shipment_assigned",
                 "courier_user_id": selected_courier_id, "courier_name": selected_courier_name,
                 "actor_id": context["actor_id"], "actor_name": actor_name, "occurred_at": now,
+                **({"reassigned_from_assignment_id": previous} if previous else {}),
             }, session=tx)
             return {**workflow, **key, **patch}, False
 

@@ -273,24 +273,16 @@ def _assert_unassignment_safe(
     ):
         raise HTTPException(status_code=409, detail={"code": "assignment_projection_changed"})
     expected_workflow = ASSIGNED_WAITING_PICKUP if state == "assigned" else "delivering"
-    expected_stage = "completed" if state == "assigned" else "delivering"
-    replacement_carrier = (
-        assignment_carrier_changed(assignment, _order_shipping_company(order))
-        and normalize_text(workflow.get("carrier_label_type")) == "carrier"
+    stage = normalize_text(workflow.get("stage"))
+    replacement_carrier = assignment_carrier_changed(assignment, _order_shipping_company(order))
+    unexpected_custody = (
+        stage == "delivered"
+        or (stage == "delivering" and state == "assigned"
+            and not assignment.get("reassigned_from_assignment_id"))
     )
-    allowed_stages = {expected_stage}
-    if replacement_carrier:
-        # The replacement carrier can advance independently of the stale local
-        # assignment. Revocation must preserve its progress and label proof.
-        allowed_stages.update({"completed", "delivering", "delivered"})
-    elif state == "assigned" and normalize_text(assignment.get("reassigned_from_assignment_id")):
-        # Older direct transfers left the previous driver's delivering stage.
-        # The pickup/delivery and identity fences below still apply.
-        allowed_stages.add("delivering")
     if (
         normalize_text(workflow.get("store_courier_assignment_state")) != expected_workflow
-        or normalize_text(workflow.get("stage")) not in allowed_stages
-        or normalize_text(workflow.get("assembly_status")) != "completed"
+        or (unexpected_custody and not replacement_carrier)
         or any(normalize_text(workflow.get(field)) for field in (
             "store_courier_delivered_at", "store_courier_delivered_by_id",
         ))
@@ -496,20 +488,16 @@ def make_store_delivery_reassignment_router(db: Any, current_user: Callable[...,
                          "store_courier_assignment_state": (
                              ASSIGNED_WAITING_PICKUP if prior_status == "assigned" else "delivering"
                          ),
-                         "stage": workflow.get("stage"),
-                         "assembly_status": "completed"},
+                         "stage": workflow.get("stage")},
                         {"$unset": {field: "" for field in (
                             *_UNASSIGN_WORKFLOW_FIELDS,
                             "store_courier_picked_up_at",
                             "store_courier_picked_up_by_id",
                         )},
                          "$set": {
-                             "stage": (
-                                 workflow["stage"]
-                                 if assignment_carrier_changed(assignment, _order_shipping_company(order))
-                                 and normalize_text(workflow.get("carrier_label_type")) == "carrier"
-                                 else "completed"
-                             ),
+                             **({"stage": "completed"} if workflow.get("stage") == "delivering"
+                                and not assignment_carrier_changed(assignment, _order_shipping_company(order))
+                                and workflow.get("assembly_status") == "completed" else {}),
                              "updated_at": now,
                          }},
                         session=tx,

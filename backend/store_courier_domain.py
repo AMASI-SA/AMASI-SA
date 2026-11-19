@@ -85,7 +85,7 @@ def eligibility_fence(order: dict[str, Any]) -> dict[str, Any]:
     paths = ("order_status_slug", "order_status", "raw_by_source.salla_direct.status",
              "raw_by_source.salla_direct.status_slug", "salla_shipping_current.company_name",
              "salla_shipping_current.company_code", "shipping_company", "shipping_company_code",
-             "store_delivery_assignment_id")
+             "store_delivery_assignment_id", "store_delivery_status", "store_delivery_updated_at")
     if not order.get("salla_shipping_current"):
         paths += tuple("raw_by_source.salla_direct." + key for key in (
             "shipping", "shipping_company", "shipping_company_code", "courier_name",

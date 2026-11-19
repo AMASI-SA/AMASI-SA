@@ -195,6 +195,40 @@ async def test_legacy_transfer_stage_can_be_revoked_only_before_new_driver_picku
 
 
 @pytest.mark.asyncio
+async def test_unassign_pending_assembly_preserves_all_fulfillment_evidence():
+    client, db = await _fixture()
+    try:
+        await db[WORKFLOWS].update_one({"order_number": "101"}, {
+            "$set": {"stage": "in_progress", "assembly_status": "pending", "carrier_label_ready": False}})
+        result = await _route(db)("assignment-A", UnassignPayload(expected_driver_id="driver-R"), user=ACTOR)
+        assert result["ok"]
+        workflow = await db[WORKFLOWS].find_one({"order_number": "101"})
+        assert (workflow["stage"], workflow["assembly_status"], workflow["carrier_label_ready"]) == (
+            "in_progress", "pending", False)
+    finally:
+        await _shutdown(client, db)
+
+
+@pytest.mark.asyncio
+async def test_released_transfer_requires_its_own_release_and_a_different_driver():
+    from store_delivery_assignment_history import released_assignment
+    client, db = await _fixture()
+    try:
+        await _route(db)("assignment-A", UnassignPayload(expected_driver_id="driver-R"), user=ACTOR)
+        order = await db[ORDERS].find_one({"order_number": "101"})
+        assert await released_assignment(db, owner="merchant", order=order, driver_id="next") == "assignment-A"
+        for owner, current, candidate in (
+            ("other-owner", order, "next"), ("merchant", order, "driver-R"),
+            ("merchant", {**order, "store_delivery_updated_at": "old"}, "next"),
+            ("merchant", {**order, "store_delivery_status": "assigned"}, "next"),
+            ("merchant", {**order, "order_number": "102"}, "next"),
+        ):
+            assert await released_assignment(db, owner=owner, order=current, driver_id=candidate) is None
+    finally:
+        await _shutdown(client, db)
+
+
+@pytest.mark.asyncio
 async def test_operator_unassign_removes_only_active_driver_projection():
     client, db = await _fixture()
     try:
@@ -328,7 +362,7 @@ async def test_in_transit_can_unassign_without_return_attestation_and_reassign_l
         )
         await db[ORDERS].update_one(
             {"order_number": "101"},
-            {"$set": {"store_delivery_status": "out_for_delivery"}},
+            {"$set": {"store_delivery_status": "out_for_delivery", "order_status_slug": "delivering"}},
         )
         await db[WORKFLOWS].update_one(
             {"order_number": "101"},
@@ -402,6 +436,7 @@ async def test_in_transit_can_unassign_without_return_attestation_and_reassign_l
             db, actor=ACTOR, user_id="merchant", session_id=session["id"],
         )
         assert confirmation["assigned_count"] == 1
+        assert confirmation["assignments"][0]["reassigned_from_assignment_id"] == "assignment-A"
         assert await db[ASSIGNMENTS].count_documents(
             {"order_id": "salla-101", "active": True, "driver_id": "driver-J"},
         ) == 1
