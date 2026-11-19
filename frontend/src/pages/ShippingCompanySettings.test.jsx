@@ -3,7 +3,8 @@ import {createRoot} from 'react-dom/client';
 import ShippingCompanySettings from './ShippingCompanySettings';
 import api from '../lib/api';
 jest.mock('../lib/api',()=>({get:jest.fn(),put:jest.fn(),post:jest.fn()}));
-jest.mock('react-router-dom',()=>({Link:({to,children,...props})=><a href={to} {...props}>{children}</a>}));
+const mockShippingLocation = { search: '' };
+jest.mock('react-router-dom',()=>({useLocation:()=>mockShippingLocation,Link:({to,children,...props})=><a href={to} {...props}>{children}</a>}));
 jest.mock('sonner',()=>({toast:{success:jest.fn(),error:jest.fn()}}));
 test('Mezan 2 reuses existing shipping settings without migrating or saving on mount',async()=>{
   global.IS_REACT_ACT_ENVIRONMENT=true;
@@ -20,6 +21,19 @@ test('Mezan 2 reuses existing shipping settings without migrating or saving on m
     expect(host.textContent).toContain('مشتركة مع تقارير الأرباح');
     expect(host.querySelector('[data-testid="settings-back"]').getAttribute('href')).toBe('/operational-balances');
   } finally {await act(async()=>root.unmount());host.remove();}
+});
+
+test('the tariffs link opened from operational tools returns to the same directory without a write',async()=>{
+  global.IS_REACT_ACT_ENVIRONMENT=true;
+  const host=document.createElement('div');document.body.appendChild(host);const root=createRoot(host);
+  mockShippingLocation.search='?from=operational-tools';
+  api.get.mockResolvedValue({data:{shipping_companies:[]}});
+  try {
+    await act(async()=>root.render(<ShippingCompanySettings mezan2/>));
+    expect(host.querySelector('[data-testid="settings-back"]').getAttribute('href')).toBe('/operational-balances?view=tools');
+    expect(api.put).not.toHaveBeenCalled();
+    expect(api.post).not.toHaveBeenCalled();
+  } finally {mockShippingLocation.search='';await act(async()=>root.unmount());host.remove();}
 });
 
 async function change(input, value) {
