@@ -14,7 +14,7 @@ export const isMoneyAccount = kind => kind === 'bank' || kind === 'cash';
 export function movementDate(row, full = false) {
   // Date-only business records do not establish a time. A timestamp without a
   // timezone is likewise not evidence of the user's local timezone.
-  const timestamp = row?.recorded_at;
+  const timestamp = row?.return_business_at || row?.recorded_at;
   if (typeof timestamp === 'string' && /T\d{2}:\d{2}.*(?:Z|[+-]\d{2}:?\d{2})$/i.test(timestamp)) {
     const date = new Date(timestamp);
     if (!Number.isNaN(date.getTime())) {
@@ -37,6 +37,7 @@ export function movementDate(row, full = false) {
 export function movementTitle(row, compact = false) {
   if (compact && row.automatic_history === 'salary') return 'آخر راتب مسجل';
   if (compact && row.automatic_history === 'delivery') return 'آخر أجرة توصيل';
+  if (row.salla_return_waybill) return row.order_number ? `أجرة رجيع · طلب ${row.order_number}` : 'أجرة بوليصة رجيع';
   if (row.prepaid_shipping && row.counterparty_name && row.order_number) return `${row.counterparty_name} · ${row.order_number}`;
   if (row.customer_name) return row.customer_name;
   if (row.order_number) return `طلب ${row.order_number}`;
@@ -47,7 +48,7 @@ export function movementTitle(row, compact = false) {
 }
 
 export function movementRecorder(row) {
-  return ['salary', 'delivery'].includes(row.automatic_history) ? 'النظام تلقائيًا' : row.recorded_by?.name || 'غير موثق';
+  return row.salla_return_waybill || ['salary', 'delivery'].includes(row.automatic_history) ? 'النظام تلقائيًا' : row.recorded_by?.name || 'غير موثق';
 }
 
 export function signedResourceBalance(resource) {

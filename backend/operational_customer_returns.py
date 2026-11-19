@@ -172,16 +172,24 @@ def attach_returns(state, sources):
 
 def shipping_obligations(state):
     obligations = state.setdefault('engine', {}).setdefault('obligations', {})
+    native = {(r.get('order_id'), r['party_id'], r['shipment_reference'].strip().casefold()): r
+              for r in obligations.values() if r.get('salla_return_shipment_id')}
     for case in state.get('customer_returns', []):
         shipping = case['shipping']
         if shipping['kind'] != 'courier':
+            continue
+        existing = native.get((case['order_id'], shipping['id'], shipping['reference'].strip().casefold()))
+        if existing:
+            existing['return_case_id'] = case['id']
+            # The waybill already owns this amount and its settlement identity.
             continue
         key = 'customer-return-shipping:' + case['id']
         confirmed = shipping['status'] == 'completed'
         obligations[key] = {'id': key, 'kind': 'shipping', 'party_type': 'courier', 'party_id': shipping['id'], 'name': shipping['name'],
                             'currency': 'SAR', 'direction': 'payable', 'expected': '0.00' if confirmed else shipping['amount'],
                             'confirmed': shipping['amount'] if confirmed else '0.00', 'business_date': case['created_at'][:10],
-                            'return_case_id': case['id'], 'shipment_reference': shipping['reference']}
+                            'return_case_id': case['id'], 'shipment_reference': shipping['reference'],
+                            'order_id': case['order_id'], 'order_number': case['order_number'], 'reference': shipping['reference']}
 
 
 async def save_case(db, owner, actor, payload, *, case_id=None, clock=None):

@@ -580,6 +580,9 @@ def ledger_items(state, computed, resource, policy, *, sources=None):
                     source_item["order_number"] = item.get("order_number") or event.get("order_number")
             row = _row(policy, resource, source_item, amount,
                        "for_party" if item["direction"] == "payable" else "for_us", "مستحق من المصدر")
+            if item.get("salla_return_shipment_id"):
+                row.update(description="أجرة بوليصة رجيع", salla_return_waybill=True,
+                           return_business_at=item.get("return_business_at"))
             if family:
                 row.update(automatic_history=family, automatic_group=group)
                 row["description"] = "راتب تلقائي" if family == "salary" else "أجرة توصيل"
