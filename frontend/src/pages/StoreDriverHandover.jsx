@@ -18,7 +18,7 @@ function mismatchMessage(row, driver) {
   }
   if (row?.code === "driver_shipping_company_unconfigured") return "اربط الموصل بشركة مندوب المدينة من إعدادات الموصلين أولًا.";
   if (row?.code === "shipment_shipping_company_required") return "شركة الشحن غير محددة. لا يمكن الإسناد قبل التحقق منها.";
-  return row?.code || "تعذر إسناد الشحنة.";
+  return row?.message || row?.code || "تعذر إسناد الشحنة.";
 }
 
 function money(value) {

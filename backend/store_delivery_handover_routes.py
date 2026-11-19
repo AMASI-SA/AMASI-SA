@@ -300,8 +300,11 @@ async def scan_shipment_service(db: Any, *, actor: dict, user_id: str, session_i
         try:
             recovered = await recover_store_courier_label_for_handover(db, user_id=user_id, order_number=order_number)
         except ShippingLabelError as exc:
-            return {"accepted": False, "barcode": barcode, "order_number": order_number,
-                    "code": exc.code, "message": str(exc)}
+            rejected = {"barcode": barcode, "order_number": order_number, "code": exc.code,
+                        "message": str(exc), "scanned_at": _now()}
+            await db[SESSIONS].update_one(
+                {"user_id": user_id, "id": session_id, "status": "open"}, {"$push": {"rejected": rejected}})
+            return {"accepted": False, **rejected}
         if recovered:
             # Recovery may have refreshed the canonical carrier or destination.
             order = await db[ORDERS].find_one(selector, {"_id": 0})

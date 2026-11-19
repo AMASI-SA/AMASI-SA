@@ -223,9 +223,23 @@ async def recover_store_courier_label_for_handover(db, *, user_id, order_number)
     number = _text(order_number)
     if not await compat.mezan_courier_name(db, user_id, number):
         return False
+    refresh = None
     if not await completed_supplier_policy(db, user_id, number):
-        await recover_pending_print_snapshot(db, user_id, number, allow_print_catalog_rename=False)
-    fence = await shipping._assert_current_print_status(db, user_id, number)
+        refresh = await recover_pending_print_snapshot(db, user_id, number, allow_print_catalog_rename=False)
+    try:
+        fence = await shipping._assert_current_print_status(db, user_id, number)
+    except ShippingLabelError as exc:
+        if exc.code != "assembly_canonical_status_blocked" or refresh is None:
+            raise
+        from assembly_status_policy import component_refresh_pending
+        source = await db.unified_orders.find_one({"user_id": user_id, "order_number": number})
+        if not component_refresh_pending(source):
+            raise
+        if not refresh.get("ok") or not refresh.get("found"):
+            raise ShippingLabelError("handover_source_refresh_unavailable",
+                "تعذّر التحقق من بيانات التجهيز من سلة. أعد مسح الشحنة بعد نجاح التحديث.") from exc
+        raise ShippingLabelError("completion_source_refresh_pending",
+            "التجميع مكتمل، لكن ميزان لم يطابق مكونات الطلب مع التجهيز المعتمد. راجع المنتجات والخيارات والكميات قبل الإسناد.") from exc
     async def persist(scoped, shipment_rows):
         workflow = await _require_completed_workflow(scoped, user_id=user_id, order_number=number)
         assignment = {key: workflow.get(key) for key in (
