@@ -187,6 +187,34 @@ def _public_recent_openai_after_fallback(
     return public
 
 
+async def latest_public_recommendations(db: Any, user_id: str) -> dict[str, Any]:
+    collection = db[RECOMMENDATION_COLLECTION]
+    latest = await collection.find_one(
+        {"user_id": user_id, **VISIBLE_SNAPSHOT_FILTER},
+        {"execution_targets": 0},
+        sort=[("generated_at", -1)],
+    )
+    if not _fallback_present(latest):
+        return _public_document(latest)
+
+    # A racing legacy writer must not make a valid OpenAI recommendation
+    # disappear. Reuse only a recent OpenAI snapshot inside the exact same
+    # five-hour recommendation validity window used by execution approval.
+    recent_openai = await collection.find_one(
+        {
+            "user_id": user_id,
+            **VISIBLE_SNAPSHOT_FILTER,
+            "recommendation_source": VALID_OPENAI_SOURCE,
+        },
+        {"execution_targets": 0},
+        sort=[("generated_at", -1)],
+    )
+    preserved = _public_recent_openai_after_fallback(recent_openai)
+    if preserved is not None:
+        return preserved
+    return _public_document(latest)
+
+
 def attach_campaign_ai_public_guard(
     router: APIRouter,
     db: Any,
@@ -199,31 +227,7 @@ def attach_campaign_ai_public_guard(
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         user_id = _text(user.get("id") or user.get("_id"))
-        collection = db[RECOMMENDATION_COLLECTION]
-        latest = await collection.find_one(
-            {"user_id": user_id, **VISIBLE_SNAPSHOT_FILTER},
-            {"execution_targets": 0},
-            sort=[("generated_at", -1)],
-        )
-        if not _fallback_present(latest):
-            return _public_document(latest)
-
-        # A racing legacy writer must not make a valid OpenAI recommendation
-        # disappear. Reuse only a recent OpenAI snapshot inside the exact same
-        # five-hour recommendation validity window used by execution approval.
-        recent_openai = await collection.find_one(
-            {
-                "user_id": user_id,
-                **VISIBLE_SNAPSHOT_FILTER,
-                "recommendation_source": VALID_OPENAI_SOURCE,
-            },
-            {"execution_targets": 0},
-            sort=[("generated_at", -1)],
-        )
-        preserved = _public_recent_openai_after_fallback(recent_openai)
-        if preserved is not None:
-            return preserved
-        return _public_document(latest)
+        return await latest_public_recommendations(db, user_id)
 
     @router.get("/ai-monitor/history", include_in_schema=False)
     async def guarded_campaign_recommendation_history(

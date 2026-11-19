@@ -104,3 +104,14 @@ test("choosing all platforms selects the real Salla order universe", async () =>
     expect(host.querySelectorAll("tbody tr")).toHaveLength(6);
     expect(host.querySelector("thead").textContent).toContain("عدد الطلبات");
 });
+
+test("a granted platform locks its source and hides external synchronization controls", async () => {
+    api.get.mockResolvedValue({ data: payload("platform") });
+    await act(async () => root.render(<MemoryRouter initialEntries={["/ads-manager?provider=google&source=salla"]}>
+        <MarketingReports readOnly fixedProvider="meta" />
+    </MemoryRouter>));
+    expect(api.get.mock.calls[0][1].params).toMatchObject({ provider: "meta", source: "platform" });
+    expect(host.textContent).not.toContain("مزامنة سلة الآن");
+    expect(host.textContent).not.toContain("مزامنة سناب الآن");
+    expect(host.querySelector("select").disabled).toBe(true);
+});

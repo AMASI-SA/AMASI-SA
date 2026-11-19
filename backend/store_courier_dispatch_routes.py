@@ -750,7 +750,9 @@ def make_store_courier_dispatch_router(
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         context = await _actor_context(db, user)
-        _require_permission(context, DELIVER_PERMISSION)
+        reader = user.get("_web_workspace_read")
+        if not reader or reader[0] not in {"fulfillment.handover", "fulfillment.delivering", "fulfillment.delivered"}:
+            _require_permission(context, DELIVER_PERMISSION)
         await ensure_store_courier_dispatch_indexes(db)
         normalized_stage = _text(stage).casefold() or "waiting"
         stage_filter = _my_stage_filter(normalized_stage)

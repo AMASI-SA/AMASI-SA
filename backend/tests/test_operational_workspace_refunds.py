@@ -454,3 +454,25 @@ def test_confirmation_rejects_hidden_changes_and_requires_explicit_execution(pat
         assert (await read(db, "owner"))["customer_returns"][0]["status"] == "pending"
         assert bank_amount(await read(db, "owner")) == "1000.00"
     run(scenario)
+
+
+def test_review_history_is_optional_scoped_to_order_and_paginated():
+    async def scenario(db, client):
+        await order_fixture(db, number="901")
+        await order_fixture(db, number="902")
+        for _ in range(10):
+            await created(client, order_number="901", amount="1.00")
+        other = await created(client, order_number="902", amount="1.00")
+        old = await client.get(BASE + "/order/901")
+        assert old.status_code == 200 and "history" not in old.json()
+        lookup = await client.get(BASE + "/order/٩٠١", params={"include_history": True})
+        assert lookup.status_code == 200, lookup.text
+        first = lookup.json()["history"]
+        assert first["total"] == 10 and first["page_size"] == 8 and len(first["items"]) == 8
+        second = await client.get(BASE, params={"order_number": "901", "page": 2, "page_size": 8})
+        assert second.status_code == 200, second.text
+        two = second.json()
+        assert len(two["items"]) == 2 and two["total_pages"] == 2
+        ids = {item["id"] for item in first["items"] + two["items"]}
+        assert len(ids) == 10 and other["id"] not in ids
+    run(scenario)

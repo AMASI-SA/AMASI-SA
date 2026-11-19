@@ -497,3 +497,17 @@ test('native accounts without a ready ledger never display default zero balances
         expect(container.textContent).not.toContain('0.00');
     });
 });
+
+test('configured supplier directory never requests store-wide finance data, even by deep link', async () => {
+    mockSupplierQuery = 'supplier=supplier-v2';
+    useOptionalAuth.mockReturnValue({user:{id:'staff',created_by:'owner',web_page_access:{pages:[
+        {id:'suppliers.directory',to:'/suppliers-v2',mode:'read'}, {id:'balances.parties',to:'/operational-balances?view=parties',mode:'read'},
+    ]}}});
+    await withOperationalPage(async container => {
+        expect(container.textContent).toContain('مورد تجريبي');
+        expect(container.querySelector('a[href="/operational-balances?view=parties"]')).toBeTruthy();
+        expect(container.querySelector('[data-testid="mezan-supplier-financial-open-supplier-v2"]')).toBeNull();
+        expect(loadOperationalSupplierAccounts).not.toHaveBeenCalled();
+        expect(loadMezanSupplierFinancials).not.toHaveBeenCalled();
+    });
+});

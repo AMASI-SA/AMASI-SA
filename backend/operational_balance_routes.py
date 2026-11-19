@@ -378,6 +378,12 @@ async def scope(db, principal, permission):
     if (not owner_account or owner_account.get("role") != "owner" or owner_account.get("disabled")
             or owner_account.get("is_active") is False or owner_account.get("deleted_at")):
         fail("operational_owner_inactive", "حساب المالك غير متاح", 403)
+    from operational_web_page_policy import request_modes, statement_access
+    modes = request_modes(actor)
+    if permission == "provider_statements" and actor.get("role") != "owner":
+        if modes is None:
+            fail("provider_statement_owner_required", "لا توجد صلاحية لكشوف المنصات", 403)
+        await statement_access(db, owner, actor["id"])
     mobile = principal.get("_session_client") == "amasi_mobile"
     if permission == "workspace":
         # Membership only. The new workspace applies its own explicit resource
@@ -410,6 +416,11 @@ async def scope(db, principal, permission):
 
 
 def make_operational_balance_router(db, current_user):
+    async def bind_web_page(request: HttpRequest, user=Depends(current_user)):
+        from operational_web_page_policy import bind_page_request
+        with bind_page_request(user, request):
+            yield
+
     async def native_gate(request: HttpRequest, user=Depends(current_user)):
         path = request.url.path.rstrip("/").split("/operational-balances", 1)[-1]
         actor, owner, _ = await scope(db, user, "workspace")
@@ -419,8 +430,23 @@ def make_operational_balance_router(db, current_user):
             return
         if path == "/workspace" or path.startswith("/workspace/"):
             from operational_balance_access import load_access
+            from operational_web_page_policy import SCOPE_REPORTS, request_modes
+            if (request.method == "GET" and path.startswith("/workspace/specialist/") and
+                    path.rsplit("/", 1)[-1] in SCOPE_REPORTS and request_modes(actor) is not None):
+                # A page-only grant can see its own empty state. The handler checks the
+                # financial scope again before reading any allocated account or opening.
+                return
             (await load_access(db, actor, owner)).require_enabled()
             return
+        if actor.get("role") != "owner":
+            from operational_web_page_policy import request_modes
+            modes = request_modes(actor)
+            if path == "/inventory" and request.method == "GET" and (modes or {}).get("products.inventory"):
+                # The inventory handler removes costs and verifies merchant membership.
+                return
+            if modes is not None and (path == "/provider-statements" or path.startswith("/provider-statements/")):
+                await scope(db, user, "provider_statements")
+                return
         if actor.get("role") != "owner":
             # Fail closed for every existing/attached aggregate, export, audit,
             # receipt and mutation route. Scoped staff use the safe workspace
@@ -461,7 +487,7 @@ def make_operational_balance_router(db, current_user):
         await scope(db, user, permission)
 
     router = APIRouter(prefix="/operational-balances", tags=["Operational balances"],
-                       dependencies=[Depends(native_gate)])
+                       dependencies=[Depends(bind_web_page), Depends(native_gate)])
 
     def guarded(permission):
         async def dependency(request: HttpRequest, user=Depends(current_user)):
@@ -639,11 +665,15 @@ def make_operational_balance_router(db, current_user):
             from operational_inventory_projection import projection
             from web_page_access import INVENTORY_PAGE, delegated_page_owner
 
-            delegated_owner = await delegated_page_owner(db, user, INVENTORY_PAGE)
-            if delegated_owner is None:
-                _, owner, _ = await scope(db, user, 'reports')
+            actor, owner, _ = await scope(db, user, 'reports')
+            if actor.get("role") == "owner":
                 return await projection(db, owner)
-            result = await projection(db, delegated_owner)
+            if await delegated_page_owner(db, actor, INVENTORY_PAGE) != owner:
+                fail("web_page_permission_required", "لا توجد صلاحية لعرض المخزون", 403)
+            result = await projection(db, owner)
+            fresh_actor, fresh_owner, _ = await scope(db, user, 'reports')
+            if fresh_owner != owner or await delegated_page_owner(db, fresh_actor, INVENTORY_PAGE) != owner:
+                fail("operational_access_changed", "تغيرت صلاحياتك؛ أعد فتح الصفحة", 409)
             cost_fields = {'unit_cost', 'inventory_value', 'cost_basis', 'operational_unit_cost',
                            'operational_inventory_value', 'operational_currency'}
             def redact_costs():

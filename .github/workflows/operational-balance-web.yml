@@ -66,6 +66,10 @@ jobs:
         run: >-
           python -B -m pytest --noconftest -q
           backend/tests/test_operational_balance*.py
+          backend/tests/test_web_page_access.py backend/tests/test_web_page_catalog_security.py
+          backend/tests/test_web_employee_page_reads.py backend/tests/test_web_marketing_page_permissions.py
+          backend/tests/test_web_legacy_page_policy.py backend/tests/test_web_legacy_config_read.py
+          backend/tests/test_web_extra_pages.py backend/tests/test_web_detail_pages.py
           backend/tests/test_operational_refresh_parallel_profit.py
           backend/tests/test_operational_refresh_party_issue_index.py
           backend/tests/test_operational_workspace_refunds.py
@@ -187,6 +191,9 @@ jobs:
         run: >-
           node node_modules/react-scripts/bin/react-scripts.js test --watch=false --runInBand --resetMocks=false
           --testMatch '**/src/pages/operational/**/*.test.{js,jsx,ts,tsx}'
+          '**/EmployeeWebAccess.test.jsx' '**/webPageAccess.test.js'
+          '**/EmployeeOperationsReadPage.test.jsx' '**/EmployeeMarketingRead.test.jsx'
+          '**/EmployeeAdditionalPage.test.jsx' '**/EmployeeDetailPage.test.jsx' '**/OrdersV2.navigation.test.jsx'
           '**/MezanV2NavigationShell.employees.test.jsx'
           '**/MezanV2NavigationShell.test.jsx'
           '**/MezanV2NavigationShell.accountingFirstRun.test.jsx'

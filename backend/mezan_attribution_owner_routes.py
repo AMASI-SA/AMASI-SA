@@ -306,8 +306,9 @@ def make_mezan_attribution_owner_router(
         max_orders: int = Query(default=100_000, ge=1, le=100_000),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
-        actor = require_owner(user)
-        user_id = _merchant_user_id(actor)
+        from web_marketing_page_policy import marketing_read_owner
+        tenant = await marketing_read_owner(db, user, "marketing.cohorts")
+        user_id = tenant if tenant is not None else _merchant_user_id(require_owner(user))
         try:
             report_date = (
                 datetime.fromisoformat(as_of).date()
@@ -322,7 +323,10 @@ def make_mezan_attribution_owner_router(
 
         from auth import ensure_user_settings
 
-        settings = await ensure_user_settings(db, user_id)
+        if tenant is None:
+            settings = await ensure_user_settings(db, user_id)
+        else:
+            settings = await db.settings.find_one({"user_id": tenant}, {"report_included_statuses": 1}) or {}
         report = await build_customer_cohort_report(
             db,
             user_id,

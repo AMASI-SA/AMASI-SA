@@ -292,8 +292,12 @@ def make_mezan_supplier_management_router(
     async def workspace(
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
-        context = await _actor_context(db, user)
-        _require_permission(context, SUPPLIERS_READ_PERMISSION)
+        scope = user.get("_web_workspace_read")
+        if scope and scope[0] == "suppliers.directory":
+            context = {"merchant_id": scope[1], "permissions": {SUPPLIERS_READ_PERMISSION}}
+        else:
+            context = await _actor_context(db, user)
+            _require_permission(context, SUPPLIERS_READ_PERMISSION)
         await ensure_mezan_supplier_indexes(db)
         merchant_id = context["merchant_id"]
         suppliers = await db[MEZAN_SUPPLIERS_V2].find(

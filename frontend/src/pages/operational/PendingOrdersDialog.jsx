@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import PaginatedReportTable from "./PaginatedReportTable";
-import { deliveryOrderLabel, formatPositionCount } from "./financialPositionPresentation";
+import { deliveryOrderLabel, formatPositionCount } from "./financialPositionDisplay";
 import { formatRiyadhDateTime } from "../../lib/dates";
 import { operationalApi, requestId } from "./api";
 import { canMatchCourierOrder, canReadOperationalPage, courierRecoveryMessage } from "./visibleOperationalRead";

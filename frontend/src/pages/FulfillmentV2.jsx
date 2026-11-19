@@ -1,5 +1,6 @@
 import "../fulfillmentMobile.css";
 // Mezan OS V2 governed preparation workspace.
+import { grantedWebLink, managedWebPages } from "../lib/webPageAccess";
 import { lazy, useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
@@ -164,12 +165,13 @@ export default function FulfillmentV2() {
     const canAssignStoreCourier = isOwner || userHasPermission(user, STORE_COURIER_ASSIGN_PERMISSION);
     const canDeliverStoreCourier = isOwner || userHasPermission(user, STORE_COURIER_DELIVER_PERMISSION);
     const courierOnly = canDeliverStoreCourier && !canAssignStoreCourier;
-    const visibleNavigationItems = useMemo(
-        () => courierOnly
-            ? FULFILLMENT_STAGES.filter((stage) => COURIER_STAGE_KEYS.has(stage.key))
-            : FULFILLMENT_NAVIGATION_ITEMS,
-        [courierOnly],
-    );
+    const pages = managedWebPages(user);
+    const stageLocation = item => item.workspace === "my-products" ? "/fulfillment-v2?workspace=my-products"
+        : "/fulfillment-v2?stage=" + item.key + (item.key === "reviewed" ? "&view=products" : "");
+    const visibleNavigationItems = useMemo(() => {
+        const items = courierOnly ? FULFILLMENT_STAGES.filter(stage => COURIER_STAGE_KEYS.has(stage.key)) : FULFILLMENT_NAVIGATION_ITEMS;
+        return pages ? items.filter(item => grantedWebLink(pages, stageLocation(item))) : items;
+    }, [courierOnly, pages]);
     const myProductsWorkspace = !courierOnly && searchParams.get("workspace") === "my-products";
     const requestedStage = String(
         searchParams.get("stage") || (courierOnly ? "courier_dispatch" : "pending_review"),
@@ -240,7 +242,7 @@ export default function FulfillmentV2() {
         { key: "assembly", label: "الاستلام من موظف التجهيز", Icon: Cube, description: "تصوير المنتج وتأكيد استلامه" },
         { key: "ready_to_ship", label: "التجميع والعنونة", Icon: Package, description: "تجميع القطع وعنونتها وطباعة الشحنة" },
         { key: "courier_dispatch", label: "استلام موظف التسليم", Icon: Truck, description: "إسناد الشحنات ومتابعة تسليمها" },
-    ];
+    ].filter(item => !pages || grantedWebLink(pages, stageLocation(item)));
     const stageContent = myProductsWorkspace ? (
         <PreparationWorkDashboard initialView="my-products" standalone />
     ) : activeStage.key === "pending_review" ? (

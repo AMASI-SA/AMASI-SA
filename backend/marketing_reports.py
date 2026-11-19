@@ -344,8 +344,9 @@ def make_marketing_reports_router(db, current_user):
         date_from: date | None = None, date_to: date | None = None,
         account_id: str | None = Query(default=None, max_length=128), user=Depends(current_user)):
         from integrations_control_center.routes import _require_owner as require_owner
-        owner = require_owner(user)
-        user_id = str(owner["id"])
+        from web_marketing_page_policy import report_read_owner
+        tenant = await report_read_owner(db, user, provider, source)
+        user_id = tenant if tenant is not None else str(require_owner(user)["id"])
         if provider in EXTRA_SOURCES:
             source = "salla"
         zone = "Asia/Riyadh"

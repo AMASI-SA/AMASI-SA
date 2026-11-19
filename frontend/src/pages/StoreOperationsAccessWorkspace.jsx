@@ -166,6 +166,7 @@ function RoleCard({ user, roleLabels, roleCatalog, warehouses, responsibilityTyp
 export default function StoreOperationsAccessWorkspace() {
     const [params, setParams] = useSearchParams();
     const panel = params.get("panel");
+    const [pageMember, setPageMember] = useState("");
     const closeAccounting = () => {
         const next = new URLSearchParams(params);
         next.delete("panel");
@@ -176,11 +177,12 @@ export default function StoreOperationsAccessWorkspace() {
             <h1 className="text-2xl font-extrabold">إدارة الصلاحيات</h1>
             <nav aria-label="إدارة الصلاحيات" className="mt-3 flex flex-wrap gap-2 text-sm font-bold">
                 <Link className="rounded-xl border px-3 py-2" to={WEB_PERMISSIONS_PATH} aria-current={!panel ? "page" : undefined}>صفحات ميزان</Link>
+                <Link className="rounded-xl border px-3 py-2" to={"/operational-balances/access" + (pageMember ? "?member=" + encodeURIComponent(pageMember) : "")}>حسابات وعمليات الأرصدة</Link>
                 <Link className="rounded-xl border px-3 py-2" to={WEB_PERMISSIONS_PATH + "&panel=roles"} aria-current={panel === "roles" ? "page" : undefined}>الأدوار التشغيلية</Link>
                 <Link className="rounded-xl border px-3 py-2" to={WEB_PERMISSIONS_PATH + "&panel=accounting-actions"}>الإجراءات المحاسبية</Link>
             </nav>
         </section>
-        {panel === "roles" ? <OperationalRolesPanel /> : <WebPagePermissions initialMemberId={params.get("member") || ""} />}
+        {panel === "roles" ? <OperationalRolesPanel /> : <WebPagePermissions initialMemberId={params.get("member") || ""} onMemberChange={setPageMember} />}
         {panel === "accounting-actions" && <AccountingPermissionsDialog open actionsOnly onClose={closeAccounting} />}
     </div>;
 }

@@ -746,10 +746,11 @@ class IntegrationsControlCenterService:
             return v2
         return await read_provider_snapshot(self.db, user_id, definition), None
 
-    async def overview(self, user_id: str) -> dict:
+    async def overview(self, user_id: str, *, provider_ids=None) -> dict:
+        definitions = PROVIDERS if provider_ids is None else [row for row in PROVIDERS if row.provider in provider_ids]
         now_iso = _iso(self._now())
         snapshots = await asyncio.gather(
-            *(self._snapshot(user_id, definition) for definition in PROVIDERS)
+            *(self._snapshot(user_id, definition) for definition in definitions)
         )
         cards = [
             _card_from_snapshot(
@@ -758,7 +759,7 @@ class IntegrationsControlCenterService:
                 checked_at=now_iso,
                 health_override=stored_health,
             )
-            for definition, (snapshot, stored_health) in zip(PROVIDERS, snapshots)
+            for definition, (snapshot, stored_health) in zip(definitions, snapshots)
         ]
         connected = sum(card["connection_status"] == "connected" for card in cards)
         api_connections = sum(

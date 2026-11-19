@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { formatRiyadhDateTime } from '../../lib/dates';
 import { operationalApi as api, messageFor, requestId } from './api';
-import { formatPositionMoney } from './financialPositionPresentation';
+import { formatPositionMoney } from './financialPositionDisplay';
 import { visibleOperationalRead } from './visibleOperationalRead';
 
 export default function CustomerWalletBalance({ sessionScope, onSaved }) {

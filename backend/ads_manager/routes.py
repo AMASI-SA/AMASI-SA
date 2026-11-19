@@ -61,7 +61,9 @@ def make_ads_manager_router(db: Any, current_user: Callable) -> APIRouter:
         limit: int = Query(default=50, ge=10, le=100),
         user: dict = Depends(current_user),
     ) -> dict:
-        principal = require_review_scope(user, "ads.meta")
+        from web_marketing_page_policy import marketing_read_owner
+        tenant = await marketing_read_owner(db, user, "marketing.overview")
+        user_id = tenant if tenant is not None else str(require_review_scope(user, "ads.meta")["id"])
         if is_meta_reviewer(user) and provider != "meta":
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -69,7 +71,7 @@ def make_ads_manager_router(db: Any, current_user: Callable) -> APIRouter:
             )
         try:
             return await service.overview(
-                str(principal["id"]),
+                user_id,
                 date_from=date_from,
                 date_to=date_to,
                 provider=provider,

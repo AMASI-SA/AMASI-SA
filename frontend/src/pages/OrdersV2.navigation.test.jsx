@@ -4,11 +4,13 @@ import OrdersV2 from "./OrdersV2";
 
 global.IS_REACT_ACT_ENVIRONMENT = true;
 const mockSearch = jest.fn();
+const mockNavigate = jest.fn();
+let mockPageGrants = null;
 jest.mock("react-router-dom", () => ({
-    useNavigate: () => jest.fn(),
+    useNavigate: () => mockNavigate,
     useSearchParams: () => [new URLSearchParams("sku=AMS13217&created_from=2026-11-10T00%3A00%3A00%2B03%3A00&created_to=2026-11-11T00%3A00%3A00%2B03%3A00")],
 }));
-jest.mock("../context/AuthContext", () => ({ useOptionalAuth: () => ({ user: null }) }));
+jest.mock("../context/AuthContext", () => ({ useOptionalAuth: () => ({ user: mockPageGrants ? { web_page_access: { pages: mockPageGrants } } : null }) }));
 jest.mock("../services/orderEngine", () => ({ getOrderFilterSummary: async () => ({ total: 0, statusCards: [], statusCounts: {} }) }));
 jest.mock("../hooks/useOrders", () => ({ useOrders: () => ({
     orders: [{ order_number: "123", source: { source: "snapchat", campaign_name: "حملة الشتاء" }, customer: {}, shipping: {}, payment: {}, totals: {}, items: [] }],
@@ -23,4 +25,23 @@ test("opens the supplied product period and shows the existing campaign name on 
     expect(host.querySelector('[title="حملة الشتاء"]')).not.toBeNull();
     expect(host.querySelector('input[type="datetime-local"]').value).toBe("2026-11-10T00:00");
     await act(async () => root.unmount());
+});
+
+test("opening an order from the list requires the separate details grant", async () => {
+    const host = document.createElement("div");
+    const root = createRoot(host);
+    try {
+        mockPageGrants = [{ id: "orders.list" }];
+        await act(async () => root.render(<OrdersV2 />));
+        const detailsButton = () => host.querySelector('[title="حملة الشتاء"]').closest("button");
+        expect(detailsButton()).toBeNull();
+        mockPageGrants = [...mockPageGrants, { id: "detail.order" }];
+        await act(async () => root.render(<OrdersV2 />));
+        expect(detailsButton()).not.toBeNull();
+        await act(async () => detailsButton().click());
+        expect(mockNavigate).toHaveBeenCalledWith("/orders-v2/123");
+    } finally {
+        mockPageGrants = null;
+        await act(async () => root.unmount());
+    }
 });

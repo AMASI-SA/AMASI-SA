@@ -991,16 +991,32 @@ def build_review(state, document, actor, external=None):
     return _review(state, document, actor, external)[0]
 
 
-async def _owner(db, owner, actor):
-    person = await db['users'].find_one({'id': actor}, {'_id': 0})
-    if (actor != owner or not person or person.get('role') != 'owner' or person.get('disabled')
-            or person.get('is_active') is False or person.get('deleted_at')):
-        fail('provider_statement_owner_required', 'رفع الكشوف واعتماد مطابقتها متاح للمالك فقط', 403)
+async def _access(db, owner, actor):
+    from operational_web_page_policy import statement_access
+    scopes = await statement_access(db, owner, actor)
     await check_authorization()
+    return scopes
 
 
-async def _document(db, owner, identity):
-    document = await db[STATEMENTS].find_one({'_id': identity, 'owner_id': owner})
+async def _bind_provider(db, owner, actor, provider):
+    from operational_web_page_policy import bind_statement_provider
+    bind_statement_provider(provider)
+    return await _access(db, owner, actor)
+
+
+async def _apply_permissions(db, owner, actor, result):
+    _, uploadable, confirmable = await _access(db, owner, actor)
+    provider = result["statement"]["provider"]
+    result["permissions"] = {"upload": result["active"] and provider in uploadable,
+                             "confirm": result["active"] and provider in confirmable}
+    return result
+
+
+async def _document(db, owner, identity, allowed=PROVIDERS):
+    selector = {'_id': identity, 'owner_id': owner}
+    if allowed != PROVIDERS:
+        selector['metadata.provider'] = {'$in': sorted(allowed)}
+    document = await db[STATEMENTS].find_one(selector)
     if document is None:
         fail('provider_statement_missing', 'الكشف غير موجود في هذا الحساب', 404)
     _validate_document(document, owner)
@@ -1020,18 +1036,18 @@ async def _authority(db, owner, state):
 
 
 async def review(db, owner, actor, statement_id):
-    await _owner(db, owner, actor)
-    document, state = await _document(db, owner, statement_id), await read(db, owner)
+    readable, _, _ = await _access(db, owner, actor)
+    document = await _document(db, owner, statement_id, readable)
+    state = await read(db, owner)
+    await _bind_provider(db, owner, actor, document['statement']['provider'])
     external = await _external_evidence(db, owner, document, state)
     result = await prepare_in_thread(build_review, state, document, actor, external)
     result['active'] = await _authority(db, owner, state)
-    result['permissions'] = {'upload': result['active'], 'confirm': result['active']}
-    await _owner(db, owner, actor)
-    return result
+    return await _apply_permissions(db, owner, actor, result)
 
 
 async def history(db, owner, actor, *, limit=50):
-    await _owner(db, owner, actor)
+    readable, uploadable, confirmable = await _access(db, owner, actor)
     if type(limit) is not int or not 1 <= limit <= 100:
         fail('provider_statement_history_limit', 'حد قراءة الكشوف غير صالح', 422)
     from operational_read_runtime import read_source_cursor
@@ -1039,7 +1055,10 @@ async def history(db, owner, actor, *, limit=50):
         '_id': 1, 'owner_id': 1, 'revision': 1, 'status': 1, 'started_at': 1, 'engine.as_of': 1,
         RECONCILIATION + '.statement_summaries': 1}).limit(1), 1)
     state = state_rows[0] if state_rows else initial(owner)
-    records = await read_source_cursor(db[STATEMENTS].find({'owner_id': owner}, {
+    record_filter = {'owner_id': owner}
+    if readable != PROVIDERS:
+        record_filter['metadata.provider'] = {'$in': sorted(readable)}
+    records = await read_source_cursor(db[STATEMENTS].find(record_filter, {
         '_id': 1, 'id': 1, 'owner_id': 1, 'metadata': 1, 'metadata_hash': 1,
         'uploaded_at': 1}).sort('uploaded_at', -1).limit(limit + 1), limit + 1)
     summaries = state.get(RECONCILIATION, {}).get('statement_summaries', {})
@@ -1047,7 +1066,7 @@ async def history(db, owner, actor, *, limit=50):
     for document in records[:limit]:
         metadata = document.get('metadata')
         if (document.get('owner_id') != owner or not isinstance(metadata, dict)
-                or document.get('metadata_hash') != digest(metadata) or metadata.get('id') != document.get('id')):
+                or metadata.get('provider') not in readable or document.get('metadata_hash') != digest(metadata) or metadata.get('id') != document.get('id')):
             fail('provider_statement_metadata_invalid', 'تعذر التحقق من فهرس الكشف المحفوظ')
         summary = summaries.get(document['id']) or {}
         counts = summary.get('counts')
@@ -1056,10 +1075,11 @@ async def history(db, owner, actor, *, limit=50):
             'statement_average': summary.get('statement_average'),
             'status': 'needs_review' if not counts or any(counts[key] for key in ('missing', 'different', 'blocked')) else 'matched'})
     active = await _authority(db, owner, state)
-    await _owner(db, owner, actor)
+    if (readable, uploadable, confirmable) != await _access(db, owner, actor):
+        fail('operational_access_changed', 'تغيرت صلاحياتك؛ أعد فتح الصفحة', 409)
     return {'session_scope': digest([owner, actor]), 'active': active, 'revision': state['revision'],
         'started_at': state.get('started_at'), 'as_of': state.get('engine', {}).get('as_of'),
-        'items': items, 'has_more': len(records) > limit, 'permissions': {'upload': active, 'confirm': active}}
+        'items': items, 'has_more': len(records) > limit, 'permissions': {'upload': active and bool(uploadable), 'confirm': active and bool(confirmable)}}
 
 
 def _file_hash(value):
@@ -1088,7 +1108,7 @@ def _original_metadata_problem(source, originals, owner):
 
 async def saved_files(db, owner, actor, *, limit=50):
     """Visible metadata only: no original bytes, totals, parsing or mutations."""
-    await _owner(db, owner, actor)
+    readable, uploadable, confirmable = await _access(db, owner, actor)
     if type(limit) is not int or not 1 <= limit <= 100:
         fail('provider_statement_history_limit', 'حد قراءة الكشوف غير صالح', 422)
     from operational_read_runtime import read_source_cursor
@@ -1096,7 +1116,7 @@ async def saved_files(db, owner, actor, *, limit=50):
         '_id': 1, 'owner_id': 1, 'revision': 1, 'status': 1, 'started_at': 1, 'engine.as_of': 1}).limit(1), 1)
     state = states[0] if states else initial(owner)
     files = await read_source_cursor(db['settlement_files'].find({'user_id': owner,
-        'provider': {'$in': sorted(PROVIDERS)}}, SAVED_FILE_FIELDS).sort('uploaded_at', -1).limit(limit + 1), limit + 1)
+        'provider': {'$in': sorted(readable)}}, SAVED_FILE_FIELDS).sort('uploaded_at', -1).limit(limit + 1), limit + 1)
     selected = files[:limit]
     if any(row.get('user_id') != owner or row.get('provider') not in PROVIDERS
            or not isinstance(row.get('id'), str) or not 0 < len(row['id']) <= 160 for row in selected):
@@ -1120,6 +1140,8 @@ async def saved_files(db, owner, actor, *, limit=50):
         reason = _original_metadata_problem(source, originals, owner)
         if ids.count(identity) > 1:
             reason = 'هوية الكشف المحفوظ مكررة؛ يلزم تصحيح الربط قبل استخدامه.'
+        if not reason and source['provider'] not in uploadable:
+            reason = 'لا توجد صلاحية لاستخدام كشوف هذه المنصة.'
         if not reason and not active:
             reason = 'استخدام الكشف متاح بعد تفعيل فترة الأرصدة التشغيلية.'
         header = source.get('header') if isinstance(source.get('header'), dict) else {}
@@ -1131,15 +1153,16 @@ async def saved_files(db, owner, actor, *, limit=50):
             'uploaded_at': uploaded.isoformat() if isinstance(uploaded, datetime) else uploaded if isinstance(uploaded, str) else None,
             'file_hash': _file_hash(source.get('file_hash')), 'original_available': len(originals) == 1,
             'can_import': active and reason is None, 'unavailable_reason': reason})
-    await _owner(db, owner, actor)
+    if (readable, uploadable, confirmable) != await _access(db, owner, actor):
+        fail('operational_access_changed', 'تغيرت صلاحياتك؛ أعد فتح الصفحة', 409)
     return {'session_scope': digest([owner, actor]), 'started_at': state.get('started_at'),
         'as_of': state.get('engine', {}).get('as_of'), 'active': active, 'items': items,
-        'has_more': len(files) > limit, 'permissions': {'upload': active}}
+        'has_more': len(files) > limit, 'permissions': {'upload': active and bool(uploadable)}}
 
 
 async def use_saved_file(db, owner, actor, file_id, payload):
     """Verify one preserved original, then use the existing upload transaction."""
-    await _owner(db, owner, actor)
+    _, uploadable, _ = await _access(db, owner, actor)
     if payload.get('expected_session_scope') != digest([owner, actor]):
         fail('operational_actor_scope_changed', 'تغير الحساب؛ أعد فتح صفحة الكشوف', 409)
     state = await read(db, owner)
@@ -1152,16 +1175,17 @@ async def use_saved_file(db, owner, actor, file_id, payload):
     prior = replay(state, 'provider_statement_saved_file_use:' + actor, identity)
     if prior is not None:
         result = await _replay_review(db, owner, actor, state, prior)
-        await _owner(db, owner, actor)
+        await _access(db, owner, actor)
         return result
     from operational_read_runtime import read_source_cursor
     files = await read_source_cursor(db['settlement_files'].find({'user_id': owner, 'id': file_id,
-        'provider': {'$in': sorted(PROVIDERS)}}, SAVED_FILE_FIELDS).limit(2), 2)
+        'provider': {'$in': sorted(uploadable)}}, SAVED_FILE_FIELDS).limit(2), 2)
     if not files:
         fail('provider_statement_saved_file_missing', 'الكشف المحفوظ غير موجود في هذا الحساب', 404)
     if len(files) != 1 or files[0].get('user_id') != owner or files[0].get('id') != file_id:
         fail('provider_statement_saved_metadata_invalid', 'تعذر التحقق من هوية الكشف المحفوظ', 409)
     source = files[0]
+    await _bind_provider(db, owner, actor, source['provider'])
     if not _file_hash(payload.get('expected_file_hash')) or source.get('file_hash') != payload['expected_file_hash']:
         fail('provider_statement_saved_file_changed', 'تغيرت بصمة الكشف المحفوظ؛ أعد قراءة قائمة الملفات', 409)
     originals = await read_source_cursor(db['accounting_source_files'].find({'user_id': owner,
@@ -1181,7 +1205,7 @@ async def use_saved_file(db, owner, actor, file_id, payload):
         fail('provider_statement_saved_original_invalid', 'تعذر التحقق من بايتات أصل الكشف وحجمه وبصمته؛ لم تتغير الأرصدة', 409)
     from excel_upload_security import validate_xlsx_archive
     await prepare_in_thread(validate_xlsx_archive, content)
-    await _owner(db, owner, actor)
+    await _access(db, owner, actor)
     return await upload(db, owner, actor, content=content, filename=source.get('filename') or 'statement.xlsx',
         request_id=payload['request_id'], expected_session_scope=payload['expected_session_scope'],
         expected_started_at=payload['expected_started_at'], saved_source={
@@ -1201,11 +1225,12 @@ async def _replay_review(db, owner, actor, state, receipt):
     if receipt.get('started_at') != state.get('started_at'):
         fail('provider_statement_period_changed', 'العملية محفوظة في فترة سابقة؛ راجعها في سجل الكشف', 409)
     document = await _document(db, owner, receipt['statement_id'])
+    await _bind_provider(db, owner, actor, document['statement']['provider'])
     external = await _external_evidence(db, owner, document, state)
     result = await prepare_in_thread(build_review, state, document, actor, external)
     result.update(applied_row_ids=list(receipt['applied_row_ids']), replayed=True,
                   duplicate=receipt.get('duplicate', False), reviewed_at=receipt['accepted_at'])
-    return result
+    return await _apply_permissions(db, owner, actor, result)
 
 
 def _save_events(state, events, document, actor, stamp):
@@ -1258,7 +1283,7 @@ def _save_statement_average(state, document, actor, stamp):
 
 
 async def upload(db, owner, actor, *, content, filename, request_id, expected_session_scope, expected_started_at, clock=None, saved_source=None):
-    await _owner(db, owner, actor)
+    await _access(db, owner, actor)
     if expected_session_scope != digest([owner, actor]):
         fail('operational_actor_scope_changed', 'تغير الحساب؛ أعد فتح صفحة الكشوف', 409)
     if not content or len(content) > MAX_FILE_BYTES:
@@ -1275,17 +1300,18 @@ async def upload(db, owner, actor, *, content, filename, request_id, expected_se
     prior = replay(state, action, payload)
     if prior is not None:
         result = await _replay_review(db, owner, actor, state, prior)
-        await _owner(db, owner, actor)
+        await _access(db, owner, actor)
         return result
     try:
         normalized = await prepare_in_thread(normalize_statement, content)
     except ValueError as exc:
         fail('provider_statement_parse_invalid', str(exc), 422)
+    await _bind_provider(db, owner, actor, normalized['provider'])
     if saved_source and (normalized['provider'] != saved_source['provider'] or normalized['file_hash'] != saved_source['file_hash']):
         fail('provider_statement_saved_provider_conflict', 'هوية المنصة في الملف الأصلي لا تطابق فهرس الكشف المحفوظ؛ لم تتغير الأرصدة', 409)
     stamp = clock or now()
     document = statement_document(owner, actor, filename, normalized, stamp)
-    await _owner(db, owner, actor)
+    await _access(db, owner, actor)
     # These indexes are created only by an explicit upload, never by GET.
     await db[STATEMENTS].create_index([('owner_id', 1), ('statement_key', 1)], unique=True)
     await db[STATEMENTS].create_index([('owner_id', 1), ('uploaded_at', -1)])
@@ -1310,7 +1336,7 @@ async def upload(db, owner, actor, *, content, filename, request_id, expected_se
             document = previous
 
     async def apply(current):
-        await _owner(db, owner, actor)
+        await _access(db, owner, actor)
         await active_gate(db, owner, current)
         if current.get('started_at') != expected_started_at:
             fail('provider_statement_period_changed', 'تغيرت فترة الأرصدة؛ أعد فتح صفحة الكشوف', 409)
@@ -1347,23 +1373,23 @@ async def upload(db, owner, actor, *, content, filename, request_id, expected_se
         _remember_review(current, action, payload, result, document, stamp)
         return result
     result = await mutate(db, owner, apply)
-    await _owner(db, owner, actor)
-    return result
+    return await _apply_permissions(db, owner, actor, result)
 
 
 async def confirm(db, owner, actor, statement_id, payload, *, clock=None):
-    await _owner(db, owner, actor)
+    _, _, confirmable = await _access(db, owner, actor)
     if payload.get('expected_session_scope') != digest([owner, actor]):
         fail('operational_actor_scope_changed', 'تغير الحساب؛ أعد قراءة المطابقة', 409)
     if payload.get('confirmed') is not True or not payload.get('decisions'):
         fail('provider_statement_confirmation_required', 'اختر العمليات وأكد مطابقتها', 422)
-    document = await _document(db, owner, statement_id)
+    document = await _document(db, owner, statement_id, confirmable)
+    await _bind_provider(db, owner, actor, document['statement']['provider'])
     action, stamp = 'provider_statement_confirm:' + actor, clock or now()
     request = {**payload, 'statement_id': statement_id}
     expected_external = {'value': None, 'state': None}
 
     async def apply(current):
-        await _owner(db, owner, actor)
+        await _access(db, owner, actor)
         await active_gate(db, owner, current)
         prior = replay(current, action, request)
         if prior is not None:
@@ -1426,5 +1452,4 @@ async def confirm(db, owner, actor, statement_id, payload, *, clock=None):
         result = await mutate(db, owner, apply)
     finally:
         AUTHORIZATION_GUARD.reset(token)
-    await _owner(db, owner, actor)
-    return result
+    return await _apply_permissions(db, owner, actor, result)

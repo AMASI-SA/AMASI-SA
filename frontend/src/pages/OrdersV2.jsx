@@ -190,8 +190,10 @@ function isRiskyTransition(fromStatus, toStatus) {
 
 export default function OrdersV2() {
     const { user } = useOptionalAuth() || {};
-    const listOnly = Boolean(managedWebPages(user));
-    const OrderEntry = listOnly ? "div" : "button";
+    const pageGrants = managedWebPages(user);
+    const listOnly = Boolean(pageGrants);
+    const canOpenDetails = !listOnly || pageGrants.some((page) => page.id === "detail.order");
+    const OrderEntry = canOpenDetails ? "button" : "div";
     const navigate = useNavigate();
     const [urlParams] = useSearchParams();
     const loadMoreRef = useRef(null);
@@ -341,7 +343,7 @@ export default function OrdersV2() {
                         return (
                             <div key={id} className={`flex items-start gap-2 px-3 py-4 sm:items-center sm:gap-3 sm:px-5 sm:py-5 ${checked ? "bg-teal-50/60" : "hover:bg-slate-50"}`}>
                                 {!listOnly && <SelectionBox checked={checked} onChange={() => toggleOrder(id)} label={`تحديد الطلب ${id}`} />}
-                                <OrderEntry type={listOnly ? undefined : "button"} onClick={listOnly ? undefined : () => navigate(`/orders-v2/${encodeURIComponent(id)}`)} className="grid min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2 text-right sm:flex sm:items-center sm:gap-3">
+                                <OrderEntry type={canOpenDetails ? "button" : undefined} onClick={canOpenDetails ? () => navigate(`/orders-v2/${encodeURIComponent(id)}`) : undefined} className="grid min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2 text-right sm:flex sm:items-center sm:gap-3">
                                     <div className="row-span-2 sm:row-auto"><CustomerAvatar customer={order.customer} /></div>
                                     <div className="min-w-0 sm:flex-1">
                                         <div className="flex min-w-0 flex-wrap items-center gap-2">

@@ -38,6 +38,8 @@ OPERATION_LABELS = {
     "owner.withdraw": "سحب مبلغ للمالك",
     "owner.return": "إرجاع مبلغ من المالك",
     "provider.settle": "تسوية مزود دفع أو شبكة",
+    "provider.statement_upload": "رفع كشف منصة أو إعادة استخدام كشف محفوظ ومطابقة حركاته المتطابقة",
+    "provider.statement_confirm": "اعتماد قرارات مطابقة كشف منصة الدفع",
     "ads.fund": "شحن أو سداد حساب إعلاني",
     "courier.receive": "استلام مبلغ من موصل أو شركة شحن",
     "courier.pay": "دفع مبلغ لموصل أو شركة شحن",
@@ -186,10 +188,12 @@ async def load_access(db, actor, owner):
     owner_override = actor.get("role") == "owner" and actor["id"] == owner
     policy = normalized_policy(actor.get(POLICY_FIELD), owner=owner)
     enabled = owner_override or policy["enabled"]
-    return AccessPolicy(actor=actor, owner_id=owner, owner_override=owner_override,
+    from operational_web_page_policy import limit_workspace_policy
+    policy_result = AccessPolicy(actor=actor, owner_id=owner, owner_override=owner_override,
                         enabled=enabled, version=policy["version"],
                         operations=tuple(OPERATION_LABELS if owner_override else policy["operations"] if enabled else []),
                         resources=deepcopy(policy["resources"] if enabled and not owner_override else []))
+    return limit_workspace_policy(policy_result)
 
 
 @asynccontextmanager

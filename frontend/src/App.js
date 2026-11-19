@@ -129,12 +129,11 @@ const BalanceDriftDiagnostic = lazy(() => import("./pages/BalanceDriftDiagnostic
 const AIControlCenter = lazy(() => import("./pages/AIControlCenter"));
 import { Toaster } from "./components/ui/sonner";
 
-const OperationalBalances = lazy(() => import("./pages/operational/OperationalBalances"));
+const ApprovedFinanceRoute = lazy(() => import("./pages/operational/ApprovedFinanceRoute"));
 const InventoryWorkspace = lazy(() => import("./pages/InventoryWorkspace"));
 const ProviderFeeSetup = lazy(() => import("./pages/operational/ProviderFeeSetup"));
 const ProviderStatements = lazy(() => import("./pages/operational/ProviderStatements"));
 const OperationalFinancialPosition = lazy(() => import("./pages/operational/OperationalFinancialPosition"));
-const SimpleBalances = lazy(() => import("./pages/operational/SimpleBalances"));
 const SimpleBalanceAccess = lazy(() => import("./pages/operational/SimpleBalanceAccess"));
 const OperationalCustomerReturns = lazy(() => import("./pages/operational/CustomerReturns"));
 const OperationalCustomerExchanges = lazy(() => import("./pages/operational/CustomerExchanges"));
@@ -152,12 +151,12 @@ function PublicOnly({ children }) {
 function AppRoutes() {
     return (
         <Routes>
-            <Route path="/operational-balances" element={<ProtectedRoute><Layout><OperationalBalances /></Layout></ProtectedRoute>} />
+            <Route path="/operational-balances" element={<ProtectedRoute><ApprovedFinanceRoute /></ProtectedRoute>} />
             <Route path="/inventory-v2" element={<ProtectedRoute><Layout><InventoryWorkspace /></Layout></ProtectedRoute>} />
             <Route path="/operational-balances/provider-fees" element={<ProtectedRoute><Layout><ProviderFeeSetup /></Layout></ProtectedRoute>} />
             <Route path="/operational-balances/provider-statements" element={<ProtectedRoute><Layout><ProviderStatements /></Layout></ProtectedRoute>} />
             <Route path="/operational-balances/financial-position" element={<ProtectedRoute><Layout><OperationalFinancialPosition /></Layout></ProtectedRoute>} />
-            <Route path="/operational-balances/daily-movements" element={<ProtectedRoute><Layout><SimpleBalances /></Layout></ProtectedRoute>} />
+            <Route path="/operational-balances/daily-movements" element={<ProtectedRoute><ApprovedFinanceRoute /></ProtectedRoute>} />
             <Route path="/operational-balances/access" element={<ProtectedRoute><OwnerOnlyRoute><Layout><SimpleBalanceAccess /></Layout></OwnerOnlyRoute></ProtectedRoute>} />
             <Route path="/operational-balances/customer-returns" element={<ProtectedRoute><Layout><OperationalCustomerReturns /></Layout></ProtectedRoute>} />
             <Route path="/operational-balances/customer-exchanges" element={<ProtectedRoute><Layout><OperationalCustomerExchanges /></Layout></ProtectedRoute>} />
@@ -201,6 +200,7 @@ function AppRoutes() {
             <Route path="/team" element={<ProtectedRoute><Layout><TeamManagement /></Layout></ProtectedRoute>} />
             <Route path="/settlements" element={<ProtectedRoute><Layout><LegacyRedirect oldLabel="تسويات المدفوعات" replacement="/settlements-overview" replacementLabel="جميع التسويات" reason="تم توحيد التسويات في صفحة واحدة مبنية على Ledger." /></Layout></ProtectedRoute>} />
             <Route path="/accounts" element={<ProtectedRoute><Layout><Accounts /></Layout></ProtectedRoute>} />
+            <Route path="/employee-detail/:pageId" element={<ProtectedRoute><Navigate to="/dashboard-advanced" replace /></ProtectedRoute>} />
             <Route path="/accounts/:id" element={<ProtectedRoute><Layout><AccountDetails /></Layout></ProtectedRoute>} />
             <Route path="/transfers" element={<ProtectedRoute><Layout><LegacyRedirect oldLabel="التحويلات بين الحسابات" replacement="/new-transaction" replacementLabel="حركة مالية جديدة (موحّدة)" reason="تم توحيد التحويلات داخل شاشة الإدخال المالي." /></Layout></ProtectedRoute>} />
             <Route path="/reconciliation" element={<ProtectedRoute><Layout><LegacyRedirect oldLabel="المطابقة والتسويات" replacement="/accounting/reconciliation" replacementLabel="تقرير المطابقة (Ledger)" reason="النسخة الجديدة تعتمد Ledger SSOT." /></Layout></ProtectedRoute>} />

@@ -9,6 +9,7 @@ from accounting_module_contract import accounting_permissions_for_user
 from accounting_module_permission_routes import install_accounting_permission_routes
 from component_workspace_cost_compat_routes import make_component_workspace_cost_compat_router
 from order_engine import _original_make_order_engine_router
+from product_costs import attach_product_costs_routes
 from product_control_center_routes import DRAFTS, make_product_control_center_router
 from product_creation_routes import DRAFTS as CREATION_DRAFTS, make_product_creation_router
 from product_option_cost_routes import RESOURCES
@@ -47,7 +48,8 @@ async def build_client(store):
 
     async def current_user(request: Request):
         user = await store.users.find_one({"id": request.headers["test-actor"]}, {"_id": 0})
-        enforce_web_catalog_access(user, request.url.path, request.method)
+        if request.url.path != "/api/test-session-pages":
+            enforce_web_catalog_access(user, request.url.path, request.method, request.query_params)
         return user
 
     app = FastAPI()
@@ -61,6 +63,7 @@ async def build_client(store):
     router.include_router(make_warehouse_location_router(store, current_user))
     router.include_router(make_warehouse_location_v2_router(store, current_user))
     install_accounting_permission_routes(router, store, current_user)
+    attach_product_costs_routes(router, store, current_user)
 
     @router.get("/test-session-pages")
     async def test_session_pages(request: Request):
@@ -91,7 +94,8 @@ async def test_only_the_merchant_owner_can_assign_known_pages_to_an_active_team_
         assert {row["section"] for row in listing.json()["pages"]} >= {"products", "orders", "accounting"}
         assert {row["id"] for row in listing.json()["pages"] if row["section"] == "products"} == {
             PRODUCTS_PAGE, INTAKE_PAGE, WAREHOUSES_PAGE, "products.components",
-            "products.inventory", "products.receiving",
+            "products.inventory", "products.receiving", "products.sold", "products.missing_costs",
+            "extra.inventory_opening", "extra.inventory_purchases", "extra.inventory_purchase",
         }
 
         assert (await client.get(GRANTS, headers=actor("employee"))).status_code == 403
@@ -281,3 +285,21 @@ async def test_warehouse_write_records_employee_and_stays_in_merchant_scope(stor
         assert created.json()["created_by"] == "employee"
         assert created.json()["user_id"] == "owner"
         assert [row["id"] for row in (await client.get(list_url, headers=staff)).json()["items"]] == [created.json()["id"]]
+
+
+@pytest.mark.asyncio
+async def test_missing_product_costs_uses_merchant_data_and_has_no_edit_rights(store):
+    await store.product_costs.insert_many([
+        {"id": "own", "user_id": "owner", "sku": "LOCAL", "is_active": True, "cost_pending": True},
+        {"id": "foreign", "user_id": "other-owner", "sku": "FOREIGN", "is_active": True, "cost_pending": True},
+    ])
+    async with await build_client(store) as client:
+        staff = actor("employee")
+        assert (await save(client, {"products.missing_costs": "read"})).status_code == 200
+        response = await client.get("/api/product-costs/missing", headers=staff)
+        assert response.status_code == 200, response.text
+        assert [row["sku"] for row in response.json()["items"]] == ["LOCAL"]
+        assert (await client.get("/api/product-costs/summary", headers=staff)).status_code == 403
+        assert (await client.post("/api/product-costs/", headers=staff, json={"sku":"NEW"})).status_code == 403
+        assert (await save(client, {}, revision=1)).status_code == 200
+        assert (await client.get("/api/product-costs/missing", headers=staff)).status_code == 403

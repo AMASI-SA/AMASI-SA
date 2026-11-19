@@ -33,12 +33,11 @@ export default function OwnerOnlyRoute({ children, employeePages = [] }) {
     ]);
     const metaReviewerAllowed = user.role === "meta_reviewer"
         && reviewerAllowedPaths.has(location.pathname);
-    // Only the accounting workspace may pass this outer owner gate.  The
-    // unified AccountingWorkspace then enforces its independent per-page
-    // permissions from the backend. Other integrations remain owner-only.
+    // The accounting workspace also enforces its native, per-page permissions.
     const accountingWorkspaceAllowed = isAccountingWorkspaceLocation(location);
 
-    const employeeAllowed = employeePages.includes(grantedPageAt(managedWebPages(user), location)?.id);
+    const grant = grantedPageAt(managedWebPages(user), location);
+    const employeeAllowed = grant && (!employeePages.length || employeePages.includes(grant.id));
     if (!user.is_owner && !metaReviewerAllowed && !accountingWorkspaceAllowed && !employeeAllowed) {
         return (
             <div

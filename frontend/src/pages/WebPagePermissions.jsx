@@ -1,13 +1,34 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import api from "../lib/api";
 
-const SECTION_LABELS = { products: "المنتجات", orders: "الطلبات", accounting: "المحاسبة" };
+import { webPageSections } from "../lib/webPageAccess";
 
-export default function WebPagePermissions({ initialMemberId = "" }) {
+function normalizePageName(text) {
+    return String(text || "").normalize("NFKC").replace(/[ً-ٰٟـ]/g, "").replace(/[أإآٱ]/g, "ا").replace(/ى/g, "ي").trim().toLowerCase();
+}
+
+export function EmployeePagePermissions({ user, pages }) {
+    const sections = webPageSections(pages);
+    return <section dir="rtl" className="space-y-4 rounded-2xl border bg-white p-5 sm:p-6">
+        <h1 className="text-2xl font-extrabold">صلاحيات حسابي</h1>
+        <p className="text-sm text-slate-600">{user.name || "حساب الموظف"} · {pages.length} صفحة متاحة</p>
+        {sections.map(({ id, label, pages: entries }) => <section key={id}>
+            <h2 className="mb-2 font-bold">{label}</h2>
+            <ul className="divide-y rounded-xl border">{entries.map(page => <li key={page.id} className="flex items-baseline justify-between gap-3 p-3">
+                <Link to={page.to} className="font-bold text-emerald-800">{page.label}</Link>
+                <span className="text-sm text-slate-600">{page.mode === "write" ? page.write_label || "قراءة وكتابة" : "قراءة"}</span>
+            </li>)}</ul>
+        </section>)}
+    </section>;
+}
+
+export default function WebPagePermissions({ initialMemberId = "", onMemberChange }) {
     const [catalogue, setCatalogue] = useState(null);
     const [memberId, setMemberId] = useState("");
     const [selected, setSelected] = useState({});
     const [section, setSection] = useState("products");
+    const [search, setSearch] = useState("");
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState("");
     const [saved, setSaved] = useState(false);
@@ -23,12 +44,13 @@ export default function WebPagePermissions({ initialMemberId = "" }) {
             const member = data.members.find((row) => row.id === initialMemberId);
             setCatalogue(data);
             setMemberId(member?.id || "");
+            onMemberChange?.(member?.id || "");
             setSelected(member?.page_modes || {});
         }).catch(() => {
             if (!controller.signal.aborted) setError("تعذّر تحميل صفحات ميزان والموظفين.");
         });
         return () => controller.abort();
-    }, [initialMemberId, reload]);
+    }, [initialMemberId, reload, onMemberChange]);
 
     if (!catalogue) return error
         ? <div role="alert" className="rounded-xl border bg-white p-5">
@@ -39,12 +61,20 @@ export default function WebPagePermissions({ initialMemberId = "" }) {
     const member = catalogue.members.find((row) => row.id === memberId);
     function selectMember(id) {
         setMemberId(id);
+        onMemberChange?.(id);
         setSelected(catalogue.members.find((row) => row.id === id)?.page_modes || {});
         setError("");
         setSaved(false);
     }
 
-    const sectionPages = catalogue.pages.filter((page) => page.section === section);
+    const sections = webPageSections(catalogue.pages);
+    const allSections = section === "*";
+    const activeSection = sections.find((item) => item.id === section) || sections[0];
+    const needle = normalizePageName(search);
+    const visiblePages = needle ? catalogue.pages.filter(page => normalizePageName(page.label).includes(needle))
+        : allSections ? catalogue.pages : activeSection?.pages || [];
+    const selectionLabel = needle ? "نتائج البحث (" + visiblePages.length + ")"
+        : allSections ? "جميع صفحات ميزان" : activeSection?.label;
     const selectedCount = Object.keys(selected).length;
 
     function setModes(pages, mode) {
@@ -99,38 +129,50 @@ export default function WebPagePermissions({ initialMemberId = "" }) {
                     </option>)}
                 </select>
             </label>
+            {initialMemberId && !member && !catalogue.members.some((row) => row.id === initialMemberId) &&
+                <p role="status">لا يوجد حساب دخول مطابق لهذا الموظف ضمن فريق المتجر. اختر الحساب من القائمة.</p>}
             {member && <>
                 <p className="text-sm text-slate-600">
                     اختر صفحات الموظف في كل قسم. تظهر الصفحات المختارة فقط في الهيدر عند دخوله ميزان.
                 </p>
                 <label className="block max-w-xl font-bold">
+                    البحث في جميع الصفحات
+                    <input type="search" value={search} onChange={event=>setSearch(event.target.value)} placeholder="اكتب اسم الصفحة" className="mt-2 block w-full rounded-xl border bg-white p-3"/>
+                </label>
+                <label className="block max-w-xl font-bold">
                     القسم
-                    <select value={section} disabled={busy} onChange={(event) => setSection(event.target.value)}
+                    <select value={allSections ? "*" : activeSection?.id || ""} disabled={busy || Boolean(needle)} onChange={(event) => setSection(event.target.value)}
                         className="mt-2 block w-full rounded-xl border bg-white p-3">
-                        {Object.entries(SECTION_LABELS).map(([id, label]) => (
+                        <option value="*">جميع الأقسام ({selectedCount} من {catalogue.pages.length})</option>
+                        {sections.map(({ id, label, pages }) => (
                             <option key={id} value={id}>
-                                {label} ({catalogue.pages.filter((page) => page.section === id && selected[page.id]).length})
+                                {label} ({pages.filter((page) => selected[page.id]).length})
                             </option>
                         ))}
                     </select>
                 </label>
+                {(visiblePages.some(page => page.section === "balances")) && <p className="text-sm text-slate-600">
+                    حدّد الصفحات هنا، واختر الحسابات والعمليات المتاحة للموظف من <a className="font-bold underline" href={"/operational-balances/access?member=" + encodeURIComponent(member.id)}>صلاحيات موظفي الأرصدة</a>.
+                </p>}
                 <fieldset disabled={busy} className="space-y-3 rounded-xl border p-3 sm:p-4">
-                    <legend className="px-2 font-bold">{SECTION_LABELS[section]}</legend>
-                    <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-sm font-bold">كل صفحات القسم</span>
-                        <button type="button" onClick={() => setModes(sectionPages, "read")} className="rounded-lg border px-3 py-2 text-sm">قراءة للجميع</button>
-                        {sectionPages.some((page) => page.write_label) && (
-                            <button type="button" onClick={() => setModes(sectionPages, "write")} className="rounded-lg border px-3 py-2 text-sm">قراءة وكتابة للجميع</button>
+                    <legend className="px-2 font-bold">{selectionLabel}</legend>
+                    {visiblePages.length > 0 && <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-bold">{needle ? "الصفحات الظاهرة" : allSections ? "كل صفحات ميزان" : "كل صفحات القسم"}</span>
+                        <button type="button" onClick={() => setModes(visiblePages, "read")} className="rounded-lg border px-3 py-2 text-sm">قراءة للجميع</button>
+                        {visiblePages.some((page) => page.write_label) && (
+                            <button type="button" onClick={() => setModes(visiblePages, "write")} className="rounded-lg border px-3 py-2 text-sm">قراءة وكتابة للجميع</button>
                         )}
-                        <button type="button" onClick={() => setModes(sectionPages, "")} className="rounded-lg border px-3 py-2 text-sm">إزالة القسم</button>
-                    </div>
-                    {sectionPages.some((page) => page.write_label) && sectionPages.some((page) => !page.write_label) && (
+                        <button type="button" onClick={() => setModes(visiblePages, "")} className="rounded-lg border px-3 py-2 text-sm">{needle ? "إزالة صلاحيات النتائج" : allSections ? "إزالة جميع الصفحات" : "إزالة القسم"}</button>
+                    </div>}
+                    {visiblePages.some((page) => page.write_label) && visiblePages.some((page) => !page.write_label) && (
                         <p className="text-xs text-slate-600">تبقى صفحات العرض على وضع القراءة عند تطبيق الكتابة على القسم.</p>
                     )}
-                    {sectionPages.map((page) => (
+                    {!visiblePages.length && <p>لا توجد صفحات مطابقة.</p>}
+                    {visiblePages.map((page) => (
                         <label key={page.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 p-3 text-sm">
                             <span>
                                 <span className="font-bold">{page.label}</span>
+                                {(needle || allSections) && <span className="mr-2 text-xs text-slate-500">{page.section_label}</span>}
                                 <span className="block text-xs text-slate-500">{page.write_label || "عرض البيانات"}</span>
                             </span>
                             <select aria-label={page.label} value={selected[page.id] || ""} onChange={(event) => setModes([page], event.target.value)}

@@ -553,7 +553,7 @@ async def compute_balance(
 
 
 async def compute_balances_bulk(
-    db, *, user_id: str, entity_type: str, entity_ids: list[str],
+    db, *, user_id: str, entity_type: str, entity_ids: list[str], sub_account: Optional[str] = None,
 ) -> dict[str, dict]:
     """Bulk version of compute_balance — one aggregation for many entities."""
     if not entity_ids:
@@ -574,6 +574,8 @@ async def compute_balances_bulk(
             "total": {"$sum": "$amount"},
         }},
     ]
+    if sub_account is not None:
+        pipeline[0]["$match"]["sub_account"] = sub_account
     raw: dict[str, dict] = {eid: {"debits": 0.0, "credits": 0.0}
                             for eid in entity_ids}
     async for row in db.general_ledger.aggregate(pipeline):

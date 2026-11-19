@@ -3,9 +3,11 @@ import {operationalApi as api,requestId,messageFor} from './api';
 import {Field,Notice} from './OpeningBalances';
 import {visibleOperationalRead} from './visibleOperationalRead';
 import './operational.css';
+import OperationalToolBack from './OperationalToolBack';
 
 const localInput=value=>{const d=new Date(value);return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16);};
 const blank=()=>({order_number:'',items:[],status:'pending',amount:'',refund_source_type:'bank',refund_source_id:'',refund_reference:'',refunded_at:'',shipping_kind:'none',shipping_id:null,shipment_reference:'',shipment_completed:false,shipping_quote_hash:null,note:''});
+
 export default function CustomerReturns(){
  const [context,setContext]=useState(null),[error,setError]=useState('');
  const contextLane=useRef({pending:null});
@@ -79,7 +81,7 @@ function ReturnsForm({context}){
   }finally{lock.current=false;setBusy(false);}
  }
  const existing=cases.find(c=>c.id===caseId),alreadyRefunded=existing?.status==='refunded';
- return <main className="op-page op-returns" dir="rtl"><h1>مرتجعات العملاء</h1><p>سجّل المنتجات المسترجعة وحالة رد المبلغ وشحنة الاسترجاع.</p><Notice error={error} message={message}/>
+ return <main className="op-page op-returns mz-finance-tool" dir="rtl"><OperationalToolBack/><h1>مرتجعات العملاء</h1><p>سجّل المنتجات المسترجعة وحالة رد المبلغ وشحنة الاسترجاع.</p><Notice error={error} message={message}/>
  {!writable&&<p>التسجيل غير متاح قبل بدء النظام أو دون صلاحية الدخول الحالية.</p>}
  {pending&&<p role="status">هناك عملية محفوظة بانتظار تأكيد النتيجة. إعادة المحاولة لا تنشئ خصمًا ثانيًا.</p>}
  <section className="op-card op-movement-cards"><Field label="رقم الطلب"><input disabled={disabled||loading} value={form.order_number} onChange={e=>{change({order_number:e.target.value,items:[]});setOrder(null);setCaseId(null);}}/></Field><button disabled={disabled||loading||!form.order_number} onClick={findOrder}>{loading?'جارٍ البحث…':'عرض الطلب'}</button>

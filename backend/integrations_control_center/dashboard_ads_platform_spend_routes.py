@@ -735,13 +735,21 @@ def attach_dashboard_ads_platform_spend_routes(
         date_to: str = Query(...),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
-        owner = require_owner(user)
-        return await build_dashboard_platform_spend(
-            db,
-            str(owner["id"]),
-            date_from=date_from,
-            date_to=date_to,
-        )
+        scope = user.get("_web_workspace_read")
+        delegated = scope and scope[0] in {"home.dashboard", "home.summary", "home.charts"}
+        merchant_id = scope[1] if delegated else str(require_owner(user)["id"])
+        result = await build_dashboard_platform_spend(db, merchant_id, date_from=date_from, date_to=date_to)
+        if delegated:
+            # Charts need spend and coverage. Account inventories, diagnostic snapshots
+            # and provider administration details belong to their own pages.
+            fields = ("date_from", "date_to", "timezone", "chart_granularity", "daily_spend",
+                      "hourly_spend", "total_sar", "known_total_sar", "provider_totals_sar")
+            visible = {key: result[key] for key in fields if key in result}
+            quality_fields = ("status", "amount_complete", "amount_available", "provisional", "known_total_sar")
+            quality = result.get("spend_quality") or {}
+            visible["spend_quality"] = {key: quality[key] for key in quality_fields if key in quality}
+            return visible
+        return result
 
     @router.post("/dashboard/ads-platform-spend/refresh")
     async def dashboard_ads_platform_spend_refresh(

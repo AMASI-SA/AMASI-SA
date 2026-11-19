@@ -1,0 +1,8 @@
+.mz-finance .mz-tool-link{display:flex;flex-direction:row;align-items:center;gap:12px;min-height:80px;text-align:start}
+.mz-finance .mz-tool-link>.ico{margin-inline-start:auto;width:15px;height:15px;color:var(--muted)}
+.mz-finance .mz-position-line{width:100%;text-align:start;background:transparent;border:none;border-block-end:1px solid var(--line);cursor:pointer}
+.mz-finance .mz-position-line:last-child{border-block-end:none}
+.mz-finance .mz-position-line .under{display:block}
+.mz-finance .mz-position-line .end small{font-size:12px;color:var(--muted)}
+.mz-finance .mz-position-currency{display:flex;align-items:center;gap:8px;margin:8px 0 14px;color:var(--muted)}
+.mz-finance .mz-position-currency select{background:white;border:1px solid var(--line);border-radius:8px;padding:4px 10px;color:var(--ink)}
