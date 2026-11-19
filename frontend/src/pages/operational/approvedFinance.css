@@ -104,6 +104,22 @@
 .mz-finance .ledger td{padding:9px 15px;border-top:1px solid #f0ecee;font-size:14px}
 .mz-finance .ledger tbody tr:hover{background:#fcf9fb}
 .mz-finance .ledger tbody tr{cursor:pointer}
+.mz-finance .supplier-invoice-lines{container-type:inline-size}
+.mz-finance .invoice-line-description{white-space:normal;overflow-wrap:anywhere}
+.mz-finance .invoice-product{display:flex;align-items:center;gap:8px}
+.mz-finance .invoice-thumb{width:2.5rem;height:2.5rem;flex:none;border-radius:.5rem;object-fit:cover}
+.mz-finance .invoice-thumb.no-photo{display:grid;place-items:center;background:#fffbeb}
+.mz-finance .invoice-line-service{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 10px;margin-block-start:4px}
+.mz-finance .invoice-field-label{display:none}
+@container (max-width:30rem){
+  .mz-finance .supplier-invoice-lines table{display:block}
+  .mz-finance .supplier-invoice-lines thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+  .mz-finance .supplier-invoice-lines tbody{display:block}
+  .mz-finance .supplier-invoice-lines tbody tr{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:12px 0;border-block-start:1px solid var(--line)}
+  .mz-finance .supplier-invoice-lines tbody td{padding:0;border:0;white-space:normal;overflow-wrap:anywhere}
+  .mz-finance .supplier-invoice-lines .invoice-line-description{grid-column:1/-1}
+  .mz-finance .invoice-field-label{display:block;font-size:12px;color:var(--muted)}
+}
 .mz-finance .tablelink{gap:10px;text-align:right;padding:0;font-weight:bold}
 .mz-finance .tablelink small{display:block;font-weight:normal}
 .mz-finance .tablelink .iconsquare{width:31px;height:31px;border-radius:9px}

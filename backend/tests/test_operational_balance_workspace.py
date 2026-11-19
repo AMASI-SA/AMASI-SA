@@ -779,7 +779,8 @@ def test_supplier_invoice_is_one_searchable_row_with_recorded_approver_and_lazy_
             key: {**terms, "id": key} for key in ("pieceA", "pieceB")}}})
         await db.mezan_supplier_invoices_v2.insert_one({"user_id": "owner", "supplier_id": "supplier", "id": "inv1",
             "invoice_number": "SI-26", "approved_at": stamp, "approved_by": "staff", "total_halalas": 2600,
-            "lines": [{"product_name": "غلاف", "quantity": 2, "product_unit_price_halalas": 1300, "total_halalas": 2600}]})
+            "lines": [{"product_name": "غلاف", "sku": "AMS-26", "selected_image_url": "/products/cover.jpg",
+                       "quantity": 2, "product_unit_price_halalas": 1300, "total_halalas": 2600}]})
         path = BASE + "/ledger/supplier/supplier"
         for route in (path, BASE + "/movements"):
             page = (await client.get(route, params={"q": "خالد أحمد"})).json()
@@ -790,7 +791,8 @@ def test_supplier_invoice_is_one_searchable_row_with_recorded_approver_and_lazy_
         detail = BASE + "/supplier-invoices/supplier/"
         invoice = (await client.get(detail + "inv1")).json()
         assert invoice["total"] == "26.00" and invoice["lines"] == [
-            {"name": "غلاف", "quantity": 2, "unit": "13.00", "total": "26.00", "services": []}]
+            {"name": "غلاف", "sku": "AMS-26", "image_url": "/products/cover.jpg",
+             "quantity": 2, "unit": "13.00", "total": "26.00", "services": []}]
         await db[STATES].update_one({"_id":"owner"}, {"$set":{"engine.obligations.pieceA.returned_amount":"13.00",
                                                               "engine.obligations.pieceA.confirmed":"0.00"}})
         adjusted = (await client.get(path, params={"q":"SI-26"})).json()

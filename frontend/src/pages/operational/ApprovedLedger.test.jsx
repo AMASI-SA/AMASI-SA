@@ -76,13 +76,19 @@ test('shows the approver next to the date and loads invoice lines only after ope
   const supplier = {...bank, kind:'supplier', id:'supplier', name:'أسواق الراجحي'};
   const row = {...rows[0], party_id:'supplier', invoice_id:'invoice1', description:'فاتورة استلام SI-26', amount:'26.00'};
   api.supplierInvoice.mockResolvedValue({id:'invoice1', currency:'SAR', total:'26.00', lines:[
-    {name:'غلاف',quantity:2,unit:'13.00',total:'26.00',services:[]}]});
+    {name:'شال شتوي لا تُنسى',sku:'AMS-26',image_url:'/products/shawl.jpg',quantity:2,unit:'13.00',total:'26.00',
+      services:[{name:'تطريز الاسم',total:'8.00'}]}]});
   api.ledger.mockImplementation(async (kind,id,params) => ({...paged(params),resource:supplier,total:1,total_pages:1,items:[row]}));
   await render({resource:supplier});
   expect(api.ledger).toHaveBeenCalledTimes(1);
   expect(host.querySelector('tbody').textContent).toContain('11-12 · سارة');
   await click('فاتورة استلام SI-26');
   expect(api.supplierInvoice.mock.calls[0].slice(0,2)).toEqual(['supplier','invoice1']);
-  expect(host.querySelector('dialog').textContent).toContain('غلاف');
+  const item = host.querySelector('dialog .invoice-line-description');
+  expect(item.textContent).not.toContain('شال شتوي لا تُنسى');
+  expect(item.querySelector('.invoice-product bdi').textContent).toBe('AMS-26');
+  expect(item.querySelector('img').getAttribute('src')).toBe('/products/shawl.jpg');
+  expect(item.querySelector('.invoice-line-service').textContent).toContain('تطريز الاسم');
+  expect(item.querySelector('.invoice-line-service').textContent).toContain('8.00');
   expect(host.querySelector('dialog').textContent).toContain('إجمالي الفاتورة');
 });

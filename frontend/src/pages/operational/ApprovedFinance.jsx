@@ -144,8 +144,8 @@ function FinanceWorkspace({context,identity,user,view,to,params,reload}) {
       break;
     }
     case 'entry':content=!writePage('balances.entry')?<><Heading title="حركة مالية جديدة"/><p className="note">صلاحيتك للعرض. تسجيل حركة يتطلب صلاحية الكتابة على الصفحة والحساب.</p></>:<>
-      {canPurchase && <Link className="button" to={purchaseLink(selected)}><Icon name="receipt-text"/>شراء آجل من مورد</Link>}
-      <Entry {...shared} resource={selected} mode={params.get('mode')||'choose'} onBack={back} onSaved={saved} onRefund={canRefund?()=>go('refund'):null}/>
+      <Entry {...shared} resource={selected} mode={params.get('mode')||'choose'} onBack={back} onSaved={saved}
+        onPurchase={canPurchase?()=>navigate(purchaseLink(selected)):null} onRefund={canRefund?()=>go('refund'):null}/>
       {canAdd && <p className="footnote"><Link className="textbtn" to={to('special-entry',selected,{mode:'movement'})}><Icon name="layers"/>عمليات مالية أخرى</Link></p>}</>;break;
     case 'refund':content=canRefund?<Refund {...shared} readOnly={!writePage('balances.refund')} onBack={()=>go('entry')} onSaved={refreshAfterReview}/>:unavailable;break;
     case 'issues':content=<Issues {...shared} resource={selected} onBack={()=>selected?open(selected):go('reviews')} onReviewCollections={canCollect?collections:undefined}/>;break;

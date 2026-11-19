@@ -51,7 +51,7 @@ export default function ApprovedEntry(props) {
     props.context.permission_version, props.mode, props.resource?.kind, props.resource?.id])} {...props} />;
 }
 
-function EntryWorkflow({ context, resource, mode = 'choose', onBack, onSaved, onRefund }) {
+function EntryWorkflow({ context, resource, mode = 'choose', onBack, onSaved, onPurchase, onRefund }) {
   const [selected, setSelected] = useState(modes[mode] ? mode : 'choose');
   const resourceId = resource && resourceKey(resource);
   const allowedTarget = resource && context.resources.find(item => resourceKey(item) === resourceId);
@@ -65,11 +65,22 @@ function EntryWorkflow({ context, resource, mode = 'choose', onBack, onSaved, on
     return moneySources.some(item => resourceKey(item) !== resourceKey(r))
       || key === 'out' && custodySource && ['supplier', 'external_person', 'operating_expense'].includes(r.kind);
   };
+  function movementChoice(key) {
+    const [label, icon, tone] = modes[key];
+    const enabled = context.status === 'active' && context.resources.some(r => canTarget(context, r, key) && canFund(r, key));
+    return <button type="button" className="quickbtn" disabled={!enabled} onClick={() => setSelected(key)}>
+      <IconBox name={icon} tone={tone}/>{label}<span className="next"><Icon name="chevron-left" className="smallicon"/></span>
+    </button>;
+  }
   if (selected === 'choose') return <><Heading title="حركة مالية جديدة" subtitle="اختر اللي صار عشان نعرض لك الخانات المناسبة."/>
-    <div className="panel quick flow"><h2>وش صار للمبلغ؟</h2>{['in', 'out', 'move'].map(key => {
-      const [label, icon, tone] = modes[key];
-      return <button key={key} type="button" className="quickbtn" disabled={context.status !== 'active' || !context.resources.some(r => canTarget(context, r, key) && canFund(r, key))} onClick={() => setSelected(key)}><IconBox name={icon} tone={tone}/>{label}<span className="next"><Icon name="chevron-left" className="smallicon" /></span></button>;
-    })}{onRefund && (granted.has('customer.refund_request') || granted.has('customer.refund_execute')) && <button type="button" className="quickbtn" onClick={onRefund}><IconBox name="corner-down-left" tone="c-out" />إرجاع مبلغ لعميل برقم الطلب</button>}</div></>;
+    <div className="panel quick flow"><h2>وش صار للمبلغ؟</h2>
+      {movementChoice('in')}{movementChoice('out')}
+      {onPurchase && <button type="button" className="quickbtn" disabled={context.status !== 'active'} onClick={onPurchase}>
+        <IconBox name="receipt-text" tone="party"/>شراء آجل من مورد<span className="next"><Icon name="chevron-left" className="smallicon"/></span>
+      </button>}
+      {movementChoice('move')}
+      {onRefund && (granted.has('customer.refund_request') || granted.has('customer.refund_execute')) && <button type="button" className="quickbtn" onClick={onRefund}><IconBox name="corner-down-left" tone="c-out" />إرجاع مبلغ لعميل برقم الطلب</button>}
+    </div></>;
   return <MovementFields key={selected} context={context} resource={allowedTarget} mode={selected} onBack={onBack} onChangeMode={() => setSelected('choose')} onSaved={onSaved} />;
 }
 
