@@ -38,7 +38,7 @@ def _base_quote(rate, owner, party, at, evidence):
 
 
 def deferred_source_event(data, setup, source, raw, state, owner, start, end, history, shipment_conflicts,
-                          *, review_only=False, review_index=None):
+                          *, review_only=False, review_index=None, assignment_index=None):
     """Return a fee-only event or None; historical expansion raises a candidate."""
     if state is None:
         return None
@@ -53,9 +53,9 @@ def deferred_source_event(data, setup, source, raw, state, owner, start, end, hi
     current = source.get('salla_shipping_current') or raw.get('salla_shipping_current') or {}
     if not isinstance(current, dict) or not _has_completion(raw, current, history):
         return None
-    if any(str(row.get('order_number')) == number and row.get('active') is not False
-           and row.get('status') in {'assigned', 'out_for_delivery', 'delivered'}
-           for row in data.get('store_delivery_assignments', [])):
+    from operational_delivery_assignment_index import has_active_assignment_for_number
+    if has_active_assignment_for_number(data.get('store_delivery_assignments', []), number,
+            owner=owner, assignment_index=assignment_index):
         return None  # Store-driver earnings retain their native assignment rule.
     current, shipment, waybill = _current_shipping(raw, source, require_delivered=False, require_label=False)
     party, carrier_key = _courier(setup, owner, current)

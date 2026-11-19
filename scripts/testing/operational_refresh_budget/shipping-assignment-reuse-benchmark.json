@@ -1,0 +1,80 @@
+{
+  "assignments": 20000,
+  "baseline_file_sha256": {
+    "backend/operational_completed_shipping.py": "d31085394c58f8d703e6b65bf50ab6f7b6b126feef971eb6fce6f568f09046db",
+    "backend/operational_prepaid_shipping.py": "45c6adb4fae1be37cb80336f81ef2572afbe3da421c0c6f4e784a0505fc3c4ff"
+  },
+  "baseline_revision": "c3c1cd26d93ab24d6e08003278b9910526055cc7",
+  "calls_per_run": 5000,
+  "candidate_base_revision": "c3c1cd26d93ab24d6e08003278b9910526055cc7",
+  "candidate_file_sha256": {
+    "backend/operational_balance_sources.py": "7a46ba2b52f1fb65f903bf25f34c65aca5b05a76f658f5bc5906b21474cd6c04",
+    "backend/operational_completed_shipping.py": "b8cc31851bc27018fc91c9ad419e8d8f5878a5142174b33fb077d17d40dfe165",
+    "backend/operational_delivery_assignment_index.py": "c85bacd42b08f89c3b495145d2f41398077b68445918426abb95743e4338f072",
+    "backend/operational_prepaid_shipping.py": "e03d2eced33ebe005e523ebceb4245ba8e07b61f20901476ddad900ff0c8b466",
+    "backend/tests/test_operational_balance_shipping_assignment_reuse.py": "0d490cd6a01bb65f67dccd80fa23ed2327e54e12f3779bdb6eab3a736beb98fd"
+  },
+  "candidate_index_build_included": true,
+  "harness_sha256": "1fac3a8bf744d776e16d5d2a1adc93a517d34835c2879c7bae81bb7b630d3001",
+  "measurements": [
+    {
+      "candidate_median_seconds": 0.6449515159984003,
+      "candidate_seconds": [
+        0.524733345999266,
+        0.6713186060005683,
+        0.6449515159984003
+      ],
+      "event_sha256": "c916f4553e59e004f0b520053ff70856873deb4a3ed4bd2e2856d59684ad4e3c",
+      "exact_event_equal": true,
+      "known_event_amount_sar": "34.50",
+      "original_median_seconds": 11.034026850000373,
+      "original_seconds": [
+        9.393665832998522,
+        11.034026850000373,
+        11.560649310995359
+      ],
+      "producer": "prepaid",
+      "separate_work_count": {
+        "assignments": 128,
+        "budget": 1536,
+        "calls": 128,
+        "candidate_assignment_row_gets": 1152,
+        "original_assignment_row_gets": 16384,
+        "original_fails_budget_candidate_passes": true
+      },
+      "unchanged_inputs": true
+    },
+    {
+      "candidate_median_seconds": 0.9469143070018617,
+      "candidate_seconds": [
+        0.743930384000123,
+        0.9469143070018617,
+        0.9483783379982924
+      ],
+      "event_sha256": "2d5c93bac017ef5b76aa74aae274f84f385f7a88eaae515e9abe309594ae5bf0",
+      "exact_event_equal": true,
+      "known_event_amount_sar": "34.50",
+      "original_median_seconds": 8.78947676300595,
+      "original_seconds": [
+        7.905921084005968,
+        8.78947676300595,
+        9.373387054998602
+      ],
+      "producer": "deferred",
+      "separate_work_count": {
+        "assignments": 128,
+        "budget": 1536,
+        "calls": 128,
+        "candidate_assignment_row_gets": 1152,
+        "original_assignment_row_gets": 16384,
+        "original_fails_budget_candidate_passes": true
+      },
+      "unchanged_inputs": true
+    }
+  ],
+  "python": "3.12.14",
+  "runs": 3,
+  "scope": "Repeated pure source calls over one unchanged synthetic assignment cohort",
+  "synthetic_only": true,
+  "timing_instrumented": false
+}
