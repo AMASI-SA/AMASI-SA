@@ -307,6 +307,9 @@ def build_link_plan(state, invoice, source, selection, *, supplier, banks, as_of
 
 def collision_with_saved_link(state, supplier_id, invoice_number, document_id):
     """An explicit same-vendor-document collision is not a hypothetical opening."""
+    from operational_invoice_numbers import manual_reference_used
+    if manual_reference_used(state, supplier_id, invoice_number):
+        return True
     if not isinstance(invoice_number, str) or not invoice_number.strip():
         return False
     obligations = state.get('engine', {}).get('obligations') or {}

@@ -231,7 +231,7 @@ async def save_purchase(db, owner, actor, payload, *, source='mezan2', clock=Non
             return prior
         await active_gate(db, owner, state)
         supplier = await entity(db, owner, 'supplier', payload['supplier_id'], 'SAR')
-        from operational_invoice_numbers import references, next_purchase_number
+        from operational_invoice_numbers import references, next_purchase_number, manual_reference_used
         automatic = 'supplier_invoice_number' in payload
         ref = payload.get('invoice_number', '').strip()
         supplier_ref = payload['supplier_invoice_number'].strip() if automatic else ref
@@ -245,7 +245,8 @@ async def save_purchase(db, owner, actor, payload, *, source='mezan2', clock=Non
             fail('inventory_invoice_date_invalid', 'أدخل رقم وتاريخ فاتورة ضمن فترة التشغيل')
         invoices = state.setdefault('inventory_purchases', [])
         other = [p for c in state.get('customer_exchanges', []) for p in c['purchases']]
-        if supplier_ref and any(p['supplier_id']==supplier['id'] and supplier_ref in references(p) for p in invoices+other):
+        if manual_reference_used(state, supplier['id'], supplier_ref) or (supplier_ref and any(
+                p['supplier_id']==supplier['id'] and supplier_ref in references(p) for p in invoices+other)):
             fail('inventory_invoice_duplicate', 'فاتورة المورد مسجلة بالفعل')
         external_rows = await rows(db, owner, 'mezan_supplier_invoices_v2')
         if supplier_ref and any(r.get('supplier_id')==supplier['id'] and str(r.get('invoice_number') or '').strip()==supplier_ref
@@ -290,6 +291,8 @@ async def save_purchase(db, owner, actor, payload, *, source='mezan2', clock=Non
                 'unit_price':fmt(unit_price), **{key:fmt(value) for key,value in values.items()}})
         if automatic:
             ref = next_purchase_number(state, external_rows + [{'invoice_number':supplier_ref}])
+            while manual_reference_used(state, supplier['id'], ref):
+                ref = next_purchase_number(state, external_rows)
         identity = digest(['inventory-invoice',owner,supplier['id'],ref])
         invoice = {'id':identity,'obligation_id':'inventory-purchase:'+identity,
             'supplier_id':supplier['id'],'supplier_name':supplier['name'],

@@ -1,6 +1,16 @@
 """Invoice references shared by purchases, exchange receipts and adjustments."""
 
 
+def supplier_ref_key(supplier_id, number):
+    from operational_balance_store import digest
+    return digest([supplier_id, number.strip().casefold()])
+
+
+def manual_reference_used(state, supplier_id, number):
+    index = state.get("supplier_credit_references")
+    return bool(index and isinstance(number, str) and number.strip() and supplier_ref_key(supplier_id, number) in index)
+
+
 def supplier_reference(invoice):
     # Historical invoice_number was the supplier's own reference.
     return invoice.get('supplier_invoice_number', invoice.get('invoice_number', ''))

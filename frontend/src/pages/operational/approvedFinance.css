@@ -368,3 +368,8 @@
 .mz-finance .tabset button[aria-pressed=true]{background:#f2e8ee;border-color:#c497af;color:#672649;font-weight:bold}
 .mz-finance .review-item .under{display:block}
 .mz-finance dialog:modal{margin:auto;color:var(--ink);border:1px solid var(--line);border-radius:14px;padding:22px;max-width:min(640px,92vw)}
+
+.mz-finance .purchase-line{display:grid;grid-template-columns:minmax(5rem,.8fr) minmax(10rem,2fr) minmax(4rem,.6fr) minmax(8rem,1fr) auto;align-items:end;gap:12px;border:1px solid var(--line,#e3dfe1);border-radius:12px;padding:14px;margin:10px 0 14px}
+.mz-finance .purchase-line legend{padding:0 6px}
+.mz-finance .purchase-line input,.mz-finance .purchase-line select{width:100%;min-width:0}
+@media(max-width:900px){.mz-finance .purchase-line{grid-template-columns:repeat(2,minmax(0,1fr))}}

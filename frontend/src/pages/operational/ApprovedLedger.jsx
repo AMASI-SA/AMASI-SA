@@ -120,9 +120,10 @@ function PeriodPrint({ resource, period, scope }) {
     {print?.scope === scope && createPortal(<div dir="rtl" className="sb-print-root"><print.StatementDocument statement={print.value} printing /></div>, document.body)}</>;
 }
 
-function LedgerPage({ context, identity, resource, onDetail, onAdd, onBack, onReviewOrders, onHistory, onExpected, onReviewCollections }) {
-  const [period, setPeriod] = useState(() => defaultPeriod(context.ledger_start));
-  const [query, setQuery] = useState(''), [draft, setDraft] = useState('');
+function LedgerPage({ context, identity, resource, initialInvoice, onDetail, onAdd, onPurchase, onBack, onReviewOrders, onHistory, onExpected, onReviewCollections }) {
+  const [period, setPeriod] = useState(() => initialInvoice?.date
+    ? {date_from:initialInvoice.date, date_to:initialInvoice.date} : defaultPeriod(context.ledger_start));
+  const [query, setQuery] = useState(initialInvoice?.number || ''), [draft, setDraft] = useState(initialInvoice?.number || '');
   const [account, setAccount] = useState(''), [direction, setDirection] = useState(''), [status, setStatus] = useState('');
   const [page, setPage] = useState(1), [detail, setDetail] = useState(null);
   const dialog = useRef(null);
@@ -160,7 +161,8 @@ function LedgerPage({ context, identity, resource, onDetail, onAdd, onBack, onRe
     {resource && onBack && <button type="button" className="textbtn back" onClick={() => onBack(resource)}><Icon name="chevron-left" />
       {isAsset(resource.kind) ? 'الأصول والحسابات' : 'الأشخاص والجهات'}</button>}
     <Heading title={resource?.name || 'سجل الحركات'} subtitle={resource ? styleOf(resource)[0] + ' · كشف الحساب' : 'ابحث باسم الحساب أو الموظف أو رقم الطلب أو المرجع.'}>
-      {onAdd && <button type="button" className="button primary" onClick={() => onAdd(resource)}><Icon name="plus" />{resource?.kind === 'ad_account' ? 'شحن رصيد الإعلان' : resource ? 'سجّل حركة' : 'حركة مالية جديدة'}</button>}
+      {onPurchase && <button type="button" className="button primary" onClick={onPurchase}><Icon name="receipt-text" />شراء آجل</button>}
+      {onAdd && <button type="button" className="button primary" onClick={() => onAdd(resource)}><Icon name="plus" />{resource?.kind === 'ad_account' ? 'شحن رصيد الإعلان' : resource?.kind === 'supplier' && resource.operations?.includes('supplier.payment') ? 'تسديد مبلغ' : resource ? 'سجّل حركة' : 'حركة مالية جديدة'}</button>}
       {summary?.can_print && <PeriodPrint key={JSON.stringify([scope, period, resourceKey(resource)])} resource={resource} scope={scope} period={period} />}
     </Heading>
     {resource && readable && <section className="panel sheet"><div className="section-head"><h2>كشف الفترة</h2><Icon name="calendar-days" /></div>

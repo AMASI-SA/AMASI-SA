@@ -110,7 +110,9 @@ def invoice_rows(obligations):
         number = first.get("source_invoice_number")
         actors = {(c.get("source_invoice_actor_id"), c.get("source_invoice_actor_name")) for c in components}
         actor, name = actors.pop() if len(actors) == 1 else (None, None)
-        base = {"party_type": "supplier", "party_id": party, "currency": currency, "business_date": day,
+        label = "فاتورة شراء آجل" if first.get("credit_detail_key") else "فاتورة استلام"
+        title = " · ".join(part for part in (label + (" " + number if number else ""), first.get("supplier_reference")) if part)
+        base = {"invoice_label": title, "party_type": "supplier", "party_id": party, "currency": currency, "business_date": day,
                 "kind": "supplier_invoice", "approved_at": first.get("source_invoice_approved_at"),
                 "reference": number, "invoice_id": invoice, "actor_id": actor,
                 "recorded_by": {"id": actor, "name": name} if actor and name else None}
@@ -122,7 +124,14 @@ def invoice_rows(obligations):
 
 
 
-async def read_invoice(db, owner, supplier, invoice_id, policy):
+async def read_invoice(db, owner, supplier, invoice_id, policy, header=None):
+    if header and header.get("credit_detail_key"):
+        from operational_supplier_credit_purchase import DETAILS
+        document = await db[DETAILS].find_one({"_id": header["credit_detail_key"], "owner_id": owner,
+                                                "supplier_id": supplier, "invoice_id": invoice_id}, {"detail": 1})
+        if not document:
+            fail("supplier_purchase_details_unavailable", "تعذر تحميل مستند الفاتورة", 503)
+        return {**document["detail"], "id": invoice_id, "number": header["number"]}
     query = {"user_id": owner, "supplier_id": supplier, "id": invoice_id}
     fields = {"_id": 0, **HEADER, "purchase_tax.amount_halalas": 1}
     for field in ("product_name", "quantity", "product_unit_price_halalas", "total_halalas",

@@ -827,3 +827,66 @@ def test_paypal_payout_moves_net_to_bank_once_after_arrival():
         assert len(state["movements"]) == 1
         assert balance(state, "bank", "bank")["actual"] == "1093.97"
     run(scenario)
+
+
+def test_external_supplier_invoice_can_book_additional_services_without_touching_receipt_stock_or_cash():
+    from operational_balance_engine import reconcile
+    from operational_supplier_credit_purchase import DETAILS
+
+    async def scenario(db, client):
+        native = {"user_id": "owner", "supplier_id": "supplier", "id": "original-receipt", "invoice_number": "SUP-001",
+                  "lines": [{"product_name": "قطعة مستلمة", "quantity": 1}], "total_halalas": 1300}
+        await db.mezan_supplier_invoices_v2.insert_one(deepcopy(native))
+        before = await read(db, "owner")
+        await grant(db, operations=["supplier.accrual"], resources=[resource("supplier", "supplier")])
+        staff = {"x-test-user": "staff"}
+        body = entry(request_id=str(uuid4()), expected_session_scope=digest(["owner", "staff"]),
+                     party_type="supplier", party_id="supplier", side="for_party", reason="credit_purchase",
+                     source_id=None, source_type=None, reference="EXT-12", note="خدمات إضافية مستقلة", amount="115",
+                     invoice={"lines":[{"kind":"service", "name":"تطريز اسم", "quantity":"10", "unit_price":"8"},
+                                       {"kind":"product", "name":"غلاف", "quantity":"2.5", "unit_price":"12"}], "tax":"5"})
+        pending = BASE + "/pending-commands/" + body["request_id"]
+        registered = await client.post(pending, headers=staff, json={"action":"entry","target_id":None,"command":body})
+        assert registered.status_code == 200, registered.text
+        command = (await client.get(pending, headers=staff, params={"expected_session_scope":body["expected_session_scope"]})).json()["command"]
+        first, retry = await asyncio.gather(*(client.post(BASE + "/entries", headers=staff, json=command) for _ in range(2)))
+        assert first.status_code == retry.status_code == 200, (first.text, retry.text)
+        assert first.json() == retry.json()
+        saved = first.json()
+        state = await read(db, "owner")
+        assert state["movements"] == before["movements"]
+        assert state.get("inventory_purchases") == before.get("inventory_purchases")
+        assert await db.mezan_supplier_invoices_v2.find_one({}, {"_id":0}) == native
+        assert balance(state, "bank", "bank")["actual"] == "1000.00"
+        assert balance(state, "supplier", "supplier")["outstanding_payable"] == "315.00"
+        refreshed = reconcile(state, {}, "2026-11-20T00:00:00+00:00")
+        assert balance(refreshed, "supplier", "supplier")["outstanding_payable"] == "315.00"
+        assert await db[DETAILS].count_documents({}) == 1
+        for path in ("/ledger/supplier/supplier", "/movements"):
+            page = (await client.get(BASE + path, params={"q":"EXT-12"}, headers=staff)).json()
+            assert page["total"] == 1, page
+            row = page["items"][0]
+            assert row["invoice_id"] == saved["invoice_id"] and row["amount"] == "115.00"
+            assert row["recorded_by"] == {"id":"staff", "name":"خالد أحمد"} and "lines" not in row
+        url = BASE + "/supplier-invoices/supplier/" + saved["invoice_id"]
+        doc = (await client.get(url, headers=staff)).json()
+        assert doc["tax"] == "5.00" and doc["total"] == "115.00" and doc["number"] == saved["invoice_number"]
+        assert doc["supplier_reference"] == "EXT-12" and doc["note"] == body["note"]
+        assert [(line["kind"],line["total"]) for line in doc["lines"]] == [("service","80.00"),("product","30.00")]
+        for changes, code in [({"reference":"ext-12"},409), ({"reference":"SUP-001"},409),
+                              ({"reference":"EXT-13","amount":"100"},422), ({"source_id":"bank","source_type":"bank"},422)]:
+            rejected = await client.post(BASE + "/entries", headers=staff, json={**body,**changes,"request_id":str(uuid4())})
+            assert rejected.status_code == code, rejected.text
+        await grant(db, operations=["supplier.payment"], resources=[resource("supplier", "supplier", movements="none")], version=2)
+        assert (await client.get(url, headers=staff)).status_code in (403,404)
+        assert (await client.post(BASE + "/entries", headers=staff, json={**body,"request_id":str(uuid4())})).status_code == 403
+        payment = entry(party_type="supplier",party_id="supplier",reason="payment",side="for_us",amount="315.00")
+        paid = await client.post(BASE + "/entries", json=payment)
+        assert paid.status_code == 200, paid.text
+        state = await read(db, "owner")
+        assert balance(state, "supplier", "supplier")["outstanding_payable"] == "0.00"
+        assert balance(state, "bank", "bank")["actual"] == "685.00"
+        assert sum(a["amount"] == "115.00" and a["obligation_id"] == saved["movement_id"]
+                   for a in state["movements"][-1]["allocations"]) == 1
+        assert (await client.get(url)).json() == doc
+    run(scenario)
