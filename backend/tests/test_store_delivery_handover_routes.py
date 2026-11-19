@@ -24,18 +24,12 @@ def test_handover_reads_canonical_unified_orders_collection():
     assert ORDERS == "unified_orders"
 
 
-def test_store_courier_assignment_requires_ready_completed_shipment():
-    ready = {
-        "carrier_label_type": "store_courier",
-        "carrier_label_ready": True,
-        "stage": "completed",
-        "assembly_status": "completed",
-    }
-    assert store_courier_assignment_blocker(ready) is None
-    assert store_courier_assignment_blocker({**ready, "carrier_label_print_confirmed": False}) is None
-    assert store_courier_assignment_blocker({**ready, "assembly_status": "in_progress"}) == (
-        "store_courier_order_not_completed"
-    )
+def test_assignment_uses_salla_carrier_and_current_status():
+    order = {"shipping_company": "مندوب الرياض", "order_status_slug": "تم التنفيذ"}
+    assert store_courier_assignment_blocker(order) is None
+    assert store_courier_assignment_blocker({**order, "order_status_slug": "جاري التوصيل"}) == "salla_assignment_status_ineligible"
+    assert store_courier_assignment_blocker({**order, "order_status_slug": "جاري التوصيل"}, transfer=True) is None
+    assert store_courier_assignment_blocker({**order, "shipping_company": "أرامكس"}, transfer=True) == "salla_store_courier_required"
 
 
 def test_order_city_prefers_shipping_fields():
@@ -144,19 +138,14 @@ def test_delivery_duration_report_uses_assignment_to_delivered_timestamp():
     }
 
 
-def test_build37_handover_scan_is_print_evidence_and_reassignment_is_explicit():
+def test_handover_keeps_print_evidence_independent_and_reassignment_explicit():
     scan_block = inspect.getsource(handover_routes.scan_shipment_service)
     confirm_block = inspect.getsource(handover_routes.confirm_session_service)
     assert '"can_reassign": bool(' in scan_block
     assert '"assignment_id": active.get("id")' in scan_block
     assert '"shipment_already_delivered"' in scan_block
     assert '"shipment_already_assigned_to_driver"' in scan_block
-    assert '"carrier_label_print_confirmed": True' in confirm_block
-    assert '"carrier_label_print_confirmed": True,' not in (
-        confirm_block.split("workflow_result = await", 1)[1].split(
-            '{"$set": workflow_patch}', 1
-        )[0]
-    )
+    assert "carrier_label_print_confirmed" not in confirm_block
 
 
 def test_build37_reassignment_moves_workflow_to_new_driver_and_keeps_delivered_blocked():

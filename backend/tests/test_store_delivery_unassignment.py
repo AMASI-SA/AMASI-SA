@@ -38,6 +38,7 @@ async def _fixture():
     }
     order = {
         "user_id": "merchant", "order_id": "salla-101", "order_number": "101",
+        "order_status_slug": "completed",
         "store_delivery_assignment_id": "assignment-A", "store_delivery_driver_id": "driver-R",
         "store_delivery_driver_name": "R", "store_delivery_status": "assigned",
         "store_delivery_fee_snapshot": 20.0,
@@ -70,7 +71,7 @@ async def test_transfer_from_in_transit_resets_workflow_and_can_be_cancelled_aga
     try:
         await db[ASSIGNMENTS].update_one({"id": "assignment-A"}, {"$set": {"status": "out_for_delivery"}})
         await db[ORDERS].update_one({"order_number": "101"}, {"$set": {
-            "store_delivery_status": "out_for_delivery", "shipping_company": "مندوب الرياض",
+            "order_status_slug": "delivering", "store_delivery_status": "out_for_delivery", "shipping_company": "مندوب الرياض",
         }})
         await db[WORKFLOWS].update_one({"order_number": "101"}, {"$set": {
             "stage": "delivering", "store_courier_assignment_state": "delivering",
@@ -350,12 +351,10 @@ async def test_in_transit_can_unassign_without_return_attestation_and_reassign_l
         # driver after revocation, without claiming prior physical return.
         # Not a synthetic
         # direct database insertion that would mask a workflow blocker.
-        from store_courier_domain import store_courier_assignment_blocker
         from store_delivery_handover_routes import (
             SessionCreate, ScanIn, create_session_service, scan_shipment_service,
             confirm_session_service,
         )
-        assert store_courier_assignment_blocker(workflow) is None
         await db[ORDERS].update_one(
             {"order_number": "101"}, {"$set": {"shipping_company": "مندوب الرياض"}},
         )

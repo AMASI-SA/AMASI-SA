@@ -200,83 +200,48 @@ class PendingPrintTests(ComponentRouteTests):
         self.assertEqual(response.status_code, 201, response.text)
         return "/store-delivery/handover/sessions/" + response.json()["id"]
 
-    async def test_operator_number_recovers_courier_proof_before_confirmation(self):
-        selector, payload = await self.seed_gap(courier="مندوب الرياض")
+    async def test_assignment_ignores_pending_components_and_missing_label(self):
+        selector, _ = await self.seed_gap(courier="مندوب الرياض")
         path = await self.courier_handover_path()
-        with self.provider_reads(payload):
+        before = await self.db.unified_orders.find_one(selector)
+        workflow = await self.db.order_review_workflows.find_one(selector)
+        with patch.object(salla_refresh, "refresh_order_from_salla", new_callable=AsyncMock) as refresh:
             response = await self.client.post(path + "/scan", json={"barcode": selector["order_number"]})
             self.assertEqual(response.status_code, 200, response.text)
             self.assertTrue(response.json()["accepted"], response.text)
-            self.assertEqual(await self.db[handover.ASSIGNMENTS].count_documents({}), 0)
-            confirmed = await self.client.post(path + "/confirm")
+            refresh.assert_not_awaited()
+        self.assertEqual(await self.db.unified_orders.find_one(selector), before)
+        self.assertEqual(await self.db.order_review_workflows.find_one(selector), workflow)
+        self.assertEqual(await self.db[handover.ASSIGNMENTS].count_documents({}), 0)
+
+    async def test_assignment_without_workflow_preserves_print_and_assembly_evidence(self):
+        selector, _ = await self.seed_gap(courier="مندوب الرياض")
+        await self.db.order_review_workflows.delete_one(selector)
+        path = await self.courier_handover_path()
+        response = await self.client.post(path + "/scan", json={"barcode": selector["order_number"]})
+        self.assertTrue(response.json()["accepted"], response.text)
+        duplicate = await self.client.post(path + "/scan", json={"barcode": selector["order_number"]})
+        self.assertEqual(duplicate.json()["code"], "shipment_already_scanned")
+        confirmed = await self.client.post(path + "/confirm")
         self.assertEqual(confirmed.status_code, 200, confirmed.text)
         self.assertEqual(confirmed.json()["assigned_count"], 1)
-        assignment = await self.db[handover.ASSIGNMENTS].find_one(selector)
-        self.assertEqual(assignment["driver_id"], "courier")
-        self.assertEqual(assignment["status"], "assigned")
-
-    async def test_operator_number_keeps_changed_component_evidence_blocked(self):
-        selector, payload = await self.seed_gap(courier="مندوب الرياض")
-        path = await self.courier_handover_path()
-        payload["items"][0]["quantity"] += 1
-        with self.provider_reads(payload):
-            response = await self.client.post(path + "/scan", json={"barcode": selector["order_number"]})
-        self.assertEqual(response.status_code, 200, response.text)
-        self.assertFalse(response.json()["accepted"])
-        self.assertEqual(response.json()["code"], "completion_source_refresh_pending")
-        session = await self.db[handover.SESSIONS].find_one({"id": path.rsplit("/", 1)[-1]})
-        self.assertEqual(session["rejected"][-1]["code"], response.json()["code"])
-        self.assertEqual(session["rejected"][-1]["message"], response.json()["message"])
-        self.assertIsNone(await source_status(self.db, "owner", selector["order_number"]))
-        source = await self.db.unified_orders.find_one(selector)
-        self.assertEqual(source["raw_by_source"]["salla_direct"]["items"][0]["quantity"], 3)
         workflow = await self.db.order_review_workflows.find_one(selector)
-        self.assertFalse(workflow.get("carrier_label_ready"))
-        self.assertEqual(await self.db[handover.ASSIGNMENTS].count_documents({}), 0)
+        for field in ("carrier_label_print_confirmed", "carrier_label_ready", "assembly_status", "stage"):
+            self.assertNotIn(field, workflow)
 
-    async def test_handover_revalidates_newer_saved_contract_when_provider_read_is_older(self):
-        from fulfillment_v2_routes import component_source_time
-        selector, payload = await self.seed_gap(courier="مندوب الرياض")
-        await self.db.unified_orders.update_one(selector, {"$set": {
-            "g47_salla_snapshot.source_updated_at": component_source_time(LATER)}})
-        payload["updated_at"] = "2026-09-25T09:00:00+00:00"
-        path = await self.courier_handover_path()
-        with self.provider_reads(payload):
-            response = await self.client.post(path + "/scan", json={"barcode": selector["order_number"]})
-            self.assertEqual(response.status_code, 200)
-            self.assertTrue(response.json()["accepted"], response.text)
-            duplicate = await self.client.post(path + "/scan", json={"barcode": selector["order_number"]})
-        self.assertEqual(duplicate.json()["code"], "shipment_already_scanned")
-        source = await self.db.unified_orders.find_one(selector)
-        self.assertEqual(source["raw_by_source"]["salla_direct"]["updated_at"], LATER)
-        self.assertIs(source["g47_salla_snapshot"]["component_pending"], False)
-        self.assertEqual(await self.db[handover.ASSIGNMENTS].count_documents({}), 0)
-
-    async def test_handover_older_provider_read_cannot_clear_newer_light_observation(self):
-        from fulfillment_v2_routes import component_source_time
-        selector, payload = await self.seed_gap(courier="مندوب الرياض")
-        await self.db.unified_orders.update_one(selector, {"$set": {
-            "g47_salla_snapshot.source_updated_at": component_source_time(LATER),
-            "last_salla_direct_status_source_updated_at": "2026-09-27T09:00:00+00:00"}})
-        path = await self.courier_handover_path()
-        with self.provider_reads(payload):
-            response = await self.client.post(path + "/scan", json={"barcode": selector["order_number"]})
-        self.assertEqual(response.status_code, 200)
-        self.assertFalse(response.json()["accepted"])
-        self.assertEqual(response.json()["code"], "completion_source_refresh_pending")
-        source = await self.db.unified_orders.find_one(selector)
-        self.assertIs(source["g47_salla_snapshot"]["component_pending"], True)
-        self.assertEqual(await self.db[handover.ASSIGNMENTS].count_documents({}), 0)
-
-    async def test_handover_reports_unavailable_provider_without_accepting_cached_label(self):
+    async def test_assignment_rechecks_carrier_and_initial_status_before_confirming(self):
         selector, _ = await self.seed_gap(courier="مندوب الرياض")
         path = await self.courier_handover_path()
-        with patch.object(salla_refresh, "refresh_order_from_salla", AsyncMock(
-                return_value={"ok": False, "found": False, "code": "salla_refresh_failed"})):
-            response = await self.client.post(path + "/scan", json={"barcode": selector["order_number"]})
-        self.assertEqual(response.status_code, 200)
-        self.assertFalse(response.json()["accepted"])
-        self.assertEqual(response.json()["code"], "handover_source_refresh_unavailable")
+        response = await self.client.post(path + "/scan", json={"barcode": selector["order_number"]})
+        self.assertTrue(response.json()["accepted"], response.text)
+        for company, status, expected in (("أرامكس", "completed", "salla_store_courier_required"),
+                                          ("مندوب المتجر", "delivering", "salla_assignment_status_ineligible")):
+            await self.db.unified_orders.update_one(selector, {"$set": {
+                "salla_shipping_current.company_name": company, "order_status_slug": status,
+                "order_status": status, "raw_by_source.salla_direct.status": status}})
+            confirmed = await self.client.post(path + "/confirm")
+            self.assertEqual(confirmed.status_code, 409, confirmed.text)
+            self.assertEqual(confirmed.json()["detail"]["code"], expected)
         self.assertEqual(await self.db[handover.ASSIGNMENTS].count_documents({}), 0)
 
     async def test_pending_unchanged_snapshot_recovers_without_ready_or_stock_changes(self):

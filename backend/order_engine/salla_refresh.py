@@ -584,7 +584,7 @@ async def refresh_order_from_salla(
             if key not in SHIPPING_FIELDS and (key == "shipping_address_found" or _present(value)):
                 canonical_updates[key] = deepcopy(value)
 
-        from fulfillment_v2_routes import component_provider_version, persist_component_source_snapshot
+        from fulfillment_v2_routes import persist_component_source_snapshot
         async def persist_snapshot(scoped):
             result = await upsert_order(scoped, str(user_id), normalized, doc, source="salla_direct", raw=merged_raw,
                                         shipping_snapshot=extract_shipping(details) or {},
@@ -605,7 +605,6 @@ async def refresh_order_from_salla(
         if result.get("stale"):
             return {"ok": True, "found": True, "updated": False, "skipped": True,
                     "reason": "stale_salla_snapshot", "order_number": normalized,
-                    "received_source_updated_at": component_provider_version(details),
                     "no_shipments_api_calls": True, "no_qoyod_calls": True}
         auto_fulfillment = {
             "attempted": False,
@@ -621,7 +620,7 @@ async def refresh_order_from_salla(
                 "reason": "evaluation_failed",
             }
             try:
-                from fulfillment_v2_routes import auto_route_instant_order
+                from fulfillment_v2_routes import auto_route_instant_order, component_provider_version
                 from order_engine.repository import MongoOrderRepository
                 from order_engine.service import get_order
 

@@ -9,9 +9,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
 
 from store_delivery_customer_instruction_routes import STORE_DELIVERY_INSTRUCTIONS
-from store_courier_domain import ASSIGNED_WAITING_PICKUP, WORKFLOWS
+from store_courier_domain import ASSIGNED_WAITING_PICKUP, WORKFLOWS, eligibility_fence, store_courier_assignment_blocker
 from store_delivery_domain import (
-    StoreDeliveryRuleError, assignment_carrier_changed, carrier_assignment_snapshot, normalize_text,
+    StoreDeliveryRuleError, assignment_carrier_changed, store_courier_snapshot, normalize_text,
 )
 from store_delivery_driver_routes import STORE_DRIVERS
 from store_delivery_handover_routes import ASSIGNMENTS, EVENTS, ORDERS, _order_city, _order_shipping_company
@@ -554,107 +554,117 @@ def make_store_delivery_reassignment_router(db: Any, current_user: Callable[...,
                        user: dict = Depends(current_user)) -> dict[str, Any]:
         actor = _require_operator(user)
         user_id = _merchant_user_id(actor)
-        old = await db[ASSIGNMENTS].find_one({"user_id": user_id, "id": assignment_id, "active": True}, {"_id": 0})
-        if not old:
-            raise HTTPException(status_code=404, detail={"code": "store_delivery_assignment_not_found"})
-        if old.get("status") == "delivered":
-            raise HTTPException(status_code=409, detail={"code": "delivered_assignment_cannot_be_reassigned"})
-        if old.get("driver_id") == payload.driver_id:
-            raise HTTPException(status_code=409, detail={"code": "assignment_already_with_driver"})
 
-        driver = await db[STORE_DRIVERS].find_one(
-            {"user_id": user_id, "id": payload.driver_id, "status": "active"}, {"_id": 0}
-        )
-        if not driver:
-            raise HTTPException(status_code=404, detail={"code": "store_driver_not_found_or_inactive"})
-        order = await db[ORDERS].find_one(
-            {"user_id": user_id, "$or": [{"order_id": old.get("order_id")}, {"order_number": old.get("order_number")}]}, {"_id": 0}
-        )
-        if not order:
-            raise HTTPException(status_code=409, detail={"code": "canonical_order_not_found"})
-        try:
-            snapshot = carrier_assignment_snapshot(driver=driver, shipping_company=_order_shipping_company(order), shipping_city=_order_city(order))
-        except StoreDeliveryRuleError as exc:
-            raise HTTPException(status_code=409, detail={"code": str(exc)}) from exc
+        async def transfer(tx):
+            old = await db[ASSIGNMENTS].find_one({"user_id": user_id, "id": assignment_id, "active": True}, {"_id": 0}, session=tx)
+            if not old:
+                raise HTTPException(status_code=404, detail={"code": "store_delivery_assignment_not_found"})
+            if old.get("status") == "delivered":
+                raise HTTPException(status_code=409, detail={"code": "delivered_assignment_cannot_be_reassigned"})
+            if old.get("driver_id") == payload.driver_id:
+                raise HTTPException(status_code=409, detail={"code": "assignment_already_with_driver"})
 
-        now = _now(); new_id = str(uuid.uuid4())
-        new_row = {
-            "id": new_id, "user_id": user_id, "session_id": None,
-            "order_id": old.get("order_id"), "order_number": old.get("order_number"),
-            "barcode": old.get("barcode"), **snapshot,
-            "status": "assigned", "active": True, "assigned_at": now,
-            "assigned_by": normalize_text(actor.get("id")), "delivered_at": None,
-            "reassigned_from_assignment_id": old["id"], "reassignment_reason": normalize_text(payload.reason),
-        }
-        await db[ASSIGNMENTS].insert_one(new_row)
-        old_update = await db[ASSIGNMENTS].update_one(
-            {"user_id": user_id, "id": old["id"], "active": True, "status": old.get("status")},
-            {"$set": {
-                "active": False, "status": "reassigned", "reassigned_at": now,
-                "reassigned_by": normalize_text(actor.get("id")), "reassigned_to_assignment_id": new_id,
-                "reassignment_reason": normalize_text(payload.reason), "updated_at": now,
-            }},
-        )
-        if old_update.modified_count != 1:
-            await db[ASSIGNMENTS].delete_one({"user_id": user_id, "id": new_id})
-            raise HTTPException(status_code=409, detail={"code": "assignment_reassign_conflict"})
+            driver = await db[STORE_DRIVERS].find_one(
+                {"user_id": user_id, "id": payload.driver_id, "status": "active"}, {"_id": 0}, session=tx
+            )
+            if not driver:
+                raise HTTPException(status_code=404, detail={"code": "store_driver_not_found_or_inactive"})
+            order = await db[ORDERS].find_one(
+                {"user_id": user_id, "$or": [{"order_id": old.get("order_id")}, {"order_number": old.get("order_number")}]}, {"_id": 0}, session=tx
+            )
+            if not order:
+                raise HTTPException(status_code=409, detail={"code": "canonical_order_not_found"})
+            blocker = store_courier_assignment_blocker(order, transfer=True)
+            if blocker:
+                raise HTTPException(status_code=409, detail={"code": blocker})
+            snapshot = store_courier_snapshot(driver=driver, shipping_company=_order_shipping_company(order),
+                                             shipping_city=_order_city(order))
 
-        await db[STORE_DELIVERY_INSTRUCTIONS].update_many(
-            {"user_id": user_id, "order_id": old.get("order_id"), "status": "active"},
-            {"$set": {
-                "driver_id": driver["id"], "driver_name_snapshot": driver.get("name"),
-                "acknowledged_at": None, "acknowledged_by_driver_id": None,
-                "last_reminder_code": None, "last_reminder_at": None,
-                "updated_at": now, "updated_by": normalize_text(actor.get("id")),
-            }},
-        )
-        await db[ORDERS].update_one(
-            {"user_id": user_id, "$or": [{"order_id": old.get("order_id")}, {"order_number": old.get("order_number")}]},
-            {"$set": {
-                "store_delivery_assignment_id": new_id,
-                "store_delivery_driver_id": driver["id"],
-                "store_delivery_driver_name": driver.get("name"),
-                "store_delivery_fee_snapshot": new_row.get("delivery_fee_snapshot"),
-                "store_delivery_status": "assigned",
-                "store_delivery_updated_at": now,
-            }},
-        )
-        await db[WORKFLOWS].update_one(
-            {
-                "user_id": user_id,
-                "order_number": old.get("order_number"),
-            },
-            {
-                "$set": {
+            now = _now(); new_id = str(uuid.uuid4())
+            new_row = {
+                "id": new_id, "user_id": user_id, "session_id": None,
+                "order_id": old.get("order_id"), "order_number": old.get("order_number"),
+                "barcode": old.get("barcode"), **snapshot,
+                "status": "assigned", "active": True, "assigned_at": now,
+                "assigned_by": normalize_text(actor.get("id")), "delivered_at": None,
+                "reassigned_from_assignment_id": old["id"], "reassignment_reason": normalize_text(payload.reason),
+            }
+            await db[ASSIGNMENTS].insert_one(new_row, session=tx)
+            old_update = await db[ASSIGNMENTS].update_one(
+                {"user_id": user_id, "id": old["id"], "active": True, "status": old.get("status")},
+                {"$set": {
+                    "active": False, "status": "reassigned", "reassigned_at": now,
+                    "reassigned_by": normalize_text(actor.get("id")), "reassigned_to_assignment_id": new_id,
+                    "reassignment_reason": normalize_text(payload.reason), "updated_at": now,
+                }}, session=tx,
+            )
+            if old_update.modified_count != 1:
+                raise HTTPException(status_code=409, detail={"code": "assignment_reassign_conflict"})
+
+            await db[STORE_DELIVERY_INSTRUCTIONS].update_many(
+                {"user_id": user_id, "order_id": old.get("order_id"), "status": "active"},
+                {"$set": {
+                    "driver_id": driver["id"], "driver_name_snapshot": driver.get("name"),
+                    "acknowledged_at": None, "acknowledged_by_driver_id": None,
+                    "last_reminder_code": None, "last_reminder_at": None,
+                    "updated_at": now, "updated_by": normalize_text(actor.get("id")),
+                }}, session=tx,
+            )
+            updated_order = await db[ORDERS].update_one(
+                {"user_id": user_id, **eligibility_fence(order), "$or": [{"order_id": old.get("order_id")}, {"order_number": old.get("order_number")}]},
+                {"$set": {
                     "store_delivery_assignment_id": new_id,
-                    "stage": "completed",
-                    "store_courier_driver_profile_id": driver["id"],
-                    "store_courier_assignee_id": (
-                        normalize_text(driver.get("account_user_id"))
-                        or f"store-driver:{driver['id']}"
-                    ),
-                    "store_courier_assignee_name": driver.get("name"),
-                    "store_courier_assignment_state": ASSIGNED_WAITING_PICKUP,
-                    "store_courier_assigned_at": now,
-                    "store_courier_assigned_by_id": normalize_text(actor.get("id")),
-                    "updated_at": now,
+                    "store_delivery_driver_id": driver["id"],
+                    "store_delivery_driver_name": driver.get("name"),
+                    "store_delivery_fee_snapshot": new_row.get("delivery_fee_snapshot"),
+                    "store_delivery_status": "assigned",
+                    "store_delivery_updated_at": now,
+                }}, session=tx,
+            )
+            if not updated_order.matched_count:
+                raise HTTPException(status_code=409, detail={"code": "assignment_reassign_conflict"})
+            workflow_key = {"user_id": user_id, "order_number": old["order_number"]}
+            workflow = await db[WORKFLOWS].find_one(workflow_key, {"stage": 1}, session=tx) or {}
+            await db[WORKFLOWS].update_one(
+                {
+                    "user_id": user_id,
+                    "order_number": old.get("order_number"),
                 },
-                "$unset": {
-                    "store_courier_picked_up_at": "",
-                    "store_courier_picked_up_by_id": "",
-                    "store_courier_delivered_at": "",
-                    "store_courier_delivered_by_id": "",
-                },
-            },
-        )
-        await db[EVENTS].insert_one({
-            "id": str(uuid.uuid4()), "user_id": user_id, "event_type": "store_delivery_reassigned",
-            "order_id": old.get("order_id"), "old_assignment_id": old["id"], "new_assignment_id": new_id,
-            "old_driver_id": old.get("driver_id"), "new_driver_id": driver["id"],
-            "reason": normalize_text(payload.reason), "actor_id": normalize_text(actor.get("id")), "occurred_at": now,
-        })
-        new_row.pop("_id", None); new_row.pop("user_id", None)
-        return {"ok": True, "old_assignment_id": old["id"], "assignment": new_row}
+                {
+                    "$set": {
+                        "store_delivery_assignment_id": new_id,
+                        **({"stage": "completed"} if workflow.get("stage") == "delivering" else {}),
+                        "delivery_flow": "store_courier",
+                        "store_courier_driver_profile_id": driver["id"],
+                        "store_courier_assignee_id": (
+                            normalize_text(driver.get("account_user_id"))
+                            or f"store-driver:{driver['id']}"
+                        ),
+                        "store_courier_assignee_name": driver.get("name"),
+                        "store_courier_assignment_state": ASSIGNED_WAITING_PICKUP,
+                        "store_courier_assigned_at": now,
+                        "store_courier_assigned_by_id": normalize_text(actor.get("id")),
+                        "updated_at": now,
+                    },
+                    "$unset": {
+                        "store_courier_picked_up_at": "",
+                        "store_courier_picked_up_by_id": "",
+                        "store_courier_delivered_at": "",
+                        "store_courier_delivered_by_id": "",
+                    },
+                }, upsert=True, session=tx,
+            )
+            await db[EVENTS].insert_one({
+                "id": str(uuid.uuid4()), "user_id": user_id, "event_type": "store_delivery_reassigned",
+                "order_id": old.get("order_id"), "old_assignment_id": old["id"], "new_assignment_id": new_id,
+                "old_driver_id": old.get("driver_id"), "new_driver_id": driver["id"],
+                "reason": normalize_text(payload.reason), "actor_id": normalize_text(actor.get("id")), "occurred_at": now,
+            }, session=tx)
+            new_row.pop("_id", None); new_row.pop("user_id", None)
+            return {"ok": True, "old_assignment_id": old["id"], "assignment": new_row}
+
+        async with await db.client.start_session() as session:
+            return await session.with_transaction(transfer)
 
     return router
 

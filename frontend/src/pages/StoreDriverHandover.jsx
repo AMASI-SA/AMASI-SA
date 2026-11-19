@@ -13,6 +13,9 @@ import {
 } from "../services/storeDelivery";
 
 function mismatchMessage(row, driver) {
+  if (row?.code === "salla_store_courier_required") return "شركة الشحن الحالية في سلة يجب أن تكون مندوب المتجر.";
+  if (row?.code === "salla_assignment_status_ineligible") return "الإسناد الأول يتطلب أن تكون حالة الطلب في سلة «تم التنفيذ».";
+  if (row?.code === "salla_transfer_status_ineligible") return "نقل الإسناد يتطلب حالة «تم التنفيذ» أو «جاري التوصيل» في سلة.";
   if (row?.code === "driver_shipping_company_mismatch") {
     return `الشحنة تتبع «${row.shipping_company || "شركة مختلفة"}» والموصل مرتبط بـ«${row.driver_shipping_company || driver?.shipping_company || "شركة غير محددة"}».`;
   }
@@ -93,13 +96,13 @@ export default function StoreDriverHandover() {
       setSession(null); setDriverId(""); setAccepted([]); setRejected([]);
       await refreshOperations();
     } catch (error) {
-      toast.error(error?.response?.data?.detail?.code || "تعذر تأكيد التسليم");
+      toast.error(mismatchMessage(error?.response?.data?.detail, driver));
     } finally { setBusy(false); }
   }
 
   async function reassign(row) {
-    const candidates = drivers.filter((item) => item.id !== row.driver_id && item.shipping_company && item.shipping_company === row.shipping_company_snapshot);
-    if (!candidates.length) return toast.error("لا يوجد موصل نشط آخر مرتبط بشركة الشحن نفسها");
+    const candidates = drivers.filter((item) => item.id !== row.driver_id);
+    if (!candidates.length) return toast.error("لا يوجد موصل نشط آخر");
     const menu = candidates.map((item, index) => `${index + 1}. ${item.name} — ${money(item.delivery_fee)}`).join("\n");
     const selectedIndex = Number(window.prompt(`اختر الموصل الجديد:\n${menu}`, "1")) - 1;
     if (!Number.isInteger(selectedIndex) || !candidates[selectedIndex]) return;
@@ -111,13 +114,13 @@ export default function StoreDriverHandover() {
       toast.success("تم إعادة إسناد الشحنة مع حفظ السجل والسعر الجديد");
       await refreshOperations();
     } catch (error) {
-      toast.error(error?.response?.data?.detail?.code || "تعذر إعادة الإسناد");
+      toast.error(mismatchMessage(error?.response?.data?.detail, driver));
     } finally { setBusy(false); }
   }
 
   return (
     <main className="space-y-5 p-4 sm:p-6" dir="rtl">
-      <header><h1 className="text-2xl font-black text-slate-950">تسليم الشحنات للموصلين</h1><p className="mt-1 text-sm font-bold text-slate-500">اختر موصلًا واحدًا ثم امسح جميع الشحنات التي سيستلمها. النظام يقارن شركة الشحن المرتبطة بالموصل ولا يعتمد على مدينة العميل.</p></header>
+      <header><h1 className="text-2xl font-black text-slate-950">تسليم الشحنات للموصلين</h1><p className="mt-1 text-sm font-bold text-slate-500">اختر موصلًا واحدًا ثم امسح جميع الشحنات التي سيستلمها. اختر شحنات مندوب المتجر في سلة. الإسناد الأول متاح عند «تم التنفيذ»، والنقل بين الموصلين متاح أيضًا عند «جاري التوصيل».</p></header>
 
       {!session && <section className="max-w-2xl rounded-3xl border bg-white p-5 shadow-sm"><label className="text-sm font-black text-slate-700">الموصل<select value={driverId} onChange={(e) => setDriverId(e.target.value)} className="mt-2 h-12 w-full rounded-xl border px-3 font-bold"><option value="">اختر الموصل</option>{drivers.map((row) => <option key={row.id} value={row.id}>{row.name} — {row.shipping_company || "غير مرتبط"} — {money(row.delivery_fee)}</option>)}</select></label>{driver && <div className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm font-bold"><Truck className="ml-1 inline" />{driver.name} · شركة الشحن {driver.shipping_company || "غير مرتبطة"} · سعر التوصيلة الحالي {money(driver.delivery_fee)}</div>}<button disabled={busy || !driverId} onClick={begin} className="mt-4 w-full rounded-2xl bg-emerald-700 px-4 py-4 font-black text-white disabled:opacity-40">بدء جلسة التسليم</button></section>}
 

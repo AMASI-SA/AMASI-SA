@@ -150,6 +150,11 @@ def carrier_assignment_snapshot(
 ) -> dict[str, Any]:
     """Only NEW assignments use carrier matching; historical rows are untouched."""
     assert_driver_can_take_shipping_company(driver=driver, shipping_company=shipping_company)
+    return store_courier_snapshot(driver=driver, shipping_company=shipping_company, shipping_city=shipping_city)
+
+
+def store_courier_snapshot(*, driver: dict[str, Any], shipping_company: Any, shipping_city: Any) -> dict[str, Any]:
+    """Freeze the actual carrier and the selected courier's fee independently."""
     return {
         "driver_id": normalize_text(driver.get("id")),
         "driver_name_snapshot": normalize_text(driver.get("name")),

@@ -82,10 +82,9 @@ jobs:
             tests/test_salla_products_projection_integration.py \
             tests/test_salla_products_projection_repair.py \
             tests/test_salla_order_items_snapshot.py \
-            tests/test_shipping_pending_snapshot_recovery.py::PendingPrintTests::test_operator_number_keeps_changed_component_evidence_blocked \
-            tests/test_shipping_pending_snapshot_recovery.py::PendingPrintTests::test_handover_revalidates_newer_saved_contract_when_provider_read_is_older \
-            tests/test_shipping_pending_snapshot_recovery.py::PendingPrintTests::test_handover_older_provider_read_cannot_clear_newer_light_observation \
-            tests/test_shipping_pending_snapshot_recovery.py::PendingPrintTests::test_handover_reports_unavailable_provider_without_accepting_cached_label \
+            tests/test_shipping_pending_snapshot_recovery.py::PendingPrintTests::test_assignment_ignores_pending_components_and_missing_label \
+            tests/test_shipping_pending_snapshot_recovery.py::PendingPrintTests::test_assignment_without_workflow_preserves_print_and_assembly_evidence \
+            tests/test_shipping_pending_snapshot_recovery.py::PendingPrintTests::test_assignment_rechecks_carrier_and_initial_status_before_confirming \
             tests/test_salla_raw_snapshot_preservation.py \
             tests/test_salla_single_order_status_resync.py \
             tests/test_order_engine_salla_refresh.py \

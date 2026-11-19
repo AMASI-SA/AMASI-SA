@@ -60,12 +60,12 @@ async def test_recovery_refuses_changed_shipping_snapshot(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_handover_returns_the_actionable_label_recovery_reason(monkeypatch):
+async def test_handover_accepts_qualified_order_with_unavailable_label(monkeypatch):
     from store_delivery_handover_routes import ScanIn, scan_shipment_service
 
     db = AsyncMongoMockClient().test
     await db.unified_orders.insert_one({"user_id": "merchant", "order_id": "salla-101",
-        "order_number": "101", "shipping_company": "مندوب الرياض"})
+        "order_number": "101", "order_status_slug": "completed", "shipping_company": "مندوب الرياض"})
     await db.store_drivers.insert_one({"user_id": "merchant", "id": "driver", "status": "active",
         "shipping_company": "مندوب الرياض", "delivery_fee": 20})
     await db.store_delivery_handover_sessions.insert_one({"user_id": "merchant", "id": "session",
@@ -80,8 +80,6 @@ async def test_handover_returns_the_actionable_label_recovery_reason(monkeypatch
     monkeypatch.setattr(labels, "recover_store_courier_label_for_handover", unavailable)
     result = await scan_shipment_service(db, actor={"id": "merchant"}, user_id="merchant",
         session_id="session", payload=ScanIn(barcode="101"))
-    assert result["accepted"] is False
-    assert result["code"] == "shipping_snapshot_changed"
-    assert result.get("message") == message
+    assert result["accepted"] is True
     assert await db.store_delivery_assignments.count_documents({}) == 0
-    assert (await db.store_delivery_handover_sessions.find_one({}))["accepted"] == []
+    assert len((await db.store_delivery_handover_sessions.find_one({}))["accepted"]) == 1
