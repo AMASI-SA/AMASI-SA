@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import ApprovedLedger from './ApprovedLedger';
 import { simpleBalancesApi as api } from './simpleBalancesApi';
 
-jest.mock('./simpleBalancesApi', () => ({ simpleBalancesApi: { ledger: jest.fn(), movements: jest.fn(), statement: jest.fn() },
+jest.mock('./simpleBalancesApi', () => ({ simpleBalancesApi: { supplierInvoice: jest.fn(), ledger: jest.fn(), movements: jest.fn(), statement: jest.fn() },
   simpleBalanceError: () => 'تعذر تحميل الكشف' }));
 jest.mock('../../lib/dates', () => ({ todaySA: () => '2026-11-19' }));
 global.IS_REACT_ACT_ENVIRONMENT = true;
@@ -70,4 +70,19 @@ test('global tab does not fetch resource ledgers, and account with no movement p
   await render({resource:{...bank,access:{movements:'none',use:true}},identity:'limited'});
   expect(api.ledger).not.toHaveBeenCalled();
   expect(host.querySelector('table')).toBeNull();
+});
+
+test('shows the approver next to the date and loads invoice lines only after opening the row',async()=>{
+  const supplier = {...bank, kind:'supplier', id:'supplier', name:'أسواق الراجحي'};
+  const row = {...rows[0], party_id:'supplier', invoice_id:'invoice1', description:'فاتورة استلام SI-26', amount:'26.00'};
+  api.supplierInvoice.mockResolvedValue({id:'invoice1', currency:'SAR', total:'26.00', lines:[
+    {name:'غلاف',quantity:2,unit:'13.00',total:'26.00',services:[]}]});
+  api.ledger.mockImplementation(async (kind,id,params) => ({...paged(params),resource:supplier,total:1,total_pages:1,items:[row]}));
+  await render({resource:supplier});
+  expect(api.ledger).toHaveBeenCalledTimes(1);
+  expect(host.querySelector('tbody').textContent).toContain('11-12 · سارة');
+  await click('فاتورة استلام SI-26');
+  expect(api.supplierInvoice.mock.calls[0].slice(0,2)).toEqual(['supplier','invoice1']);
+  expect(host.querySelector('dialog').textContent).toContain('غلاف');
+  expect(host.querySelector('dialog').textContent).toContain('إجمالي الفاتورة');
 });

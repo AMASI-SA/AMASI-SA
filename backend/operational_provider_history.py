@@ -40,7 +40,7 @@ def _context(state, row, *, obligation_key=None, through=None):
         created = _instant(row["created_at"])
         fresh = through is not None and (not engine.get("as_of") or created > _instant(engine["as_of"]))
 
-        if (not owner or owner != state.get("owner_id") or not oid or not number or party not in {"salla","tabby","tamara","emkan"}
+        if (not owner or owner != state.get("owner_id") or not oid or not number or party not in {"salla","tabby","tamara","emkan","paypal"}
                 or paid <= 0 or (not (is_closed_tender_balance(row, ccy) or is_partial_tender_balance(row, ccy))
                     and paid + _amount(row["remaining"], ccy) != _amount(row["gross"], ccy))
                 or not _instant(state["started_at"]) < created <= _instant(through or engine["as_of"])):

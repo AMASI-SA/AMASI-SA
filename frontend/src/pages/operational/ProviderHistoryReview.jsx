@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { operationalApi as api, messageFor, requestId } from "./api";
 import { visibleOperationalRead } from './visibleOperationalRead';
 
-const providers = { salla: "سلة", tamara: "تمارا", tabby: "تابي", emkan: "إمكان" };
+const providers = { salla: "سلة", tamara: "تمارا", tabby: "تابي", emkan: "إمكان", paypal: "باي بال" };
 
 export default function ProviderHistoryReview({ sessionScope }) {
     const [items, setItems] = useState(null), [order, setOrder] = useState(""), [statement, setStatement] = useState("");

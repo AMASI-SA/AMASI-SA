@@ -2,7 +2,7 @@
 from operational_balance_store import STATES, fail
 from operational_financial_activity_runtime import checked_rows, prepare_in_thread
 
-PROVIDER_NAMES = {"salla": "سلة", "tabby": "تابي", "tamara": "تمارا", "emkan": "إمكان"}
+PROVIDER_NAMES = {"salla": "سلة", "tabby": "تابي", "tamara": "تمارا", "emkan": "إمكان", "paypal": "باي بال"}
 RETURN_STATES = {"pending": "بانتظار استكمال المرتجع", "refunded": "تم رد المبلغ",
                  "salla_refund_recorded": "استرجاع مسجل في سلة", "salla_refund_confirmed": "مصدر الاسترجاع مؤكد"}
 
@@ -134,8 +134,13 @@ def _account_rows(resources, computed, group, state):
                 continue
             detail = f'متوقع للمؤسسة {forecast["expected_receivable"]} {r["currency"]} · متوقع عليها {forecast["expected_payable"]} {r["currency"]}'
         elif r["kind"] == "ad_account":
-            amount = r.get("ad_wallet_balance")
-            detail = f'رصيد المحفظة {amount} {r["currency"]}' if amount is not None else "رصيد المحفظة غير متاح"
+            amounts = r.get("ad_amounts")
+            if amounts:
+                detail = f'رصيد مقدم {amounts["prepaid"]} {amounts["currency"]} · علينا {amounts["payable"]} {amounts["currency"]}'
+                if amounts["currency"] == "USD":
+                    detail += " · التحويل إلى الريال غير متاح"
+            else:
+                detail = "رصيد الحساب الإعلاني غير متاح"
         else:
             detail = f'{balance["amount"]} {r["currency"]} · {SIDE[balance["side"]]}'
         rows.append(_display(":".join(key), r["name"], detail, RESOURCE_KIND_LABELS[r["kind"]], state["engine"].get("as_of")))

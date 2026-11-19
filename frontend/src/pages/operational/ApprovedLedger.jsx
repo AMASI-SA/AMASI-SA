@@ -1,10 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { todaySA } from '../../lib/dates';
-import { Amount, Heading, Icon, IconBox, MovementIcon, isAsset, issueLabel, styleOf } from './ApprovedFinanceUI';
+import { AdBalance, Amount, Heading, Icon, IconBox, MovementIcon, isAsset, issueLabel, styleOf } from './ApprovedFinanceUI';
 import { simpleBalancesApi as api, simpleBalanceError } from './simpleBalancesApi';
 import { useBalanceRead } from './simpleBalancesHooks';
 import { isStatement, minorUnits, movementDate, movementRecorder, movementTitle, resourceKey, signedResourceBalance } from './simpleBalancesModel';
+
+import SupplierInvoiceDetail from './SupplierInvoiceDetail';
 
 const pageSize = 8;
 function defaultPeriod(start) {
@@ -68,6 +70,7 @@ function ActivityTable({ result, resource, onDetail, onHistory }) {
     const credit = row.side === firstSide;
     return <tr key={row.id}><td><button type="button" className="tablelink" onClick={() => onDetail(row)}>
       <MovementIcon type={row.movement_type} /><span>{movementTitle(row)}<small>{movementDate(row)} · {movementRecorder(row)}</small>
+        {row.invoice_id && minorUnits(row.invoice_returns) > 0n && <small>إجمالي الفاتورة <Amount value={row.invoice_gross} currency={row.currency}/> · المرتجع <Amount value={row.invoice_returns} currency={row.currency}/></small>}
         {row.informational && resource && <small>إثبات للمؤسسة · <Amount value={row.amount} currency={row.currency} /></small>}</span></button>
       {onHistory && row.automatic_history && <button type="button" className="textbtn" onClick={() => onHistory(row)}>
         {row.automatic_history === 'salary' ? 'سجل الرواتب' : 'سجل التوصيلات'}</button>}</td>
@@ -117,9 +120,10 @@ function PeriodPrint({ resource, period, scope }) {
     {print?.scope === scope && createPortal(<div dir="rtl" className="sb-print-root"><print.StatementDocument statement={print.value} printing /></div>, document.body)}</>;
 }
 
-function LedgerPage({ context, identity, resource, onDetail, onAdd, onBack, onReviewOrders, onHistory, onExpected, onReviewCollections }) {
-  const [period, setPeriod] = useState(() => defaultPeriod(context.ledger_start));
-  const [query, setQuery] = useState(''), [draft, setDraft] = useState('');
+function LedgerPage({ context, identity, resource, initialInvoice, onDetail, onAdd, onPurchase, onBack, onReviewOrders, onHistory, onExpected, onReviewCollections }) {
+  const [period, setPeriod] = useState(() => initialInvoice?.date
+    ? {date_from:initialInvoice.date, date_to:initialInvoice.date} : defaultPeriod(context.ledger_start));
+  const [query, setQuery] = useState(initialInvoice?.number || ''), [draft, setDraft] = useState(initialInvoice?.number || '');
   const [account, setAccount] = useState(''), [direction, setDirection] = useState(''), [status, setStatus] = useState('');
   const [page, setPage] = useState(1), [detail, setDetail] = useState(null);
   const dialog = useRef(null);
@@ -157,13 +161,19 @@ function LedgerPage({ context, identity, resource, onDetail, onAdd, onBack, onRe
     {resource && onBack && <button type="button" className="textbtn back" onClick={() => onBack(resource)}><Icon name="chevron-left" />
       {isAsset(resource.kind) ? 'الأصول والحسابات' : 'الأشخاص والجهات'}</button>}
     <Heading title={resource?.name || 'سجل الحركات'} subtitle={resource ? styleOf(resource)[0] + ' · كشف الحساب' : 'ابحث باسم الحساب أو الموظف أو رقم الطلب أو المرجع.'}>
-      {onAdd && <button type="button" className="button primary" onClick={() => onAdd(resource)}><Icon name="plus" />{resource?.kind === 'ad_account' ? 'شحن رصيد الإعلان' : resource ? 'سجّل حركة' : 'حركة مالية جديدة'}</button>}
+      {onPurchase && <button type="button" className="button primary" onClick={onPurchase}><Icon name="receipt-text" />شراء آجل</button>}
+      {onAdd && <button type="button" className="button primary" onClick={() => onAdd(resource)}><Icon name="plus" />{resource?.kind === 'ad_account' ? 'شحن رصيد الإعلان' : resource?.kind === 'supplier' && resource.operations?.includes('supplier.payment') ? 'تسديد مبلغ' : resource ? 'سجّل حركة' : 'حركة مالية جديدة'}</button>}
       {summary?.can_print && <PeriodPrint key={JSON.stringify([scope, period, resourceKey(resource)])} resource={resource} scope={scope} period={period} />}
     </Heading>
     {resource && readable && <section className="panel sheet"><div className="section-head"><h2>كشف الفترة</h2><Icon name="calendar-days" /></div>
       <Range value={period} start={context.ledger_start} onChange={changePeriod} /></section>}
     {summary && <Metrics period={summary} resource={resource} />}
-    {resource?.access?.balance && (!resource.access.report || !readable) && <div className="metrics"><div className="metric accent">
+    {resource?.kind === 'ad_account' && resource.access?.balance && <div className="metric accent"><small>الرصيد الحالي</small><strong><AdBalance resource={resource} /></strong></div>}
+    {resource?.kind === 'provider' && resource.id === 'paypal' && resource.access?.balance &&
+      <div className="metric accent"><small>صافي رصيد باي بال الحالي بالريال</small><strong>{resource.balance
+        ? <Amount value={resource.balance.side === 'for_party' ? '-' + resource.balance.amount : resource.balance.amount} currency="SAR"/>
+        : 'يحتاج مطابقة'}</strong></div>}
+    {resource?.kind !== 'ad_account' && !(resource?.kind === 'provider' && resource.id === 'paypal') && resource?.access?.balance && (!resource.access.report || !readable) && <div className="metrics"><div className="metric accent">
       <small>الرصيد الحالي</small><strong><LedgerBalance value={signedResourceBalance(resource)} resource={resource} /></strong></div></div>}
     {resource?.access?.movements === 'own' && <p className="note">يعرض هذا الكشف الحركات التي سجّلتها أنت.</p>}
     {result?.balance_note && <p className="note">{result.balance_note}</p>}
@@ -194,9 +204,10 @@ function LedgerPage({ context, identity, resource, onDetail, onAdd, onBack, onRe
     {resource?.kind === 'store_driver' && resource.access?.movements === 'all' && onReviewCollections &&
       <p className="footnote"><button type="button" className="textbtn" onClick={() => onReviewCollections(resource, 'pending')}><Icon name="clock-3" />عرض التحصيلات التي تنتظر الاعتماد لهذا الحساب</button></p>}
     {detail && <dialog ref={dialog} className="panel" onClose={() => setDetail(null)}>
-      <h2>تفاصيل الحركة</h2><dl className="detail-list">{[['البيان',detail.description],['المبلغ',<Amount value={detail.amount} currency={detail.currency} />],
+      <h2>{detail.invoice_id ? 'تفاصيل فاتورة المورد' : 'تفاصيل الحركة'}</h2><dl className="detail-list">{[['البيان',detail.description],['المبلغ',<Amount value={detail.amount} currency={detail.currency} />],
         ['الحساب',detail.party_name],['من',detail.from_name],['إلى',detail.to_name],['التاريخ',movementDate(detail,true)],['سجّلها',movementRecorder(detail)],
         ['المرجع',detail.reference],['رقم الطلب',detail.order_number],['الملاحظة',detail.note]].filter(([,v])=>v).map(([t,v])=><div key={t}><dt>{t}</dt><dd>{v}</dd></div>)}</dl>
+      {detail.invoice_id && <SupplierInvoiceDetail row={detail} scope={[identity, context.session_scope, context.permission_version]}/>}
       <button type="button" className="button" onClick={() => setDetail(null)}>إغلاق</button></dialog>}
   </>;
 }

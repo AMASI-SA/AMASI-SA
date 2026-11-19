@@ -341,12 +341,18 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
             except ValueError:
                 fail("operational_order_ineligible", "الطلب أو حالته أو إثباته غير مؤهل لاحتساب الحركة")
         reference = payload.get("reference", "").strip()
+        paypal_payout = row["kind"] == "provider" and row["id"] == "paypal" and payload["kind"] != "correction"
+        if paypal_payout and (not bank or bank["kind"] != "bank" or currency != "SAR"
+                or payload["kind"] != "collection" or payload["direction"] != "incoming"
+                or not payload.get("business_date") or not reference or payload.get("bank_arrival_confirmed") is not True
+                or payload.get("allocations") or money(payload.get("actual_fee_amount", "0"), zero=True)):
+            fail("operational_paypal_bank_confirmation_required", "حدد البنك وأكّد صافي الحوالة وتاريخ وصولها ومرجعها", 422)
         pos_settlement = row["kind"] == "pos_receivable" and payload["kind"] != "correction"
         if pos_settlement and (not bank or bank["kind"] != "bank" or payload["direction"] != "incoming"
                 or payload["kind"] not in {"collection", "settlement"} or not payload.get("business_date")
                 or payload.get("bank_arrival_confirmed") is not True or not reference):
             fail("operational_pos_bank_confirmation_required", "أكد مطابقة وصول الحوالة إلى البنك وأدخل مرجعها وتاريخها", 422)
-        if pos_settlement and date.fromisoformat(payload["business_date"]) < datetime.fromisoformat(
+        if (pos_settlement or paypal_payout) and date.fromisoformat(payload["business_date"]) < datetime.fromisoformat(
                 state["started_at"].replace("Z", "+00:00")).astimezone(ZoneInfo("Asia/Riyadh")).date():
             fail("operational_business_date_invalid", "تاريخ وصول الحوالة يسبق بداية الأرصدة التشغيلية", 422)
         if payload["kind"] == "transfer" and bank and bank["kind"] == "bank" and row["kind"] == "cash" and not reference:
@@ -367,7 +373,11 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
             fail("operational_actual_fee_evidence_required", "رسوم التسوية تخص تسوية واردة من المنصة")
         requested = payload.get("allocations", [])
         party_available = None
-        if row["kind"] not in {"bank", "cash", "employee_custody"}:
+        if paypal_payout:
+            party_available = paypal_available(report(state, paypal_sar=True))
+            if party_available is None or amount > party_available:
+                fail("operational_paypal_insufficient", "تعذر مطابقة مبلغ الحوالة مع صافي رصيد باي بال المتاح", 409)
+        elif row["kind"] not in {"bank", "cash", "employee_custody"}:
             balance = next((r for r in report(state)["parties"] if r["party_type"] == row["kind"]
                             and r["party_id"] == row["id"] and r["currency"] == currency), {})
             field = "outstanding_receivable" if payload["direction"] == "incoming" else "outstanding_payable"
@@ -378,7 +388,7 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
                 and payload["kind"] in {"payment", "settlement"}
                 and amount > max(party_available - Decimal(balance.get("outstanding_receivable", "0")), Decimal(0))):
             fail("operational_supplier_payment_exceeds_payable", "لا يمكن سداد المورد دون مستحق، أو بأكثر من المبلغ المستحق")
-        if (not wallet_pool and not requested and external_operation not in EXTERNAL_CREATION
+        if (not wallet_pool and not paypal_payout and not requested and external_operation not in EXTERNAL_CREATION
                 and (payload["kind"] in {"payment", "collection", "refund"} or pos_settlement or external_operation in EXTERNAL_REPAYMENT)
                 and row["kind"] not in {"bank", "cash", "employee_custody"}):
             left, requested = min(amount, party_available) if party_available is not None else amount, []
@@ -753,12 +763,25 @@ async def supplier_return(db, owner, actor, payload, *, clock=None):
     return await mutate(db, owner, apply)
 
 
-def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=False, provider_balances_net=False):
+def paypal_available(computed):
+    groups = computed["details"]["provider_balances"]
+    if any(row["provider"] == "paypal" for unit, rows in groups.items() if unit != "SAR" for row in rows):
+        return None
+    summary = next((r for r in groups.get("SAR", []) if r["provider"] == "paypal"), None)
+    if summary is None:
+        coverage = computed["details"].get("customer_tender_coverage", {})
+        return Decimal(0) if coverage.get("paypal_provider_recognized") and not coverage.get("uninspected_source_orders") else None
+    return Decimal(summary["net"]) if summary.get("complete") and summary.get("net") is not None else None
+
+
+def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=False, provider_balances_net=False, paypal_sar=False):
     from operational_financial_activity_runtime import preparation_checkpoint
     preparation_checkpoint()
     state = reconcile_credits(deepcopy(state))
     from operational_provider_balance_sar import convert_claim, convert_projection, unavailable, usable_bases
-    valuations = usable_bases(state) if provider_balances_sar else {}
+    valuations = usable_bases(state) if provider_balances_sar or paypal_sar else {}
+    if paypal_sar and not provider_balances_sar:
+        valuations = {key: value for key, value in valuations.items() if value["provider"] == "paypal"}
     valuation_issues = []
     allocated = {}
     for movement in state["movements"]:
@@ -796,7 +819,8 @@ def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=Fa
     for obligation in obligations:
         preparation_checkpoint()
         used = allocated.get(obligation["id"], Decimal(0))
-        if provider_balances_sar and obligation["party_type"] == "provider" and obligation["currency"] != "SAR":
+        if ((provider_balances_sar or paypal_sar and obligation["party_id"] == "paypal")
+                and obligation["party_type"] == "provider" and obligation["currency"] != "SAR"):
             original = obligation.get("original_obligation_id", obligation["id"])
             basis = valuations.get(original, {})
             if basis and (basis["provider"], basis["currency"]) == (obligation["party_id"], obligation["currency"]):
@@ -1066,7 +1090,7 @@ def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=Fa
     from operational_provider_summary import provider_balances
     details["provider_balances"], resolved_fees = provider_balances(
         state, details, obligations, parties if provider_balances_net else deepcopy(parties), valuations,
-        sar_view=provider_balances_sar)
+        sar_view=provider_balances_sar, paypal_sar=paypal_sar)
     issues = [entry for entry in issues if not (
         entry.get("code") == "provider_fee_estimate_unavailable" and entry.get("source_id") in resolved_fees)]
     for currency, providers in details["provider_balances"].items():

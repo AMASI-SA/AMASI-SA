@@ -246,7 +246,7 @@ def _unclaimed_same_provider_aliases(state, records, claims):
     return aliases
 
 
-def provider_balances(state, details, obligations, parties, valuations, *, sar_view=False):
+def provider_balances(state, details, obligations, parties, valuations, *, sar_view=False, paypal_sar=False):
     """Project fees once on the unpaid gross claim. Never change saved financial state."""
     records, claims = _records(state, obligations, valuations)
     aliases = _unclaimed_same_provider_aliases(state, records, claims)
@@ -548,11 +548,11 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
                                   if code != "provider_fee_estimate_unavailable"))
         for oid in total["_held"] - explained:
             pending(total, oid, "provider_balance_recognition_pending")
-    if sar_view:
+    if sar_view or paypal_sar:
         coverage = details.get("customer_tender_coverage", {}).get("sar", {})
         for source in coverage.get("by_method", []):
             provider = source.get("method")
-            if provider not in PLATFORMS:
+            if provider not in PLATFORMS or (not sar_view and provider != "paypal"):
                 continue
             total = group("SAR", provider)
             total["source_order_count"] = source.get("orders", 0)
@@ -642,6 +642,10 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
         taken = min(party["outstanding_receivable"], deduction)
         party["outstanding_receivable"] -= taken
         party["outstanding_payable"] += deduction - taken
+        if party["party_id"] == "paypal":
+            offset = min(party["outstanding_receivable"], party["outstanding_payable"])
+            party["outstanding_receivable"] -= offset
+            party["outstanding_payable"] -= offset
         party["provider_fees_remaining"] = _money(deduction)
         party["provider_net_complete"] = total["complete"]
         total["known_net"] += party["outstanding_receivable"] - party["outstanding_payable"]

@@ -44,3 +44,22 @@ test('an employee assigned only the finance home sees no links to ungranted stat
   expect(host.querySelector('a[href*="view=entry"], a[href*="view=tools"], a[href*="view=ledger"], a[href*="view=log"]')).toBeNull();
   expect(api.context).toHaveBeenCalledTimes(1);
 });
+
+test('the existing supplier operations link opens an independent invoice for accrual staff', async () => {
+  api.context.mockResolvedValue({...ctx,operations:[{key:'supplier.accrual'}],capabilities:{create_entries:true},
+    resources:[{...ctx.resources[2],access:{use:true,movements:'own'},operations:['supplier.accrual']}]});
+  await act(async()=>root.render(<MemoryRouter initialEntries={[base+'?view=special-entry&kind=supplier&id=3']}><ApprovedFinance/></MemoryRouter>));
+  expect(host.querySelector('h1').textContent).toBe('فاتورة شراء آجل');
+  expect(host.textContent).toContain('مورد التفصيل');
+  expect(host.querySelector('fieldset select').value).toBe('service');
+  expect(host.textContent).not.toContain('المتبقي للمورد بعد الحفظ');
+  expect(api.movements).not.toHaveBeenCalled();
+});
+
+test('a payment-only user cannot open the supplier purchase form by URL', async () => {
+  api.context.mockResolvedValue({...ctx,operations:[{key:'supplier.payment'}],capabilities:{create_entries:true},
+    resources:[{...ctx.resources[2],access:{use:true,movements:'own'},operations:['supplier.payment']}]});
+  await act(async()=>root.render(<MemoryRouter initialEntries={[base+'?view=special-entry&kind=supplier&id=3&mode=purchase']}><ApprovedFinance/></MemoryRouter>));
+  expect(host.textContent).toContain('هذه الصفحة غير متاحة ضمن صلاحياتك');
+  expect(host.querySelector('form')).toBeNull();
+});

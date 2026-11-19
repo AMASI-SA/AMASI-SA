@@ -67,7 +67,7 @@ ALLOWED_COLLECTIONS = frozenset(ENTITY_COLLECTIONS.values()) | {
 from operational_remaining_bundle_sources import READ_COLLECTIONS as BUNDLE_READ_COLLECTIONS
 ALLOWED_COLLECTIONS = ALLOWED_COLLECTIONS | BUNDLE_READ_COLLECTIONS
 
-PROVIDERS = ('salla', 'tabby', 'tamara', 'emkan')
+PROVIDERS = ('salla', 'tabby', 'tamara', 'emkan', 'paypal')
 from operational_payment_evidence import PAYMENT_METHODS, DIAGNOSTICS
 from operational_provider_transaction_evidence import (COLLECTION as TXN_COLLECTION,
     load_transaction_rows, normalize_operational_payment)
@@ -470,7 +470,7 @@ async def entities(db, owner, kind, *, include_unready=False, operational_state=
                            'kind': kind, 'source': 'mz2_operational_owner_beneficiaries_v2'})
         return result
     if kind == 'provider':
-        return [{'id': p, 'name': {'salla': 'سلة', 'tabby': 'تابي', 'tamara': 'تمارا', 'emkan': 'إمكان'}[p],
+        return [{'id': p, 'name': {'salla': 'سلة', 'tabby': 'تابي', 'tamara': 'تمارا', 'emkan': 'إمكان', 'paypal': 'باي بال'}[p],
                  'kind': kind, 'currency': 'SAR'} for p in PROVIDERS]
     if kind == 'courier':
         setups = await rows(db, owner, 'mz2_shipping_setup_v2')
@@ -1462,6 +1462,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
     with refresh_stage('source_orders'):
         from operational_customer_tender_coverage import finish_coverage, new_coverage, observe_nonprovider
         customer_tenders = out["customer_tender_coverage"] = new_coverage(start.isoformat(), now.isoformat())
+        customer_tenders["paypal_provider_recognized"] = True
         counted_order_ids, inspected_order_ids = set(), set()
         from operational_completed_shipping_admission import build_review_index
         from operational_provider_statement_reconciliation import statement_refund_order_index, statement_refund_observation
@@ -1885,6 +1886,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
         piece_index = unique_index(pieces, 'id')
         invoice_counts = Counter(r.get('id') for r in data['mezan_supplier_invoices_v2'])
         coverage = {}
+        from operational_workspace_supplier_invoices import invoice_actor
         for invoice in data['mezan_supplier_invoices_v2']:
             await cpu_budget.checkpoint()
             calculation_checkpoint()
@@ -1928,6 +1930,10 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
             except (ValueError, KeyError, TypeError):
                 issue(out, 'supplier_invoice_tax_contract_incomplete', invoice.get('id'))
                 continue
+            actor_id, actor_name = invoice_actor(invoice)
+            if accepted >= start and actor_id:
+                out.setdefault('supplier_invoice_actors', {})[invoice['id']] = {
+                    'supplier_id': invoice['supplier_id'], 'id': actor_id, 'name': actor_name}
             for line in invoice.get('lines', []):
                 await cpu_budget.checkpoint()
                 calculation_checkpoint()
