@@ -85,7 +85,6 @@ def test_only_explicit_store_courier_identity_is_eligible():
 
 def test_my_shipment_stage_filters_keep_each_queue_isolated():
     assert _my_stage_filter("waiting") == {
-        "stage": "completed",
         "store_courier_assignment_state": ASSIGNED_WAITING_PICKUP,
     }
     assert _my_stage_filter("delivering") == {
@@ -128,16 +127,9 @@ def test_address_text_builds_stable_fallback_without_duplicates():
     }) == "RRAA1234، الياسمين، أنس بن مالك، 12، الرياض، السعودية"
 
 
-def test_dispatch_requires_ready_completed_store_courier_shipment_without_extra_print_gate():
-    ready = {
-        "carrier_label_type": "store_courier",
-        "carrier_label_ready": True,
-        "stage": "completed",
-        "assembly_status": "completed",
-    }
-
-    assert _store_courier_assignment_blocker(ready) is None
-    assert _store_courier_assignment_blocker({
-        **ready,
-        "carrier_label_print_confirmed": False,
-    }) is None
+def test_assignment_uses_salla_carrier_and_current_status():
+    order = {"shipping_company": "مندوب الرياض", "order_status_slug": "تم التنفيذ"}
+    assert _store_courier_assignment_blocker(order) is None
+    assert _store_courier_assignment_blocker({**order, "order_status_slug": "جاري التوصيل"}) == "salla_assignment_status_ineligible"
+    assert _store_courier_assignment_blocker({**order, "order_status_slug": "جاري التوصيل"}, transfer=True) is None
+    assert _store_courier_assignment_blocker({**order, "shipping_company": "أرامكس"}, transfer=True) == "salla_store_courier_required"

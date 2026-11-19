@@ -150,6 +150,11 @@ def carrier_assignment_snapshot(
 ) -> dict[str, Any]:
     """Only NEW assignments use carrier matching; historical rows are untouched."""
     assert_driver_can_take_shipping_company(driver=driver, shipping_company=shipping_company)
+    return store_courier_snapshot(driver=driver, shipping_company=shipping_company, shipping_city=shipping_city)
+
+
+def store_courier_snapshot(*, driver: dict[str, Any], shipping_company: Any, shipping_city: Any) -> dict[str, Any]:
+    """Freeze the actual carrier and the selected courier's fee independently."""
     return {
         "driver_id": normalize_text(driver.get("id")),
         "driver_name_snapshot": normalize_text(driver.get("name")),
@@ -160,6 +165,19 @@ def carrier_assignment_snapshot(
         "delivery_fee_snapshot": float(money(driver.get("delivery_fee"))),
         "coverage_mode_snapshot": "shipping_company",
     }
+
+
+def assignment_carrier_changed(assignment: dict[str, Any], shipping_company: Any) -> bool:
+    """Compare the current carrier with the immutable assignment identity.
+
+    Sparse legacy rows have no carrier proof and cannot establish a change.
+    Driver profile edits must never rewrite the original assignment identity.
+    """
+    expected = normalize_shipping_carrier(
+        assignment.get("shipping_company_snapshot") or assignment.get("driver_shipping_company_snapshot")
+    )
+    current = normalize_shipping_carrier(shipping_company)
+    return bool(expected and current and expected != current)
 
 
 def collection_requirements(*, outstanding_amount: Any, payment_method: str | None) -> dict[str, Any]:
@@ -224,6 +242,7 @@ __all__ = [
     "assert_driver_can_take_shipment",
     "assert_driver_can_take_shipping_company",
     "carrier_assignment_snapshot",
+    "assignment_carrier_changed",
     "normalize_shipping_carrier",
     "is_city_courier_company",
     "assignment_snapshot",
