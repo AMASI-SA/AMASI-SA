@@ -75,7 +75,7 @@ afterEach(() => { act(() => root.unmount()); host.remove(); });
 test('the daily list renders five records, recorder names, and real pagination', async () => {
   await render(<SimpleBalances />);
   expect(host.querySelectorAll('[data-testid="simple-movement-row"]')).toHaveLength(5);
-  expect(host.textContent).toContain('سجّلها: غير موثق');
+  expect(host.textContent).toContain('سجّلها: اسم الموظف غير متوفر');
   expect(host.textContent).toContain('سجّلها: محمد');
   await click('التالي');
   expect(api.movements).toHaveBeenLastCalledWith({ page: 2, page_size: 5 }, expect.objectContaining({ signal: expect.any(AbortSignal) }));

@@ -20,6 +20,26 @@ export function Amount({ value, currency = 'SAR' }) {
   const units = minorUnits(value);
   return units === null ? 'غير متاح' : <span className="amt"><bdi>{formatMinor(units)}</bdi> <span className="unit">{currency === 'SAR' ? 'ر.س' : currency}</span></span>;
 }
+export function AdBalance({ resource }) {
+  if (!resource.access?.balance || resource.balance?.visible === false) return null;
+  const amounts = resource.ad_amounts;
+  if (!amounts) {
+    return <>{resource.ad_wallet_balance != null && <span>رصيد مقدم <Amount value={resource.ad_wallet_balance} currency={resource.currency} /></span>}
+      <small className="under">المبلغ المستحق غير متاح</small></>;
+  }
+  const prepaid = minorUnits(amounts.prepaid), payable = minorUnits(amounts.payable);
+  if (prepaid === null || payable === null) return <span>الرصيد غير متاح</span>;
+  const showPrepaid = prepaid !== 0n;
+  return <>
+    {showPrepaid && <span>رصيد مقدم <Amount value={amounts.prepaid} currency={amounts.currency} /></span>}
+    {showPrepaid && payable !== 0n && <br />}
+    {payable !== 0n && <span>علينا <Amount value={amounts.payable} currency={amounts.currency} /></span>}
+    {!showPrepaid && payable === 0n && <span>الحساب متوازن <Amount value="0.00" currency={amounts.currency} /></span>}
+    {amounts.native && <small className="under">{showPrepaid && <>رصيد مقدم <Amount value={amounts.native.prepaid} currency="USD" /> </>}
+      {payable !== 0n && <>علينا <Amount value={amounts.native.payable} currency="USD" /> قبل الرسوم</>}</small>}
+    {amounts.currency === 'USD' && <small className="under">التحويل إلى الريال غير متاح</small>}
+  </>;
+}
 export const kindStyles = {
   bank:['بنك','landmark','bank'], cash:['صندوق','banknote','cash'], provider:['مزود دفع','credit-card','provider'],
   ad_account:['حساب إعلاني','megaphone','ads'], pos_receivable:['شبكة','credit-card','provider'],

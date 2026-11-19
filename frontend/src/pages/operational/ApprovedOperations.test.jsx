@@ -97,3 +97,16 @@ it.each([
   expect(host.querySelector('[data-testid=settings-back]').getAttribute('href')).toBe(back);
   expect(http.get).toHaveBeenCalledTimes(1); expect(http.put).not.toHaveBeenCalled();
 });
+
+it('shows SAR debt with the native USD amount and keeps prepaid funds separate',async()=>{
+  const resources = [
+    {...ad, ad_amounts:{currency:'SAR',prepaid:'0.00',payable:'383.63',native:{currency:'USD',prepaid:'0.00',payable:'100.00'}}},
+    {...ad, id:'prepaid',name:'تيك توك',currency:'SAR',ad_amounts:{currency:'SAR',prepaid:'420.00',payable:'0.00'}},
+  ];
+  await show(<ApprovedPosition context={{...context,resources}} identity="owner"/>);
+  const rows = [...host.querySelectorAll('.mz-position-line')].map(el=>el.textContent);
+  expect(rows[0]).toContain('علينا 383.63 ر.س');
+  expect(rows[0]).toContain('100.00 USD');
+  expect(rows[1]).toContain('رصيد مقدم 420.00 ر.س');
+  expect(rows[1]).not.toContain('علينا');
+});

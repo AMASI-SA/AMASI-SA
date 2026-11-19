@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import ApprovedEntry from './ApprovedEntry';
 import ApprovedRefund from './ApprovedRefund';
+import SupplierCreditPurchase from './SupplierCreditPurchase';
 import { simpleBalancesApi as api } from './simpleBalancesApi';
 
 jest.mock('react-router-dom', () => {
@@ -89,4 +90,37 @@ test('the USD advertising payment uses the selected account quote only and the e
   await click('احسب المقابل'); expect(api.quoteAd).toHaveBeenCalledTimes(1);
   await click('مراجعة الحركة'); await click('تأكيد وتسجيل الحركة');
   expect(api.entry).toHaveBeenCalledWith(expect.objectContaining({party_id:'سناب',source_id:'الإنماء',amount:'99.00',ad_bank_funding:{bank_amount:'375.00',bank_fee_amount:'3.75',kind:'wallet_funding'}}));
+});
+
+test('independent embroidery invoice supports mixed lines, Arabic decimals, preview and safe confirmation', async () => {
+  const ctx = context(), vendor = {...ctx.resources[0],access:{balance:true,use:true},balance:{side:'for_party',amount:'4761.00'}};
+  api.entry.mockImplementation(async c=>({saved:true,party_type:c.party_type,party_id:c.party_id,amount:c.amount,
+    movement_id:'obligation',invoice_id:'credit-1',invoice_number:'MZ-PI-000001'}));
+  await render(<SupplierCreditPurchase context={ctx} resource={vendor} onSaved={saved}/>);
+  const set = async (el,value) => act(async()=>{
+    const isSelect = el.tagName==='SELECT';
+    Object.getOwnPropertyDescriptor(isSelect?HTMLSelectElement.prototype:HTMLInputElement.prototype,'value').set.call(el,value);
+    el.dispatchEvent(new Event(isSelect?'change':'input',{bubbles:true}));
+  });
+  await set(host.querySelector('input[placeholder]'),'تطريز إضافي');
+  const [qty,price] = host.querySelectorAll('fieldset input[inputmode=decimal]');
+  await set(qty,'١٠'); await set(price,'٨');
+  expect(host.textContent).toContain('4,841.00');
+  await click('إضافة بند');
+  const second = host.querySelectorAll('fieldset')[1];
+  await set(second.querySelector('select'),'product');
+  await set(second.querySelector('input[placeholder]'),'خيط');
+  const [qty2,price2] = second.querySelectorAll('input[inputmode=decimal]');
+  await set(qty2,'١٫٢٥'); await set(price2,'٢٫٥٠');
+  await click('مراجعة الفاتورة');
+  expect(api.registerPending).not.toHaveBeenCalled();
+  expect(host.textContent).toContain('4,844.13');
+  await click('حفظ الفاتورة على حساب المورد'); await click('حفظ الفاتورة على حساب المورد');
+  expect(saved).toHaveBeenCalledTimes(1);
+  expect(api.entry).toHaveBeenCalledTimes(1);
+  expect(api.entry.mock.calls[0][0]).toMatchObject({party_id:vendor.id,party_type:'supplier',side:'for_party',
+    reason:'credit_purchase',amount:'83.13',invoice:{tax:'0.00',lines:[
+      {kind:'service',name:'تطريز إضافي',quantity:'10',unit_price:'8.00'},
+      {kind:'product',name:'خيط',quantity:'1.25',unit_price:'2.50'}]}});
+  expect(api.entry.mock.calls[0][0]).not.toHaveProperty('source_id');
 });

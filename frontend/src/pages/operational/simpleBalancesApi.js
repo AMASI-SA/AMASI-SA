@@ -13,6 +13,9 @@ export const simpleBalancesApi = {
     `${workspace}/ledger/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`,
     { ...read(config), params: kind === 'ad_account' ? { ...params, ad_bank_fx: true } : params },
   )),
+  supplierInvoice: (supplier, invoice, config) => data(http.get(
+    `${workspace}/supplier-invoices/${encodeURIComponent(supplier)}/${encodeURIComponent(invoice)}`, read(config),
+  )),
   history: (kind, id, params, config) => data(http.get(
     `${workspace}/history/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`, { ...read(config), params },
   )),

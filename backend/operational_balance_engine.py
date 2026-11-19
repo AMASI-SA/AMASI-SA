@@ -167,6 +167,8 @@ def reconcile(state, sources, as_of):
     if now < start:
         raise ValueError("as_of_before_start")
     engine = result.setdefault("engine", {})
+    if sources.get("supplier_invoice_actors"):
+        engine.setdefault("supplier_invoice_actors", {}).update(sources["supplier_invoice_actors"])
     # Save the activation boundary only as part of the aggregate reconciliation.
     # Read-only previews can never admit earlier newly eligible completion fees.
     from operational_completed_shipping_admission import initialize_admission

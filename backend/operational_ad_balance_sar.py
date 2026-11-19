@@ -94,39 +94,58 @@ def funding_quote(amount, currency, basis):
             "fee_vat_sar": format(vat, ".2f"), "exchange_rate": str(rate)}
 
 
+def _valued_party(party, basis):
+    if basis.get("currency") != "USD" or basis.get("source") != COLLECTION:
+        raise ValueError("ad_balance_cost_settings_missing")
+    rate = _decimal(basis["exchange_rate_to_sar"])
+    pct = _decimal(basis["bank_commission_pct"])
+    vat_pct = _decimal(basis["bank_commission_vat_pct"])
+    if (not 0 < rate <= 20 or not 0 <= pct <= 20 or not 0 <= vat_pct <= 100
+            or not isinstance(basis.get("apply_bank_commission"), bool)):
+        raise ValueError("ad_balance_cost_settings_invalid")
+    native = {field: format(value, ".2f") for field, value in party.items() if isinstance(value, Decimal)}
+    converted = {field: _money(value * rate) if isinstance(value, Decimal) else value
+                 for field, value in party.items()}
+    payable = converted["outstanding_payable"]
+    commission, vat = bank_charges(payable, pct if basis["apply_bank_commission"] else Decimal(0), vat_pct)
+    for field in ("outstanding_payable", "confirmed_payable", "ad_payable"):
+        if field in converted:
+            converted[field] += commission + vat
+    converted.update(currency="SAR", native_balance={"currency": "USD", **native},
+                     ad_sar_valuation={**basis, "amount_sar": format(payable, ".2f"),
+                                       "bank_commission": format(commission, ".2f"),
+                                       "bank_commission_vat": format(vat, ".2f")})
+    return converted
+
+
+def workspace_amounts(row, basis, has_sar_row=False):
+    """Return display amounts only. Entry and statement currencies stay native."""
+    if not row:
+        return None
+    currency = row["currency"]
+    amounts = {"currency": currency, "prepaid": row["ad_wallet_balance"], "payable": row["outstanding_payable"]}
+    if currency != "USD" or has_sar_row:
+        return amounts
+    try:
+        converted = _valued_party({"outstanding_payable": _decimal(amounts["payable"]),
+                                   "ad_wallet_balance": _decimal(amounts["prepaid"])}, basis)
+    except (KeyError, TypeError, ValueError):
+        return amounts
+    return {**amounts, "currency": "SAR", "prepaid": format(converted["ad_wallet_balance"], ".2f"),
+            "payable": format(converted["outstanding_payable"], ".2f"), "native": amounts}
+
+
 def project_parties(parties, bases, issues):
     """Convert the current unpaid balance once after native funding allocation."""
     for key, party in list(parties.items()):
         if party["party_type"] != "ad_account" or party["currency"] != "USD":
             continue
-        basis = bases.get(party["party_id"], {})
-        target_key = ("ad_account", party["party_id"], "SAR")
         try:
-            if basis.get("currency") != "USD" or basis.get("source") != COLLECTION:
-                raise ValueError("ad_balance_cost_settings_missing")
-            rate = _decimal(basis["exchange_rate_to_sar"])
-            pct = _decimal(basis["bank_commission_pct"])
-            vat_pct = _decimal(basis["bank_commission_vat_pct"])
-            if (not 0 < rate <= 20 or not 0 <= pct <= 20 or not 0 <= vat_pct <= 100
-                    or not isinstance(basis.get("apply_bank_commission"), bool)
-                    or any(row["party_type"] == target_key[0] and row["party_id"] == target_key[1]
-                           and row["currency"] == target_key[2] for row in parties.values())):
+            if any(row["party_type"] == "ad_account" and row["party_id"] == party["party_id"]
+                   and row["currency"] == "SAR" for row in parties.values()):
                 raise ValueError("ad_balance_cost_settings_invalid")
+            parties[key] = _valued_party(party, bases.get(party["party_id"], {}))
         except (ValueError, KeyError, TypeError):
             issues.append({"code": "ad_balance_sar_unavailable", "source_id": party["party_id"],
                            "currency": "SAR", "source_currency": "USD",
                            "message": "إعدادات تحويل الحساب الإعلاني الدولاري تحتاج إلى استكمال."})
-            continue
-        native = {field: format(value, ".2f") for field, value in party.items() if isinstance(value, Decimal)}
-        converted = {field: _money(value * rate) if isinstance(value, Decimal) else value
-                     for field, value in party.items()}
-        payable = converted["outstanding_payable"]
-        commission, vat = bank_charges(payable, pct if basis["apply_bank_commission"] else Decimal(0), vat_pct)
-        converted["outstanding_payable"] += commission + vat
-        converted["confirmed_payable"] += commission + vat
-        converted["ad_payable"] += commission + vat
-        converted.update(currency="SAR", native_balance={"currency": "USD", **native},
-                         ad_sar_valuation={**basis, "amount_sar": format(payable, ".2f"),
-                                           "bank_commission": format(commission, ".2f"),
-                                           "bank_commission_vat": format(vat, ".2f")})
-        parties[key] = converted
