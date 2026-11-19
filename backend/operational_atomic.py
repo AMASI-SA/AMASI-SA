@@ -41,6 +41,11 @@ _PROFILES = {
         "store_delivery_assignments", "store_delivery_collections", "store_delivery_driver_earnings",
         "store_delivery_delivery_proofs", "store_delivery_events", "unified_orders", "order_review_workflows",
     }),
+    "driver_noncash_delivery": frozenset({
+        "store_delivery_assignments", "store_delivery_collections", "store_delivery_driver_earnings",
+        "store_delivery_delivery_proofs", "store_delivery_receipts", "store_delivery_payment_reviews",
+        "store_delivery_customer_conversation_evidence", "store_delivery_events", "unified_orders", "order_review_workflows",
+    }),
     "driver_cash_reconciliation": frozenset({"mz2_driver_cash_reconciliations_v1"}),
     "driver_late_delivery_evidence": frozenset({
         "store_delivery_late_evidence_events_v1", "store_delivery_delivery_proofs",
@@ -104,6 +109,65 @@ _DRIVER_CASH_UNSETS = {
         "store_courier_exception_evidence_url", "customer_service_attention_required",
     }),
 }
+_DRIVER_BANK_IDENTITY_FIELDS = frozenset({"bank_identity_source", "bank_identity_version", "bank_financial_source",
+                                          "bank_operational_started_at"})
+_DRIVER_NONCASH_INSERTS = {
+    "store_delivery_collections": (_DRIVER_CASH_INSERTS["store_delivery_collections"] - {"physical_cash_evidence"}) | _DRIVER_BANK_IDENTITY_FIELDS,
+    "store_delivery_driver_earnings": _DRIVER_CASH_INSERTS["store_delivery_driver_earnings"],
+    "store_delivery_payment_reviews": frozenset({"id", "user_id", "assignment_id", "driver_id", "driver_name_snapshot",
+        "order_id", "order_number", "amount", "amount_source", "payment_method", "receipt_reference", "receipt_url",
+        "bank_account_id", "bank_name_snapshot", "status", "submitted_at"}) | _DRIVER_BANK_IDENTITY_FIELDS,
+    "store_delivery_events": _DRIVER_CASH_INSERTS["store_delivery_events"] | {
+        "order_number", "target_status", "evidence_reference", "evidence_url", "actor_account_user_id"},
+}
+_DRIVER_NONCASH_SETS = {
+    **_DRIVER_CASH_SETS,
+    "store_delivery_assignments": _DRIVER_CASH_SETS["store_delivery_assignments"] | {
+        "noncash_delivery_attempt", "out_for_delivery_at", "delivery_status_evidence_reference",
+        "delivery_status_evidence_url", "delivery_status_evidence_at"},
+    "unified_orders": _DRIVER_CASH_SETS["unified_orders"] | {
+        "store_delivery_status_evidence_reference", "store_delivery_status_evidence_url", "store_delivery_status_evidence_at"},
+    "store_delivery_receipts": frozenset({"status", "bound_at"}),
+    "store_delivery_customer_conversation_evidence": frozenset({"status", "bound_at", "bound_event_id"}),
+    "order_review_workflows": _DRIVER_CASH_SETS["order_review_workflows"] | {
+        "store_courier_picked_up_at", "store_courier_picked_up_by_id"},
+}
+_DRIVER_NONCASH_UNSETS = {
+    **_DRIVER_CASH_UNSETS,
+    "store_delivery_assignments": _DRIVER_CASH_UNSETS["store_delivery_assignments"] | {"noncash_delivery_attempt"},
+    "store_delivery_receipts": frozenset(), "store_delivery_customer_conversation_evidence": frozenset(),
+}
+
+
+def _valid_noncash_insert(name, doc):
+    if not isinstance(doc, dict) or not set(doc) <= _DRIVER_NONCASH_INSERTS[name]:
+        return False
+    fields = set(doc) & _DRIVER_BANK_IDENTITY_FIELDS
+    if fields:
+        if fields != _DRIVER_BANK_IDENTITY_FIELDS or doc.get("payment_method") != "bank_transfer":
+            return False
+        source, phase = doc.get("bank_identity_source"), doc.get("bank_financial_source")
+        if type(doc.get("bank_identity_version")) is not int:
+            return False
+        if phase == "operational":
+            if (doc["bank_identity_version"] != 2 or source not in {"accounts", "mz2_operational_bank_accounts", "mz2_financial_accounts"}
+                    or not isinstance(doc.get("bank_operational_started_at"), str) or not doc["bank_operational_started_at"]):
+                return False
+        elif (phase not in {"native", "unavailable"} or source != "mz2_financial_accounts"
+                or doc["bank_identity_version"] != 1 or doc.get("bank_operational_started_at") is not None):
+            return False
+    if name == "store_delivery_events":
+        return doc.get("event_type") in {"store_delivery_out_for_delivery", "store_delivery_delivered", "store_delivery_status_evidence"}
+    if name == "store_delivery_payment_reviews":
+        return doc.get("status") == "pending" and doc.get("payment_method") in {"bank_transfer", "card_terminal"}
+    if (doc.get("accounting_status") != "operational_only" or doc.get("ledger_txn_group_id") is not None
+            or doc.get("accounting_operation_id") is not None):
+        return False
+    if name == "store_delivery_collections":
+        return doc.get("payment_method") in {None, "bank_transfer", "card_terminal"} and doc.get("cod_custody_amount") == 0
+    return doc.get("status") == "due"
+
+
 _READS = frozenset({"find", "find_one", "count_documents", "distinct", "aggregate"})
 _WRITES = frozenset({"insert_one", "insert_many", "update_one", "update_many",
                      "replace_one", "delete_one", "delete_many", "find_one_and_update"})
@@ -251,6 +315,10 @@ class _Collection:
                 _reject(self.__state)
             if self.__state["profile"] == "driver_cash_delivery":
                 allowed = {"insert_one"} if name in _DRIVER_CASH_INSERTS else {"update_one", "find_one_and_update"}
+                if method not in allowed:
+                    _reject(self.__state)
+            if self.__state["profile"] == "driver_noncash_delivery":
+                allowed = {"insert_one"} if name in _DRIVER_NONCASH_INSERTS else {"update_one", "find_one_and_update"}
                 if method not in allowed:
                     _reject(self.__state)
             if self.__state["profile"] in {"employee_setup", "employee_lifecycle"}:
@@ -401,6 +469,8 @@ class _Collection:
                 from store_delivery_cash_evidence import validate_evidence
                 if not validate_evidence(doc, self.__owner, doc.get("driver_id")):
                     _reject(self.__state)
+        if self.__state["profile"] == "driver_noncash_delivery" and not _valid_noncash_insert(name, doc):
+            _reject(self.__state)
         if self.__state["profile"] == "driver_cash_reconciliation":
             if not set(doc) <= {"_id", "id", "user_id", "driver_id", "request_id", "request_hash", "source",
                     "allocations", "reason", "recorded_by", "recorded_at", "financial_effect", "seal"}:
@@ -460,6 +530,51 @@ class _Collection:
             if name == "store_delivery_delivery_proofs" and (
                     query.get("status") != "uploaded" or values.get("status") != "bound"):
                 _reject(self.__state)
+        if self.__state["profile"] == "driver_noncash_delivery":
+            if (kwargs.get("upsert") or not set(update) <= {"$set", "$unset"}
+                    or not set(update.get("$set", {})) <= _DRIVER_NONCASH_SETS[name]
+                    or not set(update.get("$unset", {})) <= _DRIVER_NONCASH_UNSETS[name]):
+                _reject(self.__state)
+            values = update.get("$set", {})
+            if name == "store_delivery_assignments":
+                if query.get("status") not in {"assigned", "out_for_delivery"} or query.get("active") is not True or not query.get("driver_id"):
+                    _reject(self.__state)
+                if "noncash_delivery_attempt" in values:
+                    attempt = values["noncash_delivery_attempt"]
+                    pickup = (query.get("status") == "assigned" and values.get("status") == "out_for_delivery"
+                              and query.get("noncash_delivery_attempt.token"))
+                    if ((not pickup and (set(values) != {"noncash_delivery_attempt"} or update.get("$unset")))
+                            or (pickup and set(values) != {"status", "out_for_delivery_at", "updated_at",
+                                "salla_status_slug", "salla_status_updated_at", "noncash_delivery_attempt"})
+                            or not isinstance(attempt, dict)
+                            or not set(attempt) <= {"token", "fingerprint", "state", "phase", "provider_status",
+                                "started_at", "lease_until", "collection", "earning", "confirmed_at",
+                                "request_payload", "workflow_binding"}
+                            or attempt.get("phase", "delivery") not in {"pickup", "delivery"}
+                            or (attempt.get("provider_status") is not None and attempt["provider_status"] not in {"delivering", "delivered"})
+                            or attempt.get("state") not in {"dispatching", "reconciling", "uncertain", "confirmed"}
+                            or not re.fullmatch(r"[a-f0-9]{32}", str(attempt.get("token", "")))
+                            or not re.fullmatch(r"[a-f0-9]{64}", str(attempt.get("fingerprint", "")))):
+                        _reject(self.__state)
+                    for field, collection in (("collection", "store_delivery_collections"), ("earning", "store_delivery_driver_earnings")):
+                        row = attempt.get(field)
+                        if (not _valid_noncash_insert(collection, row) or row.get("user_id") != self.__owner
+                                or row.get("assignment_id") != query.get("id") or row.get("driver_id") != query.get("driver_id")):
+                            _reject(self.__state)
+                    from store_delivery_noncash_retry import _saved_request
+                    if "request_payload" in attempt and _saved_request(attempt) is None:
+                        _reject(self.__state)
+                    binding = attempt.get("workflow_binding", {"present": False})
+                    if (not isinstance(binding, dict) or type(binding.get("present")) is not bool
+                            or set(binding) - {"present", "row_id", "row_id_type", "order_number", "assignment_id", "driver_profile_id"}
+                            or (binding["present"] and binding.get("assignment_id") != query.get("id"))):
+                        _reject(self.__state)
+                elif (query.get("status") != "out_for_delivery" or values.get("status") != "delivered" or values.get("accounting_status") != "operational_only"
+                        or values.get("ledger_txn_group_id") is not None or values.get("accounting_operation_id") is not None):
+                    _reject(self.__state)
+            if name in {"store_delivery_delivery_proofs", "store_delivery_receipts", "store_delivery_customer_conversation_evidence"}:
+                if query.get("status") != "uploaded" or values.get("status") != "bound":
+                    _reject(self.__state)
         if name == "payment_transactions":
             # Existing Tamara order-status attribution is metadata only. Never
             # authorize amounts, balances, inserts, or provider/accounting work.

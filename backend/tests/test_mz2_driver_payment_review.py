@@ -428,6 +428,7 @@ async def test_driver_bank_selection_uses_canonical_owner_active_sar_bank_withou
         await db.mz2_financial_accounts.insert_one(bank_row)
     await db.store_drivers.update_one({"id": "driver-f"}, {"$set": {"account_user_id": "driver-user"}})
     await db.unified_orders.update_one({"user_id": OWNER, "order_number": "1"}, {"$set": {"remaining_amount": "500.00"}})
+    await db.users.insert_one({"id": "driver-user", "role": "store_driver", "created_by": OWNER, "is_active": True})
     await db.store_delivery_assignments.insert_one({"id": "bank-selection-assignment", "user_id": OWNER,
         "driver_id": "driver-f", "order_id": "salla-1", "order_number": "1", "active": True,
         "status": "out_for_delivery", "delivery_fee_snapshot": "20.00"})

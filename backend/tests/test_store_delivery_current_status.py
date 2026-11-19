@@ -209,3 +209,90 @@ def test_initial_assignment_does_not_bypass_current_status_rule(monkeypatch):
     response = client.get("/store-delivery/app/deliveries/home").json()
     assert response["assigned_count"] == 0
     assert "assignment-target" not in ids(response["items"])
+
+
+@pytest.mark.parametrize("carrier", [
+    {"shipping_company": "External carrier"},
+    {"shipping_company": "مندوب الرياض", "salla_shipping_current": {"company_name": "External carrier"}},
+])
+def test_replacement_carrier_removes_current_work_and_blocks_old_driver_status(monkeypatch, carrier):
+    db, client, _, provider = setup(
+        monkeypatch, target_order=order("target", **carrier),
+        target_assignment=assignment("target", shipping_company_snapshot="مندوب الرياض"),
+    )
+
+    async def snapshot():
+        return {name: await db[name].find({}).to_list(None) for name in (
+            ORDERS, ASSIGNMENTS, routes.DRIVER_COLLECTIONS, routes.DRIVER_EARNINGS,
+        )}
+
+    before = asyncio.run(snapshot())
+    assert "assignment-target" not in ids(client.get("/store-delivery/app/deliveries/home").json()["items"])
+    assert "assignment-target" not in ids(client.get("/store-delivery/app/deliveries").json()["items"])
+    assert client.get("/store-delivery/app/deliveries/search/target").status_code == 404
+    changed = client.post("/store-delivery/app/deliveries/status", json={
+        "barcode": "BAR-target", "target_status": "out_for_delivery",
+    })
+    assert changed.status_code == 409
+    assert changed.json()["detail"]["code"] == "shipment_shipping_company_changed"
+    assert asyncio.run(snapshot()) == before
+    provider.assert_not_awaited()
+
+
+def test_same_carrier_alias_and_delivered_history_survive_carrier_filter(monkeypatch):
+    db, client, _, _ = setup(
+        monkeypatch, target_order=order("target", shipping_company="Mandoob Riyadh"),
+        target_assignment=assignment("target", shipping_company_snapshot="مندوب الرياض"),
+    )
+    assert "assignment-target" in ids(client.get("/store-delivery/app/deliveries/home").json()["items"])
+
+    async def delivered_history():
+        await db[ORDERS].update_one({"order_number": "history"}, {"$set": {"shipping_company": "External carrier"}})
+        await db[ASSIGNMENTS].update_one({"order_number": "history"}, {"$set": {"shipping_company_snapshot": "مندوب الرياض"}})
+    asyncio.run(delivered_history())
+    assert "assignment-history" in ids(client.get("/store-delivery/app/deliveries").json()["items"])
+
+
+@pytest.mark.parametrize("contact,expected_name,expected_mobile", [
+    ({"recipient": {"name": "Gift recipient", "mobile": "0500000002"}},
+     "Gift recipient", "0500000002"),
+    ({"shipping": {"receiver": {"name": "Gift recipient", "phone": "0500000002"}}},
+     "Gift recipient", "0500000002"),
+    ({"shipments": [{"ship_to": {"name": "Gift recipient", "phone": "0500000002"}}]},
+     "Gift recipient", "0500000002"),
+    ({"recipient": {"name": "Gift recipient"}}, "Gift recipient", None),
+    ({"recipient": {"mobile": "0500000002"}}, None, "0500000002"),
+    ({}, "Gift sender", "0500000001"),
+])
+def test_driver_contacts_use_recipient_without_changing_buyer_records(
+    monkeypatch, contact, expected_name, expected_mobile,
+):
+    current = order("target", customer_name="Gift sender", customer_mobile="0500000001")
+    current["raw_by_source"]["salla_direct"].update({
+        "customer": {"full_name": "Gift sender", "mobile": "0500000001"},
+        **contact,
+    })
+    db, client, _, provider = setup(monkeypatch, target_order=current)
+
+    async def snapshot():
+        return {
+            name: await db[name].find({}).to_list(None)
+            for name in (ORDERS, ASSIGNMENTS)
+        }
+
+    before = asyncio.run(snapshot())
+    for path in ("/deliveries", "/deliveries/home", "/deliveries/search/target"):
+        response = client.get("/store-delivery/app" + path)
+        assert response.status_code == 200
+        body = response.json()
+        row = body["item"] if "item" in body else next(
+            row for row in body["items"] if row["id"] == "assignment-target"
+        )
+        assert row["recipient_name"] == expected_name
+        assert row["recipient_mobile"] == expected_mobile
+        # Installed courier versions still consume the original contact keys.
+        assert row["customer_name"] == expected_name
+        assert row["customer_mobile"] == expected_mobile
+
+    assert asyncio.run(snapshot()) == before
+    provider.assert_not_awaited()

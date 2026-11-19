@@ -10,7 +10,9 @@ from pydantic import BaseModel, ConfigDict, Field, StrictBool
 
 from store_delivery_customer_instruction_routes import STORE_DELIVERY_INSTRUCTIONS
 from store_courier_domain import ASSIGNED_WAITING_PICKUP, WORKFLOWS
-from store_delivery_domain import StoreDeliveryRuleError, carrier_assignment_snapshot, normalize_text
+from store_delivery_domain import (
+    StoreDeliveryRuleError, assignment_carrier_changed, carrier_assignment_snapshot, normalize_text,
+)
 from store_delivery_driver_routes import STORE_DRIVERS
 from store_delivery_handover_routes import ASSIGNMENTS, EVENTS, ORDERS, _order_city, _order_shipping_company
 from store_delivery_payment_evidence_routes import authoritative_outstanding_amount
@@ -272,9 +274,22 @@ def _assert_unassignment_safe(
         raise HTTPException(status_code=409, detail={"code": "assignment_projection_changed"})
     expected_workflow = ASSIGNED_WAITING_PICKUP if state == "assigned" else "delivering"
     expected_stage = "completed" if state == "assigned" else "delivering"
+    replacement_carrier = (
+        assignment_carrier_changed(assignment, _order_shipping_company(order))
+        and normalize_text(workflow.get("carrier_label_type")) == "carrier"
+    )
+    allowed_stages = {expected_stage}
+    if replacement_carrier:
+        # The replacement carrier can advance independently of the stale local
+        # assignment. Revocation must preserve its progress and label proof.
+        allowed_stages.update({"completed", "delivering", "delivered"})
+    elif state == "assigned" and normalize_text(assignment.get("reassigned_from_assignment_id")):
+        # Older direct transfers left the previous driver's delivering stage.
+        # The pickup/delivery and identity fences below still apply.
+        allowed_stages.add("delivering")
     if (
         normalize_text(workflow.get("store_courier_assignment_state")) != expected_workflow
-        or normalize_text(workflow.get("stage")) != expected_stage
+        or normalize_text(workflow.get("stage")) not in allowed_stages
         or normalize_text(workflow.get("assembly_status")) != "completed"
         or any(normalize_text(workflow.get(field)) for field in (
             "store_courier_delivered_at", "store_courier_delivered_by_id",
@@ -481,14 +496,22 @@ def make_store_delivery_reassignment_router(db: Any, current_user: Callable[...,
                          "store_courier_assignment_state": (
                              ASSIGNED_WAITING_PICKUP if prior_status == "assigned" else "delivering"
                          ),
-                         "stage": "completed" if prior_status == "assigned" else "delivering",
+                         "stage": workflow.get("stage"),
                          "assembly_status": "completed"},
                         {"$unset": {field: "" for field in (
                             *_UNASSIGN_WORKFLOW_FIELDS,
                             "store_courier_picked_up_at",
                             "store_courier_picked_up_by_id",
                         )},
-                         "$set": {"stage": "completed", "updated_at": now}},
+                         "$set": {
+                             "stage": (
+                                 workflow["stage"]
+                                 if assignment_carrier_changed(assignment, _order_shipping_company(order))
+                                 and normalize_text(workflow.get("carrier_label_type")) == "carrier"
+                                 else "completed"
+                             ),
+                             "updated_at": now,
+                         }},
                         session=tx,
                     )
                     if updated_workflow.modified_count != 1:
@@ -604,6 +627,7 @@ def make_store_delivery_reassignment_router(db: Any, current_user: Callable[...,
             {
                 "$set": {
                     "store_delivery_assignment_id": new_id,
+                    "stage": "completed",
                     "store_courier_driver_profile_id": driver["id"],
                     "store_courier_assignee_id": (
                         normalize_text(driver.get("account_user_id"))

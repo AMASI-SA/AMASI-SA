@@ -90,10 +90,18 @@ async def _require_accountant(db: Any, user: Any) -> dict[str, Any]:
 async def ensure_store_delivery_payment_review_indexes(db: Any) -> None:
     await db[PAYMENT_EVENTS].create_index([("user_id", 1), ("assignment_id", 1), ("occurred_at", -1)])
     await db[DRIVER_PAYMENT_REVIEWS].create_index([("user_id", 1), ("assignment_id", 1)], unique=True)
+    from operational_driver_bank_store import MOVEMENTS
+    await db[MOVEMENTS].create_index([("user_id", 1), ("file_id", 1), ("row_no", 1)])
+    await db[MOVEMENTS].create_index([("user_id", 1), ("bank_account_id", 1), ("started_at", 1),
+        ("status", 1), ("direction", 1), ("amount", 1), ("currency", 1), ("movement_date", -1)])
+    await db[MOVEMENTS].create_index([("user_id", 1), ("bank_account_id", 1), ("movement_date", 1),
+        ("amount", 1), ("direction", 1), ("reference", 1)])
 
 
 def make_store_delivery_payment_review_router(db: Any, current_user: Callable[..., Any]) -> APIRouter:
     router = APIRouter(prefix="/store-delivery/payment-review", tags=["Store Delivery Payment Review"])
+    from operational_driver_bank_statement_routes import attach_bank_statement_routes
+    attach_bank_statement_routes(router, db, current_user, _require_accountant, _merchant_user_id)
 
     @router.get("/pending")
     async def pending_reviews(
@@ -167,6 +175,8 @@ def make_store_delivery_payment_review_router(db: Any, current_user: Callable[..
                 status_code=404,
                 detail={"code": "store_delivery_payment_review_not_found"},
             )
+        if review.get("bank_financial_source") == "operational":
+            raise HTTPException(409, detail={"code": "driver_payment_bank_context_changed"})
         method = normalize_text(review.get("payment_method"))
         amount = str(review.get("amount") or "")
         from operational_balance_store import digest
@@ -294,10 +304,8 @@ def make_store_delivery_payment_review_router(db: Any, current_user: Callable[..
     async def official_bank_accounts(user: dict = Depends(current_user)) -> dict[str, Any]:
         actor = await _require_accountant(db, user)
         user_id = _merchant_user_id(actor)
-        accounts = await list_financial_accounts(db, user_id, account_types=("bank",), currency="SAR")
-        items = [{key: row.get(key) for key in ("id", "name", "account_type", "currency", "status")}
-                 for row in accounts]
-        return {"items": items, "total": len(items), "source": "mz2_financial_accounts"}
+        from store_delivery_bank_identity import public_collection_bank_accounts
+        return await public_collection_bank_accounts(db, user_id, actor_id=normalize_text(actor.get("id")))
 
     @router.post("/{assignment_id}")
     async def review_payment(
@@ -325,6 +333,8 @@ def make_store_delivery_payment_review_router(db: Any, current_user: Callable[..
                                         assignment_id=assignment_id, payload=payload)
         if source == "operational":
             raise HTTPException(409, detail={"code": "operational_driver_review_scope_required"})
+        if prior.get("bank_financial_source") == "operational":
+            raise HTTPException(409, detail={"code": "driver_payment_bank_context_changed"})
         if payload.expected_financial_source == "native":
             from operational_balance_store import digest
             if (source != "native" or payload.expected_review_revision != prior.get("revision", 1)

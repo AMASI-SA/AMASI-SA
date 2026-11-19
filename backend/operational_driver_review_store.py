@@ -1,8 +1,10 @@
-"""Narrow transaction capability for operational noncash review only.
+"""Narrow transaction capabilities for operational review and receipt resubmission.
 
 No native journal/control writer and no extension of operational_atomic profiles.
 The owner revision fence serializes this decision against native phase changes;
 the aggregate revision also conflicts with a concurrent operational refresh.
+Receipt resubmission can only bind evidence and reset pending metadata; it has
+no state replacement, bank-consumption, claim insertion or financial authority.
 """
 from bson import BSON
 from pymongo import ReadPreference
@@ -10,13 +12,15 @@ from pymongo.read_concern import ReadConcern
 from pymongo.write_concern import WriteConcern
 
 from operational_balance_store import AUDIT_PAGES, STATES, MAX_STATE_BYTES, fail
+from operational_driver_bank_store import FILES as BANK_FILES, MOVEMENTS as BANK_MOVEMENTS
 
 EVENTS = 'operational_driver_review_events_v1'
 READS = frozenset({STATES, AUDIT_PAGES, EVENTS, 'users', 'settings', 'mz2_atomic_owners',
     'store_delivery_payment_reviews', 'store_delivery_collections', 'store_delivery_receipts',
     'store_delivery_assignments', 'unified_orders', 'store_drivers', 'mz2_financial_accounts',
     'mz2_opening_facts_v2', 'mz2_daily_movements', 'mz2_daily_movement_files', 'accounting_source_files',
-    'mz2_shipping_native_events_v2', 'mz2_courier_delivery_evidence_v1'})
+    'mz2_shipping_native_events_v2', 'mz2_courier_delivery_evidence_v1',
+    'accounts', 'mz2_operational_bank_accounts', BANK_FILES, BANK_MOVEMENTS})
 META = {'financial_source', 'operational_event_id', 'operational_review_revision',
         'operational_approval_status', 'reviewed_at', 'reviewed_by'}
 SETS = {
@@ -28,13 +32,28 @@ SETS = {
     'unified_orders': {'store_delivery_payment_review_status', 'store_delivery_payment_confirmed',
         'store_delivery_payment_status', 'store_delivery_operational_event_id'},
     'mz2_daily_movements': {'status', 'operational_event_id', 'operational_consumed_at'},
+    BANK_MOVEMENTS: {'status', 'operational_event_id', 'operational_consumed_at'},
+}
+RECEIPT_BANK_FIELDS = {'bank_account_id', 'bank_name_snapshot', 'bank_identity_source', 'bank_identity_version',
+                       'bank_financial_source', 'bank_operational_started_at'}
+RESUBMISSION_SETS = {
+    'store_delivery_payment_reviews': RECEIPT_BANK_FIELDS | {'status', 'receipt_reference', 'receipt_url',
+        'submitted_at', 'resubmitted_at', 'revision', 'reviewed_at', 'reviewed_by', 'review_note', 'resubmission_fingerprint'},
+    'store_delivery_collections': RECEIPT_BANK_FIELDS | {'review_status', 'payment_status', 'payment_confirmed',
+        'receipt_reference', 'receipt_url', 'review_note'},
+    'store_delivery_assignments': {'payment_review_status', 'payment_status', 'updated_at'},
+    'unified_orders': {'store_delivery_payment_status', 'store_delivery_payment_review_status', 'store_delivery_updated_at'},
+    'store_delivery_receipts': {'status', 'bound_at', 'review_status', 'superseded_at', 'superseded_by'},
 }
 
 
 class ReviewDatabase:
     """Reads are owner-scoped; writes are checked before reaching Mongo."""
-    def __init__(self, root, session, owner):
+    def __init__(self, root, session, owner, *, operation='review'):
+        if operation not in {'review', 'receipt_resubmission'}:
+            fail('operational_driver_review_capability_denied')
         self.__root, self.__session, self.__owner = root, session, owner
+        self.__operation = operation
         self.failed = False
 
     def reject(self):
@@ -44,7 +63,7 @@ class ReviewDatabase:
     def __getitem__(self, name):
         if name not in READS:
             self.reject()
-        return _Collection(self, self.__root[name], self.__session, self.__owner)
+        return _Collection(self, self.__root[name], self.__session, self.__owner, self.__operation)
 
     def __getattr__(self, name):
         if name.startswith('_') or name in {'client', 'command', 'get_collection', 'get_database'}:
@@ -53,8 +72,9 @@ class ReviewDatabase:
 
 
 class _Collection:
-    def __init__(self, database, collection, session, owner):
+    def __init__(self, database, collection, session, owner, operation):
         self.__db, self.__collection, self.__session, self.__owner = database, collection, session, owner
+        self.__operation = operation
 
     def _check(self, query):
         name = self.__collection.name
@@ -85,14 +105,14 @@ class _Collection:
         return await self.__collection.find_one(query, *args, session=self.__session, **kwargs)
 
     async def insert_one(self, row):
-        if (self.__collection.name != EVENTS or row.get('user_id') != self.__owner
+        if (self.__operation != 'review' or self.__collection.name != EVENTS or row.get('user_id') != self.__owner
                 or not isinstance(row.get('_id'), str) or not row['_id']):
             self.__db.reject()
         return await self.__collection.insert_one(row, session=self.__session)
 
     async def replace_one(self, query, row):
         self._check(query)
-        if (self.__collection.name != STATES or row.get('_id') != self.__owner
+        if (self.__operation != 'review' or self.__collection.name != STATES or row.get('_id') != self.__owner
                 or row.get('owner_id') != self.__owner or type(query.get('revision')) is not int
                 or row.get('revision') != query['revision'] + 1):
             self.__db.reject()
@@ -104,10 +124,29 @@ class _Collection:
         self._check(query)
         name = self.__collection.name
         values = update.get('$set', {})
+        if self.__operation == 'receipt_resubmission':
+            if (name not in RESUBMISSION_SETS or set(update) != {'$set'}
+                    or not set(values) <= RESUBMISSION_SETS[name] or query.get('_id') is None or not values):
+                self.__db.reject()
+            if name == 'store_delivery_payment_reviews':
+                previous = query.get('revision')
+                valid_revision = (type(previous) is int and values.get('revision') == previous + 1
+                                  or previous == {'$exists': False} and values.get('revision') == 2)
+                if query.get('status') != 'rejected' or values.get('status') != 'pending' or not valid_revision:
+                    self.__db.reject()
+            if name in {'store_delivery_payment_reviews', 'store_delivery_collections'}:
+                if values.get('bank_financial_source') != 'operational' or values.get('bank_identity_version') != 2:
+                    self.__db.reject()
+            if name == 'store_delivery_collections' and values.get('payment_confirmed') is not False:
+                self.__db.reject()
+            if name == 'store_delivery_receipts' and (query.get('status'), values.get('status')) not in {
+                    ('uploaded', 'bound'), ('bound', 'superseded')}:
+                self.__db.reject()
+            return await self.__collection.update_one(query, update, session=self.__session)
         if (name not in SETS or set(update) != {'$set'} or not set(values) <= SETS[name]
                 or query.get('_id') is None or not values):
             self.__db.reject()
-        if name == 'mz2_daily_movements':
+        if name in {'mz2_daily_movements', BANK_MOVEMENTS}:
             if query.get('status') != 'unclassified' or values.get('status') != 'operational_consumed':
                 self.__db.reject()
         elif name != 'unified_orders' and values.get('financial_source') != 'operational':
@@ -118,7 +157,7 @@ class _Collection:
         self.__db.reject()
 
 
-async def transact(db, owner, callback, authorize):
+async def transact(db, owner, callback, authorize, *, operation='review'):
     """A real snapshot/majority transaction; no standalone or mock fallback."""
     from accounting_write_control import AccountingDatabase
     from accounting_atomic import SessionDatabase
@@ -137,7 +176,7 @@ async def transact(db, owner, callback, authorize):
             await fence(db, owner, active_session)
             await db.mz2_atomic_owners.update_one({'_id': owner}, {'$inc': {'revision': 1}},
                                                  upsert=True, session=active_session)
-            scoped = ReviewDatabase(db, active_session, owner)
+            scoped = ReviewDatabase(db, active_session, owner, operation=operation)
             await authorize(db)  # fresh external role check, not just a transaction snapshot
             await authorize(scoped)
             result = await callback(scoped)
