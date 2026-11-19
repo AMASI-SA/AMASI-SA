@@ -146,3 +146,172 @@ def test_advanced_manual_payment_uses_the_same_account_balance_without_auto_allo
         supplier = next(p for p in service.report(state)["parties"] if p["party_type"] == "supplier")
         assert supplier["outstanding_payable"] == "120.00"
     run(scenario)
+
+
+def test_names_directory_and_selected_shipping_balance_do_not_build_other_accounts(monkeypatch):
+    import operational_balance_workspace as workspace
+    import operational_financial_position_state as positions
+    from backend.tests.test_operational_balance_workspace import grant, resource
+
+    reads, projected = [], []
+    original_read, original_report = positions.read_financial_position_state, workspace.report
+
+    async def counted_read(db, owner):
+        reads.append(owner)
+        return await original_read(db, owner)
+
+    def counted_report(state, **options):
+        projected.append({r["party_id"] for r in state["engine"]["obligations"].values()})
+        return original_report(state, **options)
+
+    monkeypatch.setattr(positions, "read_financial_position_state", counted_read)
+    monkeypatch.setattr(workspace, "report", counted_report)
+
+    async def scenario(db, client):
+        await db.mz2_shipping_setup_v2.insert_one({"user_id": "owner", "couriers": [
+            {"courier_key": key, "name": name, "confirmed_by": "owner", "confirmed_at": "2026-11-01"}
+            for key, name in (("imile", "iMile"), ("aramex", "أرامكس"), ("smsa", "سمسا"))]})
+        obligations = claims(90)
+        for key, amount in (("imile", "26220.25"), ("smsa", "6335.75")):
+            obligations[key] = {**obligations["unrelated-0"], "party_type": "courier", "party_id": key,
+                "kind": "shipping", "id": key, "confirmed": amount}
+        await db[STATES].update_one({"owner_id": "owner"}, {"$set": {"engine.obligations": obligations}})
+        directory = (await client.get(BASE + "/context?directory_only=true&home_preview=true")).json()
+        assert directory["directory_only"] and "recent_movements" not in directory
+        assert all(r["balance"] is None for r in directory["resources"])
+        assert {r["id"] for r in directory["resources"] if r["kind"] == "courier"} == {"smsa", "aramex", "imile"}
+        assert not reads and not projected
+        detail = await client.get(BASE + "/ledger/courier/imile")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["resource"]["balance"]["amount"] == "26220.25"
+        assert reads == ["owner"] and projected == [{"imile"}]
+        await grant(db, operations=[], resources=[resource("courier", "smsa", use=False, balance=True, movements="none")])
+        headers = {"x-test-user": "staff"}
+        selected = await client.get(BASE + "/resource/courier/smsa", headers=headers)
+        assert selected.json()["balance"]["amount"] == "6335.75" and "items" not in selected.json()
+        assert (await client.get(BASE + "/ledger/courier/smsa", headers=headers)).status_code == 404
+        assert (await client.get(BASE + "/resource/courier/imile", headers=headers)).status_code == 404
+    run(scenario)
+
+
+def test_register_only_projects_requested_rows_and_invalidates_on_change(monkeypatch):
+    import operational_balance_workspace as ws
+    from backend.tests.test_operational_balance_workspace import grant, resource
+
+    async def scenario(db, client):
+        for i in range(9):
+            body = entry(party_type="supplier", party_id="supplier", reason="payment", amount=str(i + 1))
+            assert (await client.post(BASE + "/entries", json=body)).status_code == 200
+        legacy = [(await client.get(BASE + f"/movements?page={n}")).json() for n in (1, 2)]
+        builds, rendered = [], []
+        original_index, original_row = ws._register_index, ws._row
+
+        def indexed(*args):
+            builds.append(True)
+            return original_index(*args)
+
+        def render(*args):
+            rendered.append(True)
+            return original_row(*args)
+
+        def unexpected(*args, **kwargs):
+            raise AssertionError("the register must not calculate account balances")
+
+        monkeypatch.setattr(ws, "_register_index", indexed)
+        monkeypatch.setattr(ws, "_row", render)
+        monkeypatch.setattr(ws, "report", unexpected)
+        monkeypatch.setattr(ws, "with_running_balances", unexpected)
+        for n in (1, 2, 1):
+            current = (await client.get(BASE + f"/movements?page={n}&page_only=true")).json()
+            old = legacy[n - 1]
+            assert current["total"] == old["total"] and current["page_only"]
+            assert current["items"] == [{**r, "balance_after": None} for r in old["items"]]
+            assert len(builds) == 1 and len(current["items"]) == 5
+        assert len(rendered) == 15
+        await db[STATES].update_one({"owner_id": "owner"}, {"$inc": {"revision": 1}})
+        await client.get(BASE + "/movements?page=2&page_only=true")
+        assert len(builds) == 2
+        await grant(db, operations=[], resources=[resource("supplier", "supplier", movements="own")])
+        staff = (await client.get(BASE + "/movements?page_only=true", headers={"x-test-user": "staff"})).json()
+        assert staff["items"] == [] and len(builds) == 3
+        await grant(db, operations=[], resources=[resource("supplier", "supplier", movements="all")], version=2)
+        staff = (await client.get(BASE + "/movements?page_only=true", headers={"x-test-user": "staff"})).json()
+        assert staff["total"] == 9 and len(builds) == 4
+    run(scenario)
+
+
+def test_smsa_opens_final_balance_and_one_page_then_reuses_balance_until_revision_changes(monkeypatch):
+    import operational_balance_workspace as ws
+    import operational_financial_position_state as positions
+
+    async def scenario(db, client):
+        await db.mz2_shipping_setup_v2.insert_one({"user_id": "owner", "couriers": [
+            {"name": "سمسا", "courier_key": "smsa", "confirmed_by": "owner", "confirmed_at": "2026-11-01"}]})
+        source = claims(60)
+        for i in range(12):
+            k = f"smsa-{i:02}"
+            source[k] = {**source["unrelated-0"], "id": k, "party_type": "courier", "party_id": "smsa",
+                         "kind": "shipping", "confirmed": "5.50", "business_date": f"2026-11-{i + 1:02}"}
+        source["forecast"] = {**source["smsa-00"], "id": "forecast", "kind": "cod", "direction": "receivable",
+                              "confirmed": "0", "expected": "230", "business_date": "2026-11-14"}
+        await db[STATES].update_one({"owner_id": "owner"}, {"$set": {"engine.obligations": source}})
+        url = BASE + "/ledger/courier/smsa?page_only=true"
+        calls = {"read": 0, "balance": 0, "detail": 0}
+        read_snapshot, report, render = positions.read_financial_position_state, ws.report, ws._row
+        async def observed_read(*args):
+            calls["read"] += 1
+            return await read_snapshot(*args)
+        def observed_report(state, **kwargs):
+            assert all(r["party_id"] == "smsa" for r in state["engine"]["obligations"].values())
+            calls["balance"] += 1
+            return report(state, **kwargs)
+        def observed_row(*args):
+            calls["detail"] += 1
+            return render(*args)
+        monkeypatch.setattr(positions, "read_financial_position_state", observed_read)
+        monkeypatch.setattr(ws, "report", observed_report)
+        monkeypatch.setattr(ws, "_row", observed_row)
+        for page, ids in ((1, range(11, 6, -1)), (2, range(6, 1, -1)), (3, range(1, -1, -1))):
+            response = await client.get(url + f"&page={page}")
+            assert response.status_code == 200, response.text
+            data = response.json()
+            assert data["page_only"] and data["resource"]["balance"]["amount"] == "66.00"
+            assert "expected_collections" not in data
+            assert data["total"] == 12 and data["total_pages"] == 3
+            assert [r["id"] for r in data["items"]] == [f"smsa-{i:02}" for i in ids]
+            assert calls == {"read": 1, "balance": 1, "detail": min(page * 5, 12)}
+        focused = (await client.get(url + "&focus_id=smsa-01")).json()
+        assert focused["page"] == 3 and calls["balance"] == 1
+        forecast = (await client.get(BASE + "/forecast/courier/smsa")).json()
+        assert forecast["amount"] == "230.00" and forecast["total"] == 1 and calls["balance"] == 1
+        await db[STATES].update_one({"owner_id": "owner"},
+            {"$inc": {"revision": 1}, "$set": {"engine.obligations.smsa-00.confirmed": "15.50"}})
+        updated = (await client.get(url + "&page=2")).json()
+        assert updated["resource"]["balance"]["amount"] == "76.00" and calls["balance"] == 2
+    run(scenario)
+
+
+def test_account_directory_batches_only_opened_bank_cash_or_employee_custody(monkeypatch):
+    import operational_balance_workspace as ws
+    from backend.tests.test_operational_balance_workspace import grant, resource
+    import operational_financial_position_state as positions
+
+    async def scenario(db, client):
+        assert (await client.post(BASE + "/entries", json=entry(party_type="cash", party_id="cash",
+                reason="transfer", amount="35"))).status_code == 200
+        def no_report(*args, **kwargs):
+            raise AssertionError("the category must not build a snapshot report or calculate salaries")
+        monkeypatch.setattr(ws, "report", no_report)
+        monkeypatch.setattr(positions, "read_financial_position_state", no_report)
+        for kind, amount in (("bank", "965.00"), ("cash", "535.00"), ("employee_custody", "150.00")):
+            response = await client.get(BASE + "/accounts/" + kind)
+            assert response.status_code == 200, response.text
+            rows = response.json()["items"]
+            assert len(rows) == 1 and rows[0]["kind"] == kind and rows[0]["balance"]["amount"] == amount
+            assert "movements" not in rows[0] and "items" not in rows[0]
+        await grant(db, operations=[], resources=[resource("bank", "bank", balance=False)])
+        headers = {"x-test-user": "staff"}
+        hidden = (await client.get(BASE + "/accounts/bank", headers=headers)).json()["items"]
+        assert len(hidden) == 1 and hidden[0]["balance"] is None
+        assert (await client.get(BASE + "/accounts/employee_custody", headers=headers)).json()["items"] == []
+    run(scenario)
