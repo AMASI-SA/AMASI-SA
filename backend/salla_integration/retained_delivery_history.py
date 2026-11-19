@@ -30,6 +30,10 @@ async def acquire(db, owner, candidates, *, limit):
         key.update({'raw_by_source.salla_direct.id': raw['id'],
                     'raw_by_source.salla_direct.status': raw.get('status'),
                     HISTORY_CHECK: previous if HISTORY_CHECK in row else {'$exists': False}})
+        for clock in ('updated_at', 'date_updated'):
+            key['raw_by_source.salla_direct.' + clock] = raw.get(clock)
+        date = raw.get('date') if isinstance(raw.get('date'), dict) else {}
+        key['raw_by_source.salla_direct.date.updated'] = date.get('updated')
         claim = {**state, 'version': candidate['version'], 'retry_after': (now + timedelta(minutes=5)).isoformat()}
         saved = await db.unified_orders.update_one(key, {'$set': {HISTORY_CHECK: claim}})
         if not saved.matched_count:

@@ -1300,7 +1300,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                                'ad_snapshots', 'recurring', 'fee_policies', 'issues')}
     enable_issue_index(out)
     out['delivery_event_coverage'] = {'version': 1, 'started_at': start.isoformat(), 'as_of': now.isoformat()}
-    from operational_delivery_register import HISTORY_CHECK, assignment_groups, history_version, observe, service_event, uses_retained_deliveries
+    from operational_delivery_register import HISTORY_CHECK, assignment_groups, history_version, notice_category, observe, order_status, service_event, uses_retained_deliveries
     retained = uses_retained_deliveries(now)
     if retained:
         out['delivery_register'] = {}
@@ -1493,7 +1493,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                     service_candidates[identity] = (raw, register)
                 elif retained and start < created and identity and order_number:
                     version = history_version(raw)
-                    if version[0] in {'canceled', 'cancelled', 'restored', 'ملغي', 'ملغى', 'مسترجع'}:
+                    if notice_category(*order_status(raw)):
                         checked = source.get(HISTORY_CHECK) or {}
                         if checked.get('version') != version or not checked.get('complete'):
                             out['delivery_history_candidates'].append(

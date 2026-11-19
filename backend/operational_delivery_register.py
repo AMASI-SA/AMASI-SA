@@ -9,10 +9,22 @@ MARKER = 'salla_first_delivered'
 HISTORY_CHECK = 'salla_delivery_history_check'
 PREFIX = 'salla_delivered_order:'
 POLICY = 'salla_delivery_register_v1'
-STATUS_LABELS = {'canceled': 'ملغي', 'cancelled': 'ملغي', 'returned': 'مسترجع', 'refunded': 'مسترجع',
+STATUS_LABELS = {'canceled': 'ملغي', 'cancelled': 'ملغي', 'returned': 'مسترجع',
                  'restored': 'مسترجع', 'completed': 'تم التنفيذ', 'delivered': 'تم التوصيل',
                  'delivering': 'جاري التوصيل', 'out_for_delivery': 'جاري التوصيل',
                  'in_progress': 'قيد التنفيذ', 'under_processing': 'قيد التنفيذ'}
+
+
+NOTICE_STATES = {
+    'canceled': 'canceled', 'cancelled': 'canceled', 'ملغي': 'canceled', 'ملغى': 'canceled',
+    'تم الإلغاء': 'canceled', 'تم الالغاء': 'canceled', 'مكنسل': 'canceled',
+    'restored': 'restored', 'returned': 'restored', 'مسترجع': 'restored', 'مرتجع': 'restored',
+    'تم الاسترجاع': 'restored',
+}
+
+
+def notice_category(key, name):
+    return NOTICE_STATES.get(key) or NOTICE_STATES.get(name)
 
 
 # The owner changed the operating rule for the November 2026 opening.
@@ -223,12 +235,8 @@ def notice(facts, view):
     rows = [record for key, record in facts.items() if key.startswith(PREFIX)
             and (not scope or record.get('party_type') == scope)]
     groups = {'canceled': [], 'restored': []}
-    aliases = {'canceled': 'canceled', 'cancelled': 'canceled', 'ملغي': 'canceled', 'ملغى': 'canceled',
-               'تم الإلغاء': 'canceled', 'تم الالغاء': 'canceled', 'مكنسل': 'canceled',
-               'restored': 'restored', 'returned': 'restored', 'مسترجع': 'restored', 'مرتجع': 'restored',
-               'تم الاسترجاع': 'restored'}
     for record in rows:
-        category = aliases.get(record.get('current_status')) or aliases.get(record.get('current_status_name'))
+        category = notice_category(record.get('current_status'), record.get('current_status_name'))
         if category:
             groups[category].append({k: record.get(k) for k in
                 ('order_id', 'order_number', 'current_status_name', 'party_name', 'party_id')})

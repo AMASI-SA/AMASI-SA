@@ -38,7 +38,7 @@ class RetainedDeliveryTests(unittest.TestCase):
             self.assertEqual((summary['count'], len(summary['changed'])), (1, 1))
             self.assertEqual(summary['changed'][0]['order_number'], '11')
             self.assertEqual(notice(self.facts, 'drivers')['changed'], [])
-        for key in ('restoring', 'unlisted_custom_state', 'completed'):
+        for key in ('restoring', 'refunded', 'unlisted_custom_state', 'completed'):
             self.raw['status'] = key
             self.refresh()
             self.assertEqual(notice(self.facts, 'couriers')['changed'], [])
