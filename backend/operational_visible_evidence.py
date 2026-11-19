@@ -20,13 +20,13 @@ _COLLECTIONS = frozenset({STATES, "unified_orders", "salla_integrations", "salla
 _LOCAL_PROOF_READS = frozenset({'mz2_shipping_setup_v2', 'store_delivery_assignments', 'order_activity_events_v2'})
 _PROJECTION = {"_id": 0, "owner_id": 1, "status": 1, "started_at": 1,
                "engine.issues": 1, "engine.customer_tender_coverage": 1, 'engine.facts': 1,
-               'engine.obligations': 1, 'movements.allocations': 1,
+               'engine.obligations': 1, 'engine.delivery_register': 1, 'movements.allocations': 1,
                'courier_tariffs': 1, ISSUES: 1, SNAPSHOT: 1}
 
 
 def _gaps(stored):
     return unpack_issues(unpack_financial_snapshot(stored,
-        selected={"customer_tender_coverage", 'facts', 'obligations'}))
+        selected={"customer_tender_coverage", 'facts', 'obligations', 'delivery_register'}))
 
 
 def _courier_status_exclusions(state, issues):
@@ -179,6 +179,11 @@ async def acquire_visible_evidence(db, owner, *, courier_order_id=None):
     result = {"status": "attempted", "bank_candidates": len(bank), "courier_candidates": len(courier),
               "sar_candidates": len(sar)}
     jobs = [(name, pending) for name, pending in (("bank", bank), ("courier", courier), ("sar", sar)) if pending]
+    if courier_order_id is None:
+        from operational_delivery_register import POLICY
+        pending_history = state.get("engine", {}).get("delivery_register", {}).get(POLICY, {}).get("history_candidates")
+        if pending_history:
+            jobs.append(("delivery_history", pending_history))
     finished = set()
     deadline = asyncio.get_running_loop().time() + ACQUISITION_SECONDS
 
@@ -201,6 +206,9 @@ async def acquire_visible_evidence(db, owner, *, courier_order_id=None):
                     async with asyncio.timeout(source_budget):
                         if name == "bank":
                             await acquire_bank(guarded, owner, pending, limit=LIMIT_PER_SOURCE)
+                        elif name == "delivery_history":
+                            from salla_integration.retained_delivery_history import acquire
+                            result[name] = await acquire(guarded, owner, pending, limit=LIMIT_PER_SOURCE)
                         elif name == "courier":
                             pending = await _unconfirmed_courier_dates(guarded, owner, state, pending)
                             if pending:

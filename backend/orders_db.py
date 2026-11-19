@@ -1067,6 +1067,12 @@ async def _upsert_order(db, user_id: str, order_number: str, incoming: dict,
             raws = dict(merged.get("raw_by_source") or {})
             if source == "salla_direct":
                 existing_raw = raws.get(source) or {}
+                from operational_delivery_register import MARKER, bind_first_driver, first_observation
+                if not existing.get(MARKER):
+                    marker = (first_observation(existing_raw, existing.get(CURRENT_SHIPPING))
+                              or first_observation(raw, shipping_snapshot))
+                    if marker:
+                        merged[MARKER] = await bind_first_driver(db, user_id, order_number, marker)
                 attributed_raw = preserve_salla_raw_attribution(existing_raw, raw)
                 raws[source] = _merge_salla_raw_snapshot(existing_raw, attributed_raw)
                 products = _current_salla_products(
@@ -1106,6 +1112,8 @@ async def _upsert_order(db, user_id: str, order_number: str, incoming: dict,
                 break
             continue
         fenced_selector[CURRENT_SHIPPING] = existing[CURRENT_SHIPPING] if CURRENT_SHIPPING in existing else {"$exists": False}
+        if source == "salla_direct" and raw is not None and MARKER in merged:
+            fenced_selector[MARKER] = existing.get(MARKER, {"$exists": False})
         result = await db.unified_orders.update_one(fenced_selector, {"$set": merged})
         # Real Mongo exposes matched_count. Retry a lost shipping CAS against
         # the latest observation rather than overwriting a concurrent change.

@@ -61,15 +61,17 @@ class Collection:
             return Cursor([])
         if self.name == "order_activity_events_v2":
             numbers = query["order_number"]["$in"]
-            assert query == {"user_id":"owner", "source":"salla_history",
-                             "order_number":{"$in":numbers}, "native_status_transition":{"$exists": True}}
+            common = {"user_id":"owner", "source":"salla_history", "order_number":{"$in":numbers}}
+            assert query in ({**common, "native_status_transition":{"$exists": True}},
+                             {**common, "native_status_transition.delivered": True})
             assert 0 < len(numbers) <= 250
             assert projection == {"_id":0, **{k:1 for k in ("user_id","order_number","provider_order_id","source",
                 "event_type","source_event_id","native_status_transition")}}
             self.db.reads.append(self.name)
             return Cursor([r for r in self.db.data.get(self.name, []) if r.get("user_id") == "owner"
                            and r.get("source") == "salla_history" and r.get("order_number") in numbers
-                           and "native_status_transition" in r])
+                           and "native_status_transition" in r and ("native_status_transition.delivered" not in query
+                           or any(proof.get("delivered") is True for proof in r["native_status_transition"]))])
         if self.name == "order_payment_transactions_v2":
             assert set(query) == {"user_id", "order_number", "source"}
             assert query["user_id"] == "owner" and query["source"] == "salla_transactions"
