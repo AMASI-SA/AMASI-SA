@@ -9,7 +9,7 @@ from salla_payment_collection import provider_order_page_balance, provider_order
 
 
 NAMES = {
-    "bank": "تحويل بنكي حسب سلة", "wallet": "محفظة العميل", "cod": "الدفع عند الاستلام",
+    "paypal": "باي بال", "bank": "تحويل بنكي حسب سلة", "wallet": "محفظة العميل", "cod": "الدفع عند الاستلام",
     "awaiting": "انتظار الدفع", "unclassified": "طريقة دفع غير محددة",
 }
 
@@ -24,6 +24,8 @@ def category(method):
         return "provider"
     if name in ("bank", "تحويل بنكي", "حوالة بنكية") or transfer_bank(name)[0]:
         return "bank"
+    if name == "paypal":
+        return "paypal"
     if name == "customer_wallet":
         return "wallet"
     if name in COD:
@@ -36,6 +38,14 @@ def new_coverage(started_at, as_of):
             "started_at":started_at, "as_of":as_of, "by_currency":{},
             "sar":{"paid":None, "known_paid":"0.00", "complete":False, "orders":0, "verified_orders":0,
                    "missing_orders":0, "missing_order_ids":[], "proof_lookups":[], "foreign_order_fx_count":0, "by_method":[]}}
+
+
+def paypal_customer_payments(coverage):
+    # Customer receipts are observable before the owner identifies their settlement destination.
+    row = next((r for r in (coverage.get("sar") or {}).get("by_method", []) if r["method"] == "paypal"), None)
+    if not row:
+        return None
+    return {key: row.get(key) for key in ("orders", "paid", "incomplete_orders")}
 
 
 def _add(summary, currency, method, paid=None, remaining=None):

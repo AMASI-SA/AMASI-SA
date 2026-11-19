@@ -12,7 +12,7 @@ FORECAST_VIEWS = frozenset({"all", "expected", "forecast"})
 SUMMARY_VIEWS = frozenset({"summary", "forecast"})
 TABLES = {
     "summary": frozenset(), "forecast": frozenset(),
-    "providers": frozenset({"providers", "balance_origin"}),
+    "providers": frozenset({"providers", "balance_origin", "paypal_customer_payments"}),
     "couriers": frozenset({"couriers", "balance_origin", "courier_fee_review"}),
     "drivers": frozenset({"drivers", "balance_origin", "driver_fee_review"}),
     "employees": frozenset({"employees", "employee_custody"}),

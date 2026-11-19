@@ -841,6 +841,17 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None,
         if include_table("providers"):
             tables.append(_provider_table(projection["details"]["provider_balances"].get(currency, []),
                                           [row for row in projection["issues"] if row.get("currency") in {None, currency}]))
+        if currency == "SAR" and include_table("paypal_customer_payments"):
+            from operational_customer_tender_coverage import paypal_customer_payments
+            receipts = paypal_customer_payments(tender_coverage)
+            if receipts:
+                paypal_table = _table("paypal_customer_payments", "مدفوعات باي بال", "fulfillment",
+                    [_column("name", "طريقة الدفع", "text"), _column("orders", "الطلبات", "count"),
+                     _column("paid", "مدفوعات العملاء بالريال"), _column("incomplete_orders", "تحتاج مطابقة", "count")],
+                    [{"id": "paypal", "name": "باي بال", **receipts}], complete=receipts["paid"] is not None,
+                    notes=["مبالغ دفعها العملاء قبل الرسوم. إضافة صافيها إلى رصيد المنصة تتطلب تحديد جهة التسوية."])
+                paypal_table.update(show_totals=False, totals={})
+                tables.append(paypal_table)
         wallet = customer_wallets.get(currency)
         if wallet is not None and include_table("customer_wallets"):
             wallet_table = _table("customer_wallets", "محافظ العملاء المستحقة علينا", "actual", [

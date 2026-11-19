@@ -29,6 +29,7 @@ NON_PROVIDER_METHODS = {
 }
 DIAGNOSTICS = {
     'provider_closed_tender_total_mismatch': 'المبلغ المدفوع مثبت، وإجمالي الطلب يختلف عنه؛ راجع المتبقي وكشف المنصة.',
+    'provider_paypal_settlement_routing_required': 'مدفوعات باي بال معروفة، وتحتاج إلى تحديد جهة التسوية قبل إثبات الرصيد.',
     'provider_payment_method_unknown': 'طريقة الدفع غير معروفة في قارئ الأرصدة',
     'provider_payment_method_conflict': 'تعارضت جهة الدفع بين حقول الطلب',
     'provider_split_payment_review_required': 'الطلب يحتوي عدة دفعات أو جهات دفع ويلزم تفصيلها',
@@ -173,6 +174,8 @@ def resolve_provider(raw, *, require_known=False):
     routes = [provider_for(value) for value in methods]
     known = [route for route in routes if route is not None]
     if not known:
+        if require_known and methods and all(isinstance(value, str) and value.strip().lower() == "paypal" for value in methods):
+            raise PaymentEvidenceError('provider_paypal_settlement_routing_required')
         if require_known and any(not isinstance(value, str) or (value.strip().lower() not in NON_PROVIDER_METHODS
                and not transfer_bank(value)[0]) for value in methods):
             raise PaymentEvidenceError('provider_payment_method_unknown')

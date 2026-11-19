@@ -763,9 +763,12 @@ def install_workspace_routes(router, db, current_user, scope):
     async def context(request: Request, ad_bank_fx: bool = False, home_preview: bool = False, user=Depends(current_user)):
         def project(actor, owner, policy, state, resources, computed):
             from operational_balance_access import OPERATION_LABELS
+            from operational_customer_tender_coverage import paypal_customer_payments
             return {"actor": {**_actor_snapshot(actor), "is_owner": policy.owner_override},
                     "session_scope": digest([owner, actor["id"]]), "permission_version": policy.version,
                     "status": state["status"], "resources": resources,
+                    **({"paypal_customer_payments": paypal_customer_payments(
+                        computed["details"].get("customer_tender_coverage", {}))} if policy.owner_override else {}),
                     "ledger_start": _business_day({"occurred_at": state["started_at"]}) if state.get("started_at") else None,
                     **({"recent_movements": _recent_postings(state, resources, policy)} if home_preview else {}),
                     "capabilities": {"manage_access": policy.owner_override,
