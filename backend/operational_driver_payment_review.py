@@ -9,7 +9,7 @@ from datetime import date
 from decimal import Decimal
 from hashlib import sha256
 from typing import Literal
-from pydantic import Field, StrictInt
+from pydantic import Field, StrictInt, model_validator
 
 from accounting_driver_payment_review import DriverReviewInput as NativeInput
 from operational_balance_store import STATES, MAX_STATE_BYTES, digest, fail, audit, logical_state, now, read
@@ -43,9 +43,16 @@ owner head before the revision CAS. Packed source issues remain byte-identical.
 
 
 class ReviewInput(NativeInput):
+    destination_financial_id: str | None = Field(default=None, min_length=1, max_length=200)
     expected_financial_source: Literal['operational', 'native'] | None = None
     expected_review_revision: StrictInt | None = Field(default=None, ge=1)
     expected_session_scope: str | None = Field(default=None, min_length=1, max_length=128)
+
+    @model_validator(mode='after')
+    def canonical_destination_limit(self):
+        if self.expected_financial_source != 'operational' and len(self.destination_financial_id or '') > 160:
+            raise ValueError('canonical_destination_identity_too_long')
+        return self
 
 
 def exact_money(value):
@@ -184,6 +191,16 @@ async def _receipt(db, owner, review, collection, event, state, stamp):
 
 async def _bank_proof(db, owner, bank_id, movement_id, value, state, stamp):
     """Same original-bytes contract as native intake, without its journal session."""
+    from operational_driver_bank_statements import MOVEMENT_PREFIX, verified_movement, bank_fact_proof
+    if isinstance(movement_id, str) and movement_id.startswith(MOVEMENT_PREFIX):
+        bank, movement, proof = await verified_movement(db, owner=owner, bank_id=bank_id,
+            movement_id=movement_id, value=value, state=state, stamp=stamp)
+        if any(m.get('direction') == 'incoming' and (
+                m.get('bank_movement_id') == movement['id'] or
+                m.get('reference') in {movement['id'], movement.get('reference')} - {None, ''})
+                for m in state.get('movements', [])):
+            fail('operational_driver_prior_payment_reconciliation_required')
+        return bank, movement, proof
     from accounting_financial_identity import list_financial_accounts
     from accounting_advertising_contract import digest as bank_digest
     banks = await list_financial_accounts(db, owner, account_types=('bank',), currency='SAR')
@@ -231,10 +248,13 @@ async def _bank_proof(db, owner, bank_id, movement_id, value, state, stamp):
     except (ValueError, KeyError, TypeError, ArithmeticError):
         fail('native_bank_statement_evidence_required')
     return bank, movement, {'source_namespace': 'mz2_daily_movements', 'source_record_id': movement['id'],
-                           'source_revision': bank_digest([owner, bank_id, hashed, fact])}
+                           'source_revision': bank_digest([owner, bank_id, hashed, fact]),
+                           'statement_row_fingerprint': digest([owner, hashed, fact['row_no'], fact['row_hash']]),
+                           **await bank_fact_proof(db, owner=owner, bank_id=bank_id, source_namespace='mz2_daily_movements',
+                                                  movement=movement, fact=fact)}
 
 
-async def options(db, *, owner, actor, assignment_id, clock=None, authorize_review=None):
+async def options(db, *, owner, actor, assignment_id, clock=None, authorize_review=None, authorize_bank_movements=None):
     # The workspace supplies its stricter per-driver/account policy. Legacy
     # callers keep the original accountant gate; the client cannot choose it.
     if authorize_review is None:
@@ -249,11 +269,18 @@ async def options(db, *, owner, actor, assignment_id, clock=None, authorize_revi
     value = exact_money(review.get('amount'))
     blocker = None
     can_reject = False
+    bank_movements = []
     from fastapi import HTTPException
     try:
         review, _, collection, _, event, value = await _evidence(db, owner, assignment_id, state, stamp)
         can_reject = True
         await _receipt(db, owner, review, collection, event, state, stamp)
+        # Permission to read a receipt does not grant its bank statement. The
+        # scoped workspace must supply a separate server-owned movement gate.
+        if review['payment_method'] == 'bank_transfer' and (authorize_review is None or authorize_bank_movements is not None):
+            from operational_driver_bank_statements import candidates
+            bank_movements = (await candidates(db, owner=owner, actor=actor,
+                assignment_id=assignment_id, clock=stamp, authorize_bank_movements=authorize_bank_movements))['items']
     except HTTPException as error:
         if error.status_code != 409 or not isinstance(error.detail, dict):
             raise
@@ -270,7 +297,7 @@ async def options(db, *, owner, actor, assignment_id, clock=None, authorize_revi
             'blocker': blocker, 'expected_review_revision': review.get('revision', 1),
             'session_scope': digest([owner, actor]), 'bank_account_id': review.get('bank_account_id'),
             'pos_receivables': [{'id': r['id'], 'display_name': r['name']} for r in destinations],
-            'bank_movements': [], 'started_at': state['started_at'],
+            'bank_movements': bank_movements, 'started_at': state['started_at'],
             'note': 'الشبكة ذمة للمتجر وليست نقدًا؛ التحويل يتطلب حركة بنك مثبتة بعد يوم القطع.'}
 
 
@@ -324,6 +351,14 @@ async def review_payment(db, *, owner, actor, assignment_id, payload, clock=None
                 if target != review.get('bank_account_id') or target != collection.get('bank_account_id'):
                     fail('driver_payment_destination_proof_invalid')
                 bank, movement, proof = await _bank_proof(scoped, owner, target, payload.settlement_reference, value, state, stamp)
+                from operational_driver_bank_store import MOVEMENTS as OPERATIONAL_BANK_MOVEMENTS
+                if (proof['source_namespace'] == OPERATIONAL_BANK_MOVEMENTS or
+                        any(field in review or field in collection for field in ('bank_identity_version', 'bank_financial_source'))):
+                    from store_delivery_bank_identity import find_collection_bank, require_saved_bank_identity
+                    current_bank = await find_collection_bank(scoped, owner, target)
+                    if current_bank is None:
+                        fail('driver_payment_bank_context_changed')
+                    require_saved_bank_identity(current_bank, review, collection)
                 name, dest_type = bank.get('name') or target, 'bank'
             else:
                 from accounting_driver_payment_port import require_driver_payment_destination
@@ -333,9 +368,17 @@ async def review_payment(db, *, owner, actor, assignment_id, payload, clock=None
                     reviewed_amount=payload.pos_reviewed_amount)
                 name, dest_type = proof['display_name'], 'pos_receivable'
             # Consume both source reference and actual receipt bytes across all destinations.
-            for namespace, identity in [('reference', [proof['source_namespace'], proof['source_record_id']]), ('receipt', hashed)]:
+            claims = [('reference', [proof['source_namespace'], proof['source_record_id']]), ('receipt', hashed)]
+            if proof.get('statement_row_fingerprint'):
+                claims.append(('statement_row', proof['statement_row_fingerprint']))
+            if proof.get('bank_fact_fingerprint'):
+                claims.append((proof['bank_fact_namespace'], proof['bank_fact_fingerprint']))
+            for namespace, identity in claims:
                 claim_id = digest([owner, 'operational-driver-review-claim', namespace, identity])
                 if await scoped[EVENTS].find_one({'user_id': owner, '_id': claim_id}):
+                    if namespace in {'bank_reference', 'bank_unreferenced_fact'}:
+                        from operational_driver_bank_statements import bank_fact_conflict
+                        bank_fact_conflict(namespace)
                     fail('driver_payment_reference_already_consumed')
                 if await scoped.mz2_shipping_native_events_v2.find_one({'user_id': owner, '$or': [
                         {'receipt_hash': hashed}, {'destination.source_namespace': proof['source_namespace'],
@@ -353,6 +396,10 @@ async def review_payment(db, *, owner, actor, assignment_id, payload, clock=None
                 'bank_movement_date': movement['movement_date'] if movement else None,
                 'transaction_reference': payload.settlement_reference,
                 **{k: proof[k] for k in ('source_namespace', 'source_record_id', 'source_revision')}}
+            if proof.get('statement_row_fingerprint'):
+                fact['statement_row_fingerprint'] = proof['statement_row_fingerprint']
+            if proof.get('bank_fact_fingerprint'):
+                fact.update({key: proof[key] for key in ('bank_fact_namespace', 'bank_fact_fingerprint')})
             if method == 'bank_transfer':
                 fact['movement_id'] = 'driver-review:' + key
                 item = {'id': fact['movement_id'], 'request_id': fact['movement_id'],
@@ -363,7 +410,7 @@ async def review_payment(db, *, owner, actor, assignment_id, payload, clock=None
                     'order_number': event['order_number'], 'reference': payload.settlement_reference,
                     'receipt_hash': hashed, 'driver_review_event_id': key, 'business_date': movement['movement_date']}
                 state['movements'].append(item)
-                changed = await scoped.mz2_daily_movements.update_one({'_id': movement['_id'], 'user_id': owner, 'status': 'unclassified'},
+                changed = await scoped[proof['source_namespace']].update_one({'_id': movement['_id'], 'user_id': owner, 'status': 'unclassified'},
                     {'$set': {'status': 'operational_consumed', 'operational_event_id': key, 'operational_consumed_at': stamp}})
                 if changed.matched_count != 1:
                     fail('shipping_movement_changed')

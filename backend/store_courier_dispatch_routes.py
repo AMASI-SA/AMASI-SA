@@ -28,13 +28,14 @@ from ai_store_access_contract import (
 from order_engine.repository import MongoOrderRepository
 from order_engine.service import OrderNotFoundError, get_order
 from order_tracking_notes import enforce_stage_instructions
+from store_delivery_assignment_history import released_assignment
 from store_courier_domain import (
     ASSIGNED_WAITING_PICKUP,
     CANCELLED,
     DELIVERED,
     DELIVERING,
     WORKFLOWS,
-    store_courier_assignment_blocker,
+    active_account_assignment, eligibility_fence, store_courier_assignment_blocker,
 )
 
 
@@ -522,7 +523,6 @@ def _my_stage_filter(stage: str) -> dict[str, Any]:
         )
     if normalized == "waiting":
         return {
-            "stage": "completed",
             "store_courier_assignment_state": ASSIGNED_WAITING_PICKUP,
         }
     if normalized == DELIVERING:
@@ -572,7 +572,7 @@ async def _assigned_workflow(
                 "order_number": order_number,
             },
         )
-    if _text(workflow.get("carrier_label_type")) != "store_courier":
+    if "store_courier" not in (workflow.get("delivery_flow"), workflow.get("carrier_label_type")):
         raise HTTPException(
             status_code=409,
             detail={
@@ -646,7 +646,7 @@ def make_store_courier_dispatch_router(
             )
         query: dict[str, Any] = {
             "user_id": context["merchant_id"],
-            "carrier_label_type": "store_courier",
+            "$or": [{"delivery_flow": "store_courier"}, {"carrier_label_type": "store_courier"}],
             "store_courier_assignee_id": {"$nin": [None, ""]},
         }
         if courier_id:
@@ -683,157 +683,64 @@ def make_store_courier_dispatch_router(
             courier_user_id=payload.courier_user_id,
         )
         order_number = _text(payload.barcode)
-        workflow = await db[WORKFLOWS].find_one(
-            {
-                "user_id": context["merchant_id"],
-                "order_number": order_number,
-            },
-            {"_id": 0},
-        )
-        if not workflow:
-            raise HTTPException(
-                status_code=404,
-                detail={
-                    "code": "store_courier_shipment_not_found",
-                    "order_number": order_number,
-                },
-            )
-        assignment_blocker = _store_courier_assignment_blocker(workflow)
-        if assignment_blocker:
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "code": assignment_blocker,
-                    "order_number": order_number,
-                },
-            )
-
+        key = {"user_id": context["merchant_id"], "order_number": order_number}
         selected_courier_id = _text(courier.get("id"))
-        selected_courier_name = (
-            _text(courier.get("name"))
-            or _text(courier.get("email"))
-            or "مندوب التوصيل"
-        )
-        existing_courier_id = _text(
-            workflow.get("store_courier_assignee_id")
-        )
-        if existing_courier_id:
-            if existing_courier_id == selected_courier_id:
-                return {
-                    "ok": True,
-                    "already_assigned": True,
-                    "courier": {
-                        "id": selected_courier_id,
-                        "name": selected_courier_name,
-                    },
-                    "shipment": await _shipment_view(
-                        repository,
-                        merchant_id=context["merchant_id"],
-                        workflow=workflow,
-                    ),
-                }
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "code": "store_courier_already_assigned",
-                    "order_number": order_number,
-                    "courier_user_id": existing_courier_id,
-                    "courier_name": workflow.get(
-                        "store_courier_assignee_name"
-                    ),
-                },
-            )
+        selected_courier_name = _text(courier.get("name") or courier.get("email")) or "مندوب التوصيل"
 
-        await enforce_stage_instructions(
-            db,
-            user_id=context["merchant_id"],
-            order_number=order_number,
-            stage="store_courier",
-            actor_id=context["actor_id"],
-            order_wide=True,
-        )
+        async def assign(tx):
+            order = await db["unified_orders"].find_one(key, session=tx)
+            if not order:
+                raise HTTPException(status_code=404, detail={"code": "store_courier_shipment_not_found"})
+            previous = await released_assignment(db, owner=key["user_id"], order=order,
+                                                 account_id=selected_courier_id, session=tx)
+            blocker = store_courier_assignment_blocker(order, transfer=bool(previous))
+            if blocker:
+                raise HTTPException(status_code=409, detail={"code": blocker})
+            active = await db["store_delivery_assignments"].find_one(
+                {"user_id": key["user_id"], "active": True,
+                 "$or": [{"order_number": order_number}, {"order_id": order.get("order_id") or order_number}]},
+                {"_id": 1}, session=tx)
+            if active:
+                raise HTTPException(status_code=409, detail={"code": "store_courier_already_assigned"})
+            workflow = await db[WORKFLOWS].find_one(key, session=tx) or {}
+            if active_account_assignment(workflow):
+                if workflow.get("store_courier_assignee_id") == selected_courier_id:
+                    return workflow, True
+                raise HTTPException(status_code=409, detail={"code": "store_courier_already_assigned"})
+            now = _now()
+            claimed = await db["unified_orders"].update_one(
+                {**key, **eligibility_fence(order)}, {"$set": {"store_courier_dispatch_assigned_at": now}}, session=tx)
+            if not claimed.matched_count:
+                raise HTTPException(status_code=409, detail={"code": "store_courier_assignment_conflict"})
+            actor_name = _actor_name(user, "مسؤول إدارة الموصلين")
+            patch = {
+                "delivery_flow": "store_courier",
+                "store_courier_assignment_state": ASSIGNED_WAITING_PICKUP,
+                "store_courier_assignee_id": selected_courier_id,
+                "store_courier_assignee_name": selected_courier_name,
+                "store_courier_assigned_at": now,
+                "store_courier_assigned_by_id": context["actor_id"],
+                "store_courier_assigned_by_name": actor_name,
+                "store_courier_assignment_barcode": order_number,
+                "updated_at": now,
+            }
+            await db[WORKFLOWS].update_one(key, {"$set": patch, "$unset": {
+                "store_delivery_assignment_id": "", "store_courier_driver_profile_id": ""}}, upsert=True, session=tx)
+            await db[EVENTS].insert_one({
+                "id": uuid.uuid4().hex, **key, "event_type": "store_courier_shipment_assigned",
+                "courier_user_id": selected_courier_id, "courier_name": selected_courier_name,
+                "actor_id": context["actor_id"], "actor_name": actor_name, "occurred_at": now,
+                **({"reassigned_from_assignment_id": previous} if previous else {}),
+            }, session=tx)
+            return {**workflow, **key, **patch}, False
 
-        now = _now()
-        actor_name = _actor_name(user, "مسؤول إدارة الموصلين")
-        result = await db[WORKFLOWS].update_one(
-            {
-                "user_id": context["merchant_id"],
-                "order_number": order_number,
-                "carrier_label_type": "store_courier",
-                "carrier_label_ready": True,
-                "stage": "completed",
-                "assembly_status": "completed",
-                "$or": [
-                    {"store_courier_assignee_id": {"$exists": False}},
-                    {"store_courier_assignee_id": None},
-                    {"store_courier_assignee_id": ""},
-                ],
-            },
-            {
-                "$set": {
-                    "delivery_flow": "store_courier",
-                    "store_courier_assignment_state": ASSIGNED_WAITING_PICKUP,
-                    "store_courier_assignee_id": selected_courier_id,
-                    "store_courier_assignee_name": selected_courier_name,
-                    "store_courier_assigned_at": now,
-                    "store_courier_assigned_by_id": context["actor_id"],
-                    "store_courier_assigned_by_name": actor_name,
-                    "store_courier_assignment_barcode": order_number,
-                    "store_courier_label_verified_at": now,
-                    "store_courier_label_verified_by_id": context["actor_id"],
-                    "updated_at": now,
-                }
-            },
-        )
-        if not result.modified_count:
-            latest = await db[WORKFLOWS].find_one(
-                {
-                    "user_id": context["merchant_id"],
-                    "order_number": order_number,
-                },
-                {"_id": 0},
-            ) or {}
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "code": "store_courier_assignment_conflict",
-                    "order_number": order_number,
-                    "courier_name": latest.get(
-                        "store_courier_assignee_name"
-                    ),
-                },
-            )
-
-        await db[EVENTS].insert_one({
-            "id": uuid.uuid4().hex,
-            "user_id": context["merchant_id"],
-            "order_number": order_number,
-            "event_type": "store_courier_shipment_assigned",
-            "courier_user_id": selected_courier_id,
-            "courier_name": selected_courier_name,
-            "actor_id": context["actor_id"],
-            "actor_name": actor_name,
-            "occurred_at": now,
-        })
-        updated = await db[WORKFLOWS].find_one(
-            {
-                "user_id": context["merchant_id"],
-                "order_number": order_number,
-            },
-            {"_id": 0},
-        ) or {}
+        async with await db.client.start_session() as session:
+            updated, already_assigned = await session.with_transaction(assign)
         return {
             "ok": True,
-            "already_assigned": False,
-            "courier": {
-                "id": selected_courier_id,
-                "name": selected_courier_name,
-            },
-            "shipment": await _shipment_view(
-                repository,
-                merchant_id=context["merchant_id"],
-                workflow=updated,
-            ),
+            "already_assigned": already_assigned,
+            "courier": {"id": selected_courier_id, "name": selected_courier_name},
+            "shipment": await _shipment_view(repository, merchant_id=context["merchant_id"], workflow=updated),
         }
 
     @router.get("/my-shipments")
@@ -850,7 +757,7 @@ def make_store_courier_dispatch_router(
         workflows = await db[WORKFLOWS].find(
             {
                 "user_id": context["merchant_id"],
-                "carrier_label_type": "store_courier",
+                "$or": [{"delivery_flow": "store_courier"}, {"carrier_label_type": "store_courier"}],
                 "store_courier_assignee_id": context["actor_id"],
                 **stage_filter,
             },
@@ -949,7 +856,7 @@ def make_store_courier_dispatch_router(
             {
                 "user_id": context["merchant_id"],
                 "order_number": normalized_order,
-                "carrier_label_type": "store_courier",
+                "$or": [{"delivery_flow": "store_courier"}, {"carrier_label_type": "store_courier"}],
                 "store_courier_assignee_id": context["actor_id"],
                 "stage": "completed",
                 "store_courier_assignment_state": ASSIGNED_WAITING_PICKUP,
@@ -1104,7 +1011,7 @@ def make_store_courier_dispatch_router(
             {
                 "user_id": context["merchant_id"],
                 "order_number": normalized_order,
-                "carrier_label_type": "store_courier",
+                "$or": [{"delivery_flow": "store_courier"}, {"carrier_label_type": "store_courier"}],
                 "store_courier_assignee_id": context["actor_id"],
                 "stage": DELIVERING,
                 "store_courier_assignment_state": DELIVERING,

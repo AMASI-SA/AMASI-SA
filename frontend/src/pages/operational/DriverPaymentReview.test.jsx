@@ -50,11 +50,20 @@ test('opening and option load read only; approval needs explicit matching POS am
 });
 
 test('bank approval pins submitted bank and exact statement movement',async()=>{
-  item.payment_method='bank_transfer';context={...context,payment_method:'bank_transfer',bank_account_id:'bank'};
+  const started_at='2026-11-01T12:00:00Z';
+  item.payment_method='bank_transfer';context={...context,payment_method:'bank_transfer',bank_account_id:'bank',started_at,
+    bank_movements:[{id:'statement-row',bank_account_id:'bank',amount:'200.00',currency:'SAR',direction:'in',
+      status:'unclassified',movement_date:'2026-11-12',reference:'BANK-42',source_namespace:'operational_driver_bank_movements_v1'}]};
+  const get=api.get.getMockImplementation();
+  api.get.mockImplementation(url=>url.endsWith('/bank-statements/context')?Promise.resolve({data:{
+    source:'operational_driver_bank_statement',bank_source:'operational_bank_catalog',financial_source:'operational',
+    session_scope:scope,started_at,can_upload:true,max_file_bytes:8388608,accepted_file_type:'.xlsx',
+    items:['bank','other'].map(id=>({id,name:id,account_type:'bank',currency:'SAR',status:'active'}))}}):get(url));
   await render();await click('تحميل خيارات الاعتماد');
-  await change(field('البنك المستلم المؤكد'),'other');await change(field('معرف حركة البنك'),'statement-row');
+  await change(field('البنك المستلم المؤكد'),'other');
   expect(button('اعتماد مدفوع').disabled).toBe(true);
-  await change(field('البنك المستلم المؤكد'),'bank');await click('اعتماد مدفوع');
+  await change(field('البنك المستلم المؤكد'),'bank');
+  await change(field('حركة البنك الواردة المطابقة'),'statement-row');await click('اعتماد مدفوع');
   expect(api.post.mock.calls[0][1]).toMatchObject({destination_financial_id:'bank',settlement_reference:'statement-row',expected_session_scope:scope});
   expect(api.post.mock.calls[0][1]).not.toHaveProperty('pos_reviewed_amount');
 });

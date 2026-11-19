@@ -80,6 +80,113 @@ test("current delivery refresh preserves unresolved submission recovery", async 
   expect(api.post.mock.calls.filter(([url]) => url.endsWith("delivery-proof"))).toHaveLength(1);
 });
 
+function recoveredAssignment(method = "bank_transfer", status = "out_for_delivery") {
+  return {id: "assignment-1", order_id: "salla-1", order_number: "test-order", barcode: "barcode-1", status,
+    outstanding_amount: 0, outstanding_amount_available: false,
+    pending_delivery_completion: {version: 1, assignment_id: "assignment-1", order_number: "test-order",
+      collection_amount: method ? "70.00" : "0.00", bank_name_snapshot: method === "bank_transfer" ? "البنك المحفوظ" : null,
+      payload: {barcode: "test-order", target_status: "delivered", payment_method: method,
+        delivery_proof_reference: "saved-proof", receipt_reference: method ? "saved-receipt" : null,
+        bank_account_id: method === "bank_transfer" ? "saved-bank" : null, conversation_evidence_reference: "saved-conversation",
+        physical_cash_amount: null, physical_cash_confirmed: false}}};
+}
+async function renderRecoveredApp(assignment) {
+  api.get.mockImplementation(async url => ({data: url.endsWith("/deliveries") ? {items: [assignment]} : {items: []}}));
+  await act(async () => root.render(<AmasiDeliveryApp/>));
+  await act(async () => [...node.querySelectorAll("button")].find(el => el.textContent.includes("#test-order")).click());
+}
+
+test.each([
+  ["bank_transfer", "assigned"], ["bank_transfer", "out_for_delivery"],
+  ["card_terminal", "assigned"], ["card_terminal", "out_for_delivery"], [null, "assigned"], [null, "out_for_delivery"],
+])("new web session restores %s completion from %s with frozen amount and original evidence", async (method, status) => {
+  const assignment = recoveredAssignment(method, status);
+  await renderRecoveredApp(assignment);
+  expect(api.post).not.toHaveBeenCalled();
+  expect([...node.querySelectorAll("button")].find(el => el.textContent === "جاري التوصيل").disabled).toBe(true);
+  await click("استكمال تأكيد التسليم");
+  const form = node.querySelector('[aria-label="صورة إثبات تسليم الطلب"]').closest("form");
+  expect(form.textContent).toContain(method ? "70.00" : "0.00");
+  expect(form.textContent).toContain("المبلغ المحفوظ لمحاولة التسليم");
+  if (method === "bank_transfer") expect(form.textContent).toContain("البنك المحفوظ");
+  expect(node.querySelector('[aria-label="صورة إثبات تسليم الطلب"]').disabled).toBe(true);
+  await click("إعادة إرسال التأكيد نفسه");
+  expect(api.post.mock.calls).toEqual([["/store-delivery/app/deliveries/status", assignment.pending_delivery_completion.payload]]);
+});
+
+test("web reload after an uncertain response restores the server payload without a new upload", async () => {
+  const assignment = recoveredAssignment();
+  await renderRecoveredApp(assignment); await click("استكمال تأكيد التسليم");
+  api.post.mockRejectedValueOnce({response: {status: 503}});
+  await click("إعادة إرسال التأكيد نفسه");
+  await act(async () => root.unmount()); root = createRoot(node);
+  await renderRecoveredApp(assignment);
+  expect(api.post).toHaveBeenCalledTimes(1);
+  await click("استكمال تأكيد التسليم"); await click("إعادة إرسال التأكيد نفسه");
+  expect(api.post.mock.calls).toEqual(Array(2).fill(["/store-delivery/app/deliveries/status", assignment.pending_delivery_completion.payload]));
+});
+
+test("server pending completion arriving during an untouched modal replaces the editable form", async () => {
+  const state = await renderCurrentDeliveryApp(); await click("تم التوصيل");
+  const assignment = recoveredAssignment();
+  state.items = [assignment]; await click("تحديث");
+  expect(node.textContent).toContain("إعادة إرسال التأكيد نفسه");
+  expect(node.querySelector('[aria-label="صورة إثبات تسليم الطلب"]').disabled).toBe(true);
+  await click("إعادة إرسال التأكيد نفسه");
+  expect(api.post.mock.calls).toEqual([["/store-delivery/app/deliveries/status", assignment.pending_delivery_completion.payload]]);
+});
+
+test.each([
+  ["version", 2], ["assignment_id", "another-assignment"], ["order_number", "another-order"],
+  ["collection_amount", "70junk"], ["payload.target_status", "out_for_delivery"],
+  ["payload.barcode", "another-order"], ["payload.delivery_proof_reference", null],
+  ["payload.receipt_reference", null], ["payload.bank_account_id", null],
+  ["payload.physical_cash_amount", "70.00"], ["payload.physical_cash_confirmed", true],
+  ["payload.payment_method", "cash"],
+])("malformed or foreign recovery field %s does not create a new completion", async (path, value) => {
+  const assignment = recoveredAssignment();
+  const parts = path.split('.');
+  const object = parts.length === 2 ? assignment.pending_delivery_completion.payload : assignment.pending_delivery_completion;
+  object[parts[parts.length - 1]] = value;
+  await renderRecoveredApp(assignment);
+  expect(node.textContent).toContain("تعذر استعادة محاولة التسليم");
+  const complete = [...node.querySelectorAll("button")].find(el => el.textContent === "استكمال تأكيد التسليم");
+  expect(complete.disabled).toBe(true); await act(async () => complete.click());
+  expect(api.post).not.toHaveBeenCalled();
+  expect(node.querySelector('[aria-label="صورة إثبات تسليم الطلب"]')).toBeNull();
+});
+
+test("zero-balance legacy cash method restores only the original noncash claim", async () => {
+  const assignment = recoveredAssignment(null); assignment.pending_delivery_completion.payload.payment_method = "cash";
+  await renderRecoveredApp(assignment); await click("استكمال تأكيد التسليم");
+  expect(node.querySelector('[aria-label="النقد المستلم فعليًا"]')).toBeNull();
+  await click("إعادة إرسال التأكيد نفسه");
+  expect(api.post.mock.calls).toEqual([["/store-delivery/app/deliveries/status", assignment.pending_delivery_completion.payload]]);
+});
+
+test("an invalid restored modal can close for a fresh read without allowing a new confirmation", async () => {
+  const assignment = recoveredAssignment(); assignment.pending_delivery_completion.version = 2;
+  const close = jest.fn();
+  await act(async () => root.render(<DeliveryPaymentModal assignment={assignment} banks={[]} onClose={close}
+    onSaved={saved} busy={false} setBusy={() => {}}/>));
+  expect(node.querySelector('[aria-label="صورة إثبات تسليم الطلب"]').disabled).toBe(true);
+  await submit(); expect(api.post).not.toHaveBeenCalled();
+  const button = node.querySelector('[aria-label="إغلاق"]');
+  expect(button.disabled).toBe(false); await act(async () => button.click()); expect(close).toHaveBeenCalledTimes(1);
+});
+
+test("double click on restored completion sends a single request with the saved payload", async () => {
+  const assignment = recoveredAssignment(); await renderRecoveredApp(assignment); await click("استكمال تأكيد التسليم");
+  let finish;
+  api.post.mockImplementationOnce(() => new Promise(resolve => {finish = resolve;}));
+  await act(async () => {
+    const button = [...node.querySelectorAll("button")].find(el => el.textContent === "إعادة إرسال التأكيد نفسه");
+    button.click(); button.click();
+  });
+  expect(api.post.mock.calls).toEqual([["/store-delivery/app/deliveries/status", assignment.pending_delivery_completion.payload]]);
+  await act(async () => finish({data: {status: "delivered"}}));
+});
+
 test.each([401, 409])("a rejected retry (%s) cannot discard an earlier uncertain completion after removal", async retryStatus => {
   const state = await renderCurrentDeliveryApp();
   await click("تم التوصيل");
