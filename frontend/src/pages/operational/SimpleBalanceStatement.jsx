@@ -33,14 +33,16 @@ function balanceSide(value, resource) {
   const units = minorUnits(value);
   if (units === null) return '';
   if (units === 0n) return 'متعادل';
-  const account = isMoneyAccount(resource.kind) || resource.kind === 'employee_custody';
-  return (units > 0n) === account ? 'عليه' : 'له';
+  const positiveIsOwed = resource.kind === 'employee_custody';
+  return (units > 0n) === positiveIsOwed ? 'عليه' : 'له';
 }
 
 const savedNote = row => typeof row.note === 'string' && row.note.trim() ? row.note : '';
 
 export function StatementDocument({ statement, printing = false }) {
   const resource = statement.resource;
+  const creditSide = isMoneyAccount(resource.kind) ? 'for_us' : 'for_party';
+  const debitSide = isMoneyAccount(resource.kind) ? 'for_party' : 'for_us';
   const balances = statement.scope === 'all' && resource.access?.balance === true
     && (statement.opening_balance !== null || statement.closing_balance !== null || statement.items.some(row => row.balance_after != null));
   const notes = statement.items.some(row => Boolean(savedNote(row)));
@@ -51,11 +53,11 @@ export function StatementDocument({ statement, printing = false }) {
     {typeof statement.balance_note === 'string' && statement.balance_note && <p className="sb-limited-report">{statement.balance_note}</p>}
     {!balances && statement.scope !== 'own' && !statement.balance_note && <p className="sb-small-note">الأرصدة غير متاحة في هذا الكشف.</p>}
     <div className="sb-table-wrap"><table className={`sb-ledger sb-statement-table${balances ? ' sb-with-running' : ''}${notes ? ' sb-with-notes' : ''}`}>
-      <thead><tr><th scope="col">البيان</th><th scope="col" data-side="for_party">له</th><th scope="col" data-side="for_us">عليه</th>{balances && <th scope="col" className="sb-statement-balance">الرصيد بعد الحركة</th>}{notes && <th scope="col" className="sb-statement-note">الملاحظة</th>}</tr></thead>
+      <thead><tr><th scope="col">البيان</th><th scope="col" data-side={creditSide}>له</th><th scope="col" data-side={debitSide}>عليه</th>{balances && <th scope="col" className="sb-statement-balance">الرصيد بعد الحركة</th>}{notes && <th scope="col" className="sb-statement-note">الملاحظة</th>}</tr></thead>
       <tbody>{statement.items.map((row, index) => <tr key={`${row.id}:${index}`}>
         <td><strong>{movementTitle(row)}</strong><small title={movementDate(row, true)}><bdi>{movementDate(row)}</bdi></small>{row.order_number && row.customer_name && <small>طلب {row.order_number}</small>}{row.informational && <small>إثبات للمؤسسة · {money(row.amount)} {row.currency || statement.currency}</small>}<small>سجّلها: {movementRecorder(row)}</small></td>
-        <td data-side="for_party">{!row.informational && row.side === 'for_party' ? money(row.amount) : '—'}</td>
-        <td data-side="for_us">{!row.informational && row.side === 'for_us' ? money(row.amount) : '—'}</td>
+        <td data-side={creditSide}>{!row.informational && row.side === creditSide ? money(row.amount) : '—'}</td>
+        <td data-side={debitSide}>{!row.informational && row.side === debitSide ? money(row.amount) : '—'}</td>
         {balances && <td className="sb-statement-balance"><SignedAmount value={row.balance_after} /></td>}
         {notes && <td className="sb-statement-note">{savedNote(row) || '—'}</td>}
       </tr>)}</tbody>
@@ -65,8 +67,8 @@ export function StatementDocument({ statement, printing = false }) {
       <h3>ملخص الفترة</h3>
       <dl className="sb-statement-totals">
         {balances && <div data-statement-total="opening"><dt>الرصيد الافتتاحي</dt><dd><SignedAmount value={statement.opening_balance} /> <span className="sb-balance-side">{balanceSide(statement.opening_balance, resource)}</span></dd></div>}
-        <div><dt>إجمالي له</dt><dd><bdi>{money(statement.totals.for_party)}</bdi></dd></div>
-        <div><dt>إجمالي عليه</dt><dd><bdi>{money(statement.totals.for_us)}</bdi></dd></div>
+        <div><dt>إجمالي له</dt><dd><bdi>{money(statement.totals[creditSide])}</bdi></dd></div>
+        <div><dt>إجمالي عليه</dt><dd><bdi>{money(statement.totals[debitSide])}</bdi></dd></div>
         {balances && <div data-statement-total="closing"><dt>الصافي بنهاية الفترة</dt><dd><SignedAmount value={statement.closing_balance} /> <span className="sb-balance-side">{balanceSide(statement.closing_balance, resource)}</span></dd></div>}
       </dl>
       {balances && <p className="sb-small-note">الصافي بنهاية الفترة يشمل الرصيد الافتتاحي وحركات الفترة.</p>}
