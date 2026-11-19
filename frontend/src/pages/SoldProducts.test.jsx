@@ -260,9 +260,13 @@ test("Salla fallback is labelled in screen and print without hiding incomplete c
     for (const printable of [false, true]) {
         const html = renderToStaticMarkup(<SoldTable rows={[product("fallback", {cost_source:"salla"})]} printable={printable} />);
         expect(html).toContain("تكلفة سلة");
+        const mixed = renderToStaticMarkup(<SoldTable rows={[product("mixed", {cost_source:"supplier_invoice_mixed", uses_salla_fallback:true})]} printable={printable} />);
+        expect(mixed).toContain("تكلفة سلة");
+        const invoiced = renderToStaticMarkup(<SoldTable rows={[product("invoiced", {cost_source:"supplier_invoice_mixed", uses_salla_fallback:false})]} printable={printable} />);
+        expect(invoiced).not.toContain("تكلفة سلة");
         const mezan = renderToStaticMarkup(<SoldTable rows={[product("mezan", {cost_source:"mezan"})]} printable={printable} />);
         expect(mezan).not.toContain("تكلفة سلة");
-        const missing = renderToStaticMarkup(<SoldTable rows={[product("missing", {cost_source:"missing",cost_status:"incomplete",total_cost:null})]} printable={printable} />);
+        const missing = renderToStaticMarkup(<SoldTable rows={[product("missing", {cost_source:"missing",uses_salla_fallback:true,cost_status:"incomplete",total_cost:null})]} printable={printable} />);
         expect(missing).not.toContain("تكلفة سلة");
         expect(missing).toContain("الإجمالي غير مكتمل");
     }

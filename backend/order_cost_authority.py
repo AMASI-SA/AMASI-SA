@@ -189,10 +189,146 @@ def _legacy_service_aliases(product, bindings, decisions, selection_evidence, re
     return {next(iter(aliases)) for aliases in candidates.values() if len(aliases) == 1}
 
 
+def _historical_service_applicability(
+    historical, *, item, source_item, product, quantity, product_bindings, option_bindings, decisions, resources,
+):
+    """Recover positive service scope, never a missing answer or an old price.
+
+    Callers must first verify this ordinary snapshot against the original line
+    with resolve_order_line_cost. A complete, consistent selected service can
+    survive a replacement option rule; absent services prove nothing here.
+    """
+    normalized = item.get("options_normalized")
+    if (normalized is not None and not isinstance(normalized, dict)
+            or not isinstance(historical, dict) or not any(value is None for value in decisions)
+            or historical.get("cost_authority") != "order_snapshot"
+            or historical.get("cost_stage") != "expected"
+            or historical.get("cost_semantics_version") != VERSION
+            or historical.get("historical_cost_verified") is not True
+            or historical.get("calculation_cost_available") is not True
+            or historical.get("base_complete") is not True
+            or historical.get("repair_version") or historical.get("missing_cost_reasons")
+            or historical.get("cost_detail_scope_complete") is False
+            or historical.get("cost_detail_units")
+            or historical.get("currency") != "SAR" or historical.get("cost_currency") != "SAR"
+            or quantity <= 0 or decimal(historical.get("quantity")) != quantity
+            or historical.get("_verified_service_scope_line_fingerprint") != line_fingerprint(source_item)):
+        return {}
+    from report_option_identity import _id, _label, catalog_options
+    cells = historical.get("cost_detail_cells")
+    if not isinstance(cells, list) or not cells or any(not isinstance(cell, dict) for cell in cells):
+        return {}
+    keyed = {_id(cell.get("key")): cell for cell in cells}
+    if "" in keyed or len(keyed) != len(cells) or "base" not in keyed:
+        return {}
+    applied, totals = {}, {"product": Decimal(0), "option": Decimal(0)}
+    try:
+        for key, cell in keyed.items():
+            if (cell.get("status") not in {"costed", "not_required", "included_in_base"}
+                    or cell.get("kind") not in {"product", "service", "component"}
+                    or key != "base" and not key.startswith(("product:", "option:"))
+                    or cell.get("status") == "costed" and decimal(cell.get("unit_cost")) is None
+                    or cell.get("status") != "costed" and cell.get("unit_cost") is not None):
+                return {}
+        base = keyed["base"]
+        if base.get("kind") != "product" or base.get("status") != "costed":
+            return {}
+        for kind, field in (("product", "applied_product_resources"), ("option", "applied_option_costs")):
+            rows = historical.get(field)
+            if not isinstance(rows, list):
+                return {}
+            for row in rows:
+                if not isinstance(row, dict) or not _id(row.get("binding_id")):
+                    return {}
+                key = kind + ":" + _id(row["binding_id"])
+                cell = keyed.get(key) or {}
+                count, unit, amount = (decimal(row.get(name)) for name in ("quantity", "unit_cost_sar", "resolved_amount"))
+                if (key in applied or cell.get("status") != "costed"
+                        or count is None or count <= 0 or unit is None or amount is None
+                        or amount != count * unit or decimal(cell.get("unit_cost")) != decimal(_amount(amount))
+                        or _id(cell.get("resource_id")) != _id(row.get("resource_id"))):
+                    return {}
+                applied[key] = row
+                totals[kind] += amount * quantity
+        if set(applied) != {key for key, cell in keyed.items() if key != "base" and cell["status"] == "costed"}:
+            return {}
+        base_total = decimal(base["unit_cost"]) * quantity
+        expected = {
+            "base_total": base_total, "product_components_total": totals["product"],
+            "selected_options_total": totals["option"],
+            "components_total": totals["product"] + totals["option"],
+            "line_total": base_total + totals["product"] + totals["option"],
+        }
+        if any(decimal(historical.get(field)) != decimal(_amount(amount)) for field, amount in expected.items()):
+            return {}
+    except (ArithmeticError, TypeError, ValueError):
+        return {}
+
+    old_by_resource, current_by_resource = defaultdict(list), defaultdict(list)
+    current_option_ids = defaultdict(int)
+    for cell in cells:
+        if _id(cell.get("resource_id")):
+            old_by_resource[_id(cell["resource_id"])].append(cell)
+    for binding in [*product_bindings, *option_bindings]:
+        if _id(binding.get("resource_id")):
+            current_by_resource[_id(binding["resource_id"])].append(binding)
+    for binding in option_bindings:
+        current_option_ids[_id(binding.get("id"))] += 1
+    catalog = catalog_options(product or {})
+    answers = [(answer, False) for answer in item.get("options_raw") or []]
+    answers.extend((answer, True) for answer in item.get("custom_fields") or [])
+    answers.extend(({"name": key, "value": value}, False) for key, value in (normalized or {}).items())
+    recovered = {}
+    for index, binding in enumerate(option_bindings):
+        rid, oid = _id(binding.get("resource_id")), _id(binding.get("option_id"))
+        if (decisions[index] is not None or binding.get("mode") != "resource"
+                or not rid or not oid or not _id(binding.get("id")) or not _id(binding.get("value_id"))
+                or (resources.get(rid) or {}).get("kind") != "service"
+                or current_option_ids[_id(binding["id"])] != 1
+                or len(old_by_resource[rid]) != 1 or len(current_by_resource[rid]) != 1):
+            continue
+        # An explicitly supplied but malformed/contradictory new answer must
+        # not be replaced by the old scope, even when its decision is None.
+        labels = set((catalog.get(oid) or {}).get("labels") or []) | {_label(binding.get("option_name"))}
+        labels.discard("")
+        present = False
+        for answer, is_field in answers:
+            if not isinstance(answer, dict):
+                continue
+            nested = answer.get("option") if isinstance(answer.get("option"), dict) else {}
+            field = answer.get("field") if isinstance(answer.get("field"), dict) else {}
+            identities = {_id(answer.get(name)) for name in ("option_id", "product_option_id", "id")}
+            identities.add(_id(nested.get("id")))
+            identities.update("field:" + value for value in (
+                _id(answer.get("field_id")), _id(field.get("id")),
+                _id(answer.get("id")) if is_field else "",
+            ) if value)
+            label = _label(answer.get("option_name") or answer.get("field_name")
+                           or answer.get("name") or nested.get("name") or field.get("name"))
+            if oid in identities or label and label in labels:
+                present = True
+                break
+        if present:
+            continue
+        cell = old_by_resource[rid][0]
+        previous = applied.get(_id(cell.get("key"))) or {}
+        count = decimal(binding.get("quantity", 1))
+        if (cell.get("kind") != "service" or cell.get("status") != "costed"
+                or not _id(cell.get("key")).startswith("option:")
+                or count is None or count <= 0 or count != decimal(previous.get("quantity"))):
+            continue
+        recovered[index] = {
+            "binding_id": _id(binding["id"]), "historical_binding_id": _id(previous["binding_id"]),
+            "resource_id": rid, "quantity": str(count), "source": "verified_order_snapshot",
+        }
+    return recovered
+
+
 def calculate_catalog_line_cost(
     item: dict, *, product: dict | None, profile: dict | None,
     product_bindings: list[dict], option_bindings: list[dict],
     resources: dict[str, dict], current_report: bool = False,
+    verified_historical_cost: dict | None = None, use_recorded_choices: bool = False,
 ) -> dict:
     """Base + selected, independent resources/options, with one quantity pass."""
     from order_option_cost_snapshot_routes import classify_base_unit_cost
@@ -216,8 +352,20 @@ def calculate_catalog_line_cost(
                 "kind": "product", "status": "costed" if base is not None else "missing_cost",
                 "unit_cost": _amount(base) if base is not None else None}]
     from report_option_identity import resolve_report_choices
-    decisions, selection_evidence = resolve_report_choices(row, product, option_bindings)
+    if current_report and row.get("options_normalized") is not None and not isinstance(row["options_normalized"], dict):
+        decisions, selection_evidence = [None] * len(option_bindings), []
+    else:
+        decisions, selection_evidence = resolve_report_choices(row, product, option_bindings)
     legacy_aliases = _legacy_service_aliases(product, option_bindings, decisions, selection_evidence, resources, profile)
+    recovered = _historical_service_applicability(
+        verified_historical_cost, item=row, source_item=item, product=product, quantity=quantity,
+        product_bindings=product_bindings, option_bindings=option_bindings, decisions=decisions, resources=resources,
+    ) if current_report else {}
+    for index in recovered:
+        decisions[index] = True
+    if current_report and use_recorded_choices and isinstance(item.get("_report_salla_question_keys"), set):
+        from report_option_identity import omit_unordered_report_options
+        omit_unordered_report_options(row, product, option_bindings, decisions, item["_report_salla_question_keys"])
     seen: set[tuple[str, str]] = set()
     for kind, bindings in (("product", product_bindings), ("option", option_bindings)):
         for index, binding in enumerate(bindings):
@@ -270,7 +418,7 @@ def calculate_catalog_line_cost(
                 "quantity": str(multiplier), "unit_cost_sar": str(unit), "resolved_amount": str(amount)})
     base_total = (base or Decimal(0)) * quantity
     product_total, option_total = totals["product"] * quantity, totals["option"] * quantity
-    return {
+    result = {
         "quantity": float(quantity), "currency": "SAR", "cost_currency": "SAR",
         "base_cost_source": status["source"], "base_complete": complete,
         "calculation_cost_available": complete,
@@ -288,6 +436,9 @@ def calculate_catalog_line_cost(
         "historical_cost_verified": False, "missing_cost_reasons": missing,
         "cost_detail_cells": details,
     }
+    if recovered:
+        result["historical_service_applicability"] = list(recovered.values())
+    return result
 
 
 def _unknown(quantity: Any, reason: str) -> dict:
@@ -769,7 +920,7 @@ async def load_order_cost_authority(db: Any, user_id: str, orders: list[dict], *
                     result["lines"][identity] = {**deepcopy(row), "cost": _unknown(
                         item.get("quantity"), "cost_correction_source_changed")}
                 else:
-                    result["lines"][identity] = deepcopy(row)
+                    result["lines"][identity] = {**deepcopy(row), "_verified_applied_correction": True}
         result["read_batches"] += 1
         if budget is not None:
             await budget.checkpoint()
@@ -792,7 +943,8 @@ async def load_order_cost_authority(db: Any, user_id: str, orders: list[dict], *
 
 
 def resolve_order_line_cost(item: dict, *, order_number: str, catalog_cost: dict,
-                            authority: dict | None, product_id: Any = None) -> dict:
+                            authority: dict | None, product_id: Any = None,
+                            include_service_scope_proof: bool = False) -> dict:
     authority = authority or {}
     row = item_dict(item)
     record = (authority.get("lines") or {}).get((str(order_number), line_id(row)))
@@ -839,6 +991,16 @@ def resolve_order_line_cost(item: dict, *, order_number: str, catalog_cost: dict
                 return _unknown(row.get("quantity"), "cost_snapshot_selected_options_mismatch")
         cost = deepcopy(record.get("cost") or _stored_cost(record))
         cost["historical_cost_verified"] = bool(cost.get("calculation_cost_available")) and cost.get("historical_cost_verified", True)
+        # A legacy verified amount may have no original line fingerprint. New
+        # service applicability recovery requires an actual source match, and
+        # this attestation is derived here rather than trusted from storage.
+        cost.pop("_verified_service_scope_line_fingerprint", None)
+        if include_service_scope_proof and record.get("_verified_applied_correction") is True:
+            cost["cost_authority"] = "approved_correction"
+        if (include_service_scope_proof and record.get("line_fingerprint")
+                and cost.get("cost_authority") == "order_snapshot"
+                and cost["historical_cost_verified"] is True):
+            cost["_verified_service_scope_line_fingerprint"] = record["line_fingerprint"]
         return cost
     identities = {str(product_id or ""), str(row.get("parent_product_id") or ""), str(row.get("product_id") or "")}
     if identities & set(authority.get("composite_products") or []):
