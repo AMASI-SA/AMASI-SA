@@ -37,6 +37,21 @@ async def review_access(db, principal, *, expected_owner=None, assignment_id=Non
     return actor, owner, policy, review
 
 
+def require_bank_movements(policy, bank):
+    policy.require_use('bank', bank)
+    if policy.resource('bank', bank)['movements'] != 'all':
+        fail('operational_review_bank_movements_forbidden', 'يلزم السماح بمشاهدة حركات البنك لمطابقة الإيصال', 403)
+
+
+async def bank_movement_access(db, principal, *, owner, assignment_id, bank_id):
+    actor, _, policy, review = await review_access(db, principal, expected_owner=owner, assignment_id=assignment_id)
+    if (review.get('status') != 'pending' or review.get('payment_method') != 'bank_transfer'
+            or review.get('bank_account_id') != bank_id):
+        fail('operational_review_bank_selection_unavailable', 'تغير التحويل أو البنك؛ أعد فتح الإيصال', 409)
+    require_bank_movements(policy, bank_id)
+    return actor, policy
+
+
 def queue_query(owner, policy, *, status, driver_id=None, method=None, bank_id=None):
     query = {'user_id': owner, 'status': status}
     if not policy.owner_override:
@@ -123,18 +138,20 @@ def install_workspace_review_routes(router, db, current_user, scope):
             actor, owner, policy, _ = await review_access(db, user, assignment_id=assignment_id)
             async def authorize(database):
                 await review_access(database, user, expected_owner=owner, assignment_id=assignment_id)
+            # The workspace reads bank rows through its bounded, paged endpoint.
+            # Its receipt options must not inherit the legacy embedded-list cap.
             result = await options(db, owner=owner, actor=actor['id'], assignment_id=assignment_id,
                                    authorize_review=authorize)
+            from store_delivery_bank_identity import collection_bank_accounts
+            banks = (await collection_bank_accounts(db, owner, actor_id=actor['id']))['items']
+            latest, _ = await unchanged(user, owner, policy, assignment_id=assignment_id)
             result['pos_receivables'] = [item for item in result.get('pos_receivables', [])
-                                         if policy.resource('pos_receivable', item['id'])['use']]
-            from accounting_financial_identity import list_financial_accounts
-            banks = await list_financial_accounts(db, owner, account_types=('bank',), currency='SAR')
+                                         if latest.resource('pos_receivable', item['id'])['use']]
             result['banks'] = [{'id': item['id'], 'name': item.get('name') or item['id']} for item in banks
                                if item['id'] == result.get('bank_account_id')
-                               and policy.resource('bank', item['id'])['use']
-                               and policy.resource('bank', item['id'])['movements'] == 'all']
+                               and latest.resource('bank', item['id'])['use']
+                               and latest.resource('bank', item['id'])['movements'] == 'all']
             result['can_select_bank_movement'] = bool(result['banks'])
-            await unchanged(user, owner, policy, assignment_id=assignment_id)
             return result
         return await run_visible_report_read(request, read)
 
@@ -157,9 +174,7 @@ def install_workspace_review_routes(router, db, current_user, scope):
             bank = review.get('bank_account_id')
             if review.get('status') != 'pending' or review.get('payment_method') != 'bank_transfer' or not bank:
                 fail('operational_review_bank_selection_unavailable', 'اختيار حركة البنك متاح للتحويل المعلق فقط', 409)
-            policy.require_use('bank', bank)
-            if policy.resource('bank', bank)['movements'] != 'all':
-                fail('operational_review_bank_movements_forbidden', 'يلزم السماح بمشاهدة حركات البنك لمطابقة الإيصال', 403)
+            require_bank_movements(policy, bank)
             if await financial_source(db, owner) != 'operational':
                 fail('operational_driver_review_phase_changed', 'تغير مسار الاعتماد؛ أعد فتح الإيصال', 409)
             state = await read(db, owner)
@@ -179,15 +194,34 @@ def install_workspace_review_routes(router, db, current_user, scope):
             for key in ('receipt_id', 'accounting_event_id', 'operational_event_id',
                         'confirmed_provider', 'explicit_provider', 'suggested_provider'):
                 query[key] = {'$in': [None, '']}
-            total = await db.mz2_daily_movements.count_documents(query)
+            # Keep the established native query (including exact numeric legacy
+            # amounts), and merge the new immutable operational namespace into
+            # its existing five-row pages. At most 200 operational candidates
+            # and a native window of 200 + page_size rows are read.
+            from operational_driver_bank_store import MOVEMENTS, SOURCE
+            from operational_driver_bank_statements import seal
+            operational_query = {**query, 'source': SOURCE, 'financial_source': 'operational',
+                                 'started_at': state['started_at'], 'amount': value}
+            operational_rows = await db[MOVEMENTS].find(operational_query).sort([
+                ('movement_date', -1), ('id', -1)
+            ]).limit(201).to_list(201)
+            if len(operational_rows) > 200:
+                fail('operational_driver_bank_candidate_scope_too_large')
+            operational_rows = [row for row in operational_rows if row.get('seal') == seal(row)]
+            total = await db.mz2_daily_movements.count_documents(query) + len(operational_rows)
             pages = max(1, ceil(total / page_size))
             current = min(page, pages)
-            fields = {'_id': 0, **{key: 1 for key in ('id', 'movement_date', 'amount', 'currency',
-                'reference', 'description', 'bank_account_id')}}
+            fields = {'_id': 0, **{key: 1 for key in ('id', 'movement_date', 'amount', 'currency', 'reference', 'description', 'bank_account_id')}}
+            offset = (current - 1) * page_size
+            native_start = max(0, offset - len(operational_rows))
             rows = await db.mz2_daily_movements.find(query, fields).sort([
                 ('movement_date', -1), ('id', -1)
-            ]).skip((current - 1) * page_size).limit(page_size).to_list(page_size)
+            ]).skip(native_start).limit(page_size + len(operational_rows)).to_list(page_size + len(operational_rows))
+            rows.extend({key: row.get(key) for key in fields if key != '_id'} for row in operational_rows)
+            rows.sort(key=lambda row: (str(row.get('movement_date') or ''), str(row.get('id') or '')), reverse=True)
+            rows = rows[offset - native_start:offset - native_start + page_size]
             await unchanged(user, owner, policy, assignment_id=assignment_id, destination=bank)
+            await bank_movement_access(db, user, owner=owner, assignment_id=assignment_id, bank_id=bank)
             return {'items': rows, 'total': total, 'page': current, 'page_size': page_size, 'total_pages': pages}
         return await run_visible_report_read(request, read_candidates)
 

@@ -231,3 +231,247 @@ def test_review_audit_name_is_owner_scoped_and_bank_selector_requires_full_bank_
         hidden = (await http.get(BASE + '/reviews/assignment-0/options', headers=STAFF)).json()
         assert hidden['banks'] == [] and not hidden['can_select_bank_movement']
     run(scenario)
+
+
+def scoped_options_case(scenario, *, role='employee', use=True, movements='all', operational=False):
+    """Actual HTTP policies and candidate readers over disposable in-memory data."""
+    import asyncio
+    from uuid import uuid4
+    from fastapi import FastAPI
+    from httpx import ASGITransport, AsyncClient
+    from mongomock_motor import AsyncMongoMockClient
+    from operational_balance_routes import make_operational_balance_router
+    from store_delivery_payment_review_routes import make_store_delivery_payment_review_router
+    from .test_store_delivery_noncash_review import seed as complete_review
+    from .test_operational_driver_bank_statements import prepare_review, BANK
+
+    async def execute():
+        client = AsyncMongoMockClient()
+        db = client['scoped_bank_options_' + uuid4().hex]
+        if operational:
+            assignment = await prepare_review(db)
+            bank = BANK
+        else:
+            assignment, _ = await complete_review(db, 'bank_transfer')
+            bank = 'bank'
+        policy = {'owner_id': 'owner', 'version': 1, 'enabled': True, 'operations': ['courier.review'],
+            'resources': [resource('store_driver', 'driver', use=False, movements='all'),
+                          resource('bank', bank, use=use, movements=movements, balance=True)]}
+        await db.users.insert_one({'id': 'staff', 'role': role, 'created_by': 'owner', 'is_active': True,
+                                   'operational_balance_access': policy})
+        await db.store_delivery_receipts.update_one({'assignment_id': assignment},
+                                                    {'$set': {'content_type': 'image/png'}})
+        async def principal(): return await db.users.find_one({'id': 'staff'}, {'_id': 0})
+        app = FastAPI()
+        app.include_router(make_operational_balance_router(db, principal), prefix='/api')
+        app.include_router(make_store_delivery_payment_review_router(db, principal))
+        try:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url='http://synthetic') as http:
+                await scenario(db, http, assignment, bank)
+        finally:
+            client.close()
+    asyncio.run(execute())
+
+
+async def operational_candidate(db, bank, identity='operational-bank-movement:synthetic', day='2026-10-06', **changes):
+    from operational_driver_bank_store import MOVEMENTS, SOURCE
+    from operational_driver_bank_statements import seal
+    from .test_store_delivery_noncash_review import START
+    row = {'_id': identity, 'id': identity, 'user_id': 'owner', 'bank_account_id': bank,
+        'source': SOURCE, 'financial_source': 'operational', 'started_at': START,
+        'file_id': 'synthetic-file', 'file_hash': 'a' * 64, 'row_no': 2,
+        'movement_date': day, 'amount': '200.00', 'currency': 'SAR', 'direction': 'in',
+        'reference': identity, 'description': 'Synthetic incoming payment', 'status': 'unclassified', **changes}
+    row['seal'] = seal(row)
+    await db[MOVEMENTS].insert_one(row)
+    return identity
+
+
+@pytest.mark.parametrize('role', ['employee', 'accountant'])
+@pytest.mark.parametrize('use,movements', [(False, 'all'), (True, 'none'), (False, 'none')])
+def test_scoped_receipt_reader_cannot_obtain_bank_rows_through_options(role, use, movements):
+    async def scenario(db, http, assignment, bank):
+        await operational_candidate(db, bank)
+        path = BASE + '/reviews/' + assignment
+        response = await http.get(path + '/options')
+        assert response.status_code == 200, response.text
+        assert response.json()['bank_movements'] == []
+        assert response.json()['banks'] == []
+        assert not response.json()['can_select_bank_movement']
+        assert (await http.get(path + '/receipt')).status_code == 200
+        assert (await http.get(path + '/bank-movements')).status_code == 403
+        assert (await db.store_delivery_payment_reviews.find_one({'assignment_id': assignment}))['status'] == 'pending'
+    scoped_options_case(scenario, role=role, use=use, movements=movements)
+
+
+@pytest.mark.parametrize('operational', [False, True])
+def test_full_scoped_reviewer_reads_actual_bank_candidates_without_import_permission(operational):
+    async def scenario(db, http, assignment, bank):
+        identity = await operational_candidate(db, bank)
+        path = BASE + '/reviews/' + assignment
+        response = await http.get(path + '/options')
+        assert response.status_code == 200, response.text
+        assert response.json()['can_approve'] and response.json()['can_select_bank_movement']
+        assert [row['id'] for row in response.json()['banks']] == [bank]
+        assert response.json()['bank_movements'] == []
+        rows = await http.get(path + '/bank-movements')
+        assert rows.status_code == 200, rows.text
+        assert identity in {row['id'] for row in rows.json()['items']}
+        from operational_driver_payment_review import options
+        legacy = await options(db, owner='owner', actor='owner', assignment_id=assignment)
+        assert identity in {row['id'] for row in legacy['bank_movements']}
+        assert (await http.get('/store-delivery/payment-review/bank-statements/context')).status_code == 403
+        upload = await http.post('/store-delivery/payment-review/bank-statements/upload',
+            data={'assignment_id': assignment, 'bank_account_id': bank, 'request_id': 'blocked-scoped-upload',
+                  'expected_started_at': '2026-10-05T09:00:00+00:00', 'expected_session_scope': 'a' * 64},
+            files={'file': ('synthetic.xlsx', b'not-read-before-authorization', 'application/octet-stream')})
+        assert upload.status_code == 403, upload.text
+        assert (await db.store_delivery_payment_reviews.find_one({'assignment_id': assignment}))['status'] == 'pending'
+    scoped_options_case(scenario, operational=operational)
+
+
+def test_receipt_callback_alone_never_grants_the_nested_bank_reader():
+    import operational_driver_payment_review as service
+    from operational_balance_reviews import review_access
+    async def scenario(db, http, assignment, bank):
+        await operational_candidate(db, bank)
+        async def authorize(database):
+            await review_access(database, {'id': 'staff'}, expected_owner='owner', assignment_id=assignment)
+        response = await service.options(db, owner='owner', actor='staff', assignment_id=assignment,
+                                         authorize_review=authorize)
+        assert response['bank_movements'] == []
+        assert response['can_approve']
+    scoped_options_case(scenario, role='accountant')
+
+
+def test_workspace_pages_native_and_operational_rows_together_in_stable_order():
+    async def scenario(db, http, assignment, bank):
+        await db.mz2_daily_movements.update_many({}, {'$set': {'status': 'matched'}})
+        for number in (1, 3, 5, 7):
+            await db.mz2_daily_movements.insert_one({'user_id': 'owner', 'id': f'native-{number}',
+                'bank_account_id': bank, 'amount': 200 if number == 3 else '200.00', 'currency': 'SAR',
+                'status': 'unclassified', 'source': 'bank_statement_import', 'direction': 'in',
+                'movement_date': f'2026-10-{number + 5:02}', 'reference': f'NATIVE-{number}'})
+        for number in (2, 4, 6):
+            await operational_candidate(db, bank, f'operational-bank-movement:{number}', f'2026-10-{number + 5:02}')
+        await operational_candidate(db, bank, 'wrong-period', started_at='2025-10-05T09:00:00+00:00')
+        await operational_candidate(db, bank, 'wrong-bank', bank_account_id='another-bank')
+        await operational_candidate(db, bank, 'outgoing', direction='out')
+        await operational_candidate(db, bank, 'consumed', operational_event_id='used')
+        path = BASE + '/reviews/' + assignment + '/bank-movements'
+        page1 = (await http.get(path)).json()
+        page2 = (await http.get(path, params={'page': 2})).json()
+        assert page1['total'] == page2['total'] == 7
+        assert page1['total_pages'] == page2['total_pages'] == 2
+        assert [row['id'] for row in page1['items']] == ['native-7', 'operational-bank-movement:6',
+            'native-5', 'operational-bank-movement:4', 'native-3']
+        assert [row['id'] for row in page2['items']] == ['operational-bank-movement:2', 'native-1']
+        assert all(set(row) <= {'id', 'movement_date', 'amount', 'currency', 'reference', 'description', 'bank_account_id'}
+                   for row in page1['items'] + page2['items'])
+    scoped_options_case(scenario)
+
+
+def test_workspace_receipt_options_do_not_depend_on_the_embedded_candidate_limit():
+    from operational_driver_payment_review import options
+    async def scenario(db, http, assignment, bank):
+        for collection in (db.store_delivery_collections, db.store_delivery_payment_reviews):
+            await collection.update_one({'assignment_id': assignment}, {'$set': {'amount': '500.00'}})
+        await db.unified_orders.update_one({'user_id': 'owner'},
+            {'$set': {'raw_by_source.salla_direct.total.amount': '500.00'}})
+        await db.mz2_daily_movements.insert_many([
+            {'user_id': 'owner', 'id': f'native-volume-{number:03}', 'bank_account_id': bank,
+             'amount': '500.00', 'currency': 'SAR', 'status': 'unclassified',
+             'source': 'bank_statement_import', 'direction': 'in', 'movement_date': '2026-10-06',
+             'reference': f'VOLUME-{number}', 'file_id': 'volume-file', 'file_hash': 'a' * 64}
+            for number in range(201)])
+        path = BASE + '/reviews/' + assignment
+        first = await http.get(path + '/bank-movements')
+        last = await http.get(path + '/bank-movements', params={'page': 41})
+        assert first.status_code == last.status_code == 200
+        assert first.json()['total'] == last.json()['total'] == 201
+        assert len(first.json()['items']) == 5 and len(last.json()['items']) == 1
+        legacy = await options(db, owner='owner', actor='owner', assignment_id=assignment)
+        assert not legacy['can_approve']
+        assert legacy['blocker'] == 'operational_driver_bank_candidate_scope_too_large'
+        response = await http.get(path + '/options')
+        assert response.status_code == 200, response.text
+        assert response.json()['can_approve'], response.text
+        assert response.json()['blocker'] is None
+        assert response.json()['bank_movements'] == []
+    scoped_options_case(scenario)
+
+
+def test_revoked_bank_scope_during_candidate_read_does_not_return_rows(monkeypatch):
+    from operational_driver_bank_store import MOVEMENTS
+    async def scenario(db, http, assignment, bank):
+        await operational_candidate(db, bank)
+        collection_type = type(db[MOVEMENTS])
+        original_find = collection_type.find
+        revoked = False
+        class Cursor:
+            def __init__(self, target): self.target = target
+            def sort(self, *args): self.target = self.target.sort(*args); return self
+            def limit(self, *args): self.target = self.target.limit(*args); return self
+            async def to_list(self, *args, **kwargs):
+                nonlocal revoked
+                rows = await self.target.to_list(*args, **kwargs)
+                if not revoked:
+                    revoked = True
+                    await db.users.update_one({'id': 'staff'}, {'$set': {
+                        'operational_balance_access.resources.1.movements': 'none'}})
+                return rows
+        def find(collection, *args, **kwargs):
+            cursor = original_find(collection, *args, **kwargs)
+            return Cursor(cursor) if collection.name == MOVEMENTS else cursor
+        monkeypatch.setattr(collection_type, 'find', find)
+        response = await http.get(BASE + '/reviews/' + assignment + '/bank-movements')
+        assert revoked
+        assert response.status_code == 403, response.text
+        assert (await db.store_delivery_payment_reviews.find_one({'assignment_id': assignment}))['status'] == 'pending'
+    scoped_options_case(scenario)
+
+
+def test_bank_scope_is_rechecked_after_the_final_catalog_read(monkeypatch):
+    import store_delivery_bank_identity as identity
+    original_catalog = identity.collection_bank_accounts
+    revoked = False
+    async def revoke_after_catalog(db, *args, **kwargs):
+        nonlocal revoked
+        result = await original_catalog(db, *args, **kwargs)
+        if kwargs.get('actor_id') == 'staff':
+            await db.users.update_one({'id': 'staff'}, {'$set': {
+                'operational_balance_access.resources.1.movements': 'none'}})
+            revoked = True
+        return result
+    monkeypatch.setattr(identity, 'collection_bank_accounts', revoke_after_catalog)
+    async def scenario(db, http, assignment, bank):
+        await operational_candidate(db, bank)
+        response = await http.get(BASE + '/reviews/' + assignment + '/options')
+        assert revoked
+        assert response.status_code == 200, response.text
+        assert response.json()['can_approve']
+        assert response.json()['bank_movements'] == response.json()['banks'] == []
+        assert not response.json()['can_select_bank_movement']
+    scoped_options_case(scenario)
+
+
+def test_bank_scope_is_rechecked_after_the_final_receipt_policy_read(monkeypatch):
+    import operational_balance_reviews as service
+    original_access = service.review_access
+    revoked = False
+    async def revoke_after_receipt_access(db, *args, **kwargs):
+        nonlocal revoked
+        result = await original_access(db, *args, **kwargs)
+        if kwargs.get('destination'):
+            await db.users.update_one({'id': 'staff'}, {'$set': {
+                'operational_balance_access.resources.1.movements': 'none'}})
+            revoked = True
+        return result
+    monkeypatch.setattr(service, 'review_access', revoke_after_receipt_access)
+    async def scenario(db, http, assignment, bank):
+        await operational_candidate(db, bank)
+        response = await http.get(BASE + '/reviews/' + assignment + '/bank-movements')
+        assert revoked
+        assert response.status_code == 403, response.text
+        assert response.json()['detail']['code'] == 'operational_review_bank_movements_forbidden'
+    scoped_options_case(scenario)
