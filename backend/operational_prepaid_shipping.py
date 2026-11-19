@@ -52,20 +52,21 @@ def source_event(data, setup, source, raw, state, owner, start, end, history, sh
     if _status(effective) in {'pending', 'new', 'created', 'processing', 'in_progress', 'under_processing',
             'under_review', 'waiting_review', 'awaiting_payment', 'بانتظار المراجعة', 'جاري التجهيز', 'قيد التجهيز'} and not has_completion:
         return True, None  # An unexecuted order has no missing earned-charge proof.
-    current, shipment, waybill = _current_shipping(raw, source, require_delivered=False, require_label=False)
     party, carrier_key = _courier(setup, owner, current)
-    if ('shipment', shipment) in shipment_conflicts or ('waybill', waybill) in shipment_conflicts:
-        raise ValueError('operational_prepaid_shipping_shipment_shared_by_orders')
-    recognition = {}
+    recognition = None
     try:
+        current, shipment, waybill = _current_shipping(raw, source, require_delivered=False, require_label=False)
+        if ('shipment', shipment) in shipment_conflicts or ('waybill', waybill) in shipment_conflicts:
+            raise ValueError('operational_prepaid_shipping_shipment_shared_by_orders')
         at = completion_time(raw, source, history, end)
         bind_completed_waybill(raw, current, shipment, waybill, at)
-    except ValueError as error:
-        if (str(error) != 'operational_prepaid_shipping_completion_timestamp_missing'
-                or review_only or status_shipment_conflicts is None):
+    except ValueError:
+        if review_only or status_shipment_conflicts is None:
             raise
+        from operational_delivery_evidence import _text
+        shipment, waybill = _text(current.get('shipment_id')), _text(current.get('tracking_number'))
         recognition = status_recognition(raw, source, current, party, owner, start, end,
-                                         shipment, waybill, status_shipment_conflicts | set(shipment_conflicts), setup=setup)
+                                         shipment, waybill, status_shipment_conflicts, setup=setup)
         if recognition is None:
             raise
         at = end
