@@ -6,6 +6,7 @@ No writer activation or default account creation is performed by this module.
 """
 from __future__ import annotations
 
+from collections import Counter
 from copy import deepcopy
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP, localcontext
 import os
@@ -21,10 +22,11 @@ from accounting_module_contract import accounting_permissions_for_user, require_
 from accounting_module_readiness import build_accounting_module_status
 from accounting_periods import assert_open_journal_periods
 from accounting_write_control import fresh_actor
+from component_status_policy import component_is_active
 from fulfillment_v2_routes import _actor_context, _warehouse_allowed
 from inventory_receipt_service import InventoryLocationCapacityError, place_inventory_receipt
 from inventory_write_gate import admitted, read_control, root_db, writes_paused
-from operational_inventory_projection import _projection
+from operational_inventory_projection import _projection, records as inventory_records
 from product_cost_revision import bump_product_cost_revision
 from purchase_receiving_service import (COST_POLICY, COST_STATES, LOCATIONS, RECEIPTS,
     approved_account_mappings, assert_opening_inventory_initialized, identity_key,
@@ -359,6 +361,9 @@ async def _post_lines(scoped, owner, context, doc):
     changed = [compare_line(r) for r in doc["lines"] if r.get("counted_quantity") is not None and quantity(r["counted_quantity"], kind=r["kind"]) != number(r["recorded_quantity"])]
     for row in changed:
         live = projected[row["id"]]
+        if row["kind"] == "component":
+            resource = await scoped.mezan_cost_resources_v2.find_one({"user_id": owner, "id": row["resource_id"]})
+            if not resource or not component_is_active(resource): fail("stocktake_lot_unavailable")
         if live.get("unit_cost") is None: fail("stocktake_cost_unknown")
         if live.get("reserved") is None or live.get("available") is None or number(live.get("held") or 0) > 0 or live.get("availability_issues"):
             fail("stocktake_lot_unavailable")
@@ -425,7 +430,8 @@ async def post_count(db, user, count_id, payload):
             if location.get("max_items") is not None and total + delta > number(location["max_items"]): fail("stocktake_capacity_exceeded")
             identity = {k: row["_item"].get(k) for k in ("item_type", "product_id", "mezan_product_id", "salla_product_id", "variant_id", "salla_variant_id", "resource_id", "category_id", "category", "code", "sku", "configuration_key", "product_name") if row["_item"].get(k) is not None}
             if row["kind"] == "component": identity["item_type"] = "stock_component"
-            else: identity.update(item_type="product", product_id=row["product_id"], mezan_product_id=row["product_id"], variant_id=row.get("variant_id"))
+            else: identity.update(item_type="product", product_id=row["product_id"], mezan_product_id=row["product_id"],
+                                  salla_product_id=str(identity.get("salla_product_id") or ""), variant_id=row.get("variant_id"))
             if delta > 0:
                 for item in items:
                     if number(item["quantity"]) > 0 and (not same_identity(item, identity) or item.get("configuration_key") != identity.get("configuration_key")):
@@ -484,10 +490,14 @@ async def movements(db, user):
     """
     _, owner, context = await scope(db, user)
     limit = 500
-    locations = {r["id"]: r async for r in db[LOCATIONS].find({"user_id": owner})}
-    warehouses = {r["id"]: r async for r in db.warehouse_locations_warehouses.find({"user_id": owner})}
-    products = {r["mezan_product_id"]: r async for r in db.mezan_products_v2.find({"user_id": owner, "mezan_product_id": {"$exists": True}})}
-    resources = {r["id"]: r async for r in db.mezan_cost_resources_v2.find({"user_id": owner, "id": {"$exists": True}})}
+    async def metadata(collection, key):
+        rows = await inventory_records(db, owner, collection)
+        repeated = Counter(r.get(key) for r in rows if r.get(key))
+        return {r[key]: r for r in rows if r.get(key) and repeated[r[key]] == 1}
+    locations = await metadata(LOCATIONS, "id")
+    warehouses = await metadata("warehouse_locations_warehouses", "id")
+    products = await metadata("mezan_products_v2", "mezan_product_id")
+    resources = await metadata("mezan_cost_resources_v2", "id")
     result, complete = [], True
     async def records(collection, query, time_field):
         nonlocal complete

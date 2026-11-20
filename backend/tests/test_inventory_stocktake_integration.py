@@ -302,3 +302,46 @@ class StocktakeMongoIntegration(unittest.IsolatedAsyncioTestCase):
         doc = await self.action(await self.action(doc, "submit"), "approve")
         posted = await self.post(doc)
         self.assertEqual(posted["status"], "posted"); self.assertEqual(await self.physical(), 4)
+
+    async def test_lost_committed_response_recovers_with_same_server_operation(self):
+        doc = await self.approved()
+        class LosePostResponse(httpx.AsyncBaseTransport):
+            def __init__(self, app): self.inner = httpx.ASGITransport(app=app); self.lost = False
+            async def handle_async_request(self, request):
+                response = await self.inner.handle_async_request(request)
+                if request.url.path.endswith('/post') and not self.lost:
+                    self.lost = True; await response.aread(); await response.aclose()
+                    raise httpx.ReadError('Synthetic response loss after commit', request=request)
+                return response
+            async def aclose(self): await self.inner.aclose()
+        async with httpx.AsyncClient(transport=LosePostResponse(self.app), base_url='http://synthetic.local') as recovery:
+            with self.assertRaises(httpx.ReadError): await self.post(doc, client=recovery)
+            self.assertEqual((await self.checked(recovery.get(f'{BASE}/{doc["id"]}')))["status"], 'posted')
+            self.assertEqual((await self.post(doc, client=recovery))["status"], 'posted')
+        self.assertEqual(await self.physical(), 3)
+        self.assertEqual(await self.db.mezan_inventory_receipts_v2.count_documents({'source_type':'inventory_adjustment'}), 1)
+
+    async def test_real_managed_employee_page_mode_and_warehouse_scope(self):
+        doc = await self.create()
+        staff = {'id':'count-employee','role':'employee','created_by':'owner','is_active':True,
+                 'accounting_permissions':['accounting.inventory.count'],
+                 'web_page_access':{'owner_id':'owner','grants':[{'id':'accounting.inventory.view','mode':'read'}]}}
+        await self.db.users.insert_one(staff)
+        await self.db.mezan_role_assignments_v2.insert_one({'user_id':'count-employee','owner_user_id':'owner','warehouse_ids':['warehouse']})
+        self.actor.clear(); self.actor.update(staff)
+        visible = await self.checked(self.client.get(f'{BASE}/{doc["id"]}'))
+        self.assertFalse(visible['capabilities']['count'])
+        payload = {'request_id':uuid.uuid4().hex,'expected_revision':doc['revision'],'title':doc['title'],'lines':[]}
+        await self.checked(self.client.put(f'{BASE}/{doc["id"]}',json=payload),403)
+        await self.db.users.update_one({'id':'count-employee'},{'$set':{'web_page_access.grants.0.mode':'write'}})
+        saved = await self.checked(self.client.put(f'{BASE}/{doc["id"]}',json=payload))
+        self.assertEqual(saved['audit'][-1]['actor_id'],'count-employee')
+        self.assertFalse(saved['capabilities']['review']); self.assertFalse(saved['capabilities']['post'])
+        await self.db.mezan_role_assignments_v2.update_one({'user_id':'count-employee'},{'$set':{'warehouse_ids':[]}})
+        await self.checked(self.client.get(f'{BASE}/{doc["id"]}'),403)
+
+    async def test_inactive_component_cannot_gain_physical_stock(self):
+        doc = await self.approved({'component':'5'})
+        await self.db.mezan_cost_resources_v2.update_one({'id':'component-A'},{'$set':{'status':'inactive'}})
+        self.assertEqual((await self.post(doc,409))['detail']['code'],'stocktake_lot_unavailable')
+        self.assertEqual(await self.physical('location-component'),4)

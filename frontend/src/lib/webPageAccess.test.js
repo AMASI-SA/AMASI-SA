@@ -47,3 +47,12 @@ test("section list includes new groups and preserves server Arabic names",()=>{
     const page=selected("new.report","/report",{section:"new",section_label:"التقارير الدورية"});
     expect(webPageSections([page])).toEqual([{id:"new",label:"التقارير الدورية",pages:[page]}]);
 });
+test.each(['stocktake','adjustments','movements'])('native accounting inventory page permits %s without inheriting the product reader',tab=>{
+    const address='/inventory-v2?tab='+tab;
+    expect(permitted(selected('products.inventory','/inventory-v2'),address)).toBeUndefined();
+    const native=selected('accounting.inventory.view','/integrations-v2?workspace=financial&page=inventory-purchases',{mode:'read'});
+    expect(permitted(native,address)).toBe('accounting.inventory.view');
+    expect(permitted(native,address+'&tab=opening')).toBeUndefined();
+    expect(permitted(native,address+'&action=post')).toBeUndefined();
+    expect(permitted(native,'/inventory-v2?tab=opening')).toBeUndefined();
+});

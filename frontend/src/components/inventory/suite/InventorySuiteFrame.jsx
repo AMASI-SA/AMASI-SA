@@ -37,7 +37,7 @@ export default function InventorySuiteFrame({active='home',children}){
   const link=item=><Link key={item.id} to={item.to} onClick={()=>{setMore(false);setMobile(false);}} className={item.id===active?'is-active':''} aria-current={item.id===active?'page':undefined}><item.Icon size={18}/>{item.label}</Link>;
   return <div className="mz-inventory-ui" dir="rtl" data-testid="inventory-suite" data-inventory-page={active}>
     <nav className="mz-inventory-nav" aria-label="نظام المخزون">
-      <Link to="/inventory-v2" className="mz-inventory-brand"><LogoIcon size={34}/><span><strong>مخزون ميزان</strong><small>ميزان 2</small></span></Link>
+      <Link to={items.some(item=>item.id==='home')?'/inventory-v2':items[0]?.to||'/inventory-v2'} className="mz-inventory-brand"><LogoIcon size={34}/><span><strong>مخزون ميزان</strong><small>ميزان 2</small></span></Link>
       <div className="mz-inventory-nav-pages">{primary.map(link)}{secondary.length>0&&<div className="mz-inventory-more"><button type="button" className={secondary.some(i=>i.id===active)?'is-active':''} aria-expanded={more} onClick={()=>setMore(value=>!value)}><DotsThree size={20}/>المزيد</button>{more&&<><button type="button" className="mz-menu-dismiss" aria-label="إغلاق قائمة المخزون" onClick={()=>setMore(false)}/><div className="mz-inventory-menu">{secondary.map(link)}</div></>}</div>}</div>
       <button type="button" className="mz-inventory-mobile-menu" aria-label="صفحات المخزون" onClick={()=>setMobile(true)}><List size={24}/></button>
     </nav>
