@@ -5,7 +5,7 @@
   "base_sha": "734b977de28254c2c089148b4db8972a03ba19eb",
   "state": "verification_in_progress",
   "production_changed": false,
-  "remote_checkpoint": "50193f57ee75b512c9e0c49bfc659606e51829d9 verified on origin; complete audit and local fixture checkpoint being committed",
+  "remote_checkpoint": "46f37a56d0512e643451f6212b030fdea1435538 verified on origin; browser acceptance and visual consistency checkpoint being committed",
   "release_lease": "not_created",
   "deployment": "not_requested",
   "owners": {
@@ -20,14 +20,13 @@
     "Preserve canonical product/variant/resource/location identity, server preview hash, stable idempotency and current permissions",
     "No opening-stock writer reused for stock adjustments"
   ],
-  "next_action": "Compile latest native frontend for isolated preview, restart only local preview fixture/gateway, finish real GUI count and purchase plus stock-entry/product-draft verification, then fresh final test suites and handoff.",
-  "updated_at": "2026-11-20T21:26:28.346930+00:00",
-  "verified_milestone": "Actual full App Vite build PASS14.29s; desktop/mobile browser21screens PASS no pageerrors/no pageoverflow; root frontend286 plus grant54 and refinements76 PASS; core backend77+12subtests plus recovery/scope/permissions followups PASS. Physical regression103+7subtests PASS, one missing-PyMuPDF case passed after installing pinned dependency. Native GUI count save/review/post succeeded; mobile count table overflow reproduced and patched, rerun pending. Full audit refinement: StocktakeWorkbench22PASS and native audit/review/post regression3PASS; preserves employee name/ID, per-save before/after, baseline and approved snapshots, sealed transaction link, bounded BSON audit storage.",
+  "next_action": "Finish final local source build and restart only disposable preview API; rerun both browser harnesses, inspect final captures, then commit review report/evidence and update Issue1006 with exact final SHA.",
+  "updated_at": "2026-11-20T21:36:16.526464+00:00",
+  "verified_milestone": "Frontend22suites298PASS; core native backend85PASS+12subtests; existing physical projection/components/bundles/standalone regression120PASS+7subtests; actual App source Vite build PASS9.29s. Browser21desktop/mobile screens PASS without pageerrors/overflow. Native browser15 captures/workflow assertions PASS: count partial save/review/approve/post/audit, invoice photo-SKU-options-lettering save/reload/receive, standalone physical pending-valued entry, product draft save/preview/reload. Subsequent intake-only brand/contrast CSS is awaiting final visual rerun.",
   "ledger": "https://github.com/AMASI-SA/AMASI-SA/issues/1006#issuecomment-6238987123 has a dedicated dated INV-UI-20261120 section appended without removing original content; comments/body limits block new entries elsewhere. Write read-back verified.",
   "incomplete": [
-    "Latest full App source build and GUI workflows pending after complete audit refinement",
-    "Native standalone stock-entry and product-draft fixture routes mounted but browser verification pending",
-    "Final combined frontend/backend/physical regression evidence and review report pending"
+    "Final visual/browser rerun after intake brand/contrast CSS",
+    "Final review report, compact verification evidence and exact remote handoff record"
   ],
   "posting_scope": "User approved full stocktake/adjustment lifecycle including atomic posting, development only; new posting default-closed",
   "durable_patch": "C:\\Users\\amasi\\OneDrive\\المستندات\\ChatGPT\\ميزان\\outputs\\inventory-implementation-20261120\\inventory-ui-wip.patch"

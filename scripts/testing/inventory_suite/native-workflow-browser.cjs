@@ -18,8 +18,9 @@ async function run(){
  await page.getByLabel('مستودع اختبار محلي',{exact:true}).check();
  let doc=await response(()=>page.getByRole('button',{name:'قراءة البنود وبدء الجرد',exact:true}).click(),'/stocktakes');
  const product=doc.lines.find(r=>r.kind==='product');assert(product);
- await page.getByLabel('الكمية الفعلية '+(product.sku||product.id),{exact:true}).fill(String(Number(product.recorded_quantity)+1));
- await page.getByLabel('سبب الفرق '+(product.sku||product.id),{exact:true}).fill('تحقق تجريبي من دورة الجرد فقط');
+ const countedRow=page.locator('.mz-count-line').nth(doc.lines.indexOf(product));
+ await countedRow.getByLabel('الكمية الفعلية '+(product.sku||product.id),{exact:true}).fill(String(Number(product.recorded_quantity)+1));
+ await countedRow.getByLabel('سبب الفرق '+(product.sku||product.id),{exact:true}).fill('تحقق تجريبي من دورة الجرد فقط');
  await shot('desktop-stocktake-edit');
  doc=await response(()=>page.getByRole('button',{name:'حفظ الجرد الجزئي',exact:true}).click(),'/'+doc.id,'PUT');
  assert.equal(doc.counted_lines,1);assert.equal(doc.variance_lines,1);
@@ -33,6 +34,10 @@ async function run(){
  await shot('desktop-stocktake-post-confirmation');
  await page.getByLabel('راجعت الفروقات وأؤكد ترحيل العملية المعتمدة.',{exact:true}).check();
  doc=await response(()=>page.getByRole('button',{name:'ترحيل الفروق',exact:true}).click(),'/post');assert.equal(doc.status,'posted');assert(doc.txn_group_id);
+ await page.getByText('سجل الجرد والمراجعة',{exact:true}).click();
+ await page.locator('.mz-count-audit-event').last().locator('summary').first().click();
+ await page.locator('.mz-count-audit-snapshot').last().locator('summary').first().click();
+ assert.equal(doc.audit.at(-1).actor_id,'owner');assert(doc.audit.at(-1).snapshot.length);assert.equal(doc.audit.at(-1).txn_group_id,doc.txn_group_id);
  await shot('desktop-stocktake-posted');
  await page.setViewportSize({width:390,height:844});await shot('mobile-stocktake-posted');
  await page.goto(UI+'/inventory-v2?tab=adjustments');await page.getByText(doc.title,{exact:true}).waitFor();await shot('mobile-adjustments');
@@ -42,6 +47,7 @@ async function run(){
  const option=page.locator('[role=option][data-product-id=pullover]');await option.waitFor();assert(await option.locator('img').getAttribute('src'));await option.click();
  await page.getByLabel('اللون: أخضر',{exact:true}).check();await page.getByLabel('المقاس: M',{exact:true}).check();
  await page.getByLabel('جاهز بالمواصفات',{exact:true}).check();await page.getByLabel('الأحرف · البند 1',{exact:true}).fill('AB');
+ await page.getByTestId('pinv-dialog').locator('label').filter({has:page.getByText('حساب المخزون',{exact:true})}).locator('select').selectOption('inventory');
  await page.getByTestId('pinv-line-0-unit-cost').fill('35');await shot('desktop-purchase-configured');
  await page.setViewportSize({width:390,height:844});await shot('mobile-purchase-configured');
  let invoice=await response(()=>page.getByTestId('pinv-save-draft').click(),'/purchase-invoices');
@@ -53,6 +59,31 @@ async function run(){
  await shot('desktop-purchase-receiving');
  invoice=await response(()=>page.getByTestId('pinv-approve-receive').click(),'/approve-receive');assert.equal(invoice.state,'approved');
  await page.goto(UI+'/inventory-v2?tab=movements');await page.getByText('فروقات المخزون',{exact:false}).first().waitFor({timeout:1500}).catch(()=>{});await page.locator('.mz-movement-table').waitFor({timeout:1500}).catch(()=>{});await shot('desktop-native-movements');
+ await page.goto(UI+'/inventory-v2?tab=opening');await page.locator('.mz-stock-state').waitFor();
+ if(await page.getByText('إدخال المخزون المستقل متوقف.',{exact:true}).isVisible()){
+   await page.getByText('إدارة الإدخال',{exact:true}).click();
+   await response(()=>page.getByRole('button',{name:'تفعيل إدخال المخزون المستقل',exact:true}).click(),'/standalone-inventory/control');
+ }
+ await page.getByRole('combobox',{name:'بحث بالاسم أو الرقم المخزني',exact:true}).fill('بلوفر خيارات');
+ await page.locator('[role=option][data-product-id=pullover]').click();
+ await page.getByLabel('اللون: أخضر',{exact:true}).check();await page.getByLabel('المقاس: M',{exact:true}).check();
+ await page.getByLabel('جاهز بالمواصفات',{exact:true}).check();await page.getByLabel('الأحرف · البند 1',{exact:true}).fill('CD');
+ await page.locator('.mz-stock-entry label').filter({has:page.getByText('موقع التخزين',{exact:true})}).locator('select').selectOption('location-entry');
+ await page.getByLabel('تكلفة الوحدة بالريال',{exact:true}).fill('35');
+ await shot('desktop-native-stock-entry');await page.setViewportSize({width:390,height:844});await shot('mobile-native-stock-entry');
+ const entry=await response(()=>page.getByRole('button',{name:'حفظ المنتج في المخزون',exact:true}).click(),'/standalone-inventory/save');
+ assert.equal(entry.status,'approved');assert.equal(entry.financial_effect,'none');assert.equal(entry.fulfillment_eligible,false);
+ // Existing matching specifications are case-folded; literal customization is
+ // retained separately by the native purchase configuration contract.
+ assert.equal(entry.lines[0].specifications['الأحرف'],'cd');assert.equal(entry.lines[0].purchase_configuration.inputs[0].value,'CD');
+ await page.getByRole('status').filter({hasText:'تم تثبيت الكمية'}).waitFor();await shot('mobile-native-stock-entry-saved');
+ await page.setViewportSize({width:1440,height:1050});await page.goto(UI+'/products-v2?workspace=intake');
+ const panel=page.getByTestId('product-creation-panel');await panel.getByRole('button',{name:'منتج جديد',exact:true}).click();
+ await panel.getByLabel('اسم المنتج',{exact:true}).fill('صنف محلي لمسودة الاختبار');await panel.getByLabel('SKU فريد',{exact:true}).fill('LOCAL-DRAFT-'+Date.now());await panel.getByLabel('السعر',{exact:true}).fill('99');
+ await shot('desktop-native-product-draft');await page.setViewportSize({width:390,height:844});await shot('mobile-native-product-draft');
+ const created=await response(()=>panel.getByRole('button',{name:'حفظ المسودة في ميزان',exact:true}).click(),'/creation-drafts');assert.equal(created.draft.status,'draft');
+ const preview=await response(()=>panel.getByRole('button',{name:'معاينة وفحص',exact:true}).click(),'/preview');assert.equal(preview.external_calls_made,false);assert.equal(preview.validation.valid,true);
+ await page.reload();await panel.getByText(created.draft.name,{exact:true}).click();await panel.getByText('طلب إنشاء: '+created.draft.name,{exact:true}).waitFor();await shot('mobile-native-product-draft-reloaded');
  assert.equal(errors.length,0,errors.join('; '));fs.writeFileSync(path.join(out,'native-workflow-report.json'),JSON.stringify({synthetic_only:true,production_modified:false,steps,requests,errors,count_id:doc.id,invoice_id:invoice.id},null,2));
  await browser.close();process.stdout.write(JSON.stringify({passed:true,steps,errors},null,2)+'\n');
 }
