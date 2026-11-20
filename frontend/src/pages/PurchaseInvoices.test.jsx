@@ -16,6 +16,7 @@ jest.mock("react-router-dom", () => ({
 }));
 
 const catalog = {
+    can_write: true, can_pay: true,
     supplier_identities: [{id: "supplier", counterparty_id: "supplier", entity_id: "supplier", name: "مورد"}],
     products: [
         { product_id: "p-one", name: "منتج أول", sku: "SAME", variants: [], variants_required: false },
@@ -526,4 +527,13 @@ test("read-only purchase access keeps drafts and approval mutation disabled",asy
     await render(<ApprovalDialog invoice={draft({lines:[configuredLine]})} catalog={configuredCatalog} readOnly onClose={jest.fn()} onSaved={jest.fn()}/>);
     await submit();
     expect(api.post).not.toHaveBeenCalled();
+});
+test("fresh server purchase capabilities keep a reader from opening writer or payment actions",async()=>{
+    api.get.mockImplementation(url=>Promise.resolve({data:url.includes("catalog")?{...configuredCatalog,can_write:false,can_pay:false}:{items:[draft({lines:[configuredLine]})]}}));
+    await render(<PurchaseInvoices/>);
+    expect(byTest("pinv-new-btn").disabled).toBe(true);
+    expect(byTest("pinv-approve-invoice-1")).toBeNull();
+    await act(async()=>byTest("pinv-open-invoice-1").click());
+    expect(byTest("pinv-save-draft")).toBeNull();
+    expect(api.post).not.toHaveBeenCalled();expect(api.put).not.toHaveBeenCalled();
 });

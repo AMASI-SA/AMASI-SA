@@ -74,6 +74,14 @@ test('partial save sends changed native rows only; explicit zero stays zero and 
   await click(button('حفظ الجرد الجزئي'));expect(service.saveInventoryStocktake).toHaveBeenCalledWith('native-count-1',{request_id:'stocktake:request-001',expected_revision:2,title:'جرد فعلي محفوظ',lines:[{id:'native-row-product',counted_quantity:'0',unit:'piece',reason:'غير موجود عند الجرد'}]});
   expect(input('الكمية الفعلية SKU-C-2').value).toBe('');expect(dialog().textContent).toContain('غير مثبت');expect(service.actOnInventoryStocktake).not.toHaveBeenCalled();expect(service.postInventoryStocktake).not.toHaveBeenCalled();
 });
+test('partial warehouse count submits explicitly selected native location ids',async()=>{
+  context.locations=[{id:'native-location-1',warehouse_id:'real-wh-1',label:'د1 / ر2 / خ3',stock_lines:2}];
+  await render();await click(button('جرد جديد'));await change(dialog().querySelector('input:not([type=checkbox])'),'جرد خانة محددة');
+  await click(dialog().querySelector('input[type=checkbox]'));await click(input('جرد الخانة د1 / ر2 / خ3'));
+  service.createInventoryStocktake.mockResolvedValue({...documentValue,revision:1});
+  await act(async()=>host.querySelector('#mz-count-create').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+  expect(service.createInventoryStocktake.mock.calls[0][0].location_ids).toEqual(['native-location-1']);
+});
 
 test('clearing a counted quantity saves null, and quantities are never converted from native units',async()=>{
   documentValue.lines[0]={...documentValue.lines[0],counted_quantity:'3',difference:'-7'};await openSaved();await change(input('الكمية الفعلية SKU-P-1'),'');await change(input('الكمية الفعلية SKU-C-2'),'٢٫١٢٥');

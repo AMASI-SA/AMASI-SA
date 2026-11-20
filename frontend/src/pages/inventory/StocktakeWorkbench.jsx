@@ -57,6 +57,7 @@ export default function StocktakeWorkbench({mode='stocktake',accessMode=null}){
   const [loading,setLoading]=useState(false),[reading,setReading]=useState(false),[busy,setBusy]=useState(false);
   const [error,setError]=useState(''),[notice,setNotice]=useState(''),[search,setSearch]=useState(''),[statusFilter,setStatusFilter]=useState('all');
   const [createOpen,setCreateOpen]=useState(false),[createTitle,setCreateTitle]=useState(''),[warehouses,setWarehouses]=useState([]);
+  const [locationIds,setLocationIds]=useState([]),[locationSearch,setLocationSearch]=useState('');
   const [document,setDocument]=useState(null),[editor,setEditor]=useState(null),[rowSearch,setRowSearch]=useState(''),[rowFilter,setRowFilter]=useState('all');
   const [action,setAction]=useState(null),[actionReason,setActionReason]=useState(''),[inventoryAccount,setInventoryAccount]=useState(''),[varianceAccount,setVarianceAccount]=useState(''),[confirmPost,setConfirmPost]=useState(false);
   const [pending,setPending]=useState(null),[conflict,setConflict]=useState(false);
@@ -159,7 +160,9 @@ export default function StocktakeWorkbench({mode='stocktake',accessMode=null}){
     event.preventDefault();if(locked||!canCount)return;
     if(!createTitle.trim()){setError('أدخل اسمًا للجرد.');return;}
     if(!warehouses.length){setError('حدد مستودعًا واحدًا على الأقل لنطاق الجرد.');return;}
-    run({kind:'create',body:{request_id:newStocktakeRequestId(),title:createTitle.trim(),warehouse_ids:warehouses,location_ids:[],row_ids:[]}});
+    const available=(context.locations||[]).filter(location=>warehouses.includes(location.warehouse_id));
+    if(locationIds.some(id=>!available.some(location=>location.id===id))){setError('راجع الخانات المحددة بعد تغيير المستودعات، أو ألغِ تحديدها لجرد المستودع.');return;}
+    run({kind:'create',body:{request_id:newStocktakeRequestId(),title:createTitle.trim(),warehouse_ids:warehouses,location_ids:locationIds,row_ids:[]}});
   }
   function save(){
     if(locked||!canEdit||!editor)return;
@@ -204,7 +207,7 @@ export default function StocktakeWorkbench({mode='stocktake',accessMode=null}){
   return <div className="mz-count-workbench">
     <InventoryPageHeader title={adjustments?'تسويات المخزون':'الجرد'} description={adjustments?'راجع فروقات الجرد المعتمدة، واعتمد التسوية بصلاحيات مستقلة وسجل واضح.':'جرد المستودع في خطوات قصيرة: اختر النطاق، أدخل الكميات الفعلية، ثم أرسلها للمراجعة.'}>
       <button type="button" className="mz-inventory-button" disabled={loading||reading||locked} onClick={loadWorkspace}><ArrowClockwise size={18}/>تحديث</button>
-      {!adjustments&&canCount&&<button type="button" className="mz-inventory-button is-primary" disabled={locked||reading} onClick={()=>{setCreateTitle('');setWarehouses([]);setCreateOpen(true);setError('');setNotice('');}}><Plus size={18}/>جرد جديد</button>}
+      {!adjustments&&canCount&&<button type="button" className="mz-inventory-button is-primary" disabled={locked||reading} onClick={()=>{setCreateTitle('');setWarehouses([]);setLocationIds([]);setLocationSearch('');setCreateOpen(true);setError('');setNotice('');}}><Plus size={18}/>جرد جديد</button>}
     </InventoryPageHeader>
     {!document&&!createOpen&&inlineError}
     {notice&&<div role="status" className="mz-count-success"><CheckCircle size={20}/>{notice}</div>}
@@ -223,6 +226,7 @@ export default function StocktakeWorkbench({mode='stocktake',accessMode=null}){
         {inlineError}<label><span>اسم الجرد <b>*</b></span><input autoFocus maxLength={160} required value={createTitle} disabled={locked} onChange={event=>setCreateTitle(event.target.value)} placeholder="مثال: جرد مستودع الرياض"/></label>
         <fieldset disabled={locked}><legend>نطاق الجرد <b>*</b></legend><p>اختر من المستودعات المسموحة لك. ستظهر الأصناف والمكونات والوحدات كما هي مسجلة.</p><div className="mz-count-warehouse-options">{context?.warehouses.map(warehouse=><label key={warehouse.id}><input type="checkbox" checked={warehouses.includes(warehouse.id)} onChange={event=>setWarehouses(current=>event.target.checked?[...current,warehouse.id]:current.filter(id=>id!==warehouse.id))}/><span>{warehouse.name}</span></label>)}</div>{!context?.warehouses.length&&<p>لا توجد مستودعات مخوّلة ضمن النطاق الحالي.</p>}</fieldset>
         <div className="mz-count-help">بعد قراءة النطاق، ابحث بالاسم أو الرقم المخزني أو الخانة وأدخل فقط البنود التي جردتها. ترك الكمية فارغة يعني «لم يُجرد».</div>
+        {!!context?.locations?.length&&<details className="mz-count-location-scope"><summary>جرد خانات محددة فقط (اختياري)</summary><p>للمستودعات الكبيرة، ابدأ بجزء صغير ثم أكمل بقية الخانات في جرد آخر. دون تحديد خانات يُقرأ نطاق المستودعات المختارة كاملًا، حتى 500 بند.</p><input aria-label="بحث خانات نطاق الجرد" value={locationSearch} onChange={event=>setLocationSearch(event.target.value)} placeholder="ابحث برمز الخانة…"/><div className="mz-count-location-options">{context.locations.filter(location=>warehouses.includes(location.warehouse_id)&&String(location.label||location.id).includes(locationSearch.trim())).slice(0,100).map(location=><label key={location.id}><input type="checkbox" aria-label={'جرد الخانة '+location.label} checked={locationIds.includes(location.id)} onChange={event=>setLocationIds(current=>event.target.checked?[...current,location.id]:current.filter(id=>id!==location.id))}/><span>{location.label} · {location.stock_lines} بنود</span></label>)}</div><small>الخانات المحددة: {locationIds.length}. يعرض البحث حتى 100 خانة مطابقة.</small>{locationIds.length>0&&<button type="button" onClick={()=>setLocationIds([])}>إلغاء تحديد الخانات</button>}</details>}
       </form>
     </InventorySheet>
 

@@ -551,10 +551,11 @@ export function ApprovalDialog({ invoice: initialInvoice, catalog, onClose, onSa
 }
 
 export default function PurchaseInvoices({accessMode=null}) {
-    const canWrite=accessMode!=="read";
     const [invoices, setInvoices] = useState([]);
     const [suppliers, setSuppliers] = useState([]);
     const [catalog, setCatalog] = useState(EMPTY_CATALOG);
+    const canWrite=accessMode!=="read"&&catalog.can_write===true;
+    const canPay=accessMode!=="read"&&catalog.can_pay===true;
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [dialog, setDialog] = useState(null);
@@ -606,7 +607,7 @@ export default function PurchaseInvoices({accessMode=null}) {
                 <td className="p-3" data-label="الحالة">{invoiceStateLabel(row)}{row.state === "approved" && <div className="text-xs">{STATUS_LABEL[row.payment_status || row.status]?.label || "غير مسددة"} · المتبقي {fmt(row.remaining_amount)}</div>}{operationStatus(row) && <div className="text-xs">{operationStatus(row)}</div>}</td>
                 <td className="flex flex-wrap gap-2 p-3" data-label="الإجراءات"><button className="rounded border px-3 py-2" onClick={() => setDialog({ invoice: row })} data-testid={"pinv-open-" + row.id}><FileText className="inline" size={16} /> {isManagedDraft(row)&&canWrite ? "تعديل المسودة" : "عرض"}</button>
                     {canWrite && isManagedDraft(row) && <button className={buttonCls} onClick={() => openApproval(row)} data-testid={"pinv-approve-" + row.id}>اعتماد واستلام كامل</button>}
-                    {canWrite && row.schema_version === "g47-v1" && row.state === "approved" && Number(row.remaining_amount) > 0 && <button className={buttonCls} onClick={() => setPayment({ invoiceId: row.id })} data-testid={"pinv-pay-" + row.id}>سداد المورد</button>}
+                    {canPay && row.schema_version === "g47-v1" && row.state === "approved" && Number(row.remaining_amount) > 0 && <button className={buttonCls} onClick={() => setPayment({ invoiceId: row.id })} data-testid={"pinv-pay-" + row.id}>سداد المورد</button>}
                     {row.schema_version === "g47-v1" && !["draft", "approved"].includes(row.state) && <button className="rounded border px-3 py-2" onClick={() => openApproval(row)}>متابعة حالة الاعتماد</button>}
                 </td>
             </tr>)}</tbody>

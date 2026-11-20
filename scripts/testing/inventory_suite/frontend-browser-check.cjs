@@ -65,14 +65,20 @@ async function run(){
   const page=await context.newPage();activePage=page;
   page.on('pageerror',error=>pageErrors.push(error.message));
   await page.addInitScript(()=>{
-    addEventListener('DOMContentLoaded',()=>{const ribbon=document.createElement('div');ribbon.dataset.syntheticBrowserTest='true';ribbon.style.cssText='padding:7px 12px;background:#fff7db;color:#655013;font:12px Tahoma;text-align:center;position:relative;z-index:500';ribbon.textContent='اختبار محلي معزول · بيانات اختبار اصطناعية فقط · جميع الاتصالات الخارجية محجوبة';document.body.prepend(ribbon);});
+    addEventListener('DOMContentLoaded',()=>{if(document.querySelector('[data-native-test-preview]'))return;const ribbon=document.createElement('div');ribbon.dataset.syntheticBrowserTest='true';ribbon.style.cssText='padding:7px 12px;background:#fff7db;color:#655013;font:12px Tahoma;text-align:center;position:relative;z-index:500';ribbon.textContent='اختبار محلي معزول · بيانات اختبار اصطناعية فقط · جميع الاتصالات الخارجية محجوبة';document.body.prepend(ribbon);});
   });
   const checkOverflow=async label=>{
     const size=await page.evaluate(()=>({viewport:innerWidth,page:document.documentElement.scrollWidth}));
     assert(size.page<=size.viewport+1,label+': horizontal overflow '+JSON.stringify(size));
   };
   const shot=async label=>{await page.screenshot({path:path.join(output,label+'.png'),fullPage:true,timeout:15000,animations:'disabled'});await checkOverflow(label);visited.push(label);};
-  const open=async(pathname,ready)=>{await page.goto(UI+pathname,{waitUntil:'domcontentloaded'});await page.locator(ready).first().waitFor({timeout:90000});await page.waitForTimeout(300);};
+  const open=async(pathname,ready)=>{await page.goto(UI+pathname,{waitUntil:'domcontentloaded'});const target=page.locator(ready).first();
+    if(page.viewportSize().width<760&&ready.includes('tbody tr')&&['/products-v2','/components-v2'].includes(pathname.split('?')[0])){
+      const back=page.locator('.mz-catalog-mobile-back:visible').first();
+      await Promise.race([target.waitFor({timeout:90000}),back.waitFor({timeout:90000})]);
+      if(await back.isVisible())await back.click();
+    }
+    await target.waitFor({timeout:90000});await page.waitForTimeout(300);};
   await open('/products-v2','[data-testid="inventory-catalog-workspace"] tbody tr');
   if(process.argv.includes('--baseline-catalog')){
     await shot('before-catalog-owner-taxonomy');
@@ -146,4 +152,5 @@ async function run(){
   fs.writeFileSync(path.join(output,'frontend-report.json'),JSON.stringify(report,null,2));await browser.close();
   process.stdout.write(JSON.stringify({output,screenshots:visited.length,blocked:blocked.length,pageErrors},null,2)+'\n');
 }
-run().catch(async error=>{if(activePage){await activePage.screenshot({path:path.join(output,'failure.png'),fullPage:true,timeout:15000,animations:'disabled'}).catch(()=>{});fs.writeFileSync(path.join(output,'failure-report.json'),JSON.stringify({error:error.message,visited,blocked,pageErrors,apiCalls},null,2));}await activeBrowser?.close();process.stderr.write(error.stack+'\n');process.exitCode=1;});
+module.exports={dataFor};
+if(require.main===module)run().catch(async error=>{if(activePage){await activePage.screenshot({path:path.join(output,'failure.png'),fullPage:true,timeout:15000,animations:'disabled'}).catch(()=>{});fs.writeFileSync(path.join(output,'failure-report.json'),JSON.stringify({error:error.message,visited,blocked,pageErrors,apiCalls},null,2));}await activeBrowser?.close();process.stderr.write(error.stack+'\n');process.exitCode=1;});

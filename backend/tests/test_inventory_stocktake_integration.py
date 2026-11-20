@@ -331,6 +331,8 @@ class StocktakeMongoIntegration(unittest.IsolatedAsyncioTestCase):
         self.actor.clear(); self.actor.update(staff)
         visible = await self.checked(self.client.get(f'{BASE}/{doc["id"]}'))
         self.assertFalse(visible['capabilities']['count'])
+        purchase_context=await self.checked(self.client.get('/api/purchase-invoices/catalog'))
+        self.assertFalse(purchase_context['can_write']);self.assertFalse(purchase_context['can_pay'])
         payload = {'request_id':uuid.uuid4().hex,'expected_revision':doc['revision'],'title':doc['title'],'lines':[]}
         await self.checked(self.client.put(f'{BASE}/{doc["id"]}',json=payload),403)
         await self.db.users.update_one({'id':'count-employee'},{'$set':{'web_page_access.grants.0.mode':'write'}})
@@ -345,3 +347,11 @@ class StocktakeMongoIntegration(unittest.IsolatedAsyncioTestCase):
         await self.db.mezan_cost_resources_v2.update_one({'id':'component-A'},{'$set':{'status':'inactive'}})
         self.assertEqual((await self.post(doc,409))['detail']['code'],'stocktake_lot_unavailable')
         self.assertEqual(await self.physical('location-component'),4)
+
+    async def test_partial_location_scope_exposes_metadata_and_only_snapshots_selected_bin(self):
+        context=await self.checked(self.client.get(BASE+'/context'))
+        locations={r['id']:r for r in context['locations']}
+        self.assertEqual(set(locations),{'location-component','location-product'})
+        self.assertNotIn('unit_cost',locations['location-component'])
+        doc=await self.create(warehouse_ids=['warehouse'],location_ids=['location-component'])
+        self.assertEqual(len(doc['lines']),1);self.assertEqual(doc['lines'][0]['kind'],'component')

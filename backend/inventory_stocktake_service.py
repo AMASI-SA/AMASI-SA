@@ -154,7 +154,16 @@ async def context_for(db, user):
     accounts = await db.expense_categories.find({"user_id": owner, "status": {"$nin": ["inactive", "disabled"]}}, {"_id": 0, "code": 1, "name": 1}).to_list(1001)
     if len(accounts) > 1000: fail("stocktake_scope_limit")
     blockers = await posting_blockers(db, owner)
+    locations = await db[LOCATIONS].find({"user_id": owner}, {"_id": 0, "id": 1, "warehouse_id": 1,
+        "code": 1, "display_code": 1, "occupancy.items.quantity": 1}).to_list(20001)
+    if len(locations) > 20000: fail("stocktake_scope_limit")
+    location_options = [{"id": row["id"], "warehouse_id": row["warehouse_id"],
+        "label": row.get("display_code") or row.get("code") or row["id"],
+        "stock_lines": len((row.get("occupancy") or {}).get("items") or [])}
+        for row in locations if row.get("id") and (row.get("occupancy") or {}).get("items")
+        and _warehouse_allowed(context, [row.get("warehouse_id")])]
     return {"schema_version": SCHEMA, "capabilities": capabilities(actor), "warehouses": warehouses,
+            "locations": location_options,
             "inventory_accounts": mappings["inventory"], "variance_accounts": [r for r in accounts if r.get("code")],
             "posting_enabled": not blockers, "posting_blockers": blockers}
 

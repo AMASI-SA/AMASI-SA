@@ -3,9 +3,9 @@
   "scope": "Replace legacy Mezan inventory interfaces with the approved integrated Arabic RTL design using the existing native services and permissions.",
   "branch": "codex/inventory-ui-replacement-20261120",
   "base_sha": "734b977de28254c2c089148b4db8972a03ba19eb",
-  "state": "implementation_in_progress",
+  "state": "verification_in_progress",
   "production_changed": false,
-  "remote_checkpoint": "ab3f22b951e7d795cd420a8ccaf3bee582391f8e verified on origin; verified integration checkpoint in progress",
+  "remote_checkpoint": "04adab8586102ad56332abc3541cacaf63c67604 verified on origin; responsive/scope/capability checkpoint in progress",
   "release_lease": "not_created",
   "deployment": "not_requested",
   "owners": {
@@ -20,15 +20,15 @@
     "Preserve canonical product/variant/resource/location identity, server preview hash, stable idempotency and current permissions",
     "No opening-stock writer reused for stock adjustments"
   ],
-  "next_action": "Build actual frontend source after checkpoint; finish strict local browser harness and interactive preview, then run fresh combined checks and save acceptance evidence.",
-  "updated_at": "2026-11-20T20:49:15.9364395+00:00",
-  "verified_milestone": "Fresh root frontend21 suites/286PASS; native grant followup54PASS including3 added cases; backend77PASS+12subtests, permission3PASS, real response-loss/employee2PASS, review fixes/inactive3PASS. Broader regression and actual source build/browser visual acceptance pending.",
+  "next_action": "Rebuild updated native frontend, restart only synthetic ASGI fixture, run native GUI purchase/count workflows and complete fresh combined test evidence; then deliver local preview and final remote handoff.",
+  "updated_at": "2026-11-20T21:14:43.1299750+00:00",
+  "verified_milestone": "Actual full App Vite build PASS14.29s; desktop/mobile browser21screens PASS no pageerrors/no pageoverflow; root frontend286 plus grant54 and refinements76 PASS; core backend77+12subtests plus recovery/scope/permissions followups PASS. Physical regression103+7subtests PASS, one missing-PyMuPDF case passed after installing pinned dependency. Native GUI count save/review/post succeeded; mobile count table overflow reproduced and patched, rerun pending.",
   "ledger": "https://github.com/AMASI-SA/AMASI-SA/issues/1006#issuecomment-6238987123 has a dedicated dated INV-UI-20261120 section appended without removing original content; comments/body limits block new entries elsewhere. Write read-back verified.",
   "incomplete": [
-    "Actual-App browser acceptance currently at dev-tooling boundary (Tailwind cwd then legacy React refresh); no visual success claimed",
-    "Full native source build pending",
-    "Broader physical receipt/consumption regression pending",
-    "Interactive test-data preview delivery pending"
+    "Fresh build and workflow browser verification after responsive/scope/capability refinements pending",
+    "Native GUI invoice variant/lettering save/reload/receiving still pending",
+    "Intake/stock-entry preview fixture coverage needs finishing; production code uses existing native contracts",
+    "Final report and ledger checkpoint pending"
   ],
   "posting_scope": "User approved full stocktake/adjustment lifecycle including atomic posting, development only; new posting default-closed",
   "durable_patch": "C:\\Users\\amasi\\OneDrive\\المستندات\\ChatGPT\\ميزان\\outputs\\inventory-implementation-20261120\\inventory-ui-wip.patch"

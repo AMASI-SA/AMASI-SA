@@ -8,6 +8,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
 from pydantic import BaseModel, ConfigDict, Field
 from accounting_atomic import atomic_owner
+from accounting_module_contract import accounting_permissions_for_user
 from accounting_source_files import MAX_BYTES, preserve_original
 from auth import get_current_user_from_db
 from component_status_policy import component_is_active
@@ -184,7 +185,9 @@ def attach_purchase_invoice_routes(parent_router: APIRouter, db):
             except HTTPException:
                 continue
         return {"products": products, "components": components, "categories": categories, "locations": locations,
-                "account_mappings": mappings, "supplier_identities": identities}
+                "account_mappings": mappings, "supplier_identities": identities,
+                "can_write": "accounting.purchases.post" in accounting_permissions_for_user(actor),
+                "can_pay": "accounting.settlements.post" in accounting_permissions_for_user(actor)}
 
     @router.post("/tax-evidence")
     async def tax_evidence(file: UploadFile = File(...), supplier_counterparty_id: str = Form(...),
