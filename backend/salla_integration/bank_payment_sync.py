@@ -1,7 +1,7 @@
 """Complete missing native bank identity with a bounded, version-bound source write."""
 from datetime import datetime, timedelta, timezone
 
-from operational_balance_bank_orders import NATIVE_BANKS, native_paid_amount, transfer_bank
+from operational_balance_bank_orders import NATIVE_BANKS, bank_ledger_paid_amount, transfer_bank
 from operational_bank_order_milestone import HISTORY_MISSING, PROOF_FIELD, history_proof, reached_in_progress
 from operational_payment_evidence import _amount, _instant
 from operational_balance_store import check_authorization
@@ -61,7 +61,7 @@ async def _acquire_progress(db, owner, source, raw, number, identity, now):
         return
     args = {"owner": owner, "order_number": number, "provider_order_id": identity, "as_of": now}
     try:
-        reached_in_progress(raw, source, **args)
+        reached_in_progress(raw, source, require_history=True, **args)
         return
     except ValueError as exc:
         if str(exc) != HISTORY_MISSING:
@@ -107,14 +107,14 @@ async def acquire_missing(db, owner, issues, *, limit=4):
         if len(previous_bank_ids) > 1:
             continue
         try:
-            paid = native_paid_amount(raw, source, owner=owner, order_number=number,
+            paid = bank_ledger_paid_amount(raw, source, owner=owner, order_number=number,
                 provider_order_id=identity, currency="SAR", total=(raw.get("amounts") or {}).get("total", raw.get("total")), as_of=now)
             await check_authorization()
             response = await call_salla(db, owner, "GET", "/orders/" + identity)
             details = response.get("data") if isinstance(response, dict) else None
             if not isinstance(details, dict) or _signature(details) != _signature(raw):
                 continue
-            observed = native_paid_amount(details, source, owner=owner, order_number=number,
+            observed = bank_ledger_paid_amount(details, source, owner=owner, order_number=number,
                 provider_order_id=identity, currency="SAR",
                 total=(details.get("amounts") or {}).get("total", details.get("total")), as_of=now)
             if observed != paid:

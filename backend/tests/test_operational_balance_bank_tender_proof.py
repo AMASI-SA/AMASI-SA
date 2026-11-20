@@ -87,9 +87,41 @@ class BankTenderProofTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             read(raw)
 
+    def test_only_pending_component_gate_can_be_resolved_by_a_current_corroborated_bank_snapshot(self):
+        raw = order(True)
+        source = deepcopy(SOURCE)
+        source['g47_salla_snapshot']['component_pending'] = True
+        issues = [{'code':'provider_order_page_identity_conflict'}]
+        self.assertEqual(read(raw, source, payment_issues=issues), Decimal('150.66'))
+        self.assertTrue(source['g47_salla_snapshot']['component_pending'])
+        with self.assertRaises(ValueError):
+            read(raw, source, payment_issues=issues + [{'code':'provider_payment_amount_conflict'}])
+        for field, value in [('order_number','foreign'), ('order_id','foreign'), ('user_id','foreign'),
+                             ('last_salla_direct_status_source_updated_at','2026-12-01T00:00:00Z')]:
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                read(raw, {**source, field:value}, payment_issues=issues)
+        with self.assertRaises(ValueError):
+            read(raw, SOURCE, payment_issues=issues)
+        with self.assertRaises(ValueError):
+            read(raw, {**source, 'g47_salla_snapshot':{'component_pending':True,'source_updated_at':CREATED}},
+                 payment_issues=issues)
+        raw['payment'] = {'method':'tabby_installment'}
+        with self.assertRaises(ValueError):
+            read(raw, source, payment_issues=issues)
+
+    def test_primary_card_receipt_does_not_substitute_for_a_bank_receipt(self):
+        raw = order(True)
+        del raw['receipt_image']
+        raw['payment'] = {'method':'mada', 'receipt_url':'https://example.test/card/receipt'}
+        raw['payment_receipt_url'] = raw['payment']['receipt_url']
+        with self.assertRaisesRegex(ValueError, MISSING):
+            read(raw)
+        raw['payment_methods'][0]['receipt_image'] = {'url':'https://example.test/bank/receipt'}
+        self.assertEqual(read(raw), Decimal('150.66'))
+
     def test_neither_shape_can_skip_refund_status_or_source_checks(self):
         for mixed in (False, True):
-            for change in ('stale', 'refund', 'disagreement', 'currency', 'pending', 'reused_types'):
+            for change in ('stale', 'refund', 'disagreement', 'currency', 'pending', 'authorization', 'reused_types'):
                 raw = order(mixed)
                 source = deepcopy(SOURCE)
                 if change == 'stale':
@@ -102,6 +134,8 @@ class BankTenderProofTests(unittest.TestCase):
                     raw['payment_methods'][0]['currency'] = 'QAR'
                 elif change == 'pending':
                     raw['status']['slug'] = 'payment_pending'
+                elif change == 'authorization':
+                    raw['payment_status'] = 'authorized'
                 else:
                     raw['payment_methods'].append(dict(raw['payment_methods'][0]))
                 with self.subTest(mixed=mixed, change=change), self.assertRaises(ValueError):

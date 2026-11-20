@@ -17,7 +17,7 @@ REVIEW_ACTIONS = {
     HISTORY_MISSING: "تحقق من سجل حالة الطلب في سلة لإثبات مروره بقيد التنفيذ.",
     HISTORY_UNPROVEN: "راجع سجل الطلب؛ لم يثبت وصوله إلى قيد التنفيذ.",
     SOURCE_INVALID: "تحقق من هوية الطلب وحداثة حالة سلة.",
-    POSTED_REVIEW: "طابق القيد السابق مع كشف البنك؛ لم يثبت بلوغ قيد التنفيذ وقت الاحتساب.",
+    POSTED_REVIEW: "راجع تسلسل حالة الطلب وطابق القيد السابق مع كشف البنك قبل إجراء أي تسوية.",
     HISTORICAL_REVIEW: "طابق الحوالة السابقة مع كشف البنك قبل تسجيلها.",
     "operational_order_bank_receipt_evidence_missing": "راجع مرفق الحوالة أو مرجع دفعتها وطابقها مع البنك.",
     "operational_order_bank_payment_incomplete": "راجع مبلغ الحوالة وطرق الدفع المسجلة في سلة.",
@@ -68,9 +68,12 @@ class BankCreditRecognition:
 
         native = mixed or method == "bank"
         currency = order["currency"]
-        bank_method = "bank" if native else (raw.get("payment") or {}).get("method") or raw.get("payment_method")
+        legacy_payment = raw.get("payment") if isinstance(raw.get("payment"), dict) else {}
+        bank_method = "bank" if native else legacy_payment.get("method") or raw.get("payment_method")
         paid = total
         if native:
+            if raw.get("is_pending_payment") is True:
+                raise ValueError("operational_order_bank_payment_incomplete")
             paid = bank_ledger_paid_amount(raw, source, currency=currency, total=total_value,
                 payment_issues=issues, transaction_rows=transactions, **scope,
                 frozen_provider=mixed and (bool(payment) or self._has_provider_money(identity)))
@@ -78,7 +81,11 @@ class BankCreditRecognition:
             not native and reached_at is not None)
         if not existing and expanded and needs_historical_review(self.state,
                 order_created_at=order["created_at"], reached_at=reached_at):
-            raise ValueError(HISTORICAL_REVIEW)
+            if not reached_at:
+                reached_in_progress(raw, source, **scope, require_history=True)
+                reached_at = source[PROOF_FIELD]["at"]
+            if needs_historical_review(self.state, order_created_at=order["created_at"], reached_at=reached_at):
+                raise ValueError(HISTORICAL_REVIEW)
         if native and self.banks is None:
             from operational_bank_catalog import bank_identities
             with refresh_stage("source_bank_catalog"):
@@ -86,4 +93,7 @@ class BankCreditRecognition:
         bank = resolve(self.data, self.owner, bank_method, currency, raw=raw, banks=self.banks or ())
         if paid <= 0 or paid != paid.quantize(Decimal(".01")):
             raise ValueError("operational_order_bank_amount_invalid")
-        return {"bank_id": bank["id"], "bank_name": bank["name"], "amount": str(paid)}
+        basis = ({"source": "salla_order_history", "observed_at": reached_at, "event_id": source[PROOF_FIELD]["event_id"]}
+                 if reached_at else {"source": "salla_order_status", "observed_at": order["updated_at"]})
+        return {"bank_id": bank["id"], "bank_name": bank["name"], "amount": str(paid),
+                "preparation_evidence": basis}

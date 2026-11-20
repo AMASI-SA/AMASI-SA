@@ -28,8 +28,9 @@ def _state(value):
 
 
 def _source(raw, source, owner, number, identity, as_of):
-    if not provider_order_page_current(source, raw, owner=owner, order_number=number,
-                                       provider_order_id=identity, customer_balance_verified=True):
+    if (any(row.get(key) is True for row in (raw, source) for key in ("is_cancelled", "cancelled"))
+            or not provider_order_page_current(source, raw, owner=owner, order_number=number,
+                                               provider_order_id=identity, customer_balance_verified=True)):
         raise ValueError(SOURCE_INVALID)
     version = _instant(raw.get("updated_at") or raw.get("date_updated"))
     created = _instant(raw.get("date") or raw.get("created_at") or raw.get("order_date"))
@@ -45,12 +46,12 @@ def _source(raw, source, owner, number, identity, as_of):
     return status, created, version
 
 
-def reached_in_progress(raw, source, *, owner, order_number, provider_order_id, as_of):
+def reached_in_progress(raw, source, *, owner, order_number, provider_order_id, as_of, require_history=False):
     """Current preparation proves itself. Later states require actual, order-bound history."""
     status, created, version = _source(raw, source, owner, order_number, provider_order_id, as_of)
-    if status == "in_progress":
+    if status == "in_progress" and not require_history:
         return True
-    if status not in _LATER:
+    if status != "in_progress" and status not in _LATER:
         return False
     proof = source.get(PROOF_FIELD)
     if proof is None:
@@ -71,11 +72,16 @@ def reached_in_progress(raw, source, *, owner, order_number, provider_order_id, 
 
 
 def _progress_event(row):
+    kinds = {row[key] for key in ("type", "event") if row.get(key)}
+    status_kinds = {"status_changed", "status_updated", "order.status.updated"}
+    if kinds - (status_kinds | {"activity"}):
+        return False
+    if not (kinds & status_kinds) and row.get("note") not in (None, ""):
+        return False
     targets = [row[key] for key in ("new_status", "to_status") if row.get(key) is not None]
     if targets:
         return all(_state(target) == "in_progress" for target in targets)
-    if row.get("type") in {"status_changed", "status_updated", "order.status.updated"} or row.get("event") in {
-            "status_changed", "status_updated", "order.status.updated"}:
+    if kinds & status_kinds:
         labels = [row[key] for key in ("customized", "status") if row.get(key)]
         return bool(labels) and all(_state(value) == "in_progress" for value in labels)
     # Native activity rows can carry arbitrary free-text notes. Only the dedicated
@@ -87,7 +93,7 @@ def _progress_event(row):
 def history_proof(raw, source, rows, *, owner, order_number, provider_order_id, as_of):
     """Summarize a complete response fetched from this owner's internal order endpoint."""
     status, created, version = _source(raw, source, owner, order_number, provider_order_id, as_of)
-    if status not in _LATER:
+    if status != "in_progress" and status not in _LATER:
         raise ValueError(SOURCE_INVALID)
     observations = []
     for row in rows:

@@ -766,6 +766,8 @@ async def refresh(db, owner, *, clock=None):
                         'direction': 'incoming', 'kind': 'collection', 'allocations': [], 'actual_fee_amount': '0.00',
                         'actor_id': 'operational_order_worker', 'source': 'mezan2', 'occurred_at': stamp,
                         'receipt_id': None, 'reference': 'طلب ' + order['order_number'], 'automatic_order_bank': True}
+                if credit.get('preparation_evidence'):
+                    item['bank_preparation_evidence'] = credit['preparation_evidence']
                 result['movements'].append(item)
                 audit(result, 'operational_order_worker', 'order_bank_credited', None, item,
                       'احتساب تحويل بنكي من طلب جديد مؤهل', 'mz2', stamp)

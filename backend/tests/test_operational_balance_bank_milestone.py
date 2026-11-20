@@ -47,6 +47,17 @@ class BankMilestoneTests(TestCase):
             self.assertTrue(reached_in_progress(raw, s, **SCOPE))
             self.assertEqual(s[PROOF_FIELD]["at"], "2026-11-13T16:27:52+00:00")
 
+    def test_current_status_does_not_invent_a_first_transition_time(self):
+        s = snapshot("in_progress")
+        raw = s["raw_by_source"]["salla_direct"]
+        with self.assertRaisesRegex(ValueError, HISTORY_MISSING):
+            reached_in_progress(raw, s, require_history=True, **SCOPE)
+        s[PROOF_FIELD] = history_proof(raw, s, [native_event()], **SCOPE)
+        self.assertTrue(reached_in_progress(raw, s, require_history=True, **SCOPE))
+        raw["cancelled"] = True
+        with self.assertRaisesRegex(ValueError, SOURCE_INVALID):
+            reached_in_progress(raw, s, require_history=True, **SCOPE)
+
     def test_waiting_review_payment_and_reversed_status_do_not_start_a_new_receipt(self):
         source = snapshot()
         raw = source["raw_by_source"]["salla_direct"]
@@ -64,7 +75,9 @@ class BankMilestoneTests(TestCase):
                 reached_in_progress(s["raw_by_source"]["salla_direct"], s, **SCOPE)
 
     def test_activities_cannot_promote_notes_or_conflicting_metadata(self):
-        for patch in ({"type": "comment"}, {"note": "قيد التنفيذ"}, {"customized": {"slug": "reviewed"}},
+        for patch in ({"type": "comment"}, {"type": "comment", "new_status": "in_progress"},
+                      {"note": "قيد التنفيذ", "new_status": "in_progress"},
+                      {"note": "قيد التنفيذ"}, {"customized": {"slug": "reviewed"}},
                       {"status": "تمت المراجعة"}, {"new_status": "reviewed", "to_status": "in_progress"}):
             s = snapshot()
             raw = s["raw_by_source"]["salla_direct"]
@@ -141,5 +154,39 @@ def test_history_read_cannot_rebind_concurrently_changed_source(monkeypatch):
         await bank_payment_sync.acquire_missing(db, "owner", [{"code": HISTORY_MISSING, "source_id": "81501"}])
         current = await db.unified_orders.find_one({"user_id": "owner"})
         assert PROOF_FIELD not in current
+    run(scenario)
+
+
+def test_missing_bank_identity_recovered_for_newly_supported_native_tenders(monkeypatch):
+    from salla_integration import bank_payment_sync
+    from test_operational_balance_bank_tender_proof import order
+    from test_operational_balance_integration import run
+
+    async def scenario(db):
+        calls, details = [], {}
+        monkeypatch.setattr(bank_payment_sync, "datetime", _Clock)
+        for index, mixed in enumerate((True, False)):
+            raw = order(mixed)
+            number, identity = str(1720 + index), str(51720 + index)
+            raw.update(id=identity, reference_id=number)
+            document = {"user_id": "owner", "order_number": number, "salla_order_id": identity,
+                        "g47_salla_snapshot": {"source_updated_at": raw["updated_at"]},
+                        "raw_by_source": {"salla_direct": deepcopy(raw)}}
+            await db.unified_orders.insert_one(document)
+            details[identity] = {**raw, "bank": {"id": "123", "bank_name": "مصرف الراجحي"}}
+
+        async def read(scoped, owner, method, path):
+            assert owner == "owner" and method == "GET"
+            identity = path.removeprefix("/orders/")
+            calls.append(identity)
+            return {"data": deepcopy(details[identity])}
+        monkeypatch.setattr(bank_payment_sync, "call_salla", read)
+        await bank_payment_sync.acquire_missing(db, "owner", [
+            {"code": "operational_order_bank_binding_incomplete", "source_id": identity} for identity in details])
+        assert set(calls) == set(details) and len(calls) == 2
+        for identity, raw in details.items():
+            current = await db.unified_orders.find_one({"user_id": "owner", "salla_order_id": identity})
+            assert current["raw_by_source"]["salla_direct"] == raw
+            assert PROOF_FIELD not in current
     run(scenario)
 

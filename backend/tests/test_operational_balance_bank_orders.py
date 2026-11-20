@@ -138,6 +138,38 @@ def test_native_bank_waits_even_with_paid_fields_and_a_receipt_then_books_once()
     run(scenario)
 
 
+def test_mixed_and_partial_bank_receipts_require_proof_and_book_only_the_bank_amount_once():
+    from test_operational_balance_bank_tender_proof import order as tender
+
+    async def scenario(db):
+        await started(db)
+        await native_accounts(db)
+        for number, mixed in (('998201', True), ('998202', False)):
+            doc = native_bank_order(number)
+            raw = doc['raw_by_source']['salla_direct']
+            evidence = tender(mixed)
+            for key in ('payment_method', 'payment_methods', 'amounts', 'payment_actions', 'receipt_image'):
+                raw[key] = evidence[key]
+            raw['total'] = raw['amounts']['total']
+            if mixed:
+                del raw['receipt_image']
+            await db.unified_orders.insert_one(doc)
+        await refresh(db, 'owner', clock=NOW)
+        first = await read(db, 'owner')
+        assert [(m['order_number'], m['amount']) for m in first['movements']] == [('998202', '202.50')]
+        assert any(i.get('order_number') == '998201' and i['code'] == 'operational_order_bank_receipt_evidence_missing'
+                   for i in first['engine']['issues']), first['engine']['issues']
+        await db.unified_orders.update_one({'order_number': '998201'},
+            {'$set': {'raw_by_source.salla_direct.receipt_image': 'https://example.test/bank.png'}})
+        await asyncio.gather(refresh(db, 'owner', clock=NOW), refresh(db, 'owner', clock=NOW))
+        final = await read(db, 'owner')
+        assert sorted((m['order_number'], m['amount']) for m in final['movements']) == [
+            ('998201', '150.66'), ('998202', '202.50')]
+        assert all(m['bank_preparation_evidence']['source'] == 'salla_order_status' for m in final['movements'])
+        assert final['engine']['obligations'] == first['engine']['obligations']
+    run(scenario)
+
+
 async def native_accounts(db):
     await db.accounts.insert_many([
         {'user_id': 'owner', 'id': code, 'name': name, 'account_type': 'bank', 'status': 'active',

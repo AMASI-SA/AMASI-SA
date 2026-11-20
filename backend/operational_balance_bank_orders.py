@@ -5,7 +5,6 @@ import re
 from decimal import Decimal
 from urllib.parse import urlsplit
 
-QUALIFYING = {'reviewed', 'تم المراجعة', 'تمت المراجعة', 'in_progress', 'processing', 'قيد التنفيذ'}
 NATIVE_BANKS = {
     'bank_rajhi': {'مصرف الراجحي', 'بنك الراجحي', 'الراجحي', 'al rajhi bank', 'al rajhi', 'rajhi'},
     'bank_inma': {'مصرف الإنماء', 'مصرف الانماء', 'بنك الإنماء', 'بنك الانماء', 'الإنماء', 'الانماء', 'alinma bank', 'alinma', 'al inma', 'inma'},
@@ -127,9 +126,13 @@ def is_closed_bank_underpayment(raw, currency, total):
             and action.get('paid_amount') is not None and 0 < _amount(action['paid_amount'], currency) < _amount(total, currency))
 
 
-def _has_receipt(raw, payment):
-    for media in (raw.get('receipt_image'), raw.get('payment_receipt_url'),
-                  payment.get('receipt_image'), payment.get('receipt_url')):
+def _has_receipt(raw, payment, bank):
+    # A primary card's receipt_url cannot prove a different tender. Salla's
+    # order-level receipt_image is the customer-uploaded bank transfer slip.
+    media_fields = [raw.get('receipt_image'), bank.get('receipt_image'), bank.get('receipt_url')]
+    if raw.get('payment_method') == 'bank':
+        media_fields.extend((raw.get('payment_receipt_url'), payment.get('receipt_image'), payment.get('receipt_url')))
+    for media in media_fields:
         if isinstance(media, dict):
             media = media.get('url') or media.get('original') or media.get('src')
         if isinstance(media, str):
@@ -176,7 +179,7 @@ def _validate_card_transactions(raw, rows, card_ref, card_amount, owner, order_n
 def bank_ledger_paid_amount(raw, source, *, owner, order_number, provider_order_id, currency, total,
                             as_of, payment_issues=(), transaction_rows=(), frozen_provider=False):
     """Recognize only the separately evidenced bank tender; never recognize a provider here."""
-    from operational_payment_evidence import _amount, _identity
+    from operational_payment_evidence import _amount, _identity, _instant
     from salla_payment_collection import provider_order_page_balance
 
     error = 'operational_order_bank_payment_incomplete'
@@ -195,7 +198,26 @@ def bank_ledger_paid_amount(raw, source, *, owner, order_number, provider_order_
 
     # The provider reader cannot describe a direct-bank leg, even when the bank is independently proved.
     allowed = {'provider_split_payment_review_required', 'provider_payment_reference_missing'} if mixed else set()
-    if frozen_provider or any(issue.get('code') not in allowed for issue in payment_issues):
+    if frozen_provider:
+        raise ValueError('operational_order_bank_credit_conflict')
+    _require_current(raw, source, owner, order_number, provider_order_id, as_of)
+    issue_codes = {issue.get('code') for issue in payment_issues}
+    watermark = source.get('g47_salla_snapshot') or {}
+    if (mixed and raw.get('payment_method') == 'mada' and watermark.get('component_pending') is True
+            and issue_codes == {'provider_order_page_identity_conflict'}
+            and any(leg.get('payment_method') == 'bank' and leg.get('transaction_reference') is None for leg in methods)):
+        # Both identity and exact source version have been checked against the real
+        # snapshot above. Isolate the stricter card-reader gate on a temporary view:
+        # it must still withhold the provider split for a known bank-leg reason.
+        from operational_split_payment import split_payment_evidence
+        probe_source = {**source, 'g47_salla_snapshot': {**watermark, 'component_pending': False}}
+        probe = split_payment_evidence(raw, currency, total, provider_order_page_balance(raw, currency, total),
+            owner=owner, order_number=order_number, provider_order_id=provider_order_id, rows=transaction_rows,
+            source=probe_source, created_at=_instant(raw.get('date') or raw.get('created_at') or raw.get('order_date')),
+            as_of=_instant(as_of))
+        if probe and probe[0] is None and probe[1]:
+            issue_codes = {issue.get('code') for issue in probe[1]}
+    if not issue_codes.issubset(allowed):
         raise ValueError('operational_order_bank_credit_conflict')
     if (currency != 'SAR' or raw.get('payment_method') not in ('bank', 'mada')
             or payment.get('method') not in (None, raw['payment_method'])
@@ -214,7 +236,7 @@ def bank_ledger_paid_amount(raw, source, *, owner, order_number, provider_order_
     bank_ref = bank.get('transaction_reference')
     if bank_ref is not None:
         bank_ref = _identity(bank_ref, error)
-    if not bank_ref and not _has_receipt(raw, payment):
+    if not bank_ref and not _has_receipt(raw, payment, bank):
         raise ValueError('operational_order_bank_receipt_evidence_missing')
 
     status = raw.get('status')
@@ -228,8 +250,6 @@ def bank_ledger_paid_amount(raw, source, *, owner, order_number, provider_order_
             or any(_amount(row[key], currency) for row in (raw, payment, refund) for key in ('pending_refund_amount', 'cancelled')
                    if row.get(key) is not None)):
         raise ValueError(error)
-    _require_current(raw, source, owner, order_number, provider_order_id, as_of)
-
     if mixed:
         page = provider_order_page_balance(raw, currency, total)
         if not page or paid != _amount(total, currency) or _amount(page['paid'], currency) != paid:
