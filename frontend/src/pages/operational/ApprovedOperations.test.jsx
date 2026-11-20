@@ -111,3 +111,19 @@ it('shows SAR debt with the native USD amount and keeps prepaid funds separate',
   expect(rows[1]).toContain('رصيد مقدم 420.00 ر.س');
   expect(rows[1]).not.toContain('علينا');
 });
+
+it('uses the same computed provider net in cards, position lines and the headline, showing pending principal separately',async()=>{
+  const { ResourceCard } = require('./ApprovedDirectory');
+  const provider={...bank,kind:'provider',id:'paypal',name:'باي بال',access:{balance:true,movements:'all',report:true},
+    balance:{visible:true,amount:'1567.66',side:'for_us'},provider_position:{currency:'SAR',complete:false,known_net:'1019.73',
+      paid_orders:5,uncomputed_orders:2,uncomputed_principal:'491.82',uncomputed_principal_complete:true}};
+  await show(<><ResourceCard resource={provider}/><ApprovedPosition context={{...context,resources:[bank,provider]}} identity="provider"/></>);
+  const card=host.querySelector('.resource'), line=[...host.querySelectorAll('.mz-position-line')].find(el=>el.textContent.includes('باي بال'));
+  for(const el of [card,line]) {
+    expect(el.textContent).toContain('1,019.73');expect(el.textContent).toContain('491.82');
+    expect(el.textContent).toContain('2 طلب');expect(el.textContent).toContain('غير مشمولة في الصافي المحتسب');
+    expect(el.textContent).not.toContain('1,567.66');
+  }
+  expect(host.querySelectorAll('.metric')[1].textContent).toContain('1,019.73');
+  expect(operationalApi.financialPosition).toHaveBeenCalledTimes(1);
+});

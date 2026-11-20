@@ -615,6 +615,22 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
                         pending(total, row["order_id"], "provider_balance_sar_unavailable", row.get("order_number"))
                         incomplete_estimate(total, row["order_id"], "provider_balance_sar_unavailable")
 
+    # Read-only disclosure of paid principal excluded from known net. Reuse
+    # folded observations so alias claims cannot count the same payment twice.
+    for identity, row in records.items():
+        if not row["paid_proven"]:
+            continue
+        gross, refunded = displayed.get(identity, (row["gross"], row["refunded"]))
+        total = group(row["currency"], row["provider"])
+        total["_observed_pending_basis"] = total.get("_observed_pending_basis", ZERO) + gross
+        principal = max(gross - refunded - allocated[identity]["gross"], ZERO)
+        if identity in resolved:
+            principal = max(principal - max(row["gross"] - row["refunded"] - allocated[identity]["gross"], ZERO), ZERO)
+        if principal:
+            total = group(row["currency"], row["provider"])
+            total.setdefault("_uncomputed_ids", set()).add(row["order_id"])
+            total["uncomputed_principal"] = total.get("uncomputed_principal", ZERO) + principal
+
     # Unknown fees or conflicting recognition cannot turn gross principal into
     # known net. Remove only those claims (and their derived credits), retaining
     # independent opening balances and other proved orders in the same account.
@@ -741,6 +757,11 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
             or total["estimated_fees_complete"])
         total["known_estimated_fees"] = (calculated_estimates
             if total["known_estimated_fees_available"] else None)
+        total["uncomputed_orders"] = len(total.get("_uncomputed_ids", set()))
+        total.setdefault("uncomputed_principal", ZERO)
+        total["uncomputed_principal_complete"] = bool(total["_gross_complete"] and total["paid_orders_complete"]
+            and not total["unidentified_pending_orders"]
+            and total["known_gross"] <= total.get("_observed_pending_basis", ZERO))
         total["held_orders"] = len(total["_held"])
         total["paid_order_ids"] = sorted(total["paid_orders"])
         total["paid_orders"] = (len(total["paid_orders"]) if total["paid_orders"] or total["paid_orders_complete"] else None)

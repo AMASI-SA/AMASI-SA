@@ -1068,7 +1068,8 @@ def install_workspace_routes(router, db, current_user, scope):
                 rows, undated = filtered_orders(computed["details"]["workspace_provider_orders"], q, date_from, date_to)
                 groups = computed["details"]["provider_balances"]
                 amounts = [{"currency": currency, **{k: item.get(k) for k in ("opening", "settled", "gross", "known_gross",
-                            "fees", "known_fees", "refunded", "net", "known_net", "complete")}}
+                            "fees", "known_fees", "refunded", "net", "known_net", "complete",
+                            "uncomputed_principal", "uncomputed_principal_complete", "uncomputed_orders")}}
                           for currency, accounts in groups.items() for item in accounts if item["provider"] == identity]
                 return {"resource": resource, "provider_orders": True, "amounts": amounts, "undated": undated,
                         **paginate(rows, page, page_size)}
