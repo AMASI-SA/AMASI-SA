@@ -1143,7 +1143,7 @@ def make_operational_balance_router(db, current_user):
         return await run_visible_report_read(request, read_page)
 
     @router.get("/reports")
-    async def reports(request: HttpRequest, user=Depends(current_user)):
+    async def reports(request: HttpRequest, user=Depends(current_user), position_amounts: bool = False):
         async def read_page():
             actor, owner, _ = await scope(db, user, "reports")
             from operational_balance_completeness import annotate_report_coverage
@@ -1151,6 +1151,10 @@ def make_operational_balance_router(db, current_user):
             state = await read(db, owner)
             result = await prepare_in_thread(lambda: annotate_report_coverage(report(
                 state, provider_balances_sar=True, provider_balances_net=True, ad_balances_sar=True)))
+            if position_amounts:
+                from operational_financial_position_core import position_balance
+                for party in result["parties"]:
+                    party["position_balance"] = position_balance(party, party["party_type"])
             result = await attach_order_numbers(db, owner, result)
             latest_actor, latest_owner, _ = await scope(db, user, "reports")
             if (latest_owner, latest_actor["id"]) != (owner, actor["id"]):

@@ -158,6 +158,36 @@ def _balance_origin(parties, obligations, complete):
     return breakdown
 
 
+def position_account_fields(row, kind):
+    """Amounts displayed by the operational position for one confirmed account."""
+    if kind == "bank":
+        return {"available": row.get("actual"), "unsettled": "0.00"}
+    if kind == "pos_receivable":
+        return {"available": "0.00", "unsettled": row.get("outstanding_receivable")}
+    if kind in {"cash", "employee_custody"}:
+        return {"available": row.get("custody_remaining", row.get("actual")) if kind == "employee_custody" else row.get("actual")}
+    return {"receivable": row.get("outstanding_receivable"), "payable": row.get("outstanding_payable")}
+
+
+def position_balance(row, kind):
+    """Merchant-signed balance in the row currency from confirmed position fields."""
+    if not row:
+        return "0.00" if kind in {"bank", "cash", "employee_custody"} else None
+    fields = position_account_fields(row, kind)
+    if kind == "operating_expense":
+        return _money(row.get("expense_paid"))
+    if kind == "owner_withdrawal":
+        return _money(row.get("owner_withdrawals"))
+    if kind == "pos_receivable":
+        return _money(fields["unsettled"])
+    if "available" in fields:
+        return _money(fields["available"])
+    receivable = row.get("ad_wallet_balance") if kind == "ad_account" else row.get("known_outstanding_receivable", fields["receivable"])
+    payable = row.get("known_outstanding_payable", fields["payable"])
+    due_to_us, due_by_us = _number(receivable), _number(payable)
+    return _money(due_to_us - due_by_us) if due_to_us is not None and due_by_us is not None else None
+
+
 def _actual_tables(parties, complete, *, table_ids=None):
     tables = []
     selected = lambda identity: table_ids is None or identity in table_ids
@@ -165,8 +195,7 @@ def _actual_tables(parties, complete, *, table_ids=None):
         columns = [_column("name", "الحساب", "text"), _column("available", "المتاح", role="neutral"),
                    _column("unsettled", "بانتظار التسوية", role="receivable")]
         banks = [{"id": _party_id(row), "name": _name(row),
-                  "available": row["actual"] if row["party_type"] == "bank" else "0.00",
-                  "unsettled": row["outstanding_receivable"] if row["party_type"] == "pos_receivable" else "0.00"}
+                  **position_account_fields(row, row["party_type"])}
                  for row in parties if row["party_type"] in {"bank", "pos_receivable"}]
         tables.append(_table("banks_network", "البنوك وأجهزة الشبكة", "actual", columns, banks, complete=complete,
                              notes=["تسويات أجهزة الشبكة حقوق لنا؛ لا تدخل ضمن النقد المتاح ولا تربط ببنك بالاسم."]))
@@ -175,8 +204,7 @@ def _actual_tables(parties, complete, *, table_ids=None):
         preparation_checkpoint()
         if not selected(identity):
             continue
-        key = "custody_remaining" if kind == "employee_custody" else "actual"
-        rows = [{"id": _party_id(row), "name": _name(row), "available": row[key]}
+        rows = [{"id": _party_id(row), "name": _name(row), **position_account_fields(row, kind)}
                 for row in parties if row["party_type"] == kind]
         tables.append(_table(identity, title, "actual", [_column("name", "الاسم", "text"),
                              _column("available", "العهدة المتبقية" if kind == "employee_custody" else "المتاح")],
@@ -187,8 +215,7 @@ def _actual_tables(parties, complete, *, table_ids=None):
         preparation_checkpoint()
         if kind in {"provider", "customer_wallet"} or not selected(identity):
             continue
-        rows = [{"id": _party_id(row), "name": _name(row),
-                 "receivable": row["outstanding_receivable"], "payable": row["outstanding_payable"]}
+        rows = [{"id": _party_id(row), "name": _name(row), **position_account_fields(row, kind)}
                 for row in parties if row["party_type"] == kind]
         notes = []
         if kind == "courier":

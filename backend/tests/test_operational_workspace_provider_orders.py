@@ -91,7 +91,10 @@ def test_mobile_provider_directory_detail_and_entry_use_web_position_with_scoped
         await db[STATES].update_one({"owner_id": "owner"}, {"$set": {"engine": state["engine"]}})
         web = (await client.get(BASE + "/context?provider_positions=true")).json()
         expected = next(r["provider_position"] for r in web["resources"] if r["id"] == "emkan")
-        assert expected["net"] == "90.00"
+        position = await client.get("/api/operational-balances/financial-position?view=providers")
+        assert position.status_code == 200
+        table = next(t for t in position.json()["currencies"]["SAR"]["tables"] if t["id"] == "providers")
+        assert expected["net"] == next(r["net"] for r in table["rows"] if r["id"] == "emkan") == "90.00"
         group = (await client.get(BASE + "/parties?kind=provider&provider_positions=true")).json()
         assert all(r["kind"] == "provider" for r in group["items"])
         assert group["session_scope"] == web["session_scope"]
