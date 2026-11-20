@@ -9,6 +9,8 @@ import {
   SpinnerGap,
   WarningCircle,
   Wrench,
+  ArrowRight,
+  LockKey,
 } from "@phosphor-icons/react";
 import {
   addMezanComponentPreview,
@@ -26,6 +28,13 @@ import {
   newComponentForm,
   toggleComponentCategory,
 } from "../lib/componentCreationRules";
+
+import InventorySuiteFrame, { InventoryPageHeader, InventorySheet } from "../components/inventory/suite/InventorySuiteFrame";
+import "./inventory-catalog-resources.css";
+
+function componentMoney(amount) {
+  return amount == null || amount === "" ? "غير محددة" : Number(amount).toLocaleString("ar-SA", { maximumFractionDigits: 2 }) + " ر.س";
+}
 
 function costCopy(component) {
   if (!component?.track_inventory) {
@@ -52,7 +61,7 @@ function costCopy(component) {
   };
 }
 
-export default function MezanComponentsProduction() {
+export default function MezanComponentsProduction({ embedded = false }) {
   const [workspace, setWorkspace] = useState({ components: [], categories: [], products: [], meta: {} });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -66,6 +75,7 @@ export default function MezanComponentsProduction() {
   const [saving, setSaving] = useState(false);
   const [statusBusy, setStatusBusy] = useState(false);
   const [costDraft, setCostDraft] = useState("");
+  const [mobileView, setMobileView] = useState("list");
 
   async function load(preferredId = "") {
     setLoading(true);
@@ -77,7 +87,7 @@ export default function MezanComponentsProduction() {
       const nextId = preferredId || selectedId || components[0]?.id || "";
       setSelectedId(nextId);
       const selected = components.find((row) => row.id === nextId) || components[0];
-      setCostDraft(selected?.track_inventory
+      setCostDraft(selected?.track_inventory && !costCopy(selected).locked
         ? (selected?.initial_unit_cost ?? selected?.reference_cost?.amount ?? "")
         : (selected?.reference_cost?.amount ?? ""));
       setEditForm(componentFormFromRow(selected));
@@ -103,15 +113,16 @@ export default function MezanComponentsProduction() {
   useEffect(() => {
     if (!selected || selected.id === selectedId) return;
     setSelectedId(selected.id);
-    setCostDraft(selected.track_inventory
+    setCostDraft(selected.track_inventory && !costCopy(selected).locked
       ? (selected.initial_unit_cost ?? selected.reference_cost?.amount ?? "")
       : (selected.reference_cost?.amount ?? ""));
     setEditForm(componentFormFromRow(selected));
   }, [selected?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function selectComponent(row) {
+    setMobileView("detail");
     setSelectedId(row.id);
-    setCostDraft(row.track_inventory
+    setCostDraft(row.track_inventory && !costCopy(row).locked
       ? (row.initial_unit_cost ?? row.reference_cost?.amount ?? "")
       : (row.reference_cost?.amount ?? ""));
     setEditForm(componentFormFromRow(row));
@@ -135,6 +146,7 @@ export default function MezanComponentsProduction() {
 
   async function createComponent(event) {
     event.preventDefault();
+    if (saving) return;
     if (!componentFormCanSave(form)) {
       setError("أدخل الاسم والرمز واختر تصنيف تجهيز واحدًا على الأقل.");
       return;
@@ -161,6 +173,7 @@ export default function MezanComponentsProduction() {
 
   async function updateComponent(event) {
     event.preventDefault();
+    if (saving) return;
     if (!selected || !componentFormCanSave(editForm)) {
       setError("أدخل الاسم والرمز واختر تصنيف تجهيز واحدًا على الأقل.");
       return;
@@ -185,7 +198,7 @@ export default function MezanComponentsProduction() {
   }
 
   async function saveCost() {
-    if (!selected || selected.status === "inactive" || selectedCostCopy.locked) return;
+    if (saving || !selected || selected.status === "inactive" || selectedCostCopy.locked) return;
     setSaving(true);
     setError("");
     try {
@@ -222,81 +235,77 @@ export default function MezanComponentsProduction() {
     }
   }
 
-  if (loading) {
-    return <div className="flex min-h-[55vh] items-center justify-center" dir="rtl"><SpinnerGap size={30} className="animate-spin text-violet-700" /></div>;
-  }
 
   const formModal = (mode) => {
     const isEdit = mode === "edit";
     const values = isEdit ? editForm : form;
     const setValues = isEdit ? setEditForm : setForm;
     const stock = values.kind === "stock_component";
+    const lockedCost = isEdit && stock && selectedCostCopy.locked;
     const canSave = componentFormCanSave(values);
+    const close = () => { if (!saving) { setAddOpen(false); setEditOpen(false); setError(""); } };
+    const formId = isEdit ? "mezan-component-edit" : "mezan-component-add";
     return (
-      <div className="fixed inset-0 z-[160] flex items-center justify-center bg-slate-950/50 p-4">
-        <form onSubmit={isEdit ? updateComponent : createComponent} className="max-h-[94vh] w-full max-w-lg overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
-          <h2 className="text-xl font-black">{isEdit ? "تعديل المكوّن أو الخدمة" : "إضافة مكوّن أو خدمة"}</h2>
-          <div className="mt-5 grid gap-3">
-            <label className="text-xs font-bold text-slate-500">الاسم<input value={values.name} onChange={(event) => setValues({ ...values, name: event.target.value })} placeholder="مثال: تطريز الاسم" className="mt-1 w-full rounded-xl border p-3 text-slate-900" /></label>
-            <label className="text-xs font-bold text-slate-500">الرمز<input value={values.code} onChange={(event) => setValues({ ...values, code: event.target.value })} placeholder="مثال: EMBROIDERY_NAME" className="mt-1 w-full rounded-xl border p-3 text-slate-900" /></label>
-            <label className="text-xs font-bold text-slate-500">النوع<select value={values.kind} onChange={(event) => setValues(changeComponentKind(values, event.target.value))} className="mt-1 w-full rounded-xl border p-3 text-slate-900"><option value="service">خدمة عمل</option><option value="stock_component">مكوّن مخزني</option></select></label>
-
-            <fieldset className="rounded-2xl border border-slate-200 p-3">
-              <legend className="px-2 text-xs font-black text-slate-600">تصنيف التجهيز — إلزامي</legend>
-              {!categories.length ? (
-                <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold leading-6 text-amber-900"><WarningCircle size={19} className="mt-0.5 shrink-0" />أنشئ تصنيفًا مثل «مطليات» أو «ملابس» من تبويب التصنيفات والقروبات أولًا.</div>
-              ) : (
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {categories.map((category) => {
-                    const checked = (values.category_ids || []).map(String).includes(String(category.id));
-                    return (
-                      <label key={category.id} className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3 ${checked ? "border-violet-500 bg-violet-50" : "border-slate-200"}`}>
-                        <input type="checkbox" checked={checked} onChange={() => setValues(toggleComponentCategory(values, category.id))} className="h-4 w-4 accent-violet-700" />
-                        <span className="font-black text-slate-900">{category.name}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              )}
-              <p className="mt-2 text-[11px] font-bold leading-5 text-slate-500">يمكن اختيار أكثر من تصنيف، لكن لا يمكن حفظ العنصر دون تصنيف واحد على الأقل.</p>
+      <InventorySheet open onClose={close} busy={saving} title={isEdit ? "تعديل المكوّن أو الخدمة" : "إضافة مكوّن أو خدمة"} description="الاسم والرمز والتصنيف أولًا، ثم التكلفة والتجهيز." footer={<><button type="button" disabled={saving} onClick={close} className="mz-catalog-secondary">إلغاء</button><button type="submit" form={formId} disabled={saving || !canSave} className="mz-catalog-primary">{saving ? <SpinnerGap className="animate-spin" /> : <Plus />}{saving ? "جارٍ الحفظ…" : isEdit ? "حفظ التعديلات" : "إنشاء"}</button></>}>
+        <form id={formId} onSubmit={isEdit ? updateComponent : createComponent} className="mz-component-fields">
+          {error && <div role="alert" className="mz-catalog-notice mz-catalog-error"><WarningCircle size={20}/>{error}</div>}
+          <fieldset disabled={saving} className="mz-component-fields">
+            <div className="mz-catalog-form-grid">
+              <label className="is-full">اسم المكوّن أو الخدمة *<input autoFocus required value={values.name} onChange={(event) => setValues({ ...values, name: event.target.value })} placeholder="مثل: تطريز الاسم" /></label>
+              <label>الرمز *<input required dir="ltr" value={values.code} onChange={(event) => setValues({ ...values, code: event.target.value })} placeholder="EMBROIDERY_NAME" /></label>
+              <label>النوع<select value={values.kind} onChange={(event) => setValues(changeComponentKind(values, event.target.value))}><option value="service">خدمة عمل</option><option value="stock_component">مكوّن مخزني</option></select></label>
+            </div>
+            <fieldset className="mz-component-categories">
+              <legend>تصنيف التجهيز *</legend>
+              {!categories.length ? <p className="mz-catalog-muted">أنشئ تصنيفًا مثل «مطليات» أو «ملابس» من تبويب التصنيفات والمجموعات أولًا.</p> : <div>{categories.map((category) => {
+                const checked = (values.category_ids || []).map(String).includes(String(category.id));
+                return <label key={category.id} className={checked ? "is-checked" : ""}><input type="checkbox" checked={checked} onChange={() => setValues(toggleComponentCategory(values, category.id))}/>{category.name}</label>;
+              })}</div>}
+              <p className="mz-catalog-muted">اختر تصنيفًا واحدًا أو أكثر.</p>
             </fieldset>
-
-            {!stock && <label className="flex items-start gap-3 rounded-xl border border-violet-200 bg-violet-50 p-3 text-sm font-bold text-violet-950"><input type="checkbox" checked={values.requires_preparation} onChange={(event) => setValues({ ...values, requires_preparation: event.target.checked })} className="mt-1" /><span>تمنع شحن المنتج حتى تكتمل الخدمة<span className="mt-1 block text-xs font-normal leading-5 text-violet-700">مفعّلة تلقائيًا للخدمات الجديدة مثل القص والطلاء والتطريز والطباعة، ويمكن إلغاؤها للخدمات التي لا توقف الشحن.</span></span></label>}
-            <label className="text-xs font-bold text-slate-500">{stock ? "التكلفة الأولية التقديرية" : "تكلفة الخدمة الحالية"}<input type="number" min="0" step="0.01" value={values.unit_cost} onChange={(event) => setValues({ ...values, unit_cost: event.target.value })} placeholder="التكلفة بالريال" className="mt-1 w-full rounded-xl border p-3 text-slate-900" /></label>
-            {stock && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-6 text-amber-900">هذه تكلفة أولية فقط. بعد اعتماد فاتورة شراء للمكوّن، تعتمد تكلفة الشراء الفعلية بدلها تلقائيًا.</div>}
-            <label className="text-xs font-bold text-slate-500">ملاحظات<textarea value={values.description} onChange={(event) => setValues({ ...values, description: event.target.value })} className="mt-1 min-h-20 w-full rounded-xl border p-3 text-slate-900" /></label>
-          </div>
-          <div className="mt-6 flex justify-end gap-2"><button type="button" onClick={() => isEdit ? setEditOpen(false) : setAddOpen(false)} className="rounded-xl border px-4 py-3 font-bold">إلغاء</button><button disabled={saving || !canSave} className="rounded-xl bg-violet-700 px-5 py-3 font-black text-white disabled:opacity-50">{saving ? "جارٍ الحفظ…" : isEdit ? "حفظ التعديلات" : "إنشاء"}</button></div>
+            {!stock && <label className="mz-component-switch"><input type="checkbox" checked={values.requires_preparation} onChange={(event) => setValues({ ...values, requires_preparation: event.target.checked })}/><span>يتطلب إكمال الخدمة قبل الشحن<small>مثل القص والطلاء والتطريز والطباعة.</small></span></label>}
+            <div className="mz-catalog-form-grid"><label className="is-full">{lockedCost ? "تكلفة المخزون المعتمدة" : stock ? "التكلفة الأولية التقديرية" : "تكلفة الخدمة الحالية"}<input type="number" min="0" step="0.01" disabled={lockedCost} value={lockedCost ? (selected?.reference_cost?.amount ?? values.unit_cost) : values.unit_cost} onChange={(event) => setValues({ ...values, unit_cost: event.target.value })} placeholder="التكلفة بالريال" /></label></div>
+            {stock && <div className={"mz-catalog-notice " + (lockedCost ? "" : "mz-catalog-warning")}>{lockedCost ? <LockKey size={19}/> : <WarningCircle size={19}/>}<span>{lockedCost ? "هذه التكلفة معتمدة من فاتورة شراء، وتبقى محمية من التعديل اليدوي." : "قيمة تقديرية للبدء. تحل تكلفة الشراء المعتمدة محلها عند اعتماد أول فاتورة شراء."}</span></div>}
+            <div className="mz-catalog-form-grid"><label className="is-full">ملاحظات <span className="mz-catalog-muted">اختياري</span><textarea value={values.description} onChange={(event) => setValues({ ...values, description: event.target.value })} /></label></div>
+          </fieldset>
         </form>
-      </div>
+      </InventorySheet>
     );
   };
 
-  return (
-    <div className="space-y-5" dir="rtl">
-      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div><h1 className="text-2xl font-black text-slate-950">مكونات وتكاليف Mezan OS</h1><p className="mt-1 text-sm text-slate-500">كل خدمة أو مكوّن يجب أن يتبع تصنيف تجهيز واحدًا على الأقل، ويمكن مشاركته بين عدة تصنيفات.</p></div><button onClick={() => { setForm(newComponentForm()); setAddOpen(true); }} className="rounded-xl bg-violet-700 px-5 py-3 font-black text-white"><Plus className="ml-2 inline" />إضافة مكوّن أو خدمة</button></div></section>
+  const content = <div className="mz-components-workspace" dir="rtl" data-testid="components-catalog-workspace">
+    <InventoryPageHeader title={embedded ? "دليل المكونات والخدمات" : "المكونات والخدمات"} description="أضف العنصر وصنّفه وحدد تكلفته، ثم اربطه بالمنتجات وخياراتها.">
+      <button onClick={() => { setError(""); setForm(newComponentForm()); setAddOpen(true); }} className="mz-catalog-primary"><Plus size={18}/>إضافة مكوّن أو خدمة</button>
+    </InventoryPageHeader>
+    {error && !addOpen && !editOpen && <div role="alert" className="mz-catalog-notice mz-catalog-error"><WarningCircle size={20}/>{error}<button type="button" onClick={() => load(selectedId)}>إعادة المحاولة</button></div>}
+    <section className="mz-components-summary" aria-label="ملخص المكونات">
+      <div><span>إجمالي العناصر</span><strong>{summary.total}</strong></div><div><span>العناصر الفعالة</span><strong>{summary.active}</strong></div><div><span>العناصر الموقوفة</span><strong>{summary.inactive}</strong></div><div><span>تحتاج تكلفة</span><strong>{summary.missing_cost}</strong></div>
+    </section>
+    <section className="mz-catalog-tools">
+      <label className="mz-catalog-search"><MagnifyingGlass size={21}/><input aria-label="بحث المكونات بالاسم أو الرمز" value={query} onChange={(event) => { setQuery(event.target.value); setMobileView("list"); }} placeholder="ابحث بالاسم أو الرمز…"/></label>
+      <div className="mz-catalog-status-tabs" aria-label="حالة المكونات">{[["active", "الفعالة"], ["inactive", "الموقوفة"], ["all", "الكل"]].map(([value, label]) => <button key={value} type="button" aria-pressed={statusFilter === value} onClick={() => { setStatusFilter(value); setMobileView("list"); }}>{label}</button>)}</div>
+    </section>
+    {loading ? <div className="mz-catalog-empty" role="status"><SpinnerGap size={30} className="animate-spin"/>جارٍ تحميل المكونات…</div> : !components.length ? <section className="mz-catalog-list mz-catalog-empty"><Cube size={48}/><h2>ابدأ بأول مكوّن أو خدمة</h2><p>أضف خامة مخزنية أو خدمة مثل النقش والتطريز والتغليف.</p><button onClick={() => { setForm(newComponentForm()); setAddOpen(true); }} className="mz-catalog-primary"><Plus size={18}/>إضافة أول مكوّن</button></section> : <section className="mz-catalog-layout">
+      <section className="mz-catalog-list" data-mobile-hidden={mobileView === "detail"} aria-label="قائمة المكونات">
+        <div className="mz-catalog-section-title"><h2>المكونات والخدمات <span>{visible.length}</span></h2><span>الأسماء والرموز والتكاليف</span></div>
+        {!visible.length ? <div className="mz-catalog-empty"><MagnifyingGlass size={35}/><p>لا توجد عناصر تطابق البحث.</p></div> : <div className="mz-catalog-table-scroll"><table className="mz-catalog-table"><thead><tr><th>العنصر</th><th>الرمز</th><th>التكلفة الحالية</th><th>الحالة</th></tr></thead><tbody>{visible.map((row) => <tr key={row.id} className={selected?.id === row.id ? "is-selected" : ""} onClick={() => selectComponent(row)}><td><button type="button" className="mz-catalog-product" aria-label={"عرض " + row.name} onClick={() => selectComponent(row)}><span className="mz-component-icon">{row.track_inventory ? <Cube size={23}/> : <Wrench size={23}/>}</span><span><strong>{row.name}</strong><small>{row.track_inventory ? "مكوّن مخزني" : "خدمة عمل"} · {row.code || "بدون رمز"}</small></span></button></td><td><bdi>{row.code || "—"}</bdi></td><td className="mz-catalog-price">{componentMoney(row.reference_cost?.amount)}</td><td><span className={"mz-catalog-state state-" + (row.status === "inactive" ? "inactive" : "active")}>{row.status === "inactive" ? "موقوف" : "فعّال"}</span></td></tr>)}</tbody></table></div>}
+      </section>
+      <aside className="mz-catalog-inspector" data-mobile-hidden={mobileView === "list"} aria-label="تفاصيل المكوّن">
+        <button type="button" className="mz-catalog-mobile-back" onClick={() => setMobileView("list")}><ArrowRight size={18}/>العودة إلى المكونات</button>
+        {selected ? <><div className="mz-catalog-identity"><span className="mz-component-icon">{selected.track_inventory ? <Cube size={29}/> : <Wrench size={29}/>}</span><div><h2>{selected.name}</h2><p><bdi>{selected.code}</bdi></p><span className={"mz-catalog-state state-" + (selected.status === "inactive" ? "inactive" : "active")}>{selected.status === "inactive" ? "موقوف" : "فعّال"}</span></div></div>
+          <div className="mz-catalog-detail-tabs"><button type="button" onClick={() => { setError(""); setEditForm(componentFormFromRow(selected)); setEditOpen(true); }}><PencilSimple size={16}/>تعديل العنصر</button><button type="button" onClick={toggleStatus} disabled={statusBusy || saving}>{selected.status === "inactive" ? <ArrowCounterClockwise size={16}/> : <Power size={16}/>}{statusBusy ? "جارٍ الحفظ…" : selected.status === "inactive" ? "إعادة التفعيل" : "إيقاف وإخفاء"}</button></div>
+          <div className="mz-catalog-detail-content">
+            {selected.status === "inactive" && <div className="mz-catalog-notice mz-catalog-warning">العنصر موقوف عن الربط الجديد. الروابط والسجلات السابقة محفوظة.</div>}
+            <section className="mz-component-cost-box"><header><h3>{selectedCostCopy.title}</h3><span className="mz-catalog-state">{selectedCostCopy.locked && <LockKey size={13}/>} {selectedCostCopy.badge}</span></header><p>{selectedCostCopy.description}</p><div><input aria-label="تكلفة المكوّن الحالية" disabled={saving || selected.status === "inactive" || selectedCostCopy.locked} type="number" min="0" step="0.01" value={costDraft} onChange={(event) => setCostDraft(event.target.value)} placeholder="التكلفة بالريال"/><button onClick={saveCost} disabled={saving || selected.status === "inactive" || selectedCostCopy.locked} className="mz-catalog-primary">{saving ? "جارٍ الحفظ…" : "حفظ"}</button></div></section>
+            <section><h3>تصنيفات التجهيز</h3><p className="mz-catalog-muted">{(selected.category_ids || []).map((id) => categories.find((category) => String(category.id) === String(id))?.name).filter(Boolean).join("، ") || "غير مصنف"}</p></section>
+            <section><h3>المنتجات المرتبطة <span>({selected.product_usages?.length || 0})</span></h3>{!(selected.product_usages || []).length && <p className="mz-catalog-muted">لا توجد روابط منتجات لهذا العنصر.</p>}{(selected.product_usages || []).map((usage) => <article key={usage.id} className="mz-component-usage"><strong>{usage.product_name}</strong><p>{usage.source === "product" ? "مرتبط بالمنتج مباشرة" : [usage.condition?.option_name, usage.condition?.value_name].filter(Boolean).join(": ")}</p></article>)}</section>
+            {selected.description && <section className="mt-4"><h3>ملاحظات</h3><p className="mz-catalog-muted">{selected.description}</p></section>}
+          </div></> : <div className="mz-catalog-empty">اختر عنصرًا لعرض التفاصيل.</div>}
+      </aside>
+    </section>}
+    {addOpen && formModal("add")}
+    {editOpen && formModal("edit")}
+  </div>;
 
-      {error && <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 font-bold text-rose-800">{error}</div>}
-
-      <section className="grid gap-3 sm:grid-cols-4"><div className="rounded-2xl border bg-white p-4"><div className="text-xs text-slate-500">إجمالي العناصر</div><div className="mt-1 text-2xl font-black">{summary.total}</div></div><div className="rounded-2xl border bg-white p-4"><div className="text-xs text-slate-500">العناصر الفعالة</div><div className="mt-1 text-2xl font-black text-emerald-700">{summary.active}</div></div><div className="rounded-2xl border bg-white p-4"><div className="text-xs text-slate-500">العناصر الموقوفة</div><div className="mt-1 text-2xl font-black text-rose-700">{summary.inactive}</div></div><div className="rounded-2xl border bg-white p-4"><div className="text-xs text-slate-500">تحتاج تكلفة</div><div className="mt-1 text-2xl font-black">{summary.missing_cost}</div></div></section>
-
-      {!components.length ? (
-        <section className="rounded-3xl border border-dashed border-violet-300 bg-violet-50/40 p-10 text-center"><Cube size={56} className="mx-auto text-violet-600" /><h2 className="mt-4 text-xl font-black">ابدأ بإضافة أول مكوّن أو خدمة</h2><p className="mx-auto mt-2 max-w-xl text-sm leading-7 text-slate-600">مثال: تطريز الاسم، نقش الاسم، طلاء ذهبي، تغليف هدية، علبة، سلسلة أو خامة.</p><button onClick={() => { setForm(newComponentForm()); setAddOpen(true); }} className="mt-5 rounded-xl bg-violet-700 px-6 py-3 font-black text-white"><Plus className="ml-2 inline" />إضافة أول مكوّن</button></section>
-      ) : (
-        <section className="grid gap-5 xl:grid-cols-[340px_minmax(0,1fr)]">
-          <aside className="overflow-hidden rounded-3xl border bg-white shadow-sm"><div className="border-b p-4"><label className="flex items-center gap-2 rounded-xl border bg-slate-50 px-3 py-2"><MagnifyingGlass className="text-slate-400" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="ابحث بالاسم أو الرمز…" className="min-w-0 flex-1 bg-transparent outline-none" /></label><div className="mt-3 grid grid-cols-3 gap-1 rounded-xl bg-slate-100 p-1">{[["active", "الفعالة"], ["inactive", "الموقوفة"], ["all", "الكل"]].map(([value, label]) => <button key={value} type="button" onClick={() => setStatusFilter(value)} className={`rounded-lg px-2 py-2 text-xs font-black ${statusFilter === value ? "bg-white text-violet-800 shadow-sm" : "text-slate-500"}`}>{label}</button>)}</div></div><div className="max-h-[650px] divide-y overflow-auto">{visible.map((row) => <button key={row.id} onClick={() => selectComponent(row)} className={`w-full p-4 text-right ${selected?.id === row.id ? "bg-violet-50" : "hover:bg-slate-50"}`}><div className="flex items-center justify-between gap-2"><div className="font-black">{row.name}</div>{row.status === "inactive" && <span className="rounded-full bg-rose-100 px-2 py-1 text-[10px] font-black text-rose-700">موقوف</span>}</div><div className="mt-1 text-xs text-slate-500">{row.code} · {row.track_inventory ? "مكوّن مخزني" : "خدمة عمل"}</div></button>)}{!visible.length && <div className="p-8 text-center text-sm font-bold text-slate-400">لا توجد عناصر في هذه القائمة.</div>}</div></aside>
-
-          {selected && <main className="space-y-5 rounded-3xl border bg-white p-5 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-4"><div className="flex items-center gap-3"><div className="rounded-2xl bg-violet-100 p-3 text-violet-700">{selected.track_inventory ? <Cube size={28} /> : <Wrench size={28} />}</div><div><div className="flex items-center gap-2"><h2 className="text-xl font-black">{selected.name}</h2>{selected.status === "inactive" && <span className="rounded-full bg-rose-100 px-2.5 py-1 text-[10px] font-black text-rose-700">موقوف</span>}</div><p className="text-xs text-slate-500">{selected.code}</p></div></div><div className="flex gap-2"><button onClick={() => { setEditForm(componentFormFromRow(selected)); setEditOpen(true); }} className="rounded-xl border border-violet-300 px-4 py-2 text-sm font-black text-violet-800"><PencilSimple className="ml-1 inline" />تعديل</button><button onClick={toggleStatus} disabled={statusBusy} className={`rounded-xl border px-4 py-2 text-sm font-black disabled:opacity-50 ${selected.status === "inactive" ? "border-emerald-300 text-emerald-800" : "border-rose-300 text-rose-800"}`}>{selected.status === "inactive" ? <ArrowCounterClockwise className="ml-1 inline" /> : <Power className="ml-1 inline" />}{statusBusy ? "جارٍ الحفظ…" : selected.status === "inactive" ? "إعادة التفعيل" : "إيقاف وإخفاء"}</button></div></div>
-            {selected.status === "inactive" && <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-bold leading-7 text-rose-900">هذا العنصر موقوف: لا يظهر في التطبيق أو قوائم ربط المنتجات الجديدة. بقيت روابط المنتجات السابقة وتكاليفها وسجلات الطلبات محفوظة دون حذف، ويمكن إعادة تفعيله.</div>}
-            <section className="rounded-2xl border p-4"><div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-black">{selectedCostCopy.title}</h3><span className={`rounded-full px-3 py-1 text-xs font-bold ${selectedCostCopy.locked ? "bg-emerald-100 text-emerald-800" : selected.track_inventory ? "bg-amber-100 text-amber-800" : "bg-violet-100 text-violet-800"}`}>{selectedCostCopy.badge}</span></div><p className="mt-1 text-xs leading-6 text-slate-500">{selectedCostCopy.description}</p><div className="mt-4 flex gap-3"><input disabled={selected.status === "inactive" || selectedCostCopy.locked} type="number" min="0" step="0.01" value={costDraft} onChange={(event) => setCostDraft(event.target.value)} className="min-w-0 flex-1 rounded-xl border p-3 disabled:bg-slate-100" placeholder="التكلفة بالريال" /><button onClick={saveCost} disabled={saving || selected.status === "inactive" || selectedCostCopy.locked} className="rounded-xl bg-emerald-700 px-5 font-black text-white disabled:opacity-50">حفظ</button></div></section>
-            <section className="rounded-2xl border p-4"><h3 className="font-black">المنتجات المرتبطة</h3><p className="mt-1 text-sm text-slate-500">{selected.product_usages?.length || 0} ربط على مستوى المنتج أو خياراته.</p>{(selected.product_usages || []).map((usage) => <div key={usage.id} className="mt-3 rounded-xl bg-slate-50 p-3"><div className="font-bold">{usage.product_name}</div><div className="text-xs text-slate-500">{usage.source === "product" ? "مرتبط بالمنتج مباشرة" : `${usage.condition?.option_name}: ${usage.condition?.value_name}`}</div></div>)}</section>
-          </main>}
-        </section>
-      )}
-
-      {addOpen && formModal("add")}
-      {editOpen && formModal("edit")}
-    </div>
-  );
+  return embedded ? content : <InventorySuiteFrame active="components">{content}</InventorySuiteFrame>;
 }
