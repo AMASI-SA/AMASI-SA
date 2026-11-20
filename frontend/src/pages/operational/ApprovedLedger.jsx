@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { todaySA } from '../../lib/dates';
-import { AdBalance, Amount, Heading, Icon, IconBox, MovementIcon, isAsset, issueLabel, styleOf } from './ApprovedFinanceUI';
+import { AdAmount, AdBalance, Amount, Heading, Icon, IconBox, MovementIcon, isAsset, issueLabel, styleOf } from './ApprovedFinanceUI';
 import { simpleBalancesApi as api, simpleBalanceError } from './simpleBalancesApi';
 import { useBalanceRead } from './simpleBalancesHooks';
 import { isStatement, minorUnits, movementDate, movementRecorder, movementTitle, resourceKey, signedResourceBalance } from './simpleBalancesModel';
@@ -39,6 +39,7 @@ function Pagination({ result, onPage }) {
 function LedgerBalance({ value, resource }) {
   const units = minorUnits(value);
   if (units === null) return <span aria-label="الرصيد غير متاح">—</span>;
+  if (resource.kind === 'ad_account') return <AdAmount value={value} currency={resource.currency} payable />;
   const cash = ['bank', 'cash'].includes(resource.kind);
   const positiveIsOwed = resource.kind === 'employee_custody';
   const side = !cash && units !== 0n ? (units > 0n) === positiveIsOwed ? 'عليه للمؤسسة' : 'له عند المؤسسة' : '';

@@ -385,9 +385,11 @@ def usable(row):
             and not any(row.get(k) for k in ('archived', 'deleted', 'is_archived', 'is_deleted')))
 
 
-def _source_cursor(db, owner, collection, *, refresh=False):
+def _source_cursor(db, owner, collection, *, refresh=False, fields=None):
     if not owner or collection not in ALLOWED_COLLECTIONS or collection in {TXN_COLLECTION, DELIVERY_HISTORY, SHIPPING_EVENT_BLOCKERS, SHIPPING_V2_BLOCKERS, 'users', 'settings', 'accounts', 'mz2_operational_bank_accounts'}:
         raise ValueError('operational_source_rejected')
+    if fields is not None:
+        return db[collection].find({'user_id': owner}, {'_id': 0, **dict.fromkeys(fields, 1)})
     if refresh and collection == 'unified_orders':
         projection = {'_id': 0, **{key: 1 for key in REFRESH_ORDER_FIELDS}}
         return db[collection].find({'user_id': owner}, projection)
@@ -408,9 +410,9 @@ def _checked_source_rows(result, owner):
     return result
 
 
-async def rows(db, owner, collection):
+async def rows(db, owner, collection, *, fields=None):
     from operational_read_runtime import read_source_cursor, source_read_is_owned
-    cursor = _source_cursor(db, owner, collection)
+    cursor = _source_cursor(db, owner, collection, fields=fields)
     result = (await read_source_cursor(cursor, MAX_ROWS + 1) if source_read_is_owned()
               else await cursor.to_list(MAX_ROWS + 1))
     return _checked_source_rows(result, owner)
@@ -618,7 +620,10 @@ async def entities(db, owner, kind, *, include_unready=False, operational_state=
         if binding and binding['source'] == 'operational':
             source.append({'id': binding['id'], 'name': binding['name'], 'currency': 'SAR', 'status': 'active'})
     elif kind in ENTITY_COLLECTIONS:
-        source = await rows(db, owner, ENTITY_COLLECTIONS[kind])
+        # Directories need identity and lifecycle fields, never employee salaries or supplier contracts.
+        fields = ('user_id', 'id', 'name', 'display_name', 'company_name', 'account_type', 'currency', 'status',
+                  'active', 'is_active', 'archived', 'deleted', 'is_archived', 'is_deleted', 'ready', 'setup_issue')
+        source = await rows(db, owner, ENTITY_COLLECTIONS[kind], fields=fields)
         if kind in ('bank', 'cash'):
             source = [r for r in source if r.get('account_type') == kind and r.get('status') == 'active']
     else:

@@ -170,6 +170,8 @@ def _movement_rows(movement, facts, allowed=None):
             "allocations", "external_operation", "funding_mode", "driver_review_event_id", "exchange_id",
             "party_type", "party_id", "bank_kind", "bank_id", "direction", "kind",
         )}
+        if movement.get("settlement_scope"):
+            financial_fields["settlement_scope"] = movement["settlement_scope"]
         item["_basis"] = digest([_seal_basis(item), financial_fields])
         item["_movement_id"] = movement["id"]
         item["_actor_recorded_name"] = movement.get("actor_name") or None
@@ -251,13 +253,18 @@ def _cash_only_projection(state, selected):
     The cash arithmetic is parity-tested against that report for every prefix.
     """
     if any(row["account_type"] not in {"bank", "cash"}
-           or (row["counterparty_id"] and row["counterparty_type"] not in {"bank", "cash"})
+           or (row["counterparty_id"] and row["counterparty_type"] not in NON_DEBT_PARTIES)
            for row in selected):
         return None
     keys = {(r["account_type"], r["account_id"], r["currency"]) for r in selected}
     # Preserve names for non-debt transfer counterparts as the full report does.
     keys.update((r["counterparty_type"], r["counterparty_id"], r["counterparty_balance_currency"])
                 for r in selected if r["counterparty_type"] in {"bank", "cash"})
+    return {"parties": list(cash_positions(state, keys).values()), "obligations": []}
+
+
+def cash_positions(state, keys):
+    """Actual bank, cash or custody balances from cash legs, independent of open obligations."""
     parties = {}
 
     def add(key, value, name=None):
@@ -289,13 +296,15 @@ def _cash_only_projection(state, selected):
             # only its bank leg changes cash. Transfers have a second real leg.
             value = -signed if movement["kind"] == "transfer" else (
                 signed if movement["kind"] == "correction" and not movement.get("bank_id") else Decimal(0))
+            if party_key[0] == "employee_custody" and movement["kind"] != "correction":
+                value = -signed
             add(party_key, value, movement.get("name"))
     for case in state.get("customer_returns", []):
         key = (case.get("refund_source_type"), case.get("refund_source_id"), case.get("currency"))
         if (key in keys and key[0] == "bank"
                 and case.get("status") in {"refunded", "salla_refund_confirmed"}):
             add(key, -Decimal(_amount(case["amount"])), case.get("refund_source_name"))
-    return {"parties": list(parties.values()), "obligations": []}
+    return parties
 
 
 def _driver_review_projection(state, selected):
@@ -367,6 +376,8 @@ def _ordinary_debt_projection(state, selected, *, counterparty_type, account_typ
             party["outstanding_receivable"] += amount if movement["direction"] == "incoming" else -amount
         elif movement["kind"] != "transfer":
             unused = amount - sum((Decimal(_amount(a["amount"])) for a in movement.get("allocations", [])), Decimal(0))
+            if movement.get("settlement_scope") == "account":
+                unused += Decimal(_amount(movement.get("actual_fee_amount", "0")))
             if unused > 0:
                 party["outstanding_receivable"] += unused if movement["direction"] == "outgoing" else -unused
     cash_rows = [{**r, "counterparty_id": None, "counterparty_type": None} for r in selected
@@ -413,6 +424,14 @@ def capture_after_balances(state, event):
     # the growing sealed log for every automatic movement in a worker batch.
     try:
         projection = _cash_only_projection(state, selected)
+        if projection is None and action == "movement_saved" and after.get("settlement_scope") == "account":
+            from operational_party_projection_state import party_projection_state
+            kind, identity = after["party_type"], after["party_id"]
+            scoped = party_projection_state(state, kind, identity)
+            projection = report(scoped)
+            cash_keys = {(r["account_type"], r["account_id"], r["currency"]) for r in selected
+                         if r["account_type"] in {"bank", "cash"}}
+            projection["parties"].extend(cash_positions(state, cash_keys).values())
         if projection is None and action == "driver_payment_review_approved":
             projection = _driver_review_projection(state, selected)
         if projection is None and action == "prepaid_shipping_paid":

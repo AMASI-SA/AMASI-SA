@@ -105,8 +105,9 @@ it('shows SAR debt with the native USD amount and keeps prepaid funds separate',
   ];
   await show(<ApprovedPosition context={{...context,resources}} identity="owner"/>);
   const rows = [...host.querySelectorAll('.mz-position-line')].map(el=>el.textContent);
-  expect(rows[0]).toContain('علينا 383.63 ر.س');
-  expect(rows[0]).toContain('100.00 USD');
+  expect(rows[0]).toContain('علينا −383.63 ر.س');
+  expect(rows[0]).toContain('−100.00 USD');
+  expect(host.querySelectorAll('[data-ad-balance="debt"]')).toHaveLength(2);
   expect(rows[1]).toContain('رصيد مقدم 420.00 ر.س');
   expect(rows[1]).not.toContain('علينا');
 });

@@ -12,8 +12,10 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from uuid import uuid4
 from fastapi import HTTPException
 
-from operational_balance_store import audit, digest, fail, mutate, now, read, remember, replay, RECEIPTS, claim_movement
-from operational_balance_engine import reconcile_credits
+from operational_balance_store import audit, digest, fail, mutate, now, read, remember, replay, RECEIPTS, STATES, claim_movement
+from operational_party_projection_state import party_projection_state
+from operational_balance_engine import allocation_totals, reconcile_credits
+from operational_financial_activity_runtime import prepare_in_thread
 from operational_provider_report_coverage import provider_customer_payments
 from operational_external_advances import ACTIONS as EXTERNAL_ACTIONS, CREATION as EXTERNAL_CREATION, REPAYMENT as EXTERNAL_REPAYMENT, advance_id, advance_obligations, balance_snapshot
 from operational_ad_wallet_pool import enabled as wallet_pool_enabled, project_pool
@@ -100,7 +102,11 @@ async def entity(db, owner, kind, identity, currency):
     if kind not in KINDS:
         fail("operational_party_type_invalid", "نوع الجهة غير صحيح", 422)
     try:
-        options = {"operational_state": await read(db, owner)} if kind == "ad_account" and identity.startswith("operational-ad:") else {}
+        options = {}
+        if kind == "ad_account" and identity.startswith("operational-ad:"):
+            binding_state = await db[STATES].find_one({"_id": owner, "owner_id": owner},
+                                                     {"owner_id": 1, "ad_funding": 1})
+            options["operational_state"] = binding_state or {"owner_id": owner}
         rows = [r for r in await entities(db, owner, kind, **options) if r["id"] == identity]
     except ValueError:
         fail("operational_entity_setup_incomplete", "إعداد الجهات في ميزان 2 غير مكتمل أو ملتبس")
@@ -178,11 +184,10 @@ async def save_opening(db, owner, actor, payload, *, finish=False, clock=None):
     return await mutate(db, owner, apply)
 
 
-def outstanding(state, obligation_id, *, include_expected=False):
-    reconcile_credits(state)
+def outstanding(state, obligation_id, *, used, advances, include_expected=False):
     obligation = (state.get("engine", {}).get("obligations") or {}).get(obligation_id)
     if not obligation and obligation_id.startswith("external-advance:"):
-        obligation = advance_obligations(state).get(obligation_id)
+        obligation = advances.get(obligation_id)
     if not obligation:
         # Baselines can be settled without replaying old orders.
         opening = state["openings"].get(obligation_id)
@@ -192,18 +197,28 @@ def outstanding(state, obligation_id, *, include_expected=False):
                       "direction": "payable" if opening["direction"] == "for_party" else "receivable"}
     if obligation.get("funding_type") == "prepaid":
         fail("operational_wallet_spend_not_payable", "الصرف يستهلك المحفظة المدفوعة مسبقًا ولا يُسدّد مرة أخرى")
-    used = sum((Decimal(a["amount"]) for m in state["movements"] for a in m.get("allocations", [])
-                if a["obligation_id"] == obligation_id), Decimal(0))
     pending = Decimal(obligation.get("expected", "0")) if include_expected and obligation.get("kind") == "recurring" else Decimal(0)
-    return obligation, max(Decimal(obligation["confirmed"]) + pending - used, Decimal(0))
+    return obligation, max(Decimal(obligation["confirmed"]) + pending - used.get(obligation_id, Decimal(0)), Decimal(0))
 
 
-async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=None):
+async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=None, on_account=False):
     stamp = clock or now()
     operation_id = await claim_movement(db, owner, actor, payload)
     replay_action = "movement:" + actor
 
     async def validate_and_apply(state):
+        before_report = None
+
+        async def current_report():
+            nonlocal before_report
+            if before_report is None:
+                if account_entry and row["kind"] not in {"bank", "cash", "employee_custody"}:
+                    snapshot = await prepare_in_thread(party_projection_state, state, row["kind"], row["id"])
+                else:
+                    snapshot = {**state, "audit": [], "requests": {}, "engine": {**state.get("engine", {}), "audit": []}}
+                before_report = await prepare_in_thread(report, snapshot)
+            return before_report
+
         historical = next((m for m in state["movements"] if m.get("actor_id") == actor
                            and m.get("request_id") == payload["request_id"]), None)
         if historical is not None:
@@ -277,15 +292,26 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
                 for key in state.get('engine', {}).get('salary_conflicts', {})):
             fail('operational_salary_adjustment_required', 'تغير مصدر استحقاق محفوظ؛ يلزم حل فرق الراتب بتسوية موثقة قبل تسجيل حركة جديدة')
         bank = await movement_source(db, owner, payload, "SAR" if has_fx else currency)
+        account_entry = (on_account or bool(payload.get("workspace_intent_hash"))) and not payload.get("allocations")
+        cash_balance = None
+        if account_entry and bank and payload["direction"] == "outgoing" and (
+                payload.get("workspace_operation") or bank["kind"] == "employee_custody"):
+            from operational_financial_activity import cash_positions
+            source_key = (bank["kind"], bank["id"], "SAR" if has_fx else currency)
+            cash = await prepare_in_thread(cash_positions, state, {source_key})
+            cash_balance = cash.get(source_key, {}).get("actual", Decimal(0))
+
         if bank and bank["kind"] == "employee_custody":
             custody_targets = {"operating_expense", "supplier"}
             if payload.get("workspace_operation") == "external.pay":
                 custody_targets.add("external_person")
             if row["kind"] not in custody_targets or payload["direction"] != "outgoing" or payload["kind"] != "payment":
                 fail("operational_custody_source_invalid", "العهدة تسمح بصرف تشغيلي أو سداد مورد فقط")
-            balance = next((r for r in report(state)["parties"] if r["party_type"] == "employee_custody"
-                            and r["party_id"] == bank["id"] and r["currency"] == currency), {})
-            if amount > Decimal(balance.get("custody_remaining", "0")):
+            if cash_balance is None:
+                balance = next((r for r in (await current_report())["parties"] if r["party_type"] == "employee_custody"
+                                and r["party_id"] == bank["id"] and r["currency"] == currency), {})
+                cash_balance = Decimal(balance.get("custody_remaining", "0"))
+            if amount > cash_balance:
                 fail("operational_custody_insufficient", "مبلغ الصرف يتجاوز المتبقي في العهدة")
         if row["kind"] == "employee_custody" and payload["kind"] != "correction":
             valid = ((payload["kind"] == "payment" and payload["direction"] == "outgoing")
@@ -293,7 +319,7 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
             if not valid or not bank or bank["kind"] not in {"bank", "cash"} or payload.get("allocations"):
                 fail("operational_custody_movement_invalid", "تمويل العهدة صادر من بنك أو صندوق وإرجاعها وارد إليه")
             if payload["direction"] == "incoming":
-                balance = next((r for r in report(state)["parties"] if r["party_type"] == "employee_custody"
+                balance = next((r for r in (await current_report())["parties"] if r["party_type"] == "employee_custody"
                                 and r["party_id"] == row["id"] and r["currency"] == currency), {})
                 if amount > Decimal(balance.get("custody_remaining", "0")):
                     fail("operational_custody_insufficient", "مبلغ الإرجاع يتجاوز المتبقي في العهدة")
@@ -303,18 +329,19 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
             if not owner_return and (payload["direction"] != "outgoing" or payload["kind"] not in {"payment", "settlement"}):
                 fail("operational_expense_direction_invalid", "المصروف أو السحب حركة صادرة")
             if owner_return:
-                owner_balance = next((r for r in report(state)["parties"]
+                owner_balance = next((r for r in (await current_report())["parties"]
                     if r["party_type"] == "owner_withdrawal" and r["party_id"] == row["id"] and r["currency"] == currency), {})
                 if amount > Decimal(owner_balance.get("owner_withdrawals", "0")):
                     fail("operational_workspace_owner_return_limit", "المبلغ يتجاوز السحوبات القابلة للإعادة", 409)
         if payload["kind"] != "correction" and bank is None:
             fail("operational_bank_required", "حدد البنك أو الصندوق الذي تحرك منه أو إليه المبلغ")
         if (payload.get("workspace_operation") and bank and payload["direction"] == "outgoing"):
-            available_source = next((r for r in report(state)["parties"]
-                if r["party_type"] == bank["kind"] and r["party_id"] == bank["id"]
-                and r["currency"] == ("SAR" if has_fx else currency)), {})
-            available_cash = Decimal(available_source.get("actual", "0"))
-            if (bank_gross if has_fx else amount) > available_cash:
+            if cash_balance is None:
+                available_source = next((r for r in (await current_report())["parties"]
+                    if r["party_type"] == bank["kind"] and r["party_id"] == bank["id"]
+                    and r["currency"] == ("SAR" if has_fx else currency)), {})
+                cash_balance = Decimal(available_source.get("actual", "0"))
+            if (bank_gross if has_fx else amount) > cash_balance:
                 fail("operational_workspace_source_insufficient", "تعذر تنفيذ المبلغ من المصدر المختار", 409)
         if payload["kind"] == "correction" and not payload.get("note", "").strip():
             fail("operational_correction_reason_required", "التصحيح يتطلب سببًا موثقًا")
@@ -374,11 +401,18 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
         requested = payload.get("allocations", [])
         party_available = None
         if paypal_payout:
-            party_available = paypal_available(report(state, paypal_sar=True))
+            party_available = paypal_available(await prepare_in_thread(report, state, paypal_sar=True))
             if party_available is None or amount > party_available:
                 fail("operational_paypal_insufficient", "تعذر مطابقة مبلغ الحوالة مع صافي رصيد باي بال المتاح", 409)
-        elif row["kind"] not in {"bank", "cash", "employee_custody"}:
-            balance = next((r for r in report(state)["parties"] if r["party_type"] == row["kind"]
+        elif wallet_pool:
+            try:
+                party_available = (await prepare_in_thread(project_pool, state, row["id"], currency))["payable"]
+            except ValueError:
+                fail("operational_wallet_balance_invalid", "تعذر اعتماد رصيد المحفظة؛ راجع مبالغ الحساب وأدلته")
+        elif (payload["kind"] != "correction" and row["kind"] not in {"bank", "cash", "employee_custody"}
+              and (not account_entry or pos_settlement
+                   or (row["kind"] == "supplier" and payload["direction"] == "outgoing"))):
+            balance = next((r for r in (await current_report())["parties"] if r["party_type"] == row["kind"]
                             and r["party_id"] == row["id"] and r["currency"] == currency), {})
             field = "outstanding_receivable" if payload["direction"] == "incoming" else "outstanding_payable"
             party_available = Decimal(balance.get(field, "0"))
@@ -388,7 +422,10 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
                 and payload["kind"] in {"payment", "settlement"}
                 and amount > max(party_available - Decimal(balance.get("outstanding_receivable", "0")), Decimal(0))):
             fail("operational_supplier_payment_exceeds_payable", "لا يمكن سداد المورد دون مستحق، أو بأكثر من المبلغ المستحق")
-        if (not wallet_pool and not paypal_payout and not requested and external_operation not in EXTERNAL_CREATION
+        used = {}
+        advances = advance_obligations(state) if (external_operation in EXTERNAL_REPAYMENT or
+            any(a["obligation_id"].startswith("external-advance:") for a in requested)) else {}
+        if (not account_entry and not wallet_pool and not paypal_payout and not requested and external_operation not in EXTERNAL_CREATION
                 and (payload["kind"] in {"payment", "collection", "refund"} or pos_settlement or external_operation in EXTERNAL_REPAYMENT)
                 and row["kind"] not in {"bank", "cash", "employee_custody"}):
             left, requested = min(amount, party_available) if party_available is not None else amount, []
@@ -396,10 +433,15 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
                 left = amount + fee
             candidates = list(state["openings"]) + list(state.get("engine", {}).get("obligations", {}))
             if external_operation in EXTERNAL_REPAYMENT:
-                candidates += list(advance_obligations(state))
+                candidates += list(advances)
+            if candidates:
+                used = allocation_totals(state)
+                reconcile_credits(state, used=used)
             for oid in candidates:
+                if left <= 0:
+                    break
                 try:
-                    obligation, remaining = outstanding(state, oid)
+                    obligation, remaining = outstanding(state, oid, used=used, advances=advances)
                 except Exception as exc:
                     from fastapi import HTTPException
                     if isinstance(exc, HTTPException):
@@ -409,10 +451,13 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
                     continue
                 direction = "incoming" if obligation["direction"] == "receivable" else "outgoing"
                 if (obligation["party_id"] == row["id"] and obligation["party_type"] == row["kind"]
-                        and obligation["currency"] == currency and direction == payload["direction"] and remaining > 0 and left > 0):
+                        and obligation["currency"] == currency and direction == payload["direction"] and remaining > 0):
                     take = min(left, remaining)
                     requested.append({"obligation_id": oid, "amount": fmt(take)})
                     left -= take
+        elif requested:
+            used = allocation_totals(state)
+            reconcile_credits(state, used=used)
         allocations, total, seen = [], Decimal(0), set()
         promotions = {}
         for allocation in requested:
@@ -420,7 +465,7 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
             if identity in seen:
                 fail("operational_duplicate_allocation", "التزام مكرر في التسوية")
             seen.add(identity)
-            obligation, remaining = outstanding(state, identity, include_expected=True)
+            obligation, remaining = outstanding(state, identity, used=used, advances=advances, include_expected=True)
             value = money(allocation["amount"])
             expected_direction = "incoming" if obligation["direction"] == "receivable" else "outgoing"
             if (obligation["party_id"] != row["id"] or obligation["party_type"] != row["kind"]
@@ -429,7 +474,7 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
             if value > remaining:
                 fail("operational_over_settlement", "المبلغ يتجاوز المتبقي")
             if obligation.get("kind") == "recurring":
-                confirmed_available = outstanding(state, identity)[1]
+                confirmed_available = outstanding(state, identity, used=used, advances=advances)[1]
                 pending = max(value-confirmed_available, Decimal(0))
                 if pending:
                     promotions[identity] = pending
@@ -440,9 +485,9 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
         if party_available is not None and total > party_available + sum(promotions.values(), Decimal(0)):
             fail("operational_employee_net_over_settlement" if row["kind"] == "employee" else "operational_party_over_settlement",
                  "التخصيص يتجاوز المتبقي المستحق بعد التصحيحات والمقاصة المعتمدة")
-        if (payload["kind"] == "settlement" or pos_settlement) and total != amount + fee:
+        if not account_entry and (payload["kind"] == "settlement" or pos_settlement) and total != amount + fee:
             fail("operational_settlement_allocation_required", "خصص مبلغ التسوية للالتزامات المستحقة")
-        if (not wallet_pool and row["kind"] == "ad_account" and row.get("funding_mode") == "hybrid"
+        if (not account_entry and not wallet_pool and row["kind"] == "ad_account" and row.get("funding_mode") == "hybrid"
                 and payload["direction"] == "outgoing" and payload["kind"] == "payment"
                 and total != min(amount, party_available)):
             fail("operational_ad_debt_priority_required",
@@ -455,6 +500,9 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
                 "bank_kind": bank["kind"] if bank else None, "bank_name": bank["name"] if bank else None,
                 "funding_mode": row.get("funding_mode"),
                 "receipt_hash": receipt["sha256"] if receipt else None}
+        if (account_entry and not wallet_pool and not paypal_payout and payload["kind"] in {"payment", "collection", "refund"}
+                and row["kind"] not in {"bank", "cash", "employee_custody", "operating_expense", "owner_withdrawal"}):
+            item["settlement_scope"] = "account"
         if has_fx:
             item.update(bank_currency="SAR", bank_amount=fmt(bank_gross),
                         bank_fee_amount=fmt(bank_fee), bank_net_amount=fmt(bank_net),
@@ -493,7 +541,8 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
                 "after": balance_snapshot(report(state), party_id=row["id"], currency=currency,
                                           bank_id=bank["id"], bank_kind=bank["kind"]),
             }
-        audit(state, actor, "movement_saved", None, item, payload.get("note") or "حركة معتمدة", source, stamp)
+        await prepare_in_thread(audit, state, actor, "movement_saved", None, item,
+                                payload.get("note") or "حركة معتمدة", source, stamp)
         remember(state, replay_action, payload, item)
         return item
     async def apply(state):
@@ -508,7 +557,17 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
                          "detail": {**exc.detail, "not_applied": True}}
             remember(state, replay_action, payload, rejection)
             return rejection
-    result = await mutate(db, owner, apply)
+    # A committed receipt and its posting share one revision CAS. A claim alone
+    # is never a confirmation. Older receipts still take the full replay path.
+    from operational_balance_store import check_authorization, request_key
+    key = request_key(replay_action, payload["request_id"])
+    stored = await db[STATES].find_one({"_id": owner, "owner_id": owner, f"requests.{key}": {"$exists": True}},
+                                       {"_id": 0, f"requests.{key}": 1})
+    result = replay(stored, replay_action, payload) if stored else None
+    if result is None:
+        result = await mutate(db, owner, apply, threaded_preparation=True)
+    else:
+        await check_authorization()
     if result.get("_operational_rejected"):
         raise HTTPException(result["status"], detail=result["detail"])
     return result
@@ -921,6 +980,17 @@ def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=Fa
             party["expense_paid" if movement["party_type"] == "operating_expense" else "owner_withdrawals"] += effect
         elif movement["party_type"] not in {"bank", "cash"}:
             party["actual"] -= signed
+            if movement.get("settlement_scope") == "account":
+                # Apply the cash to the account. The original invoices retain their own evidence.
+                paying = signed < 0
+                due = "outstanding_payable" if paying else "outstanding_receivable"
+                opposite = "outstanding_receivable" if paying else "outstanding_payable"
+                gross = amount + Decimal(movement.get("actual_fee_amount", "0"))
+                covered = min(gross, party[due])
+                party[due] -= covered
+                party[opposite] += gross - covered
+                party["settled"] += covered
+                continue
             unallocated = amount - sum((Decimal(a["amount"]) for a in movement.get("allocations", [])), Decimal(0))
             if unallocated > 0:
                 # Unallocated cash remains an explicit advance/overcollection,
