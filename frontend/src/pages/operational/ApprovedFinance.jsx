@@ -9,6 +9,7 @@ import { Amount, Heading, Icon, IconBox, isAsset } from './ApprovedFinanceUI';
 import ApprovedHome from './ApprovedHome';
 import ApprovedDirectory from './ApprovedDirectory';
 import './approvedFinance.css';
+import './approvedCashBoxes.css';
 
 let ledgerModule;
 let ledgerRequest;
@@ -21,6 +22,7 @@ function loadLedger() {
 }
 const LazyLedger = lazy(loadLedger);
 const Entry = lazy(()=>import('./ApprovedEntry'));
+const AddOperationalEntity = lazy(()=>import('./AddOperationalEntity'));
 const SupplierCreditPurchase = lazy(()=>import('./SupplierCreditPurchase'));
 const Refund = lazy(()=>import('./ApprovedRefund'));
 const Issues = lazy(()=>import('./ApprovedOrderIssues'));
@@ -60,14 +62,15 @@ function Shell({context,view,title,active,to,user,children}) {
       {view!=='tools'&&grantedWebLink(pages,to('tools'))&&<Link className="textbtn" to={to('tools')}><Icon name="layers"/>العمليات والكشوف</Link>}</header>
     <main className="content" id="finance-main">{children}</main></div></div></div>;
 }
-function Dialog({title,onClose,children}) {
+function Dialog({title,onClose,children,locked=false}) {
   const ref=useRef(null);
   useEffect(()=>{const node=ref.current;if(node&&!node.open)node.showModal();return()=>{if(node?.open)node.close()}},[]);
-  return <dialog ref={ref} aria-label={title} onCancel={onClose}><div className="between"><h2>{title}</h2><button type="button" className="glyph-btn" onClick={onClose} aria-label="إغلاق"><Icon name="x"/></button></div>{children}</dialog>;
+  return <dialog ref={ref} aria-label={title} onCancel={event=>{if(locked)event.preventDefault();else onClose();}}><div className="between"><h2>{title}</h2><button type="button" className="glyph-btn" disabled={locked} onClick={onClose} aria-label="إغلاق"><Icon name="x"/></button></div>{children}</dialog>;
 }
 function FinanceWorkspace({context,identity,user,view,to,params,reload}) {
   const navigate=useNavigate(), location=useLocation();
   const [modal,setModal]=useState(null), [historyPage,setHistoryPage]=useState(1);
+  const [creatingCash,setCreatingCash]=useState(false);
   const deferredRefresh=useRef(false);
   useEffect(()=>{
     if(deferredRefresh.current && view!=='refund' && view!=='collections'){
@@ -91,6 +94,7 @@ function FinanceWorkspace({context,identity,user,view,to,params,reload}) {
   const canCollect=allowedTo('collections')&&granted.has('courier.review')&&context.resources.some(r=>r.kind==='store_driver'&&r.access.movements==='all');
   const addAvailable=allowedTo('entry')&&writePage('balances.entry')&&context.status==='active'&&context.capabilities?.create_entries===true;
   const canAdd=addAvailable && (!selected||selected.access?.use&&selected.operations?.length>0);
+  const createCash=context.actor.is_owner && ['draft','active'].includes(context.status) ? ()=>setModal({cash:true}) : null;
   const purchaseSuppliers=addAvailable && granted.has('supplier.accrual') ? context.resources.filter(r=>
     r.kind==='supplier' && r.access?.use && r.operations?.includes('supplier.accrual')) : [];
   const canPurchase=selected ? purchaseSuppliers.includes(selected) : purchaseSuppliers.length>0;
@@ -106,15 +110,20 @@ function FinanceWorkspace({context,identity,user,view,to,params,reload}) {
   const collections=(r,status)=>go('collections',r,{review_status:status,review_driver:r?.kind==='store_driver'?r.id:'',review_bank:r?.kind==='bank'?r.id:''});
   const returnDirectory=()=>selected?go(isAsset(selected.kind)?'assets':'parties'):home();
   const back=()=>selected?open(selected):home();
-  const saved=result=>{
+  const saved=(result,recovery)=>{
     const r=context.resources.find(item=>item.kind===result?.party_type&&item.id===result?.party_id);
     if(result?.invoice_number && r){
       const route=r.access?.movements!=='none' && allowedTo('ledger',r)?to('ledger',r):to('entry');
       navigate(route,{state:{supplierInvoice:{id:r.id,number:result.invoice_number,date:result.business_date}}});
+    }else if(recovery?.recovered && r && result.movement_id){
+      const route=r.access?.movements!=='none' && allowedTo('ledger',r)?to('ledger',r):to('entry');
+      navigate(route,{state:{recoveredMovement:{kind:r.kind,id:r.id,movement:result.movement_id,
+        date:recovery.business_date,scope:context.session_scope}}});
     }else if(r)open(r);else go('log');
     reload();
   };
   const savedInvoice=location.state?.supplierInvoice;
+  const recovered=location.state?.recoveredMovement?.scope===context.session_scope?location.state.recoveredMovement:null;
   const unavailable=<p className="note" role="alert">هذه الصفحة غير متاحة ضمن صلاحياتك.</p>;
   const title=titles[view]||({ledger:selected&&isAsset(selected.kind)?'كشف الحساب':'كشف الطرف',entry:'حركة مالية جديدة','special-entry':canPurchase && (purchaseMode || selected && params.get('mode')!=='movement')?'فاتورة شراء آجل':'عمليات مالية أخرى',issues:'طلبات تحتاج مراجعة',collections:'مراجعة التحصيلات',refund:'إرجاع مبلغ لعميل'})[view]||'الأرصدة التشغيلية';
   const active=view==='ledger'?(isAsset(selected?.kind)?'assets':'parties'):view==='issues'||view==='collections'?'reviews':view==='entry'||view==='refund'?'home':view;
@@ -125,8 +134,9 @@ function FinanceWorkspace({context,identity,user,view,to,params,reload}) {
   let content;
   if(scoped&&!selected)content=unavailable;
   else switch(view){
-    case 'assets':case 'parties':content=<ApprovedDirectory key={view} context={context} people={view==='parties'} to={to} onAdd={canAdd?()=>add(null):null}/>;break;
-    case 'log':case 'ledger':content=view==='ledger'&&!selected?unavailable:<Ledger key={JSON.stringify([view,selected?.kind,selected?.id])} {...shared} resource={selected} initialInvoice={selected && savedInvoice?.id===selected.id?savedInvoice:null} onAdd={canAdd && (!supplierNeedsOtherEntry || selected.operations.some(key=>key!=='supplier.accrual')) ? (supplierNeedsOtherEntry?r=>go('special-entry',r,{mode:'movement'}):add) : null} onPurchase={selected && canPurchase?()=>navigate(purchaseLink(selected)):null} onBack={returnDirectory} onReviewOrders={allowedTo('issues')?issues:undefined}
+    case 'assets':case 'parties':content=<ApprovedDirectory key={view} context={context} people={view==='parties'} to={to} onAdd={canAdd?()=>add(null):null} onCreateCash={view==='assets'?createCash:null}/>;break;
+    case 'log':case 'ledger':content=view==='ledger'&&!selected?unavailable:<Ledger key={JSON.stringify([view,selected?.kind,selected?.id])} {...shared} resource={selected} initialMovement={selected?.id===recovered?.id && selected?.kind===recovered?.kind?recovered:null} initialInvoice={selected && savedInvoice?.id===selected.id?savedInvoice:null} onAdd={canAdd && (!supplierNeedsOtherEntry || selected.operations.some(key=>key!=='supplier.accrual')) ? (supplierNeedsOtherEntry?r=>go('special-entry',r,{mode:'movement'}):add) : null} onPurchase={selected && canPurchase?()=>navigate(purchaseLink(selected)):null} onBack={returnDirectory} onReviewOrders={allowedTo('issues')?issues:undefined}
+      canOpenOrderDetails={Boolean(context.actor?.is_owner || pages?.some(page=>page.id==='detail.order' && !page.owner_only))}
       onHistory={row=>{setHistoryPage(1);setModal({history:context.resources.find(r=>r.kind===row.party_type&&r.id===row.party_id)})}}
       onExpected={(r,summary)=>setModal({expected:summary,resource:r})} onReviewCollections={canCollect?collections:undefined}/>;break;
     case 'special-entry': {
@@ -144,8 +154,8 @@ function FinanceWorkspace({context,identity,user,view,to,params,reload}) {
       break;
     }
     case 'entry':content=!writePage('balances.entry')?<><Heading title="حركة مالية جديدة"/><p className="note">صلاحيتك للعرض. تسجيل حركة يتطلب صلاحية الكتابة على الصفحة والحساب.</p></>:<>
-      {canPurchase && <Link className="button" to={purchaseLink(selected)}><Icon name="receipt-text"/>شراء آجل من مورد</Link>}
-      <Entry {...shared} resource={selected} mode={params.get('mode')||'choose'} onBack={back} onSaved={saved} onRefund={canRefund?()=>go('refund'):null}/>
+      <Entry {...shared} resource={selected} mode={params.get('mode')||'choose'} onBack={back} onSaved={saved}
+        onPurchase={canPurchase?()=>navigate(purchaseLink(selected)):null} onRefund={canRefund?()=>go('refund'):null}/>
       {canAdd && <p className="footnote"><Link className="textbtn" to={to('special-entry',selected,{mode:'movement'})}><Icon name="layers"/>عمليات مالية أخرى</Link></p>}</>;break;
     case 'refund':content=canRefund?<Refund {...shared} readOnly={!writePage('balances.refund')} onBack={()=>go('entry')} onSaved={refreshAfterReview}/>:unavailable;break;
     case 'issues':content=<Issues {...shared} resource={selected} onBack={()=>selected?open(selected):go('reviews')} onReviewCollections={canCollect?collections:undefined}/>;break;
@@ -156,11 +166,19 @@ function FinanceWorkspace({context,identity,user,view,to,params,reload}) {
       <p className="under">تظهر لك المراجعات المتاحة لحسابك.</p>}</>;break;
     case 'position':content=context.actor.is_owner||pages?<Position {...shared} scoped={!context.actor.is_owner} onBack={home} onOpen={r=>{if(allowedTo('ledger',r))open(r)}} canOpen={r=>allowedTo('ledger',r)}/>:unavailable;break;
     case 'tools':content=<Tools {...shared} pages={pages} onBack={home}/>;break;
-    default:content=<ApprovedHome context={context} to={to} allowedTo={allowedTo} canAdd={canAdd} onDetail={row=>setModal({row})}/>;
+    default:content=<ApprovedHome context={context} to={to} allowedTo={allowedTo} canAdd={canAdd} onCreateCash={createCash} onDetail={row=>setModal({row})}/>;
   }
   const row=modal?.row;
-  return <Shell context={context} user={user} view={view} title={title} active={active} to={to}>{savedInvoice && <p className="note" role="status">حُفظت فاتورة الشراء الآجل <bdi>{savedInvoice.number}</bdi> على حساب المورد.</p>}<Suspense fallback={<p className="empty" role="status">جارٍ فتح الصفحة…</p>}>{content}</Suspense>
-    {modal&&<Dialog title={row?'تفاصيل الحركة':modal.history?'سجل الحركات التلقائية':'متوقع تحصيله'} onClose={()=>setModal(null)}>
+  return <Shell context={context} user={user} view={view} title={title} active={active} to={to}>{recovered && <p className="note" role="status">سبق تسجيل الحركة. رقم الإيصال <bdi>{recovered.movement}</bdi></p>}{savedInvoice && <p className="note" role="status">حُفظت فاتورة الشراء الآجل <bdi>{savedInvoice.number}</bdi> على حساب المورد.</p>}{view==='ledger' && selected?.kind==='cash' && selected.id===location.state?.createdCashId && <p className="note" role="status">تمت إضافة {selected.name}.</p>}<Suspense fallback={<p className="empty" role="status">جارٍ فتح الصفحة…</p>}>{content}</Suspense>
+    {modal?.cash && createCash && <Dialog title="إضافة صندوق نقدي" locked={creatingCash} onClose={()=>setModal(null)}>
+      <div className="cash-create"><Suspense fallback={<p role="status">جارٍ فتح النموذج…</p>}>
+        <AddOperationalEntity kind="cash" onBusyChange={setCreatingCash} onCancel={()=>setModal(null)} onAdded={account=>{
+          setModal(null);
+          navigate(to('ledger',account),{state:{createdCashId:account.id}});
+          reload();
+        }}/>
+      </Suspense></div></Dialog>}
+    {modal&&!modal.cash&&<Dialog title={row?'تفاصيل الحركة':modal.history?'سجل الحركات التلقائية':'متوقع تحصيله'} onClose={()=>setModal(null)}>
       {row?<><h3>{movementTitle(row)}</h3><p className="bigamt"><Amount value={row.amount} currency={row.currency}/></p><dl className="detail-list">
         {Object.entries({'الحساب':row.party_name,'سجّلها':movementRecorder(row),'تاريخ الحركة':movementDate(row,true),'رقم الطلب':row.order_number,'المرجع':row.reference,'المصدر':row.source_label,'الملاحظة':row.note}).filter(([,v])=>v).map(([k,v])=><div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl></>:
       modal.history?<Suspense fallback={<p>جارٍ فتح السجل…</p>}><History resource={modal.history} {...shared} page={historyPage} onPage={setHistoryPage} onDetail={r=>setModal({row:r})}/></Suspense>:
@@ -177,11 +195,12 @@ export default function ApprovedFinance({defaultView='home'}) {
   useEffect(()=>{if(view==='home')setHomeRequested(true)},[view]);
   const pages=managedWebPages(auth?.user);
   const requestPreview=(homeRequested||view==='home') && (!pages||pages.some(p=>p.id==='balances.home'));
+  const directoryOnly=!requestPreview && ['entry','ledger','log'].includes(view);
   const read=useBalanceRead(async config=>{
-    const value=await api.context(config,{homePreview:requestPreview});
+    const value=await api.context(config,{homePreview:requestPreview,...(directoryOnly && {directoryOnly:true})});
     if(!validContext(value)||auth?.user?.id&&auth.user.id!==value.actor.id)throw new Error('invalid finance context');
-    return value;
-  },JSON.stringify([identity,requestPreview,pages?.map(p=>[p.id,p.mode])]),!auth||Boolean(auth.user?.id)&&!auth.loading);
+    return directoryOnly ? {...value,directoryOnly:true} : value;
+  },JSON.stringify([identity,requestPreview,directoryOnly,pages?.map(p=>[p.id,p.mode])]),!auth||Boolean(auth.user?.id)&&!auth.loading);
   const to=(name,resource,extra)=>routeTo(location.pathname,name,resource,extra);
   if(!read.data)return <div className="mz-finance" dir="rtl"><main className="content"><Heading title="الأرصدة التشغيلية"/>{read.error?
     <><p role="alert" className="note">{read.error}</p><button className="button" onClick={read.reload}>إعادة المحاولة</button>

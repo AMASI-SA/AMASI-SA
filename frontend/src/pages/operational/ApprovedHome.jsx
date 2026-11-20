@@ -4,13 +4,17 @@ import { Amount, formatMinor, Heading, Icon, IconBox, MovementIcon, isAsset } fr
 import { minorUnits, movementDate, movementRecorder, movementTitle, signedResourceBalance } from './simpleBalancesModel';
 import { ResourceCard } from './ApprovedDirectory';
 
-export default function ApprovedHome({context,to,onDetail,canAdd,allowedTo=()=>true}) {
+export default function ApprovedHome({context,to,onDetail,canAdd,onCreateCash,allowedTo=()=>true}) {
   const cash=context.resources.filter(r=>['bank','cash'].includes(r.kind)&&!r.prepaid_shipping_cash&&r.currency==='SAR');
   const subtotals=kind=>{
     const visible=cash.filter(r=>r.kind===kind).map(r=>minorUnits(signedResourceBalance(r))).filter(v=>v!==null);
     return visible.length ? visible.reduce((a,b)=>a+b,0n) : null;
   };
   const bank=subtotals('bank'), box=subtotals('cash'), total=bank===null&&box===null?null:(bank??0n)+(box??0n);
+  const drawers=cash.filter(r=>r.kind==='cash');
+  let drawerBalance=formatMinor(box);
+  if (!drawers.length) drawerBalance=context.actor.is_owner?'لا توجد صناديق نقدية بالريال':'لا توجد صناديق نقدية متاحة لك';
+  else if (box===null && drawers.every(r=>!r.access?.balance)) drawerBalance='عرض الرصيد يتطلب صلاحية';
   const accounts=context.resources.filter(r=>isAsset(r.kind));
   const preferred=['bank','cash','provider'].map(k=>accounts.find(r=>r.kind===k&&!r.prepaid_shipping_cash)).filter(Boolean);
   const cards=[...preferred,...accounts.filter(r=>!preferred.includes(r))].slice(0,3);
@@ -20,7 +24,8 @@ export default function ApprovedHome({context,to,onDetail,canAdd,allowedTo=()=>t
     <div className="main-grid"><section className="hero"><div className="hero-caption">الرصيد المتاح في البنوك والصناديق</div>
       <div className="big"><bdi>{formatMinor(total)}</bdi>{total!==null && <span className="unit"> ريال سعودي</span>}</div>
       <div className="hero-sub">مجموع الحسابات النقدية المتاحة لك بالريال</div><div className="split">
-      <div><span>البنوك</span><b><bdi>{formatMinor(bank)}</bdi></b></div><div><span>الصناديق النقدية</span><b><bdi>{formatMinor(box)}</bdi></b></div></div></section>
+      <div><span>البنوك</span><b><bdi>{formatMinor(bank)}</bdi></b></div><div><span>الصناديق النقدية</span><b><bdi>{drawerBalance}</bdi></b>
+        {onCreateCash && <button type="button" className="cash-hero-add screen-only" onClick={onCreateCash}><Icon name="plus"/>إضافة صندوق نقدي</button>}</div></div></section>
       <section className="panel quick"><h2>{canAdd?'وش صار للمبلغ؟':'حساباتي وحركاتي'}</h2><div className="quickrow">
       {(canAdd?[['in','استلمت مبلغ','arrow-down-left'],['out','دفعت مبلغ','arrow-up-right'],['move','حوّلت بين حسابين','arrow-left-right']]:
         [['assets','الأصول والحسابات','wallet'],['log','سجل الحركات','receipt-text'],['parties','الأشخاص والجهات','users']]).filter(([mode])=>canAdd||allowedTo(mode)).map(([mode,name,icon])=>

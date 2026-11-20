@@ -384,9 +384,9 @@ jobs:
           const out = process.env.SIMPLE_BALANCES_UAT_OUTPUT;
           const evidence = JSON.parse(fs.readFileSync(path.join(out, 'browser-evidence.json')));
           if (evidence.synthetic_only !== true || evidence.actual_components !== true ||
-              evidence.chromium_sandbox !== true || evidence.results.length !== 11 ||
+              evidence.chromium_sandbox !== true || evidence.results.length !== 12 ||
               evidence.results.some(result => result.status !== 'PASS') || evidence.errors.length) {
-            throw Error('All eleven simple balances browser scenarios must execute and pass');
+            throw Error('All twelve simple balances browser scenarios must execute and pass');
           }
           for (const name of ['ledger', 'external-form', 'refund', 'access']) {
             for (const size of ['desktop', 'mobile']) {

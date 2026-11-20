@@ -3,6 +3,22 @@ import { Link } from 'react-router-dom';
 import { AdBalance, Amount, Heading, Icon, IconBox, assetGroups, isAsset, issueLabel, partyGroups, searchable, styleOf } from './ApprovedFinanceUI';
 import { minorUnits, signedResourceBalance } from './simpleBalancesModel';
 
+function ProviderAmount({ resource }) {
+  const position=resource.provider_position;
+  if (!resource.access?.balance || resource.balance?.visible===false) return <small>عرض الحساب</small>;
+  if (!position) {
+    const balance=resource.balance;
+    return minorUnits(balance?.amount)===null ? <small>يحتاج مطابقة</small> :
+      <><Amount value={balance.side==='for_party'?'-'+balance.amount:balance.amount} currency={resource.currency}/><small className="under">الرصيد المسجّل</small></>;
+  }
+  const value=position.complete ? position.net : position.known_net;
+  const available=minorUnits(value)!==null;
+  return <>{available ? <Amount value={value} currency={position.currency}/> : <small>يحتاج مطابقة</small>}
+    {available && !position.complete && <small className="under">صافي معلوم · يحتاج مطابقة</small>}
+    {resource.access.movements==='all' && resource.access.report && Number.isInteger(position.paid_orders) &&
+      <small className="under">الطلبات المدفوعة · {position.paid_orders}</small>}</>;
+}
+
 export function ResourceCard({ resource, href }) {
   const [label, icon, tone] = styleOf(resource), value=resource.balance;
   const visible=resource.access?.balance && value?.visible !== false && minorUnits(value?.amount) !== null;
@@ -10,13 +26,14 @@ export function ResourceCard({ resource, href }) {
   const Card = href ? Link : 'div';
   return <Card className="resource" {...(href ? {to:href} : {})}>
     <div className="between"><IconBox name={icon} tone={tone} /><span className="under">{label}</span></div>
-    <strong>{resource.name}</strong><div className="number">{visible ? (resource.kind === 'ad_account' ? <AdBalance resource={resource} /> : <Amount value={actual} currency={resource.currency} />) : <small>عرض الحساب</small>}</div>
+    <strong>{resource.name}</strong><div className="number">{resource.kind==='provider' ? <ProviderAmount resource={resource}/> :
+      visible ? (resource.kind === 'ad_account' ? <AdBalance resource={resource} /> : <Amount value={actual} currency={resource.currency} />) : <small>عرض الحساب</small>}</div>
     {visible && !isAsset(resource.kind) && <span className="under">{value.side==='for_party'?'له عند المؤسسة':value.side==='for_us'?'عليه للمؤسسة':'الحساب متوازن'}</span>}
     {resource.order_issues_count > 0 && <span className="issue-badge"><Icon name="circle-alert"/>{issueLabel(resource.order_issues_count)}</span>}
   </Card>;
 }
 
-export default function ApprovedDirectory({ context, people, to, onAdd }) {
+export default function ApprovedDirectory({ context, people, to, onAdd, onCreateCash }) {
   const [filter,setFilter]=useState(''), [query,setQuery]=useState(''), [page,setPage]=useState(1);
   const groups=people?partyGroups:assetGroups;
   const matches=useMemo(()=>{
@@ -26,15 +43,25 @@ export default function ApprovedDirectory({ context, people, to, onAdd }) {
   },[context.resources, groups, filter, query]);
   const size=24, current=Math.min(page,Math.max(1,Math.ceil(matches.length/size)));
   const displayed=matches.slice((current-1)*size,current*size);
+  const cashGroupName=assetGroups.find(([,kinds])=>kinds.includes('cash'))[0];
+  const showEmptyCash=Boolean(!people && onCreateCash && !query && (!filter || filter===cashGroupName)
+    && current===1 && !context.resources.some(r=>r.kind==='cash'));
   return <><Heading title={people?'الأشخاص والجهات':'الأصول والحسابات'} subtitle={people?'ابحث بالاسم وافتح الكشف لمعرفة كم له أو عليه.':'اختر الحساب لعرض رصيده وحركاته.'}>
     {onAdd && <button className="button primary" onClick={onAdd}><Icon name="plus"/>حركة مالية جديدة</button>}</Heading>
     <label className="searchbox directory-search"><Icon name="search"/><input type="search" aria-label={people?'بحث باسم الشخص أو الجهة':'بحث باسم الحساب'} value={query}
       onChange={e=>{setQuery(e.target.value);setPage(1)}} placeholder={people?'ابحث باسم الشخص أو الجهة':'ابحث باسم الحساب'}/></label>
-    <div className="tabset">{['',...groups.filter(([,kinds])=>context.resources.some(r=>kinds.includes(r.kind))).map(([name])=>name)].map(name=>
+    <div className="tabset">{['',...groups.filter(([,kinds])=>kinds.includes('cash')&&onCreateCash || context.resources.some(r=>kinds.includes(r.kind))).map(([name])=>name)].map(name=>
       <button key={name} type="button" aria-pressed={filter===name} className={filter===name?'on':''} onClick={()=>{setFilter(name);setPage(1)}}>{name||'الكل'}</button>)}</div>
-    {groups.map(([name])=>{const group=displayed.filter(x=>x.name===name);return group.length>0 && <section key={name}><h2 className="card-grid-title">{name}</h2>
+    {groups.map(([name,kinds])=>{
+      const group=displayed.filter(x=>x.name===name);
+      const cashGroup=Boolean(onCreateCash && kinds.includes('cash'));
+      const emptyCash=cashGroup && showEmptyCash;
+      return (group.length>0 || emptyCash) && <section key={name}>
+      <div className="section-head"><h2 className="card-grid-title">{name}</h2>
+        {cashGroup && <button type="button" className="button" onClick={onCreateCash}><Icon name="plus"/>إضافة صندوق نقدي</button>}</div>
+      {emptyCash && <p className="under">لا توجد صناديق مسجّلة.</p>}
       <div className="cards">{group.map(({r})=><ResourceCard key={r.kind+':'+r.id} resource={r} href={to('ledger',r)}/>)}</div></section>})}
-    {matches.length===0 && <p className="empty">لا توجد نتائج ضمن الحسابات المتاحة لك.</p>}
+    {matches.length===0 && !showEmptyCash && <p className="empty">لا توجد نتائج ضمن الحسابات المتاحة لك.</p>}
     {matches.length>size && <nav className="movement-pages" aria-label="صفحات الحسابات"><span>{(current-1)*size+1}–{Math.min(current*size,matches.length)} من {matches.length}</span><div>
       <button className="button" disabled={current===1} onClick={()=>setPage(current-1)}>السابق</button><button className="button" disabled={current*size>=matches.length} onClick={()=>setPage(current+1)}>التالي</button></div></nav>}
   </>;

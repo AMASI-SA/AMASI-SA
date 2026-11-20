@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from copy import deepcopy
+import re
 from typing import Literal
 
 from fastapi import Depends, Query
@@ -20,8 +21,8 @@ from pymongo.errors import DuplicateKeyError
 
 from operational_balance_access import guard_access, load_access
 from operational_balance_service import entity
-from operational_balance_store import check_authorization, digest, fail, now, read
-from operational_balance_workspace import WorkspaceEntry, entry_intent
+from operational_balance_store import STATES, check_authorization, digest, fail, mutate, now, read, request_key
+from operational_balance_workspace import WorkspaceEntry, entry_intent, movement_body
 from operational_workspace_refunds import (
     PROVIDERS, RefundCancel, RefundConfirm, RefundReconcile, RefundRequest,
     _find_case, refund_order,
@@ -149,9 +150,66 @@ async def _authorized(db, owner, actor, row):
             fail("operational_access_changed", "تغيرت صلاحياتك؛ أعد فتح الصفحة", 409)
 
 
-def _reply(row):
-    return JSONResponse({"id": row["_id"], "action": row["action"],
-                         "target_id": row["target_id"], "command": deepcopy(row["command"])}, headers=CACHE_HEADERS)
+def _payout_identity(row):
+    command = row["command"]
+    if (row["action"] != "entry" or command.get("side") != "for_us"
+            or command.get("reason") not in {None, "payment"} or not command.get("source_id")):
+        return None
+    request = command["request_id"]
+    if request != row["_id"] and not re.fullmatch(r"workspace-[0-9a-z]{1,13}-[0-9a-z]{0,20}-[0-9a-z]{0,20}", request):
+        return None
+    operation, resources = entry_intent(command)
+    payload = movement_body(command, operation, resources)
+    return request_key("movement:" + row["actor_id"], request), digest(payload)
+
+
+async def _payout_resolution(db, row, *, discard=False):
+    identity = _payout_identity(row)
+    if identity is None:
+        if discard:
+            fail("operational_discard_unsupported", "هذه العملية تحتاج متابعة من سجلها", 422)
+        return None
+    key, fingerprint = identity
+    path = "requests." + key
+    owner_query = {"_id": row["owner_id"], "owner_id": row["owner_id"]}
+    # Requests stay inline even when the audit and snapshot are archived.
+    stored = await db[STATES].find_one(owner_query, {path: 1})
+    receipt = (stored or {}).get("requests", {}).get(key)
+    if discard and receipt is None:
+        # Use the same size-checked, authorized CAS as the money write. The
+        # losing writer replays the decision, even if it started before discard.
+        async def cancel_if_pending(state):
+            rejection = {"_operational_rejected": True, "status": 409,
+                         "detail": {"code": "operational_payout_discarded", "not_applied": True,
+                                    "message": "أُلغي طلب السداد قبل تسجيل أي مبلغ."}}
+            return state["requests"].setdefault(key, {"hash": fingerprint, "result": rejection})
+        receipt = await mutate(db, row["owner_id"], cancel_if_pending)
+    if not receipt:
+        if discard:
+            fail("operational_discard_unconfirmed", "تعذر تأكيد إلغاء المحاولة. أعد التحقق من حالتها.")
+        return {"status": "pending"}
+    if receipt.get("hash") != fingerprint:
+        _conflict()
+    result = receipt["result"]
+    if result.get("_operational_rejected"):
+        detail = result.get("detail") or {}
+        return {"status": "discarded" if detail.get("code") == "operational_payout_discarded" else "rejected",
+                "detail": detail}
+    command = row["command"]
+    if (not result.get("id") or result.get("party_id") != command["party_id"]
+            or result.get("party_type") != command["party_type"]):
+        _conflict()
+    return {"status": "saved", "result": {"saved": True, "movement_id": result["id"],
+            "party_type": result["party_type"], "party_id": result["party_id"]}}
+
+
+async def _reply(db, row):
+    response = {"id": row["_id"], "action": row["action"],
+                "target_id": row["target_id"], "command": deepcopy(row["command"])}
+    resolution = await _payout_resolution(db, row)
+    if resolution is not None:
+        response["resolution"] = resolution
+    return JSONResponse(response, headers=CACHE_HEADERS)
 
 
 def install_pending_command_routes(router, db, current_user, scope):
@@ -175,7 +233,7 @@ def install_pending_command_routes(router, db, current_user, scope):
                 _retired()
             if expected_hash is not None and current["command_hash"] != expected_hash:
                 _conflict()
-            return _reply(current)
+            return await _reply(db, current)
 
     @router.post("/workspace/pending-commands/{recovery_id}")
     async def register(recovery_id: UUID4, payload: PendingRegistration, user=Depends(current_user)):
@@ -203,7 +261,7 @@ def install_pending_command_routes(router, db, current_user, scope):
                 _retired()
             if stored["command_hash"] != command_hash:
                 _conflict()
-            return await existing_reply(actor, owner, bound, stored, command_hash)
+            return await _reply(db, stored)
 
     @router.get("/workspace/pending-commands/{recovery_id}")
     async def retrieve(recovery_id: UUID4, expected_session_scope: str = Query(pattern=r"^[a-f0-9]{64}$"), user=Depends(current_user)):
@@ -213,6 +271,18 @@ def install_pending_command_routes(router, db, current_user, scope):
         if row is None:
             _not_found()
         return await existing_reply(actor, owner, bound, row)
+
+    @router.post("/workspace/pending-commands/{recovery_id}/discard")
+    async def discard(recovery_id: UUID4, payload: PendingScope, user=Depends(current_user)):
+        actor, owner, _, bound = await load(user, recovery_id, payload.expected_session_scope)
+        row = await db[PENDING_COMMANDS].find_one(bound)
+        if row is None:
+            _not_found()
+        if row["status"] == "retired":
+            _retired()
+        async with _authorized(db, owner, actor, row):
+            result = await _payout_resolution(db, row, discard=True)
+            return JSONResponse({"id": str(recovery_id), **result}, headers=CACHE_HEADERS)
 
     @router.delete("/workspace/pending-commands/{recovery_id}")
     async def retire(recovery_id: UUID4, payload: PendingScope, user=Depends(current_user)):

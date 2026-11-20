@@ -872,7 +872,9 @@ def make_operational_balance_router(db, current_user):
         if kind == "bank":
             row.update(account_type="bank", source="operational_balance")
         elif kind == "cash":
-            row.update(account_type="cash", external_ref=None)
+            # The canonical collection has a unique (user_id, idempotency_key)
+            # index. Existing rows can already occupy the missing-key slot.
+            row.update(account_type="cash", external_ref=None, idempotency_key=f"operational-cash:{identity}")
         elif kind == "external_person":
             row.update(kind="external_person", name_lower=" ".join(payload.name.split()).casefold(),
                        reference="", person_type="person", phone="", notes="")

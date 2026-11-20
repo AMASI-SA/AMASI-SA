@@ -25,6 +25,8 @@ if (!out || !path.isAbsolute(out) || path.resolve(out) === root || path.resolve(
     define: { 'process.env.NODE_ENV': '"production"', 'process.env.REACT_APP_BACKEND_URL': '""' },
   });
   const files = [
+    ...['ApprovedFinance.jsx','ApprovedEntry.jsx','ApprovedLedger.jsx','PaymentSourceFields.jsx','PendingEntryActions.jsx']
+      .map(file => `frontend/src/pages/operational/${file}`),
     'frontend/src/pages/operational/SimpleBalances.jsx', 'frontend/src/pages/operational/SimpleBalanceAccess.jsx',
     'frontend/src/pages/operational/SimpleOrderRefunds.jsx', 'frontend/src/pages/operational/simpleBalancesApi.js',
     'frontend/src/pages/operational/SimpleBalanceStatement.jsx', 'frontend/src/pages/operational/SimpleBalanceReviews.jsx',

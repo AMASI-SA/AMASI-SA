@@ -6,7 +6,10 @@ const data = promise => promise.then(response => response.data);
 const read = config => ({ timeout: 30000, ...config });
 
 export const simpleBalancesApi = {
-  context: (config, { homePreview = false } = {}) => data(http.get(`${workspace}/context`, { ...read(config), params: { ad_bank_fx: true, ...(homePreview ? { home_preview: true } : {}) } })),
+  context: (config, { homePreview = false, directoryOnly = false } = {}) => data(http.get(`${workspace}/context`, { ...read(config), params: { ad_bank_fx: true, ...(directoryOnly ? { directory_only: true } : { provider_positions: true }), ...(homePreview ? { home_preview: true } : {}) } })),
+  accountGroup: (kind, config) => data(http.get(`${workspace}/accounts/${encodeURIComponent(kind)}`, read(config))),
+  resource: (kind, id, config) => data(http.get(`${workspace}/resource/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`,
+    { ...read(config), ...(kind === 'ad_account' && { params: { ad_bank_fx: true } }) })),
   parties: (params, config) => data(http.get(`${workspace}/parties`, { ...read(config), params })),
   movements: (params, config) => data(http.get(`${workspace}/movements`, { ...read(config), params })),
   ledger: (kind, id, params, config) => data(http.get(
@@ -35,6 +38,9 @@ export const simpleBalancesApi = {
   pendingCommand: (id, scope, config) => data(http.get(`${workspace}/pending-commands/${encodeURIComponent(id)}`, {
     ...read(config), params: { expected_session_scope: scope },
   })),
+  discardPending: (id, scope) => data(http.post(`${workspace}/pending-commands/${encodeURIComponent(id)}/discard`, {
+    expected_session_scope: scope,
+  }, { timeout: 30000 })),
   retirePending: (id, scope) => data(http.delete(`${workspace}/pending-commands/${encodeURIComponent(id)}`, {
     timeout: 30000, data: { expected_session_scope: scope },
   })),
@@ -53,10 +59,11 @@ export const simpleBalancesApi = {
 
 export function simpleBalanceError(error) {
   const status = error?.response?.status;
+  const detail = error?.response?.data?.detail;
+  if (detail?.not_applied === true && typeof detail.message === 'string') return detail.message;
   if (status === 401) return 'انتهت جلسة الدخول. سجّل الدخول مجددًا لعرض حساباتك.';
   if (status === 403) return 'لا توجد صلاحية لهذا الإجراء أو تغيرت صلاحياتك. حدّث الصفحة لمراجعة المتاح لك.';
   if (status === 404) return 'هذا الحساب غير متاح ضمن صلاحياتك الحالية.';
-  const detail = error?.response?.data?.detail;
   if (typeof detail?.message === 'string') return detail.message;
   if (status === 409) return 'تغيرت البيانات أو الصلاحيات. أعد تحميلها قبل متابعة الإجراء.';
   if (typeof detail === 'string' && /[\u0600-\u06ff]/.test(detail)) return detail;

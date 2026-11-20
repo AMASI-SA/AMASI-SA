@@ -134,7 +134,7 @@ async def read_invoice(db, owner, supplier, invoice_id, policy, header=None):
         return {**document["detail"], "id": invoice_id, "number": header["number"]}
     query = {"user_id": owner, "supplier_id": supplier, "id": invoice_id}
     fields = {"_id": 0, **HEADER, "purchase_tax.amount_halalas": 1}
-    for field in ("product_name", "quantity", "product_unit_price_halalas", "total_halalas",
+    for field in ("product_name", "sku", "selected_image_url", "quantity", "product_unit_price_halalas", "total_halalas",
                   "services.service_name", "services.total_halalas"):
         fields["lines." + field] = 1
     docs = await db[COLLECTION].find(query, fields).to_list(2)
@@ -146,7 +146,8 @@ async def read_invoice(db, owner, supplier, invoice_id, policy, header=None):
         return format(Decimal(value) / 100, ".2f") if type(value) is int else None
     return {"id": invoice_id, "number": doc.get("invoice_number"), "currency": doc.get("currency", "SAR"),
             "total": amount(doc.get("total_halalas")), "tax": amount((doc.get("purchase_tax") or {}).get("amount_halalas")),
-            "lines": [{"name": line.get("product_name"), "quantity": line.get("quantity"),
+            "lines": [{"name": line.get("product_name"), "sku": line.get("sku"), "image_url": line.get("selected_image_url"),
+                       "quantity": line.get("quantity"),
                        "unit": amount(line.get("product_unit_price_halalas")), "total": amount(line.get("total_halalas")),
                        "services": [{"name": s.get("service_name"), "total": amount(s.get("total_halalas"))}
                                     for s in line.get("services") or []]} for line in doc.get("lines") or []]}

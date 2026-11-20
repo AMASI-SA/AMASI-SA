@@ -779,7 +779,8 @@ def test_supplier_invoice_is_one_searchable_row_with_recorded_approver_and_lazy_
             key: {**terms, "id": key} for key in ("pieceA", "pieceB")}}})
         await db.mezan_supplier_invoices_v2.insert_one({"user_id": "owner", "supplier_id": "supplier", "id": "inv1",
             "invoice_number": "SI-26", "approved_at": stamp, "approved_by": "staff", "total_halalas": 2600,
-            "lines": [{"product_name": "غلاف", "quantity": 2, "product_unit_price_halalas": 1300, "total_halalas": 2600}]})
+            "lines": [{"product_name": "غلاف", "sku": "AMS-26", "selected_image_url": "/products/cover.jpg",
+                       "quantity": 2, "product_unit_price_halalas": 1300, "total_halalas": 2600}]})
         path = BASE + "/ledger/supplier/supplier"
         for route in (path, BASE + "/movements"):
             page = (await client.get(route, params={"q": "خالد أحمد"})).json()
@@ -790,7 +791,8 @@ def test_supplier_invoice_is_one_searchable_row_with_recorded_approver_and_lazy_
         detail = BASE + "/supplier-invoices/supplier/"
         invoice = (await client.get(detail + "inv1")).json()
         assert invoice["total"] == "26.00" and invoice["lines"] == [
-            {"name": "غلاف", "quantity": 2, "unit": "13.00", "total": "26.00", "services": []}]
+            {"name": "غلاف", "sku": "AMS-26", "image_url": "/products/cover.jpg",
+             "quantity": 2, "unit": "13.00", "total": "26.00", "services": []}]
         await db[STATES].update_one({"_id":"owner"}, {"$set":{"engine.obligations.pieceA.returned_amount":"13.00",
                                                               "engine.obligations.pieceA.confirmed":"0.00"}})
         adjusted = (await client.get(path, params={"q":"SI-26"})).json()
@@ -891,4 +893,77 @@ def test_external_supplier_invoice_can_book_additional_services_without_touching
         purchase = next(r for r in report(state)["obligations"] if r["id"] == saved["movement_id"])
         assert purchase["confirmed"] == "115.00" and purchase["settled"] == "0.00"
         assert (await client.get(url)).json() == doc
+    run(scenario)
+
+
+@pytest.mark.parametrize("source_type,source_id,amount,remaining", [
+    ("bank", "bank", "700", "300.00"),
+    ("cash", "cash", "350", "150.00"),
+    ("employee_custody", "employee", "100", "50.00"),
+])
+def test_concurrent_supplier_payouts_cannot_overdraw_same_source(source_type, source_id, amount, remaining):
+    async def scenario(db, client):
+        await db[STATES].update_one({"_id": "owner"}, {"$set": {"openings.supplier:supplier.amount": "3000.00"}})
+        payment = dict(party_type="supplier", party_id="supplier", reason="payment",
+                       source_type=source_type, source_id=source_id, amount=amount)
+        commands = [entry(**payment), entry(**payment)]
+        results = await asyncio.gather(*(client.post(BASE + "/entries", json=body) for body in commands))
+        assert sorted(r.status_code for r in results) == [200, 409], [r.text for r in results]
+        for command, result in zip(commands, results):
+            retry = await client.post(BASE + "/entries", json=command)
+            assert retry.status_code == result.status_code and retry.json() == result.json()
+        rejected = next(r.json()["detail"] for r in results if r.status_code == 409)
+        assert rejected["not_applied"] and "لا يكفي" in rejected["message"]
+        state = await read(db, "owner")
+        assert len(state["movements"]) == 1
+        assert balance(state, source_type, source_id)["actual"] == remaining
+    run(scenario)
+
+
+def test_payout_source_has_only_availability_with_use_permission_and_all_operation_grants():
+    async def scenario(db, client):
+        await db.mezan_employees_v2.insert_one({"id": "empty", "user_id": "owner", "status": "active", "name": "عهدة فارغة"})
+        await db[STATES].update_one({"_id": "owner"}, {"$set": {"openings.bank:bank.amount": "0.00"}})
+        grants = [resource("supplier", "supplier"), resource("bank", "bank"),
+                  resource("employee_custody", "employee"), resource("employee_custody", "empty")]
+        async def catalog():
+            response = await client.get(BASE + "/context", headers={"x-test-user": "staff"})
+            assert response.status_code == 200, response.text
+            return {(r["kind"], r["id"]): r for r in response.json()["resources"]}
+        await grant(db, operations=["supplier.payment", "custody.spend"], resources=grants)
+        headers = {"x-test-user": "staff"}
+        directory = await client.get(BASE + "/context", params={"directory_only": True}, headers=headers)
+        assert directory.status_code == 200
+        assert all("can_fund_payment" not in row for row in directory.json()["resources"])
+        group = await client.get(BASE + "/accounts/employee_custody", headers=headers)
+        assert group.status_code == 200, group.text
+        custody = {row["id"]: row for row in group.json()["items"]}
+        assert group.json()["session_scope"] == directory.json()["session_scope"]
+        assert custody["employee"]["can_fund_payment"] is True
+        assert custody["empty"]["can_fund_payment"] is False
+        assert all(row["balance"] is None for row in custody.values())
+        rows = await catalog()
+        assert rows["bank", "bank"]["can_fund_payment"] is False
+        assert rows["employee_custody", "employee"]["can_fund_payment"] is True
+        assert rows["employee_custody", "empty"]["can_fund_payment"] is False
+        assert all(row["balance"] is None for row in rows.values())
+        assert ("cash", "cash") not in rows and ("employee", "employee") not in rows
+        await grant(db, operations=["supplier.payment"], resources=grants, version=2)
+        assert "can_fund_payment" not in (await catalog())["employee_custody", "employee"]
+        deposit = entry(party_type="supplier", party_id="supplier", side="for_party", reason="collection", amount="20.00")
+        response = await client.post(BASE + "/entries", json=deposit)
+        assert response.status_code == 200, response.text
+        assert (await catalog())["bank", "bank"]["can_fund_payment"] is True
+    run(scenario)
+
+
+def test_prepaid_shipping_wallet_cannot_pay_a_supplier_even_with_a_positive_balance():
+    async def scenario(db, client):
+        await db[STATES].update_one({"_id": "owner"}, {"$set": {"courier_tariffs": [
+            {"payment_mode": "prepaid", "cash_account": {"id": "cash"}}]}})
+        response = await client.post(BASE + "/entries", json=entry(
+            party_type="supplier", party_id="supplier", reason="payment", source_type="cash", source_id="cash"))
+        assert response.status_code == 409
+        assert response.json()["detail"]["code"] == "operational_prepaid_source_invalid"
+        assert (await read(db, "owner"))["movements"] == []
     run(scenario)

@@ -85,7 +85,22 @@ const server = http.createServer(async (request, response) => {
       throw Error('Unsupported recovery method');
     }
     if (url.pathname.startsWith(admin) && !actor.is_owner) return send(403, { detail: { message: 'صلاحيات المالك مطلوبة' } });
-    if (url.pathname === `${base}/context`) return send(200, f.context(actor));
+    if (url.pathname === `${base}/context`) {
+      const payload = f.context(actor);
+      return send(200, url.searchParams.has('directory_only') ? { ...payload,
+        resources: [...payload.resources, ...['employee_custody','bank'].map(kind => ({
+          ...payload.resources.find(item => item.kind === kind), id:'empty-' + kind, name:'فارغ ' + kind
+        }))].map(item => ({...item, balance:null})) } : payload);
+    }
+    if (url.pathname.startsWith(`${base}/accounts/`)) {
+      const kind = url.pathname.split('/').at(-1), scoped = f.context(actor);
+      assert(['bank','cash','employee_custody'].includes(kind));
+      const items = scoped.resources.filter(item => item.kind === kind).map(item => ({
+        ...item, balance: null, can_fund_payment: Number(item.balance?.amount) > 0,
+      }));
+      if (items.length) items.push({...items[0],id:'empty-'+kind,name:'فارغ '+kind,can_fund_payment:false});
+      return send(200,{ items, session_scope:scoped.session_scope, permission_version:scoped.permission_version });
+    }
     if (url.pathname === `${base}/parties`) return send(200, { items: f.resources.filter(item => (!url.searchParams.get('kind') || item.kind === url.searchParams.get('kind')) && (!url.searchParams.get('q') || item.name.includes(url.searchParams.get('q')))) });
     if (url.pathname === `${base}/movements`) {
       const selected = url.searchParams.get('kind');
@@ -243,6 +258,25 @@ async function capture(page, name) {
     await context.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
     const page = await context.newPage(); page.on('pageerror', error => errors.push(error.message));
     const ledgerUrl = `${origin}${basePath}?tab=parties&kind=external_person&id=external-demo`;
+    await check('Approved supplier payout fetches only the selected funding group and hides empty custody', async () => {
+      const start=calls.length;
+      await page.goto(origin+'/operational-balances?view=entry&kind=supplier&id=supplier-demo&mode=out');
+      const select = name => page.locator('label.field').filter({has:page.getByText(name,{exact:true})}).locator('select');
+      await select('نوع مصدر الدفع').waitFor();
+      assert.equal(calls.slice(start).find(call => call.path.endsWith('/context')).params.directory_only,'true');
+      assert.equal(calls.slice(start).some(call => call.path.includes('/accounts/')),false);
+      await select('نوع مصدر الدفع').selectOption('employee_custody');
+      await select('خرج المبلغ من').waitFor();
+      assert.equal(await select('خرج المبلغ من').locator('option[value*="custody-demo"]').count(),1);
+      assert.equal(await select('خرج المبلغ من').locator('option[value*="empty-"]').count(),0);
+      await select('نوع مصدر الدفع').selectOption('bank');
+      const empty=select('خرج المبلغ من').locator('option[value*="empty-bank"]');
+      await empty.waitFor({state:'attached'});
+      // isDisabled() on a labelled option follows the label to the select.
+      assert.equal(await empty.evaluate(option => option.disabled), true);
+      assert.deepEqual(calls.slice(start).filter(call=>call.path.includes('/accounts/')).map(call=>call.path.split('/').at(-1)),['employee_custody','bank']);
+      assert.equal(calls.slice(start).some(call=>call.method==='POST' && call.path.endsWith('/entries')),false);
+    });
     await check('Desktop ledger uses five rows, recorder names, red له and green عليه', async () => {
       await page.goto(ledgerUrl); await page.locator('.sb-ledger tbody tr').first().waitFor();
       assert.equal(await page.locator('.sb-ledger tbody tr').count(), 5);
@@ -264,6 +298,8 @@ async function capture(page, name) {
       await page.locator('.sb-direction [data-side="for_us"]').click();
       assert.equal(await field(page, 'سبب المبلغ').count(), 0);
       await field(page, 'المبلغ بالريال').fill('50'); await field(page, 'ملاحظة (اختياري)').fill('صرف توضيحي من العهدة');
+      assert.equal(await field(page, 'الدفع من').count(), 0);
+      await field(page, 'نوع مصدر الدفع').selectOption('employee_custody');
       await field(page, 'الدفع من').selectOption(JSON.stringify(['employee_custody', 'custody-demo']));
       await capture(page, 'external-form-mobile');
       await page.locator('.sb-direction [data-side="for_party"]').click();
@@ -273,7 +309,9 @@ async function capture(page, name) {
       assert.equal(await field(page, 'المبلغ بالريال').inputValue(), '50');
       await page.setViewportSize({ width: 1440, height: 1000 }); await capture(page, 'external-form-desktop');
       await page.locator('.sb-direction [data-side="for_us"]').click();
-      assert.equal(await field(page, 'الموظف').count(), 0); assert.equal(await field(page, 'الدفع من').inputValue(), '');
+      assert.equal(await field(page, 'الموظف').count(), 0); assert.equal(await field(page, 'نوع مصدر الدفع').inputValue(), '');
+      assert.equal(await field(page, 'الدفع من').count(), 0);
+      await field(page, 'نوع مصدر الدفع').selectOption('employee_custody');
       await field(page, 'الدفع من').selectOption(JSON.stringify(['employee_custody', 'custody-demo']));
       await field(page, 'التاريخ').fill('2026-01-01');
       holdEntryRegistration = true;
@@ -533,7 +571,7 @@ async function capture(page, name) {
       assert.equal(await page.locator('.sbr-row').count(), 1);
       await capture(page, 'reviews-approved-mobile');
     });
-    assert.deepEqual(errors, []); assert.equal(results.length, 11); assert.equal(screenshots.length, 12);
+    assert.deepEqual(errors, []); assert.equal(results.length, 12); assert.equal(screenshots.length, 12);
     await context.close();
   } finally {
     fs.writeFileSync(path.join(out, 'browser-evidence.json'), JSON.stringify({ synthetic_only: true, actual_components: true, chromium_sandbox: true, results, errors, screenshots, calls }, null, 2));

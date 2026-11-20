@@ -17,6 +17,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
 from excel_parser import normalize_name, resolve_payment_setting
+from operational_fee_methods import fee_rail
+from operational_payment_evidence import provider_for
 from payment_methods import (
     CARD_FALLBACK_SUB_KEYS,
     DEFAULT_PAYMENT_METHODS,
@@ -194,7 +196,13 @@ def _directory(names: list[str], settings: dict | None, complete: bool, *, setti
         selected, ambiguous = lookup.resolve(name)
         configured = None if ambiguous else _terms(selected)
         exact = selected is None or normalize_name(selected["name"]) == normalize_name(name)
+        # Use the same exact rail and provider matching as the dated fee calculator.
+        rail = fee_rail(name)
+        provider = "salla" if rail else provider_for(name)
+        scope = {"provider": provider, "payment_method": rail} if provider else None
         items.append({
+            "fee_scope": scope,
+            **({"inherits_from": selected["name"]} if configured and not exact else {}),
             "key": sha256(normalize_name(name).encode("utf-8")).hexdigest(),
             "name": name,
             "status": "configured" if configured is not None else "needs_commission",
