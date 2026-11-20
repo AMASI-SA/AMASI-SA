@@ -27,6 +27,37 @@ def proof_hash(order, payment):
                    order.get("updated_at"), payment])
 
 
+def _shipping_expense(state, movement):
+    """A fully allocated courier expense cannot settle a customer's payment.
+
+    Order identity is shared by shipping and payment evidence. Only exclude a
+    positively identified shipping payable; unknown or mixed allocations keep
+    the existing conservative overlap check.
+    """
+    if (movement.get("party_type") != "courier" or not movement.get("party_id")
+            or movement.get("direction") != "outgoing" or movement.get("kind") != "payment"):
+        return False
+    try:
+        currency = movement["currency"]
+        lines = movement.get("allocations") or []
+        if not lines or len({a["obligation_id"] for a in lines}) != len(lines):
+            return False
+        total = Decimal(0)
+        for allocation in checked_rows(lines):
+            charge = state.get("engine", {}).get("obligations", {}).get(allocation["obligation_id"], {})
+            if ((charge.get("kind"), charge.get("party_type"), charge.get("party_id"),
+                 charge.get("currency"), charge.get("direction")) !=
+                    ("shipping", "courier", movement["party_id"], currency, "payable")):
+                return False
+            value = _amount(allocation["amount"], currency)
+            if value <= 0 or value > _amount(charge["confirmed"], currency):
+                return False
+            total += value
+        return total == _amount(movement["amount"], currency) + _amount(movement.get("actual_fee_amount", "0"), currency)
+    except (KeyError, TypeError, ValueError, ArithmeticError):
+        return False
+
+
 def _context(state, row, *, obligation_key=None, through=None):
     """Check attributable provider money and the full allocation of incoming payouts."""
     preparation_checkpoint()
@@ -65,7 +96,9 @@ def _context(state, row, *, obligation_key=None, through=None):
             other_split_provider = (obligation_key and movement.get("party_type") == "provider"
                                     and movement.get("party_id") not in (party, "", None))
             same_number = number in (movement.get("order_number"), movement.get("original_order_number"))
-            if ((same_number and not other_split_provider) or (movement.get("order_id") == oid and not other_split_provider)
+            same_order = same_number or movement.get("order_id") == oid
+            unrelated_shipping = same_order and _shipping_expense(state, movement)
+            if ((same_order and not other_split_provider and not unrelated_shipping)
                     or movement.get("request_id") == "order-bank:" + oid
                     or any(a.get("obligation_id") in (key, "credit:" + key) for a in checked_rows(movement.get("allocations", [])))):
                 issues.append("target")
