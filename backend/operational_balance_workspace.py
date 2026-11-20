@@ -919,7 +919,7 @@ def install_workspace_routes(router, db, current_user, scope):
                                 "ad_funding", "courier_tariffs.payment_mode", "courier_tariffs.cash_account.id", "engine.ad_balance_sar_basis"), 1)
         return await db[STATES].find_one({"_id": owner, "owner_id": owner}, fields) or initial(owner)
 
-    async def checked_read(user, callback, *, ad_bank_fx=False, selected_resource=None, invoice_headers=False, invoice_detail=None, directory_only=False, balance_only=False, forecast_only=False, provider_positions=False, provider_orders=False):
+    async def checked_read(user, callback, *, ad_bank_fx=False, selected_resource=None, invoice_headers=False, invoice_detail=None, directory_only=False, balance_only=False, forecast_only=False, provider_positions=False, provider_orders=False, selected_kind=None):
         from operational_financial_position_state import read_financial_position_state
         actor, owner, source, policy = await load(user)
         if selected_resource and (not policy.resource(*selected_resource)["balance"] if balance_only else policy.resource(*selected_resource)["movements"] == "none"):
@@ -928,7 +928,7 @@ def install_workspace_routes(router, db, current_user, scope):
         # pages or idempotency receipts. Writers keep the complete store reader.
         state = await directory_state(db, owner) if directory_only else await read_financial_position_state(db, owner)
         resources, computed = await resource_catalog(db, owner, policy, state, ad_bank_fx=ad_bank_fx,
-            selected_resource=selected_resource, provider_positions=provider_positions, provider_orders=provider_orders,
+            selected_resource=selected_resource, selected_kind=selected_kind, provider_positions=provider_positions, provider_orders=provider_orders,
             directory_only=directory_only or forecast_only, reviewed_counts=review_snapshots.counts.get((owner, source_key(state))))
         if forecast_only:
             computed = {"obligations": state.get("engine", {}).get("obligations", {}).values()}
@@ -1005,10 +1005,14 @@ def install_workspace_routes(router, db, current_user, scope):
             fail("operational_ad_fx_receipt_required", "تعذر حساب المقابل بإعدادات الحساب. اختر إدخال مبالغ الإيصال.", 422)
 
     @router.get("/workspace/parties")
-    async def parties(request: Request, kind: str | None = None, q: str = Query(default="", max_length=160), user=Depends(current_user)):
+    async def parties(request: Request, kind: str | None = None, q: str = Query(default="", max_length=160),
+                      provider_positions: bool = False, user=Depends(current_user)):
         def project(actor, owner, policy, state, resources, computed):
-            return {"items": [r for r in resources if (not kind or r["kind"] == kind) and (not q or q.casefold() in r["name"].casefold())]}
-        return await run_visible_report_read(request, lambda: checked_read(user, project))
+            return {"items": [r for r in resources if not q or q.casefold() in r["name"].casefold()],
+                    "session_scope": digest([owner, actor["id"]]), "permission_version": policy.version,
+                    "owner_override": policy.owner_override}
+        return await run_visible_report_read(request, lambda: checked_read(user, project, selected_kind=kind,
+            provider_positions=kind == "provider" and provider_positions))
 
     @router.get("/workspace/accounts/{kind}")
     async def account_group(request: Request, kind: Literal["bank", "cash", "employee_custody"], user=Depends(current_user)):
@@ -1040,7 +1044,7 @@ def install_workspace_routes(router, db, current_user, scope):
                 fail("operational_workspace_not_found", "الحساب غير متاح", 404)
             return resources[0]
         return await run_visible_report_read(request, lambda: checked_read(user, selected, selected_resource=(kind, identity),
-            balance_only=True, ad_bank_fx=ad_bank_fx))
+            balance_only=True, ad_bank_fx=ad_bank_fx, provider_positions=kind == "provider"))
 
     @router.get("/workspace/forecast/{kind}/{identity}")
     async def forecast(request: Request, kind: Literal["courier", "store_driver"], identity: str, user=Depends(current_user)):
@@ -1119,7 +1123,7 @@ def install_workspace_routes(router, db, current_user, scope):
         header = await directory_state(db, owner)
         async def catalog(state, *, directory):
             resources, computed = await resource_catalog(db, owner, policy, state, selected_resource=target,
-                directory_only=directory, ad_bank_fx=ad_bank_fx,
+                directory_only=directory, ad_bank_fx=ad_bank_fx, provider_positions=account_detail and kind == "provider",
                 reviewed_counts=review_snapshots.counts.get((owner, source_key(state))))
             if target and not any(r["access"]["movements"] != "none" for r in resources):
                 fail("operational_workspace_not_found", "الكشف غير متاح", 404)
