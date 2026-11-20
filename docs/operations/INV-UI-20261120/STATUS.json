@@ -5,7 +5,7 @@
   "base_sha": "734b977de28254c2c089148b4db8972a03ba19eb",
   "state": "implementation_in_progress",
   "production_changed": false,
-  "remote_checkpoint": "cdd59c33da233336fd13ea0953a6384a4bac900b verified on origin; native UI checkpoint in progress",
+  "remote_checkpoint": "f1ccfa205e7689a617a861da6ad4d0ceaf61e8ac verified on origin; full-source WIP checkpoint in progress",
   "release_lease": "not_created",
   "deployment": "not_requested",
   "owners": {
@@ -20,10 +20,11 @@
     "Preserve canonical product/variant/resource/location identity, server preview hash, stable idempotency and current permissions",
     "No opening-stock writer reused for stock adjustments"
   ],
-  "next_action": "Checkpoint the 148-test native UI milestone, then finish and verify count/review/atomic-post contracts and browser acceptance.",
+  "next_action": "Restart only owned loopback replica27653 after host OOM, rerun purchase/count integration and frontend suites, verify same-location capacity and component report fixes, then build actual source and run native browser harness.",
   "updated_at": "2026-11-20T19:52:54.473797+00:00",
-  "verified_milestone": "Fresh integrated frontend: 14 suites, 148 tests passed (shell/RBAC, catalog/components/bundles, home/stock/reports/receiving and warehouse)",
-  "ledger": "Issue 1006 updated in dedicated INV-UI-20261120 body section because new comments are disabled at 2500 comments",
+  "verified_milestone": "Root fresh frontend148 and count arithmetic14 plus19 real-Mongo count API cases passed. Delegated count UI31 and purchase frontend95 passed before final refinements; fresh combined rerun pending. Two independently found count reporting/capacity fixes await targeted rerun.",
+  "ledger": "https://github.com/AMASI-SA/AMASI-SA/issues/1006#issuecomment-6238987123 has a dedicated dated INV-UI-20261120 section appended without removing original content; comments/body limits block new entries elsewhere. Write read-back verified.",
+  "incomplete": ["Fresh purchase rerun required after host memory exhaustion interrupted local Mongo", "Full native source build and desktop/mobile actual-App browser acceptance pending", "Two independent stocktake review findings patched, targeted rerun pending", "Native employee accounting page aliases for count tools pending"],
   "posting_scope": "User approved full stocktake/adjustment lifecycle including atomic posting, development only; new posting default-closed",
   "durable_patch": "C:\\Users\\amasi\\OneDrive\\المستندات\\ChatGPT\\ميزان\\outputs\\inventory-implementation-20261120\\inventory-ui-wip.patch"
 }

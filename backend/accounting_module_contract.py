@@ -44,6 +44,9 @@ ACCOUNTING_ACTIONS: tuple[dict[str, str], ...] = (
     # Owner-approved registry key; every user still needs an explicit grant.
     {"id": "shipping-contract-review", "label": "مراجعة واعتماد عقد شركة الشحن", "permission": "accounting.shipping.contracts.review"},
     {"id": "purchase-post", "label": "ترحيل فاتورة شراء وتحديث المخزون", "permission": "accounting.purchases.post"},
+    {"id": "inventory-count", "label": "حفظ الجرد وطلب تسوية الفروقات", "permission": "accounting.inventory.count"},
+    {"id": "inventory-adjustment-review", "label": "مراجعة واعتماد فروق الجرد", "permission": "accounting.inventory.adjustments.review"},
+    {"id": "inventory-adjustment-post", "label": "ترحيل فروق الجرد المعتمدة", "permission": "accounting.inventory.adjustments.post"},
     {"id": "payroll-post", "label": "اعتماد وترحيل الرواتب والالتزامات", "permission": "accounting.payroll.post"},
     {"id": "opening-approve", "label": "اعتماد القيد الافتتاحي", "permission": "accounting.opening_balances.approve"},
     {"id": "manual-journal", "label": "إنشاء قيد يدوي", "permission": "accounting.journals.manual_create"},
@@ -63,7 +66,8 @@ ACCOUNTING_PAGE_WRITES = {
         "accounting.drafts.create", "accounting.settlements.post",
     },
     "accounting.shipping.view": {"accounting.rules.manage", "accounting.shipping.contracts.review", "accounting.settlements.post"},
-    "accounting.inventory.view": {"accounting.purchases.post"},
+    "accounting.inventory.view": {"accounting.purchases.post", "accounting.inventory.count",
+        "accounting.inventory.adjustments.review", "accounting.inventory.adjustments.post"},
     "accounting.movements.view": {
         "accounting.advances.recognize", "accounting.advances.refund", "accounting.refunds.create",
         "accounting.refunds.recognize", "accounting.refunds.pay", "accounting.receipts.create", "accounting.movements.import",
@@ -91,6 +95,8 @@ SHIPPING_CONTRACT_PERMISSIONS = {
 # legacy ``opening_balances.approve`` key is intentionally not an alias for
 # any part of the new draft/review/post workflow.
 ACCOUNTING_EXPLICIT_GRANT_KEYS = frozenset({
+    "accounting.inventory.adjustments.review",
+    "accounting.inventory.adjustments.post",
     SHIPPING_CONTRACT_PERMISSIONS["review"],
     "accounting.opening_balances.post",
     "accounting.journals.reverse",

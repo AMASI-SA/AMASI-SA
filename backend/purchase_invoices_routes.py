@@ -13,6 +13,7 @@ from auth import get_current_user_from_db
 from component_status_policy import component_is_active
 from supplier_identity_service import require_supplier_v2
 from supplier_payment_service import SupplierPaymentRequest, payment_context, pay_supplier, supplier_statement_balance
+from purchase_configuration_contract import product_configuration_catalog, normalize_line_configuration
 from purchase_receiving_service import (
     SCHEMA, PRODUCTS, RESOURCES, OPERATIONS, actor_scope, approve_and_receive,
     approved_account_mappings, fail, invoice_public, invoice_public_projection, now, purchase_amounts, resolve_line, stable_id, stored_number,
@@ -32,6 +33,7 @@ class InvoiceLine(StrictModel):
     sku: str | None = Field(None, max_length=120)
     quantity: float = Field(gt=0, le=1e12)
     unit_cost: float = Field(ge=0, le=1e12)
+    purchase_configuration: dict | None = None
 
 class PurchaseInvoiceCreate(StrictModel):
     supplier_counterparty_id: str = Field(min_length=1, max_length=120)
@@ -82,7 +84,10 @@ async def _draft_values(db, owner, payload):
     for submitted in values["lines"]:
         line = dict(submitted)
         line["id"] = line.get("id") or str(uuid.uuid4())
-        identity, _ = await resolve_line(db, owner, line)
+        identity, product = await resolve_line(db, owner, line)
+        metadata = normalize_line_configuration(line, product)
+        line.pop("purchase_configuration", None)
+        line.update(metadata)
         line.update({key: value for key, value in identity.items() if key in {"product_name", "sku", "code", "category"}})
         lines.append(line)
     amounts = purchase_amounts(lines, values["tax_amount"], values["tax_treatment"])
@@ -150,12 +155,11 @@ def attach_purchase_invoice_routes(parent_router: APIRouter, db):
             fail("purchase_actor_scope_changed", 403)
         products = []
         for row in await db[PRODUCTS].find({"user_id": owner, "archived": {"$ne": True}}).to_list(10001):
-            variants = [{"variant_id": str(v["id"]), "name": v.get("name") or v.get("sku") or str(v["id"]),
-                         "sku": v.get("sku"), "barcode": v.get("barcode")}
-                        for v in row.get("variants") or [] if isinstance(v, dict) and v.get("id")]
+            option_catalog = product_configuration_catalog(row)
             products.append({"id": row["mezan_product_id"], "product_id": row["mezan_product_id"],
                              "name": row.get("name"), "sku": row.get("sku"), "barcode": row.get("barcode"),
-                             "variants": variants, "variants_required": bool(variants or row.get("variants_count"))})
+                             **option_catalog,
+                             "variants_required": bool(option_catalog["variants"] or row.get("variants_count"))})
         resources = await db[RESOURCES].find({"user_id": owner, "track_inventory": True}).to_list(10001)
         components = [{"id": r["id"], "resource_id": r["id"], "name": r.get("name"), "code": r.get("code"),
                        "category_ids": r.get("category_ids") or [], "track_inventory": True}
