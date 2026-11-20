@@ -315,3 +315,39 @@ def test_account_directory_batches_only_opened_bank_cash_or_employee_custody(mon
         assert len(hidden) == 1 and hidden[0]["balance"] is None
         assert (await client.get(BASE + "/accounts/employee_custody", headers=headers)).json()["items"] == []
     run(scenario)
+
+
+def test_ad_and_bank_groups_match_web_cards_and_individual_resources():
+    from operational_ad_balance_sar import COLLECTION
+    from backend.tests.test_operational_balance_workspace import grant, resource
+    async def scenario(db, client):
+        await seed_ad_account(db)
+        await db.mezan_integration_accounts_v2.update_one({"mezan_integration_account_id": "ia"}, {"$set": {"currency": "USD"}})
+        opening = {"id": "ad-opening", "name": "Ad", "party_type": "ad_account", "party_id": "ad",
+                   "amount": "100.00", "currency": "USD", "direction": "for_party",
+                   "created_at": "2026-11-01T00:00:00+00:00", "actor_id": "owner"}
+        await db[STATES].update_one({"owner_id": "owner"}, {"$set": {"openings.ad": opening,
+            "engine.ad_balance_sar_basis.ad": {"source": COLLECTION, "currency": "USD", "exchange_rate_to_sar": "3.75",
+                "bank_commission_pct": "2", "apply_bank_commission": True, "bank_commission_vat_pct": "15"},
+            "openings.bank:bank.direction": "for_party"}})
+        web = (await client.get(BASE + "/context?ad_bank_fx=true&provider_positions=true")).json()["resources"]
+        for kind, identity, group, field in (("ad_account", "ad", "/parties?kind=ad_account&ad_bank_fx=true", "ad_amounts"),
+                                             ("bank", "bank", "/accounts/bank", "balance")):
+            expected = next(r for r in web if (r["kind"], r["id"]) == (kind, identity))[field]
+            if kind == "ad_account":
+                assert (expected["payable"], expected["currency"], expected["native"]["payable"]) == ("383.63","SAR","100.00")
+            else:
+                assert (expected["side"], expected["amount"]) == ("for_party", "1000.00")
+            headers = {"x-test-mobile": "yes"}
+            rows = (await client.get(BASE + group, headers=headers)).json()["items"]
+            item = next(r for r in rows if r["id"] == identity)
+            assert item[field] == expected
+            if kind == "ad_account":
+                assert "ads.fund" in item["operations"]
+            for route in ("resource", "ledger"):
+                data = (await client.get(f"{BASE}/{route}/{kind}/{identity}?page_only=true&ad_bank_fx=true", headers=headers)).json()
+                assert data.get("resource", data)[field] == expected
+        await grant(db, operations=["ads.fund"], resources=[resource("ad_account","ad",balance=False)])
+        limited = (await client.get(BASE + "/parties?kind=ad_account&ad_bank_fx=true", headers={"x-test-user":"staff"})).json()["items"]
+        assert len(limited) == 1 and "ad_amounts" not in limited[0] and "ad_wallet_balance" not in limited[0]
+    run(scenario)

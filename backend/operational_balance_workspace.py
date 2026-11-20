@@ -365,7 +365,8 @@ async def resource_catalog(db, owner, policy, state, *, ad_bank_fx=False, review
     from operational_workspace_order_issues import issue_badge, navigation_counts
     from operational_balance_service import prepaid_shipping_cash
     from operational_balance_sources import entities
-    paypal_scope = (not selected_resource or selected_resource == ("provider", "paypal")) and policy.resource("provider", "paypal")["balance"]
+    paypal_scope = (selected_kind in (None, "provider") and (not selected_resource or selected_resource == ("provider", "paypal"))
+                    and policy.resource("provider", "paypal")["balance"])
     provider_access = policy.resource(*selected_resource) if selected_resource and selected_resource[0] == "provider" else {}
     order_access = provider_access.get("balance") and provider_access.get("report") and provider_access["movements"] == "all"
     if provider_orders and not order_access:
@@ -377,10 +378,11 @@ async def resource_catalog(db, owner, policy, state, *, ad_bank_fx=False, review
     elif selected_resource and selected_resource[0] in ACCOUNT_KINDS:
         from operational_party_projection_state import cash_account_projection
         computed = await prepare_in_thread(cash_account_projection, state, *selected_resource)
-    elif selected_resource and selected_resource[0] != "provider":
-        selected_state = await prepare_in_thread(party_projection_state, state, *selected_resource)
+    elif (selected_resource and selected_resource[0] != "provider") or selected_kind == "ad_account":
+        kind, identity = selected_resource or ("ad_account", None)
+        selected_state = await prepare_in_thread(party_projection_state, state, kind, identity)
         computed = await prepare_in_thread(report, selected_state)
-        if selected_resource[0] in {"store_driver", "courier"}:
+        if kind in {"store_driver", "courier"}:
             # The inbox can contain unresolved issues elsewhere in the saved accounting scope.
             computed["issues"] = computed["issues"] or state.get("engine", {}).get("issues", [])
     elif can_price_cards or provider_orders:
@@ -1006,13 +1008,13 @@ def install_workspace_routes(router, db, current_user, scope):
 
     @router.get("/workspace/parties")
     async def parties(request: Request, kind: str | None = None, q: str = Query(default="", max_length=160),
-                      provider_positions: bool = False, user=Depends(current_user)):
+                      provider_positions: bool = False, ad_bank_fx: bool = False, user=Depends(current_user)):
         def project(actor, owner, policy, state, resources, computed):
             return {"items": [r for r in resources if not q or q.casefold() in r["name"].casefold()],
                     "session_scope": digest([owner, actor["id"]]), "permission_version": policy.version,
                     "owner_override": policy.owner_override}
         return await run_visible_report_read(request, lambda: checked_read(user, project, selected_kind=kind,
-            provider_positions=kind == "provider" and provider_positions))
+            provider_positions=kind == "provider" and provider_positions, ad_bank_fx=kind == "ad_account" and ad_bank_fx))
 
     @router.get("/workspace/accounts/{kind}")
     async def account_group(request: Request, kind: Literal["bank", "cash", "employee_custody"], user=Depends(current_user)):
