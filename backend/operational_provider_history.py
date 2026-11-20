@@ -38,7 +38,6 @@ def _context(state, row, *, obligation_key=None, through=None):
     try:
         paid = _amount(row["paid"], ccy)
         created = _instant(row["created_at"])
-        fresh = through is not None and (not engine.get("as_of") or created > _instant(engine["as_of"]))
 
         if (not owner or owner != state.get("owner_id") or not oid or not number or party not in {"salla","tabby","tamara","emkan","paypal"}
                 or paid <= 0 or (not (is_closed_tender_balance(row, ccy) or is_partial_tender_balance(row, ccy))
@@ -71,8 +70,10 @@ def _context(state, row, *, obligation_key=None, through=None):
                     or any(a.get("obligation_id") in (key, "credit:" + key) for a in checked_rows(movement.get("allocations", [])))):
                 issues.append("target")
             # A recorded payout predating a new order could not settle that order.
+            # Snapshot freshness is irrelevant: a late-arriving payment for an
+            # order created after this payout cannot have been in that payout.
             # Explicit order/obligation links above still require reconciliation.
-            if fresh and movement.get("occurred_at") and _instant(movement["occurred_at"]) < created:
+            if movement.get("occurred_at") and _instant(movement["occurred_at"]) < created:
                 continue
             if movement.get("party_type") == "provider" and (movement.get("party_id"), movement.get("currency")) == scope:
                 movements.append(movement)
