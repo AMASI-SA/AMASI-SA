@@ -69,3 +69,4 @@ def test_late_observation_is_booked_once_without_rewriting_old_payout():
     repeated = reconcile(result, {'orders':[order]}, NOW)
     assert repeated == result
     assert state == before
+
