@@ -96,8 +96,11 @@ def known_evidence(state, kind, party, oid):
 
 
 def review_groups(state, resources, include_unassigned):
-    result = report(state)
     needed = {kind for kind, _ in resources}
+    # Provider cards and their order drill-down price saved SAR valuations.
+    # Reviewing native-currency projections instead invents missing-fee issues
+    # for foreign payments whose SAR tariff was already successfully applied.
+    result = report(state, provider_balances_sar="provider" in needed)
     names = dict(resources)
     candidates = []
     if needed.intersection({"courier", "store_driver"}) or include_unassigned:

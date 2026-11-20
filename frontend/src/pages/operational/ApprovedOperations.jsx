@@ -6,6 +6,7 @@ import { operationalApi } from './api';
 import { useBalanceRead } from './simpleBalancesHooks';
 import { minorUnits, resourceKey, signedResourceBalance } from './simpleBalancesModel';
 import { AdBalance, Amount, formatMinor, Heading, Icon, IconBox, assetGroups, partyGroups, isAsset, styleOf } from './ApprovedFinanceUI';
+import { ProviderAmount } from './ApprovedDirectory';
 import './approvedOperations.css';
 
 const base = '/operational-balances';
@@ -92,7 +93,7 @@ function PositionLine({ resource, onOpen, enabled=true }) {
   return <button type="button" className="review-item mz-position-line" disabled={!enabled} onClick={() => onOpen(resource)}>
     <IconBox name={icon} tone={tone} />
     <span>{resource.name}<small className="under">{type}</small></span>
-    <strong className="end">{resource.kind === 'ad_account' ? <AdBalance resource={resource} /> : <Amount value={amount} currency={resource.currency}/>} {description && <small>{description}</small>}</strong>
+    <strong className="end">{resource.kind === 'provider' ? <ProviderAmount resource={resource}/> : resource.kind === 'ad_account' ? <AdBalance resource={resource} /> : <Amount value={amount} currency={resource.currency}/>} {description && <small>{description}</small>}</strong>
   </button>;
 }
 
@@ -127,6 +128,13 @@ export function ApprovedPosition({ context, identity, onBack, onOpen, scoped=fal
   const spendable = resources.filter(r => ['bank', 'cash'].includes(r.kind) && !r.prepaid_shipping_cash && r.currency === currency);
   const cashAmounts = spendable.map(r => minorUnits(signedResourceBalance(r)));
   const availableCash = cashAmounts.every(n => n !== null) ? cashAmounts.reduce((total, n) => total + n, 0n) : null;
+  const providers = resources.filter(r => r.kind==='provider');
+  const unifiedProviders = currency==='SAR' && providers.length>0 && providers.every(r=>r.provider_position);
+  const providerValues = providers.map(r=>minorUnits(r.provider_position?.complete ? r.provider_position.net : r.provider_position?.known_net));
+  const providerSum = providerValues.reduce((sum,n)=>sum+(n!==null && n>0n?n:0n),0n);
+  const providerTotal = unifiedProviders ? (providerValues.some(n=>n!==null) ? `${providerSum/100n}.${String(providerSum%100n).padStart(2,'0')}` : null)
+    : figures?.debt_rows?.find(row=>row.id==='providers')?.receivable;
+  const providerPartial = unifiedProviders ? providers.some(r=>!r.provider_position.complete) : figures?.completeness?.actual===false;
   const date = report?.as_of && Number.isFinite(Date.parse(report.as_of)) ? formatRiyadhArabicLong(report.as_of) : '';
   return <>
     <button type="button" className="textbtn back" onClick={onBack}><Icon name="chevron-left" />الأرصدة التشغيلية</button>
@@ -139,8 +147,8 @@ export function ApprovedPosition({ context, identity, onBack, onOpen, scoped=fal
         {currencies.length > 1 && <label className="mz-position-currency">عملة الملخص <select value={currency} onChange={event => setSelectedCurrency(event.target.value)}>
           {currencies.map(code => <option key={code}>{code}</option>)}</select></label>}
         <div className="cards"><div className="metric"><small>المتاح في البنوك والصناديق</small><strong><bdi>{formatMinor(availableCash)}</bdi> {availableCash !== null && <span className="unit">{currency === 'SAR' ? 'ر.س' : currency}</span>}</strong></div>
-          <PositionMetric title="مبالغ عند منصات الدفع" amount={figures.debt_rows?.find(row => row.id === 'providers')?.receivable}
-            currency={currency} partial={figures.completeness?.actual === false} />
+          <PositionMetric title="مبالغ عند منصات الدفع" amount={providerTotal}
+            currency={currency} partial={providerPartial} />
           <PositionMetric title="مبالغ مستحقة للجهات" amount={figures.debt_totals?.payable} currency={currency}
             partial={figures.completeness?.actual === false && figures.debt_totals?.payable != null} /></div></>)}
     <section className="section panel sheet"><div className="section-head"><h2>تفاصيل الأرصدة</h2></div>

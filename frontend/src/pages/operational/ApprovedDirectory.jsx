@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { AdBalance, Amount, Heading, Icon, IconBox, assetGroups, isAsset, issueLabel, partyGroups, searchable, styleOf } from './ApprovedFinanceUI';
 import { minorUnits, signedResourceBalance } from './simpleBalancesModel';
 
-function ProviderAmount({ resource }) {
+export function ProviderAmount({ resource }) {
   const position=resource.provider_position;
   if (!resource.access?.balance || resource.balance?.visible===false) return <small>عرض الحساب</small>;
   if (!position) {
@@ -14,7 +14,12 @@ function ProviderAmount({ resource }) {
   const value=position.complete ? position.net : position.known_net;
   const available=minorUnits(value)!==null;
   return <>{available ? <Amount value={value} currency={position.currency}/> : <small>يحتاج مطابقة</small>}
-    {available && !position.complete && <small className="under">صافي معلوم · يحتاج مطابقة</small>}
+    {available && !position.complete && <small className="under">الصافي المحتسب · يحتاج مطابقة</small>}
+    {(minorUnits(position.uncomputed_principal)>0n || position.uncomputed_principal_complete===false) &&
+      <small className="under">قيمة الطلبات غير المحتسبة قبل العمولة: <Amount value={position.uncomputed_principal} currency={position.currency}/>
+        {position.uncomputed_principal_complete===false && ' · القيمة المعروفة فقط'}
+        {resource.access.movements==='all' && resource.access.report && Number.isInteger(position.uncomputed_orders) && ` · ${position.uncomputed_orders} طلب`}
+        <span className="under">غير مشمولة في الصافي المحتسب · تحتاج مطابقة</span></small>}
     {resource.access.movements==='all' && resource.access.report && Number.isInteger(position.paid_orders) &&
       <small className="under">الطلبات المدفوعة · {position.paid_orders}</small>}</>;
 }

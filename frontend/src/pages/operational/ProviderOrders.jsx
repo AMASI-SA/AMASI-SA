@@ -1,6 +1,6 @@
 import React from 'react';
 import { Amount } from './ApprovedFinanceUI';
-import { movementDate } from './simpleBalancesModel';
+import { minorUnits, movementDate } from './simpleBalancesModel';
 
 const feeLabels = { actual: 'فعلية', actual_settlement: 'فعلية', mixed: 'فعلية وتقديرية', plan_estimate: 'تقديرية', average_estimate: 'تقديرية' };
 
@@ -19,6 +19,13 @@ export default function ProviderOrders({ result, name, canOpenOrderDetails }) {
             {[row.opening, row.gross ?? row.known_gross, row.refunded, row.fees ?? row.known_fees, row.settled, row.net ?? row.known_net].map((value, i) =>
               <td key={i}><Value amount={value} currency={row.currency}/>{(i === 1 && row.gross == null || i === 3 && row.fees == null || i === 5 && row.net == null) && value != null && <small className="under">الجزء المعلوم</small>}</td>)}
           </tr>)}</tbody></table></div></div>}
+    {result.amounts?.filter(row=>minorUnits(row.uncomputed_principal)>0n || row.uncomputed_principal_complete===false).map(row=>
+      <div className="note warning" key={'pending-'+row.currency}>
+        <strong>قيمة الطلبات غير المحتسبة قبل العمولة: <Value amount={row.uncomputed_principal} currency={row.currency}/></strong>
+        {Number.isInteger(row.uncomputed_orders) && <span> · {row.uncomputed_orders} طلب</span>}
+        {row.uncomputed_principal_complete===false && <span> · القيمة المعروفة فقط</span>}
+        <p>غير مشمولة في الصافي المحتسب. راجع أسباب التعليق في الطلبات أدناه.</p>
+      </div>)}
     {result.items.length > 0 ? <div className="scroll"><table className="ledger">
       <thead><tr>{['الطلب', 'دفع العميل', 'سُوّي من المستحق', 'عمولة الجزء المتبقي', 'صافي متبقٍ', 'الحالة'].map(label =>
         <th scope="col" key={label}>{label}</th>)}</tr></thead>

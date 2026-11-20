@@ -83,7 +83,7 @@ test('provider cards show known partial totals and keep protected amounts and co
   await render('assets');
   const cards=[...host.querySelectorAll('.resource')];
   expect(cards[0].textContent).toContain('50.10');
-  expect(cards[0].textContent).toContain('صافي معلوم · يحتاج مطابقة');
+  expect(cards[0].textContent).toContain('الصافي المحتسب · يحتاج مطابقة');
   expect(cards[0].textContent).toContain('الطلبات المدفوعة · 5');
   expect(cards[0].textContent).not.toContain('540.00');
   expect(cards[1].textContent).not.toMatch(/50.10|540.00|الطلبات المدفوعة/);

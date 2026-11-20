@@ -50,3 +50,14 @@ test('provider scope alone exposes only the scoped order number without a full o
   expect(host.querySelector('tbody').textContent).toContain('100000');
   expect(host.querySelector('tbody a')).toBeNull();
 });
+
+test('discloses excluded principal separately from calculated net without adding it to the balance', async()=>{
+  const ProviderOrders=require('./ProviderOrders').default;
+  const result={items:[],amounts:[{currency:'SAR',opening:'0.00',gross:'1567.66',refunded:'0.00',fees:'82.47',settled:'0.00',
+    known_net:'1019.73',net:null,uncomputed_principal:'491.82',uncomputed_orders:2,uncomputed_principal_complete:true}]};
+  await act(async()=>root.render(<ProviderOrders result={result} name="باي بال"/>));
+  expect(host.querySelector('.note').textContent).toContain('491.82');
+  expect(host.querySelector('.note').textContent).toContain('2 طلب');
+  expect(host.querySelector('.note').textContent).toContain('غير مشمولة في الصافي المحتسب');
+  expect(host.querySelector('tbody').textContent).toContain('1,019.73');
+});
