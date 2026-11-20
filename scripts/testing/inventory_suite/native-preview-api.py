@@ -19,6 +19,11 @@ import test_g47_purchase_approval_integration as fixture
 from test_purchase_configuration_contract import product
 from inventory_stocktake_routes import make_inventory_stocktake_router
 from operational_inventory_projection import projection
+from operational_opening_inventory import OpeningRequest, OpeningApproval
+from standalone_inventory_entry import EntryControl
+import standalone_inventory_entry as native_entry
+from product_creation_routes import make_product_creation_router
+from starlette.responses import JSONResponse
 
 
 def app_for_preview():
@@ -32,10 +37,26 @@ def app_for_preview():
     app=fixture.app_for(db,seed.actor)
     async def identity(): return dict(seed.actor)
     app.include_router(make_inventory_stocktake_router(db,identity),prefix='/api')
+    app.include_router(make_product_creation_router(db,identity),prefix='/api')
+    @app.middleware('http')
+    async def no_provider_publish(request,call_next):
+        # Draft persistence and preview use the real native service. Publishing
+        # is deliberately unavailable even if called directly against the API.
+        if request.url.path.startswith('/api/products-v2/creation-drafts/') and request.url.path.endswith('/publish'):
+            return JSONResponse({'detail':{'code':'fixture_publish_blocked','message':'النشر إلى سلة غير متاح في المعاينة المحلية.'}},status_code=403)
+        return await call_next(request)
+    @app.get('/api/operational-balances/standalone-inventory/context')
+    async def entry_context(): return await native_entry.context(db,seed.actor)
+    @app.post('/api/operational-balances/standalone-inventory/control')
+    async def entry_control(payload:EntryControl): return await native_entry.set_control(db,seed.actor,payload.model_dump())
+    @app.post('/api/operational-balances/standalone-inventory/preview')
+    async def entry_preview(payload:OpeningRequest): return await native_entry.preview(db,seed.actor,payload.model_dump())
+    @app.post('/api/operational-balances/standalone-inventory/save')
+    async def entry_save(payload:OpeningApproval): return await native_entry.save(db,seed.actor,payload.model_dump())
     @app.get('/api/operational-balances/inventory')
     async def physical_inventory(): return await projection(db,'owner')
     @app.get('/api/fixture-health')
-    async def fixture_health(): return {'synthetic_only':True,'production_modified':False,'backend':'native_count_and_purchase_routes'}
+    async def fixture_health(): return {'synthetic_only':True,'production_modified':False,'backend':'native_count_purchase_entry_product_drafts','provider_publish_blocked':True}
     @app.get('/api/counterparties')
     async def counterparties():
         return {'items':await db.counterparties.find({'user_id':'owner'},{'_id':0}).to_list(100)}
@@ -43,7 +64,7 @@ def app_for_preview():
     async def lifespan(_):
         if not (await mongo.admin.command('hello')).get('setName'): raise RuntimeError('Disposable replica required')
         await fixture.PurchaseApprovalMongoIntegration.seed(seed,db)
-        await db.warehouse_locations_warehouses.insert_one({'id':'warehouse','user_id':'owner','name':'مستودع اختبار محلي','status':'active'})
+        await db.warehouse_locations_warehouses.insert_one({'id':'warehouse','user_id':'owner','name':'مستودع اختبار محلي','status':'active','inventory_scope':'standalone'})
         await db.expense_categories.insert_one({'user_id':'owner','code':'inventory-variance','name':'فروقات مخزون تجريبية','status':'active'})
         await db.mezan_products_v2.update_one({'mezan_product_id':'product-A'},{'$set':{'name':'بلوفر أساسي تجريبي','unit':'piece'}})
         await db.mezan_cost_resources_v2.update_one({'id':'component-A'},{'$set':{'name':'خامة تجريبية','unit':'gram'}})
@@ -51,6 +72,9 @@ def app_for_preview():
         await db.mezan_products_v2.insert_one(pullover)
         await db.warehouse_locations.insert_one({'id':'location-options','user_id':'owner','warehouse_id':'warehouse',
             'purpose':'permanent_storage','code':'LOCAL-OPTIONS','barcode_value':'LOCAL-OPTIONS','display_code':'د1 / ر1 / خ3',
+            'state':'empty','max_items':100,'occupancy':{'items':[],'total_quantity':0}})
+        await db.warehouse_locations.insert_one({'id':'location-entry','user_id':'owner','warehouse_id':'warehouse',
+            'purpose':'permanent_storage','code':'LOCAL-ENTRY','barcode_value':'LOCAL-ENTRY','display_code':'د1 / ر1 / خ4',
             'state':'empty','max_items':100,'occupancy':{'items':[],'total_quantity':0}})
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='http://synthetic.local') as client:
             body=fixture.PurchaseApprovalMongoIntegration.payload(seed)

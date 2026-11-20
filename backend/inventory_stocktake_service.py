@@ -12,6 +12,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP, localcontext
 import os
 
 from fastapi import HTTPException
+from bson import BSON
 from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError, PyMongoError
 from pymongo.read_concern import ReadConcern
@@ -49,6 +50,7 @@ MESSAGES = {
     "stocktake_capacity_exceeded": "الكمية الناتجة تتجاوز سعة خانة التخزين.",
     "stocktake_scope_empty": "لا توجد أرصدة مثبتة ضمن النطاق المحدد للجرد.",
     "stocktake_scope_limit": "اختر مستودعًا أو نطاقًا أصغر؛ الحد الأقصى للجرد 500 بند.",
+    "stocktake_audit_limit": "بلغ الجرد حد سجل التدقيق؛ احتفظ بهذا الجرد وابدأ جردًا جديدًا لنطاق أصغر.",
 }
 
 
@@ -106,6 +108,8 @@ async def scope(db, user, capability="view"):
     require_accounting_permission(actor, PERMISSIONS[capability])
     require_accounting_permission(actor, PERMISSIONS["view"])
     context = await _actor_context(db, actor)
+    label = await db.users.find_one({"id": actor["id"]}, {"_id": 0, "name": 1}) or {}
+    actor["name"] = str(label.get("name") or actor["id"])
     return actor, context["merchant_id"], context
 
 
@@ -222,8 +226,35 @@ async def snapshot(db, owner, context, filters):
 
 
 def _event(actor, action, request_id, payload_hash, revision, reason=""):
-    return {"at": now(), "actor_id": actor["id"], "actor_role": actor.get("role"), "action": action,
+    return {"at": now(), "actor_id": actor["id"], "actor_name": actor.get("name") or actor["id"], "actor_role": actor.get("role"), "action": action,
             "request_id": request_id, "payload_hash": payload_hash, "revision": revision, "reason": reason}
+
+
+def _audit_row(row):
+    return {k: deepcopy(row.get(k)) for k in ("id", "name", "kind", "product_id", "resource_id", "variant_id", "location_id", "location_code", "warehouse_id", "warehouse_name",
+        "sku", "unit", "recorded_quantity", "counted_quantity", "unit_cost", "reason", "preparation_state", "specifications")}
+
+
+def _audit_changes(doc, changes):
+    fields = {key: {"before": deepcopy(doc.get(key)), "after": deepcopy(value)} for key, value in changes.items()
+              if key != "lines" and not key.startswith("_") and doc.get(key) != value}
+    result = {"fields": fields, "lines": []}
+    if "lines" in changes:
+        old = {r["id"]: r for r in doc["lines"]}; new = {r["id"]: r for r in changes["lines"]}
+        for key in sorted(old.keys() | new.keys()):
+            before, after = old.get(key), new.get(key)
+            if before != after:
+                result["lines"].append({"line_id": key, "name": (after or before).get("name"),
+                    "before": _audit_row(before) if before else None, "after": _audit_row(after) if after else None,
+                    "before_proof": before.get("_location_proof") if before else None,
+                    "after_proof": after.get("_location_proof") if after else None})
+    return result
+
+
+def _bounded_document(doc):
+    # Never truncate audit history or let Mongo's document limit turn a final
+    # posting into a partly applied operation. The native transaction rolls back.
+    if len(BSON.encode(doc)) > 15 * 1024 * 1024: fail("stocktake_audit_limit")
 
 
 def _replayed(doc, payload, action):
@@ -254,6 +285,8 @@ async def create_count(db, user, payload):
            "warehouse_ids": sorted({r["warehouse_id"] for r in rows}), "created_by": actor["id"],
            "created_at": timestamp, "updated_at": timestamp,
            "audit": [_event(actor, "create", payload["request_id"], digest, 1)]}
+    doc["audit"][0].update(from_status=None, to_status="draft", snapshot=[_audit_row(r) for r in rows])
+    _bounded_document(doc)
     try: await db[COUNTS].insert_one(doc)
     except DuplicateKeyError:
         existing = await db[COUNTS].find_one({"_id": count_id, "user_id": owner})
@@ -265,6 +298,11 @@ async def _cas(db, owner, doc, actor, payload, action, changes):
     if len(doc.get("audit", [])) >= 2000: fail("stocktake_audit_limit")
     revision = doc["revision"] + 1
     event = _event(actor, action, payload["request_id"], fingerprint({"action": action, "payload": payload}), revision, payload.get("reason", ""))
+    event.update(from_status=doc["status"], to_status=changes.get("status", doc["status"]), change_set=_audit_changes(doc, changes))
+    if action in {"submit", "approve"}:
+        event["snapshot"] = [compare_line(_audit_row(r)) for r in doc["lines"] if r.get("counted_quantity") is not None]
+    if action == "approve": event["authorization_hash"] = fingerprint([doc["id"], revision, doc["lines"]])
+    _bounded_document({**doc, **changes, "audit": [*doc["audit"], event]})
     saved = await db[COUNTS].find_one_and_update({"_id": doc["id"], "user_id": owner, "revision": payload["expected_revision"], "status": doc["status"]},
         {"$set": {**changes, "revision": revision, "updated_at": event["at"]}, "$push": {"audit": event}}, return_document=ReturnDocument.AFTER)
     if not saved:
@@ -420,7 +458,7 @@ async def post_count(db, user, count_id, payload):
         journal_id = None
         if entries:
             await assert_open_journal_periods(scoped, owner, entries)
-            journal = await post_journal_v2(scoped._db, user_id=owner, actor_id=active_actor["id"], actor_name=active_actor["id"],
+            journal = await post_journal_v2(scoped._db, user_id=owner, actor_id=active_actor["id"], actor_name=active_actor["name"],
                 idempotency_key=payload["operation_id"], txn_type="inventory_adjustment", source="inventory_stocktake", effective_at=timestamp,
                 entries=entries, metadata={"stocktake_id": count_id, "approved_by": doc["approved_by"], "approved_revision": doc["approved_revision"],
                     "cost_policy_version": COST_POLICY, "reason": doc["reason"]}, mongo_session=scoped._session)
@@ -472,6 +510,9 @@ async def post_count(db, user, count_id, payload):
                 {"$set": {"last_stocktake_id": count_id, "updated_at": timestamp}})
         if changed: await bump_product_cost_revision(scoped, owner)
         event = _event(active_actor, "post", payload["operation_id"], fingerprint(payload), doc["revision"] + 1, doc["reason"])
+        event.update(from_status="approved", to_status="posted", txn_group_id=journal_id,
+                     snapshot=[compare_line(_audit_row(r)) for r in changed])
+        _bounded_document({**doc, "audit": [*doc["audit"], event]})
         await scoped[COUNTS].update_one({"_id": count_id, "user_id": owner, "status": "approved", "revision": doc["revision"]}, {"$set": {
             "status": "posted", "revision": doc["revision"] + 1, "posted_by": active_actor["id"], "posted_at": timestamp,
             "updated_at": timestamp, "txn_group_id": journal_id, "receipt_ids": receipts, "posted_differences": [{k: r.get(k) for k in

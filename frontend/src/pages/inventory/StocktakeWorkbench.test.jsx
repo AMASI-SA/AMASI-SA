@@ -51,6 +51,13 @@ test('normalizes Arabic digits without guessing native units and validates integ
   expect(validateStocktakeQuantity('1.1250019','component')).toContain('6');expect(validateStocktakeQuantity('-2','component')).toBeTruthy();
 });
 
+test('audit exposes employee identity and preserved before/after values only when event details are opened',async()=>{
+  documentValue.audit=[{request_id:'saved-request',actor_id:'employee-1',actor_name:'موظف الجرد',action:'save',revision:2,at:'2026-11-20T10:00:00Z',from_status:'draft',to_status:'draft',change_set:{fields:{title:{before:'الجرد الأول',after:'الجرد الثاني'}},lines:[{line_id:'native-row-product',name:'بلوفر أصلي',before:{unit:'piece',recorded_quantity:'10',counted_quantity:null,unit_cost:'12.50'},after:{unit:'piece',recorded_quantity:'10',counted_quantity:'9',unit_cost:'12.50',reason:'تلف عبوة'}}]}}];
+  await openSaved();expect(dialog().textContent).toContain('موظف الجرد');expect(dialog().textContent).not.toContain('تلف عبوة');
+  const event=dialog().querySelector('.mz-count-audit-event');await act(async()=>{event.open=true;event.dispatchEvent(new Event('toggle'));});
+  expect(event.textContent).toContain('employee-1');expect(event.textContent).toContain('الجرد الأول ← الجرد الثاني');expect(event.textContent).toContain('قبل التعديل');expect(event.textContent).toContain('لم يُجرد');expect(event.textContent).toContain('بعد التعديل');expect(event.textContent).toContain('9 حبة');expect(event.textContent).toContain('تلف عبوة');
+});
+
 test('read-only delegates never fetch the writer workspace or expose count actions',async()=>{
   await render({accessMode:'read'});expect(service.loadInventoryStocktakeContext).not.toHaveBeenCalled();expect(service.listInventoryStocktakes).not.toHaveBeenCalled();expect(host.textContent).toContain('هذه الصلاحية للعرض');expect(button('جرد جديد')).toBeUndefined();
 });

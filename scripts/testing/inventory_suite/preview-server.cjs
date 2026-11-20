@@ -6,7 +6,7 @@ const {dataFor}=require('./frontend-browser-check.cjs'),f=require('./frontend-fi
 const UI='http://127.0.0.1:4174',API='http://127.0.0.1:4175';
 const build=path.resolve(__dirname,'../../../frontend/build');
 const csp="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: http://127.0.0.1:4175; connect-src 'self' http://127.0.0.1:4175; object-src 'none'; base-uri 'self'; frame-ancestors 'none'";
-const ribbon='<div data-native-test-preview style="padding:9px 12px;background:#fff4ce;color:#6b520d;text-align:center;font:13px Tahoma;direction:rtl">معاينة الكود الفعلي · بيانات اختبار محلية فقط · لا اتصال بالإنتاج · المشتريات والجرد في قاعدة تجريبية معزولة</div>';
+const ribbon='<div data-native-test-preview style="padding:9px 12px;background:#fff4ce;color:#6b520d;text-align:center;font:13px Tahoma;direction:rtl">معاينة الكود الفعلي · بيانات اختبار محلية فقط · المشتريات والجرد والإدخال في قاعدة معزولة · لا اتصال بالإنتاج أو نشر إلى سلة</div>';
 const types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json','.svg':'image/svg+xml','.ttf':'font/ttf','.woff2':'font/woff2','.png':'image/png','.webp':'image/webp','.jpg':'image/jpeg'};
 http.createServer((req,res)=>{
   if(req.headers.host!=='127.0.0.1:4174'){res.writeHead(403);return res.end();}
@@ -25,7 +25,7 @@ http.createServer(async(req,res)=>{
   const url=new URL(req.url,API);
   try{
     if(url.pathname==='/fixture-assets/product.svg'){res.writeHead(200,{...cors,'content-type':'image/svg+xml'});return res.end(f.image);}
-    const native=url.pathname.startsWith('/api/inventory-v2/stocktakes')||url.pathname.startsWith('/api/purchase-invoices')||url.pathname==='/api/operational-balances/inventory'||url.pathname==='/api/counterparties';
+    const native=['/api/inventory-v2/stocktakes','/api/purchase-invoices','/api/operational-balances/standalone-inventory','/api/products-v2/creation-drafts'].some(prefix=>url.pathname===prefix||url.pathname.startsWith(prefix+'/'))||url.pathname==='/api/operational-balances/inventory'||url.pathname==='/api/counterparties';
     if(native){
       const chunks=[];for await(const chunk of req)chunks.push(chunk);
       const response=await fetch('http://127.0.0.1:4176'+url.pathname+url.search,{method:req.method,headers:{'content-type':'application/json'},body:['GET','HEAD'].includes(req.method)?undefined:Buffer.concat(chunks)});

@@ -355,3 +355,19 @@ class StocktakeMongoIntegration(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn('unit_cost',locations['location-component'])
         doc=await self.create(warehouse_ids=['warehouse'],location_ids=['location-component'])
         self.assertEqual(len(doc['lines']),1);self.assertEqual(doc['lines'][0]['kind'],'component')
+
+    async def test_audit_preserves_saved_values_employee_identity_and_approved_snapshot(self):
+        await self.db.users.update_one({'id':'owner'},{'$set':{'name':'موظف الجرد التجريبي'}})
+        doc=await self.create();doc=await self.save(doc,{'product':'3'});doc=await self.save(doc,{'product':'4'})
+        event=doc['audit'][-1];change=event['change_set']['lines'][0]
+        self.assertEqual(event['actor_name'],'موظف الجرد التجريبي')
+        self.assertEqual(change['before']['counted_quantity'],'3');self.assertEqual(change['after']['counted_quantity'],'4')
+        self.assertEqual(doc['audit'][1]['change_set']['lines'][0]['before']['counted_quantity'],None)
+        doc=await self.action(await self.action(doc,'submit'),'approve')
+        approval=doc['audit'][-1]
+        self.assertEqual(approval['snapshot'][0]['counted_quantity'],'4')
+        self.assertEqual(approval['snapshot'][0]['difference_value'],'20.00')
+        posted=await self.post(doc)
+        receipt=await self.db.mezan_inventory_receipts_v2.find_one({'source_type':'inventory_adjustment'})
+        self.assertEqual(receipt['authorization_hash'],approval['authorization_hash'])
+        self.assertEqual(posted['audit'][-1]['txn_group_id'],posted['txn_group_id'])

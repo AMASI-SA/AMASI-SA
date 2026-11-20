@@ -17,6 +17,9 @@ function dataFor(route,request){
   if(p==='/operational-balances/context')return f.context;
   if(p==='/inventory-v2/stocktakes/context')return f.countContext;
   if(p==='/operational-balances/inventory')return f.projection;
+  if(p==='/products-v2/category-catalog')return {items:f.categories};
+  if(p==='/ai-store-operations/foundation')return {synthetic_only:true};
+  if(p==='/ai-store-operations/product-intake')return {items:[],total:0,total_pages:1,stats:{average_readiness:0,without_cost:0,ready:0}};
   if(p==='/products-v2/workspace/products'||p==='/products-v2'){
     const q=(url.searchParams.get('q')||'').toLocaleLowerCase(),status=url.searchParams.get('status');
     const items=f.products.filter(row=>(!q||(row.name+' '+row.sku).toLocaleLowerCase().includes(q))&&(!status||row.status===status));

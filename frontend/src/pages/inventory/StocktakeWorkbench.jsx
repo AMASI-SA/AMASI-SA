@@ -52,6 +52,38 @@ function PostingBlockers({items,enabled}){
   return <div className="mz-count-posting-note"><ShieldCheck size={20}/><div><strong>{enabled?'الترحيل متاح للمخوّل بعد الاعتماد والتأكيد':'الترحيل غير متاح حاليًا'}</strong><p>حفظ الجرد واعتماده لا يغيّران الكميات أو القيود. الترحيل خطوة مستقلة بصلاحية صريحة.</p>{items.length>0&&<ul>{items.map((item,index)=><li key={item.code||index}>{item.message||item.code}</li>)}</ul>}</div></div>;
 }
 
+const AUDIT_FIELD={title:'عنوان الجرد',status:'الحالة',reason:'سبب الفرق',review_reason:'سبب المراجعة',inventory_account_id:'حساب المخزون',variance_account_code:'حساب الفروقات',warehouse_ids:'المستودعات',submitted_by:'أرسله',submitted_at:'وقت الإرسال',approved_by:'اعتمده',approved_at:'وقت الاعتماد',approved_revision:'الإصدار المعتمد',reviewed_by:'راجعه',reviewed_at:'وقت المراجعة',posting_operation_id:'مرجع عملية الترحيل'};
+function auditValue(value){
+  if(value===null||value===undefined||value==='')return 'غير مسجل';
+  if(Array.isArray(value))return value.join('، ');
+  return STATUS[value]||String(value);
+}
+function AuditRow({row,label}){
+  return <div className="mz-count-audit-row"><strong>{label}</strong>{row?<dl>
+    <div><dt>المسجل</dt><dd>{display(row.recorded_quantity)} {unitName(row.unit)}</dd></div>
+    <div><dt>الفعلي</dt><dd>{row.counted_quantity===null||row.counted_quantity===undefined?'لم يُجرد':`${row.counted_quantity} ${unitName(row.unit)}`}</dd></div>
+    <div><dt>تكلفة الوحدة</dt><dd>{display(row.unit_cost)}</dd></div>
+    {row.difference!==undefined&&<div><dt>الفرق / القيمة</dt><dd>{display(row.difference)} / {display(row.difference_value)}</dd></div>}
+    <div><dt>السبب</dt><dd>{row.reason||'غير مسجل'}</dd></div>
+  </dl>:<p>لم يكن البند ضمن هذا النطاق.</p>}</div>;
+}
+function AuditEvent({entry}){
+  const [open,setOpen]=useState(false);
+  return <li><strong>{({create:'إنشاء',save:'حفظ جزئي',posted:'ترحيل',...ACTION})[entry.action]||entry.action}</strong>
+    <span>{dateLabel(entry.at)} · {entry.actor_name||entry.actor_id||'هوية غير مثبتة'} · إصدار {entry.revision}</span>
+    {entry.from_status!==entry.to_status&&entry.to_status&&<p>{entry.from_status?`${STATUS[entry.from_status]||entry.from_status} ← `:''}{STATUS[entry.to_status]||entry.to_status}</p>}
+    {entry.reason&&<p>{entry.reason}</p>}
+    <details className="mz-count-audit-event" onToggle={event=>setOpen(event.currentTarget.open)}><summary>تفاصيل الحدث</summary>{open&&<>
+      <p className="mz-count-reference">هوية الموظف: <bdi>{entry.actor_id||'غير مثبتة'}</bdi> · مرجع الطلب: <bdi>{entry.request_id||'غير مثبت'}</bdi></p>
+      {Object.entries(entry.change_set?.fields||{}).map(([key,value])=><p className="mz-count-audit-field" key={key}><strong>{AUDIT_FIELD[key]||key}: </strong><span>{auditValue(value.before)} ← {auditValue(value.after)}</span></p>)}
+      {entry.change_set?.lines?.map(change=><section className="mz-count-audit-change" key={change.line_id}><h4>{change.name||change.line_id} · <bdi>{change.after?.sku||change.before?.sku}</bdi></h4><div><AuditRow row={change.before} label="قبل التعديل"/><AuditRow row={change.after} label="بعد التعديل"/></div></section>)}
+      {entry.snapshot?.length>0&&<details className="mz-count-audit-snapshot"><summary>{entry.action==='create'?'بنود المقارنة الأصلية':'البنود المثبتة لهذا الإجراء'} ({entry.snapshot.length})</summary>{entry.snapshot.map(row=><section className="mz-count-audit-change" key={row.id}><h4>{row.name||row.sku} · <bdi>{row.sku}</bdi></h4><p>{row.warehouse_name||row.warehouse_id} / <bdi>{row.location_code||row.location_id}</bdi></p><AuditRow row={row} label="بيانات البند"/></section>)}</details>}
+      {entry.txn_group_id&&<p className="mz-count-reference">مرجع القيد: <bdi>{entry.txn_group_id}</bdi></p>}
+      {entry.authorization_hash&&<p className="mz-count-reference">مرجع الاعتماد: <bdi>{entry.authorization_hash}</bdi></p>}
+    </>}</details>
+  </li>;
+}
+
 export default function StocktakeWorkbench({mode='stocktake',accessMode=null}){
   const [context,setContext]=useState(null),[items,setItems]=useState([]),[complete,setComplete]=useState(true);
   const [loading,setLoading]=useState(false),[reading,setReading]=useState(false),[busy,setBusy]=useState(false);
@@ -265,7 +297,7 @@ export default function StocktakeWorkbench({mode='stocktake',accessMode=null}){
         }):<div className="mz-count-empty"><p>لا توجد بنود تطابق البحث أو التصفية.</p></div>}</div>
         {document.status==='approved'&&<><PostingBlockers items={blockers} enabled={postAllowed}/>{context?.capabilities?.post!==true&&<p className="mz-count-help">ترحيل الفروقات يحتاج صلاحية صريحة. الاعتماد وحده لا يمنحها.</p>}{!document.posting_operation_id&&<p className="mz-count-help">لا يوجد معرّف ترحيل معتمد من الخدمة لهذا الإصدار.</p>}</>}
         {canEdit&&!action&&<div className="mz-count-secondary-actions"><button type="button" className="mz-inventory-button" disabled={locked||dirty} onClick={()=>beginAction('refresh_snapshot')}><ArrowClockwise size={17}/>تحديث المقارنة من المستودع</button><span>احفظ المدخلات قبل تحديث المقارنة.</span></div>}
-        <details className="mz-count-audit"><summary><ClockCounterClockwise size={18}/>سجل الجرد والمراجعة</summary><p className="mz-count-reference">المرجع: <bdi>{document.id}</bdi></p>{document.audit?.length?<ol>{document.audit.map((entry,index)=><li key={entry.request_id||index}><strong>{({create:'إنشاء',save:'حفظ جزئي',posted:'ترحيل',post:'ترحيل',...ACTION})[entry.action]||entry.action}</strong><span>{dateLabel(entry.at)} · {entry.actor_id||'هوية غير مثبتة'} · إصدار {entry.revision}</span>{entry.reason&&<p>{entry.reason}</p>}</li>)}</ol>:<p>لا توجد أحداث معروضة من الخدمة.</p>}</details>
+        <details className="mz-count-audit"><summary><ClockCounterClockwise size={18}/>سجل الجرد والمراجعة</summary><p className="mz-count-reference">المرجع: <bdi>{document.id}</bdi></p>{document.audit?.length?<ol>{document.audit.map((entry,index)=><AuditEvent key={entry.request_id||index} entry={entry}/>)}</ol>:<p>لا توجد أحداث معروضة من الخدمة.</p>}</details>
       </div>}
     </InventorySheet>
   </div>;
