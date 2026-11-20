@@ -1,0 +1,81 @@
+name: Latency session control isolated acceptance
+on:
+  pull_request:
+    branches: [hotfix/prod-snap-meta-final]
+    paths:
+      - 'backend/latency_*.py'
+      - 'backend/tests/test_latency_control.py'
+      - 'scripts/rehearse_latency_control.py'
+      - '.github/workflows/latency-control.yml'
+permissions:
+  contents: read
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHON_DOTENV_DISABLED: '1'
+      PYTHONPATH: backend
+      LATENCY_TEST_MONGO_URI: mongodb://127.0.0.1:27968/?replicaSet=latencyTest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install isolated tools
+        run: >-
+          python -m pip install pytest==8.3.5 pytest-asyncio==0.26.0 fastapi==0.140.0
+          httpx==0.28.1 motor==3.7.1 pymongo==4.18.2 uvicorn==0.25.0 psutil==7.0.0
+          cryptography openpyxl bcrypt PyJWT python-dotenv python-multipart reportlab
+      - name: Record exact source and dependencies
+        run: |
+          mkdir -p evidence
+          git rev-parse HEAD HEAD^{tree} > evidence/identity.txt
+          python -m pip freeze > evidence/dependencies.txt
+      - name: Start disposable loopback Mongo replica set
+        run: |
+          docker run -d --name latency-control-mongo --network host mongo:8.0.12 --port 27968 --bind_ip 127.0.0.1 --replSet latencyTest
+          python -B - <<'PY'
+          import time
+          from pymongo import MongoClient
+          c = MongoClient('mongodb://127.0.0.1:27968/?directConnection=true', serverSelectionTimeoutMS=1000)
+          for _ in range(45):
+              try:
+                  c.admin.command('ping')
+                  break
+              except Exception:
+                  time.sleep(1)
+          else:
+              raise RuntimeError('isolated Mongo unavailable')
+          c.admin.command('replSetInitiate', {'_id':'latencyTest', 'members':[{'_id':0,'host':'127.0.0.1:27968'}]})
+          for _ in range(45):
+              if c.admin.command('hello').get('isWritablePrimary'):
+                  break
+              time.sleep(1)
+          else:
+              raise RuntimeError('isolated primary unavailable')
+          c.close()
+          PY
+      - name: Functional, security and existing instrumentation regression
+        run: |
+          python -B -m pytest --noconftest -q backend/tests/test_latency_control.py backend/tests/test_latency_evidence.py backend/tests/test_phase1_runtime.py backend/tests/test_server_diagnostics_route_bindings.py --junitxml=evidence/tests.xml
+          python -B - <<'PY'
+          import xml.etree.ElementTree as ET
+          root = ET.parse('evidence/tests.xml').getroot()
+          assert not root.findall('.//skipped'), 'SKIP is not acceptance'
+          PY
+      - name: One two-process synthetic rehearsal and off-on-off timing
+        run: python -B scripts/rehearse_latency_control.py evidence/rehearsal
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: latency-control-${{ github.event.pull_request.head.sha }}
+          path: evidence/
+          retention-days: 14
+      - name: Stop disposable test database
+        if: always()
+        run: docker rm -f latency-control-mongo
