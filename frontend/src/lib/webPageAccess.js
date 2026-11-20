@@ -65,6 +65,14 @@ export function grantedPageAt(pages, location) {
     const detailId = detailPageIdAt(location);
     if (detailId) return pages.find((page) => page.id === detailId && !page.owner_only) || null;
     const requested = new URLSearchParams(location.search);
+    // These are presentations of the same scoped, read-only inventory reader.
+    // Writer and control tabs never inherit a stock-report page grant.
+    if (pathname === "/inventory-v2" && requested.has("tab")) {
+        const tabs = requested.getAll("tab");
+        if (tabs.length !== 1 || !["stock", "reports"].includes(tabs[0])
+            || ["workspace", "stage", "view", "provider", "action"].some(key => requested.has(key))) return null;
+        return pages.find(page => !page.owner_only && page.id === "products.inventory") || null;
+    }
     if (pathname === "/integrations-v2" && requested.has("provider")) {
         const ids = requested.getAll("provider");
         if (ids.length !== 1 || !ADVERTISING_PROVIDER_IDS.includes(ids[0])

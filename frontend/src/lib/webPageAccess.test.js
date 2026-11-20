@@ -4,6 +4,13 @@ const selected = (id,to,extra={}) => ({id,to,...extra});
 const permitted = (grant,path) => grantedPageAt([grant],new URL(path,"https://mezan.invalid"))?.id;
 const balances = "/operational-balances";
 
+test('inventory stock/report aliases retain the same read grant and never open entry or posting tabs',()=>{
+    const grant=selected('products.inventory','/inventory-v2',{mode:'read'});
+    expect(permitted(grant,'/inventory-v2?tab=stock')).toBe('products.inventory');
+    expect(permitted(grant,'/inventory-v2?tab=reports')).toBe('products.inventory');
+    for(const query of ['tab=opening','tab=stocktake','tab=adjustments','tab=purchase','tab=stock&tab=opening','tab=stock&workspace=warehouse','tab=reports&action=post'])expect(permitted(grant,'/inventory-v2?'+query)).toBeUndefined();
+});
+
 test.each([
     ["balances.home",balances,balances],
     ["balances.log",balances+"/daily-movements",balances+"?view=log"],

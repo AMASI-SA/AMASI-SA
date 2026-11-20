@@ -1,0 +1,28 @@
+{
+  "task_id": "INV-UI-20261120",
+  "scope": "Replace legacy Mezan inventory interfaces with the approved integrated Arabic RTL design using the existing native services and permissions.",
+  "branch": "codex/inventory-ui-replacement-20261120",
+  "base_sha": "734b977de28254c2c089148b4db8972a03ba19eb",
+  "state": "implementation_in_progress",
+  "production_changed": false,
+  "remote_checkpoint": "authorized_by_user; first_verified_checkpoint_in_progress",
+  "release_lease": "not_created",
+  "deployment": "not_requested",
+  "owners": {
+    "root": "Shared suite shell, native inventory workspace/reader, routing, reporting/control integration and final verification",
+    "native_catalog_resources": "Native products, components, groups, bundles visible interfaces",
+    "native_purchase_options": "Native invoice and standalone purchase options contracts, UI and tests",
+    "native_inventory_routes": "Native warehouse hierarchy UI and real occupancy read"
+  },
+  "constraints": [
+    "No production API calls/writes, stock/accounting activation, merge or deployment; user authorized development checkpoint commits/push and Issue 1006 updates",
+    "No demo providers, fake stock/cost data or browser ledgers in production source",
+    "Preserve canonical product/variant/resource/location identity, server preview hash, stable idempotency and current permissions",
+    "No opening-stock writer reused for stock adjustments"
+  ],
+  "next_action": "Push verified foundation checkpoint; implement native inventory reader/dashboard/reporting and atomic stocktake workflow while delegated native UI verticals progress.",
+  "updated_at": "2026-11-20T19:52:54.473797+00:00",
+  "verified_milestone": "Shared native suite frame and read-only route grants: 30 Jest tests passed",
+  "posting_scope": "User approved full stocktake/adjustment lifecycle including atomic posting, development only; new posting default-closed",
+  "durable_patch": "C:\\Users\\amasi\\OneDrive\\المستندات\\ChatGPT\\ميزان\\outputs\\inventory-implementation-20261120\\inventory-ui-wip.patch"
+}
