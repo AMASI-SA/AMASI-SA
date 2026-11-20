@@ -63,6 +63,23 @@ def balance_note(status):
 
 
 def signed_current_balance(resource):
+    # Rows retain their historical API convention. Reconcile them against the
+    # store's position in the same currency before exposing a running balance.
+    kind = resource["kind"]
+    if "position_balance" in resource:
+        value = resource["position_balance"]
+        return None if value is None else Decimal(value) * (1 if kind in CASH_KINDS else -1)
+    if kind == "provider" and "provider_position" in resource:
+        position = resource["provider_position"]
+        if not position.get("complete") or position.get("currency") != resource.get("currency") or position.get("net") is None:
+            return None
+        return -Decimal(position["net"])
+    if kind == "ad_account" and "ad_amounts" in resource:
+        amounts = resource["ad_amounts"] or {}
+        native = amounts.get("native", amounts)
+        if native.get("currency") != resource.get("currency") or native.get("payable") is None or native.get("prepaid") is None:
+            return None
+        return Decimal(native["payable"]) - Decimal(native["prepaid"])
     current = resource.get("balance")
     if not current:
         return None
@@ -172,6 +189,8 @@ def report_resource(resource):
     result = deepcopy(resource)
     if not can_see_balances(resource):
         result["balance"] = None
+        for field in ("position_balance", "ad_wallet_balance", "ad_amounts", "provider_position"):
+            result.pop(field, None)
     return result
 
 

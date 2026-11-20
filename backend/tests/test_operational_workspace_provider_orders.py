@@ -83,3 +83,33 @@ def test_scoped_orders_by_day_reference_and_number_preserve_review_items_and_per
             assert "paid_orders" not in emkan.get("provider_position", {})
             assert "123450" not in context.text
     run(scenario)
+
+
+def test_mobile_provider_directory_detail_and_entry_use_web_position_with_scoped_access():
+    async def scenario(db, client):
+        state, _ = paid_state("emkan", terms=settings("إمكان", rate="10", fixed="0", vat="0"))
+        await db[STATES].update_one({"owner_id": "owner"}, {"$set": {"engine": state["engine"]}})
+        web = (await client.get(BASE + "/context?provider_positions=true")).json()
+        expected = next(r["provider_position"] for r in web["resources"] if r["id"] == "emkan")
+        position = await client.get("/api/operational-balances/financial-position?view=providers")
+        assert position.status_code == 200
+        table = next(t for t in position.json()["currencies"]["SAR"]["tables"] if t["id"] == "providers")
+        assert expected["net"] == next(r["net"] for r in table["rows"] if r["id"] == "emkan") == "90.00"
+        group = (await client.get(BASE + "/parties?kind=provider&provider_positions=true")).json()
+        assert all(r["kind"] == "provider" for r in group["items"])
+        assert group["session_scope"] == web["session_scope"]
+        assert next(r["provider_position"] for r in group["items"] if r["id"] == "emkan") == expected
+        for path in ("/resource/provider/emkan", "/ledger/provider/emkan?page_only=true"):
+            item = (await client.get(BASE + path)).json()
+            assert item.get("resource", item)["provider_position"] == expected
+        await grant(db, operations=[], resources=[resource("provider", "emkan", use=False, movements="none", balance=True)])
+        headers = {"x-test-user": "staff"}
+        allowed = (await client.get(BASE + "/parties?kind=provider&provider_positions=true", headers=headers)).json()["items"]
+        assert [r["id"] for r in allowed] == ["emkan"]
+        assert allowed[0]["provider_position"]["net"] == "90.00"
+        assert "paid_orders" not in allowed[0]["provider_position"]
+        assert (await client.get(BASE + "/resource/provider/paypal", headers=headers)).status_code == 404
+        await grant(db, operations=[], resources=[resource("provider", "emkan", balance=False)], version=2)
+        denied = (await client.get(BASE + "/parties?kind=provider&provider_positions=true", headers=headers)).json()["items"]
+        assert "provider_position" not in denied[0] and denied[0]["balance"] is None
+    run(scenario)

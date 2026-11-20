@@ -1,10 +1,14 @@
-"""Select one party from the verified snapshot for its canonical balance projection."""
+"""Select parties from the verified snapshot for their canonical balance projection."""
 from operational_financial_activity_runtime import checked_rows
 
 
 def party_projection_state(state, kind, identity):
+    # Passing no identity selects the opened category in one pass.
+    def matches(row_kind, row_id):
+        return row_kind == kind and (identity is None or row_id == identity)
+
     def belongs(row):
-        return row.get("party_type") == kind and row.get("party_id") == identity
+        return matches(row.get("party_type"), row.get("party_id"))
 
     # Fees booked from another party's transfer are credited to these built-in expenses.
     if kind == "operating_expense" and identity in {"pos_settlement_fee", "advertising_bank_fx_fee"}:
@@ -16,7 +20,7 @@ def party_projection_state(state, kind, identity):
     for row in checked_rows(state["movements"]):
         if belongs(row):
             movements.append(row)
-        elif ((row.get("bank_kind"), row.get("bank_id")) == (kind, identity) or
+        elif (matches(row.get("bank_kind"), row.get("bank_id")) or
               any(a["obligation_id"] in obligations or a["obligation_id"] in openings
                   for a in row.get("allocations", []))):
             # Legacy cross-account evidence requires the complete canonical projection.

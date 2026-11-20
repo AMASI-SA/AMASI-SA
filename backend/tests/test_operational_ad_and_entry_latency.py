@@ -315,3 +315,96 @@ def test_account_directory_batches_only_opened_bank_cash_or_employee_custody(mon
         assert len(hidden) == 1 and hidden[0]["balance"] is None
         assert (await client.get(BASE + "/accounts/employee_custody", headers=headers)).json()["items"] == []
     run(scenario)
+
+
+def test_ad_and_bank_groups_match_web_cards_and_individual_resources():
+    from operational_ad_balance_sar import COLLECTION
+    from backend.tests.test_operational_balance_workspace import grant, resource
+    async def scenario(db, client):
+        await seed_ad_account(db)
+        await db.mezan_integration_accounts_v2.update_one({"mezan_integration_account_id": "ia"}, {"$set": {"currency": "USD"}})
+        opening = {"id": "ad-opening", "name": "Ad", "party_type": "ad_account", "party_id": "ad",
+                   "amount": "100.00", "currency": "USD", "direction": "for_party",
+                   "created_at": "2026-11-01T00:00:00+00:00", "actor_id": "owner"}
+        await db[STATES].update_one({"owner_id": "owner"}, {"$set": {"openings.ad": opening,
+            "engine.ad_balance_sar_basis.ad": {"source": COLLECTION, "currency": "USD", "exchange_rate_to_sar": "3.75",
+                "bank_commission_pct": "2", "apply_bank_commission": True, "bank_commission_vat_pct": "15"},
+            "openings.bank:bank.direction": "for_party"}})
+        web = (await client.get(BASE + "/context?ad_bank_fx=true&provider_positions=true")).json()["resources"]
+        for kind, identity, group, field in (("ad_account", "ad", "/parties?kind=ad_account&ad_bank_fx=true", "ad_amounts"),
+                                             ("bank", "bank", "/accounts/bank", "balance")):
+            expected = next(r for r in web if (r["kind"], r["id"]) == (kind, identity))[field]
+            if kind == "ad_account":
+                position = await client.get("/api/operational-balances/financial-position?view=advertising")
+                assert position.status_code == 200
+                grids = {t["id"]: t["rows"] for t in position.json()["currencies"]["SAR"]["tables"]}
+                assert grids["ads"][0]["payable"] == expected["payable"] == "383.63"
+                assert grids["ads_currency_conversion"][0]["amount_usd"] == expected["native"]["payable"] == "100.00"
+                assert expected["currency"] == "SAR"
+            else:
+                assert (expected["side"], expected["amount"]) == ("for_party", "1000.00")
+            headers = {"x-test-mobile": "yes"}
+            rows = (await client.get(BASE + group, headers=headers)).json()["items"]
+            item = next(r for r in rows if r["id"] == identity)
+            assert item[field] == expected
+            if kind == "ad_account":
+                assert "ads.fund" in item["operations"]
+            for route in ("resource", "ledger"):
+                data = (await client.get(f"{BASE}/{route}/{kind}/{identity}?page_only=true&ad_bank_fx=true", headers=headers)).json()
+                assert data.get("resource", data)[field] == expected
+        await grant(db, operations=["ads.fund"], resources=[resource("ad_account","ad",balance=False)])
+        limited = (await client.get(BASE + "/parties?kind=ad_account&ad_bank_fx=true", headers={"x-test-user":"staff"})).json()["items"]
+        assert len(limited) == 1 and "ad_amounts" not in limited[0] and "ad_wallet_balance" not in limited[0]
+    run(scenario)
+
+
+def test_workspace_positions_match_operational_position_and_paginated_courier_history(monkeypatch):
+    from decimal import Decimal
+    import operational_balance_workspace as ws
+    from backend.tests.test_operational_balance_workspace import grant, resource
+
+    async def scenario(db, client):
+        await db.mz2_shipping_setup_v2.insert_one({"user_id": "owner", "couriers": [
+            {"name": "سمسا", "courier_key": "smsa", "confirmed_by": "owner", "confirmed_at": "2026-11-01"}]})
+        def claim(identity, amount, direction, day):
+            return {"id": identity, "party_type": "courier", "party_id": "smsa", "kind": "shipping" if direction == "payable" else "cod",
+                    "direction": direction, "currency": "SAR", "confirmed": amount, "expected": "0.00", "business_date": day}
+        rows = [claim("fee-old", "6525.50", "payable", "2026-11-19"),
+                claim("fee-order", "17.25", "payable", "2026-11-20"),
+                claim("confirmed-cod", "6642.75", "receivable", "2026-11-21")]
+        await db[STATES].update_one({"owner_id": "owner"}, {"$set": {"engine.obligations": {r["id"]: r for r in rows},
+                                    "engine.as_of": "2026-11-21T02:00:00+00:00"}})
+        summary = await client.get("/api/operational-balances/reports?position_amounts=true")
+        assert summary.status_code == 200, summary.text
+        report_amounts = {(r["party_type"], r["party_id"]): r["position_balance"] for r in summary.json()["parties"]}
+        for kind, identity, view, table, field, expected in [
+            ("courier","smsa","couriers","couriers",None,"100.00"), ("supplier","supplier","suppliers","suppliers",None,"-200.00"),
+            ("employee","employee","employees","employees",None,"-200.00"), ("external_person","external","other","external",None,"-400.00"),
+            ("bank","bank","accounts","banks_network","available","1000.00"), ("cash","cash","accounts","cash","available","500.00"),
+            ("employee_custody","employee","employees","employee_custody","available","150.00")]:
+            web = await client.get(f"/api/operational-balances/financial-position?view={view}")
+            assert web.status_code == 200, web.text
+            grid = next(t for t in web.json()["currencies"]["SAR"]["tables"] if t["id"] == table)
+            canonical = next(r for r in grid["rows"] if r["id"] == f"{kind}:{identity}:SAR")
+            net = Decimal(canonical[field]) if field else Decimal(canonical["receivable"]) - Decimal(canonical["payable"])
+            app = await client.get(f"{BASE}/resource/{kind}/{identity}")
+            assert app.status_code == 200, app.text
+            assert net == Decimal(expected)
+            assert app.json()["position_balance"] == report_amounts[(kind, identity)] == expected
+        history, calls = ws._courier_history, []
+        def counted(state, company, policy):
+            calls.append(company["id"])
+            return history(state, company, policy)
+        monkeypatch.setattr(ws, "_courier_history", counted)
+        for route in ("movements", "ledger/courier/smsa"):
+            url = f"{BASE}/{route}?page_only=true&courier_history=true&page_size=1"
+            for page, expected_id, balance in [(1, "confirmed-cod", "-100.00"), (2, "fee-order", "6542.75"), (1, "confirmed-cod", "-100.00")]:
+                result = (await client.get(url + f"&page={page}")).json()
+                assert [(r["id"], r["balance_after"]) for r in result["items"]] == [(expected_id, balance)]
+        assert calls == ["smsa"]
+        await grant(db, operations=[], resources=[resource("courier", "smsa", movements="all", balance=False)])
+        restricted = (await client.get(f"{BASE}/movements?page_only=true&courier_history=true",
+                                      headers={"x-test-user": "staff"})).json()
+        assert restricted["items"] and all(r["balance_after"] is None for r in restricted["items"])
+        assert calls == ["smsa"]
+    run(scenario)
