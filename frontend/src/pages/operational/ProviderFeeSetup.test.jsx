@@ -348,3 +348,57 @@ test("event guidance distinguishes settlement transfer evidence from refund proc
     expect(host.textContent).toContain("تُحتسب رسوم معالجة الاسترجاع عند ثبوت الاسترجاع");
     expect(host.textContent).not.toContain("رسوم التحويل الفعلية تؤخذ من كشف التسوية");
 });
+
+test("provider aliases take their current SAR capture terms from the active table and share one edit action", async () => {
+    const scope = {provider: "emkan", payment_method: null};
+    const pending = {name: "emkan_installment", key: "emkan-code", fee_scope: scope, status: "needs_commission", editable: false};
+    const card = {...pending, name: "credit_card", key: "card-code", fee_scope: {provider: "salla", payment_method: "credit_card"}};
+    const settings = [pending, {...pending, key: "emkan-name", name: "EmkanInstallment"}, card];
+    fees.listOnboardingFeeCandidates.mockResolvedValue({items: [], payment_method_setup: {complete: true, revision: "old", items: settings}});
+    const emkan = policy({id: "emkan-sar", provider: "emkan", plan_id: null, percentage: "6.99", fixed_amount: "1.50", effective_from: "2000-01-01"});
+    const cc = policy({id: "card-sar", provider: "salla", payment_method: "credit_card", plan_id: null,
+        percentage: "2.2", fixed_amount: "1.00", effective_from: "2000-01-01", components: [{
+            id: "agreed-rate", percentage: "2.2", fixed_amount: "1.00", vat_treatment: "exclusive", vat_rate: "15",
+            vat_rounding: "half_up", vat_basis: "unrounded_fee",
+        }]});
+    await renderPolicies([emkan, cc, {...emkan, id: "ended", effective_to: "2000-12-31"},
+        {...emkan, id: "foreign", currency: "USD"}, {...cc, id: "refund", event_type: "refund"}], "mz2_policies");
+    const rows = host.querySelectorAll(".fee-directory tbody tr");
+    expect(rows).toHaveLength(2);
+    expect(rows[0].textContent).toMatch(/إمكان.*emkan_installment.*EmkanInstallment.*تعرفة ميزان 2/);
+    expect([...rows[0].querySelectorAll(".fee-value")].map(el => el.textContent)).toEqual(["6.99", "1.50", "15"]);
+    expect([...rows[1].querySelectorAll(".fee-value")].map(el => el.textContent)).toEqual(["2.2", "1.00", "15"]);
+    expect(host.querySelector(".fee-editor").open).toBe(false);
+    await act(async () => rows[1].querySelector("button").click());
+    expect(host.querySelector(".fee-editor").open).toBe(true);
+    await set("نسبة العمولة الإجمالية %", "2.3");
+    await click("حفظ تعديل التعرفة");
+    expect(fees.updateOnboardingFeePolicy).toHaveBeenCalledWith("card-sar", expect.objectContaining({
+        percentage: "2.3", expected_version: cc.version, components: [expect.objectContaining({
+            id: "agreed-rate", percentage: "2.3", vat_basis: "unrounded_fee",
+        })],
+    }));
+    expect(fees.createOnboardingFeePolicy).not.toHaveBeenCalled();
+    expect(fees.saveObservedPaymentMethodCommission).not.toHaveBeenCalled();
+});
+
+test("the simple directory keeps distinct installment plans, absent terms and actual PayPal fees visible", async () => {
+    const method = {key: "tabby", name: "tabby_installment", fee_scope: {provider: "tabby", payment_method: null},
+        status: "configured", commission_percent: 7, fixed_fee: 1, vat_percent: 15};
+    const debit = {...method, key: "debit", name: "debit_card", fee_scope: {provider: "salla", payment_method: "debit_card"}};
+    const paypal = {...method, key: "pp", name: "paypal", fee_scope: {provider: "paypal", payment_method: null},
+        commission_percent: 4.9, fixed_fee: 1.13, vat_percent: 0};
+    fees.listOnboardingFeeCandidates.mockResolvedValue({items: [], payment_method_setup: {complete: true, revision: "rev", items: [method, debit, paypal]}});
+    await renderPolicies([policy({effective_from: "2000-01-01", plan_id: "Plan-A"}), policy({id: "plan-b", effective_from: "2000-01-01", plan_id: "Plan-B"})], "mz2_policies");
+    const rows = host.querySelectorAll(".fee-directory tbody tr");
+    expect(rows[0].querySelector("summary").textContent).toBe("عرض التعرفات");
+    expect(rows[0].textContent).toContain("Plan-A");
+    expect(rows[0].textContent).toContain("Plan-B");
+    expect(rows[1].textContent).toContain("تحتاج تعرفة سارية");
+    expect([...rows[2].querySelectorAll(".fee-value")].map(el => el.textContent)).toEqual(["4.9", "1.13", "0"]);
+    await act(async () => rows[1].querySelector("button").click());
+    expect(input("المنصة").value).toBe("salla");
+    expect(input("طريقة الدفع لدى سلة").value).toBe("debit_card");
+    expect(input("تسري من").value).toBe("");
+    expect(fees.createOnboardingFeePolicy).not.toHaveBeenCalled();
+});

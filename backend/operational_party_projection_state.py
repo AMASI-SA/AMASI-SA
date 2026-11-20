@@ -52,12 +52,12 @@ def cash_account_projection(state, kind, identity):
               and (r["party_type"], r["party_id"]) == (kind, identity)]
     return {"parties": list(parties.values()), "obligations": claims, "details": {}, "issues": [], "as_of": engine.get("as_of")}
 
-async def directory_cash_positions(db, owner, kind, resources):
+async def directory_cash_positions(db, owner, kind, resources, *, funding_ids=()):
     """Read only cash evidence belonging to visible balances in the opened group."""
     from operational_balance_store import STATES
     from operational_financial_activity import cash_positions
     from operational_financial_activity_runtime import prepare_in_thread
-    keys = {(kind, row["id"], row["currency"]) for row in resources if row["access"]["balance"]}
+    keys = {(kind, row["id"], row["currency"]) for row in resources if row["access"]["balance"] or row["id"] in funding_ids}
     if not keys:
         return {}
     identities = sorted(key[1] for key in keys)

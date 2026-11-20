@@ -6,7 +6,12 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{1
 const code = failure => failure?.response?.data?.detail?.code;
 const missing = failure => failure?.response?.status === 404 && code(failure) === 'operational_pending_command_not_found';
 const retired = failure => failure?.response?.status === 410 && code(failure) === 'operational_pending_command_retired';
-const notApplied = failure => failure?.response?.data?.detail?.not_applied === true || [400, 422].includes(failure?.response?.status);
+function notApplied(failure, record) {
+  if (failure?.response?.data?.detail?.not_applied === true) return true;
+  const command = record?.command;
+  const payout = record?.action === 'entry' && command.side === 'for_us' && command.source_id && (!command.reason || command.reason === 'payment');
+  return !payout && [400, 422].includes(failure?.response?.status);
+}
 
 function readMarker(storageKey) {
   try {
@@ -39,6 +44,7 @@ export function usePendingBalanceCommand({ context, storageIdentity, validate, e
   const [blocked, setBlocked] = useState(false);
   const [error, setError] = useState('');
   const [revision, setRevision] = useState(0);
+  const [notice, setNotice] = useState('');
 
   function checked(value, id, validator = callbacks.current.validate, scope = context.session_scope) {
     if (value?.id !== id || !value.command || value.command.request_id !== id
@@ -67,11 +73,35 @@ export function usePendingBalanceCommand({ context, storageIdentity, validate, e
     callbacks.current.onRetired?.();
   }
 
+  function resolveEntry(value, decision, storageKey) {
+    if (value.action !== 'entry' || !decision || decision.status === 'pending') return false;
+    if (decision.status === 'saved') {
+      const result = decision.result;
+      if (result?.saved !== true || !callbacks.current.validateSaved(result, value)) {
+        throw { localMessage: 'تعذر مطابقة إيصال الحركة بهذا الحساب. أعد التحقق من النتيجة.' };
+      }
+      completed.current = true;
+      // A storage error cannot invalidate a confirmed receipt.
+      try { removeMarker(value.id, storageKey); } catch { /* the UUID can only recover this receipt */ }
+      publish(null, false);
+      callbacks.current.onSaved(result, { recovered: true, business_date: value.command.business_date });
+    } else if (decision.status === 'discarded') {
+      removeMarker(value.id, storageKey); publish(null, false);
+      setNotice('أُلغي الطلب السابق قبل تنفيذه. راجع تفاصيل الحركة قبل تأكيدها.');
+    } else if (decision.status === 'rejected' && typeof decision.detail?.message === 'string') {
+      removeMarker(value.id, storageKey); publish(null, false);
+      setError(decision.detail.message);
+    } else {
+      throw { localMessage: 'لم تتأكد نتيجة العملية السابقة. أعد التحقق منها قبل تسجيل حركة أخرى.' };
+    }
+    return true;
+  }
+
   useEffect(() => {
     mounted.current = true;
     keyRef.current = null; idRef.current = null; recordRef.current = null; confirmedRef.current = false;
     completed.current = false; rejected.current = false; lock.current = null; setBusy(false);
-    setRecord(null); setBlocked(false); setError(''); setRecovering(true);
+    setRecord(null); setBlocked(false); setError(''); setNotice(''); setRecovering(true);
     let disposed = false, stop;
     const active = () => !disposed && mounted.current && currentBinding.current === binding;
     pendingBalanceStorageKey(storageIdentity).then(storageKey => {
@@ -84,7 +114,10 @@ export function usePendingBalanceCommand({ context, storageIdentity, validate, e
       stop = visibleOperationalRead(config => api.pendingCommand(marker.id, context.session_scope, config), {
       onData: value => {
         if (!active()) return;
-        try { publish(checked(value, marker.id)); }
+        try {
+          const recovered = checked(value, marker.id);
+          if (!resolveEntry(recovered, recovered.resolution, storageKey)) publish(recovered);
+        }
         catch (failure) { setBlocked(true); setError(simpleBalanceError(failure)); }
       },
       onError: failure => {
@@ -106,6 +139,27 @@ export function usePendingBalanceCommand({ context, storageIdentity, validate, e
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [binding, revision]);
 
+  async function discard() {
+    const value = recordRef.current, storageKey = keyRef.current?.key;
+    if (!value || value.action !== 'entry' || value.resolution?.status !== 'pending' || idRef.current !== value.id
+      || keyRef.current?.binding !== binding || lock.current || recovering || blocked || completed.current) return;
+    const attempt = { binding }, active = () => mounted.current && currentBinding.current === binding;
+    lock.current = attempt; setBusy(true); setError(''); setNotice('');
+    try {
+      if (localStorage.getItem(storageKey) !== value.id) throw {localMessage:'تغير مرجع العملية. أعد التحقق قبل المتابعة.'};
+      const result = await api.discardPending(value.id, context.session_scope);
+      if (!active()) return;
+      if (result?.id !== value.id) throw {localMessage:'تعذر تأكيد هوية العملية. أعد التحقق من نتيجتها.'};
+      if (!resolveEntry(value, result, storageKey)) {
+        throw {localMessage:'لم يُؤكّد إلغاء الطلب. أعد التحقق من النتيجة.'};
+      }
+    } catch (failure) {
+      if (active()) { setBlocked(true); setError(simpleBalanceError(failure)); }
+    } finally {
+      if (lock.current === attempt) { lock.current = null; if (active()) setBusy(false); }
+    }
+  }
+
   async function submit(action, targetId, makeCommand) {
     if (lock.current || completed.current || recovering || blocked || keyRef.current?.binding !== binding) return;
     const storageKey = keyRef.current.key;
@@ -114,7 +168,7 @@ export function usePendingBalanceCommand({ context, storageIdentity, validate, e
     const checkOperation = (value, id) => checked(value, id, operationCallbacks.validate, context.session_scope);
     const attempt = { binding: startedBinding };
     const active = () => mounted.current && currentBinding.current === startedBinding;
-    lock.current = attempt; setBusy(true); setError('');
+    lock.current = attempt; setBusy(true); setError(''); setNotice('');
     let phase = 'validate';
     try {
       if (rejected.current && idRef.current) {
@@ -125,6 +179,10 @@ export function usePendingBalanceCommand({ context, storageIdentity, validate, e
       let value = recordRef.current;
       const newCommand = !value;
       if (!value) {
+        if (localStorage.getItem(storageKey) !== idRef.current) {
+          setBlocked(true);
+          throw {localMessage:'تغير مرجع العملية في نافذة أخرى. أعد التحقق من العملية المحفوظة.'};
+        }
         const body = makeCommand();
         const id = idRef.current || globalThis.crypto.randomUUID();
         if (!uuid.test(id)) throw { localMessage: 'تعذر إنشاء مرجع آمن للعملية. أعد فتح الصفحة.' };
@@ -139,14 +197,20 @@ export function usePendingBalanceCommand({ context, storageIdentity, validate, e
       if (!confirmedRef.current) {
         phase = 'register';
         if (!newCommand) {
-          try { checkOperation(await api.pendingCommand(value.id, context.session_scope), value.id); }
+          try {
+            const found = checkOperation(await api.pendingCommand(value.id, context.session_scope), value.id);
+            if (!active() || resolveEntry(found, found.resolution, storageKey)) return;
+          }
           catch (failure) { if (!missing(failure)) throw failure; }
         }
         const registered = await api.registerPending(value.id, {
           action: value.action, target_id: value.target_id, command: value.command,
         });
         value = checkOperation(registered, value.id);
-        if (active()) publish(value);
+        if (active()) {
+          if (resolveEntry(value, value.resolution, storageKey)) return;
+          publish(value);
+        }
       }
       // Navigation during registration leaves a recoverable intent, not a
       // background financial write. A fresh mount must read and explicitly retry.
@@ -170,7 +234,7 @@ export function usePendingBalanceCommand({ context, storageIdentity, validate, e
         // Never overwrite the existing server command or execute a different
         // form under its UUID. Restore it for review first.
         setBlocked(true); setError('هذا المرجع مرتبط بعملية محفوظة. استعد بياناتها وراجعها قبل إعادة المحاولة.');
-      } else if (phase === 'execute' && notApplied(failure)) {
+      } else if (phase === 'execute' && notApplied(failure, recordRef.current)) {
         rejected.current = true;
         try {
           await retireRecord(idRef.current, storageKey);
@@ -188,6 +252,6 @@ export function usePendingBalanceCommand({ context, storageIdentity, validate, e
       }
     }
   }
-  return { pending: record?.binding === binding ? record.value : null, recovering, busy, blocked, error, submit,
-    recover: () => { if (!busy) setRevision(value => value + 1); }, clearError: () => { if (!blocked) setError(''); } };
+  return { pending: record?.binding === binding ? record.value : null, recovering, busy, blocked, error, notice, submit, discard,
+    recover: () => { if (!lock.current && !busy) setRevision(value => value + 1); }, clearError: () => { if (!blocked) setError(''); } };
 }

@@ -246,7 +246,7 @@ def _unclaimed_same_provider_aliases(state, records, claims):
     return aliases
 
 
-def provider_balances(state, details, obligations, parties, valuations, *, sar_view=False, paypal_sar=False):
+def provider_balances(state, details, obligations, parties, valuations, *, sar_view=False, paypal_sar=False, order_details=None):
     """Project fees once on the unpaid gross claim. Never change saved financial state."""
     records, claims = _records(state, obligations, valuations)
     aliases = _unclaimed_same_provider_aliases(state, records, claims)
@@ -377,6 +377,8 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
             total["complete"] = total["fees_complete"] = False
             incomplete_estimate(total, row["order_id"], "provider_balance_recognition_pending")
             continue
+        if order_details is not None:
+            order_details.observe(identity, row, displayed_gross, claim, allocated[identity])
         projection = details.get("provider_reports", {}).get(identity)
         fee = None
         fee_basis = "unavailable"
@@ -488,6 +490,10 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
             continue
         if not held and row["paid_proven"]:
             resolved.add(identity)
+            if order_details is not None:
+                order_details.priced(identity, row, claim, remaining,
+                    "mixed" if statement and statement["actual"] and statement["estimated"] else
+                    "actual" if statement and statement["evidenced"] and not statement["estimated"] else fee_basis)
             total["_net_available"] = total["_fees_available"] = True
             if row["gross"] > 0 and not average_used:
                 total["net_confirmed_orders"].add(row["order_id"])
@@ -616,6 +622,8 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
         if obligation.get("party_type") != "provider":
             continue
         total = group(obligation["currency"], obligation["party_id"])
+        if order_details is not None:
+            order_details.credit(obligation)
         original = obligation.get("original_obligation_id", obligation["id"])
         if original in claims and original not in resolved:
             sign = 1 if obligation["direction"] == "receivable" else -1
@@ -695,6 +703,11 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
         pending_ids = set().union(*total["_pending"].values())
         samples = sorted(pending_ids)
         total["pending_orders"] = len(pending_ids)
+        if order_details is not None and provider == order_details.provider:
+            for code, order_ids in total["_pending"].items():
+                message = PENDING_MESSAGES.get(code, DIAGNOSTICS.get(code, "إثبات هذا الطلب يحتاج مطابقة."))
+                for oid in order_ids:
+                    order_details.reason(oid, message, total["_order_numbers"].get(oid))
         total["pending_order_ids"] = samples
         total["pending_order_numbers"] = sorted({total["_order_numbers"][oid] for oid in samples
                                                   if oid in total["_order_numbers"]})

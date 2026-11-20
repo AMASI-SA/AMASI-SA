@@ -553,3 +553,18 @@ async def test_successful_save_followed_by_unreadable_settings_returns_unknown_n
     assert result["complete"] is False
     assert all(item["commission_percent"] is None and not item["editable"] for item in result["items"])
     assert (await db.settings.find_one({"user_id": OWNER}))["payment_methods"] == [terms("مدى", commission_percent=7), terms("PayPal")]
+
+
+@pytest.mark.asyncio
+async def test_exact_provider_scopes_survive_legacy_alias_conflicts(db):
+    await seed(db, ["credit_card", "EmkanInstallment", "emkan_installment", "paypal", "not_emkan_test"],
+               [terms("بطاقة ائتمانية"), terms("البطاقة الإئتمانية", commission_percent=1.5),
+                terms("EmkanInstallment"), terms("إمكان", commission_percent=5)])
+    setup_rows = (await load_payment_method_setup(db, OWNER))["items"]
+    observed = {row["name"]: row for row in setup_rows}
+    assert observed["credit_card"]["fee_scope"] == {"provider": "salla", "payment_method": "credit_card"}
+    assert observed["emkan_installment"]["fee_scope"] == observed["EmkanInstallment"]["fee_scope"] == {
+        "provider": "emkan", "payment_method": None}
+    assert observed["paypal"]["fee_scope"] == {"provider": "paypal", "payment_method": None}
+    assert observed["not_emkan_test"]["fee_scope"] is None
+    assert observed["credit_card"]["editable"] is False

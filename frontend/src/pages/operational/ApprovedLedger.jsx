@@ -7,6 +7,7 @@ import { useBalanceRead } from './simpleBalancesHooks';
 import { isStatement, minorUnits, movementDate, movementRecorder, movementTitle, resourceKey, signedResourceBalance } from './simpleBalancesModel';
 
 import SupplierInvoiceDetail from './SupplierInvoiceDetail';
+import ProviderOrders from './ProviderOrders';
 
 const pageSize = 8;
 function defaultPeriod(start) {
@@ -25,10 +26,10 @@ function Range({ value, onChange, start }) {
   </form>;
 }
 
-function Pagination({ result, onPage }) {
+function Pagination({ result, onPage, label = 'صفحات جدول الحركات' }) {
   if (!result?.total) return null;
   const { page, total, total_pages } = result;
-  return <nav className="movement-pages screen-only" aria-label="صفحات جدول الحركات">
+  return <nav className="movement-pages screen-only" aria-label={label}>
     <span>عرض {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} من {total}</span>
     <div><button type="button" className="button" disabled={page <= 1} onClick={() => onPage(page - 1)}>السابق</button>
       <span aria-live="polite">صفحة {page} من {total_pages}</span>
@@ -121,39 +122,58 @@ function PeriodPrint({ resource, period, scope }) {
     {print?.scope === scope && createPortal(<div dir="rtl" className="sb-print-root"><print.StatementDocument statement={print.value} printing /></div>, document.body)}</>;
 }
 
-function LedgerPage({ context, identity, resource, initialInvoice, onDetail, onAdd, onPurchase, onBack, onReviewOrders, onHistory, onExpected, onReviewCollections }) {
-  const [period, setPeriod] = useState(() => initialInvoice?.date
-    ? {date_from:initialInvoice.date, date_to:initialInvoice.date} : defaultPeriod(context.ledger_start));
+function LedgerPage({ context, identity, resource, canOpenOrderDetails = false, initialInvoice, initialMovement, onDetail, onAdd, onPurchase, onBack, onReviewOrders, onHistory, onExpected, onReviewCollections }) {
+  const initialDate = initialInvoice?.date || initialMovement?.date;
+  const [period, setPeriod] = useState(() => initialDate
+    ? {date_from:initialDate, date_to:initialDate} : defaultPeriod(context.ledger_start));
+  const [focus, setFocus] = useState(initialMovement?.movement || '');
+  const openedReceipt = useRef(false);
+  const canSeeOrders = resource?.kind === 'provider' && resource.access?.balance && resource.access?.report && resource.access?.movements === 'all';
+  const [providerTab, setProviderTab] = useState(initialMovement ? 'movements' : 'orders'), [allDates, setAllDates] = useState(true);
+  const providerOrders = canSeeOrders && providerTab === 'orders';
   const [query, setQuery] = useState(initialInvoice?.number || ''), [draft, setDraft] = useState(initialInvoice?.number || '');
   const [account, setAccount] = useState(''), [direction, setDirection] = useState(''), [status, setStatus] = useState('');
   const [page, setPage] = useState(1), [detail, setDetail] = useState(null);
   const dialog = useRef(null);
   useEffect(() => {
     if (draft.trim() === query) return undefined;
-    const timer = setTimeout(() => { setQuery(draft.trim()); setPage(1); }, 450);
+    const timer = setTimeout(() => { setFocus(''); setQuery(draft.trim()); setPage(1); }, 450);
     return () => clearTimeout(timer);
   }, [draft, query]);
   const selected = !resource && context.resources.find(r => resourceKey(r) === account);
   const scope = JSON.stringify([identity, context.session_scope, context.permission_version]);
-  const key = JSON.stringify([scope, resource?.kind, resource?.id, account, period.date_from, period.date_to, direction, status, query, page]);
+  const key = JSON.stringify([scope, resource?.kind, resource?.id, account, period.date_from, period.date_to, direction, status, query, page, providerOrders, allDates, focus]);
   const readable = resource ? resource.access?.movements !== 'none' : context.resources.some(r => r.access?.movements !== 'none');
   const read = useBalanceRead(async config => {
-    const params = { ...period, page, page_size: pageSize, ...(query && { q: query }), ...(direction && { direction }),
+    const params = { ...(providerOrders && allDates ? {} : period), ...(providerOrders && { provider_orders: true }), ...(focus && { focus_id:focus }), page, page_size: pageSize, ...(query && { q: query }), ...(direction && { direction }),
       ...(status && { status }), ...(selected && { kind: selected.kind, id: selected.id }) };
     const result = resource ? await api.ledger(resource.kind, resource.id, params, config) : await api.movements(params, config);
-    if (!Array.isArray(result?.items) || result.items.length > pageSize || result.page_size !== pageSize ||
-        !Number.isInteger(result.total) || !Number.isInteger(result.total_pages) || result.page !== Math.min(page, result.total_pages) ||
+    if ((providerOrders && result?.provider_orders !== true) || !Array.isArray(result?.items) || result.items.length > pageSize || result.page_size !== pageSize ||
+        !Number.isInteger(result.total) || !Number.isInteger(result.total_pages) || (focus ? !Number.isInteger(result.page) || result.page < 1 || result.page > result.total_pages : result.page !== Math.min(page, result.total_pages)) ||
         (resource && (result.resource?.kind !== resource.kind || result.resource?.id !== resource.id))) throw new Error('invalid ledger');
     return result;
   }, key, readable);
+  const detailRead = useBalanceRead(async config => {
+    const value = await api.resource(resource.kind, resource.id, config);
+    if (!value || value.id !== resource.id || value.kind !== resource.kind || !value.access?.balance)
+      throw {localMessage:'تعذر التحقق من رصيد هذا الحساب.'};
+    return value;
+  }, JSON.stringify([scope, resource?.kind, resource?.id]), Boolean(context.directoryOnly && resource?.access?.balance && !readable));
   const result = read.data, summary = resource ? result?.period : null;
-  const changePeriod = next => { setPeriod(next); setPage(1); };
-  const search = <form className="searchbox directory-search" role="search" onSubmit={event => { event.preventDefault(); setQuery(draft.trim()); setPage(1); }}>
-    <Icon name="search" /><input type="search" maxLength={160} value={draft} aria-label={resource ? 'بحث في حركات ' + resource.name : 'ابحث في الحركات'}
-      placeholder={resource ? 'ابحث بالبيان أو المرجع أو اسم الموظف' : 'ابحث في الحركات'} onChange={e => setDraft(e.target.value)} /></form>;
+  useEffect(() => {
+    if (!focus || !result || openedReceipt.current) return;
+    const row = result.items.find(item => item.id === focus);
+    if (row) { openedReceipt.current = true; setDetail(row); }
+  }, [focus, result]);
+  const shownResource = context.directoryOnly ? (result?.resource || detailRead.data || resource) : resource;
+  const changePeriod = next => { setFocus(''); setPeriod(next); setAllDates(false); setPage(1); };
+  const selectTab = target => { setFocus(''); setProviderTab(target); setPage(1); setQuery(''); setDraft(''); };
+  const search = <form className="searchbox directory-search" role="search" onSubmit={event => { event.preventDefault(); setFocus(''); setQuery(draft.trim()); setPage(1); }}>
+    <Icon name="search" /><input type="search" maxLength={160} value={draft} aria-label={providerOrders ? 'بحث في طلبات ' + resource.name : resource ? 'بحث في حركات ' + resource.name : 'ابحث في الحركات'}
+      placeholder={providerOrders ? 'ابحث برقم الطلب أو مرجع الدفع' : resource ? 'ابحث بالبيان أو المرجع أو اسم الموظف' : 'ابحث في الحركات'} onChange={e => setDraft(e.target.value)} /></form>;
   const show = row => { if (onDetail) onDetail(row); else { setDetail(row); } };
   useEffect(() => { if (detail && dialog.current && !dialog.current.open) { if (dialog.current.showModal) dialog.current.showModal(); else dialog.current.setAttribute('open', ''); } }, [detail]);
-  const issueCount = resource?.order_issues_count;
+  const issueCount = shownResource?.order_issues_count;
   const changeStatus = value => {
     if (['pending', 'rejected'].includes(value) && onReviewCollections) { onReviewCollections(selected || null, value); return; }
     setStatus(value); setPage(1);
@@ -166,16 +186,23 @@ function LedgerPage({ context, identity, resource, initialInvoice, onDetail, onA
       {onAdd && <button type="button" className="button primary" onClick={() => onAdd(resource)}><Icon name="plus" />{resource?.kind === 'ad_account' ? 'شحن رصيد الإعلان' : resource?.kind === 'supplier' && resource.operations?.includes('supplier.payment') ? 'تسديد مبلغ' : resource ? 'سجّل حركة' : 'حركة مالية جديدة'}</button>}
       {summary?.can_print && <PeriodPrint key={JSON.stringify([scope, period, resourceKey(resource)])} resource={resource} scope={scope} period={period} />}
     </Heading>
+    {canSeeOrders && <div className="filters screen-only" role="group" aria-label="تفاصيل المنصة">
+      <button type="button" className={'button' + (providerOrders ? ' primary' : '')} aria-pressed={providerOrders} onClick={() => selectTab('orders')}>طلبات {resource.name}</button>
+      <button type="button" className={'button' + (!providerOrders ? ' primary' : '')} aria-pressed={!providerOrders} onClick={() => selectTab('movements')}>كشف الحركات والتسويات</button>
+    </div>}
     {resource && readable && <section className="panel sheet"><div className="section-head"><h2>كشف الفترة</h2><Icon name="calendar-days" /></div>
-      <Range value={period} start={context.ledger_start} onChange={changePeriod} /></section>}
+      <Range value={period} start={context.ledger_start} onChange={changePeriod} />
+      {providerOrders && <button type="button" className="textbtn" aria-pressed={allDates} onClick={() => { setAllDates(true); setPage(1); }}>كل التواريخ{allDates && ' · معروضة'}</button>}</section>}
     {summary && <Metrics period={summary} resource={resource} />}
-    {resource?.kind === 'ad_account' && resource.access?.balance && <div className="metric accent"><small>الرصيد الحالي</small><strong><AdBalance resource={resource} /></strong></div>}
-    {resource?.kind === 'provider' && resource.id === 'paypal' && resource.access?.balance &&
-      <div className="metric accent"><small>صافي رصيد باي بال الحالي بالريال</small><strong>{resource.balance
-        ? <Amount value={resource.balance.side === 'for_party' ? '-' + resource.balance.amount : resource.balance.amount} currency="SAR"/>
+    {detailRead.loading && <p role="status" className="note">جارٍ تحميل رصيد الحساب…</p>}
+    {detailRead.error && <p role="alert" className="note">{detailRead.error} <button type="button" onClick={detailRead.reload}>إعادة المحاولة</button></p>}
+    {resource?.kind === 'ad_account' && resource.access?.balance && <div className="metric accent"><small>الرصيد الحالي</small><strong><AdBalance resource={shownResource} /></strong></div>}
+    {!providerOrders && resource?.kind === 'provider' && resource.id === 'paypal' && resource.access?.balance &&
+      <div className="metric accent"><small>صافي رصيد باي بال الحالي بالريال</small><strong>{shownResource.balance
+        ? <Amount value={shownResource.balance.side === 'for_party' ? '-' + shownResource.balance.amount : shownResource.balance.amount} currency="SAR"/>
         : 'يحتاج مطابقة'}</strong></div>}
     {resource?.kind !== 'ad_account' && !(resource?.kind === 'provider' && resource.id === 'paypal') && resource?.access?.balance && (!resource.access.report || !readable) && <div className="metrics"><div className="metric accent">
-      <small>الرصيد الحالي</small><strong><LedgerBalance value={signedResourceBalance(resource)} resource={resource} /></strong></div></div>}
+      <small>الرصيد الحالي</small><strong><LedgerBalance value={signedResourceBalance(shownResource)} resource={shownResource} /></strong></div></div>}
     {resource?.access?.movements === 'own' && <p className="note">يعرض هذا الكشف الحركات التي سجّلتها أنت.</p>}
     {result?.balance_note && <p className="note">{result.balance_note}</p>}
     {(issueCount > 0 || issueCount === null) && onReviewOrders && <button type="button" className="issue-notice screen-only" onClick={() => onReviewOrders(resource)}>
@@ -185,7 +212,7 @@ function LedgerPage({ context, identity, resource, initialInvoice, onDetail, onA
     {resource && onExpected && result?.expected_collections?.total > 0 && <button type="button" className="textbtn" onClick={() => onExpected(resource, result.expected_collections)}>
       متوقع تحصيله · <Amount value={result.expected_collections.amount} currency={resource.currency} /> · {result.expected_collections.total} طلب</button>}
     <section className="panel sheet">
-      {resource && <div className="section-head"><h2>حركات {resource.name}</h2>{result && <small>عدد حركات الفترة: {summary?.total ?? result.total}</small>}</div>}
+      {resource && <div className="section-head"><h2>{providerOrders ? 'طلبات' : 'حركات'} {resource.name}</h2>{result && <small>{providerOrders ? 'عدد الطلبات المعروضة' : 'عدد حركات الفترة'}: {summary?.total ?? result.total}</small>}</div>}
       {readable ? <>
         <div className="filters screen-only">{search}{!resource && <>
           <select aria-label="الحساب" value={account} onChange={e => { setAccount(e.target.value); setPage(1); }}><option value="">كل الحسابات والجهات</option>
@@ -197,9 +224,10 @@ function LedgerPage({ context, identity, resource, initialInvoice, onDetail, onA
             {onReviewCollections && (!selected || ['store_driver', 'bank'].includes(selected.kind)) && <><option value="pending">بانتظار المراجعة</option><option value="rejected">تحتاج تعديل</option></>}</select>
         </>}</div>
         {!resource && <Range value={period} onChange={changePeriod} start={context.ledger_start} />}
-        {read.loading && <p role="status" className="empty">جارٍ تحميل الحركات…</p>}
+        {read.loading && <p role="status" className="empty">{providerOrders ? 'جارٍ تحميل الطلبات…' : 'جارٍ تحميل الحركات…'}</p>}
         {read.error && <div className="empty" role="alert">{read.error} <button type="button" className="textbtn" onClick={read.reload}>إعادة المحاولة</button></div>}
-        {result && <><ActivityTable result={result} resource={resource} onDetail={show} onHistory={onHistory} /><Pagination result={result} onPage={setPage} /></>}
+        {result && <>{providerOrders ? <ProviderOrders result={result} name={resource.name} canOpenOrderDetails={canOpenOrderDetails}/> : <ActivityTable result={result} resource={resource} onDetail={show} onHistory={onHistory} />}
+          <Pagination result={result} onPage={next => { setFocus(''); setPage(next); }} label={providerOrders ? 'صفحات طلبات المنصة' : 'صفحات جدول الحركات'} /></>}
       </> : <p className="empty">عرض الحركات غير متاح ضمن صلاحياتك.</p>}
     </section>
     {resource?.kind === 'store_driver' && resource.access?.movements === 'all' && onReviewCollections &&
@@ -215,5 +243,5 @@ function LedgerPage({ context, identity, resource, initialInvoice, onDetail, onA
 
 export default function ApprovedLedger(props) {
   const { context, identity, resource } = props;
-  return <LedgerPage key={JSON.stringify([identity, context.session_scope, context.permission_version, resource?.kind, resource?.id])} {...props} />;
+  return <LedgerPage key={JSON.stringify([identity, context.session_scope, context.permission_version, resource?.kind, resource?.id, props.initialMovement?.movement])} {...props} />;
 }

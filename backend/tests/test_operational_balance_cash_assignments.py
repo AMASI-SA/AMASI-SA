@@ -89,3 +89,27 @@ def test_only_owner_can_create_cash_without_opening_or_movement(mobile):
         state=await read(db,'owner')
         assert len(state['openings'])==2 and state['movements']==[]
     run(scenario)
+
+
+def test_distinct_cash_drawers_and_retries_with_canonical_account_indexes():
+    from accounting_financial_accounts import ensure_financial_account_indexes
+
+    async def scenario(db):
+        await started(db)
+        await db.mz2_financial_accounts.update_one(
+            {"id": "bank", "user_id": "owner"}, {"$set": {"idempotency_key": "original-bank-request"}})
+        # The live index permits one historical account without a request key.
+        await ensure_financial_account_indexes(db)
+        first = {"name": "الصندوق الرئيسي", "currency": "SAR", "request_id": "new-main-drawer"}
+        second = {**first, "name": "صندوق الفرع", "request_id": "new-branch-drawer"}
+        async with client(db, 'owner', mobile=False) as c:
+            path = "/api/operational-balances/entities/cash"
+            a, retry, b = await asyncio.gather(
+                c.post(path, json=first), c.post(path, json=first), c.post(path, json=second))
+            assert [a.status_code, retry.status_code, b.status_code] == [200, 200, 200]
+            assert a.json()["id"] == retry.json()["id"] != b.json()["id"]
+            conflict = await c.post(path, json={**first, "name": "اسم مختلف"})
+            assert conflict.status_code == 409
+        assert await db.mz2_financial_accounts.count_documents({"user_id": "owner", "account_type": "cash"}) == 3
+        assert (await read(db, "owner"))["movements"] == []
+    run(scenario)

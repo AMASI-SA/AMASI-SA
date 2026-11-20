@@ -291,6 +291,35 @@ async def _linked_external_entry(db, owner, actor, payload, operation, resources
     return result
 
 
+def movement_body(payload, operation, resources):
+    reason, side = payload.get("reason"), payload["side"]
+    correction = reason in {"accrual", "adjustment"}
+    direction = ("outgoing" if side == "for_party" else "incoming") if correction else (
+        "outgoing" if side == "for_us" else "incoming")
+    kind = "correction" if correction else "payment" if direction == "outgoing" else "collection"
+    if reason == "transfer":
+        kind, direction = "transfer", "outgoing"
+    body = {
+        "request_id": payload["request_id"], "expected_session_scope": payload["expected_session_scope"],
+        "party_type": payload["party_type"], "party_id": payload["party_id"],
+        "currency": "SAR", "amount": payload["amount"], "direction": direction, "kind": kind,
+        "business_date": payload["business_date"], "bank_id": payload.get("source_id"),
+        "source_account_type": payload.get("source_type") or "bank_auto",
+        "note": payload.get("note") or LABELS.get(reason) or "تسليم مبلغ للجهة",
+        "reference": payload.get("reference", ""), "receipt_id": None, "order_number": None,
+        "allocations": [], "actual_fee_amount": "0.00", "workspace_operation": operation,
+        "workspace_reason": reason or "payment", "workspace_intent_hash": digest(payload),
+        "workspace_resources": [{"kind": k, "id": i} for k, i in resources],
+    }
+    body.update({key: payload[key] for key in ("bank_arrival_confirmed", "actual_fee_amount", "fee_reference")
+                 if key in payload})
+    if payload["party_type"] == "provider" and payload["party_id"] == "paypal":
+        body["note"] = payload.get("note") or "تحويل باي بال إلى البنك"
+    if funding := payload.get("ad_bank_funding"):
+        body.update(currency="USD", bank_currency="SAR", **funding)
+    return body
+
+
 async def save_entry(db, owner, actor, payload, source):
     from operational_balance_access import guard_access
     operation, resources = entry_intent(payload)
@@ -302,31 +331,7 @@ async def save_entry(db, owner, actor, payload, source):
             return await record_purchase(db, owner, actor, payload, source)
         if payload["party_type"] == "external_person" and payload["side"] == "for_party" and payload.get("reason") != "receipt":
             return await _linked_external_entry(db, owner, actor, payload, operation, resources, source)
-        reason, side = payload.get("reason"), payload["side"]
-        correction = reason in {"accrual", "adjustment"}
-        direction = ("outgoing" if side == "for_party" else "incoming") if correction else (
-            "outgoing" if side == "for_us" else "incoming")
-        kind = "correction" if correction else "payment" if direction == "outgoing" else "collection"
-        if reason == "transfer":
-            kind, direction = "transfer", "outgoing"
-        body = {
-            "request_id": payload["request_id"], "expected_session_scope": payload["expected_session_scope"],
-            "party_type": payload["party_type"], "party_id": payload["party_id"],
-            "currency": "SAR", "amount": payload["amount"], "direction": direction, "kind": kind,
-            "business_date": payload["business_date"], "bank_id": payload.get("source_id"),
-            "source_account_type": payload.get("source_type") or "bank_auto",
-            "note": payload.get("note") or LABELS.get(reason) or "تسليم مبلغ للجهة",
-            "reference": payload.get("reference", ""), "receipt_id": None, "order_number": None,
-            "allocations": [], "actual_fee_amount": "0.00", "workspace_operation": operation,
-            "workspace_reason": reason or "payment", "workspace_intent_hash": digest(payload),
-            "workspace_resources": [{"kind": k, "id": i} for k, i in resources],
-        }
-        body.update({key: payload[key] for key in ("bank_arrival_confirmed", "actual_fee_amount", "fee_reference")
-                     if key in payload})
-        if payload["party_type"] == "provider" and payload["party_id"] == "paypal":
-            body["note"] = payload.get("note") or "تحويل باي بال إلى البنك"
-        if funding := payload.get("ad_bank_funding"):
-            body.update(currency="USD", bank_currency="SAR", **funding)
+        body = movement_body(payload, operation, resources)
         saved = await create_movement(db, owner, actor["id"], body, source=source)
         return {"saved": True, "movement_id": saved["id"], "party_type": saved["party_type"], "party_id": saved["party_id"]}
 
@@ -341,12 +346,32 @@ def _balance(row, kind):
     return {"amount": fmt(abs(signed)), "side": "for_party" if signed > 0 else "for_us" if signed < 0 else "balanced", "visible": True}
 
 
-async def resource_catalog(db, owner, policy, state, *, ad_bank_fx=False, reviewed_counts=None, selected_resource=None, directory_only=False, selected_kind=None):
+def payment_source_kinds(policy):
+    # A use-only grant permits selecting a source without disclosing its amount.
+    payment_targets = {"supplier": "supplier.payment", "external_person": "external.pay",
+        "employee": "employee.payment", "courier": "courier.pay", "store_driver": "courier.pay",
+        "operating_expense": "expense.pay", "owner_withdrawal": "owner.withdraw",
+        "employee_custody": "custody.fund", "ad_account": "ads.fund"}
+    usable_kinds = {r["kind"] for r in policy.resources if r.get("use")}
+    payee_kinds = {kind for kind, operation in payment_targets.items()
+                   if (policy.owner_override or kind in usable_kinds) and policy.can_operation(operation)}
+    can_spend_custody = policy.can_operation("custody.spend") and bool(
+        payee_kinds.intersection({"supplier", "external_person", "operating_expense"}))
+    return ({"bank", "cash"} if payee_kinds else set()) | ({"employee_custody"} if can_spend_custody else set())
+
+
+async def resource_catalog(db, owner, policy, state, *, ad_bank_fx=False, reviewed_counts=None, selected_resource=None, directory_only=False, selected_kind=None, provider_positions=False, provider_orders=False):
     from operational_ad_balance_sar import workspace_amounts
     from operational_workspace_order_issues import issue_badge, navigation_counts
     from operational_balance_service import prepaid_shipping_cash
     from operational_balance_sources import entities
     paypal_scope = (not selected_resource or selected_resource == ("provider", "paypal")) and policy.resource("provider", "paypal")["balance"]
+    provider_access = policy.resource(*selected_resource) if selected_resource and selected_resource[0] == "provider" else {}
+    order_access = provider_access.get("balance") and provider_access.get("report") and provider_access["movements"] == "all"
+    if provider_orders and not order_access:
+        fail("operational_workspace_not_found", "طلبات المنصة غير متاحة", 404)
+    can_price_cards = provider_positions and (policy.owner_override or any(
+        r["kind"] == "provider" and r.get("balance") for r in policy.resources))
     if directory_only:
         computed = {"parties": [], "obligations": [], "details": {}, "issues": []}
     elif selected_resource and selected_resource[0] in ACCOUNT_KINDS:
@@ -358,10 +383,14 @@ async def resource_catalog(db, owner, policy, state, *, ad_bank_fx=False, review
         if selected_resource[0] in {"store_driver", "courier"}:
             # The inbox can contain unresolved issues elsewhere in the saved accounting scope.
             computed["issues"] = computed["issues"] or state.get("engine", {}).get("issues", [])
+    elif can_price_cards or provider_orders:
+        computed = await prepare_in_thread(report, state, provider_balances_sar=True,
+            workspace_provider=selected_resource[1] if provider_orders else None)
     else:
         computed = await prepare_in_thread(report, state, paypal_sar=True) if paypal_scope else await prepare_in_thread(report, state)
     review_counts = navigation_counts(computed)
     balances = {(r["party_type"], r["party_id"], r["currency"]): r for r in computed["parties"]}
+    funding_kinds = payment_source_kinds(policy)
     items = []
     # A detail needs one catalog identity. Counterpart visibility still comes from the complete policy.
     for kind in RESOURCE_KINDS:
@@ -392,6 +421,14 @@ async def resource_catalog(db, owner, policy, state, *, ad_bank_fx=False, review
             elif currency != "SAR":
                 operations = []
             financials = {}
+            if not directory_only and access["use"] and currency == "SAR" and kind in funding_kinds:
+                funding = balances.get((kind, row["id"], currency), {})
+                field = "custody_remaining" if kind == "employee_custody" else "actual"
+                financials["can_fund_payment"] = Decimal(funding.get(field, funding.get("actual", "0"))) > 0
+            if not directory_only and (provider_positions or provider_orders) and kind == "provider" and access["balance"]:
+                from operational_workspace_provider_orders import provider_position
+                financials["provider_position"] = provider_position(computed, row["id"],
+                    show_orders=access.get("report") and access["movements"] == "all")
             if not directory_only and kind == "ad_account" and access["balance"]:
                 native = balances.get((kind, row["id"], currency))
                 basis = state.get("engine", {}).get("ad_balance_sar_basis", {}).get(row["id"]) or {}
@@ -882,7 +919,7 @@ def install_workspace_routes(router, db, current_user, scope):
                                 "ad_funding", "courier_tariffs.payment_mode", "courier_tariffs.cash_account.id", "engine.ad_balance_sar_basis"), 1)
         return await db[STATES].find_one({"_id": owner, "owner_id": owner}, fields) or initial(owner)
 
-    async def checked_read(user, callback, *, ad_bank_fx=False, selected_resource=None, invoice_headers=False, invoice_detail=None, directory_only=False, balance_only=False, forecast_only=False):
+    async def checked_read(user, callback, *, ad_bank_fx=False, selected_resource=None, invoice_headers=False, invoice_detail=None, directory_only=False, balance_only=False, forecast_only=False, provider_positions=False, provider_orders=False):
         from operational_financial_position_state import read_financial_position_state
         actor, owner, source, policy = await load(user)
         if selected_resource and (not policy.resource(*selected_resource)["balance"] if balance_only else policy.resource(*selected_resource)["movements"] == "none"):
@@ -891,7 +928,8 @@ def install_workspace_routes(router, db, current_user, scope):
         # pages or idempotency receipts. Writers keep the complete store reader.
         state = await directory_state(db, owner) if directory_only else await read_financial_position_state(db, owner)
         resources, computed = await resource_catalog(db, owner, policy, state, ad_bank_fx=ad_bank_fx,
-            selected_resource=selected_resource, directory_only=directory_only or forecast_only, reviewed_counts=review_snapshots.counts.get((owner, source_key(state))))
+            selected_resource=selected_resource, provider_positions=provider_positions, provider_orders=provider_orders,
+            directory_only=directory_only or forecast_only, reviewed_counts=review_snapshots.counts.get((owner, source_key(state))))
         if forecast_only:
             computed = {"obligations": state.get("engine", {}).get("obligations", {}).values()}
         if invoice_headers:
@@ -907,7 +945,7 @@ def install_workspace_routes(router, db, current_user, scope):
         return result
 
     @router.get("/workspace/context")
-    async def context(request: Request, ad_bank_fx: bool = False, home_preview: bool = False, directory_only: bool = False, user=Depends(current_user)):
+    async def context(request: Request, ad_bank_fx: bool = False, home_preview: bool = False, directory_only: bool = False, provider_positions: bool = False, user=Depends(current_user)):
         def project(actor, owner, policy, state, resources, computed):
             from operational_balance_access import OPERATION_LABELS
             return {"actor": {**_actor_snapshot(actor), "is_owner": policy.owner_override},
@@ -919,7 +957,7 @@ def install_workspace_routes(router, db, current_user, scope):
                     "capabilities": {"manage_access": policy.owner_override,
                                      "create_entries": state["status"] == "active" and any(row["operations"] for row in resources)},
                     "operations": [{"key": key, "label": label} for key, label in OPERATION_LABELS.items() if policy.can_operation(key)]}
-        return await run_visible_report_read(request, lambda: checked_read(user, project, ad_bank_fx=ad_bank_fx, directory_only=directory_only))
+        return await run_visible_report_read(request, lambda: checked_read(user, project, ad_bank_fx=ad_bank_fx, directory_only=directory_only, provider_positions=provider_positions))
 
     @router.get("/workspace/specialist/{which}")
     async def specialist(request: Request, which: Literal["returns", "exchanges", "fees", "reports", "specialized", "access"],
@@ -979,11 +1017,15 @@ def install_workspace_routes(router, db, current_user, scope):
             actor, owner, _, policy = await load(user)
             header = await directory_state(db, owner)
             resources, _ = await resource_catalog(db, owner, policy, header, directory_only=True, selected_kind=kind)
-            values = await directory_cash_positions(db, owner, kind, resources)
+            funding_allowed = kind in payment_source_kinds(policy)
+            eligible = {r["id"] for r in resources if funding_allowed and r["access"]["use"] and r["currency"] == "SAR"}
+            values = await directory_cash_positions(db, owner, kind, resources, funding_ids=eligible)
             for resource in resources:
+                position = values.get((kind, resource["id"], resource["currency"]), {})
+                if resource["id"] in eligible:
+                    resource["can_fund_payment"] = Decimal(position.get("actual", "0")) > 0
                 if resource["access"]["balance"]:
-                    key = kind, resource["id"], resource["currency"]
-                    resource["balance"] = _balance(values.get(key, {}), kind)
+                    resource["balance"] = _balance(position, kind)
             current_actor, current_owner, _, current = await load(user)
             if (actor["id"], owner, policy.version, policy.owner_override) != (current_actor["id"], current_owner, current.version, current.owner_override):
                 fail("operational_access_changed", "تغيرت صلاحياتك؛ أعد فتح الصفحة", 409)
@@ -1011,16 +1053,25 @@ def install_workspace_routes(router, db, current_user, scope):
     @router.get("/workspace/ledger/{kind}/{identity}")
     async def ledger(request: Request, kind: str, identity: str, page: int = Query(default=1, ge=1),
                      page_size: int = Query(default=5, ge=1, le=8), focus_id: str | None = Query(default=None, max_length=250),
-                     ad_bank_fx: bool = False, page_only: bool = False, q: str = Query(default="", max_length=160),
+                     ad_bank_fx: bool = False, page_only: bool = False, provider_orders: bool = False, q: str = Query(default="", max_length=160),
                      date_from: str | None = None, date_to: str | None = None, user=Depends(current_user)):
         check_period(date_from, date_to)
-        if page_only and not q and not date_from:
+        if page_only and not provider_orders and not q and not date_from:
             return await run_visible_report_read(request, lambda: movement_window(user, kind, identity, page, page_size,
                 account_detail=True, ad_bank_fx=ad_bank_fx, focus_id=focus_id))
         def project(actor, owner, policy, state, resources, computed):
             resource = next((r for r in resources if r["kind"] == kind and r["id"] == identity), None)
             if not resource or resource["access"]["movements"] == "none":
                 fail("operational_workspace_not_found", "الكشف غير متاح", 404)
+            if provider_orders:
+                from operational_workspace_provider_orders import filtered_orders
+                rows, undated = filtered_orders(computed["details"]["workspace_provider_orders"], q, date_from, date_to)
+                groups = computed["details"]["provider_balances"]
+                amounts = [{"currency": currency, **{k: item.get(k) for k in ("opening", "settled", "gross", "known_gross",
+                            "fees", "known_fees", "refunded", "net", "known_net", "complete")}}
+                          for currency, accounts in groups.items() for item in accounts if item["provider"] == identity]
+                return {"resource": resource, "provider_orders": True, "amounts": amounts, "undated": undated,
+                        **paginate(rows, page, page_size)}
             rows = ledger_items(state, computed, resource, policy)
             summary = _pos_summary(state, resource)
             balance_status = projected_balance_status(resource, rows)
@@ -1041,7 +1092,7 @@ def install_workspace_routes(router, db, current_user, scope):
                     "balance_status": balance_status, "balance_note": balance_note(balance_status),
                     "expected_collections": expected_collections(state, computed, resource, policy)}
         return await run_visible_report_read(request, lambda: checked_read(user, project, ad_bank_fx=ad_bank_fx,
-            selected_resource=(kind, identity), invoice_headers=True))
+            selected_resource=(kind, identity), invoice_headers=not provider_orders, provider_orders=provider_orders))
 
     @router.get("/workspace/supplier-invoices/{supplier_id}/{invoice_id}")
     async def supplier_invoice(request: Request, supplier_id: str, invoice_id: str, user=Depends(current_user)):

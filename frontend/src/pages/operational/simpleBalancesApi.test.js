@@ -1,5 +1,5 @@
 import http from '../../lib/api';
-import { simpleBalancesApi as api } from './simpleBalancesApi';
+import { simpleBalancesApi as api, simpleBalanceError } from './simpleBalancesApi';
 
 jest.mock('../../lib/api', () => ({ get: jest.fn(), post: jest.fn(), put: jest.fn(), delete: jest.fn() }));
 beforeEach(() => {
@@ -78,4 +78,13 @@ test('automatic history and protected receipt reads retain their request scope a
   expect(http.get).toHaveBeenLastCalledWith('/operational-balances/workspace/history/employee/a%2Fb', { timeout: 30000, signal, params: { page: 2, page_size: 5 } });
   await api.reviewReceipt('review/one', { signal });
   expect(http.get).toHaveBeenLastCalledWith('/operational-balances/workspace/reviews/review%2Fone/receipt', { timeout: 30000, signal, responseType: 'blob' });
+});
+
+test('discard uses the atomic financial endpoint and preserves a proven Arabic refusal', async () => {
+  await api.discardPending('attempt/one', 'scope');
+  expect(http.post).toHaveBeenCalledWith('/operational-balances/workspace/pending-commands/attempt%2Fone/discard',
+    { expected_session_scope:'scope' }, { timeout:30000 });
+  const message='أُلغي طلب السداد قبل تسجيل أي مبلغ.';
+  expect(simpleBalanceError({response:{status:404,data:{detail:{not_applied:true,message}}}})).toBe(message);
+  expect(simpleBalanceError({response:{status:404,data:{detail:{message:'تفاصيل المورد'}}}})).not.toContain('تفاصيل المورد');
 });

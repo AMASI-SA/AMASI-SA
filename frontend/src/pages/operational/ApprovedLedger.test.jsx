@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import ApprovedLedger from './ApprovedLedger';
 import { simpleBalancesApi as api } from './simpleBalancesApi';
 
-jest.mock('./simpleBalancesApi', () => ({ simpleBalancesApi: { supplierInvoice: jest.fn(), ledger: jest.fn(), movements: jest.fn(), statement: jest.fn() },
+jest.mock('./simpleBalancesApi', () => ({ simpleBalancesApi: { resource: jest.fn(), supplierInvoice: jest.fn(), ledger: jest.fn(), movements: jest.fn(), statement: jest.fn() },
   simpleBalanceError: () => 'تعذر تحميل الكشف' }));
 jest.mock('../../lib/dates', () => ({ todaySA: () => '2026-11-19' }));
 global.IS_REACT_ACT_ENVIRONMENT = true;
@@ -76,13 +76,39 @@ test('shows the approver next to the date and loads invoice lines only after ope
   const supplier = {...bank, kind:'supplier', id:'supplier', name:'أسواق الراجحي'};
   const row = {...rows[0], party_id:'supplier', invoice_id:'invoice1', description:'فاتورة استلام SI-26', amount:'26.00'};
   api.supplierInvoice.mockResolvedValue({id:'invoice1', currency:'SAR', total:'26.00', lines:[
-    {name:'غلاف',quantity:2,unit:'13.00',total:'26.00',services:[]}]});
+    {name:'شال شتوي لا تُنسى',sku:'AMS-26',image_url:'/products/shawl.jpg',quantity:2,unit:'13.00',total:'26.00',
+      services:[{name:'تطريز الاسم',total:'8.00'}]}]});
   api.ledger.mockImplementation(async (kind,id,params) => ({...paged(params),resource:supplier,total:1,total_pages:1,items:[row]}));
   await render({resource:supplier});
   expect(api.ledger).toHaveBeenCalledTimes(1);
   expect(host.querySelector('tbody').textContent).toContain('11-12 · سارة');
   await click('فاتورة استلام SI-26');
   expect(api.supplierInvoice.mock.calls[0].slice(0,2)).toEqual(['supplier','invoice1']);
-  expect(host.querySelector('dialog').textContent).toContain('غلاف');
+  const item = host.querySelector('dialog .invoice-line-description');
+  expect(item.textContent).not.toContain('شال شتوي لا تُنسى');
+  expect(item.querySelector('.invoice-product bdi').textContent).toBe('AMS-26');
+  expect(item.querySelector('img').getAttribute('src')).toBe('/products/shawl.jpg');
+  expect(item.querySelector('.invoice-line-service').textContent).toContain('تطريز الاسم');
+  expect(item.querySelector('.invoice-line-service').textContent).toContain('8.00');
   expect(host.querySelector('dialog').textContent).toContain('إجمالي الفاتورة');
+});
+
+test('a confirmed recovery opens its exact receipt on the server-selected ledger page',async()=>{
+  api.ledger.mockImplementation(async(kind,id,params)=>paged({...params,page:params.focus_id==='9'?2:params.page}));
+  await render({initialMovement:{id:'bank',kind:'bank',movement:'9',date:'2026-11-12'}});
+  expect(api.ledger).toHaveBeenCalledTimes(1);
+  expect(api.ledger.mock.calls[0][2]).toEqual(expect.objectContaining({focus_id:'9',date_from:'2026-11-12',date_to:'2026-11-12'}));
+  expect(host.querySelector('dialog').textContent).toContain('MV-9');
+  await click('إغلاق'); await click('السابق');
+  expect(api.ledger.mock.calls[1][2].focus_id).toBeUndefined();
+  expect(host.querySelector('dialog')).toBeNull();
+});
+
+test('balance-only account opened from a directory loads its own balance without a ledger query',async()=>{
+  const item={...bank,balance:null,access:{...bank.access,movements:'none'}};
+  api.resource.mockResolvedValue({...item,balance:{visible:true,amount:'170.45',side:'for_us'}});
+  await render({resource:item,context:{...ctx,directoryOnly:true,resources:[item]}});
+  expect(api.ledger).not.toHaveBeenCalled();
+  expect(api.resource).toHaveBeenCalledWith('bank','bank',expect.objectContaining({signal:expect.any(AbortSignal)}));
+  expect(host.textContent).toContain('170.45');
 });

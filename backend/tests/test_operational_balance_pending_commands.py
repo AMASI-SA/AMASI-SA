@@ -45,7 +45,8 @@ def test_registration_is_private_recovery_only_and_returns_stable_normalized_com
         saved = await register(client, identity, packet)
         assert saved.headers["cache-control"] == "no-store"
         result = saved.json()
-        assert set(result) == {"id", "action", "target_id", "command"}
+        assert set(result) == {"id", "action", "target_id", "command", "resolution"}
+        assert result["resolution"] == {"status": "pending"}
         assert result["id"] == result["command"]["request_id"] == identity
         assert result["command"]["amount"] == "12.50"
         assert result["command"]["note"] == "ملاحظة مالية خاصة"
@@ -438,4 +439,58 @@ def test_visibility_change_during_database_read_cannot_return_an_old_all_scope(m
         assert response.status_code == 409
         assert response.json()["detail"]["code"] == "operational_access_changed"
         assert "command" not in response.json()
+    run(scenario)
+
+
+@pytest.mark.parametrize("legacy_phone", [False, True])
+def test_discard_outgoing_payout_fences_a_delayed_post_and_can_be_repeated(legacy_phone):
+    async def scenario(db, client):
+        identity, packet = registration()
+        if legacy_phone:
+            packet["command"]["request_id"] = "workspace-m1spw5x-0fw1a-4zh"
+        command = (await register(client, identity, packet)).json()["command"]
+        path = BASE + "/" + identity
+        assert (await client.post(path + "/discard", json=query(), headers=STAFF)).status_code in {403, 404, 409}
+        for _ in range(2):
+            response = await client.post(path + "/discard", json=query())
+            assert response.status_code == 200 and response.json()["status"] == "discarded"
+        delayed = await client.post(WORKSPACE + "/entries", json=command)
+        assert delayed.status_code == 409
+        assert delayed.json()["detail"]["not_applied"]
+        assert (await client.get(path, params=query())).json()["resolution"]["status"] == "discarded"
+        assert (await read(db, "owner"))["movements"] == []
+    run(scenario)
+
+
+def test_paid_or_rejected_payout_returns_its_result_without_a_second_write():
+    async def scenario(db, client):
+        for amount, expected in [("1.00", "saved"), ("99999.00", "rejected")]:
+            identity, packet = registration(body=entry(amount=amount))
+            command = (await register(client, identity, packet)).json()["command"]
+            first = await client.post(WORKSPACE + "/entries", json=command)
+            path = BASE + "/" + identity
+            resolution = (await client.get(path, params=query())).json()["resolution"]
+            assert resolution["status"] == expected
+            if expected == "saved":
+                assert resolution["result"] == first.json()
+            else:
+                assert resolution["detail"] == first.json()["detail"]
+            assert (await client.post(path + "/discard", json=query())).json() == {"id": identity, **resolution}
+        assert len((await read(db, "owner"))["movements"]) == 1
+    run(scenario)
+
+
+def test_discard_racing_save_has_one_final_result():
+    async def scenario(db, client):
+        identity, packet = registration(body=entry(amount="1.00"))
+        command = (await register(client, identity, packet)).json()["command"]
+        path = BASE + "/" + identity
+        first, discard = await asyncio.gather(client.post(WORKSPACE + "/entries", json=command),
+                                             client.post(path + "/discard", json=query()))
+        assert discard.status_code == 200
+        outcome = discard.json()["status"]
+        assert outcome in {"saved", "discarded"}
+        assert first.status_code == (200 if outcome == "saved" else 409)
+        assert len((await read(db, "owner"))["movements"]) == int(outcome == "saved")
+        assert (await client.get(path, params=query())).json()["resolution"]["status"] == outcome
     run(scenario)

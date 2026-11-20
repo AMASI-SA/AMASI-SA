@@ -6,13 +6,13 @@ import {
 } from "../../services/accountingOnboarding";
 import { formatRiyadhDateTime } from "../../lib/dates";
 import PaginatedReportTable from "./PaginatedReportTable";
+import { feeProviders as providers, feeRails as rails } from "./paymentFeeDirectory";
 import ObservedPaymentMethods from "./ObservedPaymentMethods";
 import { requestId } from "./api";
 import "./financialPosition.css";
+import "./providerFeeSetup.css";
 import OperationalToolBack from './OperationalToolBack';
 
-const providers = { salla: "سلة", tamara: "تمارا", tabby: "تابي", emkan: "إمكان" };
-const rails = { mada: "مدى", visa: "فيزا", mastercard: "ماستركارد", apple_pay: "Apple Pay", google_pay: "Google Pay", stc_pay: "STC Pay", credit_card: "بطاقة ائتمانية", debit_card: "بطاقة بنكية", salla_wallet: "محفظة سلة" };
 const taxes = { exclusive: "تضاف الضريبة إلى العمولة", inclusive: "العمولة تشمل الضريبة", exempt: "معفاة", not_applicable: "لا تنطبق" };
 const treatments = { retain: "تحتفظ المنصة بالرسم", recalculate: "يعاد احتساب الرسم" };
 const taxRounding = { half_up: "أقرب هللة، وعند التعادل للأعلى", half_even: "أقرب هللة، وعند التعادل إلى الرقم الزوجي" };
@@ -111,7 +111,7 @@ function FeeForm() {
     const [editing, setEditing] = useState(null);
     const [sourceMode, setSourceMode] = useState(null);
     const [previewPolicy, setPreviewPolicy] = useState(null);
-    const formRef = useRef(null);
+    const editorRef = useRef(null);
     useEffect(() => {
         let current = true;
         Promise.all([
@@ -123,9 +123,20 @@ function FeeForm() {
             .finally(() => { if (current) setBusy(false); });
         return () => { current = false; };
     }, []);
-    const set = key => ({ value: form[key], onChange: e => setForm({ ...form, [key]: e.target.value }) });
+    const simpleTerms = ["percentage", "fixed_amount", "vat_treatment", "vat_rate"];
+    const set = key => ({ value: form[key], onChange: event => {
+        const value = event.target.value;
+        setForm(current => ({...current, [key]: value}));
+        if (parts.length === 1 && simpleTerms.includes(key)) {
+            setParts(current => [{...current[0], [key]: value}]);
+        }
+    }});
     const number = { type: "number", min: 0, step: "any", required: true };
-    const changePart = (i, key) => ({ value: parts[i][key], onChange: e => setParts(parts.map((part, n) => n === i ? { ...part, [key]: e.target.value } : part)) });
+    const changePart = (i, key) => ({value: parts[i][key], onChange: event => {
+        const value = event.target.value;
+        setParts(current => current.map((part, index) => index === i ? {...part, [key]: value} : part));
+        if (parts.length === 1 && simpleTerms.includes(key)) setForm(current => ({...current, [key]: value}));
+    }});
     async function activate() {
         setBusy(true); setMessage("");
         try {
@@ -134,6 +145,17 @@ function FeeForm() {
             setMessage("تم ربط الأرصدة التشغيلية بجدول رسوم ميزان 2.");
         } catch { setMessage("تعذر ربط الجدول. تحقق من حفظ التعرفات ثم أعد المحاولة."); }
         finally { setBusy(false); }
+    }
+    function openEditor() {
+        if (!editorRef.current) return;
+        editorRef.current.open = true;
+        editorRef.current.scrollIntoView?.({block: "nearest"});
+        editorRef.current.querySelector("summary")?.focus();
+    }
+    function newPolicy(scope) {
+        setForm({...initial, provider: scope?.provider || "", payment_method: scope?.payment_method || ""});
+        setParts([]); setEditing(null); setPreviewPolicy(null); setMessage("");
+        openEditor();
     }
     function edit(policy) {
         setForm(Object.fromEntries(Object.keys(initial).map(key => [key, policy[key] ?? initial[key]])));
@@ -147,7 +169,7 @@ function FeeForm() {
         setEditing({ id: policy.id, version: policy.version || 1, minimum: policy.minimum ?? null, maximum: policy.maximum ?? null });
         setPreviewPolicy(null);
         setMessage("");
-        formRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+        openEditor();
     }
     async function save(e) {
         e.preventDefault();
@@ -168,6 +190,7 @@ function FeeForm() {
                 : await createOnboardingFeePolicy(payload);
             setPolicies(prev => editing ? prev.map(policy => policy.id === row.id ? row : policy) : [...prev, row]);
             setForm(initial); setParts([]); setEditing(null);
+            if (editorRef.current) editorRef.current.open = false;
             setMessage("حُفظت التعرفة. تُطبّق عند إعادة احتساب الأرصدة على العمليات المشمولة بفترة السريان.");
         } catch (err) {
             const detail = err.response?.data?.detail;
@@ -179,26 +202,30 @@ function FeeForm() {
         } finally { setBusy(false); }
     }
     return <main dir="rtl" className="mz-finance-tool mz-fees-page p-5 space-y-4 max-w-7xl mx-auto"><OperationalToolBack/>
-        <a href="/operational-balances/financial-position">العودة إلى المركز المالي التشغيلي</a>
-        <h1 className="text-2xl font-bold">رسوم طرق الدفع في ميزان 2</h1>
-        <p>يعرض الجدول تعرفات الرسوم وفترات سريانها، ويُحفظ كل تعديل مع إصدار التعرفة السابق. تعتمد الرسوم الفعلية عند توثيق كشف التسوية.</p>
-        <ObservedPaymentMethods setup={paymentMethodSetup} onSaved={setPaymentMethodSetup} />
+        <header className="fee-page-heading"><h1>رسوم طرق الدفع</h1>
+            <a href="/operational-balances/financial-position">المركز المالي التشغيلي</a></header>
+        {busy && !sourceMode && <p role="status">جارٍ تحميل العمولات…</p>}
+        <ObservedPaymentMethods setup={paymentMethodSetup} onSaved={setPaymentMethodSetup}
+            sourceMode={sourceMode} policies={policies} onEditPolicy={edit} onNewPolicy={newPolicy} savingPolicy={busy} />
+        <details className="fee-disclosure"><summary>التعرفات حسب الخطة وسجل التعديلات</summary>
         {sourceMode === "mz2_policies" ? <p role="status">مصدر احتساب الرسوم المعتمد هو جدول ميزان 2.</p> : sourceMode === "legacy_settings" && <div className="space-y-2">
             <p>المصدر الحالي هو إعدادات طرق الدفع القديمة. احفظ التعرفات ثم اربط الأرصدة بجدول ميزان 2.</p>
             <button type="button" className="ofp-button" disabled={busy || !policies.length} onClick={activate}>ربط الأرصدة التشغيلية بهذا الجدول</button>
         </div>}
         <FeeTable policies={policies} onEdit={edit} onPreview={setPreviewPolicy} busy={busy} />
         {previewPolicy && <FeePreview key={previewPolicy.id + ":" + previewPolicy.version} policy={previewPolicy} onClose={() => setPreviewPolicy(null)} />}
-        <form ref={formRef} onSubmit={save}><fieldset disabled={busy} className="space-y-3">
-            <legend className="font-bold">{editing ? "تعديل التعرفة المحفوظة" : "إضافة تعرفة إلى ميزان 2"}</legend>
+        </details>
+        <details ref={editorRef} className="fee-disclosure fee-editor"><summary>{editing ? "تعديل التعرفة المحفوظة" : "إضافة تعرفة إلى ميزان 2"}</summary>
+        <form onSubmit={save}><fieldset disabled={busy} className="space-y-3">
+            <legend className="sr-only">{editing ? "تعديل التعرفة المحفوظة" : "إضافة تعرفة إلى ميزان 2"}</legend>
             <p>يمكن تعبئة النسبة والرسم من إعدادات طرق الدفع المحفوظة. طابقها مع المستند وحدد فترة سريانها قبل الاعتماد.</p>
-            {conflicts.length > 0 && <div className="border rounded p-3"><strong>طرق دفع تحتاج مراجعة عقد المنصة</strong>
+            {conflicts.length > 0 && <details className="fee-extra"><summary>مسميات تحتاج مراجعة في الإعدادات القديمة</summary>
                 <ul>{conflicts.map(r => <li key={r.provider + (r.payment_method || "")}>
                     {r.labels.join("، ")} — {r.reason === "duplicate_settings" ? "توجد عدة تعريفات محفوظة لطريقة الدفع نفسها." : "بيانات الرسم أو الضريبة غير مكتملة."}
                 </li>)}</ul>
                 <p>أدخل التعرفة المثبتة في العقد ومرجعه وتاريخ سريانها.</p>
-            </div>}
-            {!editing && <div className="flex flex-wrap gap-2">{suggestions.map(r => <button className="border rounded px-3" type="button" key={r.provider + (r.payment_method || "")} onClick={() => { setForm({ ...initial, provider: r.provider, payment_method: r.payment_method || "", percentage: r.percentage, fixed_amount: r.fixed_amount, vat_rate: r.vat_rate }); setParts([]); }}>{r.label} · {r.percentage}% + {r.fixed_amount}</button>)}</div>}
+            </details>}
+            {!editing && suggestions.length > 0 && <details className="fee-extra"><summary>تعبئة من إعدادات طرق الدفع المحفوظة</summary><div className="flex flex-wrap gap-2">{suggestions.map(r => <button className="border rounded px-3" type="button" key={r.provider + (r.payment_method || "")} onClick={() => { setForm({ ...initial, provider: r.provider, payment_method: r.payment_method || "", percentage: r.percentage, fixed_amount: r.fixed_amount, vat_rate: r.vat_rate }); setParts([]); }}>{r.label} · {r.percentage}% + {r.fixed_amount}</button>)}</div></details>}
             <Select label="المنصة" options={providers} disabled={Boolean(editing)} value={form.provider} onChange={e => { setForm({ ...initial, provider: e.target.value }); setParts([]); }} />
             <Select label="نوع الرسم" options={events} disabled={Boolean(editing)} {...set("event_type")} />
             {form.provider === "salla" && <Select label="طريقة الدفع لدى سلة" options={{ ...rails, all: "تعرفة عامة لكل الطرق بحسب المستند" }} disabled={Boolean(editing)} {...set("payment_method")} />}
@@ -213,6 +240,7 @@ function FeeForm() {
                 <Select label="معالجة ضريبة العمولة" options={taxes} {...set("vat_treatment")} />
                 {["inclusive", "exclusive"].includes(form.vat_treatment) && <Input label="نسبة ضريبة العمولة %" {...number} max={100} {...set("vat_rate")} />}
             </div>
+            <details className="fee-extra" key={editing?.id || "new"} open={parts.length > 1 || undefined}><summary>شروط الاسترجاع والإلغاء وأجزاء العمولة</summary>
             {!parts.length && <><Select label="معالجة رسوم الاسترداد" options={treatments} optional {...set("refund_fee_treatment")} /><Select label="معالجة رسوم الإلغاء" options={treatments} optional {...set("cancellation_fee_treatment")} /></>}
             <p>إذا فصّل المستند عمولة قابلة للرد وأخرى محتفظًا بها أو رسومًا ثابتة بمعالجة مستقلة، أدخل كل جزء على حدة. تُحسب ضريبة كل جزء بحسب معالجته ونسبته، وتُقرّب قيمته وضريبته إلى هللة وفق أسلوب التقريب المحدد.</p>
             {parts.map((part, i) => <fieldset key={part.id} className="border p-2 grid gap-2 sm:grid-cols-2"><legend>جزء العمولة {i + 1}</legend>
@@ -230,11 +258,13 @@ function FeeForm() {
                 id: requestId(), percentage: "", fixed_amount: "", vat_treatment: form.vat_treatment,
                 vat_rate: ["exclusive", "inclusive"].includes(form.vat_treatment) ? form.vat_rate : "",
                 vat_rounding: "half_up", vat_basis: "rounded_fee", refund_fee_treatment: "", cancellation_fee_treatment: "",
-            }])}>إضافة جزء مفصل للعمولة</button>
+            }])}>إضافة جزء مفصل للعمولة</button></details>
             <Input label="مرجع العقد أو كشف المنصة المثبت للتعرفة وفترتها" required minLength={3} maxLength={1000} {...set("evidence")} />
             <button type="submit" className="ofp-button">{editing ? "حفظ تعديل التعرفة" : "اعتماد التعرفة لفترة السريان"}</button>
-            {editing && <button type="button" onClick={() => { setEditing(null); setForm(initial); setParts([]); }}>إلغاء التعديل</button>}
-        </fieldset></form>
+            <button type="button" onClick={() => {
+                setEditing(null); setForm(initial); setParts([]); editorRef.current.open = false;
+            }}>إلغاء التعديل</button>
+        </fieldset></form></details>
         {message && <p role="status">{message}</p>}
     </main>;
 }

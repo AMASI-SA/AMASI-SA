@@ -12,7 +12,7 @@ jest.mock('react-router-dom', () => {
 });
 
 jest.mock('./simpleBalancesApi', () => ({ simpleBalancesApi: {
-  refundOrder: jest.fn(), refunds: jest.fn(), refund: jest.fn(), requestRefund: jest.fn(), entry: jest.fn(), registerPending: jest.fn(), retirePending: jest.fn(), quoteAd: jest.fn(),
+  accountGroup: jest.fn(), refundOrder: jest.fn(), refunds: jest.fn(), refund: jest.fn(), requestRefund: jest.fn(), entry: jest.fn(), pendingCommand: jest.fn(), discardPending: jest.fn(), registerPending: jest.fn(), retirePending: jest.fn(), quoteAd: jest.fn(),
 }, simpleBalanceError: err => err?.localMessage || 'تعذر الحفظ' }));
 global.IS_REACT_ACT_ENVIRONMENT = true;
 const resource = (kind,id, use = true) => ({kind,id,name:id,currency:'SAR',access:{use}});
@@ -44,8 +44,10 @@ async function change(label,value){
 test('a supplier payment reviews endpoint identities before registering a single financial intent',async()=>{
   await render(<ApprovedEntry context={context()} mode="out" onBack={()=>{}} onSaved={saved}/>);
   expect(host.textContent).not.toContain('مخفي');
-  await change('خرج المبلغ من',JSON.stringify(['bank','الإنماء']));
+  await change('نوع السداد','supplier');
   await change('وصل المبلغ إلى',JSON.stringify(['supplier','التفصيل']));
+  await change('نوع مصدر الدفع','bank');
+  await change('خرج المبلغ من',JSON.stringify(['bank','الإنماء']));
   await change('المبلغ (ريال)','٨٥٫٥٠');
   await click('مراجعة الحركة');
   expect(host.textContent).toContain('راجع الحركة');
@@ -53,6 +55,51 @@ test('a supplier payment reviews endpoint identities before registering a single
   await click('تأكيد وتسجيل الحركة'); await click('تأكيد وتسجيل الحركة');
   expect(saved).toHaveBeenCalledTimes(1);
   expect(api.entry).toHaveBeenCalledTimes(1); expect(api.entry).toHaveBeenCalledWith(expect.objectContaining({source_id:'الإنماء',party_id:'التفصيل',reason:'payment',amount:'85.50',side:'for_us'}));
+});
+const payoutField = label => [...host.querySelectorAll('label')].find(item => item.querySelector('span')?.textContent === label)?.querySelector('select');
+test('opening a supplier ledger fixes the payee and separates funded custody from unavailable sources',async()=>{
+  const ctx=context(), supplier=ctx.resources[0];
+  const funds=(kind,id,amount)=>({...resource(kind,id),access:{use:true,balance:true},balance:{visible:true,amount,side:'for_us'}});
+  ctx.operations.push('custody.spend');
+  ctx.resources.push(resource('supplier','مورد آخر'),resource('employee','موظف رواتب'),funds('bank','بنك فارغ','0.00'),
+    funds('cash','الصندوق','25.00'),funds('employee_custody','عهدة فارغة','0.00'),resource('employee_custody','عهدة غير مثبتة'),
+    {...resource('employee_custody','عهدة مستلمة'),can_fund_payment:true});
+  await render(<ApprovedEntry context={ctx} mode="out" resource={supplier} onBack={()=>{}} onSaved={saved}/>);
+  expect(host.textContent).toContain(supplier.name);
+  expect(payoutField('وصل المبلغ إلى')).toBeUndefined();
+  expect(host.textContent).not.toContain('مورد آخر');
+  expect(payoutField('خرج المبلغ من')).toBeUndefined();
+  await change('نوع مصدر الدفع','bank');
+  expect(payoutField('خرج المبلغ من').querySelector('option:disabled').textContent).toContain('بنك فارغ');
+  expect(host.textContent).not.toContain('عهدة مستلمة');
+  await change('نوع مصدر الدفع','employee_custody');
+  expect(Array.from(payoutField('خرج المبلغ من').options).slice(1).map(o=>o.textContent)).toEqual(['عهدة مستلمة']);
+  await change('نوع مصدر الدفع','cash');
+  await change('خرج المبلغ من',JSON.stringify(['cash','الصندوق']));
+  await change('المبلغ (ريال)','26');
+  await click('مراجعة الحركة');
+  expect(host.querySelector('[role="alert"]').textContent).toContain('رصيد مصدر الدفع لا يكفي');
+  expect(api.entry).not.toHaveBeenCalled();
+});
+test('changing payee type clears the previous payee and funding identity',async()=>{
+  const ctx=context();
+  ctx.operations.push('courier.pay','employee.payment');
+  ctx.resources.push(resource('courier','شركة الشحن'),resource('employee','موظف'),resource('external_person','جهة بلا صلاحية'));
+  await render(<ApprovedEntry context={ctx} mode="out" onBack={()=>{}} onSaved={saved}/>);
+  expect(Array.from(payoutField('نوع السداد').options).map(o=>o.value)).toEqual(['','supplier','courier','employee']);
+  await change('نوع السداد','supplier');
+  expect(host.textContent).not.toContain('شركة الشحن');
+  await change('وصل المبلغ إلى',JSON.stringify(['supplier','التفصيل']));
+  await change('نوع مصدر الدفع','bank'); await change('خرج المبلغ من',JSON.stringify(['bank','الإنماء']));
+  await change('نوع السداد','courier');
+  expect(payoutField('وصل المبلغ إلى').value).toBe('');
+  expect(host.textContent).not.toContain('التفصيل');
+  expect(payoutField('خرج المبلغ من')).toBeUndefined();
+  await change('وصل المبلغ إلى',JSON.stringify(['courier','شركة الشحن']));
+  expect(payoutField('نوع مصدر الدفع').value).toBe('');
+  await change('نوع مصدر الدفع','bank'); await change('خرج المبلغ من',JSON.stringify(['bank','الإنماء']));
+  await change('المبلغ (ريال)','10'); await click('مراجعة الحركة'); await click('تأكيد وتسجيل الحركة');
+  expect(api.entry).toHaveBeenCalledWith(expect.objectContaining({party_type:'courier',party_id:'شركة الشحن'}));
 });
 test('refund open and typing perform zero reads until explicit order lookup; amounts and history come from that lookup',async()=>{
   await render(<ApprovedRefund context={context()} identity="staff" onBack={()=>{}} onSaved={saved}/>);
@@ -123,4 +170,139 @@ test('independent embroidery invoice supports mixed lines, Arabic decimals, prev
       {kind:'service',name:'تطريز إضافي',quantity:'10',unit_price:'8.00'},
       {kind:'product',name:'خيط',quantity:'1.25',unit_price:'2.50'}]}});
   expect(api.entry.mock.calls[0][0]).not.toHaveProperty('source_id');
+});
+
+test('incoming receipts can still be deposited to an empty bank',async()=>{
+  const ctx=context();
+  ctx.operations.push('supplier.collection');
+  ctx.resources[1].can_fund_payment=false;
+  await render(<ApprovedEntry context={ctx} mode="in" resource={ctx.resources[0]} onBack={()=>{}} onSaved={saved}/>);
+  const bank=payoutField('دخل المبلغ في').querySelector('option[value*="الإنماء"]');
+  expect(bank.disabled).toBe(false); expect(payoutField('نوع مصدر الدفع')).toBeUndefined();
+  await change('دخل المبلغ في',bank.value); await change('المبلغ (ريال)','30');
+  await click('مراجعة الحركة'); await click('تأكيد وتسجيل الحركة');
+  expect(api.entry).toHaveBeenCalledWith(expect.objectContaining({party_type:'supplier',side:'for_party',reason:'collection',source_id:'الإنماء'}));
+});
+
+test('a lost acknowledgement can be recovered after the chosen bank has been exhausted', async()=>{
+  const ctx=context(), supplier=ctx.resources[0];
+  api.entry.mockRejectedValueOnce(new Error('response lost'));
+  await render(<ApprovedEntry key="before" context={ctx} mode="out" resource={supplier} onBack={()=>{}} onSaved={saved}/>);
+  await change('نوع مصدر الدفع','bank'); await change('خرج المبلغ من',JSON.stringify(['bank','الإنماء']));
+  await change('المبلغ (ريال)','30'); await click('مراجعة الحركة'); await click('تأكيد وتسجيل الحركة');
+  const [id,registered]=api.registerPending.mock.calls[0];
+  const original=api.entry.mock.calls[0][0];
+  ctx.resources[1].can_fund_payment=false;
+  api.pendingCommand.mockResolvedValue({id,...registered});
+  await render(<ApprovedEntry key="after" context={ctx} mode="out" resource={supplier} onBack={()=>{}} onSaved={saved}/>);
+  await click('مراجعة عملية سابقة لهذا الحساب');
+  expect(api.entry).toHaveBeenCalledTimes(1);
+  await click('إعادة محاولة العملية نفسها');
+  expect(api.entry.mock.calls[1][0]).toEqual(original);
+  expect(saved).toHaveBeenCalledTimes(1);
+});
+
+async function reopenSupplierPayment(bankName, resolution={status:'pending'}) {
+  const ctx=context(), supplier=ctx.resources[0];
+  ctx.resources.push(resource('bank','الأهلي'));
+  let sequence=0;
+  globalThis.crypto.randomUUID=()=>`00000000-0000-4010-8000-${String(++sequence).padStart(12,'0')}`;
+  const review=async(key,bank)=>{
+    await render(<ApprovedEntry key={key} context={ctx} mode="out" resource={supplier} onBack={()=>{}} onSaved={saved}/>);
+    await change('نوع مصدر الدفع','bank');
+    await change('خرج المبلغ من',JSON.stringify(['bank',bank]));
+    await change('المبلغ (ريال)','1'); await click('مراجعة الحركة');
+  };
+  api.entry.mockRejectedValueOnce(new Error('unknown outcome'));
+  await review('original','الإنماء'); await click('تأكيد وتسجيل الحركة');
+  const [id,record]=api.registerPending.mock.calls[0];
+  // The server validates and expands defaults before storing the command.
+  api.pendingCommand.mockResolvedValue({id,...record,command:{owner_id:null,employee_id:null,expense_id:null,reference:'',...record.command},resolution});
+  await review('new',bankName);
+  return {id,record};
+}
+test('the expanded server defaults do not create a false mismatch or trigger another payment',async()=>{
+  await reopenSupplierPayment('الإنماء');
+  expect(host.textContent).not.toContain('يختلف عن الطلب السابق');
+  expect(button('إعادة محاولة العملية نفسها').disabled).toBe(false);
+  expect(api.entry).toHaveBeenCalledTimes(1);
+});
+test('switching from Inma to Ahli requires a confirmed atomic discard, then explicit submission using a new ID',async()=>{
+  const {id}=await reopenSupplierPayment('الأهلي');
+  expect(host.textContent).toContain('طلبك الحالي من الأهلي');
+  expect(host.textContent).toContain('الطلب السابق من الإنماء');
+  expect(button('إعادة محاولة العملية نفسها').disabled).toBe(true);
+  localStorage.setItem('independent-marker','keep');
+  api.discardPending.mockResolvedValue({id,status:'discarded'});
+  await click('إلغاء الطلب السابق إذا لم يُنفّذ');
+  expect(api.discardPending).toHaveBeenCalledWith(id,'scope');
+  expect(host.textContent).toContain('أُلغي الطلب السابق قبل تنفيذه');
+  expect(api.entry).toHaveBeenCalledTimes(1);
+  expect(localStorage.getItem('independent-marker')).toBe('keep');
+  await click('تأكيد وتسجيل الحركة');
+  expect(api.entry).toHaveBeenCalledTimes(2);
+  const replacement=api.entry.mock.calls[1][0];
+  expect(replacement.source_id).toBe('الأهلي'); expect(replacement.request_id).not.toBe(id);
+});
+test('a receipt returned during discard or GET never executes a replacement payment',async()=>{
+  const result={saved:true,movement_id:'receipt-M1',party_type:'supplier',party_id:'التفصيل'};
+  const {id}=await reopenSupplierPayment('الأهلي');
+  api.discardPending.mockResolvedValue({id,status:'saved',result});
+  await click('إلغاء الطلب السابق إذا لم يُنفّذ');
+  expect(saved).toHaveBeenCalledWith(result,expect.objectContaining({recovered:true}));
+  expect(api.entry).toHaveBeenCalledTimes(1);
+});
+test('a saved recovery navigates directly to the confirmed receipt even when the replacement bank differs',async()=>{
+  const result={saved:true,movement_id:'receipt-M1',party_type:'supplier',party_id:'التفصيل'};
+  await reopenSupplierPayment('الأهلي',{status:'saved',result});
+  expect(saved).toHaveBeenCalledWith(result,expect.objectContaining({recovered:true}));
+  expect(api.discardPending).not.toHaveBeenCalled(); expect(api.entry).toHaveBeenCalledTimes(1);
+  expect(localStorage.length).toBe(0);
+});
+test('a proven rejection displays the actual reason while an unconfirmed discard keeps the exact pending identity',async()=>{
+  const {id,record}=await reopenSupplierPayment('الأهلي');
+  api.discardPending.mockRejectedValueOnce(new Error('discard response lost'));
+  await click('إلغاء الطلب السابق إذا لم يُنفّذ');
+  expect(localStorage.getItem(localStorage.key(0))).toBe(id);
+  expect(api.entry).toHaveBeenCalledTimes(1);
+  api.pendingCommand.mockResolvedValue({id,...record,resolution:{status:'rejected',detail:{not_applied:true,message:'لا يمكن سداد المورد بأكثر من مستحقه'}}});
+  await click('استعادة العملية السابقة');
+  expect(host.textContent).toContain('لا يمكن سداد المورد بأكثر من مستحقه');
+  expect(api.entry).toHaveBeenCalledTimes(1); expect(localStorage.length).toBe(0);
+});
+
+test('registration returning a previous receipt immediately opens it without executing a payment',async()=>{
+  const ctx=context(), supplier=ctx.resources[0];
+  const result={saved:true,movement_id:'receipt-M1',party_type:'supplier',party_id:supplier.id};
+  api.registerPending.mockImplementationOnce(async(id,record)=>({id,...record,resolution:{status:'saved',result}}));
+  await render(<ApprovedEntry context={ctx} mode="out" resource={supplier} onBack={()=>{}} onSaved={saved}/>);
+  await change('نوع مصدر الدفع','bank'); await change('خرج المبلغ من',JSON.stringify(['bank','الإنماء']));
+  await change('المبلغ (ريال)','1'); await click('مراجعة الحركة'); await click('تأكيد وتسجيل الحركة');
+  expect(api.entry).not.toHaveBeenCalled();
+  expect(saved).toHaveBeenCalledWith(result,expect.objectContaining({recovered:true}));
+});
+test('a lost discard result can be recovered by GET without executing a financial write',async()=>{
+  await reopenSupplierPayment('الأهلي',{status:'discarded'});
+  expect(host.textContent).toContain('أُلغي الطلب السابق قبل تنفيذه');
+  expect(api.entry).toHaveBeenCalledTimes(1);
+  expect(localStorage.length).toBe(0);
+});
+
+test('directory-only payout resolves one source group, rejects changed ACL and offers only funded authorized custody on retry',async()=>{
+  const ctx=context(), supplier=ctx.resources[0];
+  ctx.directoryOnly=true; ctx.operations.push('custody.spend');
+  const held=resource('employee_custody','عهدة مستلمة'), empty=resource('employee_custody','عهدة فارغة');
+  ctx.resources.push(held,empty);
+  const group={session_scope:ctx.session_scope,permission_version:ctx.permission_version,items:[
+    {...held,can_fund_payment:true},{...empty,can_fund_payment:false},
+    {...resource('employee_custody','عهدة خارج الصلاحية'),can_fund_payment:true}]};
+  api.accountGroup.mockResolvedValueOnce({...group,permission_version:12}).mockResolvedValueOnce(group);
+  await render(<ApprovedEntry context={ctx} mode="out" resource={supplier} onBack={()=>{}} onSaved={saved}/>);
+  expect(api.accountGroup).not.toHaveBeenCalled();
+  await change('نوع مصدر الدفع','employee_custody');
+  expect(payoutField('خرج المبلغ من')).toBeUndefined();
+  expect(host.querySelector('[role="alert"]').textContent).toContain('تعذر التحقق من صلاحيات');
+  await click('إعادة المحاولة');
+  expect(Array.from(payoutField('خرج المبلغ من').options).slice(1).map(o=>o.textContent)).toEqual(['عهدة مستلمة']);
+  expect(api.accountGroup.mock.calls.map(([kind])=>kind)).toEqual(['employee_custody','employee_custody']);
 });

@@ -5,6 +5,8 @@ import { todaySA } from '../../lib/dates';
 import { simpleBalancesApi as api, simpleBalanceError } from './simpleBalancesApi';
 import { authIdentity, useBalanceRead } from './simpleBalancesHooks';
 import { usePendingBalanceCommand } from './simpleBalancesPending';
+import PendingEntryActions from './PendingEntryActions';
+import PaymentSourceFields, { exceedsSource, insufficientSource, sourceAvailability, usePaymentSourceGroup } from './PaymentSourceFields';
 import SimpleOrderRefunds from './SimpleOrderRefunds';
 import SimpleBalanceStatement, { SignedAmount } from './SimpleBalanceStatement';
 import SimpleBalanceReviews from './SimpleBalanceReviews';
@@ -145,7 +147,7 @@ function EntryForm({ context, resource, onCancel, onSaved }) {
   const [form, setForm] = useState(() => ({ side: ad ? 'for_us' : isMoneyAccount(resource.kind) ? 'for_us' : resource.kind === 'pos_receivable' ? 'for_party' : '',
     adUnit: ad?.terms ? 'SAR' : 'receipt', adUsd: '', adFee: '', adWallet: false,
     reason: ad ? 'payment' : isMoneyAccount(resource.kind) ? 'transfer' : resource.kind === 'pos_receivable' ? 'collection' : '', reference: '', arrival: false, fee: '', feeReference: '', amount: '', business_date: todaySA(), note: '',
-    source: '', employee_id: '', owner_id: '', expense_id: '', charity_account: '' }));
+    source: '', sourceKind: '', employee_id: '', owner_id: '', expense_id: '', charity_account: '' }));
   useEffect(() => {
     if (!pending) return;
     setForm({ side: pending.side, reason: pending.reason?.startsWith('charity_') ? 'charity' : pending.reason || '',
@@ -153,7 +155,7 @@ function EntryForm({ context, resource, onCancel, onSaved }) {
       adFee: pending.ad_bank_funding?.bank_fee_amount || '', adWallet: pending.ad_bank_funding?.kind === 'wallet_funding', business_date: pending.business_date, note: pending.note || '',
       reference: pending.reference || '', arrival: pending.bank_arrival_confirmed === true,
       fee: pending.actual_fee_amount || '', feeReference: pending.fee_reference || '',
-      source: pending.source_id ? JSON.stringify([pending.source_type, pending.source_id]) : '',
+      sourceKind: pending.source_type || '', source: pending.source_id ? JSON.stringify([pending.source_type, pending.source_id]) : '',
       employee_id: pending.employee_id || '', owner_id: pending.owner_id || '', expense_id: pending.expense_id || '',
       charity_account: pending.reason === 'charity_company' ? 'company' : pending.reason === 'charity_owner' ? 'owner' : '' });
   }, [pending]);
@@ -175,14 +177,16 @@ function EntryForm({ context, resource, onCancel, onSaved }) {
   const owners = available.filter(item => item.kind === 'owner_withdrawal');
   const expenses = available.filter(item => item.kind === 'operating_expense');
   const sources = available.filter(item => (!(pos || ad) || item.kind === 'bank') && (item.currency || 'SAR') === 'SAR' && (isMoneyAccount(item.kind) || item.kind === 'employee_custody' && globalOperations.has('custody.spend') && form.side === 'for_us' && ['external_person', 'supplier', 'operating_expense'].includes(resource.kind)) && resourceKey(item) !== resourceKey(resource));
-  const source = sources.find(item => resourceKey(item) === form.source);
+  const payout = needsSource && form.side === 'for_us' && !account && !ad;
+  const group = usePaymentSourceGroup(context, sources, form.sourceKind, payout);
+  const source = group.rows.find(item => resourceKey(item) === form.source && (!payout || item.kind === form.sourceKind && !item.prepaid_shipping_cash));
   const employee = employees.find(item => item.id === form.employee_id);
   const owner = owners.find(item => item.id === form.owner_id);
   const expense = expenses.find(item => item.id === form.expense_id);
   const canWrite = context.status === 'active' && resource.access?.use === true && operations.size > 0;
   const disabled = busy || Boolean(pending) || mutation.recovering || mutation.blocked || !canWrite;
   const change = patch => { if (!disabled) { setForm(value => ({ ...value, ...patch })); mutation.clearError(); } };
-  const resetConditional = { source: '', employee_id: '', owner_id: '', expense_id: '', charity_account: '' };
+  const resetConditional = { source: '', sourceKind: '', employee_id: '', owner_id: '', expense_id: '', charity_account: '' };
   const chooseSide = side => change({ ...resetConditional, side, reason: '' });
 
   const quoteKey = JSON.stringify([resource.id, form.adUnit, form.amount, ad?.terms]);
@@ -204,6 +208,7 @@ function EntryForm({ context, resource, onCancel, onSaved }) {
         if (!amount) throw { localMessage: 'أدخل مبلغًا صحيحًا أكبر من صفر، وبحد أقصى منزلتين عشريتين.' };
         if (!/^\d{4}-\d{2}-\d{2}$/.test(form.business_date) || form.business_date > todaySA()) throw { localMessage: 'اختر تاريخًا صحيحًا حتى اليوم.' };
         if (needsSource && !source) throw { localMessage: 'اختر البنك أو الصندوق أو العهدة المتاحة لهذه الحركة.' };
+        if (payout && ((group.onDemand && sourceAvailability(source) !== true) || exceedsSource(source, amount))) throw { localMessage: insufficientSource };
         if (reason === 'adjustment' && !form.note.trim()) throw { localMessage: 'اكتب سبب الخصم لتوثيق الحركة.' };
         if (reason === 'salary_settlement') {
           if (!employee) throw { localMessage: 'اختر الموظف صاحب المستحق.' };
@@ -246,8 +251,10 @@ function EntryForm({ context, resource, onCancel, onSaved }) {
     {!canWrite && <Notice error="إضافة الحركات غير متاحة لهذا الحساب في حالة النظام أو الصلاحيات الحالية." />}
     <form className="sb-entry" onSubmit={save} noValidate>
       <Notice error={error} />
+      {mutation.notice && <Notice>{mutation.notice}</Notice>}
       {mutation.recovering && <Notice>جارٍ استعادة العملية السابقة من الخادم…</Notice>}
       {mutation.blocked && <button className="sb-secondary" type="button" onClick={mutation.recover} disabled={busy || mutation.recovering}>استعادة العملية السابقة</button>}
+      <PendingEntryActions mutation={mutation} className="sb-secondary" />
       {pending && <Notice>هناك عملية بانتظار تأكيد النتيجة. إعادة المحاولة تستخدم العملية نفسها دون إنشاء قيد جديد.</Notice>}
       {!account && !pos && !ad && <fieldset className="sb-direction" disabled={disabled}><legend>المبلغ يسجل</legend><div>{[['for_party', 'له', external ? 'أخذت منه مبلغًا أو دفع عنك' : 'يزيد ما له أو يقلل ما عليه'], ['for_us', 'عليه', external ? 'سلّمت له مبلغًا' : 'يقلل ما له أو يزيد ما عليه']].map(([side, label, help]) => <button type="button" key={side} data-side={side} aria-pressed={form.side === side} disabled={disabled || !entryChoices(resource.kind, side, operations).length} onClick={() => chooseSide(side)}><strong>{label}</strong><span>{help}</span></button>)}</div></fieldset>}
       {!implicit && form.side && <Field label="سبب المبلغ"><select value={form.reason} disabled={disabled} onChange={event => change({ ...resetConditional, reason: event.target.value })} required><option value="">اختر سبب المبلغ</option>{choices.map(item => <option key={item.reason} value={item.reason}>{item.label}</option>)}</select></Field>}
@@ -267,7 +274,10 @@ function EntryForm({ context, resource, onCancel, onSaved }) {
         {ad.mode === 'hybrid' && !ad.wallet_first && <Field label="نوع الدفعة"><select disabled={disabled} value={form.adWallet ? 'wallet' : 'payment'} onChange={e => change({ adWallet: e.target.value === 'wallet' })}><option value="payment">سداد المستحقات</option><option value="wallet">شحن المحفظة</option></select></Field>}
         <Field label="مرجع العملية البنكية"><input maxLength={160} value={form.reference} disabled={disabled} onChange={e => change({ reference: e.target.value })} /></Field>
       </>}
-      {needsSource && <Field label={form.side === 'for_party' && !account ? 'الإيداع في' : 'الدفع من'}><select value={form.source} disabled={disabled} onChange={event => change({ source: event.target.value })} required><option value="">اختر الحساب</option>{sources.map(item => <option key={resourceKey(item)} value={resourceKey(item)}>{item.kind === 'employee_custody' ? 'عهدة · ' : ''}{item.name}{item.kind === 'employee_custody' && item.access?.balance && item.balance ? ` · المتبقي ${item.balance.side === 'for_us' ? money(item.balance.amount) : '0'} ريال` : ''}</option>)}</select>{!sources.length && <small>لا توجد مصادر مسموحة لهذه العملية. يحددها مسؤول الصلاحيات.</small>}</Field>}
+      {payout && <PaymentSourceFields sources={sources} group={group} kind={form.sourceKind} value={source ? form.source : ''} disabled={disabled}
+        label="الدفع من" fieldClass="sb-field" onKind={sourceKind => change({ sourceKind, source: '' })}
+        onSource={sourceId => change({ source: sourceId })} />}
+      {needsSource && !payout && <Field label={form.side === 'for_party' && !account ? 'الإيداع في' : 'الدفع من'}><select value={form.source} disabled={disabled} onChange={event => change({ source: event.target.value })} required><option value="">اختر الحساب</option>{sources.map(item => <option key={resourceKey(item)} value={resourceKey(item)}>{item.kind === 'employee_custody' ? 'عهدة · ' : ''}{item.name}{item.kind === 'employee_custody' && item.access?.balance && item.balance ? ` · المتبقي ${item.balance.side === 'for_us' ? money(item.balance.amount) : '0'} ريال` : ''}</option>)}</select>{!sources.length && <small>لا توجد مصادر مسموحة لهذه العملية. يحددها مسؤول الصلاحيات.</small>}</Field>}
       {(pos || account) && <Field label="مرجع التحويل"><input maxLength={160} value={form.reference} required={pos || source?.kind === 'bank' && resource.prepaid_shipping_cash === true} disabled={disabled} onChange={event => change({ reference: event.target.value })} /></Field>}
       {pos && <>
         <Field label="رسوم الشبكة الفعلية إن وجدت"><input inputMode="decimal" value={form.fee} disabled={disabled} onChange={event => change({ fee: event.target.value })} /></Field>

@@ -1,0 +1,31 @@
+.mz-finance .cash-hero-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  justify-self: start;
+  padding: 4px 0;
+  color: white;
+  font: inherit;
+  font-size: 13px;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.mz-finance .cash-hero-add .ico { width: 15px; height: 15px; }
+.mz-finance .cash-create .op-field { display: grid; gap: 6px; margin-top: 15px; }
+.mz-finance .cash-create input {
+  width: 100%;
+  min-height: 42px;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.mz-finance .cash-create fieldset { border: 0; padding: 0; margin: 0; }
+.mz-finance .cash-create p { margin-block: 12px; }
+.mz-finance .cash-create button {
+  min-height: 40px;
+  padding: 6px 18px;
+  margin-inline-end: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.mz-finance .cash-create button:first-of-type { color: white; background: var(--plum); }

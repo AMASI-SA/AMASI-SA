@@ -1,0 +1,37 @@
+.mz-fees-page { --ofp-ink: #281c25; --ofp-line: #e7e2e6; }
+.mz-fees-page .fee-page-heading, .mz-fees-page .fee-directory-heading {
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+}
+.mz-fees-page .fee-directory-heading { padding: 18px 20px 8px; }
+.mz-fees-page .fee-directory-heading h2 { margin: 0; font-size: 18px; font-weight: 700; }
+.mz-fees-page .fee-directory-heading p, .mz-fees-page .fee-page-heading a,
+.mz-fees-page small { color: var(--mz-muted); font-size: 13px; }
+.mz-fees-page .fee-directory table { width: 100%; border-collapse: separate; border-spacing: 0 7px; text-align: start; }
+.mz-fees-page .fee-directory th, .mz-fees-page .fee-directory td { text-align: start; padding: 4px 6px; }
+.mz-fees-page .fee-directory thead th { font-size: 13px; color: var(--mz-muted); }
+.mz-fees-page .fee-directory tbody th { max-width: 220px; overflow-wrap: anywhere; font-weight: 700; }
+.mz-fees-page .fee-directory small { display: block; font-weight: normal; }
+.mz-fees-page .fee-directory small bdi + bdi::before { content: ' · '; }
+.mz-fees-page .fee-value { display: block; border: 1px solid var(--mz-line); border-radius: 7px;
+    background: #fcfbfc; padding: 8px 12px; text-align: center; font-variant-numeric: tabular-nums; }
+.mz-fees-page .fee-action { font-size: 13px; }
+.mz-fees-page .fee-action .ofp-button { min-height: 36px; padding: 6px 12px; }
+.mz-fees-page .fee-disclosure { background: white; border: 1px solid var(--mz-line); border-radius: 12px; padding: 14px 18px; }
+.mz-fees-page summary { cursor: pointer; font-weight: 700; }
+.mz-fees-page .fee-disclosure[open] > summary { border-bottom: 1px solid var(--mz-line); padding-bottom: 10px; margin-bottom: 12px; }
+.mz-fees-page .fee-extra { padding: 8px 0; }
+.mz-fees-page .fee-extra[open] > summary { margin-bottom: 10px; }
+.mz-fees-page .fee-editor form { max-width: 56rem; margin-inline: auto; }
+.mz-fees-page .fee-editor input, .mz-fees-page .fee-editor select { background: white; border: 1px solid var(--mz-line); border-radius: 7px; min-height: 40px; }
+@media (max-width: 720px) {
+    .mz-fees-page .fee-directory table, .mz-fees-page .fee-directory tbody { display: block; }
+    .mz-fees-page .fee-directory thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+    .mz-fees-page .fee-directory tbody tr { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 6px;
+        padding: 12px 0; border-top: 1px solid var(--mz-line); align-items: start; }
+    .mz-fees-page .fee-directory tbody th { grid-column: 1 / -1; max-width: none; }
+    .mz-fees-page .fee-source { grid-column: 1 / -1; font-size: 13px; }
+    .mz-fees-page .fee-source small { display: inline; margin-inline-start: 8px; }
+    .mz-fees-page .fee-action { grid-column: 1 / -1; }
+    .mz-fees-page .fee-directory td[data-label]::before { content: attr(data-label); display: block; font-size: 12px; color: var(--mz-muted); margin-bottom: 4px; }
+    .mz-fees-page .fee-value { padding: 6px; }
+}

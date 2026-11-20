@@ -56,6 +56,18 @@ test('the existing supplier operations link opens an independent invoice for acc
   expect(api.movements).not.toHaveBeenCalled();
 });
 
+test('credit purchase is a single choice between payment and transfer and opens the supplier list', async () => {
+  api.context.mockResolvedValue({...ctx,operations:[{key:'supplier.accrual'}],capabilities:{create_entries:true},
+    resources:[{...ctx.resources[2],access:{use:true,movements:'own'},operations:['supplier.accrual']}]});
+  await act(async()=>root.render(<MemoryRouter initialEntries={[base+'?view=entry']}><ApprovedFinance/></MemoryRouter>));
+  const choices=[...host.querySelectorAll('.quick.flow .quickbtn')];
+  expect(choices.map(button=>button.textContent)).toEqual(['استلمت مبلغ','دفعت مبلغ','شراء آجل من مورد','حوّلت بين حسابين']);
+  expect(host.querySelectorAll('a[href*="mode=purchase"]')).toHaveLength(0);
+  await act(async()=>choices[2].click());
+  expect(host.querySelector('h1').textContent).toBe('شراء آجل من مورد');
+  expect(host.querySelector('a.review-item').textContent).toContain('مورد التفصيل');
+});
+
 test('a payment-only user cannot open the supplier purchase form by URL', async () => {
   api.context.mockResolvedValue({...ctx,operations:[{key:'supplier.payment'}],capabilities:{create_entries:true},
     resources:[{...ctx.resources[2],access:{use:true,movements:'own'},operations:['supplier.payment']}]});

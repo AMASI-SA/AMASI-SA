@@ -23,7 +23,7 @@ from operational_ad_wallet_pool import enabled as wallet_pool_enabled, project_p
 _LOG = logging.getLogger(__name__)
 
 DEFINITIVE_MOVEMENT_REJECTIONS = {
-    "operational_workspace_source_insufficient", "operational_pos_bank_confirmation_required",
+    "operational_workspace_source_insufficient", "operational_prepaid_source_invalid", "operational_pos_bank_confirmation_required",
     "operational_transfer_reference_required", "operational_pos_insufficient",
     "operational_workspace_owner_return_limit",
     "operational_salary_adjustment_required",
@@ -312,7 +312,7 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
                                 and r["party_id"] == bank["id"] and r["currency"] == currency), {})
                 cash_balance = Decimal(balance.get("custody_remaining", "0"))
             if amount > cash_balance:
-                fail("operational_custody_insufficient", "مبلغ الصرف يتجاوز المتبقي في العهدة")
+                fail("operational_custody_insufficient", "رصيد العهدة لا يكفي. قلّل المبلغ أو اختر مصدرًا آخر.")
         if row["kind"] == "employee_custody" and payload["kind"] != "correction":
             valid = ((payload["kind"] == "payment" and payload["direction"] == "outgoing")
                      or (payload["kind"] == "collection" and payload["direction"] == "incoming"))
@@ -335,14 +335,16 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
                     fail("operational_workspace_owner_return_limit", "المبلغ يتجاوز السحوبات القابلة للإعادة", 409)
         if payload["kind"] != "correction" and bank is None:
             fail("operational_bank_required", "حدد البنك أو الصندوق الذي تحرك منه أو إليه المبلغ")
-        if (payload.get("workspace_operation") and bank and payload["direction"] == "outgoing"):
+        if payload.get("workspace_operation") and bank and bank["kind"] in {"bank", "cash"} and payload["direction"] == "outgoing":
+            if bank["kind"] == "cash" and payload["kind"] == "payment" and prepaid_shipping_cash(state, bank["id"]):
+                fail("operational_prepaid_source_invalid", "هذا الرصيد مخصص للشحن. اختر صندوقًا نقديًا أو بنكًا.", 409)
             if cash_balance is None:
                 available_source = next((r for r in (await current_report())["parties"]
                     if r["party_type"] == bank["kind"] and r["party_id"] == bank["id"]
                     and r["currency"] == ("SAR" if has_fx else currency)), {})
                 cash_balance = Decimal(available_source.get("actual", "0"))
             if (bank_gross if has_fx else amount) > cash_balance:
-                fail("operational_workspace_source_insufficient", "تعذر تنفيذ المبلغ من المصدر المختار", 409)
+                fail("operational_workspace_source_insufficient", "رصيد مصدر الدفع لا يكفي. قلّل المبلغ أو اختر مصدرًا آخر.", 409)
         if payload["kind"] == "correction" and not payload.get("note", "").strip():
             fail("operational_correction_reason_required", "التصحيح يتطلب سببًا موثقًا")
         if payload["kind"] == "correction" and (bank or payload.get("allocations")):
@@ -833,7 +835,7 @@ def paypal_available(computed):
     return Decimal(summary["net"]) if summary.get("complete") and summary.get("net") is not None else None
 
 
-def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=False, provider_balances_net=False, paypal_sar=False):
+def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=False, provider_balances_net=False, paypal_sar=False, workspace_provider=None):
     from operational_financial_activity_runtime import preparation_checkpoint
     preparation_checkpoint()
     state = reconcile_credits(deepcopy(state))
@@ -1158,9 +1160,15 @@ def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=Fa
         "details": details, "issues": issues, "obligations": obligations,
     })
     from operational_provider_summary import provider_balances
+    order_details = None
+    if workspace_provider is not None:
+        from operational_workspace_provider_orders import ProviderOrders
+        order_details = ProviderOrders(workspace_provider, state)
     details["provider_balances"], resolved_fees = provider_balances(
         state, details, obligations, parties if provider_balances_net else deepcopy(parties), valuations,
-        sar_view=provider_balances_sar, paypal_sar=paypal_sar)
+        sar_view=provider_balances_sar, paypal_sar=paypal_sar, order_details=order_details)
+    if order_details is not None:
+        details["workspace_provider_orders"] = list(order_details.rows.values())
     issues = [entry for entry in issues if not (
         entry.get("code") == "provider_fee_estimate_unavailable" and entry.get("source_id") in resolved_fees)]
     for currency, providers in details["provider_balances"].items():

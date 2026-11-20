@@ -21,7 +21,7 @@ global.IS_REACT_ACT_ENVIRONMENT = true;
 const operations = ['external.pay', 'external.receive', 'external.salary', 'external.charity_company',
   'external.charity_owner', 'external.household', 'external.personal', 'custody.spend'];
 const resource = (kind, id, name, patch = {}) => ({ kind, id, name, currency: 'SAR', access: { use: true, movements: 'all', balance: true },
-  balance: { amount: '400.00', side: 'for_party', visible: true }, operations: [...operations], ...patch });
+  balance: { amount: '400.00', side: ['bank','cash'].includes(kind) ? 'for_us' : 'for_party', visible: true }, operations: [...operations], ...patch });
 const external = () => resource('external_person', 'external', 'شركة آفاق');
 const context = () => ({ actor: { id: 'staff', name: 'محمد', is_owner: false }, session_scope: 'scope', permission_version: 2,
   status: 'active', capabilities: { create_entries: true, manage_access: false }, operations: operations.map(key => ({ key, label: key })),
@@ -120,6 +120,7 @@ test('changing external direction clears salary fields, keeps amount and note, a
   await act(async () => host.querySelector('[data-side="for_us"][aria-pressed]').click());
   expect(byLabel('سبب المبلغ')).toBeUndefined(); expect(byLabel('الموظف')).toBeUndefined();
   expect(byLabel('المبلغ بالريال').value).toBe('50'); expect(byLabel('ملاحظة (اختياري)').value).toBe('دفعة اليوم');
+  await change('نوع مصدر الدفع', 'employee_custody');
   await change('الدفع من', JSON.stringify(['employee_custody', 'custody']));
   await submit();
   expect(api.entry).toHaveBeenCalledTimes(1);
@@ -132,7 +133,7 @@ test('custody sources require the separate custody.spend operation', async () =>
   const ctx = context(); ctx.operations = ctx.operations.filter(item => item.key !== 'custody.spend');
   await render(<EntryForm context={ctx} resource={external()} onCancel={() => {}} onSaved={saved} />);
   await act(async () => host.querySelector('[data-side="for_us"][aria-pressed]').click());
-  expect([...byLabel('الدفع من').options].some(option => option.value.includes('custody'))).toBe(false);
+  expect([...byLabel('نوع مصدر الدفع').options].some(option => option.value === 'employee_custody')).toBe(false);
 });
 
 test('an uncertain save retries the identical command and prevents double submission', async () => {
@@ -140,7 +141,7 @@ test('an uncertain save retries the identical command and prevents double submis
   api.entry.mockImplementationOnce(() => new Promise((resolve, fail) => { reject = fail; }));
   await render(<EntryForm context={context()} resource={external()} onCancel={() => {}} onSaved={saved} />);
   await act(async () => host.querySelector('[data-side="for_us"][aria-pressed]').click());
-  await change('المبلغ بالريال', '50'); await change('الدفع من', JSON.stringify(['bank', 'bank']));
+  await change('المبلغ بالريال', '50'); await change('نوع مصدر الدفع', 'bank'); await change('الدفع من', JSON.stringify(['bank', 'bank']));
   await act(async () => {
     const form = host.querySelector('form');
     form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
@@ -159,7 +160,7 @@ test('reopening an entry restores its server body without an automatic financial
   api.entry.mockRejectedValueOnce(new Error('financial response unknown'));
   await render(<EntryForm key="before" context={context()} resource={external()} onCancel={() => {}} onSaved={saved} />);
   await act(async () => host.querySelector('[data-side="for_us"][aria-pressed]').click());
-  await change('المبلغ بالريال', '50'); await change('الدفع من', JSON.stringify(['bank', 'bank']));
+  await change('المبلغ بالريال', '50'); await change('نوع مصدر الدفع', 'bank'); await change('الدفع من', JSON.stringify(['bank', 'bank']));
   await change('ملاحظة (اختياري)', 'دفعة توضيحية'); await submit();
   const original = api.entry.mock.calls[0][0];
   const [id, registered] = api.registerPending.mock.calls[0];
@@ -219,7 +220,7 @@ test('a saved backdated movement returns to its server-selected ledger page and 
   })));
   await render(<SimpleBalances />);
   await act(async () => host.querySelector('[data-side="for_us"][aria-pressed]').click());
-  await change('المبلغ بالريال', '50'); await change('الدفع من', JSON.stringify(['bank', 'bank'])); await submit();
+  await change('المبلغ بالريال', '50'); await change('نوع مصدر الدفع', 'bank'); await change('الدفع من', JSON.stringify(['bank', 'bank'])); await submit();
   expect(api.ledger).toHaveBeenLastCalledWith('external_person', 'external', { page: 1, page_size: 5, focus_id: 'new-movement' }, expect.any(Object));
   expect(host.querySelector('.sb-new-row').textContent).toContain('دفعة محفوظة');
   expect(host.querySelector('button[aria-label="الصفحة 2"]').getAttribute('aria-current')).toBe('page');
@@ -254,4 +255,22 @@ test.each([true, false])('owner or granted employee can fund USD advertising fro
   await submit();
   expect(api.entry).toHaveBeenCalledWith(expect.objectContaining({ amount: '100.00', reference: 'BANK-TEST', source_id: 'bank',
     ad_bank_funding: { bank_amount: '383.63', bank_fee_amount: '8.63', kind: 'payment' } }));
+});
+
+test('specialized supplier payment checks the exact selected cash balance before submission', async () => {
+  const ctx = context(), supplier = resource('supplier', 'tailor', 'المخزن', { operations: ['supplier.payment'] });
+  ctx.operations.push({ key: 'supplier.payment', label: 'سداد مورد' });
+  ctx.resources.push(supplier);
+  await render(<EntryForm context={ctx} resource={supplier} onCancel={() => {}} onSaved={saved} />);
+  await act(async () => host.querySelector('[data-side="for_us"][aria-pressed]').click());
+  await change('سبب المبلغ', 'payment');
+  expect(byLabel('الدفع من')).toBeUndefined();
+  await change('نوع مصدر الدفع', 'cash');
+  expect([...byLabel('الدفع من').options].map(o => o.textContent)).toEqual(['اختر الحساب', 'الصندوق']);
+  await change('الدفع من', JSON.stringify(['cash', 'cash']));
+  await change('المبلغ بالريال', '400.01'); await submit();
+  expect(host.textContent).toContain('رصيد مصدر الدفع لا يكفي');
+  expect(api.entry).not.toHaveBeenCalled();
+  await change('المبلغ بالريال', '400'); await submit();
+  expect(api.entry).toHaveBeenCalledWith(expect.objectContaining({ party_type:'supplier', party_id:'tailor', source_type:'cash', amount:'400.00' }));
 });
