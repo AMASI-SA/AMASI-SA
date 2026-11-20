@@ -83,7 +83,7 @@ MAX_ROWS = 20000
 # whole: dotted projections could hide malformed shapes or conflicting proof.
 REFRESH_ORDER_FIELDS = (
     'user_id', 'raw_by_source', 'g47_salla_snapshot', 'salla_shipping_current',
-    'salla_paid_sar_evidence', 'order_id', 'salla_order_id', 'order_number',
+    'salla_paid_sar_evidence', 'salla_bank_in_progress_proof', 'order_id', 'salla_order_id', 'order_number',
     'order_status', 'order_status_slug', 'last_salla_direct_status_source_updated_at',
     'merchant', 'merchant_id', 'store_id', 'salla_shipment_id', 'tracking_number',
     'shipping_number', 'shipping_company_code', 'shipping_company',
@@ -1477,7 +1477,8 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
             completion_review_index = build_review_index(operational_state) if operational_state else None
             source_ids = Counter(str(r.get('id') or '') for r in raw_orders)
             source_numbers = Counter(str(r.get('reference_id') or r.get('order_number') or '') for r in raw_orders)
-            bank_catalog = None
+            from operational_bank_credit_recognition import BankCreditRecognition, REVIEW_ACTIONS
+            bank_receipts = BankCreditRecognition(db, owner, operational_state, data, as_of)
             recorded_fee_lookup = await prepare_in_thread(build_recorded_courier_fee_lookup, operational_state)
             driver_groups = {}
             if retained:
@@ -1718,25 +1719,16 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                 observe_nonprovider(customer_tenders, raw, source, order, total_value, normalized_payment, owner,
                                     blocked=payment_identity_conflict, payment_issues=payment_issues)
                 inspected_order_ids.add(identity)
-                from operational_balance_bank_orders import transfer_bank, resolve, native_paid_amount, QUALIFYING
-                native_bank = method == 'bank'
-                if not payment_identity_conflict and transfer_bank(method)[0] and (native_bank or status in QUALIFYING):
-                    try:
-                        paid = total
-                        if native_bank:
-                            paid = native_paid_amount(raw, source, owner=owner, order_number=order_number,
-                                provider_order_id=identity, currency=order['currency'], total=total_value, as_of=as_of)
-                            if bank_catalog is None:
-                                from operational_bank_catalog import bank_identities
-                                with refresh_stage('source_bank_catalog'):
-                                    bank_catalog = await bank_identities(db, owner, include_routing=True)
-                        bank = resolve(data, owner, payment.get('method') or raw.get('payment_method'),
-                                       order['currency'], raw=raw, banks=bank_catalog or ())
-                        if paid <= 0 or paid != paid.quantize(Decimal('.01')):
-                            raise ValueError('operational_order_bank_amount_invalid')
-                        order['bank_credit'] = {'bank_id': bank['id'], 'bank_name': bank['name'], 'amount': str(paid)}
-                    except ValueError as exc:
-                        issue(out, str(exc), identity)
+                try:
+                    credit = await bank_receipts.candidate(raw, source, order, method, total_value, total,
+                        normalized_payment, payment_issues, txn_by_order.get(order_number, ()), payment_identity_conflict)
+                    if credit:
+                        order['bank_credit'] = credit
+                except ValueError as exc:
+                    code = str(exc)
+                    action = REVIEW_ACTIONS.get(code)
+                    issue(out, code, identity, order_number=order_number,
+                          **({'required_action': action} if action else {}))
                 cod = method in {'cod', 'cash_on_delivery', 'cashondelivery', 'cash on delivery', 'الدفع عند الاستلام', 'دفع عند الاستلام', 'دفع عند الإستلام'}
                 if cod:
                     order['cod_required'] = True
@@ -2376,9 +2368,9 @@ async def order_bank_eligible(db, owner, order_number, started_at, reject_automa
     if len(matches) != 1:
         raise ValueError('canonical_order_missing_or_ambiguous')
     source, raw = matches[0]
-    from operational_balance_bank_orders import transfer_bank
+    from operational_balance_bank_orders import is_mada_bank_split, transfer_bank
     method = (raw.get("payment") or {}).get("method") if isinstance(raw.get("payment"), dict) else None
-    if reject_automatic and transfer_bank(method or raw.get("payment_method"))[0]:
+    if reject_automatic and (transfer_bank(method or raw.get("payment_method"))[0] or is_mada_bank_split(raw)):
         raise ValueError("operational_order_bank_automatic")
     if (source.get('g47_salla_snapshot') or {}).get('requires_authoritative_refresh'):
         raise ValueError('canonical_salla_refresh_required')

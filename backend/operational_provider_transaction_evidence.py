@@ -315,20 +315,32 @@ def normalize_operational_payment(raw, currency, total, created_at, as_of, *, ow
 
 async def load_transaction_rows(db, owner, orders, start, now, *, to_instant, max_rows):
     """One bounded order-index query per batch. No foreign, uncapped, or per-order read."""
+    from operational_balance_bank_orders import is_mada_bank_split
+
     if not isinstance(owner, str) or not owner.strip() or owner != owner.strip():
         raise ValueError("operational_source_owner_mismatch")
     keys = set()
+    bank_tender_keys = set()
+    provider_keys = set()
     by_ref = defaultdict(set)
     for raw in orders:
         try:
             if not start < to_instant(raw.get("date") or raw.get("created_at") or raw.get("order_date")) <= now:
                 continue
             method = raw.get("payment") or {}
-            if not isinstance(method, dict) or not provider_for(method.get("method") or raw.get("payment_method")):
+            if not isinstance(method, dict):
+                continue
+            provider = provider_for(method.get("method") or raw.get("payment_method"))
+            bank_tender = is_mada_bank_split(raw)
+            if not provider and not bank_tender:
                 continue
             number = raw.get("reference_id") or raw.get("order_number")
             if number and raw.get("id"):
                 keys.add(str(number))
+                if bank_tender:
+                    bank_tender_keys.add(str(number))
+                if provider:
+                    provider_keys.add(str(number))
                 references = [method.get("reference"), method.get("transaction_reference")]
                 methods = raw.get("payment_methods")
                 if isinstance(methods, list) and len(methods) <= 100:
@@ -366,7 +378,12 @@ async def load_transaction_rows(db, owner, orders, start, now, *, to_instant, ma
                     by_ref[ev["reference"]].add((number, record.get("provider_order_id")))
     for identities in by_ref.values():
         if len(identities) > 1:
+            # A newly inspected bank-primary leg may be held but cannot change an
+            # otherwise uncontested existing provider's recognition.
+            provider_collision = sum(number in provider_keys for number, _ in identities) > 1
             for number, order_id in identities:
+                if number not in bank_tender_keys and not provider_collision:
+                    continue
                 groups[number].append({"user_id":owner, "source":"salla_transactions",
                     "order_number":number, "provider_order_id":order_id, "native_transaction_evidence":[]})
     return groups

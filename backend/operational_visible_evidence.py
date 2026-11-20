@@ -166,7 +166,8 @@ async def acquire_visible_evidence(db, owner, *, courier_order_id=None):
     from salla_integration.service import SallaError
 
     issues = state.get("engine", {}).get("issues", [])
-    bank = [issue for issue in issues if issue.get("code") == "operational_order_bank_binding_incomplete"]
+    from operational_bank_order_milestone import HISTORY_MISSING
+    bank = [issue for issue in issues if issue.get("code") in {"operational_order_bank_binding_incomplete", HISTORY_MISSING}]
     courier = [issue for issue in issues if issue.get("code") in ISSUE_CODES]
     sar = (state.get("engine", {}).get("customer_tender_coverage", {}).get("sar", {}).get("proof_lookups") or [])
     if courier_order_id is not None:

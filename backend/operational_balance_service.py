@@ -176,6 +176,8 @@ async def save_opening(db, owner, actor, payload, *, finish=False, clock=None):
             except ValueError:
                 fail("operational_source_setup_incomplete", "تعذر تثبيت مصادر بداية النظام؛ أكمل إعداد ميزان 2")
             state.update(status="active", started_at=stamp)
+            from operational_bank_receipt_rollout import initialize_admission
+            initialize_admission(state, stamp)
             audit(state, actor, "system_started", "draft", "active", "حفظ وإنهاء", "opening", stamp)
         result = {"status": state["status"], "opening_count": len(state["openings"]),
                   "started_at": state["started_at"]}
@@ -744,6 +746,8 @@ async def refresh(db, owner, *, clock=None):
         await active_gate(db, owner, state)
         await checkpoint()
         result, sources = await _reconcile_with_profit_snapshot(db, owner, state, stamp)
+        from operational_bank_receipt_rollout import initialize_admission
+        initialize_admission(result, stamp)
         await checkpoint()
         with refresh_stage("bank_claims"):
             bank_actions = await run_calculation(_bank_credit_actions, sources.get("orders", []), result["movements"])

@@ -187,7 +187,7 @@ def test_source_change_during_native_read_loses_the_compare_and_set(monkeypatch,
     source, native = pair()
     calls = []
     async def concurrent(db):
-        path, value = {"raw": ("raw_by_source.salla_direct.status.slug", "in_progress"),
+        path, value = {"raw": ("raw_by_source.salla_direct.status.slug", "delivered"),
                        "watermark": ("g47_salla_snapshot.revision", 2), "owner": ("user_id", "other")}[changed]
         await db.unified_orders.update_one({"user_id": "owner"}, {"$set": {path: value}})
     provider(monkeypatch, {str(native["id"]): native}, calls, during_read=concurrent)

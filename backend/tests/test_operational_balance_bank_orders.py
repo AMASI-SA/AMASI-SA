@@ -8,7 +8,7 @@ from fastapi import HTTPException
 from test_operational_balance_integration import run, started, refresh, read, report, movement, create_movement, NOW
 
 
-async def seed(db, status='reviewed', method='تحويل بنكي مصرف تجريبي'):
+async def seed(db, status='in_progress', method='تحويل بنكي مصرف تجريبي'):
     await db.mz2_bank_transfer_bindings.insert_one({
         '_id':hashlib.sha256(json.dumps(['owner','salla.payment_method_bank','مصرف تجريبي'],ensure_ascii=False).encode()).hexdigest(),
         'user_id':'owner','upstream_source':'salla.payment_method_bank','upstream_value':'مصرف تجريبي',
@@ -25,6 +25,8 @@ def test_bank_order_credit_without_receipt_once_across_retries_and_states(status
     async def scenario(db):
         await started(db);await seed(db,status)
         await asyncio.gather(refresh(db,'owner',clock=NOW),refresh(db,'owner',clock=NOW))
+        initial = await read(db, 'owner')
+        assert len(initial['movements']) == int(status in {'in_progress', 'قيد التنفيذ'})
         await db.unified_orders.update_one({'user_id':'owner'},{'$set':{'raw_by_source.salla_direct.status':'in_progress'}})
         await refresh(db,'owner',clock=NOW)
         state=await read(db,'owner');assert len(state['movements'])==1
@@ -42,7 +44,7 @@ def test_missing_binding_and_ineligible_status_never_guess_bank():
     async def scenario(db):
         await started(db);await seed(db,'pending')
         await refresh(db,'owner',clock=NOW);assert not (await read(db,'owner'))['movements']
-        await db.unified_orders.update_one({'user_id':'owner'},{'$set':{'raw_by_source.salla_direct.status':'reviewed'}})
+        await db.unified_orders.update_one({'user_id':'owner'},{'$set':{'raw_by_source.salla_direct.status':'in_progress'}})
         await db.mz2_bank_transfer_bindings.update_one({'user_id':'owner'},{'$set':{'confirmed':False}})
         await refresh(db,'owner',clock=NOW);state=await read(db,'owner')
         assert not state['movements'];assert any(i['code']=='operational_order_bank_binding_incomplete' for i in state['engine']['issues'])
@@ -98,12 +100,42 @@ def native_bank_order(number, *, name='مصرف الراجحي', paid='100.00', 
     from test_operational_balance_order_page_payment_flow import order_document
     document = order_document('bank', paid, remaining, number=number, created='2026-10-06T10:00:00+00:00')
     raw = document['raw_by_source']['salla_direct']
+    raw['status'] = {'slug': 'in_progress', 'name': 'قيد التنفيذ'}
     raw['bank'] = {'bank_id': 'native-bank-id', 'bank_name': name}
     raw['payment_methods'] = [{'payment_method': 'bank', 'amount': paid, 'transaction_reference': None}]
     raw['payment_actions']['refund_action'] = {
         'paid_amount': {'amount': paid, 'currency': 'SAR'}, 'refund_amount': {'amount': '0.00', 'currency': 'SAR'}}
     document['g47_salla_snapshot'] = {'component_pending': True, 'source_updated_at': raw['updated_at']}
     return document
+
+
+def test_native_bank_waits_even_with_paid_fields_and_a_receipt_then_books_once():
+    async def scenario(db):
+        await started(db)
+        await native_accounts(db)
+        doc = native_bank_order('998005')
+        raw = doc['raw_by_source']['salla_direct']
+        raw['receipt_image'] = 'https://example.test/receipt.png'
+        raw['status'] = {'slug': 'under_review'}
+        await db.unified_orders.insert_one(doc)
+        for status in ('under_review', 'reviewed', 'payment_pending'):
+            await db.unified_orders.update_one({'order_number': '998005'},
+                {'$set': {'raw_by_source.salla_direct.status': {'slug': status}}})
+            await refresh(db, 'owner', clock=NOW)
+            assert not (await read(db, 'owner'))['movements']
+        await db.unified_orders.update_one({'order_number': '998005'},
+            {'$set': {'raw_by_source.salla_direct.status': {'slug': 'in_progress'}}})
+        await asyncio.gather(refresh(db, 'owner', clock=NOW), refresh(db, 'owner', clock=NOW))
+        recorded = (await read(db, 'owner'))['movements']
+        assert len(recorded) == 1 and recorded[0]['amount'] == '100.00'
+        await db.unified_orders.update_one({'order_number': '998005'},
+            {'$set': {'raw_by_source.salla_direct.status': {'slug': 'payment_pending'}}})
+        await refresh(db, 'owner', clock=NOW)
+        result = await read(db, 'owner')
+        assert result['movements'] == recorded
+        assert any(i['code'] == 'operational_order_bank_posted_milestone_review'
+                   for i in result['engine']['issues'])
+    run(scenario)
 
 
 async def native_accounts(db):
