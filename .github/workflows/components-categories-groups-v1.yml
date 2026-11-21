@@ -77,7 +77,7 @@ jobs:
         working-directory: .
         run: |
           PAGE=frontend/src/pages/MezanComponentsOrganization.jsx
-          grep -q 'التصنيفات والقروبات' "$PAGE"
-          grep -q 'اسم القروب التلقائي' "$PAGE"
+          grep -q 'التصنيفات والمجموعات' "$PAGE"
+          grep -q 'اسم المجموعة التلقائي' "$PAGE"
           grep -q 'تعديل التصنيفات' "$PAGE"
           grep -q 'الطلبات أو الفواتير السابقة' "$PAGE"

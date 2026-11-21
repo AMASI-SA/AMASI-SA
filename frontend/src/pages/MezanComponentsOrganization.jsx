@@ -209,6 +209,8 @@ export default function MezanComponentsOrganization({ accessMode = null }) {
         {!accessMode && <button onClick={() => setTab("catalog")} className={`rounded-xl px-4 py-3 text-sm font-black ${tab === "catalog" ? "bg-emerald-700 text-white" : "text-slate-700"}`}><Cube className="ml-1 inline" />إدارة العناصر والتكاليف</button>}
       </nav>
 
+      {canWrite && <p className="mz-catalog-muted">تعديل التصنيفات والمجموعات لا يغيّر الطلبات أو الفواتير السابقة.</p>}
+
       {error && <div className="flex items-start gap-2 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-black text-rose-900"><WarningCircle size={21} className="mt-0.5 shrink-0" />{error}</div>}
 
       {tab === "catalog" && !accessMode ? <MezanComponentsProduction embedded /> : (
