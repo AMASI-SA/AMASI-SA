@@ -1,3 +1,43 @@
+# Evidence-only release checkpoint
+
+DO NOT DEPLOY THIS BRANCH. Deploy only the governed release branch after all gates.
+Task: ARAMEX-PRINT-20261121; repository AMASI-SA/AMASI-SA; PR #2044.
+Release branch: `codex/aramex-label-verified-release-20261121`.
+Evidence branch: `codex/aramex-label-verified-evidence-20261121`.
+Reviewed J: `9f47a47ff16bfa02a8132bd83fe44db3bdb86da0`.
+Source A: `3948581dd53a942af538731c8ad2eff045fd86b7`.
+Intent-only B: `fccefed6880c1cad4f3b81bad7303c506a40495e`.
+Runtime: `rg5-a581e09f8d694a4ecfdca10c50d2bb899ac11f9d5d386753c812d5f359b99ae2`.
+Exact intent SHA256: `9388712d7987931fe169b6bb32b35eabca51e1e1a5a885e0de5b76e5b1e9ef37`.
+
+A's governed Linux readiness run 44914037982 succeeded. Independent comparison
+matched all 1343 Frontend,1282 Backend and322 release-control Git records and
+the deterministic runtime identity. The committed B blob exactly matches the
+downloaded candidate bytes; `verify_release_intent_git` proves intent-only B.
+Windows filesystem mode refusal is not bypassed; full source/artifact validator
+ran successfully under the governed Linux readiness job.
+
+Fresh isolated processes on corrected A: fallback41,native parity19,current
+guards29,boundary41 passed with one deliberate memory rollback skip. Earlier
+same-source compatibility58+59subtests and Mongo latency26 also passed. Exit0
+for each. Regression failed before fence with DID NOT RAISE on a conflicting
+active scoped shipment. Exact-B CI and both Host20/24 clean-clone adapter
+rehearsals remain pending; do not merge or deploy based on this checkpoint.
+
+No task merge,shared source mutation,lease or publication. Shared source was
+last observed tracked-clean at J with original guard active:false. Production
+changed by this task:no. The original live order/device acceptance is unverified.
+Unrelated shared files and all superseded source/intent/evidence branches remain
+preserved. The evidence-only status update does not amend frozen A/B.
+
+Next safe action: await all applicable exact-B checks and both host rehearsals;
+reconcile a fresh origin and original shared guard; normal merge preserving A/B,
+configured adapter,prepare/prepublish,authorized publication,new explicit success,
+original three-probe verification/inactive lease,and actual ADB label/print test.
+Canonical ledger: Issue1006 comment6238987123 ARAMEX-PRINT-20261121 block.
+
+---
+
 # Current carrier shipment read recovery
 
 Task: ARAMEX-PRINT-20261121. Repository: AMASI-SA/AMASI-SA.
