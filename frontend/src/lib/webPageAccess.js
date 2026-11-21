@@ -65,6 +65,16 @@ export function grantedPageAt(pages, location) {
     const detailId = detailPageIdAt(location);
     if (detailId) return pages.find((page) => page.id === detailId && !page.owner_only) || null;
     const requested = new URLSearchParams(location.search);
+    // Stock reports retain the product-reader grant. Counts/history use the
+    // native accounting inventory page; fresh API capabilities authorize actions.
+    if (pathname === "/inventory-v2" && requested.has("tab")) {
+        const tabs = requested.getAll("tab");
+        if (tabs.length !== 1
+            || ["workspace", "stage", "view", "provider", "action"].some(key => requested.has(key))) return null;
+        const id = ["stock", "reports"].includes(tabs[0]) ? "products.inventory"
+            : ["stocktake", "adjustments", "movements"].includes(tabs[0]) ? "accounting.inventory.view" : null;
+        return id ? pages.find(page => !page.owner_only && page.id === id) || null : null;
+    }
     if (pathname === "/integrations-v2" && requested.has("provider")) {
         const ids = requested.getAll("provider");
         if (ids.length !== 1 || !ADVERTISING_PROVIDER_IDS.includes(ids[0])

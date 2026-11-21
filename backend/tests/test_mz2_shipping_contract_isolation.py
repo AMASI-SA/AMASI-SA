@@ -49,6 +49,7 @@ class ShippingContractIsolationTests(unittest.TestCase):
                          set(ACCOUNTING_PERMISSION_KEYS) - {
                              REVIEW, "accounting.opening_balances.post",
                              "accounting.journals.reverse", "accounting.ledger_transition.manage",
+                             "accounting.inventory.adjustments.review", "accounting.inventory.adjustments.post",
                          })
 
     def test_owner_receives_review_only_after_explicit_assignment(self):

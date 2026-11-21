@@ -16,6 +16,7 @@ jest.mock("react-router-dom", () => ({
 }));
 
 const catalog = {
+    can_write: true, can_pay: true,
     supplier_identities: [{id: "supplier", counterparty_id: "supplier", entity_id: "supplier", name: "مورد"}],
     products: [
         { product_id: "p-one", name: "منتج أول", sku: "SAME", variants: [], variants_required: false },
@@ -86,11 +87,17 @@ async function change(node, value) {
     });
 }
 async function submit() {
-    await act(async () => container.querySelector("form").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+    await act(async () => document.querySelector("form").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
 }
-const byTest = (id) => container.querySelector('[data-testid="' + id + '"]');
+const byTest = (id) => document.querySelector('[data-testid="' + id + '"]');
 function field(label, element = "select") {
-    return Array.from(container.querySelectorAll("label")).find((node) => node.querySelector("span")?.textContent === label)?.querySelector(element);
+    return Array.from(document.querySelectorAll("label")).find((node) => node.querySelector("span")?.textContent === label)?.querySelector(element);
+}
+
+async function pick(index,id){
+    const search=byTest(`pinv-line-${index}-search`);
+    await act(async()=>search.focus());
+    await act(async()=>document.querySelector(`[data-testid="pinv-line-${index}"] [role="option"][data-product-id="${id}"]`).click());
 }
 
 test("draft uses exact product and variant identity instead of a duplicated SKU or free text", () => {
@@ -157,7 +164,7 @@ test("new draft UI writes only the draft endpoint with canonical identities and 
     const onSaved = jest.fn();
     await render(<InvoiceDialog suppliers={[{ id: "supplier", name: "مورد" }]} catalog={catalog} editing={null} onClose={jest.fn()} onSaved={onSaved} />);
     await change(byTest("pinv-supplier"), "supplier");
-    await change(byTest("pinv-line-0-product"), "p-two");
+    await pick(0,"p-two");
     await change(byTest("pinv-line-0-variant"), "v-two");
     await change(byTest("pinv-line-0-quantity"), "3");
     await change(byTest("pinv-line-0-total"), "36");
@@ -182,7 +189,7 @@ test("native catalog alone supplies the supplier picker and draft without a lega
     await act(async () => byTest("pinv-new-btn").click());
     expect(byTest("pinv-supplier").textContent).toContain("مورد");
     await change(byTest("pinv-supplier"), "supplier");
-    await change(byTest("pinv-line-0-product"), "p-two");
+    await pick(0,"p-two");
     await change(byTest("pinv-line-0-variant"), "v-two");
     await change(byTest("pinv-line-0-quantity"), "3");
     await change(byTest("pinv-line-0-total"), "36");
@@ -196,15 +203,19 @@ test("native catalog alone supplies the supplier picker and draft without a lega
 });
 test("changing category clears component identity and does not offer services", async () => {
     await render(<InvoiceDialog suppliers={[]} catalog={catalog} editing={null} onClose={jest.fn()} onSaved={jest.fn()} />);
-    await change(byTest("pinv-line-0-type"), "STOCK_COMPONENT");
-    await change(byTest("pinv-line-0-category"), "metal");
-    expect(byTest("pinv-line-0-component").textContent).toContain("مكوّن");
-    expect(byTest("pinv-line-0-component").textContent).not.toContain("خدمة");
-    expect(byTest("pinv-line-0-component").textContent).not.toContain("متوقف");
-    await change(byTest("pinv-line-0-component"), "stock");
+    await act(async()=>byTest("pinv-line-0-search").focus());
+    const results=document.querySelector('[role="listbox"]');
+    expect(results.textContent).toContain("مكوّن");
+    expect(results.textContent).not.toContain("خدمة");
+    expect(results.textContent).not.toContain("متوقف");
+    await pick(0,"stock");
     await change(byTest("pinv-line-0-category"), "packing");
-    expect(byTest("pinv-line-0-component").value).toBe("");
+    expect(byTest("pinv-line-0-search")).not.toBeNull();
+    await act(async()=>byTest("pinv-line-0-search").focus());
+    expect(document.querySelector('[role="option"][data-product-id="stock"]')).toBeNull();
+    expect(document.querySelector('[role="option"][data-product-id="other"]')).not.toBeNull();
 });
+
 test("editing a draft preserves line IDs and supplies the displayed revision for compare-and-swap", async () => {
     api.put.mockResolvedValue({ data: draft({ revision: 5 }) });
     await render(<InvoiceDialog suppliers={[{ id: "supplier", name: "مورد" }]} catalog={catalog} editing={draft()} onClose={jest.fn()} onSaved={jest.fn()} />);
@@ -217,7 +228,7 @@ test("editing a draft preserves line IDs and supplies the displayed revision for
 });
 test("legacy invoice dialog is read-only and submitting cannot mutate it", async () => {
     await render(<InvoiceDialog suppliers={[]} catalog={catalog} editing={draft({ schema_version: undefined })} onClose={jest.fn()} onSaved={jest.fn()} />);
-    expect(container.querySelector("fieldset").disabled).toBe(true);
+    expect(document.querySelector("fieldset").disabled).toBe(true);
     expect(byTest("pinv-save-draft")).toBeNull();
     await submit();
     expect(api.put).not.toHaveBeenCalled();
@@ -276,10 +287,10 @@ test("product search finds a variant barcode without substituting product identi
     const searchable = { ...catalog, products: catalog.products.map((p) => p.product_id === "p-two" ? { ...p, variants: [{ ...p.variants[0], barcode: "998877" }] } : p) };
     await render(<InvoiceDialog suppliers={[{ id: "supplier", name: "Supplier" }]} catalog={searchable} editing={null} onClose={jest.fn()} onSaved={jest.fn()} />);
     await change(byTest("pinv-line-0-search"), "998877");
-    const options = Array.from(byTest("pinv-line-0-product").options).map((option) => option.value);
-    expect(options).toEqual(["", "p-two"]);
-    await change(byTest("pinv-line-0-product"), "p-two");
-    expect(byTest("pinv-line-0-variant").value).toBe("");
+    const options=Array.from(document.querySelectorAll('[role="option"]')).map(option=>option.dataset.productId);
+    expect(options).toEqual(["p-two"]);
+    await act(async()=>document.querySelector('[role="option"][data-product-id="p-two"]').click());
+    expect(byTest("pinv-line-0-variant").value).toBe("v-two");
 });
 
 test("pending operation without a persisted request prevents a second approval", async () => {
@@ -291,7 +302,7 @@ test("pending operation without a persisted request prevents a second approval",
         await change(byTest("pinv-receipt-" + i + "-barcode"), "LOC-A1");
     }
     await submit();
-    expect(byTest("pinv-approve-receive").closest("fieldset").disabled).toBe(true);
+    expect(byTest("pinv-approve-receive").disabled).toBe(true);
     await submit();
     expect(api.post).toHaveBeenCalledTimes(1);
 });
@@ -304,7 +315,7 @@ test("revision changes after failure require review instead of silently approvin
         await change(byTest("pinv-receipt-" + i + "-barcode"), "LOC-A1");
     }
     await submit();
-    expect(container.textContent).toContain("تغيرت مراجعة الفاتورة");
+    expect(document.body.textContent).toContain("تغيرت مراجعة الفاتورة");
     await submit();
     expect(api.post).toHaveBeenCalledTimes(1);
 });
@@ -317,7 +328,7 @@ test("unknown operation state after failed reconciliation locks retry until an e
         await change(byTest("pinv-receipt-" + i + "-barcode"), "LOC-A1");
     }
     await submit();
-    expect(byTest("pinv-approve-receive").closest("fieldset").disabled).toBe(true);
+    expect(byTest("pinv-approve-receive").disabled).toBe(true);
     await submit();
     expect(api.post).toHaveBeenCalledTimes(1);
 });
@@ -418,7 +429,7 @@ test("pending payment response retains the attempt and does not announce complet
     await submit();
     expect(onSaved).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
-    expect(container.textContent).toContain("لم يتأكد اكتمال السداد");
+    expect(document.body.textContent).toContain("لم يتأكد اكتمال السداد");
 });
 test("V2 supplier statement offers unallocated payment and cannot retain another supplier's stale data", async () => {
     api.get.mockResolvedValueOnce({ data: { supplier: { name: "المورد الأول" }, ledger_backend: "v2",
@@ -429,7 +440,100 @@ test("V2 supplier statement offers unallocated payment and cannot retain another
     expect(onPayment).toHaveBeenCalledWith("one");
     api.get.mockRejectedValueOnce(new Error("identity unavailable"));
     await render(<SupplierStatement cpId="two" open onClose={jest.fn()} onPayment={onPayment} />);
-    expect(container.textContent).not.toContain("المورد الأول");
+    expect(document.body.textContent).not.toContain("المورد الأول");
     expect(byTest("pinv-pay-opening")).toBeNull();
-    expect(container.textContent).toContain("identity unavailable");
+    expect(document.body.textContent).toContain("identity unavailable");
+});
+
+const configuredCatalog={...catalog,products:[{
+    product_id:"pullover",name:"بلوفر",sku:"PARENT",image_url:"/pullover-test.webp",variants_required:true,
+    options:[
+        {id:"color",name:"اللون",type:"color",required:true,values:[{id:"green",name:"أخضر"},{id:"red",name:"أحمر"}]},
+        {id:"size",name:"المقاس",type:"select",required:true,values:[{id:"m",name:"M"}]},
+        {id:"letters",name:"الأحرف",type:"text",required:true,values:[]},
+    ],variants:[
+        {variant_id:"green-m",name:"أخضر M",sku:"P-G-M",barcode:"123456",selections:[{option_id:"color",value_id:"green"},{option_id:"size",value_id:"m"}]},
+        {variant_id:"red-m",name:"أحمر M",sku:"P-R-M",selections:[{option_id:"color",value_id:"red"},{option_id:"size",value_id:"m"}]},
+    ],
+}]};
+const configuredLine={...productLine,product_id:"pullover",variant_id:"green-m",product_name:"بلوفر",sku:"P-G-M",
+    purchase_configuration:{state:"ready",selections:[{option_id:"color",value_id:"green"},{option_id:"size",value_id:"m"}],inputs:[{option_id:"letters",value:"AB"}]},
+    purchase_option_labels:[{name:"اللون",value:"أخضر"},{name:"المقاس",value:"M"},{name:"الأحرف",value:"AB"}],
+    purchase_configuration_definition_hash:"server-definition"};
+
+test("native photo and SKU search configures canonical color size and real product-defined letters",async()=>{
+    api.post.mockResolvedValue({data:draft({lines:[configuredLine]})});
+    await render(<InvoiceDialog suppliers={[{id:"supplier",name:"مورد"}]} catalog={configuredCatalog} onClose={jest.fn()} onSaved={jest.fn()}/>);
+    await change(byTest("pinv-supplier"),"supplier");
+    await change(byTest("pinv-line-0-search"),"123456");
+    expect(document.querySelector('[role="option"] img').getAttribute("src")).toBe("/pullover-test.webp");
+    expect(document.querySelector('[role="option"]').textContent).toContain("PARENT");
+    await act(async()=>document.querySelector('[role="option"]').click());
+    expect(document.querySelector('[aria-label="اللون: أخضر"]').checked).toBe(true);
+    expect(document.querySelector('[aria-label="المقاس: M"]').checked).toBe(true);
+    expect(document.querySelector('[aria-label="الأحرف · البند 1"]')).toBeNull();
+    await act(async()=>document.querySelector('[aria-label="جاهز بالمواصفات"]').click());
+    await change(document.querySelector('[aria-label="الأحرف · البند 1"]'),"AB");
+    await change(byTest("pinv-line-0-unit-cost"),"12");
+    await change(field("حساب المخزون"),"inventory-account");
+    await submit();
+    expect(api.post).toHaveBeenCalledWith("/purchase-invoices",expect.objectContaining({lines:[expect.objectContaining({
+        product_id:"pullover",variant_id:"green-m",sku:"P-G-M",purchase_configuration:configuredLine.purchase_configuration,
+    })]}));
+    const savedPayload=api.post.mock.calls[0][1].lines[0];
+    expect(savedPayload).not.toHaveProperty("purchase_option_labels");
+    expect(savedPayload).not.toHaveProperty("purchase_configuration_definition_hash");
+});
+
+test("ready required lettering blocks save and switching to customer request clears the text",async()=>{
+    const editing=draft({lines:[{...configuredLine,purchase_configuration:{...configuredLine.purchase_configuration,inputs:[]}}]});
+    await render(<InvoiceDialog suppliers={[{id:"supplier",name:"مورد"}]} catalog={configuredCatalog} editing={editing} onClose={jest.fn()} onSaved={jest.fn()}/>);
+    await submit();
+    expect(api.put).not.toHaveBeenCalled();
+    expect(document.querySelector('[role="alert"]').textContent).toContain("أكمل خيارات");
+    await change(document.querySelector('[aria-label="الأحرف · البند 1"]'),"AB");
+    await act(async()=>document.querySelector('[aria-label="يُخصّص عند طلب العميل"]').click());
+    expect(document.querySelector('[aria-label="الأحرف · البند 1"]')).toBeNull();
+    api.put.mockResolvedValue({data:editing});
+    await submit();
+    expect(api.put.mock.calls[0][1].lines[0].purchase_configuration).toEqual({...configuredLine.purchase_configuration,state:"raw",inputs:[]});
+});
+
+test("saved native config reopens and approval sends persisted lettering and canonical identity",async()=>{
+    const invoice=draft({lines:[configuredLine]});
+    await render(<InvoiceDialog suppliers={[{id:"supplier",name:"مورد"}]} catalog={configuredCatalog} editing={invoice} onClose={jest.fn()} onSaved={jest.fn()}/>);
+    expect(document.querySelector('[aria-label="الأحرف · البند 1"]').value).toBe("AB");
+    await render(<ApprovalDialog invoice={invoice} catalog={configuredCatalog} onClose={jest.fn()} onSaved={jest.fn()}/>);
+    expect(document.body.textContent).toContain("الأحرف: AB");
+    await change(byTest("pinv-receipt-0-location"),"loc");
+    await change(byTest("pinv-receipt-0-barcode"),"LOC-A1");
+    api.post.mockResolvedValue({data:{...invoice,state:"approved",operation:{status:"succeeded"}}});
+    await submit();
+    expect(api.post).toHaveBeenCalledWith("/purchase-invoices/invoice-1/approve-receive",expect.objectContaining({
+        operation_id:invoice.approval_operation_id,expected_revision:invoice.revision,
+        receipts:[expect.objectContaining({line_id:"line-1",preparation_state:"ready_complete",specifications:{اللون:"أخضر",المقاس:"M",الأحرف:"AB"}})],
+    }));
+});
+
+test("read-only purchase access keeps drafts and approval mutation disabled",async()=>{
+    api.get.mockImplementation(url=>Promise.resolve({data:url.includes("catalog")?configuredCatalog:{items:[draft({lines:[configuredLine]})]}}));
+    await render(<PurchaseInvoices accessMode="read"/>);
+    expect(byTest("pinv-new-btn").disabled).toBe(true);
+    expect(byTest("pinv-approve-invoice-1")).toBeNull();
+    await act(async()=>byTest("pinv-open-invoice-1").click());
+    expect(byTest("pinv-save-draft")).toBeNull();
+    await submit();
+    expect(api.put).not.toHaveBeenCalled();
+    await render(<ApprovalDialog invoice={draft({lines:[configuredLine]})} catalog={configuredCatalog} readOnly onClose={jest.fn()} onSaved={jest.fn()}/>);
+    await submit();
+    expect(api.post).not.toHaveBeenCalled();
+});
+test("fresh server purchase capabilities keep a reader from opening writer or payment actions",async()=>{
+    api.get.mockImplementation(url=>Promise.resolve({data:url.includes("catalog")?{...configuredCatalog,can_write:false,can_pay:false}:{items:[draft({lines:[configuredLine]})]}}));
+    await render(<PurchaseInvoices/>);
+    expect(byTest("pinv-new-btn").disabled).toBe(true);
+    expect(byTest("pinv-approve-invoice-1")).toBeNull();
+    await act(async()=>byTest("pinv-open-invoice-1").click());
+    expect(byTest("pinv-save-draft")).toBeNull();
+    expect(api.post).not.toHaveBeenCalled();expect(api.put).not.toHaveBeenCalled();
 });

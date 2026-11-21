@@ -80,6 +80,9 @@ export const ACCOUNTING_ACTIONS = [
     { id: "opening-post", label: "ترحيل الأرصدة الافتتاحية", permission: "accounting.opening_balances.post" },
     { id: "ledger-transition-manage", label: "إدارة انتقال الدفتر المحاسبي", permission: "accounting.ledger_transition.manage" },
     { id: "purchase-post", label: "ترحيل فاتورة شراء وتحديث المخزون", permission: "accounting.purchases.post" },
+    { id: "inventory-count", label: "حفظ الجرد وطلب تسوية الفروقات", permission: "accounting.inventory.count" },
+    { id: "inventory-adjustment-review", label: "مراجعة واعتماد فروق الجرد", permission: "accounting.inventory.adjustments.review" },
+    { id: "inventory-adjustment-post", label: "ترحيل فروق الجرد المعتمدة", permission: "accounting.inventory.adjustments.post" },
     { id: "payroll-post", label: "اعتماد وترحيل الرواتب والالتزامات", permission: "accounting.payroll.post" },
     { id: "opening-approve", label: "اعتماد القيد الافتتاحي", permission: "accounting.opening_balances.approve" },
     { id: "manual-journal", label: "إنشاء قيد يدوي", permission: "accounting.journals.manual_create" },
@@ -92,6 +95,8 @@ export const ACCOUNTING_EXPLICIT_GRANT_PERMISSIONS = new Set([
     "accounting.journals.reverse",
     "accounting.ledger_transition.manage",
     "accounting.shipping.contracts.review",
+    "accounting.inventory.adjustments.review",
+    "accounting.inventory.adjustments.post",
 ]);
 
 export function accountingPageById(pageId) {

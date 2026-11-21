@@ -25,6 +25,7 @@ from component_status_policy import component_is_active
 from inventory_receipt_service import InventoryLocationCapacityError, place_inventory_receipt
 from product_cost_revision import bump_product_cost_revision
 from product_inventory_rules import build_inventory_configuration_key, canonical_specifications
+from purchase_configuration_contract import validate_receipt_configuration
 from supplier_identity_service import require_supplier_v2
 from operational_physical_receipts import verified_pending, adopt_pending
 
@@ -345,6 +346,10 @@ async def _approve_and_receive(db, *, user, invoice_id, payload):
         for receipt in receipts:
             if number(receipt["quantity"]) != number(lines[receipt["line_id"]]["quantity"]):
                 fail("purchase_full_receive_required", 422)
+            saved_line = lines[receipt["line_id"]]
+            if saved_line.get("purchase_configuration") is not None:
+                _, current_product = await resolve_line(scoped, owner, saved_line)
+                validate_receipt_configuration(saved_line, current_product, receipt)
         operation = {"_id": operation_id, "id": operation_id, "user_id": owner, "invoice_id": invoice_id,
             "revision": invoice["revision"], "request_hash": request_hash, "request": request,
             "status": "pending", "occurred_at": now(), "created_by": actor["id"],
@@ -384,6 +389,7 @@ async def _approve_and_receive(db, *, user, invoice_id, payload):
             identity, catalog = await resolve_line(scoped, owner, line)
             receipt = receipts_by_line[line["id"]]
             quantity = number(line["quantity"])
+            validate_receipt_configuration(line, catalog, receipt)
             specs = canonical_specifications(receipt.get("specifications") or {})
             state = receipt.get("preparation_state")
             if state not in {"ready_complete", "requires_preparation"}:

@@ -5,12 +5,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { Receipt, Plus, Trash, FileText } from "@phosphor-icons/react";
+import { Plus, FileText } from "@phosphor-icons/react";
 import api, { formatApiErrorDetail } from "../lib/api";
 import { todaySA } from "../lib/dates";
+import InventorySuiteFrame,{InventoryPageHeader,InventorySheet} from "../components/inventory/suite/InventorySuiteFrame";
+import {InventoryProductPicker,InventoryProductOptions,InventoryProductPhoto} from "../components/inventory/suite/InventoryProductFields";
+import {inventoryConfiguration,inventoryVariantFor,validateInventoryConfiguration,inventoryConfigDescription,inventoryReceiptSpecifications} from "../lib/inventoryProductConfiguration";
 
 const inputCls = "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm disabled:bg-slate-100";
-const buttonCls = "rounded-lg bg-violet-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-50";
+const buttonCls = "rounded-lg bg-emerald-800 px-4 py-2 text-sm font-bold text-white disabled:opacity-50";
 const EMPTY_CATALOG = { products: [], categories: [], components: [], locations: [], account_mappings: {} };
 const fmt = (value) => Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const valueId = (value) => String(value ?? "");
@@ -98,13 +101,15 @@ export function buildPurchaseDraft(form, catalog) {
     if (!form.lines.length) throw new Error("أضف بندًا واحدًا على الأقل.");
     const lines = form.lines.map((line) => {
         const identity = canonicalLine(line, catalog);
+        if (line.purchase_configuration) validateInventoryConfiguration(productForLine(catalog,line),line.purchase_configuration,line.variant_id);
         const quantity = Number(line.quantity);
         const unitCost = Number(line.unit_cost);
         if (line.quantity === "" || !Number.isFinite(quantity) || quantity <= 0) throw new Error("أدخل كمية موجبة لكل بند.");
         if (line.item_type === "PRODUCT" && !Number.isInteger(quantity)) throw new Error("كمية المنتج يجب أن تكون عددًا صحيحًا.");
         if (line.unit_cost === "" || !Number.isFinite(unitCost) || unitCost < 0) throw new Error("أدخل تكلفة وحدة صحيحة لكل بند.");
         if (Number(unitCost.toFixed(6)) !== unitCost || Number(quantity.toFixed(6)) !== quantity) throw new Error("دقة الكمية والتكلفة لا تتجاوز ست خانات عشرية.");
-        return { ...(line.id ? { id: line.id } : {}), ...identity, quantity, unit_cost: unitCost };
+        return { ...(line.id ? { id: line.id } : {}), ...identity, quantity, unit_cost: unitCost,
+            ...(line.purchase_configuration ? {purchase_configuration: line.purchase_configuration} : {}) };
     });
     const tax = Number(form.tax_amount);
     if (form.tax_amount === "" || !Number.isFinite(tax) || tax < 0) throw new Error("أدخل مبلغ ضريبة صحيحًا.");
@@ -145,10 +150,11 @@ export function buildFullPurchaseApproval(invoice, receipts, catalog) {
             throw new Error("باركود الخانة لا يطابق الخانة المختارة.");
         }
         if (!["requires_preparation", "ready_complete"].includes(receipt.preparation_state)) throw new Error("حدد حالة تجهيز كل بند.");
+        if (line.purchase_configuration && receipt.preparation_state !== (line.purchase_configuration.state === "ready" ? "ready_complete" : "requires_preparation")) throw new Error("حالة التجهيز لا تطابق مواصفات المسودة المحفوظة.");
         return {
             line_id: line.id, quantity: Number(line.quantity), location_id: location.id,
             scanned_location_barcode: barcode, preparation_state: receipt.preparation_state,
-            specifications: {},
+            specifications: line.purchase_configuration ? inventoryReceiptSpecifications(line) : {},
         };
     });
     return { expected_revision: invoice.revision, operation_id: invoice.approval_operation_id, receipts: result };
@@ -156,6 +162,15 @@ export function buildFullPurchaseApproval(invoice, receipts, catalog) {
 
 function failureMessage(error, fallback) {
     const detail = error.response?.data?.detail;
+    const configurationMessages={
+        purchase_configuration_definition_changed:"تغير تعريف خيارات المنتج بعد حفظ المسودة. راجع الخيارات وحالة العملية قبل الاعتماد أو إعادة المحاولة.",
+        purchase_configuration_definition_incomplete:"تعريف خيارات المنتج غير مكتمل في ميزان. أكمل التعريف قبل حفظ البند المخصص.",
+        purchase_variant_configuration_unavailable:"تعذر ربط خيارات هذا المنتج بنسخته المخزنية. راجع تعريف نسخ المنتج.",
+        purchase_variant_configuration_mismatch:"اللون والمقاس لا يطابقان النسخة المخزنية المحددة. أعد اختيارهما من المنتج.",
+        purchase_receipt_configuration_mismatch:"مواصفات الاستلام أو حالة التجهيز تختلف عن المسودة المحفوظة. أعد فتح مراجعة الاستلام.",
+        purchase_configuration_option_names_ambiguous:"توجد أسماء خيارات متكررة للمنتج؛ يلزم تصحيح تعريفها قبل الاستلام.",
+    };
+    if(configurationMessages[detail?.code])return configurationMessages[detail.code];
     const formatted = formatApiErrorDetail(detail);
     return formatted || error.message || fallback;
 }
@@ -172,8 +187,8 @@ function MappingSelect({ label, kind, catalog, value, onChange, disabled }) {
     </select></Field>;
 }
 
-export function InvoiceDialog({ suppliers, catalog, editing, onClose, onSaved }) {
-    const readOnly = !!editing && !isManagedDraft(editing);
+export function InvoiceDialog({ suppliers, catalog, editing, onClose, onSaved, readOnly: accessReadOnly = false }) {
+    const readOnly = accessReadOnly || (!!editing && !isManagedDraft(editing));
     const [form, setForm] = useState(() => editing ? {
         ...freshForm(), ...editing,
         tax_amount: String(editing.tax_amount ?? 0),
@@ -204,6 +219,13 @@ export function InvoiceDialog({ suppliers, catalog, editing, onClose, onSaved })
     const replaceLine = (index, transform) => setForm((current) => ({
         ...current, lines: current.lines.map((line, i) => i === index ? transform(line) : line),
     }));
+    const chooseItem = (index,item,query) => replaceLine(index,old=>{
+        if(item.picker_kind === "component") return {...freshLine(),...(old.id?{id:old.id}:{}),item_type:"STOCK_COMPONENT",resource_id:valueId(item.resource_id??item.id),category_id:item.category_ids?.includes(old.category_id)?old.category_id:item.category_ids?.[0]||"",product_name:item.name,sku:item.code||""};
+        const exact=(item.variants||[]).find(v=>[v.sku,v.barcode].some(value=>value&&String(value).toLowerCase()===query.trim().toLowerCase()));
+        const config=item.options?.length?inventoryConfiguration(item,exact?.variant_id):undefined;
+        return {...freshLine(),...(old.id?{id:old.id}:{}),product_id:valueId(item.product_id??item.id),product_name:item.name,sku:exact?.sku||item.sku||"",variant_id:exact?.variant_id||"",...(config?{purchase_configuration:config}:{})};
+    });
+    const configureItem=(index,product,config)=>replaceLine(index,old=>{const variant=inventoryVariantFor(product,config,old.variant_id);return {...old,purchase_configuration:config,variant_id:variant?.variant_id||"",sku:variant?.sku||product.sku||""};});
     const subtotal = money(form.lines.reduce((sum, line) => sum + (Number(line.quantity) || 0) * (Number(line.unit_cost) || 0), 0));
     const tax = Number(form.tax_amount) || 0;
     const submit = async (event) => {
@@ -249,66 +271,39 @@ export function InvoiceDialog({ suppliers, catalog, editing, onClose, onSaved })
         } catch (err) { setError(failureMessage(err, "تعذر رفع المستند الضريبي.")); }
         finally { setUploading(false); }
     };
-    return <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/50 p-4" data-testid="pinv-dialog">
-        <form onSubmit={submit} className="mx-auto my-6 max-w-5xl space-y-5 rounded-xl bg-white p-5" dir="rtl">
-            <div className="flex items-center justify-between"><h2 className="text-xl font-black">{readOnly ? "عرض الفاتورة — للقراءة فقط" : editing ? "تعديل مسودة شراء" : "مسودة شراء جديدة"}</h2><button type="button" onClick={onClose} disabled={busy}>إغلاق</button></div>
-            <p className="text-sm text-slate-600">{readOnly ? "الفواتير القديمة والمعتمدة لا تُعدل أو تُستلم مجددًا من هذا المسار." : "حفظ المسودة لا ينشئ التزامًا أو قيدًا أو مخزونًا. الاعتماد والاستلام الكامل إجراء مستقل بعد مراجعتها."}</p>
-            {error && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-rose-800">{error}</p>}
-            <fieldset disabled={busy || uploading || readOnly} className="space-y-5">
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                    <Field label="المورد"><select className={inputCls} value={form.supplier_counterparty_id} onChange={(event) => set("supplier_counterparty_id", event.target.value)} data-testid="pinv-supplier"><option value="">اختر المورد</option>{suppliers.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></Field>
-                    <Field label="رقم الفاتورة"><input className={inputCls} value={form.invoice_number} onChange={(event) => set("invoice_number", event.target.value)} /></Field>
-                    <Field label="تاريخ الفاتورة"><input className={inputCls} type="date" value={form.invoice_date} onChange={(event) => set("invoice_date", event.target.value)} /></Field>
-                    <Field label="تاريخ الاستحقاق"><input className={inputCls} type="date" value={form.due_date || ""} onChange={(event) => set("due_date", event.target.value)} /></Field>
-                </div>
-                {form.lines.map((line, index) => {
-                    const product = productForLine(catalog, line);
-                    return <section className="space-y-3 rounded-xl border border-slate-200 p-4" key={line.id || index} data-testid={"pinv-line-" + index}>
-                        <div className="flex justify-between"><h3 className="font-black">بند {index + 1}</h3>{!readOnly && <button type="button" aria-label={"حذف بند " + (index + 1)} disabled={form.lines.length === 1} onClick={() => set("lines", form.lines.filter((_, i) => i !== index))}><Trash size={18} /></button>}</div>
-                        {readOnly ? <p>{line.product_name} · {line.sku || "بدون SKU"}</p> : <div className="grid gap-3 md:grid-cols-3">
-                            <Field label="نوع البند"><select className={inputCls} value={line.item_type} data-testid={"pinv-line-" + index + "-type"} onChange={(event) => replaceLine(index, (old) => ({ ...freshLine(), ...(old.id ? { id: old.id } : {}), item_type: event.target.value }))}><option value="PRODUCT">منتج</option><option value="STOCK_COMPONENT">مكوّن مخزني</option></select></Field>
-                            {line.item_type === "PRODUCT" ? <>
-                                <Field label="بحث بالاسم أو SKU أو barcode"><input className={inputCls} value={line.catalog_query || ""} data-testid={"pinv-line-" + index + "-search"} onChange={(event) => replaceLine(index, (old) => ({ ...old, catalog_query: event.target.value }))} /></Field>
-                                <Field label="المنتج"><select className={inputCls} value={line.product_id || ""} data-testid={"pinv-line-" + index + "-product"} onChange={(event) => replaceLine(index, (old) => {
-                                    const row = catalog.products.find((item) => valueId(item.product_id ?? item.id) === event.target.value);
-                                    return { ...old, product_id: event.target.value, variant_id: "", product_name: row?.name || "", sku: row?.sku || "" };
-                                })}><option value="">اختر المنتج</option>{catalog.products.filter((row) => valueId(row.product_id ?? row.id) === valueId(line.product_id) || [row.name, row.sku, row.barcode, ...(row.variants || []).flatMap((variant) => [variant.name, variant.sku, variant.barcode])].some((value) => String(value || "").toLowerCase().includes((line.catalog_query || "").trim().toLowerCase()))).map((row) => <option key={row.product_id ?? row.id} value={row.product_id ?? row.id}>{row.name} · {row.sku || "بدون SKU"} · {row.barcode || ""}</option>)}</select></Field>
-                                {(product?.variants_required || product?.variants?.length > 0) && <Field label="خيار المنتج"><select className={inputCls} value={line.variant_id || ""} data-testid={"pinv-line-" + index + "-variant"} onChange={(event) => replaceLine(index, (old) => ({ ...old, variant_id: event.target.value, sku: product.variants.find((row) => valueId(row.variant_id) === event.target.value)?.sku || "" }))}><option value="">اختر الخيار المحدد</option>{(product.variants || []).map((row) => <option key={row.variant_id} value={row.variant_id}>{row.name || row.sku || row.variant_id}</option>)}</select></Field>}
-                            </> : <>
-                                <Field label="تصنيف المكوّن"><select className={inputCls} value={line.category_id || ""} data-testid={"pinv-line-" + index + "-category"} onChange={(event) => replaceLine(index, (old) => ({ ...old, category_id: event.target.value, resource_id: "", product_name: "", sku: "" }))}><option value="">اختر التصنيف</option>{catalog.categories.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></Field>
-                                <Field label="المكوّن المخزني"><select className={inputCls} value={line.resource_id || ""} disabled={!line.category_id} data-testid={"pinv-line-" + index + "-component"} onChange={(event) => replaceLine(index, (old) => {
-                                    const row = purchasableComponents(catalog, old.category_id).find((item) => valueId(item.resource_id ?? item.id) === event.target.value);
-                                    return { ...old, resource_id: event.target.value, product_name: row?.name || "", sku: row?.code || "" };
-                                })}><option value="">اختر المكوّن</option>{purchasableComponents(catalog, line.category_id).map((row) => <option key={row.resource_id ?? row.id} value={row.resource_id ?? row.id}>{row.name} · {row.code}</option>)}</select></Field>
-                            </>}
-                        </div>}
-                        <div className="grid gap-3 sm:grid-cols-4">
-                            <Field label="SKU / رمز المكوّن"><input className={inputCls} value={line.sku || ""} readOnly /></Field>
-                            <Field label="الكمية"><input className={inputCls} type="number" min={line.item_type === "PRODUCT" ? "1" : "0.000001"} step={line.item_type === "PRODUCT" ? "1" : "0.000001"} value={line.quantity} data-testid={"pinv-line-" + index + "-quantity"} onChange={(event) => replaceLine(index, (old) => updatePurchaseLine(old, "quantity", event.target.value))} /></Field>
-                            <Field label="تكلفة الوحدة قبل الضريبة"><input className={inputCls} type="number" min="0" step="0.000001" value={line.unit_cost} data-testid={"pinv-line-" + index + "-unit-cost"} onChange={(event) => replaceLine(index, (old) => updatePurchaseLine(old, "unit_cost", event.target.value))} /></Field>
-                            <Field label="إجمالي البند قبل الضريبة"><input className={inputCls} type="number" min="0" step="0.01" value={line.line_total} data-testid={"pinv-line-" + index + "-total"} onChange={(event) => replaceLine(index, (old) => updatePurchaseLine(old, "line_total", event.target.value))} /></Field>
-                        </div>
+    return <InventorySheet open onClose={onClose} title={readOnly?"عرض فاتورة الشراء":editing?"تعديل مسودة شراء":"فاتورة شراء جديدة"} description="ابحث عن الصنف وحدد خياراته، ثم أدخل الكمية والتكلفة. حفظ المسودة لا يغيّر المخزون أو ذمة المورد." busy={busy||uploading} wide footer={<><span data-testid="pinv-totals">الإجمالي <strong>{fmt(subtotal+tax)} SAR</strong></span>{!readOnly&&<button className={buttonCls} type="submit" form="native-purchase-form" disabled={busy||uploading} data-testid="pinv-save-draft">{uploading?"جارٍ رفع المستند…":busy?"جارٍ حفظ المسودة…":"حفظ المسودة"}</button>}</>}>
+        <form id="native-purchase-form" onSubmit={submit} className="space-y-5 mz-native-invoices" data-testid="pinv-dialog" dir="rtl">
+            {error&&<p role="alert" className="rounded-lg bg-rose-50 p-3 text-rose-800">{error}</p>}
+            <fieldset disabled={busy||uploading||readOnly} className="space-y-5">
+                <div className="grid gap-3 sm:grid-cols-2"><Field label="المورد"><select className={inputCls} value={form.supplier_counterparty_id} onChange={e=>set("supplier_counterparty_id",e.target.value)} data-testid="pinv-supplier"><option value="">اختر المورد</option>{suppliers.map(row=><option key={row.id} value={row.id}>{row.name}</option>)}</select></Field><Field label="تاريخ الفاتورة"><input className={inputCls} type="date" value={form.invoice_date} onChange={e=>set("invoice_date",e.target.value)}/></Field></div>
+                <Field label="رقم الفاتورة"><input className={inputCls} value={form.invoice_number} onChange={e=>set("invoice_number",e.target.value)} placeholder="اختياري في المسودة"/></Field>
+                <h3 className="font-black text-lg">بنود الفاتورة</h3><div className="mz-purchase-lines">{form.lines.map((line,index)=>{
+                    const product=productForLine(catalog,line),component=catalog.components.find(c=>valueId(c.resource_id??c.id)===valueId(line.resource_id));
+                    const item=product||component;
+                    const items=[...catalog.products.map(p=>({...p,picker_kind:"product",picker_id:"product:"+(p.product_id??p.id)})),...catalog.components.filter(c=>c.track_inventory&&c.status!=="inactive"&&(c.category_ids||[]).length&&(!line.category_id||c.category_ids.includes(line.category_id))).map(c=>({...c,id:c.resource_id??c.id,picker_id:"component:"+(c.resource_id??c.id),picker_kind:"component",sku:c.code}))];
+                    return <section key={line.id||index} className="mz-purchase-line" data-testid={"pinv-line-"+index}>
+                        <header><strong>البند {index+1}</strong>{!readOnly&&<div><button type="button" className="rounded border px-2 py-1" onClick={()=>set("lines",[...form.lines.slice(0,index+1),{...JSON.parse(JSON.stringify(line)),id:undefined,quantity:"1",cost_basis:"unit",line_total:line.unit_cost||""},...form.lines.slice(index+1)])} disabled={form.lines.length>=100}>نسخ البند</button>{form.lines.length>1&&<button type="button" className="text-rose-800" onClick={()=>set("lines",form.lines.filter((_,i)=>i!==index))}>إزالة</button>}</div>}</header>
+                        {readOnly?<div className="mz-purchase-read-line"><InventoryProductPhoto product={item||{name:line.product_name}}/><div><strong>{line.product_name}</strong><p>{line.sku}</p><p className="mz-purchase-config-summary">{inventoryConfigDescription(line)}</p></div></div>:<>
+                            <InventoryProductPicker items={items} selected={item} query={line.catalog_query||""} onQueryChange={query=>replaceLine(index,old=>({...old,catalog_query:query}))} onPick={(picked,query)=>chooseItem(index,picked,query)} testId={"pinv-line-"+index+"-search"} label={"بحث صنف البند "+(index+1)}/>
+                            {line.item_type==="STOCK_COMPONENT"&&<Field label="تصنيف المكوّن"><select className={inputCls} data-testid={"pinv-line-"+index+"-category"} value={line.category_id} onChange={e=>replaceLine(index,old=>({...old,category_id:e.target.value,resource_id:"",product_name:"",sku:""}))}>{catalog.categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>}
+                            {product&&line.purchase_configuration?<InventoryProductOptions product={product} config={line.purchase_configuration} index={index} variantId={line.variant_id} onChange={config=>configureItem(index,product,config)} onVariant={value=>replaceLine(index,old=>({...old,variant_id:value}))}/>:product&&(product.variants_required||product.variants?.length>0)&&<Field label="خيار المنتج"><select className={inputCls} value={line.variant_id||""} data-testid={"pinv-line-"+index+"-variant"} onChange={e=>replaceLine(index,old=>({...old,variant_id:e.target.value,sku:product.variants.find(v=>valueId(v.variant_id)===e.target.value)?.sku||""}))}><option value="">اختر النسخة المحددة</option>{product.variants.map(v=><option key={v.variant_id} value={v.variant_id}>{v.name} · {v.sku}</option>)}</select></Field>}
+                            {product&&!line.purchase_configuration&&(product.options?.length?<button type="button" className="rounded-lg border px-3 py-2 text-emerald-800" onClick={()=>configureItem(index,product,inventoryConfiguration(product,line.variant_id))}>تحديد خيارات هذا البند</button>:<p className="mz-product-deferred">لا يحتوي تعريف هذا المنتج على حقول تخصيص. أضف خياراته من شاشة الأصناف عند الحاجة إلى أحرف أو اسم حسب الطلب.</p>)}
+                        </>}
+                        <div className="grid gap-3 sm:grid-cols-3"><Field label="الكمية"><input className={inputCls} type="number" min={line.item_type==="PRODUCT"?"1":"0.000001"} step={line.item_type==="PRODUCT"?"1":"0.000001"} value={line.quantity} data-testid={"pinv-line-"+index+"-quantity"} onChange={e=>replaceLine(index,old=>updatePurchaseLine(old,"quantity",e.target.value))}/></Field><Field label="تكلفة الوحدة قبل الضريبة"><input className={inputCls} type="number" min="0" step="0.000001" value={line.unit_cost} data-testid={"pinv-line-"+index+"-unit-cost"} onChange={e=>replaceLine(index,old=>updatePurchaseLine(old,"unit_cost",e.target.value))}/></Field><Field label="إجمالي البند قبل الضريبة"><input className={inputCls} type="number" min="0" step="0.01" value={line.line_total} data-testid={"pinv-line-"+index+"-total"} onChange={e=>replaceLine(index,old=>updatePurchaseLine(old,"line_total",e.target.value))}/></Field></div>
                     </section>;
-                })}
-                {!readOnly && <button type="button" className="rounded-lg border px-4 py-2 font-bold" onClick={() => set("lines", [...form.lines, freshLine()])}><Plus size={16} className="inline" /> إضافة بند</button>}
-                <div className="grid gap-3 md:grid-cols-3">
-                    <Field label="مبلغ الضريبة"><input className={inputCls} type="number" min="0" step="0.01" value={form.tax_amount} onChange={(event) => set("tax_amount", event.target.value)} /></Field>
-                    <Field label="معالجة الضريبة"><select className={inputCls} value={form.tax_treatment} onChange={(event) => set("tax_treatment", event.target.value)}><option value="none">لا توجد ضريبة</option><option value="non_deductible">غير قابلة للخصم — تضاف لتكلفة المخزون</option><option value="deductible">قابلة للخصم — مستند وربط معتمد</option></select></Field>
-                    {form.tax_treatment === "deductible" && <Field label="الفاتورة الضريبية — PDF أو صورة حتى 10 MiB"><input className={inputCls} type="file" accept="application/pdf,image/png,image/jpeg" data-testid="pinv-tax-upload" onChange={(event) => { uploadTaxEvidence(event.target.files?.[0]); event.target.value = ""; }} />{form.tax_evidence_ref && <span className="block text-xs text-emerald-800">مستند محفوظ: {evidenceFilename || "الفاتورة الضريبية المرفقة"}</span>}</Field>}
-                </div>
-                {form.tax_treatment === "deductible" && <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={form.tax_evidence_verified === true} disabled={!form.tax_evidence_ref} onChange={(event) => set("tax_evidence_verified", event.target.checked)} data-testid="pinv-tax-attestation" />راجعت المستند وأؤكد أنه فاتورة ضريبية صحيحة تخص هذا المورد وهذه الفاتورة.</label>}
-                <div className="grid gap-3 md:grid-cols-3">
-                    <MappingSelect label="حساب المخزون" kind="inventory" catalog={catalog} value={form.inventory_account_id} onChange={(value) => set("inventory_account_id", value)} />
-                    <MappingSelect label="حساب ذمة المورد" kind="supplier" catalog={catalog} value={form.supplier_account_id} onChange={(value) => set("supplier_account_id", value)} disabled />
-                    {form.tax_treatment === "deductible" && <MappingSelect label="حساب ضريبة المدخلات" kind="input_vat" catalog={catalog} value={form.input_vat_account_id} onChange={(value) => set("input_vat_account_id", value)} />}
-                </div>
-                <Field label="ملاحظات"><textarea className={inputCls} value={form.notes} onChange={(event) => set("notes", event.target.value)} /></Field>
+                })}</div>
+                {!readOnly&&<button type="button" className="w-full rounded-lg border px-4 py-3 font-bold" disabled={form.lines.length>=100} onClick={()=>set("lines",[...form.lines,freshLine()])}><Plus size={16} className="inline"/> إضافة بند</button>}
+                <details open={!!form.tax_amount&&Number(form.tax_amount)>0||!form.inventory_account_id}><summary className="font-bold">الضريبة والحسابات والتفاصيل الإضافية</summary><div className="space-y-4 pt-4">
+                    <div className="grid gap-3 md:grid-cols-2"><Field label="تاريخ الاستحقاق"><input className={inputCls} type="date" value={form.due_date||""} onChange={e=>set("due_date",e.target.value)}/></Field><Field label="مبلغ الضريبة"><input className={inputCls} type="number" min="0" step="0.01" value={form.tax_amount} onChange={e=>set("tax_amount",e.target.value)}/></Field></div>
+                    <Field label="معالجة الضريبة"><select className={inputCls} value={form.tax_treatment} onChange={e=>set("tax_treatment",e.target.value)}><option value="none">لا توجد ضريبة</option><option value="non_deductible">غير قابلة للخصم — تضاف لتكلفة المخزون</option><option value="deductible">قابلة للخصم — مستند وربط معتمد</option></select></Field>
+                    {form.tax_treatment==="deductible"&&<><Field label="الفاتورة الضريبية — PDF أو صورة حتى 10 MiB"><input className={inputCls} type="file" accept="application/pdf,image/png,image/jpeg" data-testid="pinv-tax-upload" onChange={e=>{uploadTaxEvidence(e.target.files?.[0]);e.target.value="";}}/>{form.tax_evidence_ref&&<span>مستند محفوظ: {evidenceFilename||"الفاتورة الضريبية المرفقة"}</span>}</Field><label className="flex gap-2 text-sm"><input type="checkbox" checked={form.tax_evidence_verified===true} disabled={!form.tax_evidence_ref} onChange={e=>set("tax_evidence_verified",e.target.checked)} data-testid="pinv-tax-attestation"/>راجعت المستند وأؤكد أنه فاتورة ضريبية صحيحة تخص هذا المورد وهذه الفاتورة.</label></>}
+                    <div className="grid gap-3 md:grid-cols-2"><MappingSelect label="حساب المخزون" kind="inventory" catalog={catalog} value={form.inventory_account_id} onChange={value=>set("inventory_account_id",value)}/><MappingSelect label="حساب ذمة المورد" kind="supplier" catalog={catalog} value={form.supplier_account_id} onChange={value=>set("supplier_account_id",value)} disabled/>{form.tax_treatment==="deductible"&&<MappingSelect label="حساب ضريبة المدخلات" kind="input_vat" catalog={catalog} value={form.input_vat_account_id} onChange={value=>set("input_vat_account_id",value)}/>}</div><Field label="ملاحظات"><textarea className={inputCls} value={form.notes} onChange={e=>set("notes",e.target.value)}/></Field>
+                </div></details>
             </fieldset>
-            <p className="rounded-lg bg-slate-50 p-3 font-bold" data-testid="pinv-totals">قبل الضريبة: {fmt(subtotal)} · الضريبة: {fmt(tax)} · الإجمالي: {fmt(subtotal + tax)} SAR</p>
-            {!readOnly && <button className={buttonCls} type="submit" disabled={busy || uploading} data-testid="pinv-save-draft">{uploading ? "جارٍ رفع المستند…" : busy ? "جارٍ حفظ المسودة…" : "حفظ المسودة"}</button>}
         </form>
-    </div>;
+    </InventorySheet>;
 }
+
 
 const STATUS_LABEL = {
     unpaid: { label: "غير مسددة", tone: "bg-rose-50 text-rose-800 border-rose-200" },
@@ -333,17 +328,8 @@ export function SupplierStatement({ cpId, open, onClose, onPayment }) {
     }, [open, cpId]);
 
     if (!open) return null;
-    return (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-start justify-center overflow-y-auto p-4" data-testid="pinv-statement-dialog">
-            <div dir="rtl" className="bg-white rounded-xl shadow-2xl w-full max-w-3xl my-8">
-                <div className="flex items-center justify-between p-5 border-b border-slate-100">
-                    <h2 className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
-                        <FileText size={22} weight="duotone" className="text-violet-700" />
-                        كشف حساب مورد
-                    </h2>
-                    <button onClick={onClose} className="text-slate-500 hover:text-slate-900 text-2xl">×</button>
-                </div>
-                <div className="p-5">
+    return <InventorySheet open={open} onClose={onClose} title="كشف حساب المورد" description="فواتير المورد والمبالغ المسددة والرصيد المتبقي من العقود المحاسبية الحالية." wide>
+        <div data-testid="pinv-statement-dialog" className="mz-native-invoices" dir="rtl">
                     {error ? <p role="alert" className="text-rose-800">{error}</p> : loading || !data ? (
                         <div className="text-center text-slate-500 text-sm py-8">جاري التحميل…</div>
                     ) : (
@@ -352,7 +338,7 @@ export function SupplierStatement({ cpId, open, onClose, onPayment }) {
                                 <div className="text-xs text-slate-500">المورد</div>
                                 <div className="text-base font-extrabold text-slate-900">{data.supplier.name}</div>
                                 {data.ledger_backend === "v2" && <p className="mt-2 text-sm">الرصيد المستحق من الدفتر المحاسبي المعتمد، ويشمل الرصيد الافتتاحي. إجماليات الفواتير أدناه تخص فواتير الشراء المعتمدة في الدورة الحالية.</p>}
-                                {data.ledger_backend === "v2" && Number(data.unallocated_payable_amount) > 0 && <button type="button" className={buttonCls + " mt-3"} onClick={() => onPayment(cpId)} data-testid="pinv-pay-opening">سداد رصيد المورد غير المرتبط بفواتير الشراء</button>}
+                                {onPayment && data.ledger_backend === "v2" && Number(data.unallocated_payable_amount) > 0 && <button type="button" className={buttonCls + " mt-3"} onClick={() => onPayment(cpId)} data-testid="pinv-pay-opening">سداد رصيد المورد غير المرتبط بفواتير الشراء</button>}
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
                                 <div className="rounded-lg bg-slate-50 border border-slate-200 p-3">
@@ -402,10 +388,8 @@ export function SupplierStatement({ cpId, open, onClose, onPayment }) {
                             </div>
                         </>
                     )}
-                </div>
-            </div>
         </div>
-    );
+    </InventorySheet>;
 }
 
 export function buildSupplierPayment(context, form) {
@@ -460,9 +444,8 @@ export function PaymentDialog({ invoiceId, supplierId, onClose, onSaved }) {
         } catch (err) { setError(failureMessage(err, "تعذر تأكيد نتيجة السداد. إعادة المحاولة تستخدم العملية نفسها.")); }
         finally { saving.current = false; setBusy(false); }
     };
-    return <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/50 p-4" data-testid="pinv-payment-dialog">
-        <form onSubmit={submitPayment} className="mx-auto my-6 max-w-xl space-y-4 rounded-xl bg-white p-5" dir="rtl">
-            <div className="flex items-center justify-between"><h2 className="text-xl font-black">سداد المورد</h2><button type="button" onClick={onClose} disabled={busy}>إغلاق</button></div>
+    return <InventorySheet open onClose={onClose} title="سداد المورد" description="اختر الحساب والمبلغ والتاريخ. تعيد المحاولة العملية المحفوظة نفسها عند تعذر تأكيد النتيجة." busy={busy} footer={<button className={buttonCls} type="submit" form="native-supplier-payment-form" disabled={!context || busy || Number(context?.remaining_amount) <= 0} data-testid="pinv-payment-submit">{busy ? "جارٍ تأكيد السداد…" : request ? "إعادة محاولة السداد نفسه" : "تأكيد السداد"}</button>}>
+        <form id="native-supplier-payment-form" onSubmit={submitPayment} className="space-y-5 mz-native-invoices" dir="rtl" data-testid="pinv-payment-dialog">
             {loading && <p>جارٍ التحقق من رصيد المورد والحسابات…</p>}
             {error && <p role="alert" className="rounded bg-rose-50 p-3 text-rose-800">{error}</p>}
             {context && <p>المستحق: {fmt(context.remaining_amount)} SAR</p>}
@@ -473,9 +456,8 @@ export function PaymentDialog({ invoiceId, supplierId, onClose, onSaved }) {
                 <Field label="ملاحظات"><input className={inputCls} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></Field>
             </fieldset>
             {request && error && <p className="text-sm">بيانات المحاولة محفوظة. إعادة المحاولة لا تنشئ سدادًا ثانيًا.</p>}
-            <button className={buttonCls} type="submit" disabled={!context || busy || Number(context?.remaining_amount) <= 0} data-testid="pinv-payment-submit">{busy ? "جارٍ تأكيد السداد…" : request ? "إعادة محاولة السداد نفسه" : "تأكيد السداد"}</button>
         </form>
-    </div>;
+    </InventorySheet>;
 }
 
 
@@ -492,10 +474,10 @@ function invoiceStateLabel(invoice) {
     return "عملية اعتماد تحتاج متابعة";
 }
 
-export function ApprovalDialog({ invoice: initialInvoice, catalog, onClose, onSaved }) {
+export function ApprovalDialog({ invoice: initialInvoice, catalog, onClose, onSaved, readOnly=false }) {
     const [invoice, setInvoice] = useState(initialInvoice);
     const [receipts, setReceipts] = useState(() => initialInvoice.operation?.request?.receipts || initialInvoice.lines.map((line) => ({
-        line_id: line.id, location_id: "", scanned_location_barcode: "", preparation_state: "requires_preparation",
+        line_id: line.id, location_id: "", scanned_location_barcode: "", preparation_state: line.purchase_configuration?.state === "ready" ? "ready_complete" : "requires_preparation",
     })));
     const [busy, setBusy] = useState(false);
     const [uncertain, setUncertain] = useState(false);
@@ -522,7 +504,7 @@ export function ApprovalDialog({ invoice: initialInvoice, catalog, onClose, onSa
     };
     const submit = async (event) => {
         event.preventDefault();
-        if (submitting.current || blockedOperation || (!isManagedDraft(invoice) && !resumable)) return;
+        if (readOnly || submitting.current || blockedOperation || (!isManagedDraft(invoice) && !resumable)) return;
         let payload;
         try { payload = resumable ? frozenRequest : buildFullPurchaseApproval(invoice, receipts, catalog); }
         catch (err) { setError(err.message); return; }
@@ -544,37 +526,36 @@ export function ApprovalDialog({ invoice: initialInvoice, catalog, onClose, onSa
             try { await refresh(); } catch (_) { /* Keep the same operation locked until its state is known. */ }
         } finally { submitting.current = false; setBusy(false); }
     };
-    return <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/50 p-4" data-testid="pinv-approval-dialog">
-        <form onSubmit={submit} className="mx-auto my-6 max-w-4xl space-y-4 rounded-xl bg-white p-5" dir="rtl">
-            <div className="flex justify-between"><h2 className="text-xl font-black">اعتماد واستلام كامل الفاتورة</h2><button type="button" onClick={onClose} disabled={busy}>إغلاق</button></div>
-            <p className="text-sm text-slate-600">تُستلم جميع الكميات أدناه في عملية واحدة مرتبطة بالقيد وذمة المورد. راجع الخانات والباركود قبل الاعتماد.</p>
-            {error && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-rose-800">{error}</p>}
-            {status && <p role="status">حالة العملية: {status}</p>}
-            <fieldset disabled={busy || blockedOperation || !isManagedDraft(invoice)} className="space-y-3">
-                {invoice.lines.map((line, index) => <section key={line.id} className="space-y-3 rounded-lg border p-3">
-                    <h3 className="font-bold">{line.product_name} · {line.code || line.sku} · الكمية كاملة: {line.quantity}</h3>
-                    <div className="grid gap-3 md:grid-cols-3">
-                        <Field label={"خانة البند " + (index + 1)}><select className={inputCls} value={receipts[index]?.location_id || ""} onChange={(event) => updateReceipt(index, "location_id", event.target.value)} data-testid={"pinv-receipt-" + index + "-location"}><option value="">اختر الخانة</option>{catalog.locations.map((row) => <option key={row.id} value={row.id}>{row.code} · {row.warehouse_id}</option>)}</select></Field>
-                        <Field label={"باركود خانة البند " + (index + 1)}><input className={inputCls} value={receipts[index]?.scanned_location_barcode || ""} onChange={(event) => updateReceipt(index, "scanned_location_barcode", event.target.value)} data-testid={"pinv-receipt-" + index + "-barcode"} /></Field>
-                        <Field label={"تجهيز البند " + (index + 1)}><select className={inputCls} value={receipts[index]?.preparation_state || "requires_preparation"} onChange={(event) => updateReceipt(index, "preparation_state", event.target.value)}><option value="requires_preparation">يحتاج تجهيزًا</option><option value="ready_complete">جاهز كاملًا</option></select></Field>
+    return <InventorySheet open onClose={onClose} title="اعتماد واستلام الفاتورة" description="راجع جميع الكميات ومواقع الاستلام وباركود الخانات. الاعتماد يثبت المخزون والقيد وذمة المورد وفق القواعد الحالية." wide busy={busy} footer={<><span>{invoice.lines.length} بنود · الكميات كاملة</span>{!readOnly&&(resumable?<button type="submit" form="native-receipt-form" className={buttonCls} disabled={busy||blockedOperation} data-testid="pinv-resume-approval">إعادة محاولة الاستلام</button>:<button type="submit" form="native-receipt-form" className={buttonCls} disabled={busy||blockedOperation||!isManagedDraft(invoice)} data-testid="pinv-approve-receive">اعتماد واستلام جميع البنود</button>)}</>}>
+        <form id="native-receipt-form" onSubmit={submit} className="space-y-5 mz-native-invoices" dir="rtl" data-testid="pinv-approval-dialog">
+            {readOnly&&<p role="status">عرض حالة الاستلام فقط؛ لا تتوفر صلاحية الاعتماد.</p>}
+            {error&&<p role="alert" className="rounded-lg bg-rose-50 p-3 text-rose-800">{error}</p>}
+            {status&&<p role="status">حالة العملية: {status}</p>}{resumable&&<p className="mz-product-deferred">تُعاد العملية المحفوظة بنفس البنود والكميات والخانات؛ لا تُنشأ عملية استلام جديدة.</p>}
+            <fieldset disabled={readOnly||busy||blockedOperation||!isManagedDraft(invoice)} className="mz-purchase-lines">
+                {invoice.lines.map((line,index)=><section key={line.id} className="mz-purchase-line">
+                    <div className="mz-purchase-read-line"><InventoryProductPhoto product={productForLine(catalog,line)||{name:line.product_name}}/><div><h3 className="font-bold">{line.product_name}</h3><p className="text-sm">الرقم المخزني <bdi>{line.code||line.sku}</bdi> · الكمية كاملة: {line.quantity}</p><p className="mz-purchase-config-summary">{inventoryConfigDescription(line)}</p></div></div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                        <Field label={"خانة البند "+(index+1)}><select className={inputCls} value={receipts[index]?.location_id||""} onChange={e=>updateReceipt(index,"location_id",e.target.value)} data-testid={"pinv-receipt-"+index+"-location"}><option value="">اختر الخانة</option>{catalog.locations.map(row=><option key={row.id} value={row.id}>{row.display_code||row.code||row.name}{row.warehouse_name?" · "+row.warehouse_name:""}</option>)}</select></Field>
+                        <Field label={"باركود خانة البند "+(index+1)}><input className={inputCls} value={receipts[index]?.scanned_location_barcode||""} onChange={e=>updateReceipt(index,"scanned_location_barcode",e.target.value)} data-testid={"pinv-receipt-"+index+"-barcode"}/></Field>
                     </div>
+                    <Field label={"تجهيز البند "+(index+1)}><select className={inputCls} disabled={!!line.purchase_configuration} value={receipts[index]?.preparation_state||"requires_preparation"} onChange={e=>updateReceipt(index,"preparation_state",e.target.value)}><option value="requires_preparation">يحتاج تجهيزًا</option><option value="ready_complete">جاهز كاملًا</option></select></Field>
                 </section>)}
-                <button type="submit" className={buttonCls} data-testid="pinv-approve-receive">اعتماد واستلام جميع البنود</button>
             </fieldset>
-            {resumable && <button type="submit" className={buttonCls} disabled={busy || blockedOperation} data-testid="pinv-resume-approval">إعادة محاولة العملية المحفوظة دون تغيير البنود أو الخانات</button>}
-            <button type="button" disabled={busy} className="rounded-lg border px-4 py-2" onClick={async () => {
+            <button type="button" disabled={busy} className="rounded-lg border px-4 py-2" onClick={async()=>{
                 setBusy(true);
-                try { await refresh(); } catch (err) { setUncertain(true); setError(failureMessage(err, "تعذر التحقق من العملية.")); }
-                finally { setBusy(false); }
+                try{await refresh();}catch(err){setUncertain(true);setError(failureMessage(err,"تعذر التحقق من العملية."));}
+                finally{setBusy(false);}
             }}>تحديث حالة العملية</button>
         </form>
-    </div>;
+    </InventorySheet>;
 }
 
-export default function PurchaseInvoices() {
+export default function PurchaseInvoices({accessMode=null}) {
     const [invoices, setInvoices] = useState([]);
     const [suppliers, setSuppliers] = useState([]);
     const [catalog, setCatalog] = useState(EMPTY_CATALOG);
+    const canWrite=accessMode!=="read"&&catalog.can_write===true;
+    const canPay=accessMode!=="read"&&catalog.can_pay===true;
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [dialog, setDialog] = useState(null);
@@ -610,31 +591,30 @@ export default function PurchaseInvoices() {
             setApproval(latest);
         } catch (err) { setError(failureMessage(err, "تعذر تحميل الفاتورة.")); }
     };
-    return <div dir="rtl" className="space-y-5" data-testid="purchase-invoices-page">
-        <header className="flex flex-wrap justify-between gap-3">
-            <div><h1 className="flex items-center gap-2 text-2xl font-black"><Receipt size={28} />فواتير المشتريات</h1>
-                <p className="mt-2 text-sm text-slate-600">احفظ مسودة ثم راجعها لاعتماد الفاتورة واستلام جميع كمياتها. الفواتير السابقة للقراءة فقط.</p></div>
-            <button className={buttonCls} disabled={loading || !!error} onClick={() => setDialog({ invoice: null })} data-testid="pinv-new-btn"><Plus size={16} className="inline" /> مسودة شراء جديدة</button>
-        </header>
-        <Link to="/inventory-receiving-v2" className="text-sm text-violet-700 underline">مساحة المخزون والاستلام</Link>
+    return <InventorySuiteFrame active="purchases"><div dir="rtl" className="space-y-5 mz-native-invoices" data-testid="purchase-invoices-page">
+        <InventoryPageHeader title="المشتريات" description="احفظ مسودة، ثم راجع الاستلام والخانات. تظهر حالة كل فاتورة ومستحقات المورد في مكان واحد.">
+            <button className={buttonCls+" is-primary"} disabled={!canWrite || loading || !!error} onClick={() => setDialog({ invoice: null })} data-testid="pinv-new-btn"><Plus size={16} className="inline" /> مسودة شراء جديدة</button>
+        </InventoryPageHeader>
+        {!canWrite&&<p role="status" className="rounded-lg bg-amber-50 p-3 text-amber-900">عرض المشتريات فقط؛ إنشاء المسودات والاستلام والسداد يتطلب صلاحية التعديل.</p>}
+        <Link to="/inventory-receiving-v2" className="text-sm text-emerald-800 underline">متابعة الاستلام والمخزون</Link>
         {error && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-rose-800">{error}<button type="button" className="mr-3 underline" onClick={load}>إعادة التحميل</button></p>}
         <label className="block text-sm">بحث بالفاتورة أو المورد<input className={inputCls} value={search} onChange={(event) => setSearch(event.target.value)} /></label>
         {selectedId && <a href="/purchase-invoices" className="text-sm underline">عرض جميع الفواتير</a>}
-        {loading ? <p>جارٍ التحميل…</p> : <div className="overflow-auto rounded-xl border bg-white"><table className="w-full text-right text-sm">
+        {loading ? <p>جارٍ التحميل…</p> : <div className="overflow-auto rounded-xl border bg-white"><table className="w-full text-right text-sm mz-purchase-table">
             <thead><tr>{["الفاتورة", "المورد", "التاريخ", "الإجمالي SAR", "الحالة", "الإجراءات"].map((label) => <th key={label} className="p-3">{label}</th>)}</tr></thead>
             <tbody>{filtered.map((row) => <tr key={row.id} className="border-t" data-testid={"pinv-row-" + row.id}>
-                <td className="p-3">{row.invoice_number || "—"}</td><td className="p-3"><button className="text-violet-700 underline" onClick={() => setStatementSupplier(row.supplier_counterparty_id)}>{row.supplier_name || "—"}</button></td><td className="p-3">{row.invoice_date}</td><td className="p-3">{fmt(row.total)}</td>
-                <td className="p-3">{invoiceStateLabel(row)}{row.state === "approved" && <div className="text-xs">{STATUS_LABEL[row.payment_status || row.status]?.label || "غير مسددة"} · المتبقي {fmt(row.remaining_amount)}</div>}{operationStatus(row) && <div className="text-xs">{operationStatus(row)}</div>}</td>
-                <td className="flex flex-wrap gap-2 p-3"><button className="rounded border px-3 py-2" onClick={() => setDialog({ invoice: row })} data-testid={"pinv-open-" + row.id}><FileText className="inline" size={16} /> {isManagedDraft(row) ? "تعديل المسودة" : "عرض"}</button>
-                    {isManagedDraft(row) && <button className={buttonCls} onClick={() => openApproval(row)} data-testid={"pinv-approve-" + row.id}>اعتماد واستلام كامل</button>}
-                    {row.schema_version === "g47-v1" && row.state === "approved" && Number(row.remaining_amount) > 0 && <button className={buttonCls} onClick={() => setPayment({ invoiceId: row.id })} data-testid={"pinv-pay-" + row.id}>سداد المورد</button>}
+                <td className="p-3" data-label="الفاتورة">{row.invoice_number || "—"}</td><td className="p-3" data-label="المورد"><button className="text-emerald-800 underline" onClick={() => setStatementSupplier(row.supplier_counterparty_id)}>{row.supplier_name || "—"}</button></td><td className="p-3" data-label="التاريخ">{row.invoice_date}</td><td className="p-3" data-label="الإجمالي SAR">{fmt(row.total)}</td>
+                <td className="p-3" data-label="الحالة">{invoiceStateLabel(row)}{row.state === "approved" && <div className="text-xs">{STATUS_LABEL[row.payment_status || row.status]?.label || "غير مسددة"} · المتبقي {fmt(row.remaining_amount)}</div>}{operationStatus(row) && <div className="text-xs">{operationStatus(row)}</div>}</td>
+                <td className="flex flex-wrap gap-2 p-3" data-label="الإجراءات"><button className="rounded border px-3 py-2" onClick={() => setDialog({ invoice: row })} data-testid={"pinv-open-" + row.id}><FileText className="inline" size={16} /> {isManagedDraft(row)&&canWrite ? "تعديل المسودة" : "عرض"}</button>
+                    {canWrite && isManagedDraft(row) && <button className={buttonCls} onClick={() => openApproval(row)} data-testid={"pinv-approve-" + row.id}>اعتماد واستلام كامل</button>}
+                    {canPay && row.schema_version === "g47-v1" && row.state === "approved" && Number(row.remaining_amount) > 0 && <button className={buttonCls} onClick={() => setPayment({ invoiceId: row.id })} data-testid={"pinv-pay-" + row.id}>سداد المورد</button>}
                     {row.schema_version === "g47-v1" && !["draft", "approved"].includes(row.state) && <button className="rounded border px-3 py-2" onClick={() => openApproval(row)}>متابعة حالة الاعتماد</button>}
                 </td>
             </tr>)}</tbody>
         </table>{!filtered.length && <p className="p-8 text-center">لا توجد فواتير مطابقة.</p>}</div>}
-        {dialog && <InvoiceDialog suppliers={suppliers} catalog={catalog} editing={dialog.invoice} onClose={() => setDialog(null)} onSaved={load} />}
-        {approval && <ApprovalDialog invoice={approval} catalog={catalog} onClose={() => setApproval(null)} onSaved={load} />}
-        <SupplierStatement cpId={statementSupplier} open={!!statementSupplier} onClose={() => setStatementSupplier(null)} onPayment={(supplierId) => { setStatementSupplier(null); setPayment({ supplierId }); }} />
-        {payment && <PaymentDialog {...payment} onClose={() => setPayment(null)} onSaved={load} />}
-    </div>;
+        {dialog && <InvoiceDialog suppliers={suppliers} catalog={catalog} editing={dialog.invoice} readOnly={!canWrite} onClose={() => setDialog(null)} onSaved={load} />}
+        {approval && <ApprovalDialog invoice={approval} catalog={catalog} readOnly={!canWrite} onClose={() => setApproval(null)} onSaved={load} />}
+        <SupplierStatement cpId={statementSupplier} open={!!statementSupplier} onClose={() => setStatementSupplier(null)} onPayment={canWrite?(supplierId) => { setStatementSupplier(null); setPayment({ supplierId }); }:undefined} />
+        {canWrite && payment && <PaymentDialog {...payment} onClose={() => setPayment(null)} onSaved={load} />}
+    </div></InventorySuiteFrame>;
 }

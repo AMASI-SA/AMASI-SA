@@ -61,10 +61,12 @@ test("owner gets only setup additions; financial authorities stay explicit in bo
         "accounting.financial_accounts.view", "accounting.financial_accounts.manage",
         "accounting.opening_balances.view", "accounting.opening_balances.drafts.manage",
         "accounting.opening_balances.review",
+        "accounting.inventory.count",
     ];
     const sensitive = [
         "accounting.opening_balances.post", "accounting.journals.reverse",
         "accounting.ledger_transition.manage", "accounting.shipping.contracts.review",
+        "accounting.inventory.adjustments.review", "accounting.inventory.adjustments.post",
     ];
     expect(new Set(ACCOUNTING_EXPLICIT_GRANT_PERMISSIONS)).toEqual(new Set(sensitive));
     for (const permission of [...setup, ...sensitive]) {
@@ -86,6 +88,9 @@ test("sensitive actions remain separate from page access", () => {
     expect(actionPermissions).toContain("accounting.movements.import");
     expect(actionPermissions).toContain("accounting.journals.manual_create");
     expect(actionPermissions).toContain("accounting.journals.reverse");
+    expect(actionPermissions).toContain("accounting.inventory.count");
+    expect(actionPermissions).toContain("accounting.inventory.adjustments.review");
+    expect(actionPermissions).toContain("accounting.inventory.adjustments.post");
     expect(actionPermissions).toContain("accounting.financial_accounts.manage");
     expect(actionPermissions).toContain("accounting.opening_balances.drafts.manage");
     expect(actionPermissions).toContain("accounting.opening_balances.review");

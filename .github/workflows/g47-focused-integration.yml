@@ -133,6 +133,38 @@ jobs:
             tests/test_product_bundle_policy.py tests/test_bundle_composition_lifecycle.py \
             tests/test_bundle_composition_acceptance.py \
             --junitxml="$RUNNER_TEMP/g47-backend.xml"
+      - name: Verify native inventory counts and purchase configurations
+        env:
+          PYTHONPATH: ".:tests"
+        run: >-
+          python -m pytest --noconftest -p no:cacheprovider -q --tb=short
+          tests/test_inventory_stocktake.py tests/test_inventory_stocktake_permissions.py
+          tests/test_inventory_stocktake_integration.py
+          tests/test_purchase_configuration_contract.py tests/test_native_purchase_configuration_mongo.py
+          --junitxml="$RUNNER_TEMP/native-inventory.xml"
+      - name: Require native inventory transactions and permission tests without skips
+        if: always()
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          cases = list(ET.parse(Path(os.environ['RUNNER_TEMP']) / 'native-inventory.xml').iter('testcase'))
+          assert cases and not [c.attrib for c in cases if any(c.find(t) is not None for t in ('failure', 'error', 'skipped'))]
+          expected = {'test_inventory_stocktake', 'test_inventory_stocktake_permissions',
+                      'test_inventory_stocktake_integration', 'test_purchase_configuration_contract',
+                      'test_native_purchase_configuration_mongo'}
+          observed = {part for c in cases for part in c.get('classname', '').split('.')}
+          assert expected <= observed, sorted(expected - observed)
+          print(len(cases), 'native inventory cases PASS; zero skips')
+          PY
+      - name: Retain native inventory transaction evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-inventory-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/native-inventory.xml
+          if-no-files-found: error
       - name: Require executed passing tests with no skips
         if: always()
         run: |
@@ -296,6 +328,22 @@ jobs:
           name: g47-frontend-${{ github.event.pull_request.head.sha || github.sha }}
           path: ${{ runner.temp }}/g47-frontend.json
           if-no-files-found: error
+      - name: Verify the integrated inventory suite UI and read-only grants
+        env:
+          CI: "true"
+        run: >-
+          node scripts/test-inventory-suite.cjs
+          src/components/inventory/suite/InventorySuiteFrame.test.jsx src/lib/webPageAccess.test.js
+          src/pages/MezanProductsWorkspace.inventory.test.jsx src/pages/MezanComponentsProduction.inventory.test.jsx
+          src/pages/MezanComponentsOrganization.test.jsx src/components/products/BundleEditor.test.jsx
+          src/lib/componentCreationRules.test.js src/services/mezanComponentCatalog.test.js
+          src/pages/operational/InventoryAvailability.test.jsx src/pages/operational/InventoryWorkspace.test.jsx
+          src/pages/InventoryReceivingWorkspace.test.jsx src/pages/InventoryReceivingWorkspace.readPolicy.test.jsx
+          src/components/inventory/suite/InventoryProjectionViews.test.jsx src/pages/WarehouseHierarchyWorkspace.test.jsx
+          src/components/inventory/suite/InventoryMovementsView.test.jsx src/pages/inventory/StocktakeWorkbench.test.jsx
+          src/services/inventoryStocktakes.test.js src/pages/PurchaseInvoices.test.jsx
+          src/pages/operational/StandaloneInventoryEntry.test.jsx src/pages/operational/InventoryPurchases.test.jsx
+          src/pages/MezanProductsAutoSync.cadence.test.jsx src/components/products/ProductCreationPanel.test.jsx
       - name: Build current source through the existing GitHub entry point
         env:
           CI: "false"

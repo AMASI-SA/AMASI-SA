@@ -2,9 +2,9 @@ import React, {useEffect, useRef, useState} from 'react';
 import {Link} from 'react-router-dom';
 import {operationalApi as api, messageFor, requestId} from './api';
 import {Field, Notice} from './OpeningBalances';
+import {InventoryProductPicker,InventoryProductOptions,InventoryProductPhoto} from '../../components/inventory/suite/InventoryProductFields';
+import {validateInventoryConfiguration} from '../../lib/inventoryProductConfiguration';
 
-const choices = ['select', 'radio', 'color', 'image'];
-const texts = ['text', 'string', 'textarea'];
 const unitLabel = unit => ({piece: 'قطعة', m: 'متر', kg: 'كيلوجرام'}[unit] || unit);
 
 export default function StandaloneInventoryEntry({context}) {
@@ -34,7 +34,6 @@ export default function StandaloneInventoryEntry({context}) {
     return () => { alive = false; };
   }, [allowed, version]);
   const update = patch => setLine(current => ({...current, ...patch}));
-  const configure = patch => update({purchase_configuration: {...line.purchase_configuration, ...patch}});
   async function toggleWriter() {
     if (lock.current || !catalog || !allowed) return;
     lock.current = true; setBusy(true); setError('');
@@ -53,6 +52,7 @@ export default function StandaloneInventoryEntry({context}) {
         if (!line || !line.location_id || !/^\d+(\.\d{1,2})?$/.test(line.unit_cost) || Number(line.unit_cost) <= 0
             || !/^\d+(\.\d{1,6})?$/.test(line.quantity) || Number(line.quantity) <= 0 || Number(line.quantity) > 100000
             || (line.kind === 'product' && !Number.isInteger(Number(line.quantity)))) throw Error('أكمل الموقع والكمية الصحيحة والتكلفة الموجبة.');
+        if(line.kind==='product')validateInventoryConfiguration(line,line.purchase_configuration);
         const body = {request_id: requestId(), lines: [{kind: line.kind, item_id: line.id,
           location_id: line.location_id, quantity: Number(line.quantity), unit_cost: line.unit_cost,
           purchase_configuration: line.purchase_configuration}]};
@@ -79,33 +79,30 @@ export default function StandaloneInventoryEntry({context}) {
     } finally { lock.current = false; if (mounted.current) setBusy(false); }
   }
   if (!allowed) return <p role="alert">إدخال المخزون متاح للمالك فقط.</p>;
-  const matches = (kind === 'product' ? catalog?.products || [] : catalog?.components || [])
-    .filter(p => `${p.name} ${p.sku || ''}`.toLowerCase().includes(search.trim().toLowerCase()));
-  return <section dir="rtl" aria-label="إضافة المخزون"><h2>إضافة المخزون الموجود فعليًا</h2>
+  const matches=kind==='product'?catalog?.products||[]:catalog?.components||[];
+  return <section dir="rtl" aria-label="إضافة المخزون" className="mz-stock-entry"><h2>إضافة المخزون الموجود فعليًا</h2>
     <p>احفظ كل منتج بكميته ومواصفاته وموقعه؛ يُثبَّت فورًا ويظهر في الجدول. سجّل الفضي والذهبي كسطرين مستقلين.</p>
     <p role="note">هذا إدخال كميات موجودة عند التجهيز الأولي للمخزن، وليس فاتورة شراء أو تسوية نقص. لا يغيّر أرصدة البنوك والموردين ولا يصرف الكمية لطلبات العملاء؛ ربط التقييم والتشغيل مؤجل.</p>
     <Notice error={error}/>{message && <p role="status">{message}</p>}
     {!catalog && <button disabled={busy} onClick={() => setVersion(v => v + 1)}>تحميل بيانات المخزون</button>}
     {catalog && <>
-      <p>{catalog.writer_disabled ? 'إدخال المخزون المستقل متوقف.' : 'إدخال المخزون المستقل مفعّل.'}</p>
-      <button disabled={busy || (!!pending && !catalog.writer_disabled)} onClick={toggleWriter}>{catalog.writer_disabled ? 'تفعيل إدخال المخزون المستقل' : 'إيقاف إدخال المخزون المستقل'}</button>
+      <div className="mz-stock-state"><strong>{catalog.writer_disabled?'إدخال المخزون المستقل متوقف.':'إدخال المخزون المستقل مفعّل.'}</strong><details><summary>إدارة الإدخال</summary><p>يخص هذا التحكم الإدخال الأولي المستقل فقط؛ الربط المحاسبي والتشغيل يبقيان وفق إعداداتهما الحالية.</p><button disabled={busy || (!!pending && !catalog.writer_disabled)} onClick={toggleWriter}>{catalog.writer_disabled ? 'تفعيل إدخال المخزون المستقل' : 'إيقاف إدخال المخزون المستقل'}</button></details></div>
       {!catalog.locations.length && <p role="alert">أنشئ المخزن والدواليب أولًا من <Link to="/components-v2?workspace=warehouse">إدارة المخازن</Link>؛ تظهر هنا مواقع المخازن المستقلة فقط.</p>}
       {pending && <div role="alert">توجد عملية حفظ بانتظار تأكيد نتيجتها. إعادة المحاولة بنفس المرجع تمنع تكرار الكمية.<button disabled={busy || catalog.writer_disabled} onClick={save}>إعادة محاولة الحفظ</button></div>}
       <fieldset className="op-stock-form" disabled={busy || !!pending || !!recovery.error || catalog.writer_disabled || !catalog.locations.length}>
         <legend>إدخال منتج واحد</legend>
         {!line ? <>
           <Field label="نوع الصنف"><select value={kind} onChange={e => {setKind(e.target.value); setSearch('');}}><option value="product">منتجات</option><option value="component">مكونات</option></select></Field>
-          <Field label="بحث بالاسم أو الرقم المخزني"><input value={search} onChange={e => setSearch(e.target.value)}/></Field>
-          <ul className="op-stock-results">{matches.slice(0, 30).map(p => <li key={p.id}>{p.name} · {p.sku}<button onClick={() => setLine({...p, kind, quantity: '1', unit_cost: '', location_id: '', purchase_configuration: {state: kind === 'product' ? 'ready' : 'raw', selections: [], inputs: []}})}>اختيار {p.name}</button></li>)}</ul>
-        </> : <div className="op-card">
-          <h3>{line.name} · {line.sku}</h3>
-          {!!line.configuration_issues?.length && <p role="alert">{line.configuration_issues.join(' · ')}</p>}
-          <Field label="موقع التخزين"><select value={line.location_id} onChange={e => update({location_id: e.target.value})}><option value="">اختر الموقع</option>{catalog.locations.map(l => <option key={l.id} value={l.id}>{l.name} — {l.warehouse_name}</option>)}</select></Field>
-          {line.kind === 'product' && <Field label="حالة المنتج"><select value={line.purchase_configuration.state} onChange={e => configure({state: e.target.value, inputs: []})}><option value="ready">جاهز بالمواصفات المحددة</option><option value="raw">يحتاج تجهيز</option></select></Field>}
-          {(line.options || []).map(o => choices.includes(o.type) ? <Field key={o.id} label={o.name}><select value={line.purchase_configuration.selections.find(s => s.option_id === o.id)?.value_id || ''} onChange={e => configure({selections: [...line.purchase_configuration.selections.filter(s => s.option_id !== o.id), ...(e.target.value ? [{option_id: o.id, value_id: e.target.value}] : [])]})}><option value="">غير محدد</option>{o.values.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}</select></Field> : texts.includes(o.type) && line.purchase_configuration.state === 'ready' ? <Field key={o.id} label={o.name}><input maxLength={o.type === 'textarea' ? 1000 : 100} value={line.purchase_configuration.inputs.find(s => s.option_id === o.id)?.value || ''} onChange={e => configure({inputs: [...line.purchase_configuration.inputs.filter(s => s.option_id !== o.id), ...(e.target.value ? [{option_id: o.id, value: e.target.value}] : [])]})}/></Field> : null)}
+          <InventoryProductPicker items={matches} query={search} onQueryChange={setSearch} initialOpen label="بحث بالاسم أو الرقم المخزني" onPick={p=>setLine({...p,kind,quantity:'1',unit_cost:'',location_id:'',purchase_configuration:{state:kind==='product'?'ready':'raw',selections:[],inputs:[]}})}/>
+        </> : <div className="mz-purchase-line">
+          <div className="mz-product-selected"><InventoryProductPhoto product={line}/><div><h3>{line.name}</h3><span>الرقم المخزني <bdi>{line.sku||'غير محدد'}</bdi></span></div><button type="button" onClick={()=>setLine(null)}>تغيير الصنف</button></div>
+          {line.kind==='product'&&<InventoryProductOptions product={line} config={line.purchase_configuration} onChange={config=>update({purchase_configuration:config})}/>}
+          <Field label="موقع التخزين"><select value={line.location_id} onChange={e=>update({location_id:e.target.value})}><option value="">اختر الموقع</option>{catalog.locations.map(l=><option key={l.id} value={l.id}>{l.name||l.code}{l.warehouse_name?' · '+l.warehouse_name:''}</option>)}</select></Field>
+          <div className="mz-stock-amounts">
           <Field label={`الكمية (${unitLabel(line.unit || 'piece')})`}><input inputMode="decimal" value={line.quantity} onChange={e => update({quantity: e.target.value})}/></Field>
           <Field label="تكلفة الوحدة بالريال"><input inputMode="decimal" value={line.unit_cost} onChange={e => update({unit_cost: e.target.value})}/></Field>
-          <button className="op-primary" onClick={save}>حفظ المنتج في المخزون</button><button onClick={() => setLine(null)}>إلغاء الإدخال</button>
+          <div className="mz-stock-total"><span>إجمالي التكلفة</span><strong>{Number(line.quantity)>0&&Number(line.unit_cost)>0?(Number(line.quantity)*Number(line.unit_cost)).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):'0.00'} ر.س</strong></div></div>
+          <div className="mz-stock-actions"><button className="op-primary" aria-label="حفظ المنتج في المخزون" onClick={save}>{busy?'جارٍ تأكيد الحفظ…':'حفظ المنتج في المخزون'}</button><button onClick={()=>setLine(null)}>إلغاء الإدخال</button></div>
         </div>}
       </fieldset>
       <div className="op-table"><table><caption>آخر 100 إضافة مثبتة — جميع الكميات في صفحة المخزون الحالي</caption>
