@@ -5,6 +5,7 @@ from operational_balance_bank_orders import transfer_bank
 from operational_customer_payment_sar import remaining_sar, value_customer_payment
 from operational_payment_evidence import _amount, _instant, provider_for
 from operational_provider_report_coverage import PLATFORMS
+from payment_methods import is_unselected_payment_method
 from salla_payment_collection import provider_order_page_balance, provider_order_page_current
 
 
@@ -28,7 +29,7 @@ def category(method):
         return "wallet"
     if name in COD:
         return "cod"
-    return "awaiting" if name == "waiting" else "unclassified"
+    return "awaiting" if is_unselected_payment_method(name) else "unclassified"
 
 
 def new_coverage(started_at, as_of):

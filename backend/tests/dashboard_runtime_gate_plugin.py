@@ -11,11 +11,13 @@ import json
 import os
 import time
 from collections import Counter
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from contextvars import ContextVar
 from datetime import date, timedelta
 from pathlib import Path
 from unittest.mock import patch
+
+from dashboard_runtime_fee_contract import extend_frozen_fee_contract
 
 ARM = os.environ.get('DASHBOARD_ADOPTION_ARM', '')
 GOLDEN = Path(os.environ.get('DASHBOARD_ADOPTION_GOLDEN', 'reference-responses.json'))
@@ -26,6 +28,8 @@ sequence = 0
 active_authority_audit = ContextVar('dashboard_authority_audit', default=None)
 active_traffic_audit = ContextVar('dashboard_traffic_audit', default=None)
 active_google_audit = ContextVar('dashboard_google_audit', default=None)
+active_payment_fee_audit = ContextVar('dashboard_payment_fee_audit', default=None)
+PAYMENT_FEE_POLICIES = 'mz2_provider_fee_policies_v2'
 TRAFFIC_LEDGER = 'mezan_attribution_order_ledger_v1'
 GOOGLE_NATIVE_COLLECTION = 'mezan_google_ads_performance_daily_v2'
 GOOGLE_SAVED_SOURCE = ('mezan_google_ads_performance_daily_v2:selected_accounts:stored_sar:'
@@ -285,6 +289,42 @@ def _google_command(operation, command, *, database_name):
     return record
 
 
+def _payment_fee_command(operation, command, *, database_name):
+    """Capture all I/O in fee setup, including any unexpected write/read."""
+    record = _google_command(operation, command, database_name=database_name)
+    if operation == 'find':
+        # find_one has an explicit singleBatch flag; retain its exact value.
+        record['single_batch'] = command.get('singleBatch')
+        record['unreviewed_fields'] = [key for key in record['unreviewed_fields']
+                                       if key != 'singleBatch']
+    return record
+
+
+def _expected_payment_fee_commands(audit, response):
+    """Exactly two empty owner-scoped reads, independent of runtime helpers.
+
+    The immutable fixture has no dated fee policies or source-mode document.
+    It therefore resolves to legacy settings. All existing setting/document
+    counts remain frozen; only these two precisely audited finds are allowed.
+    """
+    cohorts = audit.get('payment_fee_cohorts', [])
+    if 'payment_breakdown' not in response:
+        assert cohorts == [], 'Fee setup must not load outside a financial response'
+        return []
+    owner = audit['owner_id']
+    assert cohorts == [{'user_id': owner}], 'Fee setup must load once for the exact owner'
+    mode_id = hashlib.sha256(json.dumps([owner, 'fee_source_mode']).encode()).hexdigest()
+    common = {'operation': 'find', 'collection': PAYMENT_FEE_POLICIES,
+              'database': audit['database'], 'command_database': audit['database'],
+              'unreviewed_fields': []}
+    return [
+        {**common, 'filter': {'user_id': owner}, 'projection': {'_id': 0},
+         'limit': None, 'single_batch': None},
+        {**common, 'filter': {'_id': mode_id, 'user_id': owner}, 'projection': {},
+         'limit': 1, 'single_batch': True},
+    ]
+
+
 def _expected_google_commands(audit, response):
     """Four exact reads replace the one legacy read; net growth is three finds.
 
@@ -387,6 +427,113 @@ def _extend_google_saved_contract(response):
     response['totals']['ads_spend_provisional'] = provisional
 
 
+def _frozen_financial_cohort(response, fixture_case):
+    """Independently enumerate the pinned 05b159dc synthetic source identities.
+
+    None of these fixtures has a waiting/wating method or a native order ID.
+    Date/filter mutations are intentionally retained; the digest cannot be
+    copied from the candidate or inferred just from an aggregate order count.
+    """
+    family_and_case = fixture_case.split('::')[1]
+    family, case = family_and_case[:-1].split('[', 1)
+    owner = 'fixture-owner'
+    if family == 'test_dashboard_mixed_permissions_and_tenants':
+        indices = [i for i in range(40) if i not in (0, 3)]
+        if case == 'other_owner':
+            owner, indices = 'fixture-other', [0]
+        elif case == 'prior_month':
+            indices = [0]
+        elif case == 'empty_period':
+            indices = []
+        elif case == 'first_day_inclusive':
+            indices = [1]
+        elif case == 'last_day_inclusive':
+            indices = [2]
+        elif case == 'overlapping_period':
+            indices = list(range(4, 40))
+        elif case == 'no_dates':
+            indices = list(range(40))
+        elif case == 'from_only':
+            indices = list(range(1, 40))
+        elif case == 'to_only':
+            indices = [i for i in range(40) if i != 3]
+        elif case == 'hide_inferred':
+            indices.remove(4)
+        elif case in {'payment_substring_case', 'bnpl_and_cod', 'combined_filters',
+                      'no_matching_filter', 'rounding_and_known_fx'}:
+            methods = ['mada', 'apple', 'bank', 'tabby', 'tamara', 'cod']
+            allowed = {
+                'payment_substring_case': {'mada', 'apple'},
+                'bnpl_and_cod': {'tabby', 'tamara', 'cod'},
+                'combined_filters': {'mada'}, 'no_matching_filter': set(),
+                'rounding_and_known_fx': {'bank'},
+            }[case]
+            indices = [i for i in indices if i == 14 or
+                       ('bank' if i in (8, 11) else methods[i % 6]) in allowed]
+            if case == 'combined_filters':
+                indices = [i for i in indices if i == 14 or i % 3 == 0]
+        elif case == 'completed_status':
+            indices = [i for i in indices if i % 6 == 0 or i in (5, 14)]
+        elif case == 'arabic_status_normalization':
+            indices = [i for i in indices if i % 6 == 4 or i == 14]
+        elif case == 'returns_only':
+            indices = [i for i in indices if (i % 6 in (1, 2) and i != 7) or i == 14]
+        else:
+            assert case in {'current_month_mixed', 'include_inferred', 'shipping_substring',
+                            'all_statuses', 'electronic_no_exclusions'}, 'Unreviewed mixed cohort'
+    elif family == 'test_existing_independent_read_mutations':
+        if case in {'status', 'payment_status', 'shipping_status', 'payment_only',
+                    'shipping_only', 'date_universe'}:
+            indices = []
+        else:
+            assert case in {'product_profile_cost', 'embedded_order_cost', 'advertising_google', 'irrelevant_note'}
+            indices = [0]
+    else:
+        assert family == 'test_mutations_during_index_preserve_captured_catalog_and_later_reads'
+        assert case in {'catalog', 'profile', 'product_binding', 'option_binding', 'resource', 'policy'}
+        indices = [0, 1]
+    assert response['totals']['total_orders'] == len(indices), 'Frozen cohort/order count disagrees'
+    decisions = [[owner, '', str(1000000 + i), '', False, False, '', False] for i in indices]
+    return {'reader_version': 'financial-cohort-proof-history-v1',
+            'total_orders': len(indices), 'financial_eligible_orders': len(indices),
+            'excluded_unpaid_orders': 0, 'review_orders': 0, 'complete': True,
+            'review_reason_counts': {}, 'eligibility_digest': hashlib.sha256(
+                json.dumps(sorted(decisions), ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()}
+
+
+def _extend_financial_cohort_contract(response, fixture_case):
+    if 'payment_breakdown' not in response:
+        return
+    assert fixture_case, 'Financial cohort extension requires an immutable fixture identity'
+    cohort = _frozen_financial_cohort(response, fixture_case)
+    # Insert only the reviewed fields at their documented response positions.
+    expanded = {}
+    for key, value in response.items():
+        expanded[key] = value
+        if key == 'range':
+            expanded['financial_cohort'] = cohort
+    response.clear()
+    response.update(expanded)
+    totals = {}
+    for key, value in response['totals'].items():
+        totals[key] = value
+        if key == 'total_orders':
+            totals.update(financial_eligible_orders=cohort['financial_eligible_orders'],
+                          excluded_unpaid_orders=0, review_orders=0, financial_cohort_complete=True)
+    response['totals'] = totals
+    # The month cohort uses its own pinned period/filter count. It need not
+    # equal the selected range count (prior/empty/boundary fixtures), and has
+    # no waiting/wating methods either. Preserve every original month value.
+    month = {}
+    for key, value in response['month_kpis'].items():
+        month[key] = value
+        if key == 'total_orders':
+            assert isinstance(value, int) and value >= 0
+            month.update(financial_eligible_orders=value,
+                         excluded_unpaid_orders=0, review_orders=0)
+    response['month_kpis'] = month
+
+
 def expected_cost_completeness_json(historical_json, *, fixture_case=None):
     """Owner-approved response extension; all other historical bytes stay exact.
 
@@ -449,6 +596,8 @@ def expected_cost_completeness_json(historical_json, *, fixture_case=None):
         if response['net_sales_config'].get('deduct_product_costs', True):
             response['totals']['net_sales'] = None
     _extend_google_saved_contract(response)
+    extend_frozen_fee_contract(response, fixture_case=fixture_case)
+    _extend_financial_cohort_contract(response, fixture_case)
     return json.dumps(response, ensure_ascii=False, default=str)
 
 
@@ -467,6 +616,9 @@ def assert_runtime_read_contract(runtime, baseline, *, fixture_case=None):
     canonical = lambda rows: Counter(json.dumps(row, sort_keys=True) for row in rows)
     assert canonical(audit['google_commands']) == canonical(google_expected), \
         'Unexpected Google query, owner, period, projection, operation or count'
+    fee_expected = _expected_payment_fee_commands(audit, json.loads(baseline['json']))
+    assert canonical(audit.get('payment_fee_commands', [])) == canonical(fee_expected), \
+        'Unexpected payment fee query, owner, projection, operation or count'
     response = json.loads(runtime['json'])
     assert len(audit['cohorts']) == (0 if 'http_error' in response else 1)
     assert len(audit['traffic_cohorts']) == len(audit['cohorts'])
@@ -486,10 +638,16 @@ def assert_runtime_read_contract(runtime, baseline, *, fixture_case=None):
             'Immutable fixture unexpectedly read Google native facts'
     else:
         assert GOOGLE_NATIVE_COLLECTION not in runtime['collections']
+    assert PAYMENT_FEE_POLICIES not in baseline['collections']
+    if fee_expected:
+        assert runtime['collections'].get(PAYMENT_FEE_POLICIES) == 0, \
+            'Immutable fixture unexpectedly read dated payment fee policies'
+    else:
+        assert PAYMENT_FEE_POLICIES not in runtime['collections']
     normalized = {key: copy.deepcopy(value) for key, value in runtime.items()
                   if key != 'cost_authority_audit'}
     normalized['json'] = baseline['json']  # Validated exact approved extension above.
-    for operation, count in Counter(row['operation'] for row in expected + traffic_expected).items():
+    for operation, count in Counter(row['operation'] for row in expected + traffic_expected + fee_expected).items():
         assert normalized['commands'].get(operation, 0) >= count
         normalized['commands'][operation] -= count
         if normalized['commands'][operation] == 0:
@@ -502,7 +660,7 @@ def assert_runtime_read_contract(runtime, baseline, *, fixture_case=None):
             del normalized['commands']['find']
     normalized['collections'] = {key: value for key, value in normalized['collections'].items()
                                  if key not in AUTHORITY_COLLECTIONS
-                                 and key not in {TRAFFIC_LEDGER, GOOGLE_NATIVE_COLLECTION}}
+                                 and key not in {TRAFFIC_LEDGER, GOOGLE_NATIVE_COLLECTION, PAYMENT_FEE_POLICIES}}
     extra_documents = sum(len(cohort['numbers']) for cohort in audit['traffic_cohorts'])
     if extra_documents:
         normalized['documents'] -= extra_documents
@@ -543,12 +701,17 @@ def pytest_collection_modifyitems(session, config, items):
             audit = {'version': 1, 'owner_id': str(user['id']),
                      'database': _fixture_database_name(args[0]), 'cohorts': [], 'commands': [],
                      'traffic_cohorts': [], 'traffic_commands': [],
-                     'google_cohorts': [], 'google_commands': []}
+                     'google_cohorts': [], 'google_commands': [],
+                     'payment_fee_cohorts': [], 'payment_fee_commands': []}
             commands = args[1]
             original_started = commands.started
 
             def started(event):
                 original_started(event)
+                if active_payment_fee_audit.get() is audit:
+                    audit['payment_fee_commands'].append(_payment_fee_command(
+                        event.command_name, event.command, database_name=event.database_name))
+                    return
                 if active_google_audit.get() is audit:
                     audit['google_commands'].append(_google_command(event.command_name, event.command,
                                                                    database_name=event.database_name))
@@ -598,6 +761,10 @@ def pytest_collection_modifyitems(session, config, items):
     import dashboard_v2_routes as dash
     import dashboard_b_computation_experiment as computation
     import orders_db
+    if ARM == 'runtime':
+        import payment_method_fee_status
+    else:
+        payment_method_fee_status = None
     from order_currency import summarize_orders_sar
     from test_dashboard_b_baseline_mongo import legacy_handler
 
@@ -610,6 +777,8 @@ def pytest_collection_modifyitems(session, config, items):
         original_cost = dash.build_mezan_v2_product_cost_cooperative
         original_traffic = getattr(dash, 'load_product_traffic_sources', None)
         original_google = getattr(dash, 'load_google_dashboard_spend', None)
+        original_fee_setup = (payment_method_fee_status.load_fee_setup_context
+                              if payment_method_fee_status is not None else None)
 
         class ForcedBudget(cpu.CPUWorkBudget):
             async def checkpoint(self):
@@ -665,6 +834,17 @@ def pytest_collection_modifyitems(session, config, items):
             finally:
                 active_google_audit.reset(token)
 
+        async def fee_setup(db, owner):
+            audit = active_authority_audit.get()
+            if audit is None:
+                return await original_fee_setup(db, owner)
+            audit['payment_fee_cohorts'].append({'user_id': str(owner)})
+            token = active_payment_fee_audit.set(audit)
+            try:
+                return await original_fee_setup(db, owner)
+            finally:
+                active_payment_fee_audit.reset(token)
+
         @contextmanager
         def actual(db, scope):
             handler = legacy_handler(db)
@@ -680,7 +860,9 @@ def pytest_collection_modifyitems(session, config, items):
              patch.object(dash, 'build_salla_ads_executive_breakdown_cooperative', ads), \
              patch.object(dash, 'build_mezan_v2_product_cost_cooperative', cost), \
              patch.object(dash, 'load_product_traffic_sources', traffic, create=True), \
-             patch.object(dash, 'load_google_dashboard_spend', google, create=True):
+             patch.object(dash, 'load_google_dashboard_spend', google, create=True), \
+             (patch.object(payment_method_fee_status, 'load_fee_setup_context', fee_setup)
+              if payment_method_fee_status is not None else nullcontext()):
             yield
 
     cases.configured = configured

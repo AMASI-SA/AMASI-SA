@@ -20,6 +20,8 @@ SETTINGS_PROJECTION = {"_id": 0, "user_id": 1, "report_included_statuses": 1,
                        "hide_inferred_date_orders": 1, "payment_methods": 1,
                        "shipping_companies": 1}
 RAW_PROJECTION = {**SALLA_RAW_CURRENCY_PROJECTION, **SALLA_REPORT_OPTION_PROJECTION,
+                  "raw_by_source.salla_direct.payment_method": 1,
+                  "raw_by_source.salla_direct.payment.method": 1,
                   "user_id": 1, **{"raw_by_source.salla_direct." + field: 1 for field in (
                       "id", "order_number", "date", "created_at", "order_date",
                       "updated_at", "date_updated")}}

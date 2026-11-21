@@ -247,13 +247,33 @@ class SourceContract(unittest.TestCase):
         self.assertEqual((cpu.PARSER_BUDGET_MS, cpu.COST_PROFIT_BUDGET_MS,
                           cpu.ADVERTISING_BUDGET_MS, cpu.PRODUCT_INDEX_BUDGET_MS), (5, 5, 1, 5))
 
-    def test_separate_product_cost_summary_endpoint_is_unchanged(self):
+    def test_separate_product_cost_summary_allows_only_guarded_financial_cohort_extension(self):
         before = subprocess.check_output(['git', 'show', BASE+':backend/dashboard_v2_routes.py'], cwd=ROOT, text=True, encoding='utf8')
         after = (ROOT/'backend/dashboard_v2_routes.py').read_text(encoding='utf8')
         def endpoint(text):
             factory = function(text, 'make_dashboard_v2_router')
             return next(n for n in factory.body if getattr(n, 'name', None) == 'product_cost_summary')
-        self.assertEqual(ast.dump(endpoint(before)), ast.dump(endpoint(after)))
+        current = endpoint(after)
+        expected = ast.parse('month_orders, financial_cohort = split_financial_cohort(month_orders)').body[0]
+        additions = [node for node in current.body if ast.dump(node) == ast.dump(expected)]
+        self.assertEqual(len(additions), 1)
+        index = current.body.index(additions[0])
+        # The checked financial split must be applied immediately after the
+        # original source read and before either monthly or daily cost builder.
+        self.assertEqual(current.body[index - 1].targets[0].id, 'month_orders')
+        self.assertEqual(current.body[index + 1].targets[0].id, 'month')
+        current.body.remove(additions[0])
+        returns = [node for node in current.body if isinstance(node, ast.Return)]
+        self.assertEqual(len(returns), 1)
+        result = returns[0].value
+        keys = [i for i, key in enumerate(result.keys)
+                if isinstance(key, ast.Constant) and key.value == 'financial_cohort']
+        self.assertEqual(len(keys), 1)
+        self.assertEqual(ast.dump(result.values[keys[0]]), ast.dump(ast.Name(id='financial_cohort', ctx=ast.Load())))
+        del result.keys[keys[0]], result.values[keys[0]]
+        # Every pre-existing statement and returned field remains pinned to
+        # the original baseline; no general exception for endpoint edits.
+        self.assertEqual(ast.dump(endpoint(before)), ast.dump(current))
 
 
 class SchedulingContract(unittest.IsolatedAsyncioTestCase):

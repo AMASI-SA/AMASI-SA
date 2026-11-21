@@ -13,8 +13,15 @@ on:
       - "backend/dashboard_v2_routes.py"
       - "backend/dashboard_ads_account_results.py"
       - "backend/dashboard_ads_costs.py"
+      - "backend/dashboard_payment_fees.py"
       - "backend/dashboard_ads_periods.py"
       - "backend/payment_method_setup.py"
+      - "backend/payment_method_fee_status.py"
+      - "backend/awaiting_payment_eligibility.py"
+      - "backend/awaiting_payment_history.py"
+      - "backend/awaiting_payment_cohort.py"
+      - "backend/operational_profit_sources.py"
+      - "backend/operational_profit_projection.py"
       - "backend/accounting_onboarding_setup_routes.py"
       - "backend/unified_marketing/readers/snapchat_v2.py"
       - "backend/integrations_control_center/ads_auto_sync_scheduler.py"
@@ -25,8 +32,15 @@ on:
       - "backend/tests/test_google_ads_reporting_v1.py"
       - "backend/tests/test_dashboard_ads_account_results.py"
       - "backend/tests/test_dashboard_ads_costs.py"
+      - "backend/tests/test_dashboard_dated_payment_fees.py"
       - "backend/tests/test_dashboard_ads_periods.py"
       - "backend/tests/test_payment_method_setup.py"
+      - "backend/tests/test_payment_method_fee_status.py"
+      - "backend/tests/test_awaiting_payment_cohort.py"
+      - "backend/tests/test_awaiting_payment_eligibility.py"
+      - "backend/tests/test_awaiting_payment_history.py"
+      - "backend/tests/test_operational_balance_awaiting_cohort_readers.py"
+      - "backend/tests/test_dashboard_awaiting_financial_cohort.py"
       - "backend/tests/test_payment_method_setup_routes.py"
       - "backend/tests/test_dashboard_runtime_source_contract.py"
       - "backend/tests/test_snapchat_reporting_v2_account_display.py"
@@ -44,6 +58,10 @@ on:
       - "frontend/src/lib/dashboardExecutiveProfit.js"
       - "frontend/src/lib/dashboardExecutiveProfit.test.js"
       - "frontend/src/pages/AdvancedDashboard.jsx"
+      - "frontend/src/pages/AdvancedDashboard.paymentFees.test.jsx"
+      - "frontend/src/components/ProfitSummaryCard.jsx"
+      - "frontend/src/components/ProfitSummaryCard.paymentFees.test.jsx"
+      - "frontend/src/lib/paymentFeeCompleteness.js"
       - "frontend/src/components/PaymentMethodSetupNotice.jsx"
       - "frontend/src/components/PaymentMethodSetupNotice.test.jsx"
       - "frontend/src/pages/operational/ObservedPaymentMethods.jsx"
@@ -97,8 +115,15 @@ jobs:
           dashboard_snapchat_spend.py
           dashboard_ads_account_results.py
           dashboard_ads_costs.py
+          dashboard_payment_fees.py
           dashboard_ads_periods.py
           payment_method_setup.py
+          payment_method_fee_status.py
+          awaiting_payment_eligibility.py
+          awaiting_payment_history.py
+          awaiting_payment_cohort.py
+          operational_profit_sources.py
+          operational_profit_projection.py
           accounting_onboarding_setup_routes.py
           dashboard_v2_routes.py
           unified_marketing/readers/snapchat_v2.py
@@ -118,10 +143,13 @@ jobs:
           tests/test_dashboard_ads_hourly_spend_v1.py
           tests/test_dashboard_ads_account_results.py
           tests/test_dashboard_ads_costs.py
+          tests/test_dashboard_dated_payment_fees.py
           tests/test_dashboard_ads_periods.py
           tests/test_dashboard_runtime_source_contract.py
           tests/test_dashboard_card_snapshots.py
           tests/test_payment_method_setup.py
+          tests/test_payment_method_fee_status.py
+          tests/test_awaiting_payment_cohort.py
           tests/test_payment_method_setup_routes.py
           tests/test_dashboard_bundle_cost_authority.py
           tests/test_snapchat_reporting_v2_account_display.py
@@ -174,6 +202,8 @@ jobs:
           src/pages/AdvancedDashboard.cardRefresh.test.jsx
           src/pages/AdvancedDashboard.latestOrders.test.jsx
           src/pages/AdvancedDashboard.profitLayout.test.jsx
+          src/pages/AdvancedDashboard.paymentFees.test.jsx
+          src/components/ProfitSummaryCard.paymentFees.test.jsx
           src/lib/dashboardPlatformSpendClient.test.js
           src/services/dashboardAdsSpend.test.js
           src/components/DashboardAnalyticsPlacement.test.js

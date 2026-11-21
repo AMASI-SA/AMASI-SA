@@ -286,6 +286,11 @@ _NULL_MARKERS = {
 }
 
 
+def is_unselected_payment_method(raw: str) -> bool:
+    """Exact source placeholders, including the observed misspelling; not gateways."""
+    return isinstance(raw, str) and raw.strip().casefold() in {"waiting", "wating"}
+
+
 def normalize_payment_method(raw: str) -> tuple[str, str, str | None]:
     """Return (sub_key, sub_display, parent_key) for a raw payment-method.
 

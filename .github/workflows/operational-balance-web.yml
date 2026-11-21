@@ -66,6 +66,8 @@ jobs:
         run: >-
           python -B -m pytest --noconftest -q
           backend/tests/test_operational_balance*.py
+          backend/tests/test_awaiting_payment*.py
+          backend/tests/test_dashboard_awaiting_financial_cohort.py
           backend/tests/test_web_page_access.py backend/tests/test_web_page_catalog_security.py
           backend/tests/test_web_employee_page_reads.py backend/tests/test_web_marketing_page_permissions.py
           backend/tests/test_web_legacy_page_policy.py backend/tests/test_web_legacy_config_read.py
@@ -98,7 +100,12 @@ jobs:
           cases = ET.parse('operational-backend.xml').findall('.//testcase')
           assert len(cases) >= 3500, 'Operational test collection incomplete'
           for suite in ('test_operational_refresh_parallel_profit',
-                        'test_operational_refresh_party_issue_index'):
+                        'test_operational_refresh_party_issue_index',
+                        'test_awaiting_payment_eligibility',
+                        'test_awaiting_payment_history',
+                        'test_awaiting_payment_cohort',
+                        'test_dashboard_awaiting_financial_cohort',
+                        'test_operational_balance_awaiting_cohort_readers'):
               assert any(suite in c.get('classname', '') for c in cases), suite + ' not collected'
           assert len([c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_workspace_refunds']) >= 23, 'Scoped financial-only refund contracts missing'
           assert len([c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_workspace_statements']) >= 10, 'Scoped period statements missing'

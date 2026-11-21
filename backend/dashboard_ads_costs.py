@@ -12,9 +12,8 @@ from typing import Any
 
 from auth import DEFAULT_PAYMENT_METHODS
 from dashboard_cpu_budget import COST_PROFIT_BUDGET_MS, CPUWorkBudget
-from excel_parser import match_settings
+from dashboard_payment_fees import BASIS as PAYMENT_FEE_BASIS, dashboard_fee_breakdown
 from order_currency import currency_code, order_total_sar
-from orders_db import orders_to_parsed_cooperative
 from shipping_cost_ssot import shipping_breakdown
 
 
@@ -35,6 +34,10 @@ class DashboardAdsCostCollector:
         self.payment_settings: list[dict] | None = None
         self.company_configs: dict[str, dict] | None = None
         self.product_orders: dict[int, dict] = {}
+        self.fee_context: dict | None = None
+
+    def capture_fee_context(self, context: dict) -> None:
+        self.fee_context = deepcopy(context)
 
     def capture_settings(self, settings: dict) -> None:
         self.payment_settings = deepcopy(settings.get("payment_methods", DEFAULT_PAYMENT_METHODS))
@@ -148,24 +151,28 @@ class DashboardAdsCostCollector:
             if self.payment_settings is None:
                 complete["payment_fees_sar"] = False
             else:
-                parsed = await orders_to_parsed_cooperative(verified_payment_orders)
                 try:
-                    payment = match_settings(parsed, self.payment_settings, [])
+                    payment = await dashboard_fee_breakdown(verified_payment_orders, self.payment_settings, self.fee_context)
                 except (TypeError, ValueError, ArithmeticError):
                     complete["payment_fees_sar"] = False
                     reasons.add("payment_settings_invalid")
                 else:
                     for row in payment.get("payment_breakdown") or []:
-                        amount = _number(row.get("fee_amount"))
+                        # Actual statement rebates may be signed; they are not
+                        # another positive charge or a missing fee.
+                        amount = row.get("fee_amount")
+                        amount = float(amount) if isinstance(amount, (int, float)) and not isinstance(amount, bool) and isfinite(amount) else None
+                        if amount is not None:
+                            known["payment_fees_sar"] += amount
                         if row.get("matched") is not True or amount is None:
                             complete["payment_fees_sar"] = False
-                        else:
-                            known["payment_fees_sar"] += amount
                         payment_bases.add(str(row.get("fee_calculation_basis") or "unknown"))
+                    reasons.update(payment.get("fee_review_reasons", []))
 
         output: dict[str, Any] = {
             "basis": "executive_order_costs_v1", "currency": "SAR",
-            "payment_fees_basis": "merchant_settings_cohort",
+            "payment_fees_basis": PAYMENT_FEE_BASIS if self.fee_context is not None or any(
+                order.get("payment_fee_status") == "actual" for order in verified_payment_orders) else "merchant_settings_cohort",
             "payment_fee_calculation_bases": sorted(payment_bases),
         }
         flags = {"pieces": "pieces_complete", "product_cost_sar": "product_cost_complete",

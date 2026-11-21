@@ -1,4 +1,5 @@
 import { buildPaymentFeeRows } from "../lib/paymentFeeRows";
+import { financialCohortCompleteness, paymentFeeCompleteness } from "../lib/paymentFeeCompleteness";
 export { buildPaymentFeeRows } from "../lib/paymentFeeRows";
 /**
  * iter-49 — Executive profit summary card.
@@ -166,6 +167,7 @@ function Line({ icon: Icon, label, value, share = null, color = "amber", isFirst
 
 export default function ProfitSummaryCard({
     totals,
+    financialCohort = null,
     shippingBreakdown = [],
     paymentBreakdown = [],
     fromDate,
@@ -176,6 +178,9 @@ export default function ProfitSummaryCard({
     adsExecutiveBreakdown = null,
 }) {
     const t = totals || {};
+    const paymentFeesState = paymentFeeCompleteness(t);
+    const cohortState = financialCohortCompleteness(t, financialCohort);
+    const finalProfitComplete = paymentFeesState.complete && cohortState.complete;
     const [excludedOpen, setExcludedOpen] = useState(false);
     const [adsBreakdownOpen, setAdsBreakdownOpen] = useState(false);
     const [adsExpanded, setAdsExpanded] = useState(false);
@@ -203,7 +208,7 @@ export default function ProfitSummaryCard({
                             + Number(t.emkan_fees         || 0)
                             + Number(t.bank_fees          || 0)
                             + Number(t.ad_bank_commission_fees || 0));
-    const allPaymentFees = t.total_payment_fees != null
+    const allPaymentFees = !paymentFeesState.complete ? null : t.total_payment_fees != null
         ? Number(t.total_payment_fees)
         : calculatedPaymentFees;
     // Operating expenses (المصروفات التشغيلية اليومية) — backend's
@@ -247,7 +252,7 @@ export default function ProfitSummaryCard({
 
     // Use the authoritative net_profit from backend; fall back to manual
     // calc only when the backend hasn't surfaced it yet (e.g., empty store).
-    const netProfit = t.net_profit != null
+    const netProfit = !finalProfitComplete ? null : t.net_profit != null
         ? Number(t.net_profit)
         : sales - productCost - adsCost - shippingTotal - allPaymentFees - operatingExpenses;
 
@@ -358,7 +363,7 @@ export default function ProfitSummaryCard({
     );
 
 
-    const paymentFeeRows = buildPaymentFeeRows(paymentBreakdown)
+    const paymentFeeRows = buildPaymentFeeRows(paymentBreakdown, { preserveUnknown: !paymentFeesState.complete })
         .filter((row) => row.ordersCount > 0 || row.baseAmount > 0 || row.feeAmount > 0);
     const paymentFeesTooltip = (
         <div data-testid="payment-fees-tooltip-content" dir="rtl">
@@ -372,7 +377,7 @@ export default function ProfitSummaryCard({
             </div>
             {paymentFeeRows.length === 0 ? (
                 <div className="text-xs text-slate-500 py-2 text-center">
-                    لا توجد رسوم طرق دفع في هذه الفترة
+                    {paymentFeesState.complete ? "لا توجد رسوم طرق دفع في هذه الفترة" : paymentFeesState.hint}
                 </div>
             ) : (
                 <div className="overflow-x-auto">
@@ -428,14 +433,14 @@ export default function ProfitSummaryCard({
                                                 : "—"}
                                     </td>
                                     <td className="p-1.5 text-left font-mono font-extrabold text-violet-800">
-                                        {fmtSar(row.feeAmount)}
+                                        {row.feeAmount == null ? "غير مكتمل" : fmtSar(row.feeAmount)}
                                     </td>
                                 </tr>
                             ))}
                             <tr className="border-t-2 border-violet-200 bg-violet-50/60">
                                 <td colSpan={6} className="p-1.5 font-extrabold text-slate-800">الإجمالي</td>
                                 <td className="p-1.5 text-left font-mono font-extrabold text-violet-900">
-                                    {fmtSar(allPaymentFees)}
+                                    {paymentFeesState.complete ? fmtSar(allPaymentFees) : "غير مكتمل"}
                                 </td>
                             </tr>
                         </tbody>
@@ -571,7 +576,10 @@ export default function ProfitSummaryCard({
                 <Line icon={Package}    label="− تكاليف المنتجات"             value={fmtSar(productCost)}    share={sharePct(productCost, sales)}     color="amber"  onClick={() => setProductCostOpen(true)} testid="profit-line-product-cost" />
                 <Line icon={Megaphone}  label="− إجمالي تكاليف الإعلانات"      value={fmtSar(adsCost)}        share={sharePct(adsCost, sales)}         color="rose"   tooltip={adsExecutiveTooltip} expandable={hasAdsExecutiveBreakdown} expanded={adsExpanded} onClick={() => hasAdsExecutiveBreakdown ? setAdsExpanded((value) => !value) : setAdsBreakdownOpen(true)} testid="profit-line-ads-cost" />
                 <Line icon={Truck}      label="− إجمالي تكاليف الشحن (مقدم + آجل)" value={fmtSar(shippingTotal)}  share={sharePct(shippingTotal, sales)}   color="sky"    tooltip={shippingTooltip} testid="profit-line-shipping" expandable expanded={shippingExpanded} onClick={() => setShippingExpanded(v => !v)} />
-                <Line icon={Receipt}    label="− إجمالي رسوم جميع طرق الدفع"    value={fmtSar(allPaymentFees)} share={sharePct(allPaymentFees, sales)}  color="violet" tooltip={paymentFeesTooltip} testid="profit-line-payment-fees" expandable expanded={paymentFeesExpanded} onClick={() => setPaymentFeesExpanded((value) => !value)} />
+                <Line icon={Receipt}    label="− إجمالي رسوم جميع طرق الدفع"    value={paymentFeesState.complete ? fmtSar(allPaymentFees) : "غير مكتمل"} share={paymentFeesState.complete ? sharePct(allPaymentFees, sales) : null} color="violet" tooltip={paymentFeesTooltip} testid="profit-line-payment-fees" expandable expanded={paymentFeesExpanded} onClick={() => setPaymentFeesExpanded((value) => !value)} />
+                {cohortState.excludedOrders > 0 && <p data-testid="profit-financial-cohort-excluded-note" className="mx-3 my-2 rounded-lg bg-slate-50 p-2 text-xs text-slate-600">طلبات بانتظار الدفع: {fmtInt(cohortState.excludedOrders)} مستبعدة من المجاميع المالية، وتبقى ضمن عدد الطلبات.</p>}
+                {!cohortState.complete && <p data-testid="profit-financial-cohort-incomplete-hint" className="mx-3 my-2 rounded-lg bg-amber-50 p-2 text-xs text-amber-800">{cohortState.hint}؛ لم يُحسم صافي الربح بعد.</p>}
+                {!paymentFeesState.complete && <p data-testid="profit-payment-fees-incomplete-hint" className="mx-3 my-2 rounded-lg bg-amber-50 p-2 text-xs text-amber-800">{paymentFeesState.hint}؛ لم يُحسم صافي الربح بعد.</p>}
                 {operatingExpenses > 0 && (
                     <Line icon={Briefcase} label="− المصروفات التشغيلية (رواتب وإيجارات وغيرها)" value={fmtSar(operatingExpenses)} share={sharePct(operatingExpenses, sales)} color="amber" tooltip={opTooltip} testid="profit-line-operating" expandable expanded={opExpanded} onClick={() => setOpExpanded(v => !v)} />
                 )}
@@ -589,7 +597,7 @@ export default function ProfitSummaryCard({
                             className="flex items-center gap-2 num text-xl sm:text-2xl font-extrabold"
                             style={{ fontFamily: "Tajawal" }}
                         >
-                            {sales > 0 && (
+                            {sales > 0 && netProfit != null && (
                                 <span
                                     className="text-xs font-bold px-2 py-0.5 rounded bg-white/20 text-white"
                                     title="هامش الربح الصافي = صافي الأرباح ÷ المبيعات"
@@ -599,7 +607,7 @@ export default function ProfitSummaryCard({
                                 </span>
                             )}
                             <span data-testid="profit-summary-net">
-                                {fmtSar(netProfit)} ر.س
+                                {finalProfitComplete ? `${fmtSar(netProfit)} ر.س` : "غير مكتمل"}
                             </span>
                         </div>
                     </div>

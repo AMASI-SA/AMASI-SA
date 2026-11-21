@@ -7,7 +7,7 @@ import pytest
 
 import operational_profit_sources as source
 from operational_payment_evidence import _instant
-from operational_profit_projection import project_profit
+from operational_profit_projection import VERSION, project_profit, valid_snapshot
 
 START = "2026-11-01T09:00:00+03:00"
 END = "2026-11-03T12:00:00+03:00"
@@ -72,6 +72,21 @@ def test_whole_day_cohort_and_costs_reuse_source_formula_before_financing_and_ta
         {"coverage": {"orders": 1, "complete": True}}, values(), {})
     result = project_profit({"owner_id": "owner", "started_at": start, "engine": {"as_of": end, "profit_snapshot": snapshot}}, "SAR")
     assert result["operating_profit"] == "47.00" and result["net_profit"] is None
+
+
+def test_previous_cohort_snapshot_requires_normal_refresh_without_mutating_saved_facts():
+    start, end = "2026-11-01T00:00:00+03:00", "2026-11-03T00:00:00+03:00"
+    snapshot = source.assemble_snapshot("owner", _instant(start), _instant(end),
+        {"coverage": {"orders": 1, "complete": True}}, values(), {})
+    state = {"owner_id": "owner", "started_at": start,
+             "engine": {"as_of": end, "profit_snapshot": snapshot, "facts": {"capture:kept": {"amount": "100.00"}}}}
+    assert snapshot["version"] == VERSION == "operational_profit_snapshot_v2"
+    assert valid_snapshot(state) is snapshot
+    state["engine"]["profit_snapshot"]["version"] = "operational_profit_snapshot_v1"
+    before = deepcopy(state)
+    assert valid_snapshot(state) is None
+    assert project_profit(state, "SAR")["operating_profit"] is None
+    assert state == before
 
 
 def test_unknown_only_sales_and_product_costs_are_not_known_zero():

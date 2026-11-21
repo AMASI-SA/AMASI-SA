@@ -10,8 +10,9 @@ from accounting_onboarding_ssot import (
     create_typed_fact, list_typed_facts,
 )
 from payment_method_setup import (
-    PaymentMethodCommissionIn, load_payment_method_setup, save_payment_method_commission,
+    PaymentMethodCommissionIn, save_payment_method_commission,
 )
+from payment_method_fee_status import load_payment_method_setup
 
 
 def install_setup_contract_routes(router, raw, current_user, actor_for, base):
@@ -50,7 +51,11 @@ def install_setup_contract_routes(router, raw, current_user, actor_for, base):
         actor, owner = await actor_for(user, "drafts_manage")
         if not is_owner(actor):
             raise HTTPException(status_code=403, detail={"code": "payment_method_owner_required"})
-        return await save_payment_method_commission(raw, owner, actor["id"], payload)
+        result = await save_payment_method_commission(raw, owner, actor["id"], payload)
+        # The save uses the existing settings CAS. Its UI response must retain
+        # current policy authority for other methods as well as the saved row.
+        result["payment_method_setup"] = await load_payment_method_setup(raw, owner)
+        return result
 
     @router.post(base + "/fee-policies")
     async def policy(payload: FeePolicyCreate, user: dict = Depends(current_user)):

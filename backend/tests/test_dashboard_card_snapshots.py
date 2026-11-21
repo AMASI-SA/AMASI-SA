@@ -124,6 +124,7 @@ async def card_app(monkeypatch):
                        "total_ads_cost": 0, "operating_expenses_total": 0, "operating_salaries_total": 0,
                        "total_payment_fees": 0, "net_profit": 100, "net_sales": 100},
             "payment_breakdown": [], "net_sales_config": {}, "recent_analyses": ["must_be_hidden"],
+            **({"payment_fee_authority": state["fee_authority"]} if state.get("fee_authority") else {}),
         }
 
     async def no_provider(*args, **kwargs):
@@ -161,7 +162,7 @@ async def test_top_products_reads_only_selected_costs_and_authorizes_saved_hits(
     response = await env.client.get(path, params=PARAMS)
     assert response.status_code == 200, response.text
     body = response.json()
-    assert set(body) == {"product_cost_v2", "snapshot"}
+    assert set(body) == {"product_cost_v2", "financial_cohort", "snapshot"}
     assert body["snapshot"]["refresh_interval_seconds"] == 1800
     assert body["product_cost_v2"]["total"] == 10
     assert body["product_cost_v2"]["product_rows"][0]["total_sales"] == 100
@@ -365,6 +366,91 @@ async def test_fee_content_changes_invalidate_executive_even_without_revision_or
     edited = (await env.client.get(path, params=PARAMS)).json()["payment_method_setup"]
     assert env.calls["legacy"] == initial_calls + 2
     assert edited["revision"] != configured["revision"]
+
+
+@pytest.mark.asyncio
+async def test_dated_tariff_changes_invalidate_executive_setup_without_legacy_edit(card_app):
+    from accounting_onboarding_ssot import POLICIES, _key
+    from tests.test_payment_method_fee_status import tariff
+    env = card_app
+    await env.db.unified_orders.insert_many([
+        sample_order("a", "emkan-upper", "2025-01-01", 120, payment="EmkanInstallment"),
+        sample_order("a", "emkan-lower", "2025-01-01", 120, payment="emkan_installment"),
+        sample_order("a", "unselected", "2025-01-01", 120, payment="waiting"),
+    ])
+    # Duplicate old definitions cannot override a new canonical tariff.
+    await env.db.settings.update_one({"user_id": "a"}, {"$push": {"payment_methods": {
+        "name": "EmkanInstallment", "commission_percent": 1, "fixed_fee": 0, "vat_percent": 0,
+    }}})
+    path = "/dashboard-v2/cards/executive"
+    first = (await env.client.get(path, params=PARAMS)).json()["payment_method_setup"]
+    assert "waiting" not in {row["name"] for row in first["items"]}
+    initial_calls = env.calls["legacy"]
+    policy = tariff(user_id="a")
+    await env.db[POLICIES].insert_one({"user_id": "a", "policies": [policy]})
+    current = (await env.client.get(path, params=PARAMS)).json()["payment_method_setup"]
+    assert current["revision"] == first["revision"]
+    assert current["fee_revision"] != first["fee_revision"]
+    assert env.calls["legacy"] == initial_calls + 1
+    aliases = [row for row in current["items"] if (row.get("fee_scope") or {}).get("provider") == "emkan"]
+    assert len(aliases) == 2 and all(row["status"] == "configured" for row in aliases)
+
+    # Expiry and source mode are also authoritative cache inputs, without refresh.
+    await env.db[POLICIES].update_one({"policies": {"$exists": True}},
+        {"$set": {"policies.0.effective_to": "2026-11-10"}})
+    expired = (await env.client.get(path, params=PARAMS)).json()["payment_method_setup"]
+    assert env.calls["legacy"] == initial_calls + 2
+    assert all(row["status"] == "needs_commission" for row in expired["items"]
+               if (row.get("fee_scope") or {}).get("provider") == "emkan")
+    await env.db[POLICIES].insert_one({"_id": _key("a", "fee_source_mode"), "user_id": "a",
+                                     "fee_source_mode": "mz2_policies"})
+    switched = (await env.client.get(path, params=PARAMS)).json()["payment_method_setup"]
+    assert switched["fee_revision"] != expired["fee_revision"]
+    assert next(row for row in switched["items"] if row["name"] == "mada")["status"] == "needs_commission"
+
+
+@pytest.mark.asyncio
+async def test_executive_collector_receives_scoped_payment_proof_and_same_policy_context(card_app):
+    from dashboard_ads_costs import DashboardAdsCostCollector
+    from tests.test_payment_method_fee_status import tariff
+    env = card_app
+    order = sample_order("a", "fee-source", "2026-11-11", 100, payment="emkan_installment")
+    order["raw_by_source"] = {"salla_direct": {
+        "created_at": "2026-11-11T01:00:00Z", "payment_method": "EmkanInstallment", "currency": "SAR",
+        "payment": {"captures": [{"id": "synthetic-capture", "amount": 100, "currency": "SAR",
+                                     "captured_at": "2026-11-11T01:00:00Z"}]},
+        "customer": {"private": "must not hydrate"},
+    }}
+    await env.db.unified_orders.insert_one(deepcopy(order))
+    before = await env.db.unified_orders.find_one({"order_number": "fee-source"})
+    collector = DashboardAdsCostCollector()
+    context = {"policies": [tariff(user_id="a")], "source_mode": "mz2_policies", "complete": True}
+    selected = await dashboard._filtered_orders(env.db, "a", from_date="2026-11-11", to_date="2026-11-11",
+        payment_methods="emkan_installment", shipping_companies=None,
+        cost_collector=collector, fee_context=context)
+    assert len(selected) == 1 and selected[0]["order_number"] == "fee-source"
+    assert selected[0]["_dashboard_fee_source"]["payment"]["captures"]
+    assert "customer" not in selected[0]["_dashboard_fee_source"]
+    assert "raw_by_source" not in selected[0]
+    assert collector.fee_context["policies"] == context["policies"]
+    fees = await collector.summary(selected, scope_complete=True)
+    assert fees["payment_fees_complete"] is True and fees["payment_fees_sar"] == 9.76, fees
+    assert await env.db.unified_orders.find_one({"order_number": "fee-source"}) == before
+
+
+@pytest.mark.asyncio
+async def test_v2_profit_adjustments_cannot_turn_incomplete_fee_authority_into_a_number(card_app):
+    env = card_app
+    env.state["fee_authority"] = {"complete": False, "incomplete_buckets": ["emkan"],
+        "electronic_complete": False, "reason_codes": ["provider_payment_plan_required"]}
+    response = await env.client.get("/dashboard-v2/cards/executive", params=PARAMS)
+    assert response.status_code == 200, response.text
+    result = response.json()
+    for key in ("net_profit", "net_sales", "total_payment_fees", "emkan_fees"):
+        assert result["totals"][key] is None
+    assert result["totals"]["payment_fees_complete"] is False
+    assert result["totals"]["payment_fee_review_reasons"] == ["provider_payment_plan_required"]
+    assert "dated_provider_policy" in result["source_contract"]["payment_gateway_fees"]
 
 
 @pytest.mark.asyncio

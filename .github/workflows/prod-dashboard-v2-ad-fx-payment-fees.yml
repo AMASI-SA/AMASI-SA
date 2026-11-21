@@ -10,8 +10,11 @@ on:
       - "backend/tests/test_dashboard_v2_ad_account_costs.py"
       - "frontend/src/components/ProfitSummaryCard.jsx"
       - "frontend/src/components/ProfitSummaryCard.paymentFees.test.jsx"
+      - "frontend/src/components/DashboardAnalyticsPlacement.test.js"
+      - "frontend/src/lib/paymentFeeCompleteness.js"
       - "frontend/src/pages/Dashboard.jsx"
       - "frontend/src/pages/AdvancedDashboard.jsx"
+      - "frontend/src/pages/AdvancedDashboard.paymentFees.test.jsx"
       - ".github/workflows/prod-dashboard-v2-ad-fx-payment-fees.yml"
 
 permissions:
@@ -84,24 +87,15 @@ jobs:
         run: corepack enable && corepack prepare yarn@1.22.22 --activate
       - name: Install frontend dependencies
         run: yarn install --non-interactive
-      - name: Test expandable payment-fee table
+      - name: Test executive payment-fee details and incomplete-profit behavior
         env:
           CI: "true"
         run: >-
           yarn test --watchAll=false --runInBand --runTestsByPath
           src/components/ProfitSummaryCard.paymentFees.test.jsx
+          src/pages/AdvancedDashboard.paymentFees.test.jsx
+          src/components/DashboardAnalyticsPlacement.test.js
       - name: Build Production frontend
         env:
           CI: "false"
         run: yarn build
-      - name: Enforce advanced executive-summary contract
-        working-directory: .
-        run: |
-          CARD=frontend/src/components/ProfitSummaryCard.jsx
-          ADVANCED=frontend/src/pages/AdvancedDashboard.jsx
-          grep -q 'profit-line-payment-fees' "$CARD"
-          grep -q 'payment-fees-breakdown-table' "$CARD"
-          grep -q 'ad_bank_commission_fees' "$CARD"
-          grep -q 'buildPaymentFeeRows(rows)' "$ADVANCED"
-          grep -q 'testid="advanced-profit-payment-details"' "$ADVANCED"
-          grep -q '<PaymentProfitDetails rows={data?.payment_breakdown} total={fees} />' "$ADVANCED"

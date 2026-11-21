@@ -6,7 +6,10 @@ from operational_forecast_projection import money, number
 from operational_payment_evidence import _instant
 from operational_profit_payroll import recorded_salary_subtotals
 
-VERSION = "operational_profit_snapshot_v1"
+# The persisted shape is unchanged, but v2 requires the proof/history-guarded
+# financial cohort. Old snapshots remain stored; a normal balance refresh
+# rebuilds them before their profit can be presented as current.
+VERSION = "operational_profit_snapshot_v2"
 SOURCE = "mezan_profit_components_same_order_cohort"
 LABELS = {
     "net_sales": "إجمالي مبيعات الفترة حسب الطلبات",
