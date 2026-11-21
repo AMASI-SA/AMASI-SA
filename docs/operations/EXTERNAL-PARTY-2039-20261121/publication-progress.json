@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "task_id": "EXTERNAL-PARTY-2039-20261121",
+  "state": "PUBLICATION_IN_PROGRESS",
+  "evidence_kind": "root_ui_observed_single_authorized_publication",
+  "observed_by": "root",
+  "repository": "AMASI-SA/AMASI-SA",
+  "application": "salla-analytics",
+  "production_origin": "https://mezansalla.com",
+  "production_branch": "hotfix/prod-snap-meta-final",
+  "source_git_sha": "e08d0e489eded39961d374e4eb7bfcc0544b6e90",
+  "reviewed_b_git_sha": "3628efc4215ee95e6196fca4807104a87398e255",
+  "deployment_git_sha": "6e41bf25b936e8c4047df75bb170610dfc71b7f7",
+  "runtime_release_id": "rg5-45eb8f2d79e0912a1277e1e14816e9d9c5e3a40d0a6d784834c6fbb54996974f",
+  "lease": {
+    "actor": "codex-pr2039-owner-authorized",
+    "prepared_at_utc": "2026-11-21T19:46:13.522595Z",
+    "protocol_version": 5,
+    "active_at_last_verified_state": true,
+    "automatic_lease_expiration": false
+  },
+  "prepublish": {
+    "result": "PASS",
+    "observed_at_utc": "2026-11-21T19:49:23.932070Z",
+    "ready_to_publish": true,
+    "identity_matches_reviewed_release": true
+  },
+  "publication": {
+    "baseline_publish_ordinal": 100,
+    "baseline_displayed_deployment_marker": "99a9215",
+    "confirmation_target_origin": "https://mezansalla.com",
+    "confirmation_cost_label": "Free republishes",
+    "executed_publish_changes_click_count": 1,
+    "publishing_observed_by_utc": "2026-11-21T19:49:55Z",
+    "observed_ui_status": "Publishing...",
+    "publish_buttons_disabled": true,
+    "newer_deployment_succeeded_observed": false,
+    "official_live_verification_started": false
+  },
+  "interaction_note": {
+    "initial_republish_request_executed": false,
+    "initial_request_rejected_by_automatic_approval_review": true,
+    "rejection_reason": "The partial UI state did not establish the indexed Republish target.",
+    "resolution": "Root obtained a fresh full accessibility state and verified the named button before the authorized UI interaction.",
+    "api_fallback_or_approval_bypass_used": false,
+    "initial_request_initiated_publication": false
+  },
+  "next_safe_action": "Monitor the existing single publication attempt. Do not retry publication or clear the lease. After a newer explicit Deployment Succeeded is observed, run the official three-probe Production verification for the exact reviewed release and confirm the matching lease closes.",
+  "scope_note": "This is publication-in-progress evidence, not a failed or blocked deployment and not a successful live release. The earlier unexecuted interaction rejection did not initiate publication."
+}

@@ -2,11 +2,25 @@
 
 ## Checkpoint verdict
 
-**PREPARED_PUBLICATION_PENDING. PR #2039 is normally merged, its official Emergent rehearsal and shared `/app` materialization have passed, and its own protocol-v5 lease is now active after successful `prepare`. Exact-M push CI is fully successful. No publication has been attempted at this checkpoint; fresh `prepublish` and post-publication verification remain required.**
+**PUBLICATION_IN_PROGRESS. After successful final official `prepublish`, the root initiated the one authorized Emergent publication. The UI showed `Publishing...` with disabled publish buttons by 2026-11-21T19:49:55Z. The task's own protocol-v5 lease remains reserved. No newer explicit deployment success or live verification result has been observed at this checkpoint.**
 
 The owner has authorized merging and publishing PR #2039, subject to the established gates. Emergent Support supplied the previously missing Production index definitions after a read-only inspection. Terminal access has now been restored. Production advanced through PR #2046, so the former A/B pair and its successful CI are historical and cannot authorize the new deployment.
 
-### Latest milestone: shared handoff and own lease prepared
+### Latest milestone: one authorized publication is in progress
+
+The final official `prepublish` passed at **2026-11-21T19:49:23.932070Z** (22:49:23 Asia/Riyadh) with `ready_to_publish:true`, deployment M `6e41bf25b936e8c4047df75bb170610dfc71b7f7`, source A `e08d0e489eded39961d374e4eb7bfcc0544b6e90`, and the exact reviewed runtime release `rg5-45eb8f2d79e0912a1277e1e14816e9d9c5e3a40d0a6d784834c6fbb54996974f`.
+
+The root used the existing `salla-analytics` Emergent overview, whose baseline was the **100th publish**, displayed marker `99a9215`. After opening Republish, the confirmation dialog showed the target `mezansalla.com` and `Free republishes`. The root clicked **Publish changes exactly once**. The resulting UI showed **`Publishing...` with disabled buttons by 2026-11-21T19:49:55Z** (22:49:55 Asia/Riyadh). That timestamp bounds the observation; it is not an asserted exact click timestamp. See [publication-progress.json](publication-progress.json).
+
+An earlier indexed Republish interaction was rejected by automatic approval review because the partial UI state did not show the target. It did not execute or initiate publication. The root resolved the missing UI evidence with a fresh full accessibility state and a verified named button before the authorized interaction; no API fallback or approval bypass was used. The deployment state is **in progress**, not blocked or failed because of that earlier unexecuted interaction.
+
+The existing protocol-v5 lease belongs to **`codex-pr2039-owner-authorized`**, prepared at **2026-11-21T19:46:13.522595Z**, and has no automatic expiry. No replacement lease or second publication is authorized by this checkpoint.
+
+**Next safe action:** monitor this existing publication attempt without retrying the click or clearing the lease. Wait for a **newer explicit `Deployment Succeeded`**, then run the official Production verification for the exact reviewed source/release. Acceptance still requires all three matching live probes and final `active:false`. No official live verification has started at this checkpoint. Do not infer live success from `Publishing...`, the previous deployment, or passing CI.
+
+Production changed by this task through this checkpoint: **Git branch yes (normal merge M); shared `/app` yes (reviewed handoff); live publication initiated once, completion unverified**. No financial/index mutation or APK publication occurred.
+
+### Previous milestone: shared handoff and own lease prepared
 
 The root observed shared `/app` materialization **PASS at 2026-11-21T19:44:54.157752Z** (22:44:54 Asia/Riyadh). The destination is exact deployment M `6e41bf25b936e8c4047df75bb170610dfc71b7f7`, whose tree `c3c66e2f15138523a9a72ee0910706f91f9b47e4` equals frozen B. Exactly the three generated outputs were materialized: `frontend/build/`, `frontend/.release/reproducible-build.json`, and `backend/release_identity.json`, totaling **356 regular files / 11,463,353 bytes**. Previous outputs were preserved at `/app/.git/mezan-pr2039-materialize-a7la6r4v/previous`; observed remaining `/app` capacity was **53,198,848 bytes**. Normal destination frontend verification with expected source A passed.
 
@@ -20,7 +34,7 @@ The final exact-M GitHub audit at **2026-11-21 19:46:03 UTC / 22:46:03 Asia/Riya
 | CodeQL | success | [44941832749](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44941832749) |
 | Mezan Release Readiness | success | [44941832677](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44941832677) |
 
-**Next safe action:** confirm the existing lease still belongs to this task and the local/remote deployment SHA remains exact M, then run the official `prepublish` immediately before one authorized publication. Do not repeat `prepare`. Acceptance requires a newer explicit `Deployment Succeeded`, the official three matching live probes, and final `active:false`. Stop on identity/SHA drift, a different lease owner, a new failed check, or any guard refusal. Prepared state is not evidence that Emergent has published or that Production serves the intended release.
+**Next safe action at the prepared checkpoint (final prepublish and the single publication initiation are now completed above):** confirm the existing lease still belongs to this task and the local/remote deployment SHA remains exact M, then run the official `prepublish` immediately before one authorized publication. Do not repeat `prepare`. Acceptance requires a newer explicit `Deployment Succeeded`, the official three matching live probes, and final `active:false`. Stop on identity/SHA drift, a different lease owner, a new failed check, or any guard refusal. Prepared state is not evidence that Emergent has published or that Production serves the intended release.
 
 Production changed by this task through this checkpoint: **Git branch yes (normal merge M); shared `/app` yes (reviewed handoff); live runtime no**. No financial/index mutation or APK publication occurred.
 
