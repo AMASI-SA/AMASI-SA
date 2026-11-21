@@ -169,7 +169,27 @@ The full unique-name and unique-ID indexes must have the exact ascending compoun
 
 ## Exact next safe action
 
-1. Keep PR #2039 at frozen B. In an isolated audit environment outside shared `/app`, run the companion helper with its pinned dependencies and independently confirmed actual Production URI entered at the hidden prompt:
+### Follow-up: Production connection timeout, 21 November 2026
+
+The owner ran the immutable helper from evidence commit `58f0d13c23716467afa3e5f4a99440cba27bf2a1` in the Emergent workspace. Both pinned dependencies installed successfully, `DIAGNOSTIC_INTEGRITY: PASS` was printed, and the actual database attempt returned only:
+
+```json
+{"error_type": "ServerSelectionTimeoutError", "status": "ERROR"}
+```
+
+This establishes a failed server-selection attempt, not an absent index, wrong password, failed application test, or completed financial preflight. No secret was supplied in chat. The root's current browser attachment to the terminal also timed out (`Page.enable`); the earlier `active:false` guard observation has not been refreshed in this follow-up and is not current execution authority.
+
+Emergent's [Database guide](https://help.emergent.sh/database-mongodb) documents separate Preview and Production databases and restricts direct external access to the managed Production cluster. Workspace-terminal export is documented for Preview. The [FAQ](https://help.emergent.sh/faqs) and [export guide](https://help.emergent.sh/export-your-app) point to the in-platform Database Manager or platform support for Production. These facts and earlier recorded 10/15-second failures from this workspace support an access-path limitation; the one exception type does not identify its exact DNS/TCP/TLS/topology cause. Do not ask the owner to enter the same URI again or blindly increase timeouts.
+
+The existing production source has no general external-party index-metadata HTTP route. The only production `listIndexes` diagnostic found is explicitly scoped to Google Ads namespaces and must not be repurposed. The public health/readiness routes do not query MongoDB and cannot prove the live index definitions.
+
+Fresh GitHub audit at **2026-11-21 21:11:38 Asia/Riyadh**: HEAD remains B, Production remains J, all twelve runs remain attempt 1 (eleven successes and the scoped TikTok skip), and all 29 checks retain 23 successes/six conditional skips. No CI failure or changed source. PR remains draft/unmerged and mergeable/clean. The four visible required contexts pass. Full administrative branch-protection details were not accessible to the integration (403), so their absence is not claimed; any eventual merge must use the normal protected route without bypass.
+
+### Current next action
+
+1. Keep PR #2039 at frozen B. Obtain read-only `listIndexes` metadata from an already authorized production-connected operator or Emergent support for database `salla-analytics-test_database`, collection `mz2_external_persons_v2`. Request key order, `unique`, `sparse`, presence of `partialFilterExpression`, collation, confirmation the relevant indexes are fully built, and the inspection timestamp. No document contents, connection string, export, index mutation, restart or publication is needed. No support message has been sent: external correspondence requires the owner's separate authorization.
+
+   The companion helper remains available for a **confirmed supported Production-connected runtime**, not as another preview-terminal retry:
 
    ```bash
    python -B docs/operations/EXTERNAL-PARTY-2039-20261121/check_production_indexes.py \
