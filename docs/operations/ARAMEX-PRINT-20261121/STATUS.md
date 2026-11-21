@@ -1,5 +1,16 @@
 # ARAMEX-PRINT-20261121: PR2048 frozen A/B verification
 
+PR2048 MERGED normally at `88af38f01cf979acbca59b95a95e661828f2306f`
+(20:17:30UTC). Fresh pre-merge Production J and all39 exact-B checks were
+verified. M parents are J/B, M tree equals B, A is an ancestor, and A-to-M changes
+only the intent. See MERGE-PROOF-2048.json. Frozen A/B was not rewritten.
+Production changed: GitHub branch YES; live runtime NO. No shared checkout,
+artifacts or foreign lease were changed by this merge. The original foreign
+verify operates on its frozen lease and public HTTP probes, independently of
+the GitHub branch. It continues while the reviewed merge is preserved remotely.
+Independent ARM64 rehearsal remains mandatory before shared materialization,
+prepare/prepublish and publication; all actual protocol gates remain in place.
+
 Current evidence branch `codex/aramex-order-payload-evidence-v2-20261121` must
 NOT be deployed. Immutable release branch `codex/aramex-order-payload-release-v2-20261121`:
 
@@ -35,11 +46,12 @@ NOT be deployed. Immutable release branch `codex/aramex-order-payload-release-v2
 - Fresh ADB: emulator online, authenticated Mezan screen visible. No new-code
   original target acceptance yet. Existing linking/scopes/tokens unchanged.
 
-Next: wait for PR2039 owner to complete its publication/verification and fresh
-original guard active:false, then rerun independent full Linux validator,
-identity/build verification and all checks, then current-base normal merge and
-authorized guarded publication. Original verify3 and actual target/control ADB
-label and print acceptance are mandatory. Production changed by follow-up:no.
+Next: wait for PR2039 owner to complete verification and fresh original guard
+active:false, then rerun independent full Linux validator/adapter at exact B
+(M tree-equivalent), recheck origin Production M, materialize only M with the
+verified artifacts, prepare/prepublish and authorized publication. Original
+verify3 and actual target/control ADB label/print acceptance are mandatory.
+The follow-up changed only GitHub Production so far; live runtime unchanged.
 The following source-stage and old-candidate notes are historical.
 
 Current source branch: `codex/aramex-order-payload-release-v2-20261121`, directly

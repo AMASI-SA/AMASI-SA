@@ -1,0 +1,16 @@
+{
+  "pr": 2048,
+  "source": "bc01a705f5bbcb58be8dab5eef35ace8516cface",
+  "intent_commit": "4c5c778a9ee76d230f8fc85908e085860656622f",
+  "reviewed_base": "6e41bf25b936e8c4047df75bb170610dfc71b7f7",
+  "merge": "88af38f01cf979acbca59b95a95e661828f2306f",
+  "parents": [
+    "6e41bf25b936e8c4047df75bb170610dfc71b7f7",
+    "4c5c778a9ee76d230f8fc85908e085860656622f"
+  ],
+  "merge_tree_equals_B": true,
+  "after_source_changes_only_intent": true,
+  "production_git_branch_changed": true,
+  "live_runtime_changed": false,
+  "lease_owned_by_task": false
+}

@@ -37,8 +37,10 @@
     "shared_tracked_source_changed": false,
     "production_order_absence_or_permission_conclusion_allowed": false
   },
-  "follow_up_production_changed": false,
+  "follow_up_production_changed": true,
+  "production_change_scope": "GitHub Production branch only: PR2048 normal merge 88af38f01cf979acbca59b95a95e661828f2306f; shared workspace and live runtime unchanged",
+  "follow_up_live_runtime_changed": false,
   "original_target_print_confirmed": false,
   "customer_data_or_environment_values_included": false,
-  "next_safe_action": "Wait foreign verify/lease completion; fresh original status must be inactive, then exact-B independent ARM64 rehearsal, current-base normal merge, authorized guarded publication, original verify3 and actual ADB acceptance."
+  "next_safe_action": "Wait foreign verify/lease completion; require inactive original status, exact-B independent ARM64 rehearsal, tree-equivalent merged-M materialization, authorized guarded publication, original verify3 and actual ADB acceptance."
 }
