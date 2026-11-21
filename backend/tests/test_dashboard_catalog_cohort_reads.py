@@ -89,6 +89,13 @@ async def test_empty_cohort_does_not_read_catalog_or_any_authority(builder, kwar
     assert result["source_lines"] == {}
     assert result["missing_products"] == []
     assert result["incomplete_orders_count"] == result["no_products_orders_count"] == 0
+    row_keys = ["product_rows", "product_profit_summary"] if kwargs.get("include_product_rows", True) else []
+    assert list(result) == [
+        "total", "breakdown", "source_lines", "linked_products_count", "missing_products_count",
+        "missing_product_cost_count", "missing_all_cost_products_count", "missing_all_cost_lines_count",
+        "salla_fallback_products_count", "missing_products", *row_keys,
+        "no_products_orders_count", "incomplete_orders_count", "source_contract",
+    ]
     if kwargs.get("include_product_rows", True):
         assert result["product_rows"] == []
         assert result["product_profit_summary"] == dashboard._finalize_product_profit_rows({})[1]
@@ -219,10 +226,26 @@ async def test_full_cost_response_and_companion_reads_equal_legacy_catalog(build
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("mutation", ["delete", "reidentify", "price"])
+async def test_nonempty_orders_without_products_preserve_companion_scopes(monkeypatch):
+    db = AsyncMongoMockClient().no_product_lines
+    await db[PRODUCTS].insert_one({"user_id": OWNER, "salla_product_id": "a", "cost_price_from_salla": 10})
+    actual_reads, original_reads = RecordedDB(db), RecordedDB(db)
+    actual = await dashboard.build_mezan_v2_product_cost_cooperative(actual_reads, OWNER, [order()])
+    monkeypatch.setattr(dashboard, "_load_cohort_catalog_products", legacy_catalog_loader)
+    expected = await dashboard.build_mezan_v2_product_cost_cooperative(original_reads, OWNER, [order()])
+    assert actual == expected
+    assert actual["no_products_orders_count"] == actual["incomplete_orders_count"] == 1
+    companions = lambda reads: [read for read in reads if read["collection"] != PRODUCTS]
+    assert companions(actual_reads.reads) == companions(original_reads.reads)
+    assert len([read for read in actual_reads.reads if read["collection"] == PRODUCTS]) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mutation", ["delete", "reidentify", "rename", "price"])
 async def test_selected_document_changed_between_alias_and_hydration(mutation, monkeypatch):
     db = AsyncMongoMockClient().catalog_race
-    await db[PRODUCTS].insert_one({"user_id": OWNER, "salla_product_id": "a", "cost_price_from_salla": 10})
+    await db[PRODUCTS].insert_one({"user_id": OWNER, "salla_product_id": "a", "name": "Original",
+                                  "cost_price_from_salla": 10})
     original_index = dashboard.index_current_catalog_products_cooperative
 
     async def index_then_change(rows):
@@ -230,7 +253,8 @@ async def test_selected_document_changed_between_alias_and_hydration(mutation, m
         if mutation == "delete":
             await db[PRODUCTS].delete_many({"user_id": OWNER})
         else:
-            change = {"salla_product_id": "b"} if mutation == "reidentify" else {"cost_price_from_salla": 42}
+            change = {"reidentify": {"salla_product_id": "b"}, "rename": {"name": "Renamed"},
+                      "price": {"cost_price_from_salla": 42}}[mutation]
             await db[PRODUCTS].update_one({"user_id": OWNER}, {"$set": change})
         return indexes
 
@@ -246,3 +270,12 @@ async def test_selected_document_changed_between_alias_and_hydration(mutation, m
         assert caught.value.detail == {
             "code": "catalog_changed_during_cost_read", "retryable": True, "data_complete": False,
         }
+        monkeypatch.setattr(dashboard, "index_current_catalog_products_cooperative", original_index)
+        fresh = await dashboard.build_mezan_v2_product_cost_cooperative(db, OWNER, orders)
+        if mutation == "rename":
+            assert fresh["total"] == 10
+            assert fresh["product_rows"][0]["name"] == "Renamed"
+        else:
+            # A truly missing identity remains explicitly incomplete on retry.
+            assert fresh["missing_all_cost_lines_count"] == 1
+            assert fresh["incomplete_orders_count"] == 1

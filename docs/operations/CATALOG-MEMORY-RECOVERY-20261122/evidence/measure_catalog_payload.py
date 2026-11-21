@@ -157,6 +157,8 @@ async def main():
             catalog = [row for row in read_only.reads if row["collection"] == PRODUCTS]
             payload = json.dumps(result, sort_keys=True, separators=(",", ":"),
                                  ensure_ascii=False).encode()
+            ordered_payload = json.dumps(result, separators=(",", ":"),
+                                         ensure_ascii=False).encode()
             observations.append({
                 "builder": name, "cohort": cohort_name,
                 "catalog_reads": len(catalog),
@@ -166,6 +168,7 @@ async def main():
                 "all_recorded_find_calls": len(read_only.reads),
                 "cost_total_sar": result["total"],
                 "result_sha256": hashlib.sha256(payload).hexdigest(),
+                "ordered_result_json_sha256": hashlib.sha256(ordered_payload).hexdigest(),
                 "catalog_read_details": catalog,
             })
     assert SOURCE_PATH.read_bytes() == SOURCE_BYTES_AT_IMPORT, "Source changed during measurement"

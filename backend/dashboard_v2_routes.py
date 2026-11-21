@@ -382,7 +382,7 @@ async def _load_cohort_catalog_products(
     index from the selected subset would change duplicate aliases and make
     globally ambiguous names appear unique.
     """
-    if not any(isinstance(item, dict) for order in orders for item in order.get("products") or []):
+    if not orders:
         return [], ({}, {}, {})
     aliases = await _to_list(
         db[PRODUCTS].find({"user_id": user_id}, PRODUCT_COST_ALIAS_PROJECTION),
@@ -445,7 +445,10 @@ async def _load_cohort_catalog_products(
 
 
 def _empty_product_cost_result(*, include_product_rows: bool = True) -> dict[str, Any]:
-    result = {
+    product_rows, product_profit_summary = (
+        _finalize_product_profit_rows({}) if include_product_rows else ([], {})
+    )
+    return {
         "total": 0.0,
         "breakdown": {source: 0.0 for source in (
             "mezan_v2_base", "mezan_v2_variant", "salla_product_fallback",
@@ -455,7 +458,10 @@ def _empty_product_cost_result(*, include_product_rows: bool = True) -> dict[str
         "linked_products_count": 0, "missing_products_count": 0,
         "missing_product_cost_count": 0, "missing_all_cost_products_count": 0,
         "missing_all_cost_lines_count": 0, "salla_fallback_products_count": 0,
-        "missing_products": [], "no_products_orders_count": 0, "incomplete_orders_count": 0,
+        "missing_products": [],
+        **({"product_rows": product_rows, "product_profit_summary": product_profit_summary}
+           if include_product_rows else {}),
+        "no_products_orders_count": 0, "incomplete_orders_count": 0,
         "source_contract": {
             "base_precedence": ["mezan_v2_variant", "mezan_v2_base",
                                 "salla_variant_fallback", "salla_product_fallback"],
@@ -466,9 +472,6 @@ def _empty_product_cost_result(*, include_product_rows: bool = True) -> dict[str
             "product_profit": "product sales minus Mezan V2 product cost; ads/shipping/payment fees are not allocated per product",
         },
     }
-    if include_product_rows:
-        result["product_rows"], result["product_profit_summary"] = _finalize_product_profit_rows({})
-    return result
 
 
 def calculate_mezan_v2_line_cost(

@@ -3,7 +3,7 @@
   "metric": "BSON-encoded documents returned by catalog cursor, not wire overhead, RSS, or production latency",
   "database": "isolated mongomock_motor, no live data",
   "repository_head": "10ee7b41204dd1d39c8b91daf9f0a9d899041ebb",
-  "dashboard_source_sha256": "42043c552104bddcbb9dab66d4522eb1d39df0e1b15f6f304881b50bc6911d0d",
+  "dashboard_source_sha256": "0d9f4fb40beebbaf8aa27c6cb51d962913cfa2d8399afb82bea1a2e52ac42feb",
   "fixture": {
     "products": 1000,
     "matched_products": 1,
@@ -24,6 +24,7 @@
       "all_recorded_find_calls": 0,
       "cost_total_sar": 0.0,
       "result_sha256": "d1cebf5899fd82687dd9dd6d73070c7e216aae6b3f926354c0a3d09d753a85cc",
+      "ordered_result_json_sha256": "40f206dc972a18d573da4381f365c885f088a0f8c60f32b68bd37137cd1a4964",
       "catalog_read_details": []
     },
     {
@@ -36,6 +37,7 @@
       "all_recorded_find_calls": 15,
       "cost_total_sar": 75.0,
       "result_sha256": "d8ea5738dc79283b2a30eadd096daef8918ba56ea0fa2a773026371b3a0eacb9",
+      "ordered_result_json_sha256": "6a9890209175e5628a5f2e51e741549890cac506aabd457bb4483c6f0c85fe14",
       "catalog_read_details": [
         {
           "collection": "mezan_products_v2",
@@ -63,6 +65,7 @@
       "all_recorded_find_calls": 0,
       "cost_total_sar": 0.0,
       "result_sha256": "d1cebf5899fd82687dd9dd6d73070c7e216aae6b3f926354c0a3d09d753a85cc",
+      "ordered_result_json_sha256": "40f206dc972a18d573da4381f365c885f088a0f8c60f32b68bd37137cd1a4964",
       "catalog_read_details": []
     },
     {
@@ -75,6 +78,7 @@
       "all_recorded_find_calls": 15,
       "cost_total_sar": 75.0,
       "result_sha256": "d8ea5738dc79283b2a30eadd096daef8918ba56ea0fa2a773026371b3a0eacb9",
+      "ordered_result_json_sha256": "6a9890209175e5628a5f2e51e741549890cac506aabd457bb4483c6f0c85fe14",
       "catalog_read_details": [
         {
           "collection": "mezan_products_v2",
@@ -102,6 +106,7 @@
       "all_recorded_find_calls": 0,
       "cost_total_sar": 0.0,
       "result_sha256": "002baa6c60251aa10a95fb0efba86bbc82bafd09b6d5f526836f6776735b2951",
+      "ordered_result_json_sha256": "c2f03a2024413ab7e66a2e90d3484752fb96cd1273d7b1dbb8adc0ade56daa4d",
       "catalog_read_details": []
     },
     {
@@ -114,6 +119,7 @@
       "all_recorded_find_calls": 13,
       "cost_total_sar": 75.0,
       "result_sha256": "8161320b73c35d5f7f49f5926a9e257b22e2bc548bfb01245b66284b55376b3d",
+      "ordered_result_json_sha256": "5f2ef01034b2b7d17546e9061869428dc0c05704dedd720dac636a59bd2d908c",
       "catalog_read_details": [
         {
           "collection": "mezan_products_v2",

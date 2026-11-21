@@ -10,7 +10,9 @@ The fixture contains 1,000 products, each with a 16,384-byte description and
 
 Both subprocesses exited 0. The standard builder, cooperative builder, and
 card-only cooperative mode each ran an empty cohort and a one-product cohort.
-Full result JSON SHA-256 values match the baseline in all six cases.
+Both canonical (sorted-key) JSON SHA-256 values and insertion-order-preserving
+JSON byte SHA-256 values match the baseline in all six cases. The latter
+confirms the response member order also matches the immutable baseline.
 
 | Cohort | Baseline catalog BSON bytes | Patched catalog BSON bytes | Full raw products before / after | Expected cost |
 | --- | ---: | ---: | ---: | ---: |
@@ -36,7 +38,7 @@ This is a payload tradeoff, not evidence that database queries became faster.
 - Baseline source SHA-256:
   `1f2b7fa44118ece4a1c82642533d6e249d4ce0aca9a7fa4cb59d27c6e174a3e6`.
 - Measured patched source SHA-256:
-  `42043c552104bddcbb9dab66d4522eb1d39df0e1b15f6f304881b50bc6911d0d`.
+  `0d9f4fb40beebbaf8aa27c6cb51d962913cfa2d8399afb82bea1a2e52ac42feb`.
 
 The patch was still uncommitted during measurement. Its exact source hash,
 not its base HEAD, identifies the measured implementation. A subsequent source
@@ -57,8 +59,11 @@ The script inserts only synthetic data into an in-process mock database. Its
 builder-facing wrapper rejects write methods and checks that input orders are
 unchanged. It asserts the independently calculated zero/75 SAR totals. It
 also refuses to save results if the source file changes during measurement.
-Compare `result_sha256` for each matching builder/cohort pair across the two
-JSON files; `comparison.json` records the executed comparison.
+Compare `result_sha256` and `ordered_result_json_sha256` for each matching
+builder/cohort pair across the two JSON files; `comparison.json` records the
+executed comparison. The ordered digest uses the original insertion order,
+UTF-8, no ASCII escapes, and compact separators, without sorting dictionary
+keys.
 
 ## Limits
 

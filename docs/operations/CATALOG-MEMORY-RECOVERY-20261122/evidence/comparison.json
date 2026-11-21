@@ -4,7 +4,7 @@
   "baseline_runtime_blob_oid": "b01ed1a17692081e1a295e4e3ff810750024a6ce",
   "runtime_blob_equals_deployment": true,
   "baseline_source_sha256": "1f2b7fa44118ece4a1c82642533d6e249d4ce0aca9a7fa4cb59d27c6e174a3e6",
-  "patched_source_sha256": "42043c552104bddcbb9dab66d4522eb1d39df0e1b15f6f304881b50bc6911d0d",
+  "patched_source_sha256": "0d9f4fb40beebbaf8aa27c6cb51d962913cfa2d8399afb82bea1a2e52ac42feb",
   "fixture_products": 1000,
   "full_results_identical_cases": 6,
   "metric": "BSON-encoded documents returned by catalog cursor, not wire overhead, RSS, or production latency",
@@ -18,7 +18,9 @@
       "reduction_percent": 100.0,
       "baseline_full_payload_rows": 1000,
       "patched_full_payload_rows": 0,
-      "cost_total_sar": 0.0
+      "cost_total_sar": 0.0,
+      "ordered_result_json_identical": true,
+      "ordered_result_json_sha256": "40f206dc972a18d573da4381f365c885f088a0f8c60f32b68bd37137cd1a4964"
     },
     {
       "builder": "standard",
@@ -29,7 +31,9 @@
       "reduction_percent": 99.57901,
       "baseline_full_payload_rows": 1000,
       "patched_full_payload_rows": 1,
-      "cost_total_sar": 75.0
+      "cost_total_sar": 75.0,
+      "ordered_result_json_identical": true,
+      "ordered_result_json_sha256": "6a9890209175e5628a5f2e51e741549890cac506aabd457bb4483c6f0c85fe14"
     },
     {
       "builder": "cooperative",
@@ -40,7 +44,9 @@
       "reduction_percent": 100.0,
       "baseline_full_payload_rows": 1000,
       "patched_full_payload_rows": 0,
-      "cost_total_sar": 0.0
+      "cost_total_sar": 0.0,
+      "ordered_result_json_identical": true,
+      "ordered_result_json_sha256": "40f206dc972a18d573da4381f365c885f088a0f8c60f32b68bd37137cd1a4964"
     },
     {
       "builder": "cooperative",
@@ -51,7 +57,9 @@
       "reduction_percent": 99.57901,
       "baseline_full_payload_rows": 1000,
       "patched_full_payload_rows": 1,
-      "cost_total_sar": 75.0
+      "cost_total_sar": 75.0,
+      "ordered_result_json_identical": true,
+      "ordered_result_json_sha256": "6a9890209175e5628a5f2e51e741549890cac506aabd457bb4483c6f0c85fe14"
     },
     {
       "builder": "card",
@@ -62,7 +70,9 @@
       "reduction_percent": 100.0,
       "baseline_full_payload_rows": 1000,
       "patched_full_payload_rows": 0,
-      "cost_total_sar": 0.0
+      "cost_total_sar": 0.0,
+      "ordered_result_json_identical": true,
+      "ordered_result_json_sha256": "c2f03a2024413ab7e66a2e90d3484752fb96cd1273d7b1dbb8adc0ade56daa4d"
     },
     {
       "builder": "card",
@@ -73,12 +83,15 @@
       "reduction_percent": 99.57901,
       "baseline_full_payload_rows": 1000,
       "patched_full_payload_rows": 1,
-      "cost_total_sar": 75.0
+      "cost_total_sar": 75.0,
+      "ordered_result_json_identical": true,
+      "ordered_result_json_sha256": "5f2ef01034b2b7d17546e9061869428dc0c05704dedd720dac636a59bd2d908c"
     }
   ],
   "limitations": [
     "The retained owner-wide alias scan still scales with catalog size.",
     "Whole variant arrays and companion cost/profile reads are not bounded by this experiment.",
     "No production RAM, latency, query-plan, concurrency, or recovery claim."
-  ]
+  ],
+  "ordered_result_json_identical_cases": 6
 }

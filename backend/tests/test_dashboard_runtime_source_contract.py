@@ -62,6 +62,17 @@ class SelectDefaultProductRows(ast.NodeTransformer):
     conditional_count = 0
     skip_count = 0
     unpack_count = 0
+    empty_count = 0
+
+    def visit_Call(self, node):
+        if isinstance(node.func, ast.Name) and node.func.id == '_empty_product_cost_result':
+            assert not node.args
+            assert len(node.keywords) == 1 and node.keywords[0].arg == 'include_product_rows'
+            assert ast.unparse(node.keywords[0].value) == 'include_product_rows'
+            self.empty_count += 1
+            node.keywords = []
+            return node
+        return self.generic_visit(node)
 
     def visit_IfExp(self, node):
         if isinstance(node.test, ast.Name) and node.test.id == 'include_product_rows':
@@ -157,10 +168,15 @@ class SourceContract(unittest.TestCase):
                     # synthetic integration proves all three report surfaces.
                     # Positive frozen service scope is re-priced only after
                     # exact line-fingerprint verification; no extra reads.
+                    # Catalog memory recovery resolves global lightweight
+                    # aliases before selected-document hydration, and skips
+                    # every cost read for an empty cohort. The test below
+                    # pins the entire remaining reducer/authority read tail
+                    # to the previously reviewed production source.
                     # Keep cooperative scheduling parity and all fixed budgets.
                     reviewed = ast.get_source_segment(current, current_function)
                     self.assertEqual(hashlib.sha256(reviewed.encode('utf8')).hexdigest(),
-                        '9f4a48249a8fe861da0af2b4f5f56ca2132d2113c5566ed7ae479663a0d75423')
+                        'ed1258846025d40913ab8de3ce8b317c3a6342d0c71bfa5854ae5fe41542ed49')
                     before = current_function
                 else:
                     self.assertEqual(ast.dump(before), ast.dump(current_function))
@@ -186,7 +202,8 @@ class SourceContract(unittest.TestCase):
                     ])
                     default_rows = SelectDefaultProductRows()
                     adopted = default_rows.visit(adopted)
-                    self.assertEqual((default_rows.conditional_count, default_rows.skip_count, default_rows.unpack_count), (3, 1, 1))
+                    self.assertEqual((default_rows.conditional_count, default_rows.skip_count,
+                                      default_rows.unpack_count, default_rows.empty_count), (3, 1, 1, 1))
                 adopted = RemoveCheckpoints().visit(adopted)
                 adopted.name = name
                 if name == 'summarize_orders_sar':
@@ -195,6 +212,23 @@ class SourceContract(unittest.TestCase):
                 if isinstance(before, ast.FunctionDef):
                     adopted = ast.FunctionDef(**vars(adopted))
                 self.assertEqual(ast.dump(before), ast.dump(adopted))
+
+    def test_catalog_cohort_loading_preserves_existing_cost_reducer_and_companion_reads(self):
+        baseline = subprocess.check_output([
+            'git', 'show', '10ee7b41204dd1d39c8b91daf9f0a9d899041ebb:backend/dashboard_v2_routes.py',
+        ], cwd=ROOT, text=True, encoding='utf8')
+        current = (ROOT/'backend/dashboard_v2_routes.py').read_text(encoding='utf8')
+
+        def companion_reads_and_reducer(node):
+            start = next(index for index, statement in enumerate(node.body)
+                         if isinstance(statement, ast.Assign)
+                         and ast.unparse(statement.targets[0]) == 'profiles')
+            return ast.dump(ast.Module(body=node.body[start:], type_ignores=[]))
+
+        for name in ('build_mezan_v2_product_cost', 'build_mezan_v2_product_cost_cooperative'):
+            with self.subTest(function=name):
+                self.assertEqual(companion_reads_and_reducer(function(baseline, name)),
+                                 companion_reads_and_reducer(function(current, name)))
 
     def test_governor_and_data_access_allow_only_reviewed_telemetry(self):
         for file in ('resource_governor.py', 'mezan_profit_engine.py', 'sold_products_report_v2.py'):
