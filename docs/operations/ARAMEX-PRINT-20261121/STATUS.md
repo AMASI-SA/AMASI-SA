@@ -1,4 +1,27 @@
-# ARAMEX-PRINT-20261121: replacement source candidate on current Production
+# ARAMEX-PRINT-20261121: PR2048 frozen A/B verification
+
+Current evidence branch `codex/aramex-order-payload-evidence-v2-20261121` must
+NOT be deployed. Immutable release branch `codex/aramex-order-payload-release-v2-20261121`:
+
+- J `6e41bf25b936e8c4047df75bb170610dfc71b7f7`.
+- A `bc01a705f5bbcb58be8dab5eef35ace8516cface`.
+- Intent-only B `4c5c778a9ee76d230f8fc85908e085860656622f`.
+- Runtime `rg5-827ca29c8410a99680fce32c0e1b953e7870dfef0051994a24c365590abf8715`.
+- Source readiness44942609937 passed; artifact14722013947 ZIP SHA256
+  `69b188af180411836c8ca63d203a2219a18f36ae7dd572cf9d998e2e323b7934`.
+- Intent SHA256 `1cb1ca09cf311dbb901da7adb21c074dc1b90c261596e555eba81c10894a0a40`.
+- CI candidate full validator passed; independent local Git manifests and
+  deterministic id matched. Exact-B readiness44942990880 and fresh independent
+  ARM64/Linux configured adapter rehearsal are running. No task lease or
+  publication. PR2048 Draft; PR2047 superseded/closed, its A/B preserved.
+- Fresh ADB: emulator online, authenticated Mezan screen visible. No new-code
+  original target acceptance yet. Existing linking/scopes/tokens unchanged.
+
+Next: require exact-B both-host rehearsals, independent full Linux validator,
+identity/build verification and all checks, then current-base normal merge and
+authorized guarded publication. Original verify3 and actual target/control ADB
+label and print acceptance are mandatory. Production changed by follow-up:no.
+The following source-stage and old-candidate notes are historical.
 
 Current source branch: `codex/aramex-order-payload-release-v2-20261121`, directly
 based on reviewed Production `6e41bf25b936e8c4047df75bb170610dfc71b7f7` (PR2039).
