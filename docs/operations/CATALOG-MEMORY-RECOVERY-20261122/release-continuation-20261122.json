@@ -1,0 +1,572 @@
+{
+  "schema_version": 1,
+  "task_id": "CATALOG-MEMORY-RECOVERY-20261122",
+  "record_status": "R2_merged_all_required_CI_accepted_production_publication_blocked",
+  "repository": "AMASI-SA/AMASI-SA",
+  "implementation_pr": 2055,
+  "implementation_pr_url": "https://github.com/AMASI-SA/AMASI-SA/pull/2055",
+  "implementation_branch": "codex/dashboard-catalog-memory-r2-20261122",
+  "evidence_branch": "codex/catalog-memory-release-evidence-20261122",
+  "evidence_branch_must_never_be_deployed": true,
+  "evidence_branch_base_rule": "exact normal PR2055 merge M2, tree-equivalent to frozen B2",
+  "evidence_branch_base_sha": "0c5e5b98795b8d30289ec0e4d3c95738fd660af1",
+  "final_merge_sha": "0c5e5b98795b8d30289ec0e4d3c95738fd660af1",
+  "merge_state": "merged",
+  "other_required_exact_b_checks": "complete: 20 workflows = 19 success + 1 conditional TikTok skip; 43 checks = 37 success + 6 expected conditional skips; zero active or failed",
+  "production_changed": false,
+  "production_publication_started": false,
+  "performance_incident_resolved": false,
+  "issue_1006_comment_posted": false,
+  "prior_pr2053": {
+    "pr_url": "https://github.com/AMASI-SA/AMASI-SA/pull/2053",
+    "merged_commit": "10ee7b41204dd1d39c8b91daf9f0a9d899041ebb",
+    "publication_state": "not_started_auto_review_rejected_final_publish_changes",
+    "approval_rejection_reason": "continuation messages did not sufficiently authorize the exact production publication",
+    "newer_deployment_succeeded_observed": false,
+    "own_lease_abort": {
+      "actor": "chatgpt-pr2053-recovery-20261122-b90f3c3040a7",
+      "ownership_asserted_before_abort": true,
+      "original_helper_used": true,
+      "exit_code": 0,
+      "aborted": true,
+      "status_after": {
+        "active": false
+      },
+      "source_git_sha": "99c0b847014d68f921154d2b5b74101c4db9dbaf",
+      "deployment_git_sha": "10ee7b41204dd1d39c8b91daf9f0a9d899041ebb",
+      "release_id": "rg5-d4eb0438ce8a4fd222298c40e6375f06cdfeb7e77ffdb35a5ff921bc8a0ab42d"
+    },
+    "durable_evidence_commit": "0fb6df6aec1e7454d3e34edddf71a6ecb342bc49",
+    "durable_evidence_branch": "codex/awaiting-history-recovery-evidence-20261122"
+  },
+  "last_live_health_observation": {
+    "observed_at_utc": "2026-11-21T22:31:02.514248+00:00",
+    "helper": "original cache-busted health helper",
+    "request_count": 1,
+    "elapsed_seconds": 0.744,
+    "health_ok": true,
+    "source_git_sha": "db141c0438edf04aa77ccd1122bc9c5008cf39d6",
+    "release_id": "rg5-500857bae382758ba238083f1f7f417b23a7e2dfb298aa3e2e99e7f4baf56b45",
+    "verified_identity_available": true,
+    "critical_file_hashes_match": true,
+    "frontend_build_verified": true,
+    "interpretation": "existing emergency rollback identity at the recorded time; not dashboard performance acceptance"
+  },
+  "last_reported_shared_workspace": {
+    "path": "/app",
+    "source_commit": "10ee7b41204dd1d39c8b91daf9f0a9d899041ebb",
+    "artifacts": "older PR2053 artifacts; not valid staging for PR2055/R2",
+    "reported_active_lease": false,
+    "fresh_guard_status_required": true,
+    "fresh_unique_tmp_staging_required": true,
+    "reuse_old_pr2053_tmp_staging_or_prepublication_proof": false,
+    "unrelated_and_untracked_files": "preserve"
+  },
+  "release_contract": {
+    "protocol_version": 5,
+    "source_base_git_sha": "10ee7b41204dd1d39c8b91daf9f0a9d899041ebb",
+    "source_git_sha": "8665e8acf1d7bb4878cd2fc0b912a20132f1e0c7",
+    "source_tree": "bd5f5d5a8cac347b7670b3e78b7e0b7a8f6b67b8",
+    "source_parent": "f13101cd78808ca0de9bb14352efd475a87eb8c4",
+    "source_delta_from_original_a": [
+      "backend/tests/test_operational_balance_profit_product_authority_parallel.py",
+      "docs/operations/CATALOG-MEMORY-RECOVERY-20261122/STATUS.md"
+    ],
+    "source_original_base_intent_bytes_and_history_preserved": true,
+    "intent_commit": "1ce536a61440da42f8f7ede9eb55d86cb29de5ec",
+    "intent_tree": "128537a80bcd08f93744f042d6c5927801188a59",
+    "intent_parent": "8665e8acf1d7bb4878cd2fc0b912a20132f1e0c7",
+    "source_to_intent_ahead": 1,
+    "source_to_intent_behind": 0,
+    "source_to_intent_merge_base": "8665e8acf1d7bb4878cd2fc0b912a20132f1e0c7",
+    "source_to_intent_changed_paths": [
+      "release/release-intent-v5.json"
+    ],
+    "intent_git_blob": "639befdbcfadecc2c2bebbc310a843b578e9badd",
+    "intent_raw_sha256": "0a8b06b82b9e00aa2b5df997e7336da9a250fd16e0d4b8671218de418ddfac5a",
+    "intent_bytes": 1444324,
+    "runtime_release_id": "rg5-4d0f595ee0711c73459e0cb18711c87657602d7886a885f0ccb1a3013e31dc05",
+    "source_and_intent_not_rewritten": true,
+    "original_source_two_pass_build_exit_code": 0,
+    "original_source_verify_exit_code": 0,
+    "original_freeze_exit_code": 0,
+    "independent_remote_commit_compare_intent_read": "passed",
+    "root_original_intent_loader": {
+      "result": "passed",
+      "exit_code": 0,
+      "exact_deployment_commit": "1ce536a61440da42f8f7ede9eb55d86cb29de5ec",
+      "local_git_parent_path_tree_and_raw_hash_match": true,
+      "checkout_clean_after_verification": true
+    },
+    "backend_runtime_file_count": 1288,
+    "frontend_source_file_count": 1345,
+    "release_control_file_count": 322,
+    "local_preparation_evidence_names": [
+      "catalog-r2-reviewed-intent-v5.json",
+      "catalog-r2-source-build.log",
+      "catalog-r2-source-verify.json"
+    ],
+    "reviewed_deployment_commit": "0c5e5b98795b8d30289ec0e4d3c95738fd660af1",
+    "reviewed_deployment_tree": "128537a80bcd08f93744f042d6c5927801188a59"
+  },
+  "frontend_proof": {
+    "toolchain": {
+      "node": "22.23.2",
+      "yarn": "1.22.22",
+      "vite": "8.2.4"
+    },
+    "artifact_tree_sha256": "770915f10cbbaa9b17e129ee8ba544c4c618dd539600de519f7f70b48c80540a",
+    "build_meta_sha256": "e5b04aab5c831ffa5e7b5d990289cf7da188812eb4d98d4119b030c74ccd2b61",
+    "build_meta_bytes": 549655,
+    "reproducibility_proof_sha256": "5d54d316731587985a3e997d09f06febd45fc23b150d6f0b085a89917f8dd518",
+    "reproducibility_proof_bytes": 1521,
+    "both_clean_passes_identical": true,
+    "retained_pass": 2,
+    "source_git_sha": "8665e8acf1d7bb4878cd2fc0b912a20132f1e0c7",
+    "previous_candidate_proof_not_reused": true
+  },
+  "independent_reviews": {
+    "implementation": "completed; alias ambiguity, duplicate winners, physical identity, companion cap/scope and financial-authority checks",
+    "gate": "completed; no material loophole found",
+    "original_164_response_oracle_and_financial_cohort_ast_unchanged": true,
+    "mutation_boundary": "after selected full-cost capture and before companion reads",
+    "between_read_identity_races": "separate retryable503 and fresh-request tests retained",
+    "local_new_gate_tests": 67,
+    "preceding_combined_read_contract_tests": 215,
+    "combined_run_note": "before the final positive lexical/reversed query-order additions",
+    "financial_mutation_expectations": {
+      "catalog": 85,
+      "profile": 146.5,
+      "product_binding": 94,
+      "option_binding": 93,
+      "resource": 95,
+      "policy": 0
+    },
+    "file_sha256": {
+      "backend/dashboard_v2_routes.py": "0d9f4fb40beebbaf8aa27c6cb51d962913cfa2d8399afb82bea1a2e52ac42feb",
+      "backend/tests/dashboard_runtime_gate_plugin.py": "43b6ff8ed59352ab3e2d17928e091e52e9a2f934e23556c36d3af43f353a01ef",
+      "backend/tests/test_dashboard_runtime_catalog_read_contract.py": "71385ba147eaf9d3ae0af34522b7dd2931be2a94dec0eb797b08ac78c638033a",
+      "backend/tests/test_operational_balance_profit_product_authority_parallel.py": "1938731b2cf811bd92060dc56091f1ba4d27dd1522c5a6250132b8fce40062ee"
+    },
+    "r2_cancellation_fixture": {
+      "scope": "test-only semantic interception of original request-owned estimate query/projection",
+      "query_scope": {
+        "user_id": "fixture owner",
+        "identities": [
+          "rose",
+          "shawl"
+        ],
+        "alias_fields": [
+          "salla_product_id",
+          "mezan_product_id",
+          "id"
+        ]
+      },
+      "exact_projection_required": true,
+      "ordinal_target_removed": true,
+      "original_worker_drain_cursor_close_and_lease_assertions_unchanged": true,
+      "negative_controls": [
+        "direct alias read",
+        "direct selected-document hydration",
+        "different owner",
+        "altered projection",
+        "extra scope"
+      ],
+      "focused_tests_passed": 217,
+      "independent_overlapping_tests_passed": 33,
+      "counts_are_not_additive": true,
+      "independent_review": "completed; minimal semantic retarget accepted",
+      "no_extended_ownership_guarantee_for_direct_catalog_reads": true,
+      "test_git_blob": "9818b9d0e426914edd570fbb119164c4420b8fa5",
+      "test_sha256": "1938731b2cf811bd92060dc56091f1ba4d27dd1522c5a6250132b8fce40062ee"
+    }
+  },
+  "confirmed_ci": {
+    "required_scope": "exact frozen B2 carrying source A2; separate source-A2 runs may be superseded or cancelled on the B2 push and need not complete independently",
+    "historical_pr2054_checks_do_not_replace_exact_b2_gates": true,
+    "exact_b2_release_readiness": {
+      "run_id": 44961507288,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44961507288",
+      "head_sha": "1ce536a61440da42f8f7ede9eb55d86cb29de5ec",
+      "source_git_sha": "8665e8acf1d7bb4878cd2fc0b912a20132f1e0c7",
+      "status": "completed",
+      "conclusion": "success",
+      "required_jobs_passed": 6,
+      "manual_redeploy_notification_job": "conditionally_skipped",
+      "host20_adapter_job_id": 137021426657,
+      "host24_adapter_job_id": 137021426603,
+      "host20_adapter_conclusion": "success",
+      "host24_adapter_conclusion": "success",
+      "root_log_checks": {
+        "git_directory_present": false,
+        "governed_node_version": "22.23.2",
+        "source_release_artifact_build_meta_proof_match": true,
+        "backend_health_verified": true,
+        "backend_isolated_verified": true,
+        "frontend_isolated_runtime_artifact_verified": true,
+        "live_emergent_snapshot_timing_proven": false
+      }
+    },
+    "exact_b2_runtime_adoption": {
+      "run_id": 44961507413,
+      "job_id": 137021092980,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44961507413",
+      "head_sha": "1ce536a61440da42f8f7ede9eb55d86cb29de5ec",
+      "source_git_sha": "8665e8acf1d7bb4878cd2fc0b912a20132f1e0c7",
+      "status": "completed",
+      "conclusion": "success",
+      "reference_tests_passed": 40,
+      "read_baseline_tests_passed": 40,
+      "runtime_tests_passed": 40,
+      "required_records_each_arm": 164,
+      "exact_approved_json_and_strict_read_contract": "passed",
+      "zero_skips_failures_errors_check": "passed",
+      "regression_tests_passed": 436,
+      "regression_subtests_passed": 7,
+      "forced_mutation_checkpoints": 18,
+      "artifact_id": 14730370162,
+      "artifact_bytes": 1873204,
+      "artifact_zip_sha256": "dd3a35814420bbeb6e8c772981ff4bc6612a3b3ba5ce02e4c61e832f81ed8351"
+    },
+    "stock_and_balance_must_pass_on_exact_b2": true,
+    "separate_source_a2_workflow_completion_required": false,
+    "exact_b2_stock": {
+      "run_id": 44961507338,
+      "job_id": 137021160627,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44961507338",
+      "head_sha": "1ce536a61440da42f8f7ede9eb55d86cb29de5ec",
+      "status": "completed",
+      "conclusion": "success",
+      "tests_passed": 5503,
+      "subtests_passed": 97,
+      "test_duration_seconds": 447.42,
+      "log_counts_verified_by_root": true,
+      "junit_artifact": {
+        "id": 14729268829,
+        "sha256": "eeefb2be975b300dc4fac22b8635ae1ff27a86573ac51a50a95577484add0a29",
+        "bound_run_id": 44961507338,
+        "bound_head_sha": "1ce536a61440da42f8f7ede9eb55d86cb29de5ec",
+        "reports_all_cases_passed": true
+      }
+    },
+    "exact_b2_codeql": {
+      "run_id": 44961507355,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44961507355",
+      "head_sha": "1ce536a61440da42f8f7ede9eb55d86cb29de5ec",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    "exact_b2_g47": {
+      "run_id": 44961507353,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44961507353",
+      "head_sha": "1ce536a61440da42f8f7ede9eb55d86cb29de5ec",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    "exact_b2_balance": {
+      "run_id": 44961507257,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44961507257",
+      "head_sha": "1ce536a61440da42f8f7ede9eb55d86cb29de5ec",
+      "status": "completed",
+      "conclusion": "success",
+      "backend_job_id": 137021159710,
+      "backend_status": "completed",
+      "backend_conclusion": "success",
+      "backend_tests_passed": 6190,
+      "backend_subtests_passed": 90,
+      "completed_jobs": [
+        {
+          "id": 137021159435,
+          "name": "Operational balances browser, mobile and visibility acceptance",
+          "conclusion": "success"
+        },
+        {
+          "id": 137021159674,
+          "name": "Operational Balance Frontend",
+          "conclusion": "success"
+        },
+        {
+          "id": 137021159683,
+          "name": "Canonical worker excludes operational balance jobs",
+          "conclusion": "success"
+        }
+      ],
+      "backend_test_duration_seconds": 551.22,
+      "shipping_regression_tests_passed": 16,
+      "shipping_regression_subtests_passed": 18,
+      "shipping_regression_duration_seconds": 0.6,
+      "root_log_counts_verified": true,
+      "junit_artifact": {
+        "id": 14730401083,
+        "sha256": "36bba2c454ec8800197f43ea8a2bd7d14e942f8943b1db7642590b08f05f4b30",
+        "bound_run_id": 44961507257,
+        "bound_head_sha": "1ce536a61440da42f8f7ede9eb55d86cb29de5ec",
+        "bound_tree": "128537a80bcd08f93744f042d6c5927801188a59",
+        "main_junit_report_zero_errors_failures_skips": true
+      }
+    },
+    "final_exact_b2_ci_summary": {
+      "head_sha": "1ce536a61440da42f8f7ede9eb55d86cb29de5ec",
+      "source_git_sha": "8665e8acf1d7bb4878cd2fc0b912a20132f1e0c7",
+      "all_required_checks_accepted": true,
+      "workflows": {
+        "total": 20,
+        "success": 19,
+        "conditionally_skipped": 1,
+        "conditional_skip": "TikTok",
+        "active": 0,
+        "failed": 0
+      },
+      "check_runs": {
+        "total": 43,
+        "success": 37,
+        "expected_conditionally_skipped": 6,
+        "active": 0,
+        "failed": 0
+      },
+      "confirmed_by": "root final exact-head verification"
+    }
+  },
+  "residual_limits": [
+    "Owner-wide aliases and complete variant values remain up to the existing cap of 100000 products; no total memory bound.",
+    "Companion profile/binding/resource queries preserve prior owner scopes and caps.",
+    "Selected full documents and large selected cohorts can still require substantial memory.",
+    "Other order/report/advertising reads are outside the change.",
+    "Two catalog reads are not a snapshot transaction; arbitrary concurrent mutations are not claimed equivalent.",
+    "Synthetic payload measurements do not establish production RSS, end-to-end latency, or incident resolution."
+  ],
+  "next_safe_sequence": [
+    "Obtain explicit fresh authorization for one production Publish changes of reviewed merge M2 0c5e5b98795b8d30289ec0e4d3c95738fd660af1 and its recorded R2 identity. The earlier automatic approval rejection remains unresolved; generic continuation is insufficient.",
+    "Re-read the remote handoff and current refs, confirm the intended exact governed deployment, then read fresh shared /app original Release Guard status. Require active:false; preserve unrelated and untracked files and never clear another actor lease.",
+    "Create fresh unique /tmp staging from exact M2. Do not reuse PR2053 or superseded PR2054 staging, artifacts, identity, proof, lease, actor, or prepublish result; shared /app still last-reported old PR2053 source/artifacts.",
+    "Run the unchanged original adapter and governed toolchain, requiring exact A2/release/artifact/build-meta/proof. After fresh adapter success, use original helpers to prepare an owner-specific lease and prepublish immediately before publication.",
+    "Perform one explicitly authorized Publish changes and observe a newer explicit Deployment Succeeded.",
+    "Run original verify --url https://mezansalla.com. Require three matching A2/release probes with verified identity, critical hashes and Frontend build, plus exact canonical/cache-busted build-meta JSON bytes and application/json. Confirm matching lease closes active:false.",
+    "Record actual live identity and authenticated dashboard/performance evidence before claiming incident resolution; preserve a remote docs-only checkpoint."
+  ],
+  "safe_commands": {
+    "shared_guard_status": "cd /app && python scripts/production_release_guard.py status",
+    "post_publication_verify": "python scripts/production_release_guard.py verify --url https://mezansalla.com"
+  },
+  "actions_not_authorized_by_this_record": [
+    "production publication",
+    "production data writes",
+    "Issue comments",
+    "deployment of evidence branch"
+  ],
+  "failed_pr2054_candidate": {
+    "pr": 2054,
+    "url": "https://github.com/AMASI-SA/AMASI-SA/pull/2054",
+    "state": "closed",
+    "merged": false,
+    "candidate_status": "superseded_after_required_ci_failures",
+    "head_preserved": "20e1bcc0e3b0a4912eab34f34819b4cde0e5bce4",
+    "source_branch": "codex/dashboard-catalog-memory-20261122",
+    "source_and_intent_unchanged": true,
+    "release_contract": {
+      "protocol_version": 5,
+      "source_base_git_sha": "10ee7b41204dd1d39c8b91daf9f0a9d899041ebb",
+      "source_git_sha": "f13101cd78808ca0de9bb14352efd475a87eb8c4",
+      "source_tree": "2b7e69a729d70f9404bcebfedde4b17977544327",
+      "intent_commit": "20e1bcc0e3b0a4912eab34f34819b4cde0e5bce4",
+      "intent_tree": "3ff926b679c0ab69254a20061ee7b0aa41dc53c3",
+      "intent_parent": "f13101cd78808ca0de9bb14352efd475a87eb8c4",
+      "source_to_intent_ahead": 1,
+      "source_to_intent_behind": 0,
+      "source_to_intent_merge_base": "f13101cd78808ca0de9bb14352efd475a87eb8c4",
+      "source_to_intent_changed_paths": [
+        "release/release-intent-v5.json"
+      ],
+      "intent_git_blob": "ed199ea77705138668553619c761e9fbbde03f81",
+      "intent_raw_sha256": "8f0c27e54cdc4fa05e83ea723febefa24d487c9eff43bac7dcddc3739e8c0284",
+      "intent_bytes": 1444324,
+      "runtime_release_id": "rg5-784308cfa8388640c2ec226a2a0c50fc9dbd66ca52f1545c503262f247d02d22",
+      "source_and_intent_not_rewritten": true,
+      "original_freeze_exit_code": 0,
+      "freeze_preparation_note": "one generated operator-owned bytecode cache removed; successful invocation used -B; no governed source changed",
+      "independent_remote_git_and_local_blob_check": "passed",
+      "original_runtime_identity_validator": {
+        "result": "passed",
+        "strict_backend_filesystem": true,
+        "allow_derived_bytecode": false
+      },
+      "backend_runtime_file_count": 1288,
+      "frontend_source_file_count": 1345,
+      "release_control_file_count": 322
+    },
+    "frontend_proof": {
+      "toolchain": {
+        "node": "22.23.2",
+        "yarn": "1.22.22",
+        "vite": "8.2.4"
+      },
+      "artifact_tree_sha256": "770915f10cbbaa9b17e129ee8ba544c4c618dd539600de519f7f70b48c80540a",
+      "build_meta_sha256": "ac9b7eca49a94281e379aef21db46962c44b0dd21820237589ad1b3cc2e7d6e7",
+      "build_meta_bytes": 549655,
+      "reproducibility_proof_sha256": "78edb4553e12524f5cba9f23b5cb70a22bf641b1fa3415359228e34a104d6730",
+      "both_clean_passes_identical": true,
+      "retained_pass": 2,
+      "source_git_sha": "f13101cd78808ca0de9bb14352efd475a87eb8c4"
+    },
+    "successful_checks": {
+      "source_a_runtime_adoption": {
+        "run_id": 44959201789,
+        "job_id": 137014016781,
+        "head_sha": "f13101cd78808ca0de9bb14352efd475a87eb8c4",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44959201789",
+        "conclusion": "success",
+        "completed_at_utc": "2026-11-21T22:59:36Z",
+        "mongo_version": "8.0.12",
+        "reference_tests_passed": 40,
+        "read_baseline_tests_passed": 40,
+        "runtime_tests_passed": 40,
+        "regression_tests_passed": 436,
+        "regression_subtests_passed": 7,
+        "required_records_each_arm": 164,
+        "exact_json_and_read_contract_check": "passed",
+        "zero_skips_failures_errors_check": "passed",
+        "forced_mutation_checkpoints": 18,
+        "artifact_id": 14729250766,
+        "artifact_bytes": 1873108
+      },
+      "intent_b_runtime_adoption": {
+        "run_id": 44959641824,
+        "head_sha": "20e1bcc0e3b0a4912eab34f34819b4cde0e5bce4",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44959641824",
+        "conclusion": "success",
+        "completed_at_utc": "2026-11-21T23:04:46Z"
+      },
+      "intent_b_release_readiness": {
+        "run_id": 44959642014,
+        "head_sha": "20e1bcc0e3b0a4912eab34f34819b4cde0e5bce4",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44959642014",
+        "conclusion": "success",
+        "completed_at_utc": "2026-11-21T23:04:56Z",
+        "required_jobs_passed": 6,
+        "manual_redeploy_notification_job": "conditionally_skipped",
+        "jobs": [
+          {
+            "id": 137015393060,
+            "name": "Backend preflight",
+            "conclusion": "success"
+          },
+          {
+            "id": 137015393253,
+            "name": "Host Node 24.19.0 engine and dispatcher contract",
+            "conclusion": "success"
+          },
+          {
+            "id": 137015393291,
+            "name": "Frontend build",
+            "conclusion": "success"
+          },
+          {
+            "id": 137015393324,
+            "name": "Host Node 20.20.2 engine and dispatcher contract",
+            "conclusion": "success"
+          },
+          {
+            "id": 137015881131,
+            "name": "Emergent Host Node 20.20.2 clean-clone adapter rehearsal",
+            "conclusion": "success"
+          },
+          {
+            "id": 137015881195,
+            "name": "Emergent Host Node 24.19.0 clean-clone adapter rehearsal",
+            "conclusion": "success"
+          }
+        ],
+        "independent_host_log_checks": {
+          "git_directory_present": false,
+          "governed_node_version": "22.23.2",
+          "source_release_artifact_proof_match": true,
+          "backend_health_verified": true,
+          "backend_isolated_verified": true,
+          "frontend_isolated_runtime_artifact_verified": true,
+          "live_emergent_snapshot_timing_proven": false
+        }
+      }
+    },
+    "independent_reviews": {
+      "implementation": "completed; alias ambiguity, duplicate winners, physical identity, companion cap/scope and financial-authority checks",
+      "gate": "completed; no material loophole found",
+      "original_164_response_oracle_and_financial_cohort_ast_unchanged": true,
+      "mutation_boundary": "after selected full-cost capture and before companion reads",
+      "between_read_identity_races": "separate retryable503 and fresh-request tests retained",
+      "local_new_gate_tests": 67,
+      "preceding_combined_read_contract_tests": 215,
+      "combined_run_note": "before the final positive lexical/reversed query-order additions",
+      "financial_mutation_expectations": {
+        "catalog": 85,
+        "profile": 146.5,
+        "product_binding": 94,
+        "option_binding": 93,
+        "resource": 95,
+        "policy": 0
+      },
+      "file_sha256": {
+        "backend/dashboard_v2_routes.py": "0d9f4fb40beebbaf8aa27c6cb51d962913cfa2d8399afb82bea1a2e52ac42feb",
+        "backend/tests/dashboard_runtime_gate_plugin.py": "43b6ff8ed59352ab3e2d17928e091e52e9a2f934e23556c36d3af43f353a01ef",
+        "backend/tests/test_dashboard_runtime_catalog_read_contract.py": "71385ba147eaf9d3ae0af34522b7dd2931be2a94dec0eb797b08ac78c638033a"
+      }
+    },
+    "failed_required_checks": [
+      {
+        "name": "Operational Stock Eligibility",
+        "run_id": 44959641752,
+        "job_id": 137015474304,
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44959641752",
+        "head_sha": "20e1bcc0e3b0a4912eab34f34819b4cde0e5bce4",
+        "conclusion": "failure",
+        "tests_failed": 1,
+        "tests_passed": 5501,
+        "subtests_passed": 97
+      },
+      {
+        "name": "Operational Balance Web",
+        "run_id": 44959641872,
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44959641872",
+        "head_sha": "20e1bcc0e3b0a4912eab34f34819b4cde0e5bce4",
+        "conclusion": "failure",
+        "tests_failed": 1,
+        "tests_passed": 6188,
+        "subtests_passed": 90
+      }
+    ],
+    "failure_case": "test_every_owned_authority_phase_drains_motor_before_lease_release[estimate_catalog]",
+    "cause": "Fixture ordinal PRODUCTS,2 moved from the request-owned current-bundle estimate read to the new direct selected-product hydration read.",
+    "production_publication_started": false,
+    "deployment_accepted": false
+  },
+  "merge_verification": {
+    "pr": 2055,
+    "pr_state": "closed",
+    "merged": true,
+    "draft": false,
+    "merge_method": "normal_merge",
+    "merged_at_utc": "2026-11-21T23:35:21Z",
+    "merge_sha": "0c5e5b98795b8d30289ec0e4d3c95738fd660af1",
+    "merge_tree": "128537a80bcd08f93744f042d6c5927801188a59",
+    "parents": [
+      "10ee7b41204dd1d39c8b91daf9f0a9d899041ebb",
+      "1ce536a61440da42f8f7ede9eb55d86cb29de5ec"
+    ],
+    "tree_equals_frozen_b2": true,
+    "b2_to_merge_changed_paths": [],
+    "a2_is_ancestor": true,
+    "a2_to_merge_changed_paths": [
+      "release/release-intent-v5.json"
+    ],
+    "a2_to_merge_ahead": 2,
+    "a2_to_merge_behind": 0,
+    "independent_remote_commit_and_compare_reads": "passed",
+    "root_local_and_remote_checks": "passed",
+    "checkout_clean": true,
+    "original_load_release_intent_on_merge": {
+      "result": "passed",
+      "exit_code": 0,
+      "source_git_sha": "8665e8acf1d7bb4878cd2fc0b912a20132f1e0c7",
+      "runtime_release_id": "rg5-4d0f595ee0711c73459e0cb18711c87657602d7886a885f0ccb1a3013e31dc05"
+    }
+  }
+}
