@@ -194,3 +194,70 @@ def test_mobile_owner_creation_stops_when_accounting_cutover_active():
         assert await db.mz2_external_persons_v2.count_documents({"name": "ممنوع بسبب القطع"}) == 0
         assert await db.mz2_financial_accounts.count_documents({"name": "ممنوع بسبب القطع"}) == 0
     run(scenario)
+
+
+
+def test_mobile_external_concurrent_duplicate_name_creates_one_party():
+    import asyncio
+    async def scenario(db):
+        await started(db)
+        await db.mz2_external_persons_v2.create_index(
+            [("user_id", 1), ("name_lower", 1)], unique=True)
+        url = "/api/operational-balances/entities/external_person"
+        async with client(db, "owner") as c:
+            a, b = await asyncio.gather(
+                c.post(url, json={"request_id": "external-concurrent-a", "name": "جهة متزامنة", "currency": "SAR"}),
+                c.post(url, json={"request_id": "external-concurrent-b", "name": "  جهة  متزامنة ", "currency": "SAR"}),
+            )
+            assert sorted([a.status_code, b.status_code]) == [200, 409], (a.text, b.text)
+        rows = await db.mz2_external_persons_v2.find(
+            {"user_id": "owner", "name_lower": "جهة متزامنة"}).to_list(length=3)
+        assert len(rows) == 1
+        state = await read(db, "owner")
+        assert state["movements"] == []
+    run(scenario)
+
+
+def test_mobile_owner_external_details_and_duplicate_name_are_safe():
+    async def scenario(db):
+        await started(db)
+        await grant(db, [WRITE, READ])
+        await db.mz2_external_persons_v2.create_index(
+            [("user_id", 1), ("name_lower", 1)], unique=True)
+        url = "/api/operational-balances/entities/external_person"
+        original = {
+            "request_id": "external-details-20261121-a",
+            "name": "  مؤسسة   الورود  ",
+            "currency": "SAR",
+            "person_type": "organization",
+            "phone": "0501234567",
+            "notes": "اتصال تجريبي",
+        }
+        async with client(db, "staff") as c:
+            denied = await c.post(url, json=original)
+            assert denied.status_code == 403, denied.text
+        async with client(db, "owner") as c:
+            created = await c.post(url, json=original)
+            assert created.status_code == 200, created.text
+            repeated = await c.post(url, json=original)
+            assert repeated.status_code == 200
+            assert repeated.json() == created.json()
+            second = await c.post(url, json={
+                **original, "request_id": "external-details-20261121-b",
+                "name": "مؤسسة الورود"})
+            assert second.status_code == 409, second.text
+            assert second.json().get("detail", {}).get("code") == "operational_external_name_duplicate"
+            changed = await c.post(url, json={**original, "notes": "تغيير"})
+            assert changed.status_code == 409, changed.text
+            listings = await c.get(url)
+            assert listings.status_code == 200, listings.text
+            assert created.json()["id"] in [r["id"] for r in listings.json()["items"]]
+        rows = await db.mz2_external_persons_v2.find(
+            {"user_id": "owner", "name_lower": "مؤسسة الورود"}).to_list(length=5)
+        assert len(rows) == 1
+        assert rows[0]["person_type"] == "organization"
+        assert rows[0]["phone"] == "0501234567"
+        assert rows[0]["notes"] == "اتصال تجريبي"
+        state = await read(db, "owner")
+        assert state["movements"] == []
+    run(scenario)
