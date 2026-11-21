@@ -139,3 +139,38 @@ This checkpoint is not deployment approval or evidence of a deployed fix.
   claimed equivalent to a single snapshot.
 - No production data was used to size the benefit. Production slowdown remains
   an open incident until a separately authorized release and live verification.
+
+## R2 prefreeze checkpoint
+
+The immutable PR #2054 candidate is retained as failed acceptance evidence:
+source A `f13101cd78808ca0de9bb14352efd475a87eb8c4` and intent-only B
+`20e1bcc0e3b0a4912eab34f34819b4cde0e5bce4`. Its runtime-adoption and Host 20/24
+readiness gates passed, but the exact-B required suites failed the same stale
+`estimate_catalog` cancellation-fixture target:
+
+- [Stock run 44959641752](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44959641752):
+  1 failed, 5501 passed, 97 subtests passed.
+- [Balance run 44959641872](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44959641872):
+  1 failed, 6188 passed, 90 subtests passed.
+
+The old fixture intercepted the second product read. That position now belongs
+to direct selected-product hydration; the unchanged request-owned bundle
+estimate read occurs later. The test-only correction selects the exact original
+owner-scoped estimate query and projection instead of an ordinal. An explicit
+negative-control test excludes direct alias/hydration reads and altered
+owner/scope/projection. All original worker-drain, cursor-close and lease-release
+assertions remain intact. This does not extend their ownership guarantee to
+the separate direct catalog reads.
+
+Focused verification passed 217 tests. An independent overlapping 33-test suite
+also passed; these counts are not additive. Independent review confirmed the
+minimal semantic retargeting. Runtime SHA-256 remains
+`0d9f4fb40beebbaf8aa27c6cb51d962913cfa2d8399afb82bea1a2e52ac42feb`.
+
+Next: create fresh R2 source A2 from original A **before B**, retaining source
+base `10ee7b41204dd1d39c8b91daf9f0a9d899041ebb`'s exact intent bytes and no intent
+changes in the source history. Do not amend or rebase the frozen failed A/B.
+Freeze a new governed intent-only B2 and require all exact-commit CI, including
+Stock and Balance, before release acceptance. A2/B2 identities and fresh freeze
+and CI results are pending. Production publication remains blocked/not started;
+no deployment or incident resolution is claimed.
