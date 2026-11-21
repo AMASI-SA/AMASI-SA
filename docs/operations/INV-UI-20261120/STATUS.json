@@ -3,9 +3,9 @@
   "scope": "Replace legacy Mezan inventory interfaces with the approved integrated Arabic RTL design using the existing native services and permissions.",
   "branch": "codex/inventory-release-20261121",
   "base_sha": "734b977de28254c2c089148b4db8972a03ba19eb",
-  "state": "manual_release_preparation_authorized",
+  "state": "integrated_ci_in_progress",
   "production_changed": false,
-  "remote_checkpoint": "dd8e9e80a0cbf2f0f1647597e4e147ebf7451f30 source candidate A pushed on codex/inventory-release-20261121; task continuity document lives on original development branch",
+  "remote_checkpoint": "754a81fd0eb92b2acb4a3700fe106a5ba14e2ce9 pushed source candidate on codex/inventory-release-20261121",
   "release_lease": "not_created",
   "deployment": "user_will_publish_manually",
   "owners": {
@@ -21,13 +21,13 @@
     "No opening-stock writer reused for stock adjustments"
   ],
   "next_action": "Commit and push integrated source candidate A, create PR to Production, require fresh CI and governed candidate intent. Freeze only generated intent as B, verify B clean-clone checks and merge preserving A/B. User will run shared /app guard/materialization/prepublish and publish manually. Never claim deployment without explicit newer success and three v5 probes.",
-  "updated_at": "2026-11-21T13:16:09.424724+00:00",
-  "verified_milestone": "Approved inventory source replayed atop current reviewed Production0d70cdc4bdc116a4640509c95216bbbd6a72b6ed without conflicts or direct file overlap. Inherited release intent bytes unchanged. No /app changes, lease or publication. Added original-service count/configuration and suite UI checks to existing G47 CI; fresh candidate checks pending.",
+  "updated_at": "2026-11-21T13:25:23.021721+00:00",
+  "verified_milestone": "Integrated core85PASS+12subtests. Fixed CI-discovered frontend explicit count review/post grant policy; existing financial/shipping isolation/product editor contracts40PASS+484subtests; default Yarn test resolver and affected UI62PASS. Existing visible component assertions PASS. Preview transport uses a fixed loopback host/port without redirects; native context and hostile absolute-form URL probes PASS. Fresh exact-source CI pending; no acceptance of superseded source.",
   "ledger": "https://github.com/AMASI-SA/AMASI-SA/issues/1006#issuecomment-6238987123 has a dedicated dated INV-UI-20261120 section appended without removing original content; comments/body limits block new entries elsewhere. Write read-back verified.",
   "incomplete": [
-    "Integrated source CI and generated candidate intent pending",
-    "Reviewed intent B, exact-head CI/rehearsal and preserving merge pending",
-    "Shared /app guard status/materialization/prepare/prepublish/manual publish/three-probe verification remain user actions; browser and Windows tools failed with missing kernel asset path"
+    "Corrected source CI and candidate intent artifact pending",
+    "Reviewed B, reviewed clean-clone checks and preserving merge pending",
+    "User manual shared /app release preparation/publish/verify remains; no agent /app writes or lease"
   ],
   "posting_scope": "User approved full stocktake/adjustment lifecycle including atomic posting, development only; new posting default-closed",
   "durable_patch": "C:\\Users\\amasi\\OneDrive\\المستندات\\ChatGPT\\ميزان\\outputs\\inventory-implementation-20261120\\inventory-ui-wip.patch",
@@ -43,7 +43,7 @@
     "provider_publish": "blocked"
   },
   "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/2038",
-  "branch_ci": "source candidate in progress; Accounting backend contract failed, diagnosis underway",
+  "branch_ci": "fresh CI on corrected source in progress; previous candidate superseded",
   "merge": "authorized_pending_verification",
   "upstream_observation": {
     "production_git_head_observed": "c4a83ac18b24f0367b3fbe8052a026c2dbdbac98",
@@ -64,7 +64,7 @@
     "real_stock_or_accounting_data_writes": false
   },
   "release_pair": {
-    "source_A": "dd8e9e80a0cbf2f0f1647597e4e147ebf7451f30",
+    "source_A": "754a81fd0eb92b2acb4a3700fe106a5ba14e2ce9",
     "base_J": "0d70cdc4bdc116a4640509c95216bbbd6a72b6ed",
     "intent_B": null,
     "source_history_preserved": true,
