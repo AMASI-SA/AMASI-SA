@@ -1,6 +1,6 @@
 # AWAITING-HISTORY-PERFORMANCE-20261121
 
-State: incident mitigation in progress; partial source fix, NOT ready for release.
+State: rollback identity verified; service latency still unstable; partial source fix NOT ready for release. Draft PR2051.
 Base: e08d0e489eded39961d374e4eb7bfcc0544b6e90.
 Branch: codex/awaiting-history-performance-20261121.
 
@@ -28,7 +28,15 @@ The original guard status subsequently returned active:false. Do not prepare or 
 
 ## Remaining
 
-1. Verify rollback outcome and service recovery; preserve original financial data.
+### Observed rollback result, 2026-11-21 around 23:36 Riyadh
+
+- Emergent deployment0ef4d22 stopped showing Publishing and appeared as the current published version. No literal success toast was captured. ConfirmRollback was clicked once only.
+- Three bounded, cache-busted health reads through the unchanged release-guard read helper all returned source `db141c0438edf04aa77ccd1122bc9c5008cf39d6`, release `rg5-500857bae382758ba238083f1f7f417b23a7e2dfb298aa3e2e99e7f4baf56b45`, verified identity and frontend build true. Public build-meta returned200 application/json with the same git_sha. These are bounded identity probes, NOT the full 710-requests-per-probe guard verify operation.
+- Initial post-rollback health0.567s/login-config2.147s improved over pre-rollback10.870s/11.354s, but subsequent health probes8.511s,10.034s,3.213s show persistent unstable latency. Do NOT claim performance incident resolved or attribute all load solely to PR2046. Actual dashboard browser attachment timed out; no interactive acceptance claimed.
+- A concurrent PR2048 release was prepared at20:32:41UTC by actor `codex-aramex-pr2048-authorized`, sourcebc01a705f5bbcb58be8dab5eef35ace8516cface/deployment88af38f01cf979acbca59b95a95e661828f2306f. Latest guard is ACTIVE for that foreign actor; untouched. Latest production Git branch still includes PR2046. Emergency HOLD documented in Issue1006: republishing that branch would undo the rollback. No new publication by this task.
+- PR2051 partial code checkpoint88f93f6fdc9def06b44ae826a5a32ae9f956a399 remains unpublished. PR2049 remains on hold. Preserve financial data and concurrent release ownership.
+
+1. Diagnose remaining production pressure after the verified rollback; service recovery is not yet proven. Coordinate concurrent release hold before any new publication; preserve original financial data.
 2. Implement the owner's requested on-demand boundary: unrelated dashboards must not trigger heavy ledger scans. Design a bounded, revision/source-bound saved read model or explicit pending state; do not silently certify stale results or omit incurred costs. Current partial fix DOES NOT yet enforce this boundary.
 3. Complete real-Mongo and exact-head CI, concurrent request/cancellation/resource tests and production-size profiling before a new release. Do not bundle unpublished PR2049 designs into emergency recovery.
 4. Publish any subsequent fix only through a fresh verified v5 A/B release and normal lease checks. Never reuse or clear another task's lease.
