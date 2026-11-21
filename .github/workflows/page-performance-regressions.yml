@@ -7,6 +7,10 @@ on:
       - "backend/preparation_piece_operations.py"
       - "backend/assembly_board_read.py"
       - "backend/assembly_board_groups.py"
+      - "backend/mobile_operations_monitoring_routes.py"
+      - "backend/monitoring_preparation_counts.py"
+      - "backend/tests/test_monitoring_preparation_counts.py"
+      - "backend/tests/test_monitoring_lazy_directory.py"
       - "backend/tests/test_assembly_board_read.py"
       - "backend/tests/test_assembly_board_groups.py"
       - "backend/purchase_invoices_routes.py"
@@ -46,6 +50,8 @@ jobs:
           tests/test_fulfillment_read_performance.py
           tests/test_assembly_board_read.py
           tests/test_assembly_board_groups.py
+          tests/test_monitoring_preparation_counts.py
+          tests/test_monitoring_lazy_directory.py
           tests/test_purchase_invoice_read_performance.py
           tests/test_completed_current_shipment_display.py
           tests/test_order_engine_repository.py
