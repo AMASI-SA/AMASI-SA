@@ -17,5 +17,8 @@ export function financialCohortCompleteness(totals = {}, cohort = null) {
     const complete = totals.financial_cohort_complete !== false && cohort?.complete !== false;
     const excluded = cohort?.excluded_unpaid_orders ?? totals.excluded_unpaid_orders;
     const excludedOrders = typeof excluded === "number" && Number.isInteger(excluded) && excluded > 0 ? excluded : 0;
-    return { complete, excludedOrders, hint: complete ? null : "بانتظار مراجعة الإثبات المالي للطلبات" };
+    const deferred = (cohort?.review_reason_counts?.awaiting_payment_history_deferred ?? 0) > 0;
+    return { complete, excludedOrders, hint: complete ? null : deferred
+        ? "فحص تاريخ الطلبات معلّق؛ راجع الأرصدة التشغيلية. صافي الربح غير مؤكد"
+        : "بانتظار مراجعة الإثبات المالي للطلبات" };
 }

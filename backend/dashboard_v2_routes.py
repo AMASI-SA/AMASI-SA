@@ -33,7 +33,7 @@ from awaiting_payment_eligibility import (
     AWAITING_PAYMENT_RAW_PROJECTION, ELIGIBILITY_FIELD, attach_financial_cohort_eligibility,
     financial_cohort_eligibility,
 )
-from awaiting_payment_history import guard_financial_cohort_history
+from awaiting_payment_history import defer_financial_cohort_history
 from customer_identity import CUSTOMER_IDENTITY_COLLECTION, decrypt_private_payload
 from dashboard_v2_ad_costs import (
     apply_mezan_v2_ad_account_costs,
@@ -561,7 +561,7 @@ async def _filtered_orders(
         and (order_matches_status(order, report_statuses.split(","), included_statuses)
              if report_statuses is not None else _matches_any(order.get("order_status", ""), included_statuses))
     ]
-    selected = await guard_financial_cohort_history(db, user_id, selected)
+    selected = defer_financial_cohort_history(selected)
     for order in selected:
         if order.get(ELIGIBILITY_FIELD) == {"eligible": True, "review_required": False, "reason_code": None}:
             # Existing report callers retain the original row contract when
