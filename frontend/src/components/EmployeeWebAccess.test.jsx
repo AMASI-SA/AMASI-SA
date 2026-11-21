@@ -95,6 +95,20 @@ test("a products-only employee lands on the catalogue and can expand the only gr
         .toEqual([["إدارة المنتجات", "/products-v2"]]);
 });
 
+test.each([true, false])("balances employee entry links directly to an authorized page (home granted: %s)", async (homeGranted) => {
+    const assets = { id: "balances.assets", section: "balances", label: "الأصول والحسابات", to: "/operational-balances?view=assets" };
+    const home = { id: "balances.home", section: "balances", label: "الرئيسية", to: "/operational-balances" };
+    const pages = homeGranted ? [assets, home] : [assets];
+    await act(async () => root.render(<MemoryRouter initialEntries={[assets.to]}><EmployeeWebLayout pages={pages}><h1>حساباتي</h1></EmployeeWebLayout></MemoryRouter>));
+    const entry = byTestId("mezan-v2-primary-balances");
+    expect(entry.tagName).toBe("A");
+    expect(entry.getAttribute("href")).toBe(homeGranted ? home.to : assets.to);
+    expect(entry.hasAttribute("aria-expanded")).toBe(false);
+    await act(async () => entry.click());
+    expect(byTestId("mezan-v2-secondary-balances")).toBeNull();
+    expect(host.textContent).not.toContain("صلاحيات الموظفين");
+});
+
 test("a granted product detail can be opened by direct link", async () => {
     await renderEmployee("/products-v2?product=123", [PRODUCTS]);
     expect(host.querySelector("h1").textContent).toBe("كتالوج المتجر");

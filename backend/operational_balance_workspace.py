@@ -30,6 +30,7 @@ from operational_financial_position_core import position_balance
 from operational_supplier_credit_purchase import CreditInvoice, record_purchase
 from operational_visible_report_read import run_visible_report_read
 from operational_workspace_ledger_filters import check_period, filter_activity, movement_type
+from operational_workspace_courier_summary import courier_summary
 from operational_workspace_projection import (
     automatic_source, balance_note, compact_rows, history as automatic_history, projected_balance_status, row_order,
     statement as period_statement, with_running_balances,
@@ -365,7 +366,7 @@ async def resource_catalog(db, owner, policy, state, *, ad_bank_fx=False, review
     from operational_ad_balance_sar import workspace_amounts
     from operational_workspace_order_issues import issue_badge, navigation_counts
     from operational_balance_service import prepaid_shipping_cash
-    from operational_balance_sources import entities
+    from operational_balance_sources import AD_SOURCES, entities
     paypal_scope = (selected_kind in (None, "provider") and (not selected_resource or selected_resource == ("provider", "paypal"))
                     and policy.resource("provider", "paypal")["balance"])
     provider_access = policy.resource(*selected_resource) if selected_resource and selected_resource[0] == "provider" else {}
@@ -454,6 +455,7 @@ async def resource_catalog(db, owner, policy, state, *, ad_bank_fx=False, review
                            if net is not None else None)
             items.append({"kind": kind, "id": row["id"], "name": row.get("name") or row["id"],
                           "currency": currency, "access": access, "operations": operations, **ad_funding,
+                          **({"platform": row["platform"]} if kind == "ad_account" and row.get("platform") in AD_SOURCES else {}),
                           **financials,
                           **({} if directory_only else issue_badge(kind, row["id"], access, bool(computed.get("as_of")), bool(computed["issues"]), review_counts, reviewed_counts or {})),
                           **({"prepaid_shipping_cash": True} if kind == "cash" and prepaid_shipping_cash(state, row["id"]) else {}),
@@ -1123,6 +1125,7 @@ def install_workspace_routes(router, db, current_user, scope):
                 display = compact_rows(rows)
             return {"resource": resource, **summary, **paginate(display, page, page_size, focus_id),
                     "balance_status": balance_status, "balance_note": balance_note(balance_status),
+                    "courier_summary": courier_summary(state, computed, resource),
                     "expected_collections": expected_collections(state, computed, resource, policy)}
         return await run_visible_report_read(request, lambda: checked_read(user, project, ad_bank_fx=ad_bank_fx,
             selected_resource=(kind, identity), invoice_headers=not provider_orders, provider_orders=provider_orders, provider_positions=kind == "provider"))
@@ -1177,7 +1180,8 @@ def install_workspace_routes(router, db, current_user, scope):
                     rows = ledger_items(state, computed, resource, policy, make_row=_register_candidate)
                     if courier_history and kind == "courier" and resource["access"]["balance"] and resource["access"]["movements"] == "all":
                         rows, _ = with_running_balances(resource, rows)
-                    return compact_rows(rows), {"resource": resource, **_pos_summary(state, resource)}
+                    return compact_rows(rows), {"resource": resource, **_pos_summary(state, resource),
+                        "courier_summary": courier_summary(state, computed, resource)}
                 index, summary = await prepare_in_thread(selected)
             else:
                 if state["revision"] != header["revision"]:

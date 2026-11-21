@@ -402,3 +402,18 @@ test("the simple directory keeps distinct installment plans, absent terms and ac
     expect(input("تسري من").value).toBe("");
     expect(fees.createOnboardingFeePolicy).not.toHaveBeenCalled();
 });
+
+test("discovered methods and tariff history use local decorative identities without changing fee values", async () => {
+    const method = {key:"EmkanInstallment",name:"EmkanInstallment",status:"configured",commission_percent:7,fixed_fee:1,vat_percent:15};
+    fees.listOnboardingFeeCandidates.mockResolvedValue({items:[],payment_method_setup:{complete:true,revision:"rev",items:[method]}});
+    await renderPolicies([policy({provider:"emkan",plan_id:null})]);
+    const observed=host.querySelector('.fee-directory tbody tr');
+    expect(observed.querySelector('[data-brand="emkan"]').getAttribute('aria-hidden')).toBe('true');
+    expect([...observed.querySelectorAll('.fee-value')].map(el=>el.textContent)).toEqual(['7','1','15']);
+    const tariff=host.querySelector('.fee-disclosure table tbody tr');
+    expect(tariff.querySelector('[data-brand="emkan"]')).not.toBeNull();
+    expect(tariff.cells[3].textContent).toBe('4.5');
+    expect(tariff.cells[4].textContent).toBe('2');
+    expect(fees.createOnboardingFeePolicy).not.toHaveBeenCalled();
+    expect(fees.saveObservedPaymentMethodCommission).not.toHaveBeenCalled();
+});

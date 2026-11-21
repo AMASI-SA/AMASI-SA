@@ -15,6 +15,10 @@ export default function EmployeeWebLayout({ pages, children }) {
     const { logout } = useOptionalAuth() || {};
     const sections = webPageSections(pages).map(({ id, label, pages: items }) => ({
         id, label, Icon: groupIcons[id] || SquaresFour,
+        ...(id === "balances" ? {
+            directEntry: true,
+            entryTo: (items.find(page => page.id === "balances.home") || items[0]).to,
+        } : {}),
         items: items.map(({ to, label: text }) => ({ to, label: text })),
     }));
 

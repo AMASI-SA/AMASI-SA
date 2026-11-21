@@ -39,7 +39,7 @@ it('links to real specialist tools and separate upload/history sections without 
   for(const path of ['/operational-balances/provider-statements#upload','/operational-balances/provider-statements#history',
     '/operational-balances/provider-fees','/shipping-settings-v2?from=operational-tools','/operational-balances/financial-position?view=drivers','/operational-balances/financial-position?view=couriers',
     '/operational-balances/financial-position?view=accounts','/operational-balances?view=specialized&section=salary-start',
-    '/operational-balances/customer-returns','/operational-balances/customer-exchanges','/inventory-v2?tab=purchases','/operational-balances/access']) expect(links()).toContain(path);
+    '/operational-balances/customer-returns','/operational-balances/customer-exchanges','/inventory-v2?from=operational-tools&tab=purchases','/operational-balances/access']) expect(links()).toContain(path);
   expect(links()).not.toContain('/operational-balances?view=specialized&section=openings');
   expect(operationalApi.financialPosition).not.toHaveBeenCalled();
   await show(<ApprovedOperations context={{...context,status:'draft'}}/>);

@@ -1,0 +1,16 @@
+.mz-finance .carrier-summary > .subtitle,
+.mz-finance .carrier-summary > .note { margin: 16px 20px; }
+.mz-finance .carrier-summary .metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 16px 20px; }
+.mz-finance .carrier-summary .ledger { white-space: normal; }
+.mz-finance .carrier-summary .ledger caption { text-align: right; font-weight: bold; padding: 12px 20px; color: var(--ink); }
+.mz-finance .carrier-summary .ledger tbody th { border-top: 1px solid var(--line); }
+.mz-finance .carrier-summary .ledger tbody tr { cursor: default; }
+.mz-finance .carrier-summary .ledger td { white-space: nowrap; }
+.mz-finance .carrier-summary-more { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.mz-finance .carrier-summary-more > summary { padding: 14px 20px; cursor: pointer; font-weight: bold; }
+@media (max-width: 650px) {
+  .mz-finance .carrier-summary .metrics { grid-template-columns: 1fr; }
+  .mz-finance .carrier-summary > .subtitle,
+  .mz-finance .carrier-summary > .note,
+  .mz-finance .carrier-summary .metrics { margin: 12px; }
+}
