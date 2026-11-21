@@ -29,6 +29,7 @@ from operational_atomic import operational_owner
 from mobile_operational_flow_policy import FIELD_PREPARATION, is_optional
 from assembly_status_policy import canonical_status
 from assembly_board_groups import assembly_queue_group
+from assembly_board_read import read_active_assembly_board
 from supplier_receipt_ready_policy import (
     POLICY as SUPPLIER_RECEIPT_READY_POLICY, supplier_ready_eligible,
     supplier_completion_covered_current, completed_supplier_policy, supplier_status,
@@ -85,6 +86,7 @@ PIECES = "mezan_preparation_pieces_v1"
 PIECE_EVENTS = "mezan_preparation_piece_events_v1"
 DEFAULT_ESTIMATED_DURATION_MINUTES = 2 * 24 * 60
 MAX_HISTORY_ROWS = 5000
+ASSEMBLY_BOARD_READ_TIMEOUT_SECONDS = 10
 
 PIECE_STATUS_ASSIGNED = "assigned"
 PIECE_STATUS_IN_PROGRESS = "in_progress"
@@ -523,6 +525,10 @@ async def ensure_piece_operation_indexes(db: Any) -> None:
         ],
         unique=True,
         name="uq_preparation_piece_physical_unit_v1",
+    )
+    await db[PIECES].create_index(
+        [("user_id", ASCENDING), ("order_number", ASCENDING)],
+        name="ix_preparation_piece_order_v1",
     )
     await db[PIECES].create_index(
         [
@@ -3532,6 +3538,7 @@ async def _assembly_order_board(
     limit: int,
     offset: int,
     query: str = "",
+    initialize: Callable[[], Any] | None = None,
 ) -> dict[str, Any]:
     """Return only orders that actually entered Mezan/Amasi preparation.
 
@@ -3544,6 +3551,24 @@ async def _assembly_order_board(
             status_code=422,
             detail={"code": "assembly_board_state_invalid"},
         )
+    if state != "completed":
+        try:
+            async with asyncio.timeout(ASSEMBLY_BOARD_READ_TIMEOUT_SECONDS):
+                if initialize is not None:
+                    await initialize()
+                return await read_active_assembly_board(
+                    db, user_id=user_id, state=state, limit=limit, offset=offset, query=query,
+                    workflow_pieces=_workflow_assembly_pieces,
+                    order_in_progress=_assembly_in_progress,
+                    source_in_progress=_status_only_assembly_in_progress,
+                )
+        except TimeoutError as exc:
+            raise HTTPException(status_code=503, detail={
+                "code": "assembly_board_read_timeout",
+                "message": "تعذر تحميل الطلبات في الوقت المحدد. أعد المحاولة.",
+            }) from exc
+    if initialize is not None:
+        await initialize()
     board_state = "completed" if state == "completed" else "in_progress"
     normalized_query = _text(query).removeprefix("#").strip()
 
@@ -4694,7 +4719,7 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
     @router.get("/assembly/orders")
     async def list_assembly_orders(
         state: Literal["in_progress", "completed", "direct_preparation", "supplier_received"] = Query(...),
-        limit: int = Query(100, ge=1, le=300),
+        limit: int = Query(10, ge=1, le=300),
         offset: int = Query(0, ge=0, le=10000),
         q: str = Query(default="", max_length=64),
         user: dict = Depends(current_user),
@@ -4705,7 +4730,6 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
             "fulfillment.ready.read",
             responsibility="instant_ready",
         )
-        await ensure_indexes_once()
         return await _assembly_order_board(
             db,
             user_id=context["merchant_id"],
@@ -4713,7 +4737,22 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
             limit=limit,
             offset=offset,
             query=q,
+            initialize=ensure_indexes_once,
         )
+
+    @router.get("/assembly/order-counts")
+    async def assembly_order_counts(
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        context = await _actor_context(db, user)
+        _require_permission(
+            context, "fulfillment.ready.read", responsibility="instant_ready",
+        )
+        result = await _assembly_order_board(
+            db, user_id=context["merchant_id"], state="in_progress", limit=0, offset=0,
+            initialize=ensure_indexes_once,
+        )
+        return {key: result[key] for key in ("queue_counts", "group_counts", "poll_seconds", "source")}
 
     @router.post("/assembly/pieces/{piece_id}/ready")
     async def mark_assembly_piece_ready(

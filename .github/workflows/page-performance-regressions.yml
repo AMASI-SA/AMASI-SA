@@ -5,6 +5,10 @@ on:
     paths:
       - "backend/fulfillment_v2_routes.py"
       - "backend/preparation_piece_operations.py"
+      - "backend/assembly_board_read.py"
+      - "backend/assembly_board_groups.py"
+      - "backend/tests/test_assembly_board_read.py"
+      - "backend/tests/test_assembly_board_groups.py"
       - "backend/purchase_invoices_routes.py"
       - "backend/purchase_receiving_service.py"
       - "backend/tests/test_fulfillment_read_performance.py"
@@ -40,6 +44,8 @@ jobs:
         run: >-
           python -m pytest -q --tb=short
           tests/test_fulfillment_read_performance.py
+          tests/test_assembly_board_read.py
+          tests/test_assembly_board_groups.py
           tests/test_purchase_invoice_read_performance.py
           tests/test_completed_current_shipment_display.py
           tests/test_order_engine_repository.py
