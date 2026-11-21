@@ -1,3 +1,28 @@
+# Shared source updated; adapter retry pending
+
+Shared `/app` original guard reported active:false, tracked source was clean on
+Production, fresh origin equalled M, and ff-only updated source to
+`d69f31da14f3dc1baad25ab0884ba810446b19f9`. The configured adapter failed
+closed (exit2, outer Yarn exit1) on prepackaged Backend `__pycache__` before
+materialization. Two derived bytecode files created by Python inspection were
+preserved outside the package, not deleted: archive
+`/tmp/aramex-bytecode-preserved-9j7xe81p`, one directory/two files, manifest
+SHA256 `ef8cc9d4696d763c18812f940e0b7a38b225c4bf464b26caeeaf89b50e984e99`.
+The operation checked fresh original active:false, resolved all targets inside
+`/app`, rejected symlinks/non-bytecode cache members, and left tracked source
+clean. All other foreign files remain preserved.
+
+Next: rerun the unchanged configured adapter with bytecode generation disabled
+for Python helpers/guard as well as build; preserve the first failure log at
+`/tmp/aramex-shared-materialize-d69f31da.log`, write retry output separately.
+Then verify matching artifact/package identity, prepare/prepublish, authorized
+publication, explicit new success, original verify3/inactive lease, and ADB
+acceptance. No own lease or publication. Production runtime changed by task:no.
+Frozen source/intent and all exact-B tests/rehearsals remain unchanged/passing.
+DO NOT DEPLOY this evidence branch.
+
+---
+
 # Merged; shared materialization and publication pending
 
 PR #2044 merged normally as `d69f31da14f3dc1baad25ab0884ba810446b19f9`.
