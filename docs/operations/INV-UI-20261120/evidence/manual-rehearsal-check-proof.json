@@ -1,0 +1,23 @@
+{
+  "syntax_check": "bash -n exit0",
+  "isolated_wrapper_simulation": {
+    "exit": 0,
+    "output": "FAILED: step=github_fetch line=4 exit=1\nSTOP_VISIBLE\nPARENT_OPEN\n"
+  },
+  "scope": "Wrapper simulation only, did not execute rehearsal or shared /app operations",
+  "user_reported_prechecks": {
+    "guard_active": false,
+    "guard_exit": 0,
+    "tracked_changes": [],
+    "branch": "hotfix/prod-snap-meta-final",
+    "head": "5019e957cd1bb578f7b7375099547a470e51cb05",
+    "commands_present": [
+      "python",
+      "python3",
+      "git",
+      "yarn"
+    ]
+  },
+  "evidence_origin": "User pasted diagnostic output; host identity and raw command paths excluded",
+  "agent_checked_remote_heads_and_tree": true
+}
