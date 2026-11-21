@@ -190,6 +190,11 @@ class Movement(Request):
 class AddEntity(Request):
     name: str = Field(min_length=2, max_length=120)
     currency: Literal["SAR"] = "SAR"
+    # External-person details only. Existing bank/cash clients keep their
+    # original payloads and request hashes.
+    phone: str = Field(default="", max_length=40)
+    notes: str = Field(default="", max_length=500)
+    person_type: Literal["person", "organization"] = "person"
 
 
 class AdCatalogSelection(Request):
@@ -864,10 +869,18 @@ def make_operational_balance_router(db, current_user):
         if kind == "operating_expense":
             identity = "op_expense_" + identity.replace("-", "")
         stamp = now()
+        if kind != "external_person" and (payload.phone or payload.notes or payload.person_type != "person"):
+            fail("operational_entity_fields_invalid", "هذه الحقول متاحة للجهات الخارجية فقط", 422)
+        normalized_external_name = re.sub(r"\s+", " ", payload.name).casefold() if kind == "external_person" else None
+        # Do not invalidate in-flight retries from older mobile/browser clients
+        # when optional fields are omitted.
+        request_body = payload.model_dump(exclude={"phone", "notes", "person_type"})
+        if kind == "external_person" and (payload.phone or payload.notes or payload.person_type != "person"):
+            request_body.update(phone=payload.phone, notes=payload.notes, person_type=payload.person_type)
         row = {"_id": identity, "id": identity, "user_id": owner, "name": payload.name,
                "display_name": payload.name, "currency": payload.currency, "status": "active", "version": 1,
                "created_at": stamp, "created_by": actor["id"], "updated_at": stamp, "updated_by": actor["id"],
-               "operational_request_hash": digest(payload.model_dump()),
+               "operational_request_hash": digest(request_body),
                "audit": [{"action": "create", "actor_id": actor["id"], "at": stamp}]}
         if kind == "bank":
             row.update(account_type="bank", source="operational_balance")
@@ -876,8 +889,8 @@ def make_operational_balance_router(db, current_user):
             # index. Existing rows can already occupy the missing-key slot.
             row.update(account_type="cash", external_ref=None, idempotency_key=f"operational-cash:{identity}")
         elif kind == "external_person":
-            row.update(kind="external_person", name_lower=" ".join(payload.name.split()).casefold(),
-                       reference="", person_type="person", phone="", notes="")
+            row.update(kind="external_person", name_lower=normalized_external_name,
+                       reference="", person_type=payload.person_type, phone=payload.phone, notes=payload.notes)
         elif kind == "owner_withdrawal":
             row.update(kind="owner_withdrawal", source="operational_balance")
         else:
@@ -885,6 +898,11 @@ def make_operational_balance_router(db, current_user):
             # accounting account or the separate legacy category tree.
             row.update(code=identity, source="operational_balance")
         existing = await db[collection].find_one({"user_id": owner, "id": identity})
+        if not existing and kind == "external_person":
+            same_name = await db[collection].find_one(
+                {"user_id": owner, "name_lower": normalized_external_name}, {"id": 1})
+            if same_name:
+                fail("operational_external_name_duplicate", "اسم الجهة الخارجية موجود مسبقًا", 409)
         if not existing:
             try:
                 await check_authorization()
@@ -895,6 +913,8 @@ def make_operational_balance_router(db, current_user):
                 existing = row
             except DuplicateKeyError:
                 existing = await db[collection].find_one({"user_id": owner, "id": identity})
+                if not existing and kind == "external_person":
+                    fail("operational_external_name_duplicate", "اسم الجهة الخارجية موجود مسبقًا", 409)
         if not existing or existing.get("operational_request_hash") != row["operational_request_hash"]:
             fail("operational_entity_conflict", "الجهة أو رقم العملية مستخدم من قبل")
         return {"id": ("operational-bank:" + identity) if kind == "bank" else identity, "name": existing["name"], "currency": existing["currency"], "kind": kind}
