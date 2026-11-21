@@ -1,3 +1,27 @@
+# New runtime identity observed; final verification pending
+
+The UI shows a new published version `cee8d3f` and a newer notification
+`Deployment finished Nov21,06:29PM` after our one publication. Public health
+now reports intended source A/runtime ID and all identity/source/hash/frontend
+verification booleans true. `PRODUCTION-FIRST-OBSERVATION.json` records this
+fresh read. Production runtime changed by this task:yes, evidenced by that
+source A/release ID observation. This is not the original three-probe result.
+
+The UI wording observed is Deployment finished; the protocol's literal
+Deployment Succeeded text has not yet been captured. Do not silently relabel
+this as observed. Current View Logs exposes runtime logs (including backend
+health), not a complete Cloud Build transcript. The local configured adapter
+logs are retained separately and must not be called Cloud Build observations.
+Platform outer argv/cwd/snapshot timing beyond actual observed logs remain
+unproven. Own lease remains active pending original verification.
+
+Next: run original three-probe verifier with bytecode disabled; independently
+inspect available explicit UI success evidence, preserve screenshot/current
+identity, and test original-order ADB label fetch/print. No final completion or
+original print-resolution claim yet. Evidence branch must never deploy.
+
+---
+
 # Publication started; production verification pending
 
 Original prepublish succeeded twice for exact M/A/runtime: before opening the
