@@ -3448,6 +3448,14 @@ async def _assembly_search(
                 row["preparation_employee_name_for_receipt"] = None
                 row["assembly_blocker_code"] = (exc.detail or {}).get("code")
                 row["instructions"] = (exc.detail or {}).get("instructions") or []
+    from assembly_pending_stage import assembly_pending_stage
+    display_salla_in_progress = _status_only_assembly_in_progress(source, current_order)
+    for row, piece in zip(rows, pieces):
+        row["assembly_pending_stage"] = assembly_pending_stage(
+            piece, row=row, source=source, workflow=workflow, current_units=supplier_units,
+            preparation_optional=preparation_shortcut_enabled,
+            salla_in_progress=display_salla_in_progress,
+        )
     rows.sort(key=lambda row: (
         0 if row["search_match"] else 1,
         0 if not row["assembly_ready"] else 1,
