@@ -1,4 +1,31 @@
-# ARAMEX-PRINT-20261121: order-payload recovery WIP
+# ARAMEX-PRINT-20261121: frozen order-payload recovery candidate
+
+Evidence branch `codex/aramex-order-payload-evidence-20261121` is NOT a
+deployment candidate. The immutable release branch is
+`codex/aramex-order-payload-recovery-20261121`:
+
+- Reviewed base J: `a9d0aec2939a706dcc16f9948e7a81cfe019e66f`.
+- Source A: `41057d6a044d4052205a48aad16bfb3922648e20`.
+- Intent-only B: `0943ccb34b36b3a374cc6df0ec28c73219820e11`.
+- Runtime id: `rg5-36b2364382c35fcc3f337577b32f97b466e6f59aed2cbf374c88315ee36b691f`.
+- Source readiness run44940825251 succeeded. Candidate artifact14722110181,
+  ZIP SHA256 `cbd1aac02225bf6b0518b5c4bdfa2907592a36180db47fc147d42feb50ca38d1`.
+- Exact intent SHA256 `64bc6bbc357f7ba3a90cb9166fdb4c87931d0f398691acbc9ac164960e5baeef`.
+- CI candidate validator passed. Local independent Git Backend/control manifests
+  and deterministic runtime id matched. Windows complete filesystem validation
+  stopped on NTFS mode0666; no validator was bypassed. Full Linux validation is
+  required and is part of the exact-B rehearsals.
+- Exact-B readiness run44941805161 and host20/24 clean-clone rehearsals running;
+  isolated shared-host ARM64 configured adapter started at exact B. Original
+  guard active:false and shared HEAD J/tracked clean were checked before start.
+  No task lease, merge or publication. PR2047 is still Draft.
+- Prior PR2046 owner records original verify3 success; own guard read independently
+  confirmed active:false. No foreign lease was closed or reused.
+
+Next: require full Linux intent/identity validation and all exact-B checks,
+then normal merge preserving A/B, authorized guarded publication, original
+verify3, and actual target/control ADB label/print acceptance. This follow-up
+has not changed Production. The source-stage notes below are historical.
 
 Current user contract: recover official carrier labels through the existing
 order-read permission, as with SMSA/iMile. Do not change linking or request
