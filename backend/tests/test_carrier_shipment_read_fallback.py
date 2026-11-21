@@ -340,12 +340,15 @@ async def test_native_routes_use_current_details_or_return_read_error(monkeypatc
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("carrier", ["Aramex International", "SMSA", "iMile"])
-@pytest.mark.parametrize("shape", ["shipping.shipment", "shipment", "scoped_singular"])
+@pytest.mark.parametrize("shape", ["shipping.shipment", "shipping.shipment_inherited_carrier", "shipment", "scoped_singular"])
 async def test_order_read_permission_supports_each_current_shipment_shape(monkeypatch, carrier, shape):
     db, calls = await scenario(monkeypatch, known=False)
     row = {**deepcopy(SHIPMENT), "courier_name": carrier, "label": {"url": LABEL}}
     order = {**deepcopy(ORDER), "shipping": {"company_name": carrier, "company_code": "321"}}
-    if shape == "shipping.shipment":
+    if shape.startswith("shipping.shipment"):
+        if shape.endswith("inherited_carrier"):
+            row.pop("courier_name")
+            row.pop("courier_id")
         order["shipping"]["shipment"] = deepcopy(row)
     elif shape == "shipment":
         order["shipment"] = deepcopy(row)
@@ -369,3 +372,133 @@ async def test_order_read_permission_supports_each_current_shipment_shape(monkey
     assert result["tracking_number"] == "SYNTHETIC-AWB"
     assert not any(path.startswith("/shipments") for _, path in calls)
     assert await db.unified_orders.find_one({"user_id": "owner", "order_number": NUMBER}) == before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mutation", [
+    {"order_id": 777}, {"order_reference_id": 777},
+    {"order": {"id": 777}}, {"order": {"reference_id": 777}},
+    {"id": 100}, {"id": 0}, {"id": None}, {"status": "cancelled"}, {"type": "return"},
+    {"courier_id": 777, "courier_name": "SMSA"},
+])
+async def test_nested_order_label_cannot_bypass_current_identity_fences(monkeypatch, mutation):
+    db, calls = await scenario(monkeypatch)
+    row = {**deepcopy(SHIPMENT), "label": {"url": LABEL}, **deepcopy(mutation)}
+    order = {**deepcopy(ORDER), "shipping": {
+        "company_name": "Aramex International", "company_code": "321", "shipment": row}}
+
+    async def provider(database, owner, method, path, **kwargs):
+        calls.append((method, path))
+        assert method == "GET"
+        if path == "/orders/42":
+            return {"data": deepcopy(order)}
+        raise SallaError("Synthetic optional API denial", status_code=403)
+
+    monkeypatch.setattr(compat, "call_salla", provider)
+    with pytest.raises(shipping.ShippingLabelError):
+        await compat.carrier_label(db, "owner", NUMBER, issue=False, completed_only=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("current", [{"status": "cancelled"}, {"type": "return"}, {"id": 100}])
+async def test_fresh_singular_current_selection_cannot_revive_older_ready_list(monkeypatch, current):
+    db, calls = await scenario(monkeypatch)
+    ready = {**deepcopy(SHIPMENT), "label": {"url": LABEL}}
+    order = {**deepcopy(ORDER), "shipment": {**deepcopy(ready), **current}}
+
+    async def provider(database, owner, method, path, **kwargs):
+        calls.append((method, path))
+        assert method == "GET"
+        if path == "/orders/42":
+            return {"data": deepcopy(order)}
+        return {"data": [deepcopy(ready)]}
+
+    monkeypatch.setattr(compat, "call_salla", provider)
+    with pytest.raises(shipping.ShippingLabelError) as error:
+        await compat.carrier_label(db, "owner", NUMBER, issue=False, completed_only=True)
+    assert error.value.code == "shipping_snapshot_changed"
+    assert calls == [("GET", "/orders/42")]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("top_key", ["shipments", "shipment"])
+async def test_explicit_top_level_selection_never_uses_nested_historical_awb(monkeypatch, top_key):
+    db, calls = await scenario(monkeypatch, known=False)
+    latest = {**deepcopy(SHIPMENT), "id": 100}
+    order = {**deepcopy(ORDER), top_key: [latest] if top_key == "shipments" else latest,
+             "shipping": {"company_name": "Aramex International", "company_code": "321",
+                          "shipment": {**deepcopy(SHIPMENT), "label": {"url": LABEL}}}}
+
+    async def provider(database, owner, method, path, **kwargs):
+        calls.append((method, path))
+        assert method == "GET"
+        if path == "/orders/42":
+            return {"data": deepcopy(order)}
+        raise SallaError("Synthetic optional API denial", status_code=403)
+
+    monkeypatch.setattr(compat, "call_salla", provider)
+    result = await compat.carrier_label(db, "owner", NUMBER, issue=False, completed_only=True)
+    assert result["ready"] is False
+    assert result["shipment_id"] == "100"
+    assert result["label_url"] is None
+
+
+@pytest.mark.asyncio
+async def test_nested_order_shipment_inherits_carrier_without_replacing_null_label(monkeypatch):
+    db, calls = await scenario(monkeypatch, known=False)
+    row = deepcopy(SHIPMENT)
+    row.pop("courier_id")
+    row.pop("courier_name")
+    row["meta"] = {"commercial_invoice_url": "https://carrier.example/invoice.pdf"}
+    order = {**deepcopy(ORDER), "shipping": {
+        "company_name": "Aramex International", "company_code": "321", "shipment": row}}
+
+    async def provider(database, owner, method, path, **kwargs):
+        calls.append((method, path))
+        assert method == "GET"
+        if path == "/orders/42":
+            return {"data": deepcopy(order)}
+        raise SallaError("Synthetic optional API denial", status_code=403)
+
+    monkeypatch.setattr(compat, "call_salla", provider)
+    result = await compat.carrier_label(db, "owner", NUMBER, issue=False, completed_only=True)
+    assert result["ready"] is False
+    assert result["shipment_id"] == SHIPMENT_ID
+    assert result["tracking_number"] == "SYNTHETIC-AWB"
+    assert result["label_url"] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("action", ["refresh", "complete-and-refresh"])
+@pytest.mark.parametrize("shape", ["shipping.shipment", "shipment", "scoped_singular"])
+async def test_native_routes_accept_order_payload_label_without_extra_permission(monkeypatch, action, shape):
+    from test_mobile_external_label_read_parity import external_case, KEY, PATH
+
+    async with external_case(monkeypatch) as (db, calls, client):
+        before = await db.unified_orders.find_one(KEY)
+        raw = deepcopy(before["raw_by_source"]["salla_direct"])
+        row = raw.pop("shipments")[0]
+        raw["shipping"] = {"company_name": row["courier_name"], "company_code": str(row["courier_id"])}
+        if shape == "shipping.shipment":
+            raw["shipping"]["shipment"] = deepcopy(row)
+        elif shape == "shipment":
+            raw["shipment"] = deepcopy(row)
+
+        async def provider(database, owner, method, path, **kwargs):
+            calls.append((method, path, kwargs))
+            assert method == "GET"
+            if path == "/orders/123":
+                return {"data": deepcopy(raw)}
+            if path == "/orders/123/shipments" and shape == "scoped_singular":
+                return {"data": {"shipment": deepcopy(row)}}
+            raise SallaError("Synthetic optional shipping API not granted", status_code=403)
+
+        monkeypatch.setattr(compat, "call_salla", provider)
+        response = await client.post(PATH + "/" + action)
+        assert response.status_code == 200, response.text
+        assert response.json()["ready"] is True
+        assert response.json()["shipment_id"] == "99"
+        assert response.json()["label_url"] == row["label"]["url"]
+        assert not any(method != "GET" or path.startswith("/shipments") for method, path, _ in calls)
+        assert await db.unified_orders.find_one(KEY) == before
+        assert "manual_label_refresh" not in await db.order_review_workflows.find_one(KEY)
