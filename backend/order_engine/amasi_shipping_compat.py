@@ -59,13 +59,16 @@ def _printable(row: dict[str, Any]) -> dict[str, Any]:
     return snap
 
 
-async def _get(db: Any, owner: str, path: str, *, params: dict | None = None):
+async def _get(db: Any, owner: str, path: str, *, params: dict | None = None,
+               failures: list[int] | None = None):
     try:
         return await asyncio.wait_for(
             call_salla(db, owner, "GET", path, params=params),
             timeout=_READ_SECONDS,
         )
-    except (SallaError, TimeoutError, ConnectionError, httpx.HTTPError):
+    except (SallaError, TimeoutError, ConnectionError, httpx.HTTPError) as exc:
+        if failures is not None:
+            failures.append(exc.status_code if isinstance(exc, SallaError) else 502)
         return None
 
 
@@ -145,6 +148,8 @@ async def _shipment(db: Any, owner: str, internal_id: str, order: dict[str, Any]
 
     needs_current_child = strict and not current_id and not _order_label_carrier(order, strict=True)
     standalone = None
+    failures: list[int] = []
+    hint_evidence = [(order.get("shipments", []), False)]
 
     async def verified(selected):
         if not needs_current_child or not (legacy._internal_carrier(baseline) or _mobile_courier_row(selected)):
@@ -180,7 +185,8 @@ async def _shipment(db: Any, owner: str, internal_id: str, order: dict[str, Any]
         (f"/orders/{internal_id}/shipments", {"per_page": 50}),
         ("/shipments", {"order_id": internal_id, "per_page": 50}),
     ):
-        response = await _get(db, owner, path, params=params)
+        response = await _get(db, owner, path, params=params, failures=failures)
+        hint_evidence.append((response, path == "/shipments"))
         if path == "/shipments":
             standalone = response
         if response is not None:
@@ -188,10 +194,35 @@ async def _shipment(db: Any, owner: str, internal_id: str, order: dict[str, Any]
         if selected and _printable(selected)["ready"]:
             return await verified(selected)
 
-    shipment_id = legacy._text(selected.get("id")) if selected else ""
+    # List endpoints may omit a current shipment or be unavailable independently
+    # of its details endpoint. A canonical ID is a routing hint only: the direct
+    # response must independently prove both shipment and order identity.
+    hint = current_id if (strict and current_id.isascii() and current_id.isdecimal()
+                          and int(current_id) > 0 and current_id not in superseded) else ""
+    if not selected and hint:
+        # A saved ID cannot override fresh cancellation or replacement evidence.
+        # Foreign or unidentified global rows cannot establish that evidence.
+        for response, global_list in hint_evidence:
+            for row in _rows(response):
+                nested = row.get("order") if isinstance(row.get("order"), dict) else {}
+                parents = [row.get("order_id"), nested.get("id")]
+                references = [row.get("order_reference_id"), nested.get("reference_id")]
+                expected_reference = legacy._text(order.get("reference_id"))
+                if (any(parent not in (None, "") and legacy._text(parent) != internal_id for parent in parents)
+                        or (global_list and not any(legacy._text(parent) == internal_id for parent in parents))
+                        or (expected_reference and any(reference not in (None, "")
+                            and legacy._text(reference) != expected_reference for reference in references))):
+                    continue
+                row_id = legacy._text(row.get("id"))
+                inactive = (legacy._status(row.get("status")) in _CANCELLED
+                            or legacy._status(row.get("type") or row.get("shipment_type")) in {"return", "return_shipment", "reverse"})
+                if ((row_id == hint and inactive)
+                        or (row_id and row_id != hint and row_id not in superseded and not inactive)):
+                    raise legacy._stale_label()
+    shipment_id = legacy._text(selected.get("id")) if selected else hint
     if shipment_id:
         for path in (f"/shipments/{shipment_id}", f"/shipments/{shipment_id}/tracking"):
-            response = await _get(db, owner, path)
+            response = await _get(db, owner, path, failures=failures)
             if response is None:
                 continue
             data = response.get("data") if isinstance(response, dict) else None
@@ -200,9 +231,30 @@ async def _shipment(db: Any, owner: str, internal_id: str, order: dict[str, Any]
             if isinstance(data, dict):
                 if data.get("id") not in (None, "") and legacy._text(data["id"]) != shipment_id:
                     continue
+                nested = data.get("order") if isinstance(data.get("order"), dict) else {}
+                parents = [data.get("order_id"), nested.get("id")]
+                if any(parent not in (None, "") and legacy._text(parent) != internal_id for parent in parents):
+                    continue
+                references = [data.get("order_reference_id"), nested.get("reference_id")]
+                expected_reference = legacy._text(order.get("reference_id"))
+                if expected_reference and any(reference not in (None, "") and legacy._text(reference) != expected_reference for reference in references):
+                    continue
+                if not selected:
+                    if (legacy._text(data.get("id")) != shipment_id
+                            or not any(legacy._text(parent) == internal_id for parent in parents)):
+                        continue
+                    if (legacy._status(data.get("status")) in _CANCELLED
+                            or legacy._status(data.get("type") or data.get("shipment_type")) in {"return", "return_shipment", "reverse"}):
+                        raise legacy._stale_label()
                 selected = _merge_rows(selected, [{**data, "id": shipment_id}], internal_id)
             if selected and _printable(selected)["ready"]:
                 break
+    if not selected and standalone is None and failures:
+        if 403 in failures:
+            raise legacy.ShippingLabelError("shipping_scope_required",
+                "صلاحية قراءة الشحنات غير متاحة في ربط سلة؛ أعد الربط بالصلاحيات المطلوبة.", status_code=403)
+        raise legacy.ShippingLabelError("salla_shipping_unavailable",
+            "تعذّر التحقق من الشحنة الحالية في سلة. أعد المحاولة.", status_code=502)
     return await verified(selected or {})
 
 
