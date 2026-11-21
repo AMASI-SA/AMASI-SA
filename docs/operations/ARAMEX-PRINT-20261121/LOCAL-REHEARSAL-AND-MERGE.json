@@ -1,0 +1,19 @@
+{
+  "task": "ARAMEX-PRINT-20261121",
+  "source_git_sha": "3948581dd53a942af538731c8ad2eff045fd86b7",
+  "rehearsal_deployment_git_sha": "fccefed6880c1cad4f3b81bad7303c506a40495e",
+  "merged_deployment_git_sha": "d69f31da14f3dc1baad25ab0884ba810446b19f9",
+  "runtime_release_id": "rg5-a581e09f8d694a4ecfdca10c50d2bb899ac11f9d5d386753c812d5f359b99ae2",
+  "local_rehearsal_exit_code": 0,
+  "frontend_verification_exit_code": 0,
+  "isolated_package_verification_exit_code": 0,
+  "frontend_artifact_tree_sha256": "985f807e1dfa7a275a45c3e873ffee1e9e2d05b56f9a62b0daf86544aaeb0be9",
+  "backend_package_tree_sha256": "a4e7f2b855ddcf8812a0a94a21f8528d2067dd2a9d6c7bd3a4ed131c3dd50470",
+  "adapter_log_bytes": 205956,
+  "adapter_log_sha256": "99f62dfe543c2dd06a00c3a2e1ae1d1c75f5bb66d8f7b0616f278eb54881aec5",
+  "merged_tree_equals_intent_b": true,
+  "merged_intent_git_provenance_valid": true,
+  "original_guard_active_before_rehearsal": false,
+  "original_guard_active_before_merge": false,
+  "production_runtime_changed_by_task": false
+}

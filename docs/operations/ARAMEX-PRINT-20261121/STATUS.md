@@ -1,3 +1,34 @@
+# Merged; shared materialization and publication pending
+
+PR #2044 merged normally as `d69f31da14f3dc1baad25ab0884ba810446b19f9`.
+Merge tree exactly equals frozen B; intent Git provenance validates M separately
+from source A. Both immutable A/B commits are preserved. No open review threads
+or reviews requiring action; exact-B33 checks concluded27success/6conditional
+skips. No source or intent was amended after freezing.
+
+The foreign owner closed its lease; fresh original status reported active:false.
+The local exact-B clean-clone configured `yarn build` adapter rehearsal then
+succeeded, followed by frontend verification and isolated package verification,
+all exit0. Identity/artifact/package digests match the reviewed candidate and
+both CI host rehearsals. Exact205956-byte sanitized adapter log was copied via
+the editor to persistent local evidence and its checksum matched the source.
+`LOCAL-REHEARSAL-AND-MERGE.json` records the durable proof. Shared source has
+only fetched the task ref; its tracked files/generated outputs remain unchanged
+by this task so far. No own lease or publication. Production runtime changed
+by this task:no. Actual original-order device acceptance remains unverified.
+The installed APK embeds the Production origin; target lookup in the platform
+Production viewer found no match by supplied number/internal ID. That lookup
+does not replace direct request evidence or actual device acceptance.
+
+Next safe action: original `/app` guard status active:false,tracked-clean
+Production branch; fresh fetch/fast-forward to exact M; configured frontend
+adapter and package verification; own prepare then immediate prepublish before
+publication; new explicit success; original verify3 and inactive lease; ADB
+original-order label fetch/print acceptance. Preserve all foreign untracked
+files and all superseded/evidence branches. DO NOT DEPLOY this evidence branch.
+
+---
+
 # Exact-B gates passed; foreign release lease remains active
 
 Corrected PR #2044 head `fccefed6880c1cad4f3b81bad7303c506a40495e`
