@@ -1,0 +1,30 @@
+{
+  "task": "ARAMEX-PRINT-20261121",
+  "follow_up_state": "WIP: existing-order-read parser repair; live acceptance pending",
+  "draft_pr": "https://github.com/AMASI-SA/AMASI-SA/pull/2047",
+  "workspace_source_git_sha": "66aa13967156e8e279b5297caf697c155f720fd1",
+  "original_guard_status_before_probe": {"active": false},
+  "shared_tracked_source_changed": false,
+  "isolated_probe_candidate_git_sha": "5958b4a5fa1be5cd9c0496dae7a630fa7233391f",
+  "isolated_probe_candidate_file_sha256": "10ca56a5a10d61b4e087a79c373110a84abdfc6e929f2ca8bddb778d14c4ee0f",
+  "workspace_data_context": {
+    "integration_documents_present": true,
+    "matching_current_store_integrations": 0,
+    "configured_app_link_matches_current_ui": false,
+    "production_grant_match_established": false
+  },
+  "probe_outcome": {
+    "stopped_before_token_decryption": true,
+    "salla_requests_executed": 0,
+    "old_candidate_live_comparison_executed": false,
+    "token_refresh_performed": false,
+    "database_writes_performed": false,
+    "provider_writes_performed": false,
+    "production_credentials_exported": false,
+    "production_permission_or_order_absence_conclusion_allowed": false
+  },
+  "follow_up_production_changed": false,
+  "original_target_print_confirmed": false,
+  "customer_data_or_environment_values_included": false,
+  "next_safe_action": "Fresh exact-head CI and new v5 A/B release gates, then actual ADB target/control acceptance using existing grant."
+}

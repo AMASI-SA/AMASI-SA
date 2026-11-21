@@ -33,21 +33,41 @@ is fenced before an older ready list can revive it. An additional regression
 first failed (1 failure/60 passed), then passed after this fence was added.
 
 Fresh verification after the source change, in isolated module processes:
-- `test_carrier_shipment_read_fallback.py`:75 passed,including six real native
+- `test_carrier_shipment_read_fallback.py`:99 passed,including ten real native
   HTTP-route cases with optional shipping API denied and no provider/local write.
 - `test_amasi_shipping_compat.py`:58 passed and59 subtests passed.
 - `test_mobile_external_label_read_parity.py`:19 passed.
 - `test_shipping_label_current_guard.py`:29 passed.
 - `test_salla_current_shipping.py`:37 passed.
-- Total:218 tests and59 subtests; all exit0. `git diff --check` passes.
+- Total:242 tests and59 subtests; all exit0. `git diff --check` passes.
 Commands use `python -B -m pytest --noconftest --asyncio-mode=auto -q --tb=short`.
 Production source changed only `backend/order_engine/amasi_shipping_compat.py`.
 Existing valid list responses and optional granted shipping fallback remain.
-This proves the parser repair on synthetic/provider-boundary cases; the actual
-reported order's response shape and live printing are not yet demonstrated.
-Exact next action: review affected canonical/print checks,open Draft PR and run
-fresh candidate CI,then perform live read and ADB acceptance under the existing
-grant. Any later publication requires a new immutable A/B intent and full v5.
+Additional review caught six failing null-placeholder cases; normalization now
+preserves a valid singular/direct row when a sibling alias is null. Nine further
+label-pointer/invoice cases failed before their repair. Official aliases already
+recognized by ingestion (`shipping_label_url`, `awb_url`, `waybill_url`) are now
+usable for printing. Explicitly typed invoices are excluded even beside a real
+AWB or inside a label array. Six invoice variants and two diagnostics privacy
+cases now pass. Read logs contain fixed source/shape/status flags only, never
+provider/customer bodies, ids, URLs, tokens or exception text. The unsupported
+reconnect instruction was removed; existing error codes remain compatible.
+
+Draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/2047. Earlier checkpoint
+`89a2f16a331cde00be8f9a6b749865078c559039` readiness44935916653 succeeded,
+but does not verify subsequent source changes; require fresh current-head CI.
+This proves synthetic/public/native contract behavior, not original-order
+printing. The workspace probe found no integration matching the current store
+and could not match the configured app link. It stopped before token decryption or
+any Salla request; it cannot establish Production permissions or absence of an
+order. See LIVE-ORDER-READ-CONTEXT.json. No production credentials were exported.
+
+Exact next action: push the source checkpoint and run fresh candidate CI for
+PR2047. Obtain its governed source-A artifact, freeze an intent-only B, require
+both host clean-clone rehearsals and applicable checks, then current-base normal
+merge and a separately authorized guarded publication. Test original target and
+control through ADB on the actual release. Do not request additional scopes or
+claim the reported case fixed before real device acceptance. All v5 gates apply.
 No customer fixtures, OAuth/config/token changes, provider POST, shipment
 creation, substitute PDF, status/financial write or sync are authorized here.
 Issue #1006 task block records the exact remote checkpoint and subsequent state.
