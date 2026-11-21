@@ -1,13 +1,13 @@
 {
   "task_id": "INV-UI-20261120",
   "scope": "Replace legacy Mezan inventory interfaces with the approved integrated Arabic RTL design using the existing native services and permissions.",
-  "branch": "codex/inventory-ui-replacement-20261120",
+  "branch": "codex/inventory-release-20261121",
   "base_sha": "734b977de28254c2c089148b4db8972a03ba19eb",
-  "state": "implemented_locally_verified_awaiting_user_review",
+  "state": "manual_release_preparation_authorized",
   "production_changed": false,
-  "remote_checkpoint": "55bb3bbfba3d327b5fbe946cfaa85764e136b282 verified on origin; final documentation/evidence commit recorded separately in Issue1006",
+  "remote_checkpoint": "dd8e9e80a0cbf2f0f1647597e4e147ebf7451f30 source candidate A pushed on codex/inventory-release-20261121; task continuity document lives on original development branch",
   "release_lease": "not_created",
-  "deployment": "not_requested",
+  "deployment": "user_will_publish_manually",
   "owners": {
     "root": "Shared suite shell, native inventory workspace/reader, routing, reporting/control integration and final verification",
     "native_catalog_resources": "Native products, components, groups, bundles visible interfaces",
@@ -15,19 +15,19 @@
     "native_inventory_routes": "Native warehouse hierarchy UI and real occupancy read"
   },
   "constraints": [
-    "No production API calls/writes, stock/accounting activation, merge or deployment; user authorized development checkpoint commits/push and Issue 1006 updates",
+    "User authorized merge and preparation of a governed production release; publication is manual by the user. No production financial/stock/permission/control activation or real data writes.",
     "No demo providers, fake stock/cost data or browser ledgers in production source",
     "Preserve canonical product/variant/resource/location identity, server preview hash, stable idempotency and current permissions",
     "No opening-stock writer reused for stock adjustments"
   ],
-  "next_action": "Review the running local compiled App and the development branch diff/report. No merge, release rehearsal, publish, production flag/permission change or real-data write is authorized. If continued later, resume from the exact final SHA in the dedicated Issue1006 ledger section.",
-  "updated_at": "2026-11-20T21:43:45.249790+00:00",
-  "verified_milestone": "Full native suite verified: frontend22suites298PASS; core backend85PASS+12subtests; physical/regression120PASS+7subtests; actual full App local Vite build PASS11.29s; strict local browser21display and15native workflow captures/assertion groups PASS with no JS errors or page horizontal overflow. Latest intake brand/contrast refinement visually inspected after final browser rerun.",
+  "next_action": "Commit and push integrated source candidate A, create PR to Production, require fresh CI and governed candidate intent. Freeze only generated intent as B, verify B clean-clone checks and merge preserving A/B. User will run shared /app guard/materialization/prepublish and publish manually. Never claim deployment without explicit newer success and three v5 probes.",
+  "updated_at": "2026-11-21T13:16:09.424724+00:00",
+  "verified_milestone": "Approved inventory source replayed atop current reviewed Production0d70cdc4bdc116a4640509c95216bbbd6a72b6ed without conflicts or direct file overlap. Inherited release intent bytes unchanged. No /app changes, lease or publication. Added original-service count/configuration and suite UI checks to existing G47 CI; fresh candidate checks pending.",
   "ledger": "https://github.com/AMASI-SA/AMASI-SA/issues/1006#issuecomment-6238987123 has a dedicated dated INV-UI-20261120 section appended without removing original content; comments/body limits block new entries elsewhere. Write read-back verified.",
   "incomplete": [
-    "User review of local preview and branch diff remains",
-    "CI/PR, production-sized staging validation and Release Guard v5 deployment verification not performed or authorized",
-    "Known scope limits documented in CHECKPOINT.md: bounded history windows, current all-lines receipt contract and no uploaded-file customization"
+    "Integrated source CI and generated candidate intent pending",
+    "Reviewed intent B, exact-head CI/rehearsal and preserving merge pending",
+    "Shared /app guard status/materialization/prepare/prepublish/manual publish/three-probe verification remain user actions; browser and Windows tools failed with missing kernel asset path"
   ],
   "posting_scope": "User approved full stocktake/adjustment lifecycle including atomic posting, development only; new posting default-closed",
   "durable_patch": "C:\\Users\\amasi\\OneDrive\\المستندات\\ChatGPT\\ميزان\\outputs\\inventory-implementation-20261120\\inventory-ui-wip.patch",
@@ -42,9 +42,9 @@
     "visual_routes": "Controlled synthetic display fixtures",
     "provider_publish": "blocked"
   },
-  "pr": "not_created",
-  "branch_ci": "no_runs",
-  "merge": "not_performed",
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/2038",
+  "branch_ci": "source candidate in progress; Accounting backend contract failed, diagnosis underway",
+  "merge": "authorized_pending_verification",
   "upstream_observation": {
     "production_git_head_observed": "c4a83ac18b24f0367b3fbe8052a026c2dbdbac98",
     "changed_paths_since_task_base": 20,
@@ -53,5 +53,21 @@
     "integrated_into_task_branch": false,
     "combined_head_runtime_verification": "not_performed; required before any authorized merge",
     "production_changed_by_this_task": false
+  },
+  "continuity_branch": "codex/inventory-ui-replacement-20261120",
+  "release_base_sha": "0d70cdc4bdc116a4640509c95216bbbd6a72b6ed",
+  "approved_inventory_sha": "d661eb596dbbf83b21061a4bf37af9842a703a25",
+  "authorization": {
+    "merge": "explicit user request ادمج وانشر on2026-11-21",
+    "publish": "user subsequently instructed ارسل الكود شنشر يدويا; agent prepares handoff, user publishes",
+    "production_inventory_posting_activation": false,
+    "real_stock_or_accounting_data_writes": false
+  },
+  "release_pair": {
+    "source_A": "dd8e9e80a0cbf2f0f1647597e4e147ebf7451f30",
+    "base_J": "0d70cdc4bdc116a4640509c95216bbbd6a72b6ed",
+    "intent_B": null,
+    "source_history_preserved": true,
+    "manual_publish": true
   }
 }
