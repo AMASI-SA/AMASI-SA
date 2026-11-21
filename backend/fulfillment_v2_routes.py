@@ -325,8 +325,14 @@ def _inventory_eligibility(location: dict, item: dict, evidence: dict) -> str | 
     current = direct[0] if direct else None
     receipt = adoptions[0] if adoptions else current
     source = receipt.get("source_type")
-    if source not in {"purchase_invoice", "stock_preparation_order", "opening_inventory"}:
+    if source not in {"purchase_invoice", "stock_preparation_order", "opening_inventory", "inventory_adjustment"}:
         return "receipt_source_unproven"
+    if source == "inventory_adjustment":
+        if (receipt.get("schema_version") != "g47-stocktake-v1"
+                or not all(receipt.get(k) for k in ("approved_by", "authorization_hash", "posting_operation_id", "source_line_id"))
+                or type(receipt.get("approved_revision")) is not int or receipt["approved_revision"] < 1
+                or not (receipt.get("accounting_txn_group_id") or receipt.get("zero_value_variance") is True)):
+            return "inventory_adjustment_unproven"
     for proof in receipts:
         # Opening's original compiler proves occupancy independently of an old
         # sparse receipt. Fill only absent historic positive evidence; explicit

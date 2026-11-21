@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
     ArrowRight, ArrowsClockwise, Cube, FloppyDisk, MagnifyingGlass,
-    Package, SlidersHorizontal, SortAscending, SpinnerGap, WarningCircle,
+    Package, SlidersHorizontal, SpinnerGap, WarningCircle,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
+import InventorySuiteFrame,{InventoryPageHeader,InventorySheet} from "../components/inventory/suite/InventorySuiteFrame";
+import "./inventory-catalog-resources.css";
 
 import ProductControlCenterPanel from "../components/products/ProductControlCenterPanel";
 import EmployeeProductDraft from "../components/products/EmployeeProductDraft";
@@ -88,7 +90,7 @@ function statusLabel(value) {
 function ProductThumb({ product, size = "md" }) {
     const classes = size === "lg" ? "h-20 w-20 sm:h-28 sm:w-28" : "h-12 w-12 sm:h-14 sm:w-14";
     return product?.main_image
-        ? <img src={product.main_image} alt={product.name || ""} className={`${classes} shrink-0 rounded-xl border border-slate-200 object-cover`} />
+        ? <img src={product.main_image} alt={product.name || ""} className={`${classes} shrink-0 rounded-xl border border-slate-200 object-contain`} />
         : <div className={`${classes} flex shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-300`}><Package size={size === "lg" ? 38 : 24} /></div>;
 }
 
@@ -98,18 +100,15 @@ function DescriptionPreview({ html }) {
 }
 
 function SkuModal({ preview, busy, onClose, onApply }) {
-    if (!preview) return null;
-    return <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/45 p-3 sm:p-4" dir="rtl">
-        <div className="max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-2xl sm:rounded-3xl">
-            <div className="flex items-center justify-between border-b px-4 py-3 sm:px-6 sm:py-4"><div><h3 className="font-black sm:text-lg">توليد SKU تلقائي</h3><p className="text-xs text-slate-500">ناقص SKU: {preview.missing_total}</p></div><button onClick={onClose}>✕</button></div>
-            <div className="max-h-[60vh] space-y-2 overflow-auto p-3 sm:p-5">{(preview.items || []).map((row) => <div key={row.salla_product_id} className="flex items-center justify-between gap-3 rounded-xl border p-3"><span className="min-w-0 truncate font-bold">{row.name}</span><span className="num shrink-0 font-black text-violet-800">{row.proposed_sku}</span></div>)}</div>
-            <div className="flex justify-end border-t p-3 sm:p-4"><button disabled={busy || !(preview.items || []).length} onClick={onApply} className="rounded-xl bg-violet-700 px-5 py-3 font-black text-white disabled:opacity-50">{busy ? "جارٍ التحديث…" : "اعتماد"}</button></div>
-        </div>
-    </div>;
+    return <InventorySheet open={Boolean(preview)} onClose={onClose} busy={busy} title="توليد الرقم المخزني" description={"راجع الأرقام المقترحة قبل اعتمادها في سلة. عدد الأصناف بدون رقم: " + (preview?.missing_total || 0)} footer={<><button type="button" className="mz-catalog-secondary" disabled={busy} onClick={onClose}>إلغاء</button><button type="button" disabled={busy || !(preview?.items || []).length} onClick={onApply} className="mz-catalog-primary">{busy ? "جارٍ التحديث…" : "اعتماد"}</button></>}>
+        <div className="mz-catalog-variants">{(preview?.items || []).map((row) => <article key={row.salla_product_id}><strong>{row.name}</strong><bdi>{row.proposed_sku}</bdi></article>)}</div>
+    </InventorySheet>;
 }
 
 export default function MezanProductsWorkspace({ catalogSearch = null, canEditDraft = false }) {
     const catalogOnly = catalogSearch !== null;
+    const bundlesView = !catalogOnly && new URLSearchParams(window.location.search).get("inventory_view") === "bundles";
+    const [detailTab,setDetailTab] = useState(() => !catalogOnly && initialCostFocus() ? "costs" : bundlesView ? "bundle" : "overview");
     const [items, setItems] = useState([]);
     const [summary, setSummary] = useState(null);
     const [pagination, setPagination] = useState({ page: 1, total: 0, total_pages: 1 });
@@ -128,13 +127,13 @@ export default function MezanProductsWorkspace({ catalogSearch = null, canEditDr
     const [focusCostEditor] = useState(() => !catalogOnly && initialCostFocus());
     const [loading, setLoading] = useState(true);
     const [detailLoading, setDetailLoading] = useState(false);
+    const [detailError, setDetailError] = useState("");
     const [costSaving, setCostSaving] = useState(false);
     const [syncing, setSyncing] = useState(false);
     const [skuPreview, setSkuPreview] = useState(null);
     const [skuBusy, setSkuBusy] = useState(false);
     const [error, setError] = useState("");
     const [mobileView, setMobileView] = useState(() => catalogOnly ? resolveInitialProductsView(catalogSearch) : initialMobileView());
-    const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
     const load = useCallback(async ({ page = 1, search = appliedQuery } = {}) => {
         setLoading(true); setError("");
@@ -185,6 +184,7 @@ export default function MezanProductsWorkspace({ catalogSearch = null, canEditDr
     const loadSelected = useCallback(async () => {
         if (!selectedId) return;
         setDetailLoading(true);
+        setDetailError("");
         try {
             if (catalogOnly) {
                 setSelected(await getProductV2(selectedId));
@@ -193,7 +193,10 @@ export default function MezanProductsWorkspace({ catalogSearch = null, canEditDr
             const [detailResult, costResult] = await Promise.all([refreshProductV2Details(selectedId), getProductV2Costs(selectedId)]);
             setSelected(detailResult.product || null);
             setCosts({ base_cost: costResult?.base_cost ?? "", variant_costs: costResult?.variant_costs || {}, notes: costResult?.notes || "" });
-        } catch (err) { toast.error(err?.response?.data?.detail?.message || "تعذر جلب تفاصيل المنتج"); }
+        } catch (err) {
+            setSelected(null);
+            setDetailError(err?.response?.data?.detail?.message || "تعذر جلب تفاصيل المنتج");
+        }
         finally { setDetailLoading(false); }
     }, [catalogOnly, selectedId]);
 
@@ -215,7 +218,6 @@ export default function MezanProductsWorkspace({ catalogSearch = null, canEditDr
     const options = selected?.options || [];
     const customFields = selected?.custom_fields || [];
     const variants = selected?.variants || [];
-    const selectedStatusLabel = useMemo(() => STATUS_FILTERS.find(([value]) => value === status)?.[1] || "كل المنتجات", [status]);
 
     async function syncNow() {
         setSyncing(true);
@@ -225,7 +227,7 @@ export default function MezanProductsWorkspace({ catalogSearch = null, canEditDr
     }
 
     async function saveCosts() {
-        if (!selectedId) return;
+        if (!selectedId || costSaving) return;
         setCostSaving(true);
         try {
             await saveProductV2Costs(selectedId, costs);
@@ -238,15 +240,27 @@ export default function MezanProductsWorkspace({ catalogSearch = null, canEditDr
     }
 
     async function applySkuBatch() {
+        if (skuBusy) return;
         setSkuBusy(true);
         try { const result = await applyMissingSkus({ prefix: "AMS", width: 5, limit: 50, confirmation: "تحديث SKU في سلة" }); toast.success(`تم تحديث ${result.succeeded || 0} منتج`); setSkuPreview(null); await load({ page: pagination.page || 1 }); }
+        catch { toast.error("تعذر تحديث الأرقام المخزنية. يمكنك إعادة المحاولة."); }
+        finally { setSkuBusy(false); }
+    }
+
+    async function previewSkus() {
+        if (skuBusy) return;
+        setSkuBusy(true);
+        try { setSkuPreview(await previewMissingSkus({ limit: 50 })); }
+        catch { toast.error("تعذر جلب الأرقام المقترحة. يمكنك إعادة المحاولة."); }
         finally { setSkuBusy(false); }
     }
 
     function selectProduct(id) {
+        if (costSaving || skuBusy) return;
         setSelectedId(id);
         if (!catalogOnly) rememberSelectedProduct(id);
         setMobileView("detail");
+        setDetailTab(bundlesView ? "bundle" : "overview");
         window.setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 0);
     }
 
@@ -271,78 +285,56 @@ export default function MezanProductsWorkspace({ catalogSearch = null, canEditDr
         window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
     }
 
-    return <div className="min-w-0 space-y-3 overflow-x-hidden sm:space-y-4" dir="rtl">
-        {!catalogOnly && <><BundleReportPanel />
-            <SkuModal preview={skuPreview} busy={skuBusy} onClose={() => setSkuPreview(null)} onApply={applySkuBatch} />
-        </>}
-
-        <section className="rounded-2xl border bg-white p-3 shadow-sm sm:rounded-3xl sm:p-4">
-            <form onSubmit={(event) => { event.preventDefault(); setAppliedQuery(query.trim()); load({ page: 1, search: query.trim() }); }} className="relative">
-                <MagnifyingGlass className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="ابحث بالاسم أو SKU أو الباركود…" className="w-full rounded-2xl border py-3 pr-11 pl-4" />
-            </form>
-            <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4 xl:flex">
-                {!catalogOnly && <select value={sort} onChange={(event) => setSort(event.target.value)} className="col-span-2 min-w-0 rounded-xl border px-3 py-2 md:col-span-1 xl:w-52"><option value="newest">المضافة حديثًا</option><option value="oldest">الأقدم</option><option value="name">الاسم</option><option value="price_high">السعر الأعلى</option><option value="price_low">السعر الأقل</option></select>}
-                <button type="button" onClick={() => setMobileFiltersOpen((value) => !value)} className="rounded-xl border px-3 py-2 xl:hidden"><SlidersHorizontal className="ml-1 inline" /> {selectedStatusLabel}</button>
-                {!catalogOnly && <><button type="button" onClick={() => setMissingSku((value) => !value)} className={`rounded-xl border px-3 py-2 ${missingSku ? "border-violet-500 bg-violet-50 text-violet-800" : ""}`}>بدون SKU</button>
-                <button type="button" onClick={toggleMissingMezanCost} className={`rounded-xl border px-3 py-2 ${missingMezanCost ? "border-amber-500 bg-amber-50 text-amber-900" : ""}`}>مباعة بدون تكلفة ميزان</button>
-                <button type="button" onClick={async () => setSkuPreview(await previewMissingSkus({ limit: 50 }))} className="rounded-xl border border-violet-300 px-3 py-2 text-violet-800">توليد SKU</button>
-                <button type="button" onClick={syncNow} disabled={syncing} className="col-span-2 rounded-xl bg-violet-700 px-3 py-2 text-white md:col-span-1 xl:mr-auto xl:px-4">{syncing ? <SpinnerGap className="inline animate-spin" /> : <ArrowsClockwise className="inline" />} مزامنة سلة</button></>}
-            </div>
-            {mobileFiltersOpen && <div className="mt-3 grid grid-cols-2 gap-2 rounded-2xl bg-slate-50 p-2 xl:hidden">{STATUS_FILTERS.map(([value, label]) => <button key={value} type="button" onClick={() => { setStatus(value); setMobileFiltersOpen(false); }} className={`rounded-xl px-3 py-2 text-sm ${status === value && (value !== "" || !missingMezanCost) ? "bg-violet-700 text-white" : "bg-white"}`}>{label}</button>)}</div>}
-        </section>
-
-        {missingMezanCost && (
-            <section className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-4 text-sm text-amber-950" data-testid="missing-mezan-cost-filter-banner">
-                <div className="flex flex-wrap items-center gap-2">
-                    <WarningCircle size={20} weight="fill" />
-                    <strong>{`يعرض الآن المنتجات المباعة بدون تكلفة صريحة في ميزان ${pagination.total} فقط.`}</strong>
-                    <span>تكلفة سلة تُستخدم للحساب فقط، ولا تُخرج المنتج من هذه القائمة.</span>
-                    {(missingCostRange.from || missingCostRange.to) && (
-                        <span className="rounded-full bg-white px-3 py-1 text-xs font-bold">
-                            {missingCostRange.from || "البداية"} — {missingCostRange.to || "اليوم"}
-                        </span>
-                    )}
-                </div>
+    return <InventorySuiteFrame active={bundlesView ? "bundles" : "catalog"}>
+        <div className="mz-catalog-workspace" dir="rtl" data-testid="inventory-catalog-workspace">
+            <InventoryPageHeader title={bundlesView ? "البكجات وتركيب المنتجات" : "الأصناف والمنتجات"} description={bundlesView ? "اختر المنتج، ثم راجع مكوناته وخياراته وتكلفته وتوريده." : "صورة الصنف ورقمه وخياراته وتكلفته، في مساحة واحدة."}>
+                {!catalogOnly && <a className="mz-catalog-secondary" href="/products-v2?workspace=intake">إضافة صنف</a>}
+                {!catalogOnly && <button className="mz-catalog-primary" onClick={syncNow} disabled={syncing}>{syncing ? <SpinnerGap className="animate-spin" /> : <ArrowsClockwise />}مزامنة سلة</button>}
+            </InventoryPageHeader>
+            {!catalogOnly && <SkuModal preview={skuPreview} busy={skuBusy} onClose={() => setSkuPreview(null)} onApply={applySkuBatch} />}
+            {bundlesView && <BundleReportPanel />}
+            <section className="mz-catalog-tools">
+                <form onSubmit={(event) => { event.preventDefault(); setAppliedQuery(query.trim()); load({ page: 1, search: query.trim() }); }} className="mz-catalog-search">
+                    <MagnifyingGlass size={21} /><input aria-label="بحث الأصناف بالاسم أو الرقم المخزني" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="الاسم، الرقم المخزني أو الباركود…" /><button type="submit">بحث</button>
+                </form>
+                <div className="mz-catalog-status-tabs" aria-label="حالة الأصناف">{STATUS_FILTERS.map(([value, label]) => <button key={value} type="button" aria-pressed={status === value} onClick={() => setStatus(value)}>{label}</button>)}</div>
+                {!catalogOnly && <details className="mz-catalog-extra-filters"><summary><SlidersHorizontal size={17} />تصفية وإجراءات إضافية</summary><div>
+                    <label>ترتيب الأصناف<select aria-label="ترتيب الأصناف" value={sort} onChange={(event) => setSort(event.target.value)}><option value="newest">المضافة حديثًا</option><option value="oldest">الأقدم</option><option value="name">الاسم</option><option value="price_high">السعر الأعلى</option><option value="price_low">السعر الأقل</option></select></label>
+                    <button type="button" aria-pressed={missingSku} onClick={() => setMissingSku((value) => !value)}>بدون SKU</button>
+                    <button type="button" aria-pressed={missingMezanCost} onClick={toggleMissingMezanCost}>مباعة بدون تكلفة ميزان</button>
+                    <button type="button" onClick={previewSkus} disabled={skuBusy}>{skuBusy ? "جارٍ التحميل…" : "توليد SKU"}</button>
+                </div></details>}
             </section>
-        )}
-
-        {error && <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-rose-800"><WarningCircle className="inline" /> {error}</div>}
-
-        <section className="grid min-w-0 gap-3 lg:grid-cols-[340px_minmax(0,1fr)] xl:min-h-[820px] xl:grid-cols-[220px_420px_minmax(0,1fr)] xl:gap-4">
-            <aside className="hidden rounded-3xl border bg-white p-4 xl:block">
-                <h2 className="mb-4 font-black"><SlidersHorizontal className="inline" /> تصفية المنتجات</h2>
-                {STATUS_FILTERS.map(([value, label]) => <button key={value} onClick={() => setStatus(value)} className={`mb-1 w-full rounded-xl px-3 py-3 text-right ${status === value && (value !== "" || !missingMezanCost) ? "bg-violet-700 text-white" : "hover:bg-slate-50"}`}>{label}</button>)}
-                {!catalogOnly && <button type="button" onClick={toggleMissingMezanCost} className={`mt-2 w-full rounded-xl px-3 py-3 text-right font-bold ${missingMezanCost ? "bg-amber-500 text-white" : "bg-amber-50 text-amber-900 hover:bg-amber-100"}`}>مباعة بدون تكلفة ميزان</button>}
-                <div className="mt-4 text-xs text-slate-500">إجمالي المنتجات: {summary?.total ?? pagination.total}</div>
-            </aside>
-
-            <div className={`${mobileView === "detail" ? "hidden lg:block" : "block"} min-w-0 overflow-hidden rounded-2xl border bg-white sm:rounded-3xl`}>
-                <div className="flex justify-between border-b p-3 sm:p-4"><div><h2 className="font-black">المنتجات</h2><p className="text-xs text-slate-500">{pagination.total} منتج</p></div><SortAscending /></div>
-                <div className="max-h-[calc(100vh-260px)] overflow-auto lg:max-h-[760px]">
-                    {loading ? <div className="flex h-72 items-center justify-center"><SpinnerGap className="animate-spin" /></div> : items.length === 0 ? <div className="flex h-72 flex-col items-center justify-center px-6 text-center text-slate-400"><Cube size={48} /><p className="mt-3 font-bold">{missingMezanCost ? "لا توجد منتجات مباعة ناقصة تكلفة ميزان في هذه الفترة." : "لا توجد منتجات مطابقة."}</p></div> : items.map((product) => {
-                        const id = product.mezan_product_id || product.id;
-                        return <button key={id} onClick={() => selectProduct(id)} className={`flex w-full min-w-0 items-center gap-3 border-b p-3 text-right ${selectedId === id ? "bg-emerald-50" : ""}`}><ProductThumb product={product} /><div className="min-w-0 flex-1"><h3 className="truncate font-black">{product.name}</h3><p className="truncate text-xs text-slate-500">{product.sku || "بدون SKU"} · {money(product.sale_price ?? product.price)}</p><div className="mt-1 flex flex-wrap gap-1"><span className="text-xs">{statusLabel(product.status)}</span>{product.mezan_cost_missing && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-900">{product.mezan_cost_status?.uses_salla_fallback && !product.mezan_cost_status?.missing_everywhere ? "تكلفة سلة فقط" : "بدون أي تكلفة"}</span>}</div></div></button>;
-                    })}
-                </div>
-                <div className="flex justify-between border-t p-3 text-sm"><button disabled={pagination.page <= 1} onClick={() => load({ page: pagination.page - 1 })}>السابق</button><span>{pagination.page} / {pagination.total_pages}</span><button disabled={pagination.page >= pagination.total_pages} onClick={() => load({ page: pagination.page + 1 })}>التالي</button></div>
-            </div>
-
-            <main className={`${mobileView === "list" ? "hidden lg:block" : "block"} min-w-0 overflow-hidden rounded-2xl border bg-white p-3 sm:rounded-3xl sm:p-5`}>
-                <button type="button" onClick={() => setMobileView("list")} className="mb-3 flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold lg:hidden"><ArrowRight /> العودة إلى المنتجات</button>
-                {detailLoading ? <div className="flex h-72 items-center justify-center"><SpinnerGap className="animate-spin" /></div> : !selected ? <div className="flex h-72 flex-col items-center justify-center text-slate-400"><Cube size={54} /><p>اختر منتجًا</p></div> : <div className="min-w-0 space-y-4 sm:space-y-5">
-                    <div className="flex min-w-0 items-center gap-3 border-b pb-4 sm:gap-4 sm:pb-5"><ProductThumb product={selected} size="lg" /><div className="min-w-0"><h1 className="break-words text-lg font-black sm:text-xl">{selected.name}</h1><p className="break-all text-xs text-slate-500">Salla #{selected.salla_product_id} · {selected.sku || "بدون SKU"}</p></div></div>
-                    {canEditDraft && <EmployeeProductDraft key={selectedId} productId={selectedId} />}
-                    {!catalogOnly && <><ProductControlCenterPanel productId={selectedId} product={selected} onPublished={loadSelected} />
-                    <BundleEditor key={selectedId} productId={selectedId} salePrice={selected.sale_price ?? selected.price} />
-                    <ProductMediaDraftEditor productId={selectedId} images={media} onPublished={loadSelected} />
-                    <section id="mezan-product-cost-editor" className="rounded-2xl border border-emerald-200 p-3 sm:p-4"><div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-black">التكلفة الأساسية — Mezan</h2><p className="text-xs text-slate-500">مستقلة عن نشر بيانات المنتج إلى سلة.</p></div><button onClick={saveCosts} disabled={costSaving} className="rounded-xl bg-emerald-700 px-4 py-2 text-white"><FloppyDisk className="inline" /> حفظ</button></div><div className="grid gap-3 sm:grid-cols-2 sm:gap-4"><label className="text-sm">تكلفة سلة<input value={selected.cost_price_from_salla ?? ""} readOnly className="mt-1 w-full rounded-xl border bg-slate-50 p-3" /></label><label className="text-sm">تكلفة المنتج في ميزان<input type="number" min="0" step="0.01" value={costs.base_cost} onChange={(event) => setCosts((current) => ({ ...current, base_cost: event.target.value }))} className="mt-1 w-full rounded-xl border border-emerald-300 p-3" /></label></div></section>
-                    <ProductOperationsEditor productId={selectedId} />
-                    <ProductOptionCostEditor productId={selectedId} options={options} customFields={customFields} /></>}
-                    <section className="rounded-2xl border p-3 sm:p-4"><h2 className="mb-3 font-black">معاينة وصف المنتج الحالي</h2><DescriptionPreview html={selected.description_html || selected.description} /></section>
-                    <section className="rounded-2xl border p-3 sm:p-4"><h2 className="mb-3 font-black">المتغيرات ({variants.length})</h2>{!variants.length ? <p className="text-slate-400">لا توجد متغيرات مستقلة.</p> : <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-right text-xs"><thead><tr><th className="p-3">المتغير</th><th>SKU</th><th>السعر</th>{!catalogOnly && <th>تكلفة ميزان</th>}</tr></thead><tbody>{variants.map((variant) => <tr key={variant.id} className="border-t"><td className="p-3 font-bold">{variant.display_name || variant.name || `متغير #${variant.id}`}</td><td>{variant.sku || "—"}</td><td>{money(variant.price)}</td>{!catalogOnly && <td><input type="number" min="0" step="0.01" value={costs.variant_costs?.[variant.id] ?? ""} onChange={(event) => setCosts((current) => ({ ...current, variant_costs: { ...current.variant_costs, [variant.id]: event.target.value } }))} className="w-28 rounded-lg border p-2" /></td>}</tr>)}</tbody></table></div>}</section>
-                </div>}
-            </main>
-        </section>
-    </div>;
+            {missingMezanCost && <section className="mz-catalog-notice mz-catalog-warning" data-testid="missing-mezan-cost-filter-banner"><WarningCircle size={20} /><div><strong>{"يعرض الآن المنتجات المباعة بدون تكلفة صريحة في ميزان " + pagination.total + " فقط."}</strong><p>تكلفة سلة تُستخدم للحساب فقط، ولا تُخرج المنتج من هذه القائمة.</p>{(missingCostRange.from || missingCostRange.to) && <small>{missingCostRange.from || "البداية"} — {missingCostRange.to || "اليوم"}</small>}</div></section>}
+            {error && <div className="mz-catalog-notice mz-catalog-error" role="alert"><WarningCircle />{error}<button type="button" onClick={() => load({ page: pagination.page || 1 })}>إعادة المحاولة</button></div>}
+            <section className={"mz-catalog-layout" + (!catalogOnly && detailTab !== "overview" ? " is-editing" : "")}>
+                <section className="mz-catalog-list" data-mobile-hidden={mobileView === "detail"} aria-label="قائمة الأصناف">
+                    <div className="mz-catalog-section-title"><h2>{bundlesView ? "منتجات البكجات" : "دليل الأصناف"} <span>{pagination.total}</span></h2><p>الرقم المخزني يحدد الصنف؛ المواصفات تحدد النسخة.</p></div>
+                    {loading ? <div className="mz-catalog-empty" role="status"><SpinnerGap className="animate-spin" size={32} />جارٍ تحميل الأصناف…</div> : !items.length ? <div className="mz-catalog-empty"><Cube size={44}/><h3>{missingMezanCost ? "لا توجد منتجات مباعة ناقصة تكلفة ميزان في هذه الفترة." : "لا توجد أصناف تطابق البحث."}</h3><p>جرّب الاسم أو الرقم المخزني أو غيّر الفلتر.</p></div> : <div className="mz-catalog-table-scroll"><table className="mz-catalog-table"><thead><tr><th>الصنف</th><th>الرقم المخزني</th><th>سعر البيع</th><th>الحالة</th></tr></thead><tbody>{items.map((product) => { const id = product.mezan_product_id || product.id; return <tr key={id} className={selectedId === id ? "is-selected" : ""} onClick={() => selectProduct(id)}><td><button type="button" className="mz-catalog-product" onClick={(event) => { event.stopPropagation(); selectProduct(id); }} aria-label={"عرض " + product.name}><ProductThumb product={product}/><span><strong>{product.name}</strong><small><bdi>{product.sku || "بدون SKU"}</bdi> · {product.product_type === "composite" ? "بكج / منتج مركب" : "منتج"}{product.mezan_cost_missing ? " · يحتاج مراجعة التكلفة" : ""}</small></span></button></td><td data-label="الرقم المخزني"><bdi>{product.sku || "بدون SKU"}</bdi></td><td data-label="سعر البيع" className="mz-catalog-price">{money(product.sale_price ?? product.price)}</td><td data-label="الحالة"><span className={"mz-catalog-state state-" + product.status}>{statusLabel(product.status)}</span>{product.mezan_cost_missing && <small className="mz-catalog-missing-cost">{product.mezan_cost_status?.uses_salla_fallback && !product.mezan_cost_status?.missing_everywhere ? "تكلفة سلة فقط" : "بدون أي تكلفة"}</small>}</td></tr>; })}</tbody></table></div>}
+                    <div className="mz-catalog-pagination"><button disabled={pagination.page <= 1 || loading} onClick={() => load({ page: pagination.page - 1 })}>السابق</button><span>صفحة {pagination.page} من {pagination.total_pages} · إجمالي الأصناف {summary?.total ?? pagination.total}</span><button disabled={pagination.page >= pagination.total_pages || loading} onClick={() => load({ page: pagination.page + 1 })}>التالي</button></div>
+                </section>
+                <aside className="mz-catalog-inspector" data-mobile-hidden={mobileView === "list"} aria-label="تفاصيل الصنف">
+                    <button type="button" className="mz-catalog-mobile-back" onClick={() => setMobileView("list")}><ArrowRight size={19}/>العودة إلى الأصناف</button>
+                    {detailLoading ? <div className="mz-catalog-empty" role="status"><SpinnerGap className="animate-spin" size={32}/>جارٍ تحميل التفاصيل…</div> : detailError ? <div className="mz-catalog-empty" role="alert"><WarningCircle size={34}/><p>{detailError}</p><button type="button" className="mz-catalog-secondary" onClick={loadSelected}>إعادة المحاولة</button></div> : !selected ? <div className="mz-catalog-empty"><Cube size={44}/><h3>اختر صنفًا</h3><p>ستظهر صورته ومواصفاته وإجراءاته هنا.</p></div> : <>
+                        <div className="mz-catalog-identity"><ProductThumb product={selected} size="lg"/><div><span>الصنف المحدد</span><h2>{selected.name}</h2><bdi>{selected.sku || "بدون SKU"}</bdi><span className={"mz-catalog-state state-" + selected.status}>{statusLabel(selected.status)}</span></div></div>
+                        <div className="mz-catalog-quick-values"><div><span>سعر البيع</span><strong>{money(selected.sale_price ?? selected.price)}</strong></div>{!catalogOnly && <div><span>تكلفة ميزان</span><strong>{money(costs.base_cost)}</strong></div>}<div><span>النسخ</span><strong>{variants.length}</strong></div></div>
+                        {!catalogOnly && <nav className="mz-catalog-detail-tabs" aria-label="تفاصيل وإجراءات الصنف">{[["overview","المواصفات"],["product","بيانات الصنف"],["costs","التكاليف"],["bundle","البكج"],["media","الصور"],["operations","التجهيز"]].map(([id,label]) => <button key={id} type="button" disabled={costSaving} aria-pressed={detailTab === id} onClick={() => setDetailTab(id)}>{label}</button>)}</nav>}
+                        <div className="mz-catalog-detail-content">
+                            {canEditDraft && <EmployeeProductDraft key={selectedId} productId={selectedId}/>}
+                            {(catalogOnly || detailTab === "overview") && <>
+                                <section><h3>خيارات المنتج</h3>{!options.length ? <p className="mz-catalog-muted">لا توجد خيارات معرفة لهذا المنتج.</p> : <dl className="mz-catalog-option-summary">{options.map((option) => <div key={option.id}><dt>{option.name}</dt><dd>{option.values?.length ? option.values.map((value) => value.name || value.label).join("، ") : "تخصيص نصي عند الطلب"}</dd></div>)}</dl>}</section>
+                                <section><h3>النسخ والرقم المخزني</h3>{!variants.length ? <p className="mz-catalog-muted">لا توجد نسخ مستقلة.</p> : <div className="mz-catalog-variants">{variants.map((variant) => <article key={variant.id}><strong>{variant.display_name || variant.name || "نسخة المنتج"}</strong><bdi>{variant.sku || "بدون SKU"}</bdi><span>{money(variant.price)}</span></article>)}</div>}</section>
+                                <details className="mz-catalog-description"><summary>وصف المنتج الحالي</summary><DescriptionPreview html={selected.description_html || selected.description}/></details>
+                            </>}
+                            {!catalogOnly && detailTab === "product" && <ProductControlCenterPanel productId={selectedId} product={selected} onPublished={loadSelected}/>}
+                            {!catalogOnly && detailTab === "bundle" && <BundleEditor key={selectedId} productId={selectedId} salePrice={selected.sale_price ?? selected.price}/>}
+                            {!catalogOnly && detailTab === "media" && <ProductMediaDraftEditor productId={selectedId} images={media} onPublished={loadSelected}/>}
+                            {!catalogOnly && detailTab === "costs" && <fieldset disabled={costSaving} id="mezan-product-cost-editor" className="mz-catalog-cost-editor"><div className="mz-catalog-section-title"><div><h3>تكلفة المنتج في ميزان</h3><p>تكلفة ميزان مستقلة عن نشر بيانات المنتج إلى سلة.</p></div><button type="button" onClick={saveCosts} disabled={costSaving} className="mz-catalog-primary"><FloppyDisk size={17}/>{costSaving ? "جارٍ الحفظ…" : "حفظ التكاليف"}</button></div><div className="mz-catalog-form-grid"><label>تكلفة سلة<input aria-label="تكلفة سلة" value={selected.cost_price_from_salla ?? ""} readOnly/></label><label>تكلفة المنتج في ميزان<input aria-label="تكلفة المنتج في ميزان" type="number" min="0" step="0.01" value={costs.base_cost} onChange={(event) => setCosts((current) => ({ ...current, base_cost: event.target.value }))}/></label></div>{variants.length > 0 && <div className="mz-catalog-variant-costs">{variants.map((variant) => <label key={variant.id}><span>{variant.display_name || variant.name || "نسخة المنتج"}<bdi>{variant.sku || "بدون SKU"}</bdi></span><input aria-label={"تكلفة " + (variant.display_name || variant.name || variant.sku)} type="number" min="0" step="0.01" value={costs.variant_costs?.[variant.id] ?? ""} onChange={(event) => setCosts((current) => ({ ...current, variant_costs: { ...current.variant_costs, [variant.id]: event.target.value } }))}/></label>)}</div>}<ProductOptionCostEditor productId={selectedId} options={options} customFields={customFields} /></fieldset>}
+                            {!catalogOnly && detailTab === "operations" && <ProductOperationsEditor productId={selectedId}/>}
+                        </div>
+                    </>}
+                </aside>
+            </section>
+        </div>
+    </InventorySuiteFrame>;
 }

@@ -1,0 +1,25 @@
+{
+  "synthetic_only": true,
+  "production_modified": false,
+  "steps": [
+    "desktop-stocktake-edit",
+    "desktop-stocktake-post-confirmation",
+    "desktop-stocktake-posted",
+    "mobile-stocktake-posted",
+    "mobile-adjustments",
+    "desktop-purchase-configured",
+    "mobile-purchase-configured",
+    "desktop-purchase-receiving",
+    "desktop-native-movements",
+    "desktop-native-stock-entry",
+    "mobile-native-stock-entry",
+    "mobile-native-stock-entry-saved",
+    "desktop-native-product-draft",
+    "mobile-native-product-draft",
+    "mobile-native-product-draft-reloaded"
+  ],
+  "page_errors": [],
+  "horizontal_page_overflow": false,
+  "external_requests_allowed": false,
+  "source_git_sha": "55bb3bbfba3d327b5fbe946cfaa85764e136b282"
+}

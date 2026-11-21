@@ -49,6 +49,8 @@ PAGES = (
             "label": row["label"],
             "to": f"/integrations-v2?workspace=financial&page={row['id']}",
             **({"aliases": ["/integrations-v2?workspace=financial"]} if row["id"] == "home" else {}),
+            **({"aliases": ["/inventory-v2?tab=stocktake", "/inventory-v2?tab=adjustments", "/inventory-v2?tab=movements"]}
+               if row["permission"] == "accounting.inventory.view" else {}),
             **({"write_label": "الإجراءات المحاسبية الممنوحة للموظف"} if row["permission"] in ACCOUNTING_PAGE_WRITES else {}),
         }
         for row in ACCOUNTING_PAGES

@@ -1,0 +1,66 @@
+{
+  "task_id": "INV-UI-20261120",
+  "scope": "Replace legacy Mezan inventory interfaces with the approved integrated Arabic RTL design using the existing native services and permissions.",
+  "branch": "codex/inventory-release-20261121",
+  "base_sha": "734b977de28254c2c089148b4db8972a03ba19eb",
+  "state": "manual_release_preparation_authorized",
+  "production_changed": false,
+  "remote_checkpoint": "55bb3bbfba3d327b5fbe946cfaa85764e136b282 verified on origin; final documentation/evidence commit recorded separately in Issue1006",
+  "release_lease": "not_created",
+  "deployment": "user_will_publish_manually",
+  "owners": {
+    "root": "Shared suite shell, native inventory workspace/reader, routing, reporting/control integration and final verification",
+    "native_catalog_resources": "Native products, components, groups, bundles visible interfaces",
+    "native_purchase_options": "Native invoice and standalone purchase options contracts, UI and tests",
+    "native_inventory_routes": "Native warehouse hierarchy UI and real occupancy read"
+  },
+  "constraints": [
+    "User authorized merge and preparation of a governed production release; publication is manual by the user. No production financial/stock/permission/control activation or real data writes.",
+    "No demo providers, fake stock/cost data or browser ledgers in production source",
+    "Preserve canonical product/variant/resource/location identity, server preview hash, stable idempotency and current permissions",
+    "No opening-stock writer reused for stock adjustments"
+  ],
+  "next_action": "Commit and push integrated source candidate A, create PR to Production, require fresh CI and governed candidate intent. Freeze only generated intent as B, verify B clean-clone checks and merge preserving A/B. User will run shared /app guard/materialization/prepublish and publish manually. Never claim deployment without explicit newer success and three v5 probes.",
+  "updated_at": "2026-11-21T13:11:18.099224+00:00",
+  "verified_milestone": "Approved inventory source replayed atop current reviewed Production0d70cdc4bdc116a4640509c95216bbbd6a72b6ed without conflicts or direct file overlap. Inherited release intent bytes unchanged. No /app changes, lease or publication. Added original-service count/configuration and suite UI checks to existing G47 CI; fresh candidate checks pending.",
+  "ledger": "https://github.com/AMASI-SA/AMASI-SA/issues/1006#issuecomment-6238987123 has a dedicated dated INV-UI-20261120 section appended without removing original content; comments/body limits block new entries elsewhere. Write read-back verified.",
+  "incomplete": [
+    "Integrated source CI and generated candidate intent pending",
+    "Reviewed intent B, exact-head CI/rehearsal and preserving merge pending",
+    "Shared /app guard status/materialization/prepare/prepublish/manual publish/three-probe verification remain user actions; browser and Windows tools failed with missing kernel asset path"
+  ],
+  "posting_scope": "User approved full stocktake/adjustment lifecycle including atomic posting, development only; new posting default-closed",
+  "durable_patch": "C:\\Users\\amasi\\OneDrive\\المستندات\\ChatGPT\\ميزان\\outputs\\inventory-implementation-20261120\\inventory-ui-wip.patch",
+  "last_verified_runtime_sha": "55bb3bbfba3d327b5fbe946cfaa85764e136b282",
+  "active_owner": "root",
+  "verification_evidence": "docs/operations/INV-UI-20261120/evidence/verification.json",
+  "review_report": "docs/operations/INV-UI-20261120/CHECKPOINT.md",
+  "preview": {
+    "url": "http://127.0.0.1:4174/inventory-v2",
+    "synthetic_only": true,
+    "native_writes": "Disposable local Mongo only for count/purchase/entry/product-draft routes",
+    "visual_routes": "Controlled synthetic display fixtures",
+    "provider_publish": "blocked"
+  },
+  "pr": "not_created",
+  "branch_ci": "not_started",
+  "merge": "authorized_pending_verification",
+  "upstream_observation": {
+    "production_git_head_observed": "c4a83ac18b24f0367b3fbe8052a026c2dbdbac98",
+    "changed_paths_since_task_base": 20,
+    "direct_file_overlap_with_task": [],
+    "scope": "bank recognition and provider financial evidence, related tests/docs and release intent",
+    "integrated_into_task_branch": false,
+    "combined_head_runtime_verification": "not_performed; required before any authorized merge",
+    "production_changed_by_this_task": false
+  },
+  "continuity_branch": "codex/inventory-ui-replacement-20261120",
+  "release_base_sha": "0d70cdc4bdc116a4640509c95216bbbd6a72b6ed",
+  "approved_inventory_sha": "d661eb596dbbf83b21061a4bf37af9842a703a25",
+  "authorization": {
+    "merge": "explicit user request ادمج وانشر on2026-11-21",
+    "publish": "user subsequently instructed ارسل الكود شنشر يدويا; agent prepares handoff, user publishes",
+    "production_inventory_posting_activation": false,
+    "real_stock_or_accounting_data_writes": false
+  }
+}

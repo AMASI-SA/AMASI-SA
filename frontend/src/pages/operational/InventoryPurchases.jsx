@@ -5,6 +5,7 @@ import {inventoryIdentity, inventoryVariant} from './inventoryIdentity';
 import {inventoryPersonalizations, assignedQuantity} from './inventoryPersonalizations';
 import PurchaseConfiguration, {purchaseConfigurationPayload, configurationDescription} from './PurchaseConfiguration';
 import {visibleOperationalRead} from './visibleOperationalRead';
+import {InventoryProductPicker,InventoryProductPhoto} from '../../components/inventory/suite/InventoryProductFields';
 
 const today = () => { const d=new Date(); return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10); };
 const cents = value => { if(!/^\d+(\.\d{1,2})?$/.test(String(value))) throw Error('أدخل مبلغًا صحيحًا بمنزلتين عشريتين كحد أقصى.'); const [a,b='']=String(value).split('.'); const n=Number(a)*100+Number(b.padEnd(2,'0')); if(!Number.isSafeInteger(n))throw Error('المبلغ أكبر من الحد المسموح.'); return n; };
@@ -78,18 +79,20 @@ export default function InventoryPurchases({context,source='mezan2',mode='purcha
     }catch(e){if(e.response?.data?.detail?.not_applied||[400,422].includes(e.response?.status)){localStorage.removeItem(storageKey);setPending(null);}setError(e.response?messageFor(e):e.message);}
     finally{lock.current=false;setBusy(false);}
   }
-  return <section dir="rtl" className="op-inventory"><h2>{mode==='reports'?'فواتير وكميات المشتريات':mode==='payment'?'سداد فاتورة مورد':'شراء المخزون'}</h2>{entry&&<p>اختر الأصناف المستلمة وكمياتها، ثم احفظ الشراء.</p>}<Notice error={error} message={message}/>
+  return <section dir="rtl" className="op-inventory mz-operational-purchase"><h2>{mode==='reports'?'فواتير وكميات المشتريات':mode==='payment'?'سداد فاتورة مورد':'شراء المخزون'}</h2>{entry&&<p>اختر الأصناف المستلمة وكمياتها، ثم احفظ الشراء.</p>}<Notice error={error} message={message}/>
     {mode==='reports'&&readable&&<button type="button" disabled={loading||busy} onClick={()=>setLoadVersion(v=>v+1)}>تحديث المشتريات</button>}
     {(entry||paying)&&<button type="button" disabled={loading||busy||!!pending} onClick={()=>{setInvoiceRead(null);setLoadVersion(v=>v+1);}}>تحديث بيانات المشتريات</button>}
     {loading&&<p role="status">جارٍ تحميل المشتريات…</p>}{loadFailed&&<button disabled={loading||busy} onClick={()=>setLoadVersion(v=>v+1)}>إعادة تحميل بيانات المشتريات</button>}
     {pending&&<div className="op-card"><p>عملية محفوظة بانتظار تأكيد النتيجة؛ أعد المحاولة بالبيانات نفسها.</p>{((entry&&pending.type==='purchase')||(paying&&pending.type==='payment'))?<button disabled={busy||!writable} onClick={()=>save(pending.type)}>إعادة محاولة الحفظ</button>:<p>{pending.type==='purchase'?'تابع العملية من صفحة شراء المخزون.':'تابع العملية من الموردين ← سداد فاتورة مخزون.'}</p>}</div>}
     {entry&&<><fieldset disabled={disabled} className="op-card"><legend>فاتورة شراء مخزون مستلم</legend>
       <Field label="المورد"><select value={form.supplier_id} onChange={e=>setForm({...form,supplier_id:e.target.value})}><option value="">اختر المورد</option>{suppliers.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></Field>
+      <Field label="رقم فاتورة المورد"><input value={form.invoice_number} onChange={e=>setForm({...form,invoice_number:e.target.value})}/></Field>
+      <Field label="تاريخ الفاتورة"><input type="date" value={form.invoice_date} onChange={e=>setForm({...form,invoice_date:e.target.value})}/></Field>
       <div className="op-segment" aria-label="نوع المخزون">{[['product','منتج'],['component','مكوّن']].map(([value,label])=><button type="button" key={value} aria-pressed={kind===value} onClick={()=>setKind(value)}>{label}</button>)}</div>
-      <Field label="بحث بالاسم أو الرمز"><input value={search} onChange={e=>setSearch(e.target.value)}/></Field>
-      <div className="op-tile-grid">{catalog.filter(item=>item.kind===kind&&`${item.name} ${item.sku||''}`.toLowerCase().includes(search.trim().toLowerCase())).map(item=><button type="button" className="op-tile" key={inventoryIdentity(item)} disabled={!item.options&&form.lines.some(l=>inventoryIdentity(l)===inventoryIdentity(item))} onClick={()=>setForm({...form,lines:[...form.lines,{...item,item_id:item.id,quantity:'1',unit_price:'',tax:'0',...(item.options?{draft_key:requestId(),purchase_configuration:{state:'raw',selections:[],inputs:[]}}:{})}]})}>{item.image_url&&<img src={item.image_url} alt={item.name} width="64" height="64"/>}<strong>{item.name}</strong><small>{item.kind==='component'?'مكوّن':'منتج'} · {unitLabel(item.unit)}</small></button>)}</div>
+      <InventoryProductPicker items={catalog.filter(item=>item.kind===kind).map(item=>({...item,picker_id:inventoryIdentity(item)}))} query={search} onQueryChange={setSearch} label="بحث بالاسم أو الرمز" initialOpen keepOpen optionClassName="op-tile" isItemDisabled={item=>!item.options&&form.lines.some(l=>inventoryIdentity(l)===inventoryIdentity(item))} onPick={item=>setForm({...form,lines:[...form.lines,{...item,item_id:item.id,quantity:'1',unit_price:'',tax:'0',...(item.options?{draft_key:requestId(),purchase_configuration:{state:'raw',selections:[],inputs:[]}}:{})}]})}/>
+
       {!loading&&!catalog.length&&<p>لا توجد منتجات أو مكونات مؤهلة في ميزان 2.</p>}
-      {form.lines.map((line,index)=><article className="op-card" key={line.draft_key||inventoryIdentity(line)}><h3>{line.name}</h3>{line.image_url&&<img src={line.image_url} alt={line.name} width="80" height="80"/>}<p>{unitLabel(line.unit)}</p><PurchaseConfiguration line={line} index={index} locations={locations} onChange={(key,value)=>update(index,key,value)}/>
+      {form.lines.map((line,index)=><article className="op-card mz-purchase-line" key={line.draft_key||inventoryIdentity(line)}><div className="mz-product-selected"><InventoryProductPhoto product={line}/><div><h3>{line.name}</h3><span>الرقم المخزني <bdi>{line.sku||'غير محدد'}</bdi> · {unitLabel(line.unit)}</span></div></div><PurchaseConfiguration line={line} index={index} locations={locations} onChange={(key,value)=>update(index,key,value)}/>
         <Field label={`الكمية — ${line.name}`}><input type="number" min="1" step="1" value={line.quantity} onChange={e=>update(index,'quantity',e.target.value)}/></Field>
         <Field label={`سعر الوحدة قبل الضريبة — ${line.name}`}><input inputMode="decimal" value={line.unit_price} onChange={e=>update(index,'unit_price',e.target.value)}/></Field>
         <Field label={`ضريبة البند — ${line.name}`}><input inputMode="decimal" value={line.tax} onChange={e=>update(index,'tax',e.target.value)}/></Field><button onClick={()=>setForm({...form,lines:form.lines.filter((_,i)=>i!==index)})}>إزالة {line.name}</button>
@@ -105,8 +108,6 @@ export default function InventoryPurchases({context,source='mezan2',mode='purcha
           <button type="button" disabled={(line.personalizations||[]).length>=100} onClick={()=>update(index,'personalizations',[...(line.personalizations||[]),{values:[],quantity:'1'}])}>إضافة تخصيص — {line.name}</button>
         </section>}
       </article>)}
-      <Field label="رقم فاتورة المورد"><input value={form.invoice_number} onChange={e=>setForm({...form,invoice_number:e.target.value})}/></Field>
-      <Field label="تاريخ الفاتورة"><input type="date" value={form.invoice_date} onChange={e=>setForm({...form,invoice_date:e.target.value})}/></Field>
       <Field label="ملاحظات اختيارية"><textarea value={form.note} onChange={e=>setForm({...form,note:e.target.value})}/></Field>
       {preview&&<p role="status">الصافي {money(preview.net)} · الضريبة {money(preview.tax)} · الإجمالي {money(preview.gross)} ريال</p>}
       <button className="op-primary" onClick={()=>save('purchase')}>{busy?'جارٍ الحفظ…':'حفظ الشراء'}</button>

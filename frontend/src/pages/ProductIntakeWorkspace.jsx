@@ -9,6 +9,8 @@ import { toast } from "sonner";
 import { getAiStoreFoundation, listProductIntake } from "../services/aiStoreOperations";
 import { getSallaCategoryCatalog } from "../services/mezanProductsV2";
 import ProductCreationPanel from "../components/products/ProductCreationPanel";
+import InventorySuiteFrame from "../components/inventory/suite/InventorySuiteFrame";
+import "./inventory-catalog-resources.css";
 
 const LABELS = {
     has_sku: "SKU",
@@ -23,7 +25,7 @@ const LABELS = {
 function ReadinessRing({ score }) {
     const safe = Math.max(0, Math.min(100, Number(score || 0)));
     return (
-        <div className="relative grid h-16 w-16 shrink-0 place-items-center rounded-full" style={{ background: `conic-gradient(#7c3aed ${safe * 3.6}deg, #ede9fe 0deg)` }}>
+        <div className="relative grid h-16 w-16 shrink-0 place-items-center rounded-full" style={{ background: `conic-gradient(#0f5d46 ${safe * 3.6}deg, #eaf3e8 0deg)` }}>
             <div className="grid h-12 w-12 place-items-center rounded-full bg-white text-sm font-black text-violet-800">{safe}%</div>
         </div>
     );
@@ -165,20 +167,20 @@ export default function ProductIntakeWorkspace({ accessMode = null, canOpenCatal
     }
 
     return (
-        <div className="space-y-5" dir="rtl" data-testid="product-intake-workspace">
+        <InventorySuiteFrame active="catalog"><div className="space-y-5 mz-product-intake" dir="rtl" data-testid="product-intake-workspace">
             <section className="overflow-hidden rounded-3xl border border-violet-200 bg-white shadow-sm">
                 <div className="bg-gradient-to-l from-violet-700 to-violet-500 p-6 text-white">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div>
-                            <div className="flex items-center gap-2 text-sm font-black text-violet-100"><Robot size={22} weight="duotone" /> Mezan AI Store Operations</div>
-                            <h1 className="mt-2 text-2xl font-black sm:text-3xl">قائمة استقبال المنتجات</h1>
+                            <div className="flex items-center gap-2 text-sm font-black text-violet-100"><Package size={22} weight="duotone" /> أصناف ميزان</div>
+                            <h1 className="mt-2 text-2xl font-black sm:text-3xl">إضافة الأصناف واستقبال المنتجات</h1>
                             <p className="mt-2 max-w-3xl text-sm leading-7 text-violet-100">ابحث في كتالوج سلة وتابع جاهزية المنتجات وربط المكونات والخدمات.</p>
                         </div>
                         <button type="button" onClick={load} disabled={loading} className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 font-black text-violet-800 shadow-sm disabled:opacity-60"><ArrowClockwise className={loading ? "animate-spin" : ""} /> تحديث القائمة</button>
                     </div>
                 </div>
                 <div className="border-t border-violet-100 bg-violet-50 px-5 py-3 text-xs font-bold text-violet-900">
-                    <ShieldCheck className="ml-1 inline" /> القاعدة: المنتج لا يصبح جاهزًا لإدارة الذكاء الاصطناعي حتى تكتمل بياناته وتكاليفه ومكوناته الأساسية.
+                    <ShieldCheck className="ml-1 inline" /> تابع اكتمال بيانات الصنف وتكلفته ومكوناته قبل اعتماده.
                 </div>
             </section>
 
@@ -269,6 +271,6 @@ export default function ProductIntakeWorkspace({ accessMode = null, canOpenCatal
                 </nav>
             )}
             {foundation && <section className="rounded-2xl border border-violet-200 bg-violet-50 p-4 text-sm text-violet-950"><Tag className="ml-1 inline" /> وضع التشغيل: <b>{foundation.mode}</b> · مسار الأمان: {(foundation.safety_flow || []).join(" ← ")}</section>}
-        </div>
+        </div></InventorySuiteFrame>
     );
 }

@@ -190,6 +190,7 @@ jobs:
       - name: Run operational Web contracts
         run: >-
           node node_modules/react-scripts/bin/react-scripts.js test --watch=false --runInBand --resetMocks=false
+          --resolver ./scripts/jest-package-exports.cjs
           --testMatch '**/src/pages/operational/**/*.test.{js,jsx,ts,tsx}'
           '**/EmployeeWebAccess.test.jsx' '**/webPageAccess.test.js'
           '**/EmployeeOperationsReadPage.test.jsx' '**/EmployeeMarketingRead.test.jsx'

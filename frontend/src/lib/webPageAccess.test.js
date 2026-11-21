@@ -4,6 +4,13 @@ const selected = (id,to,extra={}) => ({id,to,...extra});
 const permitted = (grant,path) => grantedPageAt([grant],new URL(path,"https://mezan.invalid"))?.id;
 const balances = "/operational-balances";
 
+test('inventory stock/report aliases retain the same read grant and never open entry or posting tabs',()=>{
+    const grant=selected('products.inventory','/inventory-v2',{mode:'read'});
+    expect(permitted(grant,'/inventory-v2?tab=stock')).toBe('products.inventory');
+    expect(permitted(grant,'/inventory-v2?tab=reports')).toBe('products.inventory');
+    for(const query of ['tab=opening','tab=stocktake','tab=adjustments','tab=purchase','tab=stock&tab=opening','tab=stock&workspace=warehouse','tab=reports&action=post'])expect(permitted(grant,'/inventory-v2?'+query)).toBeUndefined();
+});
+
 test.each([
     ["balances.home",balances,balances],
     ["balances.log",balances+"/daily-movements",balances+"?view=log"],
@@ -39,4 +46,13 @@ test("server can declare a reviewed exact alias and owner-only entries cannot au
 test("section list includes new groups and preserves server Arabic names",()=>{
     const page=selected("new.report","/report",{section:"new",section_label:"التقارير الدورية"});
     expect(webPageSections([page])).toEqual([{id:"new",label:"التقارير الدورية",pages:[page]}]);
+});
+test.each(['stocktake','adjustments','movements'])('native accounting inventory page permits %s without inheriting the product reader',tab=>{
+    const address='/inventory-v2?tab='+tab;
+    expect(permitted(selected('products.inventory','/inventory-v2'),address)).toBeUndefined();
+    const native=selected('accounting.inventory.view','/integrations-v2?workspace=financial&page=inventory-purchases',{mode:'read'});
+    expect(permitted(native,address)).toBe('accounting.inventory.view');
+    expect(permitted(native,address+'&tab=opening')).toBeUndefined();
+    expect(permitted(native,address+'&action=post')).toBeUndefined();
+    expect(permitted(native,'/inventory-v2?tab=opening')).toBeUndefined();
 });

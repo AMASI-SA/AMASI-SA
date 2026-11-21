@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
     ArrowRight,
     CheckCircle,
@@ -11,11 +11,19 @@ import {
     Trash,
     Warehouse,
     Wrench,
-    X,
+    MagnifyingGlass,
+    SquaresFour,
+    ListBullets,
+    CaretDown,
+    CaretLeft,
+    LockKey,
+    ArrowClockwise,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 import api from "../lib/api";
+import InventorySuiteFrame, {InventoryPageHeader, InventorySheet} from "../components/inventory/suite/InventorySuiteFrame";
+import "./warehouseHierarchy.css";
 
 const PURPOSES = [
     ["permanent_storage", "تخزين دائم"],
@@ -109,42 +117,11 @@ const CODE39 = {
     "-": "nwnnnnwnw", ".": "wwnnnnwnn", " ": "nwwnnnwnn", "*": "nwnnwnwnn",
 };
 
-function Field({ label, hint, children }) {
-    return (
-        <label className="block">
-            <span className="mb-1 block text-xs font-extrabold text-slate-700">{label}</span>
-            {children}
-            {hint && <span className="mt-1 block text-[11px] leading-5 text-slate-400">{hint}</span>}
-        </label>
-    );
+function Field({label,hint,children}) {
+    return <label className="mz-wh-field"><span>{label}</span>{children}{hint&&<small>{hint}</small>}</label>;
 }
-
-function Input(props) {
-    return <input {...props} className={`w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-100 ${props.className || ""}`} />;
-}
-
-function Select(props) {
-    return <select {...props} className={`w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-100 ${props.className || ""}`} />;
-}
-
-function Modal({ title, subtitle, onClose, children, maxWidth = "max-w-2xl" }) {
-    return (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/50 p-4" onMouseDown={onClose}>
-            <div className={`max-h-[92vh] w-full ${maxWidth} overflow-y-auto rounded-3xl border border-slate-200 bg-white shadow-2xl`} onMouseDown={(event) => event.stopPropagation()} dir="rtl">
-                <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-100 bg-white/95 px-5 py-4 backdrop-blur">
-                    <div>
-                        <h2 className="text-xl font-black text-slate-950">{title}</h2>
-                        {subtitle && <p className="mt-1 text-sm text-slate-500">{subtitle}</p>}
-                    </div>
-                    <button type="button" onClick={onClose} className="rounded-xl border border-slate-200 p-2 text-slate-500 hover:bg-slate-50" aria-label="إغلاق">
-                        <X size={19} weight="bold" />
-                    </button>
-                </div>
-                <div className="p-5">{children}</div>
-            </div>
-        </div>
-    );
-}
+function Input(props) {return <input {...props} className={"mz-wh-input "+(props.className||"")}/>;}
+function Select(props) {return <select {...props} className={"mz-wh-input "+(props.className||"")}/>;}
 
 function escapeHtml(value) {
     return String(value ?? "")
@@ -212,33 +189,15 @@ function printCabinetPack(branch, section, cabinet) {
     printWindow.document.close();
 }
 
-function Step({ number, title, subtitle, done, active }) {
-    return (
-        <div className={`rounded-2xl border p-3 transition ${active ? "border-violet-300 bg-violet-50" : done ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-white"}`}>
-            <div className="flex items-center gap-3">
-                <div className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-black ${done ? "bg-emerald-600 text-white" : active ? "bg-violet-700 text-white" : "bg-slate-100 text-slate-500"}`}>
-                    {done ? <CheckCircle size={18} weight="fill" /> : number}
-                </div>
-                <div>
-                    <p className="text-sm font-black text-slate-900">{title}</p>
-                    <p className="text-[11px] text-slate-500">{subtitle}</p>
-                </div>
-            </div>
-        </div>
-    );
+function CapabilityPills({values,options}) {
+    return <div className="mz-wh-capability-pills">{(values||[]).map(value=><span key={value}>{options.find(row=>row.value===value)?.label||value}</span>)}</div>;
 }
-
-function CapabilityPills({ values, options }) {
-    return (
-        <div className="flex flex-wrap gap-1.5">
-            {(values || []).map((value) => (
-                <span key={value} className="rounded-full bg-violet-50 px-2.5 py-1 text-[10px] font-bold text-violet-800">
-                    {options.find((item) => item.value === value)?.label || value}
-                </span>
-            ))}
-        </div>
-    );
+export function compactWarehouseLocation(cabinet,index) {
+    if(cabinet.location_numbering!=="cabinet-row-slot")return cabinetLocationLabel(cabinet,index);
+    const row=Math.floor(index/Number(cabinet.width))+1,slot=index%Number(cabinet.width)+1;
+    return "د"+cabinet.cabinet_number+" / ر"+row+" / خ"+slot;
 }
+const locationStateLabel=(row)=>!row?"غير مقروءة":row.state==="disabled"?"غير متاحة":row.state==="empty"?"فارغة":row.occupancy?.items?.length||["occupied","partial_order","ready_to_ship"].includes(row.state)?"بها مخزون":({reserved:"محجوزة",maintenance:"صيانة"}[row.state]||"تحتاج مراجعة");
 
 export default function WarehouseHierarchyWorkspace({ accessMode = null }) {
     const canWrite = accessMode !== "read";
@@ -256,6 +215,12 @@ export default function WarehouseHierarchyWorkspace({ accessMode = null }) {
     const [sectionForm, setSectionForm] = useState(EMPTY_SECTION);
     const [cabinetForm, setCabinetForm] = useState(EMPTY_CABINET);
     const [resetConfirmation, setResetConfirmation] = useState("");
+    const [initialLoading,setInitialLoading]=useState(true),[readError,setReadError]=useState(""),[formError,setFormError]=useState("");
+    const [locations,setLocations]=useState([]),[locationLoading,setLocationLoading]=useState(false),[locationError,setLocationError]=useState("");
+    const [query,setQuery]=useState(""),[mapView,setMapView]=useState("map"),[binIndex,setBinIndex]=useState(0),[page,setPage]=useState(0);
+    const sectionLane=useRef(0);
+    const closeDialog=()=>{if(!loading){setDialog(null);setFormError("");setResetConfirmation("");}};
+    const openDialog=(value)=>{setFormError("");setDialog(value);};
 
     const selectedBranch = useMemo(() => branches.find((row) => row.id === branchId) || null, [branches, branchId]);
     const selectedSection = useMemo(() => sections.find((row) => row.id === sectionId) || null, [sections, sectionId]);
@@ -269,7 +234,7 @@ export default function WarehouseHierarchyWorkspace({ accessMode = null }) {
         const response = await api.get("/warehouse-locations/warehouses");
         const items = response.data?.items || [];
         setBranches(items);
-        const nextId = preferredId && items.some((row) => row.id === preferredId) ? preferredId : "";
+        const nextId = preferredId && items.some((row) => row.id === preferredId) ? preferredId : items[0]?.id||"";
         setBranchId(nextId);
         if (!nextId) {
             setSections([]);
@@ -279,44 +244,51 @@ export default function WarehouseHierarchyWorkspace({ accessMode = null }) {
         return nextId;
     }
 
-    async function loadSections(id, preferredSectionId = "", preferredCabinetId = "") {
-        if (!id) {
-            setSections([]);
-            return;
-        }
-        const response = await api.get(`/warehouse-locations-v2/warehouses/${id}/sections`);
-        const items = response.data?.items || [];
+    async function loadSections(id,preferredSectionId="",preferredCabinetId="") {
+        const lane=++sectionLane.current;
+        if(!id){setSections([]);setSectionId("");setCabinetId("");return;}
+        const response=await api.get("/warehouse-locations-v2/warehouses/"+id+"/sections");
+        if(lane!==sectionLane.current)return;
+        const items=response.data?.items||[];
         setSections(items);
-        const nextSectionId = preferredSectionId && items.some((row) => row.id === preferredSectionId) ? preferredSectionId : "";
-        setSectionId(nextSectionId);
-        const section = items.find((row) => row.id === nextSectionId);
-        const nextCabinetId = preferredCabinetId && section?.cabinets?.some((row) => row.id === preferredCabinetId) ? preferredCabinetId : "";
-        setCabinetId(nextCabinetId);
+        const nextSection=items.find(row=>row.id===preferredSectionId)||items[0];
+        setSectionId(nextSection?.id||"");
+        const nextCabinet=nextSection?.cabinets?.find(row=>row.id===preferredCabinetId)||nextSection?.cabinets?.[0];
+        setCabinetId(nextCabinet?.id||"");
     }
-
-    useEffect(() => {
+    async function refreshHierarchy(){
+        setInitialLoading(true);setReadError("");
+        try{const id=await loadBranches(branchId);await loadSections(id,sectionId,cabinetId);}
+        catch(error){setReadError(error?.response?.data?.detail?.message||"تعذر تحميل الفروع والمخازن.");}
+        finally{setInitialLoading(false);}
+    }
+    useEffect(()=>{
+        let active=true;
         Promise.all([
-            api.get("/warehouse-locations-v2/catalog").then((response) => setCatalog(response.data || FALLBACK_CATALOG)).catch(() => null),
-            api.get("/warehouse-locations-v2/section-capabilities").then((response) => {
-                setCapabilityOptions(response.data?.items || FALLBACK_CAPABILITIES);
-                setTemplates(response.data?.recommended || FALLBACK_TEMPLATES);
-            }).catch(() => null),
-            loadBranches(),
-        ]).catch(() => toast.error("تعذر تحميل الفروع والمخازن"));
+            api.get("/warehouse-locations-v2/catalog").then(response=>{if(active)setCatalog(response.data||FALLBACK_CATALOG);}).catch(()=>null),
+            api.get("/warehouse-locations-v2/section-capabilities").then(response=>{if(active){setCapabilityOptions(response.data?.items||FALLBACK_CAPABILITIES);setTemplates(response.data?.recommended||FALLBACK_TEMPLATES);}}).catch(()=>null),
+            loadBranches().then(id=>{if(active)return loadSections(id);}),
+        ]).catch(()=>{if(active)setReadError("تعذر تحميل الفروع والمخازن.");}).finally(()=>{if(active)setInitialLoading(false);});
+        return ()=>{active=false;sectionLane.current+=1;};
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
-    function chooseBranch(id) {
-        setBranchId(id);
-        setSectionId("");
-        setCabinetId("");
-        loadSections(id).catch(() => toast.error("تعذر تحميل أقسام الفرع"));
+    },[]);
+    useEffect(()=>{
+        setLocations([]);setLocationError("");setBinIndex(0);setPage(0);setQuery("");
+        // Location occupancy is a manager-only reader; warehouse web delegates
+        // keep their native scoped hierarchy without an unauthorized extra read.
+        if(!cabinetId||accessMode){setLocationLoading(false);return;}
+        let active=true;setLocationLoading(true);
+        api.get("/warehouse-locations/locations",{params:{cabinet_id:cabinetId,limit:1000}})
+            .then(response=>{if(active)setLocations(response.data?.items||[]);})
+            .catch(()=>{if(active)setLocationError("تعذر قراءة إشغال الخانات؛ تبقى الخريطة عرضًا للترقيم فقط.");})
+            .finally(()=>{if(active)setLocationLoading(false);});
+        return ()=>{active=false;};
+    },[cabinetId,accessMode]);
+    function chooseBranch(id){
+        if(loading)return;setBranchId(id);setSections([]);setSectionId("");setCabinetId("");setReadError("");
+        loadSections(id).catch(()=>setReadError("تعذر تحميل أقسام الفرع."));
     }
-
-    function chooseSection(id) {
-        setSectionId(id);
-        setCabinetId("");
-    }
+    function chooseSection(id){if(loading)return;setSectionId(id);setCabinetId(sections.find(row=>row.id===id)?.cabinets?.[0]?.id||"");}
 
     function changeCountry(country) {
         const row = catalog.countries.find((item) => item.name === country);
@@ -341,6 +313,8 @@ export default function WarehouseHierarchyWorkspace({ accessMode = null }) {
 
     async function createBranch(event) {
         event.preventDefault();
+        if(!canWrite||loading)return;
+        setFormError("");
         setLoading(true);
         try {
             const response = await api.post("/warehouse-locations-v2/warehouses", branchForm);
@@ -351,7 +325,7 @@ export default function WarehouseHierarchyWorkspace({ accessMode = null }) {
             toast.success("تم إنشاء الفرع. الخطوة التالية: أضف قسمًا.");
         } catch (error) {
             const code = error?.response?.data?.detail?.code;
-            toast.error(code === "city_not_in_country" ? "المدينة لا تتبع الدولة المحددة" : "تعذر إنشاء الفرع");
+            const message=code === "city_not_in_country" ? "المدينة لا تتبع الدولة المحددة" : "تعذر إنشاء الفرع";setFormError(message);toast.error(message);
         } finally {
             setLoading(false);
         }
@@ -359,6 +333,8 @@ export default function WarehouseHierarchyWorkspace({ accessMode = null }) {
 
     async function createSection(event) {
         event.preventDefault();
+        if(!canWrite||loading)return;
+        setFormError("");
         if (!branchId) return toast.warning("اختر الفرع أولًا");
         setLoading(true);
         try {
@@ -373,7 +349,7 @@ export default function WarehouseHierarchyWorkspace({ accessMode = null }) {
             await loadSections(branchId, response.data.id);
             toast.success("تم إنشاء القسم. الخطوة التالية: أضف دولابًا داخله.");
         } catch (error) {
-            toast.error(error?.response?.data?.detail?.message || "تعذر إنشاء القسم");
+            const message=error?.response?.data?.detail?.message || "تعذر إنشاء القسم";setFormError(message);toast.error(message);
         } finally {
             setLoading(false);
         }
@@ -381,7 +357,11 @@ export default function WarehouseHierarchyWorkspace({ accessMode = null }) {
 
     async function createCabinet(event) {
         event.preventDefault();
+        if(!canWrite||loading)return;
+        setFormError("");
         if (!sectionId) return toast.warning("اختر القسم أولًا");
+        if(![cabinetForm.columns,cabinetForm.slots_per_column].every(value=>Number.isInteger(Number(value))&&Number(value)>=1&&Number(value)<=100)||cabinetTotal>5000){setFormError("حدد من 1 إلى 100 رف وخانة، وبحد أقصى 5000 خانة للدولاب.");return;}
+        if(cabinetForm.max_items_per_location!==""&&(!Number.isInteger(Number(cabinetForm.max_items_per_location))||Number(cabinetForm.max_items_per_location)<1||Number(cabinetForm.max_items_per_location)>100000)){setFormError("سعة الخانة عدد صحيح من 1 إلى 100000، أو تُترك فارغة.");return;}
         setLoading(true);
         try {
             const response = await api.post(`/warehouse-locations-v2/sections/${sectionId}/cabinets`, {
@@ -396,7 +376,7 @@ export default function WarehouseHierarchyWorkspace({ accessMode = null }) {
             await loadSections(branchId, sectionId, response.data.cabinet.id);
             toast.success(`تم إنشاء الدولاب و${response.data.locations_created} خانة تلقائيًا.`);
         } catch (error) {
-            toast.error(error?.response?.data?.detail?.message || "تعذر إنشاء الدولاب");
+            const message=error?.response?.data?.detail?.message || "تعذر إنشاء الدولاب";setFormError(message);toast.error(message);
         } finally {
             setLoading(false);
         }
@@ -423,295 +403,39 @@ export default function WarehouseHierarchyWorkspace({ accessMode = null }) {
         }
     }
 
-    const address = selectedBranch ? [selectedBranch.country, selectedBranch.city, selectedBranch.district, selectedBranch.street].filter(Boolean).join(" — ") : "";
-    const currentStep = !branchId ? 1 : !sectionId ? 2 : !cabinetId ? 3 : 4;
-
-    function renderWorkspace() {
-        if (!selectedBranch) {
-            return (
-                <div className="flex min-h-[520px] flex-col items-center justify-center rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-center">
-                    <Warehouse size={64} weight="duotone" className="text-slate-300" />
-                    <h2 className="mt-4 text-2xl font-black text-slate-950">ابدأ بالفرع</h2>
-                    <p className="mt-2 max-w-lg text-sm leading-7 text-slate-500">البنية المعتمدة ثابتة وواضحة: فرع ثم أقسام، وكل دولاب يجب أن يكون داخل قسم. لا يوجد دولاب مباشر خارج الأقسام.</p>
-                    {canWrite && <button type="button" onClick={() => setDialog("branch")} className="mt-5 flex items-center gap-2 rounded-xl bg-violet-700 px-5 py-3 text-sm font-extrabold text-white">
-                        <Plus size={18} weight="bold" /> إضافة أول فرع
-                    </button>}
-                </div>
-            );
-        }
-
-        if (selectedCabinet && selectedSection) {
-            return (
-                <div className="space-y-4">
-                    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                        <button type="button" onClick={() => setCabinetId("")} className="mb-4 flex items-center gap-1 text-xs font-bold text-violet-700"><ArrowRight size={15} /> الرجوع إلى {selectedSection.name}</button>
-                        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                            <div>
-                                <p className="text-xs font-extrabold text-violet-600">الخطوة 4 — الخانات</p>
-                                <h2 className="mt-1 text-2xl font-black text-slate-950">{selectedCabinet.name || `دولاب ${selectedCabinet.cabinet_number}`}</h2>
-                                <p className="num mt-1 text-xs text-slate-400">{selectedCabinet.location_numbering === "cabinet-row-slot" ? `دولاب ${selectedCabinet.cabinet_number}` : `${selectedBranch.code}-${selectedCabinet.code}`}</p>
-                            </div>
-                            <button type="button" onClick={() => printCabinetPack(selectedBranch, selectedSection, selectedCabinet)} className="flex items-center justify-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-4 py-2.5 text-sm font-extrabold text-violet-800">
-                                <Printer size={18} /> طباعة الملصقات والباركودات
-                            </button>
-                        </div>
-                        <div className="mt-5 grid gap-3 sm:grid-cols-4">
-                            <div className="rounded-2xl bg-slate-50 p-3"><span className="block text-[11px] text-slate-400">القسم</span><strong>{selectedSection.name}</strong></div>
-                            <div className="rounded-2xl bg-slate-50 p-3"><span className="block text-[11px] text-slate-400">{selectedCabinet.location_numbering === "cabinet-row-slot" ? "الخانات في الصف" : "الأعمدة"}</span><strong className="num">{selectedCabinet.width}</strong></div>
-                            <div className="rounded-2xl bg-slate-50 p-3"><span className="block text-[11px] text-slate-400">{selectedCabinet.location_numbering === "cabinet-row-slot" ? "الصفوف" : "الخانات في العمود"}</span><strong className="num">{selectedCabinet.length}</strong></div>
-                            <div className="rounded-2xl bg-slate-50 p-3"><span className="block text-[11px] text-slate-400">إجمالي الخانات</span><strong className="num">{selectedCabinet.total_locations}</strong></div>
-                        </div>
-                    </div>
-                    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                        <div className="mb-4 flex items-center justify-between">
-                            <div><h3 className="font-black text-slate-950">خريطة الخانات</h3><p className="text-xs text-slate-500">كل خانة تحمل باركودًا مستقلًا ويجب مسحه قبل وضع المنتج.</p></div>
-                            <span className="num rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">{selectedCabinet.total_locations} خانة</span>
-                        </div>
-                        <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.min(Number(selectedCabinet.width || 1), 12)}, minmax(0, 1fr))` }}>
-                            {Array.from({ length: Math.min(Number(selectedCabinet.total_locations || 0), 240) }, (_, index) => (
-                                <div key={index} className="flex aspect-square items-center justify-center rounded-xl border border-emerald-100 bg-emerald-50 text-[10px] font-black text-emerald-700 num">{cabinetLocationLabel(selectedCabinet, index)}</div>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-            );
-        }
-
-        if (selectedSection) {
-            return (
-                <div className="space-y-4">
-                    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                        <button type="button" onClick={() => { setSectionId(""); setCabinetId(""); }} className="mb-4 flex items-center gap-1 text-xs font-bold text-violet-700"><ArrowRight size={15} /> الرجوع إلى {selectedBranch.name}</button>
-                        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                            <div>
-                                <p className="text-xs font-extrabold text-violet-600">الخطوة 3 — دواليب القسم</p>
-                                <h2 className="mt-1 text-2xl font-black text-slate-950">{selectedSection.name}</h2>
-                                <p className="num mt-1 text-xs text-slate-400">{selectedBranch.code}-{selectedSection.code}</p>
-                            </div>
-                            {canWrite && <button type="button" onClick={() => { setCabinetForm(EMPTY_CABINET); setDialog("cabinet"); }} className="flex items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 py-2.5 text-sm font-extrabold text-white">
-                                <Plus size={18} weight="bold" /> إضافة دولاب داخل القسم
-                            </button>}
-                        </div>
-                        <div className="mt-4"><CapabilityPills values={selectedSection.capabilities} options={capabilityOptions} /></div>
-                    </div>
-                    {!selectedSection.cabinets?.length ? (canWrite ? (
-                        <button type="button" onClick={() => setDialog("cabinet")} className="flex min-h-[360px] w-full flex-col items-center justify-center rounded-3xl border-2 border-dashed border-violet-200 bg-violet-50/50 p-8 text-center">
-                            <Cube size={52} weight="duotone" className="text-violet-400" />
-                            <h3 className="mt-3 text-xl font-black text-slate-950">لا توجد دواليب في هذا القسم</h3>
-                            <p className="mt-2 text-sm text-slate-500">حدد عدد الأعمدة وعدد الخانات في كل عمود، وسيولّد ميزان جميع الخانات وأكوادها تلقائيًا.</p>
-                            <span className="mt-4 rounded-xl bg-violet-700 px-4 py-2 text-sm font-bold text-white">إضافة أول دولاب</span>
-                        </button>
-                    ) : <p className="rounded-2xl border bg-white p-4">لا توجد دواليب في هذا القسم.</p>) : (
-                        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                            {selectedSection.cabinets.map((cabinet) => (
-                                <button key={cabinet.id} type="button" onClick={() => setCabinetId(cabinet.id)} className="rounded-3xl border border-slate-200 bg-white p-5 text-right shadow-sm transition hover:border-violet-300 hover:shadow-md">
-                                    <div className="flex items-start justify-between gap-3">
-                                        <div><p className="text-[11px] font-extrabold text-violet-600">دولاب {cabinet.cabinet_number}</p><h3 className="mt-1 text-lg font-black text-slate-950">{cabinet.name}</h3></div>
-                                        <Cube size={25} weight="duotone" className="text-violet-700" />
-                                    </div>
-                                    <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-                                        <div className="rounded-xl bg-slate-50 p-2"><span className="block text-[10px] text-slate-400">أعمدة</span><strong className="num">{cabinet.width}</strong></div>
-                                        <div className="rounded-xl bg-slate-50 p-2"><span className="block text-[10px] text-slate-400">في العمود</span><strong className="num">{cabinet.length}</strong></div>
-                                        <div className="rounded-xl bg-emerald-50 p-2"><span className="block text-[10px] text-emerald-600">الإجمالي</span><strong className="num text-emerald-800">{cabinet.total_locations}</strong></div>
-                                    </div>
-                                </button>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            );
-        }
-
-        return (
-            <div className="space-y-4">
-                <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                        <div>
-                            <p className="text-xs font-extrabold text-violet-600">الخطوة 2 — أقسام الفرع</p>
-                            <h2 className="mt-1 text-2xl font-black text-slate-950">{selectedBranch.name}</h2>
-                            <p className="mt-2 flex items-center gap-1 text-sm text-slate-500"><MapPin size={16} /> {address}</p>
-                        </div>
-                        {canWrite && <button type="button" onClick={() => { setSectionForm({ ...EMPTY_SECTION, capabilities: templates.storage || ["cabinets"] }); setDialog("section"); }} className="flex items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 py-2.5 text-sm font-extrabold text-white">
-                            <Plus size={18} weight="bold" /> إضافة قسم
-                        </button>}
-                    </div>
-                </div>
-                {!sections.length ? (canWrite ? (
-                    <button type="button" onClick={() => setDialog("section")} className="flex min-h-[360px] w-full flex-col items-center justify-center rounded-3xl border-2 border-dashed border-violet-200 bg-violet-50/50 p-8 text-center">
-                        <Wrench size={52} weight="duotone" className="text-violet-400" />
-                        <h3 className="mt-3 text-xl font-black text-slate-950">الفرع لا يحتوي أقسامًا بعد</h3>
-                        <p className="mt-2 max-w-lg text-sm leading-6 text-slate-500">أضف قسم تخزين أو تركيب أو نحت أو تجهيز أو شحن. كل قسم يمكن أن يجمع أكثر من وظيفة، وكل دولاب سيكون داخله.</p>
-                        <span className="mt-4 rounded-xl bg-violet-700 px-4 py-2 text-sm font-bold text-white">إضافة أول قسم</span>
-                    </button>
-                ) : <p className="rounded-2xl border bg-white p-4">لا توجد أقسام في هذا الفرع.</p>) : (
-                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                        {sections.map((section) => (
-                            <button key={section.id} type="button" onClick={() => chooseSection(section.id)} className="rounded-3xl border border-slate-200 bg-white p-5 text-right shadow-sm transition hover:border-violet-300 hover:shadow-md">
-                                <div className="flex items-start justify-between gap-3">
-                                    <div><p className="num text-[11px] font-extrabold text-violet-600">{section.code}</p><h3 className="mt-1 text-lg font-black text-slate-950">{section.name}</h3></div>
-                                    <Wrench size={25} weight="duotone" className="text-violet-700" />
-                                </div>
-                                <div className="mt-3"><CapabilityPills values={section.capabilities} options={capabilityOptions} /></div>
-                                <div className="mt-4 flex items-center justify-between rounded-xl bg-slate-50 p-3 text-sm"><span className="text-slate-500">الدواليب</span><strong className="num text-lg text-slate-950">{section.cabinet_count || 0}</strong></div>
-                            </button>
-                        ))}
-                    </div>
-                )}
-            </div>
-        );
-    }
-
-    return (
-        <div className="space-y-5" dir="rtl" data-testid="warehouse-hierarchy-workspace">
-            <section className="rounded-3xl border border-slate-200 bg-gradient-to-l from-white via-white to-violet-50 p-5 shadow-sm">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                    <div>
-                        <div className="flex items-center gap-2 text-xs font-extrabold text-violet-700"><Warehouse size={18} weight="duotone" /> Mezan WMS</div>
-                        <h1 className="mt-2 text-2xl font-black text-slate-950 sm:text-3xl">الفروع والمخازن</h1>
-                        <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">المعمارية المعتمدة: <strong>فرع ← قسم ← دولاب ← خانات</strong>. لا يمكن إنشاء دولاب خارج قسم، والترقيم والأكواد والباركودات كلها تلقائية.</p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                        {canWrite && <button type="button" onClick={() => setDialog("branch")} className="flex items-center gap-2 rounded-xl bg-violet-700 px-4 py-2.5 text-sm font-extrabold text-white"><Plus size={18} weight="bold" /> إضافة فرع</button>}
-                        {!accessMode && !!branches.length && <button type="button" onClick={() => setDialog("reset")} className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-extrabold text-rose-700"><Trash size={18} /> بدء من الصفر</button>}
-                    </div>
-                </div>
-            </section>
-
-            <section className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)_270px]">
-                <aside className="rounded-3xl border border-slate-200 bg-white p-3 shadow-sm">
-                    <div className="mb-3 px-2"><h2 className="font-black text-slate-950">الهيكل</h2><p className="text-[11px] text-slate-400">فرع ثم قسم ثم دولاب</p></div>
-                    {!branches.length ? (canWrite ? (
-                        <button type="button" onClick={() => setDialog("branch")} className="w-full rounded-2xl border border-dashed border-violet-200 bg-violet-50 p-4 text-sm font-bold text-violet-800">+ إضافة أول فرع</button>
-                    ) : <p className="px-2 text-sm">لا توجد فروع.</p>) : (
-                        <div className="space-y-2">
-                            {branches.map((branch) => {
-                                const activeBranch = branch.id === branchId;
-                                return (
-                                    <div key={branch.id} className="space-y-1">
-                                        <button type="button" onClick={() => chooseBranch(branch.id)} className={`flex w-full items-center gap-2 rounded-2xl border px-3 py-3 text-right transition ${activeBranch ? "border-violet-300 bg-violet-50" : "border-transparent hover:border-slate-200 hover:bg-slate-50"}`}>
-                                            <Warehouse size={19} weight="duotone" className={activeBranch ? "text-violet-700" : "text-slate-400"} />
-                                            <span className="min-w-0 flex-1"><span className="block truncate text-sm font-black text-slate-900">{branch.name}</span><span className="num block text-[10px] text-slate-400">{branch.code}</span></span>
-                                        </button>
-                                        {activeBranch && sections.map((section) => {
-                                            const activeSection = section.id === sectionId;
-                                            return (
-                                                <div key={section.id} className="me-4 space-y-1">
-                                                    <button type="button" onClick={() => chooseSection(section.id)} className={`flex w-full items-center gap-2 rounded-xl px-3 py-2 text-right ${activeSection ? "bg-violet-100 text-violet-950" : "hover:bg-slate-50"}`}>
-                                                        <Wrench size={16} className="text-violet-500" /><span className="min-w-0 flex-1 truncate text-xs font-extrabold">{section.name}</span><span className="num text-[10px] text-slate-400">{section.cabinet_count || 0}</span>
-                                                    </button>
-                                                    {activeSection && (section.cabinets || []).map((cabinet) => (
-                                                        <button key={cabinet.id} type="button" onClick={() => setCabinetId(cabinet.id)} className={`me-4 flex w-[calc(100%-1rem)] items-center gap-2 rounded-xl px-3 py-2 text-right ${cabinet.id === cabinetId ? "bg-emerald-50 text-emerald-900" : "hover:bg-slate-50"}`}>
-                                                            <Cube size={15} className="text-emerald-600" /><span className="min-w-0 flex-1 truncate text-xs font-bold">{cabinet.name}</span><span className="num text-[10px] text-slate-400">{cabinet.total_locations}</span>
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    )}
-                </aside>
-
-                <main className="min-w-0">{renderWorkspace()}</main>
-
-                <aside className="space-y-3">
-                    <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-                        <h2 className="mb-3 font-black text-slate-950">مسار الإعداد</h2>
-                        <div className="space-y-2">
-                            <Step number="1" title="الفرع" subtitle="الدولة والمدينة والعنوان" done={!!branchId} active={currentStep === 1} />
-                            <Step number="2" title="القسم" subtitle="تخزين، تركيب، نحت، شحن..." done={!!sectionId} active={currentStep === 2} />
-                            <Step number="3" title="الدولاب" subtitle="أعمدة وخانات داخل القسم" done={!!cabinetId} active={currentStep === 3} />
-                            <Step number="4" title="الخانات" subtitle="ترقيم وباركود تلقائي" done={!!cabinetId} active={currentStep === 4} />
-                        </div>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2">
-                        <div className="rounded-2xl border border-slate-200 bg-white p-3 text-center"><Package size={20} className="mx-auto text-violet-600" /><strong className="num mt-1 block text-lg">{sections.length}</strong><span className="text-[10px] text-slate-400">قسم</span></div>
-                        <div className="rounded-2xl border border-slate-200 bg-white p-3 text-center"><Cube size={20} className="mx-auto text-violet-600" /><strong className="num mt-1 block text-lg">{allCabinets.length}</strong><span className="text-[10px] text-slate-400">دولاب</span></div>
-                        <div className="rounded-2xl border border-slate-200 bg-white p-3 text-center"><GearSix size={20} className="mx-auto text-violet-600" /><strong className="num mt-1 block text-lg">{totalLocations}</strong><span className="text-[10px] text-slate-400">خانة</span></div>
-                    </div>
-                </aside>
-            </section>
-
-            {canWrite && dialog === "branch" && (
-                <Modal title="إضافة فرع" subtitle="رقم الفرع ورمزه يُنشآن تلقائيًا داخل المدينة." onClose={() => setDialog(null)}>
-                    <form onSubmit={createBranch} className="space-y-4">
-                        <div className="grid gap-3 md:grid-cols-2">
-                            <Field label="استخدام المخزن"><select value={branchForm.inventory_scope} onChange={event => setBranchForm({...branchForm, inventory_scope: event.target.value})}><option value="standalone">مخزون مستقل — ربط الطلبات مؤجل</option><option value="shared">مخزن للمسار الحالي</option></select></Field>
-                            <p className="text-xs text-slate-500">ترقيم المواقع الجديدة: الدولاب-الصف-الخانة، مثل 1-2-7. الباركود يحتفظ بهوية الموقع.</p>
-                            <Field label="اسم الفرع"><Input required value={branchForm.name} onChange={(event) => setBranchForm({ ...branchForm, name: event.target.value })} placeholder="مثال: فرع بيت العود" /></Field>
-                            <Field label="الدولة"><Select value={branchForm.country} onChange={(event) => changeCountry(event.target.value)}>{catalog.countries.map((row) => <option key={row.name} value={row.name}>{row.name}</option>)}</Select></Field>
-                            <Field label="المدينة"><Select value={branchForm.city} onChange={(event) => setBranchForm({ ...branchForm, city: event.target.value })}>{(countryRow?.cities || []).map((city) => <option key={city} value={city}>{city}</option>)}</Select></Field>
-                            <Field label="رقم الفرع" hint="تلقائي داخل كل مدينة"><Input disabled value="تلقائي — يبدأ من 1" /></Field>
-                            <Field label="الحي"><Input required value={branchForm.district} onChange={(event) => setBranchForm({ ...branchForm, district: event.target.value })} /></Field>
-                            <Field label="الشارع"><Input required value={branchForm.street} onChange={(event) => setBranchForm({ ...branchForm, street: event.target.value })} /></Field>
-                        </div>
-                        <button disabled={loading} className="w-full rounded-xl bg-violet-700 px-4 py-3 text-sm font-extrabold text-white disabled:opacity-50">إنشاء الفرع</button>
-                    </form>
-                </Modal>
-            )}
-
-            {canWrite && dialog === "section" && (
-                <Modal title="إضافة قسم" subtitle={`داخل ${selectedBranch?.name || "الفرع"}. كل قسم يدعم الدواليب ويمكن أن يجمع عدة وظائف.`} onClose={() => setDialog(null)}>
-                    <form onSubmit={createSection} className="space-y-4">
-                        <div className="grid gap-3 md:grid-cols-2">
-                            <Field label="اسم القسم"><Input required value={sectionForm.name} onChange={(event) => setSectionForm({ ...sectionForm, name: event.target.value })} placeholder="مثال: قسم التركيب والنحت" /></Field>
-                            <Field label="قالب سريع"><Select value={sectionForm.template} onChange={(event) => applyTemplate(event.target.value)}>{Object.entries(TEMPLATE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Select></Field>
-                        </div>
-                        <div>
-                            <p className="mb-2 text-xs font-extrabold text-slate-700">وظائف القسم</p>
-                            <div className="grid gap-2 sm:grid-cols-2">
-                                {capabilityOptions.map((item) => {
-                                    const fixed = item.value === "cabinets";
-                                    const checked = fixed || sectionForm.capabilities.includes(item.value);
-                                    return (
-                                        <label key={item.value} className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-bold ${checked ? "border-violet-300 bg-violet-50 text-violet-900" : "border-slate-200 text-slate-600"}`}>
-                                            <input type="checkbox" checked={checked} disabled={fixed} onChange={() => toggleCapability(item.value)} />
-                                            {item.label}{fixed && <span className="text-[10px] text-violet-500">إلزامي</span>}
-                                        </label>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                        <Field label="ملاحظات (اختياري)"><Input value={sectionForm.notes} onChange={(event) => setSectionForm({ ...sectionForm, notes: event.target.value })} /></Field>
-                        <button disabled={loading} className="w-full rounded-xl bg-violet-700 px-4 py-3 text-sm font-extrabold text-white disabled:opacity-50">إنشاء القسم</button>
-                    </form>
-                </Modal>
-            )}
-
-            {canWrite && dialog === "cabinet" && (
-                <Modal title="إضافة دولاب" subtitle={`داخل قسم ${selectedSection?.name || ""}. الخانات والترقيم والباركود تُنشأ تلقائيًا.`} onClose={() => setDialog(null)}>
-                    <form onSubmit={createCabinet} className="space-y-4">
-                        <div className="rounded-2xl border border-violet-100 bg-violet-50 p-4">
-                            <p className="text-xs font-bold text-violet-600">الموقع</p>
-                            <p className="mt-1 font-black text-violet-950">{selectedBranch?.name} ← {selectedSection?.name}</p>
-                        </div>
-                        <Field label="اسم الدولاب (اختياري)" hint="الرقم والكود تلقائيان"><Input value={cabinetForm.cabinet_name} onChange={(event) => setCabinetForm({ ...cabinetForm, cabinet_name: event.target.value })} placeholder="مثال: دولاب السلاسل" /></Field>
-                        <div className="grid gap-3 md:grid-cols-2">
-                            <Field label={selectedBranch?.location_numbering === "cabinet-row-slot" ? "عدد الخانات في كل صف" : "عدد الأعمدة"}><Input required type="number" min="1" max="100" value={cabinetForm.columns} onChange={(event) => setCabinetForm({ ...cabinetForm, columns: event.target.value })} /></Field>
-                            <Field label={selectedBranch?.location_numbering === "cabinet-row-slot" ? "عدد الصفوف" : "عدد الخانات في كل عمود"}><Input required type="number" min="1" max="100" value={cabinetForm.slots_per_column} onChange={(event) => setCabinetForm({ ...cabinetForm, slots_per_column: event.target.value })} /></Field>
-                            <Field label="نوع الاستخدام"><Select value={cabinetForm.purpose} onChange={(event) => setCabinetForm({ ...cabinetForm, purpose: event.target.value })}>{PURPOSES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Select></Field>
-                            <Field label="سعة كل خانة (اختياري)"><Input type="number" min="1" value={cabinetForm.max_items_per_location} onChange={(event) => setCabinetForm({ ...cabinetForm, max_items_per_location: event.target.value })} /></Field>
-                        </div>
-                        <div className="rounded-2xl bg-slate-950 p-4 text-white">
-                            <div className="flex items-center justify-between"><span className="text-sm font-bold">إجمالي الخانات التي ستنشأ</span><strong className="num text-3xl">{cabinetTotal}</strong></div>
-                            <p className="mt-1 text-xs text-slate-300">{selectedBranch?.location_numbering === "cabinet-row-slot" ? `${cabinetForm.slots_per_column} صفوف × ${cabinetForm.columns} خانات — رقم الموقع: الدولاب-الصف-الخانة` : `${cabinetForm.columns} أعمدة × ${cabinetForm.slots_per_column} خانات في العمود`}</p>
-                        </div>
-                        <button disabled={loading || cabinetTotal < 1 || cabinetTotal > 5000} className="w-full rounded-xl bg-violet-700 px-4 py-3 text-sm font-extrabold text-white disabled:opacity-50">إنشاء الدولاب والخانات</button>
-                    </form>
-                </Modal>
-            )}
-
-            {!accessMode && dialog === "reset" && (
-                <Modal title="بدء الفروع والمخازن من الصفر" subtitle="سيُحذف الفرع الحالي وجميع الأقسام والدواليب والخانات وبيانات التجربة، ثم تبدأ كل الأرقام من 1." onClose={() => { setDialog(null); setResetConfirmation(""); }} maxWidth="max-w-lg">
-                    <form onSubmit={resetWorkspace} className="space-y-4">
-                        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm leading-6 text-rose-800">هذا الإجراء خاص ببيانات الفروع والمخازن فقط، ولا يحذف الطلبات أو المنتجات أو بيانات سلة وقيود.</div>
-                        <Field label="اكتب كلمة حذف للتأكيد"><Input autoFocus value={resetConfirmation} onChange={(event) => setResetConfirmation(event.target.value)} placeholder="حذف" /></Field>
-                        <button disabled={loading || resetConfirmation !== "حذف"} className="flex w-full items-center justify-center gap-2 rounded-xl bg-rose-700 px-4 py-3 text-sm font-extrabold text-white disabled:opacity-40"><Trash size={18} /> حذف بيانات التجربة والبدء من الصفر</button>
-                    </form>
-                </Modal>
-            )}
-        </div>
-    );
+    const address=selectedBranch?[selectedBranch.country,selectedBranch.city,selectedBranch.district,selectedBranch.street].filter(Boolean).join(" · "):"";
+    const bins=useMemo(()=>{
+        if(!selectedCabinet)return [];
+        const byNumber=new Map(locations.map(row=>[Number(row.number),row]));
+        return Array.from({length:Number(selectedCabinet.total_locations)||0},(_,index)=>({index,row:Math.floor(index/Number(selectedCabinet.width))+1,slot:index%Number(selectedCabinet.width)+1,label:compactWarehouseLocation(selectedCabinet,index),record:byNumber.get(index+1)}));
+    },[selectedCabinet,locations]);
+    const needle=query.trim().toLocaleLowerCase('ar');
+    const matching=bins.filter(bin=>!needle||[bin.label,cabinetLocationLabel(selectedCabinet,bin.index),bin.record?.code,bin.record?.barcode_value,...(bin.record?.occupancy?.items||[]).flatMap(item=>[item.product_name,item.name,item.sku])].join(' ').toLocaleLowerCase('ar').includes(needle));
+    const pageCount=Math.max(1,Math.ceil(matching.length/120)),safePage=Math.min(page,pageCount-1),visibleBins=matching.slice(safePage*120,(safePage+1)*120);
+    const shelves=[...new Set(visibleBins.map(bin=>bin.row))],selectedBin=bins[binIndex]||bins[0];
+    const selectedItems=selectedBin?.record?.occupancy?.items||[];
+    const empty=(title,description,action,buttonLabel)=><div className="mz-wh-empty"><Warehouse size={43}/><h2>{title}</h2><p>{description}</p>{action&&canWrite&&<button type="button" className="mz-inventory-button is-primary" onClick={action}><Plus size={18}/>{buttonLabel}</button>}</div>;
+    const mainContent=initialLoading?<p role="status" className="mz-wh-loading">جارٍ تحميل هيكل المستودعات…</p>:readError?<p className="mz-wh-loading">تعذر عرض الهيكل. أعد القراءة قبل إنشاء فرع أو قسم جديد.</p>:!selectedBranch?empty("ابدأ بإضافة فرع","فرع ثم قسم ثم دولاب، وتُنشأ الخانات بأكوادها تلقائيًا.",()=>openDialog("branch"),"إضافة أول فرع"):selectedCabinet&&selectedSection?<>
+        <nav className="mz-wh-breadcrumb" aria-label="مسار المستودع"><button onClick={()=>{setSectionId("");setCabinetId("");}}>{selectedBranch.name}</button><CaretLeft size={13}/><button onClick={()=>setCabinetId("")}>{selectedSection.name}</button><CaretLeft size={13}/><strong>{"د"+selectedCabinet.cabinet_number}</strong></nav>
+        <div className="mz-wh-cabinet-header"><div><h2>{selectedCabinet.name||"دولاب "+selectedCabinet.cabinet_number}<span>{"د"+selectedCabinet.cabinet_number}</span></h2><p><MapPin size={15}/>{selectedBranch.city} · {PURPOSES.find(row=>row[0]===selectedCabinet.purpose)?.[1]||"غير محدد"}</p></div><button type="button" className="mz-inventory-button" onClick={()=>printCabinetPack(selectedBranch,selectedSection,selectedCabinet)}><Printer size={17}/>طباعة ملصقات الدولاب</button></div>
+        <div className="mz-wh-stats"><div><strong>{selectedCabinet.total_locations}</strong><span>خانة</span></div><div><strong>{selectedCabinet.length}</strong><span>رفوف</span></div><div><strong>{selectedCabinet.width}</strong><span>خانات لكل رف</span></div><div><strong>{accessMode?"—":locations.length}</strong><span>حالة مقروءة</span></div></div>
+        <div className="mz-wh-map-toolbar"><label className="mz-wh-search"><MagnifyingGlass size={19}/><input aria-label="بحث خانات المستودع" value={query} onChange={event=>{setQuery(event.target.value);setPage(0);}} placeholder="رمز الخانة، الصنف أو الرقم المخزني…"/></label><div className="mz-wh-view-switch" aria-label="عرض الخانات"><button type="button" aria-pressed={mapView==="map"} onClick={()=>setMapView("map")}><SquaresFour size={17}/>خريطة</button><button type="button" aria-pressed={mapView==="list"} onClick={()=>setMapView("list")}><ListBullets size={17}/>قائمة</button></div></div>
+        {locationLoading&&<p role="status" className="mz-wh-note">جارٍ قراءة إشغال الخانات…</p>}
+        {locationError&&<p role="alert" className="mz-wh-note">{locationError}</p>}
+        {accessMode&&<p className="mz-wh-note">يعرض هذا النطاق هيكل الخانات وترقيمها؛ الإشغال غير مقروء ضمن هذه الصلاحية.</p>}
+        {!matching.length?empty("لا توجد خانات تطابق البحث","ابحث بالرمز أو باسم صنف ضمن بيانات الإشغال المقروءة."):mapView==="map"?<div className="mz-wh-shelves" aria-label="خريطة الرفوف والخانات">{shelves.map(shelf=><section className="mz-wh-shelf" key={shelf} aria-label={"الرف "+shelf}><span className="mz-wh-shelf-label">{"ر"+shelf}</span><div className="mz-wh-bin-grid" style={{'--wh-columns':Math.min(Number(selectedCabinet.width)||1,6),'--wh-mobile-columns':Math.min(Number(selectedCabinet.width)||1,3)}}>{visibleBins.filter(bin=>bin.row===shelf).map(bin=><button type="button" key={bin.index} className={"mz-wh-bin "+(!bin.record?"is-unknown":bin.record.state==="disabled"?"is-disabled":bin.record.state==="empty"?"is-empty":"is-occupied")+(selectedBin?.index===bin.index?" is-selected":"")} aria-pressed={selectedBin?.index===bin.index} aria-label={bin.label+"، "+locationStateLabel(bin.record)} onClick={()=>setBinIndex(bin.index)}><strong>{selectedCabinet.location_numbering==="cabinet-row-slot"?"خ"+bin.slot:cabinetLocationLabel(selectedCabinet,bin.index)}</strong><small>{locationStateLabel(bin.record)}</small></button>)}</div></section>)}</div>:<div className="mz-wh-bin-list">{visibleBins.map(bin=><button type="button" key={bin.index} className={selectedBin?.index===bin.index?"is-selected":""} onClick={()=>setBinIndex(bin.index)}><strong>{bin.label}</strong><span>{bin.record?.occupancy?.items?.map(item=>item.product_name||item.name||item.sku).filter(Boolean).join("، ")||locationStateLabel(bin.record)}</span><CaretLeft size={15}/></button>)}</div>}
+        <div className="mz-wh-legend"><span><i className="is-empty"/>فارغة</span><span><i className="is-occupied"/>بها مخزون</span><span><i className="is-disabled"/>غير متاحة</span><span><i className="is-unknown"/>غير مقروءة</span></div>
+        {pageCount>1&&<div className="mz-wh-pagination"><button type="button" disabled={safePage===0} onClick={()=>setPage(value=>value-1)}>السابق</button><span>{"صفحة "+(safePage+1)+" من "+pageCount+" · "+matching.length+" خانة"}</span><button type="button" disabled={safePage===pageCount-1} onClick={()=>setPage(value=>value+1)}>التالي</button></div>}
+        {selectedBin&&<section className="mz-wh-bin-details" aria-label="تفاصيل الخانة المحددة"><div className="mz-wh-bin-details-heading"><div><small>الخانة المحددة</small><h3>{selectedBin.label}</h3></div><span>{locationStateLabel(selectedBin.record)}</span></div>{selectedItems.length?<div className="mz-wh-occupancy">{selectedItems.map((item,index)=><article key={item.receipt_id||item.product_id||index}><Package size={22}/><div><strong>{item.product_name||item.name||item.sku||"صنف مخزني"}</strong><small>{item.sku}{item.preparation_state?" · "+({ready_complete:"جاهز",requires_preparation:"يحتاج تجهيزًا"}[item.preparation_state]||item.preparation_state):""}</small>{item.specifications&&<small>{Object.entries(item.specifications).map(([name,value])=>name+": "+value).join(" · ")}</small>}</div><span>{item.quantity==null?"—":item.quantity}{item.unit?" "+({piece:"قطعة",gram:"غرام",g:"غرام",kilogram:"كجم",kg:"كجم",meter:"متر",m:"متر",liter:"لتر",l:"لتر"}[item.unit]||item.unit):""}</span></article>)}</div>:<p>{selectedBin.record?.state==="empty"?"الخانة فارغة حسب آخر قراءة للمستودع.":selectedBin.record?"راجع حالة الخانة عند الاستلام قبل وضع أي صنف.":"الإشغال غير مثبت في هذا العرض؛ لا يعني ذلك أن الخانة فارغة."}</p>}<footer><span>{selectedBranch.name+" · "+selectedSection.name+" · "+selectedCabinet.name}</span>{selectedBin.record&&<bdi>{selectedBin.record.barcode_value||selectedBin.record.code}</bdi>}</footer></section>}
+    </>:selectedSection?<><div className="mz-wh-section-heading"><div><h2>{selectedSection.name}</h2><CapabilityPills values={selectedSection.capabilities} options={capabilityOptions}/></div>{canWrite&&<button type="button" className="mz-inventory-button is-primary" onClick={()=>{setCabinetForm(EMPTY_CABINET);openDialog("cabinet");}}><Plus size={18}/>إضافة دولاب</button>}</div>{!selectedSection.cabinets?.length?empty("القسم جاهز لاستقبال الدواليب","حدد عدد الرفوف والخانات لإنشاء المواقع دفعة واحدة.",()=>openDialog("cabinet"),"إضافة أول دولاب"):<div className="mz-wh-cards">{selectedSection.cabinets.map(cabinet=><button type="button" key={cabinet.id} onClick={()=>setCabinetId(cabinet.id)}><Cube size={25}/><h3>{cabinet.name}</h3><strong>{"د"+cabinet.cabinet_number}</strong><small>{cabinet.total_locations+" خانة · "+cabinet.length+" رفوف"}</small></button>)}</div>}</>:<><div className="mz-wh-section-heading"><div><h2>{selectedBranch.name}</h2><p>{address}</p></div>{canWrite&&<button type="button" className="mz-inventory-button is-primary" onClick={()=>openDialog("section")}><Plus size={18}/>إضافة قسم</button>}</div>{!sections.length?empty("أضف أول قسم","كل دولاب يرتبط بقسم؛ اختر قالبًا للتخزين أو التجهيز أو الشحن.",()=>openDialog("section"),"إضافة أول قسم"):<div className="mz-wh-cards">{sections.map(section=><button type="button" key={section.id} onClick={()=>chooseSection(section.id)}><Wrench size={25}/><h3>{section.name}</h3><small>{(section.cabinet_count||0)+" دواليب"}</small><CapabilityPills values={section.capabilities} options={capabilityOptions}/></button>)}</div>}</>;
+    return <InventorySuiteFrame active="warehouses"><div className="mz-warehouse" data-testid="warehouse-hierarchy-workspace">
+        <InventoryPageHeader title="المستودعات" description="كل صنف في مكانه. من الفرع إلى أصغر خانة."><button type="button" className="mz-inventory-button" disabled={initialLoading||loading} onClick={refreshHierarchy} aria-label="تحديث المستودعات"><ArrowClockwise size={18}/>تحديث</button>{canWrite&&<button type="button" className="mz-inventory-button is-primary" disabled={loading||initialLoading||!!readError} onClick={()=>{if(selectedSection){setCabinetForm(EMPTY_CABINET);openDialog("cabinet");}else if(selectedBranch)openDialog("section");else openDialog("branch");}}><Plus size={18}/>{selectedSection?"إضافة دولاب":selectedBranch?"إضافة قسم":"إضافة فرع"}</button>}</InventoryPageHeader>
+        {!canWrite&&<p className="mz-wh-readonly"><LockKey size={17}/>للعرض فقط · تظهر الفروع والأقسام المسموح لك بقراءتها.</p>}
+        {readError&&<div className="mz-wh-error" role="alert">{readError}<button type="button" onClick={refreshHierarchy}>إعادة المحاولة</button></div>}
+        <div className="mz-wh-layout"><aside className="mz-wh-tree" aria-label="هيكل المستودعات"><div className="mz-wh-tree-title"><Warehouse size={25}/><div><h2>مستودعات ميزان</h2><small>{branches.length+" فروع في هذا العرض"}</small></div></div><div className="mz-wh-mobile-branch"><label>الفرع<Select aria-label="اختيار الفرع" value={branchId} onChange={event=>chooseBranch(event.target.value)}>{branches.map(branch=><option key={branch.id} value={branch.id}>{branch.name}</option>)}</Select></label></div><div className="mz-wh-branches">{branches.map(branch=><div className={"mz-wh-branch-group "+(branch.id===branchId?"is-current":"")} key={branch.id}><button type="button" className={"mz-wh-tree-node mz-wh-branch "+(branch.id===branchId?"is-current":"")} disabled={loading} aria-expanded={branch.id===branchId} onClick={()=>chooseBranch(branch.id)}><Warehouse size={19}/><span>{branch.name}</span>{branch.id===branchId?<CaretDown size={14}/>:<CaretLeft size={14}/>}</button>{branch.id===branchId&&<div className="mz-wh-section-tree">{sections.map(section=><div key={section.id}><button type="button" className={"mz-wh-tree-node mz-wh-section "+(section.id===sectionId?"is-current":"")} disabled={loading} onClick={()=>chooseSection(section.id)}><Wrench size={16}/><span>{section.name}</span><small>{section.cabinet_count||0}</small></button>{section.id===sectionId&&<div className="mz-wh-cabinet-tree">{(section.cabinets||[]).map(cabinet=><button type="button" className={"mz-wh-tree-node mz-wh-cabinet "+(cabinet.id===cabinetId?"is-selected":"")} key={cabinet.id} disabled={loading} aria-current={cabinet.id===cabinetId?"true":undefined} onClick={()=>setCabinetId(cabinet.id)}><SquaresFour size={16}/><strong>{"د"+cabinet.cabinet_number}</strong><span>{cabinet.name}</span></button>)}</div>}</div>)}</div>}</div>)}</div>{canWrite&&<div className="mz-wh-tree-actions"><button type="button" disabled={loading||initialLoading||!!readError} onClick={()=>openDialog("branch")}><Plus size={16}/>فرع جديد</button><button type="button" disabled={loading||initialLoading||!!readError||!branchId} onClick={()=>openDialog("section")}><Plus size={16}/>قسم جديد</button></div>}<div className="mz-wh-tree-foot"><CheckCircle size={18}/><span>دولاب ← رف ← خانة<small>تسميات صغيرة، ومكان واضح.</small></span></div>{!accessMode&&!!branches.length&&<details className="mz-wh-advanced"><summary>إعدادات متقدمة</summary><button type="button" disabled={loading} onClick={()=>openDialog("reset")}><Trash size={15}/>بدء من الصفر</button></details>}</aside><main className="mz-wh-workspace" aria-label="مساحة المستودع">{mainContent}</main></div>
+        {canWrite&&<><InventorySheet open={dialog==="branch"} onClose={closeDialog} busy={loading} title="إضافة فرع" description="الرقم والكود تلقائيان؛ اختر الدولة والمدينة وحدد عنوان الفرع." footer={<button type="submit" form="warehouse-branch-form" disabled={loading} className="mz-inventory-button is-primary">{loading?"جارٍ الحفظ…":"إنشاء الفرع"}</button>}><form id="warehouse-branch-form" onSubmit={createBranch} className="mz-wh-form">{formError&&<p role="alert" className="mz-wh-error">{formError}</p>}<fieldset disabled={loading}><Field label="اسم الفرع"><Input required value={branchForm.name} onChange={event=>setBranchForm({...branchForm,name:event.target.value})} placeholder="مثال: فرع الرياض"/></Field><div className="mz-wh-form-grid"><Field label="الدولة"><Select value={branchForm.country} onChange={event=>changeCountry(event.target.value)}>{catalog.countries.map(row=><option key={row.name}>{row.name}</option>)}</Select></Field><Field label="المدينة"><Select value={branchForm.city} onChange={event=>setBranchForm({...branchForm,city:event.target.value})}>{(countryRow?.cities||[]).map(city=><option key={city}>{city}</option>)}</Select></Field><Field label="الحي"><Input required value={branchForm.district} onChange={event=>setBranchForm({...branchForm,district:event.target.value})}/></Field><Field label="الشارع"><Input required value={branchForm.street} onChange={event=>setBranchForm({...branchForm,street:event.target.value})}/></Field></div><details><summary>إعدادات المخزن</summary><Field label="استخدام المخزن"><Select value={branchForm.inventory_scope} onChange={event=>setBranchForm({...branchForm,inventory_scope:event.target.value})}><option value="standalone">مخزون مستقل — ربط الطلبات مؤجل</option><option value="shared">مخزن للمسار الحالي</option></Select></Field><p className="mz-wh-note">ترقيم المواقع الجديدة: الدولاب-الرف-الخانة. يبقى الكود والباركود بهويتهما الأصلية.</p></details></fieldset></form></InventorySheet>
+        <InventorySheet open={dialog==="section"} onClose={closeDialog} busy={loading} title="إضافة قسم" description={"داخل "+(selectedBranch?.name||"الفرع")+". كل قسم يدعم الدواليب ويمكن أن يجمع عدة وظائف."} footer={<button type="submit" form="warehouse-section-form" disabled={loading} className="mz-inventory-button is-primary">{loading?"جارٍ الحفظ…":"إنشاء القسم"}</button>}><form id="warehouse-section-form" onSubmit={createSection} className="mz-wh-form">{formError&&<p role="alert" className="mz-wh-error">{formError}</p>}<fieldset disabled={loading}><Field label="اسم القسم"><Input required value={sectionForm.name} onChange={event=>setSectionForm({...sectionForm,name:event.target.value})} placeholder="مثال: قسم التخزين"/></Field><Field label="قالب سريع"><Select value={sectionForm.template} onChange={event=>applyTemplate(event.target.value)}>{Object.entries(TEMPLATE_LABELS).map(([value,label])=><option value={value} key={value}>{label}</option>)}</Select></Field><div className="mz-wh-capability-options"><h3>وظائف القسم</h3>{capabilityOptions.map(item=><label key={item.value}><input type="checkbox" checked={item.value==="cabinets"||sectionForm.capabilities.includes(item.value)} disabled={item.value==="cabinets"} onChange={()=>toggleCapability(item.value)}/>{item.label}{item.value==="cabinets"&&<small>إلزامي</small>}</label>)}</div><Field label="ملاحظات (اختياري)"><Input value={sectionForm.notes} onChange={event=>setSectionForm({...sectionForm,notes:event.target.value})}/></Field></fieldset></form></InventorySheet>
+        <InventorySheet open={dialog==="cabinet"} onClose={closeDialog} busy={loading} title="إضافة دولاب" description={(selectedBranch?.name||"")+" · "+(selectedSection?.name||"")+". تُنشأ الخانات والترقيم والباركود تلقائيًا."} footer={<button type="submit" form="warehouse-cabinet-form" disabled={loading||cabinetTotal<1||cabinetTotal>5000} className="mz-inventory-button is-primary">{loading?"جارٍ الإنشاء…":"إنشاء الدولاب والخانات"}</button>}><form id="warehouse-cabinet-form" onSubmit={createCabinet} className="mz-wh-form">{formError&&<p role="alert" className="mz-wh-error">{formError}</p>}<fieldset disabled={loading}><Field label="اسم الدولاب (اختياري)" hint="الرقم والكود تلقائيان"><Input value={cabinetForm.cabinet_name} onChange={event=>setCabinetForm({...cabinetForm,cabinet_name:event.target.value})} placeholder="مثال: دولاب الملابس"/></Field><div className="mz-wh-form-grid"><Field label="عدد الرفوف"><Input required type="number" min="1" max="100" value={cabinetForm.slots_per_column} onChange={event=>setCabinetForm({...cabinetForm,slots_per_column:event.target.value})}/></Field><Field label="خانات لكل رف"><Input required type="number" min="1" max="100" value={cabinetForm.columns} onChange={event=>setCabinetForm({...cabinetForm,columns:event.target.value})}/></Field></div><div className="mz-wh-generation"><strong>{cabinetTotal}</strong><span>خانة ستُنشأ تلقائيًا</span><small>{cabinetForm.slots_per_column+" رفوف × "+cabinetForm.columns+" خانات لكل رف"}</small></div><Field label="نوع الاستخدام"><Select value={cabinetForm.purpose} onChange={event=>setCabinetForm({...cabinetForm,purpose:event.target.value})}>{PURPOSES.map(([value,label])=><option value={value} key={value}>{label}</option>)}</Select></Field><Field label="سعة كل خانة (اختياري)"><Input type="number" min="1" max="100000" value={cabinetForm.max_items_per_location} onChange={event=>setCabinetForm({...cabinetForm,max_items_per_location:event.target.value})}/></Field></fieldset></form></InventorySheet></>}
+        {!accessMode&&<InventorySheet open={dialog==="reset"} onClose={closeDialog} busy={loading} title="بدء الفروع والمخازن من الصفر" description="إجراء حذف نهائي للفروع والأقسام والدواليب والخانات. لا يُنفذ قبل التأكيد الصريح." footer={<button type="submit" form="warehouse-reset-form" disabled={loading||resetConfirmation!=="حذف"} className="mz-wh-danger-button"><Trash size={17}/>حذف بيانات التجربة والبدء من الصفر</button>}><form id="warehouse-reset-form" onSubmit={resetWorkspace} className="mz-wh-form"><p className="mz-wh-error">سيُحذف هيكل المخازن وبيانات التجربة وتبدأ أرقامها من 1. لا يحذف هذا الإجراء الطلبات أو المنتجات أو بيانات سلة وقيود.</p><Field label="اكتب كلمة حذف للتأكيد"><Input value={resetConfirmation} onChange={event=>setResetConfirmation(event.target.value)} placeholder="حذف" disabled={loading}/></Field></form></InventorySheet>}
+    </div></InventorySuiteFrame>;
 }
