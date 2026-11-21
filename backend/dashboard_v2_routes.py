@@ -71,8 +71,10 @@ from order_status_policy import effective_product_cost, get_policy_map
 from product_fulfillment_rules import PRODUCT_RESOURCE_BINDINGS
 from product_option_cost_routes import BINDINGS, RESOURCES
 from product_catalog_cost_resolution import (
+    enrich_current_salla_cost,
     index_current_catalog_products,
     index_current_catalog_products_cooperative,
+    normalize_product_name,
     resolve_current_catalog_line_product,
 )
 from product_v2_details_routes import COST_PROFILES
@@ -173,6 +175,24 @@ PRODUCT_COST_CATALOG_PROJECTION = {
     "options": 1,
     "raw_salla": 1,
     "raw_salla_details": 1,
+}
+
+# Keep the whole variant values: their truthiness/type and normalized/raw merge
+# order are part of legacy alias resolution. Unrelated descriptions, images and
+# option payloads are needed only after a cohort line resolves to a product.
+PRODUCT_COST_ALIAS_PROJECTION = {
+    "_id": 1,
+    "id": 1,
+    "salla_product_id": 1,
+    "mezan_product_id": 1,
+    "name": 1,
+    "sku": 1,
+    "variants": 1,
+    "raw_salla_details.variants": 1,
+    "raw_salla_details.skus": 1,
+    "raw_salla_details.product_variants": 1,
+    "raw_salla.variants": 1,
+    "raw_salla.skus": 1,
 }
 
 
@@ -336,6 +356,122 @@ def _index_products(
 ]:
     """Index the current full Salla catalog through the shared cost contract."""
     return index_current_catalog_products(products)
+
+
+def _catalog_alias_signature(product: dict[str, Any]) -> tuple:
+    """Identity only; cost edits between reads must remain current costs."""
+    def text(value: Any) -> str:
+        return str(value or "").strip()
+
+    return (
+        *(text(product.get(key)) for key in ("salla_product_id", "mezan_product_id", "id")),
+        text(product.get("sku")).casefold(),
+        normalize_product_name(product.get("name")),
+        tuple((text(row.get("id")), text(row.get("sku")).casefold())
+              for row in product.get("variants") or [] if isinstance(row, dict)),
+    )
+
+
+async def _load_cohort_catalog_products(
+    db: Any, user_id: str, orders: list[dict[str, Any]],
+) -> tuple[list[str], tuple[dict[str, dict[str, Any]], ...]]:
+    """Resolve against global aliases, then hydrate only the winning documents.
+
+    Retain the original first-100000 catalog boundary and all its Salla IDs for
+    the unchanged companion query scopes/limits. In particular, rebuilding an
+    index from the selected subset would change duplicate aliases and make
+    globally ambiguous names appear unique.
+    """
+    if not orders:
+        return [], ({}, {}, {})
+    aliases = await _to_list(
+        db[PRODUCTS].find({"user_id": user_id}, PRODUCT_COST_ALIAS_PROJECTION),
+        100000,
+    )
+    product_ids = [
+        str(product.get("salla_product_id") or "").strip()
+        for product in aliases
+        if str(product.get("salla_product_id") or "").strip()
+    ]
+    indexes = await index_current_catalog_products_cooperative(aliases)
+    del aliases
+    selected: dict[Any, dict[str, Any]] = {}
+    budget = CPUWorkBudget(COST_PROFIT_BUDGET_MS)
+    for order in orders:
+        for item in order.get("products") or []:
+            await budget.checkpoint()
+            if not isinstance(item, dict):
+                continue
+            product = _line_product(item, products_by_id=indexes[0],
+                                    products_by_variant=indexes[1], products_by_sku=indexes[2])
+            if product is not None:
+                selected[product["_id"]] = product
+    if not selected:
+        return product_ids, ({}, {}, {})
+
+    rows = await _to_list(
+        db[PRODUCTS].find(
+            {"user_id": user_id, "_id": {"$in": list(selected)}},
+            {**PRODUCT_COST_CATALOG_PROJECTION, "_id": 1},
+        ),
+        len(selected),
+    )
+    hydrated: dict[Any, dict[str, Any]] = {}
+    for row in rows:
+        await budget.checkpoint()
+        identity = row["_id"]
+        product = enrich_current_salla_cost(row)
+        if (identity not in selected or identity in hydrated
+                or _catalog_alias_signature(product) != _catalog_alias_signature(selected[identity])):
+            break
+        product.pop("_id", None)
+        hydrated[identity] = product
+    else:
+        if len(hydrated) == len(selected):
+            scoped_indexes = []
+            for index in indexes:
+                scoped = {}
+                for alias, product in index.items():
+                    await budget.checkpoint()
+                    if product["_id"] in hydrated:
+                        scoped[alias] = hydrated[product["_id"]]
+                scoped_indexes.append(scoped)
+            return product_ids, tuple(scoped_indexes)
+    # A sync removed/reidentified a selected document between the two reads.
+    # Never calculate from the compact alias row or silently return zero cost.
+    raise HTTPException(status_code=503, detail={
+        "code": "catalog_changed_during_cost_read", "retryable": True, "data_complete": False,
+    })
+
+
+def _empty_product_cost_result(*, include_product_rows: bool = True) -> dict[str, Any]:
+    product_rows, product_profit_summary = (
+        _finalize_product_profit_rows({}) if include_product_rows else ([], {})
+    )
+    return {
+        "total": 0.0,
+        "breakdown": {source: 0.0 for source in (
+            "mezan_v2_base", "mezan_v2_variant", "salla_product_fallback",
+            "salla_variant_fallback", "product_components", "selected_options",
+        )},
+        "source_lines": {},
+        "linked_products_count": 0, "missing_products_count": 0,
+        "missing_product_cost_count": 0, "missing_all_cost_products_count": 0,
+        "missing_all_cost_lines_count": 0, "salla_fallback_products_count": 0,
+        "missing_products": [],
+        **({"product_rows": product_rows, "product_profit_summary": product_profit_summary}
+           if include_product_rows else {}),
+        "no_products_orders_count": 0, "incomplete_orders_count": 0,
+        "source_contract": {
+            "base_precedence": ["mezan_v2_variant", "mezan_v2_base",
+                                "salla_variant_fallback", "salla_product_fallback"],
+            "always_added": ["product_components", "selected_option_components"],
+            "mezan_completion_sources": ["mezan_v2_variant", "mezan_v2_base"],
+            "salla_fallback_is_missing_mezan_cost": True,
+            "product_sales": "native order lines converted by verified Salla order FX to SAR",
+            "product_profit": "product sales minus Mezan V2 product cost; ads/shipping/payment fees are not allocated per product",
+        },
+    }
 
 
 def calculate_mezan_v2_line_cost(
@@ -579,20 +715,11 @@ async def build_mezan_v2_product_cost(
     user_id: str,
     orders: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    products = await _to_list(
-        db[PRODUCTS].find(
-            {"user_id": user_id},
-            PRODUCT_COST_CATALOG_PROJECTION,
-        ),
-        100000,
+    if not orders:
+        return _empty_product_cost_result()
+    product_ids, (products_by_id, products_by_variant, products_by_sku) = (
+        await _load_cohort_catalog_products(db, user_id, orders)
     )
-    products_by_id, products_by_variant, products_by_sku = _index_products(products)
-
-    product_ids = [
-        str(product.get("salla_product_id") or "").strip()
-        for product in products
-        if str(product.get("salla_product_id") or "").strip()
-    ]
     profiles = await _to_list(
         db[COST_PROFILES].find(
             {"user_id": user_id, "salla_product_id": {"$in": product_ids}},
@@ -920,20 +1047,11 @@ async def build_mezan_v2_product_cost_cooperative(
     cost_collector: DashboardAdsCostCollector | None = None,
     parallel_order_cost_reads: bool = False,
 ) -> dict[str, Any]:
-    products = await _to_list(
-        db[PRODUCTS].find(
-            {"user_id": user_id},
-            PRODUCT_COST_CATALOG_PROJECTION,
-        ),
-        100000,
+    if not orders:
+        return _empty_product_cost_result(include_product_rows=include_product_rows)
+    product_ids, (products_by_id, products_by_variant, products_by_sku) = (
+        await _load_cohort_catalog_products(db, user_id, orders)
     )
-    products_by_id, products_by_variant, products_by_sku = await index_current_catalog_products_cooperative(products)
-
-    product_ids = [
-        str(product.get("salla_product_id") or "").strip()
-        for product in products
-        if str(product.get("salla_product_id") or "").strip()
-    ]
     profiles = await _to_list(
         db[COST_PROFILES].find(
             {"user_id": user_id, "salla_product_id": {"$in": product_ids}},
