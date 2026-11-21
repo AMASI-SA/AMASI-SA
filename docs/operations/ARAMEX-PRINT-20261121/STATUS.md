@@ -5,8 +5,12 @@ order-read permission, as with SMSA/iMile. Do not change linking or request
 additional scopes. The previous missing-scope diagnosis was not proved and
 must not be treated as the required solution.
 
-New task branch `codex/aramex-order-payload-recovery-20261121` starts directly
-from reviewed Production `66aa13967156e8e279b5297caf697c155f720fd1`.
+New task branch `codex/aramex-order-payload-recovery-20261121` is now based on
+reviewed Production `a9d0aec2939a706dcc16f9948e7a81cfe019e66f` (PR2046).
+Before updating this unfrozen source, verified checkpoint
+`f78d69d885805243be5c0f736b64a651af6b1212` was pushed and preserved separately
+on `codex/aramex-order-payload-beforebase-20261121`. The source/test files are
+byte-identical after updating the base. No frozen task A/B was rewritten.
 The prior frozen release A/B/M and evidence checkpoint
 `3a679012460c8ec072d1b7e754a6ab7686aae198` remain intact. That release was
 published and original verify3 closed its lease, but original printing failed.
@@ -59,7 +63,7 @@ deselected with maxfail1). Validated negative evidence now blocks only the same
 child; a distinct new active child remains usable when no canonical id is known.
 The current Production branch advanced to a9d0aec2939a706dcc16f9948e7a81cfe019e66f
 through unrelated PR2046. Its owner reports publication/verification in progress.
-No shared workspace or foreign lease was changed. This unfrozen source must be
+No shared workspace or foreign lease was changed. The unfrozen task source was
 rebased onto that reviewed base before freezing a new intent; no task A/B exists.
 
 Draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/2047. Earlier checkpoint
@@ -71,9 +75,9 @@ and could not match the configured app link. It stopped before token decryption 
 any Salla request; it cannot establish Production permissions or absence of an
 order. See LIVE-ORDER-READ-CONTEXT.json. No production credentials were exported.
 
-Exact next action: push the verified checkpoint, preserve it, and update this
-unfrozen task branch to the current reviewed Production base. Run fresh candidate
-CI for PR2047. Obtain its governed source-A artifact, freeze an intent-only B, require
+Exact next action: push this source on the current reviewed Production base and
+run fresh candidate CI for PR2047. Obtain its governed source-A artifact,
+freeze an intent-only B, require
 both host clean-clone rehearsals and applicable checks, then current-base normal
 merge and a separately authorized guarded publication. Test original target and
 control through ADB on the actual release. Do not request additional scopes or
