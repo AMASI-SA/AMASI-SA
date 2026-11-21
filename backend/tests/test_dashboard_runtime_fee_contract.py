@@ -1,5 +1,6 @@
 """Contract-level checks for the independent frozen-response fee oracle."""
 from copy import deepcopy
+import json
 
 import pytest
 
@@ -77,6 +78,28 @@ def test_fee_completeness_key_order_precedes_ads_and_product_enrichment():
         "cod_unapproved", "payment_fees_complete", "payment_fee_review_reasons",
         "ads_spend_data_complete", "product_cost_complete",
     ]
+
+
+def test_empty_payment_cohort_preserves_integer_zero_wire_contract_and_excludes_ad_fees():
+    response = response_fixture(electronic=False)
+    response['payment_breakdown'] = [response['payment_breakdown'][1]]
+    extend_frozen_fee_contract(response, fixture_case=fixture_key('empty_period'))
+    known = response['payment_fee_authority']['known_payment_fees_sar']
+    assert type(known) is int and json.dumps(known) == '0'
+    assert response['payment_breakdown'][0]['fee_amount'] == 5.19
+
+
+@pytest.mark.parametrize('case', ['no_matching_filter', 'arabic_status_normalization'])
+def test_hidden_blank_method_group_keeps_float_zero_and_incomplete_fee_contract(case):
+    response = response_fixture(electronic=False)
+    response['payment_breakdown'] = [response['payment_breakdown'][1]]
+    extend_frozen_fee_contract(response, fixture_case=fixture_key(case))
+    authority = response['payment_fee_authority']
+    known = authority['known_payment_fees_sar']
+    assert type(known) is float and json.dumps(known) == '0.0'
+    assert authority['complete'] is False
+    assert authority['reason_codes'] == ['payment_method_unconfigured']
+    assert response['totals']['total_payment_fees'] is None
 
 
 @pytest.mark.parametrize("case,hidden,fee,vat", [

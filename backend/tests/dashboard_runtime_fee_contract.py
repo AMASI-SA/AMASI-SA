@@ -137,7 +137,14 @@ def extend_frozen_fee_contract(response, *, fixture_case):
     authority = {
         "basis": FEE_BASIS,
         "complete": not reasons,
-        "known_payment_fees_sar": float(known.quantize(Decimal(".01"))),
+        # An empty legacy payment cohort serializes its empty aggregate as
+        # integer zero. Advertising commission rows are added independently
+        # and must not turn that empty payment sum into a float or a fee.
+        # The frozen blank-method order still forms a hidden 0.0 fee group,
+        # even when display grouping omits its unrecognized payment row.
+        "known_payment_fees_sar": (float(known.quantize(Decimal(".01")))
+            if blank_method or any(row["key"] != "ad_bank_commissions" for row in response["payment_breakdown"])
+            else 0),
         "reason_codes": reasons,
         "incomplete_buckets": unknown,
         "electronic_complete": electronic_complete,

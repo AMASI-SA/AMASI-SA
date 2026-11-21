@@ -117,7 +117,7 @@ jobs:
           DASHBOARD_ADOPTION_OUTPUT: '${{ github.workspace }}/runtime-responses.json'
         run: >-
           python -m pytest --noconftest --import-mode=importlib -p no:cacheprovider -p dashboard_runtime_gate_plugin
-          --rootdir '${{ github.workspace }}/.reference/backend' -q -x
+          --rootdir '${{ github.workspace }}/.reference/backend' -q
           '${{ github.workspace }}/.reference/backend/tests/test_dashboard_b_index_cooperative_correctness.py'
           -k 'test_dashboard_mixed_permissions_and_tenants or test_existing_independent_read_mutations or test_mutations_during_index'
           --junitxml=../runtime.xml

@@ -58,6 +58,14 @@ Final native-CI follow-up: the unpaid cohort checkpoint passed 64 jobs before th
 
 Read-only Emergent terminal preflight on 2026-11-21: shared guard active:false; shared HEAD 66aa13967156e8e279b5297caf697c155f720fd1; no tracked working changes. Live health reports source db141c0438edf04aa77ccd1122bc9c5008cf39d6, release rg5-500857bae382758ba238083f1f7f417b23a7e2dfb298aa3e2e99e7f4baf56b45, with verified identity, matching critical hashes and verified frontend all true. This is the prior deployment, not publication of this task. Recheck the guard immediately before any future shared workspace mutation.
 
+## Final wire-contract and release-host follow-up
+
+Native CI for a9c47024c0bec6e98a287571e0a4bfb3f6d20b9e passed the governed A/B frontend release build and the earlier exact-row/import checks. The frozen runtime job found only a new metadata scalar distinction: a genuinely empty payment sum serializes as integer zero, while a hidden blank-method group serializes as float zero. The independent oracle now preserves both cases without changing monetary runtime code. Its 174 focused tests and five subtests passed; all 13 captured native MongoDB 8 responses replay exactly. A complete isolated diagnostic passed all 40 cases / 164 runtime responses with exact JSON and command/document read guards using a disposable MongoDB 7 driver and a temporary fixture copy. The committed MongoDB 8 version guard is unchanged; native CI remains the release authority. Runtime CI no longer stops at the first failure, so all cases remain visible.
+
+The native stock eligibility job also reported a failure and is under independent review. The current checkpoint still requires exact-HEAD native CI. The local governed frontend build exited with Vite code null after transformation and is not reported as passing; the matching native A/B artifact did pass but will be regenerated for this checkpoint. No reviewed intent is committed yet.
+
+The shared Emergent preflight remains active:false with tracked source unchanged. Toolchain setup failed because the shared /app and /root volume has only about 81 MB free. A separate /tmp mount has about 225 GB available. The next safe host step is an isolated /tmp toolchain cache and clean-clone adapter rehearsal; unrelated worktrees, store data and financial records have not been deleted or modified. No lease, merge or publication has occurred for this task.
+
 ## Preview delivery
 
 Private design preview was separately updated and published successfully at source 7d4c05c234a231c5b8849447b4210428ebf69f7a, deployment appgdep_6b01cffe72048191bce2b7dbbc592604. It separates carrier freight/returns/COD/settlements, retains account context in movement forms and links existing statement functions. Preview simulations do not post financial entries. Browser visual recheck was blocked by the browser URL policy; code/VM checks passed. This preview is not a Production financial deployment.
