@@ -3,7 +3,7 @@
   "scope": "Replace legacy Mezan inventory interfaces with the approved integrated Arabic RTL design using the existing native services and permissions.",
   "branch": "codex/inventory-release-20261121",
   "base_sha": "734b977de28254c2c089148b4db8972a03ba19eb",
-  "state": "entry_blocked_no_eligible_locations_scope_unverified",
+  "state": "entry_scope_unverified_direct_navigation_unauthenticated",
   "production_changed": true,
   "remote_checkpoint": "Immutable release B a03d05d474d1c0a5fba879c7706761d8f94f5d58; latest continuity documentation commit recorded in Issue1006",
   "release_lease": "Agent did not create/touch a lease. Earlier user idle result is historical; current shared guard state unknown after external publication.",
@@ -20,9 +20,9 @@
     "Preserve canonical product/variant/resource/location identity, server preview hash, stable idempotency and current permissions",
     "No opening-stock writer reused for stock adjustments"
   ],
-  "next_action": "Read actual warehouse inventory_scope/status through authenticated GET /api/warehouse-locations/warehouses in user browser. User confirms existing9empty bins; do not recreate, reset, relabel or convert warehouse automatically. Diagnose missing/legacy scope versus stale context before proposing a repair.",
-  "updated_at": "2026-11-21T14:58:29.976600+00:00",
-  "verified_milestone": "Entry screenshot shows writer enabled plus no-locations alert; warehouse screenshot confirms existing cabinet with9empty bins. Source excludes warehouses unless standalone+active. Fresh7frontend tests PASS using explicit local Windows testMatch; relevant source equals current Production9f47. Actual warehouse scope/status unobserved because CUA kernel fails. No source/data edits.",
+  "next_action": "Read the response of the already-authenticated GET warehouse-locations/warehouses from Network in the working Mezan app session. Return only warehouse code/status/inventory_scope, not request headers/cookies/token values. Direct URL returned Not authenticated and cookie-only console fetch may fail similarly. No sign-out, auth bypass or metadata mutation.",
+  "updated_at": "2026-11-21T15:07:10.227173+00:00",
+  "verified_milestone": "User direct API navigation returned Not authenticated, so no warehouse metadata was read. Source confirms Axios supplies Authorization from current application session while direct navigation cannot reproduce that header; server also supports cookies. Underlying credential/session cause is not established. Existing7entry tests remain accepted, no source changes to rerun.",
   "ledger": "https://github.com/AMASI-SA/AMASI-SA/issues/1006#issuecomment-6238987123 has a dedicated dated INV-UI-20261120 section appended without removing original content; comments/body limits block new entries elsewhere. Write read-back verified.",
   "incomplete": [
     "Authenticated read of existing warehouse inventory_scope/status and current entry context.",
@@ -99,7 +99,7 @@
   "production_runtime_changed_by_agent": false,
   "production_operational_data_changed_by_agent": false,
   "production_source_merge_sha": "5019e957cd1bb578f7b7375099547a470e51cb05",
-  "continuity_previous_checkpoint": "b2cee8d3755c028cebd5a872136fe03fbcda5382",
+  "continuity_previous_checkpoint": "01c65c4e094b86a29bd7e154fe803b8643860833",
   "manual_publish_instructions": "docs/operations/INV-UI-20261120/MANUAL-PUBLISH.md",
   "manual_publish_script": "docs/operations/INV-UI-20261120/manual-publish.sh",
   "release_verification_evidence": "docs/operations/INV-UI-20261120/evidence/release-validation.json",
@@ -190,10 +190,18 @@
     "browser_access": "CUA still fails with missing kernel asset path; completion summary delivered. No authenticated account inspection possible in this turn.",
     "agent_source_edits": false,
     "agent_production_configuration_or_quantity_writes": false,
-    "next_action": "User executes same-origin authenticated GET-only diagnostic in Mezan page Console and returns only code/status/inventory_scope. No credentials printed, no storage/token reading, no mutations. Determine actual scope before any repair."
+    "next_action": "Capture only Response JSON fields from already-authenticated warehouse list request in Mezan app Network. Do not read or share credentials."
   },
   "external_production_head": "9f47a47ff16bfa02a8132bd83fe44db3bdb86da0",
   "entry_diagnostic_browser_get": "https://mezansalla.com/api/warehouse-locations/warehouses",
   "entry_diagnostic_evidence": "docs/operations/INV-UI-20261120/evidence/entry-location-diagnosis.json",
-  "entry_diagnostic_note": "docs/operations/INV-UI-20261120/ENTRY-LOCATION-DIAGNOSIS.md"
+  "entry_diagnostic_note": "docs/operations/INV-UI-20261120/ENTRY-LOCATION-DIAGNOSIS.md",
+  "authentication_diagnostic": {
+    "user_evidence": "Direct navigation JSON: detail Not authenticated",
+    "warehouse_data_read": false,
+    "confirmed_source_behavior": "Axios request interceptor attaches existing app Bearer; server accepts Bearer or cookie. Direct URL may lack accepted session.",
+    "actual_warehouse_scope": "still unknown",
+    "next_read": "Response of existing authenticated app Network GET; no header/token extraction",
+    "source_or_production_writes": false
+  }
 }

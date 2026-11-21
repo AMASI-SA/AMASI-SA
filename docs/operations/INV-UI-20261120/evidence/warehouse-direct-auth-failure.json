@@ -1,0 +1,17 @@
+{
+  "recorded_at": "2026-11-21T15:07:10.227173+00:00",
+  "user_screenshot": "Direct GET returned detail Not authenticated; no warehouse metadata",
+  "code_review": [
+    {
+      "path": "frontend/src/lib/api.js",
+      "behavior": "Axios interceptor attaches current app Authorization header; withCredentials also enabled"
+    },
+    {
+      "path": "backend/auth.py",
+      "behavior": "Bearer then access cookie accepted"
+    }
+  ],
+  "verdict": "Authentication failure of this diagnostic method only. Warehouse scope/status remain unverified.",
+  "next_action": "Read only Response fields of the existing authenticated Network warehouse list request. No credentials collected.",
+  "agent_source_or_prod_mutations": false
+}
