@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "task_id": "EXTERNAL-PARTY-2039-20261121",
+  "repository": "AMASI-SA/AMASI-SA",
+  "production_branch": "hotfix/prod-snap-meta-final",
+  "observed_at_utc": "2026-11-21T20:34:08Z",
+  "published_and_verified_deployment_git_sha": "6e41bf25b936e8c4047df75bb170610dfc71b7f7",
+  "observed_remote_head_git_sha": "88af38f01cf979acbca59b95a95e661828f2306f",
+  "remote_head_differs_from_verified_deployment": true,
+  "first_observed_advance_at_utc": "2026-11-21T20:17:34Z",
+  "newer_merge": {
+    "pull_request": 2048,
+    "pull_request_url": "https://github.com/AMASI-SA/AMASI-SA/pull/2048",
+    "commit_sha": "88af38f01cf979acbca59b95a95e661828f2306f",
+    "commit_url": "https://github.com/AMASI-SA/AMASI-SA/commit/88af38f01cf979acbca59b95a95e661828f2306f",
+    "commit_timestamp_utc": "2026-11-21T20:17:29Z",
+    "pull_request_merged_at_utc": "2026-11-21T20:17:30Z",
+    "ordered_parent_shas": [
+      "6e41bf25b936e8c4047df75bb170610dfc71b7f7",
+      "4c5c778a9ee76d230f8fc85908e085860656622f"
+    ],
+    "source_head_sha": "4c5c778a9ee76d230f8fc85908e085860656622f",
+    "tree_oid": "33f5ad1bb33485106cec0da42acd1107521df875",
+    "changed_files": [
+      "backend/order_engine/amasi_shipping_compat.py",
+      "backend/tests/test_carrier_shipment_read_fallback.py",
+      "docs/operations/ARAMEX-PRINT-20261121/LIVE-ORDER-READ-CONTEXT.json",
+      "docs/operations/ARAMEX-PRINT-20261121/STATUS.md",
+      "release/release-intent-v5.json"
+    ],
+    "scope": "Aramex shipping"
+  },
+  "advance_occurred_during_pr2039_verification": true,
+  "newer_head_published_by_this_task": false,
+  "newer_head_covered_by_pr2039_verification": false,
+  "newer_head_ci_success_asserted_by_this_record": false,
+  "scope_note": "PR2039 published and verified M. GitHub Production subsequently advanced through the separate PR2048 merge. This evidence does not claim M remains the remote HEAD, deploy the newer merge, or reuse PR2039 CI/probes for that newer source."
+}

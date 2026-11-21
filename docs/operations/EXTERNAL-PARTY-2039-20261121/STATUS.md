@@ -2,11 +2,45 @@
 
 ## Checkpoint verdict
 
-**VERIFY_IN_PROGRESS. The official Production verifier was launched once at 2026-11-21T20:09:43.637945Z as PID 49863 after exact lease/source/remote checks passed. The root observed the newer green `Deployment finished` state and published version `289b0ca`; the literal `Deployment Succeeded` was not shown. The verifier's final result and all-three-probe acceptance remain unobserved at this checkpoint.**
+**PR2039_RELEASE_COMPLETE — published and officially verified. The one official verifier exited 0 with `verified:true`, `checks:3`, exact reviewed A/M/release identity, and the matching lease closed (`active:false`) at task closeout. The verified deployment is M `6e41bf25b936e8c4047df75bb170610dfc71b7f7`; GitHub Production separately advanced to PR #2048 merge `88af38f01cf979acbca59b95a95e661828f2306f` during verification. No further release action is required for PR #2039.**
 
 The owner has authorized merging and publishing PR #2039, subject to the established gates. Emergent Support supplied the previously missing Production index definitions after a read-only inspection. Terminal access has now been restored. Production advanced through PR #2046, so the former A/B pair and its successful CI are historical and cannot authorize the new deployment.
 
-### Latest milestone: official verification running once
+### Latest milestone: publication and official verification completed
+
+The existing official verifier **PID 49863 completed successfully**, with exit code **0**, `verified:true`, protocol **5**, and **three full checks**. Its receipt covers **2026-11-21T20:09:43.637945+00:00 through 2026-11-21T20:25:46.311775+00:00** (23:09:43–23:25:46 Asia/Riyadh), with reported elapsed time **962.81 seconds**. The root observed the terminal marker **`PR2039_RELEASE_COMPLETE`**. The process was run once in the task terminal renamed `PR2039_VERIFY_RUNNING_DO_NOT_INTERRUPT`; it was not interrupted or replaced.
+
+| Verified release identity | Value |
+| --- | --- |
+| Source A | `e08d0e489eded39961d374e4eb7bfcc0544b6e90` |
+| Reviewed intent B | `3628efc4215ee95e6196fca4807104a87398e255` |
+| Published and verified deployment M | `6e41bf25b936e8c4047df75bb170610dfc71b7f7` |
+| Source base J | `a9d0aec2939a706dcc16f9948e7a81cfe019e66f` |
+| Runtime release | `rg5-45eb8f2d79e0912a1277e1e14816e9d9c5e3a40d0a6d784834c6fbb54996974f` |
+| Emergent published version | `289b0ca` |
+| Frontend artifact tree SHA256 | `9bf4c7bfad899f2b011d16811ca3bb1bbc82c3565488e63e48ea4e00945fdd18` |
+
+The **unchanged raw official receipt** is [official-verification-receipt.json](official-verification-receipt.json): **40,087 bytes**, SHA256 **`8388c17b3f35bb60cfec010958bb0d9f27c43d83cdf7826f3d5be0b483a8a8e5`**. Independent review matched its exact identities, Backend/control source summaries, all **710 request labels** in reviewed order, the four build-metadata canonical/cache/Accept variants, three shell cache/MIME records, and both retirement service-worker records to the reviewed intent. The JSON retains the first probe's per-route detail and aggregate `checks:3`; it is **not 2,130 individual raw request records**.
+
+The task-generated closeout guard receipt, opened directly by root in the Emergent code editor, is retained exactly as [guard-after-verify.json](guard-after-verify.json): `{"active": false}`. The successful verifier closed only the matching lease owned by `codex-pr2039-owner-authorized`, prepared at `2026-11-21T19:46:13.522595Z`. No extra guard/status command or second verifier was run to obtain this receipt. This is the task's closeout observation, not a claim that a different later release cannot acquire a lease. The compact wrapper result and provenance are in [deployment-verification.json](deployment-verification.json).
+
+The observed platform completion remains precisely the newer green **`Deployment finished` at Nov 21 22:59 Asia/Riyadh** and **Published version `289b0ca`**. No retained literal `Deployment Succeeded` banner or full Cloud Build outer-argv transcript is claimed. The official three-probe result completes the release's identity/public-artifact acceptance.
+
+#### Newer remote Production head is a separate release
+
+During verification, GitHub Production advanced through **PR #2048** to **`88af38f01cf979acbca59b95a95e661828f2306f`**. Its merge commit is timestamped **20:17:29 UTC** and GitHub's PR `merged_at` is **20:17:30 UTC**; the CI watch observed the advance at **20:17:34 UTC**. A fresh direct GitHub read at **20:34:08 UTC** still found that head. Its ordered parents are this task's deployment M and `4c5c778a9ee76d230f8fc85908e085860656622f`, and its five-file delta belongs to the separate Aramex shipping work. See [remote-production-head.json](remote-production-head.json).
+
+**PR #2039 published and verified M; this task did not publish the newer PR #2048 merge.** M is no longer the current remote Production head. The newer merge is not covered by this task's CI or deployed verification, and its publication readiness is not asserted here. The later branch advance does not change the recorded identity that passed the official PR #2039 verifier.
+
+#### Availability observations and closeout
+
+The verifier retained three distinct `boot_started_at` observations: **20:09:07.428245Z**, **20:14:58.295836Z**, and **20:19:18.125358Z**. These do not prove restarts; different replicas could produce different boot identities. The unchanged guard accepts distinct boot observations only when each satisfies the reviewed identity and timestamp rules. **Continuous uptime and performance were not established.** Earlier runtime health timeouts and the pre-existing performance warning remain observations with unconfirmed cause; no new causal or CI-test-failure claim is made.
+
+**No further release action is required for PR #2039.** Do not rebuild, republish, rerun verification, alter `/app`, or operate a later task's lease merely to align this completed release with the newer remote head. Preserve the frozen A/B/M identities, receipts, previous-output backup, and unrelated PR #2048 terminal/work. Issue #1006 is at its comment limit, so this evidence branch preserves completion without overwriting another task's continuation record.
+
+Production changed by this task: **Git branch yes (normal merge M); shared `/app` yes (reviewed handoff); live release yes (published once and officially verified)**. No financial/index mutation or APK publication occurred.
+
+### Previous milestone: official verification running once
 
 The root started the unchanged official `scripts/production_release_guard.py verify --url https://mezansalla.com` from `/app` in **root-owned Terminal 3 at 2026-11-21T20:09:43.637945Z** (23:09:43 Asia/Riyadh), process **PID 49863**. Before launch, the owned lease's M/A/runtime identity/actor, clean tracked production branch, local M and actual remote Production M all passed checks. The lease remains the one prepared at `2026-11-21T19:46:13.522595Z` by `codex-pr2039-owner-authorized`; no replacement lease was created.
 
@@ -16,7 +50,7 @@ The root recovered the administration UI by closing crashed original tab 39 and 
 
 The available logs are runtime logs, not proof of Cloud Build outer argv. They contain four upstream GET-health timeout entries at 20:07:33/20:07:43 UTC and a successful HTTP 200 health response of approximately 1.5 seconds. A performance warning was already present before publication. Causation is unproven; these observations are not a GitHub CI test failure. No IP addresses, customer/property identifiers, or raw logs are retained here.
 
-**Next safe action:** wait for **this exact process** and read its existing completion wrapper/stdout/stderr after it finishes. Do not interrupt it, impose a timeout, run concurrent guard `status`, launch a second `verify`, republish, or clear the lease. **Terminal 2 is now in use by a separate PR #2048 conversation and must remain untouched.** Evaluate the actual official result; final acceptance still requires all three matching full probes and inactive-lease evidence after completion.
+**Next safe action at the in-progress checkpoint (successfully completed in the latest milestone above):** wait for **this exact process** and read its existing completion wrapper/stdout/stderr after it finishes. Do not interrupt it, impose a timeout, run concurrent guard `status`, launch a second `verify`, republish, or clear the lease. **Terminal 2 is in use by a separate PR #2048 conversation and must remain untouched.** The actual official result and final inactive-lease receipt are now preserved above.
 
 Production changed by this task through this checkpoint: **Git branch yes; shared `/app` yes; matching live backend release observed; official final verification in progress**. No financial/index mutation or APK publication occurred.
 
