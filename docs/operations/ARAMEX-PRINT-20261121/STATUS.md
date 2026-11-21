@@ -1,4 +1,143 @@
-# Current carrier shipment read recovery
+# ARAMEX-PRINT-20261121: replacement source candidate on current Production
+
+Current source branch: `codex/aramex-order-payload-release-v2-20261121`, directly
+based on reviewed Production `6e41bf25b936e8c4047df75bb170610dfc71b7f7` (PR2039).
+Shipping production/test files are byte-identical to the passed PR2047 candidate.
+Its immutable A/B remains intact and is superseded solely because Production
+advanced. Generate a fresh source A, intent-only B and runtime identity; never
+reuse the old intent or lease. No task lease or publication; Production changed
+by this follow-up:no. Next: push/open replacement Draft PR, close PR2047, require
+current-base CI, new intent, both host rehearsals and independent ARM64/Linux
+validation, then normal merge and authorized guarded publication. Actual target
+and control ADB acceptance remains required. Preserve foreign leases/files.
+
+## Superseded PR2047 evidence
+
+Production advanced to `6e41bf25b936e8c4047df75bb170610dfc71b7f7` through unrelated
+PR2039 while this candidate's checks ran. PR2047 now conflicts at the intent.
+Do not merge or deploy its frozen B; keep A/B unchanged and create a new source
+candidate from the new reviewed Production base. Shipping changes are unaffected.
+The old B did pass both host20/24 configured clean-clone adapter rehearsals
+(readiness44941805161 success) and complete independent ARM64/Linux validation:
+adapter0, verifier0, exact identity match,86.92seconds,shared tracked unchanged.
+ARM64 proof stage `/tmp/aramex-pr2047-0943-tw4c6c3m` is supplementary; source,
+intent,CI artifact and this summary are remotely recoverable. No task lease,
+merge,publication or Production change. Actual target acceptance remains pending.
+
+Evidence branch `codex/aramex-order-payload-evidence-20261121` is NOT a
+deployment candidate. The immutable release branch is
+`codex/aramex-order-payload-recovery-20261121`:
+
+- Reviewed base J: `a9d0aec2939a706dcc16f9948e7a81cfe019e66f`.
+- Source A: `41057d6a044d4052205a48aad16bfb3922648e20`.
+- Intent-only B: `0943ccb34b36b3a374cc6df0ec28c73219820e11`.
+- Runtime id: `rg5-36b2364382c35fcc3f337577b32f97b466e6f59aed2cbf374c88315ee36b691f`.
+- Source readiness run44940825251 succeeded. Candidate artifact14722110181,
+  ZIP SHA256 `cbd1aac02225bf6b0518b5c4bdfa2907592a36180db47fc147d42feb50ca38d1`.
+- Exact intent SHA256 `64bc6bbc357f7ba3a90cb9166fdb4c87931d0f398691acbc9ac164960e5baeef`.
+- CI candidate validator passed. Local independent Git Backend/control manifests
+  and deterministic runtime id matched. Windows complete filesystem validation
+  stopped on NTFS mode0666; no validator was bypassed. Full Linux validation is
+  required and is part of the exact-B rehearsals.
+- Exact-B readiness run44941805161 and host20/24 clean-clone rehearsals running;
+  isolated shared-host ARM64 configured adapter started at exact B. Original
+  guard active:false and shared HEAD J/tracked clean were checked before start.
+  No task lease, merge or publication. PR2047 is still Draft.
+- Prior PR2046 owner records original verify3 success; own guard read independently
+  confirmed active:false. No foreign lease was closed or reused.
+
+Next: require full Linux intent/identity validation and all exact-B checks,
+then normal merge preserving A/B, authorized guarded publication, original
+verify3, and actual target/control ADB label/print acceptance. This follow-up
+has not changed Production. The source-stage notes below are historical.
+
+Current user contract: recover official carrier labels through the existing
+order-read permission, as with SMSA/iMile. Do not change linking or request
+additional scopes. The previous missing-scope diagnosis was not proved and
+must not be treated as the required solution.
+
+New task branch `codex/aramex-order-payload-recovery-20261121` is now based on
+reviewed Production `a9d0aec2939a706dcc16f9948e7a81cfe019e66f` (PR2046).
+Before updating this unfrozen source, verified checkpoint
+`f78d69d885805243be5c0f736b64a651af6b1212` was pushed and preserved separately
+on `codex/aramex-order-payload-beforebase-20261121`. The source/test files are
+byte-identical after updating the base. No frozen task A/B was rewritten.
+The prior frozen release A/B/M and evidence checkpoint
+`3a679012460c8ec072d1b7e754a6ab7686aae198` remain intact. That release was
+published and original verify3 closed its lease, but original printing failed.
+This follow-up has no lease or publication; Production changed by follow-up:no.
+
+The existing shipping mapper recognizes `shipping.shipment` and a singular
+top-level `shipment`. The print reader starts from `shipments` only, and its
+order-scoped response normalizer also omits a singular `shipment` wrapper.
+Added synthetic public-reader cases for these three shapes across Aramex,
+SMSA and iMile, with optional standalone shipping APIs denied. All nine cases
+fail before the source change with shipping_scope_required despite an official
+label in the fresh order or order-scoped response. Command (exit1):
+`python -B -m pytest --noconftest --asyncio-mode=auto -q backend/tests/test_carrier_shipment_read_fallback.py -k order_read_permission_supports_each_current_shipment_shape`;
+PYTHONPATH includes backend and backend/tests; existing isolated test runtime.
+Result:9 failed,41 deselected at the initial regression-only checkpoint; the live
+cause remains unverified. The source repairs below are still pending deployment.
+Implemented bounded normalization of fresh `shipping.shipment`, singular
+`shipment`, and the order-scoped `data.shipment` wrapper. A nested AWB can
+inherit its enclosing carrier but not the carrier id as a shipment id. The
+same ingestion precedence prevents an old nested AWB overriding top-level
+selection/history. Strict reads reject contradictory parents/references and
+canonical shipment mismatches. Fresh singular cancellation/return/replacement
+is fenced before an older ready list can revive it. An additional regression
+first failed (1 failure/60 passed), then passed after this fence was added.
+
+Fresh verification after the source change, in isolated module processes:
+- `test_carrier_shipment_read_fallback.py`:111 passed,including ten real native
+  HTTP-route cases with optional shipping API denied and no provider/local write.
+- `test_amasi_shipping_compat.py`:58 passed and59 subtests passed.
+- `test_mobile_external_label_read_parity.py`:19 passed.
+- `test_shipping_label_current_guard.py`:29 passed.
+- `test_salla_current_shipping.py`:37 passed.
+- Total:254 tests and59 subtests; all exit0. `git diff --check` passes.
+Commands use `python -B -m pytest --noconftest --asyncio-mode=auto -q --tb=short`.
+Production source changed only `backend/order_engine/amasi_shipping_compat.py`.
+Existing valid list responses and optional granted shipping fallback remain.
+Additional review caught six failing null-placeholder cases; normalization now
+preserves a valid singular/direct row when a sibling alias is null. Nine further
+label-pointer/invoice cases failed before their repair. Official aliases already
+recognized by ingestion (`shipping_label_url`, `awb_url`, `waybill_url`) are now
+usable for printing. Explicitly typed invoices are excluded even beside a real
+AWB or inside a label array. Six invoice variants and two diagnostics privacy
+cases now pass. Read logs contain fixed source/shape/status flags only, never
+provider/customer bodies, ids, URLs, tokens or exception text. The unsupported
+reconnect instruction was removed; existing error codes remain compatible.
+Twelve additional safety cases cover cancelled/return children observed before
+an older ready response, explicit order-scoped replacement, and string-zero ids.
+The first observed cancellation case failed before its repair (1 failed,99
+deselected with maxfail1). Validated negative evidence now blocks only the same
+child; a distinct new active child remains usable when no canonical id is known.
+The current Production branch advanced to a9d0aec2939a706dcc16f9948e7a81cfe019e66f
+through unrelated PR2046. Its owner reports publication/verification in progress.
+No shared workspace or foreign lease was changed. The unfrozen task source was
+rebased onto that reviewed base before freezing a new intent; no task A/B exists.
+
+Draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/2047. Earlier checkpoint
+`89a2f16a331cde00be8f9a6b749865078c559039` readiness44935916653 succeeded,
+but does not verify subsequent source changes; require fresh current-head CI.
+This proves synthetic/public/native contract behavior, not original-order
+printing. The workspace probe found no integration matching the current store
+and could not match the configured app link. It stopped before token decryption or
+any Salla request; it cannot establish Production permissions or absence of an
+order. See LIVE-ORDER-READ-CONTEXT.json. No production credentials were exported.
+
+Exact next action: push this source on the current reviewed Production base and
+run fresh candidate CI for PR2047. Obtain its governed source-A artifact,
+freeze an intent-only B, require
+both host clean-clone rehearsals and applicable checks, then current-base normal
+merge and a separately authorized guarded publication. Test original target and
+control through ADB on the actual release. Do not request additional scopes or
+claim the reported case fixed before real device acceptance. All v5 gates apply.
+No customer fixtures, OAuth/config/token changes, provider POST, shipment
+creation, substitute PDF, status/financial write or sync are authorized here.
+Issue #1006 task block records the exact remote checkpoint and subsequent state.
+
+## Historical release preparation (superseded by current status above)
 
 Task: ARAMEX-PRINT-20261121. Repository: AMASI-SA/AMASI-SA.
 Release branch: `codex/aramex-label-verified-release-20261121`.
