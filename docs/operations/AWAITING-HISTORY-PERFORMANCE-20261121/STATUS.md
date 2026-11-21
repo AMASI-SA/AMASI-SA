@@ -50,3 +50,54 @@ The original guard status subsequently returned active:false. Do not prepare or 
 Owner renewed instruction to complete and publish after rollback. Latest shared guard observed active:false. Production branch base88af38f01cf979acbca59b95a95e661828f2306f is merged into this isolated branch, preserving PR2048. Dashboard and dashboard-v2 now call a pure deferred-history decision instead of scanning financial state or15sourcecollections. Unverified waiting candidates retain their recorded costs and block final profit; UI explicitly says the financial history check is pending in operational balances. This is conservative incident behavior, NOT a cached assertion of no prior money. Operational balance calculation retains the full history guard, now one off-thread scan per cohort. No periodic scheduler was added. Reader version changes invalidate incompatible dashboard caches.
 
 272focused non-Mongo tests PASS,2real-Mongo deselected. Dedicated local Mongo7 attempt failed host permissions; real-Mongo and exact-headCI still required. No new production publication; no financial writes. Full unified workspace PR2049 remains separate from this emergency performance release.
+
+## Latest continuation checkpoint — publication not started, 2026-11-22 Riyadh
+
+**Current state: PR #2053 is merged and its shared-host preparation passed, but the final production Publish changes action was rejected by automatic approval review. No publication was started. This task's unused release lease was then aborted successfully; the original guard reports active:false. Live still runs the emergency rollback. Performance recovery is not accepted.**
+
+This update is documentation evidence only. Its separate evidence branch must not be deployed, merged into the frozen release, or used as a replacement release intent. All earlier entries below/above remain historical evidence.
+
+### Immutable release and verification
+
+- PR: https://github.com/AMASI-SA/AMASI-SA/pull/2053
+- Source A: `99c0b847014d68f921154d2b5b74101c4db9dbaf`
+- Intent-only B: `6ad54d81340402232b5f325e09c917eba8920d86`
+- Reviewed base J: `88af38f01cf979acbca59b95a95e661828f2306f`
+- Normal deployment merge M: `10ee7b41204dd1d39c8b91daf9f0a9d899041ebb`
+- Merge and reviewed-B tree: `77548b0cb9e571003ce3b37a1b32610b8eb51db5`
+- Intended runtime: `rg5-d4eb0438ce8a4fd222298c40e6375f06cdfeb7e77ffdb35a5ff921bc8a0ab42d`
+
+Independent GitHub commit/compare reads verified M's parents are J and B, its tree exactly equals B, A is an ancestor, A..M changes only `release/release-intent-v5.json`, and B..M changes no files. A/B/M were not amended, rebased, or squashed. The original local intent loader independently passed at B.
+
+Fresh exact-B CI: latest returned runs deduplicated by workflow showed 29 successful workflows and one conditional TikTok skip, with no pending or failed latest returned workflows. Older cancelled Snapchat duplicates have successful newer replacements. Required direct evidence includes release readiness 44950763208; Host20 clean-clone/no-Git adapter job136988211434 and Host24 job136988211482; operational balances 44950763265; stock44950763235; real-Mongo review44950763194. Actual logs: balances6189tests+90subtests, then16shippingtests+18subtests; stock5502tests+97subtests with zero skips/failures/errors. These are CI checks, not live performance acceptance.
+
+The root publisher observed the actual clean shared-host adapter succeed at M, then the original prepare and prepublish succeed for the exact intended identity. No lease was held during the initial rehearsal. The task used temporary build space rather than filling the constrained /app volume and preserved unrelated shared files.
+
+### Publication boundary and unused lease closure
+
+Automatic approval review rejected the final Emergent `Publish changes` action, stating that the current “continue” messages were insufficient explicit authorization for that exact production publication. The publisher did not bypass the rejection or retry the publish through another route. The Emergent UI remained at the prepublication confirmation; no newer successful deployment was observed.
+
+Before the abort, the root publisher asserted the original guard actor was exactly `chatgpt-pr2053-recovery-20261122-b90f3c3040a7`. It then ran the unchanged original abort with the exact deployment SHA M and intended release ID. Result: exit0, `aborted:true`, matching A/M/runtime; subsequent original status: `active:false`. Only this task's own unused lease was closed. No foreign lease was cleared.
+
+### Actual live observation after closure
+
+At `2026-11-21T22:31:02.514248+00:00` (`2026-11-22 01:31:02 Asia/Riyadh`), one cache-busted read through the unchanged original health helper returned:
+
+- elapsed0.744seconds; `health_ok:true`;
+- actual source `db141c0438edf04aa77ccd1122bc9c5008cf39d6`;
+- actual runtime `rg5-500857bae382758ba238083f1f7f417b23a7e2dfb298aa3e2e99e7f4baf56b45`;
+- `verified_identity_available:true`, `critical_file_hashes_match:true`, `frontend_build_verified:true`.
+
+This is the emergency rollback identity, not PR2053. A single health read does not establish sustained speed, dashboard interaction, or complete public frontend byte/MIME acceptance. The original full three-probe release verification was not run for an unpublished release. Do not claim the performance incident is resolved.
+
+### Exact next safe action
+
+1. Explain the automatic-review rejection to the owner and obtain explicit authorization for the concrete PR2053 production publication if it is still requested. Do not treat this checkpoint as publication approval.
+2. Re-read this status, PR2053, latest relevant Issue1006 handoff, current remote production ref, Emergent publishing state, and original shared guard status. Continue only with inactive guard, preserved A/B ancestry, and no conflicting release or shared changes.
+3. If M/current intended bytes remain exact, validate the existing clean adapter artifacts against the immutable intent, then create a fresh own lease and rerun original prepublish. If the source/ref has advanced, reassess and produce a newly governed handoff where required; never force a stale release.
+4. Once authorized and prepublish passes, perform one publication, observe a newer explicit successful deployment, run the original full verify command for three consecutive exact backend/public frontend proofs, and confirm `active:false`.
+5. Perform bounded read-only dashboard/employee/runtime acceptance and measure actual speed before claiming recovery. Do not create financial, receipt, order-status, backfill, or provider test writes.
+
+PR2049 unified UI remains separate. The catalogue-memory investigation is a distinct follow-up and is not part of this frozen release. Production Git/shared source changed to M; actual live publication by this continuation: **no**. Live business data/configuration were not changed by release validation.
+
+Machine-readable sanitized checkpoint: `publication-blocked-20261122.json`.

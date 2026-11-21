@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "task": "AWAITING-HISTORY-PERFORMANCE-20261121",
+  "record_kind": "documentation_only_never_deploy",
+  "state": "merged_prepared_publication_not_started_lease_closed",
+  "recorded_for_date_riyadh": "2026-11-22",
+  "repository": "AMASI-SA/AMASI-SA",
+  "pr": 2053,
+  "release": {
+    "source_a": "99c0b847014d68f921154d2b5b74101c4db9dbaf",
+    "intent_b": "6ad54d81340402232b5f325e09c917eba8920d86",
+    "base_j": "88af38f01cf979acbca59b95a95e661828f2306f",
+    "deployment_merge": "10ee7b41204dd1d39c8b91daf9f0a9d899041ebb",
+    "tree": "77548b0cb9e571003ce3b37a1b32610b8eb51db5",
+    "runtime": "rg5-d4eb0438ce8a4fd222298c40e6375f06cdfeb7e77ffdb35a5ff921bc8a0ab42d"
+  },
+  "independent_merge_proof": {
+    "parents_match_j_b": true,
+    "tree_equals_b": true,
+    "a_is_ancestor": true,
+    "a_to_merge_paths": [
+      "release/release-intent-v5.json"
+    ],
+    "b_to_merge_paths": [],
+    "original_intent_loader_exit_code": 0
+  },
+  "ci": {
+    "ref": "6ad54d81340402232b5f325e09c917eba8920d86",
+    "latest_returned_unique_workflows": {
+      "success": 29,
+      "conditional_skipped": 1,
+      "pending": 0,
+      "failed": 0
+    },
+    "readiness_run": 44950763208,
+    "host20_job": 136988211434,
+    "host24_job": 136988211482,
+    "operational_run": 44950763265,
+    "stock_run": 44950763235,
+    "review_run": 44950763194,
+    "operational_tests": 6189,
+    "operational_subtests": 90,
+    "shipping_tests": 16,
+    "shipping_subtests": 18,
+    "stock_tests": 5502,
+    "stock_subtests": 97
+  },
+  "shared_host": {
+    "adapter_success_observed_by_publisher": true,
+    "prepare_passed": true,
+    "prepublish_passed": true,
+    "actor": "chatgpt-pr2053-recovery-20261122-b90f3c3040a7",
+    "abort": {
+      "actor_asserted": true,
+      "original_guard": true,
+      "exit_code": 0,
+      "aborted": true,
+      "subsequent_active": false
+    }
+  },
+  "publication": {
+    "started": false,
+    "action": "Publish changes",
+    "automatic_approval_review": "rejected",
+    "reason": "Current continue messages did not constitute sufficient explicit authorization for the exact production publication.",
+    "retry_or_bypass_performed": false,
+    "new_success_observed": false,
+    "full_postpublication_verify_performed": false
+  },
+  "live_observation": {
+    "observed_at": "2026-11-21T22:31:02.514248+00:00",
+    "method": "one_cache_busted_original_health_helper_read",
+    "elapsed_seconds": 0.744,
+    "health_ok": true,
+    "source_git_sha": "db141c0438edf04aa77ccd1122bc9c5008cf39d6",
+    "release_id": "rg5-500857bae382758ba238083f1f7f417b23a7e2dfb298aa3e2e99e7f4baf56b45",
+    "verified_identity_available": true,
+    "critical_file_hashes_match": true,
+    "frontend_build_verified": true,
+    "is_pr2053": false,
+    "sustained_performance_accepted": false,
+    "full_public_frontend_probe": false
+  },
+  "scope": {
+    "financial_test_writes": false,
+    "provider_test_writes": false,
+    "foreign_lease_cleared": false,
+    "pr2049_included": false,
+    "catalog_memory_followup_included": false,
+    "issue_comment_mutation_by_evidence_task": false
+  }
+}
