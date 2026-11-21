@@ -1,0 +1,47 @@
+{
+  "task": "ARAMEX-PRINT-20261121",
+  "state": "WIP: live printing unresolved",
+  "production_changed_by_task": true,
+  "source_git_sha": "3948581dd53a942af538731c8ad2eff045fd86b7",
+  "deployment_git_sha": "d69f31da14f3dc1baad25ab0884ba810446b19f9",
+  "release_id": "rg5-a581e09f8d694a4ecfdca10c50d2bb899ac11f9d5d386753c812d5f359b99ae2",
+  "original_guard": {
+    "exit_status": 0,
+    "verified": true,
+    "checks": 3,
+    "matching_lease_active": false,
+    "frontend_requests_per_round": 710,
+    "elapsed_seconds": 952,
+    "proof_bytes": 40047,
+    "proof_sha256": "dbc9c2a4660b549b5423a43f491852693df8bfce0077a08c3a5aa86e56dcc5c0",
+    "evidence": "Observed original subprocess output; raw full JSON copy pending sleeping workspace."
+  },
+  "ui": {
+    "version": "cee8d3f",
+    "event": "Deployment finished Nov21 06:29PM Asia/Riyadh",
+    "literal_deployment_succeeded_captured": false,
+    "complete_cloud_build_transcript_captured": false
+  },
+  "native_target": {
+    "authenticated_correct_package": true,
+    "fetch_submitted_once": true,
+    "result": "shipping_scope_required",
+    "print_enabled": false,
+    "android_print_reached": false,
+    "resolved": false
+  },
+  "control": {
+    "carrier": "SMSA",
+    "user_reports_print_success": true,
+    "official_pdf_observed_in_native_viewer": true,
+    "fresh_read_path_comparison": "pending"
+  },
+  "linking": {
+    "existing_connection_observed": true,
+    "displayed_shipping_read_scope_present": false,
+    "changed_by_patch": false,
+    "reauthorization_performed": false,
+    "exact_denied_upstream_request": "pending"
+  },
+  "customer_data_included": false
+}

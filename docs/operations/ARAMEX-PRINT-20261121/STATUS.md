@@ -219,7 +219,101 @@ Canonical ledger: Issue1006 comment6238987123 ARAMEX-PRINT-20261121 block.
 
 ---
 
-# Current carrier shipment read recovery
+# ARAMEX-PRINT-20261121: WIP, actual printing unresolved
+
+This current entry supersedes the historical preparation record below.
+Repository AMASI-SA/AMASI-SA. Evidence branch
+`codex/aramex-label-verified-evidence-20261121` MUST NOT be deployed.
+Previous checkpoint: `2062faadcc6a77f25e3e13376523b990bebeea8f`.
+Issue #1006 comment 6238987123 records the next exact checkpoint.
+
+## Release and original verification completed
+
+Frozen release branch `codex/aramex-label-verified-release-20261121`:
+J `9f47a47ff16bfa02a8132bd83fe44db3bdb86da0`, source A
+`3948581dd53a942af538731c8ad2eff045fd86b7`, intent-only B
+`fccefed6880c1cad4f3b81bad7303c506a40495e`. PR #2044 merged normally as M
+`d69f31da14f3dc1baad25ab0884ba810446b19f9`; M tree equals B. Runtime
+`rg5-a581e09f8d694a4ecfdca10c50d2bb899ac11f9d5d386753c812d5f359b99ae2`.
+Exact B passed 27 jobs/six conditional skips and both Host20/24 clean-clone,
+no-Git adapter rehearsals (44914538125). All 2947 source records matched.
+Corrected isolated processes passed 214 tests/59 subtests; one memory rollback
+skip has a passing real-Mongo counterpart. M readiness44917409355, Security
+Gate44917409380 and CodeQL44917409330 succeeded. Retained rehearsal/shared
+materialization JSON describes the exact logs and preserved unrelated files.
+
+After the foreign lease closed and fresh original status was inactive, shared
+source advanced ff-only to M. Unchanged configured adapter, frontend verification
+and isolated packages passed exit0 after two rejected Python cache files were
+preserved outside the package. No unrelated source deletion occurred. Outputs
+remain ignored. Own actor codex-aramex-label-2044 prepared at
+2026-11-21T15:17:02.500716+00:00; final original prepublish passed immediately
+before separately authorized publication. UI showed green Deployment finished
+Nov21 06:29PM Asia/Riyadh and active version cee8d3f. Literal Deployment
+Succeeded text was not captured; this gap is not waived. UI logs are runtime
+logs, not a complete Cloud Build transcript; manual adapter logs are not Cloud
+Build evidence.
+
+Original unchanged command completed exit0:
+
+    PYTHONDONTWRITEBYTECODE=1 python -B scripts/production_release_guard.py verify --url https://mezansalla.com
+
+Observed original output: verified=true, three consecutive checks, intended
+M/A/runtime, verified identity/hash/frontend/source flags, exact JSON metadata,
+710 frontend requests per round. Matching lease closed: active=false. Full
+proof40047bytes, SHA256
+`dbc9c2a4660b549b5423a43f491852693df8bfce0077a08c3a5aa86e56dcc5c0`, elapsed952s.
+Observed summary/checksum is durable in PRODUCTION-VERIFICATION-AND-NATIVE-RESULT.json.
+Full raw JSON copy remains pending in the sleeping code-server workspace; do
+not claim it is archived. Do not repeat publication or prepare a lease for logs.
+Production changed by this task: YES, supported by new UI version, health
+identity and original three-probe verification. This verifies released bytes,
+not resolution of the defect. Remote production has since advanced through
+unrelated work to `66aa13967156e8e279b5297caf697c155f720fd1`; reconcile fresh
+state before new source/release work and never reuse a foreign lease.
+
+## Actual native result and root-cause investigation
+
+Authenticated ADB tested the correct installed production package after release.
+The original target was completed in Salla. One explicit label fetch returned
+shipping_scope_required; native print stayed disabled and Android printing was
+not reached. Earlier sign-in blocker is resolved. ORIGINAL TARGET STILL FAILS.
+
+Owner's successful control uses SMSA; only some Aramex shipments fail. Fresh
+observation found the control's official PDF open in Android's document viewer;
+Back returned to Mezan's label screen. Fresh same-session control source
+comparison is pending. Independent connected Salla reads found one created
+outbound shipment with tracking and null label for each case: Aramex target
+international, SMSA domestic. This connector uses a different grant and cannot
+establish Mezan's permissions or exact upstream response.
+
+Read-only Mezan Salla settings show the existing connected integration, token
+update predating the patch, and no shipping-read scope in displayed permissions.
+No reconnect/disconnect/reset/sync/consent action occurred. This is consistent
+with a permission gap, but exact denied request/status/body and the control's
+successful source remain unproved. Do not claim revoked access or changed token,
+or reconnect as a proven fix. The patch changed no linking/OAuth/config/token,
+mobile source, provider POST, shipment creation, substitute PDF, status or
+financial write. Existing valid labels still succeed despite independent read
+failures. Preserve the established linking method while tracing actual reads.
+
+## Next safe actions
+
+1. Compare control and target with fresh ADB observations in the same session,
+   without customer data in logs/commits, shipment creation or status changes.
+2. Identify the exact denied Mezan Salla read and inspect old/current code.
+   Official print-specific Order Actions documentation needs response/side-effect
+   review before use. Do not issue guessed POSTs or broaden access as diagnosis.
+3. Further source work requires a fresh candidate from current reviewed
+   production; frozen A/B/M remain untouched. Use v5 only for a new release.
+4. Copy full original verifier JSON when available without repeating publication;
+   capture literal UI success evidence if exposed and preserve both limitations.
+
+Unrelated shared/untracked files, foreign leases and superseded immutable
+candidates/closed PR2040/2043 are preserved. This milestone updates evidence only;
+no new release, linking change, sync or financial write. Task remains WIP.
+
+# Historical preparation record (superseded by current entry above)
 
 Task: ARAMEX-PRINT-20261121. Repository: AMASI-SA/AMASI-SA.
 Release branch: `codex/aramex-label-verified-release-20261121`.
