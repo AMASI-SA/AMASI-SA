@@ -18,6 +18,11 @@ from operational_forecast_projection import money, number
 from operational_payment_evidence import _instant
 from operational_profit_projection import OPERATING, SOURCE, VERSION
 from operational_read_runtime import SourceReadError, load_collections, source_read_budget
+from awaiting_payment_cohort import split_financial_cohort
+from awaiting_payment_eligibility import (
+    AWAITING_PAYMENT_RAW_PROJECTION, attach_financial_cohort_eligibility, financial_cohort_eligibility,
+)
+from awaiting_payment_history import guard_financial_cohort_history
 
 RIYADH = ZoneInfo("Asia/Riyadh")
 MAX_ORDERS = 100_000
@@ -103,7 +108,7 @@ async def _cohort_cooperative(orders, raw_rows, settings, owner, start, end, bud
         await budget.checkpoint()
 
 
-async def _load_context(db, owner, start, end):
+async def _load_context(db, owner, start, end, state=None):
     from dashboard_cpu_budget import CPUWorkBudget, PARSER_BUDGET_MS
     from operational_read_runtime import read_source_cursor
     from order_cost_authority import _parallel_inputs, _request_parallel_reads
@@ -133,7 +138,13 @@ async def _load_context(db, owner, start, end):
         if len(orders) > MAX_ORDERS:
             raise ValueError("profit_order_scope_too_large")
         projection = {**SALLA_RAW_CURRENCY_PROJECTION, **SALLA_REPORT_OPTION_PROJECTION, "user_id": 1,
+            "raw_by_source.salla_direct.payment_method": 1, "raw_by_source.salla_direct.payment.method": 1,
             **{"raw_by_source.salla_direct." + field: 1 for field in ("id", "order_number", "date", "created_at", "order_date", "updated_at", "date_updated")}}
+        if any(financial_cohort_eligibility(order, {}, owner=owner)["review_required"] for order in orders):
+            projection.update(AWAITING_PAYMENT_RAW_PROJECTION)
+            projection = {path: value for path, value in projection.items()
+                          if not any(projection.get(".".join(path.split(".")[:index])) == 1
+                                     for index in range(1, len(path.split("."))))}
         raw_rows = await read("unified_orders", query, projection, MAX_ORDERS + 1) if orders else []
         if len(raw_rows) > MAX_ORDERS:
             raise ValueError("profit_order_scope_too_large")
@@ -148,6 +159,13 @@ async def _load_context(db, owner, start, end):
         orders, raw_rows = await load_orders()
     budget = CPUWorkBudget(PARSER_BUDGET_MS)
     selected, coverage = await _cohort_cooperative(orders, raw_rows, settings, owner, start, end, budget)
+    selected = attach_financial_cohort_eligibility(selected, raw_rows, owner=owner, as_of=end)
+    selected = await guard_financial_cohort_history(db, owner, selected, state=state)
+    selected, financial_cohort = split_financial_cohort(selected)
+    # The original source identity/count remains intact for reconciliation.
+    # Only the separately guarded monetary cohort feeds component calculations.
+    coverage = {**coverage, **financial_cohort,
+                "complete": coverage["complete"] and financial_cohort["complete"]}
     await attach_report_option_evidence_cooperative(selected, raw_rows, checkpoint=budget.checkpoint)
     await hydrate_order_currency_fields_cooperative(selected, raw_rows, checkpoint=budget.checkpoint)
     return {"orders": selected, "settings": settings, "coverage": coverage}
@@ -251,7 +269,8 @@ def assemble_snapshot(owner, start, end, context, values, errors):
     }
     for name in ("shipping", "payment_fees"):
         cost = costs.get(name) or {}
-        known = cost.get("known") if cost.get("known_orders") or coverage.get("orders") == 0 and cohort_complete else None
+        financial_count = coverage.get("financial_eligible_orders", coverage.get("orders"))
+        known = cost.get("known") if cost.get("known_orders") or financial_count == 0 and cohort_complete else None
         components[name] = _component(cost.get("known"), known=known,
             complete=cohort_complete and cost.get("pending_orders") == 0,
             source="shipping_cost_ssot" if name == "shipping" else "merchant_payment_settings:actual_fee_precedence",
@@ -330,7 +349,7 @@ async def load_profit_snapshot(db, owner, state, *, as_of, budget_seconds=25):
                 errors[name] = "operational_profit_source_unavailable"
 
     with source_read_budget(budget_seconds):
-        await batch({"context": lambda: _load_context(db, owner, start, end)})
+        await batch({"context": lambda: _load_context(db, owner, start, end, state)})
         context = values.get("context") or {}
         if context:
             await batch(_component_readers(db, owner, context, whole_days(start, end)[0]))

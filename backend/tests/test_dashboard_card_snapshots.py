@@ -162,7 +162,7 @@ async def test_top_products_reads_only_selected_costs_and_authorizes_saved_hits(
     response = await env.client.get(path, params=PARAMS)
     assert response.status_code == 200, response.text
     body = response.json()
-    assert set(body) == {"product_cost_v2", "snapshot"}
+    assert set(body) == {"product_cost_v2", "financial_cohort", "snapshot"}
     assert body["snapshot"]["refresh_interval_seconds"] == 1800
     assert body["product_cost_v2"]["total"] == 10
     assert body["product_cost_v2"]["product_rows"][0]["total_sales"] == 100

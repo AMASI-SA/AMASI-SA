@@ -2236,6 +2236,50 @@ async def dashboard(user=None, from_date=None, to_date=None, payment_methods=Non
             if _matches_any(o.get("order_status", ""), included_statuses)
         ]
 
+    # Keep the selected order registry intact. Only a current, bound zero-paid
+    # proof with a completed historical-money/cost check may leave money KPIs.
+    from datetime import time as _cohort_time, timedelta as _cohort_delta
+    from awaiting_payment_eligibility import (
+        AWAITING_PAYMENT_RAW_PROJECTION, attach_financial_cohort_eligibility,
+        financial_cohort_eligibility,
+    )
+    from awaiting_payment_history import guard_financial_cohort_history
+    from awaiting_payment_cohort import split_financial_cohort
+    cohort_cutoff = (datetime.combine(datetime.fromisoformat(to_date).date(), _cohort_time.max,
+                                     tzinfo=timezone(_cohort_delta(hours=3)))
+                     if to_date else datetime.now(timezone.utc))
+    candidate_numbers = []
+    for order in all_orders:
+        candidate = financial_cohort_eligibility(order, {}, owner=owner_id)
+        if candidate["review_required"] or candidate["eligible"] is False:
+            candidate_numbers.append(order.get("order_number"))
+    cohort_proof_rows = []
+    if candidate_numbers:
+        # Separate projection: whole payment fee proof and nested zero-paid
+        # fields cannot coexist in one Mongo inclusion projection.
+        cohort_proof_rows = await source_db.unified_orders.find(
+            {**orders_q, "order_number": {"$in": candidate_numbers}},
+            AWAITING_PAYMENT_RAW_PROJECTION,
+        ).to_list(100000)
+    # Native-only placeholders remain visible as disagreement/review. They do
+    # not acquire a full exclusion proof merely because fee routing read them.
+    candidate_number_set = set(candidate_numbers)
+    for order in all_orders:
+        if order.get("order_number") in candidate_number_set:
+            continue
+        native = order.get("_dashboard_fee_source") or {}
+        native_payment = native.get("payment") or {}
+        cohort_proof_rows.append({"user_id": owner_id, "order_number": order.get("order_number"),
+                                  "raw_by_source": {"salla_direct": {
+                                      "payment_method": native.get("payment_method"),
+                                      "payment": {"method": native_payment.get("method")} if isinstance(native_payment, dict) else native_payment,
+                                  }}})
+    registry_orders = await guard_financial_cohort_history(
+        source_db, owner_id, attach_financial_cohort_eligibility(
+            all_orders, cohort_proof_rows, owner=owner_id, as_of=cohort_cutoff))
+    registry_currency = summarize_orders_sar(registry_orders)
+    all_orders, financial_cohort = split_financial_cohort(registry_orders)
+
     parsed_all = await orders_to_parsed_cooperative(all_orders)
     currency_conversion = parsed_all["currency_conversion"]
     currency_conversion_complete = currency_conversion["complete"] is True
@@ -2299,7 +2343,8 @@ async def dashboard(user=None, from_date=None, to_date=None, payment_methods=Non
     matched_all["deferred_shipping_cost"]  = round(_ssot_deferred, 2)
 
     total_sales = parsed_all["total_sales"]
-    total_orders = parsed_all["total_orders"]
+    registry_sales = registry_currency["total_sar"]
+    total_orders = financial_cohort["total_orders"]
     total_fees = matched_all["total_payment_fees"]
     total_shipping = matched_all["total_shipping_cost"]
     deferred_shipping = matched_all.get("deferred_shipping_cost", 0.0)
@@ -2469,6 +2514,8 @@ async def dashboard(user=None, from_date=None, to_date=None, payment_methods=Non
             rep = a.get("report") or {}
             s = rep.get("summary") or {}
             total_sales += float(s.get("total_sales") or 0)
+            if registry_sales is not None:
+                registry_sales += float(s.get("total_sales") or 0)
             total_orders += int(s.get("total_orders") or 0)
             total_fees += float(s.get("total_payment_fees") or 0)
             total_shipping += float(s.get("total_shipping_cost") or 0)
@@ -2718,7 +2765,7 @@ async def dashboard(user=None, from_date=None, to_date=None, payment_methods=Non
 
     # Source breakdown (excel vs make vs unified)
     src_counts = {"excel": 0, "make": 0, "unified": 0}
-    for o in all_orders:
+    for o in registry_orders:
         ds = o.get("data_source") or "unified"
         src_counts[ds] = src_counts.get(ds, 0) + 1
 
@@ -2905,6 +2952,7 @@ async def dashboard(user=None, from_date=None, to_date=None, payment_methods=Non
 
     response = {
         "range": {"from_date": from_date, "to_date": to_date},
+        "financial_cohort": financial_cohort,
         "payment_fee_authority": {
             "basis": PAYMENT_FEE_BASIS,
             "complete": fee_result["payment_fees_complete"],
@@ -2928,6 +2976,10 @@ async def dashboard(user=None, from_date=None, to_date=None, payment_methods=Non
                 "unverified_orders_count"
             ],
             "total_orders": int(total_orders),
+            "financial_eligible_orders": financial_cohort["financial_eligible_orders"],
+            "excluded_unpaid_orders": financial_cohort["excluded_unpaid_orders"],
+            "review_orders": financial_cohort["review_orders"],
+            "financial_cohort_complete": financial_cohort["complete"],
             # iter-44 — cross-platform marketing KPIs
             "overall_roas": overall_roas if currency_conversion_complete else None,
             "avg_cost_per_order": avg_cost_per_order,
@@ -3002,14 +3054,14 @@ async def dashboard(user=None, from_date=None, to_date=None, payment_methods=Non
             "excluded_orders_count": int(
                 max(0, salla_ref_orders_count - total_orders)),
             "excluded_gross": (
-                round(max(0.0, float(salla_ref_gross) - float(total_sales)), 2)
-                if salla_ref_gross is not None and currency_conversion_complete
+                round(max(0.0, float(salla_ref_gross) - float(registry_sales)), 2)
+                if salla_ref_gross is not None and registry_sales is not None
                 else None
             ),
             "daily_expenses_total": round(daily_products_total, 2),
             "net_profit": (
                 round(net_profit_adjusted, 2)
-                if currency_conversion_complete
+                if currency_conversion_complete and financial_cohort["complete"]
                 else None
             ),
             "total_vat": round(total_vat, 2) if currency_conversion_complete else None,

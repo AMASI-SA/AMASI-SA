@@ -3,7 +3,7 @@
 Repository: AMASI-SA/AMASI-SA
 Branch: codex/payment-method-setup-tariff-consistency-20261121
 Reviewed base: 66aa13967156e8e279b5297caf697c155f720fd1
-State: verified setup and dashboard monetary milestones; proof-based unpaid cohort integration remains in progress. Not a release candidate.
+State: verified setup, dashboard monetary and proof-based unpaid cohort milestones; independent frozen-contract extension completed, exact full CI execution pending. Not a release candidate.
 
 ## Completed setup behavior
 
@@ -17,7 +17,7 @@ Exact `waiting` and `wating` placeholders, including surrounding spaces and case
 - Frontend notice, observed-method and fee-page tests: 47 passed.
 - `git diff --check`: passed.
 - Independent setup recheck: 82 tests passed. Setup checkpoint efe711d4ccb787448a05d709b04b73f3dd09e63e completed its applicable GitHub checks successfully; release-intent rehearsals were skipped because no new intent has been frozen.
-- All fixtures are synthetic. No Production data, sync, financial write or order-status write was used for validation.
+- Automated fixtures are synthetic. No Production sync, financial write or order-status write was used for validation. A later read-only Salla spot check confirmed the native waiting-payment payload shape; its anonymized shape is covered by a separate regression.
 
 ## Dashboard monetary milestone
 
@@ -31,11 +31,28 @@ The UI keeps unknown fee/profit values unknown, with separate awaiting-collectio
 - Tender alias coverage: 31 tests passed, including isolated Mongo integration.
 - These suites overlap earlier suites and are not added into a unique total.
 
+## Awaiting-payment cohort milestone
+
+Exact waiting/wating placeholders can now leave the financial cohort only when current native evidence is bound to the owner and order, explicitly records zero paid and the full amount outstanding, and a bounded historical check finds no previous payment or incurred-cost evidence. Missing, malformed, stale or contradictory evidence retains the row for review. Prior bank receipts, captures/refunds, COD collections, actual shipping/product/supplier costs and movement allocations prevent financial history from disappearing. Expected-only costs and stock reservations do not imply incurred cost. Large candidate sets use bounded batches with a shared deadline.
+
+Dashboard server, V2 cards/chart and operational profit sources preserve original selected/reference order counts while calculating financial amounts from a separate guarded cohort. Unresolved review blocks final profit without replacing known fees or costs with zero. The UI distinguishes that review from missing commission setup and explains excluded unpaid counts. Reader cache identity changes and profit snapshot version v2 prevent earlier semantics from being presented as current; no historical snapshot or ledger is deleted. Normal authorized refresh rebuilds current snapshots. No source order status, COD policy, payment or financial entry is written by these readers.
+
+- Helper/history/tender verification: 217 tests passed, including isolated real Mongo projection and history roundtrips. Additional native-shape, actual-fee and allocation protections were independently retested.
+- Independent helper/history/cohort review: 197 tests passed; focused frontend behavior checks: 75 passed.
+- Actual dashboard server and monetary regressions: 155 passed, including 12 Mongo-backed caller tests.
+- V2/profit reader tests cover original counts, monetary exclusion, prior cost retention, exact waiting-to-paid transition, normal refresh and subsequent cached result. All six isolated real-Mongo caller tests passed; source-contract and corrected read-contract recheck passed 42 tests and five subtests.
+- Final independent combined helper/history/server/V2/profit verification: 220 tests passed on isolated real Mongo. Counts overlap the focused suites above.
+- Broad local frontend run completed 205 suites with no failed suite before the process was killed with exit 137. It is not a complete-suite pass; final remote CI is still required.
+
 ## Remaining work and limits
 
-Proof-based awaiting-payment financial cohort exclusion is being implemented separately. Its uncommitted helper/history work is intentionally excluded from this checkpoint. It must preserve source/reference order counts, existing payment and incurred-cost evidence, and all COD behavior. Do not claim that removing waiting from fee setup already removes all unpaid sales from reports. Legacy mezan_profit_engine and marketing_report_costs monetary consumers remain outside this dashboard milestone; historical analysis fees remain explicitly legacy.
+Follow-up validation on 2026-11-21: the owner-scoped Salla connector returned 39 waiting-payment orders for November 1–21. One full native payload had zero paid, full outstanding amount, a waiting payment-method row, and the payment_pending status. The current-source proof helper accepts that shape with the correct Mezan owner, identity and watermark. This is source evidence, not a Production Mezan calculation or a claim of complete reconciliation.
 
-Next: finish independent review, integrate and test bounded current-source and prior-history eligibility guards, checkpoint exact source and run CI. Then prepare a fresh protocol-v5 A/B release on the current Production base, rehearse, and perform separately verified publication. No release intent has been frozen for this task. Shared `/app`, Release Guard, Production branch and live runtime have not been changed by this task.
+The monetary checkpoint's CI identified a legacy wrapper keyword compatibility regression (fixed), stale UI source-text assertions (replaced by behavior checks), and a frozen runtime response/read contract that is being extended independently for the approved fee and cohort semantics. The native bank-contract job passed on rerun without any bank code or test weakening. Release remains blocked until the final source passes the full required gates.
+
+The independently reviewed frozen runtime oracle extension is included in this checkpoint. All untouched historical response values and source reads remain pinned, except the explicitly reviewed unknown-FX fixed-fee correction and new fee/cohort metadata. The two fee-policy reads are audited for exact owner, projection, operation and count. Focused gate validation passed 196 tests, and all 164 frozen reference records satisfy the independent expected-contract constraints. The available captured runtime response matches the fee extension byte-for-byte. Full execution of all 164 runtime responses remains pending native CI: local MongoDB 8.0.12 aborted before starting because the sandbox lacks its required CPU metadata. Its version guard was not changed. Legacy mezan_profit_engine and marketing_report_costs monetary consumers remain outside this dashboard fee-authority milestone; historical analysis fees remain explicitly legacy.
+
+Next: finish the frozen runtime contract validation and final CI, then prepare a fresh protocol-v5 A/B release on the current Production base, rehearse, and perform separately verified publication. No release intent has been frozen for this task. Shared `/app`, Release Guard, Production branch and live runtime have not been changed by this task.
 
 Read-only Emergent terminal preflight on 2026-11-21: shared guard active:false; shared HEAD 66aa13967156e8e279b5297caf697c155f720fd1; no tracked working changes. Live health reports source db141c0438edf04aa77ccd1122bc9c5008cf39d6, release rg5-500857bae382758ba238083f1f7f417b23a7e2dfb298aa3e2e99e7f4baf56b45, with verified identity, matching critical hashes and verified frontend all true. This is the prior deployment, not publication of this task. Recheck the guard immediately before any future shared workspace mutation.
 

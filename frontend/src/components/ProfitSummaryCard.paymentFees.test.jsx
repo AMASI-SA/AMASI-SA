@@ -145,3 +145,41 @@ test("complete confirmed zero commission remains zero", () => {
     expect(container.querySelector('[data-testid="profit-line-payment-fees"]').textContent).toContain("0.00");
     expect(container.querySelector('[data-testid="profit-summary-net"]').textContent).toBe("1,000.00 ر.س");
 });
+
+
+test.each([null, 880])("cohort review prevents invented or stale final profit %s while retaining known commission", (netProfit) => {
+    act(() => root.render(<ProfitSummaryCard totals={{
+        total_sales: 1000, total_product_cost: 100, total_payment_fees: 20,
+        payment_fees_complete: true, net_profit: netProfit,
+    }} financialCohort={{ complete: false, review_orders: 1 }} />));
+    expect(container.querySelector('[data-testid="profit-summary-net"]').textContent).toBe("غير مكتمل");
+    expect(container.querySelector('[data-testid="profit-summary-margin"]')).toBeNull();
+    expect(container.querySelector('[data-testid="profit-line-payment-fees"]').textContent).toContain("20.00");
+    expect(container.querySelector('[data-testid="profit-payment-fees-incomplete-hint"]')).toBeNull();
+    const hint = container.querySelector('[data-testid="profit-financial-cohort-incomplete-hint"]').textContent;
+    expect(hint).toContain("بانتظار مراجعة الإثبات المالي للطلبات");
+    expect(hint).not.toContain("عمولات");
+});
+
+test.each([false, true, undefined])("totals-only cohort authority %s respects incomplete and legacy responses", (complete) => {
+    act(() => root.render(<ProfitSummaryCard totals={{
+        total_sales: 1000, total_product_cost: 100, total_payment_fees: 20,
+        financial_cohort_complete: complete, payment_fees_complete: true, net_profit: null,
+    }} />));
+    expect(container.querySelector('[data-testid="profit-summary-net"]').textContent)
+        .toBe(complete === false ? "غير مكتمل" : "880.00 ر.س");
+});
+
+
+test("proved unpaid exclusion explains financial totals while preserving full order count", () => {
+    act(() => root.render(<ProfitSummaryCard totals={{
+        total_sales: 1000, total_orders: 3, total_payment_fees: 20,
+        financial_cohort_complete: true, excluded_unpaid_orders: 2, net_profit: 980,
+    }} />));
+    const note = container.querySelector('[data-testid="profit-financial-cohort-excluded-note"]').textContent;
+    expect(note).toContain("بانتظار الدفع: 2");
+    expect(note).toContain("وتبقى ضمن عدد الطلبات");
+    expect(note).not.toContain("ملغ");
+    expect(container.querySelector('[data-testid="profit-summary-net"]').textContent).toBe("980.00 ر.س");
+    expect(container.querySelector('[data-testid="profit-kpi-orders"]').textContent).toContain("3");
+});

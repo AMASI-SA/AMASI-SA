@@ -28,6 +28,12 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from auth import ensure_user_settings
+from awaiting_payment_cohort import READER_VERSION as FINANCIAL_COHORT_READER_VERSION, split_financial_cohort
+from awaiting_payment_eligibility import (
+    AWAITING_PAYMENT_RAW_PROJECTION, ELIGIBILITY_FIELD, attach_financial_cohort_eligibility,
+    financial_cohort_eligibility,
+)
+from awaiting_payment_history import guard_financial_cohort_history
 from customer_identity import CUSTOMER_IDENTITY_COLLECTION, decrypt_private_payload
 from dashboard_v2_ad_costs import (
     apply_mezan_v2_ad_account_costs,
@@ -507,18 +513,30 @@ async def _filtered_orders(
         db.unified_orders.find(query, {"_id": 0, "raw_by_source": 0}),
         100000,
     )
+    projected_rows = []
+    cutoff = (datetime.combine(date.fromisoformat(to_date), datetime.max.time(), tzinfo=RIYADH_TZ)
+              if to_date else datetime.now(timezone.utc))
     if orders:
         # Historical rows predate promoted SAR fields. Fetch only the Salla FX
         # proof and exact item option evidence needed in memory. The executive
         # cost collector additionally needs bounded payment/date proof. No
         # customer fields are loaded and no database write is performed.
         from report_option_recovery import SALLA_REPORT_OPTION_PROJECTION, attach_report_option_evidence_cooperative
-        raw_projection = {**SALLA_RAW_CURRENCY_PROJECTION, **SALLA_REPORT_OPTION_PROJECTION}
+        raw_projection = {**SALLA_RAW_CURRENCY_PROJECTION, **SALLA_REPORT_OPTION_PROJECTION,
+                          "raw_by_source.salla_direct.payment_method": 1,
+                          "raw_by_source.salla_direct.payment.method": 1}
         if include_marketing_attribution:
             raw_projection.update(SALLA_RAW_ATTRIBUTION_PROJECTION)
         if cost_collector is not None:
             raw_projection.update(SALLA_ORDER_TIMESTAMP_PROJECTION)
             raw_projection.update(FEE_SOURCE_PROJECTION)
+        if any(financial_cohort_eligibility(order, {}, owner=user_id)["review_required"] for order in orders):
+            raw_projection.update(AWAITING_PAYMENT_RAW_PROJECTION)
+        # The fee reader already includes the payment object. Mongo rejects
+        # an inclusion projection containing both parent and child paths.
+        raw_projection = {path: value for path, value in raw_projection.items()
+                          if not any(raw_projection.get(".".join(path.split(".")[:index])) == 1
+                                     for index in range(1, len(path.split("."))))}
         projected_rows = await _to_list(
             db.unified_orders.find(query, raw_projection),
             100000,
@@ -532,6 +550,7 @@ async def _filtered_orders(
             attach_projected_salla_attribution(orders, projected_rows)
         if cost_collector is not None:
             attach_fee_source_evidence(orders, projected_rows)
+    orders = attach_financial_cohort_eligibility(orders, projected_rows, owner=user_id, as_of=cutoff)
     pm_list = [part.strip() for part in (payment_methods or "").split(",") if part.strip()]
     ship_list = [part.strip() for part in (shipping_companies or "").split(",") if part.strip()]
     included_statuses = settings.get("report_included_statuses") or []
@@ -542,6 +561,7 @@ async def _filtered_orders(
         and (order_matches_status(order, report_statuses.split(","), included_statuses)
              if report_statuses is not None else _matches_any(order.get("order_status", ""), included_statuses))
     ]
+    selected = await guard_financial_cohort_history(db, user_id, selected)
     if cost_collector is not None:
         cost_collector.capture_fee_context(await load_dashboard_fee_context(
             db, user_id, selected, as_of=to_date, fee_context=fee_context,
@@ -1766,6 +1786,7 @@ def make_dashboard_v2_router(
             payment_methods=payment_methods,
             shipping_companies=shipping_companies,
         )
+        _, financial_cohort = split_financial_cohort(orders)
         hourly = start == end
         if hourly:
             rows = [
@@ -1823,6 +1844,11 @@ def make_dashboard_v2_router(
             bucket = row_map.get(parsed.hour if hourly else parsed.date().isoformat())
             if bucket is None:
                 continue
+            bucket["orders"] += 1
+            eligibility = order.get(ELIGIBILITY_FIELD) or {}
+            if (eligibility.get("eligible") is False and eligibility.get("history_checked") is True
+                    and eligibility.get("review_required") is not True):
+                continue
             sales_sar = order_total_sar(order)
             if sales_sar is None:
                 bucket["currency_conversion_complete"] = False
@@ -1831,7 +1857,6 @@ def make_dashboard_v2_router(
                 )
             else:
                 bucket["sales"] = round(_float(bucket["sales"]) + sales_sar, 2)
-            bucket["orders"] += 1
 
         for row in rows:
             if row.pop("currency_conversion_complete", True) is False:
@@ -1844,6 +1869,7 @@ def make_dashboard_v2_router(
             "timezone": "Asia/Riyadh",
             "granularity": "hour" if hourly else "day",
             "series": rows,
+            "financial_cohort": financial_cohort,
             "summary": {
                 "sales": (
                     round(sum(_float(row["sales"]) for row in rows), 2)
@@ -1919,7 +1945,7 @@ def make_dashboard_v2_router(
                 payment_methods=payment_methods,
                 shipping_companies=shipping_companies,
                 include_marketing_attribution=True,
-                fee_context=fee_context,
+                **({"fee_context": fee_context} if fee_context is not None else {}),
                 **cost_observer,
                 **report_filter,
             ),
@@ -1935,10 +1961,15 @@ def make_dashboard_v2_router(
             ))
         initial_results = await _gather_dashboard_reads(*initial_reads)
         response = initial_results[0]
-        orders = initial_results[1]
-        month_orders = (
-            orders if selected_is_current_month else initial_results[2]
+        source_orders = initial_results[1]
+        orders, financial_cohort = split_financial_cohort(source_orders)
+        month_source_orders = (
+            source_orders if selected_is_current_month else initial_results[2]
         ) if include_month_kpis else None
+        month_orders, month_cohort = (
+            (orders, financial_cohort) if month_source_orders is source_orders
+            else split_financial_cohort(month_source_orders)
+        ) if month_source_orders is not None else (None, None)
         budget = CPUWorkBudget(PARSER_BUDGET_MS)
         with latency_evidence.phase("cooperative_computation_wall"):
             month_sales = (
@@ -1952,14 +1983,15 @@ def make_dashboard_v2_router(
         month_kpis = {
             "from_date": month_start,
             "to_date": today_s,
-            "total_orders": len(month_orders),
+            "total_orders": month_cohort["total_orders"],
+            **{key: month_cohort[key] for key in ("financial_eligible_orders", "excluded_unpaid_orders", "review_orders")},
             "total_sales": month_sales["total_sar"],
             "accounting_currency": "SAR",
             "currency_conversion": month_sales,
         } if month_orders is not None else None
         totals = response["totals"]
-        # The V2 filtered order set is the authoritative source for both the
-        # count and gross sales.  The legacy dashboard can under-report fresh
+        # Keep the selected source count; the guarded financial subset supplies
+        # gross sales and costs. The legacy dashboard can under-report fresh
         # Salla Direct orders when payment-collection fields are still empty,
         # even though each normalized order already has a valid total_amount.
         authoritative_sales = sales_currency["total_sar"]
@@ -1969,7 +2001,9 @@ def make_dashboard_v2_router(
             if authoritative_sales is not None
             else 0.0
         )
-        totals["total_orders"] = len(orders)
+        totals["total_orders"] = financial_cohort["total_orders"]
+        totals.update({key: financial_cohort[key] for key in ("financial_eligible_orders", "excluded_unpaid_orders", "review_orders")})
+        totals["financial_cohort_complete"] = financial_cohort["complete"]
         totals["total_sales"] = authoritative_sales
         totals["accounting_currency"] = "SAR"
         totals["sales_currency_conversion_complete"] = sales_currency[
@@ -2158,6 +2192,7 @@ def make_dashboard_v2_router(
             "ads_v2": ads,
             **({"month_kpis": month_kpis} if include_month_kpis else {}),
             "currency_conversion": sales_currency,
+            "financial_cohort": financial_cohort,
             "dashboard_source": "mezan_v2",
             "source_contract": {
                 "orders_sales_payment_methods": "unified_orders.total_amount_sar:salla_order_fx",
@@ -2184,6 +2219,8 @@ def make_dashboard_v2_router(
             ):
                 totals[field] = None
         response["recurring_obligations_v2"] = recurring
+        if not financial_cohort["complete"]:
+            totals["net_profit"] = None
         return enforce_dashboard_fee_completeness(response)
 
     @router.get("/dashboard-v2")
@@ -2253,6 +2290,7 @@ def make_dashboard_v2_router(
             return tuple(sorted({part.strip().casefold() for part in (value or "").split(",") if part.strip()}))
 
         key = (
+            FINANCIAL_COHORT_READER_VERSION,
             user_id, section, today.isoformat(), from_date, to_date,
             filter_key(payment_methods), filter_key(shipping_companies),
             None if report_statuses is None else filter_key(report_statuses),
@@ -2285,21 +2323,24 @@ def make_dashboard_v2_router(
                                               fee_context=fee_context, current_day=today),
                 )
                 return {**result, "payment_method_setup": method_setup}
-            orders = await _filtered_orders(
+            source_orders = await _filtered_orders(
                 db, user_id, **filters,
                 include_marketing_attribution=True,
             )
+            orders, financial_cohort = split_financial_cohort(source_orders)
             if section == "top-products":
-                return {"product_cost_v2": await build_mezan_v2_product_cost_cooperative(db, user_id, orders)}
+                return {"product_cost_v2": await build_mezan_v2_product_cost_cooperative(db, user_id, orders),
+                        "financial_cohort": financial_cohort}
 
             month_from = today.replace(day=1).isoformat()
             month_to = today.isoformat()
             if from_date == month_from and to_date == month_to:
-                month_orders = orders
+                month_orders, month_cohort = orders, financial_cohort
             else:
-                month_orders = await _filtered_orders(
+                month_source_orders = await _filtered_orders(
                     db, user_id, **{**filters, "from_date": month_from, "to_date": month_to},
                 )
+                month_orders, month_cohort = split_financial_cohort(month_source_orders)
             product_cost, ads, month_sales = await _gather_dashboard_reads(
                 build_mezan_v2_product_cost_cooperative(db, user_id, orders, include_product_rows=False),
                 build_mezan_v2_ads(db, user_id, from_date=from_date, to_date=to_date),
@@ -2309,11 +2350,13 @@ def make_dashboard_v2_router(
             return {
                 "month_kpis": {
                     "from_date": month_from, "to_date": month_to,
-                    "total_orders": len(month_orders), "total_sales": month_sales["total_sar"],
+                    "total_orders": month_cohort["total_orders"], "total_sales": month_sales["total_sar"],
+                    **{key: month_cohort[key] for key in ("financial_eligible_orders", "excluded_unpaid_orders", "review_orders")},
                     "accounting_currency": "SAR", "currency_conversion": month_sales,
                 },
                 "product_cost_v2": product_cost,
                 "ads_v2": {"executive_breakdown": executive},
+                "financial_cohort": financial_cohort,
             }
 
         try:
@@ -2563,6 +2606,7 @@ def make_dashboard_v2_router(
             db, user_id, from_date=month_start, to_date=today_s,
             payment_methods=None, shipping_companies=None,
         )
+        month_orders, financial_cohort = split_financial_cohort(month_orders)
         month = await build_mezan_v2_product_cost(db, user_id, month_orders)
         today_cost = await build_mezan_v2_product_cost(
             db,
@@ -2581,6 +2625,7 @@ def make_dashboard_v2_router(
             "breakdown": month["breakdown"],
             "source_contract": month["source_contract"],
             "source_only": True,
+            "financial_cohort": financial_cohort,
         }
 
     @router.get("/dashboard-v2/product-promotion-estimates")

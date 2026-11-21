@@ -20,7 +20,7 @@ afterEach(() => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = false;
 });
 
-function renderTotals(totals = {}, rows = []) {
+function renderTotals(totals = {}, rows = [], financialCohort = undefined) {
     act(() => root.render(<ProfitCard data={{
         totals: {
             total_sales: 1000, total_orders: 1, total_product_cost: 100, total_ads_cost: 50,
@@ -29,6 +29,7 @@ function renderTotals(totals = {}, rows = []) {
         },
         ads_v2: { spend_quality: { status: "complete", amount_available: true, amount_complete: true } },
         payment_breakdown: rows,
+        financial_cohort: financialCohort,
     }} />));
 }
 
@@ -70,4 +71,39 @@ test("complete confirmed zero fee does not use a nonzero legacy sum", () => {
     const fee = container.querySelector('[data-testid="advanced-profit-row-payment"]').textContent;
     expect(fee).toContain("0.00");
     expect(fee).not.toContain("20.00");
+});
+
+
+test.each([null, 830])("cohort review suppresses recomputed or stale final profit %s independently of valid fees", (netProfit) => {
+    renderTotals({ payment_fees_complete: true, total_payment_fees: 20, net_profit: netProfit }, [],
+        { complete: false, review_orders: 1 });
+    const hero = container.querySelector('[data-testid="advanced-profit-net-hero"]');
+    expect(hero.textContent).toContain("غير مكتمل");
+    expect(hero.textContent).not.toContain("830.00");
+    expect(container.querySelector('[data-testid="advanced-profit-net-margin"]')).toBeNull();
+    expect(container.querySelector('[data-testid="advanced-profit-row-payment"]').textContent).toContain("20.00");
+    expect(container.querySelector('[data-testid="advanced-profit-payment-fees-incomplete-hint"]')).toBeNull();
+    const hint = container.querySelector('[data-testid="advanced-profit-financial-cohort-incomplete-hint"]').textContent;
+    expect(hint).toContain("بانتظار مراجعة الإثبات المالي للطلبات");
+    expect(hint).not.toContain("عمولات");
+});
+
+test.each([false, true, undefined])("totals-only cohort authority %s respects incomplete and legacy responses", (complete) => {
+    renderTotals({ financial_cohort_complete: complete, payment_fees_complete: true, total_payment_fees: 20 });
+    const hero = container.querySelector('[data-testid="advanced-profit-net-hero"]');
+    expect(hero.textContent).toContain(complete === false ? "غير مكتمل" : "830.00");
+    expect(Boolean(container.querySelector('[data-testid="advanced-profit-financial-cohort-incomplete-hint"]')))
+        .toBe(complete === false);
+});
+
+
+test("proved unpaid exclusion is explained without changing registry count or final profit", () => {
+    renderTotals({ total_orders: 3, payment_fees_complete: true, total_payment_fees: 20 }, [],
+        { complete: true, excluded_unpaid_orders: 2, total_orders: 3 });
+    const note = container.querySelector('[data-testid="advanced-profit-financial-cohort-excluded-note"]').textContent;
+    expect(note).toContain("بانتظار الدفع: 2");
+    expect(note).toContain("وتبقى ضمن عدد الطلبات");
+    expect(note).not.toContain("ملغ");
+    expect(container.querySelector('[data-testid="advanced-profit-net-hero"]').textContent).toContain("830.00");
+    expect(container.querySelector('[data-testid="advanced-profit-kpis"]').textContent).toContain("عدد الطلبات3");
 });

@@ -536,27 +536,58 @@ async def test_existing_hydration_query_carries_only_precise_source_time_and_set
         "raw_by_source": {"salla_direct": {
             "date": {"date": PARAMS["from_date"] + " 12:00:00", "timezone": "Asia/Riyadh"},
             "created_at": PARAMS["from_date"] + "T09:00:00+00:00",
+            "payment": {"method": "mada", "currency": "SAR"},
+            "refunded_amount": 0,
+            "payment_actions": {"refund_action": {"refund_amount": 0},
+                                "unrelated_action": {"private": "PRIVATE-NOT-REQUESTED"}},
             "customer": {"name": "PRIVATE-NOT-REQUESTED"},
             "source": "google",
         }},
     }})
+    # The executive card loads owner-scoped fee policies once for both its
+    # monetary totals and collector. The collector must reuse that context,
+    # not add policy reads to the existing order-hydration query pair.
+    fee_context = await dashboard.load_fee_setup_context(ReadOnlyDB(env.db), "a")
+    context_before = deepcopy(fee_context)
     off_db, on_db = ReadOnlyDB(env.db), ReadOnlyDB(env.db)
-    off = await dashboard._filtered_orders(off_db, "a", **PARAMS, include_marketing_attribution=True)
+    off = await dashboard._filtered_orders(off_db, "a", **PARAMS, include_marketing_attribution=True,
+                                          fee_context=fee_context)
     collector = DashboardAdsCostCollector()
     on = await dashboard._filtered_orders(on_db, "a", **PARAMS, include_marketing_attribution=True,
-                                         cost_collector=collector)
+                                         cost_collector=collector, fee_context=fee_context)
     assert on_db.reads == off_db.reads
+    assert on_db.reads[("unified_orders", "find")] == 2
     assert len(on) == len(off) == 1
     assert collector.payment_settings is not None
+    assert fee_context == context_before
+    assert collector.fee_context == {
+        **fee_context, "as_of": PARAMS["to_date"], "statement_plans": {},
+    }
     raw = on[0]["raw_by_source"]["salla_direct"]
     assert raw["date"]["timezone"] == "Asia/Riyadh"
     assert raw["created_at"] == PARAMS["from_date"] + "T09:00:00+00:00"
     assert "customer" not in raw
+    assert raw["payment_actions"] == {"refund_action": {"refund_amount": 0}}
     assert "date" not in off[0]["raw_by_source"]["salla_direct"]
     assert "created_at" not in off[0]["raw_by_source"]["salla_direct"]
+    assert on[0]["_dashboard_fee_source"] == {
+        "date": {"date": PARAMS["from_date"] + " 12:00:00", "timezone": "Asia/Riyadh"},
+        "created_at": PARAMS["from_date"] + "T09:00:00+00:00",
+        "payment": {"method": "mada", "currency": "SAR"},
+        "refunded_amount": 0,
+        "payment_actions": {"refund_action": {"refund_amount": 0}},
+    }
+    assert "_dashboard_fee_source" not in off[0]
     legacy_shape = deepcopy(on)
-    del legacy_shape[0]["raw_by_source"]["salla_direct"]["date"]
-    del legacy_shape[0]["raw_by_source"]["salla_direct"]["created_at"]
+    del legacy_shape[0]["_dashboard_fee_source"]
+    # Hydration retains the same bounded proof in the raw source. Only these
+    # explicit collector fields may differ from the non-collector order shape.
+    for key in ("date", "created_at", "refunded_amount", "payment_actions"):
+        del legacy_shape[0]["raw_by_source"]["salla_direct"][key]
+    # Both paths now carry the native method for the unpaid-cohort conflict
+    # check. The collector additionally carries the monetary currency proof.
+    assert off[0]["raw_by_source"]["salla_direct"]["payment"] == {"method": "mada"}
+    del legacy_shape[0]["raw_by_source"]["salla_direct"]["payment"]["currency"]
     assert legacy_shape == off
     response = await env.client.get("/dashboard-v2/cards/executive", params=PARAMS)
     assert response.status_code == 200, response.text

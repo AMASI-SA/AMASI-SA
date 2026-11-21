@@ -11,3 +11,11 @@ export function paymentFeeCompleteness(totals = {}) {
                 : "بانتظار اكتمال بيانات عمولات الدفع";
     return { complete, hint };
 }
+
+/** Cohort review blocks final profit without inventing a missing commission. */
+export function financialCohortCompleteness(totals = {}, cohort = null) {
+    const complete = totals.financial_cohort_complete !== false && cohort?.complete !== false;
+    const excluded = cohort?.excluded_unpaid_orders ?? totals.excluded_unpaid_orders;
+    const excludedOrders = typeof excluded === "number" && Number.isInteger(excluded) && excluded > 0 ? excluded : 0;
+    return { complete, excludedOrders, hint: complete ? null : "بانتظار مراجعة الإثبات المالي للطلبات" };
+}
