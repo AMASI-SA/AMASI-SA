@@ -2,11 +2,25 @@
 
 ## Checkpoint verdict
 
-**The Production index gate and renewed official A/B identity are PASS. Final CI must complete on exact new B before this task can merge or publish. The latest live lease observation belongs to another publishing task.**
+**PR #2039 is merged through the normal protected route after all exact-B checks, release identity, index and live-guard gates passed. Emergent preparation and publication of this task's release are still pending.**
 
 The owner has authorized merging and publishing PR #2039, subject to the established gates. Emergent Support supplied the previously missing Production index definitions after a read-only inspection. Terminal access has now been restored. Production advanced through PR #2046, so the former A/B pair and its successful CI are historical and cannot authorize the new deployment.
 
-### Latest update: terminal recovered and A/B renewed
+### Latest milestone: normal merge completed
+
+PR #2039 was merged at **2026-11-21 19:36:18 UTC / 22:36:18 Asia/Riyadh** using `merge_method=merge` and expected HEAD B. GitHub returned merge **M `6e41bf25b936e8c4047df75bb170610dfc71b7f7`**. Root separately verified the actual Production ref equals M, M's ordered parents are J `a9d0aec2939a706dcc16f9948e7a81cfe019e66f` and B `3628efc4215ee95e6196fca4807104a87398e255`, and M's tree is exactly B's tree `c3c66e2f15138523a9a72ee0910706f91f9b47e4`. No squash, rebase or protection bypass was used.
+
+The final exact-B audit at **22:34:56 Asia/Riyadh** includes the two additional workflows triggered when the PR became Ready: **14 runs = 13 success + 1 expected TikTok skip; 35 latest checks = 25 success + 10 conditional skips; zero failed, pending or neutral**. All four visible required protected contexts passed under GitHub Actions app 15368. Root independently reread unfiltered runs, checks, actual Production, PR mergeability and commit statuses immediately before the merge. Full administrative protection visibility remains limited, so the native merge route enforced any additional requirements.
+
+Actual artifact results: Operational Backend **6,186 tests + 90 subtests** (6,276 JUnit entries), separate shipping-preservation **16 + 18 subtests**, Operational Frontend **1,258 / 83 suites**, Security Frontend **4,815 / 449 suites**, Stock **5,502 + 97 subtests**, all passing. Root independently parsed the actual backend XML and frontend JSON, including the external-party regression cases. Both actual Node20/24 adapter jobs passed; an independent reviewer checked all four artifact ZIP digests and all 357 generated files per host. See [new-b-ci-evidence.json](new-b-ci-evidence.json) and [new-b-adapter-verification.json](new-b-adapter-verification.json).
+
+PR #2046's owner completed publication and three-probe verification and closed its lease; its canonical Issue #1006 block was updated at **19:32:36 UTC**. Root's live shared checks at **19:32:58 UTC** and **19:35:39 UTC** independently returned exactly `active:false`, branch `hotfix/prod-snap-meta-final`, HEAD J, and no tracked changes. Before our own rehearsal or `/app` mutation, read the guard again. No lease has yet been created by this task.
+
+Next safe action: fresh inactive shared guard and unchanged actual Production M; rehearse the unchanged official adapter in a normal task-owned clone under `/tmp` pinned to M with tree equal to B, using public origin `https://mezansalla.com` and an isolated external cache. Then fast-forward shared `/app` only to exact M, preserving unrelated work and safely materializing only this rehearsal's verified generated outputs. Recheck destination bytes/source/guard, prepare the task's own lease, prepublish immediately before one authorized publication, observe newer explicit success, and require the official three matching live probes with final `active:false`. Do not substitute another task's artifacts or lease. Production push CI on M is also being monitored for failures or drift.
+
+Production changed by this task: **Git branch yes (M); live runtime no at this checkpoint**. No financial/index mutation or APK publication occurred.
+
+### Recovery and renewed A/B evidence
 
 The user requested another connection attempt. Reloading the existing code-server window restored the terminal. A fresh read at **2026-11-21 19:08:12 UTC / 22:08:12 Asia/Riyadh** found the shared workspace on `hotfix/prod-snap-meta-final`, HEAD `a9d0aec2939a706dcc16f9948e7a81cfe019e66f`, with no tracked changes. The live v5 guard was **active**, owned by `codex-pr2046-owner-authorized`, prepared at `2026-11-21T19:02:54.427154+00:00`, with source `eeef3913ae2e1b8fa4b58f3835478e1ed17b2988` and release `rg5-ddbdc7c7bfa083d85224a0f0275318ca7dacfdd05d3f628e8f3dc05c278be895`.
 
@@ -20,7 +34,7 @@ Production advanced by eight commits and 47 files. GitHub consequently marked th
 | New source A | `e08d0e489eded39961d374e4eb7bfcc0544b6e90` | `fdd3567f46f7c0597673fd61516ec712ede74465` |
 | New frozen intent B / current PR HEAD | `3628efc4215ee95e6196fca4807104a87398e255` | `c3c66e2f15138523a9a72ee0910706f91f9b47e4` |
 
-The former B is preserved remotely on `codex/pr2039-archived-b688995ce-20261121`. PR #2039 was first renewed at A with an expected-old-HEAD lease, then fast-forwarded to B with expected A. It remains Draft, unmerged, and unpublished by this task. The A-stage PR read reported `mergeable:true` with base J above; final mergeability must be refreshed at B. Do not reuse the old candidate or CI.
+The former B is preserved remotely on `codex/pr2039-archived-b688995ce-20261121`. PR #2039 was first renewed at A with an expected-old-HEAD lease, then fast-forwarded to B with expected A. It remained Draft during validation and was subsequently marked Ready and normally merged as recorded above. Do not reuse the old candidate or CI.
 
 The new [source-A readiness run](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44939561224) produced artifact `14721325582`. Root and an independent reviewer checked the ZIP digest against GitHub, exact candidate bytes, the official candidate loader, and source/base/worktree/Git manifests. Root then froze B changing only `release/release-intent-v5.json`, and both reviewers ran the official reviewed-intent loader and Git verifier successfully on B. The generated-runtime identity file is intentionally absent in these isolated source checkouts; these checks are not a shared-host materialization rehearsal.
 
@@ -36,7 +50,7 @@ The new [source-A readiness run](https://github.com/AMASI-SA/AMASI-SA/actions/ru
 
 At B freeze, A's Security Gate, CodeQL and readiness had passed; Operational Balance Backend and Stock were still pending. No all-A success is claimed or carried forward. The final authority is the new complete CI cycle on B, including real Node20/24 adapter rehearsals. No old B result substitutes for it.
 
-Current next steps: require all applicable exact-B CI and both real adapter rehearsals; then wait for PR #2046's owner to finish verification and release its lease. Before any merge or shared operation, recheck actual Production, PR HEAD, all gates, the live guard, tracked cleanliness, and disk capacity. Any drift invalidates the corresponding snapshot. The Production-index attestation remains accepted; no new URI entry or financial/index changes are warranted.
+The exact-B CI and foreign-publication completion steps described during recovery have now passed. The latest milestone above governs the remaining Emergent procedure. Any drift invalidates the corresponding snapshot. The Production-index attestation remains accepted; no new URI entry or financial/index changes are warranted.
 
 ### Accepted Production index evidence
 
@@ -55,7 +69,7 @@ Historical GitHub audit at **2026-11-21 21:53:11 Asia/Riyadh** found the former 
 
 In the earlier attempt, the root found code-server disconnected and could not obtain a fresh guard result. That access problem was resolved by the later window reload described above. Neither the historical inactive-guard snapshot nor the old CI authorizes execution.
 
-Production changed by this operation: **no**. No merge, release lease, publication, financial record/index mutation, or APK publication has occurred.
+At the earlier support/recovery checkpoint, Production had not changed through this task. The later normal merge is recorded above; this task still has not published or changed financial records/indexes or APKs.
 
 This document and its companion diagnostic belong to the standalone evidence branch `codex/pr2039-evidence-20261121`. **The evidence branch is not a deployable release.** Do not merge its documentation/helper changes into a frozen A/B pair or check it out in shared `/app`. Current source and release identities are listed in the latest update above.
 

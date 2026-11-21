@@ -1,0 +1,272 @@
+{
+  "observed_at_riyadh": "2026-11-21T22:34:56.000+03:00",
+  "head_sha": "3628efc4215ee95e6196fca4807104a87398e255",
+  "production_sha": "a9d0aec2939a706dcc16f9948e7a81cfe019e66f",
+  "base_sha": "a9d0aec2939a706dcc16f9948e7a81cfe019e66f",
+  "draft": false,
+  "merged": false,
+  "mergeable": true,
+  "mergeable_state": "clean",
+  "run_total": 14,
+  "runs_success": 13,
+  "runs_skipped": [
+    {
+      "id": 44940429563,
+      "name": "TikTok Creator Release Candidate"
+    }
+  ],
+  "runs_unfinished_or_bad": [],
+  "check_total": 35,
+  "checks_success": 25,
+  "checks_skipped": 10,
+  "checks_unfinished_or_bad": [],
+  "required_contexts": [
+    {
+      "name": "Backend preflight",
+      "checks": [
+        {
+          "id": 136956192652,
+          "head_sha": "3628efc4215ee95e6196fca4807104a87398e255",
+          "conclusion": "success",
+          "app_id": 15368
+        }
+      ]
+    },
+    {
+      "name": "Backend security contracts",
+      "checks": [
+        {
+          "id": 136956191719,
+          "head_sha": "3628efc4215ee95e6196fca4807104a87398e255",
+          "conclusion": "success",
+          "app_id": 15368
+        }
+      ]
+    },
+    {
+      "name": "Frontend build",
+      "checks": [
+        {
+          "id": 136956192525,
+          "head_sha": "3628efc4215ee95e6196fca4807104a87398e255",
+          "conclusion": "success",
+          "app_id": 15368
+        }
+      ]
+    },
+    {
+      "name": "Frontend dependency and CSP checks",
+      "checks": [
+        {
+          "id": 136956191897,
+          "head_sha": "3628efc4215ee95e6196fca4807104a87398e255",
+          "conclusion": "success",
+          "app_id": 15368
+        }
+      ]
+    }
+  ],
+  "reviews": 0,
+  "review_threads": 0,
+  "rulesets": [],
+  "run_attempts": [
+    {
+      "id": 44941627466,
+      "attempt": 1,
+      "event": "pull_request",
+      "head_sha": "3628efc4215ee95e6196fca4807104a87398e255"
+    },
+    {
+      "id": 44941627445,
+      "attempt": 1,
+      "event": "pull_request",
+      "head_sha": "3628efc4215ee95e6196fca4807104a87398e255"
+    },
+    {
+      "id": 44940429563,
+      "attempt": 1,
+      "event": "pull_request",
+      "head_sha": "3628efc4215ee95e6196fca4807104a87398e255"
+    },
+    {
+      "id": 44940429511,
+      "attempt": 1,
+      "event": "pull_request",
+      "head_sha": "3628efc4215ee95e6196fca4807104a87398e255"
+    },
+    {
+      "id": 44940429588,
+      "attempt": 1,
+      "event": "pull_request",
+      "head_sha": "3628efc4215ee95e6196fca4807104a87398e255"
+    },
+    {
+      "id": 44940429519,
+      "attempt": 1,
+      "event": "pull_request",
+      "head_sha": "3628efc4215ee95e6196fca4807104a87398e255"
+    },
+    {
+      "id": 44940429598,
+      "attempt": 1,
+      "event": "pull_request",
+      "head_sha": "3628efc4215ee95e6196fca4807104a87398e255"
+    },
+    {
+      "id": 44940429556,
+      "attempt": 1,
+      "event": "pull_request",
+      "head_sha": "3628efc4215ee95e6196fca4807104a87398e255"
+    },
+    {
+      "id": 44940429470,
+      "attempt": 1,
+      "event": "pull_request",
+      "head_sha": "3628efc4215ee95e6196fca4807104a87398e255"
+    },
+    {
+      "id": 44940429481,
+      "attempt": 1,
+      "event": "pull_request",
+      "head_sha": "3628efc4215ee95e6196fca4807104a87398e255"
+    },
+    {
+      "id": 44940429539,
+      "attempt": 1,
+      "event": "pull_request",
+      "head_sha": "3628efc4215ee95e6196fca4807104a87398e255"
+    },
+    {
+      "id": 44940429562,
+      "attempt": 1,
+      "event": "pull_request",
+      "head_sha": "3628efc4215ee95e6196fca4807104a87398e255"
+    },
+    {
+      "id": 44940429491,
+      "attempt": 1,
+      "event": "pull_request",
+      "head_sha": "3628efc4215ee95e6196fca4807104a87398e255"
+    },
+    {
+      "id": 44940429657,
+      "attempt": 1,
+      "event": "pull_request",
+      "head_sha": "3628efc4215ee95e6196fca4807104a87398e255"
+    }
+  ],
+  "pr": 2039,
+  "pr_url": "https://github.com/AMASI-SA/AMASI-SA/pull/2039",
+  "ci_head_sha": "3628efc4215ee95e6196fca4807104a87398e255",
+  "source_A_sha": "e08d0e489eded39961d374e4eb7bfcc0544b6e90",
+  "deployment_B_tree": "c3c66e2f15138523a9a72ee0910706f91f9b47e4",
+  "ci_verdict": "PASS",
+  "backend_test_evidence": {
+    "head_sha": "3628efc4215ee95e6196fca4807104a87398e255",
+    "source_tree": "c3c66e2f15138523a9a72ee0910706f91f9b47e4",
+    "workflow_run_id": 44940429491,
+    "artifact_id": 14722035588,
+    "artifact_sha256": "7db75a2ce7062558c9d74b0f55afd5da732d4ceeaf3dc0a7b02cf39dfb62d407",
+    "archive_members": [
+      "operational-backend.xml",
+      "operational-source-sha.txt",
+      "operational-source-tree.txt"
+    ],
+    "junit_counts": {
+      "tests": 6276,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "testcase_count": 6186,
+    "selected_cases": [
+      {
+        "name": "test_mobile_external_concurrent_duplicate_name_creates_one_party",
+        "class": "backend.tests.test_operational_balance_app_permissions",
+        "status": "passed"
+      },
+      {
+        "name": "test_mobile_owner_external_details_and_duplicate_name_are_safe",
+        "class": "backend.tests.test_operational_balance_app_permissions",
+        "status": "passed"
+      }
+    ],
+    "pytest_summary": [
+      "6186 passed, 12 warnings, 90 subtests passed in 445.81s (0:07:25)",
+      "16 passed, 18 subtests passed in 0.39s"
+    ],
+    "stock_pytest_summary": [
+      "5502 passed, 8 warnings, 97 subtests passed in 429.59s (0:07:09)"
+    ]
+  },
+  "frontend_test_evidence": {
+    "numTotalTests": 1258,
+    "numPassedTests": 1258,
+    "numFailedTests": 0,
+    "numPendingTests": 0,
+    "numTodoTests": 0,
+    "numTotalTestSuites": 83,
+    "numPassedTestSuites": 83,
+    "numFailedTestSuites": 0,
+    "numPendingTestSuites": 0,
+    "success": true,
+    "selected_cases": [
+      {
+        "name": "external entity creation in movements requires manage and retains retry identity",
+        "status": "passed"
+      },
+      {
+        "name": "external entity form sends classification, phone and notes without changing cash creation",
+        "status": "passed"
+      }
+    ],
+    "head_sha": "3628efc4215ee95e6196fca4807104a87398e255",
+    "workflow_run_id": 44940429491,
+    "artifact_id": 14721541596,
+    "artifact_sha256": "9f39c212ea9f2ecc7a8b897c1e4c8541f11bf546322cc815e1742f7ce03a1480",
+    "archive_members": [
+      "operational-frontend.json"
+    ]
+  },
+  "security_frontend": {
+    "job_id": 136956191897,
+    "passed_tests": 4815,
+    "passed_suites": 449,
+    "failed_tests": 0
+  },
+  "security_backend": {
+    "job_id": 136956191719,
+    "dependency_audit": "No known vulnerabilities found",
+    "passed_test_groups": [
+      88,
+      83,
+      216,
+      57
+    ],
+    "passed_toolchain_unittests": 26,
+    "subtests": 29,
+    "intentional_deselected_offline_case": 1
+  },
+  "stock": {
+    "job_id": 136956272841,
+    "passed_tests": 5502,
+    "passed_subtests": 97
+  },
+  "actual_adapter_rehearsals": {
+    "run_id": 44940429539,
+    "node_20_20_2_job": 136957027254,
+    "node_24_19_0_job": 136957027239,
+    "both_conclusions": "success",
+    "independent_byte_and_manifest_verification": "PASS reported by release_contract; all4 ZIPs and generated357 files per host verified"
+  },
+  "historical_source_A_tests_at_freeze": {
+    "backend": "pending",
+    "stock": "pending",
+    "used_as_final_B_proof": false
+  },
+  "pagination_complete": true,
+  "pagination_basis": "Explicit per_page100; complete unfiltered workflow total14 and check total35 equal returned rows.",
+  "branch_protected": true,
+  "full_administrative_protection_visibility": "Previously returned authenticated HTTP403 (integration lacks administration scope). Fresh branch metadata confirms protected=true and the four required contexts; fresh repository rulesets including parents is empty. Other administrative constraints are not inferred absent.",
+  "scope": "Read-only CI/metadata/artifact audit. No merge, deployment, database write, lease mutation, or run trigger."
+}

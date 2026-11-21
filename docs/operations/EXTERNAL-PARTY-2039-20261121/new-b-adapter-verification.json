@@ -1,0 +1,82 @@
+{
+  "result": "PASS",
+  "readiness_run": 44940429539,
+  "source_git_sha": "e08d0e489eded39961d374e4eb7bfcc0544b6e90",
+  "source_base_git_sha": "a9d0aec2939a706dcc16f9948e7a81cfe019e66f",
+  "deployment_git_sha": "3628efc4215ee95e6196fca4807104a87398e255",
+  "runtime_release_id": "rg5-45eb8f2d79e0912a1277e1e14816e9d9c5e3a40d0a6d784834c6fbb54996974f",
+  "intent_sha256": "bbc9727bbcc8b10c9cefa8c830877f7768999fbec77a358e0b9d3f0b09bd614d",
+  "both_host_generated_files_byte_identical": true,
+  "both_package_proofs_identical": true,
+  "hosts": [
+    {
+      "host_node": "20.20.2",
+      "result": "PASS",
+      "artifacts": {
+        "outputs": {
+          "id": 14722055359,
+          "sha256": "d565e5559bb7f5654d19f4db76728df2201554f435d5830d72776ff5e5cfe7d5"
+        },
+        "evidence": {
+          "id": 14721536983,
+          "sha256": "c1e30fe5965e95dfc12a3324e71f36839827ccb7db70bb9c4fda348d32f71bc0"
+        }
+      },
+      "tar_sha256": "1664084ecac66332d69ca9a5077205b20cfcf666f030cb6ead4f89307bccd667",
+      "generated_regular_files": 357,
+      "frontend_generated_files": 354,
+      "backend_package_files": 1289,
+      "backend_package_tree_sha256": "365c93fb7dad27cc1cc79062eaa73e9f6db3767c5466e7e770af9d7ae2b25300",
+      "frontend_package_files": 1699,
+      "frontend_package_tree_sha256": "cb2e37f3e751dfde0323c9191d3dbe2132fffdd21bf20abba7c03f7a0f25f68b",
+      "backend_identity_sha256": "e01d069eda633f2c617677f2d13a06b54d8aba954d89d5fa06c916bc5987040e",
+      "frontend_build_meta_sha256": "e2ad2261a00b555105f8800ad875b92a9c406e9c03b19a93cea945b987755ba2",
+      "reproducibility_file_sha256": "cb1f9887618f155b493e201d6b66cfa6f882b5ee16189303176f49d61aae5a66",
+      "adapter_completed": "Done in 64.92s.",
+      "runtime_log_bytes": 517
+    },
+    {
+      "host_node": "24.19.0",
+      "result": "PASS",
+      "artifacts": {
+        "outputs": {
+          "id": 14721303041,
+          "sha256": "c29536487910f5d91b529e0f6efaa1f943487a301a7b46eb8362b69e58982dfc"
+        },
+        "evidence": {
+          "id": 14721248580,
+          "sha256": "67e40e112c58bf2738356f444dcfce1831e863da722b6f4b83ed5bae879f61dc"
+        }
+      },
+      "tar_sha256": "28757d5db0b7d2c998f93afaace70c5e5a376da7cedb8b3da05e92a0db00c48d",
+      "generated_regular_files": 357,
+      "frontend_generated_files": 354,
+      "backend_package_files": 1289,
+      "backend_package_tree_sha256": "365c93fb7dad27cc1cc79062eaa73e9f6db3767c5466e7e770af9d7ae2b25300",
+      "frontend_package_files": 1699,
+      "frontend_package_tree_sha256": "cb2e37f3e751dfde0323c9191d3dbe2132fffdd21bf20abba7c03f7a0f25f68b",
+      "backend_identity_sha256": "e01d069eda633f2c617677f2d13a06b54d8aba954d89d5fa06c916bc5987040e",
+      "frontend_build_meta_sha256": "e2ad2261a00b555105f8800ad875b92a9c406e9c03b19a93cea945b987755ba2",
+      "reproducibility_file_sha256": "cb1f9887618f155b493e201d6b66cfa6f882b5ee16189303176f49d61aae5a66",
+      "adapter_completed": "Done in 68.45s.",
+      "runtime_log_bytes": 518
+    }
+  ],
+  "validation_observed_at_utc": "2026-11-21T19:29:24Z",
+  "actual_adapter_jobs": [
+    {
+      "id": 136957027254,
+      "host_node": "20.20.2",
+      "conclusion": "success",
+      "actual_invocation_step": "success",
+      "artifact_proof_identity_package_verification_step": "success"
+    },
+    {
+      "id": 136957027239,
+      "host_node": "24.19.0",
+      "conclusion": "success",
+      "actual_invocation_step": "success",
+      "artifact_proof_identity_package_verification_step": "success"
+    }
+  ]
+}
