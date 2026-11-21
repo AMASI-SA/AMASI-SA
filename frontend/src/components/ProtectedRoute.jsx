@@ -8,6 +8,7 @@ import EmployeeWebLayout, { EmployeePageUnavailable } from "./EmployeeWebLayout"
 import { grantedPageAt, managedWebPages } from "../lib/webPageAccess";
 
 const EmployeeBalanceSpecialist = lazy(() => import("../pages/operational/EmployeeBalanceSpecialist"));
+const ApprovedSpecializedPage = lazy(() => import("../pages/operational/ApprovedSpecializedPage"));
 const balanceReports = new Set(["balances.returns", "balances.exchanges", "balances.fees", "balances.reports", "balances.specialized", "balances.access"]);
 const EmployeeAdditionalPage = lazy(() => import("../pages/EmployeeAdditionalPage"));
 const EmployeeDetailPage = lazy(() => import("../pages/EmployeeDetailPage"));
@@ -89,9 +90,12 @@ export default function ProtectedRoute({ children }) {
             : balanceReports.has(page.id) ? EmployeeBalanceSpecialist
             : operationsReports.has(page.id) ? EmployeeOperationsReadPage : null;
         if (Reader) {
-            return <EmployeeWebLayout pages={pages}><Suspense fallback={<p role="status">جارٍ فتح الصفحة…</p>}>
+            const content = <Suspense fallback={<p role="status">جارٍ فتح الصفحة…</p>}>
                 <Reader key={JSON.stringify([user.id, user.created_by, page.id, page.mode])} pageId={page.id} page={page} search={location.search} />
-            </Suspense></EmployeeWebLayout>;
+            </Suspense>;
+            return balanceReports.has(page.id)
+                ? <Suspense fallback={<p role="status">جارٍ فتح الصفحة…</p>}><ApprovedSpecializedPage authenticatedUser={user}>{content}</ApprovedSpecializedPage></Suspense>
+                : <EmployeeWebLayout pages={pages}>{content}</EmployeeWebLayout>;
         }
     }
     return children;

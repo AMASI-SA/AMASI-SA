@@ -12,6 +12,7 @@ import { requestId } from "./api";
 import "./financialPosition.css";
 import "./providerFeeSetup.css";
 import OperationalToolBack from './OperationalToolBack';
+import { ResourceIcon } from './ApprovedFinanceUI';
 
 const taxes = { exclusive: "تضاف الضريبة إلى العمولة", inclusive: "العمولة تشمل الضريبة", exempt: "معفاة", not_applicable: "لا تنطبق" };
 const treatments = { retain: "تحتفظ المنصة بالرسم", recalculate: "يعاد احتساب الرسم" };
@@ -40,7 +41,7 @@ function FeeTable({ policies, onEdit, onPreview, busy }) {
             <table>
                 <thead><tr><th>المنصة</th><th>طريقة الدفع / الخطة</th><th>نوع الرسم</th><th>العمولة %</th><th>الرسم الثابت</th><th>الضريبة %</th><th>العملة</th><th>فترة السريان</th><th>الإجراءات</th></tr></thead>
                 <tbody>{pageRows.map(policy => <tr key={policy.id}>
-                    <td>{providers[policy.provider]}</td>
+                    <td><span className="mz-resource-label"><ResourceIcon resource={{kind:'provider',id:policy.provider}} size="sm"/><span>{providers[policy.provider]}</span></span></td>
                     <td>{rails[policy.payment_method] || "كل الطرق"}<br />{policy.plan_id || "كل الخطط"}</td>
                     <td>{events[policy.event_type || "capture"]}</td>
                     <td><bdi>{policy.percentage}</bdi></td>
@@ -89,7 +90,7 @@ function FeePreview({ policy, onClose }) {
         } finally { setBusy(false); }
     }
     return <section className="border rounded p-4 space-y-3">
-        <h2 className="font-bold">معاينة {events[policy.event_type || "capture"]} · {providers[policy.provider]}</h2>
+        <h2 className="font-bold mz-resource-label"><ResourceIcon resource={{kind:'provider',id:policy.provider}} size="sm"/><span>معاينة {events[policy.event_type || "capture"]} · {providers[policy.provider]}</span></h2>
         <form onSubmit={preview} className="grid gap-3 sm:grid-cols-3">
             <Input label="المبلغ لمعاينة الرسم" type="number" required disabled={busy} min="0.01" step="0.01" value={amount} onChange={event => { setAmount(event.target.value); setResult(null); }} />
             <Input label="تاريخ العملية للمعاينة" type="date" required disabled={busy} value={date} onChange={event => { setDate(event.target.value); setResult(null); }} />

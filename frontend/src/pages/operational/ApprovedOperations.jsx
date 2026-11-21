@@ -19,20 +19,22 @@ const tools = [
     ['سجل الكشوف المرفوعة', base + '/provider-statements#history', 'history'],
     ['تعرفات وعمولات المنصات', base + '/provider-fees', 'coins'],
     ['أرصدة منصات الدفع', positionView('providers'), 'credit-card'],
+    ['مراجعة الطلبات السابقة', base + '/provider-history', 'history'],
     ['تسويات الشبكة والبنوك والصناديق', positionView('accounts'), 'landmark'],
   ]],
   ['الشحن والتحصيل', [
     ['شركات الشحن وأجور الشحنات', positionView('couriers'), 'package-check'],
     ['تحصيلات الموصلين وعهدهم', positionView('drivers'), 'truck'],
+    ['مراجعة أجور الشحن', base + '/shipping-review', 'list-checks'],
     ['تعرفات شركات الشحن', '/shipping-settings-v2?from=operational-tools', 'sliders-horizontal'],
     ['الطلبات المتوقعة وغير المنسوبة لجهة', positionView('expected'), 'clipboard-list'],
   ]],
   ['الطلبات والمخزون', [
     ['مرتجعات الأصناف', base + '/customer-returns', 'corner-down-left'],
     ['استبدال الأصناف', base + '/customer-exchanges', 'arrow-left-right'],
-    ['المخزون المتاح', '/inventory-v2?tab=stock', 'store'],
-    ['شراء مخزون', '/inventory-v2?tab=purchase', 'shopping-bag'],
-    ['فواتير شراء المخزون', '/inventory-v2?tab=purchases', 'receipt-text'],
+    ['المخزون المتاح', '/inventory-v2?from=operational-tools&tab=stock', 'store'],
+    ['شراء مخزون', '/inventory-v2?from=operational-tools&tab=purchase', 'shopping-bag'],
+    ['فواتير شراء المخزون', '/inventory-v2?from=operational-tools&tab=purchases', 'receipt-text'],
     ['فواتير الموردين ومطابقتها', positionView('suppliers'), 'briefcase-business'],
   ]],
   ['الأرصدة والإعدادات', [
@@ -49,9 +51,10 @@ const tools = [
 ];
 
 function ToolGroup({ name, links }) {
+  const location = useLocation();
   if (!links.length) return null;
   return <section className="section"><h2 className="card-grid-title">{name}</h2><div className="cards mz-tools-grid">
-    {links.map(([title, to, icon]) => <Link to={to} className="resource mz-tool-link" key={to}>
+    {links.map(([title, to, icon]) => <Link to={to} state={{ financeReturnTo: location.pathname + location.search }} className="resource mz-tool-link" key={to}>
       <IconBox name={icon} tone="party" /><strong>{title}</strong><Icon name="chevron-left" />
     </Link>)}
   </div></section>;

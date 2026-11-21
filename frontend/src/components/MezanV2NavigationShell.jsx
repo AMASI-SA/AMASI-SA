@@ -118,7 +118,7 @@ export default function MezanV2NavigationShell(props) {
         () => {
             const sections = navigationSectionsForAccountingAccess(effectiveAccess);
             if (userId) {
-                const items = [{ to: "/operational-balances", label: "الأرصدة التشغيلية" },
+                const items = [{ to: "/operational-balances", pathPrefix: "/operational-balances", label: "الأرصدة التشغيلية" },
                     { to: "/operational-balances/daily-movements", label: "الأرصدة والحركات المالية" }];
                 if (effectiveAccess.is_owner) {
                     items.push({ to: "/operational-balances/access", label: "صلاحيات موظفي الأرصدة" });

@@ -18,6 +18,8 @@ const modes = {
   move: ['حوّلت بين حسابين', 'arrow-left-right', 'c-move'], ads: ['شحن رصيد إعلان', 'arrow-up-right', 'c-out'],
   wallet: ['شحن صندوق سلة', 'arrow-left-right', 'c-move'],
 };
+const entryTitle = (mode, resource) => resource?.kind === 'courier' && ['in', 'out'].includes(mode)
+  ? `${mode === 'in' ? 'استلام تحصيل من' : 'سداد أجور'} ${resource.name}` : modes[mode][0];
 const OriginalEntry = lazy(() => import('./SimpleBalances').then(module => ({ default: module.EntryForm })));
 const cash = resource => resource && isMoneyAccount(resource.kind);
 const transfer = mode => mode === 'move' || mode === 'wallet';
@@ -58,6 +60,7 @@ function EntryWorkflow({ context, resource, mode = 'choose', onBack, onSaved, on
   const [selected, setSelected] = useState(modes[mode] ? mode : 'choose');
   const resourceId = resource && resourceKey(resource);
   const allowedTarget = resource && context.resources.find(item => resourceKey(item) === resourceId);
+  const carrierContext = allowedTarget?.kind === 'courier';
   const granted = permittedOperations(context);
   const sources = context.resources.filter(item => item.access?.use === true && (item.currency || 'SAR') === 'SAR');
   const moneySources = sources.filter(cash).slice(0, 2);
@@ -70,22 +73,22 @@ function EntryWorkflow({ context, resource, mode = 'choose', onBack, onSaved, on
   };
   function movementChoice(key) {
     const [label, icon, tone] = modes[key];
-    const enabled = context.status === 'active' && context.resources.some(r => canTarget(context, r, key) && canFund(r, key));
+    const enabled = context.status === 'active' && (carrierContext ? [allowedTarget] : context.resources).some(r => canTarget(context, r, key) && canFund(r, key));
     return <button type="button" className="quickbtn" disabled={!enabled} onClick={() => setSelected(key)}>
-      <IconBox name={icon} tone={tone}/>{label}<span className="next"><Icon name="chevron-left" className="smallicon"/></span>
+      <IconBox name={icon} tone={tone}/>{carrierContext ? entryTitle(key, allowedTarget) : label}<span className="next"><Icon name="chevron-left" className="smallicon"/></span>
     </button>;
   }
   if ((resource && !allowedTarget?.access?.use) || (selected === 'out' && allowedTarget && !cash(allowedTarget) && !canTarget(context, allowedTarget, 'out'))) {
     return <p role="alert" className="note warning">السداد لهذا الحساب غير متاح ضمن صلاحياتك الحالية.</p>;
   }
-  if (selected === 'choose') return <><Heading title="حركة مالية جديدة" subtitle="اختر اللي صار عشان نعرض لك الخانات المناسبة."/>
+  if (selected === 'choose') return <><Heading title={carrierContext ? `حركة مالية · ${allowedTarget.name}` : "حركة مالية جديدة"} subtitle="اختر اللي صار عشان نعرض لك الخانات المناسبة."/>
     <div className="panel quick flow"><h2>وش صار للمبلغ؟</h2>
       {movementChoice('in')}{movementChoice('out')}
-      {onPurchase && <button type="button" className="quickbtn" disabled={context.status !== 'active'} onClick={onPurchase}>
+      {!carrierContext && onPurchase && <button type="button" className="quickbtn" disabled={context.status !== 'active'} onClick={onPurchase}>
         <IconBox name="receipt-text" tone="party"/>شراء آجل من مورد<span className="next"><Icon name="chevron-left" className="smallicon"/></span>
       </button>}
-      {movementChoice('move')}
-      {onRefund && (granted.has('customer.refund_request') || granted.has('customer.refund_execute')) && <button type="button" className="quickbtn" onClick={onRefund}><IconBox name="corner-down-left" tone="c-out" />إرجاع مبلغ لعميل برقم الطلب</button>}
+      {!carrierContext && movementChoice('move')}
+      {!carrierContext && onRefund && (granted.has('customer.refund_request') || granted.has('customer.refund_execute')) && <button type="button" className="quickbtn" onClick={onRefund}><IconBox name="corner-down-left" tone="c-out" />إرجاع مبلغ لعميل برقم الطلب</button>}
     </div></>;
   return <MovementFields key={selected} context={context} resource={allowedTarget} mode={selected} onBack={onBack} onChangeMode={() => setSelected('choose')} onSaved={onSaved} />;
 }
@@ -165,7 +168,10 @@ function MovementFields({ context, resource, mode, onBack, onChangeMode, onSaved
   const sourceSelect = <select value={source ? sourceKey : ''} required disabled={!editable} onChange={e => {setSourceKey(e.target.value); setMessage('');}}>{options(sources)}</select>;
   const sourceName = mode === 'in' ? target?.name : source?.name, destName = mode === 'in' ? source?.name : target?.name;
   return <><button className="textbtn back" type="button" onClick={onBack}><Icon name="chevron-left"/>الرئيسية</button>
-    <Heading title={modes[mode][0]} subtitle={review ? 'تأكد من الحساب والمبلغ قبل تسجيل الحركة.' : 'أدخل المبلغ وحدد من وين خرج ووين وصل.'} />
+    <Heading title={entryTitle(mode, target)} subtitle={review ? 'تأكد من الحساب والمبلغ قبل تسجيل الحركة.' : 'أدخل المبلغ وحدد من وين خرج ووين وصل.'} />
+    {target?.kind === 'courier' && <p className="note" role="note">{mode === 'in'
+      ? 'سجّل المبلغ الذي وصل فعليًا إلى البنك أو الصندوق فقط. يبقى الباقي في حساب الشركة؛ لا تخصم أجور الشحن تلقائيًا من التحصيل.'
+      : 'سجّل سدادًا فعليًا من البنك أو الصندوق لأجور الشركة. الأجرة المسددة من محفظة الشحن لا تُسدد مرة ثانية.'} المقاصة بين التحصيل والأجور تحتاج تسوية موثقة مستقلة، ولا تُسجل كتحويل نقدي وهمي.</p>}
     <div className="flow"><div className="wizard">{review ? <span>١ · تفاصيل المبلغ</span> : <b>١ · تفاصيل المبلغ</b>}<i/>{review ? <b>٢ · مراجعة وحفظ</b> : <span>٢ · مراجعة وحفظ</span>}</div>
     {!editable && <p className="note warning">تسجيل الحركات غير متاح في حالة النظام الحالية.</p>}
     {!review && payout && target && recoverTarget !== targetKey && <PendingPayoutLink key={targetKey} context={context} target={target} onOpen={() => setRecoverTarget(targetKey)} />}
@@ -187,7 +193,7 @@ function MovementFields({ context, resource, mode, onBack, onChangeMode, onSaved
         {field(mode === 'in' ? 'دخل المبلغ في' : mode === 'move' ? 'وصل المبلغ إلى حساب' : 'وصل المبلغ إلى', mode === 'in' ? sourceSelect : targetSelect)}
       </>}
       {ad?.terms && field('طريقة إدخال الدفعة', <select value={form.unit} onChange={e => change({ unit: e.target.value, amount: '' })}><option value="receipt">من الإيصال البنكي</option><option value="SAR">احسب من المبلغ بالريال</option><option value="USD">احسب من المبلغ بالدولار</option></select>)}
-      {field(ad ? form.unit === 'USD' ? 'المبلغ بالدولار' : 'إجمالي ما خُصم من البنك (ريال)' : bankArrival ? 'صافي المبلغ الوارد إلى البنك (ريال)' : 'المبلغ (ريال)', <input inputMode="decimal" value={form.amount} required placeholder="0.00" onChange={e => change({ amount: e.target.value })} />)}
+      {field(ad ? form.unit === 'USD' ? 'المبلغ بالدولار' : 'إجمالي ما خُصم من البنك (ريال)' : bankArrival ? 'صافي المبلغ الوارد إلى البنك (ريال)' : target?.kind === 'courier' && mode === 'in' ? 'المبلغ المستلم فعليًا (ريال)' : 'المبلغ (ريال)', <input inputMode="decimal" value={form.amount} required placeholder="0.00" onChange={e => change({ amount: e.target.value })} />)}
       {field('تاريخ الحركة', <input type="date" value={form.date} max={todaySA()} required onChange={e => change({ date: e.target.value })} />)}
       {ad && (form.unit === 'receipt' ? <>{field('المبلغ الذي وصل للمنصة (دولار)', <input required inputMode="decimal" value={form.usd} onChange={e => change({ usd: e.target.value })} />)}{field('الرسوم ضمن مبلغ البنك (ريال)', <input required inputMode="decimal" value={form.fee} onChange={e => change({ fee: e.target.value })} />)}</> :
         <div className="field"><button type="button" className="button" disabled={quoting} onClick={quoteAd}>احسب المقابل</button>{visibleQuote && <span>خصم البنك {visibleQuote.gross_sar} ريال، وصل للمنصة {visibleQuote.amount_usd} دولار.</span>}</div>)}

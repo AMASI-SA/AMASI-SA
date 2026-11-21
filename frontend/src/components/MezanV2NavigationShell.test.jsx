@@ -52,6 +52,8 @@ test.each([
     ["/operational-balances", "?view=tools"],
     ["/operational-balances/provider-fees", ""],
     ["/operational-balances/access", ""],
+    ["/operational-balances/shipping-review", ""],
+    ["/operational-balances/provider-history", "?provider=paypal"],
 ])("balances opens its workspace directly from %s%s without a secondary menu", (pathname, search) => {
     const markup = renderToStaticMarkup(<MezanV2NavigationShell location={{ pathname, search }} onOpenAll={() => {}} />);
     const host = document.createElement("div");

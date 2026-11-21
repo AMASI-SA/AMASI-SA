@@ -1,6 +1,6 @@
 import React, {act} from 'react';
 import {createRoot} from 'react-dom/client';
-import {MemoryRouter} from 'react-router-dom';
+import {MemoryRouter, useLocation} from 'react-router-dom';
 import InventoryWorkspace from '../InventoryWorkspace';
 import {operationalApi as api} from './api';
 import {loadInventoryStocktakeContext} from '../../services/inventoryStocktakes';
@@ -34,6 +34,18 @@ test('opens the existing purchase and opening screens only on explicit navigatio
   expect(host.querySelector('[data-testid="stock"]')).toBeNull();
   await act(async () => [...host.querySelectorAll('button')].find(b=>b.textContent==='إضافة المخزون').click());
   expect(host.querySelector('[data-testid="opening"]')).not.toBeNull();
+});
+
+test('finance embedding keeps one navigation shell and preserves its origin across actual inventory tabs', async () => {
+  function Location() { const location=useLocation(); return <output data-testid="location">{location.search}</output>; }
+  await act(async()=>root.render(<MemoryRouter initialEntries={['/inventory-v2?from=operational-tools&tab=stock']}><InventoryWorkspace embedded/><Location/></MemoryRouter>));
+  expect(host.querySelector('[data-testid="inventory-suite"]')).toBeNull();
+  expect(host.querySelector('.mz-inventory-embedded')).not.toBeNull();
+  await act(async () => [...host.querySelectorAll('button')].find(b=>b.textContent==='شراء مخزون').click());
+  expect(host.querySelector('[data-testid="purchase"]')).not.toBeNull();
+  const query=new URLSearchParams(host.querySelector('[data-testid="location"]').textContent);
+  expect(query.get('from')).toBe('operational-tools'); expect(query.get('tab')).toBe('purchase');
+  expect(api.context).toHaveBeenCalledTimes(1);
 });
 test.each(['opening','purchase','purchases','stock','stocktake','adjustments','movements'])('direct tab %s cannot bypass permissions', async tab => {
   api.context.mockResolvedValue({session_scope:'limited',permissions:{}});
