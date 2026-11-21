@@ -6,6 +6,17 @@ jest.mock("react-router-dom", () => ({
 }));
 
 import ProfitSummaryCard, { buildPaymentFeeRows } from "./ProfitSummaryCard";
+import { financialCohortCompleteness } from "../lib/paymentFeeCompleteness";
+
+test("deferred history explicitly blocks certified profit without inventing a fee", () => {
+    const state = financialCohortCompleteness({}, {
+        complete: false, review_reason_counts: { awaiting_payment_history_deferred: 2 },
+    });
+    expect(state.complete).toBe(false);
+    expect(state.hint).toContain("الأرصدة التشغيلية");
+    expect(state.hint).toContain("صافي الربح غير مؤكد");
+    expect(state.hint).not.toContain("عمولة");
+});
 
 const breakdown = [
     {

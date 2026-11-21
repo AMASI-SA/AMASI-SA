@@ -2243,7 +2243,7 @@ async def dashboard(user=None, from_date=None, to_date=None, payment_methods=Non
         AWAITING_PAYMENT_RAW_PROJECTION, attach_financial_cohort_eligibility,
         financial_cohort_eligibility,
     )
-    from awaiting_payment_history import guard_financial_cohort_history
+    from awaiting_payment_history import defer_financial_cohort_history
     from awaiting_payment_cohort import split_financial_cohort
     cohort_cutoff = (datetime.combine(datetime.fromisoformat(to_date).date(), _cohort_time.max,
                                      tzinfo=timezone(_cohort_delta(hours=3)))
@@ -2274,8 +2274,8 @@ async def dashboard(user=None, from_date=None, to_date=None, payment_methods=Non
                                       "payment_method": native.get("payment_method"),
                                       "payment": {"method": native_payment.get("method")} if isinstance(native_payment, dict) else native_payment,
                                   }}})
-    registry_orders = await guard_financial_cohort_history(
-        source_db, owner_id, attach_financial_cohort_eligibility(
+    registry_orders = defer_financial_cohort_history(
+        attach_financial_cohort_eligibility(
             all_orders, cohort_proof_rows, owner=owner_id, as_of=cohort_cutoff))
     registry_currency = summarize_orders_sar(registry_orders)
     all_orders, financial_cohort = split_financial_cohort(registry_orders)

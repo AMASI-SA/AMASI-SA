@@ -5,7 +5,7 @@ import json
 
 from awaiting_payment_eligibility import ELIGIBILITY_FIELD
 
-READER_VERSION = "financial-cohort-proof-history-v1"
+READER_VERSION = "financial-cohort-deferred-dashboard-v2"
 
 
 def split_financial_cohort(orders):

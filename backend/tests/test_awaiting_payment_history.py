@@ -68,6 +68,58 @@ def retained(row):
     return result
 
 
+def test_dashboard_deferral_preserves_money_without_history_reads_or_input_mutation():
+    from awaiting_payment_cohort import split_financial_cohort
+
+    rows = [candidate(str(300000001 + i)) for i in range(1000)]
+    rows.append({"payment_method": "cod", "total_product_cost": 75})
+    before = deepcopy(rows)
+    result = history.defer_financial_cohort_history(rows)
+    selected, coverage = split_financial_cohort(result)
+    assert rows == before
+    assert len(selected) == 1001
+    assert selected[-1] == rows[-1]
+    assert sum(row["total_product_cost"] for row in selected) == 50075
+    assert coverage["review_orders"] == 1000
+    assert coverage["excluded_unpaid_orders"] == 0
+    assert coverage["complete"] is False
+    assert coverage["review_reason_counts"] == {"awaiting_payment_history_deferred": 1000}
+    assert all(row[ELIGIBILITY_FIELD]["history_checked"] is False for row in result[:-1])
+
+
+@pytest.mark.parametrize("count", [1, 1000])
+def test_owner_history_is_scanned_once_off_event_loop_across_batches(monkeypatch, count):
+    """Large cohorts must not rescan the whole merchant ledger per batch."""
+    import threading
+    original = history.known_financial_history
+    scans = []
+    main_thread = threading.get_ident()
+
+    def instrumented(current, orders, *, owner):
+        scans.append((threading.get_ident(), len(orders)))
+        return original(current, orders, owner=owner)
+
+    async def empty_sources(db, owner, specs):
+        return {name: [] for name in specs}
+
+    monkeypatch.setattr(history, "known_financial_history", instrumented)
+    monkeypatch.setattr(history, "_load", empty_sources)
+
+    async def scenario(db):
+        rows = [candidate(str(300000001 + index)) for index in range(count)]
+        # Evidence for the last batch is retained after a single global scan.
+        last = rows[-1]
+        given = state({"capture:opaque": {"order_id": last["order_id"], "amount": "10"}})
+        result = await history.guard_financial_cohort_history(db, "owner", rows, state=given)
+        assert retained(result[-1])["reason_code"] == "awaiting_payment_prior_financial_history"
+        assert all(row[ELIGIBILITY_FIELD]["eligible"] is False for row in result[:-1])
+        assert len(scans) == 1
+        assert scans[0][1] == count
+        assert scans[0][0] != main_thread
+
+    run(scenario)
+
+
 def test_empty_history_authorizes_only_proposed_exclusion_preserves_registry_and_inputs():
     async def scenario(db):
         rows = [candidate(), {**candidate("300000002"), "payment_method": "cod",

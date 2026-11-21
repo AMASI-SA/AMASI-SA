@@ -494,7 +494,7 @@ def _frozen_financial_cohort(response, fixture_case):
         indices = [0, 1]
     assert response['totals']['total_orders'] == len(indices), 'Frozen cohort/order count disagrees'
     decisions = [[owner, '', str(1000000 + i), '', False, False, '', False] for i in indices]
-    return {'reader_version': 'financial-cohort-proof-history-v1',
+    return {'reader_version': 'financial-cohort-deferred-dashboard-v2',
             'total_orders': len(indices), 'financial_eligible_orders': len(indices),
             'excluded_unpaid_orders': 0, 'review_orders': 0, 'complete': True,
             'review_reason_counts': {}, 'eligibility_digest': hashlib.sha256(
