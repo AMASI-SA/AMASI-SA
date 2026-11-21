@@ -2,11 +2,29 @@
 
 ## Checkpoint verdict
 
-**CI, the official protocol-v5 A/B release, and the Production index gate are verified. Merge and publication remain pending a fresh live release-guard check and the normal Emergent release procedure.**
+**The Production index gate is PASS. A new source A is prepared on the current Production base; its CI and new official intent must pass before this task can merge or publish. Another task currently owns the live publication lease.**
 
-The owner has authorized merging and publishing PR #2039, subject to the established gates. Emergent Support supplied the previously missing Production index definitions after a read-only inspection. The current access blocker is the disconnected shared-workspace terminal, not missing database indexes or a request for new merge/publication permission.
+The owner has authorized merging and publishing PR #2039, subject to the established gates. Emergent Support supplied the previously missing Production index definitions after a read-only inspection. Terminal access has now been restored. Production advanced through PR #2046, so the former A/B pair and its successful CI are historical and cannot authorize the new deployment.
 
-### Latest update: authenticated Production index evidence
+### Latest update: terminal recovered and source renewed
+
+The user requested another connection attempt. Reloading the existing code-server window restored the terminal. A fresh read at **2026-11-21 19:08:12 UTC / 22:08:12 Asia/Riyadh** found the shared workspace on `hotfix/prod-snap-meta-final`, HEAD `a9d0aec2939a706dcc16f9948e7a81cfe019e66f`, with no tracked changes. The live v5 guard was **active**, owned by `codex-pr2046-owner-authorized`, prepared at `2026-11-21T19:02:54.427154+00:00`, with source `eeef3913ae2e1b8fa4b58f3835478e1ed17b2988` and release `rg5-ddbdc7c7bfa083d85224a0f0275318ca7dacfdd05d3f628e8f3dc05c278be895`.
+
+The latest relevant [Issue #1006 handoff](https://github.com/AMASI-SA/AMASI-SA/issues/1006#issuecomment-6238987123), updated at 19:04:27 UTC, records one publication click for PR #2046 and verification still pending. This task has not changed shared `/app`, cleared/reused that lease, or clicked publication. `/app` had only 67 MB available while `/tmp` had 227 GB; recheck capacity before any future shared rehearsal and preserve unrelated work.
+
+Production advanced by eight commits and 47 files. GitHub consequently marked the old PR #2039 pair conflicting. None of the four external-party feature files changed in that Production delta, so the original four-file source patch was replayed exactly in an isolated worktree. Root review confirmed all four resulting blobs match the previously reviewed feature, all new Production changes remain inherited, and the current Production intent was left unchanged. `git apply --check`, `git diff --check`, and Python AST checks passed. Full local backend/frontend execution was unavailable because the isolated environment lacked its test dependencies and MongoDB; fresh GitHub CI remains required.
+
+| Current role | Git commit | Git tree |
+| --- | --- | --- |
+| Current Production base J | `a9d0aec2939a706dcc16f9948e7a81cfe019e66f` | `7bb7011017bab4fb7367cbd217bc97ed47dcb78c` |
+| New source A / current PR HEAD | `e08d0e489eded39961d374e4eb7bfcc0544b6e90` | `fdd3567f46f7c0597673fd61516ec712ede74465` |
+| New frozen intent B | **Not created; awaiting the official candidate and validation** | — |
+
+The former B is preserved remotely on `codex/pr2039-archived-b688995ce-20261121`. PR #2039 was updated with an expected-old-HEAD lease to new source A and remains Draft, unmerged, and unpublished by this task. A fresh PR read now reports `mergeable:true` with base J above. Its current intent is the inherited Production intent, **not approval of source A**. Do not reuse the old candidate or CI.
+
+Current next steps: obtain and validate the official candidate generated for exact A/J; create an intent-only B; require all applicable exact-B CI and both real adapter rehearsals; then wait for PR #2046's owner to finish verification and release its lease. Before any merge or shared operation, recheck actual Production, PR HEAD, all gates, the live guard, tracked cleanliness, and disk capacity. Any drift invalidates the corresponding snapshot. The Production-index attestation remains accepted; no new URI entry or financial/index changes are warranted.
+
+### Accepted Production index evidence
 
 Emergent Support inspected the exact Production database and collection at **2026-11-21 18:21:48 UTC / 21:21:48 Asia/Riyadh**. Its reply arrived at **18:27:46 UTC / 21:27:46 Asia/Riyadh** from `support@emergent.sh` in the original request thread. Gmail-reported DKIM for `emergent.sh`, SPF, and DMARC passed. The root read the actual reply; this is platform-operator evidence, not a successful rerun of the workspace helper.
 
@@ -19,15 +37,15 @@ Support confirmed exactly three indexes including `_id_`, with no build in progr
 
 The current Production-index gate is **PASS**. Earlier `UNVERIFIED` and timeout sections below are historical and superseded by this reply; do not ask for another URI entry or repeat the preview-terminal check.
 
-Fresh GitHub audit at **2026-11-21 21:53:11 Asia/Riyadh** still found B and J unchanged, eleven successful workflows plus the expected TikTok skip, 23 successful checks/six conditional skips, and zero failed or unfinished checks. PR remains draft, unmerged, and mergeable/clean.
+Historical GitHub audit at **2026-11-21 21:53:11 Asia/Riyadh** found the former B and J unchanged, eleven successful workflows plus the expected TikTok skip, 23 successful checks/six conditional skips, and zero failed or unfinished checks. Those results apply only to that superseded pair.
 
-On resuming Emergent, the root found the code-server terminal disconnected and repeatedly attempting to reconnect. An input attempt into a new task-owned terminal was explicitly rejected before any input was sent. Reconnect did not restore it. No fresh guard status was obtained in this continuation, no source/workspace update was applied, and the old inactive-guard snapshot cannot authorize execution. The original release remains frozen while terminal access is restored.
+In the earlier attempt, the root found code-server disconnected and could not obtain a fresh guard result. That access problem was resolved by the later window reload described above. Neither the historical inactive-guard snapshot nor the old CI authorizes execution.
 
 Production changed by this operation: **no**. No merge, release lease, publication, financial record/index mutation, or APK publication has occurred.
 
-This document and its companion diagnostic belong to the standalone evidence branch `codex/pr2039-evidence-20261121`. **The evidence branch is not a deployable release.** Do not merge its documentation/helper changes into frozen B or check it out in shared `/app`. The original PR branch remains frozen at B.
+This document and its companion diagnostic belong to the standalone evidence branch `codex/pr2039-evidence-20261121`. **The evidence branch is not a deployable release.** Do not merge its documentation/helper changes into a frozen A/B pair or check it out in shared `/app`. Current source and release identities are listed in the latest update above.
 
-## Scope and immutable identity
+## Historical scope and superseded immutable identity
 
 - Task: `EXTERNAL-PARTY-2039-20261121`.
 - Repository: [AMASI-SA/AMASI-SA](https://github.com/AMASI-SA/AMASI-SA).
@@ -56,7 +74,7 @@ These four feature blobs are byte-identical to the previously tested feature, re
 
 Do not squash, rebase, amend, or append source/documentation changes to frozen A/B. If the source or relevant Production base changes, establish a new legitimate source A, build and validate a new candidate, freeze a new intent-only B, and rerun the applicable gates.
 
-## Official release artifact
+## Historical official release artifact (superseded)
 
 | Field | Value |
 | --- | --- |
@@ -78,7 +96,7 @@ The committed B intent blob independently matches the validated candidate bytes.
 
 An empty `fetch_file` response for this large intent is not evidence of an empty file. The tracked intent is larger than 1 MB; blob retrieval and local Git hashing establish its content.
 
-## Final CI evidence bound to B
+## Historical final CI evidence bound to former B
 
 CI snapshot: **2026-11-21 17:50:43 UTC / 20:50:43 Asia/Riyadh**, from the independently collected `ci-review/B-summary.json`. Every result in this section belongs to B `688995ce7fa958356f2ed7bb4c3e15c97ef51afb`, not an earlier commit.
 
@@ -202,7 +220,7 @@ The existing production source has no general external-party index-metadata HTTP
 
 Fresh GitHub audit at **2026-11-21 21:11:38 Asia/Riyadh**: HEAD remains B, Production remains J, all twelve runs remain attempt 1 (eleven successes and the scoped TikTok skip), and all 29 checks retain 23 successes/six conditional skips. No CI failure or changed source. PR remains draft/unmerged and mergeable/clean. The four visible required contexts pass. Full administrative branch-protection details were not accessible to the integration (403), so their absence is not claimed; any eventual merge must use the normal protected route without bypass.
 
-### Next action after the support reply
+### Historical next action after the support reply (superseded)
 
 1. Keep PR #2039 at frozen B. The owner separately authorized the support request, it was sent once, and the requested read-only index evidence has now arrived and passed review. Restore the shared Emergent terminal connection and obtain a fresh guard/status/HEAD/clean-tracked-tree snapshot. Preserve all unrelated terminals, ignored artifacts, staging directories, and untracked work. Do not request the Mongo URI again or alter financial records/indexes.
 
