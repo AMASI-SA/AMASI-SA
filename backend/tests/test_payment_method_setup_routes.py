@@ -124,3 +124,21 @@ async def test_http_validation_never_accepts_missing_or_invalid_terms(setup_api,
     response = await env.client.put(BASE + "/payment-method-commission", json=commission(setup, **invalid))
     assert response.status_code == 422, response.text
     assert await env.db.settings.find_one({"user_id": "owner-a"}) == before
+
+
+@pytest.mark.asyncio
+async def test_unrelated_legacy_fee_save_keeps_governed_methods_configured(setup_api):
+    from accounting_onboarding_ssot import POLICIES
+    from tests.test_payment_method_fee_status import tariff
+    env = setup_api
+    await env.db.unified_orders.insert_one({"user_id": "owner-a", "payment_method": "emkan_installment"})
+    await env.db[POLICIES].insert_one({"user_id": "owner-a", "policies": [
+        tariff(user_id="owner-a", effective_from="2001-01-01"),
+    ]})
+    setup = (await candidates(env))["payment_method_setup"]
+    saved = await env.client.put(BASE + "/payment-method-commission", json=commission(setup))
+    assert saved.status_code == 200, saved.text
+    current = saved.json()["payment_method_setup"]
+    row = next(row for row in current["items"] if row["name"] == "emkan_installment")
+    assert row["status"] == "configured" and row["fee_source"] == "mz2_policies"
+    assert current["fee_revision"] == setup["fee_revision"]

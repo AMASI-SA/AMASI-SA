@@ -37,7 +37,8 @@ from dashboard_v2_ads_executive import build_salla_ads_executive_breakdown_coope
 from dashboard_ads_account_results import build_dashboard_ads_account_results
 from dashboard_ads_costs import DashboardAdsCostCollector
 from dashboard_ads_periods import SALLA_ORDER_TIMESTAMP_PROJECTION
-from payment_method_setup import load_payment_method_setup, payment_settings_revision
+from payment_method_setup import payment_settings_revision
+from payment_method_fee_status import load_fee_setup_context, fee_setup_revision, load_payment_method_setup
 from dashboard_snapchat_spend import load_snapchat_dashboard_spend
 from integrations_control_center.meta_oauth_security import META_PROVIDER_ID
 from integrations_control_center.snapchat_oauth_security import SNAPCHAT_PROVIDER_ID
@@ -2229,6 +2230,7 @@ def make_dashboard_v2_router(
             get_policy_map(db, user_id),
         )
         settings = settings or {}
+        fee_context = await load_fee_setup_context(db, user_id) if section == "executive" else None
 
         def filter_key(value: str | None) -> tuple[str, ...]:
             return tuple(sorted({part.strip().casefold() for part in (value or "").split(",") if part.strip()}))
@@ -2241,6 +2243,7 @@ def make_dashboard_v2_router(
             tuple(sorted(str(value) for value in (settings.get("report_included_statuses") or []))),
             tuple(sorted(policy.items())),
             payment_settings_revision(settings) if section == "executive" else None,
+            fee_setup_revision(fee_context) if section == "executive" else None,
         )
         filters = {
             "from_date": from_date, "to_date": to_date,
@@ -2260,7 +2263,8 @@ def make_dashboard_v2_router(
                     # Setup is owner-wide, so a date or payment filter cannot
                     # hide an unresolved method. This reads names only; it does
                     # not initialize fees, create accounts or run a sync.
-                    load_payment_method_setup(db, user_id, settings=settings),
+                    load_payment_method_setup(db, user_id, settings=settings,
+                                              fee_context=fee_context, current_day=today),
                 )
                 return {**result, "payment_method_setup": method_setup}
             orders = await _filtered_orders(

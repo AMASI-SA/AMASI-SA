@@ -35,6 +35,32 @@ test("incomplete detection remains visible instead of claiming no missing commis
     expect(host.querySelector("a").getAttribute("href")).toBe("/operational-balances/provider-fees");
 });
 
+test("canonical aliases share one missing-tariff action and plans are reviewed separately", async () => {
+    const scope = {provider: "emkan", payment_method: null};
+    await render({complete: true, pending_count: 2, review_count: 1, items: [
+        {key: "upper", name: "EmkanInstallment", label: "إمكان", fee_scope: scope, status: "needs_commission"},
+        {key: "lower", name: "emkan_installment", label: "إمكان", fee_scope: scope, status: "needs_commission"},
+        {key: "tabby", name: "tabby", label: "تابي", status: "needs_review"},
+    ]});
+    expect(host.querySelectorAll("a")).toHaveLength(2);
+    expect(host.textContent.match(/إمكان/g)).toHaveLength(1);
+    expect(host.textContent).toContain("تعرفات دفع تحتاج مراجعة");
+    expect(host.textContent).toContain("مراجعة التعرفة");
+    expect(host.querySelectorAll("a")[1].getAttribute("href")).toBe("/operational-balances/provider-fees?method=tabby");
+});
+
+test("configured dated aliases clear the alert without implying every order is verified", async () => {
+    await render({complete: true, pending_count: 0, review_count: 0, items: [
+        {key: "emkan", name: "emkan_installment", status: "configured", fee_source: "mz2_policies"},
+    ]});
+    expect(host.innerHTML).toBe("");
+    await render({complete: true, pending_count: 0, review_count: 1, items: [
+        {key: "tabby", name: "تابي", status: "needs_review"},
+    ]});
+    expect(host.textContent).not.toContain("تحتاج إضافة عمولة");
+    expect(host.textContent).toContain("اكتمال التعرفة لا يعني اكتمال رسوم كل طلب");
+});
+
 test("a fresh resolved snapshot removes only the configured method notice", async () => {
     const second = { key: "another", name: "طريقة أخرى", status: "needs_commission" };
     await render({ items: [pending, second], pending_count: 2, complete: true });

@@ -23,6 +23,7 @@ from payment_methods import (
     CARD_FALLBACK_SUB_KEYS,
     DEFAULT_PAYMENT_METHODS,
     KNOWN_PAYMENT_SUB_KEYS,
+    is_unselected_payment_method,
     normalize_payment_method,
 )
 
@@ -59,7 +60,7 @@ class PaymentMethodCommissionIn(BaseModel):
     @field_validator("name")
     @classmethod
     def meaningful_name(cls, value: str) -> str:
-        if not normalize_payment_method(value)[0]:
+        if is_unselected_payment_method(value) or not normalize_payment_method(value)[0]:
             raise ValueError("payment_method_name_required")
         return value
 
@@ -173,7 +174,9 @@ async def _observed_names(db, owner: str) -> tuple[list[str], bool]:
             complete = False
             continue
         raw = raw.strip()
-        if not normalize_payment_method(raw)[0]:
+        # Salla uses waiting for an unselected tender, not a chargeable gateway.
+        # Preserve the source order/status; only exclude it from fee discovery.
+        if is_unselected_payment_method(raw) or not normalize_payment_method(raw)[0]:
             continue
         if len(raw) > MAX_METHOD_NAME_LENGTH:
             complete = False

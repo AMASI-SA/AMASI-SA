@@ -368,6 +368,47 @@ async def test_fee_content_changes_invalidate_executive_even_without_revision_or
 
 
 @pytest.mark.asyncio
+async def test_dated_tariff_changes_invalidate_executive_setup_without_legacy_edit(card_app):
+    from accounting_onboarding_ssot import POLICIES, _key
+    from tests.test_payment_method_fee_status import tariff
+    env = card_app
+    await env.db.unified_orders.insert_many([
+        sample_order("a", "emkan-upper", "2025-01-01", 120, payment="EmkanInstallment"),
+        sample_order("a", "emkan-lower", "2025-01-01", 120, payment="emkan_installment"),
+        sample_order("a", "unselected", "2025-01-01", 120, payment="waiting"),
+    ])
+    # Duplicate old definitions cannot override a new canonical tariff.
+    await env.db.settings.update_one({"user_id": "a"}, {"$push": {"payment_methods": {
+        "name": "EmkanInstallment", "commission_percent": 1, "fixed_fee": 0, "vat_percent": 0,
+    }}})
+    path = "/dashboard-v2/cards/executive"
+    first = (await env.client.get(path, params=PARAMS)).json()["payment_method_setup"]
+    assert "waiting" not in {row["name"] for row in first["items"]}
+    initial_calls = env.calls["legacy"]
+    policy = tariff(user_id="a")
+    await env.db[POLICIES].insert_one({"user_id": "a", "policies": [policy]})
+    current = (await env.client.get(path, params=PARAMS)).json()["payment_method_setup"]
+    assert current["revision"] == first["revision"]
+    assert current["fee_revision"] != first["fee_revision"]
+    assert env.calls["legacy"] == initial_calls + 1
+    aliases = [row for row in current["items"] if (row.get("fee_scope") or {}).get("provider") == "emkan"]
+    assert len(aliases) == 2 and all(row["status"] == "configured" for row in aliases)
+
+    # Expiry and source mode are also authoritative cache inputs, without refresh.
+    await env.db[POLICIES].update_one({"policies": {"$exists": True}},
+        {"$set": {"policies.0.effective_to": "2026-11-10"}})
+    expired = (await env.client.get(path, params=PARAMS)).json()["payment_method_setup"]
+    assert env.calls["legacy"] == initial_calls + 2
+    assert all(row["status"] == "needs_commission" for row in expired["items"]
+               if (row.get("fee_scope") or {}).get("provider") == "emkan")
+    await env.db[POLICIES].insert_one({"_id": _key("a", "fee_source_mode"), "user_id": "a",
+                                     "fee_source_mode": "mz2_policies"})
+    switched = (await env.client.get(path, params=PARAMS)).json()["payment_method_setup"]
+    assert switched["fee_revision"] != expired["fee_revision"]
+    assert next(row for row in switched["items"] if row["name"] == "mada")["status"] == "needs_commission"
+
+
+@pytest.mark.asyncio
 async def test_method_discovery_is_exclusive_to_executive_card_build(card_app, monkeypatch):
     async def forbidden(*args, **kwargs):
         raise AssertionError("product and period cards must not add method discovery")
