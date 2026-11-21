@@ -1,0 +1,52 @@
+{
+  "task_id": "INV-UI-20261120",
+  "recorded_at": "2026-11-21T14:57:21.116223+00:00",
+  "symptom": "User reports stock entry disabled while independent writer enabled; screenshot displays empty-location setup alert and disabled fieldset. Second screenshot confirms existing cabinet with9empty locations.",
+  "confirmed_code_path": {
+    "file": "frontend/src/pages/operational/StandaloneInventoryEntry.jsx",
+    "empty_locations_alert_line": 90,
+    "fieldset_disabled_line": 92,
+    "condition": "catalog.locations.length === 0 blocks the fieldset independently from writer_disabled"
+  },
+  "confirmed_server_contract": {
+    "file": "backend/standalone_inventory_entry.py",
+    "warehouse_filter": {
+      "inventory_scope": "standalone",
+      "status": "active"
+    },
+    "legacy_or_shared_warehouses": "excluded; not automatically converted"
+  },
+  "account_data_verdict": "Existing warehouse scope/status and session metadata have not been directly read. Missing/legacy scope is a supported hypothesis, not a verified live database value.",
+  "existing_warehouse_ui": "New warehouses can select standalone, but no existing-warehouse scope mutation endpoint is implemented. No metadata migration or bypass performed.",
+  "checks": [
+    {
+      "command": "yarn.cmd test --watchAll=false --runInBand --runTestsByPath src/pages/operational/StandaloneInventoryEntry.test.jsx",
+      "exit": 1,
+      "result": "No tests found: Windows CRA absolute-root discovery; no assertions executed"
+    },
+    {
+      "command": "yarn.cmd test --watchAll=false --runInBand StandaloneInventoryEntry.test.jsx",
+      "exit": 1,
+      "result": "No tests found; default absolute testMatch did not match local Windows paths; no assertions executed"
+    },
+    {
+      "command": "yarn.cmd test --watchAll=false --runInBand --testMatch=**/StandaloneInventoryEntry.test.jsx",
+      "exit": 0,
+      "result": "7tests PASS, including missing-locations disabling, valid save and idempotent replay. Explicit focused match fixes invocation discovery without source/config changes."
+    },
+    {
+      "command": "git diff --exit-code a03d05d474d1c0a5fba879c7706761d8f94f5d58 origin/hotfix/prod-snap-meta-final -- entry/warehouse/context affected files",
+      "exit": 0,
+      "result": "Relevant source identical to current Production head9f47a47ff16bfa02a8132bd83fe44db3bdb86da0"
+    },
+    {
+      "command": "node --check browser-warehouse-scope-check.js",
+      "exit": 0,
+      "result": "Syntax only; authenticated browser diagnostic not executed by agent"
+    }
+  ],
+  "browser_access": "CUA still fails with missing kernel asset path; completion summary delivered. No authenticated account inspection possible in this turn.",
+  "agent_source_edits": false,
+  "agent_production_configuration_or_quantity_writes": false,
+  "next_action": "User executes same-origin authenticated GET-only diagnostic in Mezan page Console and returns only code/status/inventory_scope. No credentials printed, no storage/token reading, no mutations. Determine actual scope before any repair."
+}

@@ -3,11 +3,11 @@
   "scope": "Replace legacy Mezan inventory interfaces with the approved integrated Arabic RTL design using the existing native services and permissions.",
   "branch": "codex/inventory-release-20261121",
   "base_sha": "734b977de28254c2c089148b4db8972a03ba19eb",
-  "state": "manual_prechecks_passed_clean_clone_rehearsal_pending",
+  "state": "entry_blocked_no_eligible_locations_scope_unverified",
   "production_changed": true,
   "remote_checkpoint": "Immutable release B a03d05d474d1c0a5fba879c7706761d8f94f5d58; latest continuity documentation commit recorded in Issue1006",
-  "release_lease": "User-provided diagnostic reports active:false, exit0; no agent lease. Recheck immediately before each next phase.",
-  "deployment": "No agent publish; initial user prechecks passed. Isolated clean-clone governed build is the next user-operated diagnostic phase.",
+  "release_lease": "Agent did not create/touch a lease. Earlier user idle result is historical; current shared guard state unknown after external publication.",
+  "deployment": "Public health now reports newer externally published release retaining merged inventory. Agent did not publish; full3-probe guard verification/lease owner state not observed. Old D manual publish instructions superseded.",
   "owners": {
     "root": "Shared suite shell, native inventory workspace/reader, routing, reporting/control integration and final verification",
     "native_catalog_resources": "Native products, components, groups, bundles visible interfaces",
@@ -20,14 +20,14 @@
     "Preserve canonical product/variant/resource/location identity, server preview hash, stable idempotency and current permissions",
     "No opening-stock writer reused for stock adjustments"
   ],
-  "next_action": "User runs manual-rehearsal.sh only. It rechecks idle guard/clean tracked source/exact D, fetches and checks origin, then builds a temporary clean clone. Return REHEARSAL_PASSED or last failure lines. No shared materialization, prepare/prepublish/publish or operational writes in this phase.",
-  "updated_at": "2026-11-21T14:19:03.262831+00:00",
-  "verified_milestone": "User pasted guard active:false/exit0, empty tracked status, Production branch at exact D, all required commands available. Agent independently confirmed remote continuity checkpoint and D/B tree equality. Shell syntax and isolated stop/report/parent-open simulation PASS; actual Emergent rehearsal is not yet executed by agent.",
+  "next_action": "Read actual warehouse inventory_scope/status through authenticated GET /api/warehouse-locations/warehouses in user browser. User confirms existing9empty bins; do not recreate, reset, relabel or convert warehouse automatically. Diagnose missing/legacy scope versus stale context before proposing a repair.",
+  "updated_at": "2026-11-21T14:58:29.976600+00:00",
+  "verified_milestone": "Entry screenshot shows writer enabled plus no-locations alert; warehouse screenshot confirms existing cabinet with9empty bins. Source excludes warehouses unless standalone+active. Fresh7frontend tests PASS using explicit local Windows testMatch; relevant source equals current Production9f47. Actual warehouse scope/status unobserved because CUA kernel fails. No source/data edits.",
   "ledger": "https://github.com/AMASI-SA/AMASI-SA/issues/1006#issuecomment-6238987123 has a dedicated dated INV-UI-20261120 section appended without removing original content; comments/body limits block new entries elsewhere. Write read-back verified.",
   "incomplete": [
-    "Actual failing original command remains unidentified; all initial user-provided prechecks now pass. Capture next isolated build/fetch phase output.",
-    "After a successful clean-clone rehearsal: separately materialize shared outputs, recheck guard, prepare/prepublish and user manual publish, then explicit new success and three v5 probes.",
-    "No production posting/permission/control activation or real inventory/accounting writes permitted."
+    "Authenticated read of existing warehouse inventory_scope/status and current entry context.",
+    "Determine whether an explicit safe scope-setup migration or catalog refresh is needed; no production metadata conversion authorized or performed.",
+    "Old A clean-clone rehearsal PASSED per user output and tracked-intent hash comparison, but Production advanced and that old release cannot be published over latest head."
   ],
   "posting_scope": "User approved full stocktake/adjustment lifecycle including atomic posting, development only; new posting default-closed",
   "durable_patch": "C:\\Users\\amasi\\OneDrive\\المستندات\\ChatGPT\\ميزان\\outputs\\inventory-implementation-20261120\\inventory-ui-wip.patch",
@@ -91,23 +91,25 @@
       "24.19.0"
     ],
     "governed_node": "22.23.2",
-    "governed_yarn": "1.22.22"
+    "governed_yarn": "1.22.22",
+    "historical_release_pair": true,
+    "superseded_by_production_merge": "9f47a47ff16bfa02a8132bd83fe44db3bdb86da0"
   },
   "production_git_changed": true,
   "production_runtime_changed_by_agent": false,
   "production_operational_data_changed_by_agent": false,
   "production_source_merge_sha": "5019e957cd1bb578f7b7375099547a470e51cb05",
-  "continuity_previous_checkpoint": "fad984204f6cd62157c2292074344709a123595c",
+  "continuity_previous_checkpoint": "b2cee8d3755c028cebd5a872136fe03fbcda5382",
   "manual_publish_instructions": "docs/operations/INV-UI-20261120/MANUAL-PUBLISH.md",
   "manual_publish_script": "docs/operations/INV-UI-20261120/manual-publish.sh",
   "release_verification_evidence": "docs/operations/INV-UI-20261120/evidence/release-validation.json",
   "last_verified_tested_source_sha": "03dce00590c565a125ee0219537c86abeeb76819",
   "live_release_observation": {
-    "observed_at": "2026-11-21T14:01:20.801348+00:00",
+    "observed_at": "2026-11-21T14:58:29.976600+00:00",
     "url": "https://mezansalla.com/api/health",
     "release": {
-      "source_git_sha": "e8b699ef61a196d575dc31bc31922753666c0318",
-      "release_id": "rg5-8658735cff68ad875434debc456a51b8b1fdcfcd81b0a8adfeff2373c101c085",
+      "source_git_sha": "d60e2d73f47a59e7a7b919b3dc60e956f0f274a9",
+      "release_id": "rg5-2ca7f1f7c5a05da2a34a1fbcbf46fe6820b3b868af794ed63d2b1fa451966aff",
       "verified_identity_available": true,
       "frontend_build_verified": true
     }
@@ -136,5 +138,62 @@
   },
   "manual_prechecks_evidence": "User-provided text; no host ID, environment values or raw command paths retained",
   "next_phase_script": "docs/operations/INV-UI-20261120/manual-rehearsal.sh",
-  "next_phase_evidence": "docs/operations/INV-UI-20261120/evidence/manual-rehearsal-check-proof.json"
+  "next_phase_evidence": "docs/operations/INV-UI-20261120/evidence/manual-rehearsal-check-proof.json",
+  "production_changed_this_turn": false,
+  "entry_diagnosis": {
+    "task_id": "INV-UI-20261120",
+    "recorded_at": "2026-11-21T14:57:21.116223+00:00",
+    "symptom": "User reports stock entry disabled while independent writer enabled; screenshot displays empty-location setup alert and disabled fieldset. Second screenshot confirms existing cabinet with9empty locations.",
+    "confirmed_code_path": {
+      "file": "frontend/src/pages/operational/StandaloneInventoryEntry.jsx",
+      "empty_locations_alert_line": 90,
+      "fieldset_disabled_line": 92,
+      "condition": "catalog.locations.length === 0 blocks the fieldset independently from writer_disabled"
+    },
+    "confirmed_server_contract": {
+      "file": "backend/standalone_inventory_entry.py",
+      "warehouse_filter": {
+        "inventory_scope": "standalone",
+        "status": "active"
+      },
+      "legacy_or_shared_warehouses": "excluded; not automatically converted"
+    },
+    "account_data_verdict": "Existing warehouse scope/status and session metadata have not been directly read. Missing/legacy scope is a supported hypothesis, not a verified live database value.",
+    "existing_warehouse_ui": "New warehouses can select standalone, but no existing-warehouse scope mutation endpoint is implemented. No metadata migration or bypass performed.",
+    "checks": [
+      {
+        "command": "yarn.cmd test --watchAll=false --runInBand --runTestsByPath src/pages/operational/StandaloneInventoryEntry.test.jsx",
+        "exit": 1,
+        "result": "No tests found: Windows CRA absolute-root discovery; no assertions executed"
+      },
+      {
+        "command": "yarn.cmd test --watchAll=false --runInBand StandaloneInventoryEntry.test.jsx",
+        "exit": 1,
+        "result": "No tests found; default absolute testMatch did not match local Windows paths; no assertions executed"
+      },
+      {
+        "command": "yarn.cmd test --watchAll=false --runInBand --testMatch=**/StandaloneInventoryEntry.test.jsx",
+        "exit": 0,
+        "result": "7tests PASS, including missing-locations disabling, valid save and idempotent replay. Explicit focused match fixes invocation discovery without source/config changes."
+      },
+      {
+        "command": "git diff --exit-code a03d05d474d1c0a5fba879c7706761d8f94f5d58 origin/hotfix/prod-snap-meta-final -- entry/warehouse/context affected files",
+        "exit": 0,
+        "result": "Relevant source identical to current Production head9f47a47ff16bfa02a8132bd83fe44db3bdb86da0"
+      },
+      {
+        "command": "node --check browser-warehouse-scope-check.js",
+        "exit": 0,
+        "result": "Syntax only; authenticated browser diagnostic not executed by agent"
+      }
+    ],
+    "browser_access": "CUA still fails with missing kernel asset path; completion summary delivered. No authenticated account inspection possible in this turn.",
+    "agent_source_edits": false,
+    "agent_production_configuration_or_quantity_writes": false,
+    "next_action": "User executes same-origin authenticated GET-only diagnostic in Mezan page Console and returns only code/status/inventory_scope. No credentials printed, no storage/token reading, no mutations. Determine actual scope before any repair."
+  },
+  "external_production_head": "9f47a47ff16bfa02a8132bd83fe44db3bdb86da0",
+  "entry_diagnostic_browser_get": "https://mezansalla.com/api/warehouse-locations/warehouses",
+  "entry_diagnostic_evidence": "docs/operations/INV-UI-20261120/evidence/entry-location-diagnosis.json",
+  "entry_diagnostic_note": "docs/operations/INV-UI-20261120/ENTRY-LOCATION-DIAGNOSIS.md"
 }
