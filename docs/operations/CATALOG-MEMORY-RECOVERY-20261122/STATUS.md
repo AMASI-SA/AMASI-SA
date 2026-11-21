@@ -6,7 +6,7 @@
 - Branch: `codex/dashboard-catalog-memory-20261122`.
 - Review: PR #2054 (draft at this checkpoint).
 - Base: `10ee7b41204dd1d39c8b91daf9f0a9d899041ebb`, the normal PR #2053 merge.
-- Recoverable WIP checkpoint: `8ba1aeb8229ab83ed86edd4d7606cd7d62cefa16`.
+- Recoverable WIP checkpoint: `eff3f35a773945aabd91c0faabc8ed86588a781f`.
 - The local reviewed source extends that WIP; root will record its exact final
   source commit in PR #2054 and the canonical Issue #1006 ledger.
 - Current `backend/dashboard_v2_routes.py` SHA-256:
@@ -102,18 +102,29 @@ production RSS, end-to-end latency or incident-resolution evidence.
 
 ## Pending review and exact next action
 
-The independent reviewer is adapting only the runtime gate's catalog read audit
-and focused tests. Its immutable post-catalog/pre-downstream mutation fence must
-run after full selected cost capture, while the separate alias-to-hydration race
-tests continue to require the explicit retryable 503. The 164 immutable financial
-assertions and nonempty read/response contracts must remain intact. Empty-cohort
-zero reads require a precise audited exception with negative controls.
+The runtime gate adapter now audits the exact alias/full projections, owner,
+physical winning IDs, cursor limits and returned rows. It normalizes only the
+extra selected-document read and the six removed cost reads for the seven known
+empty frozen scenarios. Negative controls reject widened or duplicate IDs,
+writes, missing nonempty/companion/unrelated reads, forged empty cohorts and
+financial JSON or member-order changes. The independent post-catalog mutation
+fence runs after full selected cost capture and before companion reads, matching
+the original semantic boundary. Separate alias-to-hydration race tests continue
+to require the retryable 503. None of the original 164 financial assertions or
+output expectations is changed.
 
-Next: finish and independently review that gate adaptation, run its focused
-tests, capture the exact final source commit, and run CI. Only after reviewed
-source verification may root decide whether to freeze a new source A and
-intent-only B under release protocol v5. This checkpoint is not deployment
-approval or evidence of a deployed fix.
+The final new catalog-audit suite passed **67 tests**. The preceding combined
+run passed **215 tests**, including all 150 existing authority, Google and
+payment-fee read contracts; the final additions verify valid Mongo index order
+without imposing an unrequested sort. Twelve
+mutation cases preserve all six frozen financial totals under synchronous and
+cooperative fences. The new gate test is registered in the runtime-adoption CI
+workflow. Independent final review and actual real-Mongo CI remain required.
+
+Next: finish the independent gate review, capture the exact source commit, and
+run exact-head CI, including all 164 immutable runtime assertions. Then freeze
+a fresh source A and intent-only B under release protocol v5 and validate B.
+This checkpoint is not deployment approval or evidence of a deployed fix.
 
 ## Material limits
 
