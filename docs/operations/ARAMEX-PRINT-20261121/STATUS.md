@@ -1,4 +1,15 @@
-# ARAMEX-PRINT-20261121: frozen order-payload recovery candidate
+# ARAMEX-PRINT-20261121: frozen candidate superseded by Production advance
+
+Production advanced to `6e41bf25b936e8c4047df75bb170610dfc71b7f7` through unrelated
+PR2039 while this candidate's checks ran. PR2047 now conflicts at the intent.
+Do not merge or deploy its frozen B; keep A/B unchanged and create a new source
+candidate from the new reviewed Production base. Shipping changes are unaffected.
+The old B did pass both host20/24 configured clean-clone adapter rehearsals
+(readiness44941805161 success) and complete independent ARM64/Linux validation:
+adapter0, verifier0, exact identity match,86.92seconds,shared tracked unchanged.
+ARM64 proof stage `/tmp/aramex-pr2047-0943-tw4c6c3m` is supplementary; source,
+intent,CI artifact and this summary are remotely recoverable. No task lease,
+merge,publication or Production change. Actual target acceptance remains pending.
 
 Evidence branch `codex/aramex-order-payload-evidence-20261121` is NOT a
 deployment candidate. The immutable release branch is
