@@ -2,7 +2,10 @@
 
 Task: ARAMEX-PRINT-20261121. Repository: AMASI-SA/AMASI-SA.
 Release branch: `codex/aramex-current-label-release-20261121`.
-Reviewed base J: `5019e957cd1bb578f7b7375099547a470e51cb05`.
+Reviewed base J: `9f47a47ff16bfa02a8132bd83fe44db3bdb86da0`.
+The prior corrected source checkpoint is `58333b388a383b9c62939fd4bd75d21ee89990e2`;
+Production advanced before its PR opened, so the new reviewed base was merged
+before freezing any corrected release intent. Draft PR: #2043.
 The owner authorized GitHub writes, normal merge and publication.
 State: corrected source checkpoint; exact source/intent SHAs and CI are recorded
 in the task PR and canonical Issue #1006 task block after checkpoint creation.
@@ -45,6 +48,8 @@ shipment list could be filtered away and an old hinted ID revived. After the
 new fence, all **41** tests in `test_carrier_shipment_read_fallback.py` pass,
 including both native HTTP routes and nine cancellation/replacement scenarios.
 `test_amasi_shipping_compat.py` independently passes **58 tests and 59 subtests**.
+`test_shipping_refresh_latency.py` independently passes **26 tests** using an
+isolated loopback Mongo replica set; no production database is used.
 Commands use `python -m pytest --noconftest --asyncio-mode=auto -q` with
 `PYTHONPATH=backend;backend/tests` on Windows. `git diff --check` passes.
 
@@ -64,9 +69,9 @@ and requires its own new governed build, intent-only commit and rehearsals.
 
 ## Exact next safe actions
 
-Push this corrected source checkpoint and open its Draft PR. Update the task
+Push the final corrected source checkpoint for Draft PR #2043. Update the task
 block in Issue #1006 comment 6238987123 without modifying surrounding entries.
-Close #2040 as superseded. Require fresh corrected-head checks; obtain its
+#2040 is closed as superseded. Require fresh corrected-head checks; obtain its
 successful Linux governed candidate, validate the complete Git manifests and
 deterministic identity, and freeze exact intent bytes in a new intent-only B.
 Do not add generated ignored build/proof/runtime files to Git. Wait for all
