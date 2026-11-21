@@ -2,11 +2,11 @@
 
 ## Checkpoint verdict
 
-**The Production index gate is PASS. A new source A is prepared on the current Production base; its CI and new official intent must pass before this task can merge or publish. Another task currently owns the live publication lease.**
+**The Production index gate and renewed official A/B identity are PASS. Final CI must complete on exact new B before this task can merge or publish. The latest live lease observation belongs to another publishing task.**
 
 The owner has authorized merging and publishing PR #2039, subject to the established gates. Emergent Support supplied the previously missing Production index definitions after a read-only inspection. Terminal access has now been restored. Production advanced through PR #2046, so the former A/B pair and its successful CI are historical and cannot authorize the new deployment.
 
-### Latest update: terminal recovered and source renewed
+### Latest update: terminal recovered and A/B renewed
 
 The user requested another connection attempt. Reloading the existing code-server window restored the terminal. A fresh read at **2026-11-21 19:08:12 UTC / 22:08:12 Asia/Riyadh** found the shared workspace on `hotfix/prod-snap-meta-final`, HEAD `a9d0aec2939a706dcc16f9948e7a81cfe019e66f`, with no tracked changes. The live v5 guard was **active**, owned by `codex-pr2046-owner-authorized`, prepared at `2026-11-21T19:02:54.427154+00:00`, with source `eeef3913ae2e1b8fa4b58f3835478e1ed17b2988` and release `rg5-ddbdc7c7bfa083d85224a0f0275318ca7dacfdd05d3f628e8f3dc05c278be895`.
 
@@ -17,12 +17,26 @@ Production advanced by eight commits and 47 files. GitHub consequently marked th
 | Current role | Git commit | Git tree |
 | --- | --- | --- |
 | Current Production base J | `a9d0aec2939a706dcc16f9948e7a81cfe019e66f` | `7bb7011017bab4fb7367cbd217bc97ed47dcb78c` |
-| New source A / current PR HEAD | `e08d0e489eded39961d374e4eb7bfcc0544b6e90` | `fdd3567f46f7c0597673fd61516ec712ede74465` |
-| New frozen intent B | **Not created; awaiting the official candidate and validation** | — |
+| New source A | `e08d0e489eded39961d374e4eb7bfcc0544b6e90` | `fdd3567f46f7c0597673fd61516ec712ede74465` |
+| New frozen intent B / current PR HEAD | `3628efc4215ee95e6196fca4807104a87398e255` | `c3c66e2f15138523a9a72ee0910706f91f9b47e4` |
 
-The former B is preserved remotely on `codex/pr2039-archived-b688995ce-20261121`. PR #2039 was updated with an expected-old-HEAD lease to new source A and remains Draft, unmerged, and unpublished by this task. A fresh PR read now reports `mergeable:true` with base J above. Its current intent is the inherited Production intent, **not approval of source A**. Do not reuse the old candidate or CI.
+The former B is preserved remotely on `codex/pr2039-archived-b688995ce-20261121`. PR #2039 was first renewed at A with an expected-old-HEAD lease, then fast-forwarded to B with expected A. It remains Draft, unmerged, and unpublished by this task. The A-stage PR read reported `mergeable:true` with base J above; final mergeability must be refreshed at B. Do not reuse the old candidate or CI.
 
-Current next steps: obtain and validate the official candidate generated for exact A/J; create an intent-only B; require all applicable exact-B CI and both real adapter rehearsals; then wait for PR #2046's owner to finish verification and release its lease. Before any merge or shared operation, recheck actual Production, PR HEAD, all gates, the live guard, tracked cleanliness, and disk capacity. Any drift invalidates the corresponding snapshot. The Production-index attestation remains accepted; no new URI entry or financial/index changes are warranted.
+The new [source-A readiness run](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44939561224) produced artifact `14721325582`. Root and an independent reviewer checked the ZIP digest against GitHub, exact candidate bytes, the official candidate loader, and source/base/worktree/Git manifests. Root then froze B changing only `release/release-intent-v5.json`, and both reviewers ran the official reviewed-intent loader and Git verifier successfully on B. The generated-runtime identity file is intentionally absent in these isolated source checkouts; these checks are not a shared-host materialization rehearsal.
+
+| Renewed release evidence | Value |
+| --- | --- |
+| Candidate ZIP SHA256 | `d9f1a47d2b99e0b3834f3b73627163aa453e0e44bbfc9302fe43739c71c32c72` |
+| Intent blob | `e27918ddea60f1f8ca038ae25f0a4e6ea0e92cb6` |
+| Intent bytes / SHA256 | 1,444,323 / `bbc9727bbcc8b10c9cefa8c830877f7768999fbec77a358e0b9d3f0b09bd614d` |
+| Runtime release ID | `rg5-45eb8f2d79e0912a1277e1e14816e9d9c5e3a40d0a6d784834c6fbb54996974f` |
+| Frontend artifact tree SHA256 | `9bf4c7bfad899f2b011d16811ca3bb1bbc82c3565488e63e48ea4e00945fdd18` |
+| build-meta.json SHA256 | `e2ad2261a00b555105f8800ad875b92a9c406e9c03b19a93cea945b987755ba2` |
+| Manifest files | Frontend 1,345; Backend runtime 1,288; release control 322 |
+
+At B freeze, A's Security Gate, CodeQL and readiness had passed; Operational Balance Backend and Stock were still pending. No all-A success is claimed or carried forward. The final authority is the new complete CI cycle on B, including real Node20/24 adapter rehearsals. No old B result substitutes for it.
+
+Current next steps: require all applicable exact-B CI and both real adapter rehearsals; then wait for PR #2046's owner to finish verification and release its lease. Before any merge or shared operation, recheck actual Production, PR HEAD, all gates, the live guard, tracked cleanliness, and disk capacity. Any drift invalidates the corresponding snapshot. The Production-index attestation remains accepted; no new URI entry or financial/index changes are warranted.
 
 ### Accepted Production index evidence
 
