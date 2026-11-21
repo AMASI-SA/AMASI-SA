@@ -1,3 +1,28 @@
+# Publication started; production verification pending
+
+Original prepublish succeeded twice for exact M/A/runtime: before opening the
+Republish dialog and again immediately before its final `Publish changes`.
+The confirmation stated free republishes. Final guard result had
+ready_to_publish=true. One publication was submitted; UI now shows Publishing
+and a new `Deployment Started Nov21,06:19PM` event (notification
+361e6f44-c39a-502b-afdc-c6cef66055a5). Do not click Publish again or interpret
+older deployment messages as this publication's success.
+
+Own protocol5 lease actor codex-aramex-label-2044 remains active for
+M d69f31da14f3dc1baad25ab0884ba810446b19f9, A3948581dd53a942af538731c8ad2eff045fd86b7,
+runtime rg5-a581e09f8d694a4ecfdca10c50d2bb899ac11f9d5d386753c812d5f359b99ae2.
+Production runtime change is not yet verified; last observed live identity was
+the prior bank release. No success or print-resolution claim is made.
+
+Next: observe a newer explicit deployment success, preserve available UI/log
+handoff evidence, run original verify with bytecode disabled, require all three
+consecutive probes and inactive lease, then actual original-order ADB fetch/
+print acceptance. Original verifier checks351 public records per round; allow
+it to finish rather than interrupting or clearing its own/another lease.
+DO NOT DEPLOY this evidence branch. Preserve all unrelated files/checkpoints.
+
+---
+
 # Own release prepared; prepublish and publication pending
 
 Original guard prepare succeeded for actor `codex-aramex-label-2044`,
