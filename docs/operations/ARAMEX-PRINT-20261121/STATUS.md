@@ -1,4 +1,36 @@
-# Current carrier shipment read recovery
+# ARAMEX-PRINT-20261121: order-payload recovery WIP
+
+Current user contract: recover official carrier labels through the existing
+order-read permission, as with SMSA/iMile. Do not change linking or request
+additional scopes. The previous missing-scope diagnosis was not proved and
+must not be treated as the required solution.
+
+New task branch `codex/aramex-order-payload-recovery-20261121` starts directly
+from reviewed Production `66aa13967156e8e279b5297caf697c155f720fd1`.
+The prior frozen release A/B/M and evidence checkpoint
+`3a679012460c8ec072d1b7e754a6ab7686aae198` remain intact. That release was
+published and original verify3 closed its lease, but original printing failed.
+This follow-up has no lease or publication; Production changed by follow-up:no.
+
+The existing shipping mapper recognizes `shipping.shipment` and a singular
+top-level `shipment`. The print reader starts from `shipments` only, and its
+order-scoped response normalizer also omits a singular `shipment` wrapper.
+Added synthetic public-reader cases for these three shapes across Aramex,
+SMSA and iMile, with optional standalone shipping APIs denied. All nine cases
+fail before the source change with shipping_scope_required despite an official
+label in the fresh order or order-scoped response. Command (exit1):
+`python -B -m pytest --noconftest --asyncio-mode=auto -q backend/tests/test_carrier_shipment_read_fallback.py -k order_read_permission_supports_each_current_shipment_shape`;
+PYTHONPATH includes backend and backend/tests; existing isolated test runtime.
+Result:9 failed,41 deselected. No production source change yet; live cause still
+unverified. This WIP regression checkpoint is not ready to deploy.
+Exact next action: implement
+the smallest normalization change preserving canonical identity, cancellation,
+replacement, carrier and no-write fences, then run affected checks and ADB.
+No customer fixtures, OAuth/config/token changes, provider POST, shipment
+creation, substitute PDF, status/financial write or sync are authorized here.
+Issue #1006 task block records the exact remote checkpoint and subsequent state.
+
+## Historical release preparation (superseded by current status above)
 
 Task: ARAMEX-PRINT-20261121. Repository: AMASI-SA/AMASI-SA.
 Release branch: `codex/aramex-label-verified-release-20261121`.
