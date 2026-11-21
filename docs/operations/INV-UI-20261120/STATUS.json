@@ -3,11 +3,11 @@
   "scope": "Replace legacy Mezan inventory interfaces with the approved integrated Arabic RTL design using the existing native services and permissions.",
   "branch": "codex/inventory-release-20261121",
   "base_sha": "734b977de28254c2c089148b4db8972a03ba19eb",
-  "state": "merged_awaiting_user_manual_publication",
+  "state": "manual_preparation_stopped_need_read_only_diagnostic",
   "production_changed": true,
-  "remote_checkpoint": "a03d05d474d1c0a5fba879c7706761d8f94f5d58 immutable reviewed release branch; documentation checkpoint containing this file is recorded in Issue1006",
-  "release_lease": "not_created_or_touched_by_agent; shared /app state unobserved",
-  "deployment": "not_published_by_agent; user requested manual publication code",
+  "remote_checkpoint": "Immutable release B a03d05d474d1c0a5fba879c7706761d8f94f5d58; latest continuity documentation commit recorded in Issue1006",
+  "release_lease": "agent did not create/touch; user-side progress and shared /app lease state unknown",
+  "deployment": "manual preparation terminated immediately with Bash exit1 per user; failing command unknown; no agent publish",
   "owners": {
     "root": "Shared suite shell, native inventory workspace/reader, routing, reporting/control integration and final verification",
     "native_catalog_resources": "Native products, components, groups, bundles visible interfaces",
@@ -20,13 +20,13 @@
     "Preserve canonical product/variant/resource/location identity, server preview hash, stable idempotency and current permissions",
     "No opening-stock writer reused for stock adjustments"
   ],
-  "next_action": "User runs MANUAL-PUBLISH.md Bash preparation in Emergent /app only if guard idle and tracked tree clean. Stop on failure or advanced Production Git. After prepublish passes, user chooses Re-publish changes once, waits for a NEW Deployment Succeeded, then runs guard verify and status. No inventory posting activation or operational data writes.",
-  "updated_at": "2026-11-21T14:02:18.163186+00:00",
-  "verified_milestone": "Normal PR2038 merge preserves A/B and has exactly the reviewed B tree. All B checks completed:68SUCCESS+7conditional workflow skips,0failures; both Node20/24 clean-clone governed adapter rehearsals PASS. Read-only live health still reports prior source; agent did not deploy.",
+  "next_action": "User opens a new Terminal and runs only manual-terminal-diagnostic.sh; return text. Do not rerun preparation/build/prepare/prepublish/publish or clear lease until the actual failed prerequisite is identified.",
+  "updated_at": "2026-11-21T14:12:52.207376+00:00",
+  "verified_milestone": "Previous accepted merge/checks preserved. Reproduced inline set-e terminating shell on failure; separately confirmed child wrapper reports failure, prevents later preparation commands and keeps parent terminal open. Actual Emergent failure not yet identified.",
   "ledger": "https://github.com/AMASI-SA/AMASI-SA/issues/1006#issuecomment-6238987123 has a dedicated dated INV-UI-20261120 section appended without removing original content; comments/body limits block new entries elsewhere. Write read-back verified.",
   "incomplete": [
-    "User-operated /app guard status, exact ff-only source update, clean-clone adapter rehearsal, shared materialization, prepare/prepublish and manual publication.",
-    "A NEW Deployment Succeeded plus three successful v5 live probes and final idle guard status are required; production visual match remains unverified."
+    "Need actual /app diagnostic output: guard state/exit, tracked status, branch/HEAD and required command availability.",
+    "All manual release resumption/publish/live verification remain paused pending diagnosis. No new source or production data edits."
   ],
   "posting_scope": "User approved full stocktake/adjustment lifecycle including atomic posting, development only; new posting default-closed",
   "durable_patch": "C:\\Users\\amasi\\OneDrive\\المستندات\\ChatGPT\\ميزان\\outputs\\inventory-implementation-20261120\\inventory-ui-wip.patch",
@@ -96,7 +96,7 @@
   "production_runtime_changed_by_agent": false,
   "production_operational_data_changed_by_agent": false,
   "production_source_merge_sha": "5019e957cd1bb578f7b7375099547a470e51cb05",
-  "continuity_previous_checkpoint": "2949600132c4f50d7cbe0937c1fa5dee37673375",
+  "continuity_previous_checkpoint": "741fd01f4f6f9c6f24f27deefa440226b108c5be",
   "manual_publish_instructions": "docs/operations/INV-UI-20261120/MANUAL-PUBLISH.md",
   "manual_publish_script": "docs/operations/INV-UI-20261120/manual-publish.sh",
   "release_verification_evidence": "docs/operations/INV-UI-20261120/evidence/release-validation.json",
@@ -110,5 +110,13 @@
       "verified_identity_available": true,
       "frontend_build_verified": true
     }
+  },
+  "terminal_failure": {
+    "user_evidence": "Screenshot /bin/bash terminated exit1; user says terminal closed immediately; no underlying command output",
+    "underlying_failure": "unknown",
+    "confirmed_script_issue": "Pasting set -e directly changes interactive shell and can close it on any failed check; original handoff did not isolate it.",
+    "local_reproduction": "Isolated Bash; inline failure exit1; child-wrapper failure visible with parent open; no /app execution",
+    "diagnostic_script": "docs/operations/INV-UI-20261120/manual-terminal-diagnostic.sh",
+    "proof": "docs/operations/INV-UI-20261120/evidence/terminal-diagnostic-proof.json"
   }
 }

@@ -1,0 +1,21 @@
+{
+  "previous_inline_errexit": {
+    "exit": 1,
+    "output": ""
+  },
+  "separate_child_failure": {
+    "exit": 0,
+    "output": "CHILD_FAILURE_CAPTURED\nPARENT_OPEN\n"
+  },
+  "read_only_wrapper_simulation": {
+    "exit": 0,
+    "output": "READ_ONLY_SIMULATION\nGUARD_EXIT=1\nPARENT_OPEN\n"
+  },
+  "scope": "Isolated Bash reproduction only; did not execute in /app or access production",
+  "diagnosis": "Inline set -e can terminate the terminal on any failed prerequisite. Actual failing Emergent command remains unknown.",
+  "future_preparation_wrapper_simulation": {
+    "exit": 0,
+    "output": "STOP_AT_LINE=3 EXIT=1\nFAILURE_VISIBLE\nPARENT_OPEN\n",
+    "result": "Child still fails closed before later commands; parent terminal remains open."
+  }
+}

@@ -1,5 +1,7 @@
 # النشر اليدوي — مخزون ميزان 2
 
+> **توقف التحضير:** أفاد المستخدم بأن الطرفية أُغلقت مباشرة برمز 1. سبب فشل الخطوة غير معروف؛ لا تعِد البناء أو التحضير أو النشر الآن. افتح طرفية جديدة وشغّل `manual-terminal-diagnostic.sh` للقراءة فقط، ثم شارك نص المخرجات. الصيغة أدناه عُدلت لتشغيل التحضير داخل Bash منفصل مع حفظ الخطأ وعدم إغلاق الطرفية، لكن لا تستأنفها قبل تشخيص الخطأ الأصلي.
+
 تم دمج [PR #2038](https://github.com/AMASI-SA/AMASI-SA/pull/2038) مع الحفاظ على مصدر الإصدار والملف المعتمد. GitHub يحتوي التغيير؛ الوكيل لم ينشر الموقع أو يلمس `/app` أو ينشئ lease أو يغيّر بيانات المخزون والمحاسبة. آخر فحص صحة للقراءة فقط ما زال يعرض الإصدار السابق.
 
 - فرع الإنتاج: `hotfix/prod-snap-meta-final`
@@ -16,8 +18,10 @@
 يلزم أن يكون `/app` نسخة Git للمشروع، وأن تتوفر أوامر Python وGit وYarn. أول خطوة تتحقق من أن Release Guard غير نشط. عند وجود lease قديم أو نشط، يتولى مالكه إغلاقه بالأداة التي أنشأته؛ لا تمسحه. التعديلات المحلية على الملفات المتتبعة أو تقدم فرع الإنتاج سيوقفان الخطوات لحين المراجعة.
 
 ```bash
+bash <<'MEZAN_RELEASE' 2>&1 | tee /tmp/mezan-inventory-release.log || printf '%s\n' 'STOP: preparation failed; do not publish. Preserve the log.'
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
+trap 'printf "STOP: line %s, exit %s; do not publish.\n" "$LINENO" "$?" >&2' ERR
 cd /app
 
 release_sha='5019e957cd1bb578f7b7375099547a470e51cb05'
@@ -61,6 +65,7 @@ python scripts/production_release_guard.py prepare --actor inventory-ui-manual-2
 python scripts/production_release_guard.py prepublish
 printf '%s\n' 'PREPUBLISH PASSED. Manually choose Re-publish changes now.'
 printf '%s\n' 'After a NEW Deployment Succeeded, run the separate verify commands.'
+MEZAN_RELEASE
 ```
 
 التجربة النظيفة تجري خارج `/app` ثم يُبنى الإصدار في `/app` عبر dispatcher المعتمد. المكيف يثبت الأدوات المعتمدة Node22.23.2 وYarn1.22.22، وينفذ البناء الحتمي والتحقق من intent وحدود الحزم. ينظف مخرجات البناء المولدة التابعة له فقط؛ لا تفتح أو تنسخ أو تطبع `.env` أو تستخدم `git reset --hard` أو تمسح ملفات المشروع غير المتعلقة بالمهمة. لا تغيّر أو تعيد صياغة A/B، ولا تضف مصدرًا أو intent جديدًا لهذا الإصدار. احتفظ بمخرجات المكيف المنقحة.

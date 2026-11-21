@@ -1,5 +1,7 @@
+bash <<'MEZAN_RELEASE' 2>&1 | tee /tmp/mezan-inventory-release.log || printf '%s\n' 'STOP: preparation failed; do not publish. Preserve the log.'
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
+trap 'printf "STOP: line %s, exit %s; do not publish.\n" "$LINENO" "$?" >&2' ERR
 cd /app
 
 release_sha='5019e957cd1bb578f7b7375099547a470e51cb05'
@@ -43,3 +45,4 @@ python scripts/production_release_guard.py prepare --actor inventory-ui-manual-2
 python scripts/production_release_guard.py prepublish
 printf '%s\n' 'PREPUBLISH PASSED. Manually choose Re-publish changes now.'
 printf '%s\n' 'After a NEW Deployment Succeeded, run the separate verify commands.'
+MEZAN_RELEASE
