@@ -1,13 +1,13 @@
 {
   "task_id": "INV-UI-20261120",
   "scope": "Replace legacy Mezan inventory interfaces with the approved integrated Arabic RTL design using the existing native services and permissions.",
-  "branch": "codex/inventory-release-20261121",
-  "base_sha": "734b977de28254c2c089148b4db8972a03ba19eb",
-  "state": "entry_scope_unverified_direct_navigation_unauthenticated",
+  "branch": "codex/inventory-legacy-locations-20261121",
+  "base_sha": "d69f31da14f3dc1baad25ab0884ba810446b19f9",
+  "state": "legacy_fix_reviewed_intent_frozen_ci_pending",
   "production_changed": true,
-  "remote_checkpoint": "Immutable release B a03d05d474d1c0a5fba879c7706761d8f94f5d58; latest continuity documentation commit recorded in Issue1006",
-  "release_lease": "Agent did not create/touch a lease. Earlier user idle result is historical; current shared guard state unknown after external publication.",
-  "deployment": "Public health now reports newer externally published release retaining merged inventory. Agent did not publish; full3-probe guard verification/lease owner state not observed. Old D manual publish instructions superseded.",
+  "remote_checkpoint": "71c53711796e972b9cdca4b1c7258709807be05e immutable reviewed intent B; latest docs checkpoint recorded in Issue1006",
+  "release_lease": "No agent lease or /app operations; shared production state not queried",
+  "deployment": "Fix only on dedicated development branch; existing deployed release unchanged by agent",
   "owners": {
     "root": "Shared suite shell, native inventory workspace/reader, routing, reporting/control integration and final verification",
     "native_catalog_resources": "Native products, components, groups, bundles visible interfaces",
@@ -20,14 +20,13 @@
     "Preserve canonical product/variant/resource/location identity, server preview hash, stable idempotency and current permissions",
     "No opening-stock writer reused for stock adjustments"
   ],
-  "next_action": "Read the response of the already-authenticated GET warehouse-locations/warehouses from Network in the working Mezan app session. Return only warehouse code/status/inventory_scope, not request headers/cookies/token values. Direct URL returned Not authenticated and cookie-only console fetch may fail similarly. No sign-out, auth bypass or metadata mutation.",
-  "updated_at": "2026-11-21T15:07:10.227173+00:00",
-  "verified_milestone": "User direct API navigation returned Not authenticated, so no warehouse metadata was read. Source confirms Axios supplies Authorization from current application session while direct navigation cannot reproduce that header; server also supports cookies. Underlying credential/session cause is not established. Existing7entry tests remain accepted, no source changes to rerun.",
+  "next_action": "Require exact B required CI and both reviewed Node20/24 clean-clone adapter rehearsals. Keep A/B immutable, mark PR2045 ready after checks, prepare reviewed user manual publication handoff. No /app writes, lease, metadata migration or stock/accounting activation.",
+  "updated_at": "2026-11-21T15:45:44.437959+00:00",
+  "verified_milestone": "94affected standalone/opening native regressions and7frontend entry regressions PASS. Source A all21CI checks successful/6conditional skips,0failures. Generated candidate independently matches2948Git records. Generated intent copied byte-for-byte as intent-only B; no source after A. Exact B CI/rehearsal pending.",
   "ledger": "https://github.com/AMASI-SA/AMASI-SA/issues/1006#issuecomment-6238987123 has a dedicated dated INV-UI-20261120 section appended without removing original content; comments/body limits block new entries elsewhere. Write read-back verified.",
   "incomplete": [
-    "Authenticated read of existing warehouse inventory_scope/status and current entry context.",
-    "Determine whether an explicit safe scope-setup migration or catalog refresh is needed; no production metadata conversion authorized or performed.",
-    "Old A clean-clone rehearsal PASSED per user output and tracked-intent hash comparison, but Production advanced and that old release cannot be published over latest head."
+    "Exact B mandatory CI and clean-clone v5 rehearsals.",
+    "PR review/release decision and user manual publication; production unchanged by agent."
   ],
   "posting_scope": "User approved full stocktake/adjustment lifecycle including atomic posting, development only; new posting default-closed",
   "durable_patch": "C:\\Users\\amasi\\OneDrive\\المستندات\\ChatGPT\\ميزان\\outputs\\inventory-implementation-20261120\\inventory-ui-wip.patch",
@@ -41,15 +40,9 @@
     "visual_routes": "Controlled synthetic display fixtures",
     "provider_publish": "blocked"
   },
-  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/2038",
-  "branch_ci": "Exact B:68SUCCESS+7conditional workflow skips,0failures; source A:66SUCCESS+7conditional workflow skips,0failures. D has identical tree to B.",
-  "merge": {
-    "state": "MERGED",
-    "strategy": "normal_merge_no_squash_no_rebase",
-    "sha": "5019e957cd1bb578f7b7375099547a470e51cb05",
-    "merged_at": "2026-11-21T13:56:26Z",
-    "tree_equals_B": true
-  },
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/2045",
+  "branch_ci": "Source A21SUCCESS+6conditional skips,0failures; reviewed BCI pending",
+  "merge": "not_merged",
   "upstream_observation": {
     "reviewed_integrated_base": "0d70cdc4bdc116a4640509c95216bbbd6a72b6ed",
     "production_git_head_observed": "5019e957cd1bb578f7b7375099547a470e51cb05",
@@ -58,7 +51,7 @@
     "unrelated_local_work": "Original shared checkout Qoyod/order modifications preserved without edits"
   },
   "continuity_branch": "codex/inventory-ui-replacement-20261120",
-  "release_base_sha": "0d70cdc4bdc116a4640509c95216bbbd6a72b6ed",
+  "release_base_sha": "d69f31da14f3dc1baad25ab0884ba810446b19f9",
   "approved_inventory_sha": "d661eb596dbbf83b21061a4bf37af9842a703a25",
   "authorization": {
     "merge": "explicit user request ادمج وانشر on2026-11-21",
@@ -67,43 +60,53 @@
     "real_stock_or_accounting_data_writes": false
   },
   "release_pair": {
-    "base_J": "0d70cdc4bdc116a4640509c95216bbbd6a72b6ed",
-    "source_A": "03dce00590c565a125ee0219537c86abeeb76819",
-    "intent_B": "a03d05d474d1c0a5fba879c7706761d8f94f5d58",
-    "release_id": "rg5-270cec5290c45a86904ee96b2b2b958625091c630b5bac2bf1a9fde9f7c8a429",
-    "intent_file_sha256": "76a837ef86fce8e1b24b16a5829b94fdf7450c2e7f7888e47eac9dea66057bd0",
-    "candidate_ci_run": 44909185703,
-    "candidate_artifact": 14709058921,
-    "source_ci_success": 66,
-    "source_ci_conditional_skips": 7,
-    "source_ci_failures": 0,
-    "independent_source_records_verified": 2947,
-    "manual_publish": true,
-    "deployment_D": "5019e957cd1bb578f7b7375099547a470e51cb05",
-    "merged_tree": "b5b139db0d9f05bc74fc28a96f63f66835c405fb",
-    "reviewed_B_checks": {
-      "SKIPPED": 7,
-      "SUCCESS": 68
-    },
-    "reviewed_B_readiness_run": 44910528896,
-    "clean_clone_host_nodes": [
-      "20.20.2",
-      "24.19.0"
-    ],
+    "source_A": "56af6ab9d997688311f339eab8d2ca12f6a0e034",
+    "reviewed_base_J": "d69f31da14f3dc1baad25ab0884ba810446b19f9",
+    "source_records_verified": 2948,
+    "intent_sha256": "276b7ff2a54d39468b0a7fedbb32ab754ae7e053a4febdd180956d4c722a3625",
+    "release_id": "rg5-f6614ad3eee05b048bc4b3b606d6a8fdb602438f8ee0db19ef61273b91e1eaac",
+    "candidate_run": 44919705717,
+    "candidate_artifact": 14713103126,
     "governed_node": "22.23.2",
     "governed_yarn": "1.22.22",
-    "historical_release_pair": true,
-    "superseded_by_production_merge": "9f47a47ff16bfa02a8132bd83fe44db3bdb86da0"
+    "local_backend_regressions": 94,
+    "local_frontend_regressions": 7,
+    "source_checks": {
+      "success": 21,
+      "conditional_skips": 6,
+      "failures": 0
+    },
+    "intent_B": "71c53711796e972b9cdca4b1c7258709807be05e",
+    "verification_commands": [
+      {
+        "command": "pytest --noconftest -q backend/tests/test_operational_balance_standalone_inventory.py backend/tests/test_operational_balance_opening_inventory.py",
+        "exit": 0,
+        "tests": 94,
+        "seconds": 44.74
+      },
+      {
+        "command": "yarn.cmd test --watchAll=false --runInBand --testMatch=**/StandaloneInventoryEntry.test.jsx",
+        "exit": 0,
+        "tests": 7
+      },
+      {
+        "command": "git diff --name-only A B",
+        "exit": 0,
+        "paths": [
+          "release/release-intent-v5.json"
+        ]
+      }
+    ]
   },
   "production_git_changed": true,
   "production_runtime_changed_by_agent": false,
   "production_operational_data_changed_by_agent": false,
   "production_source_merge_sha": "5019e957cd1bb578f7b7375099547a470e51cb05",
-  "continuity_previous_checkpoint": "01c65c4e094b86a29bd7e154fe803b8643860833",
+  "continuity_previous_checkpoint": "e641900fe4d2e4b1797cce57faafd67cd9b0802e",
   "manual_publish_instructions": "docs/operations/INV-UI-20261120/MANUAL-PUBLISH.md",
   "manual_publish_script": "docs/operations/INV-UI-20261120/manual-publish.sh",
   "release_verification_evidence": "docs/operations/INV-UI-20261120/evidence/release-validation.json",
-  "last_verified_tested_source_sha": "03dce00590c565a125ee0219537c86abeeb76819",
+  "last_verified_tested_source_sha": "56af6ab9d997688311f339eab8d2ca12f6a0e034",
   "live_release_observation": {
     "observed_at": "2026-11-21T14:58:29.976600+00:00",
     "url": "https://mezansalla.com/api/health",
@@ -203,5 +206,32 @@
     "actual_warehouse_scope": "still unknown",
     "next_read": "Response of existing authenticated app Network GET; no header/token extraction",
     "source_or_production_writes": false
+  },
+  "source_branch": "codex/inventory-legacy-locations-20261121",
+  "previous_continuity_branch": "codex/inventory-ui-replacement-20261120",
+  "confirmed_live_issue": {
+    "evidence_origin": "User response from working authenticated Network request",
+    "warehouse_active": true,
+    "inventory_scope_field_present": false,
+    "existing_locations_confirmed_by_user": 9,
+    "pii_retained": false
+  },
+  "fix_contract": {
+    "legacy_definition": "inventory_scope field absent; explicit null/empty/shared/unknown is not legacy",
+    "eligible_status": "active and not deleted",
+    "mutates_warehouse_metadata": false,
+    "uses_existing_warehouse_location_ids_and_barcodes": true,
+    "changes_writer_accounting_or_fulfillment_controls": false,
+    "mixed_or_inconsistent_occupancy": "existing preview/atomic update validators still reject",
+    "implementation": "backend/standalone_inventory_warehouse.py"
+  },
+  "fix_verification": {
+    "before_fix": "Native regression reproduced missing-context failure, exit1",
+    "focused_native": "33PASS in19.26s",
+    "broader_native": "94PASS in44.74s (standalone+opening, local replica/UUID data)",
+    "frontend": "7PASS",
+    "source_ci": "21SUCCESS+6conditional workflow skips,0failures",
+    "candidate_proof": "2948Git mode/blob/byte/SHA256 records matched; raw intent tracked byte-for-byte",
+    "reviewed_B_CI": "pending"
   }
 }

@@ -1,0 +1,39 @@
+{
+  "source_A": "56af6ab9d997688311f339eab8d2ca12f6a0e034",
+  "reviewed_base_J": "d69f31da14f3dc1baad25ab0884ba810446b19f9",
+  "source_records_verified": 2948,
+  "intent_sha256": "276b7ff2a54d39468b0a7fedbb32ab754ae7e053a4febdd180956d4c722a3625",
+  "release_id": "rg5-f6614ad3eee05b048bc4b3b606d6a8fdb602438f8ee0db19ef61273b91e1eaac",
+  "candidate_run": 44919705717,
+  "candidate_artifact": 14713103126,
+  "governed_node": "22.23.2",
+  "governed_yarn": "1.22.22",
+  "local_backend_regressions": 94,
+  "local_frontend_regressions": 7,
+  "source_checks": {
+    "success": 21,
+    "conditional_skips": 6,
+    "failures": 0
+  },
+  "intent_B": "71c53711796e972b9cdca4b1c7258709807be05e",
+  "verification_commands": [
+    {
+      "command": "pytest --noconftest -q backend/tests/test_operational_balance_standalone_inventory.py backend/tests/test_operational_balance_opening_inventory.py",
+      "exit": 0,
+      "tests": 94,
+      "seconds": 44.74
+    },
+    {
+      "command": "yarn.cmd test --watchAll=false --runInBand --testMatch=**/StandaloneInventoryEntry.test.jsx",
+      "exit": 0,
+      "tests": 7
+    },
+    {
+      "command": "git diff --name-only A B",
+      "exit": 0,
+      "paths": [
+        "release/release-intent-v5.json"
+      ]
+    }
+  ]
+}
