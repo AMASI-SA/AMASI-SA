@@ -6,8 +6,8 @@ Status: implementation verified locally and preserved in two draft PRs. No produ
 
 | Component | Repository | Reviewed base | Source checkpoint | Draft PR |
 |---|---|---|---|---|
-| Backend | AMASI-SA/AMASI-SA | `88af38f01cf979acbca59b95a95e661828f2306f` | `0a6b4baaf5a545a592bb5321e3bcb59ebd490743` | [#2050](https://github.com/AMASI-SA/AMASI-SA/pull/2050) |
-| Employee app | AMASI-SA/amasi-mobile | `e06ce56faf467d5e8ec06ce023f51f86f9cabf21` | `2868b19c70a49b0cabd4b77476d8b018cc0dd5c6` | [#373](https://github.com/AMASI-SA/amasi-mobile/pull/373) |
+| Backend | AMASI-SA/AMASI-SA | `88af38f01cf979acbca59b95a95e661828f2306f` | `0d16e1a1fdd80ae303995fd320fe2dcb73987f6a` | [#2050](https://github.com/AMASI-SA/AMASI-SA/pull/2050) |
+| Employee app | AMASI-SA/amasi-mobile | `e06ce56faf467d5e8ec06ce023f51f86f9cabf21` | `bc4f8c21b42023557fd2f68c7c21f316fb32557d` | [#373](https://github.com/AMASI-SA/amasi-mobile/pull/373) |
 
 Task branch in both repositories: `codex/assembly-queues-fast-read-20261121`.
 Backend target: `hotfix/prod-snap-meta-final`. Mobile target: `codex/assembly-print-lifecycle-20261108`.
@@ -121,7 +121,7 @@ All changed source files were read back from the remote commits and matched thei
 
 ## Follow-up: personalized product lock notices — 2026-11-22
 
-The recoverable-source table at the top now points to the reviewed lock-notice source commits. These build on the original queue handoffs without replacing their lazy loading, counts, pagination, receipt or shipping changes.
+The reviewed lock-notice source commits were backend `0a6b4baaf5a545a592bb5321e3bcb59ebd490743` and mobile `2868b19c70a49b0cabd4b77476d8b018cc0dd5c6`. They build on the original queue handoffs without replacing their lazy loading, counts, pagination, receipt or shipping changes. The top table now points to the later monitoring follow-up.
 
 ### Accepted notice behavior
 
@@ -196,11 +196,89 @@ On backend source `0a6b4baaf5a545a592bb5321e3bcb59ebd490743`, Production Prepara
 
 The prior mobile CI job-start limitation remains unresolved; final follow-up mobile source CI must be checked before any release. Local passes do not establish GitHub CI success. No workflow was restarted during this follow-up.
 
+## Follow-up: ranked unfinished employee workload — 2026-11-22
+
+The employee monitoring directory previously showed identity cards without outstanding counts. The user requested immediate counts, descending workload order, and only employees with unfinished assignments, while keeping product detail deferred.
+
+### Accepted behavior and read contract
+
+- `GET /mobile/operations-monitoring/preparation?pending_only=true` returns `ok`, `read_only`, `counts_only`, and employee identity cards with `outstanding_preparation_count`.
+- Count physical assigned units once, irrespective of the number of services. Include assigned held/blocked work, products ready at the supplier but not received, and approved partial receipts with required service work still pending. Exclude rejected/unassigned/archived units, complete supplier product/service receipts, branch handoffs, assembly-ready pieces, and terminal current source orders.
+- For waiting assignments, preserve the existing review, payment, and validated local-completion eligibility. Underway work preserves its nonterminal current-order scope. The assembly queue's in-progress-only rule is not substituted into this monitoring policy.
+- Map employment records to their work account using the existing `account_user_id`/`id` contract; preserve the existing owner row. Return positive counts only, descending by count with deterministic ties. The client also validates counts, filters zero rows and sorts descending.
+- These counts describe current outstanding workload, independent of historical date filters. Dates are passed only when the user opens an employee's detail page. Existing courier directory and detail contracts are unchanged.
+- One client request for the visible mode. No per-employee detail fetch, preload, polling, timer, hidden-screen or background read. Abort and reject obsolete responses on blur, background, mode change, account/session or permission-scope change.
+- Successful emptiness has distinct Arabic copy. Errors, timeouts and malformed responses retain retry and never become false zero or a successful empty directory. Custom-date validation is separate from the count-read error.
+
+Mongo groups current assignment units using only employee/order/stage/service-quantity facts. Current source status and necessary review/payment proof are read with skinny projections in batches of 100, cached per order across groups. Underway rows need only native status; waiting rows reuse the canonical projected mapper and current review policy. No images, item DTOs, customer options, dispatch history, employee workspaces or N+1 detail reads are loaded. The existing owner/employee/status index is reused; no new index or read-time DDL is introduced. The count read has an eight-second deadline and explicit retryable 503 failure. This is a query-shape guarantee, not a measured production latency claim.
+
+### Verification and review
+
+| Check | Result |
+|---|---|
+| New backend endpoint suite | 20 passed; independently rerun against the frozen helper/router/test blobs. Includes partial service counting, quantity-complete services, held work, current terminal states, identity mapping, owner isolation, batches/cache, failure and cancellation. |
+| Backend nearby regression run | 40 passed, 1 explicitly deselected; current-state, legacy directory, identity/workspace and owner contracts preserved. |
+| Root CI-target pair | 22 passed, exit 0, using the normal pytest configuration for the new count suite and existing lazy-directory suite. |
+| Mobile actual-component suite | 5 groups passed; independently rerun. Covers positive filtering/sort/count display, dated navigation, empty/error/retry/malformed responses, mode/courier isolation, focus/background cancellation and account/permission changes. |
+| Existing mobile lazy gate | Passed after restoring the exact unchanged MyProductsOverview dependency from the pinned task head. No dependency overlay is included in this follow-up. |
+| Mobile static checks | Scoped actual-graph TypeScript passed. Default ESLint exited 0 with zero errors and four unchanged array-style warnings. |
+
+A pre-existing courier-duration fixture expects 9000 seconds but the unchanged baseline implementation produces 9600. This was reproduced with an isolated import from the exact task-head baseline (router SHA256 `abdeebdcd982f870dd567cdf29b2644a843c8da214d9ae80a1e498df0bfccf6e`). Only that test was deselected in the nearby local run; its source and courier logic were not changed. It is unrelated to the user's delivered-count question.
+
+Independent review found and reproduced an error-state bug: opening a custom date range after failed counts hid the read failure and displayed an empty success. The corrected source keeps date validation separate; opening, cancelling, or applying dates preserves the count error/retry until a read succeeds. The exact regression passes.
+
+Primary commands:
+
+```bash
+# Backend, from backend/ with the repository test dependencies
+python -m pytest -q --tb=short tests/test_monitoring_preparation_counts.py tests/test_monitoring_lazy_directory.py
+# Employee app, from frontend/
+node scripts/verify-monitoring-outstanding.cjs
+node scripts/verify-lazy-monitoring.cjs
+```
+
+No native-device UAT or live database latency benchmark is claimed. Existing unrelated local overlays, courier business logic, receipt/shipping writes and financial code were preserved.
+
+### Source integrity and CI
+
+Backend source `0d16e1a1fdd80ae303995fd320fe2dcb73987f6a` builds on `23192ae290cf82e946318c7a126e72fae5eca47d`, whose parent is the prior task handoff `04fdd2ccd26ab0d9f017bc942e781cedc9ad7ef2`. The second source commit only supplies `email-validator==2.3.0` to the isolated CI dependencies, matching `backend/requirements.txt`. Initial page/read job `137002743285` on run `44955561839` failed test collection because this existing router dependency was missing. No test or assertion was removed.
+
+Mobile source `bc4f8c21b42023557fd2f68c7c21f316fb32557d` builds on handoff `984d6f4c2b094c0429285acef2bc899245b35033`. The remote diffs contain exactly the four backend and five mobile files below; each Git blob matches the frozen source manifest.
+
+Backend files:
+
+| Path | Git blob SHA |
+|---|---|
+| `.github/workflows/page-performance-regressions.yml` | `41a95c1d8cdcad5fe2ca459dfda7602e58cc332d` |
+| `backend/mobile_operations_monitoring_routes.py` | `5b1bb344e38209eaa179ca8254c9d5ea67a5b1d7` |
+| `backend/monitoring_preparation_counts.py` | `49f6107cc5d9db2aba2f633cb2449a8fde578713` |
+| `backend/tests/test_monitoring_preparation_counts.py` | `d3fde18278deee74596b38af0ef9c7ff7f0a06d5` |
+
+Mobile files:
+
+| Path | Git blob SHA |
+|---|---|
+| `.github/workflows/mobile-ci.yml` | `6d1f049dbeaa614e887f8cfb047f01142a4d17de` |
+| `frontend/app/(tabs)/monitoring.tsx` | `f3105d36043c571b039ef52777e3a1fa1f7ea3eb` |
+| `frontend/src/features/monitoring/repository.ts` | `3e26e2cfdbdab624bbb8aa69f81fd24ee8ae6dc5` |
+| `frontend/scripts/verify-lazy-monitoring.cjs` | `58b3b7e127443ea31847306890ceb4730ae77f0a` |
+| `frontend/scripts/verify-monitoring-outstanding.cjs` | `4c6efda9477820f885ca877c2594ea35abba2eb4` |
+
+CI snapshot: 2026-11-22 01:16 Asia/Riyadh. On exact backend source `0d16e1a1fdd80ae303995fd320fe2dcb73987f6a`, [Page and operational read performance](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44955707963) passed both jobs; its backend-query job ran **91 passing tests**. [Production Preparation Piece Operations](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44955707777) also passed both jobs with **224 passing backend tests**. This verifies the CI dependency correction and affected contracts, not a production deployment or a claim that every repository check is green.
+
+On exact mobile source `bc4f8c21b42023557fd2f68c7c21f316fb32557d`, [Mobile CI](https://github.com/AMASI-SA/amasi-mobile/actions/runs/44955577933) failed; the connector returns the failed `frontend-checks` job `137002789993` without step detail. The prior job-start limitation remains unresolved; the current exact cause is not inferred. No retry or gate weakening was performed for mobile. Local passes do not mean all GitHub CI is green.
+
+### Separate read-only courier-count diagnosis
+
+The user also asked about a difference between delivered counts in mobile monitoring and the financial-position report. Inspection of pinned source and the signed-in financial UI established differing definitions: mobile iterates delivered assignment rows within the selected delivery-date range; the financial report uses unique retained-register order IDs and requires the order creation date to be strictly after ledger start and no later than snapshot time. Historical assignment duplicates and snapshot/range timing are separate comparison dimensions. Financial confirmed-fee rows do not directly determine the delivery-register counter.
+
+A complete order-ID set reconciliation was not obtained: the existing diagnostic code-server preview was unavailable, and the separate database viewer had no production connection configured. Do not assign the entire reported difference to the cutover or to pending confirmation rows without that reconciliation. No refresh/reconcile/backfill, financial write, courier-count change or deployment was performed. No live account values or customer records are stored in this repository.
+
 ## Next safe action
 
 1. Fetch both remote task branches and verify the source checkpoints and documentation-only successors. Read this status record and the PR checks; do not resume from the older local checkpoint.
 2. Resolve the mobile CI job-start failure and run the required checks. No test gate was weakened to make it pass.
-3. Complete paired review. Deploy the backend counts/read and pending-stage display contracts before distributing the mobile update, only after the user requests publishing.
+3. Pair review is complete for the monitoring follow-up. Deploy the backend queue/count/read, pending-stage display and monitoring `pending_only` contracts before distributing the mobile update, only after the user requests publishing.
 4. For backend release, follow the repository `AGENTS.md` protocol v5 from the then-current reviewed production source, prepare a new governed source/intent pair and perform the required release verification. This task created no lease, no release intent, no merge and no deployment.
 
 Production changed by this task: **no**. No production financial, order, supplier, notification, email or message writes were performed. The repository-wide issue ledger was not posted to; this record and the draft PRs are the durable handoff.
