@@ -2,11 +2,25 @@
 
 ## Checkpoint verdict
 
-**LIVE_IDENTITY_PASS_FULL_VERIFICATION_PENDING. Emergent now shows Deployment finished and new published version `289b0ca`; a fresh read-only Production health response matches the reviewed source/release and all five identity flags pass. The task's own lease remains active. No explicit `Deployment Succeeded` literal or completed official three-probe verification is claimed; final release acceptance remains pending.**
+**VERIFY_IN_PROGRESS. The official Production verifier was launched once at 2026-11-21T20:09:43.637945Z as PID 49863 after exact lease/source/remote checks passed. The root observed the newer green `Deployment finished` state and published version `289b0ca`; the literal `Deployment Succeeded` was not shown. The verifier's final result and all-three-probe acceptance remain unobserved at this checkpoint.**
 
 The owner has authorized merging and publishing PR #2039, subject to the established gates. Emergent Support supplied the previously missing Production index definitions after a read-only inspection. Terminal access has now been restored. Production advanced through PR #2046, so the former A/B pair and its successful CI are historical and cannot authorize the new deployment.
 
-### Latest milestone: new published version and matching live identity observed
+### Latest milestone: official verification running once
+
+The root started the unchanged official `scripts/production_release_guard.py verify --url https://mezansalla.com` from `/app` in **root-owned Terminal 3 at 2026-11-21T20:09:43.637945Z** (23:09:43 Asia/Riyadh), process **PID 49863**. Before launch, the owned lease's M/A/runtime identity/actor, clean tracked production branch, local M and actual remote Production M all passed checks. The lease remains the one prepared at `2026-11-21T19:46:13.522595Z` by `codex-pr2039-owner-authorized`; no replacement lease was created.
+
+The single process writes stdout to `/tmp/mezan-pr2039-release-0sv39fp_/verify.stdout.json` and stderr to `/tmp/mezan-pr2039-release-0sv39fp_/verify.stderr.log`; its existing wrapper will write `/tmp/mezan-pr2039-release-0sv39fp_/verify-result.json` after completion. No final verifier result or completed-probe count is claimed yet. See [verification-progress.json](verification-progress.json).
+
+The root recovered the administration UI by closing crashed original tab 39 and opening a clean home/project route in tab 50; View Logs works again. The screenshot shows the newer green **`Deployment finished` at 22:59** and **Published version `289b0ca`**. It does not show the literal `Deployment Succeeded`. Release review found prior protocol records using the same UI wording; the root proceeded to the official verifier, whose **three full probes remain the acceptance gate**. The observed wording is retained without inventing a different success message.
+
+The available logs are runtime logs, not proof of Cloud Build outer argv. They contain four upstream GET-health timeout entries at 20:07:33/20:07:43 UTC and a successful HTTP 200 health response of approximately 1.5 seconds. A performance warning was already present before publication. Causation is unproven; these observations are not a GitHub CI test failure. No IP addresses, customer/property identifiers, or raw logs are retained here.
+
+**Next safe action:** wait for **this exact process** and read its existing completion wrapper/stdout/stderr after it finishes. Do not interrupt it, impose a timeout, run concurrent guard `status`, launch a second `verify`, republish, or clear the lease. **Terminal 2 is now in use by a separate PR #2048 conversation and must remain untouched.** Evaluate the actual official result; final acceptance still requires all three matching full probes and inactive-lease evidence after completion.
+
+Production changed by this task through this checkpoint: **Git branch yes; shared `/app` yes; matching live backend release observed; official final verification in progress**. No financial/index mutation or APK publication occurred.
+
+### Previous milestone: new published version and matching live identity observed
 
 The root observed **`Deployment finished` at the displayed time `Nov 21 10:59 PM`** and new published-version marker **`289b0ca`**, labeled `Few seconds ago`, replacing `99a9215` as the latest entry. The UI still labeled the latest entry **`100th publish`**; its rolling labels do not support a claim of a 101st publication. The observed deployment conversation ID `d73a098f-e03d-577c-933f-abf27c6345ff` is a conversation identifier, not the published-version identifier. The root did **not** observe an explicit `Deployment Succeeded`/`Deployment successful` literal.
 
@@ -18,7 +32,7 @@ The fresh shared guard remained **`active:true`**, actor **`codex-pr2039-owner-a
 
 The root also read sanitized metadata from the **isolated rehearsal** log: architecture `aarch64`, host Node `v24.19.0`, host Yarn `1.22.22`, host Python `3.11.18`, Git present, the configured `cd frontend && yarn build` entry, and the governed `yarn --cwd frontend build:release` subcommand. These details are retained in [emergent-rehearsal.json](emergent-rehearsal.json). They do **not** establish the actual production Cloud Build outer argv, host environment, or package snapshot order; those remain unobserved in this record.
 
-**Next safe action:** preserve the existing owned lease and complete the pending platform-success confirmation and official full Production verification. **All three full probes remain outstanding**; no official `verify` has started, and no final `active:false` has been observed. The successful health read alone does not establish canonical/cache-busted frontend bytes, JSON MIME, and the complete public release contract. Do not abort or clear this lease, retry publication, or substitute another operation's release to resolve the UI access problem.
+**Next safe action at the live-identity checkpoint (the official verifier is now running as recorded above):** preserve the existing owned lease and complete the pending platform-success confirmation and official full Production verification. At that checkpoint all three full probes remained outstanding, no official `verify` had started, and no final `active:false` had been observed. The successful health read alone does not establish canonical/cache-busted frontend bytes, JSON MIME, and the complete public release contract. Do not abort or clear this lease, retry publication, or substitute another operation's release to resolve the UI access problem.
 
 Production changed by this task through this checkpoint: **Git branch yes; shared `/app` yes; matching live backend release now observed**. Overall release acceptance remains pending. No financial/index mutation or APK publication occurred.
 

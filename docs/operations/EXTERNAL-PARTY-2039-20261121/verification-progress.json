@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "task_id": "EXTERNAL-PARTY-2039-20261121",
+  "state": "VERIFY_IN_PROGRESS",
+  "evidence_kind": "root_observed_single_official_verification_process",
+  "observed_by": "root",
+  "repository": "AMASI-SA/AMASI-SA",
+  "application": "salla-analytics",
+  "production_origin": "https://mezansalla.com",
+  "production_branch": "hotfix/prod-snap-meta-final",
+  "source_git_sha": "e08d0e489eded39961d374e4eb7bfcc0544b6e90",
+  "reviewed_b_git_sha": "3628efc4215ee95e6196fca4807104a87398e255",
+  "deployment_git_sha": "6e41bf25b936e8c4047df75bb170610dfc71b7f7",
+  "runtime_release_id": "rg5-45eb8f2d79e0912a1277e1e14816e9d9c5e3a40d0a6d784834c6fbb54996974f",
+  "prelaunch_checks": {
+    "result": "PASS",
+    "owned_lease_identity_matches": true,
+    "tracked_worktree_clean": true,
+    "branch_matches_production": true,
+    "local_head_equals_deployment_m": true,
+    "remote_production_equals_deployment_m": true
+  },
+  "lease": {
+    "actor": "codex-pr2039-owner-authorized",
+    "prepared_at_utc": "2026-11-21T19:46:13.522595Z",
+    "protocol_version": 5,
+    "active_at_prelaunch": true,
+    "automatic_lease_expiration": false
+  },
+  "verification_process": {
+    "pid": 49863,
+    "started_at_utc": "2026-11-21T20:09:43.637945Z",
+    "cwd": "/app",
+    "terminal": "Root-owned Terminal 3",
+    "script": "scripts/production_release_guard.py",
+    "arguments": [
+      "verify",
+      "--url",
+      "https://mezansalla.com"
+    ],
+    "launch_count": 1,
+    "state_at_checkpoint": "running",
+    "stdout_path": "/tmp/mezan-pr2039-release-0sv39fp_/verify.stdout.json",
+    "stderr_path": "/tmp/mezan-pr2039-release-0sv39fp_/verify.stderr.log",
+    "completion_wrapper_path": "/tmp/mezan-pr2039-release-0sv39fp_/verify-result.json",
+    "completion_wrapper_written_after_exit": true,
+    "completed_probe_count_not_yet_observed": true,
+    "consecutive_full_probes_required": 3,
+    "final_result_observed": false
+  },
+  "ui_observation": {
+    "admin_recovered": true,
+    "closed_crashed_original_tab": 39,
+    "recovered_project_tab": 50,
+    "view_logs_available": true,
+    "displayed_deployment_status": "Deployment finished",
+    "status_indicator": "green",
+    "displayed_finish_time_local": "22:59",
+    "latest_published_version_marker": "289b0ca",
+    "explicit_deployment_succeeded_literal_observed": false,
+    "decision_basis": "Root observed the newer green finished state and new published version; release review found prior protocol records using the same UI wording. Official three-probe verification remains the acceptance gate."
+  },
+  "runtime_log_observation": {
+    "scope": "Runtime logs only",
+    "upstream_health_timeout_entry_count": 4,
+    "entry_times_utc": [
+      "2026-11-21T20:07:33Z",
+      "2026-11-21T20:07:43Z"
+    ],
+    "successful_health_response_status": 200,
+    "successful_health_latency_seconds_approx": 1.5,
+    "performance_warning_seen_before_publication": true,
+    "causation_established": false,
+    "ci_test_failure": false,
+    "raw_logs_retained": false,
+    "cloud_build_outer_argv_proven": false
+  },
+  "coordination": {
+    "terminal_2_in_use_by_other_task": "PR #2048",
+    "leave_terminal_2_untouched": true,
+    "no_timeout_or_interruption": true,
+    "no_concurrent_guard_status_or_second_verify": true,
+    "no_second_publication": true,
+    "no_lease_clear": true
+  },
+  "next_safe_action": "Wait for this exact verification process to finish and inspect its existing stdout/stderr and completion wrapper. Do not interrupt it, add a timeout, run guard status concurrently, launch another verify, touch Terminal 2, republish, or clear the lease. Accept only the actual official three-probe success and final inactive-lease evidence after completion.",
+  "scope_note": "Verification has started once and no result has yet been observed. The runtime timeout entries are recorded without a causal or CI-failure claim. No IP addresses, customer/property identifiers or raw logs are retained."
+}
