@@ -1,5 +1,22 @@
 # ARAMEX-PRINT-20261121: PR2048 frozen A/B verification
 
+CURRENT: own protocol-v5 lease PREPARED, actor
+`codex-aramex-pr2048-authorized`, source A/deployment M/runtime id below. Original
+prepare exited0 with exact A/M/id/protocol5. Do not clear or reuse this lease.
+Reviewed helper c958ee3dff1cbd5518951df2cca1950d4efb014a blob SHA256
+`33e0fd9f800e3f30e8d310156053382bf9e49537f265ee902a5adad5ddd023f5`
+was fetched as bytes only and executed from /tmp. It checked inactive guard,
+fast-forwarded shared /app to M, preserved previous outputs under stage
+`previous-generated`, installed only the three governed outputs, and passed
+the shared verifier0/exact identity check with clean tracked M. No unrelated
+files were removed; evidence branch was never checked out in /app.
+Live runtime changed by this follow-up:NO so far. Next: open the republish
+confirmation, run original `python -B scripts/production_release_guard.py
+prepublish` immediately before the already authorized final Publish changes
+click. Require ready_to_publish:true and exact A/M/id, click once, observe a
+new explicit success, then unchanged original verify3 and ADB target/control
+label/print acceptance. Update evidence and lease state after those outcomes.
+
 Independent current-B ARM64 rehearsal PASSED after foreign verify completed:
 original guard active:false, complete Linux source validator passed, unchanged
 configured `cd frontend && yarn build` adapter0, separate verifier0, exact
