@@ -2,11 +2,28 @@
 
 ## Checkpoint verdict
 
-**PR #2039 is merged through the normal protected route after all exact-B checks, release identity, index and live-guard gates passed. Emergent preparation and publication of this task's release are still pending.**
+**PR #2039 is merged through the normal protected route after all exact-B checks, release identity, index and live-guard gates passed. The official isolated Emergent rehearsal has now passed on merged M. Shared-workspace handoff, the task's own prepare/prepublish, and publication remain pending at this rehearsal checkpoint.**
 
 The owner has authorized merging and publishing PR #2039, subject to the established gates. Emergent Support supplied the previously missing Production index definitions after a read-only inspection. Terminal access has now been restored. Production advanced through PR #2046, so the former A/B pair and its successful CI are historical and cannot authorize the new deployment.
 
-### Latest milestone: normal merge completed
+### Latest milestone: official Emergent rehearsal passed
+
+The root observed the official rehearsal in a task-owned normal clone at `/tmp/mezan-pr2039-release-0sv39fp_`, from **2026-11-21T19:40:23.380281Z** to **2026-11-21T19:41:54.752195Z** (22:40:23 to 22:41:54 Asia/Riyadh). The actual `cd frontend && yarn build` adapter invocation passed in **91.37 seconds**, followed by a successful strict `verify_frontend_build.py --expected-git-sha e08d0e489eded39961d374e4eb7bfcc0544b6e90 --reviewed-intent-v5` check. This is observed Emergent rehearsal evidence, recorded from the root's UI result; it is not a claim that this evidence writer reran the commands.
+
+The rehearsal used deployment M `6e41bf25b936e8c4047df75bb170610dfc71b7f7`, with tree `c3c66e2f15138523a9a72ee0910706f91f9b47e4` equal to frozen B `3628efc4215ee95e6196fca4807104a87398e255`. Its source remains A `e08d0e489eded39961d374e4eb7bfcc0544b6e90` and its runtime release remains `rg5-45eb8f2d79e0912a1277e1e14816e9d9c5e3a40d0a6d784834c6fbb54996974f`.
+
+| Retained output | Observed SHA256 |
+| --- | --- |
+| `backend/release_identity.json` | `e01d069eda633f2c617677f2d13a06b54d8aba954d89d5fa06c916bc5987040e` |
+| `frontend/build/build-meta.json` | `e2ad2261a00b555105f8800ad875b92a9c406e9c03b19a93cea945b987755ba2` |
+
+Both hashes match the reviewed exact-B adapter evidence. The rehearsal changed no shared source, created no lease, and attempted no publication. See [emergent-rehearsal.json](emergent-rehearsal.json) for the sanitized machine-readable observation. Generated outputs remain outside this evidence branch.
+
+**Next safe action:** refresh the live shared guard and actual Production SHA; continue only with `active:false` and unchanged M. Fast-forward shared `/app` only to exact M, preserve unrelated work and previous generated artifacts, and materialize only the three verified generated outputs from this rehearsal. Revalidate destination source/bytes, prepare this task's own lease, and run `prepublish` immediately before one authorized publication. Acceptance still requires a newer explicit `Deployment Succeeded`, the official three matching live verification probes, and final `active:false`. An isolated rehearsal cannot prove the later Cloud Build handoff or a live deployment. Production push CI on M remains subject to freshness monitoring.
+
+Production changed by this task through this checkpoint: **Git branch yes (the recorded normal merge M); live runtime no**. No financial/index mutation or APK publication occurred.
+
+### Previous milestone: normal merge completed
 
 PR #2039 was merged at **2026-11-21 19:36:18 UTC / 22:36:18 Asia/Riyadh** using `merge_method=merge` and expected HEAD B. GitHub returned merge **M `6e41bf25b936e8c4047df75bb170610dfc71b7f7`**. Root separately verified the actual Production ref equals M, M's ordered parents are J `a9d0aec2939a706dcc16f9948e7a81cfe019e66f` and B `3628efc4215ee95e6196fca4807104a87398e255`, and M's tree is exactly B's tree `c3c66e2f15138523a9a72ee0910706f91f9b47e4`. No squash, rebase or protection bypass was used.
 
@@ -16,7 +33,7 @@ Actual artifact results: Operational Backend **6,186 tests + 90 subtests** (6,27
 
 PR #2046's owner completed publication and three-probe verification and closed its lease; its canonical Issue #1006 block was updated at **19:32:36 UTC**. Root's live shared checks at **19:32:58 UTC** and **19:35:39 UTC** independently returned exactly `active:false`, branch `hotfix/prod-snap-meta-final`, HEAD J, and no tracked changes. Before our own rehearsal or `/app` mutation, read the guard again. No lease has yet been created by this task.
 
-Next safe action: fresh inactive shared guard and unchanged actual Production M; rehearse the unchanged official adapter in a normal task-owned clone under `/tmp` pinned to M with tree equal to B, using public origin `https://mezansalla.com` and an isolated external cache. Then fast-forward shared `/app` only to exact M, preserving unrelated work and safely materializing only this rehearsal's verified generated outputs. Recheck destination bytes/source/guard, prepare the task's own lease, prepublish immediately before one authorized publication, observe newer explicit success, and require the official three matching live probes with final `active:false`. Do not substitute another task's artifacts or lease. Production push CI on M is also being monitored for failures or drift.
+Next safe action at the merge checkpoint (the rehearsal portion is now completed above): fresh inactive shared guard and unchanged actual Production M; rehearse the unchanged official adapter in a normal task-owned clone under `/tmp` pinned to M with tree equal to B, using public origin `https://mezansalla.com` and an isolated external cache. Then fast-forward shared `/app` only to exact M, preserving unrelated work and safely materializing only this rehearsal's verified generated outputs. Recheck destination bytes/source/guard, prepare the task's own lease, prepublish immediately before one authorized publication, observe newer explicit success, and require the official three matching live probes with final `active:false`. Do not substitute another task's artifacts or lease. Production push CI on M is also being monitored for failures or drift.
 
 Production changed by this task: **Git branch yes (M); live runtime no at this checkpoint**. No financial/index mutation or APK publication occurred.
 

@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "task_id": "EXTERNAL-PARTY-2039-20261121",
+  "result": "PASS",
+  "evidence_kind": "root_ui_observed_official_emergent_rehearsal",
+  "observed_by": "root",
+  "environment": "Emergent isolated task-owned clone",
+  "stage_root": "/tmp/mezan-pr2039-release-0sv39fp_",
+  "started_at_utc": "2026-11-21T19:40:23.380281Z",
+  "completed_at_utc": "2026-11-21T19:41:54.752195Z",
+  "adapter_seconds": 91.37,
+  "repository": "AMASI-SA/AMASI-SA",
+  "production_branch": "hotfix/prod-snap-meta-final",
+  "source_base_git_sha": "a9d0aec2939a706dcc16f9948e7a81cfe019e66f",
+  "source_git_sha": "e08d0e489eded39961d374e4eb7bfcc0544b6e90",
+  "reviewed_b_git_sha": "3628efc4215ee95e6196fca4807104a87398e255",
+  "deployment_git_sha": "6e41bf25b936e8c4047df75bb170610dfc71b7f7",
+  "deployment_tree_oid": "c3c66e2f15138523a9a72ee0910706f91f9b47e4",
+  "deployment_tree_equals_reviewed_b": true,
+  "runtime_release_id": "rg5-45eb8f2d79e0912a1277e1e14816e9d9c5e3a40d0a6d784834c6fbb54996974f",
+  "commands": [
+    {
+      "command": "cd frontend && yarn build",
+      "result": "PASS"
+    },
+    {
+      "command": "python scripts/verify_frontend_build.py --expected-git-sha e08d0e489eded39961d374e4eb7bfcc0544b6e90 --reviewed-intent-v5",
+      "result": "PASS"
+    }
+  ],
+  "generated_output_hashes": {
+    "backend/release_identity.json": {
+      "sha256": "e01d069eda633f2c617677f2d13a06b54d8aba954d89d5fa06c916bc5987040e"
+    },
+    "frontend/build/build-meta.json": {
+      "sha256": "e2ad2261a00b555105f8800ad875b92a9c406e9c03b19a93cea945b987755ba2"
+    }
+  },
+  "shared_source_changed": false,
+  "lease_created": false,
+  "publication_attempted": false,
+  "production_runtime_changed": false,
+  "scope_note": "This records the root's observed isolated Emergent rehearsal through the completion timestamp. It does not establish destination materialization, prepare/prepublish, Cloud Build publication, or successful live Production probes."
+}
