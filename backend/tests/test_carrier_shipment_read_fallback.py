@@ -336,3 +336,36 @@ async def test_native_routes_use_current_details_or_return_read_error(monkeypatc
         assert await db.unified_orders.find_one(KEY) == before
         assert not any(method != "GET" for method, _, _ in calls)
         assert "manual_label_refresh" not in await db.order_review_workflows.find_one(KEY)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("carrier", ["Aramex International", "SMSA", "iMile"])
+@pytest.mark.parametrize("shape", ["shipping.shipment", "shipment", "scoped_singular"])
+async def test_order_read_permission_supports_each_current_shipment_shape(monkeypatch, carrier, shape):
+    db, calls = await scenario(monkeypatch, known=False)
+    row = {**deepcopy(SHIPMENT), "courier_name": carrier, "label": {"url": LABEL}}
+    order = {**deepcopy(ORDER), "shipping": {"company_name": carrier, "company_code": "321"}}
+    if shape == "shipping.shipment":
+        order["shipping"]["shipment"] = deepcopy(row)
+    elif shape == "shipment":
+        order["shipment"] = deepcopy(row)
+
+    async def provider(database, owner, method, path, **kwargs):
+        calls.append((method, path))
+        assert method == "GET"
+        if path == "/orders/42":
+            return {"data": deepcopy(order)}
+        if path == "/orders/42/shipments" and shape == "scoped_singular":
+            return {"data": {"shipment": deepcopy(row)}}
+        raise SallaError("Synthetic optional shipping API not granted", status_code=403)
+
+    monkeypatch.setattr(compat, "call_salla", provider)
+    before = await db.unified_orders.find_one({"user_id": "owner", "order_number": NUMBER})
+    result = await compat.carrier_label(db, "owner", NUMBER, issue=False, completed_only=True)
+
+    assert result["ready"] is True
+    assert result["shipment_id"] == SHIPMENT_ID
+    assert result["label_url"] == LABEL
+    assert result["tracking_number"] == "SYNTHETIC-AWB"
+    assert not any(path.startswith("/shipments") for _, path in calls)
+    assert await db.unified_orders.find_one({"user_id": "owner", "order_number": NUMBER}) == before
