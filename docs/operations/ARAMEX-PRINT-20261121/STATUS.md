@@ -1,3 +1,35 @@
+# Exact-B gates passed; foreign release lease remains active
+
+Corrected PR #2044 head `fccefed6880c1cad4f3b81bad7303c506a40495e`
+now has **27 successful checks and 6 conditional skips**, no failures.
+Readiness run44914538125 succeeded, including both Host20.20.2 and24.19.0
+clean-clone adapter/package/runtime route rehearsals without Git metadata.
+Both prove exact same release ID/source A, isolated Backend health, artifact
+and proof bytes, and canonical/cache-busted application/json metadata routes.
+Eight sanitized build/environment/package/runtime evidence files are retained
+locally and in the two GitHub clean-clone evidence artifacts. Generated output
+artifacts14711009333(Host20)/14711651146(Host24) are also retained by CI.
+All four affected local module processes on corrected A passed130 tests with
+one deliberate memory-only skip; compatibility58+59subtests and latency26
+passed separately. No new source or frozen intent edits were made.
+
+Shared `/app` is reserved by actor `codex-snb-2041` for deployment J
+`9f47a47ff16bfa02a8132bd83fe44db3bdb86da0`, runtime
+`rg5-2ca7f1f7c5a05da2a34a1fbcbf46fe6820b3b868af794ed63d2b1fa451966aff`.
+Original status reported active:true. Do not clear/reuse its lease or mutate
+shared source/generated files. Its UI publication finished; its owner must
+finish verification/close the lease. This task has not merged or deployed.
+Production changed by this task:no. Actual original-shipment acceptance remains
+unverified. All unrelated shared files and prior checkpoints are preserved.
+
+Next: fresh original guard must report active:false; clean-clone local exact-B
+adapter rehearsal; reconcile fresh origin; normal merge preserving A/B; original
+status before shared materialization; configured `frontend/yarn build`; own
+prepare/prepublish; authorized publication,new explicit success,original
+three probes/inactive lease,and actual ADB fetch/print acceptance.
+
+---
+
 # Evidence-only release checkpoint
 
 DO NOT DEPLOY THIS BRANCH. Deploy only the governed release branch after all gates.
