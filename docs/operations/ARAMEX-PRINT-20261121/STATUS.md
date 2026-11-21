@@ -1,3 +1,42 @@
+## Release checkpoint — 2026-11-21
+
+The owner authorized normal merge and publication. Release branch `codex/aramex-current-label-rootfix-20261121`
+is frozen at intent-only B `bc267e64a2305a8b47528960e34684d9ce95949a`, source A `a1d2ca761f0956a4214aa773e22e829bf74b8c09`,
+reviewed base J `5019e957cd1bb578f7b7375099547a470e51cb05`.
+Runtime: `rg5-eb507d72b5149c6df4de7c5769b467ae4f7daf70cd179d82ef51bd5ec354c097`.
+PR: https://github.com/AMASI-SA/AMASI-SA/pull/2040.
+
+Exact-A checks:25 successes,6 conditional skips,0 failures. Official Linux
+source readiness run44912011737 passed. Candidate artifact14710023632 matches
+all1343 Frontend,1282 Backend and322 release-control Git records, and the
+deterministic identity recomputes exactly. Full local Windows validation refused
+NTFS file modes; no waiver was applied. Exact-B Host20/24 rehearsals and all
+applicable CI must pass before merge/publication.
+
+Continuation updates use this evidence branch `codex/aramex-current-label-evidence-20261121`;
+DO NOT DEPLOY it. The source/intent release pair must remain immutable. The
+exact evidence commit is recorded in the PR and canonical ledger task block.
+Issue1006 task block: https://github.com/AMASI-SA/AMASI-SA/issues/1006#issuecomment-6238987123.
+Its append preserves all preceding owner comment content. An unsupported
+conditional request header was removed after rejected requests; no foreign
+content was deleted or replaced.
+
+The shared original guard reported active:false. Shared tracked source was
+clean on another task branch; all its untracked files were preserved. Only a
+separate temporary read-only Python environment was created outside `/app`.
+The preview database has no matching target record, so it is not evidence
+about the original production shipment. Salla's authenticated print page needs
+its own login; no authentication barrier or substitute label was used.
+No merge, own lease, shared source mutation or deployment yet.
+
+Next: finish exact-B checks and isolated Linux adapter rehearsal; refetch base
+and shared guard status, merge normally, update clean `/app` preserving foreign
+files, run the configured adapter, prepare/prepublish, publish once, verify all
+three original probes and closed lease, then retest the original order by ADB.
+Production changed by this task:no. Original shipment acceptance:unverified.
+
+---
+
 # Current carrier shipment read recovery
 
 Task branch: `codex/aramex-current-label-rootfix-20261121`.
