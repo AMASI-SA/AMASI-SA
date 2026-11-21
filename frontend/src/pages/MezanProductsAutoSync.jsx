@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useOptionalAuth } from "../context/AuthContext";
 import { managedWebPages } from "../lib/webPageAccess";
@@ -19,6 +19,8 @@ function EmployeeCatalogue({ mode }) {
 }
 
 function OwnerProductsWorkspace({ ownerId }) {
+    const [taxonomyOwner, setTaxonomyOwner] = useState(null);
+    const taxonomyOpen = taxonomyOwner === ownerId;
     useEffect(() => {
         let active = true;
         let pending = false;
@@ -62,7 +64,10 @@ function OwnerProductsWorkspace({ ownerId }) {
 
     // Never key/remount the workspace: a background sync must not erase unsaved edits.
     return <div className="space-y-4" dir="rtl">
-        <ProductGoogleTaxonomyPilotPanel />
         <MezanProductsWorkspace />
+        <section className="mz-catalog-owner-tools">
+            <button type="button" aria-expanded={taxonomyOpen} aria-controls="mezan-product-taxonomy-tools" onClick={() => setTaxonomyOwner(taxonomyOpen ? null : ownerId)}>أدوات تصنيف المنتجات <span aria-hidden="true">⌄</span></button>
+            <div id="mezan-product-taxonomy-tools" hidden={!taxonomyOpen}>{taxonomyOpen && <ProductGoogleTaxonomyPilotPanel key={ownerId} />}</div>
+        </section>
     </div>;
 }

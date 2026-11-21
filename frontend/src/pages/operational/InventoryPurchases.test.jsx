@@ -243,10 +243,10 @@ test('canonical raw gold10 and ready Abeer100 stay separate purchase lines with 
  let n=0;requestId.mockImplementation(()=>`req-${++n}`);
  await render();await input('المورد','supplier');await input('رقم فاتورة المورد','CONFIG1');
  await act(async()=>host.querySelector('.op-tile').click());
- await input('موقع تسجيل الشراء 1 — سلسال','loc');await input('اللون 1 — سلسال','gold');
+ await input('موقع تسجيل الشراء 1 — سلسال','loc');await act(async()=>host.querySelector('[aria-label="مواصفات الشراء 1 — سلسال"] [aria-label="اللون: ذهبي"]').click());
  await input('الكمية — سلسال','10');await input('سعر الوحدة قبل الضريبة — سلسال','15');
  await act(async()=>host.querySelector('.op-tile').click());
- await input('حالة المنتج 2 — سلسال','ready');await input('موقع تسجيل الشراء 2 — سلسال','loc');await input('اللون 2 — سلسال','silver');await input('الاسم * 2 — سلسال','عبير');
+ await act(async()=>host.querySelector('[aria-label="مواصفات الشراء 2 — سلسال"] [aria-label="جاهز بالمواصفات"]').click());await input('موقع تسجيل الشراء 2 — سلسال','loc');await act(async()=>host.querySelector('[aria-label="مواصفات الشراء 2 — سلسال"] [aria-label="اللون: فضي"]').click());await act(async()=>{const node=host.querySelector('[aria-label="الاسم · البند 2"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(node,'عبير');node.dispatchEvent(new Event('input',{bubbles:true}));});
  const quantityInputs=[...host.querySelectorAll('.op-field')].filter(l=>l.querySelector('span')?.textContent==='الكمية — سلسال').map(l=>l.querySelector('input'));
  const priceInputs=[...host.querySelectorAll('.op-field')].filter(l=>l.querySelector('span')?.textContent==='سعر الوحدة قبل الضريبة — سلسال').map(l=>l.querySelector('input'));
  await act(async()=>{for(const [e,v] of [[quantityInputs[1],'100'],[priceInputs[1],'2']]){Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(e,v);e.dispatchEvent(new Event('input',{bubbles:true}));}});

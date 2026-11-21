@@ -1,0 +1,31 @@
+{
+  "synthetic_only": true,
+  "production_modified": false,
+  "visited": [
+    "desktop-catalog",
+    "desktop-components",
+    "desktop-component-form-error",
+    "desktop-bundles",
+    "desktop-home",
+    "desktop-stock",
+    "desktop-reports",
+    "desktop-warehouse",
+    "desktop-receiving",
+    "mobile-home",
+    "mobile-stock",
+    "mobile-stock-inspector",
+    "mobile-catalog",
+    "mobile-catalog-inspector",
+    "mobile-components",
+    "mobile-component-form",
+    "mobile-bundles",
+    "mobile-warehouse",
+    "mobile-receiving",
+    "mobile-reports",
+    "desktop-stock-error"
+  ],
+  "page_errors": [],
+  "horizontal_page_overflow": false,
+  "external_requests_allowed": false,
+  "source_git_sha": "55bb3bbfba3d327b5fbe946cfaa85764e136b282"
+}

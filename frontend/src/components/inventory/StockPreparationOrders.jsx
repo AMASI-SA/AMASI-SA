@@ -149,7 +149,7 @@ function ReceiptForm({ order, item, inventoryCatalog, busy, onReceive }) {
     );
 }
 
-export default function StockPreparationOrders({ inventoryCatalog, onInventoryChanged }) {
+export default function StockPreparationOrders({ inventoryCatalog, onInventoryChanged, autoSyncProducts = true }) {
     const [data, setData] = useState(EMPTY_DATA);
     const [loading, setLoading] = useState(true);
     const [busy, setBusy] = useState("");
@@ -181,7 +181,7 @@ export default function StockPreparationOrders({ inventoryCatalog, onInventoryCh
     useEffect(() => { load(); }, [load]);
 
     useEffect(() => {
-        if (recentSallaSyncStarted.current) return;
+        if (!autoSyncProducts || recentSallaSyncStarted.current) return;
         recentSallaSyncStarted.current = true;
         syncRecentProductsV2()
             .then((result) => {
@@ -193,7 +193,7 @@ export default function StockPreparationOrders({ inventoryCatalog, onInventoryCh
             .catch(() => {
                 // The saved Salla catalogue remains available when the light refresh fails.
             });
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [autoSyncProducts]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const products = useMemo(() => {
         const query = productSearch.trim().toLocaleLowerCase("ar");

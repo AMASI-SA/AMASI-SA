@@ -14,7 +14,7 @@ jest.mock("../services/mezanProductsV2", () => ({
     syncRecentProductsV2: jest.fn(),
 }));
 jest.mock("../lib/api", () => ({ __esModule: true, default: { get: jest.fn(), post: jest.fn() } }));
-jest.mock("../components/products/ProductGoogleTaxonomyPilotPanel", () => () => null);
+jest.mock("../components/products/ProductGoogleTaxonomyPilotPanel", () => () => <div data-testid="taxonomy-panel">أدوات التصنيف</div>);
 jest.mock("./MezanProductsWorkspace", () => () => <input aria-label="draft cost" defaultValue="" />);
 
 let host, root;
@@ -126,4 +126,25 @@ test("a listing that finishes three seconds after mount is refreshed at its real
     await act(async () => jest.advanceTimersByTime(1));
     expect(providerStarts).toEqual([initial, initial + 3_603_000]);
     await act(async () => jest.advanceTimersByTime(3000));
+});
+
+test("owner taxonomy tool stays below the catalog and mounts only after an explicit open", async () => {
+    await act(async () => root.render(<MezanProductsAutoSync />));
+    const toggle = host.querySelector('[aria-controls="mezan-product-taxonomy-tools"]');
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(host.querySelector('[data-testid="taxonomy-panel"]')).toBeNull();
+    expect(host.firstElementChild.firstElementChild.getAttribute("aria-label")).toBe("draft cost");
+    await act(async () => toggle.click());
+    expect(host.querySelector('[data-testid="taxonomy-panel"]')).not.toBeNull();
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(syncRecentProductsV2).not.toHaveBeenCalled();
+    useOptionalAuth.mockReturnValue({ user: { id: "owner-new" } });
+    await act(async () => root.render(<MezanProductsAutoSync />));
+    expect(host.querySelector('[data-testid="taxonomy-panel"]')).toBeNull();
+});
+test("employee catalogue never mounts or exposes the owner classification tools", async () => {
+    managedWebPages.mockReturnValue([{ id: "products.catalog", mode: "read" }]);
+    await act(async () => root.render(<MezanProductsAutoSync />));
+    expect(host.querySelector('[aria-controls="mezan-product-taxonomy-tools"]')).toBeNull();
+    expect(host.querySelector('[data-testid="taxonomy-panel"]')).toBeNull();
 });
