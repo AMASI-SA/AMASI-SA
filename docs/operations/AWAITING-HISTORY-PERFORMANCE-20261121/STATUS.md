@@ -1,3 +1,7 @@
+# Latest release checkpoint
+
+PR2053 reviewed recovery checkpoint 2026-11-21T21:17Z: exactA2 99c0b847014d68f921154d2b5b74101c4db9dbaf ALL48success+6conditionalSKIP,0failure/pending. Backend6189+90subtests and16+18subtestsPASS; Stock5502+97subtestsPASS; original real-Mongo reviewPASS. New intent-onlyB6ad54d81340402232b5f325e09c917eba8920d86/tree77548b0cb9e571003ce3b37a1b32610b8eb51db5 pushed normally. Runtime rg5-d4eb0438ce8a4fd222298c40e6375f06cdfeb7e77ffdb35a5ff921bc8a0ab42d. Artifact14725600346/run44949641202 validated originalcandidate loader, exactBloader andonly-intentancestry; rawintentSHA256473b8fc9db65c264b35bf4e72fc8392748932720cbc5a2753b2083245e271b6b. PRready, exactBchecks andNode20/24rehearsals running. Noownmerge/lease/newpublish. Sharedguardfreshinactive,/app88afclean. Productionstillrollback, readonlyhealth0.801s. Next:exactBgates, recheckJ/sharedguard,normalmerge, shared/tmpcleanadapter,prepare/prepublish,onepublish,originalverify3andstatusfalse. PR2049heldseparate.
+
 # AWAITING-HISTORY-PERFORMANCE-20261121
 
 State: emergency recovery source revision 2; full exact-head CI and fresh release intent required before publication. Earlier PR2051/PR2052 are superseded checkpoints.
