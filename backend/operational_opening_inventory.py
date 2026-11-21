@@ -16,6 +16,7 @@ from product_inventory_rules import canonical_specifications, build_inventory_co
 from inventory_write_gate import admitted, read_control, root_db, writes_paused
 from operational_atomic import operational_owner
 from operational_financial_activity_runtime import prepare_in_thread, preparation_checkpoint, checked_rows
+from standalone_inventory_warehouse import allows_standalone_entry
 
 BATCHES = 'mz2_operational_inventory_openings_v1'
 RECEIPTS = 'mezan_inventory_receipts_v2'
@@ -200,8 +201,8 @@ def _compile_preview_rows(owner, request, standalone, locs, candidates, raw_prod
         stored = location_matches[0]
         warehouse = warehouse_matches[0]
         if standalone:
-            if warehouse.get('inventory_scope') != 'standalone':
-                fail('standalone_inventory_warehouse_required', 'اختر موقعًا في مخزن المخزون المستقل الجديد', 422)
+            if not allows_standalone_entry(warehouse):
+                fail('standalone_inventory_warehouse_required', 'المخزن غير متاح للإدخال المستقل؛ اختر مخزنًا آخر', 422)
             occupancy = stored.get('occupancy')
             if occupancy is not None:
                 if not isinstance(occupancy, dict) or not isinstance(occupancy.get('items'), list):

@@ -13,6 +13,7 @@ from operational_purchase_metadata import products, locations
 from operational_opening_inventory import components
 from inventory_write_gate import admitted, read_control, root_db, standalone_writes_paused
 from operational_atomic import operational_owner
+from standalone_inventory_warehouse import allows_standalone_entry
 
 SOURCE = 'standalone_inventory_entry'
 ENTRIES = 'mz2_standalone_inventory_entries_v1'
@@ -34,10 +35,10 @@ def request_body(payload, approval=False):
 async def context(db, user):
     actor = await owner_actor(db, user); owner = actor['id']
     warehouses = await db['warehouse_locations_warehouses'].find(
-        {'user_id': owner, 'inventory_scope': 'standalone', 'status': 'active'}, {'_id': 0}).to_list(20001)
+        {'user_id': owner, 'status': 'active'}, {'_id': 0}).to_list(20001)
     if len(warehouses) > 20000:
         fail('inventory_locations_incomplete', 'تعذر قراءة المخازن كاملة', 409)
-    ids = {w['id'] for w in warehouses}
+    ids = {w['id'] for w in warehouses if allows_standalone_entry(w)}
     control = await read_control(root_db(db), owner) or {}
     entries = await db[ENTRIES].find({'user_id': owner}, {'_id': 0}).sort('recorded_at', -1).limit(100).to_list(100)
     return {'products': await products(db, owner, opening_cached_options=True),
@@ -112,7 +113,7 @@ async def validate_update(db, owner, name, query, update):
     if name == 'warehouse_locations':
         loc = await db[name].find_one({'user_id': owner, 'id': query.get('id')})
         warehouse = await db['warehouse_locations_warehouses'].find_one(
-            {'user_id': owner, 'id': (loc or {}).get('warehouse_id'), 'inventory_scope': 'standalone', 'status': 'active'})
-        if not warehouse:
+            {'user_id': owner, 'id': (loc or {}).get('warehouse_id')})
+        if not allows_standalone_entry(warehouse):
             return False
     return await opening_update(db, owner, name, query, update, source=SOURCE)

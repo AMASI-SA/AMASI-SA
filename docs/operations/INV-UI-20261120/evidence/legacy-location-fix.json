@@ -1,0 +1,20 @@
+{
+  "recorded_at": "2026-11-21T15:31:40.204227+00:00",
+  "branch": "codex/inventory-legacy-locations-20261121",
+  "base_sha": "d69f31da14f3dc1baad25ab0884ba810446b19f9",
+  "root_cause": "Active legacy warehouse lacks inventory_scope; no private source data retained",
+  "before_fix": {
+    "command": "pytest --noconftest -q backend/tests/test_operational_balance_standalone_inventory.py::test_legacy_warehouse_without_scope_keeps_identity_and_supports_independent_entry",
+    "exit": 1,
+    "failure": "Expected existing location but got empty list"
+  },
+  "after_fix": {
+    "command": "pytest --noconftest -q backend/tests/test_operational_balance_standalone_inventory.py",
+    "exit": 0,
+    "tests": 33,
+    "seconds": 19.26,
+    "environment": "Owned local Mongo replica; UUID databases; no production env/server import"
+  },
+  "broader_checks": "pending",
+  "agent_prod_writes": false
+}
