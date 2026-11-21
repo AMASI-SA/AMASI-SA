@@ -1,5 +1,27 @@
 # ARAMEX-PRINT-20261121: PR2048 frozen A/B verification
 
+CURRENT PUBLICATION COORDINATION: user confirmed another session is publishing.
+This task NEVER clicked Republish/Publish changes for PR2048. UI unexpectedly
+showed newer version0ef4d22; public health20:36UTC was old bank source
+db141c0438edf04aa77ccd1122bc9c5008cf39d6 / release
+rg5-500857bae382758ba238083f1f7f417b23a7e2dfb298aa3e2e99e7f4baf56b45,
+boot20:35:24UTC, three identity flags true; build-meta returned403 text/plain.
+That is not the Aramex release. Do not attribute it to this task or report a fix.
+To avoid concurrent publishers, the owner checked actor/A/M/id, then used the
+unchanged original abort with exact M/id to close ONLY our unused prepared
+lease (exit0,aborted:true). No foreign lease was cleared. No own lease remains;
+global state may subsequently belong to the other publisher.
+Aramex fix remains normally merged at M and passed all CI/ARM/shared checks.
+Expected shipping file SHA256 is
+`db6401ac99121e6691a17ea0eccd6309d4dca430a6a7782f4b0009d10cf3398f`;
+see SHIPPING-FIX-IDENTITY.json. The next reviewed release must retain this fix.
+Next: read-only monitoring while the other publisher finishes; verify its actual
+source includes the fix, adopt an already matching verified release rather than
+publish again, and test original/control via ADB. If another own publication is
+still necessary, recheck reviewed origin/source/intent and original inactive
+guard first; never reuse the aborted lease. Actual original print is unverified.
+The preparation/release notes below are historical.
+
 CURRENT: own protocol-v5 lease PREPARED, actor
 `codex-aramex-pr2048-authorized`, source A/deployment M/runtime id below. Original
 prepare exited0 with exact A/M/id/protocol5. Do not clear or reuse this lease.

@@ -1,6 +1,6 @@
 {
   "task": "ARAMEX-PRINT-20261121",
-  "follow_up_state": "PR2048 frozen A/B; all39 checks complete; waiting foreign PR2039 lease before independent rehearsal",
+  "follow_up_state": "PR2048 merged; all CI/ARM/shared verification passed; own unused prepared lease aborted after user confirmed another publisher; actual release and ADB acceptance pending",
   "pull_request": "https://github.com/AMASI-SA/AMASI-SA/pull/2048",
   "initial_probe_fields_below_are_historical": true,
   "workspace_source_git_sha": "66aa13967156e8e279b5297caf697c155f720fd1",
@@ -38,9 +38,12 @@
     "production_order_absence_or_permission_conclusion_allowed": false
   },
   "follow_up_production_changed": true,
-  "production_change_scope": "GitHub Production branch only: PR2048 normal merge 88af38f01cf979acbca59b95a95e661828f2306f; shared workspace and live runtime unchanged",
+  "production_change_scope": "GitHub Production and shared checkout at PR2048 merge 88af38f01cf979acbca59b95a95e661828f2306f; no publish click by this task; another session changed live runtime",
   "follow_up_live_runtime_changed": false,
+  "user_confirmed_other_publisher": true,
+  "own_unused_prepared_lease_aborted": true,
+  "expected_shipping_source_sha256": "db6401ac99121e6691a17ea0eccd6309d4dca430a6a7782f4b0009d10cf3398f",
   "original_target_print_confirmed": false,
   "customer_data_or_environment_values_included": false,
-  "next_safe_action": "Wait foreign verify/lease completion; require inactive original status, exact-B independent ARM64 rehearsal, tree-equivalent merged-M materialization, authorized guarded publication, original verify3 and actual ADB acceptance."
+  "next_safe_action": "Wait for other publisher, verify actual reviewed release includes shipping fix and passes protocol, then actual ADB acceptance. Adopt an already matching verified release; recheck source/intent/inactive guard before any necessary new own publication, with a new lease."
 }
