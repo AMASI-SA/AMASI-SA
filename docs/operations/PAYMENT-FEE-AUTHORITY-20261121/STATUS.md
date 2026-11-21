@@ -3,7 +3,7 @@
 Repository: AMASI-SA/AMASI-SA
 Branch: codex/payment-method-setup-tariff-consistency-20261121
 Reviewed base: 66aa13967156e8e279b5297caf697c155f720fd1
-State: verified setup milestone; monetary integration remains in progress. Not a release candidate.
+State: verified setup and dashboard monetary milestones; proof-based unpaid cohort integration remains in progress. Not a release candidate.
 
 ## Completed setup behavior
 
@@ -16,14 +16,28 @@ Exact `waiting` and `wating` placeholders, including surrounding spaces and case
 - Isolated Python environment, 110 backend tests passed: new fee-status tests, existing payment-method setup, authenticated setup routes and dashboard-card snapshots.
 - Frontend notice, observed-method and fee-page tests: 47 passed.
 - `git diff --check`: passed.
-- Independent review found and corrected false multi-plan setup alerts, a legacy save-response regression and malformed-policy availability handling. Final independent recheck is pending at this checkpoint.
+- Independent setup recheck: 82 tests passed. Setup checkpoint efe711d4ccb787448a05d709b04b73f3dd09e63e completed its applicable GitHub checks successfully; release-intent rehearsals were skipped because no new intent has been frozen.
 - All fixtures are synthetic. No Production data, sync, financial write or order-status write was used for validation.
 
-## Remaining work
+## Dashboard monetary milestone
 
-The executive dashboard and ads cost collector still use legacy payment settings for monetary fee calculations at this checkpoint. A separate shared per-order fee adapter and integration are in progress. Do not mistake removal of the false setup alert for verification of all dashboard monetary totals. Current order-cohort handling of unpaid placeholders is also under read-only review; this milestone does not change sales eligibility.
+The executive dashboard, V2 cards and dashboard ads collector now share per-order fee resolution with actual imported statement fees first, followed by the operational dated policies and permitted legacy settings. Policy/plan/date/rail/currency uncertainty remains explicit. Complete native payment timestamps reuse the existing payment normalizer; they do not fall back to the order creation date. Actual method identity is used consistently in electronic totals. Unsupported cancellations, split tenders and ambiguous refund execution stay incomplete instead of manufacturing a fee. Legacy settings-only aggregate rounding is preserved.
 
-Next: finish and independently test the monetary adapter, actual statement priority, dated policy/plan/date/currency gaps, legacy aggregate rounding and incomplete dependent totals; checkpoint exact source and run CI. Then prepare a fresh protocol-v5 A/B release on the current Production base, rehearse, and perform separately verified publication. No release intent has been frozen for this task. Shared `/app`, Release Guard, Production branch and live runtime have not been changed by this task.
+The UI keeps unknown fee/profit values unknown, with separate awaiting-collection and missing-fee messages. The existing tender coverage reader now treats exact waiting/wating aliases consistently; positive and partial payments retain their evidence.
+
+- Monetary adapter, real dashboard-function execution, ads collector, V2 card and provider runtime/configured-fee regressions: 143 passed.
+- Final independent monetary review: 95 targeted tests and 13 adversarial reproductions passed; no remaining blocker within this monetary scope.
+- Frontend explicit fee completeness and existing fee views: 57 tests passed across 4 suites.
+- Tender alias coverage: 31 tests passed, including isolated Mongo integration.
+- These suites overlap earlier suites and are not added into a unique total.
+
+## Remaining work and limits
+
+Proof-based awaiting-payment financial cohort exclusion is being implemented separately. Its uncommitted helper/history work is intentionally excluded from this checkpoint. It must preserve source/reference order counts, existing payment and incurred-cost evidence, and all COD behavior. Do not claim that removing waiting from fee setup already removes all unpaid sales from reports. Legacy mezan_profit_engine and marketing_report_costs monetary consumers remain outside this dashboard milestone; historical analysis fees remain explicitly legacy.
+
+Next: finish independent review, integrate and test bounded current-source and prior-history eligibility guards, checkpoint exact source and run CI. Then prepare a fresh protocol-v5 A/B release on the current Production base, rehearse, and perform separately verified publication. No release intent has been frozen for this task. Shared `/app`, Release Guard, Production branch and live runtime have not been changed by this task.
+
+Read-only Emergent terminal preflight on 2026-11-21: shared guard active:false; shared HEAD 66aa13967156e8e279b5297caf697c155f720fd1; no tracked working changes. Live health reports source db141c0438edf04aa77ccd1122bc9c5008cf39d6, release rg5-500857bae382758ba238083f1f7f417b23a7e2dfb298aa3e2e99e7f4baf56b45, with verified identity, matching critical hashes and verified frontend all true. This is the prior deployment, not publication of this task. Recheck the guard immediately before any future shared workspace mutation.
 
 ## Preview delivery
 

@@ -121,7 +121,7 @@ async def test_all_five_rows_and_day_use_the_loaded_same_cost_sources(bundle_db)
         orders += [ad_order(f"{provider}-{account}-am", provider, account, quantity=1),
                    ad_order(f"{provider}-{account}-pm", provider, account, hour="12:00:00", quantity=2)]
     orders[0].update({"customer_name": "PRIVATE-SYNTHETIC-CUSTOMER", "actual_payment_fee": 999,
-                      "payment_fee_status": "actual", "operating_allocation": 999})
+                      "payment_fee_status": "estimated", "operating_allocation": 999})
     result, costs, identities = await snapshot(bundle_db, orders)
     assert len(identities.catalog.reads) == 1
     all_rows = result["accounts"] + list(result["provider_results"].values())

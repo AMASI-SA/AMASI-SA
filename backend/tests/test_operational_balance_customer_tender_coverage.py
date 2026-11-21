@@ -57,6 +57,32 @@ def test_customer_payments_cover_all_scoped_orders_without_bank_or_cod_cash():
     run(scenario)
 
 
+@pytest.mark.parametrize("method", ["waiting", "wating", " WATING "])
+@pytest.mark.parametrize(("paid", "remaining"), [("0.00", "100.00"), ("25.00", "75.00"), ("100.00", "0.00")])
+def test_awaiting_alias_requires_zero_paid_and_preserves_source(method, paid, remaining):
+    from operational_customer_tender_coverage import new_coverage, observe_nonprovider, finish_coverage
+
+    doc = tender("8118", method, paid, remaining)
+    raw = doc["raw_by_source"]["salla_direct"]
+    order = {"id": raw["id"], "order_number": doc["order_number"], "currency": "SAR"}
+    before = deepcopy(doc)
+    coverage = new_coverage(START, NOW)
+    coverage.update(source_order_count=1, uninspected_source_orders=1)
+    observe_nonprovider(coverage, raw, doc, order, raw["total"], None, "owner")
+    finish_coverage(coverage)
+
+    row, = coverage["by_currency"]["SAR"]
+    assert row["method"] == "awaiting"
+    if paid == "0.00":
+        assert (row["paid"], row["remaining"], row["incomplete_orders"]) == ("0.00", "100.00", 0)
+        assert coverage["sar"]["paid"] == "0.00" and coverage["sar"]["missing_orders"] == 0
+    else:
+        assert row["incomplete_orders"] == 1
+        assert row["paid"] is row["remaining"] is None
+        assert coverage["sar"]["paid"] is None and coverage["sar"]["missing_orders"] == 1
+    assert doc == before
+
+
 @pytest.mark.parametrize("fault", ["cross-currency", "cancelled", "wrong-paid", "unknown-method", "absent-paid"])
 def test_incomplete_customer_amount_remains_unknown(fault):
     from operational_customer_tender_coverage import new_coverage, observe_nonprovider

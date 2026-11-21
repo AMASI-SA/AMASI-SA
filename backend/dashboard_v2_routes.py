@@ -36,6 +36,10 @@ from dashboard_v2_ad_costs import (
 from dashboard_v2_ads_executive import build_salla_ads_executive_breakdown_cooperative
 from dashboard_ads_account_results import build_dashboard_ads_account_results
 from dashboard_ads_costs import DashboardAdsCostCollector
+from dashboard_payment_fees import (
+    BASIS as PAYMENT_FEE_BASIS, FEE_SOURCE_PROJECTION, attach_fee_source_evidence,
+    enforce_dashboard_fee_completeness, load_dashboard_fee_context,
+)
 from dashboard_ads_periods import SALLA_ORDER_TIMESTAMP_PROJECTION
 from payment_method_setup import payment_settings_revision
 from payment_method_fee_status import load_fee_setup_context, fee_setup_revision, load_payment_method_setup
@@ -485,6 +489,7 @@ async def _filtered_orders(
     include_marketing_attribution: bool = False,
     report_statuses: str | None = None,
     cost_collector: DashboardAdsCostCollector | None = None,
+    fee_context: dict | None = None,
 ) -> list[dict[str, Any]]:
     settings = await ensure_user_settings(db, user_id)
     if cost_collector is not None:
@@ -504,14 +509,16 @@ async def _filtered_orders(
     )
     if orders:
         # Historical rows predate promoted SAR fields. Fetch only the Salla FX
-        # proof and exact item option evidence needed in memory. No customer or
-        # payment raw fields are loaded and no database write is performed.
+        # proof and exact item option evidence needed in memory. The executive
+        # cost collector additionally needs bounded payment/date proof. No
+        # customer fields are loaded and no database write is performed.
         from report_option_recovery import SALLA_REPORT_OPTION_PROJECTION, attach_report_option_evidence_cooperative
         raw_projection = {**SALLA_RAW_CURRENCY_PROJECTION, **SALLA_REPORT_OPTION_PROJECTION}
         if include_marketing_attribution:
             raw_projection.update(SALLA_RAW_ATTRIBUTION_PROJECTION)
         if cost_collector is not None:
             raw_projection.update(SALLA_ORDER_TIMESTAMP_PROJECTION)
+            raw_projection.update(FEE_SOURCE_PROJECTION)
         projected_rows = await _to_list(
             db.unified_orders.find(query, raw_projection),
             100000,
@@ -523,16 +530,23 @@ async def _filtered_orders(
         )
         if include_marketing_attribution:
             attach_projected_salla_attribution(orders, projected_rows)
+        if cost_collector is not None:
+            attach_fee_source_evidence(orders, projected_rows)
     pm_list = [part.strip() for part in (payment_methods or "").split(",") if part.strip()]
     ship_list = [part.strip() for part in (shipping_companies or "").split(",") if part.strip()]
     included_statuses = settings.get("report_included_statuses") or []
-    return [
+    selected = [
         order for order in orders
         if _matches_any(order.get("payment_method", ""), pm_list)
         and _matches_any(order.get("shipping_company", ""), ship_list)
         and (order_matches_status(order, report_statuses.split(","), included_statuses)
              if report_statuses is not None else _matches_any(order.get("order_status", ""), included_statuses))
     ]
+    if cost_collector is not None:
+        cost_collector.capture_fee_context(await load_dashboard_fee_context(
+            db, user_id, selected, as_of=to_date, fee_context=fee_context,
+        ))
+    return selected
 
 
 async def build_mezan_v2_product_cost(
@@ -1869,6 +1883,7 @@ def make_dashboard_v2_router(
         include_month_kpis: bool = True,
         include_product_rows: bool = True,
         include_account_results: bool = False,
+        fee_context: dict | None = None,
     ) -> dict[str, Any]:
         current = owner(user)
         user_id = str(current["id"])
@@ -1893,6 +1908,7 @@ def make_dashboard_v2_router(
                 shipping_companies=shipping_companies,
                 include_legacy_analyses=False,
                 allow_self_heal=False,
+                **({"fee_context": fee_context} if fee_context is not None else {}),
                 **report_filter,
             ),
             _filtered_orders(
@@ -1903,6 +1919,7 @@ def make_dashboard_v2_router(
                 payment_methods=payment_methods,
                 shipping_companies=shipping_companies,
                 include_marketing_attribution=True,
+                fee_context=fee_context,
                 **cost_observer,
                 **report_filter,
             ),
@@ -2149,7 +2166,7 @@ def make_dashboard_v2_router(
                 "employee_salaries": "mezan_employee_salary_contracts_v2",
                 "recurring_obligations": "operating_recurring_obligations_v2",
                 "shipping_partners": "legacy_shipping_cost_ssot",
-                "payment_gateway_fees": "legacy_payment_method_settings + mezan_ad_account_cost_settings_v2",
+                "payment_gateway_fees": PAYMENT_FEE_BASIS + " + mezan_ad_account_cost_settings_v2",
             },
             "source_only": True,
             "accounting_write_reached": False,
@@ -2167,7 +2184,7 @@ def make_dashboard_v2_router(
             ):
                 totals[field] = None
         response["recurring_obligations_v2"] = recurring
-        return response
+        return enforce_dashboard_fee_completeness(response)
 
     @router.get("/dashboard-v2")
     @_heavy_dashboard_stage("dashboard_v2_summary")
@@ -2259,6 +2276,7 @@ def make_dashboard_v2_router(
                         user=current, **filters,
                         include_month_kpis=False, include_product_rows=False,
                         include_account_results=True,
+                        fee_context=fee_context,
                     ),
                     # Setup is owner-wide, so a date or payment filter cannot
                     # hide an unresolved method. This reads names only; it does

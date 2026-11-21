@@ -99,3 +99,49 @@ test("opens the fee table inside the executive profit summary", () => {
     expect(container.textContent).toContain("Snapchat — أماسي الرياض");
     expect(container.textContent).toContain("86.35");
 });
+
+test.each([null, 850])("incomplete fee authority suppresses fallback or stale numeric profit %s", (netProfit) => {
+    act(() => root.render(<ProfitSummaryCard totals={{
+        total_sales: 1000, total_product_cost: 100, other_payment_fees: 20,
+        payment_fees_complete: false, payment_fee_review_reasons: ["payment_awaiting_collection"],
+        total_payment_fees: null, net_profit: netProfit,
+    }} paymentBreakdown={[{ key: "paypal", name: "باي بال", orders_count: 1, total_sales: 1000, fee_amount: null }]} />));
+    expect(container.querySelector('[data-testid="profit-summary-net"]').textContent).toBe("غير مكتمل");
+    expect(container.querySelector('[data-testid="profit-summary-margin"]')).toBeNull();
+    expect(container.querySelector('[data-testid="profit-line-payment-fees"]').textContent).toContain("غير مكتمل");
+    const hint = container.querySelector('[data-testid="profit-payment-fees-incomplete-hint"]').textContent;
+    expect(hint).toContain("بانتظار تحصيل بعض الطلبات");
+    expect(hint).not.toContain("عمولات");
+    act(() => container.querySelector('[data-testid="profit-line-payment-fees"]').click());
+    const table = container.querySelector('[data-testid="payment-fees-breakdown-table"]');
+    expect(table.querySelector("tbody tr td:last-child").textContent).toBe("غير مكتمل");
+    expect(table.querySelector("tbody tr:last-child td:last-child").textContent).toBe("غير مكتمل");
+});
+
+test.each([
+    [[], "بانتظار اكتمال بيانات عمولات الدفع"],
+    [["fee_policy_missing"], "بانتظار اكتمال بيانات عمولات الدفع"],
+    [["payment_awaiting_collection", "fee_policy_missing"], "بانتظار تحصيل بعض الطلبات واستكمال بيانات عمولات الدفع"],
+])("fee review reason %p stays distinct from collection pending", (reasons, message) => {
+    act(() => root.render(<ProfitSummaryCard totals={{ payment_fees_complete: false, payment_fee_review_reasons: reasons }} />));
+    expect(container.querySelector('[data-testid="profit-payment-fees-incomplete-hint"]').textContent).toContain(message);
+});
+
+test.each([undefined, true])("preserves fee and profit fallback for legacy or complete authority %s", (complete) => {
+    act(() => root.render(<ProfitSummaryCard totals={{
+        total_sales: 1000, total_product_cost: 100, other_payment_fees: 20,
+        payment_fees_complete: complete, total_payment_fees: null, net_profit: null,
+    }} />));
+    expect(container.querySelector('[data-testid="profit-summary-net"]').textContent).toBe("880.00 ر.س");
+    expect(container.querySelector('[data-testid="profit-line-payment-fees"]').textContent).toContain("20.00");
+    expect(container.querySelector('[data-testid="profit-payment-fees-incomplete-hint"]')).toBeNull();
+});
+
+test("complete confirmed zero commission remains zero", () => {
+    act(() => root.render(<ProfitSummaryCard totals={{
+        total_sales: 1000, payment_fees_complete: true, total_payment_fees: 0,
+        other_payment_fees: 20, net_profit: 1000,
+    }} />));
+    expect(container.querySelector('[data-testid="profit-line-payment-fees"]').textContent).toContain("0.00");
+    expect(container.querySelector('[data-testid="profit-summary-net"]').textContent).toBe("1,000.00 ر.س");
+});

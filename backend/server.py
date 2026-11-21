@@ -2102,7 +2102,7 @@ async def read_dashboard(
 
 async def dashboard(user=None, from_date=None, to_date=None, payment_methods=None,
                     shipping_companies=None, include_legacy_analyses=True, allow_self_heal=True,
-                    report_statuses=None, *, database=None, owner_id=None, persist_settings=True):
+                    report_statuses=None, *, database=None, owner_id=None, persist_settings=True, fee_context=None):
     """Shared dashboard calculation for the signed-in account or an authorized tenant report."""
     source_db = db if database is None else database
     if owner_id is None:
@@ -2122,6 +2122,10 @@ async def dashboard(user=None, from_date=None, to_date=None, payment_methods=Non
 
     settings = (await ensure_user_settings(source_db, owner_id) if persist_settings
                 else await ensure_user_settings(source_db, owner_id, persist_defaults=False))
+    from dashboard_payment_fees import (
+        BASIS as PAYMENT_FEE_BASIS, FEE_SOURCE_PROJECTION, attach_fee_source_evidence,
+        dashboard_fee_breakdown, dashboard_payment_method, load_dashboard_fee_context, enforce_dashboard_fee_completeness,
+    )
 
     # ── Unified orders aggregation (THE source of truth) ─────────────────────
     orders_q = {"user_id": owner_id}
@@ -2143,6 +2147,7 @@ async def dashboard(user=None, from_date=None, to_date=None, payment_methods=Non
     if all_orders:
         raw_projection = dict(SALLA_RAW_CURRENCY_PROJECTION)
         raw_projection.update(SALLA_RAW_ATTRIBUTION_PROJECTION)
+        raw_projection.update(FEE_SOURCE_PROJECTION)
         projected_rows = await source_db.unified_orders.find(
             orders_q,
             raw_projection,
@@ -2151,6 +2156,7 @@ async def dashboard(user=None, from_date=None, to_date=None, payment_methods=Non
             all_orders, projected_rows, checkpoint=CPUWorkBudget(PARSER_BUDGET_MS).checkpoint,
         )
         attach_projected_salla_attribution(all_orders, projected_rows)
+        attach_fee_source_evidence(all_orders, projected_rows)
 
     # Iteration 31: data_source self-heal. Past orders whose data_source
     # was demoted to "excel" by Excel re-imports (pre-iteration-31 bug)
@@ -2235,16 +2241,20 @@ async def dashboard(user=None, from_date=None, to_date=None, payment_methods=Non
     currency_conversion_complete = currency_conversion["complete"] is True
     matched_all = match_settings(
         parsed_all,
-        settings.get("payment_methods", DEFAULT_PAYMENT_METHODS),
+        [],  # Payment fees are resolved by the shared authority below.
         settings.get("shipping_companies", DEFAULT_SHIPPING_COMPANIES),
     )
+    fee_context = await load_dashboard_fee_context(source_db, owner_id, all_orders, as_of=to_date, fee_context=fee_context)
+    fee_result = await dashboard_fee_breakdown(
+        all_orders, settings.get("payment_methods", DEFAULT_PAYMENT_METHODS), fee_context)
+    matched_all.update(payment_breakdown=fee_result["payment_breakdown"],
+                       total_payment_fees=fee_result["total_payment_fees"])
 
     # ── iter-256 — Shipping cost SSOT consolidation ───────────────────
     # Replace match_settings' shipping breakdown with the canonical
     # `shipping_cost_ssot.aggregate_breakdown()` so the dashboard
     # ALWAYS agrees with /api/shipping-ledger (same per-order/per-company
-    # math: total = base + tax). Payment breakdown is unrelated and stays
-    # on match_settings.
+    # math: total = base + tax). Payment breakdown uses its shared authority.
     from shipping_cost_ssot import (
         aggregate_breakdown as _ssot_agg,
         get_company_configs as _ssot_cfgs,
@@ -2325,6 +2335,13 @@ async def dashboard(user=None, from_date=None, to_date=None, payment_methods=Non
             other_payment_fees += fee; other_payment_sales += sales
     for sh in matched_all.get("shipping_breakdown", []):
         total_vat += float(sh.get("vat_amount", 0) or 0)
+    incomplete_fee_buckets = {
+        parent or key for row in fee_result["payment_breakdown"] if not row["fees_complete"]
+        for key, _display, parent in [_npm(row["name"])]
+    }
+    electronic_fees_complete = not (incomplete_fee_buckets - {
+        "bank_transfer", "tamara", "tabby", "emkan", "cash_on_delivery"})
+    electronic_before_filter_complete = electronic_fees_complete
 
     # ── iter-45 — Electronic Net status filter ─────────────────────────────
     # The default `other_payment_sales` / `other_payment_fees` above include
@@ -2352,7 +2369,7 @@ async def dashboard(user=None, from_date=None, to_date=None, payment_methods=Non
     electronic_orders_included: list[dict] = []
     electronic_orders_excluded: list[dict] = []
     for o in all_orders:
-        if not _is_electronic_method(o.get("payment_method", "")):
+        if not _is_electronic_method(dashboard_payment_method(o)):
             continue
         if _is_excluded_for_electronic_net(o.get("order_status", ""), elec_excluded_terms):
             electronic_orders_excluded.append(o)
@@ -2368,9 +2385,14 @@ async def dashboard(user=None, from_date=None, to_date=None, payment_methods=Non
         )
         matched_elec = match_settings(
             parsed_elec,
-            settings.get("payment_methods", DEFAULT_PAYMENT_METHODS),
+            [],  # Replaced by the same fee authority as the full cohort.
             settings.get("shipping_companies", DEFAULT_SHIPPING_COMPANIES),
         )
+        electronic_fee_result = await dashboard_fee_breakdown(
+            electronic_orders_included, settings.get("payment_methods", DEFAULT_PAYMENT_METHODS), fee_context)
+        matched_elec.update(payment_breakdown=electronic_fee_result["payment_breakdown"],
+                            total_payment_fees=electronic_fee_result["total_payment_fees"])
+        electronic_fees_complete = electronic_fee_result["payment_fees_complete"]
         # Override electronic sales/fees with the filtered figures.
         filtered_elec_sales = 0.0
         filtered_elec_fees = 0.0
@@ -2881,8 +2903,18 @@ async def dashboard(user=None, from_date=None, to_date=None, payment_methods=Non
         else:
             salla_settle_outside += float(d.get("adjustment_amount", 0) or 0)
 
-    return {
+    response = {
         "range": {"from_date": from_date, "to_date": to_date},
+        "payment_fee_authority": {
+            "basis": PAYMENT_FEE_BASIS,
+            "complete": fee_result["payment_fees_complete"],
+            "known_payment_fees_sar": fee_result["total_payment_fees"],
+            "reason_codes": fee_result["fee_review_reasons"],
+            "incomplete_buckets": sorted(incomplete_fee_buckets),
+            "electronic_complete": electronic_fees_complete,
+            "electronic_before_filter_complete": electronic_before_filter_complete,
+            "legacy_analysis_fees_included": bool(legacy_analyses),
+        },
         "totals": {
             "total_sales": (
                 round(total_sales, 2) if currency_conversion_complete else None
@@ -3040,6 +3072,7 @@ async def dashboard(user=None, from_date=None, to_date=None, payment_methods=Non
             } for a in recent
         ],
     }
+    return enforce_dashboard_fee_completeness(response)
 
 
 async def legacy_dashboard_for_tenant(db, owner_id, *, from_date, to_date, payment_methods=None,
