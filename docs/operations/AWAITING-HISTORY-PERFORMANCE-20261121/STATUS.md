@@ -1,5 +1,20 @@
 # AWAITING-HISTORY-PERFORMANCE-20261121
 
+## Current recovery release (supersedes historical checkpoints below)
+
+PR2052 https://github.com/AMASI-SA/AMASI-SA/pull/2052 is DRAFT, exact reviewed intent B94f9e037c07898ca3546859d28bfd8fee20dded4. Source A f7455ecb7df1332e50af983348f2f208809381ad, base J88af38f01cf979acbca59b95a95e661828f2306f, B tree67694b8247b4c15da98c89fb83d8a17607301f75. Release rg5-80f3644dbd92e68f8077f293a32568e5d5874eb5057bd669a7079bb3a5971fc4. Source and frozen intent are immutable; this separate evidence branch must never be deployed.
+
+Both dashboard readers now defer the owner-wide history scan and explicitly mark unchecked waiting orders incomplete, retaining prior costs. Full history checks remain in operational balance calculation, once per cohort and off event loop with cancellation checkpoints. No periodic background job is added. This does not provide a compact saved history projection yet. COD policy and source order statuses are unchanged.
+
+272focused local tests passed; two realMongo tests could not run locally. Exact A operational frontend1258tests passed; frozen runtime comparisons and368regressions+5subtests passed. A's remaining backend jobs were superseded/cancelled when B started; do not call all A checks passed. All required exact B checks and both host adapter rehearsals must pass before normal merge/publication.
+
+Artifact14724576263/run44948088722 independently verified: ZIP SHA256ad3653193290971a34e2143fe911a512a3bddac8369c2158d59e4b55541c5664; raw intent SHA256bb145da6d680e65cd9451967b9554f4477edbdf65e35f1ceb34fc03cc5189bda; original load_candidate_release_intent and load_release_intent PASS with all source/runtime bindings. No own lease, merge or new publication yet. Last shared original guard active:false; /app88af clean tracked. /app volume45MB free; use /tmp226GB free for isolated build and preserve existing files. Owner renewed publication authorization. Live remains verified emergency rollback db141c0438edf04aa77ccd1122bc9c5008cf39d6 / rg5-500857bae382758ba238083f1f7f417b23a7e2dfb298aa3e2e99e7f4baf56b45. Latest bounded health0.535s but monitoring aggregate still critical; sustained recovery not proven. PR2049 separate and on hold. Financial acceptance read-only.
+
+Next: exactB gates, fresh production head/lease check, normal merge preservingA/B, actual shared clean-clone adapter, guarded materialization and prepare/prepublish, one Publish, explicit success, original verify3 and active:false, bounded latency/read-only UI acceptance. No unrelated record changes or lease clearing.
+
+## Historical checkpoints
+
+
 State: rollback identity verified; service latency still unstable; partial source fix NOT ready for release. Draft PR2051.
 Base: e08d0e489eded39961d374e4eb7bfcc0544b6e90.
 Branch: codex/awaiting-history-performance-20261121.
