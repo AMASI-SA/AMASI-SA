@@ -1,0 +1,143 @@
+{
+  "kind": "synthetic_catalog_bson_payload_comparison_v1",
+  "metric": "BSON-encoded documents returned by catalog cursor, not wire overhead, RSS, or production latency",
+  "database": "isolated mongomock_motor, no live data",
+  "repository_head": "6ad54d81340402232b5f325e09c917eba8920d86",
+  "dashboard_source_sha256": "1f2b7fa44118ece4a1c82642533d6e249d4ce0aca9a7fa4cb59d27c6e174a3e6",
+  "fixture": {
+    "products": 1000,
+    "matched_products": 1,
+    "description_bytes_per_product": 16384,
+    "image_text_bytes_per_product": 26624,
+    "expected_cost_sar": "2 units x 37.50 = 75.00",
+    "companion_collections": "empty",
+    "variant_arrays": "absent"
+  },
+  "observations": [
+    {
+      "builder": "standard",
+      "cohort": "empty",
+      "catalog_reads": 1,
+      "catalog_rows_returned": 1000,
+      "catalog_bson_bytes_returned": 43203670,
+      "full_catalog_payload_rows": 1000,
+      "all_recorded_find_calls": 6,
+      "cost_total_sar": 0.0,
+      "result_sha256": "d1cebf5899fd82687dd9dd6d73070c7e216aae6b3f926354c0a3d09d753a85cc",
+      "catalog_read_details": [
+        {
+          "collection": "mezan_products_v2",
+          "operation": "find",
+          "rows_returned": 1000,
+          "bson_bytes_returned": 43203670,
+          "full_payload_rows": 1000
+        }
+      ]
+    },
+    {
+      "builder": "standard",
+      "cohort": "one_product",
+      "catalog_reads": 1,
+      "catalog_rows_returned": 1000,
+      "catalog_bson_bytes_returned": 43203670,
+      "full_catalog_payload_rows": 1000,
+      "all_recorded_find_calls": 14,
+      "cost_total_sar": 75.0,
+      "result_sha256": "d8ea5738dc79283b2a30eadd096daef8918ba56ea0fa2a773026371b3a0eacb9",
+      "catalog_read_details": [
+        {
+          "collection": "mezan_products_v2",
+          "operation": "find",
+          "rows_returned": 1000,
+          "bson_bytes_returned": 43203670,
+          "full_payload_rows": 1000
+        }
+      ]
+    },
+    {
+      "builder": "cooperative",
+      "cohort": "empty",
+      "catalog_reads": 1,
+      "catalog_rows_returned": 1000,
+      "catalog_bson_bytes_returned": 43203670,
+      "full_catalog_payload_rows": 1000,
+      "all_recorded_find_calls": 6,
+      "cost_total_sar": 0.0,
+      "result_sha256": "d1cebf5899fd82687dd9dd6d73070c7e216aae6b3f926354c0a3d09d753a85cc",
+      "catalog_read_details": [
+        {
+          "collection": "mezan_products_v2",
+          "operation": "find",
+          "rows_returned": 1000,
+          "bson_bytes_returned": 43203670,
+          "full_payload_rows": 1000
+        }
+      ]
+    },
+    {
+      "builder": "cooperative",
+      "cohort": "one_product",
+      "catalog_reads": 1,
+      "catalog_rows_returned": 1000,
+      "catalog_bson_bytes_returned": 43203670,
+      "full_catalog_payload_rows": 1000,
+      "all_recorded_find_calls": 14,
+      "cost_total_sar": 75.0,
+      "result_sha256": "d8ea5738dc79283b2a30eadd096daef8918ba56ea0fa2a773026371b3a0eacb9",
+      "catalog_read_details": [
+        {
+          "collection": "mezan_products_v2",
+          "operation": "find",
+          "rows_returned": 1000,
+          "bson_bytes_returned": 43203670,
+          "full_payload_rows": 1000
+        }
+      ]
+    },
+    {
+      "builder": "card",
+      "cohort": "empty",
+      "catalog_reads": 1,
+      "catalog_rows_returned": 1000,
+      "catalog_bson_bytes_returned": 43203670,
+      "full_catalog_payload_rows": 1000,
+      "all_recorded_find_calls": 6,
+      "cost_total_sar": 0.0,
+      "result_sha256": "002baa6c60251aa10a95fb0efba86bbc82bafd09b6d5f526836f6776735b2951",
+      "catalog_read_details": [
+        {
+          "collection": "mezan_products_v2",
+          "operation": "find",
+          "rows_returned": 1000,
+          "bson_bytes_returned": 43203670,
+          "full_payload_rows": 1000
+        }
+      ]
+    },
+    {
+      "builder": "card",
+      "cohort": "one_product",
+      "catalog_reads": 1,
+      "catalog_rows_returned": 1000,
+      "catalog_bson_bytes_returned": 43203670,
+      "full_catalog_payload_rows": 1000,
+      "all_recorded_find_calls": 12,
+      "cost_total_sar": 75.0,
+      "result_sha256": "8161320b73c35d5f7f49f5926a9e257b22e2bc548bfb01245b66284b55376b3d",
+      "catalog_read_details": [
+        {
+          "collection": "mezan_products_v2",
+          "operation": "find",
+          "rows_returned": 1000,
+          "bson_bytes_returned": 43203670,
+          "full_payload_rows": 1000
+        }
+      ]
+    }
+  ],
+  "limits": [
+    "The retained owner-wide alias scan still scales with catalog size.",
+    "Whole variant arrays and companion cost/profile reads are not bounded by this experiment.",
+    "No production RAM, latency, query-plan, concurrency, or recovery claim."
+  ]
+}

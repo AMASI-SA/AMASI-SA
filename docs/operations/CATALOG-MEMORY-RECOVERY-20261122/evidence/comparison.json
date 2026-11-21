@@ -1,0 +1,84 @@
+{
+  "baseline_deployment_commit": "10ee7b41204dd1d39c8b91daf9f0a9d899041ebb",
+  "baseline_checkout_commit": "6ad54d81340402232b5f325e09c917eba8920d86",
+  "baseline_runtime_blob_oid": "b01ed1a17692081e1a295e4e3ff810750024a6ce",
+  "runtime_blob_equals_deployment": true,
+  "baseline_source_sha256": "1f2b7fa44118ece4a1c82642533d6e249d4ce0aca9a7fa4cb59d27c6e174a3e6",
+  "patched_source_sha256": "42043c552104bddcbb9dab66d4522eb1d39df0e1b15f6f304881b50bc6911d0d",
+  "fixture_products": 1000,
+  "full_results_identical_cases": 6,
+  "metric": "BSON-encoded documents returned by catalog cursor, not wire overhead, RSS, or production latency",
+  "comparisons": [
+    {
+      "builder": "standard",
+      "cohort": "empty",
+      "result_identical": true,
+      "baseline_catalog_bson_bytes": 43203670,
+      "patched_catalog_bson_bytes": 0,
+      "reduction_percent": 100.0,
+      "baseline_full_payload_rows": 1000,
+      "patched_full_payload_rows": 0,
+      "cost_total_sar": 0.0
+    },
+    {
+      "builder": "standard",
+      "cohort": "one_product",
+      "result_identical": true,
+      "baseline_catalog_bson_bytes": 43203670,
+      "patched_catalog_bson_bytes": 181885,
+      "reduction_percent": 99.57901,
+      "baseline_full_payload_rows": 1000,
+      "patched_full_payload_rows": 1,
+      "cost_total_sar": 75.0
+    },
+    {
+      "builder": "cooperative",
+      "cohort": "empty",
+      "result_identical": true,
+      "baseline_catalog_bson_bytes": 43203670,
+      "patched_catalog_bson_bytes": 0,
+      "reduction_percent": 100.0,
+      "baseline_full_payload_rows": 1000,
+      "patched_full_payload_rows": 0,
+      "cost_total_sar": 0.0
+    },
+    {
+      "builder": "cooperative",
+      "cohort": "one_product",
+      "result_identical": true,
+      "baseline_catalog_bson_bytes": 43203670,
+      "patched_catalog_bson_bytes": 181885,
+      "reduction_percent": 99.57901,
+      "baseline_full_payload_rows": 1000,
+      "patched_full_payload_rows": 1,
+      "cost_total_sar": 75.0
+    },
+    {
+      "builder": "card",
+      "cohort": "empty",
+      "result_identical": true,
+      "baseline_catalog_bson_bytes": 43203670,
+      "patched_catalog_bson_bytes": 0,
+      "reduction_percent": 100.0,
+      "baseline_full_payload_rows": 1000,
+      "patched_full_payload_rows": 0,
+      "cost_total_sar": 0.0
+    },
+    {
+      "builder": "card",
+      "cohort": "one_product",
+      "result_identical": true,
+      "baseline_catalog_bson_bytes": 43203670,
+      "patched_catalog_bson_bytes": 181885,
+      "reduction_percent": 99.57901,
+      "baseline_full_payload_rows": 1000,
+      "patched_full_payload_rows": 1,
+      "cost_total_sar": 75.0
+    }
+  ],
+  "limitations": [
+    "The retained owner-wide alias scan still scales with catalog size.",
+    "Whole variant arrays and companion cost/profile reads are not bounded by this experiment.",
+    "No production RAM, latency, query-plan, concurrency, or recovery claim."
+  ]
+}
