@@ -2,6 +2,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { OpeningBalances, EntityPicker } from './OpeningBalances';
 import DailyMovementsComponent from './DailyMovements';
+import AddOperationalEntity from './AddOperationalEntity';
 import {pendingMovementKey} from './pendingMovementStorage';
 const DailyMovements = props => <DailyMovementsComponent storageScope="test-owner:test-actor" {...props}/>;
 import OperationalBalances from './OperationalBalances';
@@ -294,6 +295,28 @@ test('external entity creation in movements requires manage and retains retry id
  const first=api.addEntity.mock.calls[0];expect(host.querySelector('.op-add input').value).toBe('جهة جديدة');await click('إضافة');expect(api.addEntity.mock.calls[1]).toEqual(first);expect(host.querySelector('.op-add')).toBeNull();
  await render(<DailyMovements canManage={false}/>);expect(button('+ إضافة جهة خارجية')).toBeUndefined();
 });
+test('external entity form sends classification, phone and notes without changing cash creation',async()=>{
+ const onAdded=jest.fn();
+ api.addEntity.mockResolvedValue({id:'external2',name:'مؤسسة تجريبية',kind:'external_person',currency:'SAR'});
+ await render(<AddOperationalEntity kind="external_person" onAdded={onAdded} onCancel={()=>{}}/>);
+ await input(host.querySelector('.op-add input'),'مؤسسة تجريبية');
+ await input(host.querySelector('.op-add select'),'organization');
+ await input(host.querySelector('.op-add input[type="tel"]'),'0501234567');
+ const notes=host.querySelector('.op-add textarea');
+ await act(async()=>{
+  Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(notes,'تجربة');
+  notes.dispatchEvent(new Event('input',{bubbles:true}));
+ });
+ await click('إضافة');
+ expect(api.addEntity).toHaveBeenCalledWith('external_person',expect.objectContaining({
+  name:'مؤسسة تجريبية',person_type:'organization',phone:'0501234567',notes:'تجربة',currency:'SAR'
+ }));
+ expect(onAdded).toHaveBeenCalledTimes(1);
+ await render(<AddOperationalEntity kind="cash" onAdded={onAdded} onCancel={()=>{}}/>);
+ expect(host.querySelector('.op-add select')).toBeNull();
+ expect(host.querySelector('.op-add textarea')).toBeNull();
+});
+
 test('incomplete refund fee policy uses the exact owner-facing message',async()=>{
  api.context.mockResolvedValue({session_scope:'test-owner:test-actor',status:'active',permissions:{view:true,reports:true,move:false,manage:false}});
  api.reports.mockResolvedValue({parties:[],obligations:[],summary:{},issues:[{code:'refund_fee_treatment_incomplete'}]});
