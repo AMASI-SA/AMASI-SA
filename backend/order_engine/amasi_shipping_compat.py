@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import httpx
+import logging
 from typing import Any, Awaitable, Callable
 
 from salla_integration.service import SallaError, call_salla
@@ -22,12 +23,13 @@ _READ_SECONDS = 8.0
 _READ_ATTEMPTS_AFTER_STATUS = 4
 _DONE = {"shipped", "delivering", "delivered"}
 _CANCELLED = {"cancelled", "canceled", "void", "deleted"}
+_READ_LOG = logging.getLogger("mezan.carrier_label_read")
 
 
 def _rows(response: Any) -> list[dict[str, Any]]:
     data = response.get("data", response) if isinstance(response, dict) else response
     if isinstance(data, dict):
-        data = data.get("shipments", data.get("shipment", data.get("data", data)))
+        data = data.get("shipments") or data.get("shipment") or data.get("data", data)
     if isinstance(data, dict):
         data = [data] if data.get("id") else []
     return [dict(row) for row in data if isinstance(row, dict)] if isinstance(data, list) else []
@@ -79,7 +81,31 @@ def _current(rows: list[dict[str, Any]], internal_id: str) -> dict[str, Any]:
 
 
 def _printable(row: dict[str, Any]) -> dict[str, Any]:
-    snap = legacy._snapshot(row)
+    invoice_types = {"invoice", "commercial_invoice", "proforma_invoice", "proforma"}
+
+    def label_document(value):
+        if isinstance(value, list):
+            return [clean for child in value if (clean := label_document(child)) is not None]
+        if isinstance(value, dict):
+            if any(legacy._status(value.get(key)) in invoice_types for key in ("type", "document_type", "kind")):
+                return None
+            return {key: clean for key, child in value.items()
+                    if legacy._status(key) not in invoice_types | {"invoice_url", "commercial_invoice_url", "proforma_invoice_url"}
+                    and (clean := label_document(child)) is not None}
+        return value
+
+    # Order ingestion also recognizes these official AWB aliases. Choose a
+    # valid link, never a typed commercial invoice supplied beside the label.
+    label_url = next((url for key in ("label_url", "shipping_label_url", "label", "pdf_label", "pdf_url",
+                                      "awb_url", "waybill_url", "awb", "documents")
+                      if (url := legacy._url(label_document(row.get(key))))), None)
+    facts = legacy.extract_shipping(row, event_name="shipment.read") or {}
+    normalized = {**row, "label_url": label_url,
+                  "tracking_number": legacy._tracking(row) or facts.get("tracking_number"),
+                  "label": None, "pdf_label": None, "pdf_url": None, "awb": None, "documents": None}
+    if not legacy._url(row.get("tracking_link") or row.get("tracking_url")):
+        normalized["tracking_link"] = facts.get("tracking_url")
+    snap = legacy._snapshot(normalized)
     # A carrier-supplied PDF is sufficient even if "created" or no tracking
     # number accompanies it. No synthetic PDF is created for external couriers.
     snap["ready"] = bool(snap["shipment_id"] and snap["label_url"]
@@ -89,14 +115,30 @@ def _printable(row: dict[str, Any]) -> dict[str, Any]:
 
 async def _get(db: Any, owner: str, path: str, *, params: dict | None = None,
                failures: list[int] | None = None):
+    source = ("order_shipments" if path.startswith("/orders/") and path.endswith("/shipments")
+              else "order" if path.startswith("/orders/")
+              else "shipment_tracking" if path.startswith("/shipments/") and path.endswith("/tracking")
+              else "shipments" if path == "/shipments"
+              else "shipment" if path.startswith("/shipments/") else "other")
     try:
-        return await asyncio.wait_for(
+        response = await asyncio.wait_for(
             call_salla(db, owner, "GET", path, params=params),
             timeout=_READ_SECONDS,
         )
+        data = response.get("data") if isinstance(response, dict) else None
+        fields = data if isinstance(data, dict) else {}
+        shipping = fields.get("shipping") if isinstance(fields.get("shipping"), dict) else {}
+        # Fixed source names and shape flags only: no identifiers, URLs,
+        # provider/customer bodies, tokens or exception text in diagnostics.
+        _READ_LOG.info("carrier_label_read source=%s outcome=response data=%s plural=%s singular=%s nested=%s",
+            source, "object" if isinstance(data, dict) else "array" if isinstance(data, list) else "none",
+            bool(fields.get("shipments")), bool(fields.get("shipment")), bool(shipping.get("shipment")))
+        return response
     except (SallaError, TimeoutError, ConnectionError, httpx.HTTPError) as exc:
+        status = exc.status_code if isinstance(exc, SallaError) else 502
+        _READ_LOG.info("carrier_label_read source=%s outcome=error service_status=%s", source, status)
         if failures is not None:
-            failures.append(exc.status_code if isinstance(exc, SallaError) else 502)
+            failures.append(status)
         return None
 
 
@@ -302,7 +344,7 @@ async def _shipment(db: Any, owner: str, internal_id: str, order: dict[str, Any]
     if not selected and standalone is None and failures:
         if 403 in failures:
             raise legacy.ShippingLabelError("shipping_scope_required",
-                "صلاحية قراءة الشحنات غير متاحة في ربط سلة؛ أعد الربط بالصلاحيات المطلوبة.", status_code=403)
+                "تعذّر استرجاع بوليصة الشحن من بيانات الطلب في سلة. أعد المحاولة.", status_code=403)
         raise legacy.ShippingLabelError("salla_shipping_unavailable",
             "تعذّر التحقق من الشحنة الحالية في سلة. أعد المحاولة.", status_code=502)
     return await verified(selected or {})

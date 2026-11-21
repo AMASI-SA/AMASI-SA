@@ -339,8 +339,91 @@ async def test_native_routes_use_current_details_or_return_read_error(monkeypatc
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("field", ["shipping_label_url", "awb_url", "waybill_url"])
+@pytest.mark.parametrize("source", ["order", "scoped"])
+async def test_order_label_fields_recognized_by_ingestion_are_printable(monkeypatch, field, source):
+    db, calls = await scenario(monkeypatch, known=False)
+    row = {**deepcopy(SHIPMENT), field: LABEL}
+    order = {**deepcopy(ORDER), **({"shipment": row} if source == "order" else {})}
+
+    async def provider(database, owner, method, path, **kwargs):
+        calls.append((method, path))
+        assert method == "GET"
+        if path == "/orders/42":
+            return {"data": deepcopy(order)}
+        if path == "/orders/42/shipments" and source == "scoped":
+            return {"data": {"shipment": deepcopy(row)}}
+        raise SallaError("Synthetic optional API denial", status_code=403)
+
+    monkeypatch.setattr(compat, "call_salla", provider)
+    result = await compat.carrier_label(db, "owner", NUMBER, issue=False, completed_only=True)
+    assert result["ready"] is True
+    assert result["label_url"] == LABEL
+    assert result["shipment_id"] == SHIPMENT_ID
+    assert not any(path.startswith("/shipments") for _, path in calls)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("document_field", ["documents", "label"])
+@pytest.mark.parametrize("documents,expected", [
+    ([{"type": "commercial_invoice", "url": "https://carrier.example/invoice.pdf"}], None),
+    ({"type": "invoice", "url": "https://carrier.example/invoice.pdf"}, None),
+    ([{"type": "commercial_invoice", "url": "https://carrier.example/invoice.pdf"},
+      {"type": "shipping_label", "url": LABEL}], LABEL),
+])
+async def test_order_shipment_documents_never_replace_awb_with_invoice(monkeypatch, documents, expected, document_field):
+    db, calls = await scenario(monkeypatch, known=False)
+    order = {**deepcopy(ORDER), "shipment": {**deepcopy(SHIPMENT), document_field: deepcopy(documents)}}
+
+    async def provider(database, owner, method, path, **kwargs):
+        calls.append((method, path))
+        assert method == "GET"
+        if path == "/orders/42":
+            return {"data": deepcopy(order)}
+        raise SallaError("Synthetic optional API denial", status_code=403)
+
+    monkeypatch.setattr(compat, "call_salla", provider)
+    result = await compat.carrier_label(db, "owner", NUMBER, issue=False, completed_only=True)
+    assert result["ready"] is bool(expected)
+    assert result["label_url"] == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("denied", [False, True])
+async def test_read_diagnostics_do_not_expose_provider_or_customer_data(monkeypatch, caplog, denied):
+    db, calls = await scenario(monkeypatch, known=False)
+    private = "SYNTHETIC-PRIVATE-MARKER"
+    order = {**deepcopy(ORDER), "receiver": {"name": private, "address": private},
+             "shipping": {"company_name": "Aramex International", "company_code": "321"}}
+    if not denied:
+        order["shipping"]["shipment"] = {**deepcopy(SHIPMENT),
+            "label": {"url": "https://carrier.example/" + private + ".pdf"}}
+
+    async def provider(database, owner, method, path, **kwargs):
+        calls.append((method, path))
+        assert method == "GET"
+        if path == "/orders/42":
+            return {"data": deepcopy(order)}
+        raise SallaError("Provider failure " + private, status_code=403)
+
+    monkeypatch.setattr(compat, "call_salla", provider)
+    caplog.set_level("INFO", logger="mezan.carrier_label_read")
+    if denied:
+        with pytest.raises(shipping.ShippingLabelError) as error:
+            await compat.carrier_label(db, "owner", NUMBER, issue=False, completed_only=True)
+        assert "أعد الربط" not in str(error.value)
+    else:
+        result = await compat.carrier_label(db, "owner", NUMBER, issue=False, completed_only=True)
+        assert result["ready"] is True
+    assert any(record.name == "mezan.carrier_label_read" for record in caplog.records)
+    assert private not in caplog.text
+    assert "https://" not in caplog.text
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("carrier", ["Aramex International", "SMSA", "iMile"])
-@pytest.mark.parametrize("shape", ["shipping.shipment", "shipping.shipment_inherited_carrier", "shipment", "scoped_singular"])
+@pytest.mark.parametrize("shape", ["shipping.shipment", "shipping.shipment_inherited_carrier", "shipment",
+                                  "scoped_singular", "scoped_singular_null_plural", "scoped_direct_null_alias"])
 async def test_order_read_permission_supports_each_current_shipment_shape(monkeypatch, carrier, shape):
     db, calls = await scenario(monkeypatch, known=False)
     row = {**deepcopy(SHIPMENT), "courier_name": carrier, "label": {"url": LABEL}}
@@ -358,8 +441,13 @@ async def test_order_read_permission_supports_each_current_shipment_shape(monkey
         assert method == "GET"
         if path == "/orders/42":
             return {"data": deepcopy(order)}
-        if path == "/orders/42/shipments" and shape == "scoped_singular":
-            return {"data": {"shipment": deepcopy(row)}}
+        if path == "/orders/42/shipments":
+            if shape == "scoped_singular":
+                return {"data": {"shipment": deepcopy(row)}}
+            if shape == "scoped_singular_null_plural":
+                return {"data": {"shipments": None, "shipment": deepcopy(row)}}
+            if shape == "scoped_direct_null_alias":
+                return {"data": {**deepcopy(row), "shipment": None}}
         raise SallaError("Synthetic optional shipping API not granted", status_code=403)
 
     monkeypatch.setattr(compat, "call_salla", provider)
@@ -470,7 +558,8 @@ async def test_nested_order_shipment_inherits_carrier_without_replacing_null_lab
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("action", ["refresh", "complete-and-refresh"])
-@pytest.mark.parametrize("shape", ["shipping.shipment", "shipment", "scoped_singular"])
+@pytest.mark.parametrize("shape", ["shipping.shipment", "shipment", "scoped_singular",
+                                  "scoped_singular_null_plural", "scoped_direct_null_alias"])
 async def test_native_routes_accept_order_payload_label_without_extra_permission(monkeypatch, action, shape):
     from test_mobile_external_label_read_parity import external_case, KEY, PATH
 
@@ -489,8 +578,13 @@ async def test_native_routes_accept_order_payload_label_without_extra_permission
             assert method == "GET"
             if path == "/orders/123":
                 return {"data": deepcopy(raw)}
-            if path == "/orders/123/shipments" and shape == "scoped_singular":
-                return {"data": {"shipment": deepcopy(row)}}
+            if path == "/orders/123/shipments":
+                if shape == "scoped_singular":
+                    return {"data": {"shipment": deepcopy(row)}}
+                if shape == "scoped_singular_null_plural":
+                    return {"data": {"shipments": None, "shipment": deepcopy(row)}}
+                if shape == "scoped_direct_null_alias":
+                    return {"data": {**deepcopy(row), "shipment": None}}
             raise SallaError("Synthetic optional shipping API not granted", status_code=403)
 
         monkeypatch.setattr(compat, "call_salla", provider)
