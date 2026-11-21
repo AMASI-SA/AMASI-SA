@@ -12,14 +12,16 @@ NOT be deployed. Immutable release branch `codex/aramex-order-payload-release-v2
 - Intent SHA256 `1cb1ca09cf311dbb901da7adb21c074dc1b90c261596e555eba81c10894a0a40`.
 - CI candidate full validator passed; independent local Git manifests and
   deterministic id matched. Exact-B readiness44942990880 PASSED, including both
-  host20/24 clean-clone adapter rehearsals. Other required checks still running.
+  host20/24 clean-clone adapter rehearsals. All39 current-head checks completed
+  with zero failure/pending; PR2048 is ready for review and mergeable/CLEAN.
+  Original guard at20:03UTC still reports the foreign PR2039 lease active.
 - Fresh independent ARM64/Linux rehearsal stopped at its initial guard check
   before any fetch/clone/build: active:true, actor codex-pr2039-owner-authorized,
   source e08d0e489eded39961d374e4eb7bfcc0544b6e90, deployment J. Shared HEAD J.
   Stop result in `/tmp/aramex-pr2048-4c5c-jwr80pae`; no adapter output or shared
   tracked mutation. Do not clear/reuse the foreign lease or start another
   rehearsal until fresh original guard status reports active:false.
-- No task lease or publication. PR2048 Draft; PR2047 superseded/closed, its A/B
+- No task lease or publication. PR2048 ready; PR2047 superseded/closed, its A/B
   preserved. The earlier inactive observation preceded the foreign prepare;
   the in-job fresh check correctly stopped the race.
 - Fresh ADB: emulator online, authenticated Mezan screen visible. No new-code
