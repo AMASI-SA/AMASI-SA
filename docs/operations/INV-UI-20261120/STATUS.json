@@ -1,13 +1,13 @@
 {
   "task_id": "INV-UI-20261120",
   "scope": "Replace legacy Mezan inventory interfaces with the approved integrated Arabic RTL design using the existing native services and permissions.",
-  "branch": "codex/inventory-release-20261121",
-  "base_sha": "734b977de28254c2c089148b4db8972a03ba19eb",
-  "state": "manual_release_preparation_authorized",
-  "production_changed": false,
-  "remote_checkpoint": "55bb3bbfba3d327b5fbe946cfaa85764e136b282 verified on origin; final documentation/evidence commit recorded separately in Issue1006",
-  "release_lease": "not_created",
-  "deployment": "user_will_publish_manually",
+  "branch": "codex/inventory-legacy-locations-20261121",
+  "base_sha": "d69f31da14f3dc1baad25ab0884ba810446b19f9",
+  "state": "legacy_warehouse_fix_focused_verified_broader_checks_pending",
+  "production_changed": true,
+  "remote_checkpoint": "Containing development commit will be recorded in Issue1006 after push",
+  "release_lease": "No agent lease or /app operations; shared production state not queried",
+  "deployment": "Fix only on dedicated development branch; existing deployed release unchanged by agent",
   "owners": {
     "root": "Shared suite shell, native inventory workspace/reader, routing, reporting/control integration and final verification",
     "native_catalog_resources": "Native products, components, groups, bundles visible interfaces",
@@ -20,18 +20,16 @@
     "Preserve canonical product/variant/resource/location identity, server preview hash, stable idempotency and current permissions",
     "No opening-stock writer reused for stock adjustments"
   ],
-  "next_action": "Commit and push integrated source candidate A, create PR to Production, require fresh CI and governed candidate intent. Freeze only generated intent as B, verify B clean-clone checks and merge preserving A/B. User will run shared /app guard/materialization/prepublish and publish manually. Never claim deployment without explicit newer success and three v5 probes.",
-  "updated_at": "2026-11-21T13:11:18.099224+00:00",
-  "verified_milestone": "Approved inventory source replayed atop current reviewed Production0d70cdc4bdc116a4640509c95216bbbd6a72b6ed without conflicts or direct file overlap. Inherited release intent bytes unchanged. No /app changes, lease or publication. Added original-service count/configuration and suite UI checks to existing G47 CI; fresh candidate checks pending.",
+  "next_action": "Push focused verified checkpoint and Draft PR. Run the broader affected native opening/standalone suites and CI. No merge/publish or production data/config writes in this checkpoint. Governed release requires a new reviewed A/B intent if later approved for publication.",
+  "updated_at": "2026-11-21T15:31:40.204227+00:00",
+  "verified_milestone": "User-provided response confirms active warehouse record lacks inventory_scope; private identifiers/address not retained. Reproduced missing locations before fix. Shared eligibility helper now accepts active unclassified legacy or explicit standalone warehouses; explicit shared/null/invalid scopes remain excluded. Context/preview/atomic update use the same rule, with all existing gates and occupancy checks.33local real-Mongo tests PASS.",
   "ledger": "https://github.com/AMASI-SA/AMASI-SA/issues/1006#issuecomment-6238987123 has a dedicated dated INV-UI-20261120 section appended without removing original content; comments/body limits block new entries elsewhere. Write read-back verified.",
   "incomplete": [
-    "Integrated source CI and generated candidate intent pending",
-    "Reviewed intent B, exact-head CI/rehearsal and preserving merge pending",
-    "Shared /app guard status/materialization/prepare/prepublish/manual publish/three-probe verification remain user actions; browser and Windows tools failed with missing kernel asset path"
+    "Broader affected regression checks and CI pending.",
+    "No new reviewed intent or publication; old release pair remains historical and must not be reused for this changed source."
   ],
   "posting_scope": "User approved full stocktake/adjustment lifecycle including atomic posting, development only; new posting default-closed",
   "durable_patch": "C:\\Users\\amasi\\OneDrive\\المستندات\\ChatGPT\\ميزان\\outputs\\inventory-implementation-20261120\\inventory-ui-wip.patch",
-  "last_verified_runtime_sha": "55bb3bbfba3d327b5fbe946cfaa85764e136b282",
   "active_owner": "root",
   "verification_evidence": "docs/operations/INV-UI-20261120/evidence/verification.json",
   "review_report": "docs/operations/INV-UI-20261120/CHECKPOINT.md",
@@ -42,19 +40,17 @@
     "visual_routes": "Controlled synthetic display fixtures",
     "provider_publish": "blocked"
   },
-  "pr": "not_created",
-  "branch_ci": "not_started",
-  "merge": "authorized_pending_verification",
+  "pr": "draft_pending_creation",
+  "branch_ci": "Focused33real-Mongo tests passed; broad local/CI pending",
+  "merge": "not_merged",
   "upstream_observation": {
-    "production_git_head_observed": "c4a83ac18b24f0367b3fbe8052a026c2dbdbac98",
-    "changed_paths_since_task_base": 20,
-    "direct_file_overlap_with_task": [],
-    "scope": "bank recognition and provider financial evidence, related tests/docs and release intent",
-    "integrated_into_task_branch": false,
-    "combined_head_runtime_verification": "not_performed; required before any authorized merge",
-    "production_changed_by_this_task": false
+    "reviewed_integrated_base": "0d70cdc4bdc116a4640509c95216bbbd6a72b6ed",
+    "production_git_head_observed": "5019e957cd1bb578f7b7375099547a470e51cb05",
+    "merged_tree": "b5b139db0d9f05bc74fc28a96f63f66835c405fb",
+    "reviewed_B_tree_equal": true,
+    "unrelated_local_work": "Original shared checkout Qoyod/order modifications preserved without edits"
   },
-  "continuity_branch": "codex/inventory-ui-replacement-20261120",
+  "continuity_branch": "codex/inventory-legacy-locations-20261121",
   "release_base_sha": "0d70cdc4bdc116a4640509c95216bbbd6a72b6ed",
   "approved_inventory_sha": "d661eb596dbbf83b21061a4bf37af9842a703a25",
   "authorization": {
@@ -62,5 +58,174 @@
     "publish": "user subsequently instructed ارسل الكود شنشر يدويا; agent prepares handoff, user publishes",
     "production_inventory_posting_activation": false,
     "real_stock_or_accounting_data_writes": false
+  },
+  "release_pair": {
+    "base_J": "0d70cdc4bdc116a4640509c95216bbbd6a72b6ed",
+    "source_A": "03dce00590c565a125ee0219537c86abeeb76819",
+    "intent_B": "a03d05d474d1c0a5fba879c7706761d8f94f5d58",
+    "release_id": "rg5-270cec5290c45a86904ee96b2b2b958625091c630b5bac2bf1a9fde9f7c8a429",
+    "intent_file_sha256": "76a837ef86fce8e1b24b16a5829b94fdf7450c2e7f7888e47eac9dea66057bd0",
+    "candidate_ci_run": 44909185703,
+    "candidate_artifact": 14709058921,
+    "source_ci_success": 66,
+    "source_ci_conditional_skips": 7,
+    "source_ci_failures": 0,
+    "independent_source_records_verified": 2947,
+    "manual_publish": true,
+    "deployment_D": "5019e957cd1bb578f7b7375099547a470e51cb05",
+    "merged_tree": "b5b139db0d9f05bc74fc28a96f63f66835c405fb",
+    "reviewed_B_checks": {
+      "SKIPPED": 7,
+      "SUCCESS": 68
+    },
+    "reviewed_B_readiness_run": 44910528896,
+    "clean_clone_host_nodes": [
+      "20.20.2",
+      "24.19.0"
+    ],
+    "governed_node": "22.23.2",
+    "governed_yarn": "1.22.22",
+    "historical_release_pair": true,
+    "superseded_by_production_merge": "9f47a47ff16bfa02a8132bd83fe44db3bdb86da0"
+  },
+  "production_git_changed": true,
+  "production_runtime_changed_by_agent": false,
+  "production_operational_data_changed_by_agent": false,
+  "production_source_merge_sha": "5019e957cd1bb578f7b7375099547a470e51cb05",
+  "continuity_previous_checkpoint": "e641900fe4d2e4b1797cce57faafd67cd9b0802e",
+  "manual_publish_instructions": "docs/operations/INV-UI-20261120/MANUAL-PUBLISH.md",
+  "manual_publish_script": "docs/operations/INV-UI-20261120/manual-publish.sh",
+  "release_verification_evidence": "docs/operations/INV-UI-20261120/evidence/release-validation.json",
+  "last_verified_tested_source_sha": "03dce00590c565a125ee0219537c86abeeb76819",
+  "live_release_observation": {
+    "observed_at": "2026-11-21T14:58:29.976600+00:00",
+    "url": "https://mezansalla.com/api/health",
+    "release": {
+      "source_git_sha": "d60e2d73f47a59e7a7b919b3dc60e956f0f274a9",
+      "release_id": "rg5-2ca7f1f7c5a05da2a34a1fbcbf46fe6820b3b868af794ed63d2b1fa451966aff",
+      "verified_identity_available": true,
+      "frontend_build_verified": true
+    }
+  },
+  "terminal_failure": {
+    "user_evidence": "Screenshot /bin/bash terminated exit1; user says terminal closed immediately; no underlying command output",
+    "underlying_failure": "unknown",
+    "confirmed_script_issue": "Pasting set -e directly changes interactive shell and can close it on any failed check; original handoff did not isolate it.",
+    "local_reproduction": "Isolated Bash; inline failure exit1; child-wrapper failure visible with parent open; no /app execution",
+    "diagnostic_script": "docs/operations/INV-UI-20261120/manual-terminal-diagnostic.sh",
+    "proof": "docs/operations/INV-UI-20261120/evidence/terminal-diagnostic-proof.json",
+    "initial_diagnostic_result": "All checks pass in user-provided output; no active lease, exact clean D, required commands available. Original failure remains unknown; proceed only with captured isolated rehearsal."
+  },
+  "manual_prechecks": {
+    "guard_active": false,
+    "guard_exit": 0,
+    "tracked_changes": [],
+    "branch": "hotfix/prod-snap-meta-final",
+    "head": "5019e957cd1bb578f7b7375099547a470e51cb05",
+    "commands_present": [
+      "python",
+      "python3",
+      "git",
+      "yarn"
+    ]
+  },
+  "manual_prechecks_evidence": "User-provided text; no host ID, environment values or raw command paths retained",
+  "next_phase_script": "docs/operations/INV-UI-20261120/manual-rehearsal.sh",
+  "next_phase_evidence": "docs/operations/INV-UI-20261120/evidence/manual-rehearsal-check-proof.json",
+  "production_changed_this_turn": false,
+  "entry_diagnosis": {
+    "task_id": "INV-UI-20261120",
+    "recorded_at": "2026-11-21T14:57:21.116223+00:00",
+    "symptom": "User reports stock entry disabled while independent writer enabled; screenshot displays empty-location setup alert and disabled fieldset. Second screenshot confirms existing cabinet with9empty locations.",
+    "confirmed_code_path": {
+      "file": "frontend/src/pages/operational/StandaloneInventoryEntry.jsx",
+      "empty_locations_alert_line": 90,
+      "fieldset_disabled_line": 92,
+      "condition": "catalog.locations.length === 0 blocks the fieldset independently from writer_disabled"
+    },
+    "confirmed_server_contract": {
+      "file": "backend/standalone_inventory_entry.py",
+      "warehouse_filter": {
+        "inventory_scope": "standalone",
+        "status": "active"
+      },
+      "legacy_or_shared_warehouses": "excluded; not automatically converted"
+    },
+    "account_data_verdict": "Existing warehouse scope/status and session metadata have not been directly read. Missing/legacy scope is a supported hypothesis, not a verified live database value.",
+    "existing_warehouse_ui": "New warehouses can select standalone, but no existing-warehouse scope mutation endpoint is implemented. No metadata migration or bypass performed.",
+    "checks": [
+      {
+        "command": "yarn.cmd test --watchAll=false --runInBand --runTestsByPath src/pages/operational/StandaloneInventoryEntry.test.jsx",
+        "exit": 1,
+        "result": "No tests found: Windows CRA absolute-root discovery; no assertions executed"
+      },
+      {
+        "command": "yarn.cmd test --watchAll=false --runInBand StandaloneInventoryEntry.test.jsx",
+        "exit": 1,
+        "result": "No tests found; default absolute testMatch did not match local Windows paths; no assertions executed"
+      },
+      {
+        "command": "yarn.cmd test --watchAll=false --runInBand --testMatch=**/StandaloneInventoryEntry.test.jsx",
+        "exit": 0,
+        "result": "7tests PASS, including missing-locations disabling, valid save and idempotent replay. Explicit focused match fixes invocation discovery without source/config changes."
+      },
+      {
+        "command": "git diff --exit-code a03d05d474d1c0a5fba879c7706761d8f94f5d58 origin/hotfix/prod-snap-meta-final -- entry/warehouse/context affected files",
+        "exit": 0,
+        "result": "Relevant source identical to current Production head9f47a47ff16bfa02a8132bd83fe44db3bdb86da0"
+      },
+      {
+        "command": "node --check browser-warehouse-scope-check.js",
+        "exit": 0,
+        "result": "Syntax only; authenticated browser diagnostic not executed by agent"
+      }
+    ],
+    "browser_access": "CUA still fails with missing kernel asset path; completion summary delivered. No authenticated account inspection possible in this turn.",
+    "agent_source_edits": false,
+    "agent_production_configuration_or_quantity_writes": false,
+    "next_action": "Capture only Response JSON fields from already-authenticated warehouse list request in Mezan app Network. Do not read or share credentials."
+  },
+  "external_production_head": "9f47a47ff16bfa02a8132bd83fe44db3bdb86da0",
+  "entry_diagnostic_browser_get": "https://mezansalla.com/api/warehouse-locations/warehouses",
+  "entry_diagnostic_evidence": "docs/operations/INV-UI-20261120/evidence/entry-location-diagnosis.json",
+  "entry_diagnostic_note": "docs/operations/INV-UI-20261120/ENTRY-LOCATION-DIAGNOSIS.md",
+  "authentication_diagnostic": {
+    "user_evidence": "Direct navigation JSON: detail Not authenticated",
+    "warehouse_data_read": false,
+    "confirmed_source_behavior": "Axios request interceptor attaches existing app Bearer; server accepts Bearer or cookie. Direct URL may lack accepted session.",
+    "actual_warehouse_scope": "still unknown",
+    "next_read": "Response of existing authenticated app Network GET; no header/token extraction",
+    "source_or_production_writes": false
+  },
+  "source_branch": "codex/inventory-legacy-locations-20261121",
+  "previous_continuity_branch": "codex/inventory-ui-replacement-20261120",
+  "confirmed_live_issue": {
+    "evidence_origin": "User response from working authenticated Network request",
+    "warehouse_active": true,
+    "inventory_scope_field_present": false,
+    "existing_locations_confirmed_by_user": 9,
+    "pii_retained": false
+  },
+  "fix_contract": {
+    "legacy_definition": "inventory_scope field absent; explicit null/empty/shared/unknown is not legacy",
+    "eligible_status": "active and not deleted",
+    "mutates_warehouse_metadata": false,
+    "uses_existing_warehouse_location_ids_and_barcodes": true,
+    "changes_writer_accounting_or_fulfillment_controls": false,
+    "mixed_or_inconsistent_occupancy": "existing preview/atomic update validators still reject",
+    "implementation": "backend/standalone_inventory_warehouse.py"
+  },
+  "fix_verification": {
+    "before_fix": "New native regression failed because context.locations was empty; exit1",
+    "after_fix": "33passed in19.26s on dedicated loopback replica, UUID databases",
+    "includes": [
+      "native HTTP context/preview/save/replay",
+      "legacy metadata/identity preservation",
+      "explicit malformed/shared scope exclusion",
+      "paused controls and owner authority",
+      "stale scope after preview",
+      "concurrency and capacity",
+      "atomic rollback and financial/fulfillment isolation"
+    ]
   }
 }
