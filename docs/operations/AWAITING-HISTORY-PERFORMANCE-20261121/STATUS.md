@@ -1,8 +1,12 @@
 # AWAITING-HISTORY-PERFORMANCE-20261121
 
-State: rollback identity verified; service latency still unstable; partial source fix NOT ready for release. Draft PR2051.
-Base: e08d0e489eded39961d374e4eb7bfcc0544b6e90.
-Branch: codex/awaiting-history-performance-20261121.
+State: emergency recovery source revision 2; full exact-head CI and fresh release intent required before publication. Earlier PR2051/PR2052 are superseded checkpoints.
+Reviewed production base: 88af38f01cf979acbca59b95a95e661828f2306f.
+Release branch: codex/awaiting-history-recovery-r2-20261121.
+
+Latest validation: PR2052 frozen B94f9e037c07898ca3546859d28bfd8fee20dded4 passed both Node20/24 release rehearsals, frontend, frozen runtime and security gates. Its stock gate passed5498tests+97subtests but failed four dashboard expectations in test_operational_balance_awaiting_cohort_readers.py that still assumed synchronous financial-history authorization. Publication was blocked, not bypassed. Revision2 updates those expectations to retained costs, explicit review/incomplete profit, zero owner-state reads, and transition back to complete after payment. The two operational-profit tests still require verified unpaid exclusion and preservation of prior shipping costs, unchanged. No runtime source change relative to sourceA f7455ecb7df1332e50af983348f2f208809381ad. Old A/B remain immutable on their original branch; a new A/B release is required.
+
+Original shared guard lastobserved active:false; /app remains88af with no tracked edits. No own lease/merge/new publication. Live remains emergency rollback db141c0438edf04aa77ccd1122bc9c5008cf39d6. Readonly runtime logs20:55UTC showed health9–15ms, product operations56–68ms, reviewcompletion1049ms and no errors among100logs; aggregate Monitoring still includes incident windows, so sustained full recovery is not yet certified. PR2049 remains separate. Owner authorizes publication after corrected tests pass. Next: exact-source CI, fresh reviewed intent, normal merge, shared adapter and official guard publication/verify3.
 
 The owner reports work stopped following PR2046 and authorizes emergency rollback to the previously published version before repairing and redeploying. The owner additionally requires expensive financial scans to run only when using/opening operational balances or explicitly refreshing them, not as work caused by unrelated pages. No periodic two-hour job has been added. Unified workspace PR2049 is on hold.
 

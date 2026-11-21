@@ -85,7 +85,7 @@ async def cohort_app(monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("collector_enabled", [False, True])
-async def test_native_projection_and_history_guard_preserve_registry_without_db_writes(cohort_app, collector_enabled):
+async def test_native_projection_defers_history_and_preserves_registry_without_db_writes(cohort_app, collector_enabled):
     env = cohort_app
     before = await env.db.unified_orders.find({}, {"_id": 0}).to_list(10)
     collector = DashboardAdsCostCollector() if collector_enabled else None
@@ -94,26 +94,31 @@ async def test_native_projection_and_history_guard_preserve_registry_without_db_
         **({"cost_collector": collector} if collector else {}))
     assert len(rows) == 2
     unpaid = next(row for row in rows if row["order_number"] == "300000001")
-    assert unpaid[ELIGIBILITY_FIELD]["eligible"] is False
-    assert unpaid[ELIGIBILITY_FIELD]["history_checked"] is True
+    assert unpaid[ELIGIBILITY_FIELD]["eligible"] is True
+    assert unpaid[ELIGIBILITY_FIELD]["review_required"] is True
+    assert unpaid[ELIGIBILITY_FIELD]["history_checked"] is False
+    assert unpaid[ELIGIBILITY_FIELD]["reason_code"] == "awaiting_payment_history_deferred"
+    assert not any(name == "operational_balance_states_v1" for name, _method in env.readonly.reads)
     assert env.readonly.reads[("unified_orders", "find")] == 2
     assert before == await env.db.unified_orders.find({}, {"_id": 0}).to_list(10)
 
 
 @pytest.mark.asyncio
-async def test_dashboard_counts_two_source_orders_but_only_one_financial_sale_and_cost(cohort_app):
+async def test_dashboard_preserves_source_orders_and_costs_until_history_is_checked(cohort_app):
     response = await cohort_app.http.get("/dashboard-v2", params=PARAMS)
     assert response.status_code == 200, response.text
     result = response.json()
     assert result["totals"]["total_orders"] == result["financial_cohort"]["total_orders"] == 2
-    assert result["totals"]["total_sales"] == 100
-    assert result["totals"]["total_product_cost"] == 10
-    assert result["totals"]["financial_eligible_orders"] == 1
-    assert result["totals"]["excluded_unpaid_orders"] == 1
-    assert result["financial_cohort"]["complete"] is True
-    assert result["month_kpis"]["total_orders"] == 2 and result["month_kpis"]["total_sales"] == 100
+    assert result["totals"]["total_sales"] == 200
+    assert result["totals"]["total_product_cost"] == 20
+    assert result["totals"]["financial_eligible_orders"] == 2
+    assert result["totals"]["excluded_unpaid_orders"] == 0
+    assert result["totals"]["net_profit"] is None
+    assert result["financial_cohort"]["complete"] is False
+    assert result["financial_cohort"]["review_reason_counts"] == {"awaiting_payment_history_deferred": 1}
+    assert result["month_kpis"]["total_orders"] == 2 and result["month_kpis"]["total_sales"] == 200
     chart = (await cohort_app.http.get("/dashboard-v2/chart-orders", params=PARAMS)).json()
-    assert chart["summary"]["orders"] == 2 and chart["summary"]["sales"] == 100
+    assert chart["summary"]["orders"] == 2 and chart["summary"]["sales"] == 200
 
 
 @pytest.mark.asyncio
@@ -150,8 +155,11 @@ async def test_normal_card_refresh_replaces_unpaid_cohort_when_same_native_order
     path = "/dashboard-v2/cards/top-products"
     previous = (await env.http.get(path, params=PARAMS)).json()
     assert previous["financial_cohort"]["total_orders"] == 1
-    assert previous["financial_cohort"]["financial_eligible_orders"] == 0
-    assert previous["product_cost_v2"]["total"] == 0
+    assert previous["financial_cohort"]["financial_eligible_orders"] == 1
+    assert previous["financial_cohort"]["review_orders"] == 1
+    assert previous["financial_cohort"]["complete"] is False
+    assert previous["financial_cohort"]["review_reason_counts"] == {"awaiting_payment_history_deferred": 1}
+    assert previous["product_cost_v2"]["total"] == 10
     version = "2026-11-21T10:00:00+00:00"
     await env.db.unified_orders.update_one({"user_id": OWNER, "order_number": "300000001"}, {"$set": {
         "payment_method": "EmkanInstallment", "paid_amount": 100, "payment_collection_status": "paid",
@@ -169,6 +177,7 @@ async def test_normal_card_refresh_replaces_unpaid_cohort_when_same_native_order
     result = (await env.http.get(path, params={**PARAMS, "refresh": True})).json()
     assert result["financial_cohort"]["total_orders"] == result["financial_cohort"]["financial_eligible_orders"] == 1
     assert result["financial_cohort"]["excluded_unpaid_orders"] == result["financial_cohort"]["review_orders"] == 0
+    assert result["financial_cohort"]["complete"] is True
     assert result["product_cost_v2"]["total"] == 10
     assert result["financial_cohort"]["eligibility_digest"] != previous["financial_cohort"]["eligibility_digest"]
     assert (await env.http.get(path, params=PARAMS)).json() == result
