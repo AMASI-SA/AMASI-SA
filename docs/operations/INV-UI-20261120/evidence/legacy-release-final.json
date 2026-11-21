@@ -1,0 +1,416 @@
+{
+  "task_id": "INV-UI-20261120",
+  "source_and_merge": {
+    "source_A": "56af6ab9d997688311f339eab8d2ca12f6a0e034",
+    "reviewed_B": "71c53711796e972b9cdca4b1c7258709807be05e",
+    "deployment_D": "c7d97f3cdf1ebcd99ed8a86975c463d9729b9d73",
+    "merged_at": "2026-11-21T15:56:45Z",
+    "merged_tree": "33b0f8f037315d63ad3f8e664872306017c2fd7b",
+    "tree_equals_reviewed_B": true,
+    "only_intent_after_A": true,
+    "release_id": "rg5-f6614ad3eee05b048bc4b3b606d6a8fdb602438f8ee0db19ef61273b91e1eaac",
+    "live_observation": {
+      "observed_at": "2026-11-21T15:57:23.101330+00:00",
+      "source_git_sha": "3948581dd53a942af538731c8ad2eff045fd86b7",
+      "release_id": "rg5-a581e09f8d694a4ecfdca10c50d2bb899ac11f9d5d386753c812d5f359b99ae2",
+      "verified_identity_available": true,
+      "frontend_build_verified": true
+    },
+    "agent_published": false,
+    "agent_created_lease": false,
+    "agent_changed_business_data": false
+  },
+  "source_A_ci": {
+    "success": 21,
+    "conditional_skips": 6,
+    "failures": 0
+  },
+  "reviewed_B_ci": {
+    "success": 23,
+    "conditional_skips": 6,
+    "failures": 0,
+    "checks": [
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-21T15:44:55Z",
+        "conclusion": "SKIPPED",
+        "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44920818422/job/136896247054",
+        "name": "reviewed-candidate",
+        "startedAt": "2026-11-21T15:44:56Z",
+        "status": "COMPLETED",
+        "workflowName": "TikTok Creator Release Candidate"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-21T15:50:58Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44920818376/job/136896245862",
+        "name": "CodeQL (python)",
+        "startedAt": "2026-11-21T15:44:57Z",
+        "status": "COMPLETED",
+        "workflowName": "CodeQL"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-21T15:49:45Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44920818424/job/136896246642",
+        "name": "G47 real Mongo purchase, payment, opening and component lifecycle",
+        "startedAt": "2026-11-21T15:44:57Z",
+        "status": "COMPLETED",
+        "workflowName": "G47 Focused Integration"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-21T15:47:24Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44920818421/job/136896245637",
+        "name": "employee-contract",
+        "startedAt": "2026-11-21T15:44:57Z",
+        "status": "COMPLETED",
+        "workflowName": "MZ2 Employee Salary and Password"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-21T15:45:17Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44920818343/job/136896246301",
+        "name": "Backend preflight",
+        "startedAt": "2026-11-21T15:44:57Z",
+        "status": "COMPLETED",
+        "workflowName": "Mezan Production Release"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-21T15:46:12Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44920818328/job/136896245605",
+        "name": "real-mongo-tracking",
+        "startedAt": "2026-11-21T15:44:57Z",
+        "status": "COMPLETED",
+        "workflowName": "Mobile Order Tracking"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-21T15:55:12Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44920818366/job/136896245934",
+        "name": "Operational Balance Backend",
+        "startedAt": "2026-11-21T15:44:57Z",
+        "status": "COMPLETED",
+        "workflowName": "Operational Balance Web"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-21T15:54:31Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44920818336/job/136896246074",
+        "name": "Stock eligibility, reservation and consumption on isolated Mongo",
+        "startedAt": "2026-11-21T15:44:57Z",
+        "status": "COMPLETED",
+        "workflowName": "Operational Stock Eligibility"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-21T15:45:20Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44920818332/job/136896245572",
+        "name": "backend-unit",
+        "startedAt": "2026-11-21T15:44:57Z",
+        "status": "COMPLETED",
+        "workflowName": "Qoyod Payment Freshness"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-21T15:46:23Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44920818372/job/136896245987",
+        "name": "Backend security contracts",
+        "startedAt": "2026-11-21T15:44:57Z",
+        "status": "COMPLETED",
+        "workflowName": "Security Gate"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-21T15:45:07Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44920818466/job/136896246362",
+        "name": "scope",
+        "startedAt": "2026-11-21T15:44:57Z",
+        "status": "COMPLETED",
+        "workflowName": "Snapchat Direct Active Publication"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-21T15:56:55Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44921846010/job/136899391493",
+        "name": "scope",
+        "startedAt": "2026-11-21T15:56:45Z",
+        "status": "COMPLETED",
+        "workflowName": "Snapchat Direct Active Publication"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-21T15:45:08Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44920818442/job/136896246120",
+        "name": "Fail-closed settings and multi-account scope guard",
+        "startedAt": "2026-11-21T15:44:57Z",
+        "status": "COMPLETED",
+        "workflowName": "Snapchat Settings Management V2"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-21T15:56:55Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44921846013/job/136899391531",
+        "name": "Fail-closed settings and multi-account scope guard",
+        "startedAt": "2026-11-21T15:56:46Z",
+        "status": "COMPLETED",
+        "workflowName": "Snapchat Settings Management V2"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-21T15:47:23Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44920818376/job/136896246005",
+        "name": "CodeQL (javascript-typescript)",
+        "startedAt": "2026-11-21T15:44:58Z",
+        "status": "COMPLETED",
+        "workflowName": "CodeQL"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-21T15:45:07Z",
+        "conclusion": "SKIPPED",
+        "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44920818466/job/136896300603",
+        "name": "Publication backend and existing write guards",
+        "startedAt": "2026-11-21T15:45:08Z",
+        "status": "COMPLETED",
+        "workflowName": "Snapchat Direct Active Publication"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-21T15:56:55Z",
+        "conclusion": "SKIPPED",
+        "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44921846010/job/136899441461",
+        "name": "Publication backend and existing write guards",
+        "startedAt": "2026-11-21T15:56:56Z",
+        "status": "COMPLETED",
+        "workflowName": "Snapchat Direct Active Publication"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-21T15:45:08Z",
+        "conclusion": "SKIPPED",
+        "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44920818442/job/136896302613",
+        "name": "Backend settings and zero-write regressions",
+        "startedAt": "2026-11-21T15:45:08Z",
+        "status": "COMPLETED",
+        "workflowName": "Snapchat Settings Management V2"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-21T15:56:55Z",
+        "conclusion": "SKIPPED",
+        "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44921846013/job/136899440499",
+        "name": "Backend settings and zero-write regressions",
+        "startedAt": "2026-11-21T15:56:55Z",
+        "status": "COMPLETED",
+        "workflowName": "Snapchat Settings Management V2"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-21T15:46:20Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44920818424/job/136896246344",
+        "name": "G47 purchase and receiving UI tests and build",
+        "startedAt": "2026-11-21T15:44:57Z",
+        "status": "COMPLETED",
+        "workflowName": "G47 Focused Integration"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-21T15:45:10Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44920818343/job/136896246316",
+        "name": "Host Node 20.20.2 engine and dispatcher contract",
+        "startedAt": "2026-11-21T15:44:57Z",
+        "status": "COMPLETED",
+        "workflowName": "Mezan Production Release"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-21T15:46:30Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44920818366/job/136896246220",
+        "name": "Operational Balance Frontend",
+        "startedAt": "2026-11-21T15:44:57Z",
+        "status": "COMPLETED",
+        "workflowName": "Operational Balance Web"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-21T15:47:13Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44920818372/job/136896246305",
+        "name": "Frontend dependency and CSP checks",
+        "startedAt": "2026-11-21T15:44:57Z",
+        "status": "COMPLETED",
+        "workflowName": "Security Gate"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-21T15:45:12Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44920818343/job/136896246229",
+        "name": "Host Node 24.19.0 engine and dispatcher contract",
+        "startedAt": "2026-11-21T15:44:58Z",
+        "status": "COMPLETED",
+        "workflowName": "Mezan Production Release"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-21T15:45:07Z",
+        "conclusion": "SKIPPED",
+        "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44920818466/job/136896300399",
+        "name": "Publication frontend and existing media flow",
+        "startedAt": "2026-11-21T15:45:07Z",
+        "status": "COMPLETED",
+        "workflowName": "Snapchat Direct Active Publication"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-21T15:56:55Z",
+        "conclusion": "SKIPPED",
+        "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44921846010/job/136899441562",
+        "name": "Publication frontend and existing media flow",
+        "startedAt": "2026-11-21T15:56:56Z",
+        "status": "COMPLETED",
+        "workflowName": "Snapchat Direct Active Publication"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-21T15:45:08Z",
+        "conclusion": "SKIPPED",
+        "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44920818442/job/136896302565",
+        "name": "Frontend Snapchat settings tests and build",
+        "startedAt": "2026-11-21T15:45:08Z",
+        "status": "COMPLETED",
+        "workflowName": "Snapchat Settings Management V2"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-21T15:56:55Z",
+        "conclusion": "SKIPPED",
+        "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44921846013/job/136899440041",
+        "name": "Frontend Snapchat settings tests and build",
+        "startedAt": "2026-11-21T15:56:55Z",
+        "status": "COMPLETED",
+        "workflowName": "Snapchat Settings Management V2"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-21T15:46:00Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44920818343/job/136896246066",
+        "name": "Frontend build",
+        "startedAt": "2026-11-21T15:44:57Z",
+        "status": "COMPLETED",
+        "workflowName": "Mezan Production Release"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-21T15:46:16Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44920818366/job/136896246215",
+        "name": "Canonical worker excludes operational balance jobs",
+        "startedAt": "2026-11-21T15:45:08Z",
+        "status": "COMPLETED",
+        "workflowName": "Operational Balance Web"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-21T15:47:41Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44920818343/job/136896535049",
+        "name": "Emergent Host Node 20.20.2 clean-clone adapter rehearsal",
+        "startedAt": "2026-11-21T15:46:02Z",
+        "status": "COMPLETED",
+        "workflowName": "Mezan Production Release"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-21T15:47:14Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44920818366/job/136896246303",
+        "name": "Operational balances browser, mobile and visibility acceptance",
+        "startedAt": "2026-11-21T15:45:10Z",
+        "status": "COMPLETED",
+        "workflowName": "Operational Balance Web"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-21T15:48:08Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44920818343/job/136896534977",
+        "name": "Emergent Host Node 24.19.0 clean-clone adapter rehearsal",
+        "startedAt": "2026-11-21T15:46:02Z",
+        "status": "COMPLETED",
+        "workflowName": "Mezan Production Release"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-21T15:48:09Z",
+        "conclusion": "SKIPPED",
+        "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44920818343/job/136897104338",
+        "name": "Emergent manual redeploy required",
+        "startedAt": "2026-11-21T15:48:09Z",
+        "status": "COMPLETED",
+        "workflowName": "Mezan Production Release"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-21T15:47:25Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/runs/136896862123",
+        "name": "CodeQL",
+        "startedAt": "2026-11-21T15:47:13Z",
+        "status": "COMPLETED",
+        "workflowName": ""
+      }
+    ]
+  },
+  "local_tests": {
+    "backend_native": 94,
+    "frontend_entry": 7
+  },
+  "reviewed_run": 44920818343,
+  "artifact_ids": [
+    14713781782,
+    14713737123,
+    14713449411,
+    14713429487
+  ],
+  "intent_proof": {
+    "source_A": "56af6ab9d997688311f339eab8d2ca12f6a0e034",
+    "reviewed_base_J": "d69f31da14f3dc1baad25ab0884ba810446b19f9",
+    "source_records_verified": 2948,
+    "intent_sha256": "276b7ff2a54d39468b0a7fedbb32ab754ae7e053a4febdd180956d4c722a3625",
+    "release_id": "rg5-f6614ad3eee05b048bc4b3b606d6a8fdb602438f8ee0db19ef61273b91e1eaac",
+    "candidate_run": 44919705717,
+    "candidate_artifact": 14713103126,
+    "governed_node": "22.23.2",
+    "governed_yarn": "1.22.22",
+    "local_backend_regressions": 94,
+    "local_frontend_regressions": 7,
+    "source_checks": {
+      "success": 21,
+      "conditional_skips": 6,
+      "failures": 0
+    }
+  },
+  "operator_scripts_syntax": "Both bash -n exit0; no operator commands executed by agent",
+  "live_publication": "pending user action; no full production Guard verification claimed"
+}
