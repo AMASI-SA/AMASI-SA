@@ -28,8 +28,17 @@ http.createServer(async(req,res)=>{
     const native=['/api/inventory-v2/stocktakes','/api/purchase-invoices','/api/operational-balances/standalone-inventory','/api/products-v2/creation-drafts'].some(prefix=>url.pathname===prefix||url.pathname.startsWith(prefix+'/'))||url.pathname==='/api/operational-balances/inventory'||url.pathname==='/api/counterparties';
     if(native){
       const chunks=[];for await(const chunk of req)chunks.push(chunk);
-      const response=await fetch('http://127.0.0.1:4176'+url.pathname+url.search,{method:req.method,headers:{'content-type':'application/json'},body:['GET','HEAD'].includes(req.method)?undefined:Buffer.concat(chunks)});
-      res.writeHead(response.status,{...cors,'content-type':'application/json'});return res.end(Buffer.from(await response.arrayBuffer()));
+      // Keep the transport destination constant and never follow redirects.
+      // Request data may select a native path, never a scheme, host or port.
+      const response=await new Promise((resolve,reject)=>{
+        const upstream=http.request({protocol:'http:',hostname:'127.0.0.1',port:4176,path:url.pathname+url.search,method:req.method,headers:{'content-type':'application/json'}},incoming=>{
+          const body=[];incoming.on('data',chunk=>body.push(chunk));incoming.on('error',reject);
+          incoming.on('end',()=>resolve({status:incoming.statusCode,body:Buffer.concat(body)}));
+        });
+        upstream.on('error',reject);upstream.setTimeout(30000,()=>upstream.destroy(new Error('Local fixture timeout')));
+        upstream.end(['GET','HEAD'].includes(req.method)?undefined:Buffer.concat(chunks));
+      });
+      res.writeHead(response.status||502,{...cors,'content-type':'application/json'});return res.end(response.body);
     }
     const value=dataFor(null,{url:()=>url.href,method:()=>req.method});
     if(url.pathname==='/api/auth/me')value.id='owner';

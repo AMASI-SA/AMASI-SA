@@ -256,14 +256,14 @@ export default function MezanComponentsProduction({ embedded = false }) {
               <label>النوع<select value={values.kind} onChange={(event) => setValues(changeComponentKind(values, event.target.value))}><option value="service">خدمة عمل</option><option value="stock_component">مكوّن مخزني</option></select></label>
             </div>
             <fieldset className="mz-component-categories">
-              <legend>تصنيف التجهيز *</legend>
+              <legend>تصنيف التجهيز — إلزامي</legend>
               {!categories.length ? <p className="mz-catalog-muted">أنشئ تصنيفًا مثل «مطليات» أو «ملابس» من تبويب التصنيفات والمجموعات أولًا.</p> : <div>{categories.map((category) => {
                 const checked = (values.category_ids || []).map(String).includes(String(category.id));
                 return <label key={category.id} className={checked ? "is-checked" : ""}><input type="checkbox" checked={checked} onChange={() => setValues(toggleComponentCategory(values, category.id))}/>{category.name}</label>;
               })}</div>}
               <p className="mz-catalog-muted">اختر تصنيفًا واحدًا أو أكثر.</p>
             </fieldset>
-            {!stock && <label className="mz-component-switch"><input type="checkbox" checked={values.requires_preparation} onChange={(event) => setValues({ ...values, requires_preparation: event.target.checked })}/><span>يتطلب إكمال الخدمة قبل الشحن<small>مثل القص والطلاء والتطريز والطباعة.</small></span></label>}
+            {!stock && <label className="mz-component-switch"><input type="checkbox" checked={values.requires_preparation} onChange={(event) => setValues({ ...values, requires_preparation: event.target.checked })}/><span>تمنع شحن المنتج حتى تكتمل الخدمة<small>مثل القص والطلاء والتطريز والطباعة.</small></span></label>}
             <div className="mz-catalog-form-grid"><label className="is-full">{lockedCost ? "تكلفة المخزون المعتمدة" : stock ? "التكلفة الأولية التقديرية" : "تكلفة الخدمة الحالية"}<input type="number" min="0" step="0.01" disabled={lockedCost} value={lockedCost ? (selected?.reference_cost?.amount ?? values.unit_cost) : values.unit_cost} onChange={(event) => setValues({ ...values, unit_cost: event.target.value })} placeholder="التكلفة بالريال" /></label></div>
             {stock && <div className={"mz-catalog-notice " + (lockedCost ? "" : "mz-catalog-warning")}>{lockedCost ? <LockKey size={19}/> : <WarningCircle size={19}/>}<span>{lockedCost ? "هذه التكلفة معتمدة من فاتورة شراء، وتبقى محمية من التعديل اليدوي." : "قيمة تقديرية للبدء. تحل تكلفة الشراء المعتمدة محلها عند اعتماد أول فاتورة شراء."}</span></div>}
             <div className="mz-catalog-form-grid"><label className="is-full">ملاحظات <span className="mz-catalog-muted">اختياري</span><textarea value={values.description} onChange={(event) => setValues({ ...values, description: event.target.value })} /></label></div>
