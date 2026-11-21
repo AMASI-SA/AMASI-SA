@@ -63,6 +63,16 @@ test('statement print is a fresh full-period permissioned read independent of th
   } finally { window.print=print; }
 });
 
+test('bank ledger opens unposted status holds separately from credited movements', async () => {
+  const onReviewOrders = jest.fn();
+  await render({onReviewOrders});
+  await click('إيصالات تحويل غير معتمدة بسبب حالة الطلب');
+  expect(onReviewOrders).toHaveBeenCalledWith(bank);
+  expect(host.querySelector('tbody').textContent).not.toContain('غير معتمدة بسبب حالة الطلب');
+  await render({onReviewOrders, resource:{...bank, access:{...bank.access, movements:'own'}}});
+  expect(host.textContent).not.toContain('غير معتمدة بسبب حالة الطلب');
+});
+
 test('global tab does not fetch resource ledgers, and account with no movement permission starts no read',async()=>{
   await render({resource:null});
   expect(api.movements).toHaveBeenCalledTimes(1);

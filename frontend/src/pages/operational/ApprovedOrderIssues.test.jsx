@@ -64,3 +64,19 @@ test('search sends the last input only and own-only access makes no request',asy
   expect(host.textContent).toContain('غير متاحة ضمن صلاحياتك');
   expect(host.querySelectorAll('tbody tr')).toHaveLength(0);
 });
+
+test('bank reviews show the current status and unposted impact on the authorized bank', async () => {
+  const bank = {kind:'bank', id:'account:bank-1', name:'الراجحي', access:{movements:'all'}};
+  const reason = {code:'operational_order_bank_status_ineligible',
+    message:'الإيصال غير معتمد بسبب حالة الطلب · بانتظار المراجعة'};
+  http.get.mockResolvedValue({data:result([{order_id:'salla-1', order_number:'9001',
+    groups:[{...bank, known:null, reasons:[reason]}]}], 1)});
+  await render({...context, resources:[bank]}, bank);
+  expect(http.get.mock.calls[0][1].params).toEqual({kind:'bank',id:bank.id,page:1});
+  expect(host.textContent).toContain('#9001');
+  expect(host.textContent).toContain(reason.message);
+  expect(host.textContent).not.toContain('مراجعة إيصالات التحصيل');
+  await click('عرض السبب');
+  expect(host.textContent).toContain('لم يُضف مبلغ هذا الإيصال إلى رصيد البنك.');
+  expect(http.get).toHaveBeenCalledTimes(1);
+});

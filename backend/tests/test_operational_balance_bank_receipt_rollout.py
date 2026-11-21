@@ -2,7 +2,7 @@ from copy import deepcopy
 import unittest
 
 from operational_bank_receipt_rollout import (
-    MARKER, initialize_admission, needs_historical_review, posted_review_required, recorded_bank_credits,
+    FOUR_STATUS_MARKER, MARKER, initialize_admission, needs_historical_review, recorded_bank_credits,
 )
 
 
@@ -44,7 +44,7 @@ class ReceiptRolloutTests(unittest.TestCase):
             self.assertTrue(needs_historical_review(state, order_created_at=NEW))
         self.assertTrue(needs_historical_review(self.state, order_created_at=NEW, reached_at=OLD_ORDER))
 
-    def test_existing_money_is_reviewed_without_mutation_and_ordinary_payments_are_excluded(self):
+    def test_recorded_money_index_ignores_manual_or_unrelated_payments(self):
         entry = {"automatic_order_bank": True, "direction": "incoming", "party_type": "bank",
                  "order_number": "example-1", "occurred_at": ACTIVATION, "amount": "30.00"}
         self.state["movements"] = [entry, {**entry, "order_number": "manual", "automatic_order_bank": False},
@@ -53,8 +53,12 @@ class ReceiptRolloutTests(unittest.TestCase):
         original = deepcopy(self.state)
         found = recorded_bank_credits(self.state)
         self.assertEqual(set(found), {"example-1"})
-        self.assertTrue(posted_review_required(found["example-1"], reached=False))
-        self.assertTrue(posted_review_required(entry, reached=True, reached_at=NEW))
-        self.assertFalse(posted_review_required(entry, reached=True, reached_at=OLD_ORDER))
-        self.assertFalse(posted_review_required(None, reached=False))
         self.assertEqual(self.state, original)
+
+    def test_four_status_policy_activated_separately_for_preexisting_store(self):
+        initialize_admission(self.state, ACTIVATION)
+        del self.state["engine"][FOUR_STATUS_MARKER]
+        initialize_admission(self.state, NEW)
+        self.assertEqual(self.state["engine"][FOUR_STATUS_MARKER]["activated_at"], "2026-11-20T15:01:00+00:00")
+        self.assertNotEqual(self.state["engine"][MARKER], self.state["engine"][FOUR_STATUS_MARKER])
+        self.assertTrue(needs_historical_review(self.state, order_created_at=OLD_ORDER, marker_key=FOUR_STATUS_MARKER))

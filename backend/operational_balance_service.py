@@ -612,14 +612,28 @@ def _bank_credit_actions(orders, recorded):
         if movement.get("direction") == "incoming":
             add_position(by_order, movement.get("order_number"), position)
 
+    # Keep references on new postings so a later order cannot reuse the same bank
+    # receipt after the original Salla order has disappeared from the source batch.
+    reference_owners = {}
     for position, movement in enumerate(rows):
         calculation_checkpoint()
         index(movement, position)
+        ref = movement.get("bank_transaction_reference")
+        if movement.get("automatic_order_bank") and isinstance(ref, str) and ref:
+            reference_owners.setdefault(ref, set()).add(movement.get("order_number"))
+    for order, credit in candidates:
+        calculation_checkpoint()
+        if ref := credit.get("bank_transaction_reference"):
+            reference_owners.setdefault(ref, set()).add(order["order_number"])
 
     actions = []
     for order, credit in candidates:
         calculation_checkpoint()
         identity = "order-bank:" + str(order["id"])
+        ref = credit.get("bank_transaction_reference")
+        if ref and len(reference_owners[ref]) > 1:
+            actions.append(("conflict", order, None))
+            continue
         hits = by_request.get(identity, set()) | by_order.get(order["order_number"], set())
         if hits:
             existing = rows[next(iter(hits))]
@@ -766,6 +780,8 @@ async def refresh(db, owner, *, clock=None):
                         'direction': 'incoming', 'kind': 'collection', 'allocations': [], 'actual_fee_amount': '0.00',
                         'actor_id': 'operational_order_worker', 'source': 'mezan2', 'occurred_at': stamp,
                         'receipt_id': None, 'reference': 'طلب ' + order['order_number'], 'automatic_order_bank': True}
+                if credit.get('bank_transaction_reference'):
+                    item['bank_transaction_reference'] = credit['bank_transaction_reference']
                 if credit.get('preparation_evidence'):
                     item['bank_preparation_evidence'] = credit['preparation_evidence']
                 result['movements'].append(item)
@@ -1161,7 +1177,10 @@ def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=Fa
                           confirmed_custody=fmt(confirmed), settled=fmt(settled),
                           outstanding=fmt(max(confirmed-settled, Decimal(0))))
     details["cod_reports"] = cod_metrics
-    issues = deepcopy(state.get("engine", {}).get("issues", [])) + valuation_issues
+    from operational_bank_credit_recognition import STATUS_INELIGIBLE
+    # An ineligible bank receipt is visible in order review but has no financial effect yet.
+    issues = [deepcopy(row) for row in state.get("engine", {}).get("issues", [])
+              if row.get("code") != STATUS_INELIGIBLE] + valuation_issues
     details["provider_order_payments"], details["provider_paid_totals"] = provider_customer_payments({
         "details": details, "issues": issues, "obligations": obligations,
     })

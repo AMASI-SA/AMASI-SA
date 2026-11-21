@@ -11,6 +11,7 @@ from math import ceil
 from time import monotonic
 
 from operational_balance_completeness import annotate_report_coverage
+from operational_bank_credit_recognition import STATUS_INELIGIBLE
 from operational_balance_service import report
 from operational_balance_sources import entities
 from operational_balance_store import STATES, fail
@@ -18,8 +19,13 @@ from operational_delivery_register import PREFIX as DELIVERY_PREFIX
 from operational_financial_activity_runtime import checked_rows, prepare_in_thread
 from operational_financial_order_labels import attach_order_numbers
 from operational_financial_position_state import read_financial_position_state
+from preparation_receipt_status_message import LABELS as SALLA_STATUS_LABELS
 
-KINDS = {"provider", "store_driver", "courier"}
+KINDS = {"bank", "provider", "store_driver", "courier"}
+BANK_STATUS_LABELS = {
+    **SALLA_STATUS_LABELS, "reviewed": "تمت المراجعة", "restoring": "قيد الاسترجاع", "restored": "مسترجع",
+    **dict.fromkeys(("payment_pending", "pending_payment", "awaiting_payment", "waiting_payment"), "بانتظار الدفع"),
+}
 PAGE_SIZE = 8
 DIGITS = str.maketrans("٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹", "01234567890123456789")
 
@@ -29,9 +35,22 @@ def source_key(state):
     return state.get("revision"), engine.get("as_of"), state.get("started_at")
 
 
-def navigation_counts(computed):
-    """Read provider counters already computed for the balance, never scan orders."""
+def bank_status_issues(issues):
+    for issue in checked_rows(issues):
+        if issue.get("code") != STATUS_INELIGIBLE or issue.get("party_type") != "bank":
+            continue
+        if issue.get("source_id"):
+            yield issue.get("party_id"), str(issue["source_id"]), issue
+
+
+def navigation_counts(computed, bank_issues=()):
+    """Use saved bank exceptions and provider counters without reading orders."""
     counts = {}
+    bank_orders = defaultdict(set)
+    for bank, order_id, _ in bank_status_issues(bank_issues):
+        if bank:
+            bank_orders[bank].add(order_id)
+    counts.update({("bank", bank): len(orders) for bank, orders in bank_orders.items()})
     for rows in computed.get("details", {}).get("provider_balances", {}).values():
         for row in rows:
             key = ("provider", row["provider"])
@@ -72,7 +91,7 @@ def issue_badge(kind, identity, access, source_known, has_issues, computed_count
     if kind not in KINDS or access["movements"] != "all":
         return {}
     key = kind, identity
-    default = 0 if source_known and (kind == "provider" or not has_issues) else None
+    default = 0 if source_known and (kind in {"bank", "provider"} or not has_issues) else None
     return {"order_issues_count": reviewed_counts.get(key, computed_counts.get(key, default))}
 
 
@@ -100,9 +119,29 @@ def review_groups(state, resources, include_unassigned):
     # Provider cards and their order drill-down price saved SAR valuations.
     # Reviewing native-currency projections instead invents missing-fee issues
     # for foreign payments whose SAR tariff was already successfully applied.
-    result = report(state, provider_balances_sar="provider" in needed)
+    engine = state.get("engine") or {}
+    if needed == {"bank"} and not include_unassigned:
+        result = {"as_of": engine.get("as_of"), "started_at": state.get("started_at")}
+    else:
+        result = report(state, provider_balances_sar="provider" in needed)
     names = dict(resources)
     candidates = []
+    if "bank" in needed or include_unassigned:
+        for bank, oid, issue in bank_status_issues(engine.get("issues", [])):
+            if bank:
+                key = ("bank", bank)
+            elif include_unassigned:
+                key = ("unassigned_bank", "")
+                names[key] = "بنك التحويل غير محدد"
+            else:
+                continue
+            if key not in names:
+                continue
+            status = issue.get("order_status")
+            label = BANK_STATUS_LABELS.get(status, status) if isinstance(status, str) else None
+            message = "الإيصال غير معتمد بسبب حالة الطلب" + (f" · {label}" if label else " · الحالة غير مؤكدة")
+            candidates.append((*key, {"pending_order_details": [
+                {"order_id": oid, "reasons": [{"code": STATUS_INELIGIBLE, "message": message}]}]}))
     if needed.intersection({"courier", "store_driver"}) or include_unassigned:
         annotate_report_coverage(result)
         candidates.extend((row["party_type"], row["party_id"], row) for row in result["parties"]

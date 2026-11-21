@@ -5,8 +5,9 @@ import { Heading, Icon, IconBox, kindStyles } from './ApprovedFinanceUI';
 import { useBalanceRead } from './simpleBalancesHooks';
 
 const pageSize = 8;
-const subject = { provider: 'مستحقات منصة الدفع', courier: 'الشحن', store_driver: 'التوصيل والتحصيل', unassigned: 'جهة التوصيل' };
+const subject = { bank: 'التحويلات البنكية', provider: 'مستحقات منصة الدفع', courier: 'الشحن', store_driver: 'التوصيل والتحصيل', unassigned: 'جهة التوصيل' };
 const category = code => {
+  if (code === 'operational_order_bank_status_ineligible') return 'اعتماد إيصال التحويل البنكي';
   if (code.includes('refund')) return 'استرجاع العميل';
   if (code.includes('fee') && code.startsWith('provider_')) return 'عمولة الدفع';
   if (code.includes('settlement') || code.includes('settled_capture')) return 'تسوية المنصة';
@@ -16,6 +17,7 @@ const category = code => {
   return '';
 };
 const guidance = {
+  'اعتماد إيصال التحويل البنكي': ['لم يُضف مبلغ هذا الإيصال إلى رصيد البنك.', 'راجع حالة الطلب وإيصال التحويل في سلة.'],
   'عمولة الدفع': ['تعتمد قيمة صافي المستحق على مطابقة العمولة.', 'طابق رقم الطلب ومرجع العملية مع سطر العمولة في كشف المنصة.'],
   'تسوية المنصة': ['تحتاج حصة هذا الطلب من التسوية إلى مطابقة.', 'راجع مرجع الدفعة والمبلغ في كشف التسوية.'],
   'استرجاع العميل': ['مبلغ الاسترجاع المرتبط بهذه العملية يحتاج مطابقة.', 'راجع مرجع الاسترجاع في الطلب وفي كشف المنصة.'],
