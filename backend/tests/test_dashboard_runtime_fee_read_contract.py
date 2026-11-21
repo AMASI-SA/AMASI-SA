@@ -7,7 +7,7 @@ import pytest
 
 from dashboard_runtime_gate_plugin import (
     PAYMENT_FEE_POLICIES, _expected_payment_fee_commands, _payment_fee_command,
-    _frozen_financial_cohort, assert_runtime_read_contract,
+    _frozen_financial_cohort, _extend_financial_cohort_contract, assert_runtime_read_contract,
 )
 from test_dashboard_runtime_authority_read_contract import evidence_pair
 
@@ -99,3 +99,25 @@ def test_no_placeholder_financial_digest_is_bound_to_frozen_owner_and_order_iden
     assert cohort('first_day_inclusive', 1)['eligibility_digest'] != cohort('last_day_inclusive', 1)['eligibility_digest']
     with pytest.raises(AssertionError):
         cohort('current_month_mixed', 37)
+
+
+def test_month_cohort_metadata_uses_its_frozen_count_without_changing_range_or_money():
+    response = {
+        'range': {'from_date': '2026-09-01', 'to_date': '2026-09-30'},
+        'totals': {'total_orders': 1, 'total_sales': 100},
+        'payment_breakdown': [],
+        'month_kpis': {'total_orders': 38, 'total_sales': None,
+                       'accounting_currency': 'SAR', 'currency_conversion': {'complete': False}},
+    }
+    frozen_month = copy.deepcopy(response['month_kpis'])
+    _extend_financial_cohort_contract(response,
+        'tests/test_dashboard_b_index_cooperative_correctness.py::'
+        'test_dashboard_mixed_permissions_and_tenants[prior_month]::request-0')
+    assert response['totals']['financial_eligible_orders'] == 1
+    month = response['month_kpis']
+    assert list(month) == ['total_orders', 'financial_eligible_orders',
+                          'excluded_unpaid_orders', 'review_orders', 'total_sales',
+                          'accounting_currency', 'currency_conversion']
+    assert month['financial_eligible_orders'] == 38
+    assert month['excluded_unpaid_orders'] == month['review_orders'] == 0
+    assert {key: month[key] for key in frozen_month} == frozen_month

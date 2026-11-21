@@ -562,6 +562,11 @@ async def _filtered_orders(
              if report_statuses is not None else _matches_any(order.get("order_status", ""), included_statuses))
     ]
     selected = await guard_financial_cohort_history(db, user_id, selected)
+    for order in selected:
+        if order.get(ELIGIBILITY_FIELD) == {"eligible": True, "review_required": False, "reason_code": None}:
+            # Existing report callers retain the original row contract when
+            # this narrow unpaid-placeholder policy has no effect on the row.
+            order.pop(ELIGIBILITY_FIELD)
     if cost_collector is not None:
         cost_collector.capture_fee_context(await load_dashboard_fee_context(
             db, user_id, selected, as_of=to_date, fee_context=fee_context,

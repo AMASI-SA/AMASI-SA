@@ -12,6 +12,37 @@ from awaiting_payment_eligibility import ELIGIBILITY_FIELD
 from operational_balance_archive import compact_financial_snapshot
 
 
+def test_pure_dashboard_import_and_no_candidate_history_do_not_require_motor():
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    backend = Path(__file__).resolve().parents[1]
+    result = subprocess.run([sys.executable, "-B", "-c", """
+import asyncio
+import importlib.abc
+import sys
+
+class NoMotor(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname == 'motor' or fullname.startswith('motor.'):
+            raise ModuleNotFoundError('Motor must remain optional for pure dashboard imports', name='motor')
+
+sys.meta_path.insert(0, NoMotor())
+import dashboard_v2_routes
+from awaiting_payment_history import guard_financial_cohort_history
+
+class NoDatabaseReads:
+    def __getitem__(self, name):
+        raise AssertionError('No-candidate path must not access the database')
+
+assert asyncio.run(guard_financial_cohort_history(NoDatabaseReads(), 'owner', [])) == []
+assert 'operational_read_runtime' not in sys.modules
+"""], cwd=backend, env={**os.environ, "PYTHONPATH": str(backend), "PYTHON_DOTENV_DISABLED": "1"},
+        capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stderr
+
+
 def candidate(number="300000001"):
     return {"user_id": "owner", "order_number": number, "order_id": "native-" + number,
             "payment_method": "wating", "total_product_cost": 50,

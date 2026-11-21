@@ -10,7 +10,6 @@ from decimal import Decimal, InvalidOperation
 
 from awaiting_payment_eligibility import ELIGIBILITY_FIELD
 from operational_balance_archive import SNAPSHOT, _prepare_read, unpack_financial_snapshot
-from operational_read_runtime import load_collections, read_source_cursor, source_read_budget
 
 
 MAX_CANDIDATES = 250
@@ -187,6 +186,8 @@ def _has_cost_evidence(row, kind):
 
 
 async def _load(db, owner, specs):
+    from operational_read_runtime import load_collections, read_source_cursor
+
     async def reader(database, scoped_owner, name):
         query, projection, *_ = specs[name]
         rows = await read_source_cursor(database[name].find(query, projection).limit(MAX_SOURCE_ROWS + 1), MAX_SOURCE_ROWS + 1)
@@ -225,6 +226,10 @@ async def _guard_batch(db, owner, orders, *, state=None):
     candidates = [row for row in result if row[ELIGIBILITY_FIELD].get("eligible") is False]
     if not candidates:
         return result
+
+    # Pure dashboard/report readers need no Motor dependency unless an unpaid
+    # candidate actually requires a bounded financial-history database read.
+    from operational_read_runtime import source_read_budget
 
     def retain(reason):
         for row in candidates:
@@ -308,6 +313,8 @@ async def guard_financial_cohort_history(db, owner, orders, *, state=None):
     proposed = [row for row in orders if (row.get(ELIGIBILITY_FIELD) or {}).get("eligible") is False]
     if len(proposed) <= MAX_CANDIDATES:
         return await _guard_batch(db, owner, orders, state=state)
+    from operational_read_runtime import source_read_budget
+
     with source_read_budget(20):
         try:
             shared = state if state is not None else await _read_state(db, owner)

@@ -521,6 +521,17 @@ def _extend_financial_cohort_contract(response, fixture_case):
             totals.update(financial_eligible_orders=cohort['financial_eligible_orders'],
                           excluded_unpaid_orders=0, review_orders=0, financial_cohort_complete=True)
     response['totals'] = totals
+    # The month cohort uses its own pinned period/filter count. It need not
+    # equal the selected range count (prior/empty/boundary fixtures), and has
+    # no waiting/wating methods either. Preserve every original month value.
+    month = {}
+    for key, value in response['month_kpis'].items():
+        month[key] = value
+        if key == 'total_orders':
+            assert isinstance(value, int) and value >= 0
+            month.update(financial_eligible_orders=value,
+                         excluded_unpaid_orders=0, review_orders=0)
+    response['month_kpis'] = month
 
 
 def expected_cost_completeness_json(historical_json, *, fixture_case=None):
