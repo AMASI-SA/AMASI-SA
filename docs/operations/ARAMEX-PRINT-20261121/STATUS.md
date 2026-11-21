@@ -1,3 +1,28 @@
+# Shared governed materialization passed; publication pending
+
+The unchanged configured adapter retry, frontend verification and isolated
+package verification all passed(exit0) on shared merged M. Source A and runtime
+identity match the frozen intent; frontend artifact/package digests match local
+and both CI host rehearsals. Exact205758-byte sanitized shared adapter log is
+preserved outside ephemeral storage with matching source checksum. See
+`SHARED-MATERIALIZATION.json`. All generated build/proof/runtime outputs remain
+ignored/untracked; tracked source remains clean. The initial bytecode refusal
+was resolved by preserving two cache files outside package and disabling Python
+bytecode generation for helpers; no source/intent/validator was changed.
+
+Post-merge M readiness44917409355,Security Gate44917409380 andCodeQL44917409330
+all succeeded. No own lease or publication yet. Production runtime changed by
+this task:no. All foreign files/leases were preserved; actual shipment/device
+acceptance remains unverified. DO NOT DEPLOY this evidence branch.
+
+Next: `PYTHONDONTWRITEBYTECODE=1 python -B scripts/production_release_guard.py
+prepare --actor codex-aramex-label-2044`,then same guarded prepublish immediately
+before the authorized UI Republish. Require new explicit success, original
+verify3/inactive lease,then actual original-order ADB label fetch/print test.
+Stop on any new origin/source/lease mismatch; never clear a foreign lease.
+
+---
+
 # Shared source updated; adapter retry pending
 
 Shared `/app` original guard reported active:false, tracked source was clean on

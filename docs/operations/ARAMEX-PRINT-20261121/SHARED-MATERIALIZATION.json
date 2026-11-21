@@ -1,0 +1,17 @@
+{
+  "deployment_git_sha": "d69f31da14f3dc1baad25ab0884ba810446b19f9",
+  "source_git_sha": "3948581dd53a942af538731c8ad2eff045fd86b7",
+  "runtime_release_id": "rg5-a581e09f8d694a4ecfdca10c50d2bb899ac11f9d5d386753c812d5f359b99ae2",
+  "configured_adapter_exit_code": 0,
+  "frontend_verification_exit_code": 0,
+  "isolated_package_verification_exit_code": 0,
+  "frontend_artifact_tree_sha256": "985f807e1dfa7a275a45c3e873ffee1e9e2d05b56f9a62b0daf86544aaeb0be9",
+  "backend_package_tree_sha256": "a4e7f2b855ddcf8812a0a94a21f8528d2067dd2a9d6c7bd3a4ed131c3dd50470",
+  "adapter_log_bytes": 205758,
+  "adapter_log_sha256": "ec4df6bb1a2dd24dcdd44ae4092edcb4840d549d70a00119de087d1919fe032c",
+  "tracked_source_clean": true,
+  "generated_outputs_ignored_untracked": true,
+  "own_lease_prepared": false,
+  "production_runtime_changed_by_task": false,
+  "merged_ci": "Release readiness44917409355,Security Gate44917409380,CodeQL44917409330 all success"
+}
