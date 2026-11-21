@@ -21,8 +21,8 @@ fail before the source change with shipping_scope_required despite an official
 label in the fresh order or order-scoped response. Command (exit1):
 `python -B -m pytest --noconftest --asyncio-mode=auto -q backend/tests/test_carrier_shipment_read_fallback.py -k order_read_permission_supports_each_current_shipment_shape`;
 PYTHONPATH includes backend and backend/tests; existing isolated test runtime.
-Result:9 failed,41 deselected. No production source change yet; live cause still
-unverified. This WIP regression checkpoint is not ready to deploy.
+Result:9 failed,41 deselected at the initial regression-only checkpoint; the live
+cause remains unverified. The source repairs below are still pending deployment.
 Implemented bounded normalization of fresh `shipping.shipment`, singular
 `shipment`, and the order-scoped `data.shipment` wrapper. A nested AWB can
 inherit its enclosing carrier but not the carrier id as a shipment id. The
@@ -33,13 +33,13 @@ is fenced before an older ready list can revive it. An additional regression
 first failed (1 failure/60 passed), then passed after this fence was added.
 
 Fresh verification after the source change, in isolated module processes:
-- `test_carrier_shipment_read_fallback.py`:99 passed,including ten real native
+- `test_carrier_shipment_read_fallback.py`:111 passed,including ten real native
   HTTP-route cases with optional shipping API denied and no provider/local write.
 - `test_amasi_shipping_compat.py`:58 passed and59 subtests passed.
 - `test_mobile_external_label_read_parity.py`:19 passed.
 - `test_shipping_label_current_guard.py`:29 passed.
 - `test_salla_current_shipping.py`:37 passed.
-- Total:242 tests and59 subtests; all exit0. `git diff --check` passes.
+- Total:254 tests and59 subtests; all exit0. `git diff --check` passes.
 Commands use `python -B -m pytest --noconftest --asyncio-mode=auto -q --tb=short`.
 Production source changed only `backend/order_engine/amasi_shipping_compat.py`.
 Existing valid list responses and optional granted shipping fallback remain.
@@ -52,6 +52,15 @@ AWB or inside a label array. Six invoice variants and two diagnostics privacy
 cases now pass. Read logs contain fixed source/shape/status flags only, never
 provider/customer bodies, ids, URLs, tokens or exception text. The unsupported
 reconnect instruction was removed; existing error codes remain compatible.
+Twelve additional safety cases cover cancelled/return children observed before
+an older ready response, explicit order-scoped replacement, and string-zero ids.
+The first observed cancellation case failed before its repair (1 failed,99
+deselected with maxfail1). Validated negative evidence now blocks only the same
+child; a distinct new active child remains usable when no canonical id is known.
+The current Production branch advanced to a9d0aec2939a706dcc16f9948e7a81cfe019e66f
+through unrelated PR2046. Its owner reports publication/verification in progress.
+No shared workspace or foreign lease was changed. This unfrozen source must be
+rebased onto that reviewed base before freezing a new intent; no task A/B exists.
 
 Draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/2047. Earlier checkpoint
 `89a2f16a331cde00be8f9a6b749865078c559039` readiness44935916653 succeeded,
@@ -62,8 +71,9 @@ and could not match the configured app link. It stopped before token decryption 
 any Salla request; it cannot establish Production permissions or absence of an
 order. See LIVE-ORDER-READ-CONTEXT.json. No production credentials were exported.
 
-Exact next action: push the source checkpoint and run fresh candidate CI for
-PR2047. Obtain its governed source-A artifact, freeze an intent-only B, require
+Exact next action: push the verified checkpoint, preserve it, and update this
+unfrozen task branch to the current reviewed Production base. Run fresh candidate
+CI for PR2047. Obtain its governed source-A artifact, freeze an intent-only B, require
 both host clean-clone rehearsals and applicable checks, then current-base normal
 merge and a separately authorized guarded publication. Test original target and
 control through ADB on the actual release. Do not request additional scopes or

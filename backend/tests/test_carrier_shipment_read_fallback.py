@@ -339,6 +339,82 @@ async def test_native_routes_use_current_details_or_return_read_error(monkeypatc
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("known", [False, True])
+@pytest.mark.parametrize("source", ["scoped", "details"])
+@pytest.mark.parametrize("inactive", [{"status": "cancelled"}, {"type": "return"}])
+async def test_observed_inactive_child_cannot_be_revived_by_later_ready_response(monkeypatch, known, source, inactive):
+    db, calls = await scenario(monkeypatch, known=known)
+    ready = {**deepcopy(SHIPMENT), "label": {"url": LABEL}}
+    ended = {**deepcopy(SHIPMENT), **inactive}
+
+    async def provider(database, owner, method, path, **kwargs):
+        calls.append((method, path))
+        assert method == "GET"
+        if path == "/orders/42":
+            return {"data": deepcopy(ORDER)}
+        if path == "/orders/42/shipments":
+            return {"data": {"shipment": deepcopy(ended if source == "scoped" else SHIPMENT)}}
+        if path == "/shipments":
+            return {"data": [deepcopy(ready)] if source == "scoped" else []}
+        if path == "/shipments/99":
+            return {"data": deepcopy(ended)}
+        return {"data": deepcopy(ready)}
+
+    monkeypatch.setattr(compat, "call_salla", provider)
+    with pytest.raises(shipping.ShippingLabelError) as error:
+        await compat.carrier_label(db, "owner", NUMBER, issue=False, completed_only=True)
+    assert error.value.code == "shipping_snapshot_changed"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("replacement", [False, True])
+async def test_scoped_current_selection_preserves_canonical_replacement_fence(monkeypatch, replacement):
+    db, calls = await scenario(monkeypatch, known=replacement)
+    ended = {**deepcopy(SHIPMENT), **({"id": 100} if replacement else {"status": "cancelled"})}
+    ready = {**deepcopy(SHIPMENT), "id": 99 if replacement else 100, "label": {"url": LABEL}}
+
+    async def provider(database, owner, method, path, **kwargs):
+        calls.append((method, path))
+        assert method == "GET"
+        if path == "/orders/42":
+            return {"data": deepcopy(ORDER)}
+        if path == "/orders/42/shipments":
+            return {"data": {"shipment": deepcopy(ended)}}
+        return {"data": [deepcopy(ready)]}
+
+    monkeypatch.setattr(compat, "call_salla", provider)
+    if replacement:
+        with pytest.raises(shipping.ShippingLabelError) as error:
+            await compat.carrier_label(db, "owner", NUMBER, issue=False, completed_only=True)
+        assert error.value.code == "shipping_snapshot_changed"
+    else:
+        result = await compat.carrier_label(db, "owner", NUMBER, issue=False, completed_only=True)
+        assert result["ready"] is True
+        assert result["shipment_id"] == "100"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("source", ["order", "scoped"])
+async def test_string_zero_is_not_a_current_shipment_identity(monkeypatch, source):
+    db, calls = await scenario(monkeypatch, known=False)
+    row = {**deepcopy(SHIPMENT), "id": "0", "label": {"url": LABEL}}
+    order = {**deepcopy(ORDER), **({"shipment": row} if source == "order" else {})}
+
+    async def provider(database, owner, method, path, **kwargs):
+        calls.append((method, path))
+        assert method == "GET"
+        if path == "/orders/42":
+            return {"data": deepcopy(order)}
+        if path == "/orders/42/shipments" and source == "scoped":
+            return {"data": {"shipment": deepcopy(row)}}
+        raise SallaError("Synthetic optional API denial", status_code=403)
+
+    monkeypatch.setattr(compat, "call_salla", provider)
+    with pytest.raises(shipping.ShippingLabelError):
+        await compat.carrier_label(db, "owner", NUMBER, issue=False, completed_only=True)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("field", ["shipping_label_url", "awb_url", "waybill_url"])
 @pytest.mark.parametrize("source", ["order", "scoped"])
 async def test_order_label_fields_recognized_by_ingestion_are_printable(monkeypatch, field, source):
