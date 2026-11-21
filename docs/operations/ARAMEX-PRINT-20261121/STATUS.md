@@ -1,3 +1,22 @@
+# Own release prepared; prepublish and publication pending
+
+Original guard prepare succeeded for actor `codex-aramex-label-2044`,
+protocol5, deployment M `d69f31da14f3dc1baad25ab0884ba810446b19f9`,
+source A `3948581dd53a942af538731c8ad2eff045fd86b7`, runtime
+`rg5-a581e09f8d694a4ecfdca10c50d2bb899ac11f9d5d386753c812d5f359b99ae2`.
+Prepared at 2026-11-21T15:17:02.500716+00:00. No publication yet; Production
+runtime changed by this task:no. This is this task's own active lease. Never
+reuse/clear it from another conversation. Evidence branch is not deployable.
+
+Next: original guard prepublish with bytecode generation disabled, immediately
+followed by one authorized UI publication if it passes. If an additional UI
+confirmation appears, rerun prepublish immediately before the final publish.
+Require new explicit success, original verify3/inactive lease, then original
+shipment ADB fetch/print. If the release must be aborted, only this owner may
+use the original guard with exact expected M and runtime ID; preserve all others.
+
+---
+
 # Shared governed materialization passed; publication pending
 
 The unchanged configured adapter retry, frontend verification and isolated
