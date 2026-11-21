@@ -3,9 +3,9 @@
   "scope": "Replace legacy Mezan inventory interfaces with the approved integrated Arabic RTL design using the existing native services and permissions.",
   "branch": "codex/inventory-release-20261121",
   "base_sha": "734b977de28254c2c089148b4db8972a03ba19eb",
-  "state": "integrated_ci_in_progress",
+  "state": "reviewed_intent_frozen_ci_pending",
   "production_changed": false,
-  "remote_checkpoint": "03dce00590c565a125ee0219537c86abeeb76819 pushed release source, B not yet frozen",
+  "remote_checkpoint": "a03d05d474d1c0a5fba879c7706761d8f94f5d58 intent-only B pushed to release branch; source A and J preserved",
   "release_lease": "not_created",
   "deployment": "user_will_publish_manually",
   "owners": {
@@ -20,9 +20,9 @@
     "Preserve canonical product/variant/resource/location identity, server preview hash, stable idempotency and current permissions",
     "No opening-stock writer reused for stock adjustments"
   ],
-  "next_action": "Commit and push integrated source candidate A, create PR to Production, require fresh CI and governed candidate intent. Freeze only generated intent as B, verify B clean-clone checks and merge preserving A/B. User will run shared /app guard/materialization/prepublish and publish manually. Never claim deployment without explicit newer success and three v5 probes.",
-  "updated_at": "2026-11-21T13:32:13.004092+00:00",
-  "verified_milestone": "Integrated core85PASS+12subtests. Fixed CI-discovered frontend explicit count review/post grant policy; existing financial/shipping isolation/product editor contracts40PASS+484subtests; default Yarn test resolver and affected UI62PASS. Existing visible component assertions PASS. Preview transport uses a fixed loopback host/port without redirects; native context and hostile absolute-form URL probes PASS. Fresh exact-source CI pending; no acceptance of superseded source. Source03dce00590c565a125ee0219537c86abeeb76819 aligns the existing component UI copy assertions with approved المجموعة labels while retaining historical snapshot notice only for writers; direct operational CRA invocation uses the same resolver. Affected UI27PASS. Prior754 source G47 real-Mongo lifecycle and inventory UI, v5 candidate build and CodeQL succeeded; those artifacts are superseded and must not be frozen for new source.",
+  "next_action": "Require exact B required checks and v5 clean-clone adapter rehearsal, preserve A/B in normal PR2038 merge, then provide exact production merge SHA and user manual guard/build/prepublish/publish/verify instructions. No agent publish or /app/lease/data writes.",
+  "updated_at": "2026-11-21T13:47:12.318986+00:00",
+  "verified_milestone": "All exact source A CI complete:66SUCCESS+7conditional workflow skips,0failures. Native Mongo, stock eligibility, full operational and review regressions passed. Governed A/B source build and candidate validation PASS; independently matched2947manifest records against Git object modes/bytes/blobs/SHA256. Generated artifact copied byte-for-byte; A..B changes only intent. No source rebase/squash after freeze.",
   "ledger": "https://github.com/AMASI-SA/AMASI-SA/issues/1006#issuecomment-6238987123 has a dedicated dated INV-UI-20261120 section appended without removing original content; comments/body limits block new entries elsewhere. Write read-back verified.",
   "incomplete": [
     "Corrected source CI and candidate intent artifact pending",
@@ -43,7 +43,7 @@
     "provider_publish": "blocked"
   },
   "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/2038",
-  "branch_ci": "Exact source CI in progress; prior source had two remaining UI contract/test resolver failures; fixed and locally27PASS",
+  "branch_ci": "Source A66successful/7conditional skips,0failures. Exact B CI in progress; clean-clone adapter checks required before merge.",
   "merge": "authorized_pending_verification",
   "upstream_observation": {
     "production_git_head_observed": "c4a83ac18b24f0367b3fbe8052a026c2dbdbac98",
@@ -64,10 +64,17 @@
     "real_stock_or_accounting_data_writes": false
   },
   "release_pair": {
-    "source_A": "03dce00590c565a125ee0219537c86abeeb76819",
     "base_J": "0d70cdc4bdc116a4640509c95216bbbd6a72b6ed",
-    "intent_B": null,
-    "source_history_preserved": true,
+    "source_A": "03dce00590c565a125ee0219537c86abeeb76819",
+    "intent_B": "a03d05d474d1c0a5fba879c7706761d8f94f5d58",
+    "release_id": "rg5-270cec5290c45a86904ee96b2b2b958625091c630b5bac2bf1a9fde9f7c8a429",
+    "intent_file_sha256": "76a837ef86fce8e1b24b16a5829b94fdf7450c2e7f7888e47eac9dea66057bd0",
+    "candidate_ci_run": 44909185703,
+    "candidate_artifact": 14709058921,
+    "source_ci_success": 66,
+    "source_ci_conditional_skips": 7,
+    "source_ci_failures": 0,
+    "independent_source_records_verified": 2947,
     "manual_publish": true
   }
 }
