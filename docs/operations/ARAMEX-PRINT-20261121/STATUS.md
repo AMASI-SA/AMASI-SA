@@ -1,5 +1,19 @@
 # ARAMEX-PRINT-20261121: PR2048 frozen A/B verification
 
+Independent current-B ARM64 rehearsal PASSED after foreign verify completed:
+original guard active:false, complete Linux source validator passed, unchanged
+configured `cd frontend && yarn build` adapter0, separate verifier0, exact
+runtime identity matched,82.63seconds,shared tracked unchanged. Stage pointer
+`/tmp/aramex-pr2048-stage.txt` currently selects
+`/tmp/aramex-pr2048-4c5c-7ifxp_h0`. Source/intent/deployment IDs remain below.
+Merged-M readiness44945492343 also succeeded. No own lease or runtime publication.
+Next: run the reviewed materialize-pr2048.py helper from /tmp using its exact
+evidence-commit bytes; it checks fresh inactive guard and origin M, preserves
+prior governed outputs, fast-forwards only M, copies the three verified outputs,
+and verifies the shared contract. It creates no lease/publish. Only after its
+success prepare the unique owner lease, then prepublish immediately before the
+authorized final publish. Preserve all unrelated files and any foreign lease.
+
 PR2048 MERGED normally at `88af38f01cf979acbca59b95a95e661828f2306f`
 (20:17:30UTC). Fresh pre-merge Production J and all39 exact-B checks were
 verified. M parents are J/B, M tree equals B, A is an ancestor, and A-to-M changes
