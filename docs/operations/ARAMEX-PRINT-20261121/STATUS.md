@@ -1,5 +1,12 @@
 # ARAMEX-PRINT-20261121: PR2048 frozen A/B verification
 
+LATEST USER REQUEST: release the deployment reservation. Fresh unchanged
+original guard status confirmed `active:false`, with no actor/source/deployment
+or release id. Our prior unused reservation was already aborted successfully;
+no additional abort or foreign lease removal was needed. The stale canonical
+prepared-reservation entry must be replaced by this remotely verified state.
+Reservation-release request is complete; Aramex live acceptance remains pending.
+
 CURRENT PUBLICATION COORDINATION: user confirmed another session is publishing.
 This task NEVER clicked Republish/Publish changes for PR2048. UI unexpectedly
 showed newer version0ef4d22; public health20:36UTC was old bank source
@@ -22,7 +29,7 @@ still necessary, recheck reviewed origin/source/intent and original inactive
 guard first; never reuse the aborted lease. Actual original print is unverified.
 The preparation/release notes below are historical.
 
-CURRENT: own protocol-v5 lease PREPARED, actor
+HISTORICAL PREPARATION (subsequently aborted): own protocol-v5 lease PREPARED, actor
 `codex-aramex-pr2048-authorized`, source A/deployment M/runtime id below. Original
 prepare exited0 with exact A/M/id/protocol5. Do not clear or reuse this lease.
 Reviewed helper c958ee3dff1cbd5518951df2cca1950d4efb014a blob SHA256
