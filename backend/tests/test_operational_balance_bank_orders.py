@@ -20,13 +20,14 @@ async def seed(db, status='in_progress', method='تحويل بنكي مصرف ت
         'total':{'amount':'300','currency':'SAR'},'items':[]}}})
 
 
-@pytest.mark.parametrize('status',['reviewed','in_progress','تم المراجعة','قيد التنفيذ'])
+@pytest.mark.parametrize('status', ['reviewed', 'in_progress', 'تم المراجعة', 'قيد التنفيذ',
+                                    'تم التنفيذ', 'جاري التوصيل', 'تم التوصيل'])
 def test_bank_order_credit_without_receipt_once_across_retries_and_states(status):
     async def scenario(db):
         await started(db);await seed(db,status)
         await asyncio.gather(refresh(db,'owner',clock=NOW),refresh(db,'owner',clock=NOW))
         initial = await read(db, 'owner')
-        assert len(initial['movements']) == int(status in {'in_progress', 'قيد التنفيذ'})
+        assert len(initial['movements']) == int(status not in {'reviewed', 'تم المراجعة'})
         await db.unified_orders.update_one({'user_id':'owner'},{'$set':{'raw_by_source.salla_direct.status':'in_progress'}})
         await refresh(db,'owner',clock=NOW)
         state=await read(db,'owner');assert len(state['movements'])==1
@@ -122,19 +123,60 @@ def test_native_bank_waits_even_with_paid_fields_and_a_receipt_then_books_once()
             await db.unified_orders.update_one({'order_number': '998005'},
                 {'$set': {'raw_by_source.salla_direct.status': {'slug': status}}})
             await refresh(db, 'owner', clock=NOW)
-            assert not (await read(db, 'owner'))['movements']
+            state = await read(db, 'owner')
+            assert not state['movements']
+            held = [i for i in state['engine']['issues'] if i['code'] == 'operational_order_bank_status_ineligible']
+            assert len(held) == 1
+            assert (held[0]['order_number'], held[0]['party_id'], held[0]['order_status']) == (
+                '998005', 'account:rajhi', status)
         await db.unified_orders.update_one({'order_number': '998005'},
             {'$set': {'raw_by_source.salla_direct.status': {'slug': 'in_progress'}}})
         await asyncio.gather(refresh(db, 'owner', clock=NOW), refresh(db, 'owner', clock=NOW))
         recorded = (await read(db, 'owner'))['movements']
         assert len(recorded) == 1 and recorded[0]['amount'] == '100.00'
-        await db.unified_orders.update_one({'order_number': '998005'},
-            {'$set': {'raw_by_source.salla_direct.status': {'slug': 'payment_pending'}}})
-        await refresh(db, 'owner', clock=NOW)
-        result = await read(db, 'owner')
-        assert result['movements'] == recorded
-        assert any(i['code'] == 'operational_order_bank_posted_milestone_review'
-                   for i in result['engine']['issues'])
+        for status in ('cancelled', 'payment_pending', 'reviewed', 'delivered'):
+            await db.unified_orders.update_one({'order_number': '998005'},
+                {'$set': {'raw_by_source.salla_direct.status': {'slug': status}}})
+            await refresh(db, 'owner', clock=NOW)
+            result = await read(db, 'owner')
+            assert result['movements'] == recorded
+            assert not any(i['code'] in {'operational_order_bank_status_ineligible',
+                                         'operational_order_bank_posted_milestone_review'}
+                           for i in result['engine']['issues'])
+    run(scenario)
+
+
+@pytest.mark.parametrize("status", ["in_progress", "completed", "delivering", "delivered"])
+def test_first_qualifying_salla_status_posts_without_history_and_survives_cancellation(status):
+    async def scenario(db):
+        await started(db)
+        await native_accounts(db)
+        doc = native_bank_order("998820")
+        raw = doc["raw_by_source"]["salla_direct"]
+        raw["status"] = {"slug": "cancelled", "name": "ملغي"}
+        raw["is_cancelled"] = True
+        await db.unified_orders.insert_one(doc)
+        await refresh(db, "owner", clock=NOW)
+        initial = await read(db, "owner")
+        assert not initial["movements"]
+        hold, = [issue for issue in initial["engine"]["issues"]
+                 if issue["code"] == "operational_order_bank_status_ineligible"]
+        assert hold["status"] == "pending" and hold not in report(initial)["issues"]
+        assert (hold["order_number"], hold["order_status"], hold["party_id"]) == ("998820", "ملغي", "account:rajhi")
+        await db.unified_orders.update_one({"order_number": "998820"}, {"$set": {
+            "raw_by_source.salla_direct.status": {"slug": status}, "raw_by_source.salla_direct.is_cancelled": False}})
+        await asyncio.gather(refresh(db, "owner", clock=NOW), refresh(db, "owner", clock=NOW))
+        approved = await read(db, "owner")
+        entry, = approved["movements"]
+        assert (entry["amount"], entry["bank_preparation_evidence"]["status"]) == ("100.00", status)
+        assert not any(issue["code"] == "operational_order_bank_status_ineligible" for issue in approved["engine"]["issues"])
+        await db.unified_orders.update_one({"order_number":"998820"}, {"$set": {
+            "raw_by_source.salla_direct.status": {"slug": "cancelled"}, "raw_by_source.salla_direct.is_cancelled": True}})
+        await refresh(db, "owner", clock=NOW)
+        cancelled = await read(db, "owner")
+        assert cancelled["movements"] == [entry]
+        assert report(cancelled)["summary"]["actual_liquidity"] == report(approved)["summary"]["actual_liquidity"]
+        assert not any(issue["code"] == "operational_order_bank_status_ineligible" for issue in cancelled["engine"]["issues"])
     run(scenario)
 
 
@@ -250,4 +292,32 @@ def test_native_bank_wallet_split_posts_only_the_explicit_bank_leg():
         coverage = projection['details']['customer_tender_coverage']['sar']
         assert coverage['paid'] == '100.00' and coverage['missing_orders'] == 0
         assert {row['method']: row['paid'] for row in coverage['by_method']} == {'bank': '85.00', 'wallet': '15.00'}
+    run(scenario)
+
+
+def test_bank_reference_already_posted_for_an_archived_order_cannot_be_used_again():
+    from operational_balance_service import _bank_credit_actions
+
+    credit = {"bank_id": "account:rajhi", "amount": "150.66", "bank_transaction_reference": "receipt-17"}
+    other = {"id": "20", "order_number": "200", "currency": "SAR", "bank_credit": credit}
+    archived = {"automatic_order_bank": True, "direction": "incoming", "order_number": "100",
+                "bank_transaction_reference": "receipt-17", "bank_id": "account:rajhi", "amount": "150.66"}
+    assert _bank_credit_actions([other], [archived]) == [("conflict", other, None)]
+    first = {**other, "id": "10", "order_number": "100"}
+    assert _bank_credit_actions([first, other], []) == [("conflict", first, None), ("conflict", other, None)]
+    assert _bank_credit_actions([first], [archived]) == []
+
+
+def test_legacy_bank_label_cannot_book_gross_for_unrecognized_split_or_partial_tender():
+    async def scenario(db):
+        await started(db)
+        await seed(db)
+        key = "raw_by_source.salla_direct.payment_methods"
+        legacy = {"payment_method": "تحويل بنكي مصرف تجريبي", "amount": "50.00"}
+        for legs in ([legacy, {"payment_method": "customer_wallet", "amount": "250.00"}], [legacy]):
+            await db.unified_orders.update_one({"user_id": "owner"}, {"$set": {key: legs}})
+            await refresh(db, "owner", clock=NOW)
+            state = await read(db, "owner")
+            assert state["movements"] == []
+            assert any(i["code"] == "operational_order_bank_payment_incomplete" for i in state["engine"]["issues"])
     run(scenario)

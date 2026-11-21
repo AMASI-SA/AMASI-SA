@@ -391,7 +391,12 @@ async def resource_catalog(db, owner, policy, state, *, ad_bank_fx=False, review
             workspace_provider=selected_resource[1] if provider_orders else None)
     else:
         computed = await prepare_in_thread(report, state, paypal_sar=True) if paypal_scope else await prepare_in_thread(report, state)
-    review_counts = navigation_counts(computed)
+    include_bank_issues = (not directory_only and selected_kind in (None, "bank")
+                           and (not selected_resource or selected_resource[0] == "bank"))
+    if include_bank_issues:
+        review_counts = await prepare_in_thread(navigation_counts, computed, state.get("engine", {}).get("issues", []))
+    else:
+        review_counts = navigation_counts(computed)
     balances = {(r["party_type"], r["party_id"], r["currency"]): r for r in computed["parties"]}
     funding_kinds = payment_source_kinds(policy)
     items = []

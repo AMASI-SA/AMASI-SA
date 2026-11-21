@@ -315,12 +315,13 @@ def normalize_operational_payment(raw, currency, total, created_at, as_of, *, ow
 
 async def load_transaction_rows(db, owner, orders, start, now, *, to_instant, max_rows):
     """One bounded order-index query per batch. No foreign, uncapped, or per-order read."""
-    from operational_balance_bank_orders import is_mada_bank_split
+    from operational_balance_bank_orders import is_bank_split
 
     if not isinstance(owner, str) or not owner.strip() or owner != owner.strip():
         raise ValueError("operational_source_owner_mismatch")
     keys = set()
     bank_tender_keys = set()
+    bank_only_keys = set()
     provider_keys = set()
     by_ref = defaultdict(set)
     for raw in orders:
@@ -331,27 +332,36 @@ async def load_transaction_rows(db, owner, orders, start, now, *, to_instant, ma
             if not isinstance(method, dict):
                 continue
             provider = provider_for(method.get("method") or raw.get("payment_method"))
-            bank_tender = is_mada_bank_split(raw)
-            if not provider and not bank_tender:
-                continue
+            bank_tender = is_bank_split(raw)
             number = raw.get("reference_id") or raw.get("order_number")
-            if number and raw.get("id"):
-                keys.add(str(number))
+            if not number or not raw.get("id"):
+                continue
+            identity = (str(number), str(raw["id"]))
+            methods = raw.get("payment_methods")
+            if not provider and not bank_tender:
+                # A referenced bank receipt on another order may already claim this
+                # money. It requires no transaction lookup and keeps its own policy.
+                if (raw.get("payment_method") != "bank" or not isinstance(methods, list) or len(methods) != 1
+                        or not isinstance(methods[0], dict) or methods[0].get("payment_method") != "bank"):
+                    continue
+                references = [methods[0].get("transaction_reference")]
+                bank_only_keys.add(identity[0])
+            else:
+                keys.add(identity[0])
                 if bank_tender:
-                    bank_tender_keys.add(str(number))
+                    bank_tender_keys.add(identity[0])
                 if provider:
-                    provider_keys.add(str(number))
+                    provider_keys.add(identity[0])
                 references = [method.get("reference"), method.get("transaction_reference")]
-                methods = raw.get("payment_methods")
                 if isinstance(methods, list) and len(methods) <= 100:
                     references.extend(row.get("transaction_reference") for row in methods if isinstance(row, dict))
-                for value in references:
-                    if value is not None:
-                        try:
-                            ref = _identity(value, "provider_payment_reference_missing")
-                        except PaymentEvidenceError:
-                            continue
-                        by_ref[ref].add((str(number), str(raw["id"])))
+            for value in references:
+                if value is not None:
+                    try:
+                        ref = _identity(value, "provider_payment_reference_missing")
+                    except PaymentEvidenceError:
+                        continue
+                    by_ref[ref].add(identity)
         except (ValueError, TypeError, KeyError):
             continue  # main reader reports malformed canonical orders
     numbers, groups, count = sorted(keys), defaultdict(list), 0
@@ -381,9 +391,12 @@ async def load_transaction_rows(db, owner, orders, start, now, *, to_instant, ma
             # A newly inspected bank-primary leg may be held but cannot change an
             # otherwise uncontested existing provider's recognition.
             provider_collision = sum(number in provider_keys for number, _ in identities) > 1
+            mixed_collision = any(number in bank_tender_keys for number, _ in identities)
             for number, order_id in identities:
-                if number not in bank_tender_keys and not provider_collision:
+                conflicted_bank = mixed_collision and number in bank_only_keys
+                if number not in bank_tender_keys and not provider_collision and not conflicted_bank:
                     continue
                 groups[number].append({"user_id":owner, "source":"salla_transactions",
-                    "order_number":number, "provider_order_id":order_id, "native_transaction_evidence":[]})
+                    "order_number":number, "provider_order_id":order_id, "native_transaction_evidence":[],
+                    **({"bank_tender_reference_conflict": True} if conflicted_bank else {})})
     return groups

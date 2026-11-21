@@ -84,7 +84,7 @@ MAX_ROWS = 20000
 REFRESH_ORDER_FIELDS = (
     'user_id', 'raw_by_source', 'g47_salla_snapshot', 'salla_shipping_current',
     'salla_paid_sar_evidence', 'salla_bank_in_progress_proof', 'order_id', 'salla_order_id', 'order_number',
-    'order_status', 'order_status_slug', 'last_salla_direct_status_source_updated_at',
+    'order_status', 'order_status_slug', 'last_salla_direct_status_source_updated_at', 'is_cancelled', 'cancelled',
     'merchant', 'merchant_id', 'store_id', 'salla_shipment_id', 'tracking_number',
     'shipping_number', 'shipping_company_code', 'shipping_company',
     'shipping_status', 'shipment_status', 'salla_operational_return_waybills', 'salla_first_delivered', 'salla_delivery_history_check',
@@ -1477,7 +1477,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
             completion_review_index = build_review_index(operational_state) if operational_state else None
             source_ids = Counter(str(r.get('id') or '') for r in raw_orders)
             source_numbers = Counter(str(r.get('reference_id') or r.get('order_number') or '') for r in raw_orders)
-            from operational_bank_credit_recognition import BankCreditRecognition, REVIEW_ACTIONS
+            from operational_bank_credit_recognition import BankCreditRecognition, BankReceiptStatusHold, REVIEW_ACTIONS
             bank_receipts = BankCreditRecognition(db, owner, operational_state, data, as_of)
             recorded_fee_lookup = await prepare_in_thread(build_recorded_courier_fee_lookup, operational_state)
             driver_groups = {}
@@ -1709,10 +1709,11 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                     order['statement_refund_observation'] = statement_refund_observation(operational_state, raw,
                         owner=owner, order_id=identity, order_number=order_number,
                         transaction_rows=txn_by_order.get(order_number, ()), refund_index=statement_refund_index)
+                bank_payment_issues = payment_issues
                 if (not normalized_payment and "provider_split:" + identity in
                         (operational_state or {}).get("engine", {}).get("facts", {})):
                     # Changing the order's payment method cannot turn a frozen split receipt into bank cash or COD.
-                    payment_issues.append({"code": "provider_payment_method_conflict"})
+                    payment_issues = [*payment_issues, {"code": "provider_payment_method_conflict"}]
                 payment_identity_conflict = any(row['code'] in {
                     'provider_payment_method_conflict', 'provider_payment_shape_invalid',
                     'provider_split_payment_review_required'} for row in payment_issues)
@@ -1721,13 +1722,14 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                 inspected_order_ids.add(identity)
                 try:
                     credit = await bank_receipts.candidate(raw, source, order, method, total_value, total,
-                        normalized_payment, payment_issues, txn_by_order.get(order_number, ()), payment_identity_conflict)
+                        normalized_payment, bank_payment_issues, txn_by_order.get(order_number, ()), payment_identity_conflict)
                     if credit:
                         order['bank_credit'] = credit
                 except ValueError as exc:
                     code = str(exc)
                     action = REVIEW_ACTIONS.get(code)
                     issue(out, code, identity, order_number=order_number,
+                          **(exc.details if isinstance(exc, BankReceiptStatusHold) else {}),
                           **({'required_action': action} if action else {}))
                 cod = method in {'cod', 'cash_on_delivery', 'cashondelivery', 'cash on delivery', 'الدفع عند الاستلام', 'دفع عند الاستلام', 'دفع عند الإستلام'}
                 if cod:
@@ -2368,9 +2370,9 @@ async def order_bank_eligible(db, owner, order_number, started_at, reject_automa
     if len(matches) != 1:
         raise ValueError('canonical_order_missing_or_ambiguous')
     source, raw = matches[0]
-    from operational_balance_bank_orders import is_mada_bank_split, transfer_bank
+    from operational_balance_bank_orders import is_bank_split, transfer_bank
     method = (raw.get("payment") or {}).get("method") if isinstance(raw.get("payment"), dict) else None
-    if reject_automatic and (transfer_bank(method or raw.get("payment_method"))[0] or is_mada_bank_split(raw)):
+    if reject_automatic and (transfer_bank(method or raw.get("payment_method"))[0] or is_bank_split(raw)):
         raise ValueError("operational_order_bank_automatic")
     if (source.get('g47_salla_snapshot') or {}).get('requires_authoritative_refresh'):
         raise ValueError('canonical_salla_refresh_required')

@@ -83,6 +83,50 @@ def test_scoped_order_pages_canonical_references_no_per_row_reads_and_revoked_pe
     run(scenario)
 
 
+def test_bank_receipt_status_reviews_count_distinct_orders_without_credit_or_cross_bank_disclosure():
+    async def scenario(db, client):
+        await db.mz2_financial_accounts.insert_one({
+            "id": "second-bank", "user_id": "owner", "name": "بنك آخر", "account_type": "bank",
+            "currency": "SAR", "status": "active"})
+        await grant(db, operations=[], resources=[
+            resource("bank", "bank", balance=True, movements="all"),
+            resource("bank", "second-bank", balance=True, movements="own")])
+        headers = {"X-Test-User": "staff"}
+        ledger_path = BASE + "/ledger/bank/bank"
+        before = (await client.get(ledger_path, headers=headers)).json()
+        blocked = {"code": "operational_order_bank_status_ineligible", "party_type": "bank", "party_id": "bank",
+                   "source_id": "100", "order_status": "under_review", "order_number": "untrusted"}
+        await db[STATES].update_one({"_id": "owner"}, {"$set": {
+            "engine.as_of": "2026-11-21T10:00:00Z", "engine.issues": [
+                blocked, blocked, dict(blocked, source_id="secret", party_id="second-bank"),
+                dict(blocked, source_id="unmapped", party_id=None),
+                dict(blocked, source_id="unrelated", code="other_issue")]}})
+        await db.unified_orders.insert_one({"user_id": "owner", "raw_by_source": {
+            "salla_direct": {"id": "100", "reference_id": "90100"}}})
+        ledger = (await client.get(ledger_path, headers=headers)).json()
+        assert ledger["resource"]["order_issues_count"] == 1
+        assert ledger["items"] == before["items"] and ledger["resource"]["balance"] == before["resource"]["balance"]
+        for params in ({}, {"kind": "bank", "id": "bank", "q": "بانتظار المراجعة"}):
+            res = await client.get(BASE + "/order-issues", params=params, headers=headers)
+            assert res.status_code == 200, res.text
+            assert res.json()["total"] == 1
+            row = res.json()["items"][0]
+            assert (row["order_id"], row["order_number"]) == ("100", "90100")
+            assert row["groups"][0]["reasons"] == [{
+                "code": blocked["code"], "message": "الإيصال غير معتمد بسبب حالة الطلب · بانتظار المراجعة"}]
+            assert all(word not in res.text for word in ("secret", "unmapped", "unrelated", "untrusted"))
+        denied = await client.get(BASE + "/order-issues", headers=headers,
+                                  params={"kind": "bank", "id": "second-bank"})
+        assert denied.status_code == 404
+        owner_page = (await client.get(BASE + "/order-issues", params={"q": "بنك التحويل غير محدد"})).json()
+        assert owner_page["total"] == 1
+        assert owner_page["items"][0]["order_id"] == "unmapped"
+        assert owner_page["items"][0]["groups"][0]["kind"] == "unassigned_bank"
+        owner_bank = (await client.get(BASE + "/order-issues", params={"kind": "bank", "id": "bank"})).json()
+        assert [row["order_id"] for row in owner_bank["items"]] == ["100"]
+    run(scenario)
+
+
 def test_provider_only_pending_source_is_listed_with_its_actual_reason_and_owner_only_unassigned():
     async def scenario(db, client):
         issues = [{"scope": "provider_payment", "provider": "salla", "currency": "SAR",

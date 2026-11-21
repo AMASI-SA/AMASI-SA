@@ -1,8 +1,8 @@
-"""Complete missing native bank identity with a bounded, version-bound source write."""
+"""Complete missing bank identity or historical transition dates on a bounded refresh."""
 from datetime import datetime, timedelta, timezone
 
 from operational_balance_bank_orders import NATIVE_BANKS, bank_ledger_paid_amount, transfer_bank
-from operational_bank_order_milestone import HISTORY_MISSING, PROOF_FIELD, history_proof, reached_in_progress
+from operational_bank_order_milestone import HISTORY_MISSING, PROOF_FIELD, bank_status_evidence, history_proof
 from operational_payment_evidence import _amount, _instant
 from operational_balance_store import check_authorization
 from .service import call_salla
@@ -13,7 +13,7 @@ _RETRY = "salla_bank_details_retry_after"
 _RAW = "raw_by_source.salla_direct"
 _PROJECTION = {"_id": 0, "user_id": 1, "order_number": 1, "order_id": 1, "salla_order_id": 1,
                "g47_salla_snapshot": 1, "order_status_slug": 1, "order_status": 1, PROOF_FIELD: 1,
-               "last_salla_direct_status_source_updated_at": 1, _RAW: 1}
+               "last_salla_direct_status_source_updated_at": 1, "is_cancelled": 1, "cancelled": 1, _RAW: 1}
 
 
 def _bank_names(raw):
@@ -61,7 +61,7 @@ async def _acquire_progress(db, owner, source, raw, number, identity, now):
         return
     args = {"owner": owner, "order_number": number, "provider_order_id": identity, "as_of": now}
     try:
-        reached_in_progress(raw, source, require_history=True, **args)
+        bank_status_evidence(raw, source, require_history=True, **args)
         return
     except ValueError as exc:
         if str(exc) != HISTORY_MISSING:
@@ -74,7 +74,8 @@ async def _acquire_progress(db, owner, source, raw, number, identity, now):
     # A changed payment snapshot, order identity or status must win a concurrent read.
     selector = {"user_id": owner, "order_number": number, _RAW: raw,
                 **{key: source.get(key) for key in ("order_id", "salla_order_id", "g47_salla_snapshot",
-                    "order_status", "order_status_slug", "last_salla_direct_status_source_updated_at", PROOF_FIELD)}}
+                    "order_status", "order_status_slug", "last_salla_direct_status_source_updated_at",
+                    "is_cancelled", "cancelled", PROOF_FIELD)}}
     await check_authorization()
     await db.unified_orders.update_one(selector, {"$set": {PROOF_FIELD: proof}})
 

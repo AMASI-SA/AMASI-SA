@@ -173,7 +173,7 @@ function LedgerPage({ context, identity, resource, canOpenOrderDetails = false, 
       placeholder={providerOrders ? 'ابحث برقم الطلب أو مرجع الدفع' : resource ? 'ابحث بالبيان أو المرجع أو اسم الموظف' : 'ابحث في الحركات'} onChange={e => setDraft(e.target.value)} /></form>;
   const show = row => { if (onDetail) onDetail(row); else { setDetail(row); } };
   useEffect(() => { if (detail && dialog.current && !dialog.current.open) { if (dialog.current.showModal) dialog.current.showModal(); else dialog.current.setAttribute('open', ''); } }, [detail]);
-  const issueCount = shownResource?.order_issues_count;
+  const issueCount = resource?.access?.movements === 'all' ? shownResource?.order_issues_count : undefined;
   const changeStatus = value => {
     if (['pending', 'rejected'].includes(value) && onReviewCollections) { onReviewCollections(selected || null, value); return; }
     setStatus(value); setPage(1);
@@ -206,7 +206,7 @@ function LedgerPage({ context, identity, resource, canOpenOrderDetails = false, 
     {resource?.access?.movements === 'own' && <p className="note">يعرض هذا الكشف الحركات التي سجّلتها أنت.</p>}
     {result?.balance_note && <p className="note">{result.balance_note}</p>}
     {(issueCount > 0 || issueCount === null) && onReviewOrders && <button type="button" className="issue-notice screen-only" onClick={() => onReviewOrders(resource)}>
-      <IconBox name="clipboard-list" tone="c-wait" /><span><strong>{issueLabel(issueCount)}</strong><small>عرض طلبات المراجعة في آخر احتساب</small></span><b>عرض الطلبات <Icon name="chevron-left" /></b></button>}
+      <IconBox name="clipboard-list" tone="c-wait" /><span><strong>{issueLabel(issueCount)}</strong><small>{resource?.kind === 'bank' ? 'إيصالات تحويل غير معتمدة بسبب حالة الطلب' : 'عرض طلبات المراجعة في آخر احتساب'}</small></span><b>عرض الطلبات <Icon name="chevron-left" /></b></button>}
     {resource && result?.pos_summary && <dl className="detail-list">{[['إيصالات الشبكة المعتمدة','approved'],['المحوّل إلى البنوك','bank_received'],['الرسوم الفعلية','fees']]
       .map(([label, field]) => <div key={field}><dt>{label}</dt><dd><Amount value={result.pos_summary[field]} currency={resource.currency} /></dd></div>)}</dl>}
     {resource && onExpected && result?.expected_collections?.total > 0 && <button type="button" className="textbtn" onClick={() => onExpected(resource, result.expected_collections)}>
