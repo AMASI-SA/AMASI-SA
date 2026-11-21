@@ -5,6 +5,18 @@
   "evidence_kind": "root_ui_observed_official_emergent_rehearsal",
   "observed_by": "root",
   "environment": "Emergent isolated task-owned clone",
+  "sanitized_rehearsal_environment": {
+    "evidence_source": "Root read of the isolated rehearsal adapter.log",
+    "architecture": "aarch64",
+    "host_node": "v24.19.0",
+    "host_yarn": "1.22.22",
+    "host_python": "3.11.18",
+    "git_present": true,
+    "configured_entry_point": "cd frontend && yarn build",
+    "governed_build_subcommand": "yarn --cwd frontend build:release",
+    "cloud_build_outer_argv_proven": false,
+    "scope_note": "These are isolated Emergent rehearsal host facts, not observations of the actual production Cloud Build host, outer argv or package snapshot order."
+  },
   "stage_root": "/tmp/mezan-pr2039-release-0sv39fp_",
   "started_at_utc": "2026-11-21T19:40:23.380281Z",
   "completed_at_utc": "2026-11-21T19:41:54.752195Z",

@@ -2,11 +2,27 @@
 
 ## Checkpoint verdict
 
-**PUBLICATION_IN_PROGRESS. After successful final official `prepublish`, the root initiated the one authorized Emergent publication. The UI showed `Publishing...` with disabled publish buttons by 2026-11-21T19:49:55Z. The task's own protocol-v5 lease remains reserved. No newer explicit deployment success or live verification result has been observed at this checkpoint.**
+**LIVE_IDENTITY_PASS_FULL_VERIFICATION_PENDING. Emergent now shows Deployment finished and new published version `289b0ca`; a fresh read-only Production health response matches the reviewed source/release and all five identity flags pass. The task's own lease remains active. No explicit `Deployment Succeeded` literal or completed official three-probe verification is claimed; final release acceptance remains pending.**
 
 The owner has authorized merging and publishing PR #2039, subject to the established gates. Emergent Support supplied the previously missing Production index definitions after a read-only inspection. Terminal access has now been restored. Production advanced through PR #2046, so the former A/B pair and its successful CI are historical and cannot authorize the new deployment.
 
-### Latest milestone: one authorized publication is in progress
+### Latest milestone: new published version and matching live identity observed
+
+The root observed **`Deployment finished` at the displayed time `Nov 21 10:59 PM`** and new published-version marker **`289b0ca`**, labeled `Few seconds ago`, replacing `99a9215` as the latest entry. The UI still labeled the latest entry **`100th publish`**; its rolling labels do not support a claim of a 101st publication. The observed deployment conversation ID `d73a098f-e03d-577c-933f-abf27c6345ff` is a conversation identifier, not the published-version identifier. The root did **not** observe an explicit `Deployment Succeeded`/`Deployment successful` literal.
+
+Clicking View Logs crashed the browser renderer. Read-only reload/new-tab attempts failed; closing the task's recovery tab and reloading the existing code-server tab restored Terminal 3. The root preserved shared `/app`, the rehearsal stage, and the owned lease. No second publication click occurred.
+
+A fresh Terminal 3 **GET `https://mezansalla.com/api/health` passed** with source A `e08d0e489eded39961d374e4eb7bfcc0544b6e90` and release `rg5-45eb8f2d79e0912a1277e1e14816e9d9c5e3a40d0a6d784834c6fbb54996974f`. The response reported all five flags true: `verified_identity_available`, `critical_file_hashes_match`, `frontend_build_verified`, `backend_runtime_source_verified`, and `release_control_source_bound`. Its `boot_started_at` was `2026-11-21T20:03:39.378132Z`; this is the backend boot timestamp, not an asserted timestamp of the health read.
+
+The fresh shared guard remained **`active:true`**, actor **`codex-pr2039-owner-authorized`**, prepared at **`2026-11-21T19:46:13.522595Z`**, deployment M **`6e41bf25b936e8c4047df75bb170610dfc71b7f7`**. Shared `/app` HEAD is the same M and `/tmp/mezan-pr2039-release-0sv39fp_` still exists. See [live-identity-checkpoint.json](live-identity-checkpoint.json).
+
+The root also read sanitized metadata from the **isolated rehearsal** log: architecture `aarch64`, host Node `v24.19.0`, host Yarn `1.22.22`, host Python `3.11.18`, Git present, the configured `cd frontend && yarn build` entry, and the governed `yarn --cwd frontend build:release` subcommand. These details are retained in [emergent-rehearsal.json](emergent-rehearsal.json). They do **not** establish the actual production Cloud Build outer argv, host environment, or package snapshot order; those remain unobserved in this record.
+
+**Next safe action:** preserve the existing owned lease and complete the pending platform-success confirmation and official full Production verification. **All three full probes remain outstanding**; no official `verify` has started, and no final `active:false` has been observed. The successful health read alone does not establish canonical/cache-busted frontend bytes, JSON MIME, and the complete public release contract. Do not abort or clear this lease, retry publication, or substitute another operation's release to resolve the UI access problem.
+
+Production changed by this task through this checkpoint: **Git branch yes; shared `/app` yes; matching live backend release now observed**. Overall release acceptance remains pending. No financial/index mutation or APK publication occurred.
+
+### Previous milestone: one authorized publication is in progress
 
 The final official `prepublish` passed at **2026-11-21T19:49:23.932070Z** (22:49:23 Asia/Riyadh) with `ready_to_publish:true`, deployment M `6e41bf25b936e8c4047df75bb170610dfc71b7f7`, source A `e08d0e489eded39961d374e4eb7bfcc0544b6e90`, and the exact reviewed runtime release `rg5-45eb8f2d79e0912a1277e1e14816e9d9c5e3a40d0a6d784834c6fbb54996974f`.
 
@@ -16,7 +32,7 @@ An earlier indexed Republish interaction was rejected by automatic approval revi
 
 The existing protocol-v5 lease belongs to **`codex-pr2039-owner-authorized`**, prepared at **2026-11-21T19:46:13.522595Z**, and has no automatic expiry. No replacement lease or second publication is authorized by this checkpoint.
 
-**Next safe action:** monitor this existing publication attempt without retrying the click or clearing the lease. Wait for a **newer explicit `Deployment Succeeded`**, then run the official Production verification for the exact reviewed source/release. Acceptance still requires all three matching live probes and final `active:false`. No official live verification has started at this checkpoint. Do not infer live success from `Publishing...`, the previous deployment, or passing CI.
+**Next safe action at the publication-in-progress checkpoint (new finished/version and health observations are now recorded above):** monitor this existing publication attempt without retrying the click or clearing the lease. Wait for a **newer explicit `Deployment Succeeded`**, then run the official Production verification for the exact reviewed source/release. Acceptance still requires all three matching live probes and final `active:false`. No official live verification had started at that checkpoint. Do not infer live success from `Publishing...`, the previous deployment, or passing CI.
 
 Production changed by this task through this checkpoint: **Git branch yes (normal merge M); shared `/app` yes (reviewed handoff); live publication initiated once, completion unverified**. No financial/index mutation or APK publication occurred.
 
