@@ -37,7 +37,9 @@ Fresh verification after the source change, in isolated module processes:
   HTTP-route cases with optional shipping API denied and no provider/local write.
 - `test_amasi_shipping_compat.py`:58 passed and59 subtests passed.
 - `test_mobile_external_label_read_parity.py`:19 passed.
-- Total:152 tests and59 subtests; all exit0. `git diff --check` passes.
+- `test_shipping_label_current_guard.py`:29 passed.
+- `test_salla_current_shipping.py`:37 passed.
+- Total:218 tests and59 subtests; all exit0. `git diff --check` passes.
 Commands use `python -B -m pytest --noconftest --asyncio-mode=auto -q --tb=short`.
 Production source changed only `backend/order_engine/amasi_shipping_compat.py`.
 Existing valid list responses and optional granted shipping fallback remain.
