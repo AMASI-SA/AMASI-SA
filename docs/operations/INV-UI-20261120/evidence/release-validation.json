@@ -1,0 +1,875 @@
+{
+  "task_id": "INV-UI-20261120",
+  "recorded_at": "2026-11-21T14:02:18.163186+00:00",
+  "repository": "AMASI-SA/AMASI-SA",
+  "release_branch": "codex/inventory-release-20261121",
+  "release_pair": {
+    "base_J": "0d70cdc4bdc116a4640509c95216bbbd6a72b6ed",
+    "source_A": "03dce00590c565a125ee0219537c86abeeb76819",
+    "intent_B": "a03d05d474d1c0a5fba879c7706761d8f94f5d58",
+    "release_id": "rg5-270cec5290c45a86904ee96b2b2b958625091c630b5bac2bf1a9fde9f7c8a429",
+    "intent_file_sha256": "76a837ef86fce8e1b24b16a5829b94fdf7450c2e7f7888e47eac9dea66057bd0",
+    "candidate_ci_run": 44909185703,
+    "candidate_artifact": 14709058921,
+    "source_ci_success": 66,
+    "source_ci_conditional_skips": 7,
+    "source_ci_failures": 0,
+    "independent_source_records_verified": 2947,
+    "manual_publish": true,
+    "deployment_D": "5019e957cd1bb578f7b7375099547a470e51cb05",
+    "merged_tree": "b5b139db0d9f05bc74fc28a96f63f66835c405fb",
+    "reviewed_B_checks": {
+      "SKIPPED": 7,
+      "SUCCESS": 68
+    },
+    "reviewed_B_readiness_run": 44910528896,
+    "clean_clone_host_nodes": [
+      "20.20.2",
+      "24.19.0"
+    ],
+    "governed_node": "22.23.2",
+    "governed_yarn": "1.22.22"
+  },
+  "merge": {
+    "state": "MERGED",
+    "strategy": "normal_merge_no_squash_no_rebase",
+    "sha": "5019e957cd1bb578f7b7375099547a470e51cb05",
+    "merged_at": "2026-11-21T13:56:26Z",
+    "tree_equals_B": true
+  },
+  "merge_proof": {
+    "production_git_merge": "5019e957cd1bb578f7b7375099547a470e51cb05",
+    "reviewed_B": "a03d05d474d1c0a5fba879c7706761d8f94f5d58",
+    "source_A": "03dce00590c565a125ee0219537c86abeeb76819",
+    "merged_tree": "b5b139db0d9f05bc74fc28a96f63f66835c405fb",
+    "tree_equals_reviewed_B": true,
+    "only_intent_after_A": true,
+    "release_id": "rg5-270cec5290c45a86904ee96b2b2b958625091c630b5bac2bf1a9fde9f7c8a429",
+    "live_observation": {
+      "source_git_sha": "e8b699ef61a196d575dc31bc31922753666c0318",
+      "release_id": "rg5-8658735cff68ad875434debc456a51b8b1fdcfcd81b0a8adfeff2373c101c085",
+      "verified_identity_available": true,
+      "frontend_build_verified": true
+    },
+    "agent_published": false,
+    "agent_created_lease": false,
+    "agent_changed_business_data": false
+  },
+  "source_A_summary": {
+    "success": 66,
+    "conditional_workflow_skips": 7,
+    "failure": 0
+  },
+  "reviewed_B_summary": {
+    "SKIPPED": 7,
+    "SUCCESS": 68
+  },
+  "reviewed_B_checks": [
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:46:27Z",
+      "conclusion": "SKIPPED",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528948/job/136865174750",
+      "name": "reviewed-candidate",
+      "startedAt": "2026-11-21T13:46:28Z",
+      "status": "COMPLETED",
+      "workflowName": "TikTok Creator Release Candidate"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:48:57Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528874/job/136865172914",
+      "name": "isolated-real-mongo",
+      "startedAt": "2026-11-21T13:46:30Z",
+      "status": "COMPLETED",
+      "workflowName": "Background workers and two-hour Qoyod cycles"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:55:48Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528871/job/136865173224",
+      "name": "CodeQL (python)",
+      "startedAt": "2026-11-21T13:49:19Z",
+      "status": "COMPLETED",
+      "workflowName": "CodeQL"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:50:40Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528879/job/136865173112",
+      "name": "backend-contract",
+      "startedAt": "2026-11-21T13:50:16Z",
+      "status": "COMPLETED",
+      "workflowName": "Components Categories and Groups V1"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:49:17Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528960/job/136865173361",
+      "name": "backend-contract",
+      "startedAt": "2026-11-21T13:48:54Z",
+      "status": "COMPLETED",
+      "workflowName": "Components Required Category and Group Picker V2"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:50:52Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528901/job/136865173198",
+      "name": "Saved card authority and real Mongo hourly admission",
+      "startedAt": "2026-11-21T13:50:00Z",
+      "status": "COMPLETED",
+      "workflowName": "Dashboard card cadence and catalogue admission"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:54:34Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528921/job/136865173286",
+      "name": "frozen-reference-and-runtime",
+      "startedAt": "2026-11-21T13:50:24Z",
+      "status": "COMPLETED",
+      "workflowName": "Dashboard runtime adoption gate"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:49:51Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910529001/job/136865173783",
+      "name": "backend-contract",
+      "startedAt": "2026-11-21T13:49:34Z",
+      "status": "COMPLETED",
+      "workflowName": "Employees V2 Foundation"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:51:42Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528911/job/136865173509",
+      "name": "backend-contract",
+      "startedAt": "2026-11-21T13:50:56Z",
+      "status": "COMPLETED",
+      "workflowName": "Fulfillment V2"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:54:48Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528972/job/136865173677",
+      "name": "G47 real Mongo purchase, payment, opening and component lifecycle",
+      "startedAt": "2026-11-21T13:50:00Z",
+      "status": "COMPLETED",
+      "workflowName": "G47 Focused Integration"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:50:10Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528976/job/136865173450",
+      "name": "Manual tax and atomic recovery (real isolated Mongo)",
+      "startedAt": "2026-11-21T13:46:53Z",
+      "status": "COMPLETED",
+      "workflowName": "MZ2 Accounting Module"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:51:26Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528925/job/136865173457",
+      "name": "frontend",
+      "startedAt": "2026-11-21T13:50:31Z",
+      "status": "COMPLETED",
+      "workflowName": "MZ2 Accounting UI H2"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:47:32Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528891/job/136865172821",
+      "name": "frontend",
+      "startedAt": "2026-11-21T13:46:29Z",
+      "status": "COMPLETED",
+      "workflowName": "MZ2 Accounting UI Phase 2"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:51:51Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528916/job/136865173089",
+      "name": "native-contract",
+      "startedAt": "2026-11-21T13:47:53Z",
+      "status": "COMPLETED",
+      "workflowName": "MZ2 Track F native shipping"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:49:19Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528919/job/136865173327",
+      "name": "contracts",
+      "startedAt": "2026-11-21T13:47:36Z",
+      "status": "COMPLETED",
+      "workflowName": "MZ2 Track G SSOT contracts"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:49:01Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528884/job/136865173083",
+      "name": "native-contract",
+      "startedAt": "2026-11-21T13:47:32Z",
+      "status": "COMPLETED",
+      "workflowName": "MZ2 advertising V2 native accounting"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:50:13Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528922/job/136865172991",
+      "name": "read-only-boundary",
+      "startedAt": "2026-11-21T13:49:49Z",
+      "status": "COMPLETED",
+      "workflowName": "Mezan MCP Gateway security tests"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:49:32Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528896/job/136865173708",
+      "name": "Backend preflight",
+      "startedAt": "2026-11-21T13:49:11Z",
+      "status": "COMPLETED",
+      "workflowName": "Mezan Production Release"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:49:13Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528887/job/136865173067",
+      "name": "real-mongo-tracking",
+      "startedAt": "2026-11-21T13:48:03Z",
+      "status": "COMPLETED",
+      "workflowName": "Mobile Order Tracking"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:50:54Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528937/job/136865173407",
+      "name": "linux-acceptance",
+      "startedAt": "2026-11-21T13:46:57Z",
+      "status": "COMPLETED",
+      "workflowName": "Observability Phase1 isolated acceptance"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:58:28Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528897/job/136865173615",
+      "name": "Operational Balance Backend",
+      "startedAt": "2026-11-21T13:48:17Z",
+      "status": "COMPLETED",
+      "workflowName": "Operational Balance Web"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:56:20Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528883/job/136865173271",
+      "name": "Stock eligibility, reservation and consumption on isolated Mongo",
+      "startedAt": "2026-11-21T13:49:21Z",
+      "status": "COMPLETED",
+      "workflowName": "Operational Stock Eligibility"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:48:11Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528866/job/136865173130",
+      "name": "backend-query-budgets",
+      "startedAt": "2026-11-21T13:47:34Z",
+      "status": "COMPLETED",
+      "workflowName": "Page and operational read performance"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:50:06Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528935/job/136865173147",
+      "name": "extended-contract",
+      "startedAt": "2026-11-21T13:49:41Z",
+      "status": "COMPLETED",
+      "workflowName": "Production Campaign AI Decision V3 Extended"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:46:56Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528872/job/136865172776",
+      "name": "worker-contract",
+      "startedAt": "2026-11-21T13:46:29Z",
+      "status": "COMPLETED",
+      "workflowName": "Production Campaign AI Subprocess Worker V1"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:49:39Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528930/job/136865173179",
+      "name": "backend-contract",
+      "startedAt": "2026-11-21T13:49:14Z",
+      "status": "COMPLETED",
+      "workflowName": "Production Dashboard V2 Salla Ads Executive"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:51:55Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910529003/job/136865173504",
+      "name": "backend-unit",
+      "startedAt": "2026-11-21T13:51:27Z",
+      "status": "COMPLETED",
+      "workflowName": "Products V2"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:49:58Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528949/job/136865173473",
+      "name": "production-runtime",
+      "startedAt": "2026-11-21T13:49:03Z",
+      "status": "COMPLETED",
+      "workflowName": "Public Legal Pages Noindex"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:51:25Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528958/job/136865173480",
+      "name": "backend-unit",
+      "startedAt": "2026-11-21T13:51:00Z",
+      "status": "COMPLETED",
+      "workflowName": "Qoyod Payment Freshness"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:56:47Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528902/job/136865173339",
+      "name": "real-mongo-review",
+      "startedAt": "2026-11-21T13:46:58Z",
+      "status": "COMPLETED",
+      "workflowName": "Review Completion Resumable"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:49:10Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528900/job/136865173152",
+      "name": "backend-runtime-contract",
+      "startedAt": "2026-11-21T13:48:43Z",
+      "status": "COMPLETED",
+      "workflowName": "Runtime Stability"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:48:28Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528881/job/136865173088",
+      "name": "local-contracts",
+      "startedAt": "2026-11-21T13:48:13Z",
+      "status": "COMPLETED",
+      "workflowName": "Salla Order Revision P0 contracts"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:49:27Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528869/job/136865173297",
+      "name": "replica-set-acceptance",
+      "startedAt": "2026-11-21T13:48:30Z",
+      "status": "COMPLETED",
+      "workflowName": "Salla Orders V3 acceptance"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:50:30Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528878/job/136865173230",
+      "name": "Backend security contracts",
+      "startedAt": "2026-11-21T13:48:59Z",
+      "status": "COMPLETED",
+      "workflowName": "Security Gate"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:46:52Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528944/job/136865173605",
+      "name": "scope",
+      "startedAt": "2026-11-21T13:46:42Z",
+      "status": "COMPLETED",
+      "workflowName": "Shipping Print Boundary"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:47:36Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528963/job/136865173591",
+      "name": "scope",
+      "startedAt": "2026-11-21T13:47:25Z",
+      "status": "COMPLETED",
+      "workflowName": "Snapchat Direct Active Publication"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:50:37Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528890/job/136865173511",
+      "name": "Fail-closed settings and multi-account scope guard",
+      "startedAt": "2026-11-21T13:50:26Z",
+      "status": "COMPLETED",
+      "workflowName": "Snapchat Settings Management V2"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:53:28Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528877/job/136865173638",
+      "name": "receipt-heavy-monthly-reports",
+      "startedAt": "2026-11-21T13:47:17Z",
+      "status": "COMPLETED",
+      "workflowName": "Supplier cost report performance"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:50:17Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528892/job/136865172955",
+      "name": "changes",
+      "startedAt": "2026-11-21T13:50:07Z",
+      "status": "COMPLETED",
+      "workflowName": "Warehouse Location Engine"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:49:47Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528871/job/136865172995",
+      "name": "CodeQL (javascript-typescript)",
+      "startedAt": "2026-11-21T13:47:37Z",
+      "status": "COMPLETED",
+      "workflowName": "CodeQL"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:47:36Z",
+      "conclusion": "SKIPPED",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528963/job/136865454483",
+      "name": "Publication backend and existing write guards",
+      "startedAt": "2026-11-21T13:47:36Z",
+      "status": "COMPLETED",
+      "workflowName": "Snapchat Direct Active Publication"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:50:38Z",
+      "conclusion": "SKIPPED",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528890/job/136866214867",
+      "name": "Backend settings and zero-write regressions",
+      "startedAt": "2026-11-21T13:50:38Z",
+      "status": "COMPLETED",
+      "workflowName": "Snapchat Settings Management V2"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:50:17Z",
+      "conclusion": "SKIPPED",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528892/job/136866123828",
+      "name": "backend-unit",
+      "startedAt": "2026-11-21T13:50:17Z",
+      "status": "COMPLETED",
+      "workflowName": "Warehouse Location Engine"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:47:34Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528874/job/136865173085",
+      "name": "manual-job-ui",
+      "startedAt": "2026-11-21T13:46:45Z",
+      "status": "COMPLETED",
+      "workflowName": "Background workers and two-hour Qoyod cycles"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:50:34Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528879/job/136865172933",
+      "name": "frontend-test-and-build",
+      "startedAt": "2026-11-21T13:49:30Z",
+      "status": "COMPLETED",
+      "workflowName": "Components Categories and Groups V1"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:48:41Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528960/job/136865173161",
+      "name": "frontend-test-and-build",
+      "startedAt": "2026-11-21T13:47:52Z",
+      "status": "COMPLETED",
+      "workflowName": "Components Required Category and Group Picker V2"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:48:52Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528901/job/136865173052",
+      "name": "Independent automatic and manual card refresh",
+      "startedAt": "2026-11-21T13:48:05Z",
+      "status": "COMPLETED",
+      "workflowName": "Dashboard card cadence and catalogue admission"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:52:37Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910529001/job/136865173975",
+      "name": "frontend-test-and-build",
+      "startedAt": "2026-11-21T13:51:47Z",
+      "status": "COMPLETED",
+      "workflowName": "Employees V2 Foundation"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:52:00Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528911/job/136865173356",
+      "name": "frontend-test-and-build",
+      "startedAt": "2026-11-21T13:50:54Z",
+      "status": "COMPLETED",
+      "workflowName": "Fulfillment V2"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:52:25Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528972/job/136865173895",
+      "name": "G47 purchase and receiving UI tests and build",
+      "startedAt": "2026-11-21T13:51:20Z",
+      "status": "COMPLETED",
+      "workflowName": "G47 Focused Integration"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:50:59Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528976/job/136865173583",
+      "name": "Accounting backend contract",
+      "startedAt": "2026-11-21T13:50:42Z",
+      "status": "COMPLETED",
+      "workflowName": "MZ2 Accounting Module"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:47:15Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528925/job/136865173099",
+      "name": "currency-backend",
+      "startedAt": "2026-11-21T13:47:01Z",
+      "status": "COMPLETED",
+      "workflowName": "MZ2 Accounting UI H2"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:48:51Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528919/job/136865173619",
+      "name": "frontend",
+      "startedAt": "2026-11-21T13:48:02Z",
+      "status": "COMPLETED",
+      "workflowName": "MZ2 Track G SSOT contracts"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:52:12Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528896/job/136865173865",
+      "name": "Host Node 20.20.2 engine and dispatcher contract",
+      "startedAt": "2026-11-21T13:51:56Z",
+      "status": "COMPLETED",
+      "workflowName": "Mezan Production Release"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:53:03Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528897/job/136865173608",
+      "name": "Operational Balance Frontend",
+      "startedAt": "2026-11-21T13:51:44Z",
+      "status": "COMPLETED",
+      "workflowName": "Operational Balance Web"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:48:01Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528866/job/136865172981",
+      "name": "frontend-route-loading",
+      "startedAt": "2026-11-21T13:46:59Z",
+      "status": "COMPLETED",
+      "workflowName": "Page and operational read performance"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:52:01Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528930/job/136865173379",
+      "name": "frontend-test-and-build",
+      "startedAt": "2026-11-21T13:50:52Z",
+      "status": "COMPLETED",
+      "workflowName": "Production Dashboard V2 Salla Ads Executive"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:52:39Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910529003/job/136865173757",
+      "name": "frontend-build",
+      "startedAt": "2026-11-21T13:51:52Z",
+      "status": "COMPLETED",
+      "workflowName": "Products V2"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:48:01Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528949/job/136865173374",
+      "name": "frontend-build",
+      "startedAt": "2026-11-21T13:47:04Z",
+      "status": "COMPLETED",
+      "workflowName": "Public Legal Pages Noindex"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:50:49Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528900/job/136865173440",
+      "name": "frontend-auth-recovery",
+      "startedAt": "2026-11-21T13:50:12Z",
+      "status": "COMPLETED",
+      "workflowName": "Runtime Stability"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:53:06Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528878/job/136865173432",
+      "name": "Frontend dependency and CSP checks",
+      "startedAt": "2026-11-21T13:49:53Z",
+      "status": "COMPLETED",
+      "workflowName": "Security Gate"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:50:24Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528944/job/136865272932",
+      "name": "shipping-mongo",
+      "startedAt": "2026-11-21T13:48:52Z",
+      "status": "COMPLETED",
+      "workflowName": "Shipping Print Boundary"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:52:06Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528896/job/136865173854",
+      "name": "Host Node 24.19.0 engine and dispatcher contract",
+      "startedAt": "2026-11-21T13:51:55Z",
+      "status": "COMPLETED",
+      "workflowName": "Mezan Production Release"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:47:36Z",
+      "conclusion": "SKIPPED",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528963/job/136865454093",
+      "name": "Publication frontend and existing media flow",
+      "startedAt": "2026-11-21T13:47:36Z",
+      "status": "COMPLETED",
+      "workflowName": "Snapchat Direct Active Publication"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:50:38Z",
+      "conclusion": "SKIPPED",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528890/job/136866214686",
+      "name": "Frontend Snapchat settings tests and build",
+      "startedAt": "2026-11-21T13:50:38Z",
+      "status": "COMPLETED",
+      "workflowName": "Snapchat Settings Management V2"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:51:18Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528976/job/136865173592",
+      "name": "Accounting frontend contract",
+      "startedAt": "2026-11-21T13:50:18Z",
+      "status": "COMPLETED",
+      "workflowName": "MZ2 Accounting Module"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:51:45Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528896/job/136865173868",
+      "name": "Frontend build",
+      "startedAt": "2026-11-21T13:50:39Z",
+      "status": "COMPLETED",
+      "workflowName": "Mezan Production Release"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:51:53Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528897/job/136865173647",
+      "name": "Canonical worker excludes operational balance jobs",
+      "startedAt": "2026-11-21T13:50:36Z",
+      "status": "COMPLETED",
+      "workflowName": "Operational Balance Web"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:47:01Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528949/job/136865173219",
+      "name": "source-contract",
+      "startedAt": "2026-11-21T13:46:54Z",
+      "status": "COMPLETED",
+      "workflowName": "Public Legal Pages Noindex"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:52:23Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528892/job/136866122061",
+      "name": "frontend-build",
+      "startedAt": "2026-11-21T13:51:28Z",
+      "status": "COMPLETED",
+      "workflowName": "Warehouse Location Engine"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:54:03Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528896/job/136866488157",
+      "name": "Emergent Host Node 20.20.2 clean-clone adapter rehearsal",
+      "startedAt": "2026-11-21T13:52:01Z",
+      "status": "COMPLETED",
+      "workflowName": "Mezan Production Release"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:48:03Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528897/job/136865173362",
+      "name": "Operational balances browser, mobile and visibility acceptance",
+      "startedAt": "2026-11-21T13:46:35Z",
+      "status": "COMPLETED",
+      "workflowName": "Operational Balance Web"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:54:11Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528896/job/136866488239",
+      "name": "Emergent Host Node 24.19.0 clean-clone adapter rehearsal",
+      "startedAt": "2026-11-21T13:52:03Z",
+      "status": "COMPLETED",
+      "workflowName": "Mezan Production Release"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:54:11Z",
+      "conclusion": "SKIPPED",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528896/job/136867078391",
+      "name": "Emergent manual redeploy required",
+      "startedAt": "2026-11-21T13:54:11Z",
+      "status": "COMPLETED",
+      "workflowName": "Mezan Production Release"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-21T13:49:44Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/AMASI-SA/AMASI-SA/runs/136865955548",
+      "name": "CodeQL",
+      "startedAt": "2026-11-21T13:49:37Z",
+      "status": "COMPLETED",
+      "workflowName": ""
+    }
+  ],
+  "reviewed_B_run": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44910528896",
+  "adapter_artifacts": [
+    {
+      "id": 14710066799,
+      "name": "release-v5-clean-clone-evidence-host-24.19.0"
+    },
+    {
+      "id": 14709702829,
+      "name": "release-v5-generated-outputs-host-24.19.0"
+    },
+    {
+      "id": 14709632886,
+      "name": "release-v5-clean-clone-evidence-host-20.20.2"
+    },
+    {
+      "id": 14709369285,
+      "name": "release-v5-generated-outputs-host-20.20.2"
+    }
+  ],
+  "fresh_commands": [
+    {
+      "command": "git diff --exit-code a03d05d474d1c0a5fba879c7706761d8f94f5d58 origin/hotfix/prod-snap-meta-final",
+      "exit": 0,
+      "result": "merged D tree equals reviewed B"
+    },
+    {
+      "command": "git merge-base --is-ancestor 03dce00590c565a125ee0219537c86abeeb76819 5019e957cd1bb578f7b7375099547a470e51cb05",
+      "exit": 0,
+      "result": "source A preserved in merge ancestry"
+    },
+    {
+      "command": "git diff --name-only 03dce00590c565a125ee0219537c86abeeb76819 5019e957cd1bb578f7b7375099547a470e51cb05",
+      "exit": 0,
+      "result": [
+        "release/release-intent-v5.json"
+      ]
+    },
+    {
+      "command": "bash -n manual-publish.sh",
+      "exit": 0,
+      "result": "syntax only; not executed in /app"
+    }
+  ],
+  "live_health_observation": {
+    "observed_at": "2026-11-21T14:01:20.801348+00:00",
+    "url": "https://mezansalla.com/api/health",
+    "release": {
+      "source_git_sha": "e8b699ef61a196d575dc31bc31922753666c0318",
+      "release_id": "rg5-8658735cff68ad875434debc456a51b8b1fdcfcd81b0a8adfeff2373c101c085",
+      "verified_identity_available": true,
+      "frontend_build_verified": true
+    }
+  },
+  "agent_publish": false,
+  "agent_app_lease_or_business_writes": false,
+  "remaining": "User manual publication followed by fresh explicit Deployment Succeeded and three v5 probes. No production visual verification claimed."
+}

@@ -3,11 +3,11 @@
   "scope": "Replace legacy Mezan inventory interfaces with the approved integrated Arabic RTL design using the existing native services and permissions.",
   "branch": "codex/inventory-release-20261121",
   "base_sha": "734b977de28254c2c089148b4db8972a03ba19eb",
-  "state": "reviewed_intent_frozen_ci_pending",
-  "production_changed": false,
-  "remote_checkpoint": "a03d05d474d1c0a5fba879c7706761d8f94f5d58 intent-only B pushed to release branch; source A and J preserved",
-  "release_lease": "not_created",
-  "deployment": "user_will_publish_manually",
+  "state": "merged_awaiting_user_manual_publication",
+  "production_changed": true,
+  "remote_checkpoint": "a03d05d474d1c0a5fba879c7706761d8f94f5d58 immutable reviewed release branch; documentation checkpoint containing this file is recorded in Issue1006",
+  "release_lease": "not_created_or_touched_by_agent; shared /app state unobserved",
+  "deployment": "not_published_by_agent; user requested manual publication code",
   "owners": {
     "root": "Shared suite shell, native inventory workspace/reader, routing, reporting/control integration and final verification",
     "native_catalog_resources": "Native products, components, groups, bundles visible interfaces",
@@ -20,18 +20,16 @@
     "Preserve canonical product/variant/resource/location identity, server preview hash, stable idempotency and current permissions",
     "No opening-stock writer reused for stock adjustments"
   ],
-  "next_action": "Require exact B required checks and v5 clean-clone adapter rehearsal, preserve A/B in normal PR2038 merge, then provide exact production merge SHA and user manual guard/build/prepublish/publish/verify instructions. No agent publish or /app/lease/data writes.",
-  "updated_at": "2026-11-21T13:47:12.318986+00:00",
-  "verified_milestone": "All exact source A CI complete:66SUCCESS+7conditional workflow skips,0failures. Native Mongo, stock eligibility, full operational and review regressions passed. Governed A/B source build and candidate validation PASS; independently matched2947manifest records against Git object modes/bytes/blobs/SHA256. Generated artifact copied byte-for-byte; A..B changes only intent. No source rebase/squash after freeze.",
+  "next_action": "User runs MANUAL-PUBLISH.md Bash preparation in Emergent /app only if guard idle and tracked tree clean. Stop on failure or advanced Production Git. After prepublish passes, user chooses Re-publish changes once, waits for a NEW Deployment Succeeded, then runs guard verify and status. No inventory posting activation or operational data writes.",
+  "updated_at": "2026-11-21T14:02:18.163186+00:00",
+  "verified_milestone": "Normal PR2038 merge preserves A/B and has exactly the reviewed B tree. All B checks completed:68SUCCESS+7conditional workflow skips,0failures; both Node20/24 clean-clone governed adapter rehearsals PASS. Read-only live health still reports prior source; agent did not deploy.",
   "ledger": "https://github.com/AMASI-SA/AMASI-SA/issues/1006#issuecomment-6238987123 has a dedicated dated INV-UI-20261120 section appended without removing original content; comments/body limits block new entries elsewhere. Write read-back verified.",
   "incomplete": [
-    "Corrected source CI and candidate intent artifact pending",
-    "Reviewed B, reviewed clean-clone checks and preserving merge pending",
-    "User manual shared /app release preparation/publish/verify remains; no agent /app writes or lease"
+    "User-operated /app guard status, exact ff-only source update, clean-clone adapter rehearsal, shared materialization, prepare/prepublish and manual publication.",
+    "A NEW Deployment Succeeded plus three successful v5 live probes and final idle guard status are required; production visual match remains unverified."
   ],
   "posting_scope": "User approved full stocktake/adjustment lifecycle including atomic posting, development only; new posting default-closed",
   "durable_patch": "C:\\Users\\amasi\\OneDrive\\المستندات\\ChatGPT\\ميزان\\outputs\\inventory-implementation-20261120\\inventory-ui-wip.patch",
-  "last_verified_runtime_sha": "55bb3bbfba3d327b5fbe946cfaa85764e136b282",
   "active_owner": "root",
   "verification_evidence": "docs/operations/INV-UI-20261120/evidence/verification.json",
   "review_report": "docs/operations/INV-UI-20261120/CHECKPOINT.md",
@@ -43,16 +41,20 @@
     "provider_publish": "blocked"
   },
   "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/2038",
-  "branch_ci": "Source A66successful/7conditional skips,0failures. Exact B CI in progress; clean-clone adapter checks required before merge.",
-  "merge": "authorized_pending_verification",
+  "branch_ci": "Exact B:68SUCCESS+7conditional workflow skips,0failures; source A:66SUCCESS+7conditional workflow skips,0failures. D has identical tree to B.",
+  "merge": {
+    "state": "MERGED",
+    "strategy": "normal_merge_no_squash_no_rebase",
+    "sha": "5019e957cd1bb578f7b7375099547a470e51cb05",
+    "merged_at": "2026-11-21T13:56:26Z",
+    "tree_equals_B": true
+  },
   "upstream_observation": {
-    "production_git_head_observed": "c4a83ac18b24f0367b3fbe8052a026c2dbdbac98",
-    "changed_paths_since_task_base": 20,
-    "direct_file_overlap_with_task": [],
-    "scope": "bank recognition and provider financial evidence, related tests/docs and release intent",
-    "integrated_into_task_branch": false,
-    "combined_head_runtime_verification": "not_performed; required before any authorized merge",
-    "production_changed_by_this_task": false
+    "reviewed_integrated_base": "0d70cdc4bdc116a4640509c95216bbbd6a72b6ed",
+    "production_git_head_observed": "5019e957cd1bb578f7b7375099547a470e51cb05",
+    "merged_tree": "b5b139db0d9f05bc74fc28a96f63f66835c405fb",
+    "reviewed_B_tree_equal": true,
+    "unrelated_local_work": "Original shared checkout Qoyod/order modifications preserved without edits"
   },
   "continuity_branch": "codex/inventory-ui-replacement-20261120",
   "release_base_sha": "0d70cdc4bdc116a4640509c95216bbbd6a72b6ed",
@@ -75,6 +77,38 @@
     "source_ci_conditional_skips": 7,
     "source_ci_failures": 0,
     "independent_source_records_verified": 2947,
-    "manual_publish": true
+    "manual_publish": true,
+    "deployment_D": "5019e957cd1bb578f7b7375099547a470e51cb05",
+    "merged_tree": "b5b139db0d9f05bc74fc28a96f63f66835c405fb",
+    "reviewed_B_checks": {
+      "SKIPPED": 7,
+      "SUCCESS": 68
+    },
+    "reviewed_B_readiness_run": 44910528896,
+    "clean_clone_host_nodes": [
+      "20.20.2",
+      "24.19.0"
+    ],
+    "governed_node": "22.23.2",
+    "governed_yarn": "1.22.22"
+  },
+  "production_git_changed": true,
+  "production_runtime_changed_by_agent": false,
+  "production_operational_data_changed_by_agent": false,
+  "production_source_merge_sha": "5019e957cd1bb578f7b7375099547a470e51cb05",
+  "continuity_previous_checkpoint": "2949600132c4f50d7cbe0937c1fa5dee37673375",
+  "manual_publish_instructions": "docs/operations/INV-UI-20261120/MANUAL-PUBLISH.md",
+  "manual_publish_script": "docs/operations/INV-UI-20261120/manual-publish.sh",
+  "release_verification_evidence": "docs/operations/INV-UI-20261120/evidence/release-validation.json",
+  "last_verified_tested_source_sha": "03dce00590c565a125ee0219537c86abeeb76819",
+  "live_release_observation": {
+    "observed_at": "2026-11-21T14:01:20.801348+00:00",
+    "url": "https://mezansalla.com/api/health",
+    "release": {
+      "source_git_sha": "e8b699ef61a196d575dc31bc31922753666c0318",
+      "release_id": "rg5-8658735cff68ad875434debc456a51b8b1fdcfcd81b0a8adfeff2373c101c085",
+      "verified_identity_available": true,
+      "frontend_build_verified": true
+    }
   }
 }
