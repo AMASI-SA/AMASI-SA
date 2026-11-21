@@ -68,6 +68,39 @@ def retained(row):
     return result
 
 
+@pytest.mark.parametrize("count", [1, 1000])
+def test_owner_history_is_scanned_once_off_event_loop_across_batches(monkeypatch, count):
+    """Large cohorts must not rescan the whole merchant ledger per batch."""
+    import threading
+    original = history.known_financial_history
+    scans = []
+    main_thread = threading.get_ident()
+
+    def instrumented(current, orders, *, owner):
+        scans.append((threading.get_ident(), len(orders)))
+        return original(current, orders, owner=owner)
+
+    async def empty_sources(db, owner, specs):
+        return {name: [] for name in specs}
+
+    monkeypatch.setattr(history, "known_financial_history", instrumented)
+    monkeypatch.setattr(history, "_load", empty_sources)
+
+    async def scenario(db):
+        rows = [candidate(str(300000001 + index)) for index in range(count)]
+        # Evidence for the last batch is retained after a single global scan.
+        last = rows[-1]
+        given = state({"capture:opaque": {"order_id": last["order_id"], "amount": "10"}})
+        result = await history.guard_financial_cohort_history(db, "owner", rows, state=given)
+        assert retained(result[-1])["reason_code"] == "awaiting_payment_prior_financial_history"
+        assert all(row[ELIGIBILITY_FIELD]["eligible"] is False for row in result[:-1])
+        assert len(scans) == 1
+        assert scans[0][1] == count
+        assert scans[0][0] != main_thread
+
+    run(scenario)
+
+
 def test_empty_history_authorizes_only_proposed_exclusion_preserves_registry_and_inputs():
     async def scenario(db):
         rows = [candidate(), {**candidate("300000002"), "payment_method": "cod",
