@@ -15,6 +15,7 @@ import httpx
 from typing import Any, Awaitable, Callable
 
 from salla_integration.service import SallaError, call_salla
+from salla_shipping import same_carrier
 from . import shipping_label_service as legacy
 
 _READ_SECONDS = 8.0
@@ -26,10 +27,37 @@ _CANCELLED = {"cancelled", "canceled", "void", "deleted"}
 def _rows(response: Any) -> list[dict[str, Any]]:
     data = response.get("data", response) if isinstance(response, dict) else response
     if isinstance(data, dict):
-        data = data.get("shipments", data.get("data", data))
+        data = data.get("shipments", data.get("shipment", data.get("data", data)))
     if isinstance(data, dict):
         data = [data] if data.get("id") else []
     return [dict(row) for row in data if isinstance(row, dict)] if isinstance(data, list) else []
+
+
+def _order_shipments(order: dict[str, Any]) -> list[dict[str, Any]]:
+    # Use the same provider shapes and precedence as order ingestion. An
+    # explicit top-level selection/history must not revive a nested old AWB.
+    for key in ("shipments", "shipment"):
+        if order.get(key):
+            return _rows(order[key])
+    shipping = order.get("shipping")
+    nested = shipping.get("shipment") if isinstance(shipping, dict) else None
+    if not isinstance(nested, dict):
+        return []
+    current = legacy.extract_shipping(order) or {}
+    shipment_id = legacy._text(nested.get("id"))
+    if not shipment_id or shipment_id == "0" or legacy._text(current.get("shipment_id")) != shipment_id:
+        return []
+    child_carrier = legacy.extract_shipping({"shipping": nested}) or {}
+    if any(child_carrier.get(key) for key in ("company_name", "company_code")) and not same_carrier(current, child_carrier):
+        return []
+    row = dict(nested)
+    # Legacy nested AWBs inherit the enclosing order's carrier; its shipping
+    # company id is never used as a shipment id or as a replacement document.
+    if not legacy._text(row.get("courier_name")):
+        row["courier_name"] = current.get("company_name")
+    if row.get("courier_id") in (None, ""):
+        row["courier_id"] = current.get("company_code")
+    return [row]
 
 
 def _current(rows: list[dict[str, Any]], internal_id: str) -> dict[str, Any]:
@@ -141,15 +169,52 @@ async def _shipment(db: Any, owner: str, internal_id: str, order: dict[str, Any]
             # Embedded/order-scoped lists prove their parent by construction.
             # A global list can only return a positively identified child.
             nested = row.get("order") if isinstance(row.get("order"), dict) else {}
-            if standalone and legacy._text(row.get("order_id") or nested.get("id")) != internal_id:
+            parents = [row.get("order_id"), nested.get("id")]
+            references = [row.get("order_reference_id"), nested.get("reference_id")]
+            expected_reference = legacy._text(order.get("reference_id"))
+            if any(parent not in (None, "") and legacy._text(parent) != internal_id for parent in parents):
+                continue
+            if expected_reference and any(reference not in (None, "") and legacy._text(reference) != expected_reference
+                                          for reference in references):
+                continue
+            if standalone and not any(legacy._text(parent) == internal_id for parent in parents):
                 continue
             result.append(row)
         return result
 
+    def check_current_evidence(response, *, standalone=False, anchor=None):
+        anchor = anchor or current_id
+        for row in _rows(response):
+            nested = row.get("order") if isinstance(row.get("order"), dict) else {}
+            parents = [row.get("order_id"), nested.get("id")]
+            references = [row.get("order_reference_id"), nested.get("reference_id")]
+            expected_reference = legacy._text(order.get("reference_id"))
+            if (any(parent not in (None, "") and legacy._text(parent) != internal_id for parent in parents)
+                    or (standalone and not any(legacy._text(parent) == internal_id for parent in parents))
+                    or (expected_reference and any(reference not in (None, "")
+                        and legacy._text(reference) != expected_reference for reference in references))):
+                continue
+            row_id = legacy._text(row.get("id"))
+            inactive = (legacy._status(row.get("status")) in _CANCELLED
+                        or legacy._status(row.get("type") or row.get("shipment_type")) in {"return", "return_shipment", "reverse"})
+            if ((row_id == anchor and inactive)
+                    or (row_id and row_id != anchor and row_id not in superseded and not inactive)):
+                raise legacy._stale_label()
+
     needs_current_child = strict and not current_id and not _order_label_carrier(order, strict=True)
     standalone = None
     failures: list[int] = []
-    hint_evidence = [(order.get("shipments", []), False)]
+    order_shipments = _order_shipments(order)
+    hint_evidence = [(order_shipments, False)]
+    # A singular field is the fresh order's selection, rather than a shipment
+    # history. Fence its cancellation/replacement before any older list can
+    # return a printable label. Keep plural history selection unchanged.
+    shipping = order.get("shipping") if isinstance(order.get("shipping"), dict) else {}
+    singular = order.get("shipment") or shipping.get("shipment")
+    if strict and not order.get("shipments") and isinstance(singular, dict):
+        anchor = current_id or legacy._text(singular.get("id"))
+        if anchor:
+            check_current_evidence([singular], anchor=anchor)
 
     async def verified(selected):
         if not needs_current_child or not (legacy._internal_carrier(baseline) or _mobile_courier_row(selected)):
@@ -173,7 +238,7 @@ async def _shipment(db: Any, owner: str, internal_id: str, order: dict[str, Any]
     if needs_current_child and legacy._internal_carrier(baseline):
         return await verified({})
 
-    embedded = candidates(order.get("shipments", []))
+    embedded = candidates(order_shipments)
     selected = _current(embedded, internal_id)
     if selected and _printable(selected)["ready"]:
         return await verified(selected)
@@ -203,22 +268,7 @@ async def _shipment(db: Any, owner: str, internal_id: str, order: dict[str, Any]
         # A saved ID cannot override fresh cancellation or replacement evidence.
         # Foreign or unidentified global rows cannot establish that evidence.
         for response, global_list in hint_evidence:
-            for row in _rows(response):
-                nested = row.get("order") if isinstance(row.get("order"), dict) else {}
-                parents = [row.get("order_id"), nested.get("id")]
-                references = [row.get("order_reference_id"), nested.get("reference_id")]
-                expected_reference = legacy._text(order.get("reference_id"))
-                if (any(parent not in (None, "") and legacy._text(parent) != internal_id for parent in parents)
-                        or (global_list and not any(legacy._text(parent) == internal_id for parent in parents))
-                        or (expected_reference and any(reference not in (None, "")
-                            and legacy._text(reference) != expected_reference for reference in references))):
-                    continue
-                row_id = legacy._text(row.get("id"))
-                inactive = (legacy._status(row.get("status")) in _CANCELLED
-                            or legacy._status(row.get("type") or row.get("shipment_type")) in {"return", "return_shipment", "reverse"})
-                if ((row_id == hint and inactive)
-                        or (row_id and row_id != hint and row_id not in superseded and not inactive)):
-                    raise legacy._stale_label()
+            check_current_evidence(response, standalone=global_list, anchor=hint)
     shipment_id = legacy._text(selected.get("id")) if selected else hint
     if shipment_id:
         for path in (f"/shipments/{shipment_id}", f"/shipments/{shipment_id}/tracking"):

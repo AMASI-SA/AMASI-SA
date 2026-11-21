@@ -23,9 +23,29 @@ label in the fresh order or order-scoped response. Command (exit1):
 PYTHONPATH includes backend and backend/tests; existing isolated test runtime.
 Result:9 failed,41 deselected. No production source change yet; live cause still
 unverified. This WIP regression checkpoint is not ready to deploy.
-Exact next action: implement
-the smallest normalization change preserving canonical identity, cancellation,
-replacement, carrier and no-write fences, then run affected checks and ADB.
+Implemented bounded normalization of fresh `shipping.shipment`, singular
+`shipment`, and the order-scoped `data.shipment` wrapper. A nested AWB can
+inherit its enclosing carrier but not the carrier id as a shipment id. The
+same ingestion precedence prevents an old nested AWB overriding top-level
+selection/history. Strict reads reject contradictory parents/references and
+canonical shipment mismatches. Fresh singular cancellation/return/replacement
+is fenced before an older ready list can revive it. An additional regression
+first failed (1 failure/60 passed), then passed after this fence was added.
+
+Fresh verification after the source change, in isolated module processes:
+- `test_carrier_shipment_read_fallback.py`:75 passed,including six real native
+  HTTP-route cases with optional shipping API denied and no provider/local write.
+- `test_amasi_shipping_compat.py`:58 passed and59 subtests passed.
+- `test_mobile_external_label_read_parity.py`:19 passed.
+- Total:152 tests and59 subtests; all exit0. `git diff --check` passes.
+Commands use `python -B -m pytest --noconftest --asyncio-mode=auto -q --tb=short`.
+Production source changed only `backend/order_engine/amasi_shipping_compat.py`.
+Existing valid list responses and optional granted shipping fallback remain.
+This proves the parser repair on synthetic/provider-boundary cases; the actual
+reported order's response shape and live printing are not yet demonstrated.
+Exact next action: review affected canonical/print checks,open Draft PR and run
+fresh candidate CI,then perform live read and ADB acceptance under the existing
+grant. Any later publication requires a new immutable A/B intent and full v5.
 No customer fixtures, OAuth/config/token changes, provider POST, shipment
 creation, substitute PDF, status/financial write or sync are authorized here.
 Issue #1006 task block records the exact remote checkpoint and subsequent state.
