@@ -24,6 +24,14 @@ NOT be deployed. Immutable release branch `codex/aramex-order-payload-release-v2
 - No task lease or publication. PR2048 ready; PR2047 superseded/closed, its A/B
   preserved. The earlier inactive observation preceded the foreign prepare;
   the in-job fresh check correctly stopped the race.
+- Foreign original verify process observed running at20:09UTC. Its operation
+  lock makes concurrent original status wait; our bounded read timed out45s,
+  without changing or clearing the lease. Monitor process completion, then use
+  original status before any rehearsal or shared mutation.
+- Supplementary Mongo read-only context probe on workspace J found zero target
+  and zero control canonical rows; this workspace is not established as the
+  Production order context. No token access, Salla call or DB/shared tracked
+  write. LIVE-ORDER-READ-CONTEXT.json records sanitized role counts only.
 - Fresh ADB: emulator online, authenticated Mezan screen visible. No new-code
   original target acceptance yet. Existing linking/scopes/tokens unchanged.
 

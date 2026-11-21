@@ -1,7 +1,8 @@
 {
   "task": "ARAMEX-PRINT-20261121",
-  "follow_up_state": "WIP: existing-order-read parser repair; live acceptance pending",
-  "draft_pr": "https://github.com/AMASI-SA/AMASI-SA/pull/2047",
+  "follow_up_state": "PR2048 frozen A/B; all39 checks complete; waiting foreign PR2039 lease before independent rehearsal",
+  "pull_request": "https://github.com/AMASI-SA/AMASI-SA/pull/2048",
+  "initial_probe_fields_below_are_historical": true,
   "workspace_source_git_sha": "66aa13967156e8e279b5297caf697c155f720fd1",
   "original_guard_status_before_probe": {"active": false},
   "shared_tracked_source_changed": false,
@@ -23,8 +24,21 @@
     "production_credentials_exported": false,
     "production_permission_or_order_absence_conclusion_allowed": false
   },
+  "latest_canonical_context_probe": {
+    "workspace_source_git_sha": "6e41bf25b936e8c4047df75bb170610dfc71b7f7",
+    "helper_source_sha256": "44b16bd3829a6f117ca4de2e539c195ef33170c80f5b300d4f7a212ebdafa53a",
+    "reads_only": true,
+    "target_canonical_matches": 0,
+    "control_canonical_matches": 0,
+    "production_context_match_established": false,
+    "token_access_performed": false,
+    "salla_requests_executed": 0,
+    "database_writes_performed": false,
+    "shared_tracked_source_changed": false,
+    "production_order_absence_or_permission_conclusion_allowed": false
+  },
   "follow_up_production_changed": false,
   "original_target_print_confirmed": false,
   "customer_data_or_environment_values_included": false,
-  "next_safe_action": "Fresh exact-head CI and new v5 A/B release gates, then actual ADB target/control acceptance using existing grant."
+  "next_safe_action": "Wait foreign verify/lease completion; fresh original status must be inactive, then exact-B independent ARM64 rehearsal, current-base normal merge, authorized guarded publication, original verify3 and actual ADB acceptance."
 }
