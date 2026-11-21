@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "task_id": "EXTERNAL-PARTY-2039-20261121",
+  "state": "PREPARED_PUBLICATION_PENDING",
+  "evidence_kind": "root_ui_observed_shared_materialization_and_prepare",
+  "observed_by": "root",
+  "repository": "AMASI-SA/AMASI-SA",
+  "production_branch": "hotfix/prod-snap-meta-final",
+  "source_base_git_sha": "a9d0aec2939a706dcc16f9948e7a81cfe019e66f",
+  "source_git_sha": "e08d0e489eded39961d374e4eb7bfcc0544b6e90",
+  "reviewed_b_git_sha": "3628efc4215ee95e6196fca4807104a87398e255",
+  "deployment_git_sha": "6e41bf25b936e8c4047df75bb170610dfc71b7f7",
+  "deployment_tree_oid": "c3c66e2f15138523a9a72ee0910706f91f9b47e4",
+  "deployment_tree_equals_reviewed_b": true,
+  "runtime_release_id": "rg5-45eb8f2d79e0912a1277e1e14816e9d9c5e3a40d0a6d784834c6fbb54996974f",
+  "materialization": {
+    "result": "PASS",
+    "observed_at_utc": "2026-11-21T19:44:54.157752Z",
+    "workspace": "/app",
+    "generated_outputs": [
+      "frontend/build/",
+      "frontend/.release/reproducible-build.json",
+      "backend/release_identity.json"
+    ],
+    "generated_regular_files": 356,
+    "generated_bytes": 11463353,
+    "previous_outputs_preserved": true,
+    "previous_outputs_path": "/app/.git/mezan-pr2039-materialize-a7la6r4v/previous",
+    "workspace_free_bytes_after": 53198848,
+    "frontend_verification": {
+      "script": "scripts/verify_frontend_build.py",
+      "arguments": [
+        "--expected-git-sha",
+        "e08d0e489eded39961d374e4eb7bfcc0544b6e90"
+      ],
+      "result": "PASS"
+    }
+  },
+  "prepare": {
+    "result": "PASS",
+    "prepared_at_utc": "2026-11-21T19:46:13.522595Z",
+    "script": "scripts/production_release_guard.py",
+    "arguments": [
+      "prepare",
+      "--actor",
+      "codex-pr2039-owner-authorized"
+    ],
+    "protocol_version": 5,
+    "actor": "codex-pr2039-owner-authorized",
+    "lease_active_at_checkpoint": true,
+    "automatic_lease_expiration": false
+  },
+  "prepublish_result": "PENDING",
+  "publication_attempted": false,
+  "production_runtime_changed": false,
+  "scope_note": "Observed materialization and prepare only. The active lease belongs to this task and must not be replaced or cleared by another operation. Fresh prepublish must precede the one authorized publication; explicit newer deployment success and official live verification remain required."
+}

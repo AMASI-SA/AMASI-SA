@@ -2,11 +2,29 @@
 
 ## Checkpoint verdict
 
-**PR #2039 is merged through the normal protected route after all exact-B checks, release identity, index and live-guard gates passed. The official isolated Emergent rehearsal has now passed on merged M. Shared-workspace handoff, the task's own prepare/prepublish, and publication remain pending at this rehearsal checkpoint.**
+**PREPARED_PUBLICATION_PENDING. PR #2039 is normally merged, its official Emergent rehearsal and shared `/app` materialization have passed, and its own protocol-v5 lease is now active after successful `prepare`. Exact-M push CI is fully successful. No publication has been attempted at this checkpoint; fresh `prepublish` and post-publication verification remain required.**
 
 The owner has authorized merging and publishing PR #2039, subject to the established gates. Emergent Support supplied the previously missing Production index definitions after a read-only inspection. Terminal access has now been restored. Production advanced through PR #2046, so the former A/B pair and its successful CI are historical and cannot authorize the new deployment.
 
-### Latest milestone: official Emergent rehearsal passed
+### Latest milestone: shared handoff and own lease prepared
+
+The root observed shared `/app` materialization **PASS at 2026-11-21T19:44:54.157752Z** (22:44:54 Asia/Riyadh). The destination is exact deployment M `6e41bf25b936e8c4047df75bb170610dfc71b7f7`, whose tree `c3c66e2f15138523a9a72ee0910706f91f9b47e4` equals frozen B. Exactly the three generated outputs were materialized: `frontend/build/`, `frontend/.release/reproducible-build.json`, and `backend/release_identity.json`, totaling **356 regular files / 11,463,353 bytes**. Previous outputs were preserved at `/app/.git/mezan-pr2039-materialize-a7la6r4v/previous`; observed remaining `/app` capacity was **53,198,848 bytes**. Normal destination frontend verification with expected source A passed.
+
+The official `production_release_guard.py prepare --actor codex-pr2039-owner-authorized` then passed at **2026-11-21T19:46:13.522595Z** (22:46:13 Asia/Riyadh), binding protocol 5, deployment M, source A `e08d0e489eded39961d374e4eb7bfcc0544b6e90`, and runtime release `rg5-45eb8f2d79e0912a1277e1e14816e9d9c5e3a40d0a6d784834c6fbb54996974f`. **The active lease is this task's own lease**, actor `codex-pr2039-owner-authorized`; it has no automatic expiry. Do not create a replacement lease, assume an inactive guard, or clear it on another task's behalf. See [materialization-prepare.json](materialization-prepare.json).
+
+The final exact-M GitHub audit at **2026-11-21 19:46:03 UTC / 22:46:03 Asia/Riyadh**, independently read by root and the CI reviewer, found **all 3 workflows and all 11 checks successful**, with zero pending, failed or skipped checks and no legacy statuses. Pagination was complete and every run/check belonged to M. The Production ref remained M; its ordered parents were J and B and its tree equaled B. See [M-ci-evidence.json](M-ci-evidence.json).
+
+| Exact-M push workflow | Conclusion | Run |
+| --- | --- | --- |
+| Security Gate | success | [44941832737](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44941832737) |
+| CodeQL | success | [44941832749](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44941832749) |
+| Mezan Release Readiness | success | [44941832677](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44941832677) |
+
+**Next safe action:** confirm the existing lease still belongs to this task and the local/remote deployment SHA remains exact M, then run the official `prepublish` immediately before one authorized publication. Do not repeat `prepare`. Acceptance requires a newer explicit `Deployment Succeeded`, the official three matching live probes, and final `active:false`. Stop on identity/SHA drift, a different lease owner, a new failed check, or any guard refusal. Prepared state is not evidence that Emergent has published or that Production serves the intended release.
+
+Production changed by this task through this checkpoint: **Git branch yes (normal merge M); shared `/app` yes (reviewed handoff); live runtime no**. No financial/index mutation or APK publication occurred.
+
+### Previous milestone: official Emergent rehearsal passed
 
 The root observed the official rehearsal in a task-owned normal clone at `/tmp/mezan-pr2039-release-0sv39fp_`, from **2026-11-21T19:40:23.380281Z** to **2026-11-21T19:41:54.752195Z** (22:40:23 to 22:41:54 Asia/Riyadh). The actual `cd frontend && yarn build` adapter invocation passed in **91.37 seconds**, followed by a successful strict `verify_frontend_build.py --expected-git-sha e08d0e489eded39961d374e4eb7bfcc0544b6e90 --reviewed-intent-v5` check. This is observed Emergent rehearsal evidence, recorded from the root's UI result; it is not a claim that this evidence writer reran the commands.
 
@@ -19,7 +37,7 @@ The rehearsal used deployment M `6e41bf25b936e8c4047df75bb170610dfc71b7f7`, with
 
 Both hashes match the reviewed exact-B adapter evidence. The rehearsal changed no shared source, created no lease, and attempted no publication. See [emergent-rehearsal.json](emergent-rehearsal.json) for the sanitized machine-readable observation. Generated outputs remain outside this evidence branch.
 
-**Next safe action:** refresh the live shared guard and actual Production SHA; continue only with `active:false` and unchanged M. Fast-forward shared `/app` only to exact M, preserve unrelated work and previous generated artifacts, and materialize only the three verified generated outputs from this rehearsal. Revalidate destination source/bytes, prepare this task's own lease, and run `prepublish` immediately before one authorized publication. Acceptance still requires a newer explicit `Deployment Succeeded`, the official three matching live verification probes, and final `active:false`. An isolated rehearsal cannot prove the later Cloud Build handoff or a live deployment. Production push CI on M remains subject to freshness monitoring.
+**Next safe action at the rehearsal checkpoint (shared handoff and prepare are now completed above):** refresh the live shared guard and actual Production SHA; continue only with `active:false` and unchanged M. Fast-forward shared `/app` only to exact M, preserve unrelated work and previous generated artifacts, and materialize only the three verified generated outputs from this rehearsal. Revalidate destination source/bytes, prepare this task's own lease, and run `prepublish` immediately before one authorized publication. Acceptance still requires a newer explicit `Deployment Succeeded`, the official three matching live verification probes, and final `active:false`. An isolated rehearsal cannot prove the later Cloud Build handoff or a live deployment. Production push CI on M remains subject to freshness monitoring.
 
 Production changed by this task through this checkpoint: **Git branch yes (the recorded normal merge M); live runtime no**. No financial/index mutation or APK publication occurred.
 

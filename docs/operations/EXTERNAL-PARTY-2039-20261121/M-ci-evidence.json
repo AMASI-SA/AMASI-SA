@@ -1,0 +1,250 @@
+{
+  "schema_version": 1,
+  "task_id": "EXTERNAL-PARTY-2039-20261121",
+  "result": "PASS",
+  "observed_at_utc": "2026-11-21T19:46:03Z",
+  "observation_provenance": "Exact-M GitHub data independently read by root and CI reviewer; retained source files cross-checked by the evidence writer.",
+  "repository": "AMASI-SA/AMASI-SA",
+  "production_branch": "hotfix/prod-snap-meta-final",
+  "ci_head_sha": "6e41bf25b936e8c4047df75bb170610dfc71b7f7",
+  "pr_head_sha": "3628efc4215ee95e6196fca4807104a87398e255",
+  "pr_merged": true,
+  "merge_commit_sha": "6e41bf25b936e8c4047df75bb170610dfc71b7f7",
+  "production_sha": "6e41bf25b936e8c4047df75bb170610dfc71b7f7",
+  "tree_proof": {
+    "merge_sha": "6e41bf25b936e8c4047df75bb170610dfc71b7f7",
+    "tree": "c3c66e2f15138523a9a72ee0910706f91f9b47e4",
+    "parents": [
+      "a9d0aec2939a706dcc16f9948e7a81cfe019e66f",
+      "3628efc4215ee95e6196fca4807104a87398e255"
+    ],
+    "expected_tree": "c3c66e2f15138523a9a72ee0910706f91f9b47e4",
+    "tree_equals_verified_B": true,
+    "ordered_parents_equal_J_B": true
+  },
+  "run_total": 3,
+  "run_success_count": 3,
+  "check_total": 11,
+  "check_success_count": 11,
+  "pending_count": 0,
+  "failed_count": 0,
+  "skipped_count": 0,
+  "legacy_status_count": 0,
+  "all_run_and_check_sources_exact_M": true,
+  "pagination_complete": true,
+  "runs": [
+    {
+      "id": 44941832737,
+      "name": "Security Gate",
+      "event": "push",
+      "head_sha": "6e41bf25b936e8c4047df75bb170610dfc71b7f7",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44941832737"
+    },
+    {
+      "id": 44941832749,
+      "name": "CodeQL",
+      "event": "push",
+      "head_sha": "6e41bf25b936e8c4047df75bb170610dfc71b7f7",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44941832749"
+    },
+    {
+      "id": 44941832677,
+      "name": "Mezan Release Readiness",
+      "event": "push",
+      "head_sha": "6e41bf25b936e8c4047df75bb170610dfc71b7f7",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44941832677"
+    }
+  ],
+  "checks": [
+    {
+      "id": 136961484950,
+      "name": "Emergent manual redeploy required",
+      "head_sha": "6e41bf25b936e8c4047df75bb170610dfc71b7f7",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44941832677/job/136961484950",
+      "completed_at": "2026-11-21T19:40:10Z"
+    },
+    {
+      "id": 136960910067,
+      "name": "Emergent Host Node 24.19.0 clean-clone adapter rehearsal",
+      "head_sha": "6e41bf25b936e8c4047df75bb170610dfc71b7f7",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44941832677/job/136960910067",
+      "completed_at": "2026-11-21T19:40:03Z"
+    },
+    {
+      "id": 136960910043,
+      "name": "Emergent Host Node 20.20.2 clean-clone adapter rehearsal",
+      "head_sha": "6e41bf25b936e8c4047df75bb170610dfc71b7f7",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44941832677/job/136960910043",
+      "completed_at": "2026-11-21T19:39:43Z"
+    },
+    {
+      "id": 136960507918,
+      "name": "Backend security contracts",
+      "head_sha": "6e41bf25b936e8c4047df75bb170610dfc71b7f7",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44941832737/job/136960507918",
+      "completed_at": "2026-11-21T19:39:04Z"
+    },
+    {
+      "id": 136960507670,
+      "name": "Frontend build",
+      "head_sha": "6e41bf25b936e8c4047df75bb170610dfc71b7f7",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44941832677/job/136960507670",
+      "completed_at": "2026-11-21T19:37:56Z"
+    },
+    {
+      "id": 136960507658,
+      "name": "Frontend dependency and CSP checks",
+      "head_sha": "6e41bf25b936e8c4047df75bb170610dfc71b7f7",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44941832737/job/136960507658",
+      "completed_at": "2026-11-21T19:39:29Z"
+    },
+    {
+      "id": 136960507627,
+      "name": "Host Node 24.19.0 engine and dispatcher contract",
+      "head_sha": "6e41bf25b936e8c4047df75bb170610dfc71b7f7",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44941832677/job/136960507627",
+      "completed_at": "2026-11-21T19:36:44Z"
+    },
+    {
+      "id": 136960507591,
+      "name": "Host Node 20.20.2 engine and dispatcher contract",
+      "head_sha": "6e41bf25b936e8c4047df75bb170610dfc71b7f7",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44941832677/job/136960507591",
+      "completed_at": "2026-11-21T19:37:15Z"
+    },
+    {
+      "id": 136960507535,
+      "name": "CodeQL (python)",
+      "head_sha": "6e41bf25b936e8c4047df75bb170610dfc71b7f7",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44941832749/job/136960507535",
+      "completed_at": "2026-11-21T19:45:28Z"
+    },
+    {
+      "id": 136960507343,
+      "name": "CodeQL (javascript-typescript)",
+      "head_sha": "6e41bf25b936e8c4047df75bb170610dfc71b7f7",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44941832749/job/136960507343",
+      "completed_at": "2026-11-21T19:38:57Z"
+    },
+    {
+      "id": 136960507246,
+      "name": "Backend preflight",
+      "head_sha": "6e41bf25b936e8c4047df75bb170610dfc71b7f7",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44941832677/job/136960507246",
+      "completed_at": "2026-11-21T19:36:44Z"
+    }
+  ],
+  "adapter_job_ids": [
+    136960910043,
+    136960910067
+  ],
+  "readiness_artifacts": [
+    {
+      "id": 14722460613,
+      "name": "release-v5-clean-clone-evidence-host-20.20.2",
+      "size_in_bytes": 60653,
+      "digest": "sha256:be97582a8a4a25f18971bb00e1f30b949e6eb0e9b35e28b837ffe65cdcbe93b0",
+      "expired": false,
+      "workflow_run": {
+        "id": 44941832677,
+        "repository_id": 1250664189,
+        "head_repository_id": 1250664189,
+        "head_branch": "hotfix/prod-snap-meta-final",
+        "head_sha": "6e41bf25b936e8c4047df75bb170610dfc71b7f7"
+      }
+    },
+    {
+      "id": 14721943171,
+      "name": "release-v5-clean-clone-evidence-host-24.19.0",
+      "size_in_bytes": 60649,
+      "digest": "sha256:74b8dcfd8c1fca600d8c81c45dcd6d1a0e6bb41e60c2415165053d6bbf1d684f",
+      "expired": false,
+      "workflow_run": {
+        "id": 44941832677,
+        "repository_id": 1250664189,
+        "head_repository_id": 1250664189,
+        "head_branch": "hotfix/prod-snap-meta-final",
+        "head_sha": "6e41bf25b936e8c4047df75bb170610dfc71b7f7"
+      }
+    },
+    {
+      "id": 14721574186,
+      "name": "release-v5-generated-outputs-host-24.19.0",
+      "size_in_bytes": 3702736,
+      "digest": "sha256:767fb4ea241c6f1005ca45d9f36a7e204e09bddc2b54e37b1b6f6cab821ce9f9",
+      "expired": false,
+      "workflow_run": {
+        "id": 44941832677,
+        "repository_id": 1250664189,
+        "head_repository_id": 1250664189,
+        "head_branch": "hotfix/prod-snap-meta-final",
+        "head_sha": "6e41bf25b936e8c4047df75bb170610dfc71b7f7"
+      }
+    },
+    {
+      "id": 14721424581,
+      "name": "release-v5-generated-outputs-host-20.20.2",
+      "size_in_bytes": 3704670,
+      "digest": "sha256:e7ee3bdce2b638a583b334e317bdcaef5949370db2478666c242b87b50e57045",
+      "expired": false,
+      "workflow_run": {
+        "id": 44941832677,
+        "repository_id": 1250664189,
+        "head_repository_id": 1250664189,
+        "head_branch": "hotfix/prod-snap-meta-final",
+        "head_sha": "6e41bf25b936e8c4047df75bb170610dfc71b7f7"
+      }
+    }
+  ],
+  "artifact_verification_scope": "GitHub artifact metadata retained here; this record does not assert an additional download or byte-level verification of the M artifacts. Independently verified B artifacts are recorded separately in new-b-adapter-verification.json.",
+  "source_evidence_files": [
+    {
+      "filename": "M-final-summary.json",
+      "sha256": "01dc23d2059b34aa11523f3d95066adefe810b4ac442152df808bab05b570f83"
+    },
+    {
+      "filename": "M-tree-proof.json",
+      "sha256": "4734400fd2b791d155ff72e2b73e3d6b085f698a35fb8c333b92662b5d7e0537"
+    },
+    {
+      "filename": "M-final-snapshot-20261121T194603Z.json",
+      "sha256": "a1b48261280ab47690c32ad8cd22dc06685e626200b9212be5e4485ef2caafcd"
+    },
+    {
+      "filename": "M-readiness-artifacts.json",
+      "sha256": "aa84d848900a848cb585e2670ebabafc708fd792221794d118f20022a2c5b020"
+    }
+  ],
+  "scope": "CI and merge-tree evidence only; this record does not establish prepublish success or a live Production deployment."
+}
