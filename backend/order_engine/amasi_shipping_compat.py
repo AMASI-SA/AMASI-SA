@@ -73,7 +73,7 @@ def _current(rows: list[dict[str, Any]], internal_id: str) -> dict[str, Any]:
             continue
         if legacy._status(row.get("status")) in _CANCELLED:
             continue
-        if not legacy._text(row.get("id")):
+        if legacy._text(row.get("id")) in {"", "0"}:
             continue
         verified.append(row)
     current = legacy._active_outbound(verified)
@@ -198,6 +198,13 @@ async def _shipment(db: Any, owner: str, internal_id: str, order: dict[str, Any]
     metadata = legacy._label_metadata(baseline)
     current_id = legacy._text(metadata.get("shipment_id") or (baseline or {}).get("salla_shipment_id"))
     superseded = {str(value) for value in metadata.get("superseded_shipment_ids") or []}
+    inactive_ids = set()
+
+    def remember_inactive(rows):
+        if strict:
+            inactive_ids.update(legacy._text(row.get("id")) for row in rows
+                if legacy._status(row.get("status")) in _CANCELLED
+                or legacy._status(row.get("type") or row.get("shipment_type")) in {"return", "return_shipment", "reverse"})
 
     def candidates(response, *, standalone=False):
         rows = _rows(response)
@@ -259,6 +266,8 @@ async def _shipment(db: Any, owner: str, internal_id: str, order: dict[str, Any]
             check_current_evidence([singular], anchor=anchor)
 
     async def verified(selected):
+        if legacy._text(selected.get("id")) in inactive_ids:
+            raise legacy._stale_label()
         if not needs_current_child or not (legacy._internal_carrier(baseline) or _mobile_courier_row(selected)):
             return selected
         # A sparse order does not identify its current shipment. A unique active
@@ -269,11 +278,14 @@ async def _shipment(db: Any, owner: str, internal_id: str, order: dict[str, Any]
         page = response.get("pagination") if isinstance(response, dict) else None
         page = page if isinstance(page, dict) else {}
         rows = candidates(response, standalone=True)
+        remember_inactive(rows)
         eligible = [row for row in rows if _current([row], internal_id)
                     and legacy._status(row.get("status")) not in {"", "delivered", "returned", "refunded"}]
         if (len(eligible) != 1 or len(_rows(response)) >= 50
                 or (page.get("links") or {}).get("next")
                 or any(str(page.get(key, 1)) != "1" for key in ("totalPages", "total_pages", "last_page"))):
+            raise legacy._stale_label()
+        if legacy._text(eligible[0].get("id")) in inactive_ids:
             raise legacy._stale_label()
         return eligible[0]
 
@@ -281,6 +293,7 @@ async def _shipment(db: Any, owner: str, internal_id: str, order: dict[str, Any]
         return await verified({})
 
     embedded = candidates(order_shipments)
+    remember_inactive(embedded)
     selected = _current(embedded, internal_id)
     if selected and _printable(selected)["ready"]:
         return await verified(selected)
@@ -297,7 +310,13 @@ async def _shipment(db: Any, owner: str, internal_id: str, order: dict[str, Any]
         if path == "/shipments":
             standalone = response
         if response is not None:
-            selected = _merge_rows(selected, candidates(response, standalone=(path == "/shipments")), internal_id)
+            data = response.get("data") if isinstance(response, dict) else None
+            if (strict and current_id and path != "/shipments" and isinstance(data, dict)
+                    and not data.get("shipments") and isinstance(data.get("shipment"), dict)):
+                check_current_evidence([data["shipment"]])
+            rows = candidates(response, standalone=(path == "/shipments"))
+            remember_inactive(rows)
+            selected = _merge_rows(selected, rows, internal_id)
         if selected and _printable(selected)["ready"]:
             return await verified(selected)
 
@@ -335,9 +354,9 @@ async def _shipment(db: Any, owner: str, internal_id: str, order: dict[str, Any]
                     if (legacy._text(data.get("id")) != shipment_id
                             or not any(legacy._text(parent) == internal_id for parent in parents)):
                         continue
-                    if (legacy._status(data.get("status")) in _CANCELLED
-                            or legacy._status(data.get("type") or data.get("shipment_type")) in {"return", "return_shipment", "reverse"}):
-                        raise legacy._stale_label()
+                remember_inactive([{**data, "id": shipment_id}])
+                if strict and shipment_id in inactive_ids:
+                    raise legacy._stale_label()
                 selected = _merge_rows(selected, [{**data, "id": shipment_id}], internal_id)
             if selected and _printable(selected)["ready"]:
                 break
