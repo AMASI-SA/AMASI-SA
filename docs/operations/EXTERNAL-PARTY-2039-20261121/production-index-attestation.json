@@ -1,0 +1,54 @@
+{
+  "evidence_kind": "authenticated_platform_support_read_only_inspection",
+  "sender_domain": "emergent.sh",
+  "mail_authentication": {
+    "dkim_aligned_domain_pass": true,
+    "spf_pass": true,
+    "dmarc_pass": true,
+    "original_request_thread_match": true
+  },
+  "inspection_timestamp_utc": "2026-11-21T18:21:48Z",
+  "reply_timestamp_utc": "2026-11-21T18:27:46Z",
+  "app": "salla-analytics",
+  "environment": "Production",
+  "database": "salla-analytics-test_database",
+  "collection": "mz2_external_persons_v2",
+  "indexes": [
+    {
+      "name": "user_id_1_name_lower_1",
+      "keys_in_order": [["user_id", 1], ["name_lower", 1]],
+      "unique": true,
+      "sparse_option_present": false,
+      "partial_filter_present": false,
+      "collation_option_present": false,
+      "collation_reported": "none (default)",
+      "fully_built": true
+    },
+    {
+      "name": "user_id_1_id_1",
+      "keys_in_order": [["user_id", 1], ["id", 1]],
+      "unique": true,
+      "sparse_option_present": false,
+      "partial_filter_present": false,
+      "collation_option_present": false,
+      "collation_reported": "none (default)",
+      "fully_built": true
+    }
+  ],
+  "total_indexes_including_id": 3,
+  "index_build_in_progress": false,
+  "inspection_side_effects_reported": {
+    "index_changes": false,
+    "document_changes": false,
+    "application_restart": false,
+    "deployment": false
+  },
+  "production_index_gate": "PASS",
+  "workspace_helper_production_execution_succeeded": false,
+  "notes": [
+    "Support confirms Production accepts connections from its production environment; a direct workspace-terminal connection is expected to time out.",
+    "This is a sanitized factual transcription of platform-operator evidence, not a direct MongoDB driver response captured by this task.",
+    "No credentials, document contents, individual party names, or private mailbox message identifiers are retained here.",
+    "This timestamped evidence does not replace fresh Git SHA, CI, workspace, release-lock, rehearsal, or live publication verification."
+  ]
+}

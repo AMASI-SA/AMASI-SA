@@ -2,9 +2,26 @@
 
 ## Checkpoint verdict
 
-**CI and the official protocol-v5 A/B release are ready. Merge and publication remain blocked on direct Production index metadata.**
+**CI, the official protocol-v5 A/B release, and the Production index gate are verified. Merge and publication remain pending a fresh live release-guard check and the normal Emergent release procedure.**
 
-The owner has authorized merging and publishing PR #2039, subject to the established gates. The remaining blocker is missing evidence, not a request for new permission. The Production name index has **not** been observed missing; its definition remains **unverified**.
+The owner has authorized merging and publishing PR #2039, subject to the established gates. Emergent Support supplied the previously missing Production index definitions after a read-only inspection. The current access blocker is the disconnected shared-workspace terminal, not missing database indexes or a request for new merge/publication permission.
+
+### Latest update: authenticated Production index evidence
+
+Emergent Support inspected the exact Production database and collection at **2026-11-21 18:21:48 UTC / 21:21:48 Asia/Riyadh**. Its reply arrived at **18:27:46 UTC / 21:27:46 Asia/Riyadh** from `support@emergent.sh` in the original request thread. Gmail-reported DKIM for `emergent.sh`, SPF, and DMARC passed. The root read the actual reply; this is platform-operator evidence, not a successful rerun of the workspace helper.
+
+| Production index | Verified definition |
+| --- | --- |
+| `user_id_1_name_lower_1` | Keys `user_id:1`, then `name_lower:1`; `unique:true`; sparse not set; no partial filter; collation absent/default; fully built |
+| `user_id_1_id_1` | Keys `user_id:1`, then `id:1`; `unique:true`; sparse not set; no partial filter; collation absent/default; fully built |
+
+Support confirmed exactly three indexes including `_id_`, with no build in progress. It performed no index/document mutation, restart, or deployment. It also confirmed that direct workspace-terminal access to Production is unsupported and that the observed timeout is expected on that route. Another URI entry or preview-terminal retry is unnecessary. The sanitized evidence is recorded in [production-index-attestation.json](production-index-attestation.json).
+
+The current Production-index gate is **PASS**. Earlier `UNVERIFIED` and timeout sections below are historical and superseded by this reply; do not ask for another URI entry or repeat the preview-terminal check.
+
+Fresh GitHub audit at **2026-11-21 21:53:11 Asia/Riyadh** still found B and J unchanged, eleven successful workflows plus the expected TikTok skip, 23 successful checks/six conditional skips, and zero failed or unfinished checks. PR remains draft, unmerged, and mergeable/clean.
+
+On resuming Emergent, the root found the code-server terminal disconnected and repeatedly attempting to reconnect. An input attempt into a new task-owned terminal was explicitly rejected before any input was sent. Reconnect did not restore it. No fresh guard status was obtained in this continuation, no source/workspace update was applied, and the old inactive-guard snapshot cannot authorize execution. The original release remains frozen while terminal access is restored.
 
 Production changed by this operation: **no**. No merge, release lease, publication, financial record/index mutation, or APK publication has occurred.
 
@@ -125,8 +142,8 @@ The root's read-only Production metadata inspection found:
 | Missing names / normalized names | 0 |
 | Legacy normalization mismatches | 0 |
 | Duplicate normalized names within an owner | 0 |
-| Direct definition of unique `(user_id, name_lower)` index | **UNVERIFIED** |
-| Direct definition of unique `(user_id, id)` index | **UNVERIFIED** |
+| Direct definition of unique `(user_id, name_lower)` index | Initially unverified in the UI; **PASS in the later authenticated Support inspection** |
+| Direct definition of unique `(user_id, id)` index | Initially unverified in the UI; **PASS in the later authenticated Support inspection** |
 
 No individual names, owner identifiers, phone numbers, notes, MongoDB URI, credentials or financial values are retained in this record.
 
@@ -185,9 +202,9 @@ The existing production source has no general external-party index-metadata HTTP
 
 Fresh GitHub audit at **2026-11-21 21:11:38 Asia/Riyadh**: HEAD remains B, Production remains J, all twelve runs remain attempt 1 (eleven successes and the scoped TikTok skip), and all 29 checks retain 23 successes/six conditional skips. No CI failure or changed source. PR remains draft/unmerged and mergeable/clean. The four visible required contexts pass. Full administrative branch-protection details were not accessible to the integration (403), so their absence is not claimed; any eventual merge must use the normal protected route without bypass.
 
-### Current next action
+### Next action after the support reply
 
-1. Keep PR #2039 at frozen B. Obtain read-only `listIndexes` metadata from an already authorized production-connected operator or Emergent support for database `salla-analytics-test_database`, collection `mz2_external_persons_v2`. Request key order, `unique`, `sparse`, presence of `partialFilterExpression`, collation, confirmation the relevant indexes are fully built, and the inspection timestamp. No document contents, connection string, export, index mutation, restart or publication is needed. No support message has been sent: external correspondence requires the owner's separate authorization.
+1. Keep PR #2039 at frozen B. The owner separately authorized the support request, it was sent once, and the requested read-only index evidence has now arrived and passed review. Restore the shared Emergent terminal connection and obtain a fresh guard/status/HEAD/clean-tracked-tree snapshot. Preserve all unrelated terminals, ignored artifacts, staging directories, and untracked work. Do not request the Mongo URI again or alter financial records/indexes.
 
    The companion helper remains available for a **confirmed supported Production-connected runtime**, not as another preview-terminal retry:
 
@@ -198,11 +215,11 @@ Fresh GitHub audit at **2026-11-21 21:11:38 Asia/Riyadh**: HEAD remains B, Produ
 
    Retain only its sanitized JSON verdict. Do not paste or store a MongoDB URI in chat, Git, logs, command arguments or this record. Do not use the preview environment connection as a substitute.
 
-2. If the helper passes, freshly revalidate PR HEAD equals B, Production equals the expected J, all applicable checks belong to that exact HEAD, mergeability/no conflicts, and live guard `active:false`. Resolve any changed head/base by the official new A/B process; never reuse stale CI or an obsolete candidate.
+2. With the platform-operator index evidence accepted, freshly revalidate PR HEAD equals B, Production equals the expected J, all applicable checks belong to that exact HEAD, mergeability/no conflicts, and live guard `active:false`. Resolve any changed head/base by the official new A/B process; never reuse stale CI or an obsolete candidate.
 
 3. Only after all gates pass, the root may complete the already authorized normal merge preserving A/B and verify that the resulting deployment tree is equivalent to B. Then follow the existing `AGENTS.md` Emergent protocol: exact production SHA, clean tracked workspace, local official adapter rehearsal, matching lease, prepublish verification, one authorized publication, explicit newer deployment success, and the official three consecutive live verification probes ending in `active:false`.
 
-No deploy command is authorized by this evidence record while direct Production index metadata remains unverified. Do not weaken a gate, change financial indexes/data, bypass the release guard, or publish an APK to complete this task.
+Do not execute a deploy command until current live guard/workspace checks and the remaining protocol steps pass. The Production index evidence is now verified; the terminal's old scrollback is not a fresh release-lock check. Do not weaken a gate, change financial indexes/data, bypass the release guard, or publish an APK to complete this task.
 
 ## Handoff ownership
 
