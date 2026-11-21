@@ -526,9 +526,11 @@ async def ensure_piece_operation_indexes(db: Any) -> None:
         unique=True,
         name="uq_preparation_piece_physical_unit_v1",
     )
+    # This key is shared with supplier-report startup; Mongo requires the same
+    # canonical name when an identical index already exists.
     await db[PIECES].create_index(
         [("user_id", ASCENDING), ("order_number", ASCENDING)],
-        name="ix_preparation_piece_order_v1",
+        name="ix_preparation_piece_order_cost_v1",
     )
     await db[PIECES].create_index(
         [

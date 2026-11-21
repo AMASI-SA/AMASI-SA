@@ -408,3 +408,23 @@ async def test_read_deadline_cancels_work_and_returns_retryable_error_not_empty(
     assert response.json()["detail"]["code"] == "assembly_board_read_timeout"
     assert "queue_counts" not in response.json() and "items" not in response.json()
     assert cancelled.is_set()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reports_first", [True, False])
+async def test_piece_order_index_reuses_existing_report_index_in_either_startup_order(reports_first):
+    from supplier_invoice_reporting_costs import ensure_supplier_report_indexes
+    db = AsyncMongoMockClient().assembly_shared_index
+    builders = [ensure_supplier_report_indexes, operations.ensure_piece_operation_indexes]
+    if not reports_first:
+        builders.reverse()
+    for _ in range(2):
+        for ensure in builders:
+            await ensure(db)
+    indexes = await db[operations.PIECES].index_information()
+    same_key = {name: spec for name, spec in indexes.items()
+                if spec["key"] == [("user_id", 1), ("order_number", 1)]}
+    # Real Mongo rejects the same index specification under another name;
+    # mongomock accepts it, so explicitly exercise that compatibility contract.
+    assert set(same_key) == {"ix_preparation_piece_order_cost_v1"}
+    assert not same_key["ix_preparation_piece_order_cost_v1"].get("unique")
