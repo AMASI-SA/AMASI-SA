@@ -1,21 +1,25 @@
 {
   "schema_version": 2,
   "task_id": "OPERATIONAL-CONTEXT-READ-RECOVERY-20261122",
-  "recorded_at_utc": "2026-11-22T02:42:48Z",
+  "recorded_at_utc": "2026-11-22T02:51:37Z",
   "repository": "AMASI-SA/AMASI-SA",
   "pull_request": {
     "number": 2058,
     "url": "https://github.com/AMASI-SA/AMASI-SA/pull/2058",
-    "branch": "codex/operational-context-read-lifetime-20261122"
+    "branch": "codex/operational-context-read-lifetime-20261122",
+    "state": "merged",
+    "merged_at_utc": "2026-11-22T02:47:45Z",
+    "merge_commit": "1c4008e315c35ec4419e76400a9faddb94b9d5a2"
   },
   "evidence_branch": {
     "name": "codex/operational-context-release-evidence-20261122",
     "based_on": "5758240bd83ed3018737ae59808f55415d80a689",
     "deploy_this_branch": false,
-    "remote_checkpoint": "aa1baf3d5bd2e84b809ab15b9d034e61c7494308",
-    "remote_checkpoint_tree": "ceeade7b8cc7684db1d7ef437f8f1dfe0817b6c2",
+    "remote_checkpoint": "de285a0a573aa97cdbb9ae62910af1776cba768b",
+    "remote_checkpoint_tree": "9eddfbb00e15a58dfe76f9141514cfc506cc0fbb",
     "remote_checkpoint_scope": "previous_evidence_record_before_this_update",
-    "earlier_checkpoint": "1ac7888c1563b7b1d624c9e77196d5c8f8493a85"
+    "earlier_checkpoint": "1ac7888c1563b7b1d624c9e77196d5c8f8493a85",
+    "previous_checkpoint": "aa1baf3d5bd2e84b809ab15b9d034e61c7494308"
   },
   "provenance": {
     "base_M3": "02e8be41e6f1972806f0e095b8fdc38645a7f113",
@@ -42,7 +46,23 @@
     "original_candidate_validation": "passed_reported_by_release_owner",
     "retained_frontend_validation": "passed_reported_by_release_owner",
     "object_and_byte_checks": "passed_independent_local_read_only_inspection",
-    "B1_carried_into_new_source_lineage": false
+    "B1_carried_into_new_source_lineage": false,
+    "deployment_merge_M4": {
+      "sha": "1c4008e315c35ec4419e76400a9faddb94b9d5a2",
+      "tree": "18b335c1eb3d526c82ace35d83aca0d50ce4d1a5",
+      "parents": [
+        "02e8be41e6f1972806f0e095b8fdc38645a7f113",
+        "0329084d343562fa5ff43df535422eeeacb0a327"
+      ],
+      "normal_merge": true,
+      "tree_equals_B2": true,
+      "B2_to_M4_changed_paths": [],
+      "local_Git_independent_check": "passed",
+      "root_REST_and_Git_production_ref_check": "passed",
+      "root_original_adapter_load_and_provenance_validation": "passed",
+      "root_original_guard_assert_reviewed_source_relation": "passed",
+      "runtime_source_identity_remains_A2": true
+    }
   },
   "frozen_identity": {
     "release_id": "rg5-9d69963c0ee7f5c299595495519175af5074f703f4e318b82b870b0407554a49",
@@ -393,22 +413,20 @@
   "current_release_state": {
     "exact_head": "0329084d343562fa5ff43df535422eeeacb0a327",
     "ci": {
-      "status": "pending",
-      "triggered_workflows": 12,
-      "failed_checks_observed_in_initial_snapshot": 0,
-      "evidence_basis": "direct independent release_readiness initial B2 snapshot",
+      "status": "passed",
+      "evidence_basis": "final exact-B2 acceptance supplied by independent release_readiness; current evidence author did not duplicate monitoring",
       "critical_runs": [
         {
           "name": "Operational",
           "run_id": 44976770986,
           "job_id": 137068308105,
-          "state": "pending"
+          "state": "success"
         },
         {
           "name": "Stock",
           "run_id": 44976770906,
           "job_id": 137068307860,
-          "state": "pending"
+          "state": "success"
         },
         {
           "name": "Readiness",
@@ -542,29 +560,378 @@
           "stage_counts_not_summed": true
         }
       ],
-      "pending_major_gates": [
-        "Operational backend",
-        "Stock"
-      ],
-      "latest_reviewer_observation_utc": "2026-11-22T02:42:00Z",
+      "pending_major_gates": [],
+      "latest_reviewer_observation_utc": "2026-11-22T02:46:55.662Z",
       "failed_checks_observed": 0,
-      "interim_workflow_counts": {
-        "success": 9,
+      "final_observed_at_utc": "2026-11-22T02:46:55.662Z",
+      "workflow_run_count": 14,
+      "distinct_workflows": 12,
+      "ready_for_review_extra_scope_runs": 2,
+      "active": 0,
+      "failures": 0,
+      "neutral": 0,
+      "all_retrieved_runs_and_checks_bound_to_B2": true,
+      "workflow_counts": {
+        "success": 13,
         "expected_skipped": 1,
-        "running": 2
+        "total": 14
       },
-      "interim_REST_check_counts": {
-        "success": 21,
-        "expected_skipped": 6,
-        "running": 2
+      "workflow_job_counts": {
+        "success": 24,
+        "expected_skipped": 10,
+        "total": 34
+      },
+      "REST_check_counts": {
+        "success": 25,
+        "expected_skipped": 10,
+        "total": 35
+      },
+      "additional_successful_REST_check": {
+        "name": "aggregate_CodeQL",
+        "id": 137068849137,
+        "extra_workflow_or_job_execution": false
+      },
+      "expected_skip_breakdown": {
+        "Snapchat_downstream_initial_and_ready_events": 8,
+        "TikTok_named_branch": 1,
+        "Readiness_push_only_handoff": 1
+      },
+      "accounting_filter_count": 65,
+      "A2_changed_paths": 5,
+      "B2_changed_paths": 6,
+      "workflow_runs": [
+        {
+          "name": "Operational",
+          "run_id": 44976770986,
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44976770986",
+          "result": "success",
+          "jobs": {
+            "success": [
+              137068308105,
+              137068308305,
+              137068308183,
+              137068308131
+            ],
+            "expected_skipped": []
+          }
+        },
+        {
+          "name": "Stock",
+          "run_id": 44976770906,
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44976770906",
+          "result": "success",
+          "jobs": {
+            "success": [
+              137068307860
+            ],
+            "expected_skipped": []
+          }
+        },
+        {
+          "name": "Readiness",
+          "run_id": 44976771038,
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44976771038",
+          "result": "success",
+          "jobs": {
+            "success": [
+              137068308275,
+              137068308477,
+              137068308407,
+              137068308495,
+              137068568557,
+              137068568495
+            ],
+            "expected_skipped": [
+              137069099749
+            ]
+          }
+        },
+        {
+          "name": "Security",
+          "run_id": 44976771018,
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44976771018",
+          "result": "success",
+          "jobs": {
+            "success": [
+              137068308245,
+              137068308168
+            ],
+            "expected_skipped": []
+          }
+        },
+        {
+          "name": "G47",
+          "run_id": 44976770975,
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44976770975",
+          "result": "success",
+          "jobs": {
+            "success": [
+              137068308299,
+              137068308045
+            ],
+            "expected_skipped": []
+          }
+        },
+        {
+          "name": "CodeQL",
+          "run_id": 44976770924,
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44976770924",
+          "result": "success",
+          "jobs": {
+            "success": [
+              137068307880,
+              137068307701
+            ],
+            "expected_skipped": []
+          }
+        },
+        {
+          "name": "Mobile",
+          "run_id": 44976771012,
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44976771012",
+          "result": "success",
+          "jobs": {
+            "success": [
+              137068307913
+            ],
+            "expected_skipped": []
+          }
+        },
+        {
+          "name": "Salary",
+          "run_id": 44976770849,
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44976770849",
+          "result": "success",
+          "jobs": {
+            "success": [
+              137068307522
+            ],
+            "expected_skipped": []
+          }
+        },
+        {
+          "name": "Qoyod",
+          "run_id": 44976770953,
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44976770953",
+          "result": "success",
+          "jobs": {
+            "success": [
+              137068307822
+            ],
+            "expected_skipped": []
+          }
+        },
+        {
+          "name": "TikTok",
+          "run_id": 44976770899,
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44976770899",
+          "result": "skipped",
+          "jobs": {
+            "success": [],
+            "expected_skipped": [
+              137068309475
+            ]
+          }
+        },
+        {
+          "name": "Snapchat Publication initial",
+          "run_id": 44976770930,
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44976770930",
+          "result": "success",
+          "jobs": {
+            "success": [
+              137068308109
+            ],
+            "expected_skipped": [
+              137068355064,
+              137068356051
+            ]
+          }
+        },
+        {
+          "name": "Snapchat Settings initial",
+          "run_id": 44976770864,
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44976770864",
+          "result": "success",
+          "jobs": {
+            "success": [
+              137068307988
+            ],
+            "expected_skipped": [
+              137068376021,
+              137068376422
+            ]
+          }
+        },
+        {
+          "name": "Snapchat Publication ready",
+          "run_id": 44977571199,
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44977571199",
+          "result": "success",
+          "jobs": {
+            "success": [
+              137070780142
+            ],
+            "expected_skipped": [
+              137070822878,
+              137070822450
+            ]
+          }
+        },
+        {
+          "name": "Snapchat Settings ready",
+          "run_id": 44977571200,
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44977571200",
+          "result": "success",
+          "jobs": {
+            "success": [
+              137070780153
+            ],
+            "expected_skipped": [
+              137070823700,
+              137070823573
+            ]
+          }
+        }
+      ],
+      "critical_verification": {
+        "operational": {
+          "run_id": 44976770986,
+          "job_id": 137068308105,
+          "passed": 6237,
+          "subtests": 90,
+          "seconds": 455.12,
+          "strict_missing_skipped_gate": "success",
+          "junit": {
+            "testcase_nodes": 6237,
+            "tests_including_subtests": 6327,
+            "errors": 0,
+            "failures": 0,
+            "skipped": 0,
+            "context_snapshot_cases_passed": 21,
+            "active_read_lifetime_cases_passed": 12,
+            "context_lifetime_case_passed": true,
+            "embedded_source_sha": "0329084d343562fa5ff43df535422eeeacb0a327",
+            "embedded_source_tree": "18b335c1eb3d526c82ace35d83aca0d50ce4d1a5"
+          }
+        },
+        "shipping_separate_step": {
+          "passed": 16,
+          "subtests": 18,
+          "seconds": 0.39,
+          "result": "success",
+          "proof": "separate_successful_step_and_log",
+          "included_in_retained_main_JUnit": false
+        },
+        "stock": {
+          "run_id": 44976770906,
+          "job_id": 137068307860,
+          "passed": 5525,
+          "subtests": 97,
+          "seconds": 447.36,
+          "strict_zero_skips_failures_errors_gate": "success",
+          "junit": {
+            "testcase_nodes": 5525,
+            "tests_including_subtests": 5622,
+            "errors": 0,
+            "failures": 0,
+            "skipped": 0,
+            "active_read_lifetime_cases_passed": 12,
+            "context_lifetime_case_passed": true,
+            "archive_contains_only_XML": true,
+            "exact_head_binding": "artifact_API_workflow_run.head_sha_plus_exact_checkout_and_upload_log"
+          }
+        },
+        "coverage_counts_must_not_be_summed": true
+      },
+      "retained_artifacts": [
+        {
+          "name": "Operational backend",
+          "id": 14735194652,
+          "run_id": 44976770986,
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44976770986/artifacts/14735194652",
+          "bytes": 106471,
+          "sha256": "b61ac64fb02c73a3a385cf2ca9ea44c4e0d219db4d9eb9f74e870453233292cc",
+          "API_metadata_bound_to_exact_B2": true,
+          "downloaded_hashed_parsed_by_reviewer": true,
+          "metadata_and_upload_log_digests_match": true
+        },
+        {
+          "name": "Stock",
+          "id": 14736273113,
+          "run_id": 44976770906,
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44976770906/artifacts/14736273113",
+          "bytes": 93561,
+          "sha256": "d5114d22c30d3fc7904741d476fb5c9fbf69326acb8852cd78fc5fc0ffdff7cd",
+          "API_metadata_bound_to_exact_B2": true,
+          "downloaded_hashed_parsed_by_reviewer": true,
+          "metadata_and_upload_log_digests_match": true
+        },
+        {
+          "name": "Operational frontend",
+          "id": 14736212485,
+          "run_id": 44976770986,
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44976770986/artifacts/14736212485",
+          "bytes": 44984,
+          "sha256": "478168563606853f2cf4055ba27c081bdc81fe29305d2911af40fa374415966a",
+          "API_metadata_bound_to_exact_B2": true,
+          "downloaded_hashed_parsed_by_reviewer": false,
+          "metadata_and_upload_log_digests_match": true
+        },
+        {
+          "name": "Financial browser 14",
+          "id": 14736272200,
+          "run_id": 44976770986,
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44976770986/artifacts/14736272200",
+          "bytes": 751668,
+          "sha256": "217e7ff7a4828c23ecffe14c93bb82b08e846ad6e12eacced20cab146cd78ab8",
+          "API_metadata_bound_to_exact_B2": true,
+          "downloaded_hashed_parsed_by_reviewer": false,
+          "metadata_and_upload_log_digests_match": true
+        },
+        {
+          "name": "Simple browser 12",
+          "id": 14736043199,
+          "run_id": 44976770986,
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44976770986/artifacts/14736043199",
+          "bytes": 1090315,
+          "sha256": "bee59de43dfc5efc4b7236c5a93704727d66a33d00ba32f40dcb9a73baeca92b",
+          "API_metadata_bound_to_exact_B2": true,
+          "downloaded_hashed_parsed_by_reviewer": false,
+          "metadata_and_upload_log_digests_match": true
+        },
+        {
+          "name": "Worker",
+          "id": 14735637744,
+          "run_id": 44976770986,
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44976770986/artifacts/14735637744",
+          "bytes": 747,
+          "sha256": "2eec495542bce15090df81aeb3ffe07b4459c14281a70fd54a9fbdd2b43076b3",
+          "API_metadata_bound_to_exact_B2": true,
+          "downloaded_hashed_parsed_by_reviewer": false,
+          "metadata_and_upload_log_digests_match": true
+        }
+      ],
+      "retained_gate_artifacts_including_Readiness": 10,
+      "salary_proof_thresholds": {
+        "backend_minimum": 127,
+        "frontend_minimum": 32,
+        "original_gate_passed": true,
+        "exact_counts_derived": false
       }
     },
-    "merged": false,
+    "merged": true,
     "lease_created": false,
     "published": false,
     "production_changed_by_this_patch": false,
     "original_live_identity_verification": "pending",
-    "live_inventory_acceptance": "pending"
+    "live_inventory_acceptance": "pending",
+    "deployment_git_sha": "1c4008e315c35ec4419e76400a9faddb94b9d5a2",
+    "merged_at_utc": "2026-11-22T02:47:45Z",
+    "github_production_ref": "1c4008e315c35ec4419e76400a9faddb94b9d5a2",
+    "app_last_verified_head": "02e8be41e6f1972806f0e095b8fdc38645a7f113",
+    "app_installation": "pending",
+    "production_change_field_scope": "published_runtime; reviewed GitHub production ref has moved to M4"
   },
   "limitations": [
     "No matching live inventory/context response timing proves the original failure cause.",
@@ -573,7 +940,7 @@
     "Native stocktake, physical inventory projection, catalogs, payment writes and broader server pressure are unchanged.",
     "Current 83-case verification and immutable A2 build do not replace fresh exact-B2 CI, host rehearsal, publication or normal authenticated inventory acceptance; B1 evidence is archived only."
   ],
-  "next_safe_action": "Root checkpoints current-B2 and archived-B1 evidence before the long CI wait. Preserve both frozen branches and the confirmed unmerged closure of PR2057. Finish all required fresh exact-B2 CI, retaining its passed original actual-host rehearsal and independent Readiness proof; only then follow the unchanged reviewed merge/guard publication protocol, original three live identity probes and normal inventory acceptance. Never deploy the evidence branch.",
+  "next_safe_action": "Root checkpoints final exact-B2 acceptance and reviewed M4 merge before publication, then performs bounded M4 shared-host installation under fresh inactive original guard and unchanged protocol. After original prepare/prepublish, perform only the authorized publication; require explicit platform success, three original identity probes and inactive guard, plus normal authenticated inventory acceptance. Never deploy the evidence branch.",
   "archived_attempts": [
     {
       "attempt": "B1",

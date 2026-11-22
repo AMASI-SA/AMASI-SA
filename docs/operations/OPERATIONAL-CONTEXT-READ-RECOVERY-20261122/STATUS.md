@@ -2,15 +2,17 @@
 
 ## Current release — PR #2058 / A2 and B2
 
-**Evidence checkpoint: 2026-11-22 02:42:48 UTC.** The current candidate is
+**Evidence checkpoint: 2026-11-22 02:51:37 UTC.** The current candidate is
 [PR #2058](https://github.com/AMASI-SA/AMASI-SA/pull/2058), branch
 `codex/operational-context-read-lifetime-20261122`, in `AMASI-SA/AMASI-SA`.
-Source A2 and intent-only B2 are frozen and remotely preserved. The corrected
-source-bootstrap two-pass build and freeze passed. Exact-B2 CI is **pending**:
-12 workflows have triggered, with no failed check observed. Readiness and
-Security have now passed; other required gates remain pending. The **fresh B2 host rehearsal passed**. No B2 merge, lease,
-publication or live acceptance is claimed; Production is unchanged by this
-correction at this checkpoint.
+Source A2 and intent-only B2 remain frozen. All required exact-B2 CI has
+**passed**, and the fresh actual-host rehearsal passed. PR #2058 was normally
+merged at **2026-11-22T02:47:45Z** as M4
+`1c4008e315c35ec4419e76400a9faddb94b9d5a2`; its tree exactly equals B2.
+The GitHub production ref is M4. At root's latest handoff, shared `/app` still
+held M3 and installation was pending. **No new lease, publication or live
+acceptance is claimed.** The published runtime is not recorded as changed by
+this patch yet.
 
 PR #2057 / B1 is a **superseded, blocked attempt**, archived below with both
 failed backend jobs and its completed matrix. Root confirmed #2057 was closed **without merge**, with its frozen head
@@ -22,8 +24,8 @@ This document and adjacent `release-evidence.json` are maintained only on
 `codex/operational-context-release-evidence-20261122`, originally based on B1.
 **This evidence branch must never be deployed or merged into a frozen release.**
 The previous durable evidence checkpoint is
-`aa1baf3d5bd2e84b809ab15b9d034e61c7494308`, tree
-`ceeade7b8cc7684db1d7ef437f8f1dfe0817b6c2`. Root owns the next remote checkpoint
+`de285a0a573aa97cdbb9ae62910af1776cba768b`, tree
+`9eddfbb00e15a58dfe76f9141514cfc506cc0fbb`. Root owns the next remote checkpoint
 and all release actions. This author changes only these two evidence documents.
 
 ## Current immutable identity
@@ -36,6 +38,9 @@ and all release actions. This author changes only these two evidence documents.
 | A2 tree | `fdadfb3ae9fdc92dfc4e4b8b584c949733a2b1f8` |
 | Frozen B2, sole parent A2 | `0329084d343562fa5ff43df535422eeeacb0a327` |
 | B2 tree | `18b335c1eb3d526c82ace35d83aca0d50ce4d1a5` |
+| Deployment merge M4 | `1c4008e315c35ec4419e76400a9faddb94b9d5a2` |
+| M4 parents, in order | M3 `02e8be41e6f1972806f0e095b8fdc38645a7f113`; B2 `0329084d343562fa5ff43df535422eeeacb0a327` |
+| M4 tree | `18b335c1eb3d526c82ace35d83aca0d50ce4d1a5` |
 | Runtime release | `rg5-9d69963c0ee7f5c299595495519175af5074f703f4e318b82b870b0407554a49` |
 | Intent Git blob | `3f2382868016423828198ea08c5b2e4272177445` |
 | Intent SHA-256 | `f6e7bc34d7b0aeec0b6222960b51a366d3269ea4947d64f56c4b2a4afc557291` |
@@ -51,6 +56,14 @@ external v2 candidate is byte-identical to B2's tracked intent: **1,466,981 byte
 Root reported the unchanged original candidate and retained-frontend validators
 passed. Frozen B1 is not an ancestor carried into this new source sequence.
 The source scope and runtime behavior remain the reviewed context correction.
+
+Independent local Git inspection confirmed M4's two parents and exact tree
+equality with B2; B2-to-M4 has no content change. Root separately verified the
+merge and production ref through REST and local Git, then passed the unchanged
+original adapter load/provenance validation and
+`_assert_reviewed_source_relation(M3, A2, M4)`. The runtime source identity stays
+A2; M4 is the separate deployment commit. This validates the merge relationship,
+not a publication or deployed runtime.
 
 ## Implementation and integrity boundary
 
@@ -126,8 +139,9 @@ PYTHONPATH=backend:backend/tests PYTHONDONTWRITEBYTECODE=1 \
 The original single-module red/green command uses that same prefix/suffix and
 only `backend/tests/test_operational_balance_active_read_lifetime.py`.
 These reviewed bytes are now in source A2 and frozen B2. The governed build
-and freeze below passed, as did a fresh actual-host B2 rehearsal; final
-exact-B2 CI remains required. The correction does not turn archived B1 into a passing release.
+and freeze below passed, as did a fresh actual-host B2 rehearsal and final
+exact-B2 CI. Shared-host installation and live publication verification remain
+separate pending steps. The correction does not turn archived B1 into a passing release.
 
 ## Fresh A2 governed build and freeze
 
@@ -176,37 +190,91 @@ These are fresh B2 observations reported by the release owner, independent of
 B1. They do not establish the later actual Cloud Build, live runtime or inventory
 acceptance.
 
-## Current exact-B2 gates
+## Final exact-B2 CI acceptance
 
-The independent reviewer reported 12 newly triggered workflows and zero failed
-checks in the initial B2 snapshot. The following states refer only to the new candidate; pending rows are **not
-completed passes**:
+The independent CI reviewer confirmed **PASS** at
+**2026-11-22T02:46:55.662Z**. Every retrieved run/check is bound to exact B2
+`0329084d343562fa5ff43df535422eeeacb0a327`. There are **zero active, failed or
+neutral checks**. Two extra `ready_for_review` scope runs were added after the
+PR became ready, so the cumulative totals are:
 
-| Gate | Exact run / job | State at this checkpoint |
+| Reporting surface | Success | Expected skip | Total |
+|---|---:|---:|---:|
+| Workflow runs, covering 12 distinct workflows | 13 | 1 | 14 |
+| Jobs across those runs | 24 | 10 | 34 |
+| REST checks | 25 | 10 | 35 |
+
+The additional successful REST check is aggregate CodeQL **137068849137**,
+not another workflow/job execution. The ten expected skips are eight Snapchat
+downstream jobs across the initial and ready-event scope runs, the TikTok
+named-branch job, and Readiness's push-only manual handoff. They are not passes.
+Accounting was **not triggered**: A2's five source-change paths and B2's six
+frozen-change paths match zero of its 65 canonical filters. No prior Accounting
+result was borrowed; it is not included as a pass or skip.
+
+| Workflow / event | Exact run | Result |
 |---|---|---|
-| Operational backend | [44976770986 / 137068308105](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44976770986/job/137068308105) | Pending |
-| Stock | [44976770906 / 137068307860](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44976770906/job/137068307860) | Pending |
-| Readiness | [44976771038](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44976771038) | Six required jobs and independent artifact binding review passed |
+| Operational | [44976770986](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44976770986) | All four jobs passed |
+| Stock | [44976770906](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44976770906) | Passed |
+| Readiness | [44976771038](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44976771038) | Six required jobs passed; one expected skip |
+| Security | [44976771018](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44976771018) | Both jobs passed |
+| G47 | [44976770975](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44976770975) | Both jobs passed |
+| CodeQL | [44976770924](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44976770924) | Python and JavaScript passed |
+| Mobile | [44976771012](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44976771012) | Passed |
+| Salary | [44976770849](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44976770849) | Passed |
+| Qoyod | [44976770953](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44976770953) | Passed |
+| TikTok | [44976770899](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44976770899) | Expected named-branch skip |
+| Snapchat Publication, initial | [44976770930](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44976770930) | Scope passed; two expected skips |
+| Snapchat Settings, initial | [44976770864](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44976770864) | Scope passed; two expected skips |
+| Snapchat Publication, ready event | [44977571199](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44977571199) | Scope passed; two expected skips |
+| Snapchat Settings, ready event | [44977571200](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44977571200) | Scope passed; two expected skips |
 
-All refer to exact B2 `0329084d343562fa5ff43df535422eeeacb0a327`.
-The independent reviewer confirmed this head retains explicit registration of
-the 21-case module, its minimum-21 requirement, the unchanged global
-no-skips/failures/errors assertion and the shipping follow-up step. No Accounting
-path filter matches the six M3-to-B2 paths, so standalone Accounting is **not
-triggered**, not a pass or skip; no earlier result is borrowed. The final B2
-matrix, including actual skip reasons and executed-test evidence, remains due.
+### Critical backend and cancellation evidence
 
-A subsequent exact-B2 reviewer milestone confirmed the operational frontend
-**89 suites / 1,415 tests** (job **137068308305**), browser **26 scenarios in
-14/12 groups** (**137068308183**) and worker **4 cases** (**137068308131**) passed.
-Security backend **137068308245**, G47 UI **137068308045**, Mobile
-**137068307913** and Qoyod **137068307822** also passed their selected stages.
-These are fresh B2 results, separately recorded in JSON without adding overlapping
-groups. A later reviewer observation at **02:39:31 UTC** confirmed Security
-[44976771018](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44976771018)
-succeeded, including full frontend job **137068308168** with **456 suites /
-4,978 tests**. Salary run **44976770849**, job **137068307522**, also passed its
-original proof assertions.
+Operational backend
+[job 137068308105](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44976770986/job/137068308105)
+passed **6,237 cases plus 90 subtests in 455.12 s**. Its separate shipping step
+passed **16 cases plus 18 subtests in 0.39 s**. The strict missing/skipped-test
+gate passed. The shipping result is established by the separate successful
+step/log, **not** by the retained main JUnit archive.
+
+Stock [job 137068307860](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44976770906/job/137068307860)
+passed **5,525 cases plus 97 subtests in 447.36 s**, and its strict
+zero-skips/failures/errors gate passed. These suites overlap and are not added
+together or to the local 83-case run.
+
+The reviewer downloaded, SHA-256 verified and parsed both main archives in
+memory:
+
+- Operational artifact **14735194652**, **106,471 bytes**, SHA-256
+  `b61ac64fb02c73a3a385cf2ca9ea44c4e0d219db4d9eb9f74e870453233292cc`:
+  embedded B2/tree match; **6,237 testcase nodes**, JUnit total **6,327** including
+  90 subtests; zero errors, failures or skips. Exactly **21 context-snapshot
+  cases** and **12 active-read-lifetime cases** passed, including `/context`.
+- Stock artifact **14736273113**, **93,561 bytes**, SHA-256
+  `d5114d22c30d3fc7904741d476fb5c9fbf69326acb8852cd78fc5fc0ffdff7cd`:
+  **5,525 testcase nodes**, JUnit total **5,622** including 97 subtests; zero
+  errors, failures or skips, with all **12 lifetime cases**, including `/context`,
+  passed. This archive contains XML only; its exact B2 binding comes from API
+  artifact `workflow_run.head_sha`, exact checkout and upload log, not embedded
+  source files.
+
+Four additional Operational artifacts retain frontend, financial-browser,
+simple-browser and worker evidence, with API metadata/log digests matching exact
+B2. Their bodies were not downloaded. Together with the four independently
+reviewed Readiness artifacts, the JSON lists **10 retained gate artifacts**.
+
+### Other completed coverage — separate counts
+
+Security's full frontend passed **456 suites / 4,978 tests**; the operational
+frontend passed **89 suites / 1,415 tests**, browser groups **14 and 12 scenarios**,
+and worker **4 cases**. G47 Mongo passed overlapping groups **238 + 88 subtests**,
+**331 + 127 subtests**, **58**, and **436**; G47 UI groups were **145** and **320**.
+Mobile passed **252 + 61 subtests**, Qoyod **164**. Security backend's selected
+stages were **88 passed / 1 explicitly deselected**, unittest **26**, **83**,
+**216 + 29 subtests**, and **57**. Salary's original proof gate passed the minimum
+backend **127** and frontend **32**; exact totals were not derived. These reports
+are not summed, and no zero-deselection claim is made for Security.
 
 ### Fresh B2 Readiness proof
 
@@ -248,15 +316,6 @@ Host20 outputs/evidence **14735662870 / 14735398620**, Host24
 artifact archive bodies were not downloaded. These are CI proofs, not evidence
 of a production deployment or the platform's snapshot ordering.
 
-At the latest progress update (**02:42:00 UTC**), only Operational backend
-**137068308105** and Stock **137068307860** remained active. All other triggered
-workflows had completed successfully or with an expected skip: **9 successful,
-1 expected skip and 2 running workflows**; REST showed **21 successful,
-6 expected skips and 2 running checks**. CodeQL aggregate **137068849137** was
-successful. G47 Mongo **137068308299** passed its four overlapping stages
-(**238 + 88 subtests**, **331 + 127 subtests**, **58**, **436**); these counts are
-not summed. Overall CI remains **pending**, with zero failures observed. The two
-long jobs and their strict 21-case/shipping evidence are still required.
 
 ## Current-contract coverage and original mechanism reproduction
 
@@ -302,30 +361,31 @@ Root separately completed M3 publication and three original live identity probes
 then observed a fresh inactive guard. The
 [completed M3 evidence](https://github.com/AMASI-SA/AMASI-SA/blob/4ee3d64159cba4edd20133f81ec938cf33068ae8/docs/operations/OPERATIONAL-WORKSPACE-RELEASE-20261122/release-evidence.json)
 is preserved at `4ee3d64159cba4edd20133f81ec938cf33068ae8`. It establishes prior
-M3 identity, not this new patch or inventory recovery. Current B2 has not been
-merged or published at this checkpoint.
+M3 identity, not this new patch or inventory recovery. Current B2 has been normally merged as M4, but shared-host installation and
+publication remain pending at this checkpoint.
 
-## Next safe action for B2
+## Next safe action for M4 publication
 
-1. Root checkpoints only these two evidence files on the evidence branch before
-   the long CI wait. Retain the confirmed closed-without-merge #2057 record and preserve both
-   frozen source branches.
-2. Complete and inspect all required exact-B2 CI, including both backend jobs,
-   actual executed-test/no-skips evidence and shipping follow-up, retaining the
-   fresh B2 host rehearsal and Readiness identity proofs above. B1 results cannot satisfy these
-   gates. Do not weaken a failing assertion or edit frozen A2/B2.
-3. After required gates pass, root may perform the authorized normal merge and
-   prove its source ancestry and B2 tree equality. Before shared-host changes,
-   require a fresh inactive original guard, preserve unrelated files and follow
-   the unchanged adapter/install/guard protocol for that deployment commit.
-4. Use a fresh lease for `prepare`, final `prepublish` and the eventual single
-   publication. Never deploy this evidence branch or reuse an old lease.
-5. After explicit platform success, require the original
-   `verify --url https://mezansalla.com` to pass all three probes for A2 and its
+1. Root checkpoints only these two evidence files before publication, preserving
+   current B2 acceptance, the reviewed M4 merge and the closed blocked B1 archive.
+   Do not deploy or merge the evidence branch into the frozen release.
+2. Root performs the bounded shared-host M4 installation under the unchanged
+   protocol: fresh inactive original guard, reviewed production ref, preserved
+   unrelated files and original source/generated-output identity checks. At the
+   latest handoff `/app` still held M3; installation is not recorded complete.
+3. Only after those checks pass, use a fresh lease for original `prepare`, final
+   `prepublish` and a single authorized publication. Prior rehearsals and merge
+   identity do not establish a successful deployment. Do not reuse an old lease.
+4. After explicit platform success, run the original
+   `verify --url https://mezansalla.com`; require all three probes for A2 and its
    release ID, then confirm an inactive guard. Separately perform one normal
    authenticated inventory load. If bootstrap or stock loading still fails,
-   retain bounded matching response/timing evidence; release identity alone is
-   not proof of inventory recovery.
+   retain bounded matching response/timing evidence; identity verification alone
+   is not inventory acceptance.
+
+Installation, lease preparation, publication, original live identity verification
+and live inventory acceptance remain pending in this record. Update only after
+those results are observed.
 
 This evidence author has made no staging, commit, ref, remote, source or host
 change, and has posted no Issue #1006 comment. Root owns release actions and the
