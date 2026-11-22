@@ -2330,8 +2330,7 @@ def make_dashboard_v2_router(
                 "employee_salaries": "mezan_employee_salary_contracts_v2",
                 "recurring_obligations": "operating_recurring_obligations_v2",
                 "shipping_partners": "legacy_shipping_cost_ssot",
-                "payment_gateway_fees": (response.get("payment_fee_authority", {}).get("basis") or PAYMENT_FEE_BASIS)
-                    + " + mezan_ad_account_cost_settings_v2",
+                "payment_gateway_fees": (response.get("payment_fee_authority", {}).get("basis") or PAYMENT_FEE_BASIS) + " + mezan_ad_account_cost_settings_v2",
             },
             "source_only": True,
             "accounting_write_reached": False,

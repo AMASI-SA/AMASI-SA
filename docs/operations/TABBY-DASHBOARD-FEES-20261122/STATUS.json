@@ -1,7 +1,7 @@
 {
   "task_id": "TABBY-DASHBOARD-FEES-20261122",
-  "status": "source_verified_draft_pr_ci_in_progress",
-  "updated_at_utc": "2026-11-22 15:34:05 UTC",
+  "status": "source_verified_remote_tests_passed_ci_formatting_followup",
+  "updated_at_utc": "2026-11-22 15:42:39 UTC",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tabby-weekly-fee-estimates-20261122",
   "production_branch": "hotfix/prod-snap-meta-final",
@@ -76,6 +76,17 @@
       "command": "git diff --check; Git blob/tree identity comparison during remote preservation",
       "exit_status": 0,
       "result": "Clean diff; all 21 remote blobs and the full implementation tree matched the locally verified commit exactly."
+    },
+    {
+      "name": "Remote focused tests and frontend build",
+      "source_sha": "26af7fff4b17f172f04f3a864c8615735b3d94be",
+      "run_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45038882515",
+      "result": "All 205 backend tests passed (2 account-FX plus 203 statement/weekly/cache tests). All 46 frontend tests and frontend build passed. The backend job's final static read-only source-binding step failed only because of a wrapped expression."
+    },
+    {
+      "name": "Exact CI static contract repair",
+      "exit_status": 0,
+      "result": "Executed the workflow's exact Enforce read-only integration in Dashboard V2 shell block using bash -e -o pipefail after the formatting repair: passed. Verified ast.dump of the entire module before and after is identical. git diff --check passed."
     }
   ],
   "acceptance_cases": [
@@ -96,10 +107,14 @@
     "observed_mergeable": true
   },
   "ci": {
-    "state": "in_progress",
-    "observed_source_sha": "26af7fff4b17f172f04f3a864c8615735b3d94be",
+    "state": "focused_tests_and_build_passed_static_contract_repaired_final_head_run_pending",
+    "tested_implementation_sha": "26af7fff4b17f172f04f3a864c8615735b3d94be",
     "focused_workflow": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45038882515",
-    "note": "This is a point-in-time handoff. Inspect the current PR head and current runs before merge; earlier run results are not evidence for a changed source."
+    "frontend_job": "success",
+    "backend_tests": "205 passed",
+    "backend_job": "failed static same-line source assertion; repaired by AST-equivalent formatting",
+    "final_head_result": "Inspect the current PR checks and the latest handoff in its body.",
+    "note": "This is a point-in-time handoff. The final follow-up changes only source formatting and this status record; the tested financial behavior and frontend are unchanged."
   },
   "review": {
     "independent_code_review": "passed",
@@ -132,5 +147,11 @@
     "Production branch, shared application files, existing release intent and other task work remain unchanged."
   ],
   "continuation_record": "This task status document and PR2068 are the handoff artifacts. No issue comment or message to another person was sent.",
-  "next_safe_action": "Fetch the task branch, verify the implementation commit and its tree, inspect current git status and PR2068 head/checks, and finish the pending CI observation. Do not deploy the inherited release intent or create a production lease without separately authorized release work."
+  "next_safe_action": "Fetch the task branch, verify the implementation checkpoint and AST-equivalent formatting follow-up, inspect current git status and PR2068 head/checks, and finish the pending CI observation. Do not deploy the inherited release intent or create a production lease without separately authorized release work.",
+  "formatting_followup": {
+    "path": "backend/dashboard_v2_routes.py",
+    "reason": "The legacy CI source-binding grep expects payment_gateway_fees and mezan_ad_account_cost_settings_v2 on the same line.",
+    "change": "Collapsed a two-line expression onto one line; the complete module AST is identical before and after.",
+    "semantic_change": false
+  }
 }
