@@ -4,7 +4,7 @@ import { simpleBalanceError } from './simpleBalancesApi';
 
 // The visible result belongs to one actor and one query. A cancelled old read
 // may finish physically, but cannot disclose its data in the next account.
-export function useBalanceRead(read, key, enabled = true) {
+export function useBalanceRead(read, key, enabled = true, { singleAttemptTimeoutMs, deferUntilVisible = true } = {}) {
   const reader = useRef(read);
   reader.current = read;
   const lane = useRef({ pending: null });
@@ -21,11 +21,19 @@ export function useBalanceRead(read, key, enabled = true) {
     const stop = visibleOperationalRead(request, {
       onStart: () => { if (current === sequence.current) setBusy(key); },
       onData: value => { if (current === sequence.current) setResult({ key, value }); },
-      onError: error => { if (current === sequence.current) setFailure({ key, message: simpleBalanceError(error), status: error?.response?.status }); },
+      onError: error => {
+        if (current === sequence.current) setFailure({ key, status: error?.response?.status,
+          message: error?.code === 'OPERATIONAL_VISIBLE_READ_TIMEOUT'
+            ? 'انتهت مهلة قراءة البيانات. أعد المحاولة.' : simpleBalanceError(error) });
+      },
+      onPaused: () => {
+        if (current === sequence.current) setFailure({ key,
+          message: 'توقفت قراءة البيانات. أعد المحاولة عندما تكون الصفحة ظاهرة والاتصال متاحًا.' });
+      },
       onEnd: () => { if (current === sequence.current) setBusy(null); },
-    }, lane.current);
+    }, lane.current, { singleAttemptTimeoutMs, deferUntilVisible });
     return () => { sequence.current += 1; stop(); };
-  }, [key, enabled, revision]);
+  }, [key, enabled, revision, singleAttemptTimeoutMs, deferUntilVisible]);
   const reload = useCallback(() => setRevision(value => value + 1), []);
   return {
     data: enabled && result?.key === key ? result.value : null,

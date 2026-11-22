@@ -1,8 +1,10 @@
 """Order Engine repository contracts and Mongo implementation."""
 from __future__ import annotations
 
+import asyncio
 from copy import deepcopy
 import re
+from dashboard_cpu_budget import CPUWorkBudget, PARSER_BUDGET_MS
 from salla_shipping import CURRENT_SHIPPING, projected_shipping
 from dataclasses import dataclass
 from typing import Any, Optional, Protocol
@@ -750,10 +752,27 @@ class MongoOrderRepository:
             },
         )
         rows: list[OrderDiscoveryRow] = []
+        cpu_budget = CPUWorkBudget(PARSER_BUDGET_MS)
         async for row in cursor:
             mapped = self._to_discovery_row(row)
             if mapped is not None:
                 rows.append(mapped)
+            try:
+                await cpu_budget.checkpoint()
+            except asyncio.CancelledError:
+                # This checkpoint follows a settled cursor advance. Closing
+                # here cannot race Motor's active getMore/executor work.
+                try:
+                    closing = asyncio.ensure_future(cursor.close())
+                    while not closing.done():
+                        try:
+                            await asyncio.shield(closing)
+                        except asyncio.CancelledError:
+                            pass
+                    closing.result()
+                except (asyncio.CancelledError, Exception):
+                    pass  # Observe cleanup without replacing the cancellation.
+                raise
         return rows
 
     @staticmethod

@@ -152,3 +152,62 @@ the measured slow canonical order-batch path remain in progress. Do not freeze
 release intent or publish this checkpoint. Next: complete scoped red/green
 verification, preserve canonical order/permission behavior, review independently,
 then follow the existing fresh protocol-v5 release sequence and live acceptance.
+
+## Reviewed source candidate
+
+Predecessor catalog checkpoint: `35512ed7b09a5c6ef6e5a550a018559e3e5fe4af`.
+All intended runtime edits are complete and independently reviewed:
+
+1. The courier/ad catalog read reductions documented above.
+2. The existing CPU budget now yields between complete canonical order
+   hydration/mapping units in `order_engine/repository.py` and `service.py`.
+   Raw projections, mapping, invalid-row handling, duplicates, page totals,
+   grouping, pagination and monetary data remain unchanged. Cancellation at
+   the new repository checkpoint joins one cursor-close operation even through
+   repeated cancellation. The existing active-driver cancellation path is not
+   changed. This is cooperative scheduling, not a hard single-order deadline.
+3. Only the initial finance context opts into a 30-second complete visible
+   attempt. Hidden/offline entry, interrupted attempts, timeout and missing
+   authentication ID show explicit recovery instead of an indefinite loader.
+   A still-pending physical request retains its lane; stale identities cannot
+   publish a result. Other balance reads retain their original lifecycle.
+
+Verification at this complete-source boundary:
+
+- Frontend baseline: nine failures and two passes; after correction, all 11 new
+  cases pass. Five focused suites pass all 94 cases on pinned Node 22.23.2 and
+  Yarn 1.22.22. Exact commands and report hashes are in
+  `evidence/frontend-verification-summary.json`.
+- Backend catalog affected suites: 153 passed. Order-batch focused baseline:
+  seven failures; after correction, seven passes. The affected order-engine,
+  mapper, fulfillment and assembly batch has 122 passes and 41 explicit
+  isolated-Mongo skips. Exact commands, warnings and limits are in
+  `evidence/backend-verification.md`; skipped tests are not claimed as passing.
+- Root integration on the combined current code: 72 passed, zero failures or
+  skips, 16.04 seconds. Command: the same isolated Python/disabled-dotenv setup
+  with `--noconftest -p no:cacheprovider -q --tb=short
+  -o asyncio_default_fixture_loop_scope=function`, running
+  `test_operational_catalog_read_scope.py`,
+  `test_operational_balance_workspace.py`, and `test_order_batch_cpu_fairness.py`.
+  The only warning is the existing fitz deprecation.
+- Actual-diff independent reviews for frontend, catalog and order fairness found
+  no material blocker. No real browser/transport or production-recovery result
+  is inferred from these local checks.
+
+The code-server `/app` volume has only about 92 MiB free. An initial default
+toolchain preparation failed with no space; no source or existing outputs were
+removed. A second preparation in an isolated `/tmp` cache on the available
+filesystem succeeded using the original verified toolchain code, after a fresh
+inactive guard check. The actual-host rehearsal will use an isolated checkout
+and cache there, preserving shared services and the 417 unrelated untracked files.
+
+No ASGI lifecycle wrapper, driver deadline, new cache, truncation or speculative
+client polling change is included. The assembly response's 15-second polling
+hint does not prove the absent mobile client's request behavior. Broad production
+pressure and the cause of HTTP 520 remain unproven until live verification.
+
+Next safe step: freeze this complete source as A, run two clean pinned frontend
+builds with the reviewed public client origin, freeze intent-only B, require
+fresh exact-B CI including isolated database coverage and host adapter checks,
+then perform the original guard's actual-host release protocol. Publication is
+already authorized, but this source checkpoint itself is not a deployed result.

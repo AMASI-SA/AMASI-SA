@@ -1,0 +1,117 @@
+{
+  "schema_version": 1,
+  "task": "OPERATIONAL-HOME-LOADING-RECOVERY-20261122",
+  "verification_date_utc": "2026-11-22",
+  "working_directory": "/workspace/scratch/b90f3c3040a7/mezan-loading-recovery",
+  "source_base_git_sha": "35512ed7b09a5c6ef6e5a550a018559e3e5fe4af",
+  "target": "Uncommitted frontend recovery patch over the recorded source base; no commit or production operation performed by this worker.",
+  "files": [
+    "frontend/src/pages/operational/ApprovedFinance.jsx",
+    "frontend/src/pages/operational/simpleBalancesHooks.js",
+    "frontend/src/pages/operational/ApprovedFinance.loading.test.jsx"
+  ],
+  "toolchain": {
+    "node": "v22.23.2",
+    "yarn": "1.22.22",
+    "verification": "Repository frontend_release_toolchain.ensure_toolchain and execute validated the pinned archive, cached binaries, and exact versions.",
+    "cache_root": "/workspace/scratch/b90f3c3040a7/frontend-toolchain-cache",
+    "dependency_cache": "/workspace/scratch/b90f3c3040a7/frontend-yarn-cache",
+    "dependency_install_argv": [
+      "yarn",
+      "--cwd",
+      "frontend",
+      "install",
+      "--frozen-lockfile",
+      "--non-interactive",
+      "--cache-folder",
+      "/workspace/scratch/b90f3c3040a7/frontend-yarn-cache"
+    ],
+    "dependency_install_exit_code": 0
+  },
+  "runs": [
+    {
+      "id": "red_before_production_edits",
+      "exit_code": 1,
+      "success": false,
+      "passed_tests": 2,
+      "failed_tests": 9,
+      "passed_suites": 0,
+      "failed_suites": 1,
+      "command": "CI=true python -B - <<'PY'\nfrom pathlib import Path\nfrom scripts.frontend_release_toolchain import execute\nraise SystemExit(execute(['yarn', '--cwd', 'frontend', 'test', '--watchAll=false', '--runInBand', '--runTestsByPath', 'src/pages/operational/ApprovedFinance.loading.test.jsx', '--json', '--outputFile=/workspace/scratch/b90f3c3040a7/frontend-loading-red.json'], cache_root=Path('/workspace/scratch/b90f3c3040a7/frontend-toolchain-cache')))\nPY",
+      "report": {
+        "filename": "frontend-loading-red.json",
+        "original_local_path": "/workspace/scratch/b90f3c3040a7/frontend-loading-red.json",
+        "sha256": "0136b506b88e9dc5c300495d1a5a8c4542c7a59875b0272192849bb67fce4063"
+      }
+    },
+    {
+      "id": "green_after_fix",
+      "exit_code": 0,
+      "success": true,
+      "passed_tests": 11,
+      "failed_tests": 0,
+      "passed_suites": 1,
+      "failed_suites": 0,
+      "command": "CI=true python -B - <<'PY'\nfrom pathlib import Path\nfrom scripts.frontend_release_toolchain import execute\nraise SystemExit(execute(['yarn', '--cwd', 'frontend', 'test', '--watchAll=false', '--runInBand', '--runTestsByPath', 'src/pages/operational/ApprovedFinance.loading.test.jsx', '--json', '--outputFile=/workspace/scratch/b90f3c3040a7/frontend-loading-green.json'], cache_root=Path('/workspace/scratch/b90f3c3040a7/frontend-toolchain-cache')))\nPY",
+      "report": {
+        "filename": "frontend-loading-green.json",
+        "original_local_path": "/workspace/scratch/b90f3c3040a7/frontend-loading-green.json",
+        "sha256": "9f1b8b8ae3782e71f966e346f2cc3284c05a1ca8669cd994a50ce9050485e30f"
+      }
+    },
+    {
+      "id": "combined_focused_regression",
+      "exit_code": 0,
+      "success": true,
+      "passed_tests": 94,
+      "failed_tests": 0,
+      "passed_suites": 5,
+      "failed_suites": 0,
+      "command": "CI=true python -B - <<'PY'\nfrom pathlib import Path\nfrom scripts.frontend_release_toolchain import execute\nraise SystemExit(execute(['yarn', '--cwd', 'frontend', 'test', '--watchAll=false', '--runInBand', '--runTestsByPath', 'src/pages/operational/ApprovedFinance.loading.test.jsx', 'src/pages/operational/ApprovedFinance.test.jsx', 'src/pages/operational/visibleOperationalRead.test.js', 'src/pages/operational/simpleBalancesApi.test.js', 'src/lib/api.authRefresh.test.js', '--json', '--outputFile=/workspace/scratch/b90f3c3040a7/frontend-loading-regression.json'], cache_root=Path('/workspace/scratch/b90f3c3040a7/frontend-toolchain-cache')))\nPY",
+      "report": {
+        "filename": "frontend-loading-regression.json",
+        "original_local_path": "/workspace/scratch/b90f3c3040a7/frontend-loading-regression.json",
+        "sha256": "d199d9374113309149e5255be594f528bf6f6fea0bed540608a8cfc7169170cf"
+      }
+    }
+  ],
+  "red_result_interpretation": "Nine recovery-surface assertions failed on the unchanged production code. Ordinary request rejection and default-reader hidden-page deferral passed.",
+  "verified_behaviors": [
+    "Root and explicit home entry end an unresolved context attempt after 30 seconds with explicit retry.",
+    "The context deadline includes waiting behind a cancelled physical predecessor; retries do not overlap that predecessor.",
+    "Initial and interrupted hidden/offline states expose recovery and do not automatically restart on activity.",
+    "Late results cannot publish after timeout or identity change.",
+    "Successful retry renders the authorized financial fixture without substituting placeholder balances.",
+    "Missing authenticated user ID offers session recovery without fetching balances.",
+    "Readers without the optional policy retain existing deferred behavior.",
+    "Existing home navigation, context API behavior, and authentication refresh regressions pass."
+  ],
+  "additional_check": {
+    "command": "git diff --check",
+    "exit_code": 0
+  },
+  "independent_review": {
+    "reviewer_task": "/root/loading_frontend_trace/review_recovery_design",
+    "method": "Read-only inspection of the actual three-file source/test diff.",
+    "result": "No material finding or blocker.",
+    "reviewed_invariants": [
+      "Context-only policy opt-in",
+      "Primitive effect dependencies",
+      "Numeric HTTP status contract",
+      "Identity/sequence checks",
+      "Retained physical-request lane",
+      "Session recovery",
+      "Unchanged query flags and financial calculations"
+    ],
+    "reviewer_reran_tests": false
+  },
+  "limits": [
+    "Component tests mock the context API. They do not prove real-browser or full end-to-end HTTP transport behavior.",
+    "No browser or live authenticated API verification was performed by this worker.",
+    "These results establish frontend recovery hardening; they do not establish the cause or resolution of the production HTTP 520/backend outage.",
+    "The context now has a 30-second overall attempt budget, including queue and authentication refresh/replay time.",
+    "Governed integrated build and release verification remain separate root-owned gates.",
+    "Raw Jest reports are not embedded in this compact record; their SHA-256 digests and original local paths are recorded above."
+  ],
+  "production_changed_by_this_worker": false
+}
