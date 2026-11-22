@@ -98,3 +98,57 @@ fresh inactive status before any /app mutation or rehearsal. Do not reset hard,
 clear another owner's lease, call paid chat, or test with real financial writes.
 Durable task documents and PR metadata carry this handoff; no Issue #1006 comment
 or other outbound message was sent.
+
+## Verified catalog checkpoint (still WIP)
+
+Predecessor diagnosis checkpoint: `584e6baea30d011f114648c6b266221a2521d9bc`.
+Two backend files now have a focused, independently reviewed repair:
+
+- `backend/operational_balance_sources.py`: the courier directory reads only
+  owner identity and complete courier subdocuments, excluding unrelated setup
+  history. Other financial/contract readers of that collection stay unchanged.
+  Advertising account matching indexes ordinary exact-string identities while
+  preserving duplicates, case, provider checks and legacy non-string comparisons.
+- `backend/tests/test_operational_catalog_read_scope.py`: 21 in-memory cases
+  cover output equivalence, real query projection size, ambiguous setup rejection,
+  owner filtering, identity/error semantics and matching operation counts.
+
+Red baseline: four failures and 17 passes. The failures expose excess shipping
+payload in both directory modes and quadratic ordinary account matching. Green:
+21 focused cases, followed by 153 passing cases in 19.79 seconds across the new
+file, existing operational source, ad funding, workspace, and context-reader
+modules. The test interpreter is an existing isolated scratch environment;
+`PYTHONDONTWRITEBYTECODE=1`, `PYTHON_DOTENV_DISABLED=1`, and
+`PYTHONPATH=backend:backend/tests` prevent live configuration use. The first
+backend-only PYTHONPATH attempt failed collection on a sibling test import;
+correcting the fixture import path resolved it without code/dependency changes.
+Whitespace validation passed. Independent read-only review found no material
+semantic mismatch. Tests use synthetic data only and no live writes.
+
+Measured synthetic matching work drops from N-squared to 2N identity reads for
+ordinary strings: 16,384 to 256 at 128 rows, and 262,144 to 1,024 at 512 rows.
+Malformed/non-string-heavy catalogs deliberately retain the old fallback;
+there is no universal linear-complexity claim. A separate synthetic shipping
+example reads 194 bytes instead of 1,330,137 with identical directory output.
+These are not measurements of production payload, latency, or memory.
+
+Fresh hosting-terminal probes at 11:33:31 UTC returned HTTP 520 for both public
+`/api/live` and `/api/health`, in 0.34 and 0.27 seconds respectively. No runtime
+identity could be obtained from those failures. Later Production logs around
+11:39:45–11:40:25 UTC show assembly reads at 160.9 seconds, DB-free health at
+4.9–5.9 seconds, and multiple other routes at 13–25 seconds, plus recurring
+upstream health timeouts. Broader pressure persists and is not declared fixed.
+
+The original shared `/app` guard was read freshly: inactive, tracked source
+clean at the production base, 417 untracked files preserved. The restored
+Preview supervisor uses a separate retained supplier service; it was not changed.
+Its configured database returned no current operational-state samples and its
+existing diagnostics token is absent. No credential was created or extracted,
+no protected diagnostic request was sent, and no Preview measurement is being
+treated as Production evidence.
+
+Frontend recovery tests and an investigation of cooperative scheduling inside
+the measured slow canonical order-batch path remain in progress. Do not freeze
+release intent or publish this checkpoint. Next: complete scoped red/green
+verification, preserve canonical order/permission behavior, review independently,
+then follow the existing fresh protocol-v5 release sequence and live acceptance.
