@@ -7,11 +7,24 @@ on:
     paths:
       - "backend/dashboard_v2_ad_costs.py"
       - "backend/dashboard_v2_routes.py"
+      - "backend/dashboard_payment_fees.py"
+      - "backend/dashboard_ads_costs.py"
+      - "backend/dashboard_operational_statement_fees.py"
+      - "backend/provider_fee_statement_actual_sources.py"
+      - "backend/provider_fee_weekly_average.py"
+      - "backend/provider_fee_weekly_sources.py"
+      - "backend/server.py"
+      - "backend/tests/test_dashboard_weekly_payment_fees.py"
+      - "backend/tests/test_dashboard_operational_statement_fees.py"
+      - "backend/tests/test_provider_fee_statement_actual_sources.py"
+      - "backend/tests/test_provider_fee_weekly_average.py"
+      - "backend/tests/test_provider_fee_weekly_sources.py"
       - "backend/tests/test_dashboard_v2_ad_account_costs.py"
       - "frontend/src/components/ProfitSummaryCard.jsx"
       - "frontend/src/components/ProfitSummaryCard.paymentFees.test.jsx"
       - "frontend/src/components/DashboardAnalyticsPlacement.test.js"
       - "frontend/src/lib/paymentFeeCompleteness.js"
+      - "frontend/src/lib/paymentFeeRows.js"
       - "frontend/src/pages/Dashboard.jsx"
       - "frontend/src/pages/AdvancedDashboard.jsx"
       - "frontend/src/pages/AdvancedDashboard.paymentFees.test.jsx"
@@ -44,6 +57,9 @@ jobs:
           pytest
           pytest-asyncio
           openpyxl
+          motor==3.3.2
+          mongomock-motor
+          python-dotenv
       - name: Compile dashboard cost modules
         run: >-
           python -m py_compile
@@ -54,6 +70,17 @@ jobs:
         run: >-
           python -m pytest
           tests/test_dashboard_v2_ad_account_costs.py
+          -q --tb=short
+      - name: Test statement-derived fees and historical report restatement
+        run: >-
+          python -m pytest --noconftest
+          tests/test_dashboard_weekly_payment_fees.py
+          tests/test_dashboard_operational_statement_fees.py
+          tests/test_provider_fee_statement_actual_sources.py
+          tests/test_provider_fee_weekly_average.py
+          tests/test_provider_fee_weekly_sources.py
+          tests/test_dashboard_dated_payment_fees.py
+          tests/test_dashboard_card_snapshots.py
           -q --tb=short
       - name: Enforce read-only integration in Dashboard V2
         working-directory: .

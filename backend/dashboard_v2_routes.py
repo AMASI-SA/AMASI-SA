@@ -2048,6 +2048,12 @@ def make_dashboard_v2_router(
         # dashboard callers retain their existing JSON and hydration shape.
         cost_collector = DashboardAdsCostCollector() if include_account_results else None
         cost_observer = {"cost_collector": cost_collector} if cost_collector is not None else {}
+        if fee_context is not None:
+            # The two selected-cohort readers share accepted evidence only
+            # within this computation. Neither tasks nor the knowledge cutoff
+            # belong to tariff identity or a later request's saved result.
+            fee_context = {**fee_context, "_request_fee_reads": {},
+                           "evidence_as_of": datetime.now(timezone.utc)}
         initial_reads = [
             legacy_dashboard(
                 user=current,
@@ -2324,7 +2330,8 @@ def make_dashboard_v2_router(
                 "employee_salaries": "mezan_employee_salary_contracts_v2",
                 "recurring_obligations": "operating_recurring_obligations_v2",
                 "shipping_partners": "legacy_shipping_cost_ssot",
-                "payment_gateway_fees": PAYMENT_FEE_BASIS + " + mezan_ad_account_cost_settings_v2",
+                "payment_gateway_fees": (response.get("payment_fee_authority", {}).get("basis") or PAYMENT_FEE_BASIS)
+                    + " + mezan_ad_account_cost_settings_v2",
             },
             "source_only": True,
             "accounting_write_reached": False,
@@ -2408,6 +2415,26 @@ def make_dashboard_v2_router(
         )
         settings = settings or {}
         fee_context = await load_fee_setup_context(db, user_id) if section == "executive" else None
+        calculation_fee_context = fee_context
+        weekly_fee_revision = None
+        if fee_context and fee_context.get("complete") and any(
+            row.get("provider") == "tabby" and row.get("status") == "active"
+            and row.get("event_type", "capture") == "capture"
+            for row in fee_context.get("policies", [])
+        ):
+            from provider_fee_weekly_sources import load_weekly_fee_source_state, weekly_fee_source_revision
+            # Import acceptance changes the owner aggregate, not the tariff.
+            # Bind the snapshot to that source revision before a cache lookup;
+            # reuse the projected proof state in both fee calculations.
+            try:
+                source_state = await load_weekly_fee_source_state(db, user_id)
+            except ValueError:
+                calculation_fee_context = {**fee_context, "weekly_fee_source_state": {},
+                                           "weekly_fee_source_error": True}
+                weekly_fee_revision = "unavailable"
+            else:
+                calculation_fee_context = {**fee_context, "weekly_fee_source_state": source_state}
+                weekly_fee_revision = weekly_fee_source_revision(source_state)
 
         def filter_key(value: str | None) -> tuple[str, ...]:
             return tuple(sorted({part.strip().casefold() for part in (value or "").split(",") if part.strip()}))
@@ -2422,6 +2449,7 @@ def make_dashboard_v2_router(
             tuple(sorted(policy.items())),
             payment_settings_revision(settings) if section == "executive" else None,
             fee_setup_revision(fee_context) if section == "executive" else None,
+            weekly_fee_revision,
         )
         filters = {
             "from_date": from_date, "to_date": to_date,
@@ -2437,7 +2465,7 @@ def make_dashboard_v2_router(
                         user=current, **filters,
                         include_month_kpis=False, include_product_rows=False,
                         include_account_results=True,
-                        fee_context=fee_context,
+                        fee_context=calculation_fee_context,
                     ),
                     # Setup is owner-wide, so a date or payment filter cannot
                     # hide an unresolved method. This reads names only; it does
