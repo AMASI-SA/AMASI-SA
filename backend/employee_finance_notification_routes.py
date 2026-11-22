@@ -8,6 +8,8 @@ from employee_finance_notifications import (
 
 def make_employee_finance_notification_router(db, current_user):
     router = APIRouter(prefix="/employee-finance", tags=["employee-finance"])
+    from employee_balance_reads import install_employee_balance_routes
+    install_employee_balance_routes(router, db, current_user)
 
     @router.get("/notifications/me")
     async def notifications(response: Response, limit: int = Query(default=10, ge=1, le=10),

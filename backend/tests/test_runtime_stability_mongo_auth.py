@@ -12,6 +12,7 @@ from pymongo.errors import (
 import auth
 from customer_refund_access import CUSTOMER_REFUNDS_APP_PERMISSION
 from mobile_app_permissions import (
+    EMPLOYEE_BALANCE_PERMISSION,
     MOBILE_APP_ACCESS,
     MOBILE_APP_MANAGER,
     MOBILE_APP_PERMISSIONS,
@@ -151,7 +152,7 @@ async def test_owner_mobile_access_is_catalogue_derived_without_second_db_read()
     assert result["owner_override"] is True
     assert result["enabled"] is True
     assert set(result["permissions"]) == (
-        set(MOBILE_APP_PERMISSIONS) | {CUSTOMER_REFUNDS_APP_PERMISSION}
+        set(MOBILE_APP_PERMISSIONS) | {CUSTOMER_REFUNDS_APP_PERMISSION, EMPLOYEE_BALANCE_PERMISSION}
     )
 
 
@@ -182,6 +183,6 @@ async def test_manager_native_grant_cannot_derive_shared_refund_access(extra_nat
     assert result["enabled"] is True
     assert result["manager"] is True
     assert set(result["permissions"]) == (
-        set(MOBILE_APP_PERMISSIONS) - OPERATIONAL_APP_PERMISSIONS
+        (set(MOBILE_APP_PERMISSIONS) - OPERATIONAL_APP_PERMISSIONS) | {EMPLOYEE_BALANCE_PERMISSION}
     )
     assert CUSTOMER_REFUNDS_APP_PERMISSION not in result["permissions"]

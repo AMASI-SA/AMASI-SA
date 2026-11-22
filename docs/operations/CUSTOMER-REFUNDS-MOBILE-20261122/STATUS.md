@@ -1,5 +1,7 @@
 # Shared employee refund permission and mobile adapter
 
+Latest scope: paired personal employee-balance reads and compact global-tracking metadata/barcode lookup are included in `../EMPLOYEE-BALANCE-TRACKING-20261122/STATUS.md`. Courier count-definition reconciliation is deferred. The prior refund writer/integration below is preserved.
+
 Date: 2026-11-22 (Asia/Riyadh). Branch: `codex/assembly-queues-fast-read-20261121`. [PR2050](https://github.com/AMASI-SA/AMASI-SA/pull/2050); mobile [PR373](https://github.com/AMASI-SA/amasi-mobile/pull/373).
 
 ## Authority and integration

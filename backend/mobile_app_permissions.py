@@ -22,6 +22,7 @@ OWNER_BASELINE_PERMISSIONS = {"app.page.operations_monitoring"}
 OPERATIONAL_APP_WRITE = "operational_balance_movements_write"
 OPERATIONAL_APP_READ = "operational_balance_reports_read"
 OPERATIONAL_APP_PERMISSIONS = {OPERATIONAL_APP_WRITE, OPERATIONAL_APP_READ}
+EMPLOYEE_BALANCE_PERMISSION = "app.page.employee_balance"
 
 MOBILE_APP_PERMISSION_GROUPS = [
     {
@@ -294,10 +295,19 @@ async def mobile_app_access_for_user(db: Any, user: dict[str, Any]) -> dict[str,
         permissions.update(MOBILE_APP_PERMISSIONS)
         if role == "owner" and not user.get("_mobile_actor_id") and user.get("active") is not False:
             permissions.add(CUSTOMER_REFUNDS_APP_PERMISSION)
+    # A self-service navigation capability, not an assignable reporting grant.
+    # No new database read belongs on /auth/me. The self endpoint independently
+    # reloads the account and its unique active employee link when opened.
+    enabled = bool(account_active and (access is not None or is_owner or workspace_enabled or refund_enabled))
+    if (enabled and permissions and role != "store_driver" and not user.get("_mobile_actor_id")
+            and user.get("active") is not False and not user.get("archived")
+            and not user.get("is_archived") and not user.get("deleted") and not user.get("is_deleted")
+            and (access is None or access.get("enabled") is not False)):
+        permissions.add(EMPLOYEE_BALANCE_PERMISSION)
     permissions_list = sorted(permissions)
     return {
         "configured": access is not None or is_owner or workspace_enabled or refund_enabled,
-        "enabled": bool(account_active and (access is not None or is_owner or workspace_enabled or refund_enabled)),
+        "enabled": enabled,
         "owner_override": bool(is_owner and account_active),
         "owner_baseline": bool(is_owner),
         "manager": MOBILE_APP_MANAGER in permissions,
@@ -306,6 +316,7 @@ async def mobile_app_access_for_user(db: Any, user: dict[str, Any]) -> dict[str,
 
 
 __all__ = [
+    "EMPLOYEE_BALANCE_PERMISSION",
     "MOBILE_APP_ACCESS",
     "MOBILE_APP_ACCESS_OWNER_FIELD",
     "MOBILE_APP_CLIENT",

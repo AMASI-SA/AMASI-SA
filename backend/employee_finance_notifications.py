@@ -49,10 +49,11 @@ def _active(row):
     return bool(row) and not any(row.get(k) for k in ("disabled", "deleted_at", "archived", "is_archived", "deleted", "is_deleted")) and row.get("is_active") is not False and row.get("active") is not False
 
 
-async def _binding(db, actor_id, *, merchant_id=None, employee_id=None, require_app=True):
+async def _binding(db, actor_id, *, merchant_id=None, employee_id=None, require_app=True, required_permission=None):
     actor = await db["users"].find_one({"id": actor_id}, {
         "_id": 0, "id": 1, "role": 1, "is_owner": 1, "created_by": 1,
         "disabled": 1, "active": 1, "is_active": 1, "deleted_at": 1,
+        "archived": 1, "is_archived": 1, "deleted": 1, "is_deleted": 1,
         POLICY_FIELD: 1,
     })
     if not _active(actor) or actor.get("role") == "store_driver":
@@ -71,9 +72,10 @@ async def _binding(db, actor_id, *, merchant_id=None, employee_id=None, require_
     if (not _active(employee) or employee.get("status") != "active"
             or employee_id is not None and employee.get("id") != employee_id):
         return None
-    if require_app and actor.get("role") != "owner" and actor.get("is_owner") is not True:
+    if require_app and (required_permission or actor.get("role") != "owner" and actor.get("is_owner") is not True):
         access = await mobile_app_access_for_user(db, actor)
-        if not access.get("enabled") or not access.get("permissions"):
+        if (not access.get("enabled") or not access.get("permissions")
+                or required_permission and required_permission not in access.get("permissions", [])):
             return None
     return {"merchant_id": owner, "recipient_id": actor_id, "employee_id": employee["id"],
         "employee_name": _plain(employee.get("display_name") or employee.get("name") or "الموظف")}
@@ -234,9 +236,9 @@ def _scope(bound):
     return {key: bound[key] for key in ("merchant_id", "recipient_id", "employee_id")}
 
 
-async def financial_actor_context(db, user):
+async def financial_actor_context(db, user, *, required_permission=None):
     actor_id = user.get("_mobile_actor_id") if user.get("_session_client") == "amasi_mobile" else None
-    bound = await _binding(db, actor_id or user.get("id"))
+    bound = await _binding(db, actor_id or user.get("id"), required_permission=required_permission)
     if not bound:
         raise HTTPException(403, detail={"code": "employee_financial_account_unavailable", "message": "حساب الموظف المالي غير متاح"})
     return bound
