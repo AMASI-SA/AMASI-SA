@@ -17,6 +17,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+import read_path_diagnostics as read_diagnostics
 
 from operational_balance_service import (
     KINDS, active_gate, create_movement, entity, fmt, money, report,
@@ -362,7 +363,8 @@ def payment_source_kinds(policy):
     return ({"bank", "cash"} if payee_kinds else set()) | ({"employee_custody"} if can_spend_custody else set())
 
 
-async def resource_catalog(db, owner, policy, state, *, ad_bank_fx=False, reviewed_counts=None, selected_resource=None, directory_only=False, selected_kind=None, provider_positions=False, provider_orders=False):
+async def resource_catalog(db, owner, policy, state, *, ad_bank_fx=False, reviewed_counts=None, selected_resource=None, directory_only=False, selected_kind=None, provider_positions=False, provider_orders=False,
+                           selected_kinds=None, identities_by_kind=None, computed_override=None):
     from operational_ad_balance_sar import workspace_amounts
     from operational_workspace_order_issues import issue_badge, navigation_counts
     from operational_balance_service import prepaid_shipping_cash
@@ -375,29 +377,34 @@ async def resource_catalog(db, owner, policy, state, *, ad_bank_fx=False, review
         fail("operational_workspace_not_found", "طلبات المنصة غير متاحة", 404)
     can_price_cards = provider_positions and (policy.owner_override or any(
         r["kind"] == "provider" and r.get("balance") for r in policy.resources))
-    if directory_only:
+    if computed_override is not None:
+        computed = computed_override
+    elif directory_only:
         computed = {"parties": [], "obligations": [], "details": {}, "issues": []}
     elif selected_resource and selected_resource[0] in ACCOUNT_KINDS:
         from operational_party_projection_state import cash_account_projection
-        computed = await prepare_in_thread(cash_account_projection, state, *selected_resource)
+        computed = await prepare_in_thread(read_diagnostics.thread_call("report", cash_account_projection), state, *selected_resource)
     elif (selected_resource and selected_resource[0] != "provider") or selected_kind == "ad_account":
         kind, identity = selected_resource or ("ad_account", None)
         selected_state = await prepare_in_thread(party_projection_state, state, kind, identity)
-        computed = await prepare_in_thread(report, selected_state)
+        computed = await prepare_in_thread(read_diagnostics.thread_call("report", report), selected_state)
         if kind in {"store_driver", "courier"}:
             # The inbox can contain unresolved issues elsewhere in the saved accounting scope.
             computed["issues"] = computed["issues"] or state.get("engine", {}).get("issues", [])
     elif can_price_cards or provider_orders:
-        computed = await prepare_in_thread(report, state, provider_balances_sar=True,
+        computed = await prepare_in_thread(read_diagnostics.thread_call("report", report), state, provider_balances_sar=True,
             workspace_provider=selected_resource[1] if provider_orders else None)
     else:
-        computed = await prepare_in_thread(report, state, paypal_sar=True) if paypal_scope else await prepare_in_thread(report, state)
+        computed = (await prepare_in_thread(read_diagnostics.thread_call("report", report), state, paypal_sar=True)
+                    if paypal_scope else await prepare_in_thread(read_diagnostics.thread_call("report", report), state))
     include_bank_issues = (not directory_only and selected_kind in (None, "bank")
                            and (not selected_resource or selected_resource[0] == "bank"))
     if include_bank_issues:
-        review_counts = await prepare_in_thread(navigation_counts, computed, state.get("engine", {}).get("issues", []))
+        review_counts = await prepare_in_thread(read_diagnostics.thread_call("navigation", navigation_counts),
+                                               computed, state.get("engine", {}).get("issues", []))
     else:
-        review_counts = navigation_counts(computed)
+        with read_diagnostics.phase("navigation", cpu=True):
+            review_counts = navigation_counts(computed)
     balances = {(r["party_type"], r["party_id"], r["currency"]): r for r in computed["parties"]}
     funding_kinds = payment_source_kinds(policy)
     items = []
@@ -405,9 +412,14 @@ async def resource_catalog(db, owner, policy, state, *, ad_bank_fx=False, review
     for kind in RESOURCE_KINDS:
         if (selected_resource and kind != selected_resource[0]) or (selected_kind and kind != selected_kind):
             continue
+        if selected_kinds is not None and kind not in selected_kinds:
+            continue
         if not policy.owner_override and not any(r["kind"] == kind for r in policy.resources):
             continue
-        for row in await entities(db, owner, kind, operational_state=state):
+        with read_diagnostics.phase("catalog." + kind):
+            catalog = await entities(db, owner, kind, operational_state=state,
+                **({'selected_ids': identities_by_kind.get(kind, ())} if identities_by_kind is not None else {}))
+        for row in catalog:
             if selected_resource and row["id"] != selected_resource[1]:
                 continue
             access = policy.resource(kind, row["id"])
@@ -460,6 +472,8 @@ async def resource_catalog(db, owner, policy, state, *, ad_bank_fx=False, review
                           **({} if directory_only else issue_badge(kind, row["id"], access, bool(computed.get("as_of")), bool(computed["issues"]), review_counts, reviewed_counts or {})),
                           **({"prepaid_shipping_cash": True} if kind == "cash" and prepaid_shipping_cash(state, row["id"]) else {}),
                           "balance": balance})
+        # Match the former temporary iterator's lifetime before the next read.
+        del catalog
     return items, computed
 
 
@@ -928,6 +942,9 @@ def _open_register_page(index, policy, page, page_size, focus_id=None):
 def install_workspace_routes(router, db, current_user, scope):
     from operational_balance_access import load_access
     from operational_balance_reviews import install_workspace_review_routes
+    from operational_workspace_demand_routes import install_demand_workspace_routes
+
+    install_demand_workspace_routes(router, db, current_user)
 
     from operational_workspace_order_issues import ReviewSnapshots, read_order_issues, source_key
 
@@ -946,11 +963,13 @@ def install_workspace_routes(router, db, current_user, scope):
         from operational_balance_store import STATES, initial
         fields = dict.fromkeys(("owner_id", "status", "revision", "started_at", "pos_receivable_binding",
                                 "ad_funding", "courier_tariffs.payment_mode", "courier_tariffs.cash_account.id", "engine.ad_balance_sar_basis"), 1)
-        return await db[STATES].find_one({"_id": owner, "owner_id": owner}, fields) or initial(owner)
+        with read_diagnostics.phase("directory_state_read"):
+            return await db[STATES].find_one({"_id": owner, "owner_id": owner}, fields) or initial(owner)
 
     async def checked_read(user, callback, *, ad_bank_fx=False, selected_resource=None, invoice_headers=False, invoice_detail=None, directory_only=False, balance_only=False, forecast_only=False, provider_positions=False, provider_orders=False, selected_kind=None):
         from operational_financial_position_state import read_financial_position_state
-        actor, owner, source, policy = await load(user)
+        with read_diagnostics.phase("access_initial"):
+            actor, owner, source, policy = await load(user)
         if selected_resource and (not policy.resource(*selected_resource)["balance"] if balance_only else policy.resource(*selected_resource)["movements"] == "none"):
             fail("operational_workspace_not_found", "الكشف غير متاح", 404)
         # Workspace reports need current financial proofs, not historical audit
@@ -964,11 +983,13 @@ def install_workspace_routes(router, db, current_user, scope):
         if invoice_headers:
             from operational_workspace_supplier_invoices import fill_historical_headers
             await fill_historical_headers(db, owner, resources, computed, state, policy)
-        result = await prepare_in_thread(callback, actor, owner, policy, state, resources, computed)
+        result = await prepare_in_thread(read_diagnostics.thread_call("project", callback),
+                                        actor, owner, policy, state, resources, computed)
         if invoice_detail:
             from operational_workspace_supplier_invoices import read_invoice
             result = await read_invoice(db, owner, selected_resource[1], invoice_detail, policy, result)
-        current_actor, current_owner, _, current = await load(user)
+        with read_diagnostics.phase("access_final"):
+            current_actor, current_owner, _, current = await load(user)
         if (actor["id"], owner, policy.version, policy.owner_override) != (current_actor["id"], current_owner, current.version, current.owner_override):
             fail("operational_access_changed", "تغيرت صلاحياتك؛ أعد فتح الصفحة", 409)
         return result
@@ -986,7 +1007,10 @@ def install_workspace_routes(router, db, current_user, scope):
                     "capabilities": {"manage_access": policy.owner_override,
                                      "create_entries": state["status"] == "active" and any(row["operations"] for row in resources)},
                     "operations": [{"key": key, "label": label} for key, label in OPERATION_LABELS.items() if policy.can_operation(key)]}
-        return await run_visible_report_read(request, lambda: checked_read(user, project, ad_bank_fx=ad_bank_fx, directory_only=directory_only, provider_positions=provider_positions))
+        mode = "directory" if directory_only else "home" if home_preview else "full"
+        return await run_visible_report_read(request, lambda: read_diagnostics.sample("operational_context",
+            checked_read(user, project, ad_bank_fx=ad_bank_fx, directory_only=directory_only, provider_positions=provider_positions),
+            mode=mode))
 
     @router.get("/workspace/specialist/{which}")
     async def specialist(request: Request, which: Literal["returns", "exchanges", "fees", "reports", "specialized", "access"],
@@ -1068,7 +1092,11 @@ def install_workspace_routes(router, db, current_user, scope):
         return await run_visible_report_read(request, group)
 
     @router.get("/workspace/resource/{kind}/{identity}")
-    async def resource_balance(request: Request, kind: str, identity: str, ad_bank_fx: bool = False, user=Depends(current_user)):
+    async def resource_balance(request: Request, kind: str, identity: str, ad_bank_fx: bool = False, demand: bool = False, user=Depends(current_user)):
+        if demand:
+            from operational_workspace_demand_routes import serve_projection
+            return await serve_projection(db, user, request, "operational_resource", resource=(kind, identity),
+                                          filters={"ad_bank_fx": ad_bank_fx})
         def selected(actor, owner, policy, state, resources, computed):
             if len(resources) != 1 or not resources[0]["access"]["balance"]:
                 fail("operational_workspace_not_found", "الحساب غير متاح", 404)
@@ -1088,8 +1116,14 @@ def install_workspace_routes(router, db, current_user, scope):
     async def ledger(request: Request, kind: str, identity: str, page: int = Query(default=1, ge=1),
                      page_size: int = Query(default=5, ge=1, le=8), focus_id: str | None = Query(default=None, max_length=250),
                      ad_bank_fx: bool = False, page_only: bool = False, courier_history: bool = False, provider_orders: bool = False, q: str = Query(default="", max_length=160),
-                     date_from: str | None = None, date_to: str | None = None, user=Depends(current_user)):
+                     date_from: str | None = None, date_to: str | None = None, demand: bool = False, user=Depends(current_user)):
         check_period(date_from, date_to)
+        if demand:
+            from operational_workspace_demand_routes import serve_projection
+            return await serve_projection(db, user, request, "operational_ledger", resource=(kind, identity),
+                filters={"ad_bank_fx": ad_bank_fx, "provider_orders": provider_orders, "q": q,
+                         "date_from": date_from, "date_to": date_to, "courier_history": courier_history},
+                page=page, page_size=page_size, focus_id=focus_id)
         if page_only and not provider_orders and not q and not date_from:
             return await run_visible_report_read(request, lambda: movement_window(user, kind, identity, page, page_size,
                 account_detail=True, ad_bank_fx=ad_bank_fx, focus_id=focus_id, courier_history=courier_history))
@@ -1223,10 +1257,16 @@ def install_workspace_routes(router, db, current_user, scope):
                         kind: str | None = Query(default=None, max_length=50), id: str | None = Query(default=None, max_length=200),
                         q: str = Query(default="", max_length=160), date_from: str | None = None, date_to: str | None = None,
                         direction: Literal["in", "out", "transfer"] | None = None, status: Literal["done", "info"] | None = None,
-                        page_only: bool = False, courier_history: bool = False, user=Depends(current_user)):
+                        page_only: bool = False, courier_history: bool = False, demand: bool = False, user=Depends(current_user)):
         check_period(date_from, date_to)
         if (kind is None) != (id is None):
             fail("operational_account_filter_invalid", "اختر نوع الحساب والحساب معًا", 422)
+        if demand:
+            from operational_workspace_demand_routes import serve_projection
+            return await serve_projection(db, user, request, "operational_register",
+                resource=(kind, id) if kind is not None else None,
+                filters={"q": q, "date_from": date_from, "date_to": date_to, "direction": direction,
+                         "status": status, "courier_history": courier_history}, page=page, page_size=page_size)
         if page_only and not any((q, date_from, direction, status)):
             return await run_visible_report_read(request, lambda: movement_window(user, kind, id, page, page_size, courier_history=courier_history))
         def project(actor, owner, policy, state, resources, computed):
@@ -1254,7 +1294,12 @@ def install_workspace_routes(router, db, current_user, scope):
     async def statement(request: Request, kind: str, identity: str,
                         date_from: str = Query(pattern=r"^\d{4}-\d{2}-\d{2}$"),
                         date_to: str = Query(pattern=r"^\d{4}-\d{2}-\d{2}$"),
-                        purpose: Literal["view", "print"] = "view", user=Depends(current_user)):
+                        purpose: Literal["view", "print"] = "view", demand: bool = False, user=Depends(current_user)):
+        if demand:
+            check_period(date_from, date_to)
+            from operational_workspace_demand_routes import serve_projection
+            return await serve_projection(db, user, request, "operational_statement", resource=(kind, identity),
+                filters={"date_from": date_from, "date_to": date_to, "purpose": purpose}, page_size=300)
         def project(actor, owner, policy, state, resources, computed):
             resource = next((r for r in resources if (r["kind"], r["id"]) == (kind, identity)), None)
             if not resource or resource["access"]["movements"] == "none":
@@ -1266,7 +1311,11 @@ def install_workspace_routes(router, db, current_user, scope):
 
     @router.get("/workspace/history/{kind}/{identity}")
     async def history(request: Request, kind: str, identity: str, page: int = Query(default=1, ge=1),
-                      page_size: int = Query(default=5, ge=1, le=5), user=Depends(current_user)):
+                      page_size: int = Query(default=5, ge=1, le=5), demand: bool = False, user=Depends(current_user)):
+        if demand:
+            from operational_workspace_demand_routes import serve_projection
+            return await serve_projection(db, user, request, "operational_history", resource=(kind, identity),
+                                          page=page, page_size=page_size)
         def project(actor, owner, policy, state, resources, computed):
             resource = next((r for r in resources if (r["kind"], r["id"]) == (kind, identity)), None)
             if (not resource or resource["access"]["movements"] == "none"

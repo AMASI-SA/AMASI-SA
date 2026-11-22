@@ -27,6 +27,18 @@ test("scoped and bound full report reads forward only explicit GET configuration
     expect(http.post).not.toHaveBeenCalled();
 });
 
+test("browser demand report preserves the saved-snapshot binder on its separate read endpoint",async()=>{
+    const signal=new AbortController().signal;
+    const params={view:'couriers',expected_revision:7,expected_as_of:'2026-11-01T09:00:00Z',expected_started_at:'2026-10-31T21:00:00Z'};
+    const report={view:'couriers',revision:7,snapshot:{display_only:true}};
+    http.get.mockResolvedValueOnce({status:200,data:report});
+    expect(await operationalApi.financialPosition({demand:true,params,signal})).toBe(report);
+    expect(http.get).toHaveBeenLastCalledWith('/operational-balances/workspace/report',expect.objectContaining({
+        timeout:60000,signal,params:{...params,demand:true},headers:{'X-Mezan-Read-Consumer':expect.any(String)},
+    }));
+    expect(http.get.mock.calls.at(-1)[1].readDemand).toBeUndefined();
+});
+
 test("targeted courier refresh binds the selected order and session in the body, not transport config", async () => {
     const controller = new AbortController(), scope = "a".repeat(64);
     const response = { status: "refreshed", session_scope: scope };

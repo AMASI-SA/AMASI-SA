@@ -5,6 +5,9 @@ on:
     branches: [hotfix/prod-snap-meta-final]
     paths:
       - 'backend/background_worker_*.py'
+      - 'backend/demand_read_*.py'
+      - 'backend/tests/test_demand_read_*.py'
+      - 'backend/tests/demand_read_mongo_fixture.py'
       - 'backend/salla_integration/scheduled_reconciliation.py'
       - 'backend/salla_integration/scheduled_catalogue.py'
       - 'backend/salla_integration/sync.py'

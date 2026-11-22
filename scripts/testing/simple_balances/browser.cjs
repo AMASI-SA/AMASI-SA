@@ -49,7 +49,8 @@ const server = http.createServer(async (request, response) => {
     response.writeHead(200, { 'content-type': file.endsWith('.js') ? 'text/javascript' : file.endsWith('.css') ? 'text/css' : 'text/html' });
     fs.createReadStream(file).pipe(response); return;
   }
-  const call = { method: request.method, path: url.pathname, params: Object.fromEntries(url.searchParams), scenario };
+  const call = { method: request.method, path: url.pathname, params: Object.fromEntries(url.searchParams), scenario,
+    consumer: request.headers['x-mezan-read-consumer'], poll: request.headers['x-mezan-read-poll'] };
   calls.push(call);
   try {
     let body;
@@ -85,6 +86,38 @@ const server = http.createServer(async (request, response) => {
       throw Error('Unsupported recovery method');
     }
     if (url.pathname.startsWith(admin) && !actor.is_owner) return send(403, { detail: { message: 'صلاحيات المالك مطلوبة' } });
+    if (url.pathname === `${base}/bootstrap` || url.pathname.startsWith(`${base}/selection/`) || url.pathname === `${base}/options`) {
+      assert.equal(request.method, 'GET');
+      assert.equal(call.params.demand, 'true');
+      assert.match(call.consumer, /^[a-zA-Z0-9-]{8,128}$/);
+      assert.equal(call.poll, undefined, 'An immediately ready fixture must never be polled');
+      const scoped = f.context(actor);
+      const binding = { session_scope: scoped.session_scope, permission_version: scoped.permission_version,
+        owner_override: actor.is_owner, snapshot: { generated_at: '2026-11-19T12:00:00Z', revision: 1,
+          status: 'active', started_at: '2026-01-01T00:00:00Z', as_of: '2026-11-19T12:00:00Z', display_only: true } };
+      if (url.pathname === `${base}/bootstrap`) return send(200, { ...scoped, ...binding, resources: [] });
+      if (url.pathname.startsWith(`${base}/selection/`)) {
+        const [kind, id] = url.pathname.split('/').slice(-2);
+        const resource = scoped.resources.find(item => item.kind === kind && item.id === decodeURIComponent(id));
+        assert(resource, 'Selected resource must exist in the scoped fixture');
+        return send(200, { ...resource, ...binding, can_reference: true });
+      }
+      assert.equal(call.params.operation, 'out');
+      assert.equal(call.params.role, 'source');
+      assert.equal(call.params.selected_kind, 'supplier');
+      assert.equal(call.params.selected_id, 'supplier-demo');
+      assert.equal(call.params.page, '1');
+      assert.equal(call.params.page_size, '24');
+      const kind = call.params.kind;
+      assert(['bank', 'employee_custody'].includes(kind), 'Only the chosen source kind may be read');
+      const items = scoped.resources.filter(item => item.kind === kind).map(item => ({
+        ...item, balance: null, can_fund_payment: Number(item.balance?.amount) > 0,
+      }));
+      // Empty custody is excluded by the server; empty money accounts remain
+      // visible with a disabled funding choice.
+      if (kind === 'bank') items.push({ ...items[0], id: 'empty-bank', name: 'فارغ bank', can_fund_payment: false });
+      return send(200, { ...binding, items, total: items.length, page: 1, page_size: 24, pages: 1 });
+    }
     if (url.pathname === `${base}/context`) {
       const payload = f.context(actor);
       return send(200, url.searchParams.has('directory_only') ? { ...payload,
@@ -261,12 +294,14 @@ async function capture(page, name) {
     await check('Approved supplier payout fetches only the selected funding group and hides empty custody', async () => {
       const start=calls.length;
       await page.goto(origin+'/operational-balances?view=entry&kind=supplier&id=supplier-demo&mode=out');
-      const select = name => page.locator('label.field').filter({has:page.getByText(name,{exact:true})}).locator('select');
+      const select = name => page.getByRole('combobox', { name, exact: true });
       await select('نوع مصدر الدفع').waitFor();
-      assert.equal(calls.slice(start).find(call => call.path.endsWith('/context')).params.directory_only,'true');
+      assert.equal(calls.slice(start).filter(call => call.path.endsWith('/bootstrap')).length,1);
+      assert.equal(calls.slice(start).filter(call => call.path.endsWith('/selection/supplier/supplier-demo')).length,1);
+      assert.equal(calls.slice(start).some(call => /\/(context|home|directory|options)$/.test(call.path)),false);
       assert.equal(calls.slice(start).some(call => call.path.includes('/accounts/')),false);
       await select('نوع مصدر الدفع').selectOption('employee_custody');
-      await select('خرج المبلغ من').waitFor();
+      await select('خرج المبلغ من').locator('option[value*="custody-demo"]').waitFor({state:'attached'});
       assert.equal(await select('خرج المبلغ من').locator('option[value*="custody-demo"]').count(),1);
       assert.equal(await select('خرج المبلغ من').locator('option[value*="empty-"]').count(),0);
       await select('نوع مصدر الدفع').selectOption('bank');
@@ -274,7 +309,8 @@ async function capture(page, name) {
       await empty.waitFor({state:'attached'});
       // isDisabled() on a labelled option follows the label to the select.
       assert.equal(await empty.evaluate(option => option.disabled), true);
-      assert.deepEqual(calls.slice(start).filter(call=>call.path.includes('/accounts/')).map(call=>call.path.split('/').at(-1)),['employee_custody','bank']);
+      assert.deepEqual(calls.slice(start).filter(call=>call.path.endsWith('/options')).map(call=>call.params.kind),['employee_custody','bank']);
+      assert.equal(calls.slice(start).some(call=>call.path.includes('/accounts/')),false);
       assert.equal(calls.slice(start).some(call=>call.method==='POST' && call.path.endsWith('/entries')),false);
     });
     await check('Desktop ledger uses five rows, recorder names, red له and green عليه', async () => {

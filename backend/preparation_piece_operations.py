@@ -21,11 +21,12 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Iterable, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 from pymongo import ASCENDING, DESCENDING
 from pymongo.write_concern import WriteConcern
 from operational_atomic import operational_owner
+import read_path_diagnostics as read_diagnostics
 from mobile_operational_flow_policy import FIELD_PREPARATION, is_optional
 from assembly_status_policy import canonical_status
 from assembly_board_groups import assembly_queue_group
@@ -44,7 +45,7 @@ from fulfillment_v2_routes import (
     effective_operation_actor,
 )
 from fulfillment_carrier_label import sync_completed_carrier_label
-from order_engine.repository import MongoOrderRepository
+from order_engine.repository import MongoAssemblyBoardRepository, MongoOrderRepository
 from order_engine.service import OrderNotFoundError, get_order
 from order_engine.shipping_label_service import ShippingLabelError
 from order_review_export_controls import user_can_manage_preparation
@@ -3524,6 +3525,7 @@ async def _assembly_search(
     }
 
 
+@read_diagnostics.sampled("assembly_board")
 async def _assembly_order_board(
     db: Any,
     *,
@@ -3544,23 +3546,25 @@ async def _assembly_order_board(
             status_code=422,
             detail={"code": "assembly_board_state_invalid"},
         )
+    read_diagnostics.set_mode(state)
     board_state = "completed" if state == "completed" else "in_progress"
     normalized_query = _text(query).removeprefix("#").strip()
 
-    physical_order_numbers = {
-        _text(value)
-        for value in await db[PIECES].distinct(
-            "order_number",
-            {
-                "user_id": user_id,
-                "$or": [
-                    {"experiment_archived_at": {"$exists": False}},
-                    {"experiment_archived_at": None},
-                ],
-            },
-        )
-        if _text(value)
-    }
+    with read_diagnostics.phase("piece_distinct"):
+        physical_order_numbers = {
+            _text(value)
+            for value in await db[PIECES].distinct(
+                "order_number",
+                {
+                    "user_id": user_id,
+                    "$or": [
+                        {"experiment_archived_at": {"$exists": False}},
+                        {"experiment_archived_at": None},
+                    ],
+                },
+            )
+            if _text(value)
+        }
 
     evidence_or: list[dict[str, Any]] = [
         {"preparation_batch_ids.0": {"$exists": True}},
@@ -3576,53 +3580,67 @@ async def _assembly_order_board(
             {"order_number": {"$in": sorted(physical_order_numbers)}},
         )
 
-    workflows = await db[WORKFLOWS].find(
-        {"user_id": user_id, "$or": evidence_or},
-        {"_id": 0},
-    ).sort("updated_at", 1).limit(5000).to_list(5000)
+    with read_diagnostics.phase("workflow_read"):
+        workflows = await db[WORKFLOWS].find(
+            {"user_id": user_id, "$or": evidence_or},
+            {"_id": 0},
+        ).sort("updated_at", 1).limit(5000).to_list(5000)
+    read_diagnostics.count("workflows_acquired", len(workflows))
     workflows = [row for row in workflows
                  if is_known_review_mode(row.get("completion_mode"))
                  and _text(row.get("order_number"))
                  and (not normalized_query or normalized_query in _text(row.get("order_number")))]
+    read_diagnostics.count("workflows_filtered", len(workflows))
 
     order_numbers = sorted({
         _text(row.get("order_number"))
         for row in workflows
         if _text(row.get("order_number"))
     })
-    local_workflows = await load_local_review_workflows(
-        db, user_id=user_id, order_numbers=order_numbers, workflows=workflows,
-    )
-    physical_rows = (
-        await db[PIECES].find(
-            {
-                "user_id": user_id,
-                "order_number": {"$in": order_numbers},
-                "status": {"$ne": PIECE_STATUS_CANCELLED},
-                "$or": [
-                    {"experiment_archived_at": {"$exists": False}},
-                    {"experiment_archived_at": None},
-                ],
-            },
-            {
-                "_id": 0,
-                "order_number": 1,
-                "piece_id": 1,
-                "assembly_status": 1,
-                "order_item_id": 1,
-                "supplier_dispatch_status": 1,
-                "received_at": 1,
-            },
-        ).to_list(50000)
-        if order_numbers
-        else []
-    )
+    with read_diagnostics.phase("local_proofs"):
+        local_workflows = await load_local_review_workflows(
+            db, user_id=user_id, order_numbers=order_numbers, workflows=workflows,
+        )
+    with read_diagnostics.phase("piece_read"):
+        physical_rows = (
+            await db[PIECES].find(
+                {
+                    "user_id": user_id,
+                    "order_number": {"$in": order_numbers},
+                    "status": {"$ne": PIECE_STATUS_CANCELLED},
+                    "$or": [
+                        {"experiment_archived_at": {"$exists": False}},
+                        {"experiment_archived_at": None},
+                    ],
+                },
+                {
+                    "_id": 0,
+                    "order_number": 1,
+                    "piece_id": 1,
+                    "assembly_status": 1,
+                    "order_item_id": 1,
+                    "supplier_dispatch_status": 1,
+                    "received_at": 1,
+                },
+            ).to_list(50000)
+            if order_numbers
+            else []
+        )
+    read_diagnostics.count("physical_rows", len(physical_rows))
     physical_by_order: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for piece in physical_rows:
         physical_by_order[_text(piece.get("order_number"))].append(piece)
 
-    repository = MongoOrderRepository(db)
+    repository = MongoAssemblyBoardRepository(db)
     rows: list[dict[str, Any]] = []
+    virtual_pieces_for = _workflow_assembly_pieces
+    if read_diagnostics.current() is not None:
+        def virtual_pieces_for(workflow, *, order_number):
+            with read_diagnostics.phase("virtual_pieces", cpu=True):
+                result = _workflow_assembly_pieces(workflow, order_number=order_number)
+            # Counts actual expansions, including the existing local precheck.
+            read_diagnostics.count("virtual_pieces", len(result))
+            return result
     # Keep only one bounded DTO batch in memory and yield between batches.
     async for workflow, order in _workflow_orders(
         repository, user_id=user_id, workflows=workflows,
@@ -3631,7 +3649,7 @@ async def _assembly_order_board(
 
         if workflow.get("completion_mode") == LOCAL_COMPLETION_MODE:
             local_stages = {"in_progress", "ready_to_ship"} if board_state == "in_progress" else {"completed"}
-            if board_state == "in_progress" and _workflow_assembly_pieces(workflow, order_number=order_number):
+            if board_state == "in_progress" and virtual_pieces_for(workflow, order_number=order_number):
                 local_stages.add("reviewed")
             received_supplier_work = any(
                 piece.get("supplier_dispatch_status") == "received" and piece.get("received_at")
@@ -3652,7 +3670,7 @@ async def _assembly_order_board(
 
         pieces = list(physical_by_order.get(order_number) or [])
         pieces.extend(
-            _workflow_assembly_pieces(
+            virtual_pieces_for(
                 workflow,
                 order_number=order_number,
             )
@@ -3691,31 +3709,34 @@ async def _assembly_order_board(
             "mezan_preparation": True,
         })
 
-    if board_state == "in_progress":
-        rows.sort(
-            key=lambda row: (
-                row["order_created_at"],
-                _text(row.get("order_number")),
+    with read_diagnostics.phase("sort_group", cpu=True):
+        if board_state == "in_progress":
+            rows.sort(
+                key=lambda row: (
+                    row["order_created_at"],
+                    _text(row.get("order_number")),
+                )
             )
-        )
-    else:
-        rows.sort(
-            key=lambda row: (
-                row["status_at"],
-                _text(row.get("order_number")),
-            ),
-            reverse=True,
-        )
+        else:
+            rows.sort(
+                key=lambda row: (
+                    row["status_at"],
+                    _text(row.get("order_number")),
+                ),
+                reverse=True,
+            )
 
-    group_counts = {key: sum(row["queue_group"] == key for row in rows)
-                    for key in ("direct_preparation", "supplier_received")}
-    if state in group_counts:
-        rows = [row for row in rows if row["queue_group"] == state]
-    total = len(rows)
+        group_counts = {key: sum(row["queue_group"] == key for row in rows)
+                        for key in ("direct_preparation", "supplier_received")}
+        if state in group_counts:
+            rows = [row for row in rows if row["queue_group"] == state]
+        total = len(rows)
+        items = rows[offset:offset + limit]
+    read_diagnostics.count("result_rows", len(items))
     return {
         "state": state,
         "group_counts": group_counts,
-        "items": rows[offset:offset + limit],
+        "items": items,
         "total": total,
         "offset": offset,
         "limit": limit,
@@ -4693,10 +4714,14 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
 
     @router.get("/assembly/orders")
     async def list_assembly_orders(
+        request: Request,
         state: Literal["in_progress", "completed", "direct_preparation", "supplier_received"] = Query(...),
         limit: int = Query(100, ge=1, le=300),
         offset: int = Query(0, ge=0, le=10000),
         q: str = Query(default="", max_length=64),
+        demand: bool = False,
+        refresh: bool = False,
+        snapshot: str | None = Query(default=None, max_length=128),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         context = await _actor_context(db, user)
@@ -4705,15 +4730,19 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
             "fulfillment.ready.read",
             responsibility="instant_ready",
         )
-        await ensure_indexes_once()
-        return await _assembly_order_board(
-            db,
-            user_id=context["merchant_id"],
-            state=state,
-            limit=limit,
-            offset=offset,
-            query=q,
+        from assembly_board_read_models import demand_response
+        return await demand_response(
+            db, user=user, state=state, query=q, limit=limit, offset=offset,
+            consumer_id=request.headers.get("X-Mezan-Read-Consumer"),
+            refresh=refresh and request.headers.get("X-Mezan-Read-Poll") != "1",
+            retry_failed=request.headers.get("X-Mezan-Read-Poll") != "1",
+            snapshot=snapshot, request=request, compatible=not demand,
         )
+
+    @router.delete("/assembly/read-demand/{key}")
+    async def release_assembly_demand(key: str, consumer_id: str, user: dict = Depends(current_user)):
+        from read_demand_actor import release_current
+        return await release_current(db, user, key, consumer_id)
 
     @router.post("/assembly/pieces/{piece_id}/ready")
     async def mark_assembly_piece_ready(

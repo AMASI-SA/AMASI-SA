@@ -4,7 +4,7 @@ import SimpleBalances, { EntryForm } from './SimpleBalances';
 import { simpleBalancesApi as api } from './simpleBalancesApi';
 import { useOptionalAuth } from '../../context/AuthContext';
 
-jest.mock('./simpleBalancesApi', () => ({ simpleBalancesApi: { context: jest.fn(), parties: jest.fn(), ledger: jest.fn(), movements: jest.fn(), history: jest.fn(), statement: jest.fn(), quoteAd: jest.fn(), entry: jest.fn(), registerPending: jest.fn(), pendingCommand: jest.fn(), retirePending: jest.fn() }, simpleBalanceError: error => error?.localMessage || (error?.response?.status === 403 ? 'لا توجد صلاحية لهذا الحساب' : 'لم يتأكد الحفظ') }));
+jest.mock('./simpleBalancesApi', () => ({ simpleBalancesApi: { options: jest.fn(), selection: jest.fn(), context: jest.fn(), parties: jest.fn(), ledger: jest.fn(), movements: jest.fn(), history: jest.fn(), statement: jest.fn(), quoteAd: jest.fn(), entry: jest.fn(), registerPending: jest.fn(), pendingCommand: jest.fn(), retirePending: jest.fn() }, simpleBalanceError: error => error?.localMessage || (error?.response?.status === 403 ? 'لا توجد صلاحية لهذا الحساب' : 'لم يتأكد الحفظ') }));
 jest.mock('../../context/AuthContext', () => ({ useOptionalAuth: jest.fn() }));
 jest.mock('react-router-dom', () => ({
   Link: ({ to, children, ...props }) => <a href={to} {...props}>{children}</a>,
@@ -183,6 +183,25 @@ test('salary settlement cannot exceed the selected employee due and creates no p
   await change('المبلغ بالريال', '200'); await submit();
   expect(api.entry.mock.calls[0][0]).toEqual(expect.objectContaining({ reason: 'salary_settlement', employee_id: 'employee', amount: '200.00' }));
   expect(api.entry.mock.calls[0][0].source_id).toBeUndefined();
+});
+
+test('specialized demand salary settlement reads only its conditional beneficiary and keeps the financial command',async()=>{
+  const ctx={...context(),resources:[],demandOnly:true};
+  const employee=resource('employee','employee','أحمد');
+  api.options.mockResolvedValue({items:[employee],total:1,page:1,page_size:24,pages:1,session_scope:'scope',permission_version:2});
+  await render(<EntryForm context={ctx} resource={external()} onCancel={()=>{}} onSaved={saved}/>);
+  expect(api.options).not.toHaveBeenCalled();
+  await act(async()=>host.querySelector('[data-side="for_party"][aria-pressed]').click());
+  expect(api.options).not.toHaveBeenCalled();
+  await change('سبب المبلغ','salary_settlement');
+  expect(api.options).toHaveBeenCalledWith({operation:'external.salary',role:'recipient',kind:'employee',selected_kind:'external_person',selected_id:'external',page:1,page_size:24},expect.objectContaining({demand:true}));
+  const selector=host.querySelector('select[aria-label="الموظف"]');
+  await act(async()=>{selector.value=JSON.stringify(['employee','employee']);selector.dispatchEvent(new Event('change',{bubbles:true}));});
+  await change('المبلغ بالريال','200');await submit();
+  expect(api.options).toHaveBeenCalledTimes(1);
+  expect(api.entry.mock.calls[0][0]).toMatchObject({reason:'salary_settlement',employee_id:'employee',amount:'200.00',expected_session_scope:'scope'});
+  expect(api.entry.mock.calls[0][0].source_id).toBeUndefined();
+  expect(saved).toHaveBeenCalledTimes(1);
 });
 
 test('permission denial removes ledger money and hides the stale balance', async () => {

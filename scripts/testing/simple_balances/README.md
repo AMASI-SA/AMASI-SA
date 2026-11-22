@@ -17,11 +17,17 @@ node scripts/testing/simple_balances/browser.cjs
 An installed system Chromium can be selected with `SIMPLE_BALANCES_UAT_CHROMIUM`.
 The browser runs with its sandbox enabled and blocks every non-loopback request.
 The isolated output includes source hashes, twelve full-page screenshots, and
-`browser-evidence.json` recording eleven acceptance scenarios. Screens cover the
+`browser-evidence.json` recording twelve acceptance scenarios. Screens cover the
 ledger, external entry, refund request, and permissions editor at 1440px and 390px,
 plus compact salary/history, period statement and reviewed receipts on mobile.
 Each capture asserts no horizontal body overflow. The permissions table may
 scroll inside its own bounded container.
+
+The approved supplier payout scenario reads only bootstrap metadata and its
+selected supplier before a funding kind is chosen. It then requests the exact
+source-options page for that kind; it cannot fetch the home, whole directory,
+legacy context, or another funding group. The remaining legacy screen scenarios
+retain their existing transport contracts.
 
 This layer verifies component rendering and transport contracts with fixtures.
 The separate backend tests verify authorization, persistence, ceilings and

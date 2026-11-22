@@ -113,6 +113,14 @@ def workspace_read_pages(path, query):
 
 
 def enforce_workspace_read(modes, path, method, query):
+    release = re.fullmatch(r"/api/(dashboard-v2|preparation-work-v1/assembly)/read-demand/[a-f0-9]{64}", path)
+    if release:
+        pages = _DASHBOARD if release[1] == "dashboard-v2" else ("fulfillment.assembly", "fulfillment.completed")
+        # Release is interest in an actor/tenant-bound display job, never a
+        # delegated financial, fulfillment or provider write.
+        if method != "DELETE" or not any(page_id in modes for page_id in pages):
+            deny()
+        return
     pages = workspace_read_pages(path, query)
     if pages is None:
         return

@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 from dashboard_cpu_budget import CPUWorkBudget, PARSER_BUDGET_MS
+import read_path_diagnostics as read_diagnostics
 from salla_marketing_attribution import canonical_order_source
 from .attribution import build_attribution_projection
 
@@ -355,14 +356,30 @@ async def get_orders(
     )
     result: dict[str, OrderDTO] = {}
     cpu_budget = CPUWorkBudget(PARSER_BUDGET_MS)
+    trace = read_diagnostics.current()
+    tracing = trace is not None and trace.scope == "assembly_board"
     for row in rows:
         try:
-            result[row.order_number] = _map_row(
-                row.salla_raw,
-                current_status=row.current_status,
-                native_payment_source=row.native_payment_source,
-            )
+            if tracing:
+                with read_diagnostics.phase("dto_map", cpu=True):
+                    result[row.order_number] = _map_row(
+                        row.salla_raw,
+                        current_status=row.current_status,
+                        native_payment_source=row.native_payment_source,
+                    )
+                read_diagnostics.count("mapped_rows", 1)
+            else:
+                result[row.order_number] = _map_row(
+                    row.salla_raw,
+                    current_status=row.current_status,
+                    native_payment_source=row.native_payment_source,
+                )
         except OrderMappingError:
-            pass
-        await cpu_budget.checkpoint()
+            if tracing:
+                read_diagnostics.count("invalid_mapping_rows", 1)
+        if tracing:
+            with read_diagnostics.phase("cooperative_yield"):
+                await cpu_budget.checkpoint()
+        else:
+            await cpu_budget.checkpoint()
     return result

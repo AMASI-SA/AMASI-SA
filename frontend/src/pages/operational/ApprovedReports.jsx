@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { formatRiyadhDateTime } from '../../lib/dates';
 import { operationalApi } from './api';
-import { useBalanceRead } from './simpleBalancesHooks';
+import { assertWorkspace, retryWorkspaceRead, useWorkspaceRead } from './workspaceReadHooks';
 import { Heading, Icon } from './ApprovedFinanceUI';
 import { collectionLabel, currencyCodes, deliveryOrderLabel, destinationLabel, filterDeliveries, formatPositionCount, formatPositionMoney, isPositionContract, paymentLabel, readableMessages, UNAVAILABLE } from './financialPositionDisplay';
 import { financialSnapshotKey, financialSnapshotParams, hasFinancialSnapshot, sameFinancialSnapshot } from './financialPositionViews';
@@ -25,6 +25,7 @@ const currentLabel = { summary: 'الصورة المالية الحالية', pr
 const error = message => Object.assign(new Error(message), { localMessage: message });
 
 function validate(report, context, view, expected) {
+  if (context.demandOnly) assertWorkspace(report, context);
   if (!isPositionContract(report) || report.permissions?.reports !== true || report.status !== 'active'
     || report.session_scope !== context.session_scope || report.view !== view || !hasFinancialSnapshot(report)
     || expected && !sameFinancialSnapshot(expected, report)) {
@@ -159,16 +160,21 @@ export default function ApprovedReports({ context, identity }) {
   const [revoked, setRevoked] = useState(null);
   const enabled = context.actor?.is_owner === true && context.status === 'active';
   const scope = JSON.stringify([identity, context.session_scope, context.permission_version]);
-  const summary = useBalanceRead(async config => validate(await operationalApi.financialPosition({...config,params:{view:'summary'}}),context,'summary'),scope,enabled);
+  const summary = useWorkspaceRead(async config => validate(await operationalApi.financialPosition({...config,params:{view:'summary'}}),context,'summary'),scope,enabled);
   const snapshot = summary.data;
   const snapshotKey = financialSnapshotKey(snapshot);
-  const detail = useBalanceRead(async config => validate(await operationalApi.financialPosition({...config,
+  const detail = useWorkspaceRead(async config => validate(await operationalApi.financialPosition({...config,
     params:{view,...financialSnapshotParams(snapshot)}}),context,view,snapshot),JSON.stringify([scope,snapshotKey,view]),enabled && Boolean(snapshot) && view !== 'summary');
   const detailDenied = [401,403].includes(detail.status);
   useEffect(()=>{if(detailDenied && snapshot)setRevoked({scope,snapshot});},[detailDenied,scope,snapshot]);
   // Switching tabs must not redisplay cached owner figures after a revoked
   // permission. Only a fresh successful summary read can clear this boundary.
   const denied = detailDenied || revoked?.scope === scope && revoked?.snapshot === snapshot;
+  const retry = () => {
+    const failed = detail.error ? detail : summary;
+    if ([401,403,409].includes(failed.status) && context.reloadWorkspace) retryWorkspaceRead(failed,context);
+    else summary.reload();
+  };
   const report = denied ? null : view === 'summary' ? snapshot : detail.data;
   const codes = currencyCodes(report || snapshot);
   const currency = codes.includes(chosenCurrency) ? chosenCurrency : codes.includes('SAR') ? 'SAR' : codes[0];
@@ -177,7 +183,7 @@ export default function ApprovedReports({ context, identity }) {
   const failure = summary.error || detail.error || (denied ? 'توقفت صلاحية قراءة التقرير. أعد القراءة بعد التحقق من صلاحياتك.' : '');
   return <div className="approved-reports">
     <Heading title="التقارير" subtitle="الأرصدة، الحقوق، الالتزامات، والتكاليف والربح من مصادر ميزان الفعلية.">
-      {enabled && <button className="button" type="button" onClick={summary.reload} disabled={summary.loading}><Icon name="refresh-cw"/>إعادة قراءة التقرير</button>}
+      {enabled && <button className="button" type="button" onClick={retry} disabled={summary.loading}><Icon name="refresh-cw"/>إعادة قراءة التقرير</button>}
     </Heading>
     {!context.actor?.is_owner ? <p role="alert" className="note">التقارير المالية الشاملة متاحة لمالك الحساب.</p>
       : !enabled ? <p className="note">تتاح التقارير بعد اعتماد الأرصدة الافتتاحية وبدء التشغيل.</p>
@@ -185,7 +191,7 @@ export default function ApprovedReports({ context, identity }) {
         {snapshot && !denied && <div className="report-scope panel"><div><b>فترة التقرير</b><p>من {formatRiyadhDateTime(snapshot.started_at)} إلى {formatRiyadhDateTime(snapshot.as_of)} · الرياض</p><small>لقطة محفوظة؛ إعادة القراءة لا تحدّث سلة ولا تسجّل حركة مالية.</small></div>
           <label>عملة التقرير<select value={currency || ''} onChange={event=>setCurrency(event.target.value)}>{codes.map(code=><option key={code}>{code}</option>)}</select></label></div>}
         <nav className="report-tabs" aria-label="أقسام التقارير">{REPORT_TABS.map(([key,label])=><button type="button" key={key} aria-current={tab===key?'page':undefined} className={tab===key?'on':''} onClick={()=>changeTab(key)}>{label}</button>)}</nav>
-        {failure && <div role="alert" className="note warning"><p>{failure}</p><button className="textbtn" type="button" onClick={summary.reload}>إعادة قراءة لقطة متسقة</button></div>}
+        {failure && <div role="alert" className="note warning"><p>{failure}</p><button className="textbtn" type="button" onClick={retry}>إعادة قراءة لقطة متسقة</button></div>}
         {!failure && !report && <p className="empty" role="status">جارٍ قراءة التقرير…</p>}
         {report && !figures && <p className="empty">لا توجد بيانات موثقة لهذه العملة في هذا القسم.</p>}
         {figures && <>

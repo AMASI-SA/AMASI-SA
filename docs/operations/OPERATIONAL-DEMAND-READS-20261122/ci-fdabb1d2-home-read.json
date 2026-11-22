@@ -1,0 +1,69 @@
+{
+  "environment": "isolated loopback Mongo; ASGI transport; no browser/network timing",
+  "data": {
+    "suppliers": 200,
+    "movements": 5000
+  },
+  "cold_home_ms": 3681.0640629998943,
+  "home_legacy_ms": [
+    234.37577800007148,
+    234.96929499992802,
+    217.9211820000546,
+    365.3670379999312,
+    215.02173799990487
+  ],
+  "home_ready_ms": [
+    8.90610999999808,
+    8.888476999914019,
+    8.613414000024022,
+    8.528355999942505,
+    8.03521400007412,
+    7.873893000009957,
+    7.897656999944047,
+    7.596915000021909,
+    7.913246000043728,
+    7.768195000039668,
+    7.810824999978649,
+    7.795465999947737,
+    7.84284500002741,
+    7.584171000075912,
+    7.909698999924331,
+    8.013643999902342,
+    7.82368900001984,
+    8.276013999989118,
+    8.15749200000937,
+    8.032398999944235
+  ],
+  "home_ready_p95_ms": 8.888476999914019,
+  "six_ready_reads_total_ms": 40.05018500004098,
+  "health_equivalent_max_ms": 1.7423229999167233,
+  "actual_staff_bootstrap_max_ms": 26.139196000031006,
+  "child": [
+    {
+      "family": "operational_home",
+      "outcome": "ready",
+      "build_ms": 881.678,
+      "peak_rss_kib": 346556,
+      "authorize_ms": 9.931,
+      "mongo_driver_command_timeouts": 0,
+      "pid": 16232,
+      "mongo_driver_checkout_p95_ms": 0.04,
+      "queue_ms": 8.0,
+      "wall_ms": 927.566,
+      "materialize_ms": 2.021,
+      "mongo_driver_command_p50_ms": 0.52,
+      "check_calls": 10,
+      "process_cpu_ms": 911.769,
+      "mongo_driver_checkout_timeouts": 0,
+      "mongo_driver_command_p99_ms": 34.45,
+      "check_ms": 18.924,
+      "mongo_driver_command_p95_ms": 0.8
+    }
+  ],
+  "legacy_home_bytes": 85388,
+  "ready_home_bytes": 3816,
+  "legacy_resources": 222,
+  "ready_resources": 3,
+  "first_useful_target_met": false,
+  "ready_target_met": true
+}

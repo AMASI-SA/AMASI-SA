@@ -1,7 +1,10 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AdBalance, Amount, Heading, Icon, ResourceIcon, assetGroups, isAsset, issueLabel, partyGroups, searchable, styleOf } from './ApprovedFinanceUI';
 import { minorUnits, signedResourceBalance } from './simpleBalancesModel';
+import { simpleBalancesApi as api } from './simpleBalancesApi';
+import { assertWorkspace, retryWorkspaceRead, useWorkspaceRead, validResourcePage } from './workspaceReadHooks';
+import WorkspaceSnapshot from './WorkspaceSnapshot';
 
 export function ProviderAmount({ resource }) {
   const position=resource.provider_position;
@@ -38,7 +41,55 @@ export function ResourceCard({ resource, href }) {
   </Card>;
 }
 
-export default function ApprovedDirectory({ context, people, to, onAdd, onCreateCash }) {
+export default function ApprovedDirectory(props) {
+  return props.context.demandOnly ? <DemandDirectory {...props}/> : <LegacyDirectory {...props}/>;
+}
+
+function DemandDirectory({ context, people, to, onAdd, onCreateCash }) {
+  const [filter, setFilter] = useState(''), [draft, setDraft] = useState(''), [query, setQuery] = useState(''), [page, setPage] = useState(1);
+  const groups = people ? partyGroups : assetGroups;
+  const kind = groups.find(([name]) => name === filter)?.[1].join(',') || '';
+  useEffect(() => {
+    if (draft.trim() === query) return undefined;
+    const timer = setTimeout(() => { setQuery(draft.trim()); setPage(1); }, 350);
+    return () => clearTimeout(timer);
+  }, [draft, query]);
+  const key = JSON.stringify([context.actor.id, context.session_scope, context.permission_version, people, kind, query, page]);
+  const read = useWorkspaceRead(async config => {
+    const result = await api.directory({ group: people ? 'parties' : 'assets', ...(kind && { kind }),
+      ...(query && { q: query }), page, page_size: 24 }, config);
+    assertWorkspace(result, context);
+    if (!validResourcePage(result, context)) throw new Error('Invalid directory page');
+    return result;
+  }, key);
+  const result = read.data;
+  return <><Heading title={people ? 'الأشخاص والجهات' : 'الأصول والحسابات'} subtitle={people ? 'ابحث بالاسم وافتح الكشف لمعرفة كم له أو عليه.' : 'اختر الحساب لعرض رصيده وحركاته.'}>
+    {onAdd && <button className="button primary" onClick={onAdd}><Icon name="plus"/>حركة مالية جديدة</button>}
+    {onCreateCash && <button type="button" className="button" onClick={onCreateCash}><Icon name="plus"/>إضافة صندوق نقدي</button>}
+  </Heading>
+    <label className="searchbox directory-search"><Icon name="search"/><input type="search" maxLength={160} aria-label={people ? 'بحث باسم الشخص أو الجهة' : 'بحث باسم الحساب'} value={draft}
+      onChange={event => setDraft(event.target.value)} placeholder={people ? 'ابحث باسم الشخص أو الجهة' : 'ابحث باسم الحساب'}/></label>
+    <div className="tabset">{['', ...groups.map(([name]) => name)].map(name => <button key={name} type="button" aria-pressed={filter === name}
+      className={filter === name ? 'on' : ''} onClick={() => { setFilter(name); setPage(1); }}>{name || 'الكل'}</button>)}</div>
+    {read.error ? <p role="alert" className="note warning">{read.error} <button type="button" onClick={()=>retryWorkspaceRead(read,context)}>إعادة المحاولة</button></p>
+      : !result ? <p role="status">جارٍ تحميل الحسابات…</p> : <>
+        <WorkspaceSnapshot snapshot={result.snapshot}/>
+        {groups.map(([name, kinds]) => {
+          const items = result.items.filter(item => kinds.includes(item.kind));
+          return items.length > 0 && <section key={name}><div className="section-head"><h2 className="card-grid-title">{name}</h2></div>
+            <div className="cards">{items.map(item => <ResourceCard key={item.kind + ':' + item.id} resource={item} href={to('ledger', item)}/>)}</div></section>;
+        })}
+        {!result.total && <p className="empty">{onCreateCash && !query && (!kind || kind === 'cash') ? 'لا توجد صناديق مسجّلة.' : 'لا توجد نتائج ضمن الحسابات المتاحة لك.'}</p>}
+        {result.pages > 1 && <nav className="movement-pages" aria-label="صفحات الحسابات">
+          <span>{(result.page - 1) * 24 + 1}–{Math.min(result.page * 24, result.total)} من {result.total}</span><div>
+            <button type="button" className="button" disabled={result.page <= 1} onClick={() => setPage(result.page - 1)}>السابق</button>
+            <button type="button" className="button" disabled={result.page >= result.pages} onClick={() => setPage(result.page + 1)}>التالي</button>
+          </div></nav>}
+      </>}
+  </>;
+}
+
+function LegacyDirectory({ context, people, to, onAdd, onCreateCash }) {
   const [filter,setFilter]=useState(''), [query,setQuery]=useState(''), [page,setPage]=useState(1);
   const groups=people?partyGroups:assetGroups;
   const matches=useMemo(()=>{

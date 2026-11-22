@@ -5,6 +5,7 @@ import { useReactToPrint } from "react-to-print";
 import { useOptionalAuth } from "../../context/AuthContext";
 import { fileStampSA, formatRiyadhArabicLong, formatRiyadhDateTime } from "../../lib/dates";
 import { operationalApi } from "./api";
+import { useReadDemand } from "../../lib/demandRead";
 import {
     collectionLabel, currencyCodes, DELIVERY_MONEY_COLUMNS, DELIVERY_SCOPE_NOTE,
     deliveryOrderLabel, deliveryParties, deliveryRecognitionLabel, destinationLabel, filterDeliveries, formatPositionCount, formatPositionMoney,
@@ -218,6 +219,7 @@ export default function OperationalFinancialPosition() {
     const exportCleanup = useRef(null), exportActivityCleanup = useRef(null), exportGeneration = useRef(0), forecastAttempt = useRef(null);
     const latestReport = useRef(null), confirmedDeliveries = useRef(null), confirmationRefresh = useRef(null);
     const courierAttempt = useRef(null);
+    const readDemand = useReadDemand(JSON.stringify([scope, view, intent.id, 'financial-position']), !authLoading && !authMissing);
 
     useEffect(() => () => { courierAttempt.current?.cancel(true); }, [scope, view, authLoading, authMissing, intent.id]);
 
@@ -251,7 +253,7 @@ export default function OperationalFinancialPosition() {
         }
         const read = async config => {
             const update = manual ? await refreshVisibleSnapshot(operationalApi, config) : null;
-            const report = await operationalApi.financialPosition({ ...config, params: { view } });
+            const report = await operationalApi.financialPosition({ ...config, demand: true, readDemand, params: { view } });
             if (followUp?.scope === scope && (report?.session_scope !== followUp.sessionScope
                 || Date.parse(report?.started_at) !== Date.parse(followUp.periodStart))) {
                 const error = new Error("تغيرت جلسة التشغيل؛ أعد قراءة التقرير من الجلسة الحالية.");
@@ -293,7 +295,7 @@ export default function OperationalFinancialPosition() {
             deferUntilVisible: !manual,
         });
         return () => { cleanup(); refreshLock.current = false; };
-    }, [scope, authLoading, authMissing, view, intent]);
+    }, [scope, authLoading, authMissing, view, intent, readDemand]);
 
     useEffect(() => { setFilters(emptyFilters()); setCurrency(""); setPrinting(false); }, [scope]);
     useEffect(() => { setFilters(emptyFilters()); setPrinting(false); }, [view]);
@@ -310,6 +312,8 @@ export default function OperationalFinancialPosition() {
     const refreshing = state.scope === scope && state.view === view && state.phase === "refreshing";
     const page = financialPage(view);
     const fullExporting = exporting === "all";
+    const forecastDemand = useReadDemand(JSON.stringify([scope, intent.id, snapshotKey, 'financial-forecast']),
+        !authLoading && !authMissing && view === 'summary' && report?.forecast_pending === true && !fullExporting);
 
     useEffect(() => {
         exportGeneration.current += 1;
@@ -331,7 +335,7 @@ export default function OperationalFinancialPosition() {
         }
         const expected = report;
         setForecast({ key, phase: "loading", error: "" });
-        return visibleOperationalRead(config => operationalApi.financialPosition({ ...config,
+        return visibleOperationalRead(config => operationalApi.financialPosition({ ...config, demand: true, readDemand: forecastDemand,
             params: { view: "forecast", ...financialSnapshotParams(expected) } }), {
             onData: received => {
                 if (latestReport.current?.authLoading || latestReport.current?.authMissing) return;
@@ -363,7 +367,7 @@ export default function OperationalFinancialPosition() {
             },
             onPaused: () => setForecast({ key, phase: "paused", error: "توقفت قراءة التوقعات عند مغادرة الصفحة. أعد قراءتها عند الحاجة." }),
         }, readLane.current, { singleAttemptTimeoutMs: SECTION_READ_TIMEOUT_MS, deferUntilVisible: false });
-    }, [scope, authLoading, authMissing, view, state.phase, state.attempt, intent.id, snapshotKey, fullExporting]);
+    }, [scope, authLoading, authMissing, view, state.phase, state.attempt, intent.id, snapshotKey, fullExporting, forecastDemand]);
 
     const navigate = (event, nextView) => {
         if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -451,7 +455,7 @@ export default function OperationalFinancialPosition() {
                 if (update?.refresh_warning && update?.native_evidence?.courier) {
                     return { update, received: expected };
                 }
-                const received = await operationalApi.financialPosition({ ...config, params: { view } });
+                const received = await operationalApi.financialPosition({ ...config, demand: true, params: { view } });
                 if (!stillCurrent() || config.signal?.aborted) throw new DOMException("Page is not active", "AbortError");
                 if (received?.session_scope !== expected.session_scope || received?.started_at !== expected.started_at
                     || Number.isSafeInteger(update?.revision) && received.revision < update.revision) {
@@ -588,7 +592,7 @@ export default function OperationalFinancialPosition() {
         if (report.forecast_pending) setForecast({ key: JSON.stringify([scope, intent.id, snapshotKey]), phase: "paused",
             error: "الأرصدة المحفوظة ظاهرة؛ أعد قراءة الصفحة لاستكمال التوقعات بعد التصدير." });
         exportCleanup.current?.();
-        exportCleanup.current = visibleOperationalRead(config => operationalApi.financialPosition({ ...config,
+        exportCleanup.current = visibleOperationalRead(config => operationalApi.financialPosition({ ...config, demand: true,
             params: { view: "all", ...financialSnapshotParams(expected) } }), {
             onData: received => {
                 if (!current()) { finishActivity(); return; }
