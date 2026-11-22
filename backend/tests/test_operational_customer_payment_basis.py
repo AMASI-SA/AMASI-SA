@@ -5,6 +5,7 @@ import pytest
 
 from operational_balance_engine import reconcile
 from operational_provider_transaction_evidence import normalize_operational_payment
+from operational_customer_payment_basis import retained_confirmed_paid_basis
 
 
 CREATED = "2026-11-01T10:00:00+00:00"
@@ -109,3 +110,67 @@ def test_same_reference_total_edit_keeps_existing_claim_and_does_not_create_seco
     assert claim["confirmed"] == "200.00" and not claim.get("incomplete")
     assert not any(key.startswith("refund:") for key in second["engine"]["facts"])
     assert second["movements"] == []
+
+
+def retained_fixture():
+    raw, source = document(captured=True)
+    payment, _ = normalize(raw, source)
+    state = {"owner_id": "owner", "engine": {
+        "facts": {"capture:synthetic-capture": {"order_id": raw["id"], "provider": "salla", "amount": "200.00"}},
+        "obligations": {"provider:" + raw["id"]: {"party_type": "provider", "party_id": "salla",
+            "currency": "SAR", "confirmed": "200.00", "direction": "receivable"}},
+        "provider_fee_inputs": {"orders": {raw["id"]: {"payment": payment}}}}}
+    raw["payment"].update(status="refunded", paid_amount="0.00")
+    raw["payment_actions"]["refund_action"]["paid_amount"] = "0.00"
+    raw["payment_actions"]["remaining_action"]["paid_amount"] = "0.00"
+    raw["status"] = "refunded"
+    return raw, source, state
+
+
+def retained(raw, source, state):
+    return retained_confirmed_paid_basis(raw, "SAR", raw["total"], CREATED, AS_OF,
+        owner="owner", order_number=raw["reference_id"], provider_order_id=raw["id"], source=source, state=state)
+
+
+def test_retained_lookup_uses_existing_paid_fact_when_current_source_becomes_zero():
+    raw, source, state = retained_fixture()
+    before = deepcopy((raw, source, state))
+    basis = retained(raw, source, state)
+    assert basis["paid_amount"] == "200.00" and basis["suggested_refund_amount"] == "0.80"
+    assert basis["payment"]["retained_confirmed_payment"] is True
+    assert basis["payment"]["captures"][0]["captured_at"] == CREATED
+    assert (raw, source, state) == before
+    # This read fallback does not enable a new source payment normalization.
+    assert normalize(raw, source)[0] is None
+
+
+@pytest.mark.parametrize("mutation", ["no_fact", "no_claim", "foreign_owner", "foreign_provider", "wrong_reference", "changed_claim", "stale"])
+def test_retained_lookup_cannot_manufacture_or_reassign_original_payment(mutation):
+    raw, source, state = retained_fixture()
+    if mutation == "no_fact":
+        state["engine"]["facts"].clear()
+    elif mutation == "no_claim":
+        state["engine"]["obligations"].clear()
+    elif mutation == "foreign_owner":
+        state["owner_id"] = "other"
+    elif mutation == "foreign_provider":
+        state["engine"]["facts"]["capture:synthetic-capture"]["provider"] = "tabby"
+    elif mutation == "wrong_reference":
+        raw["payment"]["reference"] = "unrelated-reference"
+    elif mutation == "changed_claim":
+        state["engine"]["obligations"]["provider:" + raw["id"]]["confirmed"] = "201.00"
+    elif mutation == "stale":
+        source["g47_salla_snapshot"] = {"source_updated_at": AS_OF}
+    assert retained(raw, source, state) is None
+
+
+def test_retained_page_has_no_invented_capture_time_and_keeps_refunded_principal():
+    raw, source, state = retained_fixture()
+    payment = state["engine"]["provider_fee_inputs"]["orders"][raw["id"]]["payment"]
+    page = deepcopy(payment["order_page_balance"])
+    state["engine"]["facts"] = {"provider_order_balance:" + raw["id"]: page,
+        "refund:salla:known-refund": {"order_id": raw["id"], "amount": "0.80"}}
+    state["engine"]["obligations"]["provider:" + raw["id"]]["confirmed"] = "199.20"
+    basis = retained(raw, source, state)
+    assert basis["paid_amount"] == "200.00" and not basis["payment"].get("captures")
+    assert basis["payment"]["order_page_balance"] == page

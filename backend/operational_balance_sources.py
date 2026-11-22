@@ -1724,6 +1724,14 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                     order['statement_refund_observation'] = statement_refund_observation(operational_state, raw,
                         owner=owner, order_id=identity, order_number=order_number,
                         transaction_rows=txn_by_order.get(order_number, ()), refund_index=statement_refund_index)
+                    if normalized_payment is not None and order['statement_refund_observation'].get('refunds'):
+                        # An approved statement already owns this original
+                        # capture/refund. A later native reference belongs to
+                        # its dedicated alias review, never a fresh payment
+                        # candidate from the independent-paid fallback.
+                        payment_issues = [{'code': 'provider_refund_execution_evidence_required',
+                                           'provider': normalized_payment.get('provider')}]
+                        normalized_payment = None
                 bank_payment_issues = payment_issues
                 if (not normalized_payment and "provider_split:" + identity in
                         (operational_state or {}).get("engine", {}).get("facts", {})):

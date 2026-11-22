@@ -66,6 +66,11 @@ def confirmed_paid_basis(raw, currency, total, created_at, as_of, *, owner,
     from salla_payment_collection import provider_order_page_current
 
     try:
+        # Customer adjustment confirmations currently operate in SAR. Foreign
+        # tenders retain their existing FX/closed-tender evidence rules; this
+        # workflow must not convert an ambiguous refund into new native money.
+        if currency != "SAR":
+            return None
         raw, source = _object(raw), _object(source)
         provider = resolve_provider(raw, require_known=True)
         if not provider or not provider_order_page_current(source, raw, owner=owner,
@@ -168,5 +173,115 @@ def confirmed_paid_basis(raw, currency, total, created_at, as_of, *, owner,
         normalized.pop("order_page_reference", None)
         return {"provider": provider, "currency": currency, **adjustment,
                 "payment": normalized, "proof_hash": proof_hash}
+    except (ValueError, KeyError, TypeError):
+        return None
+
+
+def retained_confirmed_paid_basis(raw, currency, total, created_at, as_of, *, owner,
+                                  order_number, provider_order_id, source, state, rows=()):
+    """Read already recognized original money after the source reports a net.
+
+    This fallback is for order lookup/review only. It neither normalizes a new
+    source payment nor creates facts. A return status or zero-paid field cannot
+    prove the original receipt: its scoped frozen capture/page and provider
+    claim must both already exist.
+    """
+    from salla_payment_collection import provider_order_page_current
+
+    try:
+        if currency != "SAR" or state.get("owner_id") != owner:
+            return None
+        raw, source = _object(raw), _object(source)
+        provider = resolve_provider(raw, require_known=True)
+        if not provider or not provider_order_page_current(source, raw, owner=owner,
+                order_number=order_number, provider_order_id=provider_order_id):
+            return None
+        created, stamp, now = _instant(created_at), _instant(raw.get("updated_at") or raw.get("date_updated")), _instant(as_of)
+        if not created <= stamp <= now:
+            return None
+        commercial = _amount(total, currency)
+        amounts = _object(raw.get("amounts"))
+        payment = _object(raw.get("payment"))
+        actions = _object(raw.get("payment_actions"))
+        refund = _object(actions.get("refund_action"))
+        if (any(container.get("currency") not in (None, currency) for container in (raw, amounts, payment, refund))
+                or any(_amount(value, currency) != commercial for value in (
+                    raw.get("total"), raw.get("total_amount"), amounts.get("total")) if value is not None)):
+            return None
+        engine = state.get("engine") or {}
+        facts = engine.get("facts") or {}
+        if "provider_split:" + provider_order_id in facts:
+            return None
+        claim = (engine.get("obligations") or {}).get("provider:" + provider_order_id)
+        if (not isinstance(claim, dict) or (claim.get("party_type"), claim.get("party_id"), claim.get("currency"))
+                != ("provider", provider, currency)):
+            return None
+        frozen = {}
+        for key, fact in facts.items():
+            if not key.startswith("capture:") or not isinstance(fact, dict) or str(fact.get("order_id")) != provider_order_id:
+                continue
+            if fact.get("provider") != provider or fact.get("currency", currency) != currency:
+                return None
+            reference = _identity(key.removeprefix("capture:"), "provider_payment_reference_missing")
+            frozen[reference] = _amount(fact["amount"], currency)
+        page = facts.get("provider_order_balance:" + provider_order_id)
+        page_paid = ZERO
+        if page is not None:
+            if (not isinstance(page, dict) or (page.get("owner_id"), str(page.get("order_id")),
+                    str(page.get("order_number")), page.get("provider"), page.get("currency")) !=
+                    (owner, provider_order_id, order_number, provider, currency)):
+                return None
+            page_paid = _amount(page["paid"], currency)
+        paid = max(sum(frozen.values(), ZERO), page_paid)
+        if paid <= ZERO:
+            return None
+        refunded = sum((_amount(fact["amount"], currency) for key, fact in facts.items()
+            if key.startswith("refund:" + provider + ":") and isinstance(fact, dict)
+            and str(fact.get("order_id")) == provider_order_id), ZERO)
+        confirmed = _amount(claim.get("confirmed"), currency)
+        if refunded > paid or confirmed not in {paid, paid - refunded}:
+            return None
+        if claim.get("direction") != "receivable" and not (confirmed == 0 and refunded == paid):
+            return None
+        native = _method_rows(raw, provider, currency, page_balance=True)
+        current_refs = [reference for reference, _, _ in native if reference]
+        current_refs += [_identity(payment[key], "provider_payment_reference_missing")
+                         for key in ("reference", "transaction_reference") if payment.get(key) is not None]
+        references = set(frozen)
+        if page and page.get("transaction_reference"):
+            references.add(_identity(page["transaction_reference"], "provider_payment_reference_missing"))
+        if any(reference not in references for reference in current_refs):
+            return None
+        hint = _refund_observation(raw, payment, refund, currency)
+        if hint > paid:
+            return None
+        adjustment = {"order_total": _cash(commercial), "paid_amount": _cash(paid),
+            "refund_hint_amount": _cash(hint), "suggested_refund_amount": _cash(max(paid - commercial, hint, ZERO)),
+            "suggested_collection_amount": _cash(max(commercial - paid, ZERO)),
+            "evidence_source": "retained_operational_payment"}
+        proof = {"owner": owner, "order_id": provider_order_id, "order_number": order_number,
+                 "provider": provider, "currency": currency, "source_updated_at": stamp.isoformat(),
+                 "captures": sorted((key, _cash(value)) for key, value in frozen.items()),
+                 "page": page, "claim": {key: claim.get(key) for key in
+                     ("party_type", "party_id", "currency", "confirmed", "direction")}, **adjustment}
+        proof_hash = sha256(json.dumps(proof, ensure_ascii=False, sort_keys=True,
+                                      separators=(",", ":")).encode()).hexdigest()
+        retained = {"provider": provider, "currency": currency, "gross": _cash(paid), "cancelled": "0",
+                    "refunds": [], "retained_confirmed_payment": True,
+                    "customer_adjustment": {**adjustment, "proof_hash": proof_hash}}
+        previous = ((engine.get("provider_fee_inputs") or {}).get("orders", {}).get(provider_order_id) or {}).get("payment") or {}
+        if previous.get("provider") == provider and previous.get("currency", currency) == currency:
+            for key in ("payment_method", "plan_id", "merchant_account"):
+                if key in previous:
+                    retained[key] = deepcopy(previous[key])
+            captures = previous.get("captures") or []
+            if captures and all(str(capture.get("id")) in frozen
+                    and _amount(capture["amount"], currency) == frozen[str(capture["id"])]
+                    and created <= _instant(capture["captured_at"]) <= now for capture in captures):
+                retained["captures"] = deepcopy(captures)
+        if page:
+            retained["order_page_balance"] = deepcopy(page)
+        return {"provider": provider, "currency": currency, **adjustment,
+                "payment": retained, "proof_hash": proof_hash}
     except (ValueError, KeyError, TypeError):
         return None

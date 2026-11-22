@@ -80,6 +80,22 @@ test('automatic history and protected receipt reads retain their request scope a
   expect(http.get).toHaveBeenLastCalledWith('/operational-balances/workspace/reviews/review%2Fone/receipt', { timeout: 30000, signal, responseType: 'blob' });
 });
 
+test('customer adjustments and financial receipts remain scoped and execution commands preserve the quoted evidence',async()=>{
+  const signal=new AbortController().signal;
+  await api.customerAdjustments({direction:'refund',page:2,page_size:8},{signal});
+  expect(http.get).toHaveBeenLastCalledWith('/operational-balances/workspace/customer-adjustments',{timeout:30000,signal,params:{direction:'refund',page:2,page_size:8}});
+  await api.customerReceipt('proof/one',{signal});
+  expect(http.get).toHaveBeenLastCalledWith('/operational-balances/workspace/refund-receipts/proof%2Fone',{timeout:30000,signal,responseType:'blob'});
+  const form=new FormData();form.append('order_number','245');form.append('operation','customer.collection');
+  await api.uploadCustomerReceipt(form);
+  expect(http.post).toHaveBeenLastCalledWith('/operational-balances/workspace/refund-receipts',form,{timeout:30000});
+  const command={request_id:'one',expected_session_scope:'scope',order_number:'245',amount:'100.00',expected_basis_hash:'a'.repeat(64),expected_quote_hash:'b'.repeat(64),receipt_id:'proof/one'};
+  await api.recordCustomerCollection(command);
+  expect(http.post).toHaveBeenLastCalledWith('/operational-balances/workspace/customer-collections',command,{timeout:30000});
+  await api.recordRefundExecution(command);
+  expect(http.post).toHaveBeenLastCalledWith('/operational-balances/workspace/refunds/record-execution',command,{timeout:30000});
+});
+
 test('discard uses the atomic financial endpoint and preserves a proven Arabic refusal', async () => {
   await api.discardPending('attempt/one', 'scope');
   expect(http.post).toHaveBeenCalledWith('/operational-balances/workspace/pending-commands/attempt%2Fone/discard',
