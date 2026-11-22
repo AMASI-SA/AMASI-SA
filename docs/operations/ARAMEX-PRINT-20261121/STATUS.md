@@ -1,5 +1,30 @@
 # ARAMEX-PRINT-20261121: verified external-label reprint repair, release pending
 
+## Immutable PR2061 candidate
+
+Evidence branch `codex/aramex-intransit-label-evidence-20261122` is never a
+deployment input. Immutable release branch is
+`codex/aramex-intransit-label-reprint-20261122`:
+- J c302943e330bcdd534a4a5697b8ef813dfb7cb6e;
+- A cdd0a2ceceb3830c857261f4bd16b6745ad750f1;
+- B 3857bf871a2a5381d3dab0be2a43df3acebb00b8 (only intent after A);
+- runtime rg5-cf7e5ab9a7144318970e0b812695a15a29a200833850e79ebce3feafd93dd661;
+- intent SHA256 33f7a4e0d6d8c376cfebc2164a22f41df1db4058c9b5e69b6fd665747cc7d607.
+
+Source-A readiness45030671240 passed, candidate14757448246 ZIP SHA256
+1e7dab79c5a7c71950f5947ed38d59562159a792bbea2d29cb674b456df913c2.
+Independent full Git manifests (Frontend1379,Backend1289,control322 records)
+and deterministic identity matched. Source-A Shipping45030671137 passed,
+including both Native modules and real-Mongo legacy variants. Exact-B checks
+and host20/24 configured adapter rehearsals are pending. The tracked independent
+ARM64 rehearsal helper uses an isolated clean clone, the configured yarn-build
+entry point and original verifier, checks an inactive guard first, and never
+creates a lease. No shared source mutation, merge, lease or publication yet.
+
+Next: finish exact-B checks and independent ARM64 rehearsal, preserve evidence,
+normal-merge B tree unchanged, then authorized guarded publication and actual
+original/control ADB acceptance. Do not rebase/squash A/B or deploy this branch.
+
 ## Current source milestone (2026-11-22)
 
 The six red actual-route cases now pass after a narrow change to
