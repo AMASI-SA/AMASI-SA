@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "task_id": "CATALOG-MEMORY-RECOVERY-20261122",
-  "record_status": "R2_merged_all_required_CI_accepted_production_publication_blocked",
+  "record_status": "WIP_R2_production_publication_completed_original_live_verification_pending",
   "repository": "AMASI-SA/AMASI-SA",
   "implementation_pr": 2055,
   "implementation_pr_url": "https://github.com/AMASI-SA/AMASI-SA/pull/2055",
@@ -13,8 +13,8 @@
   "final_merge_sha": "0c5e5b98795b8d30289ec0e4d3c95738fd660af1",
   "merge_state": "merged",
   "other_required_exact_b_checks": "complete: 20 workflows = 19 success + 1 conditional TikTok skip; 43 checks = 37 success + 6 expected conditional skips; zero active or failed",
-  "production_changed": false,
-  "production_publication_started": false,
+  "production_changed": true,
+  "production_publication_started": true,
   "performance_incident_resolved": false,
   "issue_1006_comment_posted": false,
   "prior_pr2053": {
@@ -54,13 +54,19 @@
   },
   "last_reported_shared_workspace": {
     "path": "/app",
-    "source_commit": "10ee7b41204dd1d39c8b91daf9f0a9d899041ebb",
-    "artifacts": "older PR2053 artifacts; not valid staging for PR2055/R2",
-    "reported_active_lease": false,
-    "fresh_guard_status_required": true,
-    "fresh_unique_tmp_staging_required": true,
-    "reuse_old_pr2053_tmp_staging_or_prepublication_proof": false,
-    "unrelated_and_untracked_files": "preserve"
+    "source_commit": "0c5e5b98795b8d30289ec0e4d3c95738fd660af1",
+    "fast_forward_completed": true,
+    "fresh_staging": "/tmp/mezan-pr2055-release-20261122-6d6qv902",
+    "replaced_generated_output_count": 3,
+    "previous_generated_backup": "/tmp/mezan-pr2055-release-20261122-6d6qv902/previous-app-generated",
+    "sole_forbidden_generated_file": "scripts/__pycache__/production_release_guard.cpython-311.pyc",
+    "forbidden_generated_file_preserved_outside_app": true,
+    "governed_source_or_intent_changed_for_cleanup": false,
+    "artifacts": "fresh R2 original host-adapter outputs matching reviewed source and release",
+    "reported_lease_actor": "chatgpt-pr2055-release-20261122-b90f3c3040a7",
+    "final_guard_active": null,
+    "final_guard_status": "pending original verifier completion",
+    "unrelated_and_untracked_files": "preserved; previous generated outputs and sole forbidden generated cache preserved outside /app"
   },
   "release_contract": {
     "protocol_version": 5,
@@ -336,20 +342,19 @@
     "Synthetic payload measurements do not establish production RSS, end-to-end latency, or incident resolution."
   ],
   "next_safe_sequence": [
-    "Obtain explicit fresh authorization for one production Publish changes of reviewed merge M2 0c5e5b98795b8d30289ec0e4d3c95738fd660af1 and its recorded R2 identity. The earlier automatic approval rejection remains unresolved; generic continuation is insufficient.",
-    "Re-read the remote handoff and current refs, confirm the intended exact governed deployment, then read fresh shared /app original Release Guard status. Require active:false; preserve unrelated and untracked files and never clear another actor lease.",
-    "Create fresh unique /tmp staging from exact M2. Do not reuse PR2053 or superseded PR2054 staging, artifacts, identity, proof, lease, actor, or prepublish result; shared /app still last-reported old PR2053 source/artifacts.",
-    "Run the unchanged original adapter and governed toolchain, requiring exact A2/release/artifact/build-meta/proof. After fresh adapter success, use original helpers to prepare an owner-specific lease and prepublish immediately before publication.",
-    "Perform one explicitly authorized Publish changes and observe a newer explicit Deployment Succeeded.",
-    "Run original verify --url https://mezansalla.com. Require three matching A2/release probes with verified identity, critical hashes and Frontend build, plus exact canonical/cache-busted build-meta JSON bytes and application/json. Confirm matching lease closes active:false.",
-    "Record actual live identity and authenticated dashboard/performance evidence before claiming incident resolution; preserve a remote docs-only checkpoint."
+    "Observe the original verify process already started at 2026-11-22T00:10:12.164401Z. Do not repeat Publish changes, start a second verifier, alter production/source/intent, or disturb its matching lease while it is running.",
+    "Capture the original verifier's terminal exit and full sanitized result. Require three matching source A2 and R2 release probes with verified identity, critical-file hashes and Frontend build, plus exact canonical/cache-busted build-meta JSON bytes and application/json.",
+    "After the original verifier finishes, read original Release Guard status and record the matching actor/lease outcome. Successful verification must leave active:false; a failure must be recorded without claiming complete release acceptance or clearing another actor's lease.",
+    "Append final verification evidence to this same docs-only task branch using an expected-head update. Never deploy the evidence branch.",
+    "Keep the ordinary authenticated dashboard render separate from load-duration or sustained performance evidence. Preserve incident-resolution and performance limitations until measured acceptance exists."
   ],
   "safe_commands": {
     "shared_guard_status": "cd /app && python scripts/production_release_guard.py status",
-    "post_publication_verify": "python scripts/production_release_guard.py verify --url https://mezansalla.com"
+    "post_publication_verify": "python scripts/production_release_guard.py verify --url https://mezansalla.com",
+    "post_publication_verify_command_note": "Already running from 2026-11-22T00:10:12.164401Z; record/observe the existing process, do not launch another concurrent invocation."
   },
   "actions_not_authorized_by_this_record": [
-    "production publication",
+    "a repeated production publication",
     "production data writes",
     "Issue comments",
     "deployment of evidence branch"
@@ -568,5 +573,105 @@
       "source_git_sha": "8665e8acf1d7bb4878cd2fc0b912a20132f1e0c7",
       "runtime_release_id": "rg5-4d0f595ee0711c73459e0cb18711c87657602d7886a885f0ccb1a3013e31dc05"
     }
+  },
+  "publication_authorization": {
+    "user_text": "نعم انشر",
+    "scope": "one production Publish changes of exact reviewed M2 and recorded R2 identity",
+    "historical_generic_continuation_approval_hold_superseded": true
+  },
+  "publication_attempt": {
+    "deployment_git_sha": "0c5e5b98795b8d30289ec0e4d3c95738fd660af1",
+    "source_git_sha": "8665e8acf1d7bb4878cd2fc0b912a20132f1e0c7",
+    "intent_commit": "1ce536a61440da42f8f7ede9eb55d86cb29de5ec",
+    "release_id": "rg5-4d0f595ee0711c73459e0cb18711c87657602d7886a885f0ccb1a3013e31dc05",
+    "host_adapter": {
+      "result": "passed",
+      "exact_source_and_release_match": true
+    },
+    "prepare": {
+      "helper": "unchanged original Release Guard",
+      "result": "passed",
+      "exit_code": 0,
+      "observed_at_utc": "2026-11-21T23:57:28.621782Z",
+      "actor": "chatgpt-pr2055-release-20261122-b90f3c3040a7",
+      "exact_m2_a2_release_match": true
+    },
+    "prepublish": {
+      "helper": "unchanged original Release Guard",
+      "result": "passed",
+      "exit_code": 0
+    },
+    "publish_changes_click_count": 1,
+    "deployment_start_ui": "Deployment Started Nov 22, 02:57 AM",
+    "deployment_start_ui_timezone": "Asia/Aden",
+    "latest_reported_ui_phase": "green Deployment finished",
+    "completion_event": {
+      "ui_text": "Deployment finished Nov 22, 03:08 AM",
+      "ui_timezone": "Asia/Aden",
+      "green_completion_observed": true,
+      "event_id": "99555f3c-ea30-500a-bb7a-61431c964a4a",
+      "platform_reported_version": "7cf99c2",
+      "platform_version_is_not_asserted_as_governed_source_git_sha": true
+    },
+    "original_verify": {
+      "started_at_utc": "2026-11-22T00:10:12.164401Z",
+      "latest_reported_state": "still running",
+      "elapsed_seconds_at_latest_report": 150,
+      "exit_code": null,
+      "final_result": null
+    }
+  },
+  "authenticated_dashboard_observation": {
+    "ordinary_visits": 1,
+    "entry_url": "https://mezansalla.com",
+    "automatic_redirect_url": "https://mezansalla.com/dashboard-advanced",
+    "filter": "Today",
+    "displayed_date": "2026-11-22",
+    "rendered_sections": [
+      "period summary",
+      "top products",
+      "executive cards"
+    ],
+    "closed_after_initial_observation": true,
+    "manual_refresh_or_data_sync": false,
+    "application_load_error_observed": false,
+    "console_error_scope": "browser-extension metadata only",
+    "precise_load_duration_seconds": null,
+    "fresh_executive_backend_request_log_obtained": false,
+    "deployment_log_snapshot_end_utc_time": "00:08:23Z",
+    "monitoring_scope": "24-hour aggregate containing older critical intervals",
+    "current_load_test_outcome_established": false,
+    "sustained_or_per_request_incident_resolution_claimed": false
+  },
+  "previous_evidence_commit": "ab6e9b4c2a0c0fda6c53d1ee5c2f54d0f2705a15",
+  "checkpoint_state": "WIP: retain and observe the original verifier already running; final result is not yet known",
+  "publication_observation_provenance": "root's latest host and UI observations; this reviewer did not operate the host or publication",
+  "production_change_evidence": "One explicitly authorized publication has a newer green Deployment finished event 99555f3c-ea30-500a-bb7a-61431c964a4a, platform version 7cf99c2; original governed live-identity verification remains pending.",
+  "production_publication_completed": true,
+  "production_publication_completion_scope": "platform completion event; not final original Release Guard verification or performance acceptance",
+  "live_release_identity_verification_status": "pending",
+  "last_live_health_observation_is_historical": true,
+  "previous_shared_workspace_at_e2": {
+    "path": "/app",
+    "source_commit": "10ee7b41204dd1d39c8b91daf9f0a9d899041ebb",
+    "artifacts": "older PR2053 artifacts; not valid staging for PR2055/R2",
+    "reported_active_lease": false,
+    "fresh_guard_status_required": true,
+    "fresh_unique_tmp_staging_required": true,
+    "reuse_old_pr2053_tmp_staging_or_prepublication_proof": false,
+    "unrelated_and_untracked_files": "preserve"
+  },
+  "pending_final_live_verification": {
+    "original_verify_exit_code": null,
+    "three_matching_probes": null,
+    "verified_identity_available": null,
+    "critical_file_hashes_match": null,
+    "frontend_build_verified": null,
+    "canonical_and_cache_busted_build_meta_exact_bytes": null,
+    "build_meta_content_type_application_json": null,
+    "final_guard_actor": null,
+    "final_guard_active": null,
+    "additional_performance_acceptance": null
   }
 }
+

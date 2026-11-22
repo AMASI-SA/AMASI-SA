@@ -1,4 +1,4 @@
-# Catalog memory recovery — merged R2 release, publication blocked
+# Catalog memory recovery — publication finished, live verification pending
 
 ## Current release and continuation state
 
@@ -9,11 +9,13 @@ B2 carrying source A2 are accepted: **20 workflows = 19 successes and one
 conditional TikTok skip; 43 check runs = 37 successes and six expected
 conditional skips; zero active and zero failed**.
 
-**Production publication remains blocked and has not started.** The earlier
-automatic approval rejection requires explicit fresh authorization for this
-exact release. No production-data write or incident resolution is claimed.
-The last live-health observation is dated below and identifies the rollback;
-it is not a current performance measurement.
+**WIP: production publication completed at the platform level; the original
+live release verification is still pending.** The user explicitly authorized
+this publication with “نعم انشر”. Root observed the newer green Emergent
+`Deployment finished` event documented below. Initial authenticated dashboard
+sections rendered, but no precise load duration or sustained/per-request
+performance acceptance has been established. No incident resolution is claimed.
+The dated rollback health result remains historical evidence.
 
 - Task: `CATALOG-MEMORY-RECOVERY-20261122`.
 - Repository: `AMASI-SA/AMASI-SA`.
@@ -135,7 +137,9 @@ succeeded. No required CI or merge step remains open.
 The Balance JUnit artifact `14730401083` binds exact B2, its tree and run;
 its SHA-256 is
 `36bba2c454ec8800197f43ea8a2bd7d14e942f8943b1db7642590b08f05f4b30`.
-Main and shipping reports have zero errors, failures or skips. Stock JUnit
+The main Balance JUnit report has zero errors, failures or skips. The separate
+shipping result of 16 tests and 18 subtests is supported by the successful job
+log; retained shipping JUnit coverage is not claimed. Stock JUnit
 artifact `14729268829` binds run `44961507338` and exact B2; its SHA-256 is
 `eeefb2be975b300dc4fac22b8635ae1ff27a86573ac51a50a95577484add0a29`.
 Its reports pass. These artifact checks supplement the job-log totals.
@@ -146,7 +150,66 @@ six expected conditional skips, with zero active or failed. Separate source-A2
 runs may be superseded or cancelled by the B2 push and do not need to finish
 independently. Historical PR #2054 checks are not used as substitutes.
 
-## Why production publication is still pending
+## Authorized publication and pending live verification
+
+This WIP checkpoint follows evidence commit
+`ab6e9b4c2a0c0fda6c53d1ee5c2f54d0f2705a15`. Host, UI and dashboard observations
+in this section were reported by the publishing operator; the documentation
+reviewer did not operate production.
+
+The user's explicit “نعم انشر” authorized one publication of exact reviewed M2.
+The original host adapter passed with exact A2 and R2 release identity. M2 was
+fast-forwarded into shared `/app`. Fresh staging was
+`/tmp/mezan-pr2055-release-20261122-6d6qv902`; the three previous generated outputs
+were preserved beneath its `previous-app-generated` directory before replacement.
+The original prepare initially rejected the sole forbidden generated file
+`scripts/__pycache__/production_release_guard.cpython-311.pyc`. That file was
+preserved outside `/app`, with no governed source or intent change.
+
+Original prepare then exited zero at `2026-11-21T23:57:28.621782Z`, actor
+`chatgpt-pr2055-release-20261122-b90f3c3040a7`, binding exact M2, A2 and the
+recorded R2 release. Original prepublish exited zero. Root clicked
+**Publish changes exactly once**. The UI first displayed
+`Deployment Started Nov 22, 02:57 AM` and then the newer green event:
+
+- Actual completion wording: `Deployment finished Nov 22, 03:08 AM`.
+- UI timezone: `Asia/Aden`.
+- Event: `99555f3c-ea30-500a-bb7a-61431c964a4a`.
+- Platform-reported version: `7cf99c2`.
+
+The platform version is recorded as a UI label, not asserted to be the governed
+source Git SHA. The actual green completion wording is preserved rather than
+quoted as `Deployment Succeeded`. Production publication completed, while
+final release acceptance still requires the original verifier.
+
+The original command
+
+```bash
+python scripts/production_release_guard.py verify --url https://mezansalla.com
+```
+
+started at `2026-11-22T00:10:12.164401Z`. It was still running after 150 seconds
+at the latest operator report. Its exit code, three matching probes, exact
+canonical/cache-busted build-meta verification and matching-lease closure have
+not yet been reported. Do not repeat publication or start another verifier while
+that original process is active.
+
+### Initial authenticated dashboard observation
+
+One ordinary authenticated visit to `https://mezansalla.com` automatically
+redirected to `https://mezansalla.com/dashboard-advanced`. The Today filter showed
+22 November 2026. The period summary, top products and executive cards rendered.
+The page was closed after this initial observation; no manual refresh or data
+sync was performed. No application load error was observed. The only console
+error concerned browser-extension metadata, not the application.
+
+No precise load-duration measurement or fresh executive Backend request log was
+obtained. View Logs exposed a static deployment snapshot ending `00:08:23Z`;
+Monitoring showed a 24-hour aggregate that included older critical intervals.
+Neither establishes a current load-test outcome. This initial render does not
+establish sustained or per-request incident resolution.
+
+## Historical PR #2053 rejection, lease abort and rollback
 
 The preceding PR #2053 was normally merged as
 `10ee7b41204dd1d39c8b91daf9f0a9d899041ebb`. Its final Emergent **Publish changes**
@@ -177,9 +240,10 @@ The original cache-busted health helper at
 That observation proves the reported rollback identity at that time. It is not
 an authenticated dashboard timing, a memory measurement, or performance
 acceptance. It must not be described as evidence that the slowdown was resolved.
-The last reported shared `/app` still contains the PR #2053 merge and its older
-artifacts; it is not current PR #2055/R2 staging. No active lease was reported at this handoff,
-but the next operator must obtain fresh status before acting.
+At the earlier E2 handoff, shared `/app` still contained the PR #2053 merge and
+its older artifacts, and no active lease was reported. That workspace state is
+historical; the authorized R2 staging and current verification are recorded
+above.
 
 The earlier blocked-publication checkpoint is preserved at
 <https://github.com/AMASI-SA/AMASI-SA/tree/codex/awaiting-history-recovery-evidence-20261122/docs/operations/AWAITING-HISTORY-PERFORMANCE-20261121>.
@@ -336,49 +400,23 @@ improvement has been measured for this candidate.
 
 ## Exact next safe sequence
 
-1. Obtain explicit fresh authorization for one production **Publish changes**
-   of exact M2 `0c5e5b98795b8d30289ec0e4d3c95738fd660af1` and the recorded R2
-   identity. The prior automatic approval rejection remains unresolved;
-   generic continuation text is not authorization to retry the rejected action.
-2. Re-read the remote handoff and current refs and verify the intended governed
-   target. Read fresh shared `/app` state using the original helper:
-
-   ```bash
-   cd /app
-   python scripts/production_release_guard.py status
-   ```
-
-   Continue only with fresh `active: false`. Never clear another actor's lease.
-   Preserve unrelated and untracked files in the shared workspace.
-3. Create fresh unique staging under `/tmp` from exact M2. **Do not reuse old
-   PR #2053 or superseded PR #2054 staging, builds, identities, proofs, leases,
-   actors or prepublish results.** The last reported shared `/app` still has
-   old PR #2053 source/artifacts and cannot establish this release. Run the
-   unchanged original adapter and governed toolchain. Require the exact A2,
-   release ID, artifact tree, build-meta and proof in this record.
-4. After fresh clean-clone adapter success, use the original Release Guard to
-   prepare a new owner-specific lease for M2 and run `prepublish` immediately
-   before publication. Follow the reviewed handoff without overwriting
-   unrelated shared-workspace files.
-5. Perform the explicitly authorized **Publish changes** once. Require a newer
-   explicit `Deployment Succeeded`; prior success, ready preview, build output
-   or a health response does not prove this publication completed.
-6. Run the original verification helper:
-
-   ```bash
-   python scripts/production_release_guard.py verify --url https://mezansalla.com
-   ```
-
-   All three consecutive probes must identify A2 and the recorded R2 release
-   with verified identity, matching critical hashes and verified Frontend build.
-   Canonical and cache-busted `/build-meta.json` must return exact governed JSON
-   bytes and `application/json`, without SPA fallback. Successful verification
-   must close the matching lease; confirm `active: false`.
-7. Record actual live identity and authenticated dashboard/performance evidence
-   before claiming incident resolution. Preserve a remotely recoverable
-   documentation checkpoint with exact results and remaining limitations.
-   This record itself does not authorize publication, production-data writes
-   or Issue comments.
+1. Observe the original verifier already running from
+   `2026-11-22T00:10:12.164401Z`. Do not repeat **Publish changes**, run a second
+   verifier, modify production/source/intent or disturb its matching lease.
+2. Capture the original process's exit and sanitized result. Require all three
+   probes to match exact A2 and R2 with verified identity, matching critical
+   hashes and verified Frontend build. Canonical and cache-busted
+   `/build-meta.json` must match the governed JSON bytes and return
+   `application/json`.
+3. After the original verifier finishes, read its original guard status and
+   record the matching actor/lease outcome. Successful verification must close
+   the matching lease and leave `active: false`. Record any failure accurately;
+   never clear another actor's lease or infer acceptance from the UI alone.
+4. Append the final verification result to this same documentation-only evidence
+   branch using an expected-head update. **Never deploy the evidence branch.**
+5. Preserve the distinction between the observed initial dashboard render and
+   measured load duration or sustained performance acceptance. Incident
+   resolution remains unclaimed until supported by actual acceptance.
 
 ## Preserved source-A2 checkpoint
 
@@ -561,3 +599,4 @@ Freeze a new governed intent-only B2 and require all exact-commit CI, including
 Stock and Balance, before release acceptance. A2/B2 identities and fresh freeze
 and CI results are pending. Production publication remains blocked/not started;
 no deployment or incident resolution is claimed.
+
