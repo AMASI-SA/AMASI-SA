@@ -25,5 +25,14 @@
     "Candidate rehearsal passed on actual host; staging not yet run.",
     "No change to frozen A/B/M or production code.",
     "Partial staging interruption requires journal inspection; no automatic source reset."
-  ]
+  ],
+  "helper_commit": "85372740b2e9ad3db453102413749ce03d807299",
+  "remote_helper_readback": "exact_byte_match",
+  "launcher": {
+    "path": "RUN-HOST-STAGE-2069.sh",
+    "sha256": "755092e01d1193c74c9cf076a46cbc411036b0cbc185ae405f39ec5b6509de91",
+    "bytes": 2594,
+    "shell_syntax": "passed",
+    "python_ast": "passed"
+  }
 }

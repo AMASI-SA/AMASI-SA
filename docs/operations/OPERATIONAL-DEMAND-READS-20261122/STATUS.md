@@ -10,6 +10,12 @@ exactly B. **Actual shared /app staging and runtime publication remain pending.*
 Reviewed helper: `MANUAL-HOST-STAGE-2069.py`.
 SHA256: `cdd6d5a5393af9f5518907c7b8999c1b8908a3256d3d5da4ca43b91217dc709a` (17177 bytes).
 
+Terminal launcher: `RUN-HOST-STAGE-2069.sh`. It retrieves the helper from immutable
+evidence commit `85372740b2e9ad3db453102413749ce03d807299`, checks the SHA256
+above, and only then executes it. The launcher itself passed shell syntax and
+Python AST checks. Its SHA256 is `755092e01d1193c74c9cf076a46cbc411036b0cbc185ae405f39ec5b6509de91`.
+The saved remote helper was read back and matched the reviewed local bytes.
+
 The helper checks exact clean J and inactive original guard; confirms remote M
 and its ordered J/B parents and frozen tree; validates the retained same-host
 candidate with the original source/build/proof validators; and checks free space.
