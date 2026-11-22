@@ -6,6 +6,7 @@ import json
 from dataclasses import dataclass
 from typing import Any, Optional
 
+from dashboard_cpu_budget import CPUWorkBudget, PARSER_BUDGET_MS
 from salla_marketing_attribution import canonical_order_source
 from .attribution import build_attribution_projection
 
@@ -353,6 +354,7 @@ async def get_orders(
         order_numbers=normalized,
     )
     result: dict[str, OrderDTO] = {}
+    cpu_budget = CPUWorkBudget(PARSER_BUDGET_MS)
     for row in rows:
         try:
             result[row.order_number] = _map_row(
@@ -361,5 +363,6 @@ async def get_orders(
                 native_payment_source=row.native_payment_source,
             )
         except OrderMappingError:
-            continue
+            pass
+        await cpu_budget.checkpoint()
     return result

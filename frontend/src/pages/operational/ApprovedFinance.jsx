@@ -39,6 +39,9 @@ const navigation=[
   ['reports','التقارير','chart-no-axes-column'],['tools','العمليات والكشوف','layers'],
 ];
 const titles = Object.fromEntries(navigation.map(([key,label])=>[key,label]));
+// Bound the complete context attempt, including queue and session-refresh waits.
+// An inactive page exposes retry instead of deferring an indefinite loader.
+const contextReadPolicy = { singleAttemptTimeoutMs: 30000, deferUntilVisible: false };
 function routeTo(path, view, resource, filters) {
   const params=new URLSearchParams({view});
   if(resource){params.set('kind',resource.kind);params.set('id',resource.id);}
@@ -216,10 +219,13 @@ export default function ApprovedFinance({defaultView='home'}) {
     const value=await api.context(config,{homePreview:requestPreview,...(directoryOnly && {directoryOnly:true})});
     if(!validContext(value)||auth?.user?.id&&auth.user.id!==value.actor.id)throw new Error('invalid finance context');
     return directoryOnly ? {...value,directoryOnly:true} : value;
-  },JSON.stringify([identity,requestPreview,directoryOnly,pages?.map(p=>[p.id,p.mode])]),!auth||Boolean(auth.user?.id)&&!auth.loading);
+  },JSON.stringify([identity,requestPreview,directoryOnly,pages?.map(p=>[p.id,p.mode])]),!auth||Boolean(auth.user?.id)&&!auth.loading,contextReadPolicy);
   const to=(name,resource,extra)=>routeTo(location.pathname,name,resource,extra);
-  if(!read.data)return <div className="mz-finance" dir="rtl"><main className="content"><Heading title="الأرصدة التشغيلية"/>{read.error?
-    <><p role="alert" className="note">{read.error}</p><button className="button" onClick={read.reload}>إعادة المحاولة</button>
-    {grantedWebLink(pages,'/operational-balances?view=specialized')&&<Link className="textbtn" to="/operational-balances?view=specialized">الإعدادات والعمليات المتخصصة</Link>}</>:<p role="status">جارٍ تحميل الأرصدة…</p>}</main></div>;
+  const sessionUnavailable=auth&&!auth.loading&&!auth.user?.id;
+  const error=sessionUnavailable?'تعذر التحقق من جلسة الدخول. أعد التحقق لعرض الأرصدة.':read.error;
+  const retry=sessionUnavailable?(auth.retryAuth||(()=>window.location.reload())):read.reload;
+  if(!read.data)return <div className="mz-finance" dir="rtl"><main className="content"><Heading title="الأرصدة التشغيلية"/>{error?
+    <><p role="alert" className="note">{error}</p><button className="button" onClick={retry}>{sessionUnavailable?'إعادة التحقق من الجلسة':'إعادة المحاولة'}</button>
+    {!sessionUnavailable&&grantedWebLink(pages,'/operational-balances?view=specialized')&&<Link className="textbtn" to="/operational-balances?view=specialized">الإعدادات والعمليات المتخصصة</Link>}</>:<p role="status">{auth?.loading?'جارٍ التحقق من الجلسة…':'جارٍ تحميل الأرصدة…'}</p>}</main></div>;
   return <FinanceWorkspace key={JSON.stringify([identity,read.data.session_scope,read.data.permission_version])} identity={identity} user={auth?.user} context={read.data} view={view} params={params} to={to} reload={read.reload}/>;
 }
