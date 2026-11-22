@@ -148,6 +148,7 @@ async def dashboard(user=None, from_date=None, to_date=None, payment_methods=Non
     from dashboard_payment_fees import (
         BASIS as PAYMENT_FEE_BASIS, FEE_SOURCE_PROJECTION, attach_fee_source_evidence,
         dashboard_fee_breakdown, dashboard_payment_method, load_dashboard_fee_context, enforce_dashboard_fee_completeness,
+        merge_statement_estimate_metadata,
     )
 
     # ── Unified orders aggregation (THE source of truth) ─────────────────────
@@ -856,6 +857,7 @@ async def dashboard(user=None, from_date=None, to_date=None, payment_methods=Non
             b["fee_amount"]  += fee
             b["vat_amount"]  += vat
             b["orders_count"] += cnt
+            merge_statement_estimate_metadata(b, r)
             # Aggregate sub-methods by their CANONICAL key so multiple raw
             # spellings of e.g. الراجحي collapse into one sub-row.
             sm_idx = {s["key"]: i for i, s in enumerate(b["sub_methods"])}
@@ -873,6 +875,8 @@ async def dashboard(user=None, from_date=None, to_date=None, payment_methods=Non
                     "fee_amount": fee,
                     "orders_count": cnt,
                 })
+                s = b["sub_methods"][-1]
+            merge_statement_estimate_metadata(s, r)
         # Sort sub_methods by sales desc, round everything for the response.
         out = []
         for b in buckets.values():
@@ -977,7 +981,7 @@ async def dashboard(user=None, from_date=None, to_date=None, payment_methods=Non
         "range": {"from_date": from_date, "to_date": to_date},
         "financial_cohort": financial_cohort,
         "payment_fee_authority": {
-            "basis": PAYMENT_FEE_BASIS,
+            "basis": fee_result["basis"],
             "complete": fee_result["payment_fees_complete"],
             "known_payment_fees_sar": fee_result["total_payment_fees"],
             "reason_codes": fee_result["fee_review_reasons"],
@@ -985,6 +989,9 @@ async def dashboard(user=None, from_date=None, to_date=None, payment_methods=Non
             "electronic_complete": electronic_fees_complete,
             "electronic_before_filter_complete": electronic_before_filter_complete,
             "legacy_analysis_fees_included": bool(legacy_analyses),
+            **({key: fee_result[key] for key in (
+                "payment_fees_estimated", "payment_fee_estimate_sources", "estimated_orders_count")}
+                if fee_result.get("payment_fees_estimated") else {}),
         },
         "totals": {
             "total_sales": (

@@ -1,0 +1,106 @@
+{
+  "task_id": "TABBY-DASHBOARD-FEES-20261122",
+  "status": "r2_integrated_source_and_independent_review_passed_remote_ci_pending",
+  "updated_at_utc": "2026-11-22T20:37:28.167519+00:00",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/tabby-weekly-fee-estimates-r2-20261122",
+  "production_branch": "hotfix/prod-snap-meta-final",
+  "source_base": "24270ebdfdebb83282389308a2349cdb27e2b8e4",
+  "historical_pr": 2068,
+  "historical_source": "63c3f4ed08a4cb23d723326332774b6c21bcf212",
+  "historical_intent_commit": "2b381e6c2fa353f985f2a515f753757073bb9516",
+  "publication_authorization": "Owner explicitly instructed كمل وانشر and requested a terminal publication retry; authority remains in force.",
+  "scope": "Restore numeric Tabby fees and net profit through weekly evidence and the exact Operational Balances fallback; restate historical reports when accepted settlement knowledge changes.",
+  "r2_integration": [
+    "Retain current Production demand-only card/worker and frontend consumer lifecycle.",
+    "Move accepted-source revision into dashboard_card_builder binding.key, which keys persistent demand read models and their source-authorization fence.",
+    "Keep tariff/setup identity separate from calculation evidence; only active Tabby capture policies request compact source revision.",
+    "Create one private memo and current evidence cutoff per standalone _compute_dashboard_v2 calculation, shared across selected-cohort readers.",
+    "Port estimate metadata and dynamic fee authority into legacy_dashboard_reader; preserve server wrapper, cooperative parsing and read-only flags.",
+    "Retain weekly-first estimate, exact operational profile/period fallback, actual-fee replacement, refunds, VAT, FX, rounding and source validation from the reviewed original implementation.",
+    "Preserve unrelated customer/inventory/operational changes and the withdrawn ledger-table request."
+  ],
+  "changed_files": [
+    ".github/workflows/prod-dashboard-v2-ad-fx-payment-fees.yml",
+    "backend/dashboard_ads_costs.py",
+    "backend/dashboard_card_builder.py",
+    "backend/dashboard_operational_statement_fees.py",
+    "backend/dashboard_payment_fees.py",
+    "backend/dashboard_v2_routes.py",
+    "backend/legacy_dashboard_reader.py",
+    "backend/provider_fee_statement_actual_sources.py",
+    "backend/provider_fee_weekly_average.py",
+    "backend/provider_fee_weekly_sources.py",
+    "backend/tests/test_dashboard_card_snapshots.py",
+    "backend/tests/test_dashboard_operational_statement_fees.py",
+    "backend/tests/test_dashboard_weekly_payment_fees.py",
+    "backend/tests/test_dashboard_weekly_read_model.py",
+    "backend/tests/test_provider_fee_statement_actual_sources.py",
+    "backend/tests/test_provider_fee_weekly_average.py",
+    "backend/tests/test_provider_fee_weekly_sources.py",
+    "docs/operations/TABBY-DASHBOARD-FEES-20261122/STATUS.json",
+    "frontend/src/components/ProfitSummaryCard.jsx",
+    "frontend/src/components/ProfitSummaryCard.paymentFees.test.jsx",
+    "frontend/src/lib/paymentFeeCompleteness.js",
+    "frontend/src/lib/paymentFeeRows.js",
+    "frontend/src/pages/AdvancedDashboard.jsx",
+    "frontend/src/pages/AdvancedDashboard.paymentFees.test.jsx"
+  ],
+  "verification": [
+    {
+      "name": "Combined backend integration/regression",
+      "command": "PYTHONPATH=backend .venv/bin/python -m pytest --noconftest -q backend/tests/test_dashboard_weekly_payment_fees.py backend/tests/test_provider_fee_weekly_average.py backend/tests/test_provider_fee_weekly_sources.py backend/tests/test_dashboard_operational_statement_fees.py backend/tests/test_provider_fee_statement_actual_sources.py backend/tests/test_dashboard_dated_payment_fees.py backend/tests/test_dashboard_card_snapshots.py backend/tests/test_dashboard_v2_ad_account_costs.py backend/tests/test_dashboard_weekly_read_model.py backend/tests/test_dashboard_demand_builders.py --tb=short",
+      "exit_status": 0,
+      "result": "216 passed, zero skipped/failed, six existing deprecation warnings."
+    },
+    {
+      "name": "Frontend fee, demand and snapshot integration",
+      "toolchain": {
+        "node": "22.23.2",
+        "yarn": "1.22.22"
+      },
+      "exit_status": 0,
+      "result": "117 tests passed across six suites: ProfitSummaryCard.paymentFees, AdvancedDashboard.paymentFees, DashboardAnalyticsPlacement, AdvancedDashboard.cardRefresh, useDashboardCardSnapshot, demandRead."
+    },
+    {
+      "name": "Exact focused-workflow static contract",
+      "exit_status": 0,
+      "result": "Executed unchanged read-only integration shell block under bash -e -o pipefail; passed."
+    },
+    {
+      "name": "Whitespace and source preservation",
+      "exit_status": 0,
+      "result": "git diff --check passed. AdvancedDashboard demand reader and default component byte-identical to Production; preserved suffix SHA256 c671a3e385a434dfb99ec6b608129811cc4e4a212eb84f904020400bc60ff018."
+    },
+    {
+      "name": "Red/green integration",
+      "result": "Four snapshot failures reproduced before card port; three direct canonical-reader cases failed before legacy port; fee-estimate rendering failed before UI port. All pass after integration."
+    },
+    {
+      "name": "Independent integrated backend review",
+      "exit_status": 0,
+      "result": "No blocking findings. Four focused real-reader/demand/replacement cases passed. Original core fee modules match reviewed source; server and demand store/jobs/runner unchanged. Existing worker fences reauthorize before build, after materialization and before serving ready results. Focused workflow includes all ten backend and six frontend suites and their affected test paths."
+    }
+  ],
+  "new_acceptance_evidence": [
+    "A later accepted statement changes the persistent projection key; an old worker spec is rejected with 409 read_source_changed and HTTP returns 202 rather than serving obsolete fees.",
+    "A Nov11 report reads sale days Nov4-10 despite Nov22 acceptance and returns independently expected commission12.51 SAR.",
+    "An empty historical week uses the exact saved operational profile and source period, without changing financial state.",
+    "Each worker computation loads weekly and actual evidence once across both readers; HTTP does neither heavy load; a reused binding gets a new memo without mutation or serialization of task state."
+  ],
+  "release": {
+    "production_changed_by_this_task": false,
+    "merged": false,
+    "published": false,
+    "lease_created": false,
+    "shared_guard": "Owner supplied actual /app status exactly active:false in current conversation. Fresh guard required at next shared action boundary.",
+    "base_release": "Canonical ledger reports PR2074 original verified:true/checks:3 and matching lease closure; frozen source4e6c8a61bd1566e061a4f312e797ce239b582475, deployment24270ebdfdebb83282389308a2349cdb27e2b8e4. This task has not observed its UI publication.",
+    "old_intent": "Do not reuse historical PR2068 intent. Current Production intent remains unchanged in source; generate fresh candidate for this source/base.",
+    "terminal_access": "Local workspace is separate from actual Emergent /app; owner runs pinned reviewed host command when ready. No paid chat or live financial writes."
+  },
+  "next_safe_actions": [
+    "Preserve reviewed integrated source on dedicated R2 branch/Draft PR and complete exact-head CI.",
+    "Verify current Production still matches reviewed base; generate and validate new candidate intent, freeze intent-only B and verify exact B.",
+    "Use actual inactive /app guard and pinned reviewed host helpers for adapter rehearsal, ordinary merge/staging as appropriate, prepare/prepublish, one user publication, and original three-probe verification."
+  ]
+}
