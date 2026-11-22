@@ -1,10 +1,10 @@
 # CUSTOMER-INVENTORY-UNIFIED-20261122
 
-## Current state — actual host rehearsal passed; coordinated merge and staging next
+## Current state — PR2074 merged; actual host rehearsal passed; shared staging next
 
 The owner requested publication code, supplied the original shared inactive-guard inspection, withdrew the misdirected slowness report, and asked what to execute next. Release preparation has resumed for the already approved customer refund/collection and inventory/purchase/receiving scopes. No additional source was supplied. The earlier publication deferral is retained in historical commits; this record is the current preparation handoff. No performance work or new performance gate is assigned to this task.
 
-Unified PR: https://github.com/AMASI-SA/AMASI-SA/pull/2074
+Unified PR: https://github.com/AMASI-SA/AMASI-SA/pull/2074 — merged with ordinary merge commit `24270ebdfdebb83282389308a2349cdb27e2b8e4`.
 Branch: `codex/customer-inventory-unified-r2-20261122`.
 
 | Identity | Exact value |
@@ -14,6 +14,7 @@ Branch: `codex/customer-inventory-unified-r2-20261122`.
 | A2 tree | `8f99772552fba3df9a14f55952648aa5d0ed5408` |
 | Intent-only B | `447e83bfb95d2627877d46c7baa528e454a2e143` |
 | B tree | `6a906db6cf4fd3dda4b550483a0ef96067c6f1ed` |
+| Deployment merge D | `24270ebdfdebb83282389308a2349cdb27e2b8e4` |
 | Intent blob | `33ffe9f95b8093c1eeec33b2869708422358a7d0` |
 | Runtime release | `rg5-2e0e3797d6ff3b955a3a23fd31487bd92721e70f316f3bdf34cab0d94c5d630f` |
 
@@ -54,6 +55,6 @@ The owner's prior inspection observed `active:false`, clean shared M, inherited 
 
 ## Exact next safe action
 
-The actual isolated host rehearsal is complete; retain `/tmp/mezan-pr2074-icmywyrd` and its adapter.log. [HOST-REHEARSAL-PASS-20261122.json](HOST-REHEARSAL-PASS-20261122.json) records the supplied result. Fresh GitHub reads confirm reviewed Production M and clean/mergeable PR2074 at B with all17 applicable gates passed. Complete the ordinary merge, verify its exact B tree/parents, and use a reviewed guarded helper to stage the verified outputs while preserving every unrelated host file and previous backups. On actual successful rehearsal and fresh unchanged Production/guard checks, the later authorized sequence is non-squash merge, safe shared update/materialization, original prepare/prepublish immediately before one Re-publish changes, a new explicit Deployment Succeeded, original three-probe verification of source/runtime/files/build/exact JSON MIME, and final active:false. Actual isolated host success is now recorded; live unified Production success is still unverified.
+The actual isolated host rehearsal is complete; retain `/tmp/mezan-pr2074-icmywyrd` and its adapter.log. [HOST-REHEARSAL-PASS-20261122.json](HOST-REHEARSAL-PASS-20261122.json) records the supplied result. Fresh GitHub reads confirmed reviewed Production M and clean/mergeable PR2074 at B with all17 applicable gates passed. The authorized ordinary merge is complete at D `24270ebdfdebb83282389308a2349cdb27e2b8e4`. Its exact tree equals B and its ordered parents are M/B; remote Production points to D. [NORMAL-MERGE-2074.json](NORMAL-MERGE-2074.json) records this verified result. Use a reviewed guarded helper to stage the verified outputs while preserving every unrelated host file and previous backups. On actual successful rehearsal and fresh unchanged Production/guard checks, the later authorized sequence is non-squash merge, safe shared update/materialization, original prepare/prepublish immediately before one Re-publish changes, a new explicit Deployment Succeeded, original three-probe verification of source/runtime/files/build/exact JSON MIME, and final active:false. Actual isolated host success is now recorded; live unified Production success is still unverified.
 
-Production changed by this task: **NO**. No shared `/app` mutation, owned lease, merge, publication, live business test writes or paid Emergent chat. This evidence branch is documentation/handoff only; never deploy it. Canonical ledger: https://github.com/AMASI-SA/AMASI-SA/issues/1006#issuecomment-6238987123 .
+Production Git branch changed by this task: **YES**, ordinary merge D above. Live runtime publication: **NO**. No shared `/app` source/output mutation, owned lease, publication, live business test writes or paid Emergent chat. This evidence branch is documentation/handoff only; never deploy it. Canonical ledger: https://github.com/AMASI-SA/AMASI-SA/issues/1006#issuecomment-6238987123 .

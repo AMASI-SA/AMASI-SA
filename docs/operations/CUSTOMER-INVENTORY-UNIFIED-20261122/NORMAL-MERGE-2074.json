@@ -1,0 +1,22 @@
+{
+  "pr": 2074,
+  "merged": true,
+  "merge_method": "merge",
+  "deployment_git_sha": "24270ebdfdebb83282389308a2349cdb27e2b8e4",
+  "source_git_sha": "4e6c8a61bd1566e061a4f312e797ce239b582475",
+  "intent_git_sha": "447e83bfb95d2627877d46c7baa528e454a2e143",
+  "source_base_git_sha": "06763ffd6e3c3f7c861769b61d2c4e6b9b2d5f35",
+  "tree": "6a906db6cf4fd3dda4b550483a0ef96067c6f1ed",
+  "parents": [
+    "06763ffd6e3c3f7c861769b61d2c4e6b9b2d5f35",
+    "447e83bfb95d2627877d46c7baa528e454a2e143"
+  ],
+  "exact_intent_tree": true,
+  "production_ref_verified": "24270ebdfdebb83282389308a2349cdb27e2b8e4",
+  "runtime_release_id": "rg5-2e0e3797d6ff3b955a3a23fd31487bd92721e70f316f3bdf34cab0d94c5d630f",
+  "actual_rehearsal_evidence_file": "HOST-REHEARSAL-PASS-20261122.json",
+  "git_production_changed": true,
+  "actual_shared_staging": false,
+  "lease_created": false,
+  "published": false
+}
