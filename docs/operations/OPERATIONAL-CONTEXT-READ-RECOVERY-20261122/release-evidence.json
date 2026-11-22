@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "task_id": "OPERATIONAL-CONTEXT-READ-RECOVERY-20261122",
-  "recorded_at_utc": "2026-11-22T03:01:37Z",
+  "recorded_at_utc": "2026-11-22T03:17:13Z",
   "repository": "AMASI-SA/AMASI-SA",
   "pull_request": {
     "number": 2058,
@@ -15,11 +15,11 @@
     "name": "codex/operational-context-release-evidence-20261122",
     "based_on": "5758240bd83ed3018737ae59808f55415d80a689",
     "deploy_this_branch": false,
-    "remote_checkpoint": "698cf345369dc1f6fa3cb6a739ecc1e7c1acaa20",
-    "remote_checkpoint_tree": "56970a2dd37d18ffef27a5fca65cc6ff574e3ab5",
+    "remote_checkpoint": "4cff7fa7a5331fc71c1997b0c5d8d059aa6fc758",
+    "remote_checkpoint_tree": "25e4e48c343241de9e82a4ec67e9fbcd4fc71bd9",
     "remote_checkpoint_scope": "previous_evidence_record_before_this_update",
     "earlier_checkpoint": "1ac7888c1563b7b1d624c9e77196d5c8f8493a85",
-    "previous_checkpoint": "de285a0a573aa97cdbb9ae62910af1776cba768b"
+    "previous_checkpoint": "698cf345369dc1f6fa3cb6a739ecc1e7c1acaa20"
   },
   "provenance": {
     "base_M3": "02e8be41e6f1972806f0e095b8fdc38645a7f113",
@@ -922,22 +922,25 @@
     },
     "merged": true,
     "lease_created": true,
-    "published": false,
-    "production_changed_by_this_patch": null,
-    "original_live_identity_verification": "pending",
-    "live_inventory_acceptance": "pending",
+    "published": true,
+    "production_changed_by_this_patch": true,
+    "original_live_identity_verification": "running",
+    "live_inventory_acceptance": "passed_validated_empty_current_scope",
     "deployment_git_sha": "1c4008e315c35ec4419e76400a9faddb94b9d5a2",
     "merged_at_utc": "2026-11-22T02:47:45Z",
     "github_production_ref": "1c4008e315c35ec4419e76400a9faddb94b9d5a2",
     "app_last_verified_head": "1c4008e315c35ec4419e76400a9faddb94b9d5a2",
     "app_installation": "passed",
-    "production_change_field_scope": "published_runtime_change_not_yet_observed_while_publication_in_progress",
+    "production_change_field_scope": "new_platform_publication_and_version_observed; intended_runtime_identity_verification_pending",
     "lease_actor": "chatgpt-pr2058-release-20261122-b90f3c3040a7",
     "prepare": "passed",
     "prepublish": "passed",
     "publication_started": true,
     "published_field_meaning": "explicit_platform_completion_observed",
-    "lease_closure": "pending"
+    "lease_closure": "pending",
+    "platform_version": "66dda85",
+    "fresh_guard_inactive_after_verify": false,
+    "live_home_acceptance": "passed_normal_render"
   },
   "limitations": [
     "No matching live inventory/context response timing proves the original failure cause.",
@@ -946,7 +949,7 @@
     "Native stocktake, physical inventory projection, catalogs, payment writes and broader server pressure are unchanged.",
     "Current 83-case verification and immutable A2 build do not replace fresh exact-B2 CI, host rehearsal, publication or normal authenticated inventory acceptance; B1 evidence is archived only."
   ],
-  "next_safe_action": "Checkpoint observed M4 installation, original prepare/prepublish and the single publication start. Monitor that existing publication without another click or new lease. After explicit platform success require three original live identity probes for A2/release, inactive guard and normal authenticated inventory acceptance. Never deploy the evidence branch.",
+  "next_safe_action": "Checkpoint observed platform success/version66dda85 and bounded stock/home acceptance. Let the existing original verify process finish under the matching lease; record its actual three-probe result and a fresh original inactive-guard status only when observed. Do not republish, reuse prior probes or infer performance/total inventory from the UI snapshots. Never deploy the evidence branch.",
   "archived_attempts": [
     {
       "attempt": "B1",
@@ -1635,7 +1638,7 @@
     }
   },
   "publication": {
-    "status": "started",
+    "status": "platform_succeeded_identity_verification_running",
     "evidence_basis": "single_authorized_UI_action_observed_by_release_owner",
     "ui_flow": [
       "Free republishes",
@@ -1643,12 +1646,10 @@
     ],
     "publish_changes_clicks": 1,
     "after_successful_prepublish_finished_at_utc": "2026-11-22T02:59:32.032087Z",
-    "observed_ui_text": "Publishing...",
-    "button_disabled": true,
     "platform_event_id": null,
-    "platform_version": null,
-    "explicit_platform_success_observed": false,
-    "completed": false,
+    "platform_version": "66dda85",
+    "explicit_platform_success_observed": true,
+    "completed": true,
     "started_timeline_event": {
       "label": "Deployment Started",
       "display_time": "Nov 22, 06:00 AM",
@@ -1663,6 +1664,102 @@
       "display_timezone": "Asia/Aden",
       "version": "ccb1df5",
       "credited_as_current_success": false
-    }
+    },
+    "initial_ui_text": "Publishing...",
+    "initial_button_disabled": true,
+    "republish_enabled": true,
+    "completion_timeline_event": {
+      "label": "Deployment finished",
+      "display_time": "Nov 22, 06:10 AM",
+      "display_timezone": "Asia/Aden",
+      "success_class": "text-sep-green",
+      "exact_visible_label_and_new_timestamp_observed": true,
+      "event_id": null
+    },
+    "deployment_ordinal_inferred": false,
+    "prior_M3_version": "ccb1df5"
+  },
+  "original_live_verification": {
+    "status": "running",
+    "original_guard_unmodified": true,
+    "started_at_utc": "2026-11-22T03:11:51.651163Z",
+    "process_id": 44288,
+    "runner_path": "/tmp/mezan-pr2058-release-20261122-0agkk3um/verify-runner.py",
+    "runner_bytes": 2935,
+    "runner_sha256": "512a385336f20bbd1a1ef8d335a2b969a238774bd302c76cbbd3a2aabe78f759",
+    "latest_observed_progress": {
+      "at_utc": "2026-11-22T03:12:53.543662Z",
+      "pid_alive": true,
+      "started": true,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "final_result_observed": false
+    },
+    "exit_code": null,
+    "passed_probe_count": null,
+    "all_three_probes_passed": null,
+    "lease_closed": null,
+    "fresh_guard_inactive_observed": false
+  },
+  "live_UI_acceptance": {
+    "evidence_basis": "normal_live_UI_observations_by_release_owner_plus_read_only_frozen_source_flow_interpretation",
+    "stock": {
+      "result": "passed_validated_empty_current_scope",
+      "url": "https://mezansalla.com/inventory-v2?from=operational-tools&tab=stock",
+      "first_observation_at_utc": "2026-11-22T03:12:05.559Z",
+      "first_observation": "authentication_check",
+      "accepted_at_utc": "2026-11-22T03:12:24.074Z",
+      "observation_interval_seconds": 18.515,
+      "rounded_observation_bound_seconds": 19,
+      "is_request_latency": false,
+      "is_performance_bound": false,
+      "stock_heading_and_filters_rendered": true,
+      "stock_refresh_control_rendered": true,
+      "validated_empty_state_rendered": true,
+      "empty_state_text": "لا توجد كمية مخزنية خاصة بنظام ميزان لهذا المنتج أو البحث.",
+      "generic_failure_visible": false,
+      "displayed_filters": {
+        "type": "الكل",
+        "warehouse": "كل المستودعات",
+        "status": "كل الحالات",
+        "search": ""
+      },
+      "native_buttons_alone_counted_as_acceptance": false,
+      "source_mapped_operational_context_permission_success": true,
+      "source_mapped_inventory_response_validation_passed": true,
+      "raw_response_or_request_timing_captured": false,
+      "total_inventory_outside_scope_inferred": false,
+      "form_writes": 0,
+      "retry_clicks": 0
+    },
+    "home": {
+      "result": "passed_normal_render",
+      "observed_at_utc": "2026-11-22T03:13:43.815Z",
+      "url": "https://mezansalla.com/operational-balances?view=home",
+      "navigation": "visible_Mezan2_logo_click",
+      "unified_shell_and_heading_rendered": true,
+      "account_cards_populated": true,
+      "recent_movement_rows_present": true,
+      "orders_needing_review_panel_present": true,
+      "loading_or_error_visible": false,
+      "financial_value_audit_claimed": false,
+      "amounts_account_names_order_ids_or_raw_snapshots_retained": false
+    },
+    "acceptance_interpretation": {
+      "bootstrap": "Promise.allSettled concurrent operational/context and native stocktakes/context reads",
+      "operational_context_endpoint": "/api/operational-balances/context",
+      "operational_context_timeout_seconds": 30,
+      "native_context_endpoint": "/api/inventory-v2/stocktakes/context",
+      "native_context_has_explicit_shared_timeout_in_caller": false,
+      "native_buttons_do_not_prove_operational_context_success": true,
+      "stock_heading_filters_require": "operational permissions.reports",
+      "stock_endpoint": "/api/operational-balances/inventory",
+      "inventory_response_contract": "existing version-1 read-only warehouse_locations contract and items array",
+      "stock_acceptance_requires": "rendered stock table or validated empty state",
+      "generic_error_before_filters": "operational context stage",
+      "generic_error_after_filters": "inventory retrieval or shape validation; rechecked permissions can also fail"
+    },
+    "historical_failure_cause_proven": false,
+    "original_identity_verification_satisfied_by_UI": false
   }
 }

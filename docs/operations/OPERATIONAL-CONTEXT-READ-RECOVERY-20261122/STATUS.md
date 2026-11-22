@@ -2,7 +2,7 @@
 
 ## Current release — PR #2058 / A2 and B2
 
-**Evidence checkpoint: 2026-11-22 03:01:37 UTC.** The current candidate is
+**Evidence checkpoint: 2026-11-22 03:17:13 UTC.** The current candidate is
 [PR #2058](https://github.com/AMASI-SA/AMASI-SA/pull/2058), branch
 `codex/operational-context-read-lifetime-20261122`, in `AMASI-SA/AMASI-SA`.
 Source A2 and intent-only B2 remain frozen. All required exact-B2 CI has
@@ -10,11 +10,14 @@ Source A2 and intent-only B2 remain frozen. All required exact-B2 CI has
 merged at **2026-11-22T02:47:45Z** as M4
 `1c4008e315c35ec4419e76400a9faddb94b9d5a2`; its tree exactly equals B2.
 The GitHub production ref and installed `/app` are M4. Bounded installation,
-original `prepare` and final `prepublish` passed. Root then clicked the authorized
-**Publish changes exactly once**; the observed UI reads **Publishing...** and is
-disabled. **Publication has started; platform success and the deployed version
-have not yet been observed.** The new lease remains in use for this release.
-Original live identity verification and inventory acceptance are pending.
+original `prepare` and final `prepublish` passed. The single authorized
+publication has now **succeeded on the platform**, latest version **66dda85**:
+the newest green **Deployment finished** item is labeled **Nov 22, 06:10 AM,
+Asia/Aden**, and republish is enabled. Normal stock and home navigation also
+passed the bounded UI acceptance checks below. **The original three-probe live
+identity verification is still running, with no result observed; lease closure
+and a fresh inactive guard are not yet established.** Platform/UI success is
+separate from that remaining governed identity gate.
 
 PR #2057 / B1 is a **superseded, blocked attempt**, archived below with both
 failed backend jobs and its completed matrix. Root confirmed #2057 was closed **without merge**, with its frozen head
@@ -26,8 +29,8 @@ This document and adjacent `release-evidence.json` are maintained only on
 `codex/operational-context-release-evidence-20261122`, originally based on B1.
 **This evidence branch must never be deployed or merged into a frozen release.**
 The previous durable evidence checkpoint is
-`698cf345369dc1f6fa3cb6a739ecc1e7c1acaa20`, tree
-`56970a2dd37d18ffef27a5fca65cc6ff574e3ab5`. Root owns the next remote checkpoint
+`4cff7fa7a5331fc71c1997b0c5d8d059aa6fc758`, tree
+`25e4e48c343241de9e82a4ec67e9fbcd4fc71bd9`. Root owns the next remote checkpoint
 and all release actions. This author changes only these two evidence documents.
 
 ## Current immutable identity
@@ -67,7 +70,7 @@ original adapter load/provenance validation and
 A2; M4 is the separate deployment commit. This validates the merge relationship,
 not a publication or deployed runtime.
 
-## Actual M4 installation and publication start
+## Actual M4 installation and platform publication
 
 The following actual-host observations were supplied by the release owner;
 this evidence author did not operate the host or browser.
@@ -118,20 +121,87 @@ Stdout SHA-256 is
 stderr was empty. The stage retains compact `prepublish-result.json` and the
 raw stdout. Only concise metadata and hashes are recorded here.
 
-### Single publication in progress
+### Single publication completed on the platform
 
-After that successful final prepublish, root used the **Free republishes →
-Publish changes** action exactly **once**. The visible state became
-**Publishing...**, disabled. A new timeline item was then observed as
-**Deployment Started — Nov 22, 06:00 AM**, in **Asia/Aden**. The initial Overview
-snapshot read **Packaging your latest changes... •33s**; root subsequently
-reported the build still ongoing at about **1m13**. This new started item is
-distinct from prior M3's completed **04:37 AM** item, version **ccb1df5**.
-The new event ID, version and completion are still unknown; no
-`Deployment Succeeded` or completed publication is claimed. Do not infer runtime
-identity or inventory recovery from the button or started-event state. The current
-publication must be monitored; another click or a new prepare cycle is not
-needed for this milestone.
+After successful final prepublish, root used **Free republishes → Publish
+changes** exactly **once**. The initial UI was **Publishing...**, disabled, then
+showed **Deployment Started — Nov 22, 06:00 AM**, **Asia/Aden**. Its initial
+Overview snapshot read **Packaging your latest changes... •33s**, followed by
+ongoing build progress.
+
+The newest timeline item subsequently became **Deployment finished — Nov 22,
+06:10 AM**, **Asia/Aden**, with success class `text-sep-green` and its exact
+visible label/timestamp observed together. Overview enabled republish, and the
+new latest platform version is **66dda85**. Prior M3 version **ccb1df5** is now a
+previous entry; it is not credited as this new success. The current event ID
+was not observed. No ordinal deployment number is inferred from the history.
+These observations establish platform publication success, while the intended
+runtime identity remains subject to the original verification below.
+
+### Original live identity verification running
+
+Root launched the **unmodified original verify** at
+**2026-11-22T03:11:51.651163Z**, PID **44288**, via
+`/tmp/mezan-pr2058-release-20261122-0agkk3um/verify-runner.py`.
+The launcher is **2,935 bytes**, SHA-256
+`512a385336f20bbd1a1ef8d335a2b969a238774bd302c76cbbd3a2aabe78f759`.
+The latest reported progress snapshot, **03:12:53.543662Z**, showed the PID alive
+and started, with stdout/stderr still empty and no final result. No individual
+probe count, three-probe success, verification exit code, lease closure or fresh
+inactive status has been observed. Empty output while running is not treated as
+a failure or acceptance.
+
+## Live UI acceptance after publication
+
+### Stock — passed for the displayed scope
+
+Root navigated normally in a new live tab to
+`https://mezansalla.com/inventory-v2?from=operational-tools&tab=stock`.
+The first observation at **2026-11-22T03:12:05.559Z** showed the authentication
+check. At **03:12:24.074Z**, the actual **الأصناف والمخزون** heading, search box,
+**تحديث المخزون** control and filters were rendered, followed by the validated
+empty-state text **«لا توجد كمية مخزنية خاصة بنظام ميزان لهذا المنتج أو البحث.»**.
+No generic failure was visible. Type was **الكل**, warehouse **كل المستودعات**,
+status **كل الحالات**, and search was blank. No form write or retry click was
+performed.
+
+The two observations are **18.515 s apart**, approximately **19 s**. This is an
+observation interval/upper bound for seeing the rendered outcome, **not** a
+measured request latency or a production performance bound. A validated empty
+state accepts this displayed scope; it does not establish zero total inventory
+outside that scope or prove a numerical stock reconciliation.
+
+The acceptance interpretation is grounded in read-only inspection of the frozen
+UI source. Inventory bootstrap starts two concurrent reads using
+`Promise.allSettled`: `GET /api/operational-balances/context` (30-second client
+timeout) and `GET /api/inventory-v2/stocktakes/context` (no explicit shared timeout
+in that caller). Native **الجرد / التسويات / حركة المخزون** buttons can appear
+from only the second read; they **do not prove operational context success**.
+This distinction also applies to the prior M3 observations.
+
+Stock filters and heading require operational `permissions.reports`; the stock
+component then reads `GET /api/operational-balances/inventory` and validates the
+existing version-1 read-only `warehouse_locations` contract and items array.
+A rendered stock table or the observed validated empty state is the acceptance
+criterion. By that source mapping, the current observation establishes permitted
+stock bootstrap and an accepted inventory response, without claiming a directly
+captured response body/timing. A generic error before the filters indicates the
+operational-context stage; after them, inventory retrieval/shape validation or
+rechecked permissions can fail. Native buttons alone are never sufficient.
+
+### Home — passed without retaining business data
+
+At **2026-11-22T03:13:43.815Z**, after clicking the visible Mezan 2 logo, root
+observed `https://mezansalla.com/operational-balances?view=home` render the
+unified **الرئيسية** shell and **الأرصدة التشغيلية** heading, populated
+**حساباتي** cards, **آخر الحركات المسجّلة** rows and **طلبات تحتاج مراجعة**.
+No loading or error state was visible. This records successful normal rendering,
+not an audit of the displayed financial values. No amounts, account names,
+order IDs, row contents or raw snapshots are retained in these evidence files.
+
+These two normal UI visits passed after platform success. They do not establish
+historical incident causation, sustained performance under load, or completion
+of the separately running governed identity verification.
 
 ## Implementation and integrity boundary
 
@@ -208,8 +278,8 @@ The original single-module red/green command uses that same prefix/suffix and
 only `backend/tests/test_operational_balance_active_read_lifetime.py`.
 These reviewed bytes are now in source A2 and frozen B2. The governed build
 and freeze below passed, as did a fresh actual-host B2 rehearsal and final
-exact-B2 CI. Shared-host installation also passed. Publication has started, with platform
-success and live verification still pending. The correction does not turn archived B1 into a passing release.
+exact-B2 CI. Shared-host installation and platform publication passed, followed by bounded
+stock/home UI acceptance. Original live identity verification is still running. The correction does not turn archived B1 into a passing release.
 
 ## Fresh A2 governed build and freeze
 
@@ -429,30 +499,30 @@ Root separately completed M3 publication and three original live identity probes
 then observed a fresh inactive guard. The
 [completed M3 evidence](https://github.com/AMASI-SA/AMASI-SA/blob/4ee3d64159cba4edd20133f81ec938cf33068ae8/docs/operations/OPERATIONAL-WORKSPACE-RELEASE-20261122/release-evidence.json)
 is preserved at `4ee3d64159cba4edd20133f81ec938cf33068ae8`. It establishes prior
-M3 identity, not this new patch or inventory recovery. Current B2 was normally merged as M4 and installed. Publication is now in
-progress; platform completion and live identity/inventory verification remain
-pending.
+M3 identity, not this new patch or inventory recovery. Current B2 was normally merged as M4, installed and published on the platform.
+Stock and home passed the bounded UI acceptance above. The original governed
+identity verification and lease closure remain unconfirmed.
 
-## Next safe action for the existing publication
+## Next safe action — finish the running original verification
 
-1. Root checkpoints these two evidence files with installation, prepare,
-   prepublish and the single observed publication start. Preserve both frozen
-   branches, the closed blocked B1 archive and all retained host-stage evidence.
-2. Monitor the **existing** platform publication for an explicit newer success
-   event and its actual event/version identity. Do not click Publish again,
-   recreate the lease or treat `Publishing...` as completion.
-3. After explicit platform success, run the original
-   `verify --url https://mezansalla.com` under this release's matching lease;
-   require all three probes for A2 and its release ID, then confirm the original
-   guard is inactive. Record an actual failure or blocked verification honestly.
-4. Separately perform one normal authenticated inventory load. If permission
-   bootstrap or the subsequent stock request still fails, retain bounded matching
-   response/timing evidence. Release identity alone does not establish inventory
-   recovery or resolve the original incident's cause.
+1. Root checkpoints these two evidence files with observed platform version
+   **66dda85**, completed publication and bounded stock/home acceptance. Preserve
+   the source/frozen branches, archived B1 failure and retained host evidence.
+2. Continue the already-running original verify process for this matching lease.
+   Inspect its actual final result; do not count the platform green state or UI
+   visits as any of the three required identity probes.
+3. If the original verification succeeds, retain all three intended A2/release
+   probes and confirm the original guard's fresh inactive status. If it fails or
+   remains blocked, record the actual result and retain the owner's lease state;
+   do not claim closure, complete release acceptance or a successful probe count.
+4. Preserve the stock result as **validated empty in the displayed scope** and
+   the observation interval as **not request latency**. No further form writes,
+   retries or synthetic load are needed for these completed UI observations.
 
-Publication completion, original live identity verification, lease closure and
-live inventory acceptance remain pending. Update only after those results are
-observed. This evidence branch must never be deployed.
+The remaining release gate is the original live identity verification followed
+by observed lease closure/inactive status. This evidence branch must never be
+deployed. Do not republish or recreate the lease merely because verification is
+still running.
 
 This evidence author has made no staging, commit, ref, remote, source or host
 change, and has posted no Issue #1006 comment. Root owns release actions and the
