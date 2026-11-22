@@ -1,0 +1,103 @@
+{
+  "task_id": "OPERATIONAL-DEMAND-LATENCY-20261122",
+  "pr": 2076,
+  "evidence_kind": "owner_supplied_original_emergent_terminal_result",
+  "recorded_at_utc": "2026-11-22T20:48:32Z",
+  "original_host_execution_by_assistant": false,
+  "launcher": {
+    "commit": "6cec158b353da90afba9e35945be480ca6085cb9",
+    "sha256": "30aa6e1a9075e8e27b731d4f4c38b3970a10a8c1fa87b5db4c2a661540761eaf",
+    "helper_commit": "b23a9eefbb2ffcd94cade26691482579cdacce56",
+    "helper_sha256": "c2a091a9ea9c33baf99c2daaba4cc7c5f0cc02751248b0e1428bb5659d4e692d",
+    "checksum_verified": true
+  },
+  "predecessor": {
+    "deployment_git_sha": "24270ebdfdebb83282389308a2349cdb27e2b8e4",
+    "source_git_sha": "4e6c8a61bd1566e061a4f312e797ce239b582475",
+    "release_id": "rg5-2e0e3797d6ff3b955a3a23fd31487bd92721e70f316f3bdf34cab0d94c5d630f",
+    "operator_response": "2074 OK",
+    "new_deployment_succeeded_before_original_verify_confirmed": true,
+    "ui_observed_by_assistant": false,
+    "original_verification_evidence_commit": "3be5f8df326ed27bec6976a344283e26a90510fd",
+    "independently_reviewed_completion_receipt_commit": "b46798fab681471a0fdf9450c30d6446a4f55ffa",
+    "serial_handoff_released": true
+  },
+  "shared_checks": [
+    {
+      "phase": "before",
+      "active": false,
+      "exactly_inactive": true,
+      "incomplete": false,
+      "tracked_clean": true,
+      "deployment_git_sha": "24270ebdfdebb83282389308a2349cdb27e2b8e4"
+    },
+    {
+      "phase": "before_build",
+      "active": false,
+      "exactly_inactive": true,
+      "incomplete": false,
+      "tracked_clean": true,
+      "deployment_git_sha": "24270ebdfdebb83282389308a2349cdb27e2b8e4"
+    },
+    {
+      "phase": "final",
+      "active": false,
+      "exactly_inactive": true,
+      "incomplete": false,
+      "tracked_clean": true,
+      "deployment_git_sha": "24270ebdfdebb83282389308a2349cdb27e2b8e4"
+    }
+  ],
+  "remote_checks": [
+    {
+      "phase": "before",
+      "production": "24270ebdfdebb83282389308a2349cdb27e2b8e4",
+      "candidate": "5bb05036d8095a87c6635c0a431c2c19d24d8f78"
+    },
+    {
+      "phase": "before_build",
+      "production": "24270ebdfdebb83282389308a2349cdb27e2b8e4",
+      "candidate": "5bb05036d8095a87c6635c0a431c2c19d24d8f78"
+    },
+    {
+      "phase": "final",
+      "production": "24270ebdfdebb83282389308a2349cdb27e2b8e4",
+      "candidate": "5bb05036d8095a87c6635c0a431c2c19d24d8f78"
+    }
+  ],
+  "build_space": {
+    "cache_free_bytes": 267984711680,
+    "cache_root": "/tmp/mezan-release-v5-cache-0",
+    "tmp_free_bytes": 267984711680
+  },
+  "optional_diagnostic": {
+    "exit": 1,
+    "status": "unavailable",
+    "performance_measurement_available": false
+  },
+  "adapter_exit": {
+    "build_log": "/tmp/mezan-pr2076-6gtp8l10/adapter.log",
+    "code": 0
+  },
+  "rehearsal_success": {
+    "artifact_tree": "dcaa1f2b805c44427be8df2f5b466b85d7860bade43a3799009156300397300b",
+    "base_ui_success_confirmed_by_operator": true,
+    "base_verification_evidence_commit": "3be5f8df326ed27bec6976a344283e26a90510fd",
+    "build_log": "/tmp/mezan-pr2076-6gtp8l10/adapter.log",
+    "built": true,
+    "deployment": "5bb05036d8095a87c6635c0a431c2c19d24d8f78",
+    "directory": "/tmp/mezan-pr2076-6gtp8l10",
+    "guard_active": false,
+    "package_boundaries_verified": true,
+    "proof_sha256": "30bcd91b489c6cb585c4b560937b4cd22f21b02f8ce78bab6e417b17b224eac3",
+    "release_id": "rg5-e4e41b98edc9f49b8e74adad2a905d362b7113b5b1a1fa83436a4c1ba8c4b918",
+    "shared_tracked_clean": true,
+    "source": "108024c00b7f367fd1d6b15874d7a73d55de2620",
+    "source_base": "24270ebdfdebb83282389308a2349cdb27e2b8e4"
+  },
+  "done": "isolated rehearsal only; no shared source/output/dependency change, lease or publish",
+  "accepted": true,
+  "production_changed_by_performance_task": false,
+  "live_latency_unverified": true,
+  "next": "Fresh exact refs, CI and serial handoff; ordinary merge; reviewed original staging and prepare/prepublish command. No repeated rehearsal required."
+}

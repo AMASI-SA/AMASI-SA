@@ -1,3 +1,15 @@
+# PR2076 actual host rehearsal accepted; predecessor handoff complete
+
+Owner returned the original pinned launcher result: **REHEARSAL_SUCCESS**, adapter exit0, exact frozen A/B/runtime/artifact/proof, isolated package boundaries verified, and original /app guard exactly inactive with clean tracked N before/before-build/final. The retained clone is `/tmp/mezan-pr2076-6gtp8l10/repo`; log `/tmp/mezan-pr2076-6gtp8l10/adapter.log`. Full sanitized acceptance is in `HOST-REHEARSAL-PASS-2076.json`.
+
+The optional bounded diagnostic returned exit1/unavailable. No diagnostic-derived Production timing or claimed speed percentage is available. This does not invalidate the successful original adapter build or package proof. Live first-visible latency remains unverified until publication and actual page acceptance.
+
+The owner typed `2074 OK`, explicitly confirming the preceding new UI success before its original verification. The predecessor's own independently fetched immutable completion receipt `b46798fab681471a0fdf9450c30d6446a4f55ffa` also records that UI fact, original verify3, closed lease, and released serial handoff. Earlier active-lease/UI-confirmation blockers below are historical and superseded. No previous release step is repeated.
+
+Existing publication authorization persists. Next: fresh exact-B CI/refs/coordination review, ordinary tree-equivalent merge preserving A/B, and owner-run pinned staging plus original prepare/prepublish. Preserve all unrelated files/dependencies and retained backups. At this checkpoint no merge, shared output/source change, lease or publication has been performed by this performance task.
+
+---
+
 # PR2076 — pinned command ready for the owner
 
 The concrete launcher is RUN-HOST-REHEARSAL-2076.py in this evidence branch.
