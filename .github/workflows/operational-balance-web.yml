@@ -77,6 +77,9 @@ jobs:
           backend/tests/test_operational_refresh_parallel_profit.py
           backend/tests/test_operational_refresh_party_issue_index.py
           backend/tests/test_operational_workspace_refunds.py
+          backend/tests/test_operational_workspace_refund_execution.py
+          backend/tests/test_operational_workspace_customer_collections.py
+          backend/tests/test_operational_customer_*.py
           backend/tests/test_operational_workspace_statements.py
           backend/tests/test_operational_completed_shipping*.py
           backend/tests/test_operational_read_runtime.py
@@ -111,6 +114,12 @@ jobs:
                         'test_operational_balance_awaiting_cohort_readers'):
               assert any(suite in c.get('classname', '') for c in cases), suite + ' not collected'
           assert len([c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_workspace_refunds']) >= 23, 'Scoped financial-only refund contracts missing'
+          for suite, minimum in (('test_operational_customer_payment_basis', 10),
+                                 ('test_operational_customer_adjustments', 3),
+                                 ('test_operational_workspace_refund_execution', 8),
+                                 ('test_operational_workspace_customer_collections', 11),
+                                 ('test_operational_customer_provider_projection', 9)):
+              assert len([c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == suite]) >= minimum, suite + ' customer money contracts missing'
           assert len([c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_workspace_statements']) >= 10, 'Scoped period statements missing'
           assert len([c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_balance_reviews']) >= 7, 'Scoped receipt-review permissions missing'
           assert len([c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_balance_review_mongo']) == 3, 'Real scoped review transactions missing'
@@ -230,6 +239,9 @@ jobs:
               r.numPendingTestSuites || r.numTodoTests) process.exit(1);
           for (const suffix of ['SalaryStart.test.jsx', 'EmployeesV2Management.test.jsx', 'OperationalSupplierAccount.test.jsx',
                                 'SimpleBalances.test.jsx', 'SimpleBalanceAccess.test.jsx', 'SimpleOrderRefunds.test.jsx',
+                                'ApprovedEntry.test.jsx', 'ApprovedFinance.test.jsx', 'ApprovedLedger.test.jsx',
+                                'CustomerReturns.test.jsx', 'ApprovedCustomerCollections.test.jsx', 'CustomerAdjustments.test.jsx',
+                                'webPageAccess.test.js',
                                 'SimpleBalanceStatement.test.jsx', 'SimpleBalanceReviews.test.jsx',
                                 'simpleBalancesApi.test.js', 'simpleBalancesModel.test.js', 'simpleBalancesPending.test.jsx',
                                 'OperationalFinancialPosition.test.jsx', 'DriverPaymentReview.test.jsx',

@@ -24,9 +24,10 @@ from operational_balance_service import entity
 from operational_balance_store import STATES, check_authorization, digest, fail, mutate, now, read, request_key
 from operational_balance_workspace import WorkspaceEntry, entry_intent, movement_body
 from operational_workspace_refunds import (
-    PROVIDERS, RefundCancel, RefundConfirm, RefundReconcile, RefundRequest,
+    PROVIDERS, RefundCancel, RefundConfirm, RefundExecution, RefundReconcile, RefundRequest,
     _find_case, refund_order,
 )
+from operational_workspace_customer_collections import CollectionRecord
 
 
 PENDING_COMMANDS = "operational_workspace_pending_commands_v1"
@@ -36,13 +37,15 @@ ACTION_MODELS = {
     "refund.confirm": RefundConfirm,
     "refund.cancel": RefundCancel,
     "refund.reconcile": RefundReconcile,
+    "refund.record_execution": RefundExecution,
+    "customer.collection": CollectionRecord,
 }
 CACHE_HEADERS = {"Cache-Control": "no-store", "Pragma": "no-cache"}
 
 
 class PendingRegistration(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    action: Literal["entry", "refund.create", "refund.confirm", "refund.cancel", "refund.reconcile"]
+    action: Literal["entry", "refund.create", "refund.confirm", "refund.cancel", "refund.reconcile", "refund.record_execution", "customer.collection"]
     target_id: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
     command: dict
 
@@ -75,7 +78,7 @@ def _normalize(payload):
         command = parsed.command() if isinstance(parsed, WorkspaceEntry) else parsed.model_dump()
     except ValidationError:
         fail("operational_pending_command_invalid", "بيانات العملية المحفوظة غير صحيحة", 422)
-    needs_target = payload.action not in {"entry", "refund.create"}
+    needs_target = payload.action not in {"entry", "refund.create", "refund.record_execution", "customer.collection"}
     if bool(payload.target_id) != needs_target:
         fail("operational_pending_command_target", "نوع العملية لا يطابق طلب الاسترجاع المحدد", 422)
     return {"action": payload.action, "target_id": payload.target_id, "command": command}
@@ -104,9 +107,12 @@ async def _requirements(db, owner, actor, row, policy):
         if command.get("source_type") == "employee_custody":
             operations.append("custody.spend")
         return operations, [list(resource) for resource in resources]
+    if action == "customer.collection":
+        policy.require_operation("customer.collection")
+        return ["customer.collection"], [[command["source_type"], command["source_id"]]]
     operation = _refund_operation(action)
     policy.require_operation(operation)
-    if action != "refund.create":
+    if action not in {"refund.create", "refund.record_execution"}:
         resource = await _case_resource(db, owner, actor, row, policy)
     elif command["method"] == "bank":
         if not command.get("bank_id"):

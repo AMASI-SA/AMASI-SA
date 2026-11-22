@@ -46,6 +46,7 @@ OPERATION_LABELS = {
     "courier.review": "مراجعة إيصالات الموصلين",
     "customer.refund_request": "تسجيل طلب استرجاع عميل",
     "customer.refund_execute": "تنفيذ رد مبلغ لعميل",
+    "customer.collection": "تسجيل تحصيل متبقي طلب عميل",
 }
 RESOURCE_KIND_LABELS = {
     "bank": "الحسابات البنكية",

@@ -29,6 +29,7 @@ FINANCIAL_ACTIONS = frozenset({
     "movement_saved", "order_bank_credited", "prepaid_shipping_paid",
     "driver_payment_review_approved", "customer_return_saved",
     "salla_customer_compensation_source_confirmed", "customer_exchange_saved",
+    "customer_collection_recorded", "financial_refund_bank_confirmed", "financial_refund_execution_recorded",
 })
 SYSTEM_ACTORS = frozenset({"operational_order_worker"})
 NON_DEBT_PARTIES = frozenset({"operating_expense", "owner_withdrawal", "bank", "cash"})
@@ -46,7 +47,7 @@ _BUILDING = {}
 from operational_balance_archive import ArchiveError, SNAPSHOT, unpack_financial_snapshot
 
 ACTIVITY_FIELDS = {"_id": 0, "owner_id": 1, "revision": 1, "status": 1, "started_at": 1,
-                   "movements": 1, "audit": 1, "customer_returns": 1,
+                   "movements": 1, "audit": 1, "customer_returns": 1, "customer_collections": 1,
                    "driver_payment_review_facts": 1, "engine.obligations": 1, SNAPSHOT: 1}
 
 
@@ -196,6 +197,20 @@ def _refund_row(case):
     return row
 
 
+def _collection_row(case):
+    if case.get("status") != "confirmed" or case.get("destination_type") not in {"bank", "provider"}:
+        return None
+    raw = {"occurred_at": case["executed_at"], "actor_id": case["created_by"],
+           "currency": case["currency"], "kind": "customer_collection", "reference": case["reference"],
+           "order_number": case["order_number"], "note": case["reason"]}
+    row = _base("customer_collection:" + case["id"], raw, account_type=case["destination_type"],
+                account_id=case["destination_id"], account_name=case["destination_name"], amount=case["amount"],
+                currency=case["currency"], direction="incoming", party_type="customer")
+    row["_basis"] = digest([_seal_basis(row), case.get("fee_amount"), case.get("fee_status")])
+    row["_actor_recorded_name"] = case.get("created_by_snapshot", {}).get("name")
+    return row
+
+
 def _pos_row(fact):
     preparation_checkpoint()
     raw = {"occurred_at": fact["approved_at"], "actor_id": fact["approved_by"], "currency": fact["currency"],
@@ -216,9 +231,20 @@ def operational_rows(state, allowed=None):
     preparation_checkpoint()
     by_id = {row["id"]: row for row in checked_rows(facts)}
     rows = [item for movement in checked_rows(state.get("movements", [])) for item in _movement_rows(movement, by_id, allowed)]
+    from operational_workspace_refunds import recorded_bank_refund_match
     rows.extend(row for case in checked_rows(state.get("customer_returns", []))
                 if (allowed is None or (case.get("refund_source_type"), case.get("refund_source_id")) in allowed)
+                and not recorded_bank_refund_match(state, case)
                 and (row := _refund_row(case)) is not None)
+    from operational_customer_collection_effects import collection_match
+    for case in checked_rows(state.get("customer_collections", [])):
+        if allowed is not None and (case.get("destination_type"), case.get("destination_id")) not in allowed:
+            continue
+        if case.get("destination_type") == "bank" and collection_match(state, case):
+            continue  # Its canonical bank movement already appears above.
+        row = _collection_row(case)
+        if row is not None:
+            rows.append(row)
     rows.extend(_pos_row(fact) for fact in checked_rows(facts) if fact["payment_method"] == "card_terminal"
                 and (allowed is None or ("pos_receivable", fact["destination_id"]) in allowed))
     identities = [row["id"] for row in checked_rows(rows)]
@@ -234,8 +260,10 @@ def _affected(state, event):
         return {"movement:" + str(after["id"]), "movement:" + str(after["id"]) + ":destination"}
     if action == "driver_payment_review_approved":
         return {"movement:" + str(after["movement_id"])} if after.get("movement_id") else {"pos:" + str(after["id"])}
-    if action in {"customer_return_saved", "salla_customer_compensation_source_confirmed"}:
+    if action in {"customer_return_saved", "salla_customer_compensation_source_confirmed", "financial_refund_bank_confirmed", "financial_refund_execution_recorded"}:
         return {"refund:" + str(after["id"])} if _refund_row(after) and not _refund_row(before) else set()
+    if action == "customer_collection_recorded":
+        return {"customer_collection:" + str(after["id"])} if _collection_row(after) else set()
     if action == "customer_exchange_saved":
         previous = {row["movement_id"] for row in before.get("contributions", [])}
         return {"movement:" + row["movement_id"] for row in after.get("contributions", [])
@@ -303,7 +331,15 @@ def cash_positions(state, keys):
         key = (case.get("refund_source_type"), case.get("refund_source_id"), case.get("currency"))
         if (key in keys and key[0] == "bank"
                 and case.get("status") in {"refunded", "salla_refund_confirmed"}):
+            from operational_workspace_refunds import recorded_bank_refund_match
+            if recorded_bank_refund_match(state, case):
+                continue
             add(key, -Decimal(_amount(case["amount"])), case.get("refund_source_name"))
+    from operational_customer_collection_effects import collection_match
+    for case in state.get("customer_collections", []):
+        key = (case.get("destination_type"), case.get("destination_id"), case.get("currency"))
+        if key in keys and key[0] == "bank" and case.get("status") == "confirmed" and collection_match(state, case) is None:
+            add(key, Decimal(_amount(case["amount"])), case.get("destination_name"))
     return parties
 
 
@@ -412,8 +448,10 @@ def capture_after_balances(state, event):
         selected = ([_pos_row(fact)] if fact["payment_method"] == "card_terminal" else [
             row for movement in state.get("movements", []) if movement.get("id") == fact["movement_id"]
             for row in _movement_rows(movement, {fact["id"]: fact})])
-    elif action in {"customer_return_saved", "salla_customer_compensation_source_confirmed"}:
+    elif action in {"customer_return_saved", "salla_customer_compensation_source_confirmed", "financial_refund_bank_confirmed", "financial_refund_execution_recorded"}:
         selected = [_refund_row(after)]
+    elif action == "customer_collection_recorded":
+        selected = [_collection_row(after)]
     else:
         selected = [row for movement in state.get("movements", []) if "movement:" + str(movement.get("id")) in affected
                     for row in _movement_rows(movement, {})]
