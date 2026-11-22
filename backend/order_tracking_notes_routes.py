@@ -1000,6 +1000,13 @@ def make_order_tracking_notes_router(
             raise HTTPException(status_code=404, detail={"code": "customer_service_instruction_not_found"})
         return context, row, can_manage
 
+    @router.get("/notifications/me/unread-preview")
+    async def my_unread_preview(response: Response, user: dict = Depends(instruction_user)):
+        context = await _actor_context(db, user)
+        from operational_unread_preview import unread_preview
+        response.headers["Cache-Control"] = "no-store"
+        return await unread_preview(db, merchant_id=context["merchant_id"], actor_id=context["actor_id"])
+
     @router.get("/notifications/me")
     async def my_notifications(directory_only: bool = False, count_only: bool = False,
         sender_id: str = Query(default="", max_length=128),
