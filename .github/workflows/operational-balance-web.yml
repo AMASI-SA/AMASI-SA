@@ -83,6 +83,9 @@ jobs:
           backend/tests/test_operational_financial_review_groups.py
           backend/tests/test_operational_financial_position_state.py
           backend/tests/test_operational_context_snapshot_reader.py
+          backend/tests/test_read_path_diagnostics.py
+          backend/tests/test_operational_context_read_diagnostics.py
+          backend/tests/test_assembly_read_diagnostics.py
           backend/tests/test_operational_financial_position_views.py
           backend/tests/test_operational_open_cost_exposure.py
           backend/tests/test_operational_bundle_cost_projection.py
@@ -102,6 +105,12 @@ jobs:
           import xml.etree.ElementTree as ET
           cases = ET.parse('operational-backend.xml').findall('.//testcase')
           assert len(cases) >= 3500, 'Operational test collection incomplete'
+          for suite, minimum in (('test_read_path_diagnostics', 15),
+                                 ('test_operational_context_read_diagnostics', 14),
+                                 ('test_assembly_read_diagnostics', 11)):
+              diagnostic_cases = [c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == suite]
+              assert len(diagnostic_cases) >= minimum, suite + ' missing cases'
+              assert not any(c.find('skipped') is not None for c in diagnostic_cases), suite + ' skipped'
           for suite in ('test_operational_refresh_parallel_profit',
                         'test_operational_refresh_party_issue_index',
                         'test_awaiting_payment_eligibility',

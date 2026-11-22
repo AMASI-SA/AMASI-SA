@@ -5,6 +5,7 @@ import asyncio
 from copy import deepcopy
 import re
 from dashboard_cpu_budget import CPUWorkBudget, PARSER_BUDGET_MS
+import read_path_diagnostics as read_diagnostics
 from salla_shipping import CURRENT_SHIPPING, projected_shipping
 from dataclasses import dataclass
 from typing import Any, Optional, Protocol
@@ -753,12 +754,27 @@ class MongoOrderRepository:
         )
         rows: list[OrderDiscoveryRow] = []
         cpu_budget = CPUWorkBudget(PARSER_BUDGET_MS)
-        async for row in cursor:
-            mapped = self._to_discovery_row(row)
+        trace = read_diagnostics.current()
+        tracing = trace is not None and trace.scope == "assembly_board"
+        if tracing:
+            read_diagnostics.count("canonical_batches", 1)
+        async for row in read_diagnostics.iterator("hydration_cursor", cursor):
+            if tracing:
+                with read_diagnostics.phase("hydrate_row", cpu=True):
+                    mapped = self._to_discovery_row(row)
+                read_diagnostics.count(
+                    "hydrated_rows" if mapped is not None else "invalid_discovery_rows", 1,
+                )
+            else:
+                mapped = self._to_discovery_row(row)
             if mapped is not None:
                 rows.append(mapped)
             try:
-                await cpu_budget.checkpoint()
+                if tracing:
+                    with read_diagnostics.phase("cooperative_yield"):
+                        await cpu_budget.checkpoint()
+                else:
+                    await cpu_budget.checkpoint()
             except asyncio.CancelledError:
                 # This checkpoint follows a settled cursor advance. Closing
                 # here cannot race Motor's active getMore/executor work.

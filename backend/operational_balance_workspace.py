@@ -17,6 +17,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+import read_path_diagnostics as read_diagnostics
 
 from operational_balance_service import (
     KINDS, active_gate, create_movement, entity, fmt, money, report,
@@ -379,25 +380,28 @@ async def resource_catalog(db, owner, policy, state, *, ad_bank_fx=False, review
         computed = {"parties": [], "obligations": [], "details": {}, "issues": []}
     elif selected_resource and selected_resource[0] in ACCOUNT_KINDS:
         from operational_party_projection_state import cash_account_projection
-        computed = await prepare_in_thread(cash_account_projection, state, *selected_resource)
+        computed = await prepare_in_thread(read_diagnostics.thread_call("report", cash_account_projection), state, *selected_resource)
     elif (selected_resource and selected_resource[0] != "provider") or selected_kind == "ad_account":
         kind, identity = selected_resource or ("ad_account", None)
         selected_state = await prepare_in_thread(party_projection_state, state, kind, identity)
-        computed = await prepare_in_thread(report, selected_state)
+        computed = await prepare_in_thread(read_diagnostics.thread_call("report", report), selected_state)
         if kind in {"store_driver", "courier"}:
             # The inbox can contain unresolved issues elsewhere in the saved accounting scope.
             computed["issues"] = computed["issues"] or state.get("engine", {}).get("issues", [])
     elif can_price_cards or provider_orders:
-        computed = await prepare_in_thread(report, state, provider_balances_sar=True,
+        computed = await prepare_in_thread(read_diagnostics.thread_call("report", report), state, provider_balances_sar=True,
             workspace_provider=selected_resource[1] if provider_orders else None)
     else:
-        computed = await prepare_in_thread(report, state, paypal_sar=True) if paypal_scope else await prepare_in_thread(report, state)
+        computed = (await prepare_in_thread(read_diagnostics.thread_call("report", report), state, paypal_sar=True)
+                    if paypal_scope else await prepare_in_thread(read_diagnostics.thread_call("report", report), state))
     include_bank_issues = (not directory_only and selected_kind in (None, "bank")
                            and (not selected_resource or selected_resource[0] == "bank"))
     if include_bank_issues:
-        review_counts = await prepare_in_thread(navigation_counts, computed, state.get("engine", {}).get("issues", []))
+        review_counts = await prepare_in_thread(read_diagnostics.thread_call("navigation", navigation_counts),
+                                               computed, state.get("engine", {}).get("issues", []))
     else:
-        review_counts = navigation_counts(computed)
+        with read_diagnostics.phase("navigation", cpu=True):
+            review_counts = navigation_counts(computed)
     balances = {(r["party_type"], r["party_id"], r["currency"]): r for r in computed["parties"]}
     funding_kinds = payment_source_kinds(policy)
     items = []
@@ -407,7 +411,9 @@ async def resource_catalog(db, owner, policy, state, *, ad_bank_fx=False, review
             continue
         if not policy.owner_override and not any(r["kind"] == kind for r in policy.resources):
             continue
-        for row in await entities(db, owner, kind, operational_state=state):
+        with read_diagnostics.phase("catalog." + kind):
+            catalog = await entities(db, owner, kind, operational_state=state)
+        for row in catalog:
             if selected_resource and row["id"] != selected_resource[1]:
                 continue
             access = policy.resource(kind, row["id"])
@@ -460,6 +466,8 @@ async def resource_catalog(db, owner, policy, state, *, ad_bank_fx=False, review
                           **({} if directory_only else issue_badge(kind, row["id"], access, bool(computed.get("as_of")), bool(computed["issues"]), review_counts, reviewed_counts or {})),
                           **({"prepaid_shipping_cash": True} if kind == "cash" and prepaid_shipping_cash(state, row["id"]) else {}),
                           "balance": balance})
+        # Match the former temporary iterator's lifetime before the next read.
+        del catalog
     return items, computed
 
 
@@ -946,11 +954,13 @@ def install_workspace_routes(router, db, current_user, scope):
         from operational_balance_store import STATES, initial
         fields = dict.fromkeys(("owner_id", "status", "revision", "started_at", "pos_receivable_binding",
                                 "ad_funding", "courier_tariffs.payment_mode", "courier_tariffs.cash_account.id", "engine.ad_balance_sar_basis"), 1)
-        return await db[STATES].find_one({"_id": owner, "owner_id": owner}, fields) or initial(owner)
+        with read_diagnostics.phase("directory_state_read"):
+            return await db[STATES].find_one({"_id": owner, "owner_id": owner}, fields) or initial(owner)
 
     async def checked_read(user, callback, *, ad_bank_fx=False, selected_resource=None, invoice_headers=False, invoice_detail=None, directory_only=False, balance_only=False, forecast_only=False, provider_positions=False, provider_orders=False, selected_kind=None):
         from operational_financial_position_state import read_financial_position_state
-        actor, owner, source, policy = await load(user)
+        with read_diagnostics.phase("access_initial"):
+            actor, owner, source, policy = await load(user)
         if selected_resource and (not policy.resource(*selected_resource)["balance"] if balance_only else policy.resource(*selected_resource)["movements"] == "none"):
             fail("operational_workspace_not_found", "الكشف غير متاح", 404)
         # Workspace reports need current financial proofs, not historical audit
@@ -964,11 +974,13 @@ def install_workspace_routes(router, db, current_user, scope):
         if invoice_headers:
             from operational_workspace_supplier_invoices import fill_historical_headers
             await fill_historical_headers(db, owner, resources, computed, state, policy)
-        result = await prepare_in_thread(callback, actor, owner, policy, state, resources, computed)
+        result = await prepare_in_thread(read_diagnostics.thread_call("project", callback),
+                                        actor, owner, policy, state, resources, computed)
         if invoice_detail:
             from operational_workspace_supplier_invoices import read_invoice
             result = await read_invoice(db, owner, selected_resource[1], invoice_detail, policy, result)
-        current_actor, current_owner, _, current = await load(user)
+        with read_diagnostics.phase("access_final"):
+            current_actor, current_owner, _, current = await load(user)
         if (actor["id"], owner, policy.version, policy.owner_override) != (current_actor["id"], current_owner, current.version, current.owner_override):
             fail("operational_access_changed", "تغيرت صلاحياتك؛ أعد فتح الصفحة", 409)
         return result
@@ -986,7 +998,10 @@ def install_workspace_routes(router, db, current_user, scope):
                     "capabilities": {"manage_access": policy.owner_override,
                                      "create_entries": state["status"] == "active" and any(row["operations"] for row in resources)},
                     "operations": [{"key": key, "label": label} for key, label in OPERATION_LABELS.items() if policy.can_operation(key)]}
-        return await run_visible_report_read(request, lambda: checked_read(user, project, ad_bank_fx=ad_bank_fx, directory_only=directory_only, provider_positions=provider_positions))
+        mode = "directory" if directory_only else "home" if home_preview else "full"
+        return await run_visible_report_read(request, lambda: read_diagnostics.sample("operational_context",
+            checked_read(user, project, ad_bank_fx=ad_bank_fx, directory_only=directory_only, provider_positions=provider_positions),
+            mode=mode))
 
     @router.get("/workspace/specialist/{which}")
     async def specialist(request: Request, which: Literal["returns", "exchanges", "fees", "reports", "specialized", "access"],
