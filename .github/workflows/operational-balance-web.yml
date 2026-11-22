@@ -24,6 +24,7 @@ jobs:
       PYTHON_DOTENV_DISABLED: '1'
       OPERATIONAL_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
       MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+      DEMAND_READ_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
     steps:
       - uses: actions/checkout@v4
         with:
@@ -40,7 +41,7 @@ jobs:
           httpx==0.28.1 motor==3.7.1 pymongo==4.18.3 python-multipart==0.0.32
           cryptography==50.0.0 reportlab==4.5.1 PyMuPDF==1.28.2 qrcode==8.2
           bcrypt==4.1.3 PyJWT==2.15.0 mongomock==4.3.0
-          mongomock-motor==0.0.36 openpyxl==3.1.5 email-validator==2.3.0
+          mongomock-motor==0.0.36 openpyxl==3.1.5 email-validator==2.3.0 python-dotenv==1.2.2
       - name: Start isolated projection Replica Set
         run: |
           set -euo pipefail
@@ -97,6 +98,21 @@ jobs:
           backend/tests/test_provider_fee_runtime_binding.py
           backend/tests/test_bnpl_fee_completeness_boundaries.py
           --asyncio-mode=auto --tb=short --junitxml=operational-backend.xml
+      - name: Run durable demand-read store, child, HTTP and builder contracts
+        env:
+          DEMAND_READ_BENCHMARK_REPORT: operational-demand-read-benchmark.json
+          DEMAND_READ_REGISTER_BENCHMARK_REPORT: operational-demand-register-benchmark.json
+        # The explicit loopback fixture makes missing Mongo an error rather than
+        # allowing the real transaction/subprocess cases to silently skip.
+        run: >-
+          python -B -m pytest --noconftest -p no:cacheprovider -q
+          backend/tests/test_demand_read_store.py
+          backend/tests/test_demand_read_jobs.py
+          backend/tests/test_operational_workspace_demand_reads.py
+          backend/tests/test_operational_workspace_demand_http.py
+          backend/tests/test_dashboard_demand_builders.py
+          backend/tests/test_assembly_demand_builders.py
+          --asyncio-mode=auto --tb=short --junitxml=operational-demand-read.xml
       - name: Preserve shipping summary and calculator contracts
         run: python -B -m pytest --noconftest -q backend/tests/test_dashboard_shipping_ssot.py backend/tests/test_mz2_shipping_calculator.py --tb=short
       - name: Reject missing or skipped tests
@@ -174,12 +190,62 @@ jobs:
               assert len(found) >= minimum, suite + ' demand-only/completeness coverage missing'
           assert not any(c.find(tag) is not None for c in cases for tag in ('skipped', 'failure', 'error'))
           PY
+      - name: Reject missing, skipped or failed demand-read acceptance
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          cases = ET.parse('operational-demand-read.xml').findall('.//testcase')
+          for suite, minimum in (
+              ('test_demand_read_store', 13),
+              ('test_demand_read_jobs', 14),
+              ('test_operational_workspace_demand_reads', 29),
+              ('test_operational_workspace_demand_http', 6),
+              ('test_dashboard_demand_builders', 7),
+              ('test_assembly_demand_builders', 13),
+          ):
+              found = [c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == suite]
+              assert len(found) >= minimum, (suite + ' missing acceptance cases', len(found), minimum)
+          names = {c.get('name') for c in cases}
+          for name in (
+              'test_immutable_ready_generation_survives_new_client_and_reads_one_indexed_page',
+              'test_actual_assembly_child_reads_canonical_fixture_and_publishes_ready',
+              'test_actual_child_keeps_health_and_bootstrap_responsive_on_same_large_fixture',
+              'test_same_data_twenty_filtered_pages_reuse_one_report_and_source_read',
+              'test_statement_reassembles_full_period_and_report_binds_fresh_bootstrap',
+              'test_ready_position_and_release_are_actor_scoped_and_do_not_write_money',
+              'test_demand_report_has_bootstrap_scope_and_permission_binding',
+          ):
+              assert name in names, name + ' was not collected'
+          for name in ('test_saved_resource_preserves_explicit_usd_ad_fx_flag',
+                       'test_ready_statement_disconnect_stops_before_next_chunk',
+                       'test_admitted_demand_releases_its_consumer_when_http_read_fails'):
+              assert any(n == name or n.startswith(name + '[') for n in names), name + ' was not collected'
+          assert not any(c.find(tag) is not None for c in cases for tag in ('skipped', 'failure', 'error'))
+          evidence = json.loads(Path('operational-demand-read-benchmark.json').read_text())
+          assert evidence['environment'] == 'isolated loopback Mongo; ASGI transport; no browser/network timing'
+          assert evidence['ready_target_met'] is True
+          assert type(evidence['first_useful_target_met']) is bool
+          assert evidence['child'] and all(row['outcome'] == 'ready' for row in evidence['child'])
+          register = json.loads(Path('operational-demand-register-benchmark.json').read_text())
+          assert register['environment'] == 'isolated loopback Mongo; ASGI; in-process builder test seam for exact work counts; no browser/network timing'
+          assert register['report_reduction_fraction'] >= .8 and register['ready_p95_ms'] < 1000
+          assert register['financial_results_equal'] is True and register['source_unchanged'] is True
+          # Keep the cold result visible even when its target is not met. It is
+          # controlled ASGI evidence, not a browser or production latency claim.
+          print('Cold home target met:', evidence['first_useful_target_met'])
+          print('Demand-read acceptance:', len(cases), 'executed cases; zero skips/failures/errors')
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: operational-backend-results
           path: |
             operational-backend.xml
+            operational-demand-read.xml
+            operational-demand-read-benchmark.json
+            operational-demand-register-benchmark.json
             operational-source-sha.txt
             operational-source-tree.txt
           if-no-files-found: error
@@ -229,6 +295,9 @@ jobs:
           '**/mezanSuppliersV2.test.js'
           '**/SupplierPaymentWorkspace.test.jsx'
           '**/src/lib/safeSpreadsheet.test.js'
+          '**/src/lib/demandRead.test.js'
+          '**/src/hooks/useDashboardCardSnapshot.test.jsx'
+          '**/src/components/fulfillment/PreparationWorkDashboard.loading.test.jsx'
           --json --outputFile=operational-frontend.json
       - name: Reject missing or skipped tests
         run: |
@@ -245,10 +314,21 @@ jobs:
                                 'NativePurchaseReview.test.jsx', 'nativePurchaseLinkApi.test.js',
                                 'ExternalOperationControls.test.jsx', 'ProviderFeeSetup.test.jsx',
                                 'ProviderFeeCompleteness.test.jsx', 'OrderDetailsV2.shippingIdentity.test.jsx',
-                                'safeSpreadsheet.test.js']) {
+                                'safeSpreadsheet.test.js', 'demandRead.test.js', 'workspaceReadHooks.test.jsx',
+                                'useDashboardCardSnapshot.test.jsx', 'PreparationWorkDashboard.loading.test.jsx',
+                                'ApprovedFinance.demand.test.jsx', 'ApprovedFinance.loading.test.jsx',
+                                'ApprovedEntry.test.jsx', 'ApprovedLedger.test.jsx', 'ApprovedReports.test.jsx',
+                                'ApprovedOperations.test.jsx']) {
             const suite = r.testResults.find(s => s.name.endsWith('/' + suffix));
             if (!suite || !suite.assertionResults.length || suite.assertionResults.some(t => t.status !== 'passed'))
               throw Error('Combined UI suite missing or incomplete: ' + suffix);
+          }
+          for (const [suffix, minimum] of [['demandRead.test.js', 14], ['workspaceReadHooks.test.jsx', 1],
+                                          ['useDashboardCardSnapshot.test.jsx', 26],
+                                          ['PreparationWorkDashboard.loading.test.jsx', 3]]) {
+            const suite = r.testResults.find(s => s.name.endsWith('/' + suffix));
+            if (!suite || suite.assertionResults.length < minimum)
+              throw Error('Demand lifecycle coverage missing: ' + suffix);
           }
           JS
       - uses: actions/upload-artifact@v4

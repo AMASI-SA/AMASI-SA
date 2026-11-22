@@ -30,6 +30,46 @@ test('only an explicit preparation polls, with one consumer, then a ready result
   expect(http.delete).toHaveBeenCalledWith('/operational-balances/workspace/read-demand/projection-1', expect.objectContaining({ params: { consumer_id: scope.consumerId } }));
 });
 
+test('ordinary preparation checks at 500ms, 1000ms, then 2000ms and stops at ready', async () => {
+  const preparing = { ...pending, data: { ...pending.data, retry_after_ms: 2000 } };
+  const request = jest.fn().mockResolvedValueOnce(preparing).mockResolvedValueOnce(preparing)
+    .mockResolvedValueOnce(preparing).mockResolvedValueOnce(preparing)
+    .mockResolvedValue({ status: 200, data: { result: 'ready' } });
+  const result = demandRead(request);
+  await flush();
+  for (const [calls, delay] of [[1, 500], [2, 1000], [3, 2000], [4, 2000]]) {
+    jest.advanceTimersByTime(delay - 1); await flush();
+    expect(request).toHaveBeenCalledTimes(calls);
+    jest.advanceTimersByTime(1); await flush();
+    expect(request).toHaveBeenCalledTimes(calls + 1);
+  }
+  await expect(result).resolves.toEqual({ result: 'ready' });
+  expect(new Set(request.mock.calls.map(([config]) => config.headers['X-Mezan-Read-Consumer'])).size).toBe(1);
+  expect(request.mock.calls[0][0].headers['X-Mezan-Read-Poll']).toBeUndefined();
+  expect(request.mock.calls.slice(1).every(([config]) => config.headers['X-Mezan-Read-Poll'] === '1')).toBe(true);
+  jest.advanceTimersByTime(60000); await flush();
+  expect(request).toHaveBeenCalledTimes(5);
+});
+
+test('a slower server backpressure hint is never shortened, including beyond ten seconds', async () => {
+  const request = jest.fn().mockResolvedValueOnce({ ...pending, data: { ...pending.data, retry_after_ms: 12000 } })
+    .mockResolvedValue({ status: 200, data: { result: 'ready' } });
+  const result = demandRead(request);
+  await flush();
+  jest.advanceTimersByTime(11999); await flush();
+  expect(request).toHaveBeenCalledTimes(1);
+  jest.advanceTimersByTime(1); await flush();
+  await expect(result).resolves.toEqual({ result: 'ready' });
+  expect(request).toHaveBeenCalledTimes(2);
+});
+
+test.each([2147483648, 1e40, -1, 0.5, null])('invalid timer hint %p fails instead of causing a rapid polling loop', async hint => {
+  const request = jest.fn().mockResolvedValue({ ...pending, data: { ...pending.data, retry_after_ms: hint } });
+  await expect(demandRead(request)).rejects.toThrow('Invalid read preparation response');
+  jest.advanceTimersByTime(60000); await flush();
+  expect(request).toHaveBeenCalledTimes(1);
+});
+
 test('aborting preparation clears the poll and releases only its own consumer', async () => {
   const scope = createReadDemand(), controller = new AbortController(), request = jest.fn().mockResolvedValue(pending);
   const result = demandRead(request, { signal: controller.signal, readDemand: scope });

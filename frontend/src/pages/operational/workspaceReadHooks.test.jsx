@@ -26,7 +26,7 @@ test('a delayed hidden-page DELETE cannot cancel a resumed read of the same quer
       return {status:200,data:{result:'ready'}};
     }
     leases.add(id);
-    return {status:202,data:{status:'preparing',key:'same-result',retry_after_ms:500}};
+    return {status:202,data:{status:'preparing',key:'same-result',retry_after_ms:2000}};
   });
   const host=document.createElement('div');document.body.appendChild(host);const root=createRoot(host);
   try{

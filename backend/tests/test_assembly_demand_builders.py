@@ -146,7 +146,38 @@ async def test_cold_compatible_read_keeps_original_contract_while_request_is_ali
     assert response.status_code == 200
     assert demand.await_count == 3
     assert len({call.args[2] for call in demand.await_args_list}) == 1
+    assert [call.kwargs["retry"] for call in demand.await_args_list] == [True, False, False]
     release.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_initial_assembly_intent_retries_failed_job_and_wakes_but_status_poll_does_not(monkeypatch):
+    import background_worker_process
+
+    db = await database("assembly_failed_intent")
+    app = FastAPI()
+    async def user():
+        return {"id": "owner", "role": "owner"}
+    app.include_router(pieces.make_preparation_piece_operations_router(db, user))
+    calls = []
+    async def demand(database, spec, consumer_id, **options):
+        calls.append(options)
+        return {"status": "preparing" if options["retry"] else "failed", "key": store.projection_key(spec),
+                "error_code": "read_preparation_failed"}
+    monkeypatch.setattr(store, "demand", demand)
+    monkeypatch.setattr(store, "read_ready", AsyncMock(return_value=None))
+    wake = AsyncMock()
+    monkeypatch.setattr(background_worker_process, "wake_read_projections", wake)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        params = {"state": "in_progress", "demand": True}
+        headers = {"X-Mezan-Read-Consumer": "retrying-visible-reader"}
+        admitted = await client.get("/preparation-work-v1/assembly/orders", params=params, headers=headers)
+        polled = await client.get("/preparation-work-v1/assembly/orders", params=params,
+                                  headers={**headers, "X-Mezan-Read-Poll": "1"})
+    assert admitted.status_code == 202 and polled.status_code == 503
+    assert [call["retry"] for call in calls] == [True, False]
+    assert all(call["refresh"] is False for call in calls)
+    wake.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -183,6 +214,30 @@ async def test_native_employee_authority_is_rebuilt_and_revocation_stops_saved_r
     with pytest.raises(HTTPException) as denied:
         await models.authorize_spec(db, spec)
     assert denied.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_persisted_assembly_owner_flag_preserves_existing_authority_and_release_scope(monkeypatch):
+    from dashboard_card_read_models import make_spec as card_spec
+    from read_demand_actor import release_current
+
+    db = await database("assembly_owner_flag")
+    await db.users.update_one({"id": "owner"}, {"$set": {"role": "employee", "is_owner": True}})
+    user = {"id": "owner", "role": "employee", "is_owner": True}
+    spec = await models.make_spec(db, user=user, state="in_progress")
+    assert spec["owner_id"] == spec["actor_id"] == "owner"
+    assert await models.authorize_spec(db, spec)
+    release = AsyncMock()
+    monkeypatch.setattr(store, "release_by_key", release)
+    assert await release_current(db, user, store.projection_key(spec), "flag-reader") == {"released": True}
+    assert release.await_args.kwargs["owner_id"] == "owner"
+    # This is an existing assembly rule, not a new dashboard owner grant.
+    with pytest.raises(HTTPException) as denied:
+        await card_spec(db, user=user, section="executive", filters={})
+    assert denied.value.status_code == 403
+    await db.users.update_one({"id": "owner"}, {"$set": {"is_owner": False}})
+    with pytest.raises(HTTPException):
+        await models.authorize_spec(db, spec)
 
 
 @pytest.mark.asyncio

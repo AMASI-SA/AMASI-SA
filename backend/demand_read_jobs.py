@@ -242,7 +242,31 @@ async def execute_claim(db, key, token, generation, *, builder=None, authorize=N
             metrics["peak_rss_kib"] = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
         with suppress(Exception):
             metrics["queue_ms"] = max(0.0, (row["started_at"] - row["requested_at"]).total_seconds() * 1000)
+        with suppress(Exception):
+            metrics.update(_mongo_driver_metrics())
         _emit_metrics(metrics)
+
+
+def _mongo_driver_metrics():
+    """Bounded driver/network-inclusive timing samples, not executionStats.
+
+    Each production child owns one Mongo client and one job. Read the existing
+    listener's bounded snapshot without issuing queries or exporting shapes.
+    """
+    from mongo_observability import mongo_metrics
+    snapshot = mongo_metrics.snapshot()
+    command = snapshot.get("operation_duration_ms") or {}
+    checkout = snapshot.get("checkout_wait_ms") or {}
+    selected = {
+        "mongo_driver_command_p50_ms": command.get("p50"),
+        "mongo_driver_command_p95_ms": command.get("p95"),
+        "mongo_driver_command_p99_ms": command.get("p99"),
+        "mongo_driver_checkout_p95_ms": checkout.get("p95"),
+        "mongo_driver_command_timeouts": snapshot.get("operation_timeouts"),
+        "mongo_driver_checkout_timeouts": snapshot.get("checkout_timeouts"),
+    }
+    return {key: value for key, value in selected.items()
+            if type(value) in (int, float) and 0 <= value <= 10 ** 12}
 
 
 def _emit_metrics(metrics):

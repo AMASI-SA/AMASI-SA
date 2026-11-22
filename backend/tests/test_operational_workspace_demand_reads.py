@@ -1,5 +1,7 @@
 """Demand-only workspace reads against the public route and canonical reducers."""
 from copy import deepcopy
+import asyncio
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -230,4 +232,97 @@ def test_demand_report_has_bootstrap_scope_and_permission_binding():
         assert result["header"]["view"] == "summary"
         for key in ("session_scope", "permission_version", "owner_override"):
             assert result["header"][key] == bootstrap[key]
+    run(scenario)
+
+
+@pytest.mark.parametrize("ad_bank_fx", [False, True])
+def test_saved_resource_preserves_explicit_usd_ad_fx_flag(ad_bank_fx):
+    from test_operational_balance_integration import seed_ad_account
+    async def scenario(db, client):
+        await seed_ad_account(db)
+        await db.mezan_integration_accounts_v2.update_one(
+            {"mezan_integration_account_id": "ia"}, {"$set": {"currency": "USD"}})
+        path = "/resource/ad_account/ad"
+        expected = await client.get(BASE + path, params={"ad_bank_fx": ad_bank_fx})
+        assert expected.status_code == 200, expected.text
+        _, result = await project(db, "operational_resource", path,
+            filters={"ad_bank_fx": ad_bank_fx}, target=("ad_account", "ad"))
+        for key, value in expected.json().items():
+            assert result["header"][key] == value, key
+        assert bool(result["header"]["operations"]) is ad_bank_fx
+        assert ("ad_bank_funding" in result["header"]) is ad_bank_fx
+    run(scenario)
+
+
+@pytest.mark.parametrize("already_disconnected", [True, False])
+def test_ready_statement_disconnect_stops_before_next_chunk(already_disconnected, monkeypatch):
+    from operational_workspace_demand_routes import serve_projection
+    async def scenario(db, client):
+        offsets, cancelled = [], []
+        second_started = asyncio.Event()
+        async def saved(db, spec, *, offset, limit, snapshot=None):
+            offsets.append(offset)
+            if offset:
+                second_started.set()
+                try:
+                    await asyncio.Event().wait()
+                except asyncio.CancelledError:
+                    cancelled.append(offset)
+                    raise
+            return {"header": {}, "items": [{"id": str(i)} for i in range(300)],
+                    "total": 601, "snapshot": "synthetic-generation", "generated_at": datetime.now(timezone.utc)}
+        monkeypatch.setattr("demand_read_store.read_ready", saved)
+        async def disconnected():
+            return already_disconnected
+        async def receive():
+            await second_started.wait()
+            return {"type": "http.disconnect"}
+        request = SimpleNamespace(url=SimpleNamespace(path=BASE + "/statements/bank/bank"),
+            headers={}, is_disconnected=disconnected, receive=receive)
+        with pytest.raises(HTTPException) as stopped:
+            await asyncio.wait_for(serve_projection(db, {"id": "owner"}, request, "operational_statement",
+                resource=("bank", "bank"), filters={"date_from": "2026-11-01", "date_to": "2026-11-22", "purpose": "view"},
+                page_size=300), timeout=3)
+        assert stopped.value.status_code == 499
+        assert offsets == ([] if already_disconnected else [0, 300])
+        assert cancelled == ([] if already_disconnected else [300])
+    run(scenario)
+
+
+@pytest.mark.parametrize("failure", ["disconnect", "permission"])
+def test_admitted_demand_releases_its_consumer_when_http_read_fails(failure, monkeypatch):
+    from operational_workspace_demand_routes import serve_projection
+    from demand_read_store import projection_key
+    async def scenario(db, client):
+        admitted, released = [], []
+        waiting = asyncio.Event()
+        async def missing(*args, **kwargs):
+            return None
+        async def demand(db, spec, consumer, **kwargs):
+            admitted.append(consumer)
+            if failure == "permission":
+                await db.users.update_one({"id": "owner"}, {"$set": {"disabled": True}})
+            return {"status": "preparing", "key": projection_key(spec)}
+        async def release(db, spec, consumer):
+            released.append((spec["owner_id"], spec["actor_id"], consumer))
+        async def wake():
+            waiting.set()
+            await asyncio.Event().wait()
+        async def disconnected():
+            return False
+        async def receive():
+            await waiting.wait()
+            return {"type": "http.disconnect"}
+        monkeypatch.setattr("demand_read_store.read_ready", missing)
+        monkeypatch.setattr("demand_read_store.demand", demand)
+        monkeypatch.setattr("demand_read_store.release", release)
+        monkeypatch.setattr("background_worker_process.wake_read_projections", wake)
+        request = SimpleNamespace(url=SimpleNamespace(path=BASE + "/home"),
+            headers={"X-Mezan-Read-Consumer": "cancelled-http-consumer"},
+            is_disconnected=disconnected, receive=receive)
+        with pytest.raises(HTTPException) as stopped:
+            await asyncio.wait_for(serve_projection(db, {"id": "owner"}, request, "operational_home"), timeout=3)
+        assert stopped.value.status_code == (499 if failure == "disconnect" else 403)
+        assert admitted == ["cancelled-http-consumer"]
+        assert released == [("owner", "owner", "cancelled-http-consumer")]
     run(scenario)

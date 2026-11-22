@@ -146,6 +146,146 @@ async def test_directory_http_acquires_only_one_page_and_focus_uses_stored_ordin
 
 
 @pytest.mark.asyncio
+async def test_statement_reassembles_full_period_and_report_binds_fresh_bootstrap(read_db):
+    db = read_db
+    before = await seed_workspace(db, suppliers=2, movements=360)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application(db)), base_url="http://isolated") as client:
+        path = BASE + "/statements/bank/bank"
+        period = {"date_from": "2026-11-02", "date_to": "2026-11-21", "purpose": "view"}
+        canonical = await client.get(path, params=period)
+        assert canonical.status_code == 200, canonical.text
+        assert len(canonical.json()["items"]) > 300
+        pending = await client.get(path, params={**period, "demand": True}, headers=HEADERS)
+        assert pending.status_code == 202, pending.text
+        assert await settle(db) is True
+        ready = await client.get(path, params={**period, "demand": True}, headers=HEADERS)
+        assert ready.status_code == 200, ready.text
+        for key, value in canonical.json().items():
+            if key != "generated_at":
+                assert ready.json()[key] == value, key
+        bootstrap = (await client.get(BASE + "/bootstrap")).json()
+        report_path = BASE + "/report"
+        report_query = {"view": "summary"}
+        canonical = await client.get("/api/operational-balances/financial-position", params=report_query)
+        assert canonical.status_code == 200, canonical.text
+        assert (await client.get(report_path, params=report_query, headers=HEADERS)).status_code == 202
+        assert await settle(db) is True
+        report = await client.get(report_path, params=report_query, headers=HEADERS)
+        assert report.status_code == 200, report.text
+        for key in ("session_scope", "permission_version", "owner_override"):
+            assert report.json()[key] == bootstrap[key]
+        for key, value in canonical.json().items():
+            if key != "generated_at":
+                assert report.json()[key] == value, key
+        # A stale forecast/report request must reject the known mismatch before
+        # starting a heavy job, preserving the existing snapshot-binding error.
+        await db[STATES].update_one({"_id": "owner"}, {"$inc": {"revision": 1}})
+        rejected = await client.get(report_path, params={**report_query, "expected_revision": 5,
+            "expected_started_at": before["started_at"], "expected_as_of": "2026-11-21T00:00:00+00:00"}, headers=HEADERS)
+        assert rejected.status_code == 409, rejected.text
+    after = await db[STATES].find_one({"_id": "owner"})
+    after["revision"] = before["revision"]
+    assert after == before
+
+
+@pytest.mark.asyncio
+async def test_ready_position_and_release_are_actor_scoped_and_do_not_write_money(read_db):
+    db = read_db
+    before = await seed_workspace(db, suppliers=30, movements=40)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application(db)), base_url="http://isolated") as client:
+        pending = await client.get(BASE + "/position", headers=HEADERS)
+        assert pending.status_code == 202, pending.text
+        key = pending.json()["key"]
+        assert await settle(db) is True
+        response = await client.get(BASE + "/position", params={"page": 2}, headers=HEADERS)
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["page_size"] == 24 and len(body["items"]) <= 24
+        assert body["summary"]["available_cash"]["SAR"] == "1000496.00"
+        assert body["report"]["view"] == "summary"
+        before_job = await db[store.JOBS].find_one({"_id": key})
+        other = await client.delete(BASE + "/read-demand/" + key,
+            params={"consumer_id": HEADERS["X-Mezan-Read-Consumer"]}, headers={"x-test-user": "other"})
+        assert other.status_code == 200
+        assert await db[store.JOBS].find_one({"_id": key}) == before_job
+        # A genuinely unused cold demand stops without computing a report.
+        pending = await client.get(BASE + "/directory", params={"group": "parties", "kind": "supplier"}, headers=HEADERS)
+        assert pending.status_code == 202
+        result = await client.delete(BASE + "/read-demand/" + pending.json()["key"],
+            params={"consumer_id": HEADERS["X-Mezan-Read-Consumer"]})
+        assert result.status_code == 200
+        assert await settle(db) is False
+    assert await db[STATES].find_one({"_id": "owner"}) == before
+
+
+@pytest.mark.asyncio
+async def test_same_data_twenty_filtered_pages_reuse_one_report_and_source_read(read_db, monkeypatch):
+    db = read_db
+    before = await seed_workspace(db, suppliers=200, movements=5000)
+    import operational_financial_position_state as financial_source
+    counts = {"reports": 0, "financial_snapshots": 0}
+    report, read_state = workspace.report, financial_source.read_financial_position_state
+    def counted_report(*args, **kwargs):
+        counts["reports"] += 1
+        return report(*args, **kwargs)
+    async def counted_read(*args, **kwargs):
+        counts["financial_snapshots"] += 1
+        return await read_state(*args, **kwargs)
+    monkeypatch.setattr(workspace, "report", counted_report)
+    monkeypatch.setattr(financial_source, "read_financial_position_state", counted_read)
+    filters = {"q": "مرجع", "date_from": "2026-11-03", "date_to": "2026-11-20", "page_size": 8}
+    path = BASE + "/movements"
+    legacy_times, ready_times, canonical = [], [], []
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application(db)), base_url="http://isolated") as client:
+        for page in range(1, 21):
+            stamp = time.perf_counter()
+            response = await client.get(path, params={**filters, "page": page})
+            legacy_times.append((time.perf_counter() - stamp) * 1000)
+            assert response.status_code == 200, response.text
+            canonical.append(response.json())
+        baseline = dict(counts)
+        assert baseline == {"reports": 20, "financial_snapshots": 20}
+        counts.update(reports=0, financial_snapshots=0)
+        cold_start = time.perf_counter()
+        pending = await asyncio.gather(*[client.get(path, params={**filters, "demand": True, "page": i + 1},
+            headers={"X-Mezan-Read-Consumer": f"register_benchmark_{i}"}) for i in range(6)])
+        assert all(r.status_code == 202 for r in pending), [r.text for r in pending]
+        assert len({r.json()["key"] for r in pending}) == 1
+        assert counts == {"reports": 0, "financial_snapshots": 0}
+        assert await settle(db) is True
+        cold_build_ms = (time.perf_counter() - cold_start) * 1000
+        for page in range(1, 21):
+            stamp = time.perf_counter()
+            response = await client.get(path, params={**filters, "demand": True, "page": page}, headers=HEADERS)
+            ready_times.append((time.perf_counter() - stamp) * 1000)
+            assert response.status_code == 200, response.text
+            for field in ("items", "total", "page", "page_size", "total_pages"):
+                assert response.json()[field] == canonical[page - 1][field]
+        assert counts == {"reports": 1, "financial_snapshots": 1}
+        stamp = time.perf_counter()
+        results = await asyncio.gather(*[client.get(path, params={**filters, "demand": True, "page": i + 1},
+            headers=HEADERS) for i in range(6)])
+        concurrent_ms = (time.perf_counter() - stamp) * 1000
+        assert all(r.status_code == 200 for r in results)
+        assert counts == {"reports": 1, "financial_snapshots": 1}
+    assert await db[STATES].find_one({"_id": "owner"}) == before
+    p95 = lambda values: sorted(values)[math.ceil(.95 * len(values)) - 1]
+    evidence = {"environment": "isolated loopback Mongo; ASGI; in-process builder test seam for exact work counts; no browser/network timing",
+        "data": {"suppliers": 200, "movements": 5000, "pages": 20, "page_size": 8},
+        "filters": filters, "legacy_work": baseline, "demand_work_including_initial_build": counts,
+        "report_reduction_fraction": 1 - counts["reports"] / baseline["reports"],
+        "legacy_ms": legacy_times, "ready_ms": ready_times,
+        "legacy_p95_ms": p95(legacy_times), "ready_p95_ms": p95(ready_times),
+        "cold_build_ms": cold_build_ms, "six_ready_reads_total_ms": concurrent_ms,
+        "financial_results_equal": True, "source_unchanged": True}
+    assert evidence["report_reduction_fraction"] >= .8
+    assert evidence["ready_p95_ms"] < 1000
+    if destination := os.environ.get("DEMAND_READ_REGISTER_BENCHMARK_REPORT"):
+        Path(destination).write_text(json.dumps(evidence, ensure_ascii=False, indent=2))
+    print("CONTROLLED_REGISTER_READ " + json.dumps(evidence, ensure_ascii=False))
+
+
+@pytest.mark.asyncio
 async def test_actual_child_keeps_health_and_bootstrap_responsive_on_same_large_fixture(read_db, read_mongo_uri, monkeypatch):
     db = read_db
     before = await seed_workspace(db, suppliers=200, movements=5000)

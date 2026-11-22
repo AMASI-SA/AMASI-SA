@@ -2396,6 +2396,7 @@ def make_dashboard_v2_router(
                 db, user=user, section=section, binding=binding,
                 consumer_id=request.headers.get("X-Mezan-Read-Consumer"),
                 refresh=refresh and request.headers.get("X-Mezan-Read-Poll") != "1",
+                retry_failed=request.headers.get("X-Mezan-Read-Poll") != "1",
             )
 
         @_heavy_dashboard_stage("dashboard_v2_" + section.replace("-", "_"))

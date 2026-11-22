@@ -31,6 +31,12 @@ no hidden full-report request. The server serves real per-view builder output,
 checks snapshot bindings and rejects unknown fixture views. Delayed forecast
 completion after navigation must not replace the new page.
 
+The actual report reads use `/workspace/report` with explicit demand consumers.
+The held forecast returns `202 preparing` before its bound poll. Its consumer
+must stay the same during polling and release its own lease both after success
+and when the user leaves the page. Release DELETEs are coordination only; read
+navigation still cannot issue a financial mutation or source refresh.
+
 The fixture also downloads the explicitly scoped page workbook and the separate
 full-report workbook, preserving known money and leaving unknown forecasts
 unknown. Evidence includes exact generated-fixture hashes, query/view request

@@ -47,10 +47,14 @@ async def fresh_actor(db, *, actor_id, client_kind, path, query):
     return principal, {key: actor.get(key) for key in _ACTOR_FIELDS}
 
 
-async def require_owner_available(db, owner_id):
-    owner = await db.users.find_one({"id": owner_id, "role": "owner"},
+async def require_owner_available(db, owner_id, *, allow_owner_flag=False):
+    owner = await db.users.find_one({"id": owner_id},
                                     {"_id": 0, **dict.fromkeys(_ACTOR_FIELDS, 1)})
-    if owner is None or account_is_disabled(owner):
+    owns_store = owner is not None and (
+        str(owner.get("role") or "").strip().casefold() == "owner"
+        or (allow_owner_flag and owner.get("is_owner") is True)
+    )
+    if not owns_store or account_is_disabled(owner):
         raise HTTPException(403, detail={"code": "read_owner_unavailable"})
     return {key: owner.get(key) for key in _ACTOR_FIELDS}
 
@@ -70,7 +74,8 @@ async def release_current(db, user, key, consumer_id):
     actor_id, _client = identity(user)
     scope = user.get("_web_workspace_read")
     owner_id = (user.get("_mobile_owner_id") or (scope[1] if scope else None)
-                or (user.get("id") if str(user.get("role") or "").strip().casefold() == "owner"
+                or (user.get("id") if (str(user.get("role") or "").strip().casefold() == "owner"
+                                      or user.get("is_owner") is True)
                     else user.get("created_by")))
     if not owner_id:
         raise HTTPException(403, detail={"code": "read_owner_required"})

@@ -194,3 +194,69 @@ Post-checkpoint compatibility fix identified: preserve assembly existing persist
 `is_owner=True` authority where the canonical actor boundary permits it; dashboard
 owner-role semantics must remain separate. Also review a bounded initial preparing
 poll cadence; current two-second polls can add extra time to browser first data.
+
+
+## Integrated continuation checkpoint
+
+Remote implementation milestone: `81a3774958259c163437772495034f35ac207eab`,
+tree `92ff1789be1d11f8c836404e774d6882c0777f81` (72 changed files).
+Remote integration with newer Production: `cabb3b79560ad29a6c721cee8c224a425b310cd4`,
+tree `a47d60a0a740e9439aaf31ff2b31882203ca59c1`. This normal merge preserves
+Production `9b4fb716b430c32073b5ea7abaeaff62646d9633` and all its AWB changes.
+
+Subsequent source fixes and verification:
+
+- Each new assembly/card intent may retry failed work once; polls and legacy
+  connection renewals do not reset failure. Pending demand wakes only the read
+  queue. Assembly preserves its existing persisted is_owner authority separately
+  from the dashboard's strict owner role. Family tests22/22; three existing real
+  Mongo assembly policy oracles plus canonical assembly child4/4 passed15.85s.
+- Preparing UI uses bounded500/1000/2000ms checks while respecting slower server
+  hints. Invalid or overflowing delays reject. Full affected frontend394/394,
+  21/21 suites,15.379s; no skipped or failed tests.
+- Both retained browser harnesses (14 report,12 simple balances scenarios) now
+  reflect bootstrap/paged options/demand report wire contracts and validate exact
+  preparing-consumer release. Fixtures and Vite builds passed. Local Chromium
+  failed before any scenario with socket() EPERM; its sandbox was not disabled.
+  Browser execution remains required on the existing CI runner.
+- Independent review found explicit ad_bank_fx=False was ignored in one new
+  resource reader and ready multi-chunk statements outlived disconnected HTTP
+  readers. Both were corrected; the existing visible-report lifetime now owns
+  every read and cancels an in-flight chunk. Newly admitted consumer leases are
+  released on cancellation or authorization change. Fresh root suite29/29 passed
+  in9.67s, including both FX flag values, already-closed/in-flight disconnect,
+  and post-admission permission/cancellation cleanup.
+- Pinned report snapshot mismatch is rejected before starting a heavy job.
+  Added real HTTP cases for complete>300-row statements, report scope/pinned
+  revision, scoped position/release, and exact20-page register before/after work.
+  These extend HTTP coverage from3 to6 and still require a completed integrated
+  run. No20-page reduction result is claimed yet.
+- Three workflows explicitly collect the new suites, require no missing/skipped
+  cases and preserve the old>=3500 operational and>=41 realLocalAssembly gates.
+  All YAML/shell/JS rejection scripts validated. Added the actual child dependency
+  python-dotenv==1.2.2.
+- Child metrics now include six fixed numeric Mongo driver timing/timeout fields
+  from the existing listener, without additional queries or query values. These
+  timings include DB-network round trips and are not executionStats. Privacy and
+  forwarding tests4/4 passed; the extended actual-child assertion awaits CI.
+
+One combined local run was interrupted (exit130) during host contention without
+completed JUnit or a known active test. An initial inference that it had reached
+HTTP was withdrawn:16 fixture databases do not establish that. No product
+assertion failure or acceptance pass was identified. The raw incomplete-run
+metadata is retained in interrupted-local-run.json. Future execution should use
+live verbose pytest output and preserve raw timing; do not relax application
+limits to turn this run into a pass.
+
+The cloud browser also failed at CDP attach/dispatch and subsequently reset its
+kernel. Search-service access to health/build metadata was unavailable. These
+are access failures, not evidence of a Production outage. New live identity,
+shared Release Guard status and actual pages remain unverified since the newer
+Production merge. No shared /app change, new lease, publish or merge to Production
+has been performed by this demand-read work.
+
+Next safe action: push this task checkpoint, open a Draft PR against Production
+for independent CI, resolve any concrete integration failures, and require the
+original current guard/rehearsal/three-probe protocol before publication. The user
+already authorized publication; the remaining blocker is evidence/access, not a
+missing request for permission.

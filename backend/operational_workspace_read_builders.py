@@ -231,6 +231,11 @@ async def make_spec(db, principal, request, family, *, filters=None, resource=No
         if not allowed:
             fail("operational_workspace_not_found", "الحساب غير متاح", 404)
     header = await snapshot_header(db, owner)
+    if family == "operational_report" and (filters.get("view") == "forecast" or any(
+            filters.get(key) is not None for key in ("expected_revision", "expected_as_of", "expected_started_at"))):
+        from operational_financial_position_state import require_snapshot_binding
+        require_snapshot_binding(header, revision=filters.get("expected_revision"),
+            as_of=filters.get("expected_as_of"), started_at=filters.get("expected_started_at"))
     spec = {"schema": 1, "family": family, "owner_id": owner, "actor_id": actor["id"],
         "client_kind": "mobile" if principal.get("_session_client") == "amasi_mobile" or principal.get("_mobile_actor_id") else "web",
         "request": {"path": request.url.path, "method": "GET", "query": dict(filters)},
@@ -494,12 +499,12 @@ async def _options(db, owner, policy, state, filters):
     return {"header": {}, "rows": rows}
 
 
-async def _selection(db, owner, policy, state, target, *, balance_only=False):
+async def _selection(db, owner, policy, state, target, *, balance_only=False, ad_bank_fx=True):
     from operational_balance_workspace import resource_catalog
     if balance_only and not policy.resource(*target)["balance"]:
         fail("operational_workspace_not_found", "الحساب غير متاح", 404)
     resources, _ = await resource_catalog(db, owner, policy, state, selected_resource=target,
-        selected_kinds={target[0]}, identities_by_kind={target[0]: [target[1]]}, ad_bank_fx=True,
+        selected_kinds={target[0]}, identities_by_kind={target[0]: [target[1]]}, ad_bank_fx=ad_bank_fx,
         provider_positions=target[0] == "provider", directory_only=not policy.resource(*target)["balance"])
     if len(resources) != 1:
         fail("operational_workspace_not_found", "الحساب غير متاح", 404)
@@ -680,7 +685,8 @@ async def build_projection(db, spec, checkpoint):
         elif family == "operational_options":
             result = await _options(db, owner, policy, state, filters)
         elif family in {"operational_selection", "operational_resource"}:
-            result = await _selection(db, owner, policy, state, target, balance_only=family == "operational_resource")
+            result = await _selection(db, owner, policy, state, target, balance_only=family == "operational_resource",
+                ad_bank_fx=True if family == "operational_selection" else filters.get("ad_bank_fx", False))
         elif family in {"operational_ledger", "operational_statement", "operational_history"}:
             result = await _ledger(db, actor, owner, policy, state, target, filters, family)
         elif family == "operational_register":

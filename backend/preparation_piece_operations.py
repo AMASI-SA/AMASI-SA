@@ -4735,6 +4735,7 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
             db, user=user, state=state, query=q, limit=limit, offset=offset,
             consumer_id=request.headers.get("X-Mezan-Read-Consumer"),
             refresh=refresh and request.headers.get("X-Mezan-Read-Poll") != "1",
+            retry_failed=request.headers.get("X-Mezan-Read-Poll") != "1",
             snapshot=snapshot, request=request, compatible=not demand,
         )
 

@@ -1,4 +1,5 @@
 """Small HTTP boundary for request-driven saved display results."""
+import asyncio
 from math import ceil
 from typing import Literal
 
@@ -12,8 +13,30 @@ from operational_workspace_read_builders import make_spec, authorize_spec
 
 async def serve_projection(db, user, request, family, *, filters=None, resource=None,
                            page=1, page_size=24, focus_id=None):
+    from operational_visible_report_read import run_visible_report_read
+    # The visible HTTP reader owns cancellation even for a ready multi-chunk
+    # statement. Durable child work owns its separate, shared demand leases.
+    ownership = {}
+    try:
+        return await run_visible_report_read(request, lambda: _serve_projection(
+            db, user, request, family, filters=filters, resource=resource,
+            page=page, page_size=page_size, focus_id=focus_id, ownership=ownership))
+    except BaseException:
+        if ownership:
+            from demand_read_store import release
+            try:
+                await release(db, ownership["spec"], ownership["consumer"])
+            except (asyncio.CancelledError, Exception):
+                # Preserve the original failure/cancellation; a failed cleanup
+                # expires through the existing short consumer lease.
+                pass
+        raise
+
+
+async def _serve_projection(db, user, request, family, *, filters=None, resource=None,
+                            page=1, page_size=24, focus_id=None, ownership):
     from demand_read_store import (InvalidReadSpec, ProjectionUnavailable, SnapshotChanged,
-        demand, find_row_ordinal, projection_key, read_ready, release)
+        demand, find_row_ordinal, projection_key, read_ready)
     consumer = request.headers.get("X-Mezan-Read-Consumer")
     spec = await make_spec(db, user, request, family, filters=filters, resource=resource)
     key = projection_key(spec)
@@ -51,22 +74,21 @@ async def serve_projection(db, user, request, family, *, filters=None, resource=
                     response.update(items=result["items"], total=total, page=selected_page,
                         page_size=page_size, total_pages=pages, pages=pages)
             return JSONResponse(content=jsonable_encoder(response), headers={"Cache-Control": "no-store"})
+        ownership.update(spec=spec, consumer=consumer)
         status = await demand(db, spec, consumer,
                               retry=request.headers.get("X-Mezan-Read-Poll") != "1")
         await authorize_spec(db, spec)
-        if await request.is_disconnected():
-            await release(db, spec, consumer)
-            fail("operational_read_cancelled", "أُلغيت القراءة بعد مغادرة الصفحة", 499)
         if status["status"] == "failed":
             fail(status.get("error_code") or "read_preparation_failed", "تعذر تجهيز البيانات؛ أعد المحاولة", 503)
         # Waking this dedicated queue must not trigger financial reconciliation,
         # invoice sending or any other background scheduler.
         from background_worker_process import wake_read_projections
         await wake_read_projections()
-        return JSONResponse(status_code=202, content=jsonable_encoder({"status": "preparing", "key": key,
+        response = JSONResponse(status_code=202, content=jsonable_encoder({"status": "preparing", "key": key,
             "retry_after_ms": status.get("retry_after_ms") or 1500,
             "release_url": "/operational-balances/workspace/read-demand/" + key}),
             headers={"Cache-Control": "no-store"})
+        return response
     except InvalidReadSpec:
         fail("operational_read_invalid", "تعذر بدء قراءة الصفحة", 422)
     except (ProjectionUnavailable, SnapshotChanged):

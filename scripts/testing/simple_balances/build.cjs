@@ -25,7 +25,8 @@ if (!out || !path.isAbsolute(out) || path.resolve(out) === root || path.resolve(
     define: { 'process.env.NODE_ENV': '"production"', 'process.env.REACT_APP_BACKEND_URL': '""' },
   });
   const files = [
-    ...['ApprovedFinance.jsx','ApprovedEntry.jsx','ApprovedLedger.jsx','PaymentSourceFields.jsx','PendingEntryActions.jsx']
+    ...['ApprovedFinance.jsx','ApprovedEntry.jsx','ApprovedLedger.jsx','PaymentSourceFields.jsx','PendingEntryActions.jsx',
+      'workspaceReadHooks.js','WorkspaceResourcePicker.jsx','WorkspaceSnapshot.jsx']
       .map(file => `frontend/src/pages/operational/${file}`),
     'frontend/src/pages/operational/SimpleBalances.jsx', 'frontend/src/pages/operational/SimpleBalanceAccess.jsx',
     'frontend/src/pages/operational/SimpleOrderRefunds.jsx', 'frontend/src/pages/operational/simpleBalancesApi.js',
@@ -34,7 +35,7 @@ if (!out || !path.isAbsolute(out) || path.resolve(out) === root || path.resolve(
     'frontend/src/pages/operational/simpleBalancesModel.js', 'frontend/src/pages/operational/simpleBalancesHooks.js',
     'frontend/src/pages/operational/simpleBalancesPending.js',
     'frontend/src/pages/operational/simpleBalances.css', 'frontend/src/pages/operational/visibleOperationalRead.js',
-    'frontend/src/context/AuthContext.jsx', 'frontend/src/lib/api.js',
+    'frontend/src/context/AuthContext.jsx', 'frontend/src/lib/api.js', 'frontend/src/lib/demandRead.js',
     ...['main.jsx', 'index.html', 'build.cjs', 'browser.cjs', 'fixtures.cjs', 'features.cjs'].map(file => `scripts/testing/simple_balances/${file}`),
   ];
   fs.writeFileSync(path.join(out, 'source-manifest.json'), JSON.stringify({ synthetic_only: true,

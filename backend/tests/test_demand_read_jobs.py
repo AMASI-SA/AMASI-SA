@@ -258,7 +258,39 @@ async def test_actual_assembly_child_reads_canonical_fixture_and_publishes_ready
     assert len(collected) == 1 and collected[0]["outcome"] == "ready"
     assert collected[0]["pid"] != __import__("os").getpid()
     assert all(collected[0][key] >= 0 for key in ("build_ms", "materialize_ms", "check_ms", "process_cpu_ms", "peak_rss_kib"))
+    assert all(collected[0][key] >= 0 for key in ("mongo_driver_command_p50_ms", "mongo_driver_command_p95_ms",
+        "mongo_driver_command_p99_ms", "mongo_driver_checkout_p95_ms", "mongo_driver_command_timeouts",
+        "mongo_driver_checkout_timeouts"))
     assert "Private synthetic" not in json.dumps(collected)
+
+
+def test_driver_metrics_export_only_bounded_numeric_samples_and_never_query_shapes(monkeypatch):
+    from mongo_observability import mongo_metrics
+    snapshot = {"operation_duration_ms": {"p50": 2.5, "p95": 12.0, "p99": 18.5},
+        "checkout_wait_ms": {"p50": .1, "p95": .3, "p99": .8},
+        "operation_timeouts": 2, "checkout_timeouts": 1,
+        "recent_query_shapes": ["private collection/customer"],
+        "checkout_failures": {"timeout": "private exception"}}
+    monkeypatch.setattr(mongo_metrics, "snapshot", lambda: snapshot)
+    expected = {"mongo_driver_command_p50_ms": 2.5, "mongo_driver_command_p95_ms": 12.0,
+        "mongo_driver_command_p99_ms": 18.5, "mongo_driver_checkout_p95_ms": .3,
+        "mongo_driver_command_timeouts": 2, "mongo_driver_checkout_timeouts": 1}
+    assert jobs._mongo_driver_metrics() == expected
+    record = {"family": "operational_home", "outcome": "ready", **expected}
+    assert store.safe_metrics(record) == record
+    assert store.safe_metrics({**record, "recent_query_shapes": snapshot["recent_query_shapes"]}) is None
+    for key in expected:
+        for invalid in ("private exception", True, float("nan"), float("inf"), -1):
+            assert store.safe_metrics({**record, key: invalid}) is None
+
+
+def test_driver_metrics_do_not_turn_missing_or_invalid_samples_into_zero(monkeypatch):
+    from mongo_observability import mongo_metrics
+    monkeypatch.setattr(mongo_metrics, "snapshot", lambda: {
+        "operation_duration_ms": {"p50": None, "p95": float("nan"), "p99": "private"},
+        "checkout_wait_ms": {"p95": True}, "operation_timeouts": 0, "checkout_timeouts": 0})
+    assert jobs._mongo_driver_metrics() == {
+        "mongo_driver_command_timeouts": 0, "mongo_driver_checkout_timeouts": 0}
 
 
 @pytest.mark.asyncio
@@ -267,7 +299,8 @@ async def test_supervisor_forwards_only_fixed_numeric_sample_and_caps_each_famil
     monkeypatch.setattr(supervisor, "_read_metric_last", {})
     caplog.set_level(logging.INFO, logger=supervisor.log.name)
     reader = asyncio.StreamReader()
-    record = {"family": "assembly_board", "outcome": "ready", "pid": 12, "wall_ms": 53.6}
+    record = {"family": "assembly_board", "outcome": "ready", "pid": 12, "wall_ms": 53.6,
+              "mongo_driver_command_p95_ms": 4.25, "mongo_driver_checkout_timeouts": 0}
     payloads = ["private provider exception", "x" * 20000,
         store.METRIC_PREFIX + json.dumps({**record, "customer": "private customer"}),
         store.METRIC_PREFIX + json.dumps({**record, "wall_ms": "private financial amount"}),
@@ -278,6 +311,7 @@ async def test_supervisor_forwards_only_fixed_numeric_sample_and_caps_each_famil
     observed = [message.getMessage() for message in caplog.records if message.name == supervisor.log.name]
     assert len(observed) == 1 and "demand_read_sample" in observed[0]
     assert "private" not in observed[0] and "assembly_board" in observed[0]
+    assert '"mongo_driver_command_p95_ms": 4.25' in observed[0]
 
 
 @pytest.mark.asyncio

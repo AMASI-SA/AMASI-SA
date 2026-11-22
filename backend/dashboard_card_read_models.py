@@ -95,16 +95,19 @@ async def build_projection(db, spec, checkpoint):
     return {"header": result, "rows": None}
 
 
-async def demand_response(db, *, user, section, binding, consumer_id, refresh=False):
+async def demand_response(db, *, user, section, binding, consumer_id, refresh=False, retry_failed=True):
+    from background_worker_process import wake_read_projections
     from demand_read_store import InvalidReadSpec, demand, read_ready
 
     spec = await make_spec(db, user=user, section=section, filters=_query(binding["filters"]), binding=binding)
     try:
-        state = await demand(db, spec, consumer_id, refresh=refresh, retry=refresh)
+        state = await demand(db, spec, consumer_id, refresh=refresh, retry=refresh or retry_failed)
     except InvalidReadSpec as exc:
         raise HTTPException(422, detail={"code": str(exc)}) from exc
     if state["status"] == "failed":
         raise HTTPException(503, detail={"code": state.get("error_code", "read_preparation_failed"), "retryable": True})
+    if state["status"] == "preparing":
+        await wake_read_projections()
     ready = await read_ready(db, spec) if state["status"] == "ready" else None
     if ready is None:
         return JSONResponse(status_code=202, content={**state, "status": "preparing", "retry_after_ms": 1500,

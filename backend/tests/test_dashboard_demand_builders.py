@@ -63,7 +63,9 @@ async def test_readonly_order_filter_does_not_initialize_or_migrate_settings(car
 
 
 @pytest.mark.asyncio
-async def test_demand_get_and_ready_get_never_invoke_heavy_builder(card_app, monkeypatch):
+@pytest.mark.parametrize("refresh", [False, True])
+async def test_demand_get_and_ready_get_never_invoke_heavy_builder(card_app, monkeypatch, refresh):
+    import background_worker_process
     env = card_app
     await seed_owner(env.db)
     heavy = AsyncMock(side_effect=AssertionError("HTTP must not compute a card"))
@@ -80,7 +82,9 @@ async def test_demand_get_and_ready_get_never_invoke_heavy_builder(card_app, mon
 
     monkeypatch.setattr(store, "demand", demand)
     monkeypatch.setattr(store, "read_ready", read_ready)
-    params = {**PARAMS, "demand": "true", "refresh": "true"}
+    wake = AsyncMock()
+    monkeypatch.setattr(background_worker_process, "wake_read_projections", wake)
+    params = {**PARAMS, "demand": "true", "refresh": str(refresh).lower()}
     headers = {"X-Mezan-Read-Consumer": "test-consumer-123"}
     first = await env.client.get("/dashboard-v2/cards/top-products", params=params, headers=headers)
     assert first.status_code == 202 and first.json()["status"] == "preparing"
@@ -91,9 +95,11 @@ async def test_demand_get_and_ready_get_never_invoke_heavy_builder(card_app, mon
                                   headers={**headers, "X-Mezan-Read-Poll": "1"})
     assert second.status_code == 200 and second.json()["product_cost_v2"]["total"] == 10
     assert second.json()["snapshot"]["kind"] == "dated_display"
-    assert calls[0][2]["refresh"] is True and calls[1][2]["refresh"] is False
+    assert calls[0][2]["refresh"] is refresh and calls[1][2]["refresh"] is False
+    assert calls[0][2]["retry"] is True and calls[1][2]["retry"] is False
     assert calls[0][0] == calls[1][0]
     heavy.assert_not_awaited()
+    wake.assert_awaited_once()
 
 
 @pytest.mark.asyncio

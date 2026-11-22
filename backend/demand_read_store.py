@@ -45,7 +45,9 @@ _KEY = re.compile(r"[a-f0-9]{64}\Z")
 _CONSUMER = re.compile(r"[A-Za-z0-9_-]{8,128}\Z")
 METRIC_PREFIX = "mezan_demand_read_metrics "
 _METRIC_NUMBERS = frozenset({"pid", "wall_ms", "build_ms", "materialize_ms", "check_ms", "check_calls",
-                            "authorize_ms", "process_cpu_ms", "peak_rss_kib", "queue_ms"})
+                            "authorize_ms", "process_cpu_ms", "peak_rss_kib", "queue_ms",
+                            "mongo_driver_command_p50_ms", "mongo_driver_command_p95_ms", "mongo_driver_command_p99_ms",
+                            "mongo_driver_checkout_p95_ms", "mongo_driver_command_timeouts", "mongo_driver_checkout_timeouts"})
 
 
 class InvalidReadSpec(ValueError):

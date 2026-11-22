@@ -36,7 +36,7 @@ async def _authorize(db, *, actor_id, client_kind, filters):
     context = await _actor_context(db, principal)
     _require_permission(context, "fulfillment.ready.read", responsibility="instant_ready")
     owner_id = context["merchant_id"]
-    owner_basis = await require_owner_available(db, owner_id)
+    owner_basis = await require_owner_available(db, owner_id, allow_owner_flag=True)
     effective = {key: sorted(value) if isinstance(value, set) else value for key, value in context.items()}
     return owner_id, permission_fingerprint(actor_basis, owner_basis, principal, effective)
 
@@ -100,7 +100,8 @@ def _response(ready, *, offset, limit):
 
 
 async def demand_response(db, *, user, state, query, offset, limit, consumer_id,
-                          refresh=False, snapshot=None, request=None, compatible=False):
+                          refresh=False, snapshot=None, request=None, compatible=False, retry_failed=True):
+    from background_worker_process import wake_read_projections
     from demand_read_store import InvalidReadSpec, SnapshotChanged, demand, read_ready, release
 
     spec = await make_spec(db, user=user, state=state, query=query)
@@ -110,15 +111,20 @@ async def demand_response(db, *, user, state, query, offset, limit, consumer_id,
     # which would cancel every cold attempt before it can finish. Client timeouts
     # are unchanged; the queue's hard job limit still bounds child computation.
     next_renew = 0.0
+    initial_admission = True
     try:
         while True:
             now = time.monotonic()
             if now >= next_renew:
-                status = await demand(db, spec, consumer_id, refresh=refresh, retry=refresh)
+                status = await demand(db, spec, consumer_id, refresh=refresh,
+                                      retry=refresh or (initial_admission and retry_failed))
+                initial_admission = False
                 refresh = False
                 next_renew = now + 10.0
                 if status["status"] == "failed":
                     raise HTTPException(503, detail={"code": status.get("error_code", "read_preparation_failed"), "retryable": True})
+                if status["status"] == "preparing":
+                    await wake_read_projections()
             ready = await read_ready(db, spec, offset=offset, limit=limit, snapshot=snapshot)
             if ready is not None:
                 await authorize_spec(db, spec)
