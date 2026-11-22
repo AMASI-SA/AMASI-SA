@@ -1,4 +1,4 @@
-# Catalog memory recovery — publication finished, live verification pending
+# Catalog memory recovery — publication and required verification complete
 
 ## Current release and continuation state
 
@@ -9,13 +9,15 @@ B2 carrying source A2 are accepted: **20 workflows = 19 successes and one
 conditional TikTok skip; 43 check runs = 37 successes and six expected
 conditional skips; zero active and zero failed**.
 
-**WIP: production publication completed at the platform level; the original
-live release verification is still pending.** The user explicitly authorized
-this publication with “نعم انشر”. Root observed the newer green Emergent
-`Deployment finished` event documented below. Initial authenticated dashboard
-sections rendered, but no precise load duration or sustained/per-request
-performance acceptance has been established. No incident resolution is claimed.
-The dated rollback health result remains historical evidence.
+**Production publication and required original release verification are
+complete.** The explicitly authorized publication produced the newer green
+Emergent `Deployment finished` event. The unchanged original verifier finished
+with exit `0`, `verified=true` and `checks=3` for exact A2/M2/R2; its matching
+lease automatically closed and original status returned `active: false`,
+`actor: null`. Initial authenticated dashboard sections rendered. Precise
+load duration and sustained/per-request performance remain unmeasured; no
+blanket incident resolution is claimed. The dated rollback result below is
+historical evidence.
 
 - Task: `CATALOG-MEMORY-RECOVERY-20261122`.
 - Repository: `AMASI-SA/AMASI-SA`.
@@ -150,12 +152,13 @@ six expected conditional skips, with zero active or failed. Separate source-A2
 runs may be superseded or cancelled by the B2 push and do not need to finish
 independently. Historical PR #2054 checks are not used as substitutes.
 
-## Authorized publication and pending live verification
+## Authorized publication and completed live verification
 
-This WIP checkpoint follows evidence commit
-`ab6e9b4c2a0c0fda6c53d1ee5c2f54d0f2705a15`. Host, UI and dashboard observations
-in this section were reported by the publishing operator; the documentation
-reviewer did not operate production.
+This completed outcome follows WIP evidence commit
+`a7d8f430264bffc7cda79eea3d6eaf956ec7a604`, which preserved the ongoing verifier,
+and earlier evidence commit `ab6e9b4c2a0c0fda6c53d1ee5c2f54d0f2705a15`.
+Host, UI, verifier and dashboard observations in this section were reported by
+the publishing operator; the documentation reviewer did not operate production.
 
 The user's explicit “نعم انشر” authorized one publication of exact reviewed M2.
 The original host adapter passed with exact A2 and R2 release identity. M2 was
@@ -179,8 +182,8 @@ recorded R2 release. Original prepublish exited zero. Root clicked
 
 The platform version is recorded as a UI label, not asserted to be the governed
 source Git SHA. The actual green completion wording is preserved rather than
-quoted as `Deployment Succeeded`. Production publication completed, while
-final release acceptance still requires the original verifier.
+quoted as `Deployment Succeeded`. The subsequent original verification below
+completed the required release acceptance.
 
 The original command
 
@@ -188,11 +191,62 @@ The original command
 python scripts/production_release_guard.py verify --url https://mezansalla.com
 ```
 
-started at `2026-11-22T00:10:12.164401Z`. It was still running after 150 seconds
-at the latest operator report. Its exit code, three matching probes, exact
-canonical/cache-busted build-meta verification and matching-lease closure have
-not yet been reported. Do not repeat publication or start another verifier while
-that original process is active.
+was run unchanged and completed successfully:
+
+| Original verification result | Recorded value |
+|---|---|
+| Started | `2026-11-22T00:10:12.164401Z` |
+| Finished | `2026-11-22T00:24:02.181628Z` |
+| Elapsed | `830.017` seconds |
+| Exit / result | `0`, `verified=true`, `checks=3` |
+| Source A2 | `8665e8acf1d7bb4878cd2fc0b912a20132f1e0c7` |
+| Source base M1 | `10ee7b41204dd1d39c8b91daf9f0a9d899041ebb` |
+| Deployment M2 | `0c5e5b98795b8d30289ec0e4d3c95738fd660af1` |
+| Runtime release | `rg5-4d0f595ee0711c73459e0cb18711c87657602d7886a885f0ccb1a3013e31dc05` |
+| Frontend artifact tree | `770915f10cbbaa9b17e129ee8ba544c4c618dd539600de519f7f70b48c80540a` |
+| Frontend requests | `710` per probe; `2130` across three probes |
+| Raw verifier stdout SHA-256 | `6501e67c29bc5e6c824b09e1621076579ebe802e4569724b89ed688b8e6aa21f` |
+| Original status afterward | `active: false`, `actor: null` |
+
+The recorded boot-start observations were `2026-11-22T00:07:26.517771Z` and
+`2026-11-22T00:07:33.179919Z`. The matching lease closed automatically on
+successful verification. No manual lease abort was needed for this outcome.
+
+Success of the unchanged original guard establishes the reviewed source and
+runtime identity, critical Backend/source bindings, verified Frontend artifact
+tree, and exact canonical/cache-busted build-meta JSON bytes with
+`application/json`. These are conclusions from the original guard's contract,
+not additional fields asserted to appear independently in its raw stdout.
+
+The `830.017` seconds measure the full release verification, which made
+`2130` Frontend requests across three probes. Ordinary dashboard load duration
+was not measured. Publication, prepare and the completed three-check verifier
+must not be repeated for this release.
+
+### User-supplied release ID reconciliation
+
+The user supplied
+`rg5-ddbdc7c7bfa083d85224a0f0275318ca7dacfdd05d3f628e8f3dc05c278be895`.
+Root and an independent reviewer identified it as the earlier
+[PR #2046](https://github.com/AMASI-SA/AMASI-SA/pull/2046) release:
+
+- Source: `eeef3913ae2e1b8fa4b58f3835478e1ed17b2988`.
+- Source base: `66aa13967156e8e279b5297caf697c155f720fd1`.
+- Intent commit: `4f5dd585d89b1aea2e98efbcb8efd7cce0559858`.
+
+One bounded original `_health_payload` sample at
+`2026-11-22T00:21:49.943625Z` took `0.344` seconds and returned
+`health_ok=true`, exact source A2 and intended R2 release
+`rg5-4d0f595ee0711c73459e0cb18711c87657602d7886a885f0ccb1a3013e31dc05`.
+Its boot time was `2026-11-22T00:07:33.179919Z`.
+`verified_identity_available`, `critical_file_hashes_match` and
+`frontend_build_verified` were all true; `matches_user_supplied=false` and
+`matches_expected=true`. The sanitized host-stage record is
+`user-release-id-check.json`.
+
+This was one health-identity observation, separate from the completed original
+three-check verification. Its timing does not establish dashboard performance.
+No inference is made about where the user obtained the older ID.
 
 ### Initial authenticated dashboard observation
 
@@ -398,25 +452,17 @@ their unchanged paths. Synthetic payload measurements are retained in the
 historical checkpoint and evidence files; no production RSS or dashboard latency
 improvement has been measured for this candidate.
 
-## Exact next safe sequence
+## Release completion and safe follow-up
 
-1. Observe the original verifier already running from
-   `2026-11-22T00:10:12.164401Z`. Do not repeat **Publish changes**, run a second
-   verifier, modify production/source/intent or disturb its matching lease.
-2. Capture the original process's exit and sanitized result. Require all three
-   probes to match exact A2 and R2 with verified identity, matching critical
-   hashes and verified Frontend build. Canonical and cache-busted
-   `/build-meta.json` must match the governed JSON bytes and return
-   `application/json`.
-3. After the original verifier finishes, read its original guard status and
-   record the matching actor/lease outcome. Successful verification must close
-   the matching lease and leave `active: false`. Record any failure accurately;
-   never clear another actor's lease or infer acceptance from the UI alone.
-4. Append the final verification result to this same documentation-only evidence
-   branch using an expected-head update. **Never deploy the evidence branch.**
-5. Preserve the distinction between the observed initial dashboard render and
-   measured load duration or sustained performance acceptance. Incident
-   resolution remains unclaimed until supported by actual acceptance.
+Publication and the required original release verification are complete. The
+matching lease is closed. **Do not repeat Publish changes, prepare or the
+completed three-check verifier for this release. Never deploy the evidence
+branch.**
+
+Ordinary follow-up is appropriate only for a concrete reported issue. Begin
+with this evidence and the exact deployed identity. Keep the successful initial
+authenticated dashboard render separate from precise load-duration or sustained
+performance acceptance; no blanket incident resolution is claimed.
 
 ## Preserved source-A2 checkpoint
 
@@ -599,4 +645,5 @@ Freeze a new governed intent-only B2 and require all exact-commit CI, including
 Stock and Balance, before release acceptance. A2/B2 identities and fresh freeze
 and CI results are pending. Production publication remains blocked/not started;
 no deployment or incident resolution is claimed.
+
 

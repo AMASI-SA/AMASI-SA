@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "task_id": "CATALOG-MEMORY-RECOVERY-20261122",
-  "record_status": "WIP_R2_production_publication_completed_original_live_verification_pending",
+  "record_status": "R2_production_publication_and_required_release_verification_complete",
   "repository": "AMASI-SA/AMASI-SA",
   "implementation_pr": 2055,
   "implementation_pr_url": "https://github.com/AMASI-SA/AMASI-SA/pull/2055",
@@ -63,10 +63,11 @@
     "forbidden_generated_file_preserved_outside_app": true,
     "governed_source_or_intent_changed_for_cleanup": false,
     "artifacts": "fresh R2 original host-adapter outputs matching reviewed source and release",
-    "reported_lease_actor": "chatgpt-pr2055-release-20261122-b90f3c3040a7",
-    "final_guard_active": null,
-    "final_guard_status": "pending original verifier completion",
-    "unrelated_and_untracked_files": "preserved; previous generated outputs and sole forbidden generated cache preserved outside /app"
+    "final_guard_active": false,
+    "final_guard_status": "original verifier completed successfully; matching lease automatically closed",
+    "unrelated_and_untracked_files": "preserved; previous generated outputs and sole forbidden generated cache preserved outside /app",
+    "final_guard_actor": null,
+    "prepared_lease_actor": "chatgpt-pr2055-release-20261122-b90f3c3040a7"
   },
   "release_contract": {
     "protocol_version": 5,
@@ -342,19 +343,18 @@
     "Synthetic payload measurements do not establish production RSS, end-to-end latency, or incident resolution."
   ],
   "next_safe_sequence": [
-    "Observe the original verify process already started at 2026-11-22T00:10:12.164401Z. Do not repeat Publish changes, start a second verifier, alter production/source/intent, or disturb its matching lease while it is running.",
-    "Capture the original verifier's terminal exit and full sanitized result. Require three matching source A2 and R2 release probes with verified identity, critical-file hashes and Frontend build, plus exact canonical/cache-busted build-meta JSON bytes and application/json.",
-    "After the original verifier finishes, read original Release Guard status and record the matching actor/lease outcome. Successful verification must leave active:false; a failure must be recorded without claiming complete release acceptance or clearing another actor's lease.",
-    "Append final verification evidence to this same docs-only task branch using an expected-head update. Never deploy the evidence branch.",
-    "Keep the ordinary authenticated dashboard render separate from load-duration or sustained performance evidence. Preserve incident-resolution and performance limitations until measured acceptance exists."
+    "Publication and the original required verification are complete. Do not repeat Publish changes, prepare or verify3 for this completed release.",
+    "Keep this documentation-only evidence branch separate from the reviewed M2 deployment; never deploy the evidence branch.",
+    "Perform ordinary follow-up only for a concrete reported issue, starting with the current evidence and exact identity. An initial authenticated dashboard render does not establish sustained/per-request performance or incident resolution."
   ],
   "safe_commands": {
     "shared_guard_status": "cd /app && python scripts/production_release_guard.py status",
     "post_publication_verify": "python scripts/production_release_guard.py verify --url https://mezansalla.com",
-    "post_publication_verify_command_note": "Already running from 2026-11-22T00:10:12.164401Z; record/observe the existing process, do not launch another concurrent invocation."
+    "post_publication_verify_command_note": "Completed successfully at 2026-11-22T00:24:02.181628Z; command retained solely as provenance. Do not repeat publish, prepare or the completed verify3 for this release.",
+    "shared_guard_status_note": "Final original status already recorded active:false, actor:null; no lease action remains."
   },
   "actions_not_authorized_by_this_record": [
-    "a repeated production publication",
+    "repeating the completed publication, prepare or verify3",
     "production data writes",
     "Issue comments",
     "deployment of evidence branch"
@@ -614,11 +614,42 @@
       "platform_version_is_not_asserted_as_governed_source_git_sha": true
     },
     "original_verify": {
+      "helper": "unchanged original scripts/production_release_guard.py verify --url https://mezansalla.com",
+      "summary_provenance": "sanitized operator-reported original result; contract conclusions below are derived from unchanged guard success and are not represented as additional raw-stdout fields",
       "started_at_utc": "2026-11-22T00:10:12.164401Z",
-      "latest_reported_state": "still running",
-      "elapsed_seconds_at_latest_report": 150,
-      "exit_code": null,
-      "final_result": null
+      "finished_at_utc": "2026-11-22T00:24:02.181628Z",
+      "elapsed_seconds": 830.017,
+      "exit_code": 0,
+      "verified": true,
+      "checks": 3,
+      "source_git_sha": "8665e8acf1d7bb4878cd2fc0b912a20132f1e0c7",
+      "source_base_git_sha": "10ee7b41204dd1d39c8b91daf9f0a9d899041ebb",
+      "deployment_git_sha": "0c5e5b98795b8d30289ec0e4d3c95738fd660af1",
+      "release_id": "rg5-4d0f595ee0711c73459e0cb18711c87657602d7886a885f0ccb1a3013e31dc05",
+      "boot_started_at_observations": [
+        "2026-11-22T00:07:26.517771Z",
+        "2026-11-22T00:07:33.179919Z"
+      ],
+      "frontend_artifact_tree_sha256": "770915f10cbbaa9b17e129ee8ba544c4c618dd539600de519f7f70b48c80540a",
+      "frontend_requests_per_probe": 710,
+      "frontend_requests_total": 2130,
+      "raw_stdout_sha256": "6501e67c29bc5e6c824b09e1621076579ebe802e4569724b89ed688b8e6aa21f",
+      "final_result": "passed",
+      "elapsed_time_scope": "complete governed release verification across three probes; ordinary dashboard load duration was not measured",
+      "contract_conclusions": {
+        "basis": "successful unmodified original Release Guard, exit zero, verified=true, checks=3",
+        "guarantees": [
+          "All three probes bind the reviewed source/release with verified identity, critical Backend hashes and Frontend build.",
+          "Canonical and cache-busted build-meta responses have the exact governed JSON raw bytes and application/json content type.",
+          "The verified Frontend artifact tree and Backend/source bindings satisfy the reviewed intent."
+        ],
+        "not_independent_raw_stdout_fields": true
+      },
+      "original_status_after": {
+        "active": false,
+        "actor": null,
+        "matching_lease_closed_automatically": true
+      }
     }
   },
   "authenticated_dashboard_observation": {
@@ -643,13 +674,13 @@
     "current_load_test_outcome_established": false,
     "sustained_or_per_request_incident_resolution_claimed": false
   },
-  "previous_evidence_commit": "ab6e9b4c2a0c0fda6c53d1ee5c2f54d0f2705a15",
-  "checkpoint_state": "WIP: retain and observe the original verifier already running; final result is not yet known",
+  "previous_evidence_commit": "a7d8f430264bffc7cda79eea3d6eaf956ec7a604",
+  "checkpoint_state": "complete: one authorized publication and the original three-check verification succeeded; no repeat release action remains",
   "publication_observation_provenance": "root's latest host and UI observations; this reviewer did not operate the host or publication",
-  "production_change_evidence": "One explicitly authorized publication has a newer green Deployment finished event 99555f3c-ea30-500a-bb7a-61431c964a4a, platform version 7cf99c2; original governed live-identity verification remains pending.",
+  "production_change_evidence": "One authorized publication produced newer green Deployment finished event 99555f3c-ea30-500a-bb7a-61431c964a4a, platform version 7cf99c2; the unchanged original Release Guard subsequently exited zero with verified=true and checks=3 for exact A2/M2/R2.",
   "production_publication_completed": true,
-  "production_publication_completion_scope": "platform completion event; not final original Release Guard verification or performance acceptance",
-  "live_release_identity_verification_status": "pending",
+  "production_publication_completion_scope": "platform publication completed and required original release verification passed; sustained/per-request performance acceptance remains unmeasured",
+  "live_release_identity_verification_status": "passed",
   "last_live_health_observation_is_historical": true,
   "previous_shared_workspace_at_e2": {
     "path": "/app",
@@ -661,17 +692,68 @@
     "reuse_old_pr2053_tmp_staging_or_prepublication_proof": false,
     "unrelated_and_untracked_files": "preserve"
   },
-  "pending_final_live_verification": {
-    "original_verify_exit_code": null,
-    "three_matching_probes": null,
-    "verified_identity_available": null,
-    "critical_file_hashes_match": null,
-    "frontend_build_verified": null,
-    "canonical_and_cache_busted_build_meta_exact_bytes": null,
-    "build_meta_content_type_application_json": null,
-    "final_guard_actor": null,
-    "final_guard_active": null,
-    "additional_performance_acceptance": null
+  "previous_wip_checkpoint": {
+    "commit": "a7d8f430264bffc7cda79eea3d6eaf956ec7a604",
+    "earlier_evidence_commit": "ab6e9b4c2a0c0fda6c53d1ee5c2f54d0f2705a15",
+    "record_status": "WIP_R2_production_publication_completed_original_live_verification_pending",
+    "original_verify_at_that_checkpoint": {
+      "started_at_utc": "2026-11-22T00:10:12.164401Z",
+      "latest_reported_state": "still running",
+      "elapsed_seconds_at_latest_report": 150,
+      "exit_code": null,
+      "final_result": null
+    },
+    "pending_outcomes_at_that_checkpoint": {
+      "original_verify_exit_code": null,
+      "three_matching_probes": null,
+      "verified_identity_available": null,
+      "critical_file_hashes_match": null,
+      "frontend_build_verified": null,
+      "canonical_and_cache_busted_build_meta_exact_bytes": null,
+      "build_meta_content_type_application_json": null,
+      "final_guard_actor": null,
+      "final_guard_active": null,
+      "additional_performance_acceptance": null
+    }
+  },
+  "final_live_verification": {
+    "status": "passed",
+    "completed_at_utc": "2026-11-22T00:24:02.181628Z",
+    "original_verify_exit_code": 0,
+    "verified": true,
+    "checks": 3,
+    "original_guard_status": {
+      "active": false,
+      "actor": null
+    },
+    "performance_acceptance": "initial authenticated render observed; sustained/per-request timing and incident resolution remain unclaimed"
+  },
+  "user_supplied_release_id_reconciliation": {
+    "supplied_release_id": "rg5-ddbdc7c7bfa083d85224a0f0275318ca7dacfdd05d3f628e8f3dc05c278be895",
+    "identified_historical_release": {
+      "pr": 2046,
+      "pr_url": "https://github.com/AMASI-SA/AMASI-SA/pull/2046",
+      "source_git_sha": "eeef3913ae2e1b8fa4b58f3835478e1ed17b2988",
+      "source_base_git_sha": "66aa13967156e8e279b5297caf697c155f720fd1",
+      "intent_commit": "4f5dd585d89b1aea2e98efbcb8efd7cce0559858",
+      "identification_provenance": "root and independent reviewer"
+    },
+    "bounded_live_identity_sample": {
+      "helper": "original _health_payload",
+      "observed_at_utc": "2026-11-22T00:21:49.943625Z",
+      "request_count": 1,
+      "elapsed_seconds": 0.344,
+      "health_ok": true,
+      "source_git_sha": "8665e8acf1d7bb4878cd2fc0b912a20132f1e0c7",
+      "release_id": "rg5-4d0f595ee0711c73459e0cb18711c87657602d7886a885f0ccb1a3013e31dc05",
+      "boot_started_at": "2026-11-22T00:07:33.179919Z",
+      "verified_identity_available": true,
+      "critical_file_hashes_match": true,
+      "frontend_build_verified": true,
+      "matches_user_supplied": false,
+      "matches_expected": true,
+      "host_stage_evidence_filename": "user-release-id-check.json",
+      "interpretation": "one health identity sample, separate from the completed original three-check verification and not performance acceptance"
+    }
   }
 }
-
