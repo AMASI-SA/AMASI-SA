@@ -12,7 +12,7 @@ jest.mock('react-router-dom', () => {
 });
 
 jest.mock('./simpleBalancesApi', () => ({ simpleBalancesApi: {
-  accountGroup: jest.fn(), refundOrder: jest.fn(), refunds: jest.fn(), refund: jest.fn(), requestRefund: jest.fn(), entry: jest.fn(), pendingCommand: jest.fn(), discardPending: jest.fn(), registerPending: jest.fn(), retirePending: jest.fn(), quoteAd: jest.fn(),
+  options: jest.fn(), selection: jest.fn(), accountGroup: jest.fn(), refundOrder: jest.fn(), refunds: jest.fn(), refund: jest.fn(), requestRefund: jest.fn(), entry: jest.fn(), pendingCommand: jest.fn(), discardPending: jest.fn(), registerPending: jest.fn(), retirePending: jest.fn(), quoteAd: jest.fn(),
 }, simpleBalanceError: err => err?.localMessage || 'تعذر الحفظ' }));
 global.IS_REACT_ACT_ENVIRONMENT = true;
 const resource = (kind,id, use = true) => ({kind,id,name:id,currency:'SAR',access:{use}});
@@ -57,6 +57,57 @@ test('a supplier payment reviews endpoint identities before registering a single
   expect(api.entry).toHaveBeenCalledTimes(1); expect(api.entry).toHaveBeenCalledWith(expect.objectContaining({source_id:'الإنماء',party_id:'التفصيل',reason:'payment',amount:'85.50',side:'for_us'}));
 });
 const payoutField = label => [...host.querySelectorAll('label')].find(item => item.querySelector('span')?.textContent === label)?.querySelector('select');
+const chooseDemand = async (label,value) => {
+  const input=host.querySelector(`select[aria-label="${label}"]`);
+  await act(async()=>{Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(input,value);input.dispatchEvent(new Event('change',{bubbles:true}));});
+};
+const demandContext=()=>({...context(),demandOnly:true,resources:[],capabilities:{create_entries:true}});
+const optionPage=items=>({items,total:items.length,page:1,page_size:24,pages:1,session_scope:'scope',permission_version:1});
+
+test('demand entry loads only the selected payee kind and then its selected source group before saving unchanged intent',async()=>{
+  const ctx=demandContext(),supplier={...resource('supplier','المورد'),operations:['supplier.payment']};
+  const bank={...resource('bank','بنك الدفع'),can_fund_payment:true,balance:{visible:true,amount:'100.00',side:'for_us'},access:{use:true,balance:true}};
+  api.options.mockImplementation(async params=>optionPage(params.role==='recipient'?[supplier]:[bank]));
+  await render(<ApprovedEntry context={ctx} mode="choose" onBack={()=>{}} onSaved={saved}/>);
+  expect(api.options).not.toHaveBeenCalled();
+  await click('دفعت مبلغ');
+  expect(api.options).not.toHaveBeenCalled();
+  await change('نوع السداد','supplier');
+  expect(api.options).toHaveBeenCalledTimes(1);
+  expect(api.options.mock.calls[0][0]).toEqual({operation:'out',role:'recipient',kind:'supplier',page:1,page_size:24});
+  await chooseDemand('وصل المبلغ إلى',JSON.stringify(['supplier','المورد']));
+  expect(api.options).toHaveBeenCalledTimes(1);
+  await change('نوع مصدر الدفع','bank');
+  expect(api.options.mock.calls[1][0]).toEqual({operation:'out',role:'source',kind:'bank',page:1,page_size:24,selected_kind:'supplier',selected_id:'المورد'});
+  expect(api.accountGroup).not.toHaveBeenCalled();
+  await chooseDemand('خرج المبلغ من',JSON.stringify(['bank','بنك الدفع']));
+  await change('المبلغ (ريال)','25');
+  await click('مراجعة الحركة');
+  expect(host.textContent).toContain('بنك الدفع');
+  expect(api.entry).not.toHaveBeenCalled();
+  await click('تأكيد وتسجيل الحركة');
+  expect(api.entry).toHaveBeenCalledTimes(1);
+  expect(api.entry.mock.calls[0][0]).toMatchObject({party_type:'supplier',party_id:'المورد',source_type:'bank',source_id:'بنك الدفع',amount:'25.00',reason:'payment',side:'for_us'});
+  expect(saved).toHaveBeenCalledTimes(1);
+});
+
+test('changing payee type aborts the old source options and excludes their late response',async()=>{
+  const ctx=demandContext();ctx.operations.push('employee.payment');
+  const supplier={...resource('supplier','المورد'),operations:['supplier.payment']};
+  let finish;
+  api.options.mockImplementation((params)=>params.role==='source'?new Promise(resolve=>{finish=resolve;}):Promise.resolve(optionPage(params.kind==='supplier'?[supplier]:[])));
+  await render(<ApprovedEntry context={ctx} mode="out" onBack={()=>{}} onSaved={saved}/>);
+  await change('نوع السداد','supplier');
+  await chooseDemand('وصل المبلغ إلى',JSON.stringify(['supplier','المورد']));
+  await change('نوع مصدر الدفع','bank');
+  const signal=api.options.mock.calls.find(([params])=>params.role==='source')[1].signal;
+  await change('نوع السداد','employee');
+  expect(signal.aborted).toBe(true);
+  await act(async()=>{finish(optionPage([resource('bank','مصدر قديم')]));});
+  expect(host.textContent).not.toContain('مصدر قديم');
+  expect(host.querySelector('select[aria-label="خرج المبلغ من"]')).toBeNull();
+  expect(api.entry).not.toHaveBeenCalled();
+});
 test('opening a supplier ledger fixes the payee and separates funded custody from unavailable sources',async()=>{
   const ctx=context(), supplier=ctx.resources[0];
   const funds=(kind,id,amount)=>({...resource(kind,id),access:{use:true,balance:true},balance:{visible:true,amount,side:'for_us'}});

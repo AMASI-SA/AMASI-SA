@@ -78,6 +78,10 @@ class ReadCounter:
                     await asyncio.sleep(owner.delay)
                 return await target.find_one(*args, **kwargs)
 
+            def aggregate(self, *args, **kwargs):
+                owner.reads[(name, "aggregate")] += 1
+                return target.aggregate(*args, **kwargs)
+
             async def create_index(self, *args, **kwargs):
                 owner.index_calls[name] += 1
                 await asyncio.sleep(0)
@@ -208,7 +212,8 @@ async def test_assembly_board_batches_orders_and_keeps_total_sort_and_pagination
     assert [row["order_number"] for row in result["items"]] == numbers[30:50]
     assert all(row["ready_count"] == row["total_count"] == 1 for row in result["items"])
     assert counted.reads[("unified_orders", "find_one")] == 0
-    assert counted.reads[("unified_orders", "find")] <= 3
+    assert counted.reads[("unified_orders", "find")] == 0
+    assert counted.reads[("unified_orders", "aggregate")] == 3
 
 
 @pytest.mark.asyncio
@@ -220,11 +225,12 @@ async def test_search_does_not_hydrate_unmatched_assembly_orders():
     assert result["total"] == 1
     assert result["items"][0]["order_number"] == "1005"
     assert counted.reads[("unified_orders", "find_one")] == 0
-    assert counted.reads[("unified_orders", "find")] == 1
+    assert counted.reads[("unified_orders", "find")] == 0
+    assert counted.reads[("unified_orders", "aggregate")] == 1
 
 
 @pytest.mark.asyncio
-async def test_simultaneous_board_polls_initialize_indexes_once_per_router():
+async def test_simultaneous_custody_polls_initialize_indexes_once_per_router():
     raw = AsyncMongoMockClient().index_budget
     await seed_queue(raw, "in_progress", 3)
     db = ReadCounter(raw)
@@ -234,10 +240,10 @@ async def test_simultaneous_board_polls_initialize_indexes_once_per_router():
     app.include_router(make_preparation_piece_operations_router(db, actor))
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://local.test") as client:
         responses = await asyncio.gather(*[
-            client.get("/preparation-work-v1/assembly/orders", params={"state": "in_progress"})
+            client.get("/preparation-work-v1/receiving/custody")
             for _ in range(4)
         ])
-    assert all(response.status_code == 200 and response.json()["total"] == 3 for response in responses)
+    assert all(response.status_code == 200 for response in responses)
     assert sum(db.index_calls.values()) == 5
 
 
@@ -260,7 +266,7 @@ async def test_index_failure_can_retry_without_marking_the_router_ready(monkeypa
         return {"id": "owner", "role": "owner"}
     app.include_router(make_preparation_piece_operations_router(db, actor))
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app, raise_app_exceptions=False), base_url="http://local.test") as client:
-        responses = [await client.get("/preparation-work-v1/assembly/orders", params={"state": "in_progress"}) for _ in range(3)]
+        responses = [await client.get("/preparation-work-v1/receiving/custody") for _ in range(3)]
     assert [response.status_code for response in responses] == [500, 200, 200]
     assert attempts == 2
     assert sum(db.index_calls.values()) == 5

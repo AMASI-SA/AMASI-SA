@@ -28,7 +28,14 @@ const files = path.join(out, 'dist');
 const calls = [], errors = [], results = [];
 let mode = 'success', scenario = '', manualSaved = false;
 let releasePreview = null, previewStarted = null, releaseForecast = null, forecastStarted = null;
+let forecastReleased = null;
+const readLeases = new Map();
+const reportPath = '/api/operational-balances/workspace/report';
+const releasePrefix = '/api/operational-balances/workspace/read-demand/';
 const currentFixtures = () => manualSaved ? mode === 'manual-refresh-failed' ? pendingFixtures : confirmedFixtures : fixtures;
+const readyReport = report => ({ ...report, permission_version: 3, owner_override: true,
+  snapshot: { generated_at: report.as_of, revision: report.revision, status: report.status,
+    started_at: report.started_at, as_of: report.as_of, display_only: true } });
 const server = http.createServer((request, response) => {
   const url = new URL(request.url, 'http://127.0.0.1');
   const send = (status, body) => {
@@ -37,7 +44,19 @@ const server = http.createServer((request, response) => {
     response.end(JSON.stringify(body));
   };
   if (url.pathname.startsWith('/api/')) {
-    calls.push({method:request.method, path:url.pathname, params:Object.fromEntries(url.searchParams), scenario, mode});
+    const call = {method:request.method, path:url.pathname, params:Object.fromEntries(url.searchParams), scenario, mode,
+      consumer:request.headers['x-mezan-read-consumer'], poll:request.headers['x-mezan-read-poll']};
+    calls.push(call);
+    if (url.pathname.startsWith(releasePrefix) && request.method === 'DELETE') {
+      const key = url.pathname.slice(releasePrefix.length), lease = readLeases.get(key);
+      if (!lease || url.searchParams.get('consumer_id') !== lease.consumer) {
+        errors.push('Read release must address only its own active consumer');
+        return send(422, {detail:'Invalid synthetic read release'});
+      }
+      readLeases.delete(key);
+      lease.released();
+      return send(200, {released:true});
+    }
     if (url.pathname.endsWith('/delivery-after-start/preview') || url.pathname.endsWith('/delivery-after-start/confirm')) {
       let body = '';
       request.on('data', chunk => {body += chunk;});
@@ -82,7 +101,12 @@ const server = http.createServer((request, response) => {
       if (mode === 'denied') return send(403, {detail:{code:'operational_forbidden'}});
       return send(200, {status:'refreshed'});
     }
-    if (url.pathname.endsWith('/financial-position') && request.method === 'GET') {
+    if (url.pathname === reportPath && request.method === 'GET') {
+      if (call.params.demand !== 'true' || typeof call.consumer !== 'string' || !/^[a-zA-Z0-9-]{8,128}$/.test(call.consumer)
+          || call.poll !== undefined && call.poll !== '1') {
+        errors.push('Report reads require an explicit demand and a valid attempt consumer');
+        return send(422, {detail:'Invalid synthetic read demand'});
+      }
       if (mode === 'denied') return send(403, {detail:{code:'operational_forbidden'}});
       const view = url.searchParams.get('view');
       const report = currentFixtures()[view];
@@ -102,14 +126,28 @@ const server = http.createServer((request, response) => {
         }
       }
       if (view === 'forecast' && mode === 'hold-forecast') {
-        releaseForecast = () => send(200, report);
+        const key = 'synthetic-forecast-' + call.consumer;
+        if (call.poll !== '1') {
+          if (readLeases.has(key)) {
+            errors.push('An admitted read must reuse its consumer only for polls');
+            return send(422, {detail:'Duplicate synthetic read admission'});
+          }
+          forecastReleased = new Promise(resolve => readLeases.set(key, {consumer:call.consumer, released:resolve}));
+          return send(202, {status:'preparing', key, retry_after_ms:2000,
+            release_url:'/operational-balances/workspace/read-demand/' + key});
+        }
+        if (!readLeases.has(key)) {
+          errors.push('A preparing report poll must retain its admitted consumer');
+          return send(422, {detail:'Missing synthetic read lease'});
+        }
+        releaseForecast = () => send(200, readyReport(report));
         forecastStarted?.();
         return;
       }
       // Deliberately return another actual generated snapshot to exercise the
       // client's identity check, even when a faulty server accepts the binding.
-      if (view === 'forecast' && mode === 'forecast-mismatch') return send(200, confirmedFixtures.forecast);
-      return send(200, report);
+      if (view === 'forecast' && mode === 'forecast-mismatch') return send(200, readyReport(confirmedFixtures.forecast));
+      return send(200, readyReport(report));
     }
     errors.push('Unexpected fixture API: ' + request.method + ' ' + url.pathname);
     return send(404, {detail:'Unexpected fixture API'});
@@ -135,8 +173,9 @@ async function withDeadline(operation, label) {
     })]);
   } finally {clearTimeout(timer);}
 }
-const reads = from => calls.slice(from).filter(row => row.path.endsWith('/financial-position'));
-const assertNoPost = from => assert.equal(calls.slice(from).filter(row => row.method !== 'GET').length, 0);
+const reads = from => calls.slice(from).filter(row => row.method === 'GET' && row.path === reportPath);
+const assertNoPost = from => assert.equal(calls.slice(from).filter(row => row.method !== 'GET'
+  && !(row.method === 'DELETE' && row.path.startsWith(releasePrefix))).length, 0);
 const navLink = (page, view) => page.locator('nav[aria-label="صفحات المركز المالي"] a[href*="view=' + view + '"]');
 async function waitForView(page, view, currency = 'SAR') {
   await page.getByTestId('financial-position-content').waitFor();
@@ -184,10 +223,16 @@ async function assertQuiet(page, milliseconds = 300) {
       await page.screenshot({path:path.join(out, 'financial-summary-desktop.png'), fullPage:false});
       releaseForecast(); releaseForecast=null; forecastStarted=null;
       await page.getByTestId('financial-forecast-pending').waitFor({state:'hidden'});
+      await withDeadline(forecastReleased, 'Completed forecast lease release');
       assert.equal(await page.getByTestId('financial-debt-summary').innerText(), saved);
       assert.equal(fixtures.forecast.currencies.SAR.metrics.forecast_monetary_position, null);
       assert.equal(await page.getByTestId('financial-forecast-position').getByLabel('المبلغ غير متاح').count(), 1);
-      assert.deepEqual(reads(before).map(row => row.params.view), ['summary', 'forecast']);
+      assert.deepEqual(reads(before).map(row => row.params.view), ['summary', 'forecast', 'forecast']);
+      const forecastReads = reads(before).filter(row => row.params.view === 'forecast');
+      assert.deepEqual(forecastReads.map(row => row.poll), [undefined, '1']);
+      assert.equal(forecastReads[0].consumer, forecastReads[1].consumer);
+      assert.deepEqual(forecastReads[0].params, forecastReads[1].params);
+      assert.equal(readLeases.size, 0);
       assertNoPost(before);
     });
     await check('Every sidebar page and currency is reachable with scoped GET-only navigation', async () => {
@@ -219,11 +264,13 @@ async function assertQuiet(page, milliseconds = 300) {
       const before=calls.length;
       await page.goto(origin); await waitForView(page,'summary'); await withDeadline(ready,'Deferred summary forecast');
       await navLink(page,'drivers').click(); await waitForView(page,'drivers');
+      await withDeadline(forecastReleased, 'Closed forecast lease release');
       releaseForecast(); releaseForecast=null; forecastStarted=null;
       await assertQuiet(page);
       await assertScopedTables(page,'drivers');
       assert.equal(await page.getByTestId('financial-debt-summary').count(),0);
-      assert.deepEqual(reads(before).map(row => row.params.view),['summary','forecast','drivers']);
+      assert.deepEqual(reads(before).map(row => row.params.view),['summary','forecast','forecast','drivers']);
+      assert.equal(readLeases.size, 0);
       assertNoPost(before);
     });
     await check('A different forecast snapshot never replaces saved values or becomes zero', async () => {
@@ -269,11 +316,13 @@ async function assertQuiet(page, milliseconds = 300) {
       await page.getByText(/تُعرض آخر أرصدة محفوظة بتاريخها/).first().waitFor();
       assert((await page.getByTestId('financial-table-drivers').innerText()).includes('75.00'));
       assert.deepEqual(calls.slice(before).map(row => [row.method,row.path.split('/').pop(),row.params.view]),
-        [['POST','refresh',undefined],['GET','financial-position','drivers']]);
+        [['POST','refresh',undefined],['GET','report','drivers']]);
     });
     await check('A hidden page does no request and one visible activation reads its section once', async () => {
       mode='success'; const hidden=await context.newPage(); hidden.on('pageerror',error => errors.push(error.message));
-      await hidden.addInitScript(() => {window.__testVisible=false;Object.defineProperty(document,'visibilityState',{get:() => window.__testVisible?'visible':'hidden'});});
+      await hidden.addInitScript(() => {window.__testVisible=false;
+        Object.defineProperty(document,'visibilityState',{get:() => window.__testVisible?'visible':'hidden'});
+        Object.defineProperty(document,'hidden',{get:() => !window.__testVisible});});
       const count=calls.length; await hidden.goto(origin+'/?view=drivers'); await assertQuiet(hidden);
       assert.equal(calls.length,count);
       await hidden.evaluate(() => {window.__testVisible=true;document.dispatchEvent(new Event('visibilitychange'));});
@@ -323,7 +372,7 @@ async function assertQuiet(page, milliseconds = 300) {
       assert((await drivers.innerText()).includes('100.00'));
       await page.getByText('تم حفظ التأكيد وتطبيقه في التقرير.',{exact:true}).waitFor();
       const work=calls.slice(before);
-      for(const suffix of ['/delivery-after-start/preview','/delivery-after-start/confirm','/refresh','/financial-position']) {
+      for(const suffix of ['/delivery-after-start/preview','/delivery-after-start/confirm','/refresh','/workspace/report']) {
         assert.equal(work.filter(call => call.path.endsWith(suffix)).length,1,suffix);
       }
       assert.equal(work.length,4);
@@ -359,7 +408,7 @@ async function assertQuiet(page, milliseconds = 300) {
       const action=row.getByRole('button',{name:'تأكيد التوصيل بعد بداية التشغيل',exact:true});
       assert.equal(await action.count() ? await action.isEnabled() : false,false);
       assert((await page.getByTestId('financial-table-drivers').innerText()).includes('75.00'));
-      for(const suffix of ['/delivery-after-start/preview','/delivery-after-start/confirm','/refresh','/financial-position']) {
+      for(const suffix of ['/delivery-after-start/preview','/delivery-after-start/confirm','/refresh','/workspace/report']) {
         assert.equal(calls.slice(before).filter(call => call.path.endsWith(suffix)).length,1,suffix);
       }
       assert.equal(reads(before)[0].params.view,'drivers');
@@ -369,7 +418,9 @@ async function assertQuiet(page, milliseconds = 300) {
     await check('Hiding during delivery preflight prevents confirmation and automatic retry', async () => {
       mode='manual-hidden'; manualSaved=false;
       const hidden=await context.newPage(); hidden.on('pageerror',error => errors.push(error.message));
-      await hidden.addInitScript(() => {window.__testVisible=true;Object.defineProperty(document,'visibilityState',{get:() => window.__testVisible?'visible':'hidden'});});
+      await hidden.addInitScript(() => {window.__testVisible=true;
+        Object.defineProperty(document,'visibilityState',{get:() => window.__testVisible?'visible':'hidden'});
+        Object.defineProperty(document,'hidden',{get:() => !window.__testVisible});});
       await hidden.goto(origin+'/?view=drivers'); await waitForView(hidden,'drivers');
       await hidden.getByRole('button',{name:'7 طلبات غير مؤكدة — مندوب تجريبي',exact:true}).click();
       const ready=new Promise(resolve => {previewStarted=resolve;});
@@ -387,6 +438,7 @@ async function assertQuiet(page, milliseconds = 300) {
       assert.equal(manualSaved,false); await hidden.close();
     });
     assert.equal(results.length,14);
+    assert.equal(readLeases.size,0, 'Every preparing read must release its consumer on completion or navigation');
     assert.deepEqual(errors,[]);
     fs.writeFileSync(path.join(out,'browser-evidence.json'),JSON.stringify({synthetic_only:true,results,calls,errors,
       fixture_sha256:fixtureManifest.sha256,views:pageViews},null,2));

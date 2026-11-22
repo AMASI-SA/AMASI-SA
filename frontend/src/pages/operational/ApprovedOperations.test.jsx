@@ -76,6 +76,29 @@ it('reads one saved summary, excludes prepaid shipping cash, retains unknown deb
   expect(operationalApi.refreshBalances).not.toHaveBeenCalled();
 });
 
+it('demand position uses exact server totals and fetches only its current detail page',async()=>{
+  const current={...context,actor:{id:'owner',is_owner:true},resources:[],demandOnly:true};
+  http.get.mockImplementation(async(url,config)=>({status:200,data:{session_scope:'a',permission_version:1,
+    report,summary:{available_cash:{SAR:'999.31',USD:null},providers:{SAR:{amount:null,partial:true},USD:{amount:'5.20',partial:false}}},
+    items:config.params.page===1?[bank]:[cash],page:config.params.page,page_size:24,total:25,pages:2,
+  }}));
+  await show(<ApprovedPosition context={current} identity="owner"/>);
+  expect(http.get).toHaveBeenCalledWith('/operational-balances/workspace/position',expect.objectContaining({params:{page:1,page_size:24,demand:true}}));
+  expect(host.querySelectorAll('.metric')[0].textContent).toContain('999.31');
+  expect(host.querySelectorAll('.metric')[1].textContent).toContain('غير متاح');
+  expect(host.querySelectorAll('.mz-position-line')).toHaveLength(1);
+  expect(operationalApi.financialPosition).not.toHaveBeenCalled();
+  await act(async()=>{[...host.querySelectorAll('button')].find(button=>button.textContent==='التالي').click();});
+  expect(http.get.mock.calls.at(-1)[1].params).toEqual({page:2,page_size:24,demand:true});
+  expect(host.querySelector('.mz-position-line').textContent).toContain('صندوق المتجر');
+  expect(host.querySelectorAll('.metric')[0].textContent).toContain('999.31');
+});
+
+it('a demand position cannot start an unscoped owner report for an employee',async()=>{
+  await show(<ApprovedPosition context={{...context,actor:{id:'employee',is_owner:false},resources:[],demandOnly:true}} identity="employee"/>);
+  expect(host.textContent).toContain('متاح لمالك الحساب');expect(http.get).not.toHaveBeenCalled();
+});
+
 it('discards previously visible financial figures when identity changes or permission is missing',async()=>{
   await show(<ApprovedPosition context={context} identity="first"/>);
   expect(host.querySelectorAll('.metric')).toHaveLength(3);

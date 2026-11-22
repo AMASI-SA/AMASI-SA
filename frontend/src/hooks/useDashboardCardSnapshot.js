@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import api from "../lib/api";
+import { demandRead } from "../lib/demandRead";
 import {
     DASHBOARD_CARD_REQUEST_TIMEOUT_MS,
     dashboardCardQuery,
@@ -53,22 +54,22 @@ export default function useDashboardCardSnapshot({
             inFlight = Promise.resolve().then(async () => {
                 if (!active) return;
                 try {
-                    const response = await apiClient.get(`${key}${manual ? `${query ? "&" : ""}refresh=true` : ""}`, {
-                        timeout: DASHBOARD_CARD_REQUEST_TIMEOUT_MS,
-                        _mezanAuthDeadlineAt: Date.now() + DASHBOARD_CARD_REQUEST_TIMEOUT_MS,
-                        signal: controller.signal,
-                    });
+                    const value = await demandRead((network) => apiClient.get(
+                        `${key}${manual ? `${query ? "&" : ""}refresh=true` : ""}`, {
+                            ...network, params: { demand: true }, timeout: DASHBOARD_CARD_REQUEST_TIMEOUT_MS,
+                            _mezanAuthDeadlineAt: Date.now() + DASHBOARD_CARD_REQUEST_TIMEOUT_MS,
+                        }), { signal: controller.signal });
                     if (!active) return;
-                    if (!validDashboardCardSnapshot(endpoint, response?.data, intervalMs)) {
+                    if (!validDashboardCardSnapshot(endpoint, value, intervalMs)) {
                         throw new Error("invalid_dashboard_card_snapshot");
                     }
-                    dueAt = nextDashboardCardReadAt(response.data, intervalMs);
-                    setState({ key, data: response.data, loading: false, error: null });
+                    dueAt = nextDashboardCardReadAt(value, intervalMs);
+                    setState({ key, data: value, loading: false, error: null });
                 } catch {
                     if (!active) return;
                     // Failed work must not quietly restore a one-minute loop.
                     // The card's explicit refresh remains available immediately.
-                    dueAt = Date.now() + intervalMs;
+                    dueAt = canReadAutomatically() ? Date.now() + intervalMs : 0;
                     setState((previous) => ({
                         key,
                         data: previous.key === key ? previous.data : null,
@@ -86,9 +87,17 @@ export default function useDashboardCardSnapshot({
         refreshRef.current = load;
         setState({ key, data: null, loading: false, error: null });
         void load(false);
-        const resume = () => { void load(false); };
+        const resume = () => {
+            if (!canReadAutomatically()) {
+                dueAt = 0;
+                controller?.abort();
+                return;
+            }
+            void load(false);
+        };
         window.addEventListener("focus", resume);
         window.addEventListener("online", resume);
+        window.addEventListener("offline", resume);
         document.addEventListener("visibilitychange", resume);
         return () => {
             active = false;
@@ -96,6 +105,7 @@ export default function useDashboardCardSnapshot({
             controller?.abort();
             window.removeEventListener("focus", resume);
             window.removeEventListener("online", resume);
+            window.removeEventListener("offline", resume);
             document.removeEventListener("visibilitychange", resume);
             if (refreshRef.current === load) refreshRef.current = resolved;
         };

@@ -13,6 +13,7 @@ import uuid
 ROOT = Path(__file__).resolve().parent
 WORKER_FLAG = 'MEZAN_BACKGROUND_WORKER_PROCESS'
 _current = None
+_read_metric_last = {}
 log = logging.getLogger(__name__)
 
 
@@ -20,8 +21,18 @@ def is_worker_process():
     return os.environ.get(WORKER_FLAG) == '1'
 
 
-async def _discard(stream):
+async def _discard(stream, *, trusted_read_metrics=False):
     # Drain without accumulating output or publishing provider/customer data.
+    if trusted_read_metrics:
+        from demand_read_store import read_metric_stream
+        def record(value):
+            import json
+            family, stamp = value['family'], time.monotonic()
+            if stamp - _read_metric_last.get(family, float('-inf')) >= 60:
+                _read_metric_last[family] = stamp
+                log.info('demand_read_sample %s', json.dumps(value, sort_keys=True, allow_nan=False))
+        await read_metric_stream(stream, record)
+        return
     while await stream.read(8192):
         pass
 
@@ -79,8 +90,8 @@ class ManagedWorker:
                     stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                 )
-                drains = [asyncio.create_task(_discard(stream)) for stream in
-                          (self.process.stdout, self.process.stderr)]
+                drains = [asyncio.create_task(_discard(self.process.stdout, trusted_read_metrics=True)),
+                          asyncio.create_task(_discard(self.process.stderr))]
                 code = await self.process.wait()
                 log.warning('Background worker exited code=%s; restarting after cooldown', code)
             except asyncio.CancelledError:
@@ -100,11 +111,11 @@ class ManagedWorker:
             with suppress(asyncio.CancelledError):
                 await self.task
 
-    async def wake(self, *, assembly=False):
+    async def wake(self, *, assembly=False, read_projections=False):
         if not self.status()['running'] or self.process.stdin is None:
             return False
         try:
-            self.process.stdin.write(b'assembly\n' if assembly else b'wake\n')
+            self.process.stdin.write(b'read\n' if read_projections else b'assembly\n' if assembly else b'wake\n')
             await asyncio.wait_for(self.process.stdin.drain(), 1)
             return True
         except (BrokenPipeError, ConnectionResetError, asyncio.TimeoutError):
@@ -133,8 +144,12 @@ def status():
     return _current.status() if _current else {'running': False, 'execution': 'background_process'}
 
 
-async def wake_background_process(*, assembly=False):
-    return await _current.wake(assembly=assembly) if _current is not None else False
+async def wake_background_process(*, assembly=False, read_projections=False):
+    return await _current.wake(assembly=assembly, read_projections=read_projections) if _current is not None else False
+
+
+async def wake_read_projections():
+    return await wake_background_process(read_projections=True)
 
 
 async def read_status(db):

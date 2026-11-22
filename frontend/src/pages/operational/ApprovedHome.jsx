@@ -1,26 +1,50 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Amount, formatMinor, Heading, Icon, IconBox, MovementIcon, isAsset } from './ApprovedFinanceUI';
-import { minorUnits, movementDate, movementRecorder, movementTitle, signedResourceBalance } from './simpleBalancesModel';
+import { minorUnits, movementDate, movementRecorder, movementTitle, signedResourceBalance, validHome } from './simpleBalancesModel';
 import { ResourceCard } from './ApprovedDirectory';
+import { simpleBalancesApi as api } from './simpleBalancesApi';
+import { assertWorkspace, retryWorkspaceRead, useWorkspaceRead } from './workspaceReadHooks';
+import WorkspaceSnapshot from './WorkspaceSnapshot';
 
-export default function ApprovedHome({context,to,onDetail,canAdd,onCreateCash,allowedTo=()=>true}) {
+function DemandHome(props) {
+  const { context } = props;
+  const read = useWorkspaceRead(async config => {
+    const value = await api.home(config);
+    assertWorkspace(value, context);
+    if (!validHome(value, context)) throw new Error('Invalid home summary');
+    return value;
+  }, JSON.stringify([context.actor.id, context.session_scope, context.permission_version, 'home']));
+  if (!read.data) return <><Heading title="الأرصدة التشغيلية"/>{read.error
+    ? <p role="alert" className="note warning">{read.error} <button type="button" onClick={()=>retryWorkspaceRead(read,context)}>إعادة المحاولة</button></p>
+    : <p role="status">جارٍ تحميل ملخص الأرصدة…</p>}</>;
+  return <HomeContents {...props} context={{ ...context, ...read.data }} />;
+}
+
+export default function ApprovedHome(props) {
+  return props.context.demandOnly ? <DemandHome {...props}/> : <HomeContents {...props}/>;
+}
+
+function HomeContents({context,to,onDetail,canAdd,onCreateCash,allowedTo=()=>true}) {
   const cash=context.resources.filter(r=>['bank','cash'].includes(r.kind)&&!r.prepaid_shipping_cash&&r.currency==='SAR');
   const subtotals=kind=>{
     const visible=cash.filter(r=>r.kind===kind).map(r=>minorUnits(signedResourceBalance(r))).filter(v=>v!==null);
     return visible.length ? visible.reduce((a,b)=>a+b,0n) : null;
   };
-  const bank=subtotals('bank'), box=subtotals('cash'), total=bank===null&&box===null?null:(bank??0n)+(box??0n);
+  const bank=context.summary ? minorUnits(context.summary.bank) : subtotals('bank');
+  const box=context.summary ? minorUnits(context.summary.cash) : subtotals('cash');
+  const total=context.summary ? minorUnits(context.summary.total) : bank===null&&box===null?null:(bank??0n)+(box??0n);
   const drawers=cash.filter(r=>r.kind==='cash');
   let drawerBalance=formatMinor(box);
-  if (!drawers.length) drawerBalance=context.actor.is_owner?'لا توجد صناديق نقدية بالريال':'لا توجد صناديق نقدية متاحة لك';
-  else if (box===null && drawers.every(r=>!r.access?.balance)) drawerBalance='عرض الرصيد يتطلب صلاحية';
+  if (!(context.summary ? context.summary.cash_count : drawers.length)) drawerBalance=context.actor.is_owner?'لا توجد صناديق نقدية بالريال':'لا توجد صناديق نقدية متاحة لك';
+  else if (box===null && (context.summary ? !context.summary.cash_balance_visible : drawers.every(r=>!r.access?.balance))) drawerBalance='عرض الرصيد يتطلب صلاحية';
   const accounts=context.resources.filter(r=>isAsset(r.kind));
   const preferred=['bank','cash','provider'].map(k=>accounts.find(r=>r.kind===k&&!r.prepaid_shipping_cash)).filter(Boolean);
-  const cards=[...preferred,...accounts.filter(r=>!preferred.includes(r))].slice(0,3);
+  const cards=context.summary ? context.resources : [...preferred,...accounts.filter(r=>!preferred.includes(r))].slice(0,3);
   const date=new Intl.DateTimeFormat('ar-SA-u-ca-gregory-nu-latn',{dateStyle:'full',timeZone:'Asia/Riyadh'}).format(new Date());
   const recent=context.recent_movements;
   return <><Heading title="الأرصدة التشغيلية" subtitle={date}>{canAdd&&<Link className="button primary" to={to('entry')}><Icon name="plus"/>حركة مالية جديدة</Link>}</Heading>
+    <WorkspaceSnapshot snapshot={context.snapshot}/>
     <div className="main-grid"><section className="hero"><div className="hero-caption">الرصيد المتاح في البنوك والصناديق</div>
       <div className="big"><bdi>{formatMinor(total)}</bdi>{total!==null && <span className="unit"> ريال سعودي</span>}</div>
       <div className="hero-sub">مجموع الحسابات النقدية المتاحة لك بالريال</div><div className="split">
@@ -38,6 +62,6 @@ export default function ApprovedHome({context,to,onDetail,canAdd,onCreateCash,al
       <tbody>{recent.map(row=><tr key={row.event_id||row.id}><td><button className="tablelink" onClick={()=>onDetail(row)}><MovementIcon type={row.movement_type}/><span>{movementTitle(row)}<small>{movementDate(row)} · {movementRecorder(row)}</small></span></button></td>
       <td>{row.from_name && row.to_name ? <>{row.from_name} ← {row.to_name}</> : row.party_name}</td><td><Amount value={row.amount} currency={row.currency}/></td><td><span className="pill st-done">مسجّلة</span></td><td><bdi>{row.reference||row.order_number||'—'}</bdi></td></tr>)}</tbody></table></div>:
       <p className="empty">{Array.isArray(recent)?'لا توجد حركات مسجّلة متاحة لك.':'يمكنك فتح سجل الحركات لعرض التفاصيل.'}</p>}</section>
-    {allowedTo('reviews')&&context.resources.some(r=>r.order_issues_count>0 || r.order_issues_count===null) && <Link className="section issue-notice" to={to('reviews')}><IconBox name="clock-3" tone="c-wait"/><strong>طلبات تحتاج مراجعة</strong><b>عرض الطلبات <Icon name="chevron-left"/></b></Link>}
+    {allowedTo('reviews')&&(context.summary ? context.has_order_issues : context.resources.some(r=>r.order_issues_count>0 || r.order_issues_count===null)) && <Link className="section issue-notice" to={to('reviews')}><IconBox name="clock-3" tone="c-wait"/><strong>طلبات تحتاج مراجعة</strong><b>عرض الطلبات <Icon name="chevron-left"/></b></Link>}
   </>;
 }

@@ -1,0 +1,177 @@
+{
+  "kind": "synthetic_local_fixture_only",
+  "recorded_on": "2026-11-22",
+  "production_changed": false,
+  "production_data_used": false,
+  "inputs": {
+    "orders": 5000,
+    "timeline_entries_per_order": 500,
+    "bytes": 433300000
+  },
+  "board_output_exactly_equal": true,
+  "first_pass_caveat": "The full pass includes first-use/import/GC and scheduling effects; one DTO row took 13.544s wall time. This is not a controlled Production speedup ratio or proof of the mobile15s cold budget.",
+  "canonical_change": "Only raw_by_source.salla_direct.timeline is excluded in the assembly bulk projection. Nested shipment history, marketing metadata and all canonical payment/status/item facts remain.",
+  "transport": "Fixture-owned isolated loopback Mongo replica; both cases have identical synthetic indexes.",
+  "results": [
+    {
+      "variant": "full",
+      "elapsed_seconds": 47.044127623999884,
+      "rows": 5000,
+      "sample": [
+        {
+          "counts": {
+            "canonical_batches": 50,
+            "hydrated_rows": 5000,
+            "mapped_rows": 5000,
+            "physical_rows": 5000,
+            "result_rows": 5000,
+            "virtual_pieces": 0,
+            "workflows_acquired": 5000,
+            "workflows_filtered": 5000
+          },
+          "elapsed_ms": 47043.63884700069,
+          "mode": "in_progress",
+          "outcome": "complete",
+          "phases": {
+            "cooperative_yield": {
+              "calls": 10000,
+              "max_ms": 6.048,
+              "sum_ms": 134.16
+            },
+            "dto_map": {
+              "calls": 5000,
+              "max_ms": 13544.438,
+              "sum_ms": 35636.055,
+              "sum_thread_cpu_ms": 15667.687
+            },
+            "hydrate_row": {
+              "calls": 5000,
+              "max_ms": 47.372,
+              "sum_ms": 5818.091,
+              "sum_thread_cpu_ms": 5788.202
+            },
+            "hydration_cursor": {
+              "calls": 5050,
+              "max_ms": 407.5,
+              "sum_ms": 3091.014
+            },
+            "local_proofs": {
+              "calls": 1,
+              "max_ms": 2.395,
+              "sum_ms": 2.395
+            },
+            "piece_distinct": {
+              "calls": 1,
+              "max_ms": 11.277,
+              "sum_ms": 11.277
+            },
+            "piece_read": {
+              "calls": 1,
+              "max_ms": 17.319,
+              "sum_ms": 17.319
+            },
+            "sort_group": {
+              "calls": 1,
+              "max_ms": 3.673,
+              "sum_ms": 3.673,
+              "sum_thread_cpu_ms": 3.672
+            },
+            "virtual_pieces": {
+              "calls": 5000,
+              "max_ms": 0.437,
+              "sum_ms": 7.458,
+              "sum_thread_cpu_ms": 6.757
+            },
+            "workflow_read": {
+              "calls": 1,
+              "max_ms": 17.182,
+              "sum_ms": 17.182
+            }
+          },
+          "pid": 6,
+          "scope": "assembly_board"
+        }
+      ]
+    },
+    {
+      "variant": "timeline_projection",
+      "elapsed_seconds": 3.5318246639999415,
+      "rows": 5000,
+      "sample": [
+        {
+          "counts": {
+            "canonical_batches": 50,
+            "hydrated_rows": 5000,
+            "mapped_rows": 5000,
+            "physical_rows": 5000,
+            "result_rows": 5000,
+            "virtual_pieces": 0,
+            "workflows_acquired": 5000,
+            "workflows_filtered": 5000
+          },
+          "elapsed_ms": 3531.17728899997,
+          "mode": "in_progress",
+          "outcome": "complete",
+          "phases": {
+            "cooperative_yield": {
+              "calls": 10000,
+              "max_ms": 3.363,
+              "sum_ms": 30.991
+            },
+            "dto_map": {
+              "calls": 5000,
+              "max_ms": 101.775,
+              "sum_ms": 1857.666,
+              "sum_thread_cpu_ms": 1794.438
+            },
+            "hydrate_row": {
+              "calls": 5000,
+              "max_ms": 0.763,
+              "sum_ms": 151.651,
+              "sum_thread_cpu_ms": 152.98
+            },
+            "hydration_cursor": {
+              "calls": 5050,
+              "max_ms": 646.822,
+              "sum_ms": 1198.601
+            },
+            "local_proofs": {
+              "calls": 1,
+              "max_ms": 2.479,
+              "sum_ms": 2.479
+            },
+            "piece_distinct": {
+              "calls": 1,
+              "max_ms": 14.762,
+              "sum_ms": 14.762
+            },
+            "piece_read": {
+              "calls": 1,
+              "max_ms": 17.24,
+              "sum_ms": 17.24
+            },
+            "sort_group": {
+              "calls": 1,
+              "max_ms": 4.69,
+              "sum_ms": 4.69,
+              "sum_thread_cpu_ms": 4.665
+            },
+            "virtual_pieces": {
+              "calls": 5000,
+              "max_ms": 0.049,
+              "sum_ms": 5.533,
+              "sum_thread_cpu_ms": 6.134
+            },
+            "workflow_read": {
+              "calls": 1,
+              "max_ms": 17.084,
+              "sum_ms": 17.084
+            }
+          },
+          "pid": 6,
+          "scope": "assembly_board"
+        }
+      ]
+    }
+  ]
+}

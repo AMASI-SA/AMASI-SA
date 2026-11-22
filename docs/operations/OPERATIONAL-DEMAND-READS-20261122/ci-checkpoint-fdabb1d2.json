@@ -1,0 +1,335 @@
+{
+  "head": "fdabb1d2a404433ad2b506d47847850aadd56e3c",
+  "observed_at": "2026-11-22T15:29:22.901Z",
+  "runs": [
+    {
+      "id": 45037120244,
+      "name": "Mezan MCP Gateway security tests",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120244"
+    },
+    {
+      "id": 45037120173,
+      "name": "Production Campaign AI Decision V3 Extended",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120173"
+    },
+    {
+      "id": 45037120257,
+      "name": "Assembly Mobile Settings",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120257"
+    },
+    {
+      "id": 45037120094,
+      "name": "Production Dashboard Executive Four Platform Date V1",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120094"
+    },
+    {
+      "id": 45037120139,
+      "name": "Production Dashboard Profit Date Race V1",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120139"
+    },
+    {
+      "id": 45037120141,
+      "name": "Snapchat Reporting V2 Shadow",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120141"
+    },
+    {
+      "id": 45037120242,
+      "name": "Salla Orders V3 acceptance",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120242"
+    },
+    {
+      "id": 45037120112,
+      "name": "Campaign hover source coverage",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120112"
+    },
+    {
+      "id": 45037120334,
+      "name": "Salla Order Revision P0 contracts",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120334"
+    },
+    {
+      "id": 45037120323,
+      "name": "Production Campaign AI Subprocess Worker V1",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120323"
+    },
+    {
+      "id": 45037120168,
+      "name": "MZ2 advertising V2 native accounting",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120168"
+    },
+    {
+      "id": 45037120321,
+      "name": "Qoyod Payment Freshness",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120321"
+    },
+    {
+      "id": 45037120264,
+      "name": "MZ2 Employee Salary and Password",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120264"
+    },
+    {
+      "id": 45037120107,
+      "name": "Runtime Stability",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120107"
+    },
+    {
+      "id": 45037120127,
+      "name": "Sold product cost details",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120127"
+    },
+    {
+      "id": 45037120270,
+      "name": "Mobile Order Tracking",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120270"
+    },
+    {
+      "id": 45037120293,
+      "name": "Snapchat Direct Active Publication",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120293"
+    },
+    {
+      "id": 45037120319,
+      "name": "Page and operational read performance",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120319"
+    },
+    {
+      "id": 45037120290,
+      "name": "Snapchat Settings Management V2",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120290"
+    },
+    {
+      "id": 45037120317,
+      "name": "Production Preparation Piece Operations",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120317"
+    },
+    {
+      "id": 45037120351,
+      "name": "Production Campaign AI Decision Intelligence V3",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120351"
+    },
+    {
+      "id": 45037120309,
+      "name": "Employees V2 Foundation",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120309"
+    },
+    {
+      "id": 45037120158,
+      "name": "Google Ads full management",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120158"
+    },
+    {
+      "id": 45037120275,
+      "name": "Supplier Invoice Service Policy",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120275"
+    },
+    {
+      "id": 45037120288,
+      "name": "Salla durable ingress and daily refresh",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120288"
+    },
+    {
+      "id": 45037120335,
+      "name": "Fulfillment V2",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120335"
+    },
+    {
+      "id": 45037120336,
+      "name": "Production Dashboard Four Platform Spend V1",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120336"
+    },
+    {
+      "id": 45037120303,
+      "name": "MZ2 Track F native shipping",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120303"
+    },
+    {
+      "id": 45037120484,
+      "name": "MZ2 Track G SSOT contracts",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120484"
+    },
+    {
+      "id": 45037120432,
+      "name": "Production Dashboard V2 Salla Ads Executive",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120432"
+    },
+    {
+      "id": 45037120287,
+      "name": "Dashboard card cadence and catalogue admission",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120287"
+    },
+    {
+      "id": 45037120295,
+      "name": "Supplier embroidery and profit layout acceptance (PR only)",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120295"
+    },
+    {
+      "id": 45037120407,
+      "name": "Assembly Direct Preparation Receipt",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120407"
+    },
+    {
+      "id": 45037120281,
+      "name": "Dashboard runtime adoption gate",
+      "status": "completed",
+      "conclusion": "failure",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120281"
+    },
+    {
+      "id": 45037120189,
+      "name": "Observability Phase1 isolated acceptance",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120189"
+    },
+    {
+      "id": 45037120410,
+      "name": "Store Delivery V1",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120410"
+    },
+    {
+      "id": 45037120508,
+      "name": "Background workers and two-hour Qoyod cycles",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120508"
+    },
+    {
+      "id": 45037120430,
+      "name": "Security Gate",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120430"
+    },
+    {
+      "id": 45037120337,
+      "name": "Supplier cost report performance",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120337"
+    },
+    {
+      "id": 45037120401,
+      "name": "Production Dashboard V2 Ad FX And Payment Fees",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120401"
+    },
+    {
+      "id": 45037120245,
+      "name": "Shipping Print Boundary",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120245"
+    },
+    {
+      "id": 45037120316,
+      "name": "G47 Focused Integration",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120316"
+    },
+    {
+      "id": 45037120370,
+      "name": "Mezan Release Readiness",
+      "status": "completed",
+      "conclusion": "failure",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120370"
+    },
+    {
+      "id": 45037120272,
+      "name": "CodeQL",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120272"
+    },
+    {
+      "id": 45037120243,
+      "name": "Review Completion Resumable",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120243"
+    },
+    {
+      "id": 45037120269,
+      "name": "Operational Stock Eligibility",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120269"
+    },
+    {
+      "id": 45037120326,
+      "name": "Operational Balance Web",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45037120326"
+    }
+  ]
+}

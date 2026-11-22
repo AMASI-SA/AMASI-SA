@@ -8,6 +8,7 @@ import {
 import { User } from "@phosphor-icons/react";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import api from "../lib/api";
+import { demandRead } from "../lib/demandRead";
 import MezanLiveSourcesCard from "../components/MezanLiveSourcesCard";
 import ProductTrafficSources from "../components/ProductTrafficSources";
 import DashboardPanel from "../components/DashboardPanel";
@@ -829,6 +830,7 @@ export async function loadDashboardPeriodSnapshot({
     now = Date.now,
     endpoint = "/dashboard-v2",
     refresh = false,
+    signal,
 }) {
     if (!background) {
         setLoading(true);
@@ -850,13 +852,25 @@ export async function loadDashboardPeriodSnapshot({
             }).catch(() => null)
             : Promise.resolve(null);
         const requestConfig = () => ({
+            signal,
             timeout: DASHBOARD_CARD_REQUEST_TIMEOUT_MS,
             _mezanAuthDeadlineAt: Date.now() + DASHBOARD_CARD_REQUEST_TIMEOUT_MS,
             headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
         });
         const matchesRange = (response) => !response?.config
             || dashboardRequestRangeKey(response.config) === dashboardRequestRangeKey({ url: `${endpoint}?${query.toString()}` });
-        let response = await apiClient.get(`${endpoint}?${query.toString()}`, requestConfig());
+        const read = async () => {
+            const url = `${endpoint}?${query.toString()}`;
+            if (!endpoint.startsWith("/dashboard-v2/cards/")) return apiClient.get(url, requestConfig());
+            let completed;
+            const data = await demandRead(async (network) => {
+                completed = await apiClient.get(url, { ...requestConfig(), ...network,
+                    params: { demand: true }, _mezanAuthDeadlineAt: Date.now() + DASHBOARD_CARD_REQUEST_TIMEOUT_MS });
+                return completed;
+            }, { signal });
+            return { ...completed, data };
+        };
+        let response = await read();
         let timeoutId;
         const platformSpend = await Promise.race([
             platformSpendPromise,
@@ -880,7 +894,7 @@ export async function loadDashboardPeriodSnapshot({
             // in-flight work; unmatched results retain the rendering gate.
             if (endpoint === "/dashboard-v2") query.set("_refresh", `${now()}-spend-recompute`);
             query.set("refresh", "true");
-            response = await apiClient.get(`${endpoint}?${query.toString()}`, requestConfig());
+            response = await read();
             if (!isLatest(requestSequence) || !matchesRange(response)) return;
         }
         // The executive card keeps financial totals and bank fees owned by the
@@ -939,6 +953,7 @@ export default function AdvancedDashboard() {
     const { orders, hasMore: hasMoreOrders, loading: ordersLoading, loadMore: loadMoreOrders } = useOrders();
     const dashboardDataRef = useRef(null);
     const requestSequenceRef = useRef(0);
+    const executiveControllerRef = useRef(null);
     const executiveDueRef = useRef({ key: null, at: 0 });
     const dashboardRefreshGateRef = useRef(null);
     if (dashboardRefreshGateRef.current === null) {
@@ -951,6 +966,9 @@ export default function AdvancedDashboard() {
         if (background && executiveDueRef.current.key === nextKey && Date.now() < executiveDueRef.current.at) return;
         const gate = dashboardRefreshGateRef.current;
         if (!gate.start(background)) return;
+        executiveControllerRef.current?.abort();
+        const controller = new AbortController();
+        executiveControllerRef.current = controller;
         const requestSequence = ++requestSequenceRef.current;
         const platformVersion = beginPlatformRead();
         try {
@@ -959,6 +977,7 @@ export default function AdvancedDashboard() {
                 background,
                 endpoint: "/dashboard-v2/cards/executive",
                 refresh,
+                signal: controller.signal,
                 requestSequence,
                 isLatest: (sequence) => sequence === requestSequenceRef.current,
                 setData: (value) => {
@@ -970,9 +989,11 @@ export default function AdvancedDashboard() {
                 onPlatformSpend: (value) => receivePlatformSpend(value, platformVersion),
             });
             if (requestSequence === requestSequenceRef.current) {
-                executiveDueRef.current = { key: nextKey, at: nextDashboardCardReadAt(result, EXECUTIVE_REFRESH_MS) };
+                executiveDueRef.current = { key: nextKey, at: document.hidden || navigator.onLine === false
+                    ? 0 : nextDashboardCardReadAt(result, EXECUTIVE_REFRESH_MS) };
             }
         } finally {
+            if (executiveControllerRef.current === controller) executiveControllerRef.current = null;
             gate.finish(background);
         }
     }, [beginPlatformRead, receivePlatformSpend]);
@@ -988,9 +1009,12 @@ export default function AdvancedDashboard() {
         void topProducts.refresh();
         void periodSummary.refresh();
     };
-    useEffect(() => { loadPeriod(filters); }, [filters, loadPeriod]);
+    useEffect(() => {
+        void loadPeriod(filters);
+        return () => executiveControllerRef.current?.abort();
+    }, [filters, loadPeriod]);
     useEffect(() => { dashboardDataRef.current = visibleData; }, [visibleData]);
-    useEffect(() => () => { requestSequenceRef.current += 1; }, []);
+    useEffect(() => () => { requestSequenceRef.current += 1; executiveControllerRef.current?.abort(); }, []);
     useEffect(() => {
         const previousSignature = lastOrderSignatureRef.current;
         lastOrderSignatureRef.current = orderSignature;
@@ -999,15 +1023,18 @@ export default function AdvancedDashboard() {
         }
   }, [orderSignature, refreshDashboard]);
     useEffect(() => {
-    const handleVisibilityChange = () => { if (!document.hidden) refreshDashboard(); };
+    const pause = () => { executiveControllerRef.current?.abort(); };
+    const handleVisibilityChange = () => { if (document.hidden) pause(); else refreshDashboard(); };
     const timer = window.setInterval(refreshDashboard, DASHBOARD_AUTO_REFRESH_MS);
     window.addEventListener("focus", refreshDashboard);
     window.addEventListener("online", refreshDashboard);
+    window.addEventListener("offline", pause);
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => {
       window.clearInterval(timer);
       window.removeEventListener("focus", refreshDashboard);
       window.removeEventListener("online", refreshDashboard);
+      window.removeEventListener("offline", pause);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [refreshDashboard]);

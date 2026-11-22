@@ -4,6 +4,9 @@ import { formatRiyadhArabicLong } from '../../lib/dates';
 import { grantedWebLink } from '../../lib/webPageAccess';
 import { operationalApi } from './api';
 import { useBalanceRead } from './simpleBalancesHooks';
+import { assertWorkspace, retryWorkspaceRead, useWorkspaceRead, validResourcePage } from './workspaceReadHooks';
+import { simpleBalancesApi as api } from './simpleBalancesApi';
+import WorkspaceSnapshot from './WorkspaceSnapshot';
 import { minorUnits, resourceKey, signedResourceBalance } from './simpleBalancesModel';
 import { AdBalance, Amount, formatMinor, Heading, Icon, IconBox, assetGroups, partyGroups, isAsset, styleOf } from './ApprovedFinanceUI';
 import { ProviderAmount } from './ApprovedDirectory';
@@ -68,7 +71,7 @@ export default function ApprovedOperations({ context, onBack, pages=null }) {
   if (grants.has('customer.refund_request') || grants.has('customer.refund_execute')) {
     employeeLinks.push(['رد مبلغ برقم الطلب', workspace + '?view=refund', 'corner-down-left']);
   }
-  if (grants.has('courier.review') && context.resources.some(r => r.kind === 'store_driver' && r.access?.movements === 'all')) {
+  if (grants.has('courier.review') && (context.demandOnly ? context.capabilities?.review_collections === true : context.resources.some(r => r.kind === 'store_driver' && r.access?.movements === 'all'))) {
     employeeLinks.push(['مراجعة تحصيلات الموصلين', workspace + '?view=collections', 'list-checks']);
   }
   const visibleGroups = tools.map(([name, links]) => [name, links.filter(([,to,,requirement]) =>
@@ -105,7 +108,63 @@ function PositionMetric({ title, amount, currency, partial }) {
     {partial && <small>الأرصدة المثبتة فقط</small>}</div>;
 }
 
-export function ApprovedPosition({ context, identity, onBack, onOpen, scoped=false, canOpen=()=>true }) {
+export function ApprovedPosition(props) {
+  return props.context.demandOnly ? <DemandPosition {...props}/> : <LegacyPosition {...props}/>;
+}
+
+function DemandPosition({ context, identity, onBack, onOpen, scoped=false, canOpen=()=>true }) {
+  const [page, setPage] = useState(1), [selectedCurrency, setSelectedCurrency] = useState('');
+  const allowed = context.actor?.is_owner === true || scoped;
+  const read = useWorkspaceRead(async config => {
+    const value = await api.position({ page, page_size: 24 }, config);
+    assertWorkspace(value, context);
+    if (!validResourcePage(value, context) || !value.summary || (!scoped && context.status === 'active'
+      && (value.report?.permissions?.reports !== true || value.report.session_scope !== context.session_scope
+        || value.report.view !== 'summary' || value.report.schema_version !== 1
+        || value.report.authority !== 'operational_balance_report' || !value.report.currencies))) {
+      throw new Error('Invalid financial position');
+    }
+    return value;
+  }, JSON.stringify([identity, context.session_scope, context.permission_version, 'position', page]), allowed);
+  const result = read.data, report = result?.report;
+  const currencies = Object.keys(report?.currencies || {});
+  const currency = currencies.includes(selectedCurrency) ? selectedCurrency : currencies.includes('SAR') ? 'SAR' : currencies[0];
+  const figures = report?.currencies?.[currency], provider = result?.summary.providers?.[currency];
+  const date = report?.as_of && Number.isFinite(Date.parse(report.as_of)) ? formatRiyadhArabicLong(report.as_of) : '';
+  if (!allowed) return <p role="alert">المركز المالي متاح لمالك الحساب.</p>;
+  return <>
+    <button type="button" className="textbtn back" onClick={onBack}><Icon name="chevron-left"/>الأرصدة التشغيلية</button>
+    <Heading title="المركز المالي" subtitle={scoped ? 'أرصدة الحسابات والجهات المسموح لك بعرضها' : date ? 'ملخص المالك في ' + date : 'ملخص المالك'}>
+      {context.actor.is_owner && <Link to={positionView('summary')} className="textbtn">التقرير التفصيلي <Icon name="chevron-left"/></Link>}
+    </Heading>
+    {read.error ? <p role="alert" className="note warning">{read.error} <button type="button" onClick={()=>retryWorkspaceRead(read,context)}>إعادة المحاولة</button></p>
+      : !result ? <p role="status">جارٍ قراءة ملخص الأرصدة…</p> : <>
+        <WorkspaceSnapshot snapshot={result.snapshot}/>
+        {!scoped && (context.status !== 'active' ? <p className="empty">يتاح ملخص المركز المالي أثناء التشغيل بعد اعتماد الأرصدة الافتتاحية.</p>
+          : !figures ? <p className="empty">لا توجد بيانات عملة متاحة لهذا الملخص.</p> : <>
+            {currencies.length > 1 && <label className="mz-position-currency">عملة الملخص <select value={currency} onChange={event => setSelectedCurrency(event.target.value)}>
+              {currencies.map(code => <option key={code}>{code}</option>)}</select></label>}
+            <div className="cards">
+              <PositionMetric title="المتاح في البنوك والصناديق" amount={result.summary.available_cash?.[currency]} currency={currency}/>
+              <PositionMetric title="مبالغ عند منصات الدفع" amount={provider?.amount} currency={currency} partial={provider?.partial}/>
+              <PositionMetric title="مبالغ مستحقة للجهات" amount={figures.debt_totals?.payable} currency={currency}
+                partial={figures.completeness?.actual === false && figures.debt_totals?.payable != null}/>
+            </div>
+          </>)}
+        <section className="section panel sheet"><div className="section-head"><h2>تفاصيل الأرصدة</h2></div>
+          {result.items.map(resource => <PositionLine key={resourceKey(resource)} resource={resource} onOpen={onOpen} enabled={canOpen(resource)}/>)}
+          {!result.total && <p className="empty">لا توجد حسابات متاحة للعرض.</p>}
+          {result.pages > 1 && <nav className="movement-pages" aria-label="صفحات تفاصيل الأرصدة">
+            <span>عرض {(result.page - 1) * 24 + 1}–{Math.min(result.page * 24, result.total)} من {result.total}</span><div>
+              <button type="button" className="button" disabled={result.page <= 1} onClick={() => setPage(result.page - 1)}>السابق</button>
+              <span>صفحة {result.page} من {result.pages}</span><button type="button" className="button" disabled={result.page >= result.pages} onClick={() => setPage(result.page + 1)}>التالي</button>
+            </div></nav>}
+        </section>
+      </>}
+  </>;
+}
+
+function LegacyPosition({ context, identity, onBack, onOpen, scoped=false, canOpen=()=>true }) {
   const owner = context.actor?.is_owner === true;
   const [selectedCurrency, setSelectedCurrency] = useState('');
   const [page, setPage] = useState(1);

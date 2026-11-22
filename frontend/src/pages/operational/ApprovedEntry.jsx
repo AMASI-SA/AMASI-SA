@@ -7,6 +7,7 @@ import { decimalAmount, entryChoices, isMoneyAccount, minorUnits, permittedOpera
 
 import PendingEntryActions from './PendingEntryActions';
 import PaymentSourceFields, { exceedsSource, insufficientSource, sourceAvailability, usePaymentSourceGroup } from './PaymentSourceFields';
+import WorkspaceResourcePicker from './WorkspaceResourcePicker';
 
 const RefundScreen = lazy(() => import('./ApprovedRefund'));
 export function ApprovedRefund(props) {
@@ -59,7 +60,7 @@ export default function ApprovedEntry(props) {
 function EntryWorkflow({ context, resource, mode = 'choose', onBack, onSaved, onPurchase, onRefund }) {
   const [selected, setSelected] = useState(modes[mode] ? mode : 'choose');
   const resourceId = resource && resourceKey(resource);
-  const allowedTarget = resource && context.resources.find(item => resourceKey(item) === resourceId);
+  const allowedTarget = resource && (context.demandOnly ? resource : context.resources.find(item => resourceKey(item) === resourceId));
   const carrierContext = allowedTarget?.kind === 'courier';
   const granted = permittedOperations(context);
   const sources = context.resources.filter(item => item.access?.use === true && (item.currency || 'SAR') === 'SAR');
@@ -73,7 +74,9 @@ function EntryWorkflow({ context, resource, mode = 'choose', onBack, onSaved, on
   };
   function movementChoice(key) {
     const [label, icon, tone] = modes[key];
-    const enabled = context.status === 'active' && (carrierContext ? [allowedTarget] : context.resources).some(r => canTarget(context, r, key) && canFund(r, key));
+    const enabled = context.status === 'active' && (context.demandOnly
+      ? context.capabilities?.create_entries === true && (!carrierContext || canTarget(context, allowedTarget, key))
+      : (carrierContext ? [allowedTarget] : context.resources).some(r => canTarget(context, r, key) && canFund(r, key)));
     return <button type="button" className="quickbtn" disabled={!enabled} onClick={() => setSelected(key)}>
       <IconBox name={icon} tone={tone}/>{carrierContext ? entryTitle(key, allowedTarget) : label}<span className="next"><Icon name="chevron-left" className="smallicon"/></span>
     </button>;
@@ -94,8 +97,11 @@ function EntryWorkflow({ context, resource, mode = 'choose', onBack, onSaved, on
 }
 
 function MovementFields({ context, resource, mode, onBack, onChangeMode, onSaved }) {
+  const demand = context.demandOnly === true;
   const resourceIsSource = cash(resource) && (!transfer(mode) || mode === 'move');
-  const targets = context.resources.filter(item => canTarget(context, item, mode));
+  const [pickedTarget, setPickedTarget] = useState(!resourceIsSource && canTarget(context, resource, mode) ? resource : null);
+  const [pickedSource, setPickedSource] = useState(resourceIsSource ? resource : null);
+  const targets = (demand ? [pickedTarget].filter(Boolean) : context.resources).filter(item => canTarget(context, item, mode));
   const payout = mode === 'out';
   const fixedPayee = payout && resource && !resourceIsSource;
   const [payeeKind, setPayeeKind] = useState(fixedPayee ? resource.kind : '');
@@ -105,7 +111,8 @@ function MovementFields({ context, resource, mode, onBack, onChangeMode, onSaved
   const sources = sourcesFor(context, target, mode);
   const [sourceKind, setSourceKind] = useState(resourceIsSource ? resource.kind : '');
   const [sourceKey, setSourceKey] = useState(resourceIsSource ? resourceKey(resource) : '');
-  const group = usePaymentSourceGroup(context, sources, sourceKind, payout && Boolean(target));
+  const legacyGroup = usePaymentSourceGroup(context, sources, sourceKind, !demand && payout && Boolean(target));
+  const group = demand ? { rows: pickedSource ? [pickedSource] : [], onDemand: true } : legacyGroup;
   const source = group.rows.find(item => resourceKey(item) === sourceKey && (!payout || item.kind === sourceKind));
   const [form, setForm] = useState(baseForm), [review, setReview] = useState(null), [message, setMessage] = useState('');
   const [quote, setQuote] = useState(null), [quoting, setQuoting] = useState(false);
@@ -157,15 +164,35 @@ function MovementFields({ context, resource, mode, onBack, onChangeMode, onSaved
     if (payout && ((group.onDemand && sourceAvailability(source) !== true) || exceedsSource(source, command.ad_bank_funding?.bank_amount || amount))) return setMessage(insufficientSource);
     setMessage(''); setReview(command);
   }
-  function clearSource() { setSourceKey(''); setSourceKind(''); }
+  function clearSource() { setSourceKey(''); setSourceKind(''); setPickedSource(null); }
   function changePayeeKind(value) {
-    setPayeeKind(value); setTargetKey(''); clearSource(); setQuote(null);
+    setPayeeKind(value); setTargetKey(''); setPickedTarget(null); clearSource(); setQuote(null);
     change({ unit: 'receipt', usd: '', fee: '', receipt: '', arrival: false, wallet: false });
   }
   const targetSelect = <select value={targetKey} required disabled={!editable} onChange={e => {
     setTargetKey(e.target.value); if (payout && targetKey) clearSource(); setQuote(null); change({ unit: 'receipt', usd: '', fee: '', receipt: '', arrival: false, wallet: false });
   }}>{options(selectedTargets)}</select>;
   const sourceSelect = <select value={source ? sourceKey : ''} required disabled={!editable} onChange={e => {setSourceKey(e.target.value); setMessage('');}}>{options(sources)}</select>;
+  const demandTarget = label => <WorkspaceResourcePicker key={`recipient-${payeeKind}`} context={context} operation={mode} role="recipient"
+    kind={payout ? payeeKind : ''} selectedResource={resourceIsSource ? source : undefined} value={target} label={label} disabled={!editable}
+    onSelect={item => {
+      setPickedTarget(item); setTargetKey(item ? resourceKey(item) : ''); clearSource(); setQuote(null);
+      change({ unit: 'receipt', usd: '', fee: '', receipt: '', arrival: false, wallet: false });
+    }}/>;
+  const fundingKinds = target?.ad_bank_funding || isPayPal(target) || target?.kind === 'pos_receivable'
+    ? ['bank'] : ['bank', 'cash', ...(payout && ['supplier', 'external_person', 'operating_expense'].includes(target?.kind)
+      && permittedOperations(context).has('custody.spend') ? ['employee_custody'] : [])];
+  const demandSource = label => <>
+    {field('نوع مصدر الدفع', <select value={sourceKind} required disabled={!editable} onChange={event => {
+      setSourceKind(event.target.value); setSourceKey(''); setPickedSource(null); setMessage('');
+    }}><option value="">اختر نوع المصدر</option>{fundingKinds.map(kind => <option key={kind} value={kind}>{resourceLabels[kind]}</option>)}</select>)}
+    {sourceKind && <WorkspaceResourcePicker key={`source-${sourceKind}-${targetKey}`} context={context} operation={mode} role="source" kind={sourceKind}
+      selectedResource={target} value={source} label={label} disabled={!editable}
+      optionDisabled={item => payout && sourceAvailability(item) !== true}
+      onSelect={item => { setPickedSource(item); setSourceKey(item ? resourceKey(item) : ''); setMessage(''); }}/>}
+  </>;
+  const payoutKinds = demand ? Object.keys(resourceLabels).filter(kind => canTarget(context,
+    { kind, id: '', currency: 'SAR', access: { use: true } }, 'out')) : [...new Set(targets.map(item => item.kind))];
   const sourceName = mode === 'in' ? target?.name : source?.name, destName = mode === 'in' ? source?.name : target?.name;
   return <><button className="textbtn back" type="button" onClick={onBack}><Icon name="chevron-left"/>الرئيسية</button>
     <Heading title={entryTitle(mode, target)} subtitle={review ? 'تأكد من الحساب والمبلغ قبل تسجيل الحركة.' : 'أدخل المبلغ وحدد من وين خرج ووين وصل.'} />
@@ -180,17 +207,23 @@ function MovementFields({ context, resource, mode, onBack, onChangeMode, onSaved
       {payout ? <>
         {fixedPayee ? <div className="field"><span>وصل المبلغ إلى</span><strong>{resource.name}</strong></div> : <>
           {field('نوع السداد', <select value={payeeKind} required disabled={!editable} onChange={e => changePayeeKind(e.target.value)}>
-            <option value="">اختر نوع المستفيد</option>{[...new Set(targets.map(item => item.kind))].map(kind =>
+            <option value="">اختر نوع المستفيد</option>{payoutKinds.map(kind =>
               <option key={kind} value={kind}>{resourceLabels[kind]}</option>)}
           </select>)}
-          {payeeKind && field('وصل المبلغ إلى', targetSelect)}
+          {payeeKind && (demand ? demandTarget('وصل المبلغ إلى') : field('وصل المبلغ إلى', targetSelect))}
         </>}
-        {target && <PaymentSourceFields sources={sources} group={group} kind={sourceKind} value={source ? sourceKey : ''} disabled={!editable}
+        {target && (demand ? demandSource('خرج المبلغ من') : <PaymentSourceFields sources={sources} group={group} kind={sourceKind} value={source ? sourceKey : ''} disabled={!editable}
           label="خرج المبلغ من" onKind={kind => { setSourceKind(kind); setSourceKey(''); setMessage(''); }}
-          onSource={key => { setSourceKey(key); setMessage(''); }} />}
+          onSource={key => { setSourceKey(key); setMessage(''); }} />)}
       </> : <>
-        {field(mode === 'in' ? 'استلمت من' : 'خرج المبلغ من', mode === 'in' ? targetSelect : sourceSelect)}
-        {field(mode === 'in' ? 'دخل المبلغ في' : mode === 'move' ? 'وصل المبلغ إلى حساب' : 'وصل المبلغ إلى', mode === 'in' ? sourceSelect : targetSelect)}
+        {demand ? <>
+          {resource && !resourceIsSource ? <div className="field"><span>{mode === 'in' ? 'استلمت من' : 'وصل المبلغ إلى'}</span><strong>{resource.name}</strong></div>
+            : demandTarget(mode === 'in' ? 'استلمت من' : mode === 'move' ? 'وصل المبلغ إلى حساب' : 'وصل المبلغ إلى')}
+          {target && demandSource(mode === 'in' ? 'دخل المبلغ في' : 'خرج المبلغ من')}
+        </> : <>
+          {field(mode === 'in' ? 'استلمت من' : 'خرج المبلغ من', mode === 'in' ? targetSelect : sourceSelect)}
+          {field(mode === 'in' ? 'دخل المبلغ في' : mode === 'move' ? 'وصل المبلغ إلى حساب' : 'وصل المبلغ إلى', mode === 'in' ? sourceSelect : targetSelect)}
+        </>}
       </>}
       {ad?.terms && field('طريقة إدخال الدفعة', <select value={form.unit} onChange={e => change({ unit: e.target.value, amount: '' })}><option value="receipt">من الإيصال البنكي</option><option value="SAR">احسب من المبلغ بالريال</option><option value="USD">احسب من المبلغ بالدولار</option></select>)}
       {field(ad ? form.unit === 'USD' ? 'المبلغ بالدولار' : 'إجمالي ما خُصم من البنك (ريال)' : bankArrival ? 'صافي المبلغ الوارد إلى البنك (ريال)' : target?.kind === 'courier' && mode === 'in' ? 'المبلغ المستلم فعليًا (ريال)' : 'المبلغ (ريال)', <input inputMode="decimal" value={form.amount} required placeholder="0.00" onChange={e => change({ amount: e.target.value })} />)}
@@ -204,7 +237,7 @@ function MovementFields({ context, resource, mode, onBack, onChangeMode, onSaved
     </div>{message && <p className="note warning" role="alert">{message}</p>}
       <p className="note">{sourceName && destName && decimalAmount(form.amount) ? `من ${sourceName} إلى ${destName}.` : 'بعد إدخال التفاصيل يظهر لك أثر المبلغ على الحساب.'}</p>
       <div className="form-actions"><button className="button primary" type="submit" disabled={!editable}><Icon name="list-checks"/>مراجعة الحركة</button><button type="button" className="button" onClick={onChangeMode}>تغيير نوع الحركة</button></div>
-    </form> : !target ? <p role="alert" className="note warning">تغيّرت صلاحيات الحساب. أعد فتح الحركة.</p> : <ReviewedMovement context={context} target={target} command={review} onEdit={() => setReview(null)} onSaved={onSaved} />}</div></>;
+    </form> : !target ? <p role="alert" className="note warning">تغيّرت صلاحيات الحساب. أعد فتح الحركة.</p> : <ReviewedMovement context={demand ? {...context,resources:[target,source].filter(Boolean)} : context} target={target} command={review} onEdit={() => setReview(null)} onSaved={onSaved} />}</div></>;
 }
 
 function PendingPayoutLink({ context, target, onOpen }) {

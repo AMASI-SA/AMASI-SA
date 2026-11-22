@@ -1,30 +1,37 @@
 import http from '../../lib/api';
+import { demandRead } from '../../lib/demandRead';
 
 const workspace = '/operational-balances/workspace';
 const access = '/operational-balances/access';
 const data = promise => promise.then(response => response.data);
 const read = config => ({ timeout: 30000, ...config });
+const demandGet = (path, params, config) => demandRead(request => http.get(`${workspace}/${path}`, {
+  ...request, params: { ...params, demand: true },
+}), read(config));
+const optionalDemandGet = (path, params, config) => config?.demand
+  ? demandGet(path, params, config)
+  : data(http.get(`${workspace}/${path}`, { ...read(config), ...(params && { params }) }));
 
 export const simpleBalancesApi = {
+  bootstrap: config => demandGet('bootstrap', undefined, config),
+  home: config => demandGet('home', undefined, config),
+  directory: (params, config) => demandGet('directory', params, config),
+  options: (params, config) => demandGet('options', params, config),
+  position: (params, config) => demandGet('position', params, config),
+  selection: (kind, id, config) => demandGet(`selection/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`, undefined, config),
   context: (config, { homePreview = false, directoryOnly = false } = {}) => data(http.get(`${workspace}/context`, { ...read(config), params: { ad_bank_fx: true, ...(directoryOnly ? { directory_only: true } : { provider_positions: true }), ...(homePreview ? { home_preview: true } : {}) } })),
   accountGroup: (kind, config) => data(http.get(`${workspace}/accounts/${encodeURIComponent(kind)}`, read(config))),
-  resource: (kind, id, config) => data(http.get(`${workspace}/resource/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`,
-    { ...read(config), ...(kind === 'ad_account' && { params: { ad_bank_fx: true } }) })),
+  resource: (kind, id, config) => optionalDemandGet(`resource/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`,
+    kind === 'ad_account' ? { ad_bank_fx: true } : undefined, config),
   parties: (params, config) => data(http.get(`${workspace}/parties`, { ...read(config), params })),
-  movements: (params, config) => data(http.get(`${workspace}/movements`, { ...read(config), params })),
-  ledger: (kind, id, params, config) => data(http.get(
-    `${workspace}/ledger/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`,
-    { ...read(config), params: kind === 'ad_account' ? { ...params, ad_bank_fx: true } : params },
-  )),
+  movements: (params, config) => optionalDemandGet('movements', params, config),
+  ledger: (kind, id, params, config) => optionalDemandGet(`ledger/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`,
+    kind === 'ad_account' ? { ...params, ad_bank_fx: true } : params, config),
   supplierInvoice: (supplier, invoice, config) => data(http.get(
     `${workspace}/supplier-invoices/${encodeURIComponent(supplier)}/${encodeURIComponent(invoice)}`, read(config),
   )),
-  history: (kind, id, params, config) => data(http.get(
-    `${workspace}/history/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`, { ...read(config), params },
-  )),
-  statement: (kind, id, params, config) => data(http.get(
-    `${workspace}/statements/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`, { ...read(config), params },
-  )),
+  history: (kind, id, params, config) => optionalDemandGet(`history/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`, params, config),
+  statement: (kind, id, params, config) => optionalDemandGet(`statements/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`, params, config),
   reviews: (params, config) => data(http.get(`${workspace}/reviews`, { ...read(config), params })),
   review: (id, config) => data(http.get(`${workspace}/reviews/${encodeURIComponent(id)}`, read(config))),
   reviewOptions: (id, config) => data(http.get(`${workspace}/reviews/${encodeURIComponent(id)}/options`, read(config))),

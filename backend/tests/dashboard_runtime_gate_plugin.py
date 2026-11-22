@@ -925,6 +925,22 @@ def pytest_runtest_setup(item):
     current_test, sequence = item.nodeid, 0
 
 
+@contextmanager
+def _runtime_legacy_adapter(handler, parser):
+    """Bind the extracted HTTP adapter to its actual canonical dependency.
+
+    The immutable fixture excludes server imports to avoid application startup.
+    Its current adapter now delegates to a separate, bootstrap-free module;
+    bind that real reader and observe its parser without changing either body.
+    Historical reference and Production-baseline arms never enter this scope.
+    """
+    import legacy_dashboard_reader as canonical
+    assert Path(canonical.__file__).resolve().parent == Path(__file__).resolve().parents[1]
+    with patch.dict(handler.__globals__, {'_canonical_dashboard': canonical.dashboard}), \
+         patch.object(canonical, 'orders_to_parsed_cooperative', parser):
+        yield handler
+
+
 def pytest_collection_modifyitems(session, config, items):
     assert ARM in {'reference', 'baseline', 'runtime'}, 'Explicit dashboard adoption arm required'
     modules = {item.module for item in items}
@@ -1143,7 +1159,8 @@ def pytest_collection_modifyitems(session, config, items):
                 orders_to_parsed_cooperative=parser,
                 _dashboard_deepcopy=copy.deepcopy,
             )
-            yield dash.make_dashboard_v2_router, handler
+            with (_runtime_legacy_adapter(handler, parser) if ARM == 'runtime' else nullcontext()):
+                yield dash.make_dashboard_v2_router, handler
 
         with patch.object(computation, 'candidate', actual), \
              patch.object(dash, 'index_current_catalog_products_cooperative', index), \

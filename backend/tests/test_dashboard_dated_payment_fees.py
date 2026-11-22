@@ -302,7 +302,7 @@ def test_raw_projection_does_not_attach_unrequested_customer_fields():
 
 
 def test_server_uses_shared_adapter_for_whole_and_electronic_cohorts_and_masks_final_response():
-    tree = ast.parse((Path(__file__).parents[1] / "server.py").read_text())
+    tree = ast.parse((Path(__file__).parents[1] / "legacy_dashboard_reader.py").read_text())
     fn = next(node for node in tree.body if isinstance(node, ast.AsyncFunctionDef) and node.name == "dashboard")
     calls = [node for node in ast.walk(fn) if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)]
     fee_calls = [node for node in calls if node.func.id == "dashboard_fee_breakdown"]
@@ -336,7 +336,7 @@ def real_server_dashboard_without_bootstrap():
         DEFAULT_ELECTRONIC_NET_EXCLUDED_STATUSES=["cancelled", "بانتظار الدفع"], DEFAULT_NET_SALES_CONFIG={},
         _spend_by_date_from_ledger=no_ads, compute_operating_expenses_for_range=no_operating,
         _parse_date_or=lambda text, fallback: date.fromisoformat(text) if text else fallback)
-    tree = ast.parse((Path(__file__).parents[1] / "server.py").read_text())
+    tree = ast.parse((Path(__file__).parents[1] / "legacy_dashboard_reader.py").read_text())
     functions = [node for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
                  and node.name in {"dashboard", "_is_excluded_for_electronic_net"}]
     exec(compile(ast.Module(body=functions, type_ignores=[]), "server-dashboard-read-only", "exec"), namespace)

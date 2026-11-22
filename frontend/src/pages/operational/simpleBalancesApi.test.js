@@ -20,6 +20,29 @@ test('ledger reads encode resource identifiers and retain cancellation, page siz
   expect(http.post).not.toHaveBeenCalled();
 });
 
+test('new workspace reads and opted-in ledger use demand transport without changing legacy reads',async()=>{
+  const controller=new AbortController();
+  const config={signal:controller.signal,demand:true};
+  await api.bootstrap(config);
+  await api.home(config);
+  await api.directory({group:'assets',kind:'provider,pos_receivable',q:'اسم',page:2,page_size:24},config);
+  await api.options({operation:'out',role:'source',kind:'bank',selected_kind:'supplier',selected_id:'s1',page:1,page_size:24},config);
+  await api.selection('bank','a/b',config);
+  await api.ledger('bank','a/b',{page:2,page_size:8},config);
+  expect(http.get.mock.calls.map(([url])=>url)).toEqual([
+    '/operational-balances/workspace/bootstrap','/operational-balances/workspace/home',
+    '/operational-balances/workspace/directory','/operational-balances/workspace/options',
+    '/operational-balances/workspace/selection/bank/a%2Fb','/operational-balances/workspace/ledger/bank/a%2Fb',
+  ]);
+  for(const [,request] of http.get.mock.calls){
+    expect(request.signal).toBe(controller.signal);expect(request.params.demand).toBe(true);
+    expect(request.headers['X-Mezan-Read-Consumer']).toEqual(expect.any(String));
+    expect(request.readDemand).toBeUndefined();
+  }
+  expect(http.get.mock.calls[2][1].params).toMatchObject({group:'assets',kind:'provider,pos_receivable',q:'اسم',page:2,page_size:24});
+  expect(http.post).not.toHaveBeenCalled();
+});
+
 test('an explicit write preserves the idempotency key, session binding, and typed source', async () => {
   const body = { request_id: 'one-intent', expected_session_scope: 'same-scope', party_type: 'external_person',
     party_id: 'external', side: 'for_us', amount: '50.00', source_type: 'employee_custody', source_id: 'employee-custody' };

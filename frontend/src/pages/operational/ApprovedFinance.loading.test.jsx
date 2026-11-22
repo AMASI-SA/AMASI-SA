@@ -9,7 +9,7 @@ import { useBalanceRead } from './simpleBalancesHooks';
 jest.mock('react-router-dom', () => { global.TextEncoder = require('util').TextEncoder; return jest.requireActual('react-router'); });
 jest.mock('../../context/AuthContext', () => ({ useOptionalAuth: jest.fn() }));
 jest.mock('./simpleBalancesApi', () => ({
-  simpleBalancesApi: { context: jest.fn() },
+  simpleBalancesApi: { bootstrap: jest.fn(), home: jest.fn() },
   simpleBalanceError: () => 'تعذر تحميل الأرصدة. أعد المحاولة.',
 }));
 
@@ -21,11 +21,10 @@ const deferred = () => {
   return { promise, resolve, reject };
 };
 const contextFor = (id = 'first', name = 'الحساب الحالي') => ({
-  actor: { id, name: 'موظف العمليات', is_owner: false },
+  actor: { id, name, is_owner: false },
   session_scope: 'scope-' + id, permission_version: 1, status: 'active', operations: [],
   capabilities: { create_entries: false }, recent_movements: [],
-  resources: [{ kind: 'bank', id: 'bank-' + id, name, currency: 'SAR', operations: [],
-    access: { balance: true, movements: 'all' }, balance: { visible: true, side: 'for_us', amount: '90.00' } }],
+  resources: [],
 });
 
 let host, root, visibility, online;
@@ -35,7 +34,12 @@ beforeEach(() => {
   visibility = jest.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
   online = jest.spyOn(navigator, 'onLine', 'get').mockReturnValue(true);
   useOptionalAuth.mockReturnValue({ user: { id: 'first' }, loading: false });
-  api.context.mockResolvedValue(contextFor());
+  api.bootstrap.mockResolvedValue(contextFor());
+  api.home.mockImplementation(async () => ({
+    session_scope: 'scope-' + useOptionalAuth().user.id, permission_version: 1,
+    summary: { currency: 'SAR', bank: '90.00', cash: null, total: '90.00', cash_count: 0, cash_balance_visible: false },
+    resources: [], recent_movements: [], has_order_issues: false,
+  }));
   window.scrollTo = jest.fn();
   host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host);
 });
@@ -67,43 +71,43 @@ const expectRecovery = () => {
 };
 
 test.each(['/operational-balances', '/operational-balances?view=home'])(
-  '%s ends a stalled context attempt after 30 seconds and recovers only on explicit retry', async url => {
+  '%s ends a stalled bootstrap attempt after 30 seconds and recovers only on explicit retry', async url => {
     const pending = deferred();
-    api.context.mockReturnValueOnce(pending.promise);
+    api.bootstrap.mockReturnValueOnce(pending.promise);
     await open(url);
-    expect(api.context).toHaveBeenCalledTimes(1);
-    expect(api.context.mock.calls[0][1]).toEqual({ homePreview: true });
+    expect(api.bootstrap).toHaveBeenCalledTimes(1);
+    expect(api.home).not.toHaveBeenCalled();
     expect(host.textContent).toContain('جارٍ تحميل الأرصدة');
     await elapse(30000);
     expectRecovery();
     expect(host.querySelector('[role="alert"]').textContent).toContain('انتهت مهلة');
-    expect(api.context.mock.calls[0][0].signal.aborted).toBe(true);
+    expect(api.bootstrap.mock.calls[0][0].signal.aborted).toBe(true);
     await act(async () => { pending.resolve(contextFor('first', 'استجابة متأخرة')); await flush(); });
     await returnToPage();
-    expect(api.context).toHaveBeenCalledTimes(1);
+    expect(api.bootstrap).toHaveBeenCalledTimes(1);
     expect(host.textContent).not.toContain('استجابة متأخرة');
     await retry();
-    expect(api.context).toHaveBeenCalledTimes(2);
+    expect(api.bootstrap).toHaveBeenCalledTimes(2);
     expect(host.querySelector('.hero .big').textContent).toContain('90.00');
   },
 );
 
 test('retry remains bounded while an aborted predecessor is still physically pending', async () => {
   const pending = deferred();
-  api.context.mockReturnValueOnce(pending.promise);
+  api.bootstrap.mockReturnValueOnce(pending.promise);
   await open(); await elapse(30000);
   expectRecovery();
   await retry();
-  expect(api.context).toHaveBeenCalledTimes(1);
+  expect(api.bootstrap).toHaveBeenCalledTimes(1);
   expect(host.textContent).toContain('جارٍ تحميل الأرصدة');
   await elapse(30000);
   expectRecovery();
-  expect(api.context).toHaveBeenCalledTimes(1);
+  expect(api.bootstrap).toHaveBeenCalledTimes(1);
   await act(async () => { pending.resolve(contextFor('first', 'بيانات المحاولة القديمة')); await flush(); });
   expect(host.textContent).not.toContain('بيانات المحاولة القديمة');
-  expect(api.context).toHaveBeenCalledTimes(1);
+  expect(api.bootstrap).toHaveBeenCalledTimes(1);
   await retry();
-  expect(api.context).toHaveBeenCalledTimes(2);
+  expect(api.bootstrap).toHaveBeenCalledTimes(2);
   expect(host.querySelector('.hero .big').textContent).toContain('90.00');
 });
 
@@ -112,17 +116,17 @@ test.each(['hidden', 'offline'])('initially %s entry exposes recovery without st
   else online.mockReturnValue(false);
   await open();
   expectRecovery();
-  expect(api.context).not.toHaveBeenCalled();
+  expect(api.bootstrap).not.toHaveBeenCalled();
   await elapse(300000); await returnToPage();
   expectRecovery();
-  expect(api.context).not.toHaveBeenCalled();
+  expect(api.bootstrap).not.toHaveBeenCalled();
   await retry();
-  expect(api.context).toHaveBeenCalledTimes(1);
+  expect(api.bootstrap).toHaveBeenCalledTimes(1);
   expect(host.querySelector('.hero .big').textContent).toContain('90.00');
 });
 
 test.each(['hidden', 'offline'])('%s interruption leaves a paused attempt and never automatically repeats its request', async cause => {
-  api.context.mockImplementationOnce(({ signal }) => new Promise((resolve, reject) => {
+  api.bootstrap.mockImplementationOnce(({ signal }) => new Promise((resolve, reject) => {
     signal.addEventListener('abort', () => reject(new DOMException('cancelled', 'AbortError')), { once: true });
   }));
   await open();
@@ -135,39 +139,39 @@ test.each(['hidden', 'offline'])('%s interruption leaves a paused attempt and ne
     await flush();
   });
   expectRecovery();
-  expect(api.context.mock.calls[0][0].signal.aborted).toBe(true);
+  expect(api.bootstrap.mock.calls[0][0].signal.aborted).toBe(true);
   await returnToPage(); await elapse(300000);
-  expect(api.context).toHaveBeenCalledTimes(1);
+  expect(api.bootstrap).toHaveBeenCalledTimes(1);
   await retry();
-  expect(api.context).toHaveBeenCalledTimes(2);
+  expect(api.bootstrap).toHaveBeenCalledTimes(2);
   expect(host.querySelector('.hero .big').textContent).toContain('90.00');
 });
 
 test('an identity change cannot expose the old result or wait indefinitely behind its request', async () => {
   const old = deferred();
-  api.context.mockReturnValueOnce(old.promise).mockResolvedValue(contextFor('second', 'حساب المستخدم الحالي'));
+  api.bootstrap.mockReturnValueOnce(old.promise).mockResolvedValue(contextFor('second', 'حساب المستخدم الحالي'));
   await open();
   useOptionalAuth.mockReturnValue({ user: { id: 'second' }, loading: false });
   await open();
-  expect(api.context.mock.calls[0][0].signal.aborted).toBe(true);
-  expect(api.context).toHaveBeenCalledTimes(1);
+  expect(api.bootstrap.mock.calls[0][0].signal.aborted).toBe(true);
+  expect(api.bootstrap).toHaveBeenCalledTimes(1);
   await elapse(30000);
   expectRecovery();
   await act(async () => { old.resolve(contextFor('first', 'حساب خاص بالمستخدم السابق')); await flush(); });
   expect(host.textContent).not.toContain('حساب خاص بالمستخدم السابق');
-  expect(api.context).toHaveBeenCalledTimes(1);
+  expect(api.bootstrap).toHaveBeenCalledTimes(1);
   await retry();
-  expect(api.context).toHaveBeenCalledTimes(2);
+  expect(api.bootstrap).toHaveBeenCalledTimes(2);
   expect(host.textContent).toContain('حساب المستخدم الحالي');
   expect(host.textContent).not.toContain('حساب خاص بالمستخدم السابق');
 });
 
-test('an ordinary context rejection exposes retry without substituting financial data', async () => {
-  api.context.mockRejectedValueOnce({ response: { status: 503 } });
+test('an ordinary bootstrap rejection exposes retry without substituting financial data', async () => {
+  api.bootstrap.mockRejectedValueOnce({ response: { status: 503 } });
   await open();
   expectRecovery();
   await retry();
-  expect(api.context).toHaveBeenCalledTimes(2);
+  expect(api.bootstrap).toHaveBeenCalledTimes(2);
   expect(host.querySelector('.hero .big').textContent).toContain('90.00');
 });
 
@@ -176,10 +180,10 @@ test('a missing authenticated user id offers authentication recovery instead of 
   useOptionalAuth.mockReturnValue({ user: {}, loading: false, retryAuth });
   await open();
   expectRecovery();
-  expect(api.context).not.toHaveBeenCalled();
+  expect(api.bootstrap).not.toHaveBeenCalled();
   await act(async () => host.querySelector('button').click());
   expect(retryAuth).toHaveBeenCalledTimes(1);
-  expect(api.context).not.toHaveBeenCalled();
+  expect(api.bootstrap).not.toHaveBeenCalled();
 });
 
 test('balance readers without the policy retain their existing hidden-page deferral', async () => {
