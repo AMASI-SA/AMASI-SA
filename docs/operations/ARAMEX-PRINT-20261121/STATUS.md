@@ -29,11 +29,23 @@ Local isolated-module verification, all exit0:
 Commands use Python -B -m pytest --noconftest --asyncio-mode=auto -q --tb=short,
 one module per process. git diff --check passed. Total396 tests plus59 subtests.
 
-Release state: no PR/frozen intent/new lease/publication yet. Production unchanged
+PR2061 is Draft. Source444b29c4660a11e8570ed0fee682ffcd4cd14fe6 readiness
+run45030291278 passed and produced candidate artifact14757168626. Independent
+Git-manifest and deterministic-identity checks passed. No intent was frozen:
+Shipping Print Boundary run45030291253 found24 legacy expectations of the old
+status rejection (573 passed,1 skipped). These expectations are now updated to
+the new external-AWB contract and extended to delivering/cancelled/refunded,
+with observed status, no-provider-write and all non-label data assertions kept.
+Fresh isolated legacy module:146 passed,146 skipped (Mongo replica set absent
+locally); exact-head CI must execute both memory and real-Mongo variants.
+Earlier source candidate is superseded; build a new source A and intent B.
+Current local total542 passed plus59 subtests;146 Mongo skips remain for CI.
+
+Release state: no frozen intent/new lease/publication yet. Production unchanged
 by this follow-up. Root-case Native printing remains unverified until acceptance
-on the new reviewed release. Next: push source checkpoint/open Draft PR, require
-fresh CI, new v5 A/B and exact-B host/ARM rehearsals, then authorized guarded
-publication and original/control ADB tests. Preserve all previous frozen pairs.
+on the new reviewed release. Next: push updated source checkpoint, require fresh
+CI, new v5 A/B and exact-B host/ARM rehearsals, then authorized guarded publication
+and original/control ADB tests. Preserve all previous frozen pairs.
 
 ## Earlier red checkpoint (preserved)
 
