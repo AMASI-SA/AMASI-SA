@@ -1,0 +1,28 @@
+{
+  "recorded_at_utc": "2026-11-22T17:03:41Z",
+  "execution_time_utc": null,
+  "provenance": "User-supplied complete successful actual Emergent terminal launcher/rehearsal output; assistant did not execute the host command",
+  "launcher_verified": true,
+  "rehearsal_directory": "/tmp/mezan-pr2069-0mhyfa47",
+  "build_log": "/tmp/mezan-pr2069-0mhyfa47/adapter.log",
+  "source_git_sha": "063611ff163c90d80cdbf96446a28584fe429846",
+  "head_B": "5db36bd28ae86acaca8ceeb9cceee8e350916f12",
+  "release_id": "rg5-90a88a6e7ac6a65670274d6180be0338d689f64d91efbf5cdfbbf651ca182bf7",
+  "adapter_exit": 0,
+  "built": true,
+  "artifact_tree_sha256": "9437b75f8c005e379a7132e62c97e90af71e596d1907ba935f6a2a01da2cd4f4",
+  "package_boundaries_verified": true,
+  "shared_guard_before": {
+    "active": false,
+    "incomplete": false
+  },
+  "shared_guard_after": {
+    "active": false,
+    "incomplete": false
+  },
+  "shared_clean_J_pre_and_postcondition": "9b4fb716b430c32073b5ea7abaeaff62646d9633",
+  "merged": false,
+  "published": false,
+  "lease_created": false,
+  "shared_outputs_changed": false
+}

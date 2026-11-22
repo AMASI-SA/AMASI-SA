@@ -1,5 +1,47 @@
 # Operational demand reads — implementation checkpoint
 
+## Actual host rehearsal PASS — serial merge/staging handoff begins
+
+The user returned the complete successful original-adapter execution from the
+actual Emergent host. ADAPTER_EXIT=0, built=true, source A and runtime identity
+exact, frontend artifact tree9437b75f8c005e379a7132e62c97e90af71e596d1907ba935f6a2a01da2cd4f4,
+package_boundaries_verified=true. Source checkout:
+`/tmp/mezan-pr2069-0mhyfa47/repo`; full log:
+`/tmp/mezan-pr2069-0mhyfa47/adapter.log`.
+Raw selected results: `manual-host-rehearsal-pass-20261122.json`.
+
+The original /app guard was inactive before and after, and the script's shared
+clean-J pre/postconditions passed. /app source, bytecode and generated outputs
+were untouched by rehearsal. This proves actual host rehearsal, not deployment.
+
+Root freshly read PR2069, Production and the coordination ledger: PR remains
+exact B/open/mergeable-clean, Production remains J, all47 applicable B workflows
+still pass. The computed normal-merge candidate has parents J/B and exact B
+tree057c273506c237af2035c7976cc7fe8e9aacaeb2. This task now proceeds with the
+already-authorized normal merge and bounded shared staging handoff, preserving
+other integration work. A new actual release lease is created only by the original
+shared guard after shared candidate validation. No other lease is cleared.
+
+Generated public files plus metadata/proof/identity total approximately12MiB.
+Dependencies and frontend package.json/yarn.lock did not change from J to B;
+do not move or reinstall node_modules merely because /app has little free space.
+The staging command must check actual sizes/free space, preserve current build,
+proof, identity and bytecode outside source roots with content/mode verification,
+fast-forward only to the exact confirmed tree-equivalent merge, atomically place
+the three verified outputs and run the original validators. Preserve all other
+untracked files and .release entries. Keep a recoverable backup on any failure;
+never reset/clean or relax the guard.
+
+The separate CUSTOMER-INVENTORY-UNIFIED-20261122 work combines2065+2067 and has
+reported no own shared lease or publication. It remains separate and must retain
+this release in any later base. No combined source is imported into frozen2069.
+
+At this checkpoint: Production runtime changed:NO; merge/staging pending,
+no new lease/publish yet. The latest section supersedes older pending-rehearsal
+statements below.
+
+---
+
 ## Actual host build preflight returned — isolated rehearsal next
 
 The owner supplied the complete output of MANUAL-HOST-BUILD-PREFLIGHT.py from
