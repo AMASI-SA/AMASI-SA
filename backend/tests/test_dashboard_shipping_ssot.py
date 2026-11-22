@@ -68,7 +68,7 @@ def test_ssot_aggregate_matches_dashboard_shape():
 def test_dashboard_shipping_row_mirrors_ssot_fields():
     """Inspect server.py to confirm the dashboard now copies SSOT
     per-unit fields into the shipping_breakdown response."""
-    with (Path(__file__).resolve().parents[1] / "server.py").open(encoding="utf-8") as f:
+    with (Path(__file__).resolve().parents[1] / "legacy_dashboard_reader.py").open(encoding="utf-8") as f:
         src = f.read()
 
     # SSOT consolidation block must exist

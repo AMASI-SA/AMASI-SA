@@ -1,0 +1,63 @@
+{
+  "environment": "isolated loopback Mongo; ASGI transport; no browser/network timing",
+  "data": {
+    "suppliers": 200,
+    "movements": 5000
+  },
+  "cold_home_ms": 2792.1779959997366,
+  "home_legacy_ms": [
+    471.4307710000867,
+    243.4569819997705,
+    244.028230999902,
+    193.49653700010094,
+    302.15252700145356
+  ],
+  "home_ready_ms": [
+    7.459692000338691,
+    5.9437359996081796,
+    8.165316001395695,
+    7.770611999148969,
+    6.27087999964715,
+    6.763221999790403,
+    6.286892999924021,
+    6.216217001565383,
+    6.472895000115386,
+    5.984266999803367,
+    5.8425429997441825,
+    6.35017899912782,
+    7.223796001198934,
+    7.894368000052054,
+    7.5764390003314475,
+    19.721288001164794,
+    8.401092998610693,
+    7.157286001529428,
+    6.473003999417415,
+    6.566354999449686
+  ],
+  "home_ready_p95_ms": 8.401092998610693,
+  "six_ready_reads_total_ms": 34.50061200055643,
+  "health_equivalent_max_ms": 2.807733999361517,
+  "actual_staff_bootstrap_max_ms": 77.40853399991465,
+  "child": [
+    {
+      "family": "operational_home",
+      "outcome": "ready",
+      "materialize_ms": 1.2,
+      "peak_rss_kib": 123384,
+      "authorize_ms": 7.831,
+      "wall_ms": 769.872,
+      "check_ms": 14.761,
+      "build_ms": 728.211,
+      "check_calls": 10,
+      "process_cpu_ms": 1552.08,
+      "pid": 130,
+      "queue_ms": 6.0
+    }
+  ],
+  "legacy_home_bytes": 85388,
+  "ready_home_bytes": 3816,
+  "legacy_resources": 222,
+  "ready_resources": 3,
+  "first_useful_target_met": false,
+  "ready_target_met": true
+}

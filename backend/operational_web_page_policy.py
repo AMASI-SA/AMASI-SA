@@ -76,11 +76,34 @@ def enforce_operational_web_pages(modes, path, method, query=None):
     if path == "/inventory" or path.startswith(("/inventory-", "/standalone-inventory/")):
         # The product workspace catalogue applies its own exact route and method checks.
         return
-    if path == "/workspace/context" and method == "GET":
+    if path in {"/workspace/context", "/workspace/bootstrap"} and method == "GET":
         if not modes.keys() & (WORKSPACE - {"balances.returns", "balances.exchanges", "balances.fees"}):
             _deny()
         if str(query.get("home_preview", "")).lower() in {"true", "1", "on", "yes", "y", "t"}:
             _allow(modes, "home")
+        return
+    if path == "/workspace/home" and method == "GET":
+        return _allow(modes, "home")
+    if path == "/workspace/directory" and method == "GET":
+        return _allow(modes, "assets" if query.get("group") == "assets" else "parties")
+    if path == "/workspace/position" and method == "GET":
+        return _allow(modes, "position")
+    if path == "/workspace/report" and method == "GET":
+        return _allow(modes, "reports", "position", "specialized")
+    if path == "/workspace/options" and method == "GET":
+        operation = query.get("operation")
+        if operation == "filter":
+            return _allow(modes, "log", "review")
+        if operation == "courier.review":
+            return _allow(modes, "collections")
+        return _allow(modes, "entry")
+    match = re.fullmatch(r"/workspace/(?:selection|resource)/([^/]+)/[^/]+", path)
+    if match and method == "GET":
+        return _allow(modes, "entry", "log", "review", "collections", "assets" if match[1] in ASSETS else "parties")
+    if re.fullmatch(r"/workspace/read-demand/[a-f0-9]{64}", path) and method == "DELETE":
+        # Cancels only this authenticated actor/tenant's existing consumer lease.
+        if not modes.keys() & WORKSPACE:
+            _deny()
         return
     if path == "/workspace/parties" and method == "GET":
         kind = query.get("kind")

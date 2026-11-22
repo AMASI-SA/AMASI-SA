@@ -5,6 +5,9 @@ import os
 from datetime import datetime, timedelta, timezone
 import unittest
 from unittest.mock import AsyncMock, patch
+import pytest
+
+from demand_read_mongo_fixture import read_mongo_uri
 
 import fulfillment_v2_routes as fulfillment
 import order_review_completion as completion
@@ -21,6 +24,13 @@ from order_tracking_notes import ORDER_TRACKING_INSTRUCTIONS
 from stock_component_consumption_service import LOCATIONS, UNITS, PLANS
 
 
+@pytest.fixture
+def local_assembly_mongo(request, monkeypatch):
+    if not os.environ.get("MZ2_TEST_MONGO_URI"):
+        monkeypatch.setenv("MZ2_TEST_MONGO_URI", request.getfixturevalue("read_mongo_uri"))
+
+
+@pytest.mark.usefixtures("local_assembly_mongo")
 class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
     asyncTearDown = fixture.ComponentRouteTests.asyncTearDown
     source_payload = fixture.ComponentRouteTests.source_payload
@@ -232,6 +242,26 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
             {"$set": {"raw_by_source.salla_direct.shipping_address": address}},
         )
 
+    async def read_board(self, path):
+        """Drive the real derived worker before checking current policy output.
+
+        The HTTP endpoint now serves saved rows. Explicit refresh here ensures
+        each mutation fixture tests a newly computed canonical board, while the
+        queue/process suites separately exercise scheduling and CPU isolation.
+        """
+        from urllib.parse import parse_qs, urlsplit
+        import assembly_board_read_models as reads
+        import demand_read_jobs as jobs
+        import demand_read_store as store
+
+        query = parse_qs(urlsplit(path).query)
+        spec = await reads.make_spec(self.db, user=self.actor, state=query["state"][0],
+                                     query=query.get("q", [""])[0])
+        await store.demand(self.db, spec, "local-policy-fixture", refresh=True)
+        self.assertTrue(await jobs.execute_once(self.db, builder=reads.build_projection,
+                                                authorize=reads.authorize_spec))
+        return await self.client.get(path)
+
     async def test_supplier_queue_includes_mixed_after_supplier_receipt_before_employee_receipt(self):
         self.mount_assignment()
         await self.complete_review(mixed=True)
@@ -240,39 +270,39 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
         assigned = await self.assign_cards(cards, "supplier-board-only")
         self.assertEqual(assigned.status_code, 200, assigned.text)
         path = "/preparation-work-v1/assembly/orders?state=supplier_received&limit=8"
-        self.assertEqual((await self.client.get(path)).json()["total"], 0)
+        self.assertEqual((await self.read_board(path)).json()["total"], 0)
         # Model the supplier close receipt, deliberately without employee custody receipt.
         await self.db[pieces.PIECES].update_many({}, {"$set": {
             "supplier_dispatch_status": "received", "received_at": datetime.now(timezone.utc),
             "execution_status": "received_from_supplier", "status": "received"}})
-        result = await self.client.get(path)
+        result = await self.read_board(path)
         self.assertEqual(result.status_code, 200, result.text)
         self.assertEqual(result.json()["total"], 1, result.text)
         self.assertEqual(result.json()["group_counts"], {"direct_preparation": 0, "supplier_received": 1})
         self.assertEqual(await self.db[pieces.PIECES].count_documents({"preparation_received_at": {"$exists": True}}), 0)
         row = await self.db[pieces.PIECES].find_one({})
         await self.db[pieces.PIECES].update_one({"_id": row["_id"]}, {"$set": {"supplier_dispatch_status": "partial_received"}})
-        self.assertEqual((await self.client.get(path)).json()["total"], 0)
+        self.assertEqual((await self.read_board(path)).json()["total"], 0)
 
     async def test_direct_queue_membership_count_and_no_ready_write(self):
         await self.complete_review()
         before = await self.workflow()
-        direct = await self.client.get("/preparation-work-v1/assembly/orders?state=direct_preparation&limit=8")
+        direct = await self.read_board("/preparation-work-v1/assembly/orders?state=direct_preparation&limit=8")
         self.assertEqual(direct.status_code, 200, direct.text)
         self.assertEqual(direct.json()["total"], 1)
         self.assertEqual(direct.json()["group_counts"], {"direct_preparation": 1, "supplier_received": 0})
         self.assertEqual(direct.json()["items"][0]["order_number"], "local-assembly")
-        empty = await self.client.get("/preparation-work-v1/assembly/orders?state=direct_preparation&limit=8&offset=8")
+        empty = await self.read_board("/preparation-work-v1/assembly/orders?state=direct_preparation&limit=8&offset=8")
         self.assertEqual(empty.json()["items"], [])
         self.assertEqual(empty.json()["total"], 1)
-        supplier = await self.client.get("/preparation-work-v1/assembly/orders?state=supplier_received&limit=8")
+        supplier = await self.read_board("/preparation-work-v1/assembly/orders?state=supplier_received&limit=8")
         self.assertEqual(supplier.json()["total"], 0)
         self.assertEqual(await self.workflow(), before)
         self.external.assert_not_awaited()
 
     async def test_real_local_review_direct_assembly_starts_then_completes(self):
         await self.complete_review()
-        board = await self.client.get("/preparation-work-v1/assembly/orders?state=in_progress")
+        board = await self.read_board("/preparation-work-v1/assembly/orders?state=in_progress")
         self.assertEqual(board.status_code, 200, board.text)
         self.assertEqual([row["order_number"] for row in board.json()["items"]], ["local-assembly"])
         search = await self.client.get("/preparation-work-v1/assembly/search?q=local-assembly")

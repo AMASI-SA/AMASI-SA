@@ -495,6 +495,9 @@ class MongoOrderRepository:
     def __init__(self, db: Any):
         self._collection = db.unified_orders
 
+    def _bulk_source_cursor(self, query: dict, projection: dict):
+        return self._collection.find(query, projection)
+
     async def financial_delivery_snapshot(self, *, user_id: str, order_number: str):
         """Exact provider snapshot for a provenance adapter, no root fallbacks.
 
@@ -737,7 +740,7 @@ class MongoOrderRepository:
         ))
         if not normalized:
             return []
-        cursor = self._collection.find(
+        cursor = self._bulk_source_cursor(
             {
                 "user_id": str(user_id),
                 "order_number": {"$in": normalized},
@@ -820,3 +823,21 @@ class MongoOrderRepository:
             native_payment_source={k: raw_provider[k] for k in _NATIVE_PAYMENT_FIELDS if k in raw_provider}
             if payment_ready else {},
         )
+
+
+class MongoAssemblyBoardRepository(MongoOrderRepository):
+    """Canonical assembly inputs without the unused order-detail timeline.
+
+    Board membership still maps the complete payment, status, item, shipment,
+    attribution and root-fallback facts through the ordinary Order Engine.
+    Only the top-level display timeline is omitted before BSON transfer and
+    deep-copying; no preparation policy or full order/detail read uses this
+    projection.
+    """
+
+    def _bulk_source_cursor(self, query: dict, projection: dict):
+        return self._collection.aggregate([
+            {"$match": query},
+            {"$project": projection},
+            {"$project": {"raw_by_source.salla_direct.timeline": 0}},
+        ])

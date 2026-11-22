@@ -11,14 +11,20 @@ IDENTITY_FIELDS = ('id', 'user_id', 'name', 'display_name', 'currency', 'account
 PROJECTION = {'_id': 0, **{key: 1 for key in IDENTITY_FIELDS}}
 
 
-async def bank_identities(db, owner, *, include_routing=False):
+async def bank_identities(db, owner, *, include_routing=False, selected_ids=None):
     if not owner:
         raise ValueError('operational_source_rejected')
     result, seen = [], set()
     for collection, prefix in (('mz2_financial_accounts', ''), ('accounts', 'account:'),
                                ('mz2_operational_bank_accounts', 'operational-bank:')):
         projection = {**PROJECTION, 'bank_transfer_aliases': 1} if include_routing and collection == 'accounts' else PROJECTION
-        records = await db[collection].find({'user_id': owner}, projection).to_list(MAX_ROWS + 1)
+        query = {'user_id': owner}
+        if selected_ids is not None:
+            identities = [identity[len(prefix):] for identity in selected_ids if identity.startswith(prefix)]
+            if not identities:
+                continue
+            query['id'] = {'$in': identities}
+        records = await db[collection].find(query, projection).to_list(MAX_ROWS + 1)
         if len(records) > MAX_ROWS:
             raise ValueError('operational_source_scope_too_large')
         for row in records:

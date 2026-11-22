@@ -4,6 +4,8 @@ import { useOptionalAuth } from '../../context/AuthContext';
 import { todaySA } from '../../lib/dates';
 import { simpleBalancesApi as api, simpleBalanceError } from './simpleBalancesApi';
 import { authIdentity, useBalanceRead } from './simpleBalancesHooks';
+import { sameWorkspace, useWorkspaceRead } from './workspaceReadHooks';
+import WorkspaceResourcePicker from './WorkspaceResourcePicker';
 import { usePendingBalanceCommand } from './simpleBalancesPending';
 import PendingEntryActions from './PendingEntryActions';
 import PaymentSourceFields, { exceedsSource, insufficientSource, sourceAvailability, usePaymentSourceGroup } from './PaymentSourceFields';
@@ -131,6 +133,8 @@ function Summary({ resource, amount, side, choice, reason, employee, owner, expe
 }
 
 function EntryForm({ context, resource, onCancel, onSaved }) {
+  const demand = context.demandOnly === true;
+  const [picked, setPicked] = useState({});
   const scope = context.session_scope;
   const mutation = usePendingBalanceCommand({ context,
     storageIdentity: JSON.stringify(['entry', context.actor.id, scope, resource.kind, resource.id]),
@@ -172,13 +176,26 @@ function EntryForm({ context, resource, onCancel, onSaved }) {
   const needsExpense = external && reason === 'charity' && form.charity_account === 'company';
   const direct = external && directReasons.has(reason);
   const needsSource = Boolean(choice) && !direct && !['accrual', 'adjustment'].includes(reason);
-  const available = context.resources.filter(item => item.access?.use === true && (item.currency || 'SAR') === 'SAR');
+  const pendingRefs = pending ? [[pending.source_type, pending.source_id], ['employee', pending.employee_id],
+    ['owner_withdrawal', pending.owner_id], ['operating_expense', pending.expense_id]].filter(([kind,id])=>kind&&id) : [];
+  const pendingRead = useWorkspaceRead(async config => {
+    const items=[];
+    for(const [kind,id] of pendingRefs){
+      const item=await api.selection(kind,id,config);
+      if(item?.kind!==kind||item.id!==id||!item.access||!sameWorkspace(item,context))throw new Error('Invalid pending command resource');
+      items.push(item);
+    }
+    return items;
+  },JSON.stringify([context.actor.id,scope,context.permission_version,pendingRefs,'entry-recovery']),demand&&pendingRefs.length>0);
+  const available = (demand ? [...Object.values(picked),...(pendingRead.data||[])] : context.resources)
+    .filter(item => item?.access?.use === true && (item.currency || 'SAR') === 'SAR');
   const employees = available.filter(item => item.kind === 'employee');
   const owners = available.filter(item => item.kind === 'owner_withdrawal');
   const expenses = available.filter(item => item.kind === 'operating_expense');
   const sources = available.filter(item => (!(pos || ad) || item.kind === 'bank') && (item.currency || 'SAR') === 'SAR' && (isMoneyAccount(item.kind) || item.kind === 'employee_custody' && globalOperations.has('custody.spend') && form.side === 'for_us' && ['external_person', 'supplier', 'operating_expense'].includes(resource.kind)) && resourceKey(item) !== resourceKey(resource));
   const payout = needsSource && form.side === 'for_us' && !account && !ad;
-  const group = usePaymentSourceGroup(context, sources, form.sourceKind, payout);
+  const legacyGroup = usePaymentSourceGroup(context, sources, form.sourceKind, !demand && payout);
+  const group = demand ? {rows:sources,onDemand:true} : legacyGroup;
   const source = group.rows.find(item => resourceKey(item) === form.source && (!payout || item.kind === form.sourceKind && !item.prepaid_shipping_cash));
   const employee = employees.find(item => item.id === form.employee_id);
   const owner = owners.find(item => item.id === form.owner_id);
@@ -188,6 +205,16 @@ function EntryForm({ context, resource, onCancel, onSaved }) {
   const change = patch => { if (!disabled) { setForm(value => ({ ...value, ...patch })); mutation.clearError(); } };
   const resetConditional = { source: '', sourceKind: '', employee_id: '', owner_id: '', expense_id: '', charity_account: '' };
   const chooseSide = side => change({ ...resetConditional, side, reason: '' });
+  const chooseResource = (field, item) => {
+    setPicked(previous=>({...previous,[field]:item}));
+    change({[field]:item ? field==='source'?resourceKey(item):item.id : ''});
+  };
+  const optionOperation = reason==='charity' ? `external.charity_${form.charity_account}` : choice?.operation;
+  const picker = (kind, field, value, label, role='recipient') => <WorkspaceResourcePicker
+    key={JSON.stringify([optionOperation,kind,field,form.side])} context={context} operation={optionOperation} role={role} kind={kind}
+    selectedResource={resource} value={value} label={label} disabled={disabled}
+    optionDisabled={item=>field==='source'&&payout&&sourceAvailability(item)!==true}
+    onSelect={item=>chooseResource(field,item)}/>;
 
   const quoteKey = JSON.stringify([resource.id, form.adUnit, form.amount, ad?.terms]);
   const shownQuote = quote?.key === quoteKey ? quote : null;
@@ -274,20 +301,27 @@ function EntryForm({ context, resource, onCancel, onSaved }) {
         {ad.mode === 'hybrid' && !ad.wallet_first && <Field label="نوع الدفعة"><select disabled={disabled} value={form.adWallet ? 'wallet' : 'payment'} onChange={e => change({ adWallet: e.target.value === 'wallet' })}><option value="payment">سداد المستحقات</option><option value="wallet">شحن المحفظة</option></select></Field>}
         <Field label="مرجع العملية البنكية"><input maxLength={160} value={form.reference} disabled={disabled} onChange={e => change({ reference: e.target.value })} /></Field>
       </>}
-      {payout && <PaymentSourceFields sources={sources} group={group} kind={form.sourceKind} value={source ? form.source : ''} disabled={disabled}
+      {needsSource && demand && <>
+        <Field label="نوع مصدر الدفع"><select value={form.sourceKind} required disabled={disabled} onChange={event=>change({sourceKind:event.target.value,source:''})}>
+          <option value="">اختر نوع المصدر</option>{(pos||ad?['bank']:['bank','cash',...(payout&&globalOperations.has('custody.spend')&&['external_person','supplier','operating_expense'].includes(resource.kind)?['employee_custody']:[])])
+            .map(kind=><option key={kind} value={kind}>{resourceLabels[kind]}</option>)}
+        </select></Field>
+        {form.sourceKind && picker(form.sourceKind,'source',source,form.side==='for_party'&&!account?'الإيداع في':'الدفع من','source')}
+      </>}
+      {payout && !demand && <PaymentSourceFields sources={sources} group={group} kind={form.sourceKind} value={source ? form.source : ''} disabled={disabled}
         label="الدفع من" fieldClass="sb-field" onKind={sourceKind => change({ sourceKind, source: '' })}
         onSource={sourceId => change({ source: sourceId })} />}
-      {needsSource && !payout && <Field label={form.side === 'for_party' && !account ? 'الإيداع في' : 'الدفع من'}><select value={form.source} disabled={disabled} onChange={event => change({ source: event.target.value })} required><option value="">اختر الحساب</option>{sources.map(item => <option key={resourceKey(item)} value={resourceKey(item)}>{item.kind === 'employee_custody' ? 'عهدة · ' : ''}{item.name}{item.kind === 'employee_custody' && item.access?.balance && item.balance ? ` · المتبقي ${item.balance.side === 'for_us' ? money(item.balance.amount) : '0'} ريال` : ''}</option>)}</select>{!sources.length && <small>لا توجد مصادر مسموحة لهذه العملية. يحددها مسؤول الصلاحيات.</small>}</Field>}
+      {needsSource && !payout && !demand && <Field label={form.side === 'for_party' && !account ? 'الإيداع في' : 'الدفع من'}><select value={form.source} disabled={disabled} onChange={event => change({ source: event.target.value })} required><option value="">اختر الحساب</option>{sources.map(item => <option key={resourceKey(item)} value={resourceKey(item)}>{item.kind === 'employee_custody' ? 'عهدة · ' : ''}{item.name}{item.kind === 'employee_custody' && item.access?.balance && item.balance ? ` · المتبقي ${item.balance.side === 'for_us' ? money(item.balance.amount) : '0'} ريال` : ''}</option>)}</select>{!sources.length && <small>لا توجد مصادر مسموحة لهذه العملية. يحددها مسؤول الصلاحيات.</small>}</Field>}
       {(pos || account) && <Field label="مرجع التحويل"><input maxLength={160} value={form.reference} required={pos || source?.kind === 'bank' && resource.prepaid_shipping_cash === true} disabled={disabled} onChange={event => change({ reference: event.target.value })} /></Field>}
       {pos && <>
         <Field label="رسوم الشبكة الفعلية إن وجدت"><input inputMode="decimal" value={form.fee} disabled={disabled} onChange={event => change({ fee: event.target.value })} /></Field>
         {form.fee && <Field label="مرجع مستند الرسوم"><input required maxLength={160} value={form.feeReference} disabled={disabled} onChange={event => change({ feeReference: event.target.value })} /></Field>}
         <label><input type="checkbox" required checked={form.arrival} disabled={disabled} onChange={event => change({ arrival: event.target.checked })} /> طابقت وصول صافي التحويل مع حساب البنك المحدد</label>
       </>}
-      {reason === 'salary_settlement' && <Field label="الموظف"><select value={form.employee_id} disabled={disabled} onChange={event => change({ employee_id: event.target.value })} required><option value="">اختر الموظف</option>{employees.map(item => <option key={item.id} value={item.id}>{item.name}{item.access?.balance && item.balance ? ` · المستحق ${item.balance.side === 'for_party' ? money(item.balance.amount) : '0'} ريال` : ''}</option>)}</select></Field>}
+      {reason === 'salary_settlement' && (demand ? picker('employee','employee_id',employee,'الموظف') : <Field label="الموظف"><select value={form.employee_id} disabled={disabled} onChange={event => change({ employee_id: event.target.value })} required><option value="">اختر الموظف</option>{employees.map(item => <option key={item.id} value={item.id}>{item.name}{item.access?.balance && item.balance ? ` · المستحق ${item.balance.side === 'for_party' ? money(item.balance.amount) : '0'} ريال` : ''}</option>)}</select></Field>)}
       {reason === 'charity' && <Field label="الصدقات على حساب"><select value={form.charity_account} disabled={disabled} onChange={event => change({ charity_account: event.target.value, owner_id: '', expense_id: '' })} required><option value="">اختر صاحب المصروف</option>{operations.has('external.charity_company') && <option value="company">المؤسسة</option>}{operations.has('external.charity_owner') && <option value="owner">المالك</option>}</select></Field>}
-      {needsOwner && <Field label="حساب المالك"><select value={form.owner_id} disabled={disabled} onChange={event => change({ owner_id: event.target.value })} required><option value="">اختر حساب المالك</option>{owners.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>}
-      {needsExpense && <Field label="حساب الصدقات"><select value={form.expense_id} disabled={disabled} onChange={event => change({ expense_id: event.target.value })} required><option value="">اختر حساب المصروف</option>{expenses.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>}
+      {needsOwner && (demand ? picker('owner_withdrawal','owner_id',owner,'حساب المالك') : <Field label="حساب المالك"><select value={form.owner_id} disabled={disabled} onChange={event => change({ owner_id: event.target.value })} required><option value="">اختر حساب المالك</option>{owners.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>)}
+      {needsExpense && (demand ? picker('operating_expense','expense_id',expense,'حساب الصدقات') : <Field label="حساب الصدقات"><select value={form.expense_id} disabled={disabled} onChange={event => change({ expense_id: event.target.value })} required><option value="">اختر حساب المصروف</option>{expenses.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>)}
       <Field label={reason === 'adjustment' ? 'سبب الخصم' : 'ملاحظة (اختياري)'}><textarea rows="2" maxLength="1000" value={form.note} disabled={disabled} required={reason === 'adjustment'} onChange={event => change({ note: event.target.value })} /></Field>
       {!ad && <Summary resource={resource} amount={form.amount} side={form.side} choice={choice} reason={reason} employee={employee} owner={owner} expense={expense} source={source} />}
       <button className="sb-primary sb-submit" type="submit" disabled={busy || mutation.blocked || mutation.recovering || !canWrite}>{busy ? 'جارٍ تأكيد الحفظ…' : pending ? 'إعادة محاولة العملية نفسها' : 'حفظ والعودة للحركات'}</button>
@@ -317,7 +351,7 @@ function BalanceDialog({ title, onClose, children }) {
 
 function AutomaticHistory({ resource, context, identity, page, onPage, onDetail }) {
   const key = JSON.stringify([identity, context.session_scope, context.permission_version, resource?.kind, resource?.id, page]);
-  const read = useBalanceRead(async config => {
+  const read = useWorkspaceRead(async config => {
     const value = await api.history(resource.kind, resource.id, { page, page_size: BALANCE_PAGE_SIZE }, config);
     if (!isPage(value, page) || value.resource?.kind !== resource.kind || value.resource?.id !== resource.id
       || !['salary', 'delivery'].includes(value.automatic_history) || !Array.isArray(value.previous_months)) throw new Error('invalid automatic history');

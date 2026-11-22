@@ -3,7 +3,10 @@ import { createPortal } from 'react-dom';
 import { todaySA } from '../../lib/dates';
 import { AdAmount, AdBalance, Amount, Heading, Icon, IconBox, MovementIcon, ResourceIcon, isAsset, issueLabel, styleOf } from './ApprovedFinanceUI';
 import { simpleBalancesApi as api, simpleBalanceError } from './simpleBalancesApi';
-import { useBalanceRead } from './simpleBalancesHooks';
+import { useWorkspaceRead } from './workspaceReadHooks';
+import { useReadDemand } from '../../lib/demandRead';
+import WorkspaceResourcePicker from './WorkspaceResourcePicker';
+import WorkspaceSnapshot from './WorkspaceSnapshot';
 import CarrierAccountSummary from './CarrierAccountSummary';
 import { isStatement, minorUnits, movementDate, movementRecorder, movementTitle, resourceKey, signedResourceBalance } from './simpleBalancesModel';
 
@@ -91,6 +94,7 @@ function ActivityTable({ result, resource, onDetail, onHistory }) {
 function PeriodPrint({ resource, period, scope }) {
   const [request, setRequest] = useState(0);
   const [print, setPrint] = useState(null), [failure, setFailure] = useState('');
+  const readDemand = useReadDemand(JSON.stringify([scope, resource.kind, resource.id, period.date_from, period.date_to, request, 'print']), Boolean(request));
   // Recheck the current server permissions and load every page only on an
   // explicit print request. Navigation or auth changes cancel that request.
   useEffect(() => {
@@ -99,7 +103,7 @@ function PeriodPrint({ resource, period, scope }) {
     const cancel = () => { if (document.visibilityState === 'hidden') { controller.abort(); setRequest(0); setPrint(null); } };
     document.addEventListener('visibilitychange', cancel);
     const query = { date_from: period.date_from, date_to: period.date_to, purpose: 'print' };
-    Promise.all([api.statement(resource.kind, resource.id, query, { signal: controller.signal }),
+    Promise.all([api.statement(resource.kind, resource.id, query, { signal: controller.signal, demand: true, readDemand }),
       import('./SimpleBalanceStatement'), import('./simpleBalances.css')])
       .then(([value, { StatementDocument }]) => {
         if (controller.signal.aborted) return;
@@ -134,6 +138,7 @@ function LedgerPage({ context, identity, resource, canOpenOrderDetails = false, 
   const providerOrders = canSeeOrders && providerTab === 'orders';
   const [query, setQuery] = useState(initialInvoice?.number || ''), [draft, setDraft] = useState(initialInvoice?.number || '');
   const [account, setAccount] = useState(''), [direction, setDirection] = useState(''), [status, setStatus] = useState('');
+  const [pickedAccount, setPickedAccount] = useState(null), [accountPicker, setAccountPicker] = useState(false);
   const [page, setPage] = useState(1), [detail, setDetail] = useState(null);
   const dialog = useRef(null);
   useEffect(() => {
@@ -141,11 +146,12 @@ function LedgerPage({ context, identity, resource, canOpenOrderDetails = false, 
     const timer = setTimeout(() => { setFocus(''); setQuery(draft.trim()); setPage(1); }, 450);
     return () => clearTimeout(timer);
   }, [draft, query]);
-  const selected = !resource && context.resources.find(r => resourceKey(r) === account);
+  const selected = !resource && (context.demandOnly ? pickedAccount : context.resources.find(r => resourceKey(r) === account));
   const scope = JSON.stringify([identity, context.session_scope, context.permission_version]);
   const key = JSON.stringify([scope, resource?.kind, resource?.id, account, period.date_from, period.date_to, direction, status, query, page, providerOrders, allDates, focus]);
-  const readable = resource ? resource.access?.movements !== 'none' : context.resources.some(r => r.access?.movements !== 'none');
-  const read = useBalanceRead(async config => {
+  const readable = resource ? resource.access?.movements !== 'none' : context.demandOnly
+    ? context.capabilities?.read_movements === true : context.resources.some(r => r.access?.movements !== 'none');
+  const read = useWorkspaceRead(async config => {
     const params = { ...(providerOrders && allDates ? {} : period), ...(providerOrders && { provider_orders: true }), ...(focus && { focus_id:focus }), page, page_size: pageSize, ...(query && { q: query }), ...(direction && { direction }),
       ...(status && { status }), ...(selected && { kind: selected.kind, id: selected.id }) };
     const result = resource ? await api.ledger(resource.kind, resource.id, params, config) : await api.movements(params, config);
@@ -154,7 +160,7 @@ function LedgerPage({ context, identity, resource, canOpenOrderDetails = false, 
         (resource && (result.resource?.kind !== resource.kind || result.resource?.id !== resource.id))) throw new Error('invalid ledger');
     return result;
   }, key, readable);
-  const detailRead = useBalanceRead(async config => {
+  const detailRead = useWorkspaceRead(async config => {
     const value = await api.resource(resource.kind, resource.id, config);
     if (!value || value.id !== resource.id || value.kind !== resource.kind || !value.access?.balance)
       throw {localMessage:'تعذر التحقق من رصيد هذا الحساب.'};
@@ -166,7 +172,7 @@ function LedgerPage({ context, identity, resource, canOpenOrderDetails = false, 
     const row = result.items.find(item => item.id === focus);
     if (row) { openedReceipt.current = true; setDetail(row); }
   }, [focus, result]);
-  const shownResource = context.directoryOnly ? (result?.resource || detailRead.data || resource) : resource;
+  const shownResource = context.directoryOnly || context.demandOnly ? (result?.resource || detailRead.data || resource) : resource;
   const changePeriod = next => { setFocus(''); setPeriod(next); setAllDates(false); setPage(1); };
   const selectTab = target => { setFocus(''); setProviderTab(target); setPage(1); setQuery(''); setDraft(''); };
   const search = <form className="searchbox directory-search" role="search" onSubmit={event => { event.preventDefault(); setFocus(''); setQuery(draft.trim()); setPage(1); }}>
@@ -214,6 +220,7 @@ function LedgerPage({ context, identity, resource, canOpenOrderDetails = false, 
       <small>الرصيد الحالي</small><strong><LedgerBalance value={signedResourceBalance(shownResource)} resource={shownResource} /></strong></div></div>}
     {resource?.access?.movements === 'own' && <p className="note">يعرض هذا الكشف الحركات التي سجّلتها أنت.</p>}
     {result?.balance_note && <p className="note">{result.balance_note}</p>}
+    <WorkspaceSnapshot snapshot={result?.snapshot}/>
     {(issueCount > 0 || issueCount === null) && onReviewOrders && <button type="button" className="issue-notice screen-only" onClick={() => onReviewOrders(resource)}>
       <IconBox name="clipboard-list" tone="c-wait" /><span><strong>{issueLabel(issueCount)}</strong><small>{resource?.kind === 'bank' ? 'إيصالات تحويل غير معتمدة بسبب حالة الطلب' : 'عرض طلبات المراجعة في آخر احتساب'}</small></span><b>عرض الطلبات <Icon name="chevron-left" /></b></button>}
     {resource && result?.pos_summary && <dl className="detail-list">{[['إيصالات الشبكة المعتمدة','approved'],['المحوّل إلى البنوك','bank_received'],['الرسوم الفعلية','fees']]
@@ -224,8 +231,12 @@ function LedgerPage({ context, identity, resource, canOpenOrderDetails = false, 
       {resource && <div className="section-head"><h2>{providerOrders ? 'طلبات' : 'حركات'} {resource.name}</h2>{result && <small>{providerOrders ? 'عدد الطلبات المعروضة' : 'عدد حركات الفترة'}: {summary?.total ?? result.total}</small>}</div>}
       {readable ? <>
         <div className="filters screen-only">{search}{!resource && <>
-          <select aria-label="الحساب" value={account} onChange={e => { setAccount(e.target.value); setPage(1); }}><option value="">كل الحسابات والجهات</option>
-            {context.resources.filter(r => r.access?.movements !== 'none').map(r => <option value={resourceKey(r)} key={resourceKey(r)}>{r.name}</option>)}</select>
+          {context.demandOnly ? <div>
+            <button type="button" className="button" onClick={() => setAccountPicker(value => !value)}>{selected?.name || 'كل الحسابات والجهات'}</button>
+            {accountPicker && <WorkspaceResourcePicker context={context} operation="filter" role="filter" label="الحساب" value={selected} optional
+              onSelect={item => { setPickedAccount(item); setAccount(item ? resourceKey(item) : ''); setPage(1); setAccountPicker(false); }}/>}
+          </div> : <select aria-label="الحساب" value={account} onChange={e => { setAccount(e.target.value); setPage(1); }}><option value="">كل الحسابات والجهات</option>
+            {context.resources.filter(r => r.access?.movements !== 'none').map(r => <option value={resourceKey(r)} key={resourceKey(r)}>{r.name}</option>)}</select>}
           <select aria-label="نوع الحركة" value={direction} onChange={e => { setDirection(e.target.value); setPage(1); }}><option value="">كل الأنواع</option>
             <option value="in">استلام</option><option value="out">دفع</option><option value="transfer">تحويل داخلي</option></select>
           <select aria-label="حالة الحركة" value={status} onChange={e => changeStatus(e.target.value)}>

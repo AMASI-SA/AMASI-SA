@@ -73,9 +73,10 @@ export default function ApprovedOrderIssues({ context, identity, resource, onBac
   const [draft, setDraft] = useState(query);
   const searchTimer = useRef(null);
   useEffect(() => { setDraft(query); return () => clearTimeout(searchTimer.current); }, [query, resource?.kind, resource?.id]);
-  const scope = resource ? context.resources.find(r => r.kind === resource.kind && r.id === resource.id) : null;
+  const scope = resource ? context.demandOnly ? resource : context.resources.find(r => r.kind === resource.kind && r.id === resource.id) : null;
   const permitted = item => Boolean(subject[item?.kind] && item.access?.movements === 'all');
-  const allowed = resource ? permitted(scope) : context.actor.is_owner || context.resources.some(permitted);
+  const allowed = resource ? permitted(scope) : context.actor.is_owner || (context.demandOnly
+    ? context.capabilities?.review_orders === true : context.resources.some(permitted));
   const name = scope?.name || 'كل الجهات';
   const key = JSON.stringify([identity, context.session_scope, context.permission_version, resource?.kind, resource?.id, query, page]);
   const read = useBalanceRead(async config => {

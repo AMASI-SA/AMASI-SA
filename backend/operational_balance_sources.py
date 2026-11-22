@@ -385,11 +385,14 @@ def usable(row):
             and not any(row.get(k) for k in ('archived', 'deleted', 'is_archived', 'is_deleted')))
 
 
-def _source_cursor(db, owner, collection, *, refresh=False, fields=None):
+def _source_cursor(db, owner, collection, *, refresh=False, fields=None, selected_ids=None):
     if not owner or collection not in ALLOWED_COLLECTIONS or collection in {TXN_COLLECTION, DELIVERY_HISTORY, SHIPPING_EVENT_BLOCKERS, SHIPPING_V2_BLOCKERS, 'users', 'settings', 'accounts', 'mz2_operational_bank_accounts'}:
         raise ValueError('operational_source_rejected')
     if fields is not None:
-        return db[collection].find({'user_id': owner}, {'_id': 0, **dict.fromkeys(fields, 1)})
+        query = {'user_id': owner}
+        if selected_ids is not None:
+            query['id'] = {'$in': list(selected_ids)}
+        return db[collection].find(query, {'_id': 0, **dict.fromkeys(fields, 1)})
     if refresh and collection == 'unified_orders':
         projection = {'_id': 0, **{key: 1 for key in REFRESH_ORDER_FIELDS}}
         return db[collection].find({'user_id': owner}, projection)
@@ -410,9 +413,9 @@ def _checked_source_rows(result, owner):
     return result
 
 
-async def rows(db, owner, collection, *, fields=None):
+async def rows(db, owner, collection, *, fields=None, selected_ids=None):
     from operational_read_runtime import read_source_cursor, source_read_is_owned
-    cursor = _source_cursor(db, owner, collection, fields=fields)
+    cursor = _source_cursor(db, owner, collection, fields=fields, selected_ids=selected_ids)
     result = (await read_source_cursor(cursor, MAX_ROWS + 1) if source_read_is_owned()
               else await cursor.to_list(MAX_ROWS + 1))
     return _checked_source_rows(result, owner)
@@ -425,7 +428,14 @@ async def refresh_source_rows(db, owner, collection):
     return _checked_source_rows(await read_source_cursor(cursor, MAX_ROWS + 1), owner)
 
 
-async def entities(db, owner, kind, *, include_unready=False, operational_state=None):
+async def entities(db, owner, kind, *, include_unready=False, operational_state=None, selected_ids=None):
+    if selected_ids is not None:
+        if (not isinstance(selected_ids, (list, tuple, set, frozenset)) or len(selected_ids) > MAX_ROWS
+                or any(not isinstance(value, str) or not value or len(value) > 200 for value in selected_ids)):
+            raise ValueError('operational_entity_selection_invalid')
+        selected_ids = frozenset(selected_ids)
+        if not selected_ids:
+            return []
     if kind == 'operating_expense':
         catalog = {code: {'id': code, 'name': name, 'kind': kind, 'currency': 'SAR', 'source': 'mz2_builtin'}
                    for code, name in EXPENSE_CATEGORIES.items()}
@@ -443,7 +453,7 @@ async def entities(db, owner, kind, *, include_unready=False, operational_state=
             catalog[code] = {'id': code, 'name': row.get('name') or 'تصنيف مصروف — إعداد الاسم غير مكتمل', 'kind': kind,
                              'ready': bool(row.get('name')),
                              'currency': 'SAR', 'source': row.get('source') or 'mz2_category_registry'}
-        return list(catalog.values())
+        return [row for row in catalog.values() if selected_ids is None or row['id'] in selected_ids]
     if kind == 'owner_withdrawal':
         if not owner:
             raise ValueError('operational_source_rejected')
@@ -470,10 +480,10 @@ async def entities(db, owner, kind, *, include_unready=False, operational_state=
             seen.add(row['id'])
             result.append({'id': row['id'], 'name': row['name'], 'currency': row.get('currency', 'SAR'),
                            'kind': kind, 'source': 'mz2_operational_owner_beneficiaries_v2'})
-        return result
+        return [row for row in result if selected_ids is None or row['id'] in selected_ids]
     if kind == 'provider':
         return [{'id': p, 'name': {'salla': 'سلة', 'tabby': 'تابي', 'tamara': 'تمارا', 'emkan': 'إمكان', 'paypal': 'باي بال'}[p],
-                 'kind': kind, 'currency': 'SAR'} for p in PROVIDERS]
+                 'kind': kind, 'currency': 'SAR'} for p in PROVIDERS if selected_ids is None or p in selected_ids]
     if kind == 'courier':
         # Keep complete courier identities/aliases, but not unrelated contract,
         # request and audit histories embedded in the same setup document.
@@ -623,7 +633,7 @@ async def entities(db, owner, kind, *, include_unready=False, operational_state=
                                setup_issue='ad_financial_binding_required'))
     elif kind == 'bank':
         from operational_bank_catalog import bank_identities
-        source = await bank_identities(db, owner)
+        source = await bank_identities(db, owner, **({'selected_ids': selected_ids} if selected_ids is not None else {}))
     elif kind == 'pos_receivable':
         from operational_pos_identity import bound_identity, pos_candidates
         from operational_balance_store import STATES
@@ -638,7 +648,8 @@ async def entities(db, owner, kind, *, include_unready=False, operational_state=
         # Directories need identity and lifecycle fields, never employee salaries or supplier contracts.
         fields = ('user_id', 'id', 'name', 'display_name', 'company_name', 'account_type', 'currency', 'status',
                   'active', 'is_active', 'archived', 'deleted', 'is_archived', 'is_deleted', 'ready', 'setup_issue')
-        source = await rows(db, owner, ENTITY_COLLECTIONS[kind], fields=fields)
+        source = await rows(db, owner, ENTITY_COLLECTIONS[kind], fields=fields,
+                            **({'selected_ids': selected_ids} if selected_ids is not None else {}))
         if kind in ('bank', 'cash'):
             source = [r for r in source if r.get('account_type') == kind and r.get('status') == 'active']
     else:
@@ -662,7 +673,8 @@ async def entities(db, owner, kind, *, include_unready=False, operational_state=
                        **({k: row.get(k) for k in ('platform', 'integration_account_id', 'platform_account_id', 'funding_mode',
                            'wallet_fraction', 'hybrid_policy_id', 'settings_complete', 'funding_policy')}
                           if kind == 'ad_account' else {})})
-    return sorted(result, key=lambda r: (r['name'], r['id']))
+    return sorted((row for row in result if selected_ids is None or row['id'] in selected_ids),
+                  key=lambda r: (r['name'], r['id']))
 
 
 def issue(out, code, identity=None, **details):

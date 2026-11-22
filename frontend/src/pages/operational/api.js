@@ -1,4 +1,5 @@
 import api from '../../lib/api';
+import { demandRead } from '../../lib/demandRead';
 const base = '/operational-balances';
 const data = promise => promise.then(response => response.data);
 export const operationalApi = {
@@ -79,7 +80,11 @@ export const operationalApi = {
     ...(expectedSessionScope !== undefined ? {expected_session_scope: expectedSessionScope} : {}),
   }, {timeout: 90000, ...config})),
   costExposure: (config = {}) => data(api.get(`${base}/cost-exposure`, {timeout: 45000, ...config})),
-  financialPosition: (config = {}) => data(api.get(`${base}/financial-position`, {timeout: 60000, ...config})),
+  financialPosition: ({ demand, readDemand, ...config } = {}) => demand
+    ? demandRead(request => api.get(`${base}/workspace/report`, {
+      ...request, params: { ...request.params, demand: true },
+    }), { timeout: 60000, ...config, readDemand })
+    : data(api.get(`${base}/financial-position`, {timeout: 60000, ...config})),
   dailyFinancialMovements: (params, config = {}) => data(api.get(`${base}/daily-financial-movements`, {timeout: 30000, ...config, params})),
   audit: (config = {}) => data(api.get(`${base}/audit`, {timeout: 30000, ...config}))
 };

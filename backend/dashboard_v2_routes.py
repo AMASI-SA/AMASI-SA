@@ -25,7 +25,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from auth import ensure_user_settings
 from awaiting_payment_cohort import READER_VERSION as FINANCIAL_COHORT_READER_VERSION, split_financial_cohort
@@ -632,8 +632,10 @@ async def _filtered_orders(
     report_statuses: str | None = None,
     cost_collector: DashboardAdsCostCollector | None = None,
     fee_context: dict | None = None,
+    persist_settings: bool = True,
 ) -> list[dict[str, Any]]:
-    settings = await ensure_user_settings(db, user_id)
+    settings = (await ensure_user_settings(db, user_id) if persist_settings
+                else await ensure_user_settings(db, user_id, persist_defaults=False))
     if cost_collector is not None:
         cost_collector.capture_settings(settings)
     query: dict[str, Any] = {"user_id": user_id}
@@ -1867,6 +1869,339 @@ async def build_provider_summary(db: Any, user_id: str, provider: str) -> dict[s
     }
 
 
+async def _compute_dashboard_v2(
+    db, legacy_dashboard,
+    *,
+    user: dict,
+    from_date: str | None = None,
+    to_date: str | None = None,
+    payment_methods: str | None = None,
+    shipping_companies: str | None = None,
+    report_statuses: str | None = None,
+    include_month_kpis: bool = True,
+    include_product_rows: bool = True,
+    include_account_results: bool = False,
+    fee_context: dict | None = None,
+    persist_settings: bool = True,
+) -> dict[str, Any]:
+    current = user  # The route/worker authorizes this explicit tenant before calculation.
+    user_id = str(current["id"])
+    if report_statuses is not None:
+        from sold_financial_report import validate_report_statuses
+        report_statuses = validate_report_statuses(report_statuses)
+    report_filter = {"report_statuses": report_statuses} if report_statuses is not None else {}
+    today = _today_riyadh()
+    month_start = today.replace(day=1).isoformat()
+    today_s = today.isoformat()
+    selected_is_current_month = from_date == month_start and to_date == today_s
+    # The compact executive card owns this additive contract. Default
+    # dashboard callers retain their existing JSON and hydration shape.
+    cost_collector = DashboardAdsCostCollector() if include_account_results else None
+    cost_observer = {"cost_collector": cost_collector} if cost_collector is not None else {}
+    settings_options = {} if persist_settings else {"persist_settings": False}
+    initial_reads = [
+        legacy_dashboard(
+            user=current,
+            from_date=from_date,
+            to_date=to_date,
+            payment_methods=payment_methods,
+            shipping_companies=shipping_companies,
+            include_legacy_analyses=False,
+            allow_self_heal=False,
+            **settings_options,
+            **({"fee_context": fee_context} if fee_context is not None else {}),
+            **report_filter,
+        ),
+        _filtered_orders(
+            db,
+            user_id,
+            from_date=from_date,
+            to_date=to_date,
+            payment_methods=payment_methods,
+            shipping_companies=shipping_companies,
+            include_marketing_attribution=True,
+            **settings_options,
+            **({"fee_context": fee_context} if fee_context is not None else {}),
+            **cost_observer,
+            **report_filter,
+        ),
+    ]
+    if include_month_kpis and not selected_is_current_month:
+        initial_reads.append(_filtered_orders(
+            db,
+            user_id,
+            from_date=month_start,
+            to_date=today_s,
+            **settings_options,
+            payment_methods=payment_methods,
+            shipping_companies=shipping_companies,
+        ))
+    initial_results = await _gather_dashboard_reads(*initial_reads)
+    response = initial_results[0]
+    source_orders = initial_results[1]
+    orders, financial_cohort = split_financial_cohort(source_orders)
+    month_source_orders = (
+        source_orders if selected_is_current_month else initial_results[2]
+    ) if include_month_kpis else None
+    month_orders, month_cohort = (
+        (orders, financial_cohort) if month_source_orders is source_orders
+        else split_financial_cohort(month_source_orders)
+    ) if month_source_orders is not None else (None, None)
+    budget = CPUWorkBudget(PARSER_BUDGET_MS)
+    with latency_evidence.phase("cooperative_computation_wall"):
+        month_sales = (
+            await summarize_orders_sar_cooperative(month_orders, checkpoint=budget.checkpoint)
+            if month_orders is not None else None
+        )
+        if month_orders is orders:
+            sales_currency = deepcopy(month_sales)
+        else:
+            sales_currency = await summarize_orders_sar_cooperative(orders, checkpoint=budget.checkpoint)
+    month_kpis = {
+        "from_date": month_start,
+        "to_date": today_s,
+        "total_orders": month_cohort["total_orders"],
+        **{key: month_cohort[key] for key in ("financial_eligible_orders", "excluded_unpaid_orders", "review_orders")},
+        "total_sales": month_sales["total_sar"],
+        "accounting_currency": "SAR",
+        "currency_conversion": month_sales,
+    } if month_orders is not None else None
+    totals = response["totals"]
+    # Keep the selected source count; the guarded financial subset supplies
+    # gross sales and costs. The legacy dashboard can under-report fresh
+    # Salla Direct orders when payment-collection fields are still empty,
+    # even though each normalized order already has a valid total_amount.
+    authoritative_sales = sales_currency["total_sar"]
+    previous_sales = _float(totals.get("total_sales"))
+    sales_delta = (
+        round(float(authoritative_sales) - previous_sales, 2)
+        if authoritative_sales is not None
+        else 0.0
+    )
+    totals["total_orders"] = financial_cohort["total_orders"]
+    totals.update({key: financial_cohort[key] for key in ("financial_eligible_orders", "excluded_unpaid_orders", "review_orders")})
+    totals["financial_cohort_complete"] = financial_cohort["complete"]
+    totals["total_sales"] = authoritative_sales
+    totals["accounting_currency"] = "SAR"
+    totals["sales_currency_conversion_complete"] = sales_currency[
+        "conversion_complete"
+    ]
+    totals["unverified_currency_orders_count"] = sales_currency[
+        "unverified_orders_count"
+    ]
+    previous_product = _float(totals.get("total_product_cost"))
+    previous_ads = _float(totals.get("total_ads_cost"))
+    previous_operating = _float(totals.get("operating_expenses_total"))
+    salary_total = _float(totals.get("operating_salaries_total"))
+    try:
+        operating_from = date.fromisoformat(from_date) if from_date else today.replace(day=1)
+    except (TypeError, ValueError):
+        operating_from = today.replace(day=1)
+    try:
+        operating_to = date.fromisoformat(to_date) if to_date else today
+    except (TypeError, ValueError):
+        operating_to = today
+    if operating_to < operating_from:
+        operating_from, operating_to = operating_to, operating_from
+    product_cost, ads, recurring = await _gather_dashboard_reads(
+        build_mezan_v2_product_cost_cooperative(
+            db, user_id, orders,
+            **cost_observer,
+            **({"include_product_rows": False} if not include_product_rows else {}),
+        ),
+        build_mezan_v2_ads(
+            db,
+            user_id,
+            from_date=from_date,
+            to_date=to_date,
+            **({"include_account_ids": True} if include_account_results else {}),
+        ),
+        compute_recurring_obligations_for_range(
+            db, user_id, operating_from, operating_to
+        ),
+    )
+    with latency_evidence.phase("cooperative_computation_wall"):
+        ads["executive_breakdown"] = await build_salla_ads_executive_breakdown_cooperative(
+            orders,
+            ads,
+        )
+        if include_account_results:
+            ads["account_results"] = await build_dashboard_ads_account_results(
+                db, user_id, orders,
+                snapchat_account_ids=(ads.get("providers") or {}).get("snapchat", {}).get("account_ids") or [],
+                date_from=from_date, date_to=to_date,
+                cost_collector=cost_collector,
+            )
+    recurring_total = _float(recurring.get("total"))
+    operating_total = salary_total + recurring_total
+    product_total = product_cost["total"]
+    ads_total = ads["total"]
+    ads_quality = ads.get("spend_quality") or {}
+    ads_amount_available = (
+        ads_total is not None
+        and (
+            ads_quality.get("amount_available") is True
+            or ads_quality.get("amount_complete") is True
+        )
+    )
+    ads_amount_complete = (
+        ads_total is not None
+        and ads_quality.get("amount_complete") is True
+    )
+    ads_amount_provisional = (
+        ads_amount_available
+        and not ads_amount_complete
+        and ads_quality.get("provisional") is True
+    )
+    if ads_amount_available:
+        totals["net_profit"] = round(
+            _float(totals.get("net_profit"))
+            + sales_delta
+            + previous_product - product_total
+            + previous_ads - float(ads_total)
+            + previous_operating - operating_total,
+            2,
+        )
+    else:
+        totals["net_profit"] = None
+    totals["net_sales"] = round(
+        _float(totals.get("net_sales")) + sales_delta,
+        2,
+    )
+    config = response.get("net_sales_config") or {}
+    if config.get("deduct_product_costs", True):
+        totals["net_sales"] = round(
+            _float(totals.get("net_sales")) + previous_product - product_total,
+            2,
+        )
+    if config.get("deduct_ads", True):
+        totals["net_sales"] = (
+            round(
+                _float(totals.get("net_sales"))
+                + previous_ads - float(ads_total),
+                2,
+            )
+            if ads_amount_available
+            else None
+        )
+    if config.get("deduct_operating_expenses", True):
+        if totals.get("net_sales") is not None:
+            totals["net_sales"] = round(
+                _float(totals.get("net_sales")) + previous_operating - operating_total,
+                2,
+            )
+    totals.update({
+        "total_product_cost": product_total,
+        "computed_product_cost": product_total,
+        "manual_product_cost": 0.0,
+        "missing_product_cost_count": product_cost["missing_products_count"],
+        "incomplete_profit_orders_count": product_cost["incomplete_orders_count"],
+        "no_products_orders_count": product_cost["no_products_orders_count"],
+        "excel_no_products_count": 0,
+        "total_ads_cost": ads_total,
+        "daily_ads_total": ads_total,
+        "ads_spend_data_complete": ads_amount_complete,
+        "ads_spend_amount_available": ads_amount_available,
+        "ads_spend_provisional": ads_amount_provisional,
+        "daily_products_total": product_total,
+        "daily_costs_total": (
+            round(product_total + float(ads_total), 2)
+            if ads_amount_available
+            else None
+        ),
+        "daily_expenses_total": product_total,
+        "operating_expenses_total": round(operating_total, 2),
+        "operating_rentals_total": recurring["rentals_total"],
+        "operating_utilities_total": recurring["utilities_total"],
+        "operating_renewals_total": recurring["renewals_total"],
+        "operating_recurring_total": recurring["total"],
+        "operating_recurring_by_type": recurring["by_type"],
+        "operating_prepaid_total": 0.0,
+        "operating_prepaid_by_type": {},
+        "operating_daily_other_total": 0.0,
+        "overall_roas": (
+            round(_float(totals.get("total_sales")) / float(ads_total), 2)
+            if ads_amount_available and float(ads_total) > 0
+            else None
+        ),
+        "avg_cost_per_order": (
+            round(float(ads_total) / int(totals.get("total_orders") or 0), 2)
+            if ads_amount_available
+            and float(ads_total) > 0
+            and int(totals.get("total_orders") or 0) > 0
+            else None
+        ),
+        "tiktok_spend": ads["providers"]["tiktok"]["spend"],
+        "tiktok_purchases": ads["providers"]["tiktok"]["orders"],
+        "tiktok_revenue": ads["providers"]["tiktok"]["revenue"],
+        "tiktok_roas": ads["providers"]["tiktok"]["roas"],
+        "meta_spend": ads["providers"]["meta"]["spend"],
+        "meta_purchases": ads["providers"]["meta"]["orders"],
+        "meta_revenue": ads["providers"]["meta"]["revenue"],
+        "meta_roas": ads["providers"]["meta"]["roas"],
+        "legacy_analyses_count": 0,
+        "analyses_count": 0,
+    })
+    if ads_amount_available and ads.get("bank_commissions") is not None:
+        merge_ad_bank_fees_into_dashboard(response, ads)
+    else:
+        totals["ad_bank_commission_fees"] = None
+        totals["total_payment_fees"] = None
+        totals["net_profit"] = None
+        if config.get("deduct_payment_fees", True):
+            totals["net_sales"] = None
+        response["payment_breakdown"] = [
+            row
+            for row in (response.get("payment_breakdown") or [])
+            if row.get("key") != "ad_bank_commissions"
+        ]
+    totals["product_cost_complete"] = (
+        product_cost["missing_all_cost_products_count"] == 0
+        and product_cost["no_products_orders_count"] == 0
+    )
+    if not totals["product_cost_complete"]:
+        totals["net_profit"] = None
+        if config.get("deduct_product_costs", True):
+            totals["net_sales"] = None
+    response.update({
+        "recent_analyses": [],
+        "product_cost_v2": product_cost,
+        "ads_v2": ads,
+        **({"month_kpis": month_kpis} if include_month_kpis else {}),
+        "currency_conversion": sales_currency,
+        "financial_cohort": financial_cohort,
+        "dashboard_source": "mezan_v2",
+        "source_contract": {
+            "orders_sales_payment_methods": "unified_orders.total_amount_sar:salla_order_fx",
+            "product_cost": product_cost["source_contract"],
+            "advertising": ads["source_contract"],
+            "employee_salaries": "mezan_employee_salary_contracts_v2",
+            "recurring_obligations": "operating_recurring_obligations_v2",
+            "shipping_partners": "legacy_shipping_cost_ssot",
+            "payment_gateway_fees": PAYMENT_FEE_BASIS + " + mezan_ad_account_cost_settings_v2",
+        },
+        "source_only": True,
+        "accounting_write_reached": False,
+        "qoyod_write_reached": False,
+    })
+    if not sales_currency["conversion_complete"]:
+        # Do not turn an unverified GCC amount into zero or a fake SAR
+        # result anywhere in the executive accounting surface.
+        for field in (
+            "total_sales",
+            "net_sales",
+            "net_profit",
+            "overall_roas",
+            "total_payment_fees",
+        ):
+            totals[field] = None
+    response["recurring_obligations_v2"] = recurring
+    if not financial_cohort["complete"]:
+        totals["net_profit"] = None
+    return enforce_dashboard_fee_completeness(response)
+
+
+
 def make_dashboard_v2_router(
     db: Any,
     current_user: Callable[..., Any],
@@ -2021,330 +2356,6 @@ def make_dashboard_v2_router(
             "qoyod_write_reached": False,
         }
 
-    async def compute_dashboard_v2(
-        *,
-        user: dict,
-        from_date: str | None = None,
-        to_date: str | None = None,
-        payment_methods: str | None = None,
-        shipping_companies: str | None = None,
-        report_statuses: str | None = None,
-        include_month_kpis: bool = True,
-        include_product_rows: bool = True,
-        include_account_results: bool = False,
-        fee_context: dict | None = None,
-    ) -> dict[str, Any]:
-        current = owner(user)
-        user_id = str(current["id"])
-        if report_statuses is not None:
-            from sold_financial_report import validate_report_statuses
-            report_statuses = validate_report_statuses(report_statuses)
-        report_filter = {"report_statuses": report_statuses} if report_statuses is not None else {}
-        today = _today_riyadh()
-        month_start = today.replace(day=1).isoformat()
-        today_s = today.isoformat()
-        selected_is_current_month = from_date == month_start and to_date == today_s
-        # The compact executive card owns this additive contract. Default
-        # dashboard callers retain their existing JSON and hydration shape.
-        cost_collector = DashboardAdsCostCollector() if include_account_results else None
-        cost_observer = {"cost_collector": cost_collector} if cost_collector is not None else {}
-        initial_reads = [
-            legacy_dashboard(
-                user=current,
-                from_date=from_date,
-                to_date=to_date,
-                payment_methods=payment_methods,
-                shipping_companies=shipping_companies,
-                include_legacy_analyses=False,
-                allow_self_heal=False,
-                **({"fee_context": fee_context} if fee_context is not None else {}),
-                **report_filter,
-            ),
-            _filtered_orders(
-                db,
-                user_id,
-                from_date=from_date,
-                to_date=to_date,
-                payment_methods=payment_methods,
-                shipping_companies=shipping_companies,
-                include_marketing_attribution=True,
-                **({"fee_context": fee_context} if fee_context is not None else {}),
-                **cost_observer,
-                **report_filter,
-            ),
-        ]
-        if include_month_kpis and not selected_is_current_month:
-            initial_reads.append(_filtered_orders(
-                db,
-                user_id,
-                from_date=month_start,
-                to_date=today_s,
-                payment_methods=payment_methods,
-                shipping_companies=shipping_companies,
-            ))
-        initial_results = await _gather_dashboard_reads(*initial_reads)
-        response = initial_results[0]
-        source_orders = initial_results[1]
-        orders, financial_cohort = split_financial_cohort(source_orders)
-        month_source_orders = (
-            source_orders if selected_is_current_month else initial_results[2]
-        ) if include_month_kpis else None
-        month_orders, month_cohort = (
-            (orders, financial_cohort) if month_source_orders is source_orders
-            else split_financial_cohort(month_source_orders)
-        ) if month_source_orders is not None else (None, None)
-        budget = CPUWorkBudget(PARSER_BUDGET_MS)
-        with latency_evidence.phase("cooperative_computation_wall"):
-            month_sales = (
-                await summarize_orders_sar_cooperative(month_orders, checkpoint=budget.checkpoint)
-                if month_orders is not None else None
-            )
-            if month_orders is orders:
-                sales_currency = deepcopy(month_sales)
-            else:
-                sales_currency = await summarize_orders_sar_cooperative(orders, checkpoint=budget.checkpoint)
-        month_kpis = {
-            "from_date": month_start,
-            "to_date": today_s,
-            "total_orders": month_cohort["total_orders"],
-            **{key: month_cohort[key] for key in ("financial_eligible_orders", "excluded_unpaid_orders", "review_orders")},
-            "total_sales": month_sales["total_sar"],
-            "accounting_currency": "SAR",
-            "currency_conversion": month_sales,
-        } if month_orders is not None else None
-        totals = response["totals"]
-        # Keep the selected source count; the guarded financial subset supplies
-        # gross sales and costs. The legacy dashboard can under-report fresh
-        # Salla Direct orders when payment-collection fields are still empty,
-        # even though each normalized order already has a valid total_amount.
-        authoritative_sales = sales_currency["total_sar"]
-        previous_sales = _float(totals.get("total_sales"))
-        sales_delta = (
-            round(float(authoritative_sales) - previous_sales, 2)
-            if authoritative_sales is not None
-            else 0.0
-        )
-        totals["total_orders"] = financial_cohort["total_orders"]
-        totals.update({key: financial_cohort[key] for key in ("financial_eligible_orders", "excluded_unpaid_orders", "review_orders")})
-        totals["financial_cohort_complete"] = financial_cohort["complete"]
-        totals["total_sales"] = authoritative_sales
-        totals["accounting_currency"] = "SAR"
-        totals["sales_currency_conversion_complete"] = sales_currency[
-            "conversion_complete"
-        ]
-        totals["unverified_currency_orders_count"] = sales_currency[
-            "unverified_orders_count"
-        ]
-        previous_product = _float(totals.get("total_product_cost"))
-        previous_ads = _float(totals.get("total_ads_cost"))
-        previous_operating = _float(totals.get("operating_expenses_total"))
-        salary_total = _float(totals.get("operating_salaries_total"))
-        try:
-            operating_from = date.fromisoformat(from_date) if from_date else today.replace(day=1)
-        except (TypeError, ValueError):
-            operating_from = today.replace(day=1)
-        try:
-            operating_to = date.fromisoformat(to_date) if to_date else today
-        except (TypeError, ValueError):
-            operating_to = today
-        if operating_to < operating_from:
-            operating_from, operating_to = operating_to, operating_from
-        product_cost, ads, recurring = await _gather_dashboard_reads(
-            build_mezan_v2_product_cost_cooperative(
-                db, user_id, orders,
-                **cost_observer,
-                **({"include_product_rows": False} if not include_product_rows else {}),
-            ),
-            build_mezan_v2_ads(
-                db,
-                user_id,
-                from_date=from_date,
-                to_date=to_date,
-                **({"include_account_ids": True} if include_account_results else {}),
-            ),
-            compute_recurring_obligations_for_range(
-                db, user_id, operating_from, operating_to
-            ),
-        )
-        with latency_evidence.phase("cooperative_computation_wall"):
-            ads["executive_breakdown"] = await build_salla_ads_executive_breakdown_cooperative(
-                orders,
-                ads,
-            )
-            if include_account_results:
-                ads["account_results"] = await build_dashboard_ads_account_results(
-                    db, user_id, orders,
-                    snapchat_account_ids=(ads.get("providers") or {}).get("snapchat", {}).get("account_ids") or [],
-                    date_from=from_date, date_to=to_date,
-                    cost_collector=cost_collector,
-                )
-        recurring_total = _float(recurring.get("total"))
-        operating_total = salary_total + recurring_total
-        product_total = product_cost["total"]
-        ads_total = ads["total"]
-        ads_quality = ads.get("spend_quality") or {}
-        ads_amount_available = (
-            ads_total is not None
-            and (
-                ads_quality.get("amount_available") is True
-                or ads_quality.get("amount_complete") is True
-            )
-        )
-        ads_amount_complete = (
-            ads_total is not None
-            and ads_quality.get("amount_complete") is True
-        )
-        ads_amount_provisional = (
-            ads_amount_available
-            and not ads_amount_complete
-            and ads_quality.get("provisional") is True
-        )
-        if ads_amount_available:
-            totals["net_profit"] = round(
-                _float(totals.get("net_profit"))
-                + sales_delta
-                + previous_product - product_total
-                + previous_ads - float(ads_total)
-                + previous_operating - operating_total,
-                2,
-            )
-        else:
-            totals["net_profit"] = None
-        totals["net_sales"] = round(
-            _float(totals.get("net_sales")) + sales_delta,
-            2,
-        )
-        config = response.get("net_sales_config") or {}
-        if config.get("deduct_product_costs", True):
-            totals["net_sales"] = round(
-                _float(totals.get("net_sales")) + previous_product - product_total,
-                2,
-            )
-        if config.get("deduct_ads", True):
-            totals["net_sales"] = (
-                round(
-                    _float(totals.get("net_sales"))
-                    + previous_ads - float(ads_total),
-                    2,
-                )
-                if ads_amount_available
-                else None
-            )
-        if config.get("deduct_operating_expenses", True):
-            if totals.get("net_sales") is not None:
-                totals["net_sales"] = round(
-                    _float(totals.get("net_sales")) + previous_operating - operating_total,
-                    2,
-                )
-        totals.update({
-            "total_product_cost": product_total,
-            "computed_product_cost": product_total,
-            "manual_product_cost": 0.0,
-            "missing_product_cost_count": product_cost["missing_products_count"],
-            "incomplete_profit_orders_count": product_cost["incomplete_orders_count"],
-            "no_products_orders_count": product_cost["no_products_orders_count"],
-            "excel_no_products_count": 0,
-            "total_ads_cost": ads_total,
-            "daily_ads_total": ads_total,
-            "ads_spend_data_complete": ads_amount_complete,
-            "ads_spend_amount_available": ads_amount_available,
-            "ads_spend_provisional": ads_amount_provisional,
-            "daily_products_total": product_total,
-            "daily_costs_total": (
-                round(product_total + float(ads_total), 2)
-                if ads_amount_available
-                else None
-            ),
-            "daily_expenses_total": product_total,
-            "operating_expenses_total": round(operating_total, 2),
-            "operating_rentals_total": recurring["rentals_total"],
-            "operating_utilities_total": recurring["utilities_total"],
-            "operating_renewals_total": recurring["renewals_total"],
-            "operating_recurring_total": recurring["total"],
-            "operating_recurring_by_type": recurring["by_type"],
-            "operating_prepaid_total": 0.0,
-            "operating_prepaid_by_type": {},
-            "operating_daily_other_total": 0.0,
-            "overall_roas": (
-                round(_float(totals.get("total_sales")) / float(ads_total), 2)
-                if ads_amount_available and float(ads_total) > 0
-                else None
-            ),
-            "avg_cost_per_order": (
-                round(float(ads_total) / int(totals.get("total_orders") or 0), 2)
-                if ads_amount_available
-                and float(ads_total) > 0
-                and int(totals.get("total_orders") or 0) > 0
-                else None
-            ),
-            "tiktok_spend": ads["providers"]["tiktok"]["spend"],
-            "tiktok_purchases": ads["providers"]["tiktok"]["orders"],
-            "tiktok_revenue": ads["providers"]["tiktok"]["revenue"],
-            "tiktok_roas": ads["providers"]["tiktok"]["roas"],
-            "meta_spend": ads["providers"]["meta"]["spend"],
-            "meta_purchases": ads["providers"]["meta"]["orders"],
-            "meta_revenue": ads["providers"]["meta"]["revenue"],
-            "meta_roas": ads["providers"]["meta"]["roas"],
-            "legacy_analyses_count": 0,
-            "analyses_count": 0,
-        })
-        if ads_amount_available and ads.get("bank_commissions") is not None:
-            merge_ad_bank_fees_into_dashboard(response, ads)
-        else:
-            totals["ad_bank_commission_fees"] = None
-            totals["total_payment_fees"] = None
-            totals["net_profit"] = None
-            if config.get("deduct_payment_fees", True):
-                totals["net_sales"] = None
-            response["payment_breakdown"] = [
-                row
-                for row in (response.get("payment_breakdown") or [])
-                if row.get("key") != "ad_bank_commissions"
-            ]
-        totals["product_cost_complete"] = (
-            product_cost["missing_all_cost_products_count"] == 0
-            and product_cost["no_products_orders_count"] == 0
-        )
-        if not totals["product_cost_complete"]:
-            totals["net_profit"] = None
-            if config.get("deduct_product_costs", True):
-                totals["net_sales"] = None
-        response.update({
-            "recent_analyses": [],
-            "product_cost_v2": product_cost,
-            "ads_v2": ads,
-            **({"month_kpis": month_kpis} if include_month_kpis else {}),
-            "currency_conversion": sales_currency,
-            "financial_cohort": financial_cohort,
-            "dashboard_source": "mezan_v2",
-            "source_contract": {
-                "orders_sales_payment_methods": "unified_orders.total_amount_sar:salla_order_fx",
-                "product_cost": product_cost["source_contract"],
-                "advertising": ads["source_contract"],
-                "employee_salaries": "mezan_employee_salary_contracts_v2",
-                "recurring_obligations": "operating_recurring_obligations_v2",
-                "shipping_partners": "legacy_shipping_cost_ssot",
-                "payment_gateway_fees": PAYMENT_FEE_BASIS + " + mezan_ad_account_cost_settings_v2",
-            },
-            "source_only": True,
-            "accounting_write_reached": False,
-            "qoyod_write_reached": False,
-        })
-        if not sales_currency["conversion_complete"]:
-            # Do not turn an unverified GCC amount into zero or a fake SAR
-            # result anywhere in the executive accounting surface.
-            for field in (
-                "total_sales",
-                "net_sales",
-                "net_profit",
-                "overall_roas",
-                "total_payment_fees",
-            ):
-                totals[field] = None
-        response["recurring_obligations_v2"] = recurring
-        if not financial_cohort["complete"]:
-            totals["net_profit"] = None
-        return enforce_dashboard_fee_completeness(response)
 
     @router.get("/dashboard-v2")
     @_heavy_dashboard_stage("dashboard_v2_summary")
@@ -2356,8 +2367,8 @@ def make_dashboard_v2_router(
         report_statuses: str | None = None,
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
-        report = await compute_dashboard_v2(
-            user=user, from_date=from_date, to_date=to_date,
+        report = await _compute_dashboard_v2(
+            db, legacy_dashboard, user=owner(user), from_date=from_date, to_date=to_date,
             payment_methods=payment_methods, shipping_companies=shipping_companies,
             report_statuses=report_statuses,
         )
@@ -2369,124 +2380,31 @@ def make_dashboard_v2_router(
         return report
 
     async def card_snapshot(
-        section: str,
-        *,
-        user: dict,
-        from_date: str | None,
-        to_date: str | None,
-        payment_methods: str | None,
-        shipping_companies: str | None,
-        report_statuses: str | None,
-        refresh: bool,
+        section: str, *, user: dict, from_date: str | None, to_date: str | None,
+        payment_methods: str | None, shipping_companies: str | None,
+        report_statuses: str | None, refresh: bool, demand_mode=False, request=None,
     ) -> dict[str, Any]:
-        # Authorization and scope validation run even when a result is saved.
+        from dashboard_card_builder import CARD_TTLS, prepare_dashboard_card, build_dashboard_card
         current = owner(user)
-        user_id = str(current["id"])
-        if report_statuses is not None:
-            from sold_financial_report import validate_report_statuses
-            report_statuses = validate_report_statuses(report_statuses)
-        try:
-            start = date.fromisoformat(from_date) if from_date else None
-            end = date.fromisoformat(to_date) if to_date else None
-            if start and end and end < start:
-                raise ValueError("reversed_date_range")
-        except (TypeError, ValueError) as exc:
-            raise HTTPException(status_code=422, detail="invalid_date_range") from exc
-        from_date = start.isoformat() if start else None
-        to_date = end.isoformat() if end else None
-        today = _today_riyadh()
-        from supplier_invoice_reporting_costs import latest_report_invoice
-        revision, invoice_revision, settings, policy = await asyncio.gather(
-            get_product_cost_revision(db, user_id),
-            latest_report_invoice(db, user_id),
-            db.settings.find_one(
-                {"user_id": user_id},
-                {"_id": 0, "hide_inferred_date_orders": 1, "report_included_statuses": 1,
-                 **({"payment_methods": 1} if section == "executive" else {})},
-            ),
-            get_policy_map(db, user_id),
+        binding = await prepare_dashboard_card(
+            db, owner_id=current["id"], section=section, from_date=from_date, to_date=to_date,
+            payment_methods=payment_methods, shipping_companies=shipping_companies, report_statuses=report_statuses,
         )
-        settings = settings or {}
-        fee_context = await load_fee_setup_context(db, user_id) if section == "executive" else None
-
-        def filter_key(value: str | None) -> tuple[str, ...]:
-            return tuple(sorted({part.strip().casefold() for part in (value or "").split(",") if part.strip()}))
-
-        key = (
-            FINANCIAL_COHORT_READER_VERSION,
-            user_id, section, today.isoformat(), from_date, to_date,
-            filter_key(payment_methods), filter_key(shipping_companies),
-            None if report_statuses is None else filter_key(report_statuses),
-            revision, invoice_revision, bool(settings.get("hide_inferred_date_orders")),
-            tuple(sorted(str(value) for value in (settings.get("report_included_statuses") or []))),
-            tuple(sorted(policy.items())),
-            payment_settings_revision(settings) if section == "executive" else None,
-            fee_setup_revision(fee_context) if section == "executive" else None,
-        )
-        filters = {
-            "from_date": from_date, "to_date": to_date,
-            "payment_methods": payment_methods, "shipping_companies": shipping_companies,
-            **({"report_statuses": report_statuses} if report_statuses is not None else {}),
-        }
+        if demand_mode:
+            from dashboard_card_read_models import demand_response
+            return await demand_response(
+                db, user=user, section=section, binding=binding,
+                consumer_id=request.headers.get("X-Mezan-Read-Consumer"),
+                refresh=refresh and request.headers.get("X-Mezan-Read-Poll") != "1",
+            )
 
         @_heavy_dashboard_stage("dashboard_v2_" + section.replace("-", "_"))
-        async def build() -> dict[str, Any]:
-            if section == "executive":
-                result, method_setup = await _gather_dashboard_reads(
-                    compute_dashboard_v2(
-                        user=current, **filters,
-                        include_month_kpis=False, include_product_rows=False,
-                        include_account_results=True,
-                        fee_context=fee_context,
-                    ),
-                    # Setup is owner-wide, so a date or payment filter cannot
-                    # hide an unresolved method. This reads names only; it does
-                    # not initialize fees, create accounts or run a sync.
-                    load_payment_method_setup(db, user_id, settings=settings,
-                                              fee_context=fee_context, current_day=today),
-                )
-                return {**result, "payment_method_setup": method_setup}
-            source_orders = await _filtered_orders(
-                db, user_id, **filters,
-                include_marketing_attribution=True,
-            )
-            orders, financial_cohort = split_financial_cohort(source_orders)
-            if section == "top-products":
-                return {"product_cost_v2": await build_mezan_v2_product_cost_cooperative(db, user_id, orders),
-                        "financial_cohort": financial_cohort}
-
-            month_from = today.replace(day=1).isoformat()
-            month_to = today.isoformat()
-            if from_date == month_from and to_date == month_to:
-                month_orders, month_cohort = orders, financial_cohort
-            else:
-                month_source_orders = await _filtered_orders(
-                    db, user_id, **{**filters, "from_date": month_from, "to_date": month_to},
-                )
-                month_orders, month_cohort = split_financial_cohort(month_source_orders)
-            product_cost, ads, month_sales = await _gather_dashboard_reads(
-                build_mezan_v2_product_cost_cooperative(db, user_id, orders, include_product_rows=False),
-                build_mezan_v2_ads(db, user_id, from_date=from_date, to_date=to_date),
-                summarize_orders_sar_cooperative(month_orders, checkpoint=CPUWorkBudget(PARSER_BUDGET_MS).checkpoint),
-            )
-            executive = await build_salla_ads_executive_breakdown_cooperative(orders, ads)
-            return {
-                "month_kpis": {
-                    "from_date": month_from, "to_date": month_to,
-                    "total_orders": month_cohort["total_orders"], "total_sales": month_sales["total_sar"],
-                    **{key: month_cohort[key] for key in ("financial_eligible_orders", "excluded_unpaid_orders", "review_orders")},
-                    "accounting_currency": "SAR", "currency_conversion": month_sales,
-                },
-                "product_cost_v2": product_cost,
-                "ads_v2": {"executive_breakdown": executive},
-                "financial_cohort": financial_cohort,
-            }
+        async def build():
+            return await build_dashboard_card(db, legacy_dashboard, owner_id=current["id"],
+                                              section=section, binding=binding, read_only=False)
 
         try:
-            return await snapshots.get(
-                key, ttl_seconds={"executive": 60, "top-products": 1800, "period-summary": 18000}[section],
-                build=build, refresh=refresh,
-            )
+            return await snapshots.get(binding["key"], ttl_seconds=CARD_TTLS[section], build=build, refresh=refresh)
         except DashboardSnapshotBusy as exc:
             raise HTTPException(status_code=503, detail={
                 "code": "resource_pressure", "retryable": True, "data_complete": False,
@@ -2498,51 +2416,62 @@ def make_dashboard_v2_router(
 
     @router.get("/dashboard-v2/cards/top-products")
     async def top_products_card(
+        request: Request,
         from_date: str | None = None,
         to_date: str | None = None,
         payment_methods: str | None = None,
         shipping_companies: str | None = None,
         report_statuses: str | None = None,
         refresh: bool = False,
+        demand: bool = False,
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         return await card_snapshot(
             "top-products", user=user, from_date=from_date, to_date=to_date,
             payment_methods=payment_methods, shipping_companies=shipping_companies,
-            report_statuses=report_statuses, refresh=refresh,
+            report_statuses=report_statuses, refresh=refresh, demand_mode=demand, request=request,
         )
 
     @router.get("/dashboard-v2/cards/period-summary")
     async def period_summary_card(
+        request: Request,
         from_date: str | None = None,
         to_date: str | None = None,
         payment_methods: str | None = None,
         shipping_companies: str | None = None,
         report_statuses: str | None = None,
         refresh: bool = False,
+        demand: bool = False,
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         return await card_snapshot(
             "period-summary", user=user, from_date=from_date, to_date=to_date,
             payment_methods=payment_methods, shipping_companies=shipping_companies,
-            report_statuses=report_statuses, refresh=refresh,
+            report_statuses=report_statuses, refresh=refresh, demand_mode=demand, request=request,
         )
 
     @router.get("/dashboard-v2/cards/executive")
     async def executive_card(
+        request: Request,
         from_date: str | None = None,
         to_date: str | None = None,
         payment_methods: str | None = None,
         shipping_companies: str | None = None,
         report_statuses: str | None = None,
         refresh: bool = False,
+        demand: bool = False,
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         return await card_snapshot(
             "executive", user=user, from_date=from_date, to_date=to_date,
             payment_methods=payment_methods, shipping_companies=shipping_companies,
-            report_statuses=report_statuses, refresh=refresh,
+            report_statuses=report_statuses, refresh=refresh, demand_mode=demand, request=request,
         )
+
+    @router.delete("/dashboard-v2/read-demand/{key}")
+    async def release_dashboard_demand(key: str, consumer_id: str, user: dict = Depends(current_user)):
+        from read_demand_actor import release_current
+        return await release_current(db, user, key, consumer_id)
 
     @router.get("/dashboard-v2/unified-marketing-shadow")
     async def unified_marketing_shadow(

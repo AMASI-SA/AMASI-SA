@@ -1,6 +1,7 @@
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import useDashboardCardSnapshot from "./useDashboardCardSnapshot";
+import api from "../lib/api";
 import {
     DASHBOARD_CARD_REQUEST_TIMEOUT_MS,
     PERIOD_SUMMARY_REFRESH_MS,
@@ -8,7 +9,7 @@ import {
     dashboardCardQuery,
 } from "../services/dashboardCardSnapshot";
 
-jest.mock("../lib/api", () => ({ get: jest.fn() }));
+jest.mock("../lib/api", () => ({ get: jest.fn(), delete: jest.fn(async () => ({ data: { released: true } })) }));
 
 const INITIAL_TIME = Date.parse("2026-11-11T18:00:00Z");
 const filters = { from: "2026-11-11", to: "2026-11-11", payment_methods: ["mada"], shipping_companies: ["carrier"] };
@@ -32,11 +33,70 @@ beforeEach(() => {
     global.IS_REACT_ACT_ENVIRONMENT = true;
     jest.useFakeTimers();
     jest.setSystemTime(INITIAL_TIME);
+    jest.clearAllMocks();
     Object.defineProperty(document, "hidden", { configurable: true, value: false });
     Object.defineProperty(navigator, "onLine", { configurable: true, value: true });
     apiClient = { get: jest.fn(async () => ({ data: payload("saved") })) };
     host = document.createElement("div"); document.body.appendChild(host);
     root = createRoot(host);
+});
+
+test("an explicit preparing response polls demand until one complete saved card arrives", async () => {
+    apiClient.get.mockResolvedValueOnce({ status: 202, data: {
+        status: "preparing", key: "a".repeat(64), retry_after_ms: 1500,
+        release_url: `/dashboard-v2/read-demand/${"a".repeat(64)}`,
+    }}).mockResolvedValueOnce({ status: 200, data: payload("worker-ready") });
+    await render();
+    expect(observed.loading).toBe(true);
+    expect(apiClient.get).toHaveBeenCalledTimes(1);
+    const first = apiClient.get.mock.calls[0][1];
+    expect(first.params.demand).toBe(true);
+    expect(first.headers["X-Mezan-Read-Consumer"]).toEqual(expect.any(String));
+    expect(first.headers["X-Mezan-Read-Poll"]).toBeUndefined();
+    await tick(1500);
+    expect(observed.data.marker).toBe("worker-ready");
+    expect(apiClient.get).toHaveBeenCalledTimes(2);
+    expect(apiClient.get.mock.calls[1][1].headers["X-Mezan-Read-Poll"]).toBe("1");
+    expect(apiClient.get.mock.calls[1][1].headers["X-Mezan-Read-Consumer"]).toBe(first.headers["X-Mezan-Read-Consumer"]);
+    await tick(5000);
+    expect(apiClient.get).toHaveBeenCalledTimes(2);
+});
+
+test("hiding a preparing card releases its worker demand and stops status polling", async () => {
+    const release = `/dashboard-v2/read-demand/${"b".repeat(64)}`;
+    apiClient.get.mockResolvedValue({ status: 202, data: {
+        status: "preparing", key: "b".repeat(64), retry_after_ms: 1500, release_url: release,
+    }});
+    await render();
+    Object.defineProperty(document, "hidden", { configurable: true, value: true });
+    await event(document, "visibilitychange");
+    expect(api.delete).toHaveBeenCalledWith(release, expect.objectContaining({
+        params: { consumer_id: apiClient.get.mock.calls[0][1].headers["X-Mezan-Read-Consumer"] },
+    }));
+    await tick(10000);
+    expect(apiClient.get).toHaveBeenCalledTimes(1);
+});
+
+test("a resumed card uses a new consumer while an old release is still pending", async () => {
+    let finishRelease;
+    api.delete.mockImplementationOnce(() => new Promise((resolve) => { finishRelease = resolve; }));
+    apiClient.get.mockResolvedValue({ status: 202, data: {
+        status: "preparing", key: "c".repeat(64), retry_after_ms: 1500,
+        release_url: `/dashboard-v2/read-demand/${"c".repeat(64)}`,
+    }});
+    await render();
+    const original = apiClient.get.mock.calls[0][1].headers["X-Mezan-Read-Consumer"];
+    Object.defineProperty(document, "hidden", { configurable: true, value: true });
+    await event(document, "visibilitychange");
+    Object.defineProperty(document, "hidden", { configurable: true, value: false });
+    await event(document, "visibilitychange");
+    expect(apiClient.get).toHaveBeenCalledTimes(2);
+    const resumed = apiClient.get.mock.calls[1][1].headers["X-Mezan-Read-Consumer"];
+    expect(resumed).not.toBe(original);
+    expect(api.delete.mock.calls[0][1].params.consumer_id).toBe(original);
+    await act(async () => finishRelease({ data: { released: true } }));
+    await tick(1500);
+    expect(apiClient.get.mock.calls[2][1].headers["X-Mezan-Read-Consumer"]).toBe(resumed);
 });
 afterEach(async () => {
     await act(async () => root.unmount());

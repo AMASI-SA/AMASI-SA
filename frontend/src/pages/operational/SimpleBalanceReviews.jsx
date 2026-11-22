@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { simpleBalancesApi as api, simpleBalanceError } from './simpleBalancesApi';
 import { useBalanceRead } from './simpleBalancesHooks';
 import { money, movementDate } from './simpleBalancesModel';
+import WorkspaceResourcePicker from './WorkspaceResourcePicker';
 import './simpleBalanceReviews.css';
 
 const statusLabels = { pending: 'بانتظار المراجعة', approved: 'معتمدة', rejected: 'مرفوضة' };
@@ -64,13 +65,13 @@ function BankMovements({ id, identity, bank, selected, selectedLabel, disabled, 
   </section>;
 }
 
-function ReviewDetail({ id, identity, onProof, onChanged, readOnly }) {
+function ReviewDetail({ id, identity, onProof, onChanged, readOnly, visible = true }) {
   const read = useBalanceRead(async config => {
     const item = await api.review(id, config);
     if (item?.assignment_id !== id) throw new Error('invalid review');
     const options = item.status === 'pending' && !readOnly ? await api.reviewOptions(id, config) : null;
     return { item, options };
-  }, JSON.stringify([identity, id]));
+  }, JSON.stringify([identity, id]), visible);
   const [draft, setDraft] = useState(initialDraft);
   const [decision, setDecision] = useState(null);
   const [uncertain, setUncertain] = useState(null);
@@ -182,7 +183,7 @@ export default function SimpleBalanceReviews({ context, driverId = '', identity 
   const bankId = params.get('review_bank') || '';
   const page = Math.max(1, Number(params.get('review_page')) || 1);
   const key = JSON.stringify([identity, context.session_scope, context.permission_version, status, driver, method, bankId, page]);
-  const allowed = context.operations.some(row => row.key === 'courier.review');
+  const allowed = context.operations.some(row => (typeof row === 'string' ? row : row.key) === 'courier.review');
   const read = useBalanceRead(config => api.reviews({ status, ...(driver ? { driver_id: driver } : {}), ...(method ? { method } : {}), ...(bankId ? { bank_id: bankId } : {}), page, page_size: 5 }, config), key, allowed && !id);
   const go = (patch, replace = !('review_id' in patch || 'review_proof' in patch)) => {
     const next = new URLSearchParams(params);
@@ -200,14 +201,16 @@ export default function SimpleBalanceReviews({ context, driverId = '', identity 
   return <section className="sbr-page">
     {!proof && <header className="sb-section-title"><h2>مراجعات الإيصالات</h2><button type="button" className="sb-secondary" onClick={back}>رجوع</button></header>}
     {!allowed ? <p role="alert">لا توجد صلاحية مراجعة الإيصالات.</p> : id ? <>
-      <div hidden={proof}><ReviewDetail readOnly={readOnly} key={`${identity}:${context.session_scope}:${context.permission_version}:${id}`} id={id} identity={key} onProof={() => go({ review_proof: '1' })} onChanged={onChanged} /></div>
+      <div hidden={proof}><ReviewDetail visible={!proof} readOnly={readOnly} key={`${identity}:${context.session_scope}:${context.permission_version}:${id}`} id={id} identity={key} onProof={() => go({ review_proof: '1' })} onChanged={onChanged} /></div>
       {proof && <Receipt id={id} identity={key} onBack={back} />}
     </> : <>
       <div className="sbr-tabs" role="group" aria-label="حالة المراجعة">{Object.entries(statusLabels).map(([value, label]) => <button type="button" key={value} aria-pressed={status === value} onClick={() => go({ review_status: value, review_page: null })}>{label}</button>)}</div>
       <div className="sbr-filters">
-        {!driverId && <label className="sb-field"><span>الموصل</span><select value={driver} onChange={event => go({ review_driver: event.target.value, review_page: null })}><option value="">جميع الموصلين المسموحين</option>{drivers.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>}
+        {!driverId && (context.demandOnly ? <ReviewFilter context={context} kind="store_driver" role="recipient" label="الموصل" value={driver} onSelect={value => go({ review_driver: value, review_page: null })}/>
+          : <label className="sb-field"><span>الموصل</span><select value={driver} onChange={event => go({ review_driver: event.target.value, review_page: null })}><option value="">جميع الموصلين المسموحين</option>{drivers.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>)}
         <label className="sb-field"><span>طريقة الدفع</span><select value={method} onChange={event => go({ review_method: event.target.value, review_bank: null, review_page: null })}><option value="">الجميع</option><option value="bank_transfer">تحويل بنكي</option><option value="card_terminal">شبكة</option></select></label>
-        {method !== 'card_terminal' && <label className="sb-field"><span>البنك</span><select value={bankId} onChange={event => go({ review_bank: event.target.value, review_page: null })}><option value="">الجميع</option>{banks.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>}
+        {method !== 'card_terminal' && (context.demandOnly ? <ReviewFilter context={context} kind="bank" role="source" label="البنك" value={bankId} onSelect={value => go({ review_bank: value, review_page: null })}/>
+          : <label className="sb-field"><span>البنك</span><select value={bankId} onChange={event => go({ review_bank: event.target.value, review_page: null })}><option value="">الجميع</option>{banks.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>)}
       </div>
       {read.error && <p role="alert" className="sb-notice sb-error">{read.error}</p>}
       {read.loading && <p role="status">جارٍ تحميل المراجعات…</p>}
@@ -217,4 +220,14 @@ export default function SimpleBalanceReviews({ context, driverId = '', identity 
       <button type="button" className="sb-secondary" onClick={read.reload}>تحديث</button>
     </>}
   </section>;
+}
+
+function ReviewFilter({context,kind,role,label,value,onSelect}) {
+  const [opened,setOpened]=useState(false), [picked,setPicked]=useState(null);
+  const selected=picked?.id===value?picked:context.resources.find(item=>item.kind===kind&&item.id===value);
+  return <div><button type="button" className="sb-secondary" onClick={()=>setOpened(current=>!current)}>
+    {label}: {selected?.name || (value?'المحدد':'الجميع')}</button>
+    {opened && <WorkspaceResourcePicker context={context} operation="courier.review" role={role} kind={kind} label={label} value={selected} optional
+      onSelect={item=>{setPicked(item);setOpened(false);onSelect(item?.id||'');}}/>}
+  </div>;
 }

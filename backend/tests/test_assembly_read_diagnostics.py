@@ -12,7 +12,7 @@ import pytest
 
 import read_path_diagnostics as diagnostics
 import order_engine.service as service
-from order_engine.repository import MongoOrderRepository, OrderDiscoveryRow
+from order_engine.repository import MongoAssemblyBoardRepository, MongoOrderRepository, OrderDiscoveryRow
 import preparation_piece_operations as pieces
 from test_fulfillment_read_performance import seed_queue
 from test_order_batch_cpu_fairness import (
@@ -53,6 +53,10 @@ class ReadOnlyObservedDB:
             def find(self, *args, **kwargs):
                 calls.append((name, "find", deepcopy(args), deepcopy(kwargs)))
                 return target.find(*args, **kwargs)
+
+            def aggregate(self, *args, **kwargs):
+                calls.append((name, "aggregate", deepcopy(args), deepcopy(kwargs)))
+                return target.aggregate(*args, **kwargs)
 
             async def find_one(self, *args, **kwargs):
                 calls.append((name, "find_one", deepcopy(args), deepcopy(kwargs)))
@@ -174,14 +178,19 @@ def test_other_read_scope_does_not_acquire_assembly_counts(caplog):
     asyncio.run(exercise())
 
 
-def test_sampled_checkpoint_cancellation_keeps_original_joined_close(monkeypatch, caplog):
+@pytest.mark.parametrize("projected", [False, True])
+def test_sampled_checkpoint_cancellation_keeps_original_joined_close(monkeypatch, caplog, projected):
     async def exercise():
         db = database(raw_rows(), gated_close=True)
+        if projected:
+            db.unified_orders.aggregate = lambda pipeline: db.unified_orders.find(
+                pipeline[0]["$match"], pipeline[1]["$project"])
         calls, heartbeat = [], []
         clock = ControlledCPU(monkeypatch)
         traced(monkeypatch, MongoOrderRepository, "_to_discovery_row", clock,
                calls, heartbeat, static=True, cancel=True)
-        task = asyncio.create_task(diagnostics.sample("assembly_board", MongoOrderRepository(db).get_salla_orders(
+        repository = MongoAssemblyBoardRepository(db) if projected else MongoOrderRepository(db)
+        task = asyncio.create_task(diagnostics.sample("assembly_board", repository.get_salla_orders(
             user_id="owner", order_numbers=[str(index) for index in range(100)])))
         await asyncio.sleep(0)
         cursor = db.unified_orders.cursor
@@ -207,7 +216,8 @@ def test_sampled_checkpoint_cancellation_keeps_original_joined_close(monkeypatch
     asyncio.run(exercise())
 
 
-def test_cancelled_pending_cursor_advance_is_not_closed_or_retried(caplog):
+@pytest.mark.parametrize("projected", [False, True])
+def test_cancelled_pending_cursor_advance_is_not_closed_or_retried(caplog, projected):
     async def exercise():
         class PendingCursor(CloseableCursor):
             def __init__(self, rows):
@@ -233,7 +243,11 @@ def test_cancelled_pending_cursor_advance_is_not_closed_or_retried(caplog):
                 return self.cursor
 
         db = SimpleNamespace(unified_orders=PendingCollection(raw_rows()))
-        task = asyncio.create_task(diagnostics.sample("assembly_board", MongoOrderRepository(db).get_salla_orders(
+        if projected:
+            db.unified_orders.aggregate = lambda pipeline: db.unified_orders.find(
+                pipeline[0]["$match"], pipeline[1]["$project"])
+        repository = MongoAssemblyBoardRepository(db) if projected else MongoOrderRepository(db)
+        task = asyncio.create_task(diagnostics.sample("assembly_board", repository.get_salla_orders(
             user_id="owner", order_numbers=["0"])))
         await asyncio.sleep(0)
         cursor = db.unified_orders.cursor

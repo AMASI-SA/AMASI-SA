@@ -21,7 +21,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Iterable, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 from pymongo import ASCENDING, DESCENDING
 from pymongo.write_concern import WriteConcern
@@ -45,7 +45,7 @@ from fulfillment_v2_routes import (
     effective_operation_actor,
 )
 from fulfillment_carrier_label import sync_completed_carrier_label
-from order_engine.repository import MongoOrderRepository
+from order_engine.repository import MongoAssemblyBoardRepository, MongoOrderRepository
 from order_engine.service import OrderNotFoundError, get_order
 from order_engine.shipping_label_service import ShippingLabelError
 from order_review_export_controls import user_can_manage_preparation
@@ -3631,7 +3631,7 @@ async def _assembly_order_board(
     for piece in physical_rows:
         physical_by_order[_text(piece.get("order_number"))].append(piece)
 
-    repository = MongoOrderRepository(db)
+    repository = MongoAssemblyBoardRepository(db)
     rows: list[dict[str, Any]] = []
     virtual_pieces_for = _workflow_assembly_pieces
     if read_diagnostics.current() is not None:
@@ -4714,10 +4714,14 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
 
     @router.get("/assembly/orders")
     async def list_assembly_orders(
+        request: Request,
         state: Literal["in_progress", "completed", "direct_preparation", "supplier_received"] = Query(...),
         limit: int = Query(100, ge=1, le=300),
         offset: int = Query(0, ge=0, le=10000),
         q: str = Query(default="", max_length=64),
+        demand: bool = False,
+        refresh: bool = False,
+        snapshot: str | None = Query(default=None, max_length=128),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         context = await _actor_context(db, user)
@@ -4726,15 +4730,18 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
             "fulfillment.ready.read",
             responsibility="instant_ready",
         )
-        await ensure_indexes_once()
-        return await _assembly_order_board(
-            db,
-            user_id=context["merchant_id"],
-            state=state,
-            limit=limit,
-            offset=offset,
-            query=q,
+        from assembly_board_read_models import demand_response
+        return await demand_response(
+            db, user=user, state=state, query=q, limit=limit, offset=offset,
+            consumer_id=request.headers.get("X-Mezan-Read-Consumer"),
+            refresh=refresh and request.headers.get("X-Mezan-Read-Poll") != "1",
+            snapshot=snapshot, request=request, compatible=not demand,
         )
+
+    @router.delete("/assembly/read-demand/{key}")
+    async def release_assembly_demand(key: str, consumer_id: str, user: dict = Depends(current_user)):
+        from read_demand_actor import release_current
+        return await release_current(db, user, key, consumer_id)
 
     @router.post("/assembly/pieces/{piece_id}/ready")
     async def mark_assembly_piece_ready(

@@ -363,7 +363,8 @@ def payment_source_kinds(policy):
     return ({"bank", "cash"} if payee_kinds else set()) | ({"employee_custody"} if can_spend_custody else set())
 
 
-async def resource_catalog(db, owner, policy, state, *, ad_bank_fx=False, reviewed_counts=None, selected_resource=None, directory_only=False, selected_kind=None, provider_positions=False, provider_orders=False):
+async def resource_catalog(db, owner, policy, state, *, ad_bank_fx=False, reviewed_counts=None, selected_resource=None, directory_only=False, selected_kind=None, provider_positions=False, provider_orders=False,
+                           selected_kinds=None, identities_by_kind=None, computed_override=None):
     from operational_ad_balance_sar import workspace_amounts
     from operational_workspace_order_issues import issue_badge, navigation_counts
     from operational_balance_service import prepaid_shipping_cash
@@ -376,7 +377,9 @@ async def resource_catalog(db, owner, policy, state, *, ad_bank_fx=False, review
         fail("operational_workspace_not_found", "طلبات المنصة غير متاحة", 404)
     can_price_cards = provider_positions and (policy.owner_override or any(
         r["kind"] == "provider" and r.get("balance") for r in policy.resources))
-    if directory_only:
+    if computed_override is not None:
+        computed = computed_override
+    elif directory_only:
         computed = {"parties": [], "obligations": [], "details": {}, "issues": []}
     elif selected_resource and selected_resource[0] in ACCOUNT_KINDS:
         from operational_party_projection_state import cash_account_projection
@@ -409,10 +412,13 @@ async def resource_catalog(db, owner, policy, state, *, ad_bank_fx=False, review
     for kind in RESOURCE_KINDS:
         if (selected_resource and kind != selected_resource[0]) or (selected_kind and kind != selected_kind):
             continue
+        if selected_kinds is not None and kind not in selected_kinds:
+            continue
         if not policy.owner_override and not any(r["kind"] == kind for r in policy.resources):
             continue
         with read_diagnostics.phase("catalog." + kind):
-            catalog = await entities(db, owner, kind, operational_state=state)
+            catalog = await entities(db, owner, kind, operational_state=state,
+                **({'selected_ids': identities_by_kind.get(kind, ())} if identities_by_kind is not None else {}))
         for row in catalog:
             if selected_resource and row["id"] != selected_resource[1]:
                 continue
@@ -936,6 +942,9 @@ def _open_register_page(index, policy, page, page_size, focus_id=None):
 def install_workspace_routes(router, db, current_user, scope):
     from operational_balance_access import load_access
     from operational_balance_reviews import install_workspace_review_routes
+    from operational_workspace_demand_routes import install_demand_workspace_routes
+
+    install_demand_workspace_routes(router, db, current_user)
 
     from operational_workspace_order_issues import ReviewSnapshots, read_order_issues, source_key
 
@@ -1083,7 +1092,11 @@ def install_workspace_routes(router, db, current_user, scope):
         return await run_visible_report_read(request, group)
 
     @router.get("/workspace/resource/{kind}/{identity}")
-    async def resource_balance(request: Request, kind: str, identity: str, ad_bank_fx: bool = False, user=Depends(current_user)):
+    async def resource_balance(request: Request, kind: str, identity: str, ad_bank_fx: bool = False, demand: bool = False, user=Depends(current_user)):
+        if demand:
+            from operational_workspace_demand_routes import serve_projection
+            return await serve_projection(db, user, request, "operational_resource", resource=(kind, identity),
+                                          filters={"ad_bank_fx": ad_bank_fx})
         def selected(actor, owner, policy, state, resources, computed):
             if len(resources) != 1 or not resources[0]["access"]["balance"]:
                 fail("operational_workspace_not_found", "الحساب غير متاح", 404)
@@ -1103,8 +1116,14 @@ def install_workspace_routes(router, db, current_user, scope):
     async def ledger(request: Request, kind: str, identity: str, page: int = Query(default=1, ge=1),
                      page_size: int = Query(default=5, ge=1, le=8), focus_id: str | None = Query(default=None, max_length=250),
                      ad_bank_fx: bool = False, page_only: bool = False, courier_history: bool = False, provider_orders: bool = False, q: str = Query(default="", max_length=160),
-                     date_from: str | None = None, date_to: str | None = None, user=Depends(current_user)):
+                     date_from: str | None = None, date_to: str | None = None, demand: bool = False, user=Depends(current_user)):
         check_period(date_from, date_to)
+        if demand:
+            from operational_workspace_demand_routes import serve_projection
+            return await serve_projection(db, user, request, "operational_ledger", resource=(kind, identity),
+                filters={"ad_bank_fx": ad_bank_fx, "provider_orders": provider_orders, "q": q,
+                         "date_from": date_from, "date_to": date_to, "courier_history": courier_history},
+                page=page, page_size=page_size, focus_id=focus_id)
         if page_only and not provider_orders and not q and not date_from:
             return await run_visible_report_read(request, lambda: movement_window(user, kind, identity, page, page_size,
                 account_detail=True, ad_bank_fx=ad_bank_fx, focus_id=focus_id, courier_history=courier_history))
@@ -1238,10 +1257,16 @@ def install_workspace_routes(router, db, current_user, scope):
                         kind: str | None = Query(default=None, max_length=50), id: str | None = Query(default=None, max_length=200),
                         q: str = Query(default="", max_length=160), date_from: str | None = None, date_to: str | None = None,
                         direction: Literal["in", "out", "transfer"] | None = None, status: Literal["done", "info"] | None = None,
-                        page_only: bool = False, courier_history: bool = False, user=Depends(current_user)):
+                        page_only: bool = False, courier_history: bool = False, demand: bool = False, user=Depends(current_user)):
         check_period(date_from, date_to)
         if (kind is None) != (id is None):
             fail("operational_account_filter_invalid", "اختر نوع الحساب والحساب معًا", 422)
+        if demand:
+            from operational_workspace_demand_routes import serve_projection
+            return await serve_projection(db, user, request, "operational_register",
+                resource=(kind, id) if kind is not None else None,
+                filters={"q": q, "date_from": date_from, "date_to": date_to, "direction": direction,
+                         "status": status, "courier_history": courier_history}, page=page, page_size=page_size)
         if page_only and not any((q, date_from, direction, status)):
             return await run_visible_report_read(request, lambda: movement_window(user, kind, id, page, page_size, courier_history=courier_history))
         def project(actor, owner, policy, state, resources, computed):
@@ -1269,7 +1294,12 @@ def install_workspace_routes(router, db, current_user, scope):
     async def statement(request: Request, kind: str, identity: str,
                         date_from: str = Query(pattern=r"^\d{4}-\d{2}-\d{2}$"),
                         date_to: str = Query(pattern=r"^\d{4}-\d{2}-\d{2}$"),
-                        purpose: Literal["view", "print"] = "view", user=Depends(current_user)):
+                        purpose: Literal["view", "print"] = "view", demand: bool = False, user=Depends(current_user)):
+        if demand:
+            check_period(date_from, date_to)
+            from operational_workspace_demand_routes import serve_projection
+            return await serve_projection(db, user, request, "operational_statement", resource=(kind, identity),
+                filters={"date_from": date_from, "date_to": date_to, "purpose": purpose}, page_size=300)
         def project(actor, owner, policy, state, resources, computed):
             resource = next((r for r in resources if (r["kind"], r["id"]) == (kind, identity)), None)
             if not resource or resource["access"]["movements"] == "none":
@@ -1281,7 +1311,11 @@ def install_workspace_routes(router, db, current_user, scope):
 
     @router.get("/workspace/history/{kind}/{identity}")
     async def history(request: Request, kind: str, identity: str, page: int = Query(default=1, ge=1),
-                      page_size: int = Query(default=5, ge=1, le=5), user=Depends(current_user)):
+                      page_size: int = Query(default=5, ge=1, le=5), demand: bool = False, user=Depends(current_user)):
+        if demand:
+            from operational_workspace_demand_routes import serve_projection
+            return await serve_projection(db, user, request, "operational_history", resource=(kind, identity),
+                                          page=page, page_size=page_size)
         def project(actor, owner, policy, state, resources, computed):
             resource = next((r for r in resources if (r["kind"], r["id"]) == (kind, identity)), None)
             if (not resource or resource["access"]["movements"] == "none"

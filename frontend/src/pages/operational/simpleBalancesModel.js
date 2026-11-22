@@ -11,6 +11,24 @@ export const resourceLabels = {
 export const resourceKey = resource => JSON.stringify([resource.kind, resource.id]);
 export const isMoneyAccount = kind => kind === 'bank' || kind === 'cash';
 
+export function validBootstrap(value) {
+  return Boolean(value?.actor?.id && typeof value.session_scope === 'string' && value.session_scope
+    && Array.isArray(value.operations) && value.capabilities && typeof value.capabilities === 'object'
+    && (value.resources === undefined || Array.isArray(value.resources) && value.resources.length === 0));
+}
+
+export function validHome(value, context) {
+  const summary = value?.summary;
+  return Boolean(value?.session_scope === context.session_scope && value.permission_version === context.permission_version
+    && summary?.currency === 'SAR' && ['bank', 'cash', 'total'].every(key => summary[key] === null
+      || typeof summary[key] === 'string' && minorUnits(summary[key]) !== null)
+    && Number.isInteger(summary.cash_count) && summary.cash_count >= 0 && typeof summary.cash_balance_visible === 'boolean'
+    && Array.isArray(value.resources) && value.resources.length <= 3
+    && value.resources.every(item => item?.id && typeof item.kind === 'string' && typeof item.name === 'string' && item.access)
+    && Array.isArray(value.recent_movements) && value.recent_movements.length <= 4
+    && typeof value.has_order_issues === 'boolean');
+}
+
 export function movementDate(row, full = false) {
   // Date-only business records do not establish a time. A timestamp without a
   // timezone is likewise not evidence of the user's local timezone.
