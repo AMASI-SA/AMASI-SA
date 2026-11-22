@@ -36,5 +36,13 @@
   "prepare_pending": true,
   "publication_pending": true,
   "original_verify3_pending": true,
-  "original_merge_loader_validation": "separate independent receipt pending; host stage also revalidates original load/Git before shared source change"
+  "original_merge_loader_validation": {
+    "result": "PASS",
+    "receipt": "ORIGINAL-MERGE-VALIDATION-2076.json",
+    "sha256": "2eace2c88a0beb1d07daa3b1b475614ef3e79f03945eae057cb0075afe62946f",
+    "clean_isolated_D": true,
+    "load_release_intent": "PASS",
+    "verify_release_intent_git": "PASS",
+    "no_build_or_host_action": true
+  }
 }

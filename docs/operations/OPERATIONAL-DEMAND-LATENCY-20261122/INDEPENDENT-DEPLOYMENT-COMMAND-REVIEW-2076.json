@@ -73,5 +73,13 @@
     "other frontend/.release members",
     "old outputs and optional known bytecode cache in verified backups"
   ],
-  "no_main_or_real_host_actions_performed": true
+  "no_main_or_real_host_actions_performed": true,
+  "final_launcher": {
+    "sha256": "3d0966878ef783e3438acdf10a3d87a3efbd637d790a2645bde6f6796d4ecd01",
+    "helper_evidence_commit": "bc7a91bb32baff7e3a92b8020cac6df25403848b",
+    "immutable_remote_helpers_byte_equal": true,
+    "independent_pin_review": "PASS; replacing only EVIDENCE assignment reproduces independently reviewed draft bytes exactly",
+    "verified_by": "release_preflight",
+    "host_execution": false
+  }
 }

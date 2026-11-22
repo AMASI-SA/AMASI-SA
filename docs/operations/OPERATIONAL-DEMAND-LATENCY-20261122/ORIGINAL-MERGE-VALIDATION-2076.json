@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "task": "PR2076 independent merged Git boundary",
+  "deployment_git_sha": "02cd99e5b2b68c95341c87590abcf572c885e697",
+  "result": "PASS",
+  "observed_at_utc": "2026-11-22T20:55:52.694203+00:00",
+  "isolated_clone": "/workspace/scratch/e3ebab9db878/r3-validation/merge-D-hus1ohfi/repo",
+  "object_source": "available local object via isolated clone alternates",
+  "tree": "8f915a681de43fed9da1ec98685a56f87a4c8bcb",
+  "parents": [
+    "24270ebdfdebb83282389308a2349cdb27e2b8e4",
+    "5bb05036d8095a87c6635c0a431c2c19d24d8f78"
+  ],
+  "ancestors_verified": [
+    "24270ebdfdebb83282389308a2349cdb27e2b8e4",
+    "108024c00b7f367fd1d6b15874d7a73d55de2620",
+    "5bb05036d8095a87c6635c0a431c2c19d24d8f78"
+  ],
+  "tree_exact_B": true,
+  "A_to_D_changed_paths": [
+    "release/release-intent-v5.json"
+  ],
+  "B_to_D_changed_paths": [],
+  "intent_blob": "3f1b3c7101dd125593f4f38970b079ae37fc2bf4",
+  "intent_bytes_equal_B": true,
+  "intent_sha256": "3a56ff073fcb3b7e362500a3be1966e2c513194f4679d5bb81a139a338c866c6",
+  "github_signature": {
+    "verified": true,
+    "reason": "valid",
+    "verified_at": "2026-11-22T20:50:43Z"
+  },
+  "isolated_tracked_and_untracked_clean_before_and_after": true,
+  "bytecode_absent": true,
+  "source_worktree_unchanged": {
+    "head": "5bb05036d8095a87c6635c0a431c2c19d24d8f78",
+    "tracked_status": ""
+  },
+  "original_validators": {
+    "backend_runtime_source": {
+      "file_count": 1310,
+      "scope": "backend_runtime_package_v1",
+      "tree_sha256": "82491b8a59c0efae68824d14f2fcdfe89e62be26bf99d5d8e1cbc8d26345a276"
+    },
+    "deployment_git_sha": "02cd99e5b2b68c95341c87590abcf572c885e697",
+    "frontend_artifact_tree_sha256": "dcaa1f2b805c44427be8df2f5b466b85d7860bade43a3799009156300397300b",
+    "frontend_reproducibility_proof_sha256": "30bcd91b489c6cb585c4b560937b4cd22f21b02f8ce78bab6e417b17b224eac3",
+    "load_release_intent": "PASS",
+    "original_adapter_path": "/workspace/scratch/e3ebab9db878/r3-validation/merge-D-hus1ohfi/repo/scripts/emergent_deployment_adapter.py",
+    "protocol_version": 5,
+    "release_control_source": {
+      "file_count": 328,
+      "scope": "release_control_source_v1",
+      "tree_sha256": "51196364edb881394449c62ebdb46203832f7a74a51797c7fd0cda0b38f113cc"
+    },
+    "release_id": "rg5-e4e41b98edc9f49b8e74adad2a905d362b7113b5b1a1fa83436a4c1ba8c4b918",
+    "source_base_git_sha": "24270ebdfdebb83282389308a2349cdb27e2b8e4",
+    "source_git_sha": "108024c00b7f367fd1d6b15874d7a73d55de2620",
+    "verify_release_intent_git": "PASS"
+  },
+  "build_run": false,
+  "host_or_lease_action": false,
+  "finished_at_utc": "2026-11-22T20:55:56.507496+00:00",
+  "proof_hash_evidence_source": "frontend_reproducibility.proof_file.sha256 from byte-verified frozen intent; diagnostic extraction corrected after validator success without rerunning validators"
+}

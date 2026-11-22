@@ -1,0 +1,28 @@
+{
+  "task_id": "OPERATIONAL-DEMAND-LATENCY-20261122",
+  "pr": 2076,
+  "stage": "concrete_deployment_command_issued",
+  "deployment_git_sha": "02cd99e5b2b68c95341c87590abcf572c885e697",
+  "source_git_sha": "108024c00b7f367fd1d6b15874d7a73d55de2620",
+  "intent_git_sha": "5bb05036d8095a87c6635c0a431c2c19d24d8f78",
+  "shared_expected_base": "24270ebdfdebb83282389308a2349cdb27e2b8e4",
+  "retained_candidate": "/tmp/mezan-pr2076-6gtp8l10/repo",
+  "helper_evidence_commit": "bc7a91bb32baff7e3a92b8020cac6df25403848b",
+  "launcher_sha256": "3d0966878ef783e3438acdf10a3d87a3efbd637d790a2645bde6f6796d4ecd01",
+  "helpers": {
+    "MANUAL-HOST-STAGE-2076.py": "3906f0c84731a9de511854ae0a382fd7d0755f92cc9669a03a9c2aa7cb5aac89",
+    "MANUAL-HOST-PREPARE-PREPUBLISH-2076.py": "a3f7ecac60f74228a7cbccd0e5a6b180424202478f8847910f2c5c74fe25aa67",
+    "RUN-HOST-VERIFY-2076.sh": "58315f10c66f75c4c6bfb5f8d70803d33125d4cc183888f86c687584c203ff7a"
+  },
+  "independent_review": "PASS",
+  "host_staging": false,
+  "prepare_started": false,
+  "published": false,
+  "operator_next_actions": [
+    "Execute exact pinned RUN-HOST-DEPLOY-2076.sh in original /app terminal",
+    "After PREPUBLISH_PASSED, click Re-publish changes exactly once",
+    "Wait for NEW Deployment Succeeded for PR2076",
+    "Run printed VERIFY_COMMAND for original exact-own-lease verify3; return full result"
+  ],
+  "failure_action": "Stop and retain phase/backup/stage details; no blind rerun or automatic rollback; never clear another lease"
+}

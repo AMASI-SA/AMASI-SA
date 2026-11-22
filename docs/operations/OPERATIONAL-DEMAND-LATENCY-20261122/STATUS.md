@@ -1,3 +1,15 @@
+# PR2076 final pinned deployment command ready
+
+The executable handoff is **RUN-HOST-DEPLOY-2076.sh**, SHA256 `3d0966878ef783e3438acdf10a3d87a3efbd637d790a2645bde6f6796d4ecd01`, pinned to immutable helper evidence `bc7a91bb32baff7e3a92b8020cac6df25403848b`. All three helper bytes fetched from that exact commit match the reviewed local files. Independent final pin review proved that only the EVIDENCE assignment changed from the already-approved disabled launcher. There are no placeholders in the issued command.
+
+Ordinary merge D `02cd99e5b2b68c95341c87590abcf572c885e697` passed the **original load_release_intent and verify_release_intent_git** in a clean isolated D clone: parents N+B, D tree=B, A..D only intent, byte-exact intent blob/SHA, source/runtime/artifact/proof all exact. ORIGINAL-MERGE-VALIDATION-2076.json SHA256 `2eace2c88a0beb1d07daa3b1b475614ef3e79f03945eae057cb0075afe62946f` records that acceptance; no build or host/lease action was run for this validation.
+
+**Owner next:** run the pinned command in the original /app terminal. It performs guarded staging then original prepare/prepublish. After PREPUBLISH_PASSED, click Re-publish changes once; wait for the NEW Deployment Succeeded for2076; run the exact VERIFY_COMMAND printed by the launcher; return full original result and final guard status. On STOP retain the phase and recovery directories and send the result; do not rerun a helper expecting N after partial staging. No manual lease clearing or automatic rollback.
+
+**Current state:** merged Git YES; actual owner rehearsal YES; shared staging/prepare/publication of2076 still pending this command; live latency unverified. Root did not claim host or UI execution. The serial handoff remains with this release through original verification and lease closure. Existing scope/publication authorization persists. Keep all unrelated task records and host files preserved. Never deploy this evidence branch.
+
+---
+
 # PR2076 merged; actual rehearsal passed; guarded deployment command reviewed
 
 **Production Git changed YES:** ordinary merge D `02cd99e5b2b68c95341c87590abcf572c885e697`, parents N `24270ebdfdebb83282389308a2349cdb27e2b8e4` and frozen B `5bb05036d8095a87c6635c0a431c2c19d24d8f78`. D tree `8f915a681de43fed9da1ec98685a56f87a4c8bcb` equals B exactly. Frozen source A `108024c00b7f367fd1d6b15874d7a73d55de2620` and intent B are unchanged. GitHub reports a valid verified signature. No actual shared staging, new lease or runtime publication has yet been performed by root.
