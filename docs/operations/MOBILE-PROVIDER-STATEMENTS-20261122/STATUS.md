@@ -90,3 +90,20 @@ CI=true npm test -- --watchAll=false --runInBand   src/pages/ProviderStatementAc
 ```
 
 Web grants and upload remain lazy and owner-authoritative; background/account changes invalidate stale permission responses. An uncertain permission save requires a fresh read before another attempt. New statement access alone never enables the existing saved-file application button or missing-operation confirmation.
+
+## Saved source and exact-source remote result
+
+Verified remote application source: `58c12ca48a700642d03ac2e7e79c0943721832b1`, tree `a9a21c2b6c5fa1bf50782b0a11f66259f4d0549f`, parent `079b5bae883ca6a7d7defc5e1fbffc2cca2192b8`.
+Verified remote backend source: `fdcdaf8f839134ab1b57c20ee5ce3180f552cdfd`, tree `327f795e07f421c212e83d5878898499966f6111`, parent `a063c22d6f0f9f4125032ca9d2d0066cc09e9d27`.
+The remote trees matched the locally staged trees exactly. All other parent files were preserved; both isolated worktrees were clean after hydrating the exact remote commits. This follow-up changes only handoff/export evidence, so the application-input export remains valid.
+
+On application source `58c12ca48a700642d03ac2e7e79c0943721832b1`:
+
+- [Mobile CI run45053950689](https://github.com/AMASI-SA/amasi-mobile/actions/runs/45053950689), job137304964891: completed/failure, `runner_id:0`, `steps:[]`.
+- [Android bundle run45053950543](https://github.com/AMASI-SA/amasi-mobile/actions/runs/45053950543), job137304964706: completed/failure, `runner_id:0`, `steps:[]`.
+- Twelve exact-head workflow runs were returned: ten failed and two were skipped. The main/bundle job details above establish their pre-execution failure. No CI result was presented as success, no rerun was requested and no startup cause was inferred.
+- Expo access still lacks a usable build session. No APK, EAS submission, OTA or store submission exists for this work.
+
+PR2050 remains draft with `mergeable:false` / `mergeable_state:dirty` against the then-current production base `9b4fb716b430c32073b5ea7abaeaff62646d9633`. No workflow runs were returned for backend source `fdcdaf8f839134ab1b57c20ee5ce3180f552cdfd` at the final check. Its local 304-test result is not remote CI or deployment proof. Resolve integration conflicts against the actual current production source during the coordinated backend release, rerun affected verification, and then prepare the required v5 A/B handoff. Do not deploy this task branch directly or change another conversation's lease.
+
+The implementation is complete and remotely checkpointed. Release remains blocked by exact-source mobile CI startup and Expo access; coordinated backend integration/deployment also remains pending. These are release limits, not a request to repeat previously supplied authorization.
