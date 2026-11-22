@@ -1,7 +1,7 @@
 {
   "task_id": "TABBY-DASHBOARD-FEES-20261122",
   "status": "r3_frozen_intent_B_exact_final_CI_running",
-  "updated_at_utc": "2026-11-22T21:05:58.140151+00:00",
+  "updated_at_utc": "2026-11-22T21:13:01.280879+00:00",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tabby-weekly-fees-release-evidence-20261122",
   "production_branch": "hotfix/prod-snap-meta-final",
@@ -196,7 +196,13 @@
   "frontend_artifact": "d37d10537c6b55f4f0e4a4392ed40eca5bef962ea6cabaf822acc6a5e47a9d99",
   "final_B_ci": {
     "complete": false,
-    "required": "All exactB gates including Operational/Stock/security/CodeQL/G47 and both Node20/24 clean-clone adapters mustpass beforemerge."
+    "required": "All exactB gates including Operational/Stock/security/CodeQL/G47 and both Node20/24 clean-clone adapters mustpass beforemerge.",
+    "readiness_run": 45070030187,
+    "readiness": "PASS including both real Node20/24 adapters",
+    "focused_run": 45070030423,
+    "focused_backend": "216PASS",
+    "focused_frontend": "123PASS/6suites and buildPASS",
+    "required_4": "PASS app15368"
   },
   "manual_helper_review_R3": {
     "logic": "Independent normalized-AST comparison of five operational helpersPASS; only PR/branch/release constants changed from corrected R2.",
@@ -213,5 +219,18 @@
     "EVIDENCE": null,
     "helper_hashes": null,
     "host_execution": false
+  },
+  "final_B_adapter_review": {
+    "result": "APPROVED",
+    "record": "evidence/final-B-adapters/root-acceptance.json",
+    "full_original_validator_and_package_review": "PASS",
+    "artifact_count": 4,
+    "generated_files_identical": 389,
+    "frontend_package_files": 1788,
+    "backend_package_files": 1315,
+    "real_CI_HTTP_JSON_MIME_routing": "PASS both hosts",
+    "source_A": "d6443504c7d16eba00142526478abf10de336f99",
+    "base_J": "02cd99e5b2b68c95341c87590abcf572c885e697",
+    "B": "d5036d9609b7155ee137d07ff802bbce5be265c5"
   }
 }

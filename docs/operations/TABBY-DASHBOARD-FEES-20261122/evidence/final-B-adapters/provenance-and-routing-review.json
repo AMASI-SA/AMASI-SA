@@ -1,0 +1,265 @@
+{
+  "run_id": 45070030187,
+  "head_sha": "d5036d9609b7155ee137d07ff802bbce5be265c5",
+  "artifacts": [
+    {
+      "id": 14773425786,
+      "name": "release-v5-clean-clone-evidence-host-20.20.2",
+      "size_in_bytes": 64090,
+      "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14773425786",
+      "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14773425786/zip",
+      "expired": false,
+      "created_at": "2026-11-22T21:08:42Z",
+      "expires_at": "2026-12-06T21:08:41Z",
+      "updated_at": "2026-11-22T21:08:42Z",
+      "digest": "sha256:31af422aff20e7673fb3db91cccc4f7bfe2adc7a193ba65bc048c7bd21c4f421",
+      "workflow_run": {
+        "id": 45070030187,
+        "repository_id": 1250664189,
+        "head_repository_id": 1250664189,
+        "head_branch": "codex/tabby-weekly-fee-estimates-r3-20261122",
+        "head_sha": "d5036d9609b7155ee137d07ff802bbce5be265c5"
+      }
+    },
+    {
+      "id": 14773186895,
+      "name": "release-v5-generated-outputs-host-24.19.0",
+      "size_in_bytes": 3835584,
+      "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14773186895",
+      "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14773186895/zip",
+      "expired": false,
+      "created_at": "2026-11-22T21:10:09Z",
+      "expires_at": "2026-12-06T21:10:07Z",
+      "updated_at": "2026-11-22T21:10:09Z",
+      "digest": "sha256:5f705cba097f3a5911e67e300e1ed90fd13ed1418709f795502f525745442b9b",
+      "workflow_run": {
+        "id": 45070030187,
+        "repository_id": 1250664189,
+        "head_repository_id": 1250664189,
+        "head_branch": "codex/tabby-weekly-fee-estimates-r3-20261122",
+        "head_sha": "d5036d9609b7155ee137d07ff802bbce5be265c5"
+      }
+    },
+    {
+      "id": 14772564874,
+      "name": "release-v5-clean-clone-evidence-host-24.19.0",
+      "size_in_bytes": 64098,
+      "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14772564874",
+      "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14772564874/zip",
+      "expired": false,
+      "created_at": "2026-11-22T21:10:10Z",
+      "expires_at": "2026-12-06T21:10:09Z",
+      "updated_at": "2026-11-22T21:10:10Z",
+      "digest": "sha256:b3504cd5713b43f5dd7d3dc8f71de021f417ccfa3c72597a928249663b931bd5",
+      "workflow_run": {
+        "id": 45070030187,
+        "repository_id": 1250664189,
+        "head_repository_id": 1250664189,
+        "head_branch": "codex/tabby-weekly-fee-estimates-r3-20261122",
+        "head_sha": "d5036d9609b7155ee137d07ff802bbce5be265c5"
+      }
+    },
+    {
+      "id": 14772489817,
+      "name": "release-v5-generated-outputs-host-20.20.2",
+      "size_in_bytes": 3836016,
+      "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14772489817",
+      "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14772489817/zip",
+      "expired": false,
+      "created_at": "2026-11-22T21:08:41Z",
+      "expires_at": "2026-12-06T21:08:40Z",
+      "updated_at": "2026-11-22T21:08:41Z",
+      "digest": "sha256:8bff002df3e154f7be6f9d4e78c70beb74ee11206e492068fc38171b1e377d17",
+      "workflow_run": {
+        "id": 45070030187,
+        "repository_id": 1250664189,
+        "head_repository_id": 1250664189,
+        "head_branch": "codex/tabby-weekly-fee-estimates-r3-20261122",
+        "head_sha": "d5036d9609b7155ee137d07ff802bbce5be265c5"
+      }
+    }
+  ],
+  "adapter_reviews": [
+    {
+      "host": "20.20.2",
+      "job_id": 137355316706,
+      "conclusion": "success",
+      "steps": [
+        {
+          "name": "Create a clean tracked-source clone",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7
+        },
+        {
+          "name": "Prove generated release inputs are absent",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8
+        },
+        {
+          "name": "Record sanitized Host adapter evidence",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9
+        },
+        {
+          "name": "Rehearse a conservative outer Host frozen install",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10
+        },
+        {
+          "name": "Emulate a Cloud Build checkout without Git metadata",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11
+        },
+        {
+          "name": "Invoke the Emergent package adapter under the selected Host Node",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 12
+        },
+        {
+          "name": "Verify artifact, proof, identity, and package boundaries",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13
+        },
+        {
+          "name": "Prove the governed runtime returns build metadata as JSON",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 14
+        },
+        {
+          "name": "Archive verified generated release outputs",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 15
+        },
+        {
+          "name": "Retain verified generated release outputs",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 16
+        },
+        {
+          "name": "Retain sanitized rehearsal evidence",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 17
+        }
+      ],
+      "checks": {
+        "exactBCheckout": true,
+        "exactSourceA": true,
+        "exactBaseJ": true,
+        "hostInstallSentinelRemoval": true,
+        "gitRemoved": true,
+        "metadataJsonMime": true,
+        "metadataExactBytes": true,
+        "metadataBothAcceptHeaders": true,
+        "cacheBustedMetadata": true,
+        "productionHost": true,
+        "previewHost": true,
+        "assetImmutable": true,
+        "spaRouteNoStore": true
+      }
+    },
+    {
+      "host": "24.19.0",
+      "job_id": 137355316721,
+      "conclusion": "success",
+      "steps": [
+        {
+          "name": "Create a clean tracked-source clone",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7
+        },
+        {
+          "name": "Prove generated release inputs are absent",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8
+        },
+        {
+          "name": "Record sanitized Host adapter evidence",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9
+        },
+        {
+          "name": "Rehearse a conservative outer Host frozen install",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10
+        },
+        {
+          "name": "Emulate a Cloud Build checkout without Git metadata",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11
+        },
+        {
+          "name": "Invoke the Emergent package adapter under the selected Host Node",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 12
+        },
+        {
+          "name": "Verify artifact, proof, identity, and package boundaries",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13
+        },
+        {
+          "name": "Prove the governed runtime returns build metadata as JSON",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 14
+        },
+        {
+          "name": "Archive verified generated release outputs",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 15
+        },
+        {
+          "name": "Retain verified generated release outputs",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 16
+        },
+        {
+          "name": "Retain sanitized rehearsal evidence",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 17
+        }
+      ],
+      "checks": {
+        "exactBCheckout": true,
+        "exactSourceA": true,
+        "exactBaseJ": true,
+        "hostInstallSentinelRemoval": true,
+        "gitRemoved": true,
+        "metadataJsonMime": true,
+        "metadataExactBytes": true,
+        "metadataBothAcceptHeaders": true,
+        "cacheBustedMetadata": true,
+        "productionHost": true,
+        "previewHost": true,
+        "assetImmutable": true,
+        "spaRouteNoStore": true
+      }
+    }
+  ],
+  "frontend_job": {
+    "id": 137354702349,
+    "conclusion": "success"
+  },
+  "scope": "Downloaded CI evidence and original read-only validators only. No builds or production actions."
+}
