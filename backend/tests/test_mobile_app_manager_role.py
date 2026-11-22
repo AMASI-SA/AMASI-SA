@@ -1,4 +1,5 @@
 import pytest
+from customer_refund_access import CUSTOMER_REFUNDS_APP_PERMISSION
 
 from mobile_app_permissions import (
     MOBILE_APP_MANAGER,
@@ -59,7 +60,7 @@ async def test_owner_gets_all_native_app_permissions_without_stored_access():
     assert result["owner_baseline"] is True
     assert result["enabled"] is True
     assert result["manager"] is True
-    assert set(result["permissions"]) == set(MOBILE_APP_PERMISSIONS)
+    assert set(result["permissions"]) == set(MOBILE_APP_PERMISSIONS) | {CUSTOMER_REFUNDS_APP_PERMISSION}
 
 
 @pytest.mark.asyncio
@@ -70,7 +71,7 @@ async def test_owner_full_access_cannot_be_reduced_by_partial_stored_permissions
     )
     assert result["owner_override"] is True
     assert result["manager"] is True
-    assert set(result["permissions"]) == set(MOBILE_APP_PERMISSIONS)
+    assert set(result["permissions"]) == set(MOBILE_APP_PERMISSIONS) | {CUSTOMER_REFUNDS_APP_PERMISSION}
 
 
 @pytest.mark.asyncio

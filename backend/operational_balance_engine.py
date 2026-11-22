@@ -855,7 +855,8 @@ def reconcile(state, sources, as_of):
                     if page and str(error) in {"provider_historical_capture_review_required", "provider_settled_capture_review_required"}:
                         balance_review = {k: page[k] for k in
                                           ("order_id", "order_number", "provider", "currency", "gross", "paid", "remaining")}
-                        if page.get("source") in {"canonical_salla_closed_tender", "canonical_salla_partial_tender"}:
+                        if page.get("source") in {"canonical_salla_closed_tender", "canonical_salla_partial_tender",
+                                                   "canonical_salla_adjusted_payment"}:
                             balance_review["source"] = page["source"]
                             if page.get("transaction_reference"):
                                 balance_review["transaction_reference"] = page["transaction_reference"]

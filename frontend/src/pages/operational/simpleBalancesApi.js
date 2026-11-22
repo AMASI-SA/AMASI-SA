@@ -6,7 +6,7 @@ const data = promise => promise.then(response => response.data);
 const read = config => ({ timeout: 30000, ...config });
 
 export const simpleBalancesApi = {
-  context: (config, { homePreview = false, directoryOnly = false } = {}) => data(http.get(`${workspace}/context`, { ...read(config), params: { ad_bank_fx: true, ...(directoryOnly ? { directory_only: true } : { provider_positions: true }), ...(homePreview ? { home_preview: true } : {}) } })),
+  context: (config, { homePreview = false, directoryOnly = false, refundContext = false } = {}) => data(http.get(`${workspace}/context`, { ...read(config), params: { ad_bank_fx: true, ...(directoryOnly || refundContext ? { directory_only: true } : { provider_positions: true }), ...(homePreview && !refundContext ? { home_preview: true } : {}), ...(refundContext ? { refund_context: true } : {}) } })),
   accountGroup: (kind, config) => data(http.get(`${workspace}/accounts/${encodeURIComponent(kind)}`, read(config))),
   resource: (kind, id, config) => data(http.get(`${workspace}/resource/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`,
     { ...read(config), ...(kind === 'ad_account' && { params: { ad_bank_fx: true } }) })),
@@ -45,9 +45,17 @@ export const simpleBalancesApi = {
     timeout: 30000, data: { expected_session_scope: scope },
   })),
   refundOrder: (number, config) => data(http.get(`${workspace}/refunds/order/${encodeURIComponent(number)}`, read(config))),
+  customerAdjustments: (params, config) => data(http.get(`${workspace}/customer-adjustments`, { ...read(config), params })),
   refunds: (params, config) => data(http.get(`${workspace}/refunds`, { ...read(config), params })),
   refund: (id, config) => data(http.get(`${workspace}/refunds/${encodeURIComponent(id)}`, read(config))),
   requestRefund: body => data(http.post(`${workspace}/refunds`, body, { timeout: 30000 })),
+  recordRefundExecution: body => data(http.post(`${workspace}/refunds/record-execution`, body, { timeout: 30000 })),
+  uploadCustomerReceipt: body => data(http.post(`${workspace}/refund-receipts`, body, { timeout: 30000 })),
+  customerReceipt: (id, config) => data(http.get(`${workspace}/refund-receipts/${encodeURIComponent(id)}`, { ...read(config), responseType: 'blob' })),
+  customerCollectionOrder: (number, config) => data(http.get(`${workspace}/customer-collections/order/${encodeURIComponent(number)}`, read(config))),
+  customerCollections: (params, config) => data(http.get(`${workspace}/customer-collections`, { ...read(config), params })),
+  quoteCustomerCollection: body => data(http.post(`${workspace}/customer-collections/quote`, body, { timeout: 30000 })),
+  recordCustomerCollection: body => data(http.post(`${workspace}/customer-collections`, body, { timeout: 30000 })),
   confirmRefund: (id, body) => data(http.post(`${workspace}/refunds/${encodeURIComponent(id)}/confirm`, body, { timeout: 30000 })),
   reconcileRefund: (id, body) => data(http.post(`${workspace}/refunds/${encodeURIComponent(id)}/reconcile`, body, { timeout: 30000 })),
   cancelRefund: (id, body) => data(http.post(`${workspace}/refunds/${encodeURIComponent(id)}/cancel`, body, { timeout: 30000 })),

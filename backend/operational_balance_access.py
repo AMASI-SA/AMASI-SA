@@ -44,8 +44,10 @@ OPERATION_LABELS = {
     "courier.receive": "استلام مبلغ من موصل أو شركة شحن",
     "courier.pay": "دفع مبلغ لموصل أو شركة شحن",
     "courier.review": "مراجعة إيصالات الموصلين",
+    "customer.refund_read": "عرض استرجاع المبالغ للعملاء",
     "customer.refund_request": "تسجيل طلب استرجاع عميل",
     "customer.refund_execute": "تنفيذ رد مبلغ لعميل",
+    "customer.collection": "تسجيل تحصيل متبقي طلب عميل",
 }
 RESOURCE_KIND_LABELS = {
     "bank": "الحسابات البنكية",
@@ -193,6 +195,9 @@ async def load_access(db, actor, owner):
                         enabled=enabled, version=policy["version"],
                         operations=tuple(OPERATION_LABELS if owner_override else policy["operations"] if enabled else []),
                         resources=deepcopy(policy["resources"] if enabled and not owner_override else []))
+    from customer_refund_access import refund_scope_active, project_customer_refund_access
+    if refund_scope_active():
+        policy_result = await project_customer_refund_access(db, policy_result)
     return limit_workspace_policy(policy_result)
 
 
@@ -215,9 +220,11 @@ async def guard_access(db, actor, owner, operation, resources=()):
             policy.require_use(kind, identity)
         return policy
 
-    policy = await verify()
-    token = AUTHORIZATION_GUARD.set(verify)
-    try:
-        yield policy
-    finally:
-        AUTHORIZATION_GUARD.reset(token)
+    from customer_refund_access import REFUND_OPERATIONS, bind_customer_refund_scope
+    with bind_customer_refund_scope(bool(operations) and set(operations).issubset(REFUND_OPERATIONS)):
+        policy = await verify()
+        token = AUTHORIZATION_GUARD.set(verify)
+        try:
+            yield policy
+        finally:
+            AUTHORIZATION_GUARD.reset(token)

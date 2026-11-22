@@ -24,7 +24,8 @@ OPERATIONAL_WEB_PAGES = (
     _page("assets", "الأصول والحسابات"), _page("parties", "الأشخاص والجهات"),
     _page("log", "سجل الحركات المالية", BASE + "/daily-movements"),
     _page("entry", "حركة مالية جديدة", write=WRITE_ENTRY),
-    _page("refund", "رد مبلغ لعميل برقم الطلب", write="تسجيل ومتابعة رد المبلغ حسب صلاحيات الحساب"),
+    _page("refund", "استرجاع المبالغ للعملاء", write="تسجيل ومتابعة رد المبلغ حسب صلاحيات الحساب"),
+    _page("customer-collections", "تحصيل متبقي طلب عميل", write="توثيق التحصيل المنفذ وعمولته على الحساب المصرح به"),
     _page("review", "الطلبات التي تحتاج مراجعة", BASE + "?view=reviews"),
     _page("collections", "مراجعة تحصيلات الموصلين", write="اعتماد أو رفض الإيصالات المخصصة"),
     _page("position", "المركز المالي للحسابات المخصصة"),
@@ -101,9 +102,17 @@ def enforce_operational_web_pages(modes, path, method, query=None):
         return _allow(modes, "entry", write=True)
     if re.fullmatch(r"/workspace/pending-commands/[^/]+", path) and method in {"GET", "POST", "DELETE"}:
         # Exact action is checked against the actor-bound stored command inside the handler.
-        return _allow(modes, "entry", "refund", write=True)
-    if path == "/workspace/refunds" or path.startswith("/workspace/refunds/"):
+        return _allow(modes, "entry", "refund", "customer-collections", write=True)
+    if (path == "/workspace/refunds" or path.startswith("/workspace/refunds/")
+            or path == "/workspace/mobile-refunds" or path.startswith("/workspace/mobile-refunds/")):
         return _allow(modes, "refund", write=method != "GET")
+    if path == "/workspace/customer-adjustments" and method == "GET":
+        direction = query.get("direction")
+        return _allow(modes, "refund" if direction == "refund" else "customer-collections") if direction in {"refund", "collection"} else _allow(modes, "refund", "customer-collections")
+    if path == "/workspace/refund-receipts" or path.startswith("/workspace/refund-receipts/"):
+        return _allow(modes, "refund", "customer-collections", write=method != "GET")
+    if path == "/workspace/customer-collections" or path.startswith("/workspace/customer-collections/"):
+        return _allow(modes, "customer-collections", write=method != "GET")
     if path == "/workspace/reviews" or path.startswith("/workspace/reviews/"):
         return _allow(modes, "collections", write=method != "GET")
     if path == "/provider-statements" or path.startswith("/provider-statements/"):
@@ -126,10 +135,12 @@ _CURRENT = ContextVar("operational_web_page_request", default=None)
 
 @contextmanager
 def bind_page_request(user, request):
+    from customer_refund_access import bind_customer_refund_request
     web = user.get("_session_client") != "amasi_mobile" and not user.get("_mobile_actor_id")
     token = _CURRENT.set(BrowserRequest(request.url.path, request.method, dict(request.query_params)) if web else None)
     try:
-        yield
+        with bind_customer_refund_request(request):
+            yield
     finally:
         _CURRENT.reset(token)
 
@@ -182,7 +193,7 @@ def limit_workspace_policy(policy):
             kinds.update(("bank", "supplier", "courier", "store_driver"))
         if "fees" in pages:
             kinds.add("provider")
-        if "refund" in pages:
+        if pages & {"refund", "customer-collections"}:
             kinds.update(("bank", "provider"))
         if "collections" in pages:
             kinds.update(("bank", "store_driver", "pos_receivable"))
@@ -200,8 +211,9 @@ def limit_workspace_policy(policy):
     # Page grants for view/entry are further intersected with native operation permissions.
     operations = tuple(op for op in policy.operations if (
         (op.startswith("customer.refund") and "refund" in pages) or
+        (op == "customer.collection" and "customer-collections" in pages) or
         (op == "courier.review" and "collections" in pages) or
-        (not op.startswith(("customer.refund", "provider.statement_")) and op != "courier.review" and modes.get("balances.entry") == "write")))
+        (not op.startswith(("customer.refund", "provider.statement_")) and op not in {"courier.review", "customer.collection"} and modes.get("balances.entry") == "write")))
     if resources == policy.resources and operations == policy.operations:
         return policy
     return replace(policy, resources=resources, operations=operations)
@@ -210,7 +222,7 @@ def limit_workspace_policy(policy):
 def enforce_pending_action(actor, action):
     modes = request_modes(actor)
     if modes is not None:
-        _allow(modes, "entry" if action == "entry" else "refund", write=True)
+        _allow(modes, "entry" if action == "entry" else "customer-collections" if action == "customer.collection" else "refund", write=True)
 
 
 def bind_statement_provider(provider):

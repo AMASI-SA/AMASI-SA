@@ -725,3 +725,5 @@ async def ensure_indexes(db):
     await db[NOTIFICATIONS].create_index([("merchant_id", 1), ("recipient_id", 1), ("_id", 1)])
     await db[NOTIFICATIONS].create_index([("conversation_pending", 1), ("_id", 1)])
     await db[NOTIFICATIONS].create_index([("merchant_id", 1), ("instruction_id", 1), ("event_type", 1), ("recipient_id", 1)])
+    from operational_unread_preview import ensure_indexes as ensure_unread_preview_indexes
+    await ensure_unread_preview_indexes(db)

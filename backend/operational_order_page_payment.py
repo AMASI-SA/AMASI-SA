@@ -4,6 +4,7 @@ from decimal import Decimal
 from operational_payment_evidence import _amount, _instant
 from operational_provider_history import late_payment_blocks
 from operational_provider_transaction_evidence import is_closed_tender_balance, is_partial_tender_balance
+from operational_customer_payment_basis import is_adjusted_payment_balance
 
 
 def corroborated_refund_basis(previous, payment, facts, order_id):
@@ -34,14 +35,15 @@ def observed_balance(page, payment, order, state, *, now, start, fact_items=None
             oid, order.get("order_number"), party, currency) or not state.get("owner_id") or page.get("owner_id") != state["owner_id"]:
         raise ValueError("provider_order_page_identity_conflict")
     gross, paid = (_amount(page[k], currency) for k in ("gross", "paid"))
-    if is_closed_tender_balance(page, currency):
+    adjusted = is_adjusted_payment_balance(page, currency)
+    if adjusted or is_closed_tender_balance(page, currency):
         valid_amounts = _amount(payment["gross"], currency) == paid
     elif is_partial_tender_balance(page, currency):
         valid_amounts = _amount(payment["gross"], currency) == gross
     else:
         due = _amount(page["remaining"], currency)
         valid_amounts = gross == _amount(payment["gross"], currency) and paid + due == gross
-    if not valid_amounts or gross <= 0:
+    if not valid_amounts or (gross <= 0 and not adjusted):
         raise ValueError("provider_payment_amount_conflict")
     if any(payment.get(k) for k in ("refunds", "cancellations")) or _amount(payment.get("cancelled", 0), currency):
         raise ValueError("provider_refund_execution_evidence_required")
@@ -64,12 +66,14 @@ def observed_balance(page, payment, order, state, *, now, start, fact_items=None
             captures[fact_key] = _amount(fact["amount"], currency)
     frozen = sum(captures.values(), Decimal(0))
     if previous:
-        if any(previous.get(k) != page[k] for k in ("owner_id", "order_id", "order_number", "provider", "currency", "gross")):
+        if any(previous.get(k) != page[k] for k in ("owner_id", "order_id", "order_number", "provider", "currency")):
             raise ValueError("provider_order_page_identity_conflict")
         if known != _amount(previous["paid"], currency) or frozen > known:
             raise ValueError("provider_capture_amount_conflict")
         last_version = state.get("engine", {}).get("order_versions", {}).get(oid) or previous["observed_at"]
         if paid < known or (paid != known and (not version or version <= _instant(last_version))):
+            raise ValueError("provider_order_page_version_conflict")
+        if gross != _amount(previous["gross"], currency) and (not version or version <= _instant(last_version)):
             raise ValueError("provider_order_page_version_conflict")
     elif known != frozen or paid < known:
         raise ValueError("provider_capture_amount_conflict")
@@ -110,6 +114,11 @@ def observed_balance(page, payment, order, state, *, now, start, fact_items=None
         if old_ref and new_ref and old_ref != new_ref:
             raise ValueError("provider_capture_identity_conflict")
         if paid == known:
+            if gross != _amount(previous["gross"], currency):
+                # Commercial edits change the refund/collection suggestion,
+                # never the original cumulative paid principal or its date.
+                return {**page, "observed_at": previous["observed_at"],
+                        **({"transaction_reference": old_ref} if old_ref and not new_ref else {})}
             if new_ref and not old_ref:
                 return {**previous, "transaction_reference": new_ref}
             return previous

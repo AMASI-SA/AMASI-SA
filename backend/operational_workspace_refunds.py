@@ -2,7 +2,7 @@
 
 Pending requests reserve only refundable order money. Bank confirmation records
 an execution already performed by the user; it calls no bank. Original-provider
-requests remain pending: a local button is not provider execution evidence.
+requests require matched evidence or a separate accountant execution attestation.
 No items, stock, customer bank details or accounting ledger are written here.
 """
 from __future__ import annotations
@@ -30,8 +30,8 @@ from salla_payment_collection import provider_order_page_balance, provider_order
 
 CASE_TYPE = "financial_refund"
 PROVIDERS = {"tamara": "تمارا", "tabby": "تابي", "salla": "سلة"}
-READ_OPERATIONS = ("customer.refund_request", "customer.refund_execute")
-EXECUTED = {"refunded", "salla_refund_confirmed"}
+READ_OPERATIONS = ("customer.refund_read", "customer.refund_request", "customer.refund_execute")
+EXECUTED = {"refunded", "salla_refund_confirmed", "bank_matched"}
 MATCHED = "provider_matched"
 DEFINITIVE_REJECTIONS = {
     "operational_refund_amount_exceeded", "operational_refund_source_insufficient",
@@ -41,6 +41,8 @@ DEFINITIVE_REJECTIONS = {
     "operational_refund_payment_basis_required", "operational_refund_order_not_found",
     "operational_refund_evidence_changed", "operational_refund_already_matched",
     "operational_refund_external_history_review",
+    "operational_refund_receipt_invalid", "operational_customer_collection_evidence_conflict",
+    "operational_refund_before_start",
 }
 REJECTED = "_workspace_refund_rejected"
 DIGITS = str.maketrans("٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹", "01234567890123456789")
@@ -79,6 +81,16 @@ class RefundConfirm(RefundCommand):
     reference: str = Field(default="", max_length=160)
     executed_at: str = Field(min_length=16, max_length=40)
     confirmed: Literal[True]
+
+
+class RefundExecution(RefundRequest):
+    """Accountant attestation of an already executed refund, never a transfer API."""
+    expected_basis_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+    reference: str = Field(min_length=1, max_length=160)
+    executed_at: str = Field(min_length=16, max_length=40)
+    confirmed: Literal[True]
+    receipt_id: str | None = Field(default=None, min_length=1, max_length=100)
+    pending_case_id: str | None = Field(default=None, min_length=1, max_length=160)
 
 
 class RefundCancel(RefundCommand):
@@ -165,8 +177,8 @@ async def _external_history(db, owner, order, state):
 
 
 @asynccontextmanager
-async def _refund_guard(db, owner, actor, operation, resources):
-    expected = {"order": None, "external": None}
+async def _refund_guard(db, owner, actor, operation, resources, *, replay_action=None, replay_payload=None):
+    expected = {"order": None, "external": None, "basis_hash": None}
     async with guard_access(db, actor, owner, operation, resources):
         previous = AUTHORIZATION_GUARD.get()
 
@@ -174,12 +186,19 @@ async def _refund_guard(db, owner, actor, operation, resources):
             await previous()
             order = expected["order"]
             if order is not None:
-                current = await refund_order(db, owner, order["order_number"])
+                current_state = await read(db, owner)
+                if replay_action is not None and replay(current_state, replay_action, replay_payload) is not None:
+                    return  # An identical concurrent writer already decided this immutable intent.
+                current = await refund_order(db, owner, order["order_number"], state=current_state)
                 if any(current[key] != order[key] for key in ("id", "provider", "currency", "total", "paid_amount")):
                     fail("operational_refund_order_changed", "تغير إثبات دفع الطلب أثناء الحفظ؛ أعد القراءة", 409)
-                fingerprint = await _external_history(db, owner, current, await read(db, owner))
+                fingerprint = await _external_history(db, owner, current, current_state)
                 if fingerprint != expected["external"]:
                     fail("operational_refund_external_history_review", "ظهر سجل استرجاع خارجي أثناء الحفظ؛ أعد القراءة", 409)
+                if expected["basis_hash"] is not None:
+                    from operational_customer_adjustments import adjustment_from_order
+                    if adjustment_from_order(current, current_state)["basis_hash"] != expected["basis_hash"]:
+                        fail("operational_refund_order_changed", "تغير رصيد الطلب أثناء الحفظ؛ أعد القراءة", 409)
 
         token = AUTHORIZATION_GUARD.set(verify)
         try:
@@ -200,6 +219,59 @@ def validate_provider_match(state, case):
             or digest(fact) != case.get("provider_evidence_hash")):
         fail("operational_refund_evidence_changed", "تغير دليل الاسترجاع المرتبط؛ يلزم مراجعته", 409)
     return fact
+
+
+def recorded_provider_refund_match(state, case):
+    from operational_customer_adjustments import provider_refund_match
+    from operational_customer_collection_effects import provider_refund_recognized
+    key = provider_refund_match(state, case)
+    return key if key is not None and provider_refund_recognized(state, case) else None
+
+
+def _bank_refund_movement(state, order_id, bank_id, currency, amount, reference):
+    from operational_customer_collection_effects import bank_movement_effect
+    try:
+        matches = [movement for movement in state.get("movements", [])
+                   if reference in {movement.get("reference"), movement.get("bank_transaction_reference")}
+                   and bank_movement_effect(movement, bank_id, currency) < 0]
+        if not matches:
+            return None
+        if (len(matches) != 1 or str(matches[0].get("order_id")) != str(order_id)
+                or bank_movement_effect(matches[0], bank_id, currency) != -money(amount)):
+            fail("operational_refund_evidence_changed", "مرجع البنك لا يطابق الطلب والأثر النقدي المؤكد", 409)
+        return matches[0]
+    except (ValueError, TypeError, KeyError):
+        fail("operational_refund_evidence_changed", "تعذر التحقق من الأثر البنكي المرتبط", 409)
+
+
+def recorded_bank_refund_match(state, case):
+    """Replace only the new manual bridge with an exact later bank cash leg."""
+    if (case.get("status") != "refunded" or case.get("refund_source_type") != "bank"
+            or case.get("execution_mode") != "accountant_recorded"
+            or case.get("financial_effect") != "confirmed_bank_refund_debit"):
+        return None
+    reference = case.get("refund_reference")
+    if not isinstance(reference, str) or not reference.strip():
+        fail("operational_refund_evidence_changed", "مرجع تنفيذ الاسترجاع غير مكتمل", 409)
+    movement = _bank_refund_movement(state, case["order_id"], case["refund_source_id"],
+                                     case["currency"], case["amount"], reference)
+    return "bank-movement:" + str(movement["id"]) if movement is not None else None
+
+
+def validate_bank_match(state, case):
+    from operational_customer_collection_effects import bank_movement_effect
+    movement = next((row for row in state.get("movements", []) if row.get("id") == case.get("bank_evidence_id")), None)
+    try:
+        effect = bank_movement_effect(movement, case.get("refund_source_id"), case.get("currency")) if movement else None
+    except (ValueError, TypeError, KeyError):
+        fail("operational_refund_evidence_changed", "تعذر التحقق من الأثر البنكي المرتبط", 409)
+    if (case.get("status") != "bank_matched" or case.get("refund_source_type") != "bank"
+            or movement is None or digest(movement) != case.get("bank_evidence_hash")
+            or str(movement.get("order_id")) != str(case.get("order_id"))
+            or effect != -money(case["amount"])
+            or case.get("refund_reference") not in {movement.get("reference"), movement.get("bank_transaction_reference")}):
+        fail("operational_refund_evidence_changed", "تغير دليل التحويل المرتبط؛ يلزم مراجعته", 409)
+    return movement
 
 
 def _provider_evidence(state, case):
@@ -248,6 +320,15 @@ def _history_usage(state, order_id, *, exclude_case_id=None):
     for case in state.get("customer_returns", []):
         if str(case.get("order_id")) != order_id or case.get("id") == exclude_case_id:
             continue
+        if case.get("status") == "salla_refund_recorded" and case.get("resolved_by_case_id"):
+            linked = next((row for row in state.get("customer_returns", [])
+                           if row.get("id") == case["resolved_by_case_id"]), None)
+            if (linked is not None and linked.get("status") in {*EXECUTED, MATCHED}
+                    and linked.get("order_id") == case.get("order_id")
+                    and linked.get("amount") == case.get("amount")
+                    and (linked.get("refund_reference") or linked.get("provider_evidence_reference")) == case.get("refund_reference")):
+                continue
+            fail("operational_refund_history_conflict", "تعذر التحقق من مطابقة توثيق الاسترجاع", 409)
         if case.get("case_type") == CASE_TYPE and case.get("status") == "pending":
             reserved += money(case["amount"])
         elif case.get("status") == MATCHED:
@@ -268,8 +349,12 @@ def _history_usage(state, order_id, *, exclude_case_id=None):
 
 
 def _capacity(state, order, *, exclude_case_id=None):
+    from operational_customer_collection_effects import source_uncovered_collected_amount
     refunded, reserved = _history_usage(state, order["id"], exclude_case_id=exclude_case_id)
-    paid = money(order["paid_amount"], zero=True)
+    try:
+        paid = money(order["paid_amount"], zero=True) + source_uncovered_collected_amount(state, order)
+    except (ValueError, KeyError, TypeError):
+        fail("operational_customer_collection_evidence_conflict", "تعارض دليل تحصيل محفوظ؛ يلزم مراجعته", 409)
     return {"paid_amount": fmt(paid), "refunded_amount": fmt(refunded), "reserved_amount": fmt(reserved),
             "available_amount": fmt(max(Decimal(0), paid - refunded - reserved))}
 
@@ -291,7 +376,7 @@ item-return/record-only rules keep their original behavior on all other orders.
         fail("operational_refund_reserved_amount", "المبلغ يتجاوز المتاح بعد الاسترجاعات والطلبات المعلّقة", 409)
 
 
-async def refund_order(db, owner, number_text, *, stamp=None):
+async def refund_order(db, owner, number_text, *, stamp=None, state=None):
     """Financial evidence only; no product quantities or customer PII are read out."""
     stamp = stamp or now()
     number_text = _order_number(number_text)
@@ -317,45 +402,17 @@ async def refund_order(db, owner, number_text, *, stamp=None):
     raw = (source.get("raw_by_source") or {}).get("salla_direct")
     if not isinstance(raw, dict) or str(raw.get("reference_id") or raw.get("order_number") or "") != number_text:
         fail("operational_refund_order_not_found", "الطلب غير متاح أو هويته غير مكتملة", 404)
-    identity = str(raw.get("id") or "")
-    amounts = raw.get("amounts") or {}
-    total_value = amounts.get("total", raw.get("total")) if isinstance(amounts, dict) else None
-    currency = raw.get("currency") or (total_value.get("currency") if isinstance(total_value, dict) else None)
     try:
-        if not identity or currency != "SAR":
-            raise ValueError("currency_or_identity")
-        total = _amount(total_value, currency)
-        provider = resolve_provider(raw, require_known=True)
         created_at = _instant(raw.get("date") or raw.get("created_at") or raw.get("order_date"))
-        if created_at > _instant(stamp) or not provider_order_page_current(source, raw, owner=owner,
-                order_number=number_text, provider_order_id=identity, customer_balance_verified=True):
-            raise ValueError("stale_source")
         # Read only saved transaction evidence, never start a provider/network
         # refresh while a user is entering a refund.
         transactions = await load_transaction_rows(db, owner, [raw], created_at - timedelta(seconds=1),
             _instant(stamp), to_instant=instant, max_rows=20000)
-        payment, issues = normalize_operational_payment(raw, currency, total, created_at, stamp,
-            owner=owner, order_number=number_text, provider_order_id=identity,
-            rows=transactions.get(number_text, []), source=source)
-        if payment and payment.get("split"):
-            raise ValueError("split_tender")
-        if any(issue.get("code") != "provider_capture_evidence_incomplete" for issue in issues):
-            raise ValueError("unproved_payment")
-        captures = payment.get("captures", []) if payment else []
-        if captures:
-            paid = sum((_amount(capture["amount"], currency) for capture in captures), Decimal(0))
-        else:
-            page = provider_order_page_balance(raw, currency, total, allow_paid_only=True)
-            if not page:
-                raise ValueError("paid_amount_missing")
-            paid = _amount(page["paid"], currency)
-        if not 0 <= paid <= total:
-            raise ValueError("paid_amount_conflict")
     except (ValueError, TypeError, KeyError, ArithmeticError, AttributeError):
         fail("operational_refund_payment_basis_required", "تعذر إثبات المبلغ المدفوع أو تغيّرت بيانات الطلب؛ راجع مصدر الدفع أولًا", 409)
-    return {"id": identity, "order_number": number_text, "currency": currency,
-            "total": fmt(total), "paid_amount": fmt(paid), "provider": provider,
-            "created_at": created_at.isoformat()}
+    from operational_customer_adjustments import source_order_basis
+    state = await read(db, owner) if state is None else state
+    return source_order_basis(source, owner, stamp=stamp, transaction_rows=transactions.get(number_text, []), state=state)
 
 
 async def _bank_choices(db, owner, policy):
@@ -385,6 +442,8 @@ def _case_dto(case, policy, state):
     use = policy.resource(case["refund_source_type"], case["refund_source_id"])["use"]
     if case["status"] == MATCHED:
         validate_provider_match(state, case)
+    elif case["status"] == "bank_matched":
+        validate_bank_match(state, case)
     evidence = _provider_evidence(state, case) if use and policy.can_operation("customer.refund_execute") else []
     return {"id": case["id"], "order_number": case["order_number"], "currency": case["currency"],
             "amount": case["amount"], "method": case["method"],
@@ -398,8 +457,10 @@ def _case_dto(case, policy, state):
             "matched_at": case.get("matched_at"), "provider_evidence": evidence,
             "can_reconcile": bool(evidence) and pending and use and policy.can_operation("customer.refund_execute"),
             "internal_confirmation_id": case.get("internal_confirmation_id"),
+            "receipt_id": case.get("receipt_id"), "execution_mode": case.get("execution_mode"),
             "cancel_reason": case.get("cancel_reason"),
             "can_confirm": pending and use and case["method"] == "bank" and policy.can_operation("customer.refund_execute"),
+            "can_record_execution": pending and use and policy.can_operation("customer.refund_execute"),
             "can_cancel": pending and use and policy.can_operation("customer.refund_request")
                 and (policy.owner_override or case.get("created_by") == policy.actor["id"])}
 
@@ -439,7 +500,7 @@ async def request_refund(db, owner, actor, payload, *, source="mezan2", stamp=No
             if previous is not None:
                 return next((case for case in state.get("customer_returns", []) if case["id"] == previous["id"]), previous)
             await active_gate(db, owner, state)
-            order = await refund_order(db, owner, payload["order_number"], stamp=stamp)
+            order = await refund_order(db, owner, payload["order_number"], stamp=stamp, state=state)
             if (order["id"], order["provider"]) != (initial_order["id"], initial_order["provider"]):
                 fail("operational_refund_order_changed", "تغيرت جهة دفع الطلب؛ أعد فتحه", 409)
             account = await entity(db, owner, kind, identity, "SAR")
@@ -501,7 +562,7 @@ async def confirm_refund(db, owner, actor, case_id, payload, *, source="mezan2",
                 return current
             if current["status"] != "pending":
                 fail("operational_refund_not_pending", "طلب الاسترجاع ليس معلّقًا", 409)
-            order = await refund_order(db, owner, current["order_number"], stamp=stamp)
+            order = await refund_order(db, owner, current["order_number"], stamp=stamp, state=state)
             expected.update(order=order, external=await _external_history(db, owner, order, state))
             if (order["id"], order["provider"], order["total"], order["paid_amount"]) != (
                     current["order_id"], current["original_provider"], current["order_total"], current["paid_basis"]):
@@ -539,6 +600,189 @@ async def confirm_refund(db, owner, actor, case_id, payload, *, source="mezan2",
             return current
 
         return await _decide(db, owner, "workspace_refund_confirm:" + actor["id"] + ":" + case_id, payload, apply)
+
+
+async def record_refund_execution(db, owner, actor, payload, *, source="mezan2", stamp=None):
+    """Record the accountant's attestation once, or match an existing effect."""
+    from operational_customer_adjustments import adjustment_from_order
+    from operational_workspace_refund_receipts import validate_refund_receipt
+
+    stamp = stamp or now()
+    _require_session(payload, owner, actor)
+    action = "workspace_refund_record_execution:" + actor["id"]
+    prior = replay(await read(db, owner), action, payload)
+    if prior is not None and prior.get(REJECTED):
+        raise HTTPException(prior["status"], detail=prior["detail"])
+    initial_order = None if prior is not None else await refund_order(db, owner, payload["order_number"], stamp=stamp)
+    if prior is not None:
+        kind, identity = prior["refund_source_type"], prior["refund_source_id"]
+    elif payload["method"] == "bank":
+        if not payload.get("bank_id"):
+            fail("operational_refund_bank_required", "اختر البنك الذي خرج منه المبلغ", 422)
+        kind, identity = "bank", payload["bank_id"]
+    else:
+        if payload.get("bank_id"):
+            fail("operational_refund_hidden_bank", "طريقة الاسترجاع المختارة لا تستخدم بنكًا", 422)
+        if initial_order["provider"] not in PROVIDERS:
+            fail("operational_refund_original_unavailable", "لا يوجد مزود دفع أصلي متاح لهذا الطلب", 422)
+        kind, identity = "provider", initial_order["provider"]
+    async with _refund_guard(db, owner, actor, "customer.refund_execute", [(kind, identity)],
+                             replay_action=action, replay_payload=payload) as expected:
+        await claim_movement(db, owner, actor["id"], {**payload, "_operation": "workspace_refund_record_execution"})
+
+        async def apply(state):
+            # A CAS retry may now see the exact execution committed by another
+            # worker. Its immutable replay must not retain the old basis guard.
+            expected.update(order=None, external=None, basis_hash=None)
+            previous = replay(state, action, payload)
+            if previous is not None:
+                return previous
+            await active_gate(db, owner, state)
+            order = await refund_order(db, owner, payload["order_number"], stamp=stamp, state=state)
+            if (order["id"], order["provider"]) != (initial_order["id"], initial_order["provider"]):
+                fail("operational_refund_order_changed", "تغيرت هوية الطلب أو جهة الدفع؛ أعد القراءة", 409)
+            value = money(payload["amount"])
+            reference = payload["reference"]
+            try:
+                executed = _instant(payload["executed_at"])
+            except ValueError:
+                fail("operational_refund_execution_date", "أدخل تاريخ تنفيذ الاسترجاع الصحيح", 422)
+            if not _instant(order["created_at"]) <= executed <= _instant(stamp):
+                fail("operational_refund_execution_date", "وقت التنفيذ خارج فترة الطلب أو في المستقبل", 422)
+            if state.get("started_at") and executed < _instant(state["started_at"]):
+                fail("operational_refund_before_start", "رد ما قبل بداية الأرصدة يحتاج مطابقة الرصيد الافتتاحي", 409)
+            account = await entity(db, owner, kind, identity, "SAR")
+            receipt = await validate_refund_receipt(db, owner, actor, order["order_number"], payload.get("receipt_id"))
+            cases = state.setdefault("customer_returns", [])
+            pending = None
+            if payload.get("pending_case_id"):
+                pending = _find_case(state, payload["pending_case_id"], await load_access(db, actor, owner))
+                if (pending.get("order_id"), pending.get("order_number"), pending.get("method"),
+                        pending.get("refund_source_type"), pending.get("refund_source_id"), pending.get("amount")) != (
+                        order["id"], order["order_number"], payload["method"], kind, identity, fmt(value)):
+                    fail("operational_refund_order_changed", "بيانات التنفيذ لا تطابق طلب الرد المعلّق", 409)
+            for existing in cases:
+                existing_ref = existing.get("refund_reference") or existing.get("provider_evidence_reference")
+                if (existing.get("status") in {*EXECUTED, MATCHED}
+                        and (existing.get("refund_source_type"), existing.get("refund_source_id"), existing_ref) == (kind, identity, reference)):
+                    if pending is not None and existing["id"] != pending["id"]:
+                        fail("operational_refund_reference_duplicate", "مرجع التنفيذ مرتبط بطلب رد آخر", 409)
+                    if (existing.get("order_id"), existing.get("amount"), existing.get("refunded_at")) != (
+                            order["id"], fmt(value), executed.isoformat()):
+                        fail("operational_refund_reference_duplicate", "مرجع التنفيذ مسجل بمعلومات أخرى؛ راجع العملية الأصلية", 409)
+                    if existing.get("case_type") != CASE_TYPE:
+                        fail("operational_refund_reference_duplicate", "عملية الاسترجاع مسجلة سابقًا؛ راجع سجلها", 409)
+                    if existing["status"] == MATCHED:
+                        validate_provider_match(state, existing)
+                    elif existing["status"] == "bank_matched":
+                        validate_bank_match(state, existing)
+                    elif kind == "provider":
+                        recorded_provider_refund_match(state, existing)
+                    elif kind == "bank":
+                        recorded_bank_refund_match(state, existing)
+                    remember(state, action, payload, existing)
+                    return existing
+            if pending is not None and pending.get("status") != "pending":
+                fail("operational_refund_not_pending", "طلب الاسترجاع ليس معلّقًا", 409)
+            adjustment = adjustment_from_order(order, state)
+            if adjustment["basis_hash"] != payload["expected_basis_hash"]:
+                fail("operational_refund_order_changed", "تغير رصيد الطلب أو دليله؛ أعد القراءة قبل التأكيد", 409)
+            if value > money(adjustment["paid_amount"], zero=True):
+                fail("operational_refund_amount_exceeded", "المبلغ يتجاوز التحصيل المثبت للطلب", 409)
+            expected.update(order=order, external=await _external_history(db, owner, order, state),
+                            basis_hash=adjustment["basis_hash"])
+            fact_key = "refund:" + identity + ":" + reference if kind == "provider" else None
+            fact = state.get("engine", {}).get("facts", {}).get(fact_key) if fact_key else None
+            if fact is not None and fact != {"order_id": order["id"], "amount": fmt(value)}:
+                fail("operational_refund_evidence_changed", "مرجع المنصة يخص طلبًا أو مبلغًا مختلفًا", 409)
+            matched_movement = None
+            if kind == "bank":
+                matched_movement = _bank_refund_movement(state, order["id"], identity, "SAR", fmt(value), reference)
+                if await db.mz2_customer_refund_payments.find_one({"user_id": owner, "status": "posted", "bank_reference": reference}):
+                    fail("operational_refund_reference_duplicate", "التحويل مسجل محاسبيًا؛ يلزم مطابقته", 409)
+            documents = [case for case in cases if case.get("status") == "salla_refund_recorded"
+                and not case.get("resolved_by_case_id") and case.get("order_id") == order["id"]
+                and case.get("refund_reference") == reference]
+            if len(documents) > 1 or documents and documents[0].get("amount") != fmt(value):
+                fail("operational_refund_history_conflict", "توثيق الاسترجاع السابق يخالف المبلغ؛ راجعه أولًا", 409)
+            if fact is None and matched_movement is None:
+                excluded = pending["id"] if pending is not None else documents[0]["id"] if documents else None
+                capacity = _capacity(state, order, exclude_case_id=excluded)
+                if value > money(capacity["available_amount"], zero=True):
+                    fail("operational_refund_amount_exceeded", "المبلغ يتجاوز التحصيل المتاح بعد الردود والحجوزات", 409)
+                if kind == "bank":
+                    balance = next((row for row in report(state)["parties"] if row["party_type"] == "bank"
+                                    and row["party_id"] == identity and row["currency"] == "SAR"), {})
+                    if value > Decimal(balance.get("actual", "0.00")):
+                        fail("operational_refund_source_insufficient", "المبلغ غير متاح في حساب التحويل المحدد", 409)
+                else:
+                    # An additional bank receipt cannot enlarge the original
+                    # provider's refundable principal.
+                    from operational_customer_collection_effects import source_uncovered_collected_amount
+                    from operational_customer_adjustments import refund_totals
+                    provider_state = {**state,
+                        "customer_collections": [row for row in state.get("customer_collections", [])
+                            if (row.get("destination_type"), row.get("destination_id")) == ("provider", identity)],
+                        "customer_returns": [row for row in cases
+                            if (row.get("refund_source_type"), row.get("refund_source_id")) == ("provider", identity)],
+                        "engine": {**state.get("engine", {}), "facts": {key: row for key, row in state.get("engine", {}).get("facts", {}).items()
+                            if not key.startswith("refund:") or key.startswith("refund:" + identity + ":")}}}
+                    principal = money(order["paid_amount"], zero=True) + source_uncovered_collected_amount(provider_state, order)
+                    used = refund_totals(provider_state, order["id"])["executed"]
+                    if value > max(Decimal(0), principal - used):
+                        fail("operational_refund_amount_exceeded", "المبلغ يتجاوز التحصيل المتبقي لدى منصة الدفع الأصلية", 409)
+            case = {"id": digest([owner, actor["id"], "recorded_financial_refund", payload["request_id"]]),
+                    "case_type": CASE_TYPE, "request_id": payload["request_id"],
+                    "order_id": order["id"], "order_number": order["order_number"], "currency": "SAR",
+                    "order_total": order["total"], "order_created_at": order["created_at"],
+                    "paid_basis": adjustment["paid_amount"], "original_provider": order["provider"],
+                    "amount": fmt(value), "status": "refunded", "method": payload["method"],
+                    "refund_source_type": kind, "refund_source_id": identity, "refund_source_name": account["name"],
+                    "refund_reference": reference, "request_reference": "", "refunded_at": executed.isoformat(),
+                    "note": payload["reason"], "created_at": stamp, "created_by": actor["id"], "actor_id": actor["id"],
+                    "recorded_by": _actor(actor), "confirmed_at": stamp, "confirmed_by": actor["id"],
+                    "confirmed_by_snapshot": _actor(actor), "source": source,
+                    "execution_mode": "accountant_recorded", "receipt_id": payload.get("receipt_id"),
+                    "receipt_hash": receipt["sha256"] if receipt else None,
+                    "confirmed_basis_hash": adjustment["basis_hash"], "source_proof_hash": order["proof_hash"],
+                    "internal_confirmation_id": digest([owner, kind, identity, reference]),
+                    "financial_effect": "confirmed_bank_refund_debit" if kind == "bank" else "confirmed_provider_refund_debit",
+                    "items": [], "shipping": {"kind": "none", "amount": "0.00", "status": "none", "reference": ""}}
+            before = deepcopy(pending)
+            if pending is not None:
+                case.update({key: deepcopy(pending[key]) for key in (
+                    "id", "request_id", "created_at", "created_by", "recorded_by", "actor_id", "source",
+                    "note", "request_reference", "order_total", "order_created_at", "paid_basis", "original_provider") if key in pending})
+                case.update(execution_request_id=payload["request_id"], execution_note=payload["reason"],
+                            confirmation_source=source, confirmation_paid_basis=adjustment["paid_amount"],
+                            confirmation_order_total=order["total"])
+            if kind == "provider":
+                case["payment_snapshot"] = deepcopy(order["_payment_snapshot"])
+                if fact is not None:
+                    case.update(provider_evidence_id=fact_key, provider_evidence_hash=digest(fact),
+                                provider_evidence_reference=reference, matched_at=stamp, matched_by=actor["id"],
+                                matched_by_snapshot=_actor(actor))
+                    # A fact can precede its financial projection. Keep the
+                    # manual bridge until the original claim reflects it.
+                    if recorded_provider_refund_match(state, case) is not None:
+                        case["matched_evidence_at_confirmation"] = fact_key
+            elif matched_movement is not None:
+                case.update(status="bank_matched", bank_evidence_id=matched_movement["id"],
+                            bank_evidence_hash=digest(matched_movement), matched_at=stamp,
+                            financial_effect="none_existing_bank_movement")
+                validate_bank_match(state, case)
+            if pending is None:
+                cases.append(case)
+            else:
+                pending.clear()
+                pending.update(case)
+            for document in documents:
+                document.update(resolved_by_case_id=case["id"], matched_at=stamp, matched_by=actor["id"])
+            audit(state, actor["id"], "financial_refund_execution_recorded", before, case, payload["reason"], source, stamp)
+            remember(state, action, payload, case)
+            return case
+
+        return await _decide(db, owner, action, payload, apply)
 
 
 async def cancel_refund(db, owner, actor, case_id, payload, *, source="mezan2", stamp=None):
@@ -615,10 +859,11 @@ async def reconcile_refund(db, owner, actor, case_id, payload, *, source="mezan2
         return await _decide(db, owner, action, payload, apply)
 
 
-def refund_history_page(state, policy, *, page, page_size, order_number=None):
+def refund_history_page(state, policy, *, page, page_size, order_number=None, status="all"):
     cases = [case for case in state.get("customer_returns", [])
              if case.get("case_type") == CASE_TYPE and (order_number is None or case.get("order_number") == order_number)
-             and _visible(policy, case)]
+             and _visible(policy, case) and (status == "all" or
+                 (case.get("status") in {*EXECUTED, MATCHED} if status == "refunded" else case.get("status") == status))]
     cases.sort(key=lambda case: (case["created_at"], case["id"]), reverse=True)
     total_pages = max(1, ceil(len(cases) / page_size))
     page = min(page, total_pages)
@@ -627,6 +872,10 @@ def refund_history_page(state, policy, *, page, page_size, order_number=None):
 
 
 def install_refund_routes(router, db, current_user, scope):
+    from operational_customer_adjustments import install_customer_adjustment_routes
+    from operational_workspace_refund_receipts import install_refund_receipt_routes
+    install_customer_adjustment_routes(router, db, current_user, scope)
+    install_refund_receipt_routes(router, db, current_user, scope)
     async def load(user):
         actor, owner, source = await scope(db, user, "workspace")
         policy = await load_access(db, actor, owner)
@@ -651,18 +900,25 @@ def install_refund_routes(router, db, current_user, scope):
     async def order_lookup(number: str, request: Request, include_history: bool = False, user=Depends(current_user)):
         async def project():
             _, owner, _, policy = await load(user)
-            order = await refund_order(db, owner, number)
+            state = await read(db, owner)
+            order = await refund_order(db, owner, number, state=state)
             banks = await _bank_choices(db, owner, policy)
             methods = [{"id": "bank", "label": "تحويل بنكي"}] if banks else []
             if order["provider"] in PROVIDERS and policy.resource("provider", order["provider"])["use"]:
                 methods.append({"id": "original", "label": PROVIDERS[order["provider"]]})
+            if not methods:
+                fail("customer_refund_order_unavailable", "الطلب غير متاح ضمن مصادر الاسترجاع المصرح بها", 404)
             result = {key: order[key] for key in ("id", "order_number", "currency", "total")}
-            state = await read(db, owner)
             await _external_history(db, owner, order, state)
             capacity = _capacity(state, order)
+            from operational_customer_adjustments import adjustment_from_order
+            adjustment = adjustment_from_order(order, state)
+            result.update(adjustment, executed_refunded_amount=adjustment["confirmed_refunded_amount"])
             result.update(capacity, methods=methods, banks=banks,
+                          execution_amount_limit=capacity["paid_amount"],
                           can_request=bool(methods) and money(capacity["available_amount"], zero=True) > 0
-                              and policy.can_operation("customer.refund_request"))
+                              and policy.can_operation("customer.refund_request"),
+                          can_record_execution=bool(methods) and policy.can_operation("customer.refund_execute"))
             if include_history:
                 result["history"] = refund_history_page(state, policy, page=1, page_size=8,
                                                        order_number=order["order_number"])
@@ -673,12 +929,13 @@ def install_refund_routes(router, db, current_user, scope):
     @router.get("/workspace/refunds")
     async def refund_list(request: Request, page: int = Query(default=1, ge=1),
                           page_size: int = Query(default=5, ge=1, le=8), order_number: str | None = Query(default=None, max_length=160),
+                          status: Literal["all", "pending", "refunded", "cancelled"] = "all",
                           user=Depends(current_user)):
         async def project():
             _, owner, _, policy = await load(user)
             state = await read(db, owner)
             result = refund_history_page(state, policy, page=page, page_size=page_size,
-                                         order_number=_order_number(order_number) if order_number else None)
+                                         order_number=_order_number(order_number) if order_number else None, status=status)
             await recheck(user, owner, policy)
             return result
         return await run_visible_report_read(request, project)
@@ -698,6 +955,14 @@ def install_refund_routes(router, db, current_user, scope):
         actor, owner, source, policy = await load(user)
         policy.require_operation("customer.refund_request")
         case = await request_refund(db, owner, actor, payload.model_dump(), source=source)
+        return await saved_reply(user, owner, policy, case)
+
+
+    @router.post("/workspace/refunds/record-execution")
+    async def record_execution(payload: RefundExecution, user=Depends(current_user)):
+        actor, owner, source, policy = await load(user)
+        policy.require_operation("customer.refund_execute")
+        case = await record_refund_execution(db, owner, actor, payload.model_dump(), source=source)
         return await saved_reply(user, owner, policy, case)
 
     @router.post("/workspace/refunds/{case_id}/confirm")

@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AdBalance, Amount, Heading, Icon, ResourceIcon, assetGroups, isAsset, issueLabel, partyGroups, searchable, styleOf } from './ApprovedFinanceUI';
 import { minorUnits, signedResourceBalance } from './simpleBalancesModel';
+import { CustomerAdjustmentBadges } from './CustomerAdjustments';
 
 export function ProviderAmount({ resource }) {
   const position=resource.provider_position;
@@ -35,6 +36,7 @@ export function ResourceCard({ resource, href }) {
       visible ? (resource.kind === 'ad_account' ? <AdBalance resource={resource} /> : <Amount value={actual} currency={resource.currency} />) : <small>عرض الحساب</small>}</div>
     {visible && !isAsset(resource.kind) && <span className="under">{value.side==='for_party'?'له عند المؤسسة':value.side==='for_us'?'عليه للمؤسسة':'الحساب متوازن'}</span>}
     {resource.order_issues_count > 0 && <span className="issue-badge"><Icon name="circle-alert"/>{issueLabel(resource.order_issues_count)}</span>}
+    {resource.kind === 'provider' && resource.access?.movements === 'all' && resource.access?.report && <CustomerAdjustmentBadges summary={resource.customer_adjustments || resource.provider_position?.customer_adjustments}/>}
   </Card>;
 }
 

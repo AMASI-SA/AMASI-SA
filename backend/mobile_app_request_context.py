@@ -100,7 +100,10 @@ def _notification_route_allowed(path: str, method: str, *, driver=False) -> bool
         rf"{root}/instructions/{resource}/tasks/submit", rf"{root}/instructions/{resource}/tasks/{resource}/comments",
         r"/api/operational-notifications/devices/(?:register|unregister)"]
     if not driver:
-        common_get += [rf"{root}/instructions/mine/history", rf"{root}/orders/{resource}", rf"{root}/search"]
+        common_get += [rf"{root}/instructions/mine/history", rf"{root}/orders/{resource}", rf"{root}/search",
+            rf"{root}/notifications/me/unread-preview", r"/api/employee-finance/notifications/me",
+            rf"/api/employee-finance/notifications/{resource}"]
+        common_post += [rf"/api/employee-finance/notifications/{resource}/read"]
         common_post += [rf"{root}/orders/{resource}/instructions", rf"{root}/instructions/{resource}/(?:approve|reject|complete|stop-acknowledgment|send-edit)", rf"{root}/instructions/{resource}/tasks/claim"]
     return any(re.fullmatch(pattern, path) for pattern in (common_get if method == "GET" else common_post if method == "POST" else []))
 
@@ -172,7 +175,7 @@ async def mobile_app_request_user(
         return user
 
     if (str(path).startswith("/api/employees-v2/management/employees/")
-            and str(path).rstrip("/").endswith("/mobile-app-permissions")):
+            and str(path).rstrip("/").endswith(("/mobile-app-permissions", "/customer-refund-access"))):
         # Do not let the merchant-shaped bridge satisfy the owner-only grant API.
         return user
 

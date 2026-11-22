@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from copy import deepcopy
 from typing import Literal
 
 from fastapi import Depends
@@ -154,6 +155,12 @@ def install_access_routes(router, db, current_user, scope):
                   "operations": sorted(payload.operations),
                   "resources": sorted((row.model_dump() for row in payload.resources), key=lambda row: (row["kind"], row["id"])),
                   "updated_at": now(), "updated_by": actor["id"]}
+        # This independent editor must not erase the explicitly scoped shared
+        # refund source grant. Revoking its operations/enabled flag still wins.
+        from customer_refund_access import REFUND_FIELD
+        previous_policy = target.get(POLICY_FIELD)
+        if isinstance(previous_policy, dict) and REFUND_FIELD in previous_policy:
+            stored[REFUND_FIELD] = deepcopy(previous_policy[REFUND_FIELD])
         selector = {"id": user_id, "created_by": owner, "role": {"$ne": "owner"},
                     "deleted_at": {"$in": [None, ""]}}
         # Compare the observed document as well as the public version. This

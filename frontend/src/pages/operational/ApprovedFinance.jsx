@@ -25,6 +25,7 @@ const Entry = lazy(()=>import('./ApprovedEntry'));
 const AddOperationalEntity = lazy(()=>import('./AddOperationalEntity'));
 const SupplierCreditPurchase = lazy(()=>import('./SupplierCreditPurchase'));
 const Refund = lazy(()=>import('./ApprovedRefund'));
+const CustomerCollections = lazy(()=>import('./ApprovedCustomerCollections'));
 const Issues = lazy(()=>import('./ApprovedOrderIssues'));
 const Tools = lazy(()=>import('./ApprovedOperations'));
 const Position = lazy(()=>import('./ApprovedOperations').then(m=>({default:m.ApprovedPosition})));
@@ -79,7 +80,7 @@ function FinanceWorkspace({context,identity,user,view,to,params,reload}) {
   const [creatingCash,setCreatingCash]=useState(false);
   const deferredRefresh=useRef(false);
   useEffect(()=>{
-    if(deferredRefresh.current && view!=='refund' && view!=='collections'){
+    if(deferredRefresh.current && !['refund','collections','customer-collections'].includes(view)){
       deferredRefresh.current=false;
       reload();
     }
@@ -97,6 +98,7 @@ function FinanceWorkspace({context,identity,user,view,to,params,reload}) {
   const home=()=>go('home'), open=r=>go('ledger',r), issues=r=>go('issues',r);
   const granted=new Set(context.operations.map(o=>typeof o==='string'?o:o.key));
   const canRefund=allowedTo('refund')&&(granted.has('customer.refund_request')||granted.has('customer.refund_execute'));
+  const canCustomerCollect=allowedTo('customer-collections')&&granted.has('customer.collection');
   const canCollect=allowedTo('collections')&&granted.has('courier.review')&&context.resources.some(r=>r.kind==='store_driver'&&r.access.movements==='all');
   const addAvailable=allowedTo('entry')&&writePage('balances.entry')&&context.status==='active'&&context.capabilities?.create_entries===true;
   const canAdd=addAvailable && (!selected||selected.access?.use&&selected.operations?.length>0);
@@ -135,8 +137,8 @@ function FinanceWorkspace({context,identity,user,view,to,params,reload}) {
   const savedInvoice=location.state?.supplierInvoice;
   const recovered=location.state?.recoveredMovement?.scope===context.session_scope?location.state.recoveredMovement:null;
   const unavailable=<p className="note" role="alert">هذه الصفحة غير متاحة ضمن صلاحياتك.</p>;
-  const title=titles[view]||({ledger:selected&&isAsset(selected.kind)?'كشف الحساب':'كشف الطرف',entry:'حركة مالية جديدة','special-entry':canPurchase && (purchaseMode || selected && params.get('mode')!=='movement')?'فاتورة شراء آجل':'عمليات مالية أخرى',issues:'طلبات تحتاج مراجعة',collections:'مراجعة التحصيلات',refund:'إرجاع مبلغ لعميل'})[view]||'الأرصدة التشغيلية';
-  const active=view==='ledger'?(isAsset(selected?.kind)?'assets':'parties'):view==='issues'||view==='collections'?'reviews':view==='entry'||view==='refund'?'home':view;
+  const title=titles[view]||({ledger:selected&&isAsset(selected.kind)?'كشف الحساب':'كشف الطرف',entry:'حركة مالية جديدة','special-entry':canPurchase && (purchaseMode || selected && params.get('mode')!=='movement')?'فاتورة شراء آجل':'عمليات مالية أخرى',issues:'طلبات تحتاج مراجعة',collections:'مراجعة التحصيلات',refund:'إرجاع مبلغ لعميل','customer-collections':'تحصيل متبقي طلب'})[view]||'الأرصدة التشغيلية';
+  const active=view==='ledger'?(isAsset(selected?.kind)?'assets':'parties'):view==='issues'||view==='collections'?'reviews':['entry','refund','customer-collections'].includes(view)?'home':view;
   const shared={context,identity};
   useEffect(()=>{setModal(null);setHistoryPage(1)},[location.key]);
   useEffect(()=>{const previous=document.title;document.title=title+' · ميزان ٢';return()=>{document.title=previous}},[title]);
@@ -149,6 +151,7 @@ function FinanceWorkspace({context,identity,user,view,to,params,reload}) {
       canOpenOrderDetails={Boolean(context.actor?.is_owner || pages?.some(page=>page.id==='detail.order' && !page.owner_only))}
       onStatements={canStatements?(r,section)=>openSpecialist(statementTarget(r,section)):undefined}
       canUploadStatements={Boolean(canStatements && writePage('balances.statements'))}
+      onReviewCustomerRefunds={canRefund?()=>go('refund'):undefined} onReviewCustomerCollections={canCustomerCollect?()=>go('customer-collections'):undefined}
       onProviderHistory={canHistory?r=>openSpecialist('/operational-balances/provider-history?provider='+encodeURIComponent(r.id)):undefined}
       onHistory={row=>{setHistoryPage(1);setModal({history:context.resources.find(r=>r.kind===row.party_type&&r.id===row.party_id)})}}
       onExpected={(r,summary)=>setModal({expected:summary,resource:r})} onReviewCollections={canCollect?collections:undefined}/>;break;
@@ -168,12 +171,17 @@ function FinanceWorkspace({context,identity,user,view,to,params,reload}) {
     }
     case 'entry':content=!writePage('balances.entry')?<><Heading title="حركة مالية جديدة"/><p className="note">صلاحيتك للعرض. تسجيل حركة يتطلب صلاحية الكتابة على الصفحة والحساب.</p></>:<>
       <Entry {...shared} resource={selected} mode={params.get('mode')||'choose'} onBack={back} onSaved={saved}
-        onPurchase={canPurchase?()=>navigate(purchaseLink(selected)):null} onRefund={canRefund?()=>go('refund'):null}/>
+        onPurchase={canPurchase?()=>navigate(purchaseLink(selected)):null} onRefund={canRefund?()=>go('refund'):null} onCustomerCollection={canCustomerCollect?()=>go('customer-collections'):null}/>
       {canAdd && <p className="footnote"><Link className="textbtn" to={to('special-entry',selected,{mode:'movement'})}><Icon name="layers"/>عمليات مالية أخرى</Link></p>}</>;break;
     case 'refund':content=canRefund?<Refund {...shared} readOnly={!writePage('balances.refund')} onBack={()=>go('entry')} onSaved={refreshAfterReview}/>:unavailable;break;
+    case 'customer-collections':content=canCustomerCollect?<CustomerCollections {...shared} readOnly={!writePage('balances.customer-collections')} onBack={()=>go('entry')} onSaved={refreshAfterReview}/>:unavailable;break;
     case 'issues':content=<Issues {...shared} resource={selected} onBack={()=>selected?open(selected):go('reviews')} onReviewCollections={canCollect?collections:undefined}/>;break;
     case 'collections':content=canCollect?<ReviewCollections {...shared} readOnly={!writePage('balances.collections')} driverId={selected?.kind==='store_driver'?selected.id:''} onBack={()=>go('reviews')} onChanged={refreshAfterReview}/>:unavailable;break;
     case 'reviews':content=<><Heading title="تحتاج مراجعة" subtitle="افتح الطلب أو الحركة لمعرفة السبب ومراجعة المصدر."/>
+      {(canRefund || canCustomerCollect) && <section className="panel sheet"><div className="section-head"><h2>مبالغ العملاء بانتظار التأكيد</h2></div>
+        {canRefund && <Link className="review-item customer-adjustment-link" to={to('refund')}><IconBox name="corner-down-left" tone="provider"/><span>رد مبالغ العملاء</span><Icon name="chevron-left" className="end"/></Link>}
+        {canCustomerCollect && <Link className="review-item customer-adjustment-link" to={to('customer-collections')}><IconBox name="arrow-down-left" tone="c-in"/><span>تحصيل المبالغ المتبقية على العملاء</span><Icon name="chevron-left" className="end"/></Link>}
+      </section>}
       {allowedTo('issues')&&context.resources.some(r=>Object.hasOwn(r,'order_issues_count'))&&<Link to={to('issues')} className="issue-notice"><IconBox name="clipboard-list" tone="c-wait"/><span><strong>طلبات تحتاج مراجعة</strong><small>اعرض أرقام الطلبات وسبب المراجعة لكل طلب.</small></span><b>عرض الطلبات <Icon name="chevron-left"/></b></Link>}
       {canCollect?<section className="panel sheet"><div className="section-head"><h2>حركات مالية تنتظر المراجعة</h2></div><Link className="review-item" to={to('collections')}><IconBox name="receipt-text" tone="provider"/><span><b>مراجعة تحصيلات الموصلين</b><small className="under">تحويلات العملاء وإيصالات الشبكة</small></span><Icon name="chevron-left" className="end"/></Link></section>:
       <p className="under">تظهر لك المراجعات المتاحة لحسابك.</p>}
@@ -212,14 +220,15 @@ export default function ApprovedFinance({defaultView='home'}) {
   const [homeRequested,setHomeRequested]=useState(view==='home');
   useEffect(()=>{if(view==='home')setHomeRequested(true)},[view]);
   const pages=managedWebPages(auth?.user);
-  const requestPreview=(homeRequested||view==='home') && (!pages||pages.some(p=>p.id==='balances.home'));
+  const refundContext=view==='refund';
+  const requestPreview=!refundContext && (homeRequested||view==='home') && (!pages||pages.some(p=>p.id==='balances.home'));
   // Reports read their own bound snapshot; their context needs only the directory.
-  const directoryOnly=!requestPreview && ['entry','ledger','log','reports'].includes(view);
+  const directoryOnly=refundContext || !requestPreview && ['entry','ledger','log','reports'].includes(view);
   const read=useBalanceRead(async config=>{
-    const value=await api.context(config,{homePreview:requestPreview,...(directoryOnly && {directoryOnly:true})});
+    const value=await api.context(config,{homePreview:requestPreview,...(directoryOnly && {directoryOnly:true}),...(refundContext && {refundContext:true})});
     if(!validContext(value)||auth?.user?.id&&auth.user.id!==value.actor.id)throw new Error('invalid finance context');
     return directoryOnly ? {...value,directoryOnly:true} : value;
-  },JSON.stringify([identity,requestPreview,directoryOnly,pages?.map(p=>[p.id,p.mode])]),!auth||Boolean(auth.user?.id)&&!auth.loading,contextReadPolicy);
+  },JSON.stringify([identity,requestPreview,directoryOnly,refundContext,pages?.map(p=>[p.id,p.mode])]),!auth||Boolean(auth.user?.id)&&!auth.loading,contextReadPolicy);
   const to=(name,resource,extra)=>routeTo(location.pathname,name,resource,extra);
   const sessionUnavailable=auth&&!auth.loading&&!auth.user?.id;
   const error=sessionUnavailable?'تعذر التحقق من جلسة الدخول. أعد التحقق لعرض الأرصدة.':read.error;

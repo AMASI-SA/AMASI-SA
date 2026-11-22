@@ -22,6 +22,9 @@ jest.mock("sonner", () => ({
     toast: { success: jest.fn(), error: jest.fn() },
 }));
 
+jest.mock('../services/customerRefundAccess', () => ({ getCustomerRefundAccess: jest.fn(), saveCustomerRefundAccess: jest.fn() }));
+import { getCustomerRefundAccess } from '../services/customerRefundAccess';
+
 import EmployeesV2Management from "./EmployeesV2Management";
 import {
     assignEmployeesV2MobileAppPermissions,
@@ -138,6 +141,21 @@ async function cleanup(container, root) {
     container.remove();
     globalThis.IS_REACT_ACT_ENVIRONMENT = false;
 }
+
+test('loads shared refund grants only after opening the dedicated linked-employee button', async () => {
+    getEmployeesV2Management.mockResolvedValue(workspace);
+    getCustomerRefundAccess.mockResolvedValue({ employee_id:'employee-1', user:{id:'turki-account'},
+        access:{mode:'none',policy_version:0,page_revision:0,session_scope:'a'.repeat(64),sources:[],enabled:false},
+        sources:[{kind:'bank',id:'bank',name:'بنك الرد',currency:'SAR'}] });
+    const {container,root} = await renderPage();
+    expect(getCustomerRefundAccess).not.toHaveBeenCalled();
+    const button = [...container.querySelectorAll('button')].find(row=>row.textContent==='استرجاع المبالغ للعملاء');
+    expect(button).toBeDefined();
+    await act(async()=>button.click());
+    expect(getCustomerRefundAccess).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain('حفظ الصلاحية للتطبيق وميزان');
+    await cleanup(container,root);
+});
 
 
 beforeEach(() => {

@@ -4,6 +4,7 @@ from decimal import Decimal
 from operational_balance_store import digest
 from operational_payment_evidence import _amount, _instant
 from operational_provider_transaction_evidence import is_closed_tender_balance, is_partial_tender_balance
+from operational_customer_payment_basis import is_adjusted_payment_balance
 from operational_financial_activity_runtime import checked_rows, preparation_checkpoint
 
 HISTORICAL = "provider_historical_capture_review_required"
@@ -71,7 +72,8 @@ def _context(state, row, *, obligation_key=None, through=None):
         created = _instant(row["created_at"])
 
         if (not owner or owner != state.get("owner_id") or not oid or not number or party not in {"salla","tabby","tamara","emkan","paypal"}
-                or paid <= 0 or (not (is_closed_tender_balance(row, ccy) or is_partial_tender_balance(row, ccy))
+                or paid <= 0 or (not (is_closed_tender_balance(row, ccy) or is_partial_tender_balance(row, ccy)
+                                      or is_adjusted_payment_balance(row, ccy))
                     and paid + _amount(row["remaining"], ccy) != _amount(row["gross"], ccy))
                 or not _instant(state["started_at"]) < created <= _instant(through or engine["as_of"])):
             issues.append("order")
@@ -160,15 +162,16 @@ def make_review_row(order, payment):
     fields = ("owner_id", "order_id", "order_number", "provider", "currency", "gross", "paid", "remaining")
     closed_tender = is_closed_tender_balance(page, payment.get("currency"))
     partial_tender = is_partial_tender_balance(page, payment.get("currency"))
-    if ((page.get("source") != "canonical_salla_order_page" and not closed_tender and not partial_tender)
-            or not all(page.get(k) or (k == "remaining" and (closed_tender or partial_tender)) for k in fields)
+    adjusted = is_adjusted_payment_balance(page, payment.get("currency"))
+    if ((page.get("source") != "canonical_salla_order_page" and not closed_tender and not partial_tender and not adjusted)
+            or not all(page.get(k) or (k == "remaining" and (closed_tender or partial_tender or adjusted)) for k in fields)
             or (page["provider"], page["currency"]) != (payment.get("provider"), payment.get("currency"))
-            or _amount(page["paid"] if closed_tender else page["gross"], page["currency"]) != _amount(payment["gross"], page["currency"])
+            or _amount(page["paid"] if closed_tender or adjusted else page["gross"], page["currency"]) != _amount(payment["gross"], page["currency"])
             or order.get("bank_credit") or payment.get("refunds") or payment.get("cancellations")
             or _amount(payment.get("cancelled", 0), page["currency"]) != 0
             or (str(order["id"]), order["order_number"]) != (page["order_id"], page["order_number"])):
         return None
-    provenance = {k: page[k] for k in ("source", "transaction_reference") if k in page} if closed_tender or partial_tender else {}
+    provenance = {k: page[k] for k in ("source", "transaction_reference") if k in page} if closed_tender or partial_tender or adjusted else {}
     return {**{k: page[k] for k in fields}, **provenance, "created_at": order["created_at"]}
 
 

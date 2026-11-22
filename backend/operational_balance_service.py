@@ -547,6 +547,8 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
             }
         await prepare_in_thread(audit, state, actor, "movement_saved", None, item,
                                 payload.get("note") or "حركة معتمدة", source, stamp)
+        from employee_finance_notifications import stage_employee_financial_notifications
+        await stage_employee_financial_notifications(db, owner, state, item)
         remember(state, replay_action, payload, item)
         return item
     async def apply(state):
@@ -1070,8 +1072,23 @@ def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=Fa
         status = case.get("status")
         kind = case.get("refund_source_type")
         if status == "refunded" and kind == "bank":
+            from operational_workspace_refunds import recorded_bank_refund_match
+            if recorded_bank_refund_match(state, case):
+                continue
             bank = get("bank", case["refund_source_id"], case["currency"], case["refund_source_name"])
             bank["actual"] -= Decimal(case["amount"])
+        elif (status == "refunded" and kind == "provider"
+              and case.get("financial_effect") == "confirmed_provider_refund_debit"):
+            from operational_workspace_refunds import recorded_provider_refund_match
+            if recorded_provider_refund_match(state, case):
+                continue
+            account = get("provider", case["refund_source_id"], case["currency"], case["refund_source_name"])
+            value = Decimal(case["amount"])
+            taken = min(account["outstanding_receivable"], value)
+            account["outstanding_receivable"] -= taken
+            account["outstanding_payable"] += value - taken
+            account["confirmed_receivable"] = max(account["confirmed_receivable"] - value, Decimal(0))
+            account["customer_refunds_manual_debited"] += value
         elif status == "salla_refund_confirmed" and kind in {"bank", "provider"}:
             from operational_provider_statement_reconciliation import fact_backed_employee_refund
             if fact_backed_employee_refund(state, case):
@@ -1086,6 +1103,24 @@ def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=Fa
                           case["refund_source_name"])
             account["actual"] -= Decimal(case["amount"])
             account["customer_refunds_manual_debited"] += Decimal(case["amount"])
+    from operational_customer_collection_effects import collection_projection
+    for collection in state.get("customer_collections", []):
+        preparation_checkpoint()
+        if collection.get("status") != "confirmed":
+            continue
+        effect = collection_projection(state, collection)
+        if not effect["principal_delta"]:
+            continue
+        account = get(collection["destination_type"], collection["destination_id"],
+                      collection["currency"], collection["destination_name"])
+        value = effect["principal_delta"]
+        if collection["destination_type"] == "bank":
+            account["actual"] += value
+        elif collection["destination_type"] == "provider":
+            # The provider summary applies the saved per-transaction fee quote.
+            # Keep confirmed principal available even while that fee is unknown.
+            account["confirmed_receivable"] += value
+            account["outstanding_receivable"] += value
     if ad_balances_sar:
         from operational_ad_balance_sar import project_parties
         project_parties(parties, state.get("engine", {}).get("ad_balance_sar_basis", {}), valuation_issues)
@@ -1312,6 +1347,9 @@ def account_statement(state, account):
                     or case['refund_source_type']!='bank'
                     or case['refund_source_id']!=identity or case['currency']!=currency):
                 continue
+            from operational_workspace_refunds import recorded_bank_refund_match
+            if recorded_bank_refund_match(state, case):
+                continue
             stamp = case.get('refunded_at') or case.get('updated_at') or case.get('created_at','')
             business_day = datetime.fromisoformat(stamp.replace('Z','+00:00')).astimezone(ZoneInfo('Asia/Riyadh')).date().isoformat() if stamp else ''
             items.append({'id':'customer_return:'+case['id'],
@@ -1320,6 +1358,18 @@ def account_statement(state, account):
                 'amount':case['amount'], 'currency':currency, 'direction':'outgoing',
                 'business_date':business_day, 'occurred_at':stamp, 'reference':case.get('refund_reference',''),
                 'note':case.get('note',''), 'kind':'customer_refund'})
+        from operational_customer_collection_effects import collection_match
+        for collection in checked_rows(state.get('customer_collections', [])):
+            if (collection.get('status') != 'confirmed'
+                    or (collection.get('destination_type'), collection.get('destination_id'), collection.get('currency'))
+                    != ('bank', identity, currency) or collection_match(state, collection)):
+                continue
+            stamp = collection['executed_at']
+            business_day = datetime.fromisoformat(stamp.replace('Z', '+00:00')).astimezone(ZoneInfo('Asia/Riyadh')).date().isoformat()
+            items.append({'id': 'customer_collection:' + collection['id'], 'name': 'تحصيل متبقي طلب',
+                'amount': collection['amount'], 'currency': currency, 'direction': 'incoming',
+                'business_date': business_day, 'occurred_at': stamp, 'reference': collection['reference'],
+                'note': collection.get('reason', ''), 'kind': 'customer_collection'})
     items.sort(key=lambda r:(r['business_date'],r['occurred_at'],r['id']),reverse=True)
     preparation_checkpoint()
     return {'account':{'name':account['name'],'party_type':kind,'party_id':identity,'currency':currency,

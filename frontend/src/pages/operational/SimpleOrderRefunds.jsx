@@ -4,6 +4,7 @@ import { Amount, Icon } from './ApprovedFinanceUI';
 import { simpleBalancesApi as api } from './simpleBalancesApi';
 import { useBalanceRead } from './simpleBalancesHooks';
 import { usePendingBalanceCommand } from './simpleBalancesPending';
+import { CustomerReceipt, CustomerReceiptUpload } from './CustomerAdjustmentReceipt';
 import { BALANCE_PAGE_SIZE, decimalAmount, isPage, minorUnits, money, permittedOperations } from './simpleBalancesModel';
 
 const statusLabel = status => ({ pending: 'بانتظار الرد', refunded: 'تم تسجيل رد المبلغ', cancelled: 'ملغى' }[status] || 'قيد المراجعة');
@@ -38,65 +39,113 @@ function MutationStatus({ mutation }) {
     {mutation.command && <p className="sb-notice" role="status">هناك عملية بانتظار تأكيد النتيجة. إعادة المحاولة تستخدم المرجع نفسه.</p>}</>;
 }
 
-export function RefundRequestForm({ context, order, onSaved, onRecoveryRetired, approved = false, showForm = true }) {
+export function RefundRequestForm({ context, order, onSaved, onRecoveryRetired, approved = false, showForm = true, pendingCase = null }) {
   const operations = permittedOperations(context);
-  const permitted = context.status === 'active' && operations.has('customer.refund_request');
-  const allowed = permitted && order.can_request === true;
-  const mutation = useRefundMutation({ context, identity: `order:${order.id || order.order_number}`,
-    validate: value => value.action === 'create' && value.body.order_number === order.order_number,
-    execute: value => api.requestRefund(value.body),
+  const mayRequest = context.status === 'active' && operations.has('customer.refund_request');
+  const mayRecord = approved && context.status === 'active' && operations.has('customer.refund_execute');
+  const [intent, setIntent] = useState(mayRecord && order.can_record_execution === true ? 'record_execution' : 'create');
+  const [uploading, setUploading] = useState(false);
+  const mutation = useRefundMutation({ context, identity: pendingCase ? `execution:${pendingCase.id}` : `order:${order.id || order.order_number}`,
+    validate: value => ['create','record_execution'].includes(value.action) && value.body.order_number === order.order_number
+      && (value.body.pending_case_id || null) === (pendingCase?.id || null),
+    execute: value => value.action === 'record_execution' ? api.recordRefundExecution(value.body) : api.requestRefund(value.body),
     validateSaved: (result, pending) => Boolean(result.item?.id) && result.item.order_number === pending.command.order_number
       && minorUnits(result.item.amount) === minorUnits(pending.command.amount) && result.item.method === pending.command.method
-      && (pending.command.method !== 'bank' || result.item.source?.kind === 'bank' && result.item.source.id === pending.command.bank_id),
+      && (!pending.command.pending_case_id || result.item.id === pending.command.pending_case_id)
+      && (pending.command.method !== 'bank' || result.item.source?.kind === 'bank' && result.item.source.id === pending.command.bank_id)
+      && (pending.action !== 'refund.record_execution' || result.item.status === 'refunded'
+        && (pending.command.method !== 'original' || result.item.source?.kind === 'provider'
+          && (!order.provider || pending.command.expected_basis_hash !== order.basis_hash || result.item.source.id === order.provider))),
     onSaved, onRetired: onRecoveryRetired });
   const [mode, setMode] = useState('partial');
-  const [form, setForm] = useState({ amount: '', method: '', bank_id: '', reason: '', reference: '' });
+  const suggested = minorUnits(order.suggested_refund_amount);
+  const executedRefunded = order.executed_refunded_amount ?? order.confirmed_refunded_amount ?? order.refunded_amount;
+  const executionLimit = order.execution_amount_limit ?? order.available_amount;
+  const initialLimit = mayRecord && order.can_record_execution === true ? executionLimit : order.available_amount;
+  const initialAmount = suggested !== null && suggested > 0n && suggested <= minorUnits(initialLimit)
+    ? order.suggested_refund_amount : minorUnits(order.available_amount) > 0n ? order.available_amount : '';
+  const [form, setForm] = useState({ amount: pendingCase?.amount || (approved ? initialAmount : ''), method: pendingCase?.method || '',
+    bank_id: pendingCase?.method === 'bank' ? pendingCase.source.id : '', reason: pendingCase?.reason || '', reference: '', executed_at: localTime(), confirmed: false, receipt_id: '' });
   const pendingBody = mutation.command?.body;
+  const pendingAction = mutation.command?.action;
   useEffect(() => {
     if (!pendingBody) return;
+    setIntent(pendingAction);
     setMode('partial'); setForm({ amount: pendingBody.amount, method: pendingBody.method, bank_id: pendingBody.bank_id || '',
-      reason: pendingBody.reason, reference: pendingBody.reference || '' });
-  }, [pendingBody]);
+      reason: pendingBody.reason, reference: pendingBody.reference || '', executed_at: localTime(pendingBody.executed_at),
+      confirmed: pendingBody.confirmed === true, receipt_id: pendingBody.receipt_id || '' });
+  }, [pendingBody, pendingAction]);
+  const execution = Boolean(pendingCase) || (pendingAction || intent) === 'record_execution';
+  const permitted = execution ? mayRecord : mayRequest;
+  const pendingMatches = !pendingCase || pendingCase.order_number === order.order_number
+    && (pendingCase.method !== 'original' || !order.provider || pendingCase.source?.id === order.provider);
+  const allowed = permitted && pendingMatches && (execution ? order.can_record_execution === true && /^[a-f0-9]{64}$/.test(order.basis_hash || '') : order.can_request === true);
   const disabled = mutation.busy || Boolean(mutation.command) || mutation.blocked || mutation.recovering || !allowed;
-  const available = minorUnits(order.available_amount);
+  const available = minorUnits(pendingCase ? pendingCase.amount : execution ? executionLimit : order.available_amount);
   const canRequestAmount = available !== null && available > 0n;
   const choose = patch => { if (!disabled) setForm(value => ({ ...value, ...patch })); };
   async function submit(event) {
     event.preventDefault();
-    if (!permitted || !mutation.command && !allowed) return;
-    await mutation.submit('create', () => {
-      const amount = decimalAmount(mode === 'full' ? order.available_amount : form.amount);
-      if (!amount || available === null || minorUnits(amount) > available) throw { localMessage: 'أدخل مبلغًا ضمن المتاح للاسترجاع من التحصيل المؤكد.' };
+    if (uploading || !permitted || !mutation.command && !allowed) return;
+    await mutation.submit(execution ? 'record_execution' : 'create', () => {
+      const amount = decimalAmount(pendingCase ? pendingCase.amount : mode === 'full' ? order.available_amount : form.amount);
+      if (!amount || available === null || minorUnits(amount) > available) throw { localMessage: execution
+        ? 'أدخل مبلغ التنفيذ الفعلي ضمن التحصيل المؤكد. تُراجع العمليات السابقة قبل التسجيل.'
+        : 'أدخل مبلغًا ضمن المتاح للاسترجاع من التحصيل المؤكد.' };
       if (!(order.methods || []).some(method => method.id === form.method)) throw { localMessage: 'اختر طريقة الاسترجاع.' };
       if (form.method === 'bank' && !(order.banks || []).some(bank => bank.id === form.bank_id)) throw { localMessage: 'اختر بنك المؤسسة الذي سيخرج منه المبلغ.' };
-      if (!form.reason.trim()) throw { localMessage: 'اكتب سبب الاسترجاع.' };
-      return { order_number: order.order_number, amount, method: form.method, reason: form.reason.trim(),
+      if (!form.reason.trim() || approved && form.reason.trim().length < 3) throw { localMessage: 'اكتب سبب الاسترجاع بوضوح.' };
+      const body = { order_number: order.order_number, amount, method: form.method, reason: form.reason.trim(),
         ...(form.method === 'bank' ? { bank_id: form.bank_id } : {}), ...(form.reference.trim() ? { reference: form.reference.trim() } : {}) };
+      if (pendingCase) {
+        if (pendingCase.status !== 'pending' || pendingCase.order_number !== order.order_number || form.method !== pendingCase.method
+          || pendingCase.method === 'bank' && form.bank_id !== pendingCase.source.id) throw {localMessage:'لم تطابق البيانات طلب الرد المعلّق. أعد فتحه قبل التأكيد.'};
+        body.pending_case_id = pendingCase.id;
+      }
+      if (execution) {
+        if (!form.reference.trim()) throw {localMessage:'اكتب مرجع عملية رد المبلغ.'};
+        const date = new Date(form.executed_at);
+        if (!form.executed_at || Number.isNaN(date.getTime()) || date.getTime() > Date.now() + 60000) throw {localMessage:'اختر وقت التنفيذ الفعلي، دون تاريخ مستقبلي.'};
+        if (!form.confirmed) throw {localMessage:'أكد أن المبلغ رُد بالفعل من المصدر المختار.'};
+        Object.assign(body, {expected_basis_hash:order.basis_hash,executed_at:date.toISOString(),confirmed:true,
+          ...(form.receipt_id ? {receipt_id:form.receipt_id} : {})});
+      }
+      return body;
     });
   }
   if (approved) {
     const original = order.methods.find(item => item.id === 'original');
     return <><section className="panel rf-block"><div className="between rf-head"><h2>طلب <bdi>#{order.order_number}</bdi></h2>
       {original && <span className="rf-tag"><Icon name="credit-card"/>طريقة الدفع الأصلية · {original.label}</span>}</div>
-      <div className="rf-metrics">{[['دفع العميل', order.paid_amount], ['سبق إرجاعه', order.refunded_amount], ['بانتظار الرد', order.reserved_amount], ['تقدر ترجع', order.available_amount]].map(([label, value], index) =>
+      <div className="rf-metrics">{[['دفع العميل', order.paid_amount], ['سبق إرجاعه بتأكيد', executedRefunded], ['محجوز لطلبات رد', order.reserved_amount], ['متاح لرد جديد', order.available_amount]].map(([label, value], index) =>
         <div key={label} className={'metric' + (index === 3 ? ' accent' : '')}><small>{label}</small><strong><Amount value={value} currency={order.currency}/></strong></div>)}</div>
+      {minorUnits(order.unconfirmed_refund_amount) > 0n && <p className="adjustment-badge refund">إشارة استرجاع غير مؤكدة <Amount value={order.unconfirmed_refund_amount} currency={order.currency}/></p>}
     </section>{showForm && <><MutationStatus mutation={mutation} />
+      {!pendingCase && (mayRequest || mayRecord) && <div className="tabset adjustment-tabs" role="group" aria-label="نوع تسجيل الاسترجاع">
+        {mayRecord && <button type="button" className={execution?'on':''} aria-pressed={execution} disabled={mutation.busy || Boolean(mutation.command) || mutation.blocked || mutation.recovering || uploading} onClick={() => setIntent('record_execution')}>تسجيل رد منفّذ</button>}
+        {mayRequest && <button type="button" className={!execution?'on':''} aria-pressed={!execution} disabled={mutation.busy || Boolean(mutation.command) || mutation.blocked || mutation.recovering || uploading} onClick={() => setIntent('create')}>طلب رد لم يُنفّذ</button>}
+      </div>}
       {(allowed && canRequestAmount || mutation.command) ? <form className="panel rf-block" onSubmit={submit}>
-        <div className="between rf-head"><h2>تفاصيل الإرجاع</h2></div><div className="fields">
-        <fieldset className="rf-mode"><legend>كم تبغى ترجع؟</legend><div className="tabset">
+        <div className="between rf-head"><h2>{pendingCase ? 'توثيق تنفيذ طلب الرد المعلّق' : 'تفاصيل الإرجاع'}</h2></div>
+        {execution && !pendingCase && minorUnits(order.available_amount) === 0n && <p className="under">توثيق التنفيذ السابق يتطلب مطابقة المرجع مع سجل المصدر، مع الحفاظ على الرصيد المحتسب.</p>}
+        {pendingCase && <p className="under">يُوثّق تنفيذ الطلب نفسه بالمبلغ والمصدر المحجوزين. يُرفع حجزه عند التأكيد.</p>}<div className="fields">
+        {!pendingCase && <fieldset className="rf-mode"><legend>كم تبغى ترجع؟</legend><div className="tabset">
           <button className={mode === 'partial' ? 'on' : ''} type="button" aria-pressed={mode === 'partial'} disabled={disabled} onClick={() => setMode('partial')}>جزء من المبلغ</button>
-          <button className={mode === 'full' ? 'on' : ''} type="button" aria-pressed={mode === 'full'} disabled={disabled} onClick={() => setMode('full')}>كامل المتاح</button></div></fieldset>
-        <label className="field"><span>المبلغ ({unit(order.currency)})</span><input inputMode="decimal" placeholder="0.00" value={mode === 'full' ? order.available_amount : form.amount} readOnly={mode === 'full'} disabled={disabled} onChange={e => choose({ amount: e.target.value })} required /></label>
-        <label className="field"><span>كيف بترجع المبلغ؟</span><select value={form.method} required disabled={disabled} onChange={e => choose({ method: e.target.value, bank_id: '' })}><option value="">اختر طريقة الإرجاع</option>{order.methods.map(item => <option key={item.id} value={item.id}>{item.id === 'bank' ? 'تحويل من بنك المؤسسة' : 'عن طريق ' + item.label}</option>)}</select></label>
-        {form.method === 'bank' && <label className="field"><span>البنك الذي بيخرج منه المبلغ</span><select value={form.bank_id} required disabled={disabled} onChange={e => choose({ bank_id: e.target.value })}><option value="">اختر بنك المؤسسة</option>{order.banks.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></label>}
+          <button className={mode === 'full' ? 'on' : ''} type="button" aria-pressed={mode === 'full'} disabled={disabled || minorUnits(order.available_amount) <= 0n} onClick={() => setMode('full')}>كامل المتاح</button></div></fieldset>}
+        <label className="field"><span>المبلغ ({unit(order.currency)})</span><input inputMode="decimal" placeholder="0.00" value={mode === 'full' ? order.available_amount : form.amount} readOnly={Boolean(pendingCase) || mode === 'full'} disabled={disabled} onChange={e => choose({ amount: e.target.value })} required /></label>
+        <label className="field"><span>{execution ? 'المصدر الذي ردّ المبلغ فعليًا' : 'كيف بترجع المبلغ؟'}</span><select value={form.method} required disabled={disabled || Boolean(pendingCase)} onChange={e => choose({ method: e.target.value, bank_id: '', confirmed:false })}><option value="">اختر طريقة الإرجاع</option>{order.methods.map(item => <option key={item.id} value={item.id}>{item.id === 'bank' ? 'تحويل من بنك المؤسسة' : 'عن طريق ' + item.label}</option>)}</select></label>
+        {form.method === 'bank' && <label className="field"><span>{execution ? 'البنك الذي خرج منه المبلغ' : 'البنك الذي بيخرج منه المبلغ'}</span><select value={form.bank_id} required disabled={disabled || Boolean(pendingCase)} onChange={e => choose({ bank_id: e.target.value, confirmed:false })}><option value="">اختر بنك المؤسسة</option>{order.banks.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></label>}
         <label className="field"><span>سبب الإرجاع</span><input required minLength="3" maxLength="1000" value={form.reason} disabled={disabled} onChange={e => choose({ reason: e.target.value })} placeholder="مثلاً فرق سعر التغليف" /></label>
-        <label className="field"><span>مرجع العملية (اختياري)</span><input maxLength="160" value={form.reference} disabled={disabled} onChange={e => choose({ reference: e.target.value })} /></label>
-        </div><div className="rf-foot"><span className="rf-quiet"><Icon name="clock-3"/> الحفظ يحجز المبلغ حتى توثيق ردّه.</span>
-          <button className="button primary" type="submit" disabled={mutation.busy || mutation.blocked || mutation.recovering || !(mutation.command ? permitted : allowed)}>{mutation.busy ? 'جارٍ الحفظ…' : mutation.command ? 'إعادة محاولة العملية نفسها' : 'حفظ طلب الإرجاع'}</button>
+        <label className="field"><span>{execution ? 'مرجع عملية رد المبلغ' : 'مرجع العملية (اختياري)'}</span><input maxLength="160" required={execution} value={form.reference} disabled={disabled} onChange={e => choose({ reference: e.target.value })} /></label>
+        {execution && <><label className="field"><span>وقت التنفيذ الفعلي (بتوقيت جهازك)</span><input type="datetime-local" required value={form.executed_at} disabled={disabled} onChange={e => choose({executed_at:e.target.value})}/></label>
+          <CustomerReceiptUpload context={context} orderNumber={order.order_number} value={form.receipt_id} onChange={receipt_id => choose({receipt_id})} onBusyChange={setUploading} disabled={disabled}/>
+          <label className="sb-check"><input type="checkbox" checked={form.confirmed} disabled={disabled} onChange={e => choose({confirmed:e.target.checked})}/><span>تم رد هذا المبلغ فعليًا من المصدر المختار</span></label></>}
+        </div><div className="rf-foot"><span className="rf-quiet"><Icon name="clock-3"/> {execution ? 'يسجّل التأكيد خروج المبلغ من المصدر الفعلي مرة واحدة.' : 'الحفظ يحجز المبلغ حتى توثيق ردّه.'}</span>
+          <button className="button primary" type="submit" disabled={uploading || mutation.busy || mutation.blocked || mutation.recovering || !(mutation.command ? permitted : allowed)}>{mutation.busy ? 'جارٍ الحفظ…' : mutation.command ? 'إعادة محاولة العملية نفسها' : execution ? 'تأكيد وتسجيل رد المبلغ' : 'حفظ طلب الإرجاع'}</button>
         </div></form> : <p className="note">{!canRequestAmount ? 'ما فيه مبلغ متاح لإرجاع جديد.' : 'إنشاء طلب إرجاع غير متاح ضمن صلاحياتك الحالية.'}</p>}</>}</>;
   }
   return <section className="sb-refund-create"><div className="sb-title"><h2>طلب {order.order_number}</h2><p>الاسترجاع من المبلغ المحصّل المؤكد</p></div>
-    <dl className="sb-order-totals">{[['المدفوع المؤكد', order.paid_amount], ['سبق رده', order.refunded_amount], ['بانتظار الرد', order.reserved_amount], ['المتاح للاسترجاع', order.available_amount]].map(([label, value]) => <div key={label}><dt>{label}</dt><dd><bdi>{money(value)}</bdi> {unit(order.currency)}</dd></div>)}</dl>
+    <dl className="sb-order-totals">{[['المدفوع المؤكد', order.paid_amount], ['سبق رده بتأكيد', executedRefunded], ['بانتظار الرد', order.reserved_amount], ['المتاح للاسترجاع', order.available_amount]].map(([label, value]) => <div key={label}><dt>{label}</dt><dd><bdi>{money(value)}</bdi> {unit(order.currency)}</dd></div>)}</dl>
     {!canRequestAmount && <p className="sb-notice">لا يوجد مبلغ متاح لاسترجاع جديد من هذا الطلب.</p>}
     {!allowed && <p className="sb-small-note">يمكنك مراجعة الطلب. إنشاء طلب استرجاع غير متاح ضمن صلاحياتك الحالية.</p>}
     <MutationStatus mutation={mutation} />
@@ -113,7 +162,7 @@ export function RefundRequestForm({ context, order, onSaved, onRecoveryRetired, 
   </section>;
 }
 
-export function RefundDetails({ context, item, onSaved, onBack, onRecoveryRetired, readOnly=false }) {
+export function RefundDetails({ context, item, onSaved, onBack, onRecoveryRetired, readOnly=false, onRecordExecution }) {
   const operations = permittedOperations(context);
   const mutation = useRefundMutation({ context, identity: `item:${item.id}`, targetId: item.id,
     validate: value => ['confirm', 'cancel', 'reconcile'].includes(value.action),
@@ -138,7 +187,8 @@ export function RefundDetails({ context, item, onSaved, onBack, onRecoveryRetire
     setReason(pendingAction === 'cancel' ? pendingBody.reason || '' : '');
   }, [pendingBody, pendingAction]);
   const active = !readOnly && context.status === 'active';
-  const canConfirm = active && item.method === 'bank' && item.status === 'pending' && item.can_confirm === true && operations.has('customer.refund_execute');
+  const canRecord = active && !mutation.command && item.status === 'pending' && item.can_record_execution === true && operations.has('customer.refund_execute') && Boolean(onRecordExecution);
+  const canConfirm = active && !canRecord && item.method === 'bank' && item.status === 'pending' && item.can_confirm === true && operations.has('customer.refund_execute');
   const evidence = Array.isArray(item.provider_evidence) ? item.provider_evidence : [];
   const canReconcile = active && item.method === 'original' && item.status === 'pending' && item.can_reconcile === true
     && evidence.length > 0 && operations.has('customer.refund_execute');
@@ -175,8 +225,11 @@ export function RefundDetails({ context, item, onSaved, onBack, onRecoveryRetire
       {item.confirmed_by?.name && <div><dt>سجّل التأكيد</dt><dd>{item.confirmed_by.name}</dd></div>}
       {item.internal_confirmation_id && <div><dt>مرجع التسجيل الداخلي</dt><dd>{item.internal_confirmation_id}</dd></div>}
     </dl>
+    <CustomerReceipt id={item.receipt_id} identity={JSON.stringify([context.actor.id,context.session_scope,context.permission_version])}/>
+    {item.match_status === 'awaiting_source_match' && <p className="under">تم توثيق الرد الفعلي، وبانتظار مطابقته مع سجل المصدر.</p>}
     {item.method === 'original' && item.status === 'pending' && <p className="sb-small-note">{canReconcile ? `وصل تأكيد ${item.source?.name || 'مزود الدفع'} ويمكن مطابقته مع الطلب.` : `بانتظار تأكيد ${item.source?.name || 'مزود الدفع'}. لا يخصم هذا الطلب بنك المؤسسة.`}</p>}
     <MutationStatus mutation={mutation} />
+    {canRecord && !mutation.command && <button className="button primary" type="button" disabled={disabled} onClick={onRecordExecution}>توثيق رد منفّذ لهذا الطلب</button>}
     {(canConfirm || canCancel || canReconcile) && <form onSubmit={save} noValidate>
       {mode === 'cancel' ? <><h3>إلغاء طلب الاسترجاع</h3><Field label="سبب الإلغاء"><textarea value={reason} rows="2" disabled={disabled} onChange={event => setReason(event.target.value)} required /></Field><p className="sb-small-note">يفك الحجز عن المبلغ دون حركة بنكية.</p></>
         : canReconcile ? <><h3>مطابقة تأكيد المنصة</h3><p className="sb-small-note">اربط الطلب بتأكيد الاسترجاع الموجود في سجل المنصة، دون تسجيل دفع جديد.</p><Field label="تأكيد المنصة"><select value={evidenceId} disabled={disabled} onChange={event => setEvidenceId(event.target.value)} required><option value="">اختر التأكيد المطابق</option>{evidence.map(value => <option key={value.id} value={value.id}>{value.reference || value.id} · {money(value.amount)} {unit(item.currency)}</option>)}</select></Field></>
@@ -203,7 +256,7 @@ export default function SimpleOrderRefunds({ context, identity, onBalancesChange
   const page = Math.max(1, Number.parseInt(params.get('refund_page') || '1', 10) || 1);
   const [query, setQuery] = useState(orderNumber);
   const operations = permittedOperations(context);
-  const allowed = operations.has('customer.refund_request') || operations.has('customer.refund_execute');
+  const allowed = operations.has('customer.refund_read') || operations.has('customer.refund_request') || operations.has('customer.refund_execute');
   const scopeKey = JSON.stringify([identity, context.session_scope, context.permission_version]);
   const go = values => setParams({ tab: 'parties', panel: 'refunds', ...Object.fromEntries(Object.entries(values).filter(([, value]) => value !== '' && value != null)) });
   const orderRead = useBalanceRead(async config => {
