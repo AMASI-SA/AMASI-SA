@@ -211,3 +211,27 @@ builds with the reviewed public client origin, freeze intent-only B, require
 fresh exact-B CI including isolated database coverage and host adapter checks,
 then perform the original guard's actual-host release protocol. Publication is
 already authorized, but this source checkpoint itself is not a deployed result.
+
+## CI coverage correction before intent freeze
+
+The first complete-source checkpoint is preserved as
+`e9f5f85d7a9a8a1198ef593d564c20c2144a20e9`. No intent was frozen for it.
+Independent release-readiness inspection found that two new backend filenames
+fell outside the existing CI test list. Four workflow lines now collect them
+explicitly and require at least 21 catalog and seven fairness cases, retaining
+the global no-skip/no-failure guard. YAML and embedded Python validation passed.
+`evidence/ci-readiness.md` records the complete gate map. In particular, the
+existing exact-head Review Completion Resumable job runs the 41 locally skipped
+assembly cases on its isolated Mongo replica set and rejects skips.
+
+An initial local build invocation consumed the previous tracked intent and
+correctly rejected the new frontend source member before Vite ran. The original
+documented `MEZAN_RELEASE_BOOTSTRAP_INTENT=1` mode is required for source-A
+bootstrap; it will be used for the fresh A2 build. No release rules were changed
+or bypassed. Final B and actual-host adapter rehearsal must consume reviewed
+intent through the unchanged governed path.
+
+The isolated actual-host source checkout and frozen dependency prefetch completed
+successfully in 48.746 seconds; Yarn installation itself took 29.78 seconds.
+That is preparation only, not an adapter rehearsal or publication. The shared
+source, existing services, data, untracked files and lease remain unchanged.

@@ -66,6 +66,8 @@ jobs:
         run: >-
           python -B -m pytest --noconftest -q
           backend/tests/test_operational_balance*.py
+          backend/tests/test_operational_catalog_read_scope.py
+          backend/tests/test_order_batch_cpu_fairness.py
           backend/tests/test_awaiting_payment*.py
           backend/tests/test_dashboard_awaiting_financial_cohort.py
           backend/tests/test_web_page_access.py backend/tests/test_web_page_catalog_security.py
@@ -147,6 +149,8 @@ jobs:
               ('test_operational_financial_review_groups', 1),
               ('test_operational_financial_position_state', 25),
               ('test_operational_context_snapshot_reader', 21),
+              ('test_operational_catalog_read_scope', 21),
+              ('test_order_batch_cpu_fairness', 7),
               ('test_operational_financial_position_views', 48),
               ('test_operational_driver_review_packed_state', 3),
               ('test_operational_balance_delivery_start_rule', 53),
