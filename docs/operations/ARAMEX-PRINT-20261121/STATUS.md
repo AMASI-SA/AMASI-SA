@@ -1,4 +1,178 @@
-# ARAMEX-PRINT-20261121: replacement source candidate on current Production
+# ARAMEX-PRINT-20261121: verified external-label reprint repair, release pending
+
+## Current successor: strict external classifier, freshly verified
+
+Branch `codex/aramex-intransit-label-reprint-v2-20261122` is constructed directly
+on unchanged reviewed J c302943e330bcdd534a4a5697b8ef813dfb7cb6e. PR2061 and its
+frozen A/B remain intact and are superseded, not rebased or squashed. The new
+post-dispatch fence now uses only the existing strict Native classifier. Known
+external carrier names retain their external identity with meta.app_id=0;
+current-child/carrier/cancellation/supersession and local-document checks remain.
+
+Fresh GREEN on this corrected source: all9 isolated modules exit0 (2 workers,
+one subprocess/module),546 passed and59 subtests,146 real-Mongo skips awaiting
+CI. Counts:external_reprint13,mobile_parity20,compat58+59subtests,fallback111,
+current_guard29,salla_current37,history_identity114,history_races18,legacy146
+passed146skipped. The four zero-app cases include completed as the unchanged
+control and all3 outbound statuses; the previous source failed3 of these cases.
+git diff --check passed. No real customer fixtures or metadata are recorded.
+
+Next: push/open a new Draft PR; require fresh source-head CI/artifact, freeze
+new intent-only B, exact-B host20/24 and independent ARM64 rehearsals. No new
+intent, lease, merge or publication. Production changed by this successor:no.
+The platform panel is accessible again and shows the existing published version;
+no Republish was clicked. Original/control ADB acceptance remains outstanding.
+
+## PR2061 superseded before merge (additional RED review evidence)
+
+Do not merge or publish PR2061. A final source review found that the new
+post-dispatch fence unnecessarily called the broad legacy courier classifier.
+That classifier treats every app_id=0 as internal, while the existing strict
+Native classifier correctly retains recognized external carriers such as Aramex.
+Four new synthetic route cases set only current shipment meta.app_id=0:
+completed still reads the official Aramex PDF, but shipped/delivering/delivered
+fail409. Fresh focused result:3 failed,10 passed,exit1,3.22s. This proves a
+candidate regression; it does not claim the live target has this metadata.
+
+Preserve the immutable PR2061 A/B and successful rehearsal evidence. No merge,
+lease or new publication occurred. Next: construct a fresh source branch on the
+latest reviewed Production base, keep only the strict classifier in this fence,
+make all13 cases green, and freeze a new A/B after fresh verification. Never
+rewrite the existing frozen pair. Evidence branch remains non-deployable.
+
+## Immutable PR2061 candidate
+
+Evidence branch `codex/aramex-intransit-label-evidence-20261122` is never a
+deployment input. Immutable release branch is
+`codex/aramex-intransit-label-reprint-20261122`:
+- J c302943e330bcdd534a4a5697b8ef813dfb7cb6e;
+- A cdd0a2ceceb3830c857261f4bd16b6745ad750f1;
+- B 3857bf871a2a5381d3dab0be2a43df3acebb00b8 (only intent after A);
+- runtime rg5-cf7e5ab9a7144318970e0b812695a15a29a200833850e79ebce3feafd93dd661;
+- intent SHA256 33f7a4e0d6d8c376cfebc2164a22f41df1db4058c9b5e69b6fd665747cc7d607.
+
+Source-A readiness45030671240 passed, candidate14757448246 ZIP SHA256
+1e7dab79c5a7c71950f5947ed38d59562159a792bbea2d29cb674b456df913c2.
+Independent full Git manifests (Frontend1379,Backend1289,control322 records)
+and deterministic identity matched. Source-A Shipping45030671137 passed,
+including both Native modules and real-Mongo legacy variants. Exact-B checks
+and host20/24 configured adapter rehearsals are pending. The tracked independent
+ARM64 rehearsal helper uses an isolated clean clone, the configured yarn-build
+entry point and original verifier, checks an inactive guard first, and never
+creates a lease. No shared source mutation, merge, lease or publication yet.
+
+Next: finish exact-B checks and independent ARM64 rehearsal, preserve evidence,
+normal-merge B tree unchanged, then authorized guarded publication and actual
+original/control ADB acceptance. Do not rebase/squash A/B or deploy this branch.
+
+Independent exact-B ARM64 rehearsal now passed: configured frontend yarn-build
+adapter exit0, original verifier exit0,92.178s, Node24.19.0/Yarn1.22.22 dispatcher,
+governed toolchain inside adapter. Exact intent/identity/artifact matched and
+shared source stayed unchanged. No lease/publication. Durable result is
+`evidence/pr2061-arm64-result.json`; helper is tracked. Supplementary workspace
+pointer `/tmp/aramex-pr2061-stage.txt` must be inspected before materialization;
+it is not a deployment source and does not replace Cloud Build verification.
+
+Exact-B readiness45030907372 passed both host20.20.2/24.19.0 clean-clone
+configured adapter rehearsals. Remaining cross-domain checks must pass before
+merge. The tracked `evidence/materialize-pr2061.py` pins A/B/J/identity/intent
+and isolated-stage proof, requires a separately supplied reviewed normal merge
+SHA/tree-equivalent B, an inactive original guard and clean shared source,
+preserves previous generated outputs, and runs the original verifier. It does
+not create a lease or publish; syntax checked. Cloud Build still rebuilds its
+own artifacts, ignoring this local materialization. Use only after reviewed M.
+
+## Current source milestone (2026-11-22)
+
+The six red actual-route cases now pass after a narrow change to
+`backend/order_engine/amasi_shipping_compat.py`: the strict Native reader may
+return an existing verified external-carrier AWB for shipped, delivering or
+delivered orders. It preserves the observed Salla status and never posts a
+status or creates a shipment. Current-child/carrier/supersession/cancellation,
+assembly and employee-authority fences remain in place. Normal local-courier
+document generation remains rejected for these statuses; the existing separately
+guarded historic-courier recovery is unchanged.
+
+`test_external_carrier_reprint_status.py` now covers six positive Native routes
+and three negative local-document cases. The existing mobile parity regression
+also covers a fresh provider advancing beyond cached completion without a status
+POST or canonical-order mutation. Cancelled/refunded/unknown cases still fail
+closed. Shipping Print Boundary CI now explicitly runs both Native modules.
+
+Local isolated-module verification, all exit0:
+- external_carrier_reprint_status:9 passed;
+- mobile_external_label_read_parity:20 passed;
+- amasi_shipping_compat:58 passed,59 subtests passed;
+- carrier_shipment_read_fallback:111 passed;
+- shipping_label_current_guard:29 passed;
+- salla_current_shipping:37 passed;
+- courier_history_identity_recovery:114 passed;
+- courier_history_recovery_races:18 passed.
+Commands use Python -B -m pytest --noconftest --asyncio-mode=auto -q --tb=short,
+one module per process. git diff --check passed. Total396 tests plus59 subtests.
+
+PR2061 is Draft. Source444b29c4660a11e8570ed0fee682ffcd4cd14fe6 readiness
+run45030291278 passed and produced candidate artifact14757168626. Independent
+Git-manifest and deterministic-identity checks passed. No intent was frozen:
+Shipping Print Boundary run45030291253 found24 legacy expectations of the old
+status rejection (573 passed,1 skipped). These expectations are now updated to
+the new external-AWB contract and extended to delivering/cancelled/refunded,
+with observed status, no-provider-write and all non-label data assertions kept.
+Fresh isolated legacy module:146 passed,146 skipped (Mongo replica set absent
+locally); exact-head CI must execute both memory and real-Mongo variants.
+Earlier source candidate is superseded; build a new source A and intent B.
+Current local total542 passed plus59 subtests;146 Mongo skips remain for CI.
+
+Release state: no frozen intent/new lease/publication yet. Production unchanged
+by this follow-up. Root-case Native printing remains unverified until acceptance
+on the new reviewed release. Next: push updated source checkpoint, require fresh
+CI, new v5 A/B and exact-B host/ARM rehearsals, then authorized guarded publication
+and original/control ADB tests. Preserve all previous frozen pairs.
+
+## Earlier red checkpoint (preserved)
+
+New branch `codex/aramex-intransit-label-reprint-20261122` starts directly from
+reviewed Production `c302943e330bcdd534a4a5697b8ef813dfb7cb6e` (PR2059).
+Previous task evidence checkpoint adcb4f38cb000c34fef0f4d7e9ea1b0fb6861035 and
+all frozen A/B/M pairs remain unchanged. Latest authorization renews publication.
+
+The parser repair is ALREADY deployed inside source
+d396049f8fedf72c394169a451d45b227ad52376 / runtime
+rg5-aceb392af7809d9099ba92b27d4bb3d802999148c91013a5bba1cca5ad5f6c8e.
+Shipping module SHA256 db6401ac99121e6691a17ea0eccd6309d4dca430a6a7782f4b0009d10cf3398f
+matches exactly. Do not republish that candidate. Owner evidence checkpoint
+529bd8574031e5be30a2319e890796c74f561074 records original verify3 exit0,760
+requests/probe and inactive lease. Own fresh original guard also reports inactive.
+Both current canonical/cache-busted build-meta probes through the unchanged
+guard fetch routine returned200/application-json/exact reviewed SHA256
+abbc0f54ce6063852b165e10f4caa7f9b6520624b9412c2162f5569c30e0cb1e.
+
+Actual ADB acceptance still fails: existing-label fetch completes but print
+remains disabled. The UI freezes post-dispatch carrier reprints by requiring
+the exact completed state. No relink/scope diagnosis follows. The strict native
+carrier reader currently accepts only completed despite its existing outbound
+status set including shipped/delivering/delivered for other callers.
+
+Added six synthetic actual-route regressions: shipped/delivering/delivered x
+refresh/complete-and-refresh with a current official external AWB and durable
+assembly proof. Initial run:6 failed in16.58s, all HTTP409
+order_status_not_completed. Command: python -B -m pytest --noconftest
+--asyncio-mode=auto -q --tb=short backend/tests/test_external_carrier_reprint_status.py.
+At this earlier checkpoint no production code had changed. It was not ready for
+merge or publication; the current verified source milestone is recorded above.
+Fresh rerun after adding pre-result side-effect assertions:6 failed in4.34s,
+all at the intended HTTP200 expectation. Prior assertions passed: provider GET
+only, unchanged canonical order, unchanged assembly/stage, no manual refresh.
+
+Next: repair only existing external-carrier reprint eligibility. Preserve
+assembly/employee permission/current-child/replacement/cancellation fences;
+do not relax internal courier document issuance or change Salla statuses,
+financial state, linking or scopes. Verify native UI compatibility and the
+original/control in ADB after a new reviewed v5 release. Root-case printing is
+unverified until actual acceptance. No task lease or new publication; no shared
+workspace mutation by this follow-up. Checkpoint/Issue1006 must precede long work.
+
+## Previous parser repair history
 
 Current source branch: `codex/aramex-order-payload-release-v2-20261121`, directly
 based on reviewed Production `6e41bf25b936e8c4047df75bb170610dfc71b7f7` (PR2039).
