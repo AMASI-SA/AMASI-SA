@@ -1,0 +1,39 @@
+{
+  "reviewer": "release_code_review",
+  "status": "passed",
+  "file": "RUN-HOST-DEPLOY-2074.sh",
+  "sha256": "fa596f80844cb3e272f2819b6ca52686aca1e994fe41da9af2ea4fa2d4222958",
+  "bytes": 3679,
+  "shell_syntax_exit_status": 0,
+  "embedded_python_ast_parse_passed": true,
+  "previous_reviewed_launcher_sha256": "b810ab4c1d73a719dac47accb4bd28e2d47401b4c269ca38536693d6589452d3",
+  "exact_only_reviewed_delta_proven_by_previous_hash_reconstruction": true,
+  "pinned_evidence_commit": "afdbd4e293760938706849232a15f0afe6fa1edf",
+  "pinned_helpers": [
+    {
+      "file": "MANUAL-HOST-STAGE-2074.py",
+      "sha256": "e52f11663f943d9a4ab24f917b9ccd4a83ea8526cf1dd471867029c3fda3adde",
+      "remote_bytes_independently_verified": true
+    },
+    {
+      "file": "MANUAL-HOST-PREPARE-PREPUBLISH-2074.py",
+      "sha256": "a02f10c61751c439e38e81880aaa555bbe43ad7bc9a2906c8f6ab334d91c0bca",
+      "remote_bytes_independently_verified": true
+    },
+    {
+      "file": "RUN-HOST-VERIFY-2074.sh",
+      "sha256": "e23d910b9c03ef8e979a7f78cc4cc8947e640ced03efdce35953c1efd88e132e",
+      "remote_bytes_independently_verified": true
+    }
+  ],
+  "all_three_checksums_validated_before_operational_helpers": true,
+  "stage_and_prepare_gate_only_executed_in_fresh_children": true,
+  "verification_script_written_to_unique_temporary_directory": true,
+  "verification_script_mode": "0400",
+  "verification_command_printed_only_after_successful_gate": true,
+  "verification_not_executed_by_launcher": true,
+  "new_explicit_Deployment_Succeeded_required_before_verifier": true,
+  "unchanged_initial_original_guard_clean_base_isolated_clone_and_credential_protections": true,
+  "blocking_findings": [],
+  "operational_code_executed_or_imported": false
+}

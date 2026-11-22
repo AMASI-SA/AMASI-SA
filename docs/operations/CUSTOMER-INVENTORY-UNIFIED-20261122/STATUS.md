@@ -1,6 +1,6 @@
 # CUSTOMER-INVENTORY-UNIFIED-20261122
 
-## Current state — PR2074 merged; reviewed staging and publish gate ready
+## Current state — PR2074 merged; complete manual deployment handoff ready
 
 The owner requested publication code, supplied the original shared inactive-guard inspection, withdrew the misdirected slowness report, and asked what to execute next. Release preparation has resumed for the already approved customer refund/collection and inventory/purchase/receiving scopes. No additional source was supplied. The earlier publication deferral is retained in historical commits; this record is the current preparation handoff. No performance work or new performance gate is assigned to this task.
 
@@ -65,6 +65,10 @@ A separate reviewed helper is intended to run in a fresh Python child only after
 - `MANUAL-HOST-PREPARE-PREPUBLISH-2074.py`: SHA256 `a02f10c61751c439e38e81880aaa555bbe43ad7bc9a2906c8f6ab334d91c0bca` (4410 bytes). AST and independent source/API/schema review passed. No guard operation was executed locally. A fresh process avoids stale pre-staging module imports.
 - `ORIGINAL-MERGE-VALIDATION.json` records clean-D original validation. Independent helper review files are retained alongside the scripts.
 
-The final pinned launcher will fetch these exact reviewed bytes into an isolated temporary clone before any source mutation. Its syntax/source review and remote byte check are the remaining handoff packaging step. No new source or build identity is created.
+The final [RUN-HOST-DEPLOY-2074.sh](RUN-HOST-DEPLOY-2074.sh) launcher is pinned and independently reviewed: SHA256 `fa596f80844cb3e272f2819b6ca52686aca1e994fe41da9af2ea4fa2d4222958`,3679bytes. It pins helpers bundle `afdbd4e293760938706849232a15f0afe6fa1edf`, validates all three helper hashes before operational execution, and runs only staging then the original prepare/prepublish gate in separate fresh Python children. All three remote files were independently reread and match accepted bytes. No new source/build identity is created.
+
+The launcher also saves the reviewed [RUN-HOST-VERIFY-2074.sh](RUN-HOST-VERIFY-2074.sh), SHA256 `e23d910b9c03ef8e979a7f78cc4cc8947e640ced03efdce35953c1efd88e132e`,4821bytes, in its unique /tmp directory with mode0400. It prints an exact `VERIFY_COMMAND` after the gate succeeds. It never executes verification automatically. Run that command only after a NEW explicit Deployment Succeeded. The wrapper preserves the original operation lock and unchanged original three-probe verification core, adding an exact-own-lease fence inside the same lock. This prevents a foreign lease being substituted between a separate status and verification call. It requires complete original JSON, verified:true/checks3/exact IDs/artifact, original lease closure and final original status exactlyactive:false.
+
+Both launchers and the verifier passed shell/Python syntax and independent source reviews. These are prepared commands, not evidence that staging, lease or publication has occurred. Do not replay the already completed isolated rehearsal. Open Manage Publishing first, execute the deployment launcher once, click Re-publish changes once only after PREPUBLISH_PASSED, wait for the new success, then execute VERIFY_COMMAND and return its output. Stop on any failure and preserve recovery directories and the current lease.
 
 Production Git branch changed by this task: **YES**, ordinary merge D above. Live runtime publication: **NO**. No shared `/app` source/output mutation, owned lease, publication, live business test writes or paid Emergent chat. This evidence branch is documentation/handoff only; never deploy it. Canonical ledger: https://github.com/AMASI-SA/AMASI-SA/issues/1006#issuecomment-6238987123 .

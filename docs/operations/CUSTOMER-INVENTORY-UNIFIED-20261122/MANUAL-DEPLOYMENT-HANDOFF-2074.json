@@ -1,0 +1,40 @@
+{
+  "task_id": "CUSTOMER-INVENTORY-UNIFIED-20261122",
+  "status": "merged_actual_rehearsal_passed_manual_deployment_handoff_ready",
+  "pr": 2074,
+  "merged": true,
+  "deployment_git_sha": "24270ebdfdebb83282389308a2349cdb27e2b8e4",
+  "intent_git_sha": "447e83bfb95d2627877d46c7baa528e454a2e143",
+  "source_git_sha": "4e6c8a61bd1566e061a4f312e797ce239b582475",
+  "source_base_git_sha": "06763ffd6e3c3f7c861769b61d2c4e6b9b2d5f35",
+  "runtime_release_id": "rg5-2e0e3797d6ff3b955a3a23fd31487bd92721e70f316f3bdf34cab0d94c5d630f",
+  "deployment_tree": "6a906db6cf4fd3dda4b550483a0ef96067c6f1ed",
+  "actor": "codex-customer-inventory-unified-2074-20261122",
+  "helper_bundle_commit": "afdbd4e293760938706849232a15f0afe6fa1edf",
+  "deployment_launcher_sha256": "fa596f80844cb3e272f2819b6ca52686aca1e994fe41da9af2ea4fa2d4222958",
+  "stage_sha256": "e52f11663f943d9a4ab24f917b9ccd4a83ea8526cf1dd471867029c3fda3adde",
+  "prepare_prepublish_sha256": "a02f10c61751c439e38e81880aaa555bbe43ad7bc9a2906c8f6ab334d91c0bca",
+  "verifier_sha256": "e23d910b9c03ef8e979a7f78cc4cc8947e640ced03efdce35953c1efd88e132e",
+  "remote_pinned_bytes_verified": true,
+  "independent_reviews_passed": true,
+  "actual_host_rehearsal_passed": true,
+  "actual_rehearsal_evidence": "HOST-REHEARSAL-PASS-20261122.json",
+  "actual_shared_staging_observed": false,
+  "own_lease_created_or_observed": false,
+  "publish_click_observed": false,
+  "new_deployment_succeeded_observed": false,
+  "production_three_probe_verification_passed": false,
+  "last_actual_guard_observation": {
+    "source": "owner supplied actual isolated rehearsal transcript",
+    "active": false,
+    "incomplete": false
+  },
+  "next_action": [
+    "Open Manage Publishing",
+    "Run pinned deployment launcher once",
+    "Only on PREPUBLISH_PASSED click Re-publish changes exactly once immediately",
+    "Wait for a new explicit Deployment Succeeded",
+    "Run the exact VERIFY_COMMAND printed by launcher",
+    "Return complete verification result and final inactive status"
+  ]
+}
