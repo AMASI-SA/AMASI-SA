@@ -1,3 +1,61 @@
+# Current handoff — PR2069 published and verified; cold-read latency follow-up open
+
+The owner reports publication completed. The uploaded output of the original
+`production_release_guard.py verify --url https://mezansalla.com` reports
+`verified: true`, three consecutive checks, deployment
+`06763ffd6e3c3f7c861769b61d2c4e6b9b2d5f35`, source
+`063611ff163c90d80cdbf96446a28584fe429846`, runtime
+`rg5-90a88a6e7ac6a65670274d6180be0338d689f64d91efbf5cdfbbf651ca182bf7`
+and artifact tree
+`9437b75f8c005e379a7132e62c97e90af71e596d1907ba935f6a2a01da2cd4f4`.
+The observed backend boot is `2026-11-22T17:47:12.939028+00:00`, after the
+original prepare at `2026-11-22T17:35:06.658523+00:00`.
+The subsequent original guard status is exactly `{"active": false}`.
+No lease was manually cleared. Root did not independently inspect a new
+Deployment Succeeded screen; publication report and original verifier output
+are the available host/runtime evidence.
+
+See `manual-host-published-verify-pass-20261122.json` for the normalized
+original result. The uploaded terminal transcript is 44,027 bytes with SHA256
+`8e0b13ce4343599ab37503d9efa6add8062ca17bc2fb472623921a6505b24744`.
+Its 766 frontend checked-request entries are represented by their count;
+all other original verification fields and the final guard status are retained.
+
+## Post-publication owner report and next task
+
+The owner clarifies that the system is stable, memory is not under pressure,
+and overall load is markedly lower, but operational-balances pages take
+roughly ten times as long to load. This is a remaining performance regression,
+not a claim that PR2069 failed identity verification. Legacy /reports and
+general memory-pressure investigation are not the active scope.
+
+Source-only follow-up branch:
+`codex/operational-demand-latency-r2-20261122`, based on exact deployed M
+`06763ffd6e3c3f7c861769b61d2c4e6b9b2d5f35`.
+Investigation reproduced the child stdin-buffer lock abort during ordinary
+interpreter shutdown. A bounded actual-child fixture shows this delays release
+of the sole runner after a result is already published. A narrow raw-fd
+watcher fix and lifecycle regression tests are being reviewed; it does not
+yet establish production first-visible latency recovery. Serial selection,
+report stages and readiness polling are also being examined without restoring
+broad eager work or weakening source, actor, permission or financial invariants.
+
+The PR2069 publication handoff is closed. No new release lease is held by this
+task, and no follow-up source is yet merged or published. Preserve the real-host
+backup `/tmp/mezan-pr2069-preserved-pls7dhb7`, retained local originals
+`/app/.git/pr2069-stage-takiu9ut`, and all unrelated untracked files.
+Other tasks, including deferred customer/inventory source PR2074, remain
+separate. Next: checkpoint and review the latency fix, run affected gates,
+then follow the unchanged protocol-v5 source A / intent-only B process if ready.
+
+**Production changed: yes, for original PR2069**, as shown by the exact original
+three-probe verification. **Production changed by the latency follow-up: no.**
+
+The preceding current handoff supersedes all pending-publication and
+active-lease descriptions in the retained historical record below.
+
+---
+
 # Operational demand reads — implementation checkpoint
 
 ## Original prepare and prepublish PASSED — own lease active; publish next

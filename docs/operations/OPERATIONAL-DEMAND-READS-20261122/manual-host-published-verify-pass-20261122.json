@@ -1,0 +1,107 @@
+{
+  "attachment_sha256": "8e0b13ce4343599ab37503d9efa6add8062ca17bc2fb472623921a6505b24744",
+  "attachment_bytes": 44027,
+  "source": "User-uploaded original guard CLI output after user-reported completed publication",
+  "verification": {
+    "verified": true,
+    "source_git_sha": "063611ff163c90d80cdbf96446a28584fe429846",
+    "source_base_git_sha": "9b4fb716b430c32073b5ea7abaeaff62646d9633",
+    "git_sha": "063611ff163c90d80cdbf96446a28584fe429846",
+    "deployment_git_sha": "06763ffd6e3c3f7c861769b61d2c4e6b9b2d5f35",
+    "release_id": "rg5-90a88a6e7ac6a65670274d6180be0338d689f64d91efbf5cdfbbf651ca182bf7",
+    "protocol_version": 5,
+    "backend_runtime_source": {
+      "added_count": 12,
+      "deleted_count": 0,
+      "file_count": 1301,
+      "manifest_sha256": "04ead41cfcc989f3f034ecc15a0910de5264650e0813784b8af0af1d4100bf8a",
+      "modified_count": 15,
+      "projection_tree_oid": "2714a2fb29bfa6108840f4348a1bee89069d13b6",
+      "scope": "backend_runtime_package_v1",
+      "scope_tree_oid": "14c2c2375f959425d5526dcabfb2dfdcd891e30e",
+      "source_base_git_sha": "9b4fb716b430c32073b5ea7abaeaff62646d9633",
+      "source_base_root_tree_oid": "c0009bc3bcbbbdd5b1512ba12db08daf222ed892",
+      "source_base_scope_tree_oid": "89ba4d5c37d50e75cf95359c5d60afa2ecb87661",
+      "source_git_sha": "063611ff163c90d80cdbf96446a28584fe429846",
+      "source_root_tree_oid": "383b716d1d39c6556fed5f440d324a9c9b83d301",
+      "tombstone_count": 0,
+      "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tree_sha256": "b488f4e5a0292009d9f150f283459c72afb16de9c8a94088a797644f0903cf62"
+    },
+    "release_control_source": {
+      "added_count": 0,
+      "deleted_count": 0,
+      "file_count": 322,
+      "manifest_sha256": "e98fe53a22e215894c9eaaaf03dd4518f84dbf40e69ee1b12ab4be0524c2c296",
+      "modified_count": 10,
+      "projection_tree_oid": "90c1dcd334ef15899b370679bbaf5d877fd4b7b4",
+      "scope": "release_control_source_v1",
+      "scope_tree_oid": "90c1dcd334ef15899b370679bbaf5d877fd4b7b4",
+      "source_base_git_sha": "9b4fb716b430c32073b5ea7abaeaff62646d9633",
+      "source_base_root_tree_oid": "c0009bc3bcbbbdd5b1512ba12db08daf222ed892",
+      "source_base_scope_tree_oid": "f257e108471025d475113240ae8519178e77f619",
+      "source_git_sha": "063611ff163c90d80cdbf96446a28584fe429846",
+      "source_root_tree_oid": "383b716d1d39c6556fed5f440d324a9c9b83d301",
+      "tombstone_count": 0,
+      "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tree_sha256": "7245c56f957c54b1c19f36364362fb0a2d72ab497f914446d499df1f904dab8f"
+    },
+    "url": "https://mezansalla.com",
+    "checks": 3,
+    "boot_started_at": "2026-11-22T17:47:12.939028+00:00",
+    "boot_started_at_observations": [
+      "2026-11-22T17:47:12.939028+00:00"
+    ],
+    "frontend_artifact_tree_sha256": "9437b75f8c005e379a7132e62c97e90af71e596d1907ba935f6a2a01da2cd4f4",
+    "frontend_shell_cache": [
+      {
+        "path": "/index.html",
+        "cache_control": "no-cache, no-store, must-revalidate",
+        "etag": "\"37fe6e1d5588fc75dba8a5e2fd0e3088\"",
+        "age": null,
+        "cf_cache_status": null,
+        "content_type": "text/html; charset=utf-8"
+      },
+      {
+        "path": "/",
+        "cache_control": "no-cache, no-store, must-revalidate",
+        "etag": "\"37fe6e1d5588fc75dba8a5e2fd0e3088\"",
+        "age": null,
+        "cf_cache_status": null,
+        "content_type": "text/html; charset=utf-8"
+      },
+      {
+        "path": "/snapchat-accounts",
+        "cache_control": "no-cache, no-store, must-revalidate",
+        "etag": null,
+        "age": null,
+        "cf_cache_status": null,
+        "content_type": "text/html; charset=utf-8"
+      }
+    ],
+    "frontend_service_workers": [
+      {
+        "path": "/service-worker.js",
+        "state": "retirement_payload_present",
+        "cache_control": "no-cache, no-store, must-revalidate, max-age=0",
+        "etag": "\"28bfda7be2133fb6650e9bd67f2dffd1\"",
+        "age": null,
+        "cf_cache_status": null,
+        "content_type": "application/javascript; charset=utf-8"
+      },
+      {
+        "path": "/sw.js",
+        "state": "retirement_payload_present",
+        "cache_control": "no-cache, no-store, must-revalidate, max-age=0",
+        "etag": "\"28bfda7be2133fb6650e9bd67f2dffd1\"",
+        "age": null,
+        "cf_cache_status": null,
+        "content_type": "application/javascript; charset=utf-8"
+      }
+    ],
+    "frontend_checked_request_count": 766
+  },
+  "final_guard_status": {
+    "active": false
+  }
+}
