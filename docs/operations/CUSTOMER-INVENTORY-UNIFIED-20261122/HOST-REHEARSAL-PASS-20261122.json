@@ -1,0 +1,37 @@
+{
+  "task_id": "CUSTOMER-INVENTORY-UNIFIED-20261122",
+  "evidence_kind": "owner_supplied_actual_Emergent_terminal_transcript",
+  "reported_date": "2026-11-22",
+  "result": "PASS",
+  "shared_head_required_and_checked": "06763ffd6e3c3f7c861769b61d2c4e6b9b2d5f35",
+  "rehearsal_intent_git_sha": "447e83bfb95d2627877d46c7baa528e454a2e143",
+  "source_git_sha": "4e6c8a61bd1566e061a4f312e797ce239b582475",
+  "release_id": "rg5-2e0e3797d6ff3b955a3a23fd31487bd92721e70f316f3bdf34cab0d94c5d630f",
+  "helper_sha256": "b11576e193ecd80994a3127474433e50a75fa624eb78e22e4bbeca5e5e03c9d6",
+  "rehearsal_directory": "/tmp/mezan-pr2074-icmywyrd",
+  "build_log": "/tmp/mezan-pr2074-icmywyrd/adapter.log",
+  "adapter_exit": 0,
+  "built": true,
+  "artifact_tree": "68278a1d40fc16b2852359eeee963b12bb1820e675e691d74410ce4f47f5123b",
+  "package_boundaries_verified": true,
+  "displayed_shared_guard_checks": [
+    {
+      "active": false,
+      "incomplete": false
+    },
+    {
+      "active": false,
+      "incomplete": false
+    },
+    {
+      "active": false,
+      "incomplete": false
+    }
+  ],
+  "final_message": "DONE: isolated rehearsal only; no merge, shared output change, lease or publish",
+  "shared_source_or_outputs_changed": false,
+  "lease_created": false,
+  "merged_at_observation": false,
+  "published": false,
+  "next_action": "Fresh Production/PR/ledger checks, ordinary merge preserving exact B tree, guarded shared staging, then original prepare/prepublish immediately before one publication."
+}
