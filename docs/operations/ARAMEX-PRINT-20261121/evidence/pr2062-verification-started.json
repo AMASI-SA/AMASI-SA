@@ -1,0 +1,24 @@
+{
+  "platform_deployment": "930c6e9",
+  "source": "23e9514b9e8a33bffb2363bb1d3afd792355ab2c",
+  "deployment": "9b4fb716b430c32073b5ea7abaeaff62646d9633",
+  "release": "rg5-3ec8529aa0398fbe08b591ca47b175f1fd41af183c6fdae0fc21da4c223c618c",
+  "actor": "codex-aramex-pr2062-authorized",
+  "attempt": 1,
+  "wrapper_pid": 60459,
+  "started_at_utc": "2026-11-22T15:49:08.715759+00:00",
+  "phase": "original_guard_running",
+  "verified": false,
+  "health_before": {
+    "source_git_sha": "23e9514b9e8a33bffb2363bb1d3afd792355ab2c",
+    "release_id": "rg5-3ec8529aa0398fbe08b591ca47b175f1fd41af183c6fdae0fc21da4c223c618c",
+    "boot_started_at": "2026-11-22T15:39:09.365295+00:00",
+    "verified_identity_available": true,
+    "backend_runtime_source_verified": true,
+    "release_control_source_bound": true,
+    "critical_file_hashes_match": true,
+    "frontend_build_verified": true
+  },
+  "own_lease_active": true,
+  "native_acceptance_completed": false
+}

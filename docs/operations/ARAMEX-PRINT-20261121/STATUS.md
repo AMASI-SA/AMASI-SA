@@ -151,6 +151,19 @@ verification or alternate lease. Next: start exactly one attempt,monitor its
 progress/result without calling guard status during its operation lock,perform
 actual original/control Native ADB in parallel,archive raw proof after success.
 
+Intended new runtime is now independently observed LIVE: source A/RID exactly
+match,boot15:39:09.365295UTC,all six identity/source/control/critical/frontend
+flags true. Production changed:YES (new930c6e9 plus exact public health identity).
+Original verification attempt1 started15:49:08.715759UTC,wrapperPID60459,phase
+original_guard_running,alive,stdout still0 bytes as expected until completion.
+No 3/3 pass claimed yet. Persistent progress/result/raw output directory:
+/app/.release-preserved/aramex-pr2062-9b4fb716-recovery/verify-attempt-1.
+Do not launch another attempt or call status while its operation lock is held.
+Native authenticated com.amasi.sa.mobile is foreground and ready for actual
+target/control testing; the separate operational app was not changed/stopped.
+Next: Native original/control E2E,monitor attempt1 result,archive raw proof and
+final inactive status. Preserve UI literal-success/Cloud transcript gaps honestly.
+
 ## Current successor: strict external classifier, freshly verified
 
 Branch `codex/aramex-intransit-label-reprint-v2-20261122` is constructed directly
