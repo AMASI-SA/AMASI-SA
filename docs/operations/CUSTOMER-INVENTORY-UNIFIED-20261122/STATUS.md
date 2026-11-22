@@ -1,5 +1,49 @@
 # CUSTOMER-INVENTORY-UNIFIED-20261122
 
+## Post-publication performance follow-up — 22 November 2026
+
+The owner supplied original production verification output and a fresh shared
+workspace inspection. This adds evidence about the separate PR #2069 release;
+it does not deploy or change unified source A2.
+
+- User-supplied original verification reports `verified:true`, three checks,
+  source `063611ff163c90d80cdbf96446a28584fe429846`,
+  deployment `06763ffd6e3c3f7c861769b61d2c4e6b9b2d5f35` and runtime
+  `rg5-90a88a6e7ac6a65670274d6180be0338d689f64d91efbf5cdfbbf651ca182bf7`.
+  The verification finishes with `active:false`.
+- The subsequent user terminal result has the same deployment/source identity,
+  tracked-clean Production branch, inactive guard and
+  `target_source_in_intent:false` for unified A2. This is consistent with
+  PR #2074 remaining unpublished. Root has not independently observed a new
+  Deployment Succeeded UI or re-run the full guard against Production.
+- The owner reports very slow Reports and other pages after that publication.
+  Release identity success is not page-performance acceptance.
+- Read-only diagnosis on a separate clean M worktree identified the main
+  `/reports` four-request rendering barrier (unchanged by PR #2069) and the
+  newer operational report preparation queue shared with other demand reads.
+  Repeated HTTP 202 preparation can leave the report waiting without an overall
+  visible-attempt deadline. These mechanisms are verified in source; none is
+  yet established as the live cause.
+- Cloud Browser creation timed out before the page. External lightweight
+  probes included connection-stage timeouts; one readiness probe was HTTP 200
+  in 1.197 seconds, of which 1.086 seconds was connection/TLS setup. These are
+  client/network observations, not a Production CPU, database or queue profile.
+- The shared CodeServer `/app` was previously documented as Preview, separate
+  from Production. Do not substitute its process/database metrics for live
+  telemetry, invent diagnostics credentials, or weaken authentication.
+- Next decisive evidence: the exact slow page path plus a bounded browser
+  Network capture of request paths, statuses, waiting times and durations,
+  including pending requests; alternatively existing sanitized
+  `demand_read_sample` records from Emergent Production View Logs.
+- No performance source patch, source identity change, new lease, publication,
+  rollback, financial write or database write occurred in this follow-up.
+  Existing unified source, all source proofs, pending additional scopes and
+  owner publication deferral remain intact.
+
+Detailed sanitized evidence is in
+[POST-PUBLISH-PERFORMANCE-20261122.json](POST-PUBLISH-PERFORMANCE-20261122.json).
+The prior verified-source status below remains unchanged.
+
 ## Verified integration checkpoint — publication deferred
 
 This is a post-source evidence record. **Do not deploy this evidence branch.**

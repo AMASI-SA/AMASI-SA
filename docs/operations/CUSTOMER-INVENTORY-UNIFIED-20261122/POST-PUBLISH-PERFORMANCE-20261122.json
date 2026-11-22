@@ -1,0 +1,126 @@
+{
+  "task": "CUSTOMER-INVENTORY-UNIFIED-20261122",
+  "kind": "post-publication-performance-diagnosis",
+  "observed_date": "2026-11-22",
+  "timezone": "Asia/Riyadh",
+  "status": "inconclusive-live-bottleneck; source inspection complete; browser/network evidence needed",
+  "baseline": {
+    "deployment_git_sha": "06763ffd6e3c3f7c861769b61d2c4e6b9b2d5f35",
+    "source_git_sha": "063611ff163c90d80cdbf96446a28584fe429846",
+    "release_id": "rg5-90a88a6e7ac6a65670274d6180be0338d689f64d91efbf5cdfbbf651ca182bf7"
+  },
+  "unified": {
+    "pull_request": 2074,
+    "source_git_sha": "4e6c8a61bd1566e061a4f312e797ce239b582475",
+    "published": false,
+    "changed": false
+  },
+  "owner_evidence": {
+    "original_verify": true,
+    "checks": 3,
+    "final_guard_active": false,
+    "workspace_tracked_clean": true,
+    "target_source_in_intent": false,
+    "attachment_sha256": "8e0b13ce4343599ab37503d9efa6add8062ca17bc2fb472623921a6505b24744",
+    "attachment_bytes": 44027,
+    "frontend_checked_request_count_per_probe": 766,
+    "boot_started_at": "2026-11-22T17:47:12.939028+00:00",
+    "classification": "user-supplied output; not fresh root-observed hosting UI"
+  },
+  "source_findings": [
+    {
+      "path": "frontend/src/pages/Reports.jsx",
+      "finding": "Initial Promise.all blocks full-page rendering on dashboard, unfiltered daily-costs, reconciliation summary and payment-gateway metrics; child report reads begin after barrier",
+      "introduced_by_2069": false,
+      "live_causality": "unverified"
+    },
+    {
+      "path": "frontend/src/lib/api.js",
+      "finding": "Dashboard response may await authoritative summary enrichment up to2.5 seconds",
+      "introduced_by_2069": false,
+      "live_causality": "unverified"
+    },
+    {
+      "path": "backend/demand_read_jobs.py",
+      "finding": "One fenced global runner awaits one child job at a time across operational reports/home/ledger/register plus dashboard/assembly; maximum job180seconds",
+      "live_causality": "unverified"
+    },
+    {
+      "path": "frontend/src/pages/operational/ApprovedReports.jsx",
+      "finding": "Snapshot-bound summary before detail; repeated demand202 has no whole-attempt report deadline",
+      "live_causality": "unverified"
+    },
+    {
+      "path": "backend/operational_workspace_read_builders.py",
+      "finding": "Revision/actor/filter-bound projections expire after300seconds; cold report still executes canonical arithmetic",
+      "live_causality": "unverified"
+    }
+  ],
+  "client_probes": [
+    {
+      "path": "/api/health",
+      "client": "urllib",
+      "status": 200,
+      "total_ms": 11710.7,
+      "bytes": 103774,
+      "limit": "includes unresolved network/proxy/connection time; identity nested under release was not extracted in this sample"
+    },
+    {
+      "path": "/build-meta.json",
+      "client": "urllib",
+      "status": 403,
+      "total_ms": 5953.1,
+      "limit": "unresolved response origin; not proof of deployed metadata failure"
+    },
+    {
+      "path": "/api/live",
+      "client": "curl",
+      "exit": 28,
+      "total_seconds": 5.00632,
+      "connected": false,
+      "limit": "connection-stage timeout; not server processing duration"
+    },
+    {
+      "path": "/api/ready",
+      "client": "curl",
+      "status": 200,
+      "total_seconds": 1.197483,
+      "tls_complete_seconds": 1.085664,
+      "first_byte_seconds": 1.197393,
+      "bytes": 30,
+      "ready": true
+    },
+    {
+      "path": "/api/health",
+      "client": "curl",
+      "exit": 28,
+      "total_seconds": 6.003387,
+      "connected": false,
+      "limit": "connection-stage timeout; not server processing duration"
+    }
+  ],
+  "browser": {
+    "page_observed": false,
+    "error": "createBrowserTab timed out and runtime reset",
+    "security_bypassed": false
+  },
+  "requirements": {
+    "financial_numbers_preserved": true,
+    "no_speculative_queue_or_cache_change": true,
+    "performance_not_inferred_from_identity_verify": true,
+    "preview_metrics_not_production": true
+  },
+  "next_evidence": [
+    "Actual slow route and browser Network path/status/duration/pending request metadata",
+    "Existing sanitized demand_read_sample from Production View Logs: queue_ms/build_ms/wall_ms/process_cpu_ms/Mongo latency"
+  ],
+  "mutations": {
+    "source": false,
+    "shared_app": false,
+    "database": false,
+    "financial": false,
+    "lease": false,
+    "publish": false,
+    "rollback": false
+  }
+}
