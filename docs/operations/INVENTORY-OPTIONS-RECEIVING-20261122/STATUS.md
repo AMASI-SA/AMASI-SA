@@ -4,6 +4,7 @@ Task: INVENTORY-OPTIONS-RECEIVING-20261122. Repository AMASI-SA/AMASI-SA.
 Current branch: codex/inventory-options-receiving-r2-20261122. Previous branch and Draft PR2063 remain preserved as superseded checkpoints.
 Reviewed current Production base J2: 9b4fb716b430c32073b5ea7abaeaff62646d9633 (PR2062 external-carrier reprint release). Original J: c302943e330bcdd534a4a5697b8ef813dfb7cb6e.
 Previous durable WIP:49524eb95a3498f2ab335ca49f2493610ed8bb2d; superseded source A1:1e89a97b351313692e7c6b6064e07bf3f364c612.
+Previous r2 source A2:5ab27e875a0b3f675f9561fb4004289b70469349; the next source checkpoint includes the visual correction below and requires a fresh candidate intent.
 The exact r2 source SHA and later CI/release state are recorded in Issue1006 bounded section INVENTORY-OPTIONS-RECEIVING-20261122.
 
 ## Authorization and scope
@@ -42,8 +43,16 @@ Production advanced through reviewed PR2062 to J2 during A1 verification. Its7ch
 
 ## Release state and next safe action
 
-No intent B frozen, merge, lease, deployment or Production write. Shared /app source untouched. Browser attempts to obtain actual shared guard status encountered crashed tabs and disconnected code-server; no active:false result was observed, so no release rehearsal or shared source change is authorized by the guard yet. Reconnect management UI, run actual shared production_release_guard.py status and continue only if inactive.
+### A2 browser acceptance and visual correction
 
-Checkpoint current source; finish exact-source GitHub gates and review browser screenshots. Then review candidate intent from governed A/B build, freeze intent-only B without squash/rebase, pass v5 clean rehearsal, recheck Production J and actual shared guard, perform one authorized publication, require newer explicit Deployment Succeeded and original verify with3probes, then inactive guard. Preserve unrelated files/leases and never use reset --hard. Exact next state remains in Issue1006; do not republish from this source-status document alone.
+Exact A2 Operational Balance Web run45036362654 browser job137250885421 passed all7inventory scenarios. Artifact14759977607 was downloaded and its archive SHA2563a072a00f893b8c8ecf0377ad06680b7c01074a8702d3caac7811d43e3469e8e verified. Screenshots use actual React/CSS and synthetic fixtures only. Source manifest records57files. No receiving/payment call occurred when approving an unreceived credit invoice; later exact2of4 receipt kept2pending and unpaid balance415 after reload.
+
+Visual review nevertheless found the global op-card max-width680px capped the inner invoice fieldset inside the centered70%panel, leaving unused left space; inherited op-tile column layout also made catalog results unnecessarily tall. Minimal scoped CSS removes the nested cap and restores horizontal native catalog rows. Browser assertions now check actual inner fieldset edges and row geometry in addition to the outer70%panel. This changes source identity; never reuse the A2 candidate intent. Exact new-source browser screenshots and gates remain required.
+
+A2 Security Gate, G47, Stock Eligibility, Shipping Print Boundary and Release Readiness passed. Backend Operational Balance and Python CodeQL were still running at this source checkpoint. Intent-aware clean adapter rehearsals were skipped by the candidate-A workflow as designed; a source build is not rehearsal evidence.
+
+No intent B frozen, merge, lease, deployment or Production write. Shared /app source untouched. Actual shared `python scripts/production_release_guard.py status` was observed returning `active:false` in a new terminal in the existing VSCode session on2026-11-22. The browser subsequently crashed again while reading Git status; that command's result was not observed. Recheck the actual shared guard and tracked source state before any shared source change; preserve unrelated untracked work. Browser connection may still require recovery.
+
+Checkpoint corrected source; finish exact-source GitHub gates and review browser screenshots. Then review its fresh candidate intent from governed A/B build, freeze intent-only B without squash/rebase, pass v5 clean rehearsal, recheck Production J and actual shared guard, perform one authorized publication, require newer explicit Deployment Succeeded and original verify with3probes, then inactive guard. Preserve unrelated files/leases and never use reset --hard. Exact next state remains in Issue1006; do not republish from this source-status document alone.
 
 Production changed by this task: **no**.

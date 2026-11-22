@@ -107,7 +107,34 @@ async function capture(page,name) {
   await page.evaluate(()=>document.fonts.ready);
   const size=await page.evaluate(()=>({viewport:innerWidth,html:document.documentElement.scrollWidth,body:document.body.scrollWidth}));
   assert(size.html<=size.viewport+1 && size.body<=size.viewport+1,'Horizontal page overflow '+name+': '+JSON.stringify(size));
-  measurements.push({name,...size});
+  const draftLayout=await page.evaluate(()=>{
+    const draft=document.querySelector('.mz-stock-native-form .mz-operational-purchase > .mz-invoice-draft');
+    if(!draft)return null;
+    const panel=draft.parentElement,panelBox=panel.getBoundingClientRect(),panelStyle=getComputedStyle(panel),box=draft.getBoundingClientRect();
+    const number=value=>parseFloat(value)||0;
+    const left=panelBox.left+number(panelStyle.borderLeftWidth)+number(panelStyle.paddingLeft);
+    const right=panelBox.right-number(panelStyle.borderRightWidth)-number(panelStyle.paddingRight);
+    return {width:box.width,contentWidth:right-left,leftGap:box.left-left,rightGap:right-box.right,
+      results:[...draft.querySelectorAll('.mz-product-results > button')].map(button=>{
+        const row=button.getBoundingClientRect(),style=getComputedStyle(button);
+        const photo=button.querySelector('.mz-product-photo').getBoundingClientRect(),copy=button.querySelector('.mz-product-result-copy').getBoundingClientRect();
+        return {direction:style.flexDirection,height:row.height,photoLeft:photo.left,copyRight:copy.right,
+          centerDifference:Math.abs(photo.top+photo.height/2-copy.top-copy.height/2),
+          contentHeight:Math.max(...[...button.children].map(child=>child.getBoundingClientRect().height)),
+          verticalPaddingAndBorder:number(style.paddingTop)+number(style.paddingBottom)+number(style.borderTopWidth)+number(style.borderBottomWidth)};
+      })};
+  });
+  if(draftLayout){
+    const detail=name+': '+JSON.stringify(draftLayout);
+    assert(Math.abs(draftLayout.width-draftLayout.contentWidth)<=2,'Inner invoice draft does not fill its panel '+detail);
+    assert(Math.abs(draftLayout.leftGap)<=2&&Math.abs(draftLayout.rightGap)<=2,'Inner invoice draft is not centered in its panel '+detail);
+    for(const row of draftLayout.results){
+      assert.equal(row.direction,'row','Product result is a vertical tile '+detail);
+      assert(row.copyRight<=row.photoLeft+2&&row.centerDifference<=2,'Product photo and text are not aligned in one RTL row '+detail);
+      assert(row.height<=row.contentHeight+row.verticalPaddingAndBorder+2,'Product result has excessive vertical space '+detail);
+    }
+  }
+  measurements.push({name,...size,...(draftLayout?{draft:draftLayout}:{})});
   const filename=name+'.png';await page.screenshot({path:path.join(out,filename),fullPage:true});screenshots.push(filename);
 }
 const paymentCalls=()=>calls.filter(call=>call.path.endsWith('/movements') || call.path.endsWith('/allocate-payment'));
