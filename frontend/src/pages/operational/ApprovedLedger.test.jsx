@@ -5,6 +5,7 @@ import { simpleBalancesApi as api } from './simpleBalancesApi';
 
 jest.mock('./simpleBalancesApi', () => ({ simpleBalancesApi: { resource: jest.fn(), supplierInvoice: jest.fn(), ledger: jest.fn(), movements: jest.fn(), statement: jest.fn() },
   simpleBalanceError: () => 'تعذر تحميل الكشف' }));
+jest.mock('./api', () => ({ requestId:()=>'a-reversal-request' }));
 jest.mock('../../lib/dates', () => ({ todaySA: () => '2026-11-19' }));
 global.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -142,4 +143,57 @@ test.each(['emkan','paypal'])('provider %s never advertises an unsupported state
   api.ledger.mockImplementation(async(kind,ident,params)=>({...paged(params),resource:provider,provider_orders:true}));
   await render({resource:provider,onStatements:jest.fn(),canUploadStatements:true});
   expect(host.textContent).not.toContain('إضافة كشف');
+});
+
+test('authorized staff confirm a linked reversal with a reason and reload the displayed statement', async () => {
+  const original = { ...rows[0], can_reverse: true };
+  const result = () => ({ ...paged({page:1,page_size:8}), items:[original], total:1, total_pages:1 });
+  api.ledger.mockImplementation(async () => result());
+  api.reverseMovement = jest.fn().mockResolvedValue({ id:'reversal-id', reverse_of:original.id });
+  await render({ resource:bank, context:{ ...ctx, status:'active' } });
+  await click('حركة 0');
+  await click('عكس الحركة');
+  expect(api.reverseMovement).not.toHaveBeenCalled();
+  const reason = host.querySelector('dialog textarea');
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(reason, 'تكرار الإدخال');
+    reason.dispatchEvent(new Event('input', { bubbles:true }));
+  });
+  await click('تأكيد العكس');
+  expect(api.reverseMovement).toHaveBeenCalledWith(original.id, {
+    request_id:'a-reversal-request', expected_session_scope:'s', reason:'تكرار الإدخال'
+  });
+  expect(host.querySelector('dialog').textContent).toContain('تم عكس الحركة');
+  expect(api.ledger).toHaveBeenCalledTimes(2);
+  expect([...host.querySelectorAll('dialog button')].some(b=>b.textContent==='عكس الحركة')).toBe(false);
+});
+
+test('an uncertain reversal keeps the same command on retry; unrelated staff never see the action', async () => {
+  const original = { ...rows[0], can_reverse:false };
+  api.movements.mockImplementation(async params => ({...paged(params), items:[original], total:1, total_pages:1}));
+  const current = { ...ctx, status:'active', actor:{id:'staff'} };
+  await render({resource:null, context:current});
+  await click('حركة 0');
+  expect(host.querySelector('dialog').textContent).not.toContain('عكس الحركة');
+  await click('إغلاق');
+  original.can_reverse = true;
+  await render({resource:null, context:{...current, permission_version:2}});
+  await click('حركة 0');
+  await click('عكس الحركة');
+  const submit = () => host.querySelector('dialog button[type="submit"]');
+  expect(submit().disabled).toBe(true);
+  const reason = host.querySelector('dialog textarea');
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(reason, ' خطأ في الحساب ');
+    reason.dispatchEvent(new Event('input', { bubbles:true }));
+  });
+  api.reverseMovement = jest.fn().mockRejectedValueOnce(new Error('timeout'))
+    .mockResolvedValueOnce({ id:'reversal-id', reverse_of:original.id });
+  await click('تأكيد العكس');
+  expect(reason.disabled).toBe(true);
+  await click('إعادة محاولة العكس');
+  const [first, retry] = api.reverseMovement.mock.calls;
+  expect(retry).toEqual(first);
+  expect(first[1].reason).toBe('خطأ في الحساب');
+  expect(host.querySelector('dialog').textContent).toContain('تم عكس الحركة');
 });

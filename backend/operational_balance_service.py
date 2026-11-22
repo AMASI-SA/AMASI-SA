@@ -867,8 +867,11 @@ def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=Fa
         valuations = {key: value for key, value in valuations.items() if value["provider"] == "paypal"}
     valuation_issues = []
     allocated = {}
+    reversed_debt_entries = set()
     for movement in state["movements"]:
         preparation_checkpoint()
+        if movement.get("reverse_of") and movement["party_type"] in {"employee", "supplier", "external_person"}:
+            reversed_debt_entries.update((movement["id"], movement["reverse_of"]))
         for entry in movement.get("allocations", []):
             preparation_checkpoint()
             key = entry["obligation_id"]
@@ -986,6 +989,8 @@ def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=Fa
         elif movement["kind"] == "transfer":
             party["actual"] -= signed
         elif movement["kind"] == "correction":
+            if movement.get("id") in reversed_debt_entries:
+                continue
             if movement["party_type"] in {"bank", "cash", "employee_custody"}:
                 if not movement.get("bank_id"):
                     party["actual"] += signed
@@ -998,13 +1003,19 @@ def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=Fa
                 party[opposite] -= reduced
                 party[field] += amount - reduced
         elif movement["party_type"] in {"operating_expense", "owner_withdrawal"}:
-            effect = -amount if (movement["party_type"] == "owner_withdrawal" and movement.get("workspace_operation") == "owner.return"
-                                 and movement["direction"] == "incoming") else amount
+            subtract = (movement["direction"] == "incoming" and (
+                movement["party_type"] == "owner_withdrawal" and movement.get("workspace_operation") == "owner.return"
+                or movement["party_type"] == "operating_expense" and movement.get("reverse_of")))
+            effect = -amount if subtract else amount
             party["actual"] += effect
             party["expense_paid" if movement["party_type"] == "operating_expense" else "owner_withdrawals"] += effect
         elif movement["party_type"] not in {"bank", "cash"}:
             party["actual"] -= signed
             if movement.get("settlement_scope") == "account":
+                # Original and reversal retain both cash legs and their dated ledger rows.
+                # Netting the two as ordinary new settlements would settle another debt.
+                if movement.get("id") in reversed_debt_entries:
+                    continue
                 # Apply the cash to the account. The original invoices retain their own evidence.
                 paying = signed < 0
                 due = "outstanding_payable" if paying else "outstanding_receivable"
