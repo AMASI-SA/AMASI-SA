@@ -33,6 +33,16 @@ exact B was pushed, duplicate source-A Native45032318759 and CodeQL45032318607
 runs were intentionally cancelled; exact-B counterparts remain mandatory.
 The local546+59subtests proof and all frozen pairs remain unchanged.
 
+All exact-B PR2062 checks now completed:27 successful,6 conditional skips,
+zero pending/failure; mergeable CLEAN. Fresh source review confirms one narrow
+production-module change, read-only external-AWB eligibility, existing strict
+carrier identity and unchanged status-write, authority, current-child and local
+document fences. Exact A/B relation, tracked intent bytes and current origin J
+were rechecked. Durable full check list/tree: `evidence/pr2062-premerge.json`.
+No merge/publication/lease at this checkpoint. Next: normal merge expected B,
+verify M tree equals B, then pinned guarded materialization and authorized
+prepare/prepublish/Republish; original verify3 and actual Native acceptance.
+
 ## Current successor: strict external classifier, freshly verified
 
 Branch `codex/aramex-intransit-label-reprint-v2-20261122` is constructed directly
