@@ -35,7 +35,13 @@ For app-first publication, new refund menu/editor require literal server capabil
 - Previous production/task merge: **76 passed +7 subtests** with real isolated Mongo.
 - Mobile root: complete locked dependency install, full TypeScript exit0, nine fresh integrated release/behavior suites pass, including 19 refund groups and immutable auth preservation. Independent stale-journal race checks pass. See mobile matching status for details.
 
-CI includes the new grant, bridge, adapter and web editor. Inspect remote checks on the new exact SHA; local results do not establish CI or publication success.
+Source checkpoint: `6f086242d5d408057258c29a99131a358f830c9d`, tree `75b67181253fa5cf7dd2222911db5229dd77c042`. CI includes the new grant, bridge, adapter and web editor. Local results do not establish CI or publication success.
+
+Remote runtime-auth job137267673364 found an old exact owner-catalogue expectation missing the intentionally derived refund key. It was reproduced locally (one failed/four passed). The follow-up changes only `test_runtime_stability_mongo_auth.py`: exact catalogue plus that one derived key, preserving `_NoLookupDb`, owner/enabled assertions and two added full manager negatives (including a forged native refund key). Narrow rerun: seven passed; root repeated seven passed. No production authorization code changed for this fixture update.
+
+The remote release-readiness Frontend build correctly rejected this integration history: the inherited reviewed intent does not describe the new sources, and the merged source is not a valid source-A transition. This is the already documented release preparation requirement, not a reason to weaken the guard. A later release needs a fresh governed A/intent-only-B pair based on then-current production. Other exact-source checks were still running at this handoff; check the latest PR before a release.
+
+Paired mobile source `d68fe5867eb086c7e0aa0b447827f4dc35bdb3d2` passed full TypeScript, direct ESLint and complete Android Hermes export. Its private CI jobs fail before steps and the cloud Expo browser access times out. No APK was built or published. Follow the mobile status/PR for that separate blocker.
 
 ## Release and continuation
 
