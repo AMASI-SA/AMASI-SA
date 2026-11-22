@@ -2,6 +2,9 @@
 from copy import deepcopy
 from decimal import Decimal
 
+import pytest
+from fastapi import HTTPException
+
 from operational_balance_inventory import purchase_view, save_purchase
 from operational_balance_service import account_statement, create_movement, report
 from operational_balance_store import STATES, digest, mutate, read
@@ -17,6 +20,51 @@ from test_operational_workspace_refunds import BASE as REFUNDS
 OWNER = {"id": "owner"}
 STAMP = "2026-11-11T12:00:00+00:00"
 ACCOUNT = {"kind": "bank", "id": "bank", "currency": "SAR", "name": "الإنماء"}
+
+
+@pytest.mark.parametrize("allocate_first", [False, True])
+def test_supplier_payment_allocation_and_reversal_cannot_both_apply(allocate_first):
+    from operational_inventory_payment_allocation import candidates
+    from test_operational_movement_reversal_routes import command as reversal_command
+
+    async def scenario(db, client):
+        await db.mezan_products_v2.insert_one({"user_id": "owner", "mezan_product_id": "reversal-product",
+            "name": "مخزون الاختبار", "status": "sale", "archived": False})
+        invoice = await save_purchase(db, "owner", "owner", {
+            "request_id": "reversal-invoice-1", "expected_session_scope": digest(["owner", "owner"]),
+            "supplier_id": "supplier", "invoice_number": "REVERSAL-1", "invoice_date": "2026-11-02", "note": "",
+            "lines": [{"kind": "product", "item_id": "reversal-product", "quantity": 5,
+                       "unit_price": "20.00", "tax": "0.00"}]}, clock=STAMP)
+        payment = await create_movement(db, "owner", "owner", {
+            "request_id": "reversal-old-payment", "expected_session_scope": digest(["owner", "owner"]),
+            "party_type": "supplier", "party_id": "supplier", "bank_id": "bank", "amount": "70.00",
+            "currency": "SAR", "direction": "outgoing", "kind": "payment", "reference": "reversal-paid-70",
+            "allocations": [], "note": "دفعة المورد السابقة", "receipt_id": None, "order_number": None},
+            on_account=True, clock="2026-11-03T12:00:00+00:00")
+        payload = {"request_id": "reversal-allocation-1", "expected_session_scope": digest(["owner", "owner"]),
+                   "movement_id": payment["id"], "amount": "50.00", "business_date": "2026-11-11"}
+        path = "/api/operational-balances/workspace/movements/" + payment["id"] + "/reverse"
+        if allocate_first:
+            await allocate(db, OWNER, invoice["id"], payload, clock=STAMP)
+            before = await read(db, "owner")
+            rejected = await client.post(path, json=reversal_command("owner"))
+            assert rejected.status_code == 409, rejected.text
+            assert rejected.json()["detail"]["code"] == "operational_reversal_unavailable"
+            assert await read(db, "owner") == before
+            assert bank_and_supplier(before) == ("930.00", Decimal("230.00"))
+        else:
+            reversed_payment = await client.post(path, json=reversal_command("owner"))
+            assert reversed_payment.status_code == 200, reversed_payment.text
+            before = await read(db, "owner")
+            offered = await candidates(db, OWNER, invoice["id"])
+            assert offered["items"] == [] and offered["excluded"]
+            with pytest.raises(HTTPException) as rejected:
+                await allocate(db, OWNER, invoice["id"], payload, clock=STAMP)
+            assert rejected.value.status_code == 409
+            assert rejected.value.detail["code"] == "inventory_payment_unavailable"
+            assert await read(db, "owner") == before
+            assert bank_and_supplier(before) == ("1000.00", Decimal("300.00"))
+    run(scenario)
 
 
 def activity_rows(state):

@@ -31,6 +31,8 @@ from operational_financial_position_core import position_balance
 from operational_supplier_credit_purchase import CreditInvoice, record_purchase
 from operational_visible_report_read import run_visible_report_read
 from operational_workspace_ledger_filters import check_period, filter_activity, movement_type
+from operational_workspace_reversals import add_reversal_actions, install_reversal_routes
+from operational_movement_reversal import ReversalIndex
 from operational_workspace_courier_summary import courier_summary
 from operational_workspace_projection import (
     automatic_source, balance_note, compact_rows, history as automatic_history, projected_balance_status, row_order,
@@ -558,7 +560,7 @@ def _row(policy, resource, item, amount, side, description):
     return result
 
 
-def _index_ledger_sources(state, computed, resources):
+def _index_ledger_sources(state, computed, resources, *, reversals=None):
     """Group this request's rows once; ledger projection retains every access check."""
     sources = {"openings": (), "obligations": (), "movements": (), "customer_returns": (), "customer_collections": (), "driver_receipts": ()}
     indexed = {(row["kind"], row["id"], row["currency"]): {name: [] for name in sources}
@@ -579,6 +581,8 @@ def _index_ledger_sources(state, computed, resources):
         for item in checked_rows(rows):
             append(name, (item.get("party_type"), item.get("party_id"), item.get("currency")), item)
     for item in checked_rows(state.get("movements", [])):
+        if reversals is not None:
+            reversals.add(item)
         primary = (item["party_type"], item["party_id"], item["currency"])
         cash = (item.get("bank_kind"), item.get("bank_id"), item.get("bank_currency") or item["currency"])
         append("movements", primary, item)
@@ -597,10 +601,12 @@ def _index_ledger_sources(state, computed, resources):
     return indexed
 
 
-def _movement_rows(resource, policy, movements, make_row=_row):
+def _movement_rows(resource, policy, movements, make_row=_row, *, reversals=None):
     kind, identity, currency = resource["kind"], resource["id"], resource["currency"]
     result = []
     for item in checked_rows(movements):
+        if reversals is not None:
+            reversals.add(item)
         primary = (item["party_type"], item["party_id"], item["currency"]) == (kind, identity, currency)
         cash = (item.get("bank_kind"), item.get("bank_id"), item.get("bank_currency") or item["currency"]) == (kind, identity, currency)
         if not (primary or cash) or not _can_row(policy, resource, item):
@@ -623,6 +629,8 @@ def _movement_rows(resource, policy, movements, make_row=_row):
             "transfer": "تحويل بين الحسابات", "correction": "تسوية موثقة",
             "wallet_funding": "تمويل رصيد الإعلانات", "refund": "رد مبلغ",
         }.get(item["kind"], "حركة مالية")
+        if item.get("reverse_of"):
+            description = "عكس حركة مالية"
         result.append(make_row(policy, resource, item, amount, side, description))
         fee = Decimal(item.get("actual_fee_amount", "0"))
         if (primary and (kind == "provider" and item["kind"] == "settlement"
@@ -639,7 +647,7 @@ def _movement_rows(resource, policy, movements, make_row=_row):
     return result
 
 
-def ledger_items(state, computed, resource, policy, *, sources=None, make_row=None):
+def ledger_items(state, computed, resource, policy, *, sources=None, make_row=None, reversals=None):
     index_only = make_row is not None
     make_row = make_row or _row
     preparation_checkpoint()
@@ -697,7 +705,7 @@ def ledger_items(state, computed, resource, policy, *, sources=None, make_row=No
                 row.update(automatic_history=family, automatic_group=group)
                 row["description"] = "راتب تلقائي" if family == "salary" else "أجرة توصيل"
             result.append(row)
-    result.extend(_movement_rows(resource, policy, sources["movements"], make_row))
+    result.extend(_movement_rows(resource, policy, sources["movements"], make_row, reversals=reversals))
     if kind in {"bank", "provider"}:
         for case in checked_rows(sources["customer_returns"]):
             if (case.get("refund_source_type"), case.get("refund_source_id"), case.get("currency")) != (kind, identity, currency):
@@ -931,8 +939,8 @@ def _register_candidate(policy, resource, item, amount, side, description):
             "amount": fmt(amount), "side": side, "description": description}
 
 
-def _register_index(state, computed, resources, policy):
-    sources = _index_ledger_sources(state, computed, resources)
+def _register_index(state, computed, resources, policy, *, reversals=None):
+    sources = _index_ledger_sources(state, computed, resources, reversals=reversals)
     unique = {}
     for resource in checked_rows(resources):
         key = resource["kind"], resource["id"], resource["currency"]
@@ -944,13 +952,14 @@ def _register_index(state, computed, resources, policy):
 
 
 def _courier_history(state, resource, policy):
-    """Reconcile just the opened courier against the same financial position as its detail page."""
-    selected = party_projection_state(state, "courier", resource["id"])
+    """Reconcile one visible carrier or driver against its own financial position."""
+    kind = resource["kind"]
+    selected = party_projection_state(state, kind, resource["id"])
     computed = report(selected)
     current = next((r for r in computed["parties"] if (r["party_type"], r["party_id"], r["currency"]) ==
-                    ("courier", resource["id"], resource["currency"])), None)
-    resource = {**resource, "balance": _balance(current or {}, "courier"),
-                "position_balance": position_balance(current, "courier")}
+                    (kind, resource["id"], resource["currency"])), None)
+    resource = {**resource, "balance": _balance(current or {}, kind),
+                "position_balance": position_balance(current, kind)}
     sources = {"openings": selected["openings"].values(), "movements": selected["movements"],
                "obligations": computed["obligations"], "customer_returns": ()}
     rows = ledger_items(state, computed, resource, policy, sources=sources, make_row=_register_candidate)
@@ -983,6 +992,7 @@ def install_workspace_routes(router, db, current_user, scope):
     review_snapshots = ReviewSnapshots()
     register_indexes = OrderedDict()
     install_workspace_review_routes(router, db, current_user, scope)
+    install_reversal_routes(router, db, current_user, scope)
 
     async def load(user, *, allow_disabled=False):
         actor, owner, source = await scope(db, user, "workspace")
@@ -1147,18 +1157,19 @@ def install_workspace_routes(router, db, current_user, scope):
     @router.get("/workspace/ledger/{kind}/{identity}")
     async def ledger(request: Request, kind: str, identity: str, page: int = Query(default=1, ge=1),
                      page_size: int = Query(default=5, ge=1, le=8), focus_id: str | None = Query(default=None, max_length=250),
-                     ad_bank_fx: bool = False, page_only: bool = False, courier_history: bool = False, provider_orders: bool = False, q: str = Query(default="", max_length=160),
+                     ad_bank_fx: bool = False, page_only: bool = False, courier_history: bool = False, account_history: bool = False, provider_orders: bool = False, q: str = Query(default="", max_length=160),
                      date_from: str | None = None, date_to: str | None = None, demand: bool = False, user=Depends(current_user)):
         check_period(date_from, date_to)
         if demand:
             from operational_workspace_demand_routes import serve_projection
             return await serve_projection(db, user, request, "operational_ledger", resource=(kind, identity),
                 filters={"ad_bank_fx": ad_bank_fx, "provider_orders": provider_orders, "q": q,
-                         "date_from": date_from, "date_to": date_to, "courier_history": courier_history},
+                         "date_from": date_from, "date_to": date_to, "courier_history": courier_history,
+                         "account_history": account_history},
                 page=page, page_size=page_size, focus_id=focus_id)
         if page_only and not provider_orders and not q and not date_from:
             return await run_visible_report_read(request, lambda: movement_window(user, kind, identity, page, page_size,
-                account_detail=True, ad_bank_fx=ad_bank_fx, focus_id=focus_id, courier_history=courier_history))
+                account_detail=True, ad_bank_fx=ad_bank_fx, focus_id=focus_id, courier_history=courier_history, account_history=account_history))
         def project(actor, owner, policy, state, resources, computed):
             resource = next((r for r in resources if r["kind"] == kind and r["id"] == identity), None)
             if not resource or resource["access"]["movements"] == "none":
@@ -1173,7 +1184,8 @@ def install_workspace_routes(router, db, current_user, scope):
                           for currency, accounts in groups.items() for item in accounts if item["provider"] == identity]
                 return {"resource": resource, "provider_orders": True, "amounts": amounts, "undated": undated,
                         **paginate(rows, page, page_size)}
-            rows = ledger_items(state, computed, resource, policy)
+            reversals = ReversalIndex()
+            rows = ledger_items(state, computed, resource, policy, reversals=reversals)
             summary = _pos_summary(state, resource)
             balance_status = projected_balance_status(resource, rows)
             if date_from and resource["access"].get("report"):
@@ -1189,7 +1201,9 @@ def install_workspace_routes(router, db, current_user, scope):
                 display = list(filter_activity(rows, q=q, date_from=date_from, date_to=date_to))
             else:
                 display = compact_rows(rows)
-            return {"resource": resource, **summary, **paginate(display, page, page_size, focus_id),
+            selected_page = paginate(display, page, page_size, focus_id)
+            add_reversal_actions(selected_page["items"], state, policy, reversals)
+            return {"resource": resource, **summary, **selected_page,
                     "balance_status": balance_status, "balance_note": balance_note(balance_status),
                     "courier_summary": courier_summary(state, computed, resource),
                     "expected_collections": expected_collections(state, computed, resource, policy)}
@@ -1212,15 +1226,16 @@ def install_workspace_routes(router, db, current_user, scope):
             selected_resource=("supplier", supplier_id), invoice_headers=True, invoice_detail=invoice_id))
 
     async def movement_window(user, kind, identity, page, page_size, *, account_detail=False,
-                              ad_bank_fx=False, focus_id=None, courier_history=False):
+                              ad_bank_fx=False, focus_id=None, courier_history=False, account_history=False):
         from operational_financial_position_state import read_financial_position_state
         from operational_workspace_supplier_invoices import fill_historical_headers
         actor, owner, _, policy = await load(user)
         target = (kind, identity) if kind is not None else None
+        selected_history = account_history and target is not None
         header = await directory_state(db, owner)
         async def catalog(state, *, directory):
             resources, computed = await resource_catalog(db, owner, policy, state, selected_resource=target,
-                directory_only=directory, ad_bank_fx=ad_bank_fx, provider_positions=account_detail and kind == "provider",
+                directory_only=directory, ad_bank_fx=ad_bank_fx, provider_positions=(account_detail or selected_history) and kind == "provider",
                 reviewed_counts=review_snapshots.counts.get((owner, source_key(state))))
             if target and not any(r["access"]["movements"] != "none" for r in resources):
                 fail("operational_workspace_not_found", "الكشف غير متاح", 404)
@@ -1228,7 +1243,7 @@ def install_workspace_routes(router, db, current_user, scope):
 
         resources, _ = await catalog(header, directory=True)
         key = (owner, actor["id"], policy.version, policy.owner_override, target, account_detail, ad_bank_fx,
-               header["revision"], digest(resources), courier_history)
+               header["revision"], digest(resources), courier_history, account_history, policy.can_operation("movements.reverse"))
         state = None
         cached = register_indexes.get(key)
         if cached is not None and monotonic() - cached[0] < 120:
@@ -1237,36 +1252,54 @@ def install_workspace_routes(router, db, current_user, scope):
         else:
             state = await read_financial_position_state(db, owner)
             summary = {}
+            reversals = ReversalIndex()
             courier_rows = {}
-            if account_detail:
+            if account_detail or selected_history:
                 resources, computed = await catalog(state, directory=False)
                 await fill_historical_headers(db, owner, resources, computed, state, policy)
                 resource = resources[0]
                 def selected():
-                    rows = ledger_items(state, computed, resource, policy, make_row=_register_candidate)
-                    if courier_history and kind == "courier" and resource["access"]["balance"] and resource["access"]["movements"] == "all":
+                    rows = ledger_items(state, computed, resource, policy, make_row=_register_candidate, reversals=reversals)
+                    metadata = {}
+                    if account_detail:
+                        metadata.update(resource=resource, **_pos_summary(state, resource),
+                                        courier_summary=courier_summary(state, computed, resource))
+                    if selected_history:
+                        if resource["access"]["balance"] and resource["access"]["movements"] == "all":
+                            rows, status = with_running_balances(resource, rows)
+                        else:
+                            status = "restricted"
+                        metadata.update(balance_status=status, balance_note=balance_note(status))
+                    elif courier_history and kind == "courier" and resource["access"]["balance"] and resource["access"]["movements"] == "all":
                         rows, _ = with_running_balances(resource, rows)
-                    return compact_rows(rows), {"resource": resource, **_pos_summary(state, resource),
-                        "courier_summary": courier_summary(state, computed, resource)}
+                    rows = compact_rows(rows)
+                    if not account_detail:
+                        unique = {}
+                        for row in checked_rows(rows):
+                            unique.setdefault(row["event_id"], row)
+                        rows = list(unique.values())
+                    return rows, metadata
                 index, summary = await prepare_in_thread(selected)
             else:
                 if state["revision"] != header["revision"]:
                     resources, _ = await catalog(state, directory=True)
                 claims = await prepare_in_thread(register_claims, state, policy.resource("provider", "paypal")["balance"])
                 await fill_historical_headers(db, owner, resources, claims, state, policy)
-                index = await prepare_in_thread(_register_index, state, claims, resources, policy)
+                index = await prepare_in_thread(_register_index, state, claims, resources, policy, reversals=reversals)
+            await prepare_in_thread(add_reversal_actions, index, state, policy, reversals)
             if state["revision"] == header["revision"] and len(index) <= 20000:
                 register_indexes[key] = (monotonic(), index, summary, courier_rows)
                 register_indexes.move_to_end(key)
                 while len(register_indexes) > 3 or sum(len(value[1]) for value in register_indexes.values()) > 24000:
                     register_indexes.popitem(last=False)
         result = await prepare_in_thread(_open_register_page, index, policy, page, page_size, focus_id)
-        if courier_history and not account_detail:
-            visible = {(row["party_id"], row["currency"]) for row in result["items"]
-                       if row["party_type"] == "courier" and not row.get("summary")}
+        if (courier_history or account_history) and not account_detail and not selected_history:
+            history_kinds = {"courier", "store_driver"} if account_history else {"courier"}
+            visible = {(row["party_type"], row["party_id"], row["currency"]) for row in result["items"]
+                       if row["party_type"] in history_kinds and not row.get("summary")}
             for resource in resources:
-                company = resource["id"], resource["currency"]
-                if (resource["kind"] != "courier" or company not in visible or not resource["access"]["balance"]
+                company = resource["kind"], resource["id"], resource["currency"]
+                if (company not in visible or not resource["access"]["balance"]
                         or resource["access"]["movements"] != "all" or company in courier_rows):
                     continue
                 if state is None:
@@ -1275,8 +1308,8 @@ def install_workspace_routes(router, db, current_user, scope):
                         break  # Do not attach figures from a different posting revision.
                 courier_rows[company] = await prepare_in_thread(_courier_history, state, resource, policy)
             for row in result["items"]:
-                if row["party_type"] == "courier" and not row.get("summary"):
-                    balances = courier_rows.get((row["party_id"], row["currency"]), {})
+                if row["party_type"] in history_kinds and not row.get("summary"):
+                    balances = courier_rows.get((row["party_type"], row["party_id"], row["currency"]), {})
                     row["balance_after"] = balances.get(row["id"])
         current_actor, current_owner, _, current = await load(user)
         if (actor["id"], owner, policy.version, policy.owner_override) != (current_actor["id"], current_owner, current.version, current.owner_override):
@@ -1289,7 +1322,7 @@ def install_workspace_routes(router, db, current_user, scope):
                         kind: str | None = Query(default=None, max_length=50), id: str | None = Query(default=None, max_length=200),
                         q: str = Query(default="", max_length=160), date_from: str | None = None, date_to: str | None = None,
                         direction: Literal["in", "out", "transfer"] | None = None, status: Literal["done", "info"] | None = None,
-                        page_only: bool = False, courier_history: bool = False, demand: bool = False, user=Depends(current_user)):
+                        page_only: bool = False, courier_history: bool = False, account_history: bool = False, demand: bool = False, user=Depends(current_user)):
         check_period(date_from, date_to)
         if (kind is None) != (id is None):
             fail("operational_account_filter_invalid", "اختر نوع الحساب والحساب معًا", 422)
@@ -1298,14 +1331,16 @@ def install_workspace_routes(router, db, current_user, scope):
             return await serve_projection(db, user, request, "operational_register",
                 resource=(kind, id) if kind is not None else None,
                 filters={"q": q, "date_from": date_from, "date_to": date_to, "direction": direction,
-                         "status": status, "courier_history": courier_history}, page=page, page_size=page_size)
+                         "status": status, "courier_history": courier_history, "account_history": account_history},
+                page=page, page_size=page_size)
         if page_only and not any((q, date_from, direction, status)):
-            return await run_visible_report_read(request, lambda: movement_window(user, kind, id, page, page_size, courier_history=courier_history))
+            return await run_visible_report_read(request, lambda: movement_window(user, kind, id, page, page_size, courier_history=courier_history, account_history=account_history))
         def project(actor, owner, policy, state, resources, computed):
             selected = [r for r in resources if kind is None or (r["kind"], r["id"]) == (kind, id)]
             if kind is not None and not any(r["access"]["movements"] != "none" for r in selected):
                 fail("operational_workspace_not_found", "الكشف غير متاح", 404)
-            indexed = _index_ledger_sources(state, computed, selected)
+            reversals = ReversalIndex()
+            indexed = _index_ledger_sources(state, computed, selected, reversals=reversals)
 
             def resource_rows():
                 for resource in checked_rows(selected):
@@ -1319,7 +1354,9 @@ def install_workspace_routes(router, db, current_user, scope):
                         q or date_from or direction or status) else compact_rows(rows)
                     yield display
 
-            return register_page(resource_rows(), page, page_size)
+            result = register_page(resource_rows(), page, page_size)
+            add_reversal_actions(result["items"], state, policy, reversals)
+            return result
         return await run_visible_report_read(request, lambda: checked_read(user, project, selected_resource=(kind, id) if kind is not None else None, invoice_headers=True))
 
     @router.get("/workspace/statements/{kind}/{identity}")

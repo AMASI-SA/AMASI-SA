@@ -15,6 +15,7 @@ from operational_balance_store import AUTHORIZATION_GUARD, fail
 
 POLICY_FIELD = "operational_balance_access"
 OPERATION_LABELS = {
+    "movements.reverse": "عكس حركة مالية يدوية",
     "employee.accrual": "تسجيل مستحق موظف",
     "employee.payment": "دفع مبلغ لموظف",
     "employee.collection": "استلام مبلغ من موظف",
@@ -198,7 +199,7 @@ async def load_access(db, actor, owner):
 
 
 @asynccontextmanager
-async def guard_access(db, actor, owner, operation, resources=()):
+async def guard_access(db, actor, owner, operation, resources=(), *, movement_actor=None):
     """Compose fresh checks with the existing guard, including just before CAS."""
     actor_id = actor.get("_mobile_actor_id") or actor.get("id")
     operations = (operation,) if isinstance(operation, str) else tuple(operation)
@@ -212,8 +213,12 @@ async def guard_access(db, actor, owner, operation, resources=()):
         policy.require_enabled()
         for key in operations:
             policy.require_operation(key)
+        if movement_actor is not None and not policy.owner_override and movement_actor != policy.actor["id"]:
+            fail("operational_workspace_not_found", "الحركة غير متاحة", 404)
         for kind, identity in required_resources:
             policy.require_use(kind, identity)
+            if movement_actor is not None and not policy.can_read_movement(kind, identity, movement_actor):
+                fail("operational_workspace_not_found", "الحركة غير متاحة", 404)
         return policy
 
     policy = await verify()

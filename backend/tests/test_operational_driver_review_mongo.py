@@ -216,7 +216,8 @@ def test_real_failures_have_no_partial_financial_or_review_effect(case):
     run(scenario)
 
 
-def test_real_pos_settlement_uses_existing_operational_allocation_without_second_driver_cash():
+@pytest.mark.parametrize("mobile", [False, True])
+def test_real_pos_settlement_uses_existing_operational_allocation_without_second_driver_cash(mobile):
     async def scenario(db):
         assignment, payload = await seed(db)
         from operational_pos_identity import configure_pos
@@ -238,16 +239,24 @@ def test_real_pos_settlement_uses_existing_operational_allocation_without_second
                    'kind': 'collection', 'amount': '150.00', 'bank_id': 'bank', 'note': 'Synthetic received payment',
                    'allocations': [], 'bank_arrival_confirmed': True, 'reference': 'TEST-BANK-REF',
                    'business_date': NOW[:10], 'actual_fee_amount': '2.50', 'fee_reference': 'TEST-FEE'}
-        for change in ({'bank_arrival_confirmed': False}, {'amount': '201'}, {'reference': ''},
-                       {'fee_reference': ''}):
+        source = 'employee_app' if mobile else 'mezan2'
+        if mobile:
+            del request['reference']
+        invalid = [{'bank_arrival_confirmed': False}, {'amount': '201'}, {'fee_reference': ''},
+                   {'business_date': None}]
+        if not mobile:
+            invalid.append({'reference': ''})
+        async def post(command):
+            return await create_movement(db, 'owner', 'owner', command, clock=NOW, source=source)
+        for change in invalid:
             with pytest.raises(HTTPException):
-                await create_movement(db, 'owner', 'owner', {**request, 'request_id': digest(change), **change}, clock=NOW)
-        posted = await create_movement(db, 'owner', 'owner', request, clock=NOW)
-        assert posted == await create_movement(db, 'owner', 'owner', request, clock=NOW)
+                await post({**request, 'request_id': digest(change), **change})
+        posted = await post(request)
+        assert posted['reference'] == ('' if mobile else 'TEST-BANK-REF')
+        assert posted == await post(request)
         with pytest.raises(HTTPException) as duplicate:
-            await create_movement(db, 'owner', 'owner', {**request, 'request_id': 'synthetic-new-request'}, clock=NOW)
-        assert duplicate.value.detail['code'] == 'operational_reference_duplicate'
-        await create_movement(db, 'owner', 'owner', request, clock=NOW)
+            await post({**request, 'request_id': 'synthetic-new-request'})
+        assert duplicate.value.detail['code'] == ('operational_pos_insufficient' if mobile else 'operational_reference_duplicate')
         state = await db[STATES].find_one({'_id': 'owner'})
         result = report(state)
         assert result['summary']['actual_liquidity'] == '1150.00'

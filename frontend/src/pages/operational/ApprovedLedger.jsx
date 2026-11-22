@@ -10,6 +10,7 @@ import WorkspaceSnapshot from './WorkspaceSnapshot';
 import CarrierAccountSummary from './CarrierAccountSummary';
 import { isStatement, minorUnits, movementDate, movementRecorder, movementTitle, resourceKey, signedResourceBalance } from './simpleBalancesModel';
 
+import MovementReversal from './MovementReversal';
 import SupplierInvoiceDetail from './SupplierInvoiceDetail';
 import ProviderOrders from './ProviderOrders';
 import { CustomerAdjustmentBadges } from './CustomerAdjustments';
@@ -86,7 +87,7 @@ function ActivityTable({ result, resource, onDetail, onHistory }) {
         {balanceVisible && <td><LedgerBalance value={row.balance_after} resource={resource} /></td>}</>
         : <><td>{row.from_name && row.to_name ? <>{row.from_name} ← {row.to_name}</> : row.party_name || '—'}</td>
           <td><Amount value={row.amount} currency={row.currency} /></td>
-          <td><span className={'pill ' + (row.informational ? '' : 'st-done')}>{row.informational ? 'إثبات' : 'مسجّلة'}</span></td>
+          <td><span className={'pill ' + (row.informational ? '' : 'st-done')}>{row.reversal_id ? 'معكوسة' : row.reverse_of ? 'قيد عكسي' : row.informational ? 'إثبات' : 'مسجّلة'}</span></td>
           <td><bdi>{row.reference || row.order_number || '—'}</bdi></td></>}
     </tr>;
   })}</tbody></table></div>;
@@ -263,6 +264,11 @@ function LedgerPage({ context, identity, resource, canOpenOrderDetails = false, 
       <h2>{detail.invoice_id ? 'تفاصيل فاتورة المورد' : 'تفاصيل الحركة'}</h2><dl className="detail-list">{[['البيان',detail.description],['المبلغ',<Amount value={detail.amount} currency={detail.currency} />],
         ['الحساب',detail.party_name],['من',detail.from_name],['إلى',detail.to_name],['التاريخ',movementDate(detail,true)],['سجّلها',movementRecorder(detail)],
         ['المرجع',detail.reference],['رقم الطلب',detail.order_number],['الملاحظة',detail.note]].filter(([,v])=>v).map(([t,v])=><div key={t}><dt>{t}</dt><dd>{v}</dd></div>)}</dl>
+      <MovementReversal key={detail.id} row={detail} context={context} onSaved={result => {
+        setDetail(current => current?.id === result.reverse_of ? { ...current, can_reverse:false, reversal_id:result.id } : current);
+        read.reload();
+        if (context.directoryOnly && !readable) detailRead.reload();
+      }} />
       {detail.invoice_id && <SupplierInvoiceDetail row={detail} scope={[identity, context.session_scope, context.permission_version]}/>}
       <button type="button" className="button" onClick={() => setDetail(null)}>إغلاق</button></dialog>}
   </>;

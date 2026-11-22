@@ -53,6 +53,7 @@ export function movementDate(row, full = false) {
 }
 
 export function movementTitle(row, compact = false) {
+  if (row.reverse_of) return 'قيد عكسي · ' + (row.reference || row.reverse_of);
   if (compact && row.automatic_history === 'salary') return 'آخر راتب مسجل';
   if (compact && row.automatic_history === 'delivery') return 'آخر أجرة توصيل';
   if (row.salla_return_waybill) return row.order_number ? `أجرة رجيع · طلب ${row.order_number}` : 'أجرة بوليصة رجيع';

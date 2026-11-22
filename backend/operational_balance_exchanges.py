@@ -66,50 +66,58 @@ def project_exchanges(state):
         case['purchase_status'] = 'purchased' if all(i['remaining_to_buy']==0 for i in case['items']) else ('partial' if case['purchases'] else 'pending')
 
 
-async def add_contribution(db, owner, actor, state, case, payload, stamp):
+async def add_contribution(db, owner, actor, state, case, payload, stamp, operation_id, source):
     bank = await entity(db, owner, 'bank', payload['bank_id'], 'SAR')
-    value = money(payload['amount']); ref = payload['reference'].strip()
+    value = money(payload['amount'])
+    ref = (payload.get('reference') or '').strip()
+    if not ref and source != 'employee_app':
+        fail('exchange_contribution_invalid', 'أدخل مرجع الدفع الفعلي', 422)
     try:
         paid = instant(payload['paid_at'])
-        if not ref or paid > instant(stamp) or paid < instant(case['order_created_at']):
+        if paid > instant(stamp) or paid < instant(case['order_created_at']):
             raise ValueError()
     except (ValueError, TypeError):
-        fail('exchange_contribution_invalid', 'أدخل مرجع وتاريخ الدفع الفعلي الصحيح')
+        fail('exchange_contribution_invalid', 'أدخل تاريخ الدفع الفعلي الصحيح')
     all_contributions = [c for r in state['customer_exchanges'] for c in r['contributions']]
-    if any(c['bank_id']==bank['id'] and c['reference']==ref for c in all_contributions):
-        fail('exchange_contribution_duplicate', 'المساهمة مسجلة بالفعل')
     existing_id = payload.get('existing_movement_id')
-    existing = next((m for m in state['movements'] if m['id']==existing_id), None) if existing_id else None
     if existing_id:
-        if (not existing or existing.get('bank_kind')!='bank' or existing.get('bank_id')!=bank['id']
-                or existing.get('direction')!='incoming' or existing.get('kind')!='collection'
-                or existing.get('party_type')!='bank' or existing.get('allocations')
+        existing = next((m for m in state['movements'] if m['id'] == existing_id), None)
+        if (not existing or existing.get('bank_kind') != 'bank' or existing.get('bank_id') != bank['id']
+                or existing.get('direction') != 'incoming' or existing.get('kind') != 'collection'
+                or existing.get('party_type') != 'bank' or existing.get('party_id') != bank['id']
+                or existing.get('currency') != 'SAR' or existing.get('allocations')
                 or existing.get('automatic_order_bank') or existing.get('order_number')
-                or existing.get('exchange_id') or existing.get('reference')!=ref
-                or money(existing['amount'])!=value
-                or any(c['movement_id']==existing_id for c in all_contributions)):
+                or existing.get('exchange_id') or existing.get('reverse_of')
+                or money(existing['amount']) != value
+                or any(c['movement_id'] == existing_id for c in all_contributions)):
             fail('exchange_contribution_link_invalid', 'الحركة غير مؤهلة أو مرتبطة مسبقًا')
+        recorded_ref = (existing.get('reference') or '').strip()
+        if ref and ref != recorded_ref:
+            fail('exchange_contribution_link_invalid', 'مرجع المساهمة لا يطابق الحركة')
+        ref = recorded_ref
         movement_id = existing_id
-    else:
-        if any(m.get('bank_id')==bank['id'] and m.get('reference')==ref for m in state['movements']):
+    if ref and any(c['bank_id'] == bank['id'] and c.get('reference') == ref for c in all_contributions):
+        fail('exchange_contribution_duplicate', 'المساهمة مسجلة بالفعل')
+    if not existing_id:
+        if ref and any(m.get('bank_id') == bank['id'] and (m.get('reference') or '').strip() == ref for m in state['movements']):
             fail('exchange_contribution_existing', 'الحركة موجودة؛ اربطها بالاستبدال بدل تسجيل وارد جديد')
-        if any(r.get('refund_source_id')==bank['id'] and r.get('refund_reference')==ref for r in state.get('customer_returns', [])):
+        if ref and any(r.get('refund_source_id') == bank['id'] and r.get('refund_reference') == ref for r in state.get('customer_returns', [])):
             fail('exchange_contribution_reference_conflict', 'المرجع مستخدم لاسترداد سابق')
-        movement_id = digest([owner,'exchange-contribution',bank['id'],ref])
+        movement_id = digest([owner, 'exchange-contribution', bank['id'], ref]) if ref else operation_id
         state['movements'].append({'id':movement_id,'request_id':movement_id,'party_type':'bank','party_id':bank['id'],
             'bank_kind':'bank','bank_id':bank['id'],'bank_name':bank['name'],'name':bank['name'],
             'amount':fmt(value),'currency':'SAR','direction':'incoming','kind':'collection','allocations':[],
             'actual_fee_amount':'0.00','receipt_id':None,'reference':ref,'order_number':None,
-            'original_order_number':case['order_number'],'exchange_id':case['id'],'source':'mezan2',
+            'original_order_number':case['order_number'],'exchange_id':case['id'],'source':source,
             'actor_id':actor,'occurred_at':stamp,'business_date':paid.date().isoformat(),
             'note':'مساهمة عميل في استبدال الطلب '+case['order_number']})
     case['contributions'].append({'movement_id':movement_id,'bank_id':bank['id'],'bank_name':bank['name'],
         'amount':fmt(value),'reference':ref,'paid_at':paid.isoformat(),'actor_id':actor,'linked_existing':bool(existing_id)})
 
 
-async def save_exchange(db, owner, actor, payload, *, case_id=None, clock=None):
+async def save_exchange(db, owner, actor, payload, *, case_id=None, clock=None, source="mezan2"):
     stamp = clock or now()
-    await claim_movement(db, owner, actor, {**payload,'_operation':'customer_exchange','_case_id':case_id})
+    operation_id = await claim_movement(db, owner, actor, {**payload,'_operation':'customer_exchange','_case_id':case_id})
     async def apply(state):
         previous = replay(state,'customer_exchange:'+actor,payload)
         if previous is not None:return previous
@@ -139,9 +147,10 @@ async def save_exchange(db, owner, actor, payload, *, case_id=None, clock=None):
                 'order_created_at':order['created_at'],'created_at':stamp,'actor_id':actor,'items':items,
                 'shipping':ship,'purchases':[],'contributions':[],'future_replacement_order_id':None}
             cases.append(case)
-            if payload.get('contribution'):await add_contribution(db,owner,actor,state,case,payload['contribution'],stamp)
+            if payload.get('contribution'):
+                await add_contribution(db, owner, actor, state, case, payload['contribution'], stamp, operation_id, source)
         elif payload['action']=='contribution':
-            await add_contribution(db,owner,actor,state,case,payload['contribution'],stamp)
+            await add_contribution(db, owner, actor, state, case, payload['contribution'], stamp, operation_id, source)
         elif payload['action']=='shipping_completed':
             ref=payload['shipment_reference'].strip()
             if not ref:fail('exchange_shipment_reference_required','أدخل مرجع شحنة البدل المنفذة')
@@ -185,7 +194,7 @@ async def save_exchange(db, owner, actor, payload, *, case_id=None, clock=None):
                 'actor_id':actor,'recorded_at':stamp,'source':'actual_supplier_invoice_operational_only'})
         else:fail('exchange_action_invalid','إجراء غير مسموح')
         project_exchanges(state)
-        audit(state,actor,'customer_exchange_saved',before,case,'استبدال مرتبط بالطلب الأصلي','mezan2',stamp)
+        audit(state,actor,'customer_exchange_saved',before,case,'استبدال مرتبط بالطلب الأصلي',source,stamp)
         remember(state,'customer_exchange:'+actor,payload,case)
         return case
     try:return await mutate(db,owner,apply)
