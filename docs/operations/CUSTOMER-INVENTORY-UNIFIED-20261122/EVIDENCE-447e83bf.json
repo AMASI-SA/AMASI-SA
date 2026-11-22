@@ -1,0 +1,129 @@
+{
+  "task_id": "CUSTOMER-INVENTORY-UNIFIED-20261122",
+  "status": "intent_frozen_exact_B_acceptance_in_progress",
+  "production_changed": false,
+  "source_git_sha": "4e6c8a61bd1566e061a4f312e797ce239b582475",
+  "source_base_git_sha": "06763ffd6e3c3f7c861769b61d2c4e6b9b2d5f35",
+  "intent_git_sha": "447e83bfb95d2627877d46c7baa528e454a2e143",
+  "intent_tree_sha": "6a906db6cf4fd3dda4b550483a0ef96067c6f1ed",
+  "intent_blob_sha": "33ffe9f95b8093c1eeec33b2869708422358a7d0",
+  "release_id": "rg5-2e0e3797d6ff3b955a3a23fd31487bd92721e70f316f3bdf34cab0d94c5d630f",
+  "intent_sha256": "762a168ddd6bbe86afd29dd6ed8b5add13d33c426d2edc1fbf4d934c772326ab",
+  "pr_url": "https://github.com/AMASI-SA/AMASI-SA/pull/2074",
+  "source_evidence_file": "EVIDENCE-4e6c8a61.json",
+  "workflow_runs": [
+    {
+      "id": 45056863390,
+      "name": "Operational Stock Eligibility",
+      "status": "in_progress",
+      "conclusion": null
+    },
+    {
+      "id": 45056863397,
+      "name": "Security Gate",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 45056863078,
+      "name": "Supplier cost report performance",
+      "status": "in_progress",
+      "conclusion": null
+    },
+    {
+      "id": 45056863257,
+      "name": "Review Completion Resumable",
+      "status": "in_progress",
+      "conclusion": null
+    },
+    {
+      "id": 45056863140,
+      "name": "Operational Balance Web",
+      "status": "in_progress",
+      "conclusion": null
+    },
+    {
+      "id": 45056863109,
+      "name": "CodeQL",
+      "status": "in_progress",
+      "conclusion": null
+    },
+    {
+      "id": 45056863249,
+      "name": "Qoyod Payment Freshness",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 45056863179,
+      "name": "Mobile Order Tracking",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 45056863202,
+      "name": "Snapchat Settings Management V2",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 45056863261,
+      "name": "TikTok Creator Release Candidate",
+      "status": "completed",
+      "conclusion": "skipped"
+    },
+    {
+      "id": 45056863300,
+      "name": "Snapchat Direct Active Publication",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 45056863089,
+      "name": "Store Delivery V1",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 45056863320,
+      "name": "MZ2 Employee Salary and Password",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 45056863157,
+      "name": "Shipping Print Boundary",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 45056863142,
+      "name": "MZ2 Track F native shipping",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 45056863086,
+      "name": "MZ2 Accounting Module",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 45056863176,
+      "name": "G47 Focused Integration",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 45056863095,
+      "name": "Mezan Release Readiness",
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ],
+  "shared_host_rehearsal_executed": false,
+  "lease_created": false,
+  "merged": false,
+  "published": false,
+  "helper_sha256": "b11576e193ecd80994a3127474433e50a75fa624eb78e22e4bbeca5e5e03c9d6"
+}

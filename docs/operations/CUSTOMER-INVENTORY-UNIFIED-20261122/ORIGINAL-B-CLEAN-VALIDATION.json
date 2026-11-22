@@ -1,0 +1,7 @@
+{
+  "directory": "/workspace/scratch/36b1bc151c92/unified-B-clean-validator-msl81hhu",
+  "exit_code": 0,
+  "stdout": "{\"source\": \"4e6c8a61bd1566e061a4f312e797ce239b582475\", \"base\": \"06763ffd6e3c3f7c861769b61d2c4e6b9b2d5f35\", \"release_id\": \"rg5-2e0e3797d6ff3b955a3a23fd31487bd92721e70f316f3bdf34cab0d94c5d630f\"}\n",
+  "stderr": "release identity validation failed (FileNotFoundError): [Errno 2] No such file or directory: '/workspace/scratch/36b1bc151c92/unified-B-clean-validator-msl81hhu/repo/backend/release_identity.json'\n",
+  "clean_after": true
+}

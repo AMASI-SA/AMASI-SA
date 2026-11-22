@@ -1,0 +1,32 @@
+{
+  "script": "MANUAL-HOST-ISOLATED-REHEARSAL-2074.py",
+  "sha256": "b11576e193ecd80994a3127474433e50a75fa624eb78e22e4bbeca5e5e03c9d6",
+  "bytes": 7340,
+  "original_commit": "c01f238687e3193f096d55e6e0deb34fa8a57ec5",
+  "original_path": "docs/operations/OPERATIONAL-DEMAND-READS-20261122/MANUAL-HOST-ISOLATED-REHEARSAL.py",
+  "original_sha256": "475ec8ea80ad8ba69e69f26f940851b379b3e000749d2e76aadab1d51f404768",
+  "expected": {
+    "J": "06763ffd6e3c3f7c861769b61d2c4e6b9b2d5f35",
+    "A": "4e6c8a61bd1566e061a4f312e797ce239b582475",
+    "B": "447e83bfb95d2627877d46c7baa528e454a2e143",
+    "TREE": "6a906db6cf4fd3dda4b550483a0ef96067c6f1ed",
+    "RELEASE_ID": "rg5-2e0e3797d6ff3b955a3a23fd31487bd92721e70f316f3bdf34cab0d94c5d630f"
+  },
+  "branch": "codex/customer-inventory-unified-r2-20261122",
+  "checks": {
+    "python_ast": "passed",
+    "embedded_original_validator_program_ast": "passed",
+    "exact_allowed_diff": "passed",
+    "original_helper_hash": "passed"
+  },
+  "actual_host_execution": false,
+  "adapter_build_executed": false,
+  "main_repo_changed": false,
+  "remote_changed": false,
+  "lease_created": false,
+  "publication_executed": false,
+  "limitations": [
+    "Prepared only. Exact B CI and a fresh actual /app inactive guard, clean M, and remote M/B checks remain execution prerequisites.",
+    "Independent reviewer report is separate."
+  ]
+}
