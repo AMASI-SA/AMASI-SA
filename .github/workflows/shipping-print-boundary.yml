@@ -9,6 +9,8 @@ on:
       - backend/tests/test_shipping_saved_label_print.py
       - backend/tests/test_shipping_label_inbox.py
       - backend/tests/test_carrier_shipment_read_fallback.py
+      - backend/tests/test_external_carrier_reprint_status.py
+      - backend/tests/test_mobile_external_label_read_parity.py
       - backend/tests/test_shipping_snapshot_bootstrap.py
       - backend/order_engine/shipping_label_service.py
       - backend/order_engine/amasi_shipping_compat.py
@@ -74,6 +76,7 @@ jobs:
           shipping_tests = {name for name in changed if name.startswith((
               "backend/tests/test_shipping_", "backend/tests/test_salla_current_shipping",
               "backend/tests/test_carrier_shipment_read_fallback",
+              "backend/tests/test_external_carrier_reprint_status", "backend/tests/test_mobile_external_label_read_parity",
               "backend/tests/test_salla_generic_shipping_mode", "backend/tests/test_courier_generic_identity_recovery",
               "backend/tests/test_courier_explicit_completion_recovery",
               "backend/tests/test_courier_history_identity_recovery",
@@ -133,6 +136,10 @@ jobs:
         run: python -m pytest --noconftest --asyncio-mode=auto -q -ra backend/tests/test_shipping_refresh_latency.py
       - name: Current carrier detail fallback and native read-only routes
         run: python -m pytest --noconftest --asyncio-mode=auto -q -ra backend/tests/test_carrier_shipment_read_fallback.py
+      - name: Native external label read parity
+        run: python -m pytest --noconftest --asyncio-mode=auto -q -ra backend/tests/test_mobile_external_label_read_parity.py
+      - name: Current external AWB reprints after dispatch
+        run: python -m pytest --noconftest --asyncio-mode=auto -q -ra backend/tests/test_external_carrier_reprint_status.py
       - name: Store courier identity and explicit completion recovery
         run: >-
           python -m pytest --noconftest --asyncio-mode=auto -q -ra

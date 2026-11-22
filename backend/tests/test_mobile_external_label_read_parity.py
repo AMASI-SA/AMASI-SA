@@ -111,7 +111,7 @@ async def test_unconfirmed_external_order_still_requires_current_completion_evid
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("status", ["cancelled", "refunded", "delivered", "shipped", "unknown"])
+@pytest.mark.parametrize("status", ["cancelled", "refunded", "delivered", "shipped", "delivering", "unknown"])
 async def test_fresh_noncompleted_external_status_does_not_trigger_completion(monkeypatch, status):
     async with external_case(monkeypatch) as (db, calls, client):
         original = compat.call_salla
@@ -123,12 +123,25 @@ async def test_fresh_noncompleted_external_status_does_not_trigger_completion(mo
 
         monkeypatch.setattr(compat, "call_salla", provider)
         before = await db.order_review_workflows.find_one(KEY)
+        canonical = await db.unified_orders.find_one(KEY)
         response = await client.post(PATH + "/complete-and-refresh")
 
-        assert response.status_code == 409, response.text
-        assert response.json()["detail"]["code"] in {"order_cancelled", "order_status_not_completed"}
         assert not any(method == "POST" for method, _, _ in calls)
-        assert await db.order_review_workflows.find_one(KEY) == before
+        assert await db.unified_orders.find_one(KEY) == canonical
+        current = await db.order_review_workflows.find_one(KEY)
+        if status in {"shipped", "delivering", "delivered"}:
+            assert response.status_code == 200, response.text
+            result = response.json()
+            assert result["ready"] is True and result["shipment_id"] == "99"
+            assert result["observed_order_status"] == status
+            assert result["order_status_changed"] is False
+            assert current["salla_order_status"] == status
+            assert current["assembly_status"] == before["assembly_status"]
+            assert current["stage"] == before["stage"]
+        else:
+            assert response.status_code == 409, response.text
+            assert response.json()["detail"]["code"] in {"order_cancelled", "order_status_not_completed"}
+            assert current == before
 
 
 @pytest.mark.asyncio

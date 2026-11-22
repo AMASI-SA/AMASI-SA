@@ -1,4 +1,41 @@
-# ARAMEX-PRINT-20261121: outbound external-label reprint regression WIP
+# ARAMEX-PRINT-20261121: verified external-label reprint repair, release pending
+
+## Current source milestone (2026-11-22)
+
+The six red actual-route cases now pass after a narrow change to
+`backend/order_engine/amasi_shipping_compat.py`: the strict Native reader may
+return an existing verified external-carrier AWB for shipped, delivering or
+delivered orders. It preserves the observed Salla status and never posts a
+status or creates a shipment. Current-child/carrier/supersession/cancellation,
+assembly and employee-authority fences remain in place. Normal local-courier
+document generation remains rejected for these statuses; the existing separately
+guarded historic-courier recovery is unchanged.
+
+`test_external_carrier_reprint_status.py` now covers six positive Native routes
+and three negative local-document cases. The existing mobile parity regression
+also covers a fresh provider advancing beyond cached completion without a status
+POST or canonical-order mutation. Cancelled/refunded/unknown cases still fail
+closed. Shipping Print Boundary CI now explicitly runs both Native modules.
+
+Local isolated-module verification, all exit0:
+- external_carrier_reprint_status:9 passed;
+- mobile_external_label_read_parity:20 passed;
+- amasi_shipping_compat:58 passed,59 subtests passed;
+- carrier_shipment_read_fallback:111 passed;
+- shipping_label_current_guard:29 passed;
+- salla_current_shipping:37 passed;
+- courier_history_identity_recovery:114 passed;
+- courier_history_recovery_races:18 passed.
+Commands use Python -B -m pytest --noconftest --asyncio-mode=auto -q --tb=short,
+one module per process. git diff --check passed. Total396 tests plus59 subtests.
+
+Release state: no PR/frozen intent/new lease/publication yet. Production unchanged
+by this follow-up. Root-case Native printing remains unverified until acceptance
+on the new reviewed release. Next: push source checkpoint/open Draft PR, require
+fresh CI, new v5 A/B and exact-B host/ARM rehearsals, then authorized guarded
+publication and original/control ADB tests. Preserve all previous frozen pairs.
+
+## Earlier red checkpoint (preserved)
 
 New branch `codex/aramex-intransit-label-reprint-20261122` starts directly from
 reviewed Production `c302943e330bcdd534a4a5697b8ef813dfb7cb6e` (PR2059).
@@ -27,7 +64,8 @@ refresh/complete-and-refresh with a current official external AWB and durable
 assembly proof. Initial run:6 failed in16.58s, all HTTP409
 order_status_not_completed. Command: python -B -m pytest --noconftest
 --asyncio-mode=auto -q --tb=short backend/tests/test_external_carrier_reprint_status.py.
-No production code changed yet. This WIP is not ready for merge or publication.
+At this earlier checkpoint no production code had changed. It was not ready for
+merge or publication; the current verified source milestone is recorded above.
 Fresh rerun after adding pre-result side-effect assertions:6 failed in4.34s,
 all at the intended HTTP200 expectation. Prior assertions passed: provider GET
 only, unchanged canonical order, unchanged assembly/stage, no manual refresh.

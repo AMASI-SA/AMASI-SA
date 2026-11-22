@@ -862,7 +862,10 @@ async def carrier_label(
         status = "completed"
     if completed_only and status == "in_progress":
         raise legacy.ShippingLabelError("carrier_order_in_progress", "لم تؤكد سلة تنفيذ الطلب بعد.")
-    printable = {"completed"} if completed_only else {"completed", *_DONE}
+    # The strict native read may reprint an existing external AWB after
+    # dispatch. It retains all current-child checks and never posts a status.
+    # Local courier generation is fenced separately below.
+    printable = {"completed", *_DONE}
     if status not in printable and not (issue and not completed_only and status == "in_progress"):
         raise legacy.ShippingLabelError("order_status_not_completed", "حالة الطلب الحالية لا تسمح بالطباعة.")
     changed = False
@@ -911,6 +914,17 @@ async def carrier_label(
             "لم تؤكد سلة حالة «تم التنفيذ»؛ لم تتم الطباعة أو إنشاء بوليصة بديلة.",
             status_code=502 if status_error else 409,
         )
+
+    if completed_only and _order_status(order) in _DONE:
+        snap = _printable(result)
+        if order_internal or _mobile_courier_row(result) or legacy._is_store_courier(result):
+            raise legacy.ShippingLabelError(
+                "order_status_not_completed",
+                "إعادة الطباعة في هذه الحالة متاحة لبوليصة شركة الشحن الحالية فقط.",
+            )
+        if not any((carrier.get("company_name"), carrier.get("company_code"),
+                    snap.get("courier_name"), snap.get("courier_code"))):
+            raise legacy._stale_label()
 
     if completed_only:
         provider_carrier = {"name": legacy._text(carrier.get("company_name")),
