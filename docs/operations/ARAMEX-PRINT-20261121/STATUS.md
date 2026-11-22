@@ -43,6 +43,21 @@ No merge/publication/lease at this checkpoint. Next: normal merge expected B,
 verify M tree equals B, then pinned guarded materialization and authorized
 prepare/prepublish/Republish; original verify3 and actual Native acceptance.
 
+PR2062 normal-merged at14:38:43UTC to M
+9b4fb716b430c32073b5ea7abaeaff62646d9633. Fresh remote M tree equals immutable B
+c0009bc3bcbbbdd5b1512ba12db08daf222ed892; A ancestor,after-A diff intent-only,
+parents exactly J/B. Full premerge rollup includes reruns:29 successful/10
+conditional skips; latest context summary27/6,all completed. Durable merge
+record `evidence/pr2062-merge.json`. No runtime publication/own lease yet.
+
+Next safe action: original guard inactive,fetch this evidence metadata,execute
+tracked materialize-pr2062.py with explicit M,require original verifier0 and
+unchanged unrelated files. Then prepare actor codex-aramex-pr2062-authorized,
+prepublish immediately before one authorized UI Republish of mezansalla.com.
+Require a newer explicit success,original verify3/inactive and actual original
+and SMSA-control Native ADB label/print acceptance. Do not claim printing fixed
+until actual acceptance. Production runtime changed by this successor:no.
+
 ## Current successor: strict external classifier, freshly verified
 
 Branch `codex/aramex-intransit-label-reprint-v2-20261122` is constructed directly

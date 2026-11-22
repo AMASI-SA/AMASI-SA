@@ -1,0 +1,17 @@
+{
+  "pr": 2062,
+  "merged_at_utc": "2026-11-22T14:38:43Z",
+  "source": "23e9514b9e8a33bffb2363bb1d3afd792355ab2c",
+  "intent_commit": "44c5e4867435d45a651881f0da101f3dcb338061",
+  "deployment_merge": "9b4fb716b430c32073b5ea7abaeaff62646d9633",
+  "merge_tree": "c0009bc3bcbbbdd5b1512ba12db08daf222ed892",
+  "normal_merge": true,
+  "tree_equals_b": true,
+  "after_a_only_intent": true,
+  "premerge_full_rollup_success": 29,
+  "premerge_full_rollup_skipped": 10,
+  "premerge_latest_context_success": 27,
+  "premerge_latest_context_skipped": 6,
+  "runtime_publication_performed": false,
+  "lease_created": false
+}
