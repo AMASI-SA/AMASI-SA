@@ -83,7 +83,11 @@ On this exact application source:
 
 These jobs did not execute test/build steps. No billing, quota or administrative cause is inferred; no gate was bypassed and no redundant rerun was requested. The previously attempted Expo build UI did not provide a usable session. No EAS submission or APK link is claimed. The passing local Android export is recorded separately above.
 
-The backend containing source commit is the paired checkpoint; its exact SHA/tree and final PR integration status will be recorded in the following handoff-only update. Mezan still requires coordinated integration and its v5 source/intent release procedure against actual production. The task branch itself is not a deployment candidate.
+Backend source: `5278f6958385937d218afe4735679152b8f433d7`, tree `4622502c91b47f04f7fa11dac63f89a8bea1c3b6`, parent `100fed6629eba4c4bc47d2500a294c0aea7f40cd`. The remote tree exactly matched the locally staged tree. The exact remote commit was hydrated locally, and the worktree was clean before this documentation-only handoff update.
+
+Paired pull requests: [mobile #373](https://github.com/AMASI-SA/amasi-mobile/pull/373) and [Mezan #2050](https://github.com/AMASI-SA/AMASI-SA/pull/2050). At the final source read, Mezan #2050 is draft, `mergeable:false`, `mergeable_state:dirty` against PR base `9b4fb716b430c32073b5ea7abaeaff62646d9633`. That is the observed PR base, not an assertion of the live production SHA. This source checkpoint requires conflict resolution during coordinated integration and the v5 source/intent release procedure against actual production. The task branch itself is not a deployment candidate. No other conversation's release lease was changed.
+
+Following handoff commits change only this status document. They preserve both frozen source trees outside this document and all 318 verified Android application inputs. Release must validate the actual selected release head and must not publish the older parent as containing this feature.
 
 ## Reproduce the focused acceptance
 
