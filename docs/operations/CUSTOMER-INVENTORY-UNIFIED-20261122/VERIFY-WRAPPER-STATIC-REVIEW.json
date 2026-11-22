@@ -1,0 +1,26 @@
+{
+  "file": "RUN-HOST-VERIFY-2074.sh",
+  "sha256": "e23d910b9c03ef8e979a7f78cc4cc8947e640ced03efdce35953c1efd88e132e",
+  "bytes": 4821,
+  "deployment_git_sha": "24270ebdfdebb83282389308a2349cdb27e2b8e4",
+  "source_git_sha": "4e6c8a61bd1566e061a4f312e797ce239b582475",
+  "source_base_git_sha": "06763ffd6e3c3f7c861769b61d2c4e6b9b2d5f35",
+  "release_id": "rg5-2e0e3797d6ff3b955a3a23fd31487bd92721e70f316f3bdf34cab0d94c5d630f",
+  "protocol_version": 5,
+  "actor": "codex-customer-inventory-unified-2074-20261122",
+  "original_guard_sha256": "4e56f1f60f5f79931658b8f95a0aeb2269471025ca84f7e5b651cd284806349a",
+  "checks": {
+    "bash_syntax": "PASS",
+    "embedded_python_ast": "PASS",
+    "original_public_verify_ast_exactly_lock_plus_locked_core": "PASS",
+    "exact_own_lease_fenced_inside_original_mutex": "PASS",
+    "calls_original_locked_verifier_unchanged": "PASS",
+    "complete_original_verification_json_retained": "PASS",
+    "original_result_requires_verified_true_checks_three_and_expected_ids": "PASS",
+    "lease_paths_absent_under_mutex_after_original_success": "PASS",
+    "public_status_only_after_mutex_and_requires_exact_inactive": "PASS"
+  },
+  "precondition": "Run only after a NEW explicit Emergent Deployment Succeeded for this release.",
+  "cli_equivalence_note": "The public CLI invokes verify(URL), whose entire original body takes _release_operation_lock() and calls _verify_locked(URL). This wrapper uses those unchanged original functions with an additional exact actor/source/base/deployment/runtime/protocol/artifact lease fence inside that same lock; a separate status-to-CLI sequence would leave a lease-replacement race. No probe or verifier behavior is reimplemented.",
+  "no_side_effects_during_review": "No launcher execution, guard import, host access, network probe, production action, or lease operation. Only bash -n, AST/source reads and scratch review artifacts."
+}

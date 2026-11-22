@@ -1,0 +1,30 @@
+{
+  "reviewer": "release_code_review",
+  "status": "passed",
+  "file": "RUN-HOST-VERIFY-2074.sh",
+  "sha256": "e23d910b9c03ef8e979a7f78cc4cc8947e640ced03efdce35953c1efd88e132e",
+  "bytes": 4821,
+  "shell_syntax_exit_status": 0,
+  "embedded_python_ast_parse_passed": true,
+  "expected_release": {
+    "deployment_git_sha": "24270ebdfdebb83282389308a2349cdb27e2b8e4",
+    "source_git_sha": "4e6c8a61bd1566e061a4f312e797ce239b582475",
+    "source_base_git_sha": "06763ffd6e3c3f7c861769b61d2c4e6b9b2d5f35",
+    "git_sha": "4e6c8a61bd1566e061a4f312e797ce239b582475",
+    "release_id": "rg5-2e0e3797d6ff3b955a3a23fd31487bd92721e70f316f3bdf34cab0d94c5d630f",
+    "protocol_version": 5
+  },
+  "actor": "codex-customer-inventory-unified-2074-20261122",
+  "atomic_original_verifier_sequence": true,
+  "original_public_verify_ast_confirmed_lock_plus_locked_core": true,
+  "nested_guard_lock_calls": false,
+  "own_lease_fenced_before_verifier_under_same_lock": true,
+  "unchanged_original_three_probe_core_used": true,
+  "complete_original_result_printed_and_identity_checks_preserved": true,
+  "original_lease_closure_checked_under_lock": true,
+  "final_public_status_checked_outside_lock": true,
+  "only_after_new_explicit_deployment_succeeded": true,
+  "no_abort_prepare_prepublish_or_manual_cleanup": true,
+  "operational_code_executed_or_imported": false,
+  "blocking_findings": []
+}
