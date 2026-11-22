@@ -5,6 +5,7 @@ import unicodedata
 from operational_balance_store import digest, fail
 from operational_balance_sources import rows, usable
 from operational_financial_activity_runtime import prepare_in_thread, preparation_checkpoint, checked_rows
+from inventory_option_configuration import option_metadata, option_visibility
 
 TEXT={'text','string','textarea'}
 CHOICE={'select','radio','color','image'}
@@ -44,7 +45,8 @@ def option_contract(row):
         elif kind not in TEXT:
             issues.append('رفع صورة تخصيص غير مدعوم حاليًا' if kind=='file' else 'نوع الخيار '+option['name']+' غير مدعوم حاليًا')
         result.append({'id':option['id'],'name':option['name'],'type':kind,'required':option['required'],'values':values})
-    return result,issues
+    result, condition_issues, _ = option_metadata(row, result)
+    return result,issues+condition_issues
 
 
 def combinations(row,options):
@@ -81,12 +83,16 @@ def _products(stored, *, opening_cached_options=False):
             from operational_opening_options import opening_option_source
             row=opening_option_source(row)
         options,issues=option_contract(row)
-        result.append({'id':identity,'kind':'product','name':row['name'],'image_url':image_url(row.get('main_image')),'sku':row.get('sku') or '', 'unit':row.get('unit') or 'piece','options':options,'configuration_issues':issues,'selection_combinations':combinations(row,options),'conditional_rules_verified':False})
+        result.append({'id':identity,'kind':'product','name':row['name'],'image_url':image_url(row.get('main_image')),'sku':row.get('sku') or '', 'unit':row.get('unit') or 'piece','options':options,'configuration_issues':issues,'selection_combinations':combinations(row,options),'conditional_rules_verified':not issues,'configuration_contract_version':2,'physical_option_ids':[option['id'] for option in options if option.get('stock_identity')]})
     return result
 
 
 def configuration(value,product):
-    if not isinstance(value,dict) or set(value)!={'state','selections','inputs'} or value['state'] not in ('raw','ready') or not isinstance(value['selections'],list) or not isinstance(value['inputs'],list) or len(value['selections'])+len(value['inputs'])>100:fail('inventory_purchase_configuration_invalid','بيانات حالة المنتج وخياراته غير صالحة',422)
+    if not isinstance(value,dict) or not {'state','selections','inputs'}.issubset(value) or set(value)-{'state','selections','inputs','deferred_option_ids'} or value['state'] not in ('raw','ready') or not isinstance(value['selections'],list) or not isinstance(value['inputs'],list) or len(value['selections'])+len(value['inputs'])>100:fail('inventory_purchase_configuration_invalid','بيانات حالة المنتج وخياراته غير صالحة',422)
+    explicit_deferred = 'deferred_option_ids' in value
+    deferred = value.get('deferred_option_ids', [])
+    if not isinstance(deferred,list) or len(deferred)+len(value['selections'])+len(value['inputs'])>100 or any(not isinstance(oid,str) for oid in deferred) or len(set(deferred))!=len(deferred):fail('inventory_purchase_configuration_invalid','خيارات التخصيص المؤجلة غير صالحة',422)
+    if product.get('configuration_issues'):fail('inventory_purchase_configuration_incomplete','تعذر التحقق من تعريف وترابط خيارات المنتج',422)
     fields={f['id']:f for f in product.get('options',[])};seen=set();selected=[];inputs=[];labels=[]
     for group in ('selections','inputs'):
         for entry in value[group]:
@@ -109,25 +115,37 @@ def configuration(value,product):
     represented={v['option_id'] for choice in maps for v in choice}
     comparable=[v for v in selected if v['option_id'] in represented]
     if comparable and not any(all(v in choice for v in comparable) for choice in maps):fail('inventory_purchase_combination_invalid','اللون والمقاس لا يطابقان تركيبة معتمدة في ميزان 2',422)
-    if value['state']=='raw' and inputs:fail('inventory_purchase_raw_customization','المنتج الخام لا يحمل تخصيصًا جاهزًا',422)
-    if value['state']=='ready':
-        if any(f['required'] and f['id'] not in seen for f in fields.values()):fail('inventory_purchase_required_option','أكمل خيارات المنتج الجاهز المطلوبة',422)
-        # A missing canonical field cannot be silently treated as optional.
-        if any('غير مكتمل' in issue for issue in product.get('configuration_issues',[])):fail('inventory_purchase_configuration_incomplete','خيارات المنتج الجاهز غير مكتملة في ميزان 2',422)
-    if product['kind']=='component' and seen:fail('inventory_purchase_component_configuration','المكون يسجل خامًا دون تخصيصات المنتج',422)
-    result={'state':value['state'],'selections':sorted(selected,key=lambda x:x['option_id']),'inputs':sorted(inputs,key=lambda x:x['option_id'])}
+    if explicit_deferred and maps and len([choice for choice in maps if len(choice)==len(comparable) and all(v in choice for v in comparable)])!=1:fail('inventory_purchase_combination_invalid','حدد تركيبة واحدة كاملة للون والمقاس',422)
+    for oid in deferred:
+        if oid not in fields or not fields[oid].get('defer_allowed') or fields[oid].get('stock_identity') or oid in represented or oid in seen:fail('inventory_purchase_deferred_option_invalid','التأجيل متاح لخيارات التخصيص فقط ولا يجمع مع قيمة ثابتة',422)
+    visibility = option_visibility(list(fields.values()), selected, deferred)
+    if any(visibility.get(oid)!='visible' for oid in seen|set(deferred)):fail('inventory_purchase_hidden_option','خيار مخفي أو تابع لم يتم اختيار شرطه؛ أعد تحديد خيارات المنتج',422)
+    if not explicit_deferred and value['state']=='raw' and inputs:fail('inventory_purchase_raw_customization','المنتج الخام لا يحمل تخصيصًا جاهزًا',422)
+    if value['state']=='ready' or explicit_deferred:
+        if any(f['required'] and visibility.get(f['id'])=='visible' and f['id'] not in seen|set(deferred) for f in fields.values()):fail('inventory_purchase_required_option','أكمل خيارات المنتج المطلوبة أو أجّل التخصيص المتاح',422)
+    # Only a definitively hidden physical dimension is inapplicable. An
+    # unanswered parent still needs resolution before the stock is identified.
+    if explicit_deferred and any(f.get('stock_identity') and
+            (visibility.get(f['id']) == 'pending' or
+             visibility.get(f['id']) == 'visible' and f['id'] not in seen)
+            for f in fields.values()):fail('inventory_purchase_physical_option_required','حدد اللون والمقاس الفعليين للمخزون',422)
+    if product['kind']=='component' and (seen or deferred):fail('inventory_purchase_component_configuration','المكون يسجل خامًا دون تخصيصات المنتج',422)
+    state = ('raw' if deferred else 'ready') if explicit_deferred and product['kind']=='product' else value['state']
+    result={'state':state,'selections':sorted(selected,key=lambda x:x['option_id']),'inputs':sorted(inputs,key=lambda x:x['option_id'])}
+    if explicit_deferred:result['deferred_option_ids']=sorted(deferred)
     for label in labels:
         label['option_name']=label['name']
         if 'value_id' in label:label['value_name']=label['value']
     return result,labels
 
 
-async def describe(db,owner,line,base_products,location_rows):
+async def describe(db,owner,line,base_products,location_rows,*,allow_missing_location=False):
     if line.get('variant_id'):fail('inventory_purchase_mixed_variant','اختر خيارات المنتج دون خلطها بهوية تركيبة أخرى',422)
     if line.get('personalizations'):fail('inventory_purchase_mixed_customization','استخدم خيارات المنتج دون توزيع الأسماء القديم',422)
     product=base_products.get((line['kind'],line['item_id']))
     if not product:fail('inventory_item_not_mz2','المنتج أو المكون غير متاح في ميزان 2',422)
     location=next((l for l in location_rows if l['id']==line.get('location_id')),None)
-    if not location:fail('inventory_purchase_location_invalid','اختر موقعًا معتمدًا في ميزان 2',422)
+    if not location and (not allow_missing_location or line.get('location_id')):fail('inventory_purchase_location_invalid','اختر موقعًا معتمدًا في ميزان 2',422)
     config,labels=configuration(line['purchase_configuration'],product)
-    return {**product,'purchase_configuration':config,'purchase_option_labels':labels,'location_id':location['id'],'location':deepcopy(location),'location_name':location['name'],'purchase_line_key':digest(['operational-purchase-description',line['kind'],line['item_id'],config,location['id']]),'physical_stock_status':'unproven'}
+    location_fields={'location_id':location['id'],'location':deepcopy(location),'location_name':location['name']} if location else {}
+    return {**product,'purchase_configuration':config,'purchase_option_labels':labels,'deferred_option_labels':[{'option_id':oid,'name':next(option['name'] for option in product.get('options',[]) if option['id']==oid)} for oid in config.get('deferred_option_ids',[])],**location_fields,'purchase_line_key':digest(['operational-purchase-description',line['kind'],line['item_id'],config,location['id'] if location else None]),'physical_stock_status':'unproven'}

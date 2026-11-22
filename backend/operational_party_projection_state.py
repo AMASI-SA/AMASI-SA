@@ -14,6 +14,10 @@ def party_projection_state(state, kind, identity):
     if kind == "operating_expense" and identity in {"pos_settlement_fee", "advertising_bank_fx_fee"}:
         return state
     engine = state.get("engine", {})
+    if kind == "provider" and (state.get("customer_collections") or state.get("customer_returns")):
+        # Customer cash requires exact canonical capture/refund identities and
+        # their fee inputs. An obligation-only slice cannot prove late matches.
+        return state
     openings = {key: row for key, row in checked_rows(state["openings"].items()) if belongs(row)}
     obligations = {key: row for key, row in checked_rows(engine.get("obligations", {}).items()) if belongs(row)}
     movements = []
@@ -47,6 +51,8 @@ def cash_account_projection(state, kind, identity):
             currencies.add(row["currency"])
     currencies.update(r["currency"] for r in checked_rows(state.get("customer_returns", []))
                       if (r.get("refund_source_type"), r.get("refund_source_id")) == (kind, identity))
+    currencies.update(r["currency"] for r in checked_rows(state.get("customer_collections", []))
+                      if (r.get("destination_type"), r.get("destination_id")) == (kind, identity))
     for case in checked_rows(state.get("customer_returns", [])):
         if (case.get("refund_source_type"), case.get("refund_source_id"), case.get("status")) == (kind, identity, "salla_refund_confirmed"):
             from operational_provider_statement_reconciliation import fact_backed_employee_refund
@@ -77,10 +83,12 @@ async def directory_cash_positions(db, owner, kind, resources, *, funding_ids=()
             "movements": selected("$movements", {"$or": [matches("$$r.party_type", "$$r.party_id"),
                                                         matches("$$r.bank_kind", "$$r.bank_id")]}),
             "customer_returns": selected("$customer_returns", matches("$$r.refund_source_type", "$$r.refund_source_id")),
+            "customer_collections": selected("$customer_collections", matches("$$r.destination_type", "$$r.destination_id")),
         }},
-        {"$project": {"_id": 0, "openings": 1, "customer_returns": 1,
+        {"$project": {"_id": 0, "openings": 1, "customer_returns": 1, "customer_collections": 1,
                       **{"movements." + field: 1 for field in ("party_type", "party_id", "currency", "bank_kind",
-                          "bank_id", "bank_currency", "bank_amount", "amount", "kind", "direction")}}},
+                          "bank_id", "bank_currency", "bank_amount", "amount", "kind", "direction",
+                          "id", "order_id", "reference", "bank_transaction_reference")}}},
     ]
     result = await db[STATES].aggregate(pipeline).to_list(1)
     return await prepare_in_thread(cash_positions, result[0] if result else {}, keys)

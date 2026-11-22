@@ -11,6 +11,7 @@ from collections import OrderedDict
 import asyncio
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
+from itertools import chain
 import json
 from time import monotonic
 from threading import Event
@@ -25,10 +26,14 @@ from operational_balance_store import STATES, digest, fail, now
 TIMEZONE = "Asia/Riyadh"
 RIYADH = ZoneInfo(TIMEZONE)
 SNAPSHOT_SCHEMA = "operational-financial-activity-v1"
+ALLOCATION_LINEAGE_SCHEMA = "inventory-payment-allocation-lineage-v1"
+ALLOCATION_LINEAGE_FIELD = "financial_activity_allocation_lineage"
+ALLOCATION_ACTION = "inventory_payment_allocated"
 FINANCIAL_ACTIONS = frozenset({
     "movement_saved", "order_bank_credited", "prepaid_shipping_paid",
     "driver_payment_review_approved", "customer_return_saved",
     "salla_customer_compensation_source_confirmed", "customer_exchange_saved",
+    "customer_collection_recorded", "financial_refund_bank_confirmed", "financial_refund_execution_recorded",
 })
 SYSTEM_ACTORS = frozenset({"operational_order_worker"})
 NON_DEBT_PARTIES = frozenset({"operating_expense", "owner_withdrawal", "bank", "cash"})
@@ -46,7 +51,7 @@ _BUILDING = {}
 from operational_balance_archive import ArchiveError, SNAPSHOT, unpack_financial_snapshot
 
 ACTIVITY_FIELDS = {"_id": 0, "owner_id": 1, "revision": 1, "status": 1, "started_at": 1,
-                   "movements": 1, "audit": 1, "customer_returns": 1,
+                   "movements": 1, "audit": 1, "customer_returns": 1, "customer_collections": 1,
                    "driver_payment_review_facts": 1, "engine.obligations": 1, SNAPSHOT: 1}
 
 
@@ -178,6 +183,133 @@ def _movement_rows(movement, facts, allowed=None):
     return rows
 
 
+def _allocation_change(event, owner):
+    """Verify the narrow attribution-only transition before trusting its seal.
+
+    This does not project a historical balance. The actual allocation writer
+    independently proves the full financial report has zero delta before audit.
+    """
+    before, after = event["before"]["movement"], event["after"]["movement"]
+    result = event["after"]["allocation"]
+    invoice = result["invoice"]
+    if (event["action"] != ALLOCATION_ACTION or event["actor_id"] != owner
+            or event["source"] != "inventory_purchase"
+            or {k: v for k, v in before.items() if k != "allocations"}
+            != {k: v for k, v in after.items() if k != "allocations"}
+            or before.get("party_type") != "supplier" or before.get("currency") != "SAR"
+            or before.get("direction") != "outgoing" or before.get("kind") not in {"payment", "settlement"}
+            or before.get("bank_kind") not in {"bank", "cash", "employee_custody"} or not before.get("bank_id")
+            or before.get("settlement_scope") not in {None, "account"}
+            or before.get("native_payment_operation_id") or before.get("source") == "native_purchase_link"
+            or before.get("exchange_id") or before.get("order_number") or before.get("external_operation")
+            or any(value for key, value in before.items() if key.startswith("automatic_"))
+            or before.get("status") in {"reversed", "void", "voided", "cancelled", "canceled"}
+            or before.get("reversed_at") or before.get("reversal_id") or before.get("voided_at")
+            or result.get("movement_id") != before["id"] or result.get("invoice_id") != invoice.get("id")
+            or invoice.get("supplier_id") != before.get("party_id") or invoice.get("currency") != "SAR"
+            or result.get("financial_effect") != "allocation_only"
+            or result.get("cash_effect") != "0.00" or result.get("supplier_balance_effect") != "0.00"):
+        raise ValueError("invalid allocation lineage scope")
+    amount = Decimal(_amount(before["amount"]))
+    if (amount <= 0 or before.get("bank_currency") not in {None, "SAR"}
+            or Decimal(_amount(before.get("bank_amount") or before["amount"])) != amount
+            or any(Decimal(_amount(before.get(key) or "0")) for key in ("actual_fee_amount", "bank_fee_amount"))):
+        raise ValueError("invalid allocation principal")
+
+    def allocations(movement):
+        values = {}
+        for row in movement.get("allocations", []):
+            if (set(row) != {"obligation_id", "amount"} or not isinstance(row["obligation_id"], str)
+                    or not row["obligation_id"] or row["obligation_id"] in values):
+                raise ValueError("invalid allocation identity")
+            value = Decimal(_amount(row["amount"]))
+            if value <= 0:
+                raise ValueError("invalid allocation amount")
+            values[row["obligation_id"]] = value
+        return values
+
+    old, new = allocations(before), allocations(after)
+    target, added = invoice["obligation_id"], Decimal(_amount(result["allocated_amount"]))
+    expected = {**old, target: old.get(target, Decimal(0)) + added}
+    if (added <= 0 or not target or new != expected or sum(new.values()) > amount
+            or Decimal(_amount(result["available"])) != amount - sum(new.values())):
+        raise ValueError("invalid allocation-only delta")
+    previous, current = _movement_rows(before, {}), _movement_rows(after, {})
+    if len(previous) != 1 or len(current) != 1 or _seal_basis(previous[0]) != _seal_basis(current[0]):
+        raise ValueError("allocation changed a cash activity")
+    return before, after, previous[0], current[0]
+
+
+def _allocation_lineage_heads(state, pending=None):
+    """Resolve ordered, sealed allocation ancestry to an original cash seal.
+
+    A missing/invalid link poisons that chain. Nothing here repairs old evidence,
+    edits a cash snapshot, or substitutes today's balance for a past balance.
+    ``pending`` is the new audit event, before its existing atomic append.
+    """
+    heads, touched = {}, set()
+    for event in chain(checked_rows(state.get("audit", [])), [pending] if pending is not None else []):
+        if event.get("action") == "movement_saved":
+            movement = event.get("after") or {}
+            identity = movement.get("id") if isinstance(movement, dict) else None
+            if not isinstance(identity, str) or not identity:
+                continue
+            if identity in heads:
+                heads[identity] = None
+                continue
+            try:
+                rows = _movement_rows(movement, {})
+                snapshots = [snap for snap in event.get("financial_activity_snapshots", [])
+                    if isinstance(snap, dict) and snap.get("schema") == SNAPSHOT_SCHEMA
+                    and snap.get("owner_id") == state["owner_id"] and snap.get("audit_id") == event["id"]
+                    and len(rows) == 1 and snap.get("activity_id") == rows[0]["id"] and snap.get("basis") == rows[0]["_basis"]
+                    and snap.get("seal") == digest({k: v for k, v in snap.items() if k != "seal"})]
+                heads[identity] = ({"snapshot": snapshots[0], "basis": rows[0]["_basis"],
+                    "movement_hash": digest(movement), "event_id": event["id"], "seal": snapshots[0]["seal"]}
+                    if len(snapshots) == 1 else None)
+            except (AttributeError, KeyError, TypeError, ValueError, ArithmeticError, HTTPException):
+                heads[identity] = None
+            continue
+        if event.get("action") != ALLOCATION_ACTION and ALLOCATION_LINEAGE_FIELD not in event:
+            continue
+        # Even a malformed link must not permit fallback to an older endpoint.
+        ids = set()
+        before = event.get("before") if isinstance(event.get("before"), dict) else {}
+        after = event.get("after") if isinstance(event.get("after"), dict) else {}
+        for value in (before.get("movement"), after.get("movement"), after.get("allocation"), event.get(ALLOCATION_LINEAGE_FIELD)):
+            if isinstance(value, dict):
+                identity = value.get("movement_id") or value.get("id")
+                if isinstance(identity, str) and identity:
+                    ids.add(identity)
+        touched.update(ids)
+        previous = heads.get(next(iter(ids))) if len(ids) == 1 else None
+        for identity in ids:
+            heads[identity] = None
+        if previous is None:
+            continue
+        try:
+            before, after, old_row, new_row = _allocation_change(event, state["owner_id"])
+            if digest(before) != previous["movement_hash"] or old_row["_basis"] != previous["basis"]:
+                continue
+            proof = {"schema": ALLOCATION_LINEAGE_SCHEMA, "owner_id": state["owner_id"], "audit_id": event["id"],
+                "movement_id": before["id"], "activity_id": new_row["id"],
+                "before_basis": old_row["_basis"], "after_basis": new_row["_basis"],
+                "before_movement_hash": digest(before), "after_movement_hash": digest(after),
+                "previous_audit_id": previous["event_id"], "previous_seal": previous["seal"],
+                "origin_audit_id": previous["snapshot"]["audit_id"], "origin_snapshot_seal": previous["snapshot"]["seal"],
+                "event_hash": digest({key: event[key] for key in ("id", "actor_id", "at", "action", "before", "after", "source", "reason")})}
+            proof["seal"] = digest(proof)
+            if event is pending:
+                event[ALLOCATION_LINEAGE_FIELD] = proof
+            elif event.get(ALLOCATION_LINEAGE_FIELD) != proof:
+                continue
+            heads[before["id"]] = {"snapshot": previous["snapshot"], "basis": new_row["_basis"],
+                "movement_hash": digest(after), "event_id": event["id"], "seal": proof["seal"]}
+        except (AttributeError, KeyError, TypeError, ValueError, ArithmeticError, HTTPException):
+            continue
+    return {identity: heads.get(identity) for identity in touched}
+
+
 def _refund_row(case):
     preparation_checkpoint()
     if case.get("status") not in {"refunded", "salla_refund_confirmed"}:
@@ -193,6 +325,20 @@ def _refund_row(case):
                 amount=case["amount"], currency=case["currency"], direction="outgoing",
                 party_type="customer", party_id=case.get("customer_id"), party_name=case.get("customer_name"))
     row["_basis"] = digest(_seal_basis(row))
+    return row
+
+
+def _collection_row(case):
+    if case.get("status") != "confirmed" or case.get("destination_type") not in {"bank", "provider"}:
+        return None
+    raw = {"occurred_at": case["executed_at"], "actor_id": case["created_by"],
+           "currency": case["currency"], "kind": "customer_collection", "reference": case["reference"],
+           "order_number": case["order_number"], "note": case["reason"]}
+    row = _base("customer_collection:" + case["id"], raw, account_type=case["destination_type"],
+                account_id=case["destination_id"], account_name=case["destination_name"], amount=case["amount"],
+                currency=case["currency"], direction="incoming", party_type="customer")
+    row["_basis"] = digest([_seal_basis(row), case.get("fee_amount"), case.get("fee_status")])
+    row["_actor_recorded_name"] = case.get("created_by_snapshot", {}).get("name")
     return row
 
 
@@ -216,9 +362,20 @@ def operational_rows(state, allowed=None):
     preparation_checkpoint()
     by_id = {row["id"]: row for row in checked_rows(facts)}
     rows = [item for movement in checked_rows(state.get("movements", [])) for item in _movement_rows(movement, by_id, allowed)]
+    from operational_workspace_refunds import recorded_bank_refund_match
     rows.extend(row for case in checked_rows(state.get("customer_returns", []))
                 if (allowed is None or (case.get("refund_source_type"), case.get("refund_source_id")) in allowed)
+                and not recorded_bank_refund_match(state, case)
                 and (row := _refund_row(case)) is not None)
+    from operational_customer_collection_effects import collection_match
+    for case in checked_rows(state.get("customer_collections", [])):
+        if allowed is not None and (case.get("destination_type"), case.get("destination_id")) not in allowed:
+            continue
+        if case.get("destination_type") == "bank" and collection_match(state, case):
+            continue  # Its canonical bank movement already appears above.
+        row = _collection_row(case)
+        if row is not None:
+            rows.append(row)
     rows.extend(_pos_row(fact) for fact in checked_rows(facts) if fact["payment_method"] == "card_terminal"
                 and (allowed is None or ("pos_receivable", fact["destination_id"]) in allowed))
     identities = [row["id"] for row in checked_rows(rows)]
@@ -234,8 +391,10 @@ def _affected(state, event):
         return {"movement:" + str(after["id"]), "movement:" + str(after["id"]) + ":destination"}
     if action == "driver_payment_review_approved":
         return {"movement:" + str(after["movement_id"])} if after.get("movement_id") else {"pos:" + str(after["id"])}
-    if action in {"customer_return_saved", "salla_customer_compensation_source_confirmed"}:
+    if action in {"customer_return_saved", "salla_customer_compensation_source_confirmed", "financial_refund_bank_confirmed", "financial_refund_execution_recorded"}:
         return {"refund:" + str(after["id"])} if _refund_row(after) and not _refund_row(before) else set()
+    if action == "customer_collection_recorded":
+        return {"customer_collection:" + str(after["id"])} if _collection_row(after) else set()
     if action == "customer_exchange_saved":
         previous = {row["movement_id"] for row in before.get("contributions", [])}
         return {"movement:" + row["movement_id"] for row in after.get("contributions", [])
@@ -303,7 +462,15 @@ def cash_positions(state, keys):
         key = (case.get("refund_source_type"), case.get("refund_source_id"), case.get("currency"))
         if (key in keys and key[0] == "bank"
                 and case.get("status") in {"refunded", "salla_refund_confirmed"}):
+            from operational_workspace_refunds import recorded_bank_refund_match
+            if recorded_bank_refund_match(state, case):
+                continue
             add(key, -Decimal(_amount(case["amount"])), case.get("refund_source_name"))
+    from operational_customer_collection_effects import collection_match
+    for case in state.get("customer_collections", []):
+        key = (case.get("destination_type"), case.get("destination_id"), case.get("currency"))
+        if key in keys and key[0] == "bank" and case.get("status") == "confirmed" and collection_match(state, case) is None:
+            add(key, Decimal(_amount(case["amount"])), case.get("destination_name"))
     return parties
 
 
@@ -393,6 +560,9 @@ def capture_after_balances(state, event):
     Each worker append is audited separately, so a batch cannot stamp its final
     balance onto every preceding movement. Historic entries are never backfilled.
     """
+    if event["action"] == ALLOCATION_ACTION:
+        _allocation_lineage_heads(state, pending=event)
+        return
     if event["action"] not in FINANCIAL_ACTIONS:
         return
     affected = _affected(state, event)
@@ -412,8 +582,10 @@ def capture_after_balances(state, event):
         selected = ([_pos_row(fact)] if fact["payment_method"] == "card_terminal" else [
             row for movement in state.get("movements", []) if movement.get("id") == fact["movement_id"]
             for row in _movement_rows(movement, {fact["id"]: fact})])
-    elif action in {"customer_return_saved", "salla_customer_compensation_source_confirmed"}:
+    elif action in {"customer_return_saved", "salla_customer_compensation_source_confirmed", "financial_refund_bank_confirmed", "financial_refund_execution_recorded"}:
         selected = [_refund_row(after)]
+    elif action == "customer_collection_recorded":
+        selected = [_collection_row(after)]
     else:
         selected = [row for movement in state.get("movements", []) if "movement:" + str(movement.get("id")) in affected
                     for row in _movement_rows(movement, {})]
@@ -479,7 +651,9 @@ def capture_after_balances(state, event):
 def attach_snapshots(state, rows):
     indexed = {}
     recorded = {}
+    has_allocations = False
     for event in checked_rows(state.get("audit", [])):
+        has_allocations = has_allocations or event.get("action") == ALLOCATION_ACTION or ALLOCATION_LINEAGE_FIELD in event
         if event.get("action") not in FINANCIAL_ACTIONS:
             continue
         try:
@@ -498,9 +672,16 @@ def attach_snapshots(state, rows):
                     and snap.get("audit_id") == event["id"]
                     and snap.get("seal") == digest({k: v for k, v in snap.items() if k != "seal"})):
                 indexed.setdefault(snap.get("activity_id"), []).append(snap)
+    lineage = _allocation_lineage_heads(state) if has_allocations else {}
+    movements = {movement.get("id"): movement for movement in checked_rows(state.get("movements", []))} if lineage else {}
     for row in checked_rows(rows):
         row["recorded_at"] = recorded.get(row["id"])
         matches = [s for s in indexed.get(row["id"], []) if s["basis"] == row["_basis"]]
+        identity = row.get("_movement_id")
+        if identity in lineage:
+            head = lineage[identity]
+            matches = ([head["snapshot"]] if head and head["basis"] == row["_basis"]
+                and digest(movements.get(identity)) == head["movement_hash"] else [])
         if len(matches) != 1:
             continue
         snap = matches[0]

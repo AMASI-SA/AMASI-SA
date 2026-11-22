@@ -5,6 +5,7 @@ import {operationalApi as api, messageFor} from './operational/api';
 import InventoryAvailability from './operational/InventoryAvailability';
 import StandaloneInventoryEntry from './operational/StandaloneInventoryEntry';
 import InventoryPurchases from './operational/InventoryPurchases';
+import InventoryPurchaseReceipts from './operational/InventoryPurchaseReceipts';
 import InventoryMovementsView from '../components/inventory/suite/InventoryMovementsView';
 import {loadInventoryStocktakeContext,loadInventoryStocktakeMovements} from '../services/inventoryStocktakes';
 import InventorySuiteFrame, {InventoryPageHeader} from '../components/inventory/suite/InventorySuiteFrame';
@@ -64,7 +65,7 @@ function InventoryManagement({ embedded }) {
   const countCapabilities=stocktakeContext?.capabilities||{};
   const tabs = [
     ...(permissions.reports ? [['home', 'الرئيسية'], ['stock', 'الأصناف والمخزون'], ['reports', 'التقارير'], ['purchases', 'فواتير شراء المخزون']] : []),
-    ...(context?.can_manage_inventory_opening === true ? [['opening', 'إضافة المخزون']] : []),
+    ...(context?.can_manage_inventory_opening === true ? [['opening', 'إضافة المخزون'], ['receipts','استلام مشتريات المخزون']] : []),
     ...(permissions.move ? [['purchase', 'شراء مخزون']] : []),
     ...(countCapabilities.view===true ? [['stocktake','الجرد'],...((countCapabilities.review===true||countCapabilities.post===true)?[['adjustments','التسويات']]:[]),['movements','حركة المخزون']] : []),
   ];
@@ -72,8 +73,8 @@ function InventoryManagement({ embedded }) {
   const selected = requested || tabs[0]?.[0] || 'home';
   const allowed = tabs.some(([id]) => id === selected);
   const navigate = (value,item) => setParams(tabQuery(params,value,item));
-  const frameActive = ({stock:'catalog',opening:'entry',purchase:'purchases',purchases:'purchases'})[selected] || selected;
-  const titles={opening:['إضافة المخزون','سجّل الكميات الموجودة ومواصفاتها وتكلفتها وموقعها.'],purchase:['شراء مخزون','تسجيل شراء مستقل لبضاعة مخزنية للطلبات القادمة.'],purchases:['فواتير شراء المخزون','مراجعة فواتير المخزون المسجلة من المسار الحالي.']};
+  const frameActive = ({stock:'catalog',opening:'entry',purchase:'purchases',purchases:'purchases',receipts:'receiving'})[selected] || selected;
+  const titles={opening:['إضافة المخزون','سجّل الكميات الموجودة ومواصفاتها وتكلفتها وموقعها.'],purchase:['شراء مخزون','تسجيل شراء مستقل لبضاعة مخزنية للطلبات القادمة.'],purchases:['فواتير شراء المخزون','مراجعة فواتير المخزون المسجلة من المسار الحالي.'],receipts:['استلام مشتريات المخزون','سجّل وصول البضاعة كاملة أو على دفعات من الفاتورة الأصلية.']};
   const capabilityError=!allowed?(['stocktake','adjustments','movements'].includes(selected)?stocktakeError:error):'';
   return <WorkspaceFrame embedded={embedded} active={frameActive}>
     <main className="mz-stock-management" dir="rtl">
@@ -89,6 +90,7 @@ function InventoryManagement({ embedded }) {
           {selected==='opening'&&<div className="mz-stock-native-form"><StandaloneInventoryEntry key={"opening:"+context.session_scope} context={context}/></div>}
           {selected==='purchase'&&<div className="mz-stock-native-form"><p className="mz-stock-notice">تسجّل الفاتورة التزام المورد؛ إثبات الاستلام بالموقع والتقييم عمليتان مستقلتان. هذه الصفحة لا تنشئ شراءً لطلب عميل.</p><InventoryPurchases key={"purchase:"+context.session_scope} context={context}/></div>}
           {selected==='purchases'&&<div className="mz-stock-native-form"><InventoryPurchases key={"purchase-reports:"+context.session_scope} context={context} mode="reports"/></div>}
+          {selected==='receipts'&&<InventoryPurchaseReceipts key={"purchase-receipts:"+context.session_scope} context={context} initialInvoiceId={params.get('invoice')||''}/>}
           {['stocktake','adjustments'].includes(selected)&&<Suspense fallback={<div className="mz-stock-empty" role="status">جارٍ فتح مساحة الجرد…</div>}><StocktakeWorkbench mode={selected==='adjustments'?'adjustments':'stocktake'}/></Suspense>}
           {selected==='movements'&&<InventoryMovementsView allowed={countCapabilities.view===true} scope={stocktakeContext} loadMovements={loadInventoryStocktakeMovements}/>}
         </div>}
