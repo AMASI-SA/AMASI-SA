@@ -79,7 +79,9 @@ export function validateInventoryConfiguration(product,config,variantId=''){
   if([...seen,...deferred].some(id=>visibility[id]!=='visible'))throw Error('أعد تحديد الخيارات التابعة؛ توجد قيمة لخيار مخفي.');
   if(!explicit&&config.state==='raw'&&config.inputs.length)throw Error('التخصيص حسب طلب العميل لا يحتفظ بنص جاهز.');
   if((explicit||config.state==='ready')&&options.some(o=>o.required&&visibility[o.id]==='visible'&&!seen.has(o.id)&&!deferred.includes(o.id)))throw Error('أكمل خيارات المنتج المطلوبة أو أجّل التخصيص المتاح.');
-  if(explicit&&options.some(o=>o.stock_identity&&!seen.has(o.id)))throw Error('حدد اللون والمقاس الفعليين للمخزون.');
+  // Hidden physical children do not belong to this variant; pending ones must
+  // still be resolved by answering their parent before the stock can be saved.
+  if(explicit&&options.some(o=>o.stock_identity&&(visibility[o.id]==='pending'||visibility[o.id]==='visible'&&!seen.has(o.id))))throw Error('حدد اللون والمقاس الفعليين للمخزون.');
   if(product?.variants?.length){const variant=inventoryVariantFor(product,config,variantId);if(!variant||String(variant.variant_id)!==String(variantId))throw Error('حدد اللون والمقاس المطابقين لنسخة المنتج.');}
   const combinations=product?.selection_combinations||[],represented=new Set(combinations.flatMap(combination=>combination.map(row=>row.option_id)));
   const comparable=config.selections.filter(row=>represented.has(row.option_id));

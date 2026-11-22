@@ -8,6 +8,7 @@ import {visibleOperationalRead} from './visibleOperationalRead';
 import InventoryPurchaseDraft, {readPurchaseDraft} from './InventoryPurchaseDraft';
 import {resumePurchase,purchaseToday,validatePurchaseCommand} from './inventoryPurchaseWorkflow';
 import {PurchaseReceiptStatus,PurchaseReceiptHistory} from './InventoryPurchaseReceipts';
+import {readInventoryCommands,persistInventoryCommand,removeInventoryCommand} from './inventoryCommandStorage';
 
 const today = purchaseToday;
 const cents = value => { if(!/^\d+(\.\d{1,2})?$/.test(String(value))) throw Error('أدخل مبلغًا صحيحًا بمنزلتين عشريتين كحد أقصى.'); const [a,b='']=String(value).split('.'); const n=Number(a)*100+Number(b.padEnd(2,'0')); if(!Number.isSafeInteger(n))throw Error('المبلغ أكبر من الحد المسموح.'); return n; };
@@ -17,7 +18,8 @@ const fresh = () => ({supplier_id:'',invoice_number:'',invoice_date:today(),line
 
 export default function InventoryPurchases({context,source='mezan2',mode='purchase',supplierId='',fixedSource=null}) {
   const scope=context.session_scope, storageKey=`mezan.operational.inventory.v1:${scope}`;
-  const [recovery]=useState(()=>{try{const command=JSON.parse(localStorage.getItem(storageKey)||'null'); if(command&&(!['purchase','payment'].includes(command.type)||command.body?.expected_session_scope!==scope||!command.body?.request_id))throw Error();if(command?.workflow_version!==undefined)validatePurchaseCommand(command,scope);return {command};}catch{return {error:'تعذر قراءة العملية المحفوظة؛ تحقق من التخزين قبل المتابعة.'};}});
+  const validateRecovery=command=>{if(!['purchase','payment'].includes(command.type)||command.body?.expected_session_scope!==scope||!command.body?.request_id)throw Error();if(command.workflow_version!==undefined)validatePurchaseCommand(command,scope);};
+  const [recovery]=useState(()=>{try{const commands=readInventoryCommands(storageKey,validateRecovery);return {command:commands[0]};}catch{return {error:'تعذر قراءة العملية المحفوظة؛ تحقق من التخزين قبل المتابعة.'};}});
   const [pending,setPending]=useState(recovery.command),[error,setError]=useState(recovery.error||''),[message,setMessage]=useState('');
   const [initialDraft]=useState(()=>readPurchaseDraft(storageKey+':draft'));
   const [draftVersion,setDraftVersion]=useState(0),[lastInvoice,setLastInvoice]=useState(null);
@@ -59,19 +61,19 @@ export default function InventoryPurchases({context,source='mezan2',mode='purcha
     if(lock.current||!entry||!writable||recovery.error)return;
     lock.current=true;setBusy(true);setError('');setMessage('');
     let current=usePrepared?prepared:(pending||prepared);
-    const persist=command=>{current=command;localStorage.setItem(storageKey,JSON.stringify(command));setPending(command);};
+    const persist=command=>{current=command;persistInventoryCommand(storageKey,command);setPending(command);};
     try{
       validatePurchaseCommand(current,scope);
       if(!pending)persist(current);
       const freshContext=await api.context();
       if(freshContext.session_scope!==scope||!freshContext.permissions?.move||freshContext.status!=='active')throw Error('تغيرت الجلسة أو الصلاحية؛ احتفظنا بالعملية للتحقق.');
       current=await resumePurchase(current,api,persist);
-      localStorage.removeItem(storageKey);localStorage.removeItem(storageKey+':draft');
-      setPending(null);setForm(fresh());setDraftVersion(value=>value+1);setLastInvoice(current.invoice);
+      removeInventoryCommand(storageKey,current);
+      setPending(readInventoryCommands(storageKey,validateRecovery)[0]||null);setForm(fresh());setDraftVersion(value=>value+1);setLastInvoice(current.invoice);
       setMessage('تم اعتماد الفاتورة '+current.invoice.invoice_number+' · '+(current.receipt?'تم تسجيل الاستلام المحدد':'بانتظار الاستلام')+' · '+(current.payment?'تم تسجيل السداد المحدد':'آجلة غير مسددة'));
     }catch(reason){
       const definitive=reason.notApplied||reason.response?.data?.detail?.not_applied||[400,422].includes(reason.response?.status);
-      if(current?.phase==='invoice'&&!current.invoice&&definitive){localStorage.removeItem(storageKey);setPending(null);}
+      if(current?.phase==='invoice'&&!current.invoice&&definitive){removeInventoryCommand(storageKey,current);setPending(readInventoryCommands(storageKey,validateRecovery)[0]||null);}
       else if(current?.invoice&&definitive){try{persist({...current,correctable_step:current.phase});}catch{setPending({...current,correctable_step:current.phase});}}
       const detail=reason.response?messageFor(reason):reason.message;
       setError((current?.invoice?'الفاتورة محفوظة؛ لم تكتمل مرحلة '+(current.phase==='receipt'?'الاستلام':'السداد')+'. ':'')+detail);
@@ -85,14 +87,14 @@ export default function InventoryPurchases({context,source='mezan2',mode='purcha
       else corrected={...corrected,receipt:null,receipt_body:null,phase:'payment'};
     }else if(pending.phase==='payment'&&action==='later')corrected={...corrected,payment:null,phase:'complete'};
     else return;
-    try{validatePurchaseCommand(corrected,scope);localStorage.setItem(storageKey,JSON.stringify(corrected));setPending(corrected);}
+    try{validatePurchaseCommand(corrected,scope);persistInventoryCommand(storageKey,corrected);setPending(corrected);}
     catch(reason){setError(reason.message);return;}
     saveWorkflow(corrected,true);
   }
   async function save(type){
     if(lock.current||!writable||recovery.error||mode==='reports'||(pending&&pending.type!==(paying?'payment':'purchase')))return;lock.current=true;setBusy(true);setError('');setMessage('');
+    let command=pending;
     try{
-      let command=pending;
       if(!command){let body;
         if(type==='purchase'){
           if(!form.supplier_id||!form.invoice_number.trim()||!form.invoice_date||!form.lines.length)throw Error('اختر المورد والمنتجات وأكمل بيانات الفاتورة.');totals();
@@ -101,16 +103,16 @@ export default function InventoryPurchases({context,source='mezan2',mode='purcha
           const account=accounts.find(a=>`${a.kind}:${a.id}`===payment?.account);if(!payment||!account||cents(payment.amount)<=0||cents(payment.amount)>cents(payment.row.outstanding))throw Error('اختر مصدر الدفع ومبلغًا لا يتجاوز المتبقي.');
           body={party_type:'supplier',party_id:payment.row.supplier_id,kind:'payment',direction:'outgoing',currency:'SAR',source_account_type:account.kind,bank_id:account.id,amount:payment.amount,allocations:[{obligation_id:payment.row.obligation_id,amount:payment.amount}],reference:payment.reference||'',source,receipt_id:null,business_date:today()};
         }
-        command={type,...(type==='payment'?{lookup:{supplier_id:payment.row.supplier_id,invoice_number:payment.row.invoice_number}}:{}),body:{...body,request_id:requestId(),expected_session_scope:scope}};localStorage.setItem(storageKey,JSON.stringify(command));setPending(command);
+        command={type,...(type==='payment'?{lookup:{supplier_id:payment.row.supplier_id,invoice_number:payment.row.invoice_number}}:{}),body:{...body,request_id:requestId(),expected_session_scope:scope}};persistInventoryCommand(storageKey,command);setPending(command);
       }
       const current=await api.context();if(current.session_scope!==scope||!current.permissions?.move||current.status!=='active')throw Error('تغيرت الجلسة أو الصلاحية؛ احتفظنا بالعملية للتحقق.');
       const result=command.type==='purchase'?await api.saveInventoryPurchase(command.body):await api.movement(command.body);
-      localStorage.removeItem(storageKey);setPending(null);setForm(fresh());setPayment(null);setMessage('تم حفظ العملية التشغيلية');
+      removeInventoryCommand(storageKey,command);setPending(readInventoryCommands(storageKey,validateRecovery)[0]||null);setForm(fresh());setPayment(null);setMessage('تم حفظ العملية التشغيلية');
       // The write response may show the author's invoice without granting report access.
       if(!readable&&command.type==='purchase'&&result?.id){setRows([result]);setMessage(`تم حفظ الفاتورة ${result.invoice_number} · الإجمالي ${result.gross} ريال`);}
       if(!readable&&command.type==='payment'&&command.lookup)setInvoiceRead({...command.lookup,scope});
       if(readable)setLoadVersion(v=>v+1);
-    }catch(e){if(e.response?.data?.detail?.not_applied||[400,422].includes(e.response?.status)){localStorage.removeItem(storageKey);setPending(null);}setError(e.response?messageFor(e):e.message);}
+    }catch(e){if(command&&(e.response?.data?.detail?.not_applied||[400,422].includes(e.response?.status))){removeInventoryCommand(storageKey,command);setPending(readInventoryCommands(storageKey,validateRecovery)[0]||null);}setError(e.response?messageFor(e):e.message);}
     finally{lock.current=false;setBusy(false);}
   }
   return <section dir="rtl" className="op-inventory mz-operational-purchase"><h2>{mode==='reports'?'فواتير وكميات المشتريات':mode==='payment'?'سداد فاتورة مورد':'شراء المخزون'}</h2>{entry&&<p>أكمل صنفًا واحدًا وأضفه إلى المسودة، ثم راجع الاستلام والسداد واعتمد الفاتورة.</p>}<Notice error={error} message={message}/>

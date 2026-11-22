@@ -123,7 +123,12 @@ def configuration(value,product):
     if not explicit_deferred and value['state']=='raw' and inputs:fail('inventory_purchase_raw_customization','المنتج الخام لا يحمل تخصيصًا جاهزًا',422)
     if value['state']=='ready' or explicit_deferred:
         if any(f['required'] and visibility.get(f['id'])=='visible' and f['id'] not in seen|set(deferred) for f in fields.values()):fail('inventory_purchase_required_option','أكمل خيارات المنتج المطلوبة أو أجّل التخصيص المتاح',422)
-    if explicit_deferred and any(f.get('stock_identity') and f['id'] not in seen for f in fields.values()):fail('inventory_purchase_physical_option_required','حدد اللون والمقاس الفعليين للمخزون',422)
+    # Only a definitively hidden physical dimension is inapplicable. An
+    # unanswered parent still needs resolution before the stock is identified.
+    if explicit_deferred and any(f.get('stock_identity') and
+            (visibility.get(f['id']) == 'pending' or
+             visibility.get(f['id']) == 'visible' and f['id'] not in seen)
+            for f in fields.values()):fail('inventory_purchase_physical_option_required','حدد اللون والمقاس الفعليين للمخزون',422)
     if product['kind']=='component' and (seen or deferred):fail('inventory_purchase_component_configuration','المكون يسجل خامًا دون تخصيصات المنتج',422)
     state = ('raw' if deferred else 'ready') if explicit_deferred and product['kind']=='product' else value['state']
     result={'state':state,'selections':sorted(selected,key=lambda x:x['option_id']),'inputs':sorted(inputs,key=lambda x:x['option_id'])}

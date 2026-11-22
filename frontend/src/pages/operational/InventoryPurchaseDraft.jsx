@@ -7,7 +7,7 @@ import {inventoryConfiguration} from '../../lib/inventoryProductConfiguration';
 import PurchaseConfiguration from './PurchaseConfiguration';
 import {inventoryIdentity} from './inventoryIdentity';
 import {assignedQuantity} from './inventoryPersonalizations';
-import {makePurchaseCommand, purchaseLinePayload, purchaseTotals, purchaseMoney, purchaseSettings, purchaseToday} from './inventoryPurchaseWorkflow';
+import {makePurchaseCommand, purchaseLinePayload, purchaseLineFingerprint, purchaseTotals, purchaseMoney, purchaseSettings, purchaseToday} from './inventoryPurchaseWorkflow';
 import './inventoryPurchaseDraft.css';
 
 export function readPurchaseDraft(key) {
@@ -38,6 +38,7 @@ export default function InventoryPurchaseDraft({form,onChange,catalog,locations,
   const [error,setError] = useState(''), [storageError,setStorageError] = useState(''), [message,setMessage] = useState('');
   const [guard,setGuard] = useState(null), [review,setReview] = useState(false), [undo,setUndo] = useState(null);
   const [accounts,setAccounts] = useState([]), [candidates,setCandidates] = useState([]), [paymentLoading,setPaymentLoading] = useState(false);
+  const [excludedPayments,setExcludedPayments] = useState([]);
   const editorRef = useRef(null), ids = useRef(0);
   const owner = context.can_manage_inventory_opening === true;
   const initialEditor = useRef(editor ? JSON.stringify(initialDraft?.form?.lines?.find(line=>line.draft_key===editor.draft_key) || null) : '');
@@ -57,13 +58,13 @@ export default function InventoryPurchaseDraft({form,onChange,catalog,locations,
     return () => window.removeEventListener('beforeunload',warn);
   }, [dirty]);
   useEffect(() => {
-    setCandidates([]);setError('');setPaymentLoading(false);
+    setCandidates([]);setExcludedPayments([]);setError('');setPaymentLoading(false);
     if (settings.payment_mode === 'credit' || disabled) return;
     if (settings.payment_mode === 'existing' && (!owner || !form.supplier_id)) return;
     const controller = new AbortController();let active = true;
     setPaymentLoading(true);
     const call = settings.payment_mode === 'existing'
-      ? api.inventoryPurchasePaymentCandidates(form.supplier_id,{signal:controller.signal}).then(result => {if(active)setCandidates(result.items || []);})
+      ? api.inventoryPurchasePaymentCandidates(form.supplier_id,{signal:controller.signal}).then(result => {if(active){setCandidates(result.items || []);setExcludedPayments(result.excluded || []);}})
       : Promise.all(['bank','cash','employee_custody'].map(accountKind => api.entities(accountKind,{signal:controller.signal}).then(result => result.items.map(item => ({...item,kind:accountKind}))))).then(result => {if(active)setAccounts(result.flat());});
     call.catch(reason => {if(active)setError(messageFor(reason));}).finally(() => {if(active)setPaymentLoading(false);});
     return () => {active=false;controller.abort();};
@@ -80,8 +81,7 @@ export default function InventoryPurchaseDraft({form,onChange,catalog,locations,
     if (!editor) return false;
     try {
       purchaseLinePayload(editor);
-      const duplicate = form.lines.find(line => line.draft_key !== editor.draft_key && inventoryIdentity(line) === inventoryIdentity(editor)
-        && JSON.stringify(line.purchase_configuration || null) === JSON.stringify(editor.purchase_configuration || null) && (line.location_id || '') === (editor.location_id || ''));
+      const duplicate = form.lines.find(line => line.draft_key !== editor.draft_key && purchaseLineFingerprint(line) === purchaseLineFingerprint(editor));
       if (duplicate) throw Error('الصنف بالمواصفات نفسها موجود في المسودة؛ افتحه وعدّل كميته.');
       const existing = form.lines.some(line => line.draft_key === editor.draft_key);
       setForm({lines:existing?form.lines.map(line => line.draft_key===editor.draft_key?editor:line):[editor,...form.lines]});
@@ -135,8 +135,9 @@ export default function InventoryPurchaseDraft({form,onChange,catalog,locations,
         {settings.payment_mode!=='credit'&&<><p>{settings.payment_mode==='existing'?'ربط المبلغ المتاح بالفاتورة فقط؛ لا ينشئ خصمًا جديدًا من البنك أو رصيد المورد.':'سجّل المبلغ المدفوع فعليًا ومصدره؛ هذا التسجيل لا ينفذ تحويلًا بنكيًا.'}</p>{paymentLoading&&<p role="status">جارٍ تحميل مصادر السداد…</p>}<div className="mz-invoice-meta">
           {settings.payment_mode==='existing'?<Field label="الدفعة السابقة"><select value={settings.movement_id} disabled={paymentLoading} onChange={event=>setOption({movement_id:event.target.value})}><option value="">اختر دفعة المورد</option>{candidates.map(item=><option key={item.id} value={item.id}>{item.business_date} · {item.reference || item.bank_name || 'دفعة'} · المتاح {item.available} ر.س</option>)}</select></Field>:<Field label="مصدر السداد"><select value={settings.payment_account} disabled={paymentLoading} onChange={event=>setOption({payment_account:event.target.value})}><option value="">اختر بنكًا أو صندوقًا أو عهدة</option>{accounts.map(item=><option key={item.kind+':'+item.id} value={item.kind+':'+item.id}>{item.name}</option>)}</select></Field>}
           <Field label="مبلغ السداد"><input inputMode="decimal" disabled={settings.payment_mode==='full'} value={settings.payment_mode==='full'?purchaseMoney(total?.gross || 0):settings.payment_amount} onChange={event=>setOption({payment_amount:event.target.value})}/></Field>
-          <Field label={settings.payment_mode==='existing'?'تاريخ ربط الدفعة':'تاريخ السداد'}><input type="date" min={form.invoice_date} max={purchaseToday()} value={settings.payment_date} onChange={event=>setOption({payment_date:event.target.value})}/></Field>
+          <Field label={settings.payment_mode==='existing'?'تاريخ ربط الدفعة':'تاريخ السداد'}><input type="date" min={[form.invoice_date,settings.payment_mode==='existing'&&candidates.find(item=>item.id===settings.movement_id)?.business_date].filter(Boolean).sort().at(-1)} max={purchaseToday()} value={settings.payment_date} onChange={event=>setOption({payment_date:event.target.value})}/></Field>
         </div>{settings.payment_mode!=='existing'&&<Field label="مرجع السداد الاختياري"><input value={settings.payment_reference} onChange={event=>setOption({payment_reference:event.target.value})}/></Field>}{settings.payment_mode==='existing'&&!paymentLoading&&!candidates.length&&<p>لا توجد دفعة سابقة متاحة لهذا المورد. يمكنك حفظ الفاتورة آجلة وسدادها لاحقًا.</p>}</>}
+        {settings.payment_mode==='existing'&&!paymentLoading&&!!excludedPayments.length&&<div className="mz-invoice-payment-exclusions"><p>دفعات تحتاج مراجعة قبل ربطها:</p>{excludedPayments.map(item=><p key={item.reason}>{item.reason} · {item.count} دفعة</p>)}</div>}
       </section>
       <Field label="ملاحظات اختيارية"><textarea rows="2" maxLength="1000" value={form.note} onChange={event=>setForm({note:event.target.value})}/></Field>
       <div className="mz-invoice-footer"><span>{total?'الصافي '+purchaseMoney(total.net)+' · الضريبة '+purchaseMoney(total.tax)+' · الإجمالي '+purchaseMoney(total.gross)+' ريال':'أكمل أسعار الأصناف'}</span><button type="button" className="op-primary" onClick={checkInvoice} disabled={paymentLoading}>مراجعة الفاتورة</button></div>

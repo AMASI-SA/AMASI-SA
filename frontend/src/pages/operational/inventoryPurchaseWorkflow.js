@@ -31,6 +31,18 @@ export function purchaseLinePayload(line) {
     ...inventoryPersonalizations(line),...purchaseConfigurationPayload(line,{allowMissingLocation:true}),
     quantity:Number(line.quantity),unit_price:line.unit_price,tax:line.tax};
 }
+export function purchaseLineFingerprint(line) {
+  const config=line.purchase_configuration;
+  const clean=value=>String(value).normalize('NFC').trim().replace(/\s+/gu,' ');
+  const sorted=rows=>rows.sort((a,b)=>a.option_id.localeCompare(b.option_id));
+  const configured=config?{
+    state:config.state,
+    selections:sorted((config.selections||[]).map(row=>({option_id:row.option_id,value_id:row.value_id}))),
+    inputs:sorted((config.inputs||[]).map(row=>({option_id:row.option_id,value:clean(row.value)}))),
+    ...('deferred_option_ids' in config?{deferred_option_ids:[...config.deferred_option_ids].sort()}:{}),
+  }:null;
+  return JSON.stringify([line.kind,line.item_id||line.id,line.variant_id||null,configured,line.location_id||'']);
+}
 export const purchaseSettings = () => ({receipt_mode:'none',receipt_date:purchaseToday(),receipt_quantities:{},
   payment_mode:'credit',payment_account:'',payment_amount:'',payment_reference:'',payment_date:purchaseToday(),movement_id:''});
 
@@ -77,8 +89,10 @@ export async function resumePurchase(command, api, persist) {
   validatePurchaseCommand(command,command.body?.expected_session_scope);
   let current = command;
   async function checkpoint(patch) {
-    current = {...current,...patch};
-    await persist(current);
+    const next = {...current,...patch};
+    validatePurchaseCommand(next,command.body.expected_session_scope);
+    await persist(next);
+    current=next;
   }
   if (current.phase === 'invoice') {
     const invoice = await api.saveInventoryPurchase(current.body);
@@ -100,8 +114,8 @@ export async function resumePurchase(command, api, persist) {
         await checkpoint({receipt_body:{...body,preview_hash:preview.preview_hash}});
       }
       const result = await api.saveInventoryPurchaseReceipt(current.invoice.id,current.receipt_body);
-      if (result?.status !== 'approved') throw Error('حُفظت الفاتورة؛ لم يصل تأكيد الاستلام. أعد المحاولة بنفس العملية.');
-      await checkpoint({receipt_result:result,invoice:result.invoice || current.invoice});
+      if (result?.status !== 'approved'||!result.receipt_id) throw Error('حُفظت الفاتورة؛ لم يصل تأكيد الاستلام. أعد المحاولة بنفس العملية.');
+      await checkpoint({receipt_result:result,invoice:mergePurchaseInvoice(current.invoice,result.invoice)});
     }
     await checkpoint({phase:'payment'});
   }
@@ -111,11 +125,19 @@ export async function resumePurchase(command, api, persist) {
         ? await api.allocateInventoryPurchasePayment(current.invoice.id,current.payment.body)
         : await api.movement({...current.payment.body,allocations:[{obligation_id:current.invoice.obligation_id,amount:current.payment.body.amount}]});
       if (!result?.id) throw Error('حُفظت الفاتورة؛ لم يصل تأكيد السداد. أعد المحاولة بنفس العملية.');
-      await checkpoint({payment_result:result,invoice:result.invoice || current.invoice});
+      await checkpoint({payment_result:result,invoice:mergePurchaseInvoice(current.invoice,result.invoice)});
     }
     await checkpoint({phase:'complete'});
   }
   return current;
+}
+
+function mergePurchaseInvoice(before,after) {
+  if(!after)return before;
+  if(after.id!==before.id||!Array.isArray(after.lines)||after.lines.length!==before.lines.length)throw Error('تعذر مطابقة تأكيد العملية مع الفاتورة؛ أعد المحاولة بنفس العملية.');
+  // Financial responses contain the stored invoice but may omit receipt
+  // decorations. Preserve those decorations, including each saved line ID.
+  return {...before,...after,lines:after.lines.map((line,index)=>({...before.lines[index],...line}))};
 }
 
 export function validatePurchaseCommand(command,scope) {
@@ -125,22 +147,43 @@ export function validatePurchaseCommand(command,scope) {
   const validBody=body=>body&&typeof body.request_id==='string'&&body.request_id.length>=8&&body.expected_session_scope===scope;
   const body=command.body;
   if(!validBody(body)||!body.supplier_id||!body.invoice_number||!Array.isArray(body.lines)||!body.lines.length||body.receipt_tracking_version!==1)invalid();
-  if(command.phase!=='invoice'&&(!command.invoice?.id||!command.invoice.obligation_id||!Array.isArray(command.invoice.lines)||command.invoice.lines.length!==body.lines.length))invalid();
-  if(command.invoice?.supplier_id&&command.invoice.supplier_id!==body.supplier_id)invalid();
+  const validDate=value=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&!Number.isNaN(Date.parse(value))&&new Date(value).toISOString().slice(0,10)===value;
+  if(!validDate(body.invoice_date)||body.invoice_date>purchaseToday())invalid();
+  const total=purchaseTotals(body.lines);
+  if(command.phase!=='invoice'&&!command.invoice)invalid();
+  if(command.invoice){
+    const invoice=command.invoice;
+    if(!invoice.id||!invoice.obligation_id||invoice.supplier_id!==body.supplier_id||invoice.invoice_number!==body.invoice_number||invoice.invoice_date!==body.invoice_date||!Array.isArray(invoice.lines)||invoice.lines.length!==body.lines.length)invalid();
+    for(let index=0;index<body.lines.length;index++){
+      const sent=body.lines[index],saved=invoice.lines[index];
+      if(saved.item_id!==sent.item_id||saved.kind!==sent.kind||Number(saved.quantity)!==sent.quantity||(saved.variant_id||null)!==(sent.variant_id||null))invalid();
+      if(purchaseCents(saved.unit_price)!==purchaseCents(sent.unit_price)||purchaseCents(saved.tax)!==purchaseCents(sent.tax))invalid();
+    }
+  }
   if(command.receipt){
-    if(!validBody(command.receipt)||!Array.isArray(command.receipt.lines)||!command.receipt.lines.length||!command.receipt.receipt_date)invalid();
+    const receipt=command.receipt;
+    if(!validBody(receipt)||!Array.isArray(receipt.lines)||!receipt.lines.length||!validDate(receipt.receipt_date)||receipt.receipt_date<body.invoice_date||receipt.receipt_date>purchaseToday())invalid();
     const seen=new Set();
-    for(const line of command.receipt.lines){if(!Number.isSafeInteger(line.index)||!body.lines[line.index]||seen.has(line.index)||!Number.isSafeInteger(line.quantity)||line.quantity<=0||line.quantity>body.lines[line.index].quantity||!line.location_id)invalid();seen.add(line.index);}
-    if(command.receipt_body&&(!validBody(command.receipt_body)||command.receipt_body.request_id!==command.receipt.request_id||!command.receipt_body.preview_hash||!Array.isArray(command.receipt_body.lines)))invalid();
-    if(['payment','complete'].includes(command.phase)&&command.receipt_result?.status!=='approved')invalid();
+    for(const line of receipt.lines){if(!Number.isSafeInteger(line.index)||!body.lines[line.index]||seen.has(line.index)||!Number.isSafeInteger(line.quantity)||line.quantity<=0||line.quantity>body.lines[line.index].quantity||!line.location_id)invalid();seen.add(line.index);}
+    if(command.receipt_body){
+      const previewed=command.receipt_body;
+      if(!command.invoice||!validBody(previewed)||previewed.request_id!==receipt.request_id||previewed.receipt_date!==receipt.receipt_date||(previewed.note||'')!==(receipt.note||'')||!/^[0-9a-f]{64}$/.test(previewed.preview_hash)||!Array.isArray(previewed.lines)||previewed.lines.length!==receipt.lines.length)invalid();
+      for(let index=0;index<receipt.lines.length;index++){
+        const planned=receipt.lines[index],actual=previewed.lines[index],saved=command.invoice.lines[planned.index];
+        if(!saved.line_id||actual.line_id!==saved.line_id||actual.quantity!==planned.quantity||actual.location_id!==planned.location_id)invalid();
+      }
+    }
+    if(['payment','complete'].includes(command.phase)&&(!command.receipt_body||command.receipt_result?.status!=='approved'||!command.receipt_result.receipt_id))invalid();
+    if(command.receipt_result?.invoice_id&&command.receipt_result.invoice_id!==command.invoice?.id)invalid();
   }
   if(command.payment){
-    if(!['movement','allocation'].includes(command.payment.kind)||!validBody(command.payment.body)||!command.payment.body.business_date)invalid();
+    if(!['movement','allocation'].includes(command.payment.kind)||!validBody(command.payment.body))invalid();
     const payment=command.payment.body;
-    if(purchaseCents(payment.amount)<=0)invalid();
+    if(!validDate(payment.business_date)||payment.business_date<body.invoice_date||payment.business_date>purchaseToday()||purchaseCents(payment.amount)<=0||purchaseCents(payment.amount)>total.gross)invalid();
     if(command.payment.kind==='allocation'&&!payment.movement_id)invalid();
     if(command.payment.kind==='movement'&&(!payment.bank_id||payment.party_id!==body.supplier_id||payment.direction!=='outgoing'||payment.kind!=='payment'||payment.currency!=='SAR'))invalid();
     if(command.phase==='complete'&&!command.payment_result?.id)invalid();
+    if(command.payment_result?.invoice_id&&command.payment_result.invoice_id!==command.invoice?.id)invalid();
   }
   return command;
 }

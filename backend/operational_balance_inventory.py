@@ -1,4 +1,4 @@
-"""Actual inventory purchase receipts in the temporary operational aggregate only.
+"""Purchase obligations in the operational aggregate; physical receipt is separate.
 
 MZ2 catalogues are read-only. Quantities are purchased/received quantities, not
 the Accounting warehouse's available stock. Payments use the existing movement
@@ -310,7 +310,8 @@ async def save_purchase(db, owner, actor, payload, *, source='mezan2', clock=Non
             invoice['receipt_tracking_version'] = 1
         invoices.append(invoice)
         project_inventory(state)
-        audit(state,actor,'inventory_purchase_saved',None,invoice,'فاتورة شراء واستلام مخزون تشغيلية',source,stamp)
+        audit(state,actor,'inventory_purchase_saved',None,invoice,
+              'فاتورة شراء مخزون تشغيلية' if payload.get('receipt_tracking_version') == 1 else 'فاتورة شراء واستلام مخزون تشغيلية',source,stamp)
         result = purchase_view(state,invoice)
         remember(state,'inventory_purchase:'+actor,payload,result)
         return result

@@ -4,6 +4,7 @@ import {Field, Notice} from './OpeningBalances';
 import {configurationDescription} from './PurchaseConfiguration';
 import {purchaseToday} from './inventoryPurchaseWorkflow';
 import {visibleOperationalRead} from './visibleOperationalRead';
+import {readInventoryCommands,persistInventoryCommand,removeInventoryCommand} from './inventoryCommandStorage';
 import './inventoryPurchaseDraft.css';
 
 export const receiptLabels = {not_received:'بانتظار الاستلام',partial:'مستلمة جزئيًا',received:'مستلمة بالكامل',closed:'لا توجد كمية متبقية للاستلام',unproven:'الاستلام غير مثبت'};
@@ -18,7 +19,8 @@ export function PurchaseReceiptHistory({invoice}) {
 
 export default function InventoryPurchaseReceipts({context,initialInvoiceId=''}) {
   const scope = context.session_scope, key = 'mezan.inventory.purchase.receiving.v1:'+scope;
-  const [recovery] = useState(()=>{try{const saved=JSON.parse(localStorage.getItem(key)||'null');if(saved&&(!saved.invoice_id||!saved.body?.request_id||saved.body.expected_session_scope!==scope||!saved.body.preview_hash))throw Error();return {saved};}catch{return {error:'تعذر قراءة عملية الاستلام المحفوظة. تحقق من التخزين قبل المتابعة.'};}});
+  const validateRecovery=command=>{if(!command.invoice_id||!command.body?.request_id||command.body.expected_session_scope!==scope||!command.body.preview_hash||!Array.isArray(command.body.lines)||!command.body.lines.length)throw Error();};
+  const [recovery] = useState(()=>{try{return {saved:readInventoryCommands(key,validateRecovery)[0]};}catch{return {error:'تعذر قراءة عملية الاستلام المحفوظة. تحقق من التخزين قبل المتابعة.'};}});
   const [pending,setPending] = useState(recovery.saved), [rows,setRows] = useState([]), [selected,setSelected] = useState(recovery.saved?.invoice_id || initialInvoiceId);
   const [detail,setDetail] = useState(null), [quantities,setQuantities] = useState({}), [locations,setLocations] = useState({});
   const [date,setDate] = useState(purchaseToday), [note,setNote] = useState(''), [filter,setFilter] = useState('waiting'), [search,setSearch] = useState('');
@@ -59,15 +61,15 @@ export default function InventoryPurchaseReceipts({context,initialInvoiceId=''})
         const preview=await api.previewInventoryPurchaseReceipt(selected,body);
         if(!preview?.preview_hash||preview.writer_disabled||preview.fulfillment_eligible!==false)throw Error('الاستلام متوقف أو تعذر التحقق من الكميات.');
         command={invoice_id:selected,body:{...body,preview_hash:preview.preview_hash}};
-        localStorage.setItem(key,JSON.stringify(command));setPending(command);
+        persistInventoryCommand(key,command);setPending(command);
       }
       const result=await api.saveInventoryPurchaseReceipt(command.invoice_id,command.body);
       if(result?.status!=='approved')throw Error('لم يصل تأكيد الاستلام. أعد المحاولة بنفس العملية.');
-      localStorage.removeItem(key);
-      if(mounted.current){setPending(null);setMessage('تم تسجيل الاستلام وإضافة الكميات المحددة إلى المخزون. بقي رصيد المورد والسداد دون تغيير.');setRevision(value=>value+1);}
+      removeInventoryCommand(key,command);
+      if(mounted.current){const next=readInventoryCommands(key,validateRecovery)[0]||null;setPending(next);if(next)setSelected(next.invoice_id);setMessage('تم تسجيل الاستلام وإضافة الكميات المحددة إلى المخزون. بقي رصيد المورد والسداد دون تغيير.');setRevision(value=>value+1);}
     }catch(reason){
       const code=reason.response?.data?.detail?.code;
-      if(reason.response?.data?.detail?.not_applied===true||['purchase_receipt_preview_changed','opening_inventory_preview_changed','purchase_receipt_quantity_exceeded'].includes(code)||reason.response?.status===422){localStorage.removeItem(key);if(mounted.current)setPending(null);}
+      if(reason.response?.data?.detail?.not_applied===true||['purchase_receipt_preview_changed','opening_inventory_preview_changed','purchase_receipt_quantity_exceeded'].includes(code)||reason.response?.status===422){if(command)removeInventoryCommand(key,command);if(mounted.current){const next=readInventoryCommands(key,validateRecovery)[0]||null;setPending(next);if(next)setSelected(next.invoice_id);setRevision(value=>value+1);}}
       if(mounted.current)setError(reason.response?messageFor(reason):reason.message);
     }finally{lock.current=false;if(mounted.current)setBusy(false);}
   }

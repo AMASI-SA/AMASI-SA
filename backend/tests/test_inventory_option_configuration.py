@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from inventory_option_configuration import (
     configuration_identity, configuration_specifications, option_visibility,
 )
-from operational_purchase_metadata import option_contract, configuration, describe
+from operational_purchase_metadata import option_contract, combinations, configuration, describe
 
 
 def product_source():
@@ -119,6 +119,52 @@ def test_new_configuration_requires_a_unique_full_physical_combination():
     reject(config(), definition, 'inventory_purchase_combination_invalid')
     legacy = config(); legacy.pop('deferred_option_ids')
     assert configuration(legacy, definition)[0]['state'] == 'ready'
+
+
+def conditional_physical_product(*, mapped_variants=True):
+    source = {'options': [
+        {'id': 'kind', 'name': 'نوع القطعة', 'type': 'radio', 'required': mapped_variants,
+         'values': [{'id': 'plain', 'name': 'قطعة عادية'}, {'id': 'chain', 'name': 'سلسلة'}]},
+        {'id': 'length', 'name': 'طول السلسلة', 'type': 'select', 'required': True,
+         'values': [{'id': 'long', 'name': 'طويلة'}], 'inventory_role': 'physical',
+         'show_if': [{'option_id': 'kind', 'value_id': 'chain'}]},
+    ], 'variants': [
+        {'id': 'plain-variant', 'selections': [{'option_id': 'kind', 'value_id': 'plain'}]},
+        {'id': 'chain-variant', 'selections': [{'option_id': 'kind', 'value_id': 'chain'},
+                                             {'option_id': 'length', 'value_id': 'long'}]},
+    ] if mapped_variants else []}
+    options, issues = option_contract(source)
+    assert issues == []
+    return {'kind': 'product', 'options': options, 'configuration_issues': issues,
+            'selection_combinations': combinations(source, options)}
+
+
+@pytest.mark.parametrize('kind', ['plain', 'chain'])
+def test_physical_requirements_follow_visibility_for_each_complete_variant(kind):
+    definition = conditional_physical_product()
+    selections = [{'option_id': 'kind', 'value_id': kind}]
+    if kind == 'chain': selections.append({'option_id': 'length', 'value_id': 'long'})
+    body = {'state': 'ready', 'selections': selections, 'inputs': [], 'deferred_option_ids': []}
+    assert option_visibility(definition['options'], selections)['length'] == ('hidden' if kind == 'plain' else 'visible')
+    saved, labels = configuration(body, definition)
+    assert saved == body
+    assert {row['option_id'] for row in labels} == ({'kind'} if kind == 'plain' else {'kind', 'length'})
+
+
+def test_hidden_physical_values_and_incomplete_visible_dimensions_are_rejected():
+    definition = conditional_physical_product()
+    hidden = {'state': 'ready', 'selections': [{'option_id': 'kind', 'value_id': 'plain'},
+              {'option_id': 'length', 'value_id': 'long'}], 'inputs': [], 'deferred_option_ids': []}
+    reject(hidden, definition)
+    missing = {**hidden, 'selections': [{'option_id': 'kind', 'value_id': 'chain'}]}
+    reject(missing, definition)
+
+
+def test_pending_physical_dimension_requires_parent_answer_even_without_variant_maps():
+    definition = conditional_physical_product(mapped_variants=False)
+    body = {'state': 'ready', 'selections': [], 'inputs': [], 'deferred_option_ids': []}
+    assert option_visibility(definition['options'], [])['length'] == 'pending'
+    reject(body, definition, 'inventory_purchase_physical_option_required')
 
 
 def test_deferred_parent_is_pending_not_false_and_hidden_parent_cascades():

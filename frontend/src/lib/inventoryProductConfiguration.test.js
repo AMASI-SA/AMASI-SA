@@ -69,6 +69,31 @@ test('new configured purchases require a unique complete physical combination',(
   expect(()=>validateInventoryConfiguration({...product,selection_combinations:[combo,combo]},fixed())).toThrow('تركيبة واحدة');
 });
 
+const conditionalPhysicalProduct={configuration_contract_version:2,physical_option_ids:['kind','length'],options:[
+  {id:'kind',name:'نوع القطعة',type:'radio',required:true,stock_identity:true,values:[{id:'plain',name:'قطعة عادية'},{id:'chain',name:'سلسلة'}]},
+  {id:'length',name:'طول السلسلة',type:'select',required:true,stock_identity:true,values:[{id:'long',name:'طويلة'}],visibility_rules:[{option_id:'kind',value_id:'chain',operator:'='}]},
+],selection_combinations:[[{option_id:'kind',value_id:'plain'}],[{option_id:'kind',value_id:'chain'},{option_id:'length',value_id:'long'}]]};
+
+test.each(['plain','chain'])('physical requirements follow visibility for complete %s variant',kind=>{
+  const config={state:'ready',selections:[{option_id:'kind',value_id:kind},...(kind==='chain'?[{option_id:'length',value_id:'long'}]:[])],inputs:[],deferred_option_ids:[]};
+  expect(inventoryOptionVisibility(conditionalPhysicalProduct,config).length).toBe(kind==='plain'?'hidden':'visible');
+  expect(()=>validateInventoryConfiguration(conditionalPhysicalProduct,config)).not.toThrow();
+});
+
+test('hidden physical values and incomplete visible physical dimensions are rejected',()=>{
+  const hidden={state:'ready',selections:[{option_id:'kind',value_id:'plain'},{option_id:'length',value_id:'long'}],inputs:[],deferred_option_ids:[]};
+  expect(()=>validateInventoryConfiguration(conditionalPhysicalProduct,hidden)).toThrow('خيار مخفي');
+  const missing={...hidden,selections:[{option_id:'kind',value_id:'chain'}]};
+  expect(()=>validateInventoryConfiguration(conditionalPhysicalProduct,missing)).toThrow();
+});
+
+test('pending physical dimension requires a parent answer even without variant mappings',()=>{
+  const definition={...conditionalPhysicalProduct,physical_option_ids:['length'],selection_combinations:[],options:conditionalPhysicalProduct.options.map(option=>option.id==='kind'?{...option,required:false,stock_identity:false}:option)};
+  const config={state:'ready',selections:[],inputs:[],deferred_option_ids:[]};
+  expect(inventoryOptionVisibility(definition,config).length).toBe('pending');
+  expect(()=>validateInventoryConfiguration(definition,config)).toThrow('حدد اللون والمقاس');
+});
+
 test('not-equals does not interpret unanswered parent as no',()=>{
   const dependent={...product,options:product.options.map(option=>option.id==='name'?{...option,visibility_rules:[{option_id:'emb',value_id:'yes',operator:'!='}]}:option)};
   expect(inventoryOptionVisibility(dependent,{selections:[],inputs:[],deferred_option_ids:[]}).name).toBe('pending');
