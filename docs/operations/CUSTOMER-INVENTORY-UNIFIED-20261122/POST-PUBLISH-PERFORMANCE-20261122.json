@@ -3,7 +3,7 @@
   "kind": "post-publication-performance-diagnosis",
   "observed_date": "2026-11-22",
   "timezone": "Asia/Riyadh",
-  "status": "inconclusive-live-bottleneck; source inspection complete; browser/network evidence needed",
+  "status": "withdrawn-misdirected-message-by-owner",
   "baseline": {
     "deployment_git_sha": "06763ffd6e3c3f7c861769b61d2c4e6b9b2d5f35",
     "source_git_sha": "063611ff163c90d80cdbf96446a28584fe429846",
@@ -110,10 +110,7 @@
     "performance_not_inferred_from_identity_verify": true,
     "preview_metrics_not_production": true
   },
-  "next_evidence": [
-    "Actual slow route and browser Network path/status/duration/pending request metadata",
-    "Existing sanitized demand_read_sample from Production View Logs: queue_ms/build_ms/wall_ms/process_cpu_ms/Mongo latency"
-  ],
+  "next_evidence": [],
   "mutations": {
     "source": false,
     "shared_app": false,
@@ -122,5 +119,13 @@
     "lease": false,
     "publish": false,
     "rollback": false
+  },
+  "owner_correction": {
+    "date": "2026-11-22",
+    "instruction": "Ignore the mistakenly sent slowness message; focus on supplied deployment-inspection output",
+    "task_performance_followup": false,
+    "network_capture_request_withdrawn": true,
+    "release_gate_added": false,
+    "prior_observations": "historical only; not an assigned active incident"
   }
 }
