@@ -6,12 +6,68 @@ Status: implementation verified locally and preserved in two draft PRs. No produ
 
 | Component | Repository | Reviewed base | Source checkpoint | Draft PR |
 |---|---|---|---|---|
-| Backend | AMASI-SA/AMASI-SA | `88af38f01cf979acbca59b95a95e661828f2306f` | `0d16e1a1fdd80ae303995fd320fe2dcb73987f6a` | [#2050](https://github.com/AMASI-SA/AMASI-SA/pull/2050) |
-| Employee app | AMASI-SA/amasi-mobile | `e06ce56faf467d5e8ec06ce023f51f86f9cabf21` | `bc4f8c21b42023557fd2f68c7c21f316fb32557d` | [#373](https://github.com/AMASI-SA/amasi-mobile/pull/373) |
+| Backend | AMASI-SA/AMASI-SA | `6cfd09f40796b4ee739ce73484013029f3e3099d` | `f3a6bf907b7d9cc899627018792905ee0bb33a33` | [#2050](https://github.com/AMASI-SA/AMASI-SA/pull/2050) |
+| Employee app | AMASI-SA/amasi-mobile | `cabbb8b3949816092d1761f8b3512b4baf6dc8da` | `89e7dca352c075a95dff0897554dda4d6362ad60` | [#373](https://github.com/AMASI-SA/amasi-mobile/pull/373) |
 
 Task branch in both repositories: `codex/assembly-queues-fast-read-20261121`.
 Backend target: `hotfix/prod-snap-meta-final`. Mobile target: `codex/assembly-print-lifecycle-20261108`.
 Source checkpoint SHAs above are immutable and recoverable. The later documentation-only checkpoint on each task branch adds this record; verify its parent/source diff before continuing.
+
+## Latest follow-up: two unread previews with visit-only dismissal — 2026-11-22
+
+The final user correction is **two unread notifications total**, not two per employee or three employees. The latest clarification makes the X a **current-visit dismissal only**. This follow-up is implemented and verified, saved in the existing draft PRs, and is not a release.
+
+### Accepted behavior and lightweight read
+
+- One compact card above the existing My Products overview cards displays at most the two newest authorized unread human notifications, with sender, short preview, time and order number. Two notices from the same employee are allowed. An empty result renders no card or empty space.
+- Tapping a notice navigates to its exact existing private instruction conversation. Merely previewing or closing the card does not mark a notification read or send any message.
+- X hides the card for the current overview visit. Background/resume, bell events and a benign refresh of the same account do not undo this dismissal. Leaving and reentering the overview creates a fresh visit and read: unread items make the card reappear; no unread items means it stays absent.
+- The component mounts only on the overview and reads only while focused/active. It adds no polling timer, ignores existing bell poll events, aborts stale requests on blur/account invalidation and coalesces concurrent change events. Navigation cards never wait for this optional request.
+- The mobile client makes one bounded GET to `/order-tracking-notes/notifications/me/unread-preview`, with no automatic retry or full inbox/conversation hydration. Failures leave the existing overview usable.
+- The server response is versioned, limited to two after authorization/read filters, and `Cache-Control: no-store`. Merchant, recipient, conversation parties, legacy notice-read markers and current mobile permission context are checked. Driver callers are denied. No read acknowledgement, backfill, reconciliation, or order/product writes occur in this GET.
+- The aggregate projects minimal fields, bounds execution at 1,500 ms, uses batch size 2 and forbids disk spill. A timeout returns retryable 503 rather than a false empty result. Supporting indexes are registered through the existing worker startup index setup, never created on GET.
+
+### Exact source and preservation
+
+Mobile source: [`89e7dca352c075a95dff0897554dda4d6362ad60`](https://github.com/AMASI-SA/amasi-mobile/commit/89e7dca352c075a95dff0897554dda4d6362ad60), parent `cabbb8b3949816092d1761f8b3512b4baf6dc8da`.
+Backend source: [`f3a6bf907b7d9cc899627018792905ee0bb33a33`](https://github.com/AMASI-SA/AMASI-SA/commit/f3a6bf907b7d9cc899627018792905ee0bb33a33), parent `6cfd09f40796b4ee739ce73484013029f3e3099d`.
+
+Each source commit changes exactly six files. Full remote-tree comparison verified all other 855 mobile and 6,180 backend files unchanged. All 46 pre-existing instructions/native-notification files remain byte-identical, preserving the earlier notifications redesign. Existing assembly queues, monitoring, shipment feedback and persistent matching prompt changes remain in the branch. The later handoff commit changes only this STATUS file.
+
+### Verification and limits
+
+- Actual mobile TSX/repository suite: **10 groups PASS**, including X during a visit, background/resume, same-account refresh, reentry with unread, reentry with none, read updates, private navigation, no poll work, overlapping events and stale account/network responses.
+- TypeScript 5.9.3: the actual three changed production roots resolve to **714 source/declaration files, zero diagnostics**. Default ESLint: **zero errors and warnings**. No source stubs or weakened compiler/lint settings.
+- Prior scan-result feedback **8 groups PASS** and print-return matching lifecycle **10 groups PASS** after the shared harness change.
+- New backend HTTP/real-Mongo suite: **10 tests PASS, no skips**. The implementation review also ran the focused conversation, sender-directory and account-scope suites: **58 total PASS, no skips**. Index explain coverage excludes 1,000 read events without scanning them as unread. Local Mongo is isolated 7.0.16; CI uses its existing 8.0.12 fixture.
+- Independent review: **PASS**, including fresh actual-component and real-Mongo execution against the final frozen source blobs.
+- Exact backend source GitHub [Mobile Order Tracking run 45028293272](https://github.com/AMASI-SA/AMASI-SA/actions/runs/45028293272): **success**, including the real-Mongo tests and no-skips gate.
+- Exact mobile source [Mobile CI run 45028294545](https://github.com/AMASI-SA/amasi-mobile/actions/runs/45028294545): **failure before test execution**. The completed `frontend-checks` job `137226029042` has `runner_id: 0` and `steps: []`. No successful mobile CI claim, root-cause inference, retry loop or weakened gate. Local passes do not replace this unresolved CI requirement.
+- This verifies source behavior and bounded reads, not production load latency or physical-device acceptance. No APK was built/distributed, OTA published, PR merged, production deployed or production notification changed.
+
+CI snapshot observed 2026-11-22 16:39 Asia/Riyadh. Deploy the compatible backend endpoint and ensure the startup indexes before distributing this mobile update, when publishing is requested. The existing production protocol and required mobile/device checks still apply.
+
+#### Mobile frozen source files
+
+| Path | Git blob SHA |
+|---|---|
+| `frontend/src/features/instructions/MyProductsUnreadPreview.tsx` | `84fff7707a948b2a3921367913c922376d2051ad` |
+| `frontend/src/features/instructions/unreadPreviewRepository.ts` | `c916b635fa6f3e656f73c274df39fe654875c820` |
+| `frontend/src/features/myProducts/MyProductsOverview.tsx` | `aab086a2a2033764d30685c291bb60c3f537048e` |
+| `frontend/scripts/verify-my-products-unread-preview.cjs` | `0ebd9852aba360c828dcc6464a46307189ae3e6b` |
+| `frontend/scripts/ui-contract-harness.cjs` | `8d2e39869d497b46a73fecdd25adda1aaff6d54f` |
+| `.github/workflows/mobile-ci.yml` | `cc74136bfab8739162d9a48850487c5cd1ead221` |
+
+#### Backend frozen source files
+
+| Path | Git blob SHA |
+|---|---|
+| `backend/operational_unread_preview.py` | `5bfc171abb808d2d87e2d0e6623154b051686aa6` |
+| `backend/order_tracking_notes_routes.py` | `29d9845292e67e8d46874e807ee26e3bf5d4acbb` |
+| `backend/operational_instruction_conversations.py` | `28787ca552b4e3690698d8012b1672b20d3a2ffd` |
+| `backend/mobile_app_request_context.py` | `67ee9aaf7e81d51ba01755f087ff758ec16a494d` |
+| `backend/tests/test_notification_unread_preview.py` | `73ee9a73c6e136af7d7be6647f16dc857718ac0f` |
+| `.github/workflows/mobile-order-tracking.yml` | `c9cf9e36380c3d9961786a655462550ea1dcac1c` |
 
 ## Accepted behavior
 
@@ -278,7 +334,7 @@ A complete order-ID set reconciliation was not obtained: the existing diagnostic
 
 1. Fetch both remote task branches and verify the source checkpoints and documentation-only successors. Read this status record and the PR checks; do not resume from the older local checkpoint.
 2. Resolve the mobile CI job-start failure and run the required checks. No test gate was weakened to make it pass.
-3. Pair review is complete for the monitoring follow-up. Deploy the backend queue/count/read, pending-stage display and monitoring `pending_only` contracts before distributing the mobile update, only after the user requests publishing.
+3. Pair review is complete for the unread-preview follow-up. Deploy the compatible unread-preview endpoint/startup indexes together with the existing queue/count/read, pending-stage display and monitoring `pending_only` contracts before distributing the mobile update, only after the user requests publishing.
 4. For backend release, follow the repository `AGENTS.md` protocol v5 from the then-current reviewed production source, prepare a new governed source/intent pair and perform the required release verification. This task created no lease, no release intent, no merge and no deployment.
 
 Production changed by this task: **no**. No production financial, order, supplier, notification, email or message writes were performed. The repository-wide issue ledger was not posted to; this record and the draft PRs are the durable handoff.
