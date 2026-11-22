@@ -206,9 +206,9 @@ def test_register_only_projects_requested_rows_and_invalidates_on_change(monkeyp
         builds, rendered = [], []
         original_index, original_row = ws._register_index, ws._row
 
-        def indexed(*args):
+        def indexed(*args, **kwargs):
             builds.append(True)
-            return original_index(*args)
+            return original_index(*args, **kwargs)
 
         def render(*args):
             rendered.append(True)

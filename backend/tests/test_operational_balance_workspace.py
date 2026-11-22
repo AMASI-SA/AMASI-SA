@@ -680,7 +680,30 @@ def test_prepaid_cash_transfer_requires_reference_and_survives_retries():
     run(scenario)
 
 
-def test_employee_usd_ad_funding_from_assigned_sar_bank_posts_both_legs_once():
+def test_mobile_prepaid_topups_without_reference_have_distinct_ids_and_retry_once():
+    async def scenario(db, client):
+        await db[STATES].update_one({"_id": "owner"}, {"$set": {"courier_tariffs": [
+            {"payment_mode": "prepaid", "cash_account": {"id": "cash"}}]}})
+        commands = [entry(party_type="cash", party_id="cash", reason="transfer", amount="25.00")
+                    for _ in range(2)]
+        commands[1]["reference"] = "  "
+        headers = {"x-test-mobile": "yes"}
+        for command in commands:
+            first = await client.post(BASE + "/entries", json=command, headers=headers)
+            assert first.status_code == 200, first.text
+            assert (await client.post(BASE + "/entries", json=command, headers=headers)).json() == first.json()
+            changed = await client.post(BASE + "/entries", json={**command, "amount": "26.00"}, headers=headers)
+            assert changed.status_code == 409
+        state = await read(db, "owner")
+        assert len({row["id"] for row in state["movements"]}) == 2
+        assert all(row["reference"] == "" for row in state["movements"])
+        assert balance(state, "bank", "bank")["actual"] == "950.00"
+        assert balance(state, "cash", "cash")["actual"] == "550.00"
+    run(scenario)
+
+
+@pytest.mark.parametrize("bank_reference", ["BANK-TEST-USD", None, " 7 "])
+def test_employee_usd_ad_funding_from_assigned_sar_bank_posts_both_legs_once(bank_reference):
     from backend.tests.test_operational_balance_integration import seed_ad_account
 
     async def scenario(db, client):
@@ -708,8 +731,15 @@ def test_employee_usd_ad_funding_from_assigned_sar_bank_posts_both_legs_once():
             assert quote.json() == {"amount_usd": "100.00", "gross_sar": "383.63", "fee_sar": "8.63",
                                     "commission_sar": "7.50", "fee_vat_sar": "1.13", "exchange_rate": "3.75"}
         body = entry(expected_session_scope=digest(["owner", "staff"]), party_type="ad_account",
-                     party_id="ad", reason="payment", reference="BANK-TEST-USD", amount="100",
+                     party_id="ad", reason="payment", amount="100",
                      ad_bank_funding={"bank_amount": "383.63", "bank_fee_amount": "8.63", "kind": "wallet_funding"})
+        if bank_reference is not None:
+            body["reference"] = bank_reference
+        if not bank_reference or len(bank_reference.strip()) < 3:
+            web_body = {**body, "request_id": "web-fx-without-required-reference",
+                        "expected_session_scope": digest(["owner", "owner"])}
+            web = await client.post(BASE + "/entries", json=web_body)
+            assert web.json()["detail"]["code"] == "operational_ad_fx_reference_required"
         async def send(**changes):
             return await client.post(BASE + "/entries", headers=headers, json={**body, **changes})
         assert (await send(source_type="cash", source_id="cash")).status_code == 422
@@ -724,6 +754,7 @@ def test_employee_usd_ad_funding_from_assigned_sar_bank_posts_both_legs_once():
         state = await read(db, "owner")
         assert len(state["movements"]) == 1
         row = state["movements"][0]
+        assert row["reference"] == (bank_reference or "").strip()
         assert (row["currency"], row["amount"], row["bank_currency"], row["bank_amount"], row["bank_fee_amount"],
                 row["bank_net_amount"], row["actor_id"]) == ("USD", "100.00", "SAR", "383.63", "8.63", "375.00", "staff")
         assert balance(state, "bank", "bank")["actual"] == "616.37"
@@ -807,7 +838,8 @@ def test_supplier_invoice_is_one_searchable_row_with_recorded_approver_and_lazy_
     run(scenario)
 
 
-def test_paypal_payout_moves_net_to_bank_once_after_arrival():
+@pytest.mark.parametrize("mobile", [False, True])
+def test_paypal_payout_moves_net_to_bank_once_after_arrival(mobile):
     from test_operational_balance_configured_provider_fees import paid_state, settings
     async def scenario(db, client):
         wallet, _ = paid_state("paypal", terms=settings("PayPal", "4.9", "1.13", "0"))
@@ -819,14 +851,22 @@ def test_paypal_payout_moves_net_to_bank_once_after_arrival():
         assert await available() == "93.97"
         body = entry(party_type="provider", party_id="paypal", reason="collection", side="for_party",
                      amount="93.97", reference="PP-1", bank_arrival_confirmed=True)
-        for bad in ({"source_type": "cash", "source_id": "cash"}, {"reference": ""}, {"amount": "100.00"}):
-            invalid = await client.post(BASE + "/entries", json={**body, **bad, "request_id": "entry-" + uuid4().hex})
+        headers = {"x-test-mobile": "yes" if mobile else "no"}
+        if mobile:
+            del body["reference"]
+        invalid_cases = [{"source_type": "cash", "source_id": "cash"}, {"bank_arrival_confirmed": False},
+                         {"amount": "100.00"}, {"business_date": "2026-10-31"}]
+        if not mobile:
+            invalid_cases.append({"reference": ""})
+        for bad in invalid_cases:
+            invalid = await client.post(BASE + "/entries", headers=headers, json={**body, **bad, "request_id": "entry-" + uuid4().hex})
             assert invalid.status_code in {409, 422}
-        assert (await client.post(BASE + "/entries", json=body)).status_code == 200
-        assert (await client.post(BASE + "/entries", json=body)).status_code == 200
+        assert (await client.post(BASE + "/entries", headers=headers, json=body)).status_code == 200
+        assert (await client.post(BASE + "/entries", headers=headers, json=body)).status_code == 200
         assert await available() == "0.00"
         state = await read(db, "owner")
         assert len(state["movements"]) == 1
+        assert state["movements"][0]["reference"] == ("" if mobile else "PP-1")
         assert balance(state, "bank", "bank")["actual"] == "1093.97"
     run(scenario)
 

@@ -263,6 +263,8 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
         # credited USD advertising amount, and total debited SAR including bank fee.
         fx_fields = ("bank_currency", "bank_amount", "bank_fee_amount")
         has_fx = any(payload.get(field) is not None for field in fx_fields)
+        reference = (payload.get("reference") or "").strip()
+        reference_optional = source == "employee_app"
         bank_gross = bank_fee = bank_net = fx_rate = None
         if has_fx:
             if any(payload.get(field) is None for field in fx_fields):
@@ -281,7 +283,7 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
             fx_rate = (bank_net / amount).quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
             if fx_rate < Decimal("2") or fx_rate > Decimal("6"):
                 fail("operational_ad_fx_rate_invalid", "تأكد من المبلغ بالدولار والريال؛ سعر التحويل المحسوب غير معقول", 422)
-            if len(str(payload.get("reference") or "").strip()) < 3:
+            if not reference_optional and len(reference) < 3:
                 fail("operational_ad_fx_reference_required", "أدخل مرجع عملية البنك لتوثيق الخصم ومنع التكرار", 422)
         wallet_pool = row["kind"] == "ad_account" and wallet_pool_enabled(state, row["id"], currency)
         if wallet_pool:
@@ -371,29 +373,31 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
                 await order_bank_eligible(db, owner, payload["order_number"], state["started_at"], reject_automatic=payload["direction"] == "incoming")
             except ValueError:
                 fail("operational_order_ineligible", "الطلب أو حالته أو إثباته غير مؤهل لاحتساب الحركة")
-        reference = payload.get("reference", "").strip()
+        missing_required_reference = not reference_optional and not reference
         paypal_payout = row["kind"] == "provider" and row["id"] == "paypal" and payload["kind"] != "correction"
         if paypal_payout and (not bank or bank["kind"] != "bank" or currency != "SAR"
                 or payload["kind"] != "collection" or payload["direction"] != "incoming"
-                or not payload.get("business_date") or not reference or payload.get("bank_arrival_confirmed") is not True
+                or not payload.get("business_date") or missing_required_reference or payload.get("bank_arrival_confirmed") is not True
                 or payload.get("allocations") or money(payload.get("actual_fee_amount", "0"), zero=True)):
-            fail("operational_paypal_bank_confirmation_required", "حدد البنك وأكّد صافي الحوالة وتاريخ وصولها ومرجعها", 422)
+            message = "حدد البنك وأكّد صافي الحوالة وتاريخ وصولها"
+            fail("operational_paypal_bank_confirmation_required", message if reference_optional else message + " ومرجعها", 422)
         pos_settlement = row["kind"] == "pos_receivable" and payload["kind"] != "correction"
         if pos_settlement and (not bank or bank["kind"] != "bank" or payload["direction"] != "incoming"
                 or payload["kind"] not in {"collection", "settlement"} or not payload.get("business_date")
-                or payload.get("bank_arrival_confirmed") is not True or not reference):
-            fail("operational_pos_bank_confirmation_required", "أكد مطابقة وصول الحوالة إلى البنك وأدخل مرجعها وتاريخها", 422)
+                or payload.get("bank_arrival_confirmed") is not True or missing_required_reference):
+            message = "أكد مطابقة وصول الحوالة إلى البنك وأدخل تاريخها"
+            fail("operational_pos_bank_confirmation_required", message if reference_optional else message + " ومرجعها", 422)
         if (pos_settlement or paypal_payout) and date.fromisoformat(payload["business_date"]) < datetime.fromisoformat(
                 state["started_at"].replace("Z", "+00:00")).astimezone(ZoneInfo("Asia/Riyadh")).date():
             fail("operational_business_date_invalid", "تاريخ وصول الحوالة يسبق بداية الأرصدة التشغيلية", 422)
-        if payload["kind"] == "transfer" and bank and bank["kind"] == "bank" and row["kind"] == "cash" and not reference:
+        if payload["kind"] == "transfer" and bank and bank["kind"] == "bank" and row["kind"] == "cash" and missing_required_reference:
             if prepaid_shipping_cash(state, row["id"]):
                 fail("operational_transfer_reference_required", "أدخل مرجع التحويل إلى صندوق الشحن", 422)
         if reference and any(r.get("status") in {"refunded", "salla_refund_confirmed"} and r.get("refund_source_type") == "bank"
                              and r.get("refund_source_id") == payload.get("bank_id") and r.get("refund_reference") == reference
                              for r in state.get("customer_returns", [])):
             fail("operational_reference_duplicate", "مرجع الاسترداد مسجل بالفعل")
-        if reference and any(m.get("reference") == reference and m.get("bank_id") == payload.get("bank_id")
+        if reference and any((m.get("reference") or "").strip() == reference and m.get("bank_id") == payload.get("bank_id")
                              for m in state["movements"]):
             fail("operational_reference_duplicate", "مرجع الحركة مستخدم من قبل")
         fee = money(payload.get("actual_fee_amount", "0"), zero=True)
@@ -497,7 +501,7 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
             fail("operational_ad_debt_priority_required",
                  "الدفعة تسدد المستحق الإعلاني أولًا، ثم يضاف الزائد إلى المحفظة. أكمل تخصيص المستحق أو اترك التخصيص تلقائيًا.")
         recorded_actor = await db["users"].find_one({"id": actor}, {"_id": 0, "id": 1, "name": 1})
-        item = {**payload, "id": operation_id,
+        item = {**payload, "id": operation_id, "reference": reference,
                 "amount": fmt(amount), "actual_fee_amount": fmt(fee), "allocations": allocations, "actor_id": actor,
                 "recorded_by": {"id": actor, "name": str(recorded_actor.get("name") or "غير موثق")} if recorded_actor else None,
                 "source": source, "occurred_at": stamp, "name": row["name"],
