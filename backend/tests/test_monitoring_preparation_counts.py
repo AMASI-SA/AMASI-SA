@@ -107,14 +107,42 @@ class ReadBudgetDB:
         return Collection()
 
 
-async def read_counts(db, monkeypatch, *, allowed=True):
+async def read_counts(db, monkeypatch, *, allowed=True, dedicated=False, params=None):
     async def access(*_args):
         return {"permissions": [monitoring.MONITORING_PERMISSION] if allowed else []}
     monkeypatch.setattr(monitoring, "mobile_app_access_for_user", access)
     app = FastAPI()
     app.include_router(monitoring.make_mobile_operations_monitoring_router(db, lambda: {"id": OWNER, "role": "owner"}))
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://synthetic.test") as client:
-        return await client.get("/mobile/operations-monitoring/preparation", params={"pending_only": "true"})
+        path = "/mobile/operations-monitoring/preparation-pending-counts" if dedicated else "/mobile/operations-monitoring/preparation"
+        return await client.get(path, params=params if params is not None else ({} if dedicated else {"pending_only": "true"}))
+
+
+@pytest.mark.asyncio
+async def test_dedicated_count_endpoint_preserves_scope_and_cannot_enter_dated_or_directory_modes(monkeypatch):
+    db = AsyncMongoMockClient().dedicated_monitoring
+    account = await employee(db, "A")
+    await order(db, "active")
+    await db[monitoring.PIECES].insert_many([
+        piece("pending", account),
+        piece("received", account, status="received", supplier_dispatch_status="received", received_at=WHEN),
+        piece("foreign", account, user_id="foreign"),
+    ])
+    legacy = await read_counts(ReadBudgetDB(db), monkeypatch)
+    assert legacy.status_code == 200, legacy.text
+    assert [(row["employee_id"], row["outstanding_preparation_count"])
+            for row in legacy.json()["employees"]] == [("A", 1)]
+    for params in ({}, {"pending_only": "false", "directory_only": "true", "from_at": "invalid-date", "to_at": "invalid-date"}):
+        observed = ReadBudgetDB(db)
+        result = await read_counts(observed, monkeypatch, dedicated=True, params=params)
+        assert result.status_code == 200, result.text
+        assert result.json() == legacy.json()
+        assert sum(call[1] == "aggregate" for call in observed.calls) == 1
+        assert "range" not in result.json() and "directory_only" not in result.json()
+    denied = ReadBudgetDB(db)
+    result = await read_counts(denied, monkeypatch, dedicated=True, allowed=False)
+    assert result.status_code == 403
+    assert denied.calls == []
 
 
 @pytest.mark.asyncio

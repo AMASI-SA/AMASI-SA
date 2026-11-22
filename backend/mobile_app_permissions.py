@@ -225,6 +225,7 @@ async def _mobile_app_access_for_linked_employee(
 
 
 async def mobile_app_access_for_user(db: Any, user: dict[str, Any]) -> dict[str, Any]:
+    from customer_refund_access import CUSTOMER_REFUNDS_APP_PERMISSION, REFUND_FIELD, REFUND_OPERATIONS, load_customer_refund_access
     role = str(user.get("role") or "").strip().casefold()
     is_owner = role == "owner" or user.get("is_owner") is True
     owner_id = (
@@ -261,11 +262,26 @@ async def mobile_app_access_for_user(db: Any, user: dict[str, Any]) -> dict[str,
     # enforces resource/operation grants on every request and before money CAS.
     # Do not require a second native-permission assignment for this workspace.
     workspace_enabled = False
+    refund_enabled = False
     if not is_owner:
         from operational_balance_access import POLICY_FIELD, normalized_policy
         workspace = normalized_policy(user.get(POLICY_FIELD), owner=owner_id)
-        workspace_enabled = account_active and bool(owner_id) and workspace["enabled"]
+        workspace_active = account_active and bool(owner_id) and workspace["enabled"]
+        raw_workspace = user.get(POLICY_FIELD)
+        shared_refund = isinstance(raw_workspace, dict) and REFUND_FIELD in raw_workspace
+        refund_operations = set(workspace["operations"]) & REFUND_OPERATIONS
+        if workspace_active and refund_operations:
+            if shared_refund:
+                refund_enabled = (await load_customer_refund_access(db, user, owner_id)).can_operation("customer.refund_read")
+            else:
+                refund_enabled = True
+        general_operations = set(workspace["operations"]) - REFUND_OPERATIONS
+        general_reads = any(row["balance"] or row["report"] or row["print"] or row["movements"] != "none"
+                            for row in workspace["resources"])
+        workspace_enabled = workspace_active and bool(general_operations or general_reads or not shared_refund and not refund_operations)
         permissions.difference_update(OPERATIONAL_APP_PERMISSIONS)
+        if refund_enabled:
+            permissions.add(CUSTOMER_REFUNDS_APP_PERMISSION)
         if workspace_enabled:
             permissions.add(OPERATIONAL_APP_READ)
             if workspace["operations"]:
@@ -276,10 +292,12 @@ async def mobile_app_access_for_user(db: Any, user: dict[str, Any]) -> dict[str,
         # page/action becomes available automatically while Mezan web RBAC
         # remains completely separate.
         permissions.update(MOBILE_APP_PERMISSIONS)
+        if role == "owner" and not user.get("_mobile_actor_id") and user.get("active") is not False:
+            permissions.add(CUSTOMER_REFUNDS_APP_PERMISSION)
     permissions_list = sorted(permissions)
     return {
-        "configured": access is not None or is_owner or workspace_enabled,
-        "enabled": bool(account_active and (access is not None or is_owner or workspace_enabled)),
+        "configured": access is not None or is_owner or workspace_enabled or refund_enabled,
+        "enabled": bool(account_active and (access is not None or is_owner or workspace_enabled or refund_enabled)),
         "owner_override": bool(is_owner and account_active),
         "owner_baseline": bool(is_owner),
         "manager": MOBILE_APP_MANAGER in permissions,

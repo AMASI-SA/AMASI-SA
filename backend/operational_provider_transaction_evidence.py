@@ -261,6 +261,13 @@ def normalize_operational_payment(raw, currency, total, created_at, as_of, *, ow
     try:
         amounts = provider_order_page_balance(raw, currency, total, allow_paid_only=True)
     except ValueError as exc:
+        if str(exc) in {"provider_refund_execution_evidence_required", "provider_payment_amount_conflict",
+                        "provider_capture_status_conflict", "provider_capture_original_basis_required"}:
+            from operational_customer_payment_basis import confirmed_paid_basis
+            basis = confirmed_paid_basis(raw, currency, total, created_at, as_of, owner=owner,
+                order_number=order_number, provider_order_id=provider_order_id, rows=rows, source=source)
+            if basis is not None:
+                return basis["payment"], []
         return None, [{"code": str(exc), "provider": provider}]
     from operational_split_payment import split_payment_evidence
     split = split_payment_evidence(raw, currency, total, amounts, owner=owner, order_number=order_number,
@@ -310,6 +317,14 @@ def normalize_operational_payment(raw, currency, total, created_at, as_of, *, ow
         "gross": format(_amount(total, currency), ".2f"), "source_updated_at": source_stamp}
     if "order_page_reference" in payment:
         payment["order_page_balance"]["transaction_reference"] = payment.pop("order_page_reference")
+    difference = _amount(total, currency) - paid
+    if paid > 0 and difference:
+        payment["customer_adjustment"] = {
+            "order_total": format(_amount(total, currency), ".2f"), "paid_amount": format(paid, ".2f"),
+            "refund_hint_amount": "0.00", "suggested_refund_amount": format(max(-difference, Decimal(0)), ".2f"),
+            "suggested_collection_amount": format(max(difference, Decimal(0)), ".2f"),
+            "evidence_source": page_source,
+        }
     return payment, []
 
 

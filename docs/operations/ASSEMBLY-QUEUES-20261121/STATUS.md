@@ -447,3 +447,7 @@ The requested mobile flow is form → local save/review → final confirmation. 
 Outstanding work at this checkpoint: finish and review the isolated refund read/permission adapter and mobile screens; ensure mobile backward compatibility with current production notification registration/counts, monitoring and queue APIs; run integrated verification; checkpoint and build the authorized employee app. The new refund menu requires the explicit server capability, including owners, before it can issue new endpoint requests. Mezan publication remains deferred and requires a fresh source/intent pair under protocolv5 after the other release is settled.
 
 Production changed by this checkpoint: **no**. No production merge, shared `/app` modification, release lease, publish click, financial write or external notification was performed. Issue1006 is at its comment limit; this task document and the draft PR preserve continuation.
+
+## Customer refund review and app-first publication — 2026-11-22
+
+The next source checkpoint adds the shared refund grant, canonical read adapter, separate mobile review/confirmation flow, three-second result popups and old-server compatibility. The current continuation and verification record is [CUSTOMER-REFUNDS-MOBILE-20261122](../CUSTOMER-REFUNDS-MOBILE-20261122/STATUS.md). The user authorized app-first publication; Mezan may wait. No APK or backend deployment is claimed by this checkpoint.

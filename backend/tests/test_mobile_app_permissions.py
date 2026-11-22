@@ -12,6 +12,7 @@ from mobile_app_permissions import (
     validate_mobile_app_permissions,
 )
 import supplier_receiving_routes
+from customer_refund_access import CUSTOMER_REFUNDS_APP_PERMISSION
 
 
 class _Collection:
@@ -92,7 +93,7 @@ def test_owner_always_receives_every_mobile_app_permission():
         {"id": "owner-1", "role": "owner"},
     ))
     assert result["owner_override"] is True
-    assert set(result["permissions"]) == MOBILE_APP_PERMISSIONS
+    assert set(result["permissions"]) == MOBILE_APP_PERMISSIONS | {CUSTOMER_REFUNDS_APP_PERMISSION}
 
 
 def test_supplier_receiving_translates_actions_only_for_signed_mobile_session(monkeypatch):

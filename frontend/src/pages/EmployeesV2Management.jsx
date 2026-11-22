@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { WEB_PERMISSIONS_PATH } from "../lib/webPageAccess";
+import CustomerRefundAccessDialog from "./CustomerRefundAccessDialog";
 import {
     ArrowClockwise,
     CheckCircle,
@@ -502,7 +503,7 @@ function EventsModal({ employee, items, loading, onClose }) {
 }
 
 
-function EmployeeCard({ employee, management, onEdit, onAccount, onRole, onMobileAppPermissions, onEvents }) {
+function EmployeeCard({ employee, management, onEdit, onAccount, onRole, onMobileAppPermissions, onCustomerRefundAccess, onEvents }) {
     const linked = Boolean(employee.account?.user_id);
     const role = employee.operational_role || {};
     const salary = employee.salary_contract?.current_monthly_amount ?? employee.salary_contract?.monthly_amount;
@@ -532,6 +533,7 @@ function EmployeeCard({ employee, management, onEdit, onAccount, onRole, onMobil
                 <div className="rounded-2xl border bg-slate-50 p-3"><div className="text-[10px] font-bold text-slate-500">الصلاحيات</div><div className="mt-1 text-sm font-black">{numberFormatter.format(role.effective_permissions?.length || 0)}</div></div>
             </div>
             {employee.account?.suggested_account && !linked && <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900">اقتراح يحتاج اعتمادًا يدويًا: {employee.account.suggested_account.name || employee.account.suggested_account.email}</div>}
+            {linked && <button type="button" onClick={onCustomerRefundAccess} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm font-bold text-emerald-900"><CurrencyCircleDollar />استرجاع المبالغ للعملاء</button>}
             <div className="mt-4 grid grid-cols-2 gap-2"><button type="button" onClick={onAccount} className="inline-flex items-center justify-center gap-1 rounded-xl border px-3 py-2.5 text-xs font-black text-violet-700"><LinkSimple />{linked ? "الحساب وكلمة المرور" : "ربط حساب"}</button><button type="button" onClick={linked ? onRole : onAccount} className="inline-flex items-center justify-center gap-1 rounded-xl border px-3 py-2.5 text-xs font-black text-emerald-700"><ShieldCheck />{linked ? "الدور التشغيلي" : "اربط الحساب أولًا"}</button>{linked && <Link to={WEB_PERMISSIONS_PATH + "&member=" + encodeURIComponent(employee.account.user_id)} className="inline-flex items-center justify-center gap-1 rounded-xl border px-3 py-2.5 text-xs font-black text-emerald-700"><ShieldCheck />صلاحيات ميزان</Link>}<button type="button" onClick={linked ? onMobileAppPermissions : onAccount} className="inline-flex items-center justify-center gap-1 rounded-xl border px-3 py-2.5 text-xs font-black text-sky-700"><DeviceMobile />{linked ? `صلاحيات التطبيق (${numberFormatter.format(employee.mobile_app_access?.permissions?.length || 0)})` : "اربط الحساب أولًا"}</button><button type="button" onClick={onEvents} className="inline-flex items-center justify-center gap-1 rounded-xl border px-3 py-2.5 text-xs font-black text-slate-700"><ClockCounterClockwise />سجل النشاط</button></div>
         </article>
     );
@@ -618,12 +620,13 @@ export default function EmployeesV2ManagementWorkspace() {
 
             {loading && <div className="rounded-3xl border bg-white p-12 text-center font-bold text-slate-500">جارٍ تحميل إدارة الموظفين…</div>}
             {!loading && !employees.length && <div className="rounded-3xl border border-dashed bg-white p-12 text-center text-slate-500">لا يوجد موظفون مطابقون للبحث والتصفية.</div>}
-            {!loading && employees.length > 0 && <section className="grid gap-3 xl:grid-cols-2">{employees.map((employee) => <EmployeeCard key={employee.id} employee={employee} management={management} onEdit={() => setModal({ type: "form", employee })} onAccount={() => setModal({ type: "account", employee })} onRole={() => setModal({ type: "role", employee })} onMobileAppPermissions={() => setModal({ type: "mobile-app-permissions", employee })} onEvents={() => openEvents(employee)} />)}</section>}
+            {!loading && employees.length > 0 && <section className="grid gap-3 xl:grid-cols-2">{employees.map((employee) => <EmployeeCard key={employee.id} employee={employee} management={management} onEdit={() => setModal({ type: "form", employee })} onAccount={() => setModal({ type: "account", employee })} onRole={() => setModal({ type: "role", employee })} onMobileAppPermissions={() => setModal({ type: "mobile-app-permissions", employee })} onCustomerRefundAccess={() => setModal({ type: "customer-refund-access", employee })} onEvents={() => openEvents(employee)} />)}</section>}
 
             {modal?.type === "form" && <EmployeeFormModal employee={selectedEmployee} busy={busy} onClose={() => setModal(null)} onSubmit={(payload) => mutate(() => selectedEmployee ? updateEmployeesV2(selectedEmployee.id, payload) : createEmployeesV2(payload), selectedEmployee ? (payload.monthly_salary ? "تم تحديث الموظف والراتب بتاريخ السريان دون ترحيل مالي" : "تم تحديث الموظف") : (payload.monthly_salary ? "تمت إضافة الموظف وعقد الراتب دون ترحيل مالي" : "تمت إضافة الموظف دون عقد راتب"))} />}
             {modal?.type === "account" && selectedEmployee && <AccountModal employee={selectedEmployee} candidates={management.login_account_candidates || []} busy={busy} onClose={() => setModal(null)} onLink={(accountId) => mutate(() => linkEmployeesV2Account(selectedEmployee.id, accountId), "تم ربط حساب الدخول بالحالة الحالية للموظف")} onCreateAndLink={(payload) => mutate(() => createAndLinkEmployeesV2Account(selectedEmployee.id, payload), "تم إنشاء حساب الدخول وربطه بصفر صلاحيات قديمة")} onUnlink={() => mutate(() => unlinkEmployeesV2Account(selectedEmployee.id), "تم فصل الحساب وإيقاف وصوله فورًا")} onPassword={(password) => mutate(() => resetEmployeesV2AccountPassword(selectedEmployee.id, password), "تم تغيير كلمة مرور الموظف دون إظهارها في السجل")} />}
             {modal?.type === "role" && selectedEmployee && <RoleModal employee={selectedEmployee} management={management} busy={busy} onClose={() => setModal(null)} onSubmit={(payload) => mutate(() => assignEmployeesV2Role(selectedEmployee.id, payload), "تم حفظ الدور والصلاحيات")} />}
             {modal?.type === "mobile-app-permissions" && selectedEmployee && <MobileAppPermissionsModal employee={selectedEmployee} management={management} busy={busy} onClose={() => setModal(null)} onSubmit={(payload) => mutate(() => assignEmployeesV2MobileAppPermissions(selectedEmployee.id, payload), "تم حفظ صلاحيات التطبيق فقط دون تغيير صلاحيات ميزان")} />}
+            {modal?.type === "customer-refund-access" && selectedEmployee && <CustomerRefundAccessDialog key={selectedEmployee.id} employee={selectedEmployee} onClose={() => setModal(null)} onSaved={() => { setModal(null); toast.success("تم حفظ صلاحية استرجاع المبالغ للتطبيق وميزان"); }} />}
             {modal?.type === "events" && <EventsModal employee={selectedEmployee} items={events.items} loading={events.loading} onClose={() => setModal(null)} />}
         </div>
     );

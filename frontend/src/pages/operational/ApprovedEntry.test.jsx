@@ -12,7 +12,7 @@ jest.mock('react-router-dom', () => {
 });
 
 jest.mock('./simpleBalancesApi', () => ({ simpleBalancesApi: {
-  accountGroup: jest.fn(), refundOrder: jest.fn(), refunds: jest.fn(), refund: jest.fn(), requestRefund: jest.fn(), entry: jest.fn(), pendingCommand: jest.fn(), discardPending: jest.fn(), registerPending: jest.fn(), retirePending: jest.fn(), quoteAd: jest.fn(),
+  accountGroup: jest.fn(), customerAdjustments: jest.fn(), refundOrder: jest.fn(), refunds: jest.fn(), refund: jest.fn(), requestRefund: jest.fn(), entry: jest.fn(), pendingCommand: jest.fn(), discardPending: jest.fn(), registerPending: jest.fn(), retirePending: jest.fn(), quoteAd: jest.fn(),
 }, simpleBalanceError: err => err?.localMessage || 'تعذر الحفظ' }));
 global.IS_REACT_ACT_ENVIRONMENT = true;
 const resource = (kind,id, use = true) => ({kind,id,name:id,currency:'SAR',access:{use}});
@@ -30,10 +30,25 @@ beforeEach(() => {
   api.registerPending.mockImplementation(async(id,record)=>({id,...record})); api.retirePending.mockImplementation(async id=>({deleted:true,id}));
   api.entry.mockImplementation(async command=>({saved:true,movement_id:'M1',party_type:command.party_type,party_id:command.party_id}));
   api.refundOrder.mockImplementation(async()=>order());
+  api.customerAdjustments.mockResolvedValue({items:[],page:1,page_size:8,total:0,total_pages:1,summary:{refund_pending_amount:'100.00',refund_pending_count:1,collection_pending_amount:'20.00',collection_pending_count:1,unknown_count:0}});
   host=document.createElement('div');document.body.append(host);root=createRoot(host);saved=jest.fn();
 });
 afterEach(()=>{act(()=>root.unmount());host.remove();});
 const render=async component=>act(async()=>root.render(<MemoryRouter>{component}</MemoryRouter>));
+test('a shared refund-read grant can inspect the same pending inbox without any write controls', async () => {
+  const scoped = {...context(), operations:['customer.refund_read']};
+  api.refundOrder.mockResolvedValue({...order(),can_request:false,can_record_execution:false});
+  await render(<ApprovedRefund context={scoped} identity="refund-read" readOnly onBack={()=>{}} onSaved={saved}/>);
+  expect(api.customerAdjustments).toHaveBeenCalledTimes(1);
+  expect(host.textContent).not.toContain('عرض طلبات الإرجاع غير متاح');
+  await change('رقم الطلب في سلة','245');
+  await act(async()=>host.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+  expect(api.refundOrder).toHaveBeenCalledWith('245',expect.objectContaining({signal:expect.any(AbortSignal)}));
+  expect(host.textContent).toContain('سجل إرجاعات الطلب');
+  expect(api.requestRefund).not.toHaveBeenCalled();
+  expect(api.registerPending).not.toHaveBeenCalled();
+  expect(host.querySelector('input[name="amount"]')).toBeNull();
+});
 const button=txt=>[...host.querySelectorAll('button')].find(b=>b.textContent.includes(txt));
 async function click(text){await act(async()=>button(text).click());}
 async function change(label,value){
@@ -101,9 +116,12 @@ test('changing payee type clears the previous payee and funding identity',async(
   await change('المبلغ (ريال)','10'); await click('مراجعة الحركة'); await click('تأكيد وتسجيل الحركة');
   expect(api.entry).toHaveBeenCalledWith(expect.objectContaining({party_type:'courier',party_id:'شركة الشحن'}));
 });
-test('refund open and typing perform zero reads until explicit order lookup; amounts and history come from that lookup',async()=>{
+test('refund inbox loads once while typing never searches orders; explicit lookup supplies the available amount and history',async()=>{
   await render(<ApprovedRefund context={context()} identity="staff" onBack={()=>{}} onSaved={saved}/>);
+  expect(api.customerAdjustments).toHaveBeenCalledTimes(1);
+  expect(host.textContent).toContain('استرجاع ينتظر التأكيد');
   await change('رقم الطلب في سلة','٢٤٥');
+  expect(api.customerAdjustments).toHaveBeenCalledTimes(1);
   expect(api.refundOrder).not.toHaveBeenCalled(); expect(api.refunds).not.toHaveBeenCalled();
   await click('عرض الطلب');
   expect(api.refundOrder).toHaveBeenCalledTimes(1);
@@ -114,6 +132,15 @@ test('refund open and typing perform zero reads until explicit order lookup; amo
   await click('حفظ طلب الإرجاع');
   expect(api.requestRefund).toHaveBeenCalledWith(expect.objectContaining({order_number:'245',amount:'280.00',method:'original'}));
   expect(saved).not.toHaveBeenCalled();expect(host.textContent).toContain('حُفظ طلب الإرجاع');
+});
+
+test('confirmed refunds use a server status filter before pagination and stay separate from detected differences',async()=>{
+  api.refunds.mockResolvedValue({items:[],page:1,page_size:8,total:0,total_pages:1});
+  await render(<ApprovedRefund context={context()} identity="staff" onBack={()=>{}} onSaved={saved}/>);
+  await click('ردود مؤكدة');
+  expect(api.refunds).toHaveBeenCalledWith({page:1,page_size:8,status:'refunded'},expect.objectContaining({signal:expect.any(AbortSignal)}));
+  expect(api.refundOrder).not.toHaveBeenCalled();expect(api.customerAdjustments).toHaveBeenCalledTimes(1);
+  await click('طلبات رد معلّقة');expect(api.refunds).toHaveBeenLastCalledWith({page:1,page_size:8,status:'pending'},expect.any(Object));
 });
 
 test('an internal transfer uses a different receiving account and preserves the shipping wallet bank reference',async()=>{

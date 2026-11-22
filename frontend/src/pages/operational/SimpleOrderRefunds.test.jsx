@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import SimpleOrderRefunds, { RefundDetails, RefundRequestForm } from './SimpleOrderRefunds';
 import { simpleBalancesApi as api } from './simpleBalancesApi';
 
-jest.mock('./simpleBalancesApi', () => ({ simpleBalancesApi: { refundOrder: jest.fn(), refunds: jest.fn(), refund: jest.fn(), requestRefund: jest.fn(), confirmRefund: jest.fn(), cancelRefund: jest.fn(), reconcileRefund: jest.fn(), registerPending: jest.fn(), pendingCommand: jest.fn(), retirePending: jest.fn() }, simpleBalanceError: error => error?.localMessage || 'لم تتأكد نتيجة الحفظ' }));
+jest.mock('./simpleBalancesApi', () => ({ simpleBalancesApi: { refundOrder: jest.fn(), refunds: jest.fn(), refund: jest.fn(), requestRefund: jest.fn(), recordRefundExecution: jest.fn(), uploadCustomerReceipt: jest.fn(), customerReceipt: jest.fn(), confirmRefund: jest.fn(), cancelRefund: jest.fn(), reconcileRefund: jest.fn(), registerPending: jest.fn(), pendingCommand: jest.fn(), retirePending: jest.fn() }, simpleBalanceError: error => error?.localMessage || 'لم تتأكد نتيجة الحفظ' }));
 jest.mock('react-router-dom', () => ({ useSearchParams: () => {
   const ReactModule = require('react');
   const [params, setParams] = ReactModule.useState(() => new URLSearchParams(globalThis.window.location.search));
@@ -47,6 +47,8 @@ beforeEach(() => {
     amount: body.amount, method: body.method, source: body.method === 'bank' ? { kind: 'bank', id: body.bank_id, name: 'بنك المؤسسة' }
       : { kind: 'provider', id: 'tamara', name: 'تمارا' } }) }));
   api.confirmRefund.mockResolvedValue({ saved: true, item: refund({ status: 'refunded', can_confirm: false }) });
+  api.recordRefundExecution.mockImplementation(body => Promise.resolve({saved:true,item:refund({status:'refunded',order_number:body.order_number,amount:body.amount,method:body.method,
+    source:body.method==='bank'?{kind:'bank',id:body.bank_id,name:'بنك المؤسسة'}:{kind:'provider',id:'tamara',name:'تمارا'},receipt_id:body.receipt_id})}));
   api.cancelRefund.mockResolvedValue({ saved: true, item: refund({ status: 'cancelled', can_cancel: false }) });
   api.registerPending.mockImplementation((id, value) => Promise.resolve({ id, ...value }));
   api.pendingCommand.mockRejectedValue({ response: { status: 404, data: { detail: { code: 'operational_pending_command_not_found' } } } });
@@ -165,4 +167,80 @@ test('refund history is paginated in five rows and keeps recorder attribution', 
   expect(host.querySelectorAll('tbody tr')).toHaveLength(5); expect(host.textContent).toContain('سجّلها: محمد');
   await click('التالي'); expect(host.querySelectorAll('tbody tr')).toHaveLength(1);
   expect(api.refunds).toHaveBeenLastCalledWith({ page: 2, page_size: 5 }, expect.objectContaining({ signal: expect.any(AbortSignal) }));
+});
+
+test('an actual platform refund requires its own reference, date and acknowledgement and records only an uploaded receipt id',async()=>{
+  const current=order({can_record_execution:true,basis_hash:'a'.repeat(64),suggested_refund_amount:'100.00'});
+  await render(<RefundRequestForm approved context={context()} order={current} onSaved={saved}/>);
+  expect(field('المبلغ (ريال)').value).toBe('100.00');
+  await change('المصدر الذي ردّ المبلغ فعليًا','original');await change('سبب الإرجاع','تعديل منتج');await submit();
+  expect(api.recordRefundExecution).not.toHaveBeenCalled();
+  await change('مرجع عملية رد المبلغ','REFUND-100');
+  api.uploadCustomerReceipt.mockResolvedValue({id:'receipt-1',name:'proof.png',mime:'image/png',size:5,order_number:'2042'});
+  const input=host.querySelector('input[type="file"]'), file=new File(['proof'],'proof.png',{type:'image/png'});
+  await act(async()=>{Object.defineProperty(input,'files',{configurable:true,value:[file]});input.dispatchEvent(new Event('change',{bubbles:true}));});
+  const upload=api.uploadCustomerReceipt.mock.calls[0][0];
+  expect(upload.get('order_number')).toBe('2042');expect(upload.get('operation')).toBe('customer.refund_execute');expect(upload.get('expected_session_scope')).toBe('scope');
+  await submit();expect(api.recordRefundExecution).not.toHaveBeenCalled();
+  await act(async()=>host.querySelector('input[type="checkbox"]').click());await submit();await submit();
+  expect(api.recordRefundExecution).toHaveBeenCalledTimes(1);
+  const sent=api.recordRefundExecution.mock.calls[0][0];
+  expect(sent).toEqual(expect.objectContaining({order_number:'2042',amount:'100.00',method:'original',expected_basis_hash:'a'.repeat(64),reference:'REFUND-100',receipt_id:'receipt-1',confirmed:true}));
+  expect(Number.isNaN(Date.parse(sent.executed_at))).toBe(false);expect(sent.bank_id).toBeUndefined();expect(sent.file).toBeUndefined();
+  expect(api.registerPending.mock.calls[0][1].action).toBe('refund.record_execution');
+  expect(api.confirmRefund).not.toHaveBeenCalled();expect(api.requestRefund).not.toHaveBeenCalled();
+});
+
+test('an unconfirmed difference never performs a refund and an uncertain execution retries its immutable evidence',async()=>{
+  const current=order({can_record_execution:true,basis_hash:'a'.repeat(64),suggested_refund_amount:'0.80'});
+  api.recordRefundExecution.mockRejectedValueOnce(new Error('reply unknown'));
+  await render(<RefundRequestForm key="first" approved context={context()} order={current} onSaved={saved}/>);
+  expect(field('المبلغ (ريال)').value).toBe('0.80');expect(api.recordRefundExecution).not.toHaveBeenCalled();
+  await change('المصدر الذي ردّ المبلغ فعليًا','bank');await change('البنك الذي خرج منه المبلغ','bank');
+  await change('سبب الإرجاع','فرق سعر');await change('مرجع عملية رد المبلغ','BANK-80');
+  await act(async()=>host.querySelector('input[type="checkbox"]').click());await submit();
+  const original=api.recordRefundExecution.mock.calls[0][0], [id,registered]=api.registerPending.mock.calls[0];
+  api.pendingCommand.mockResolvedValue({id,...registered});
+  await render(<RefundRequestForm key="reopened" approved context={context()} order={{...current,basis_hash:'c'.repeat(64)}} onSaved={saved}/>);
+  expect(api.recordRefundExecution).toHaveBeenCalledTimes(1);await submit();
+  expect(api.recordRefundExecution.mock.calls[1][0]).toEqual(original);expect(localStorage.length).toBe(0);
+});
+
+test('recording an existing pending platform request uses its exact reserved amount and case id when new available funds are zero',async()=>{
+  const pending=refund({method:'original',amount:'300.00',source:{kind:'provider',id:'tamara',name:'تمارا'}});
+  const current=order({provider:'tamara',can_record_execution:true,can_request:false,basis_hash:'a'.repeat(64),available_amount:'0.00',reserved_amount:'300.00'});
+  await render(<RefundRequestForm approved context={context()} order={current} pendingCase={pending} onSaved={saved}/>);
+  expect(field('المبلغ (ريال)').value).toBe('300.00');expect(field('المبلغ (ريال)').readOnly).toBe(true);
+  expect(field('المصدر الذي ردّ المبلغ فعليًا').disabled).toBe(true);
+  await change('مرجع عملية رد المبلغ','TAMARA-300');await act(async()=>host.querySelector('input[type="checkbox"]').click());await submit();
+  expect(api.recordRefundExecution).toHaveBeenCalledWith(expect.objectContaining({amount:'300.00',method:'original',pending_case_id:'refund-one',expected_basis_hash:'a'.repeat(64)}));
+  expect(api.requestRefund).not.toHaveBeenCalled();expect(api.cancelRefund).not.toHaveBeenCalled();expect(saved.mock.calls[0][0].id).toBe('refund-one');
+});
+
+test.each([['0.00','100.00'],['100.00','0.00']])('execution can document existing evidence with zero new availability while confirmed=%s and unconfirmed=%s stay distinct',async(confirmed,unconfirmed)=>{
+  const current=order({provider:'tamara',paid_amount:'100.00',refunded_amount:'100.00',executed_refunded_amount:confirmed,unconfirmed_refund_amount:unconfirmed,
+    available_amount:'0.00',execution_amount_limit:'100.00',can_record_execution:true,can_request:false,basis_hash:'a'.repeat(64),suggested_refund_amount:unconfirmed});
+  await render(<RefundRequestForm approved context={context()} order={current} onSaved={saved}/>);
+  const metric=[...host.querySelectorAll('.metric')].find(item=>item.querySelector('small').textContent==='سبق إرجاعه بتأكيد');
+  expect(metric.querySelector('bdi').textContent).toBe(confirmed);
+  if(unconfirmed==='100.00')expect(host.querySelector('.adjustment-badge.refund').textContent).toContain('إشارة استرجاع غير مؤكدة');
+  expect(api.recordRefundExecution).not.toHaveBeenCalled();expect(host.querySelector('form')).not.toBeNull();
+  await change('المبلغ (ريال)','100');await change('المصدر الذي ردّ المبلغ فعليًا','original');
+  await change('سبب الإرجاع','توثيق تنفيذ سابق');await change('مرجع عملية رد المبلغ','KNOWN-REFUND');
+  await act(async()=>host.querySelector('input[type="checkbox"]').click());await submit();
+  expect(api.recordRefundExecution).toHaveBeenCalledWith(expect.objectContaining({amount:'100.00',reference:'KNOWN-REFUND'}));
+  expect(api.requestRefund).not.toHaveBeenCalled();
+});
+
+test('the modern execution option does not block recovery of a previously registered bank confirmation',async()=>{
+  api.confirmRefund.mockRejectedValueOnce(new Error('unknown old confirmation'));
+  await render(<RefundDetails key="old" context={context()} item={refund()} onBack={()=>{}} onSaved={saved}/>);
+  await act(async()=>host.querySelector('input[type="checkbox"]').click());await submit();
+  const original=api.confirmRefund.mock.calls[0][1], [id,registered]=api.registerPending.mock.calls[0];
+  api.pendingCommand.mockResolvedValue({id,...registered});
+  const openNew=jest.fn();
+  await render(<RefundDetails key="modern" context={context()} item={refund({can_record_execution:true})} onBack={()=>{}} onSaved={saved} onRecordExecution={openNew}/>);
+  expect(field('مرجع التحويل (اختياري)')).toBeDefined();await submit();
+  expect(api.confirmRefund).toHaveBeenCalledTimes(2);expect(api.confirmRefund.mock.calls[1][1]).toEqual(original);
+  expect(api.recordRefundExecution).not.toHaveBeenCalled();expect(openNew).not.toHaveBeenCalled();
 });

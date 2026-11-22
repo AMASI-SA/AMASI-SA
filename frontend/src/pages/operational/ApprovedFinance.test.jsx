@@ -1,6 +1,6 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useNavigate } from 'react-router-dom';
 import { useOptionalAuth } from '../../context/AuthContext';
 import ApprovedFinance from './ApprovedFinance';
 import { simpleBalancesApi as api } from './simpleBalancesApi';
@@ -94,6 +94,23 @@ function ownerReports() {
 }
 const openFinance = view => act(async()=>root.render(<MemoryRouter initialEntries={['/operational-balances?view='+view]}><ApprovedFinance/></MemoryRouter>));
 const openFinanceTab = view => act(async()=>host.querySelector('nav[aria-label="صفحات الأرصدة"] a[href="/operational-balances?view='+view+'"]').click());
+
+test('refund context is isolated from the home preview and is dropped on returning to the home', async () => {
+  ownerReports();
+  function NavigationProbe() {
+    const navigate = useNavigate();
+    return <><button id="open-refund" onClick={()=>navigate('/operational-balances?view=refund')}>Refund</button>
+      <button id="open-home" onClick={()=>navigate('/operational-balances?view=home')}>Home</button><ApprovedFinance/></>;
+  }
+  await act(async()=>root.render(<MemoryRouter initialEntries={['/operational-balances?view=home']}><NavigationProbe/></MemoryRouter>));
+  expect(api.context.mock.calls[0][1]).toEqual({homePreview:true});
+  await act(async()=>host.querySelector('#open-refund').click());
+  expect(api.context.mock.calls.at(-1)[1]).toEqual({homePreview:false,directoryOnly:true,refundContext:true});
+  await act(async()=>host.querySelector('#open-home').click());
+  expect(api.context.mock.calls.at(-1)[1]).toEqual({homePreview:true});
+  expect(api.context).toHaveBeenCalledTimes(3);
+  expect(api.movements).not.toHaveBeenCalled();
+});
 
 test.each(['reports','entry','log'])('opening reports from %s reads directory context once and the actual saved report separately', async start => {
   ownerReports();

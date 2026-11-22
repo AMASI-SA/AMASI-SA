@@ -473,6 +473,13 @@ def make_mobile_operations_monitoring_router(
             "employees": rows,
         }
 
+    @router.get("/preparation-pending-counts")
+    async def preparation_pending_counts(user: dict = Depends(current_user)) -> dict[str, Any]:
+        # A dedicated read URL allows older apps/servers to negotiate counts
+        # without an old server silently ignoring pending_only and loading detail.
+        return await preparation_summary(from_at=None, to_at=None, directory_only=False,
+                                         pending_only=True, user=user)
+
     @router.get("/preparation/{employee_id}")
     async def preparation_employee_detail(
         employee_id: str,
