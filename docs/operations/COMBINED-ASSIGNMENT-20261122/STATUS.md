@@ -87,10 +87,10 @@ This is a JS/assets export, not an APK, EAS build, publication or physical-devic
 ## Sources and release handoff
 
 - Mobile: AMASI-SA/amasi-mobile, PR373, branch `codex/assembly-queues-fast-read-20261121`, source commit `4e748d3b893102df9efa7804ee24e7b1b6720192`; parent `ed44e0a7c940bfc58bc54faa53009a43db32160c`.
-- Backend: AMASI-SA/AMASI-SA, PR2050, same task branch; this source checkpoint follows `cfbde46a923711b513ba37c306b5e53a4717c884`. The final handoff records its immutable SHA.
+- Backend: AMASI-SA/AMASI-SA, PR2050, same task branch, source commit `e0476d2a16d386f6c91aa036175fee819b952cf9`; parent `cfbde46a923711b513ba37c306b5e53a4717c884`.
 - Previous Stage6 source is preserved: mobile `b115caf662023b68c5889333acbcfc76f545fdf5`, backend `5278f6958385937d218afe4735679152b8f433d7`.
 
-Fresh exact-mobile-source CI evidence: MobileCI run45065905428/job137341856676 and combined Android run45065905349/job137341856190 both returned failure with runner_id0 and an empty steps array for source `4e748d3b893102df9efa7804ee24e7b1b6720192`. No workflow step executed; no billing/quota diagnosis is inferred. The backend PR was last observed draft/open and nonmergeable against its existing base; that base is not asserted to be current production.
+Fresh exact-mobile-source CI evidence: MobileCI run45065905428/job137341856676 and combined Android run45065905349/job137341856190 both returned failure with runner_id0 and an empty steps array for source `4e748d3b893102df9efa7804ee24e7b1b6720192`. No workflow step executed; no billing/quota diagnosis is inferred. The exact backend source `e0476d2a16d386f6c91aa036175fee819b952cf9` had no PR-triggered workflow runs in the fresh lookup. PR2050 remained draft/open and nonmergeable against its existing base; that base is not asserted to be current production.
 
 App-first publication remains authorized once its release gates are satisfied. Backend integration/deployment must preserve the repository's v5 procedure and the other conversation's release lease. No release lease, production state or third-party message was changed here. The existing hourly automation `Automation_7fd7e2fc16f8819199903b78592d5757` remains the continuation mechanism; update its handoff to these completed sources without changing its schedule or creating a duplicate task.
 
