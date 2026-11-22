@@ -379,8 +379,10 @@ async def assert_only_label_cache_written(db, before):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("piece_kind", ["physical", "virtual"])
 @pytest.mark.parametrize("stage", ["completed", "delivering", "delivered"])
-@pytest.mark.parametrize("salla_status", ["completed", "in_progress", "shipped", "delivered"])
-async def test_completed_assembly_print_requires_live_completed_status(
+@pytest.mark.parametrize("salla_status", [
+    "completed", "in_progress", "shipped", "delivering", "delivered", "cancelled", "refunded",
+])
+async def test_completed_assembly_reprint_respects_live_status_without_side_effects(
     setup, monkeypatch, piece_kind, stage, salla_status,
 ):
     db, state = setup
@@ -415,9 +417,9 @@ async def test_completed_assembly_print_requires_live_completed_status(
         assert response.json()["ready"] is False
         assert await dump(db) == before
         return
-    if salla_status != "completed":
+    if salla_status in {"cancelled", "refunded"}:
         assert response.status_code == 409, response.text
-        assert response.json()["detail"]["code"] == "order_status_not_completed"
+        assert response.json()["detail"]["code"] in {"order_status_not_completed", "order_cancelled"}
         assert "/shipments" not in state["calls"]
         assert await dump(db) == before
         return
@@ -426,6 +428,11 @@ async def test_completed_assembly_print_requires_live_completed_status(
     assert response.json()["label_url"] == CURRENT["label_url"]
     assert response.json()["shipment_id"] == "200"
     assert response.json()["tracking_number"] == "CURRENT-AWB"
+    assert response.json()["order_status_changed"] is False
+    if salla_status != "completed":
+        assert response.json()["observed_order_status"] == salla_status
+        workflow = await db.order_review_workflows.find_one({"user_id": OWNER, "order_number": ORDER})
+        assert workflow["salla_order_status"] == salla_status
     assert "/shipments" in state["calls"]
     await assert_only_label_cache_written(db, before)
 

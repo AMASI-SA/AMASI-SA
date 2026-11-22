@@ -29,6 +29,8 @@ active_authority_audit = ContextVar('dashboard_authority_audit', default=None)
 active_traffic_audit = ContextVar('dashboard_traffic_audit', default=None)
 active_google_audit = ContextVar('dashboard_google_audit', default=None)
 active_payment_fee_audit = ContextVar('dashboard_payment_fee_audit', default=None)
+active_catalog_audit = ContextVar('dashboard_catalog_audit', default=None)
+active_cost_audit = ContextVar('dashboard_cost_audit', default=None)
 PAYMENT_FEE_POLICIES = 'mz2_provider_fee_policies_v2'
 TRAFFIC_LEDGER = 'mezan_attribution_order_ledger_v1'
 GOOGLE_NATIVE_COLLECTION = 'mezan_google_ads_performance_daily_v2'
@@ -37,6 +39,236 @@ GOOGLE_SAVED_SOURCE = ('mezan_google_ads_performance_daily_v2:selected_accounts:
 # Reviewed polymorphic source fields preserve scalar and object source evidence.
 # All remaining projection leaves, owner scope, and the two-query limit stay pinned.
 TRAFFIC_PROJECTION_SHA256 = '9b2f00731606f76104bafa9e195b18584f5cc8cca1a514c322da4d5b916c8171'
+
+# Independent read specifications for the two-pass catalog change. These are
+# deliberately not imported from runtime, and the frozen JSON oracle is not
+# extended: only the exact selected-document read and empty-cost removals below
+# may change raw Mongo counts.
+CATALOG_COLLECTION = 'mezan_products_v2'
+CATALOG_ALIAS_PROJECTION = dict.fromkeys((
+    '_id', 'id', 'salla_product_id', 'mezan_product_id', 'name', 'sku', 'variants',
+    'raw_salla_details.variants', 'raw_salla_details.skus',
+    'raw_salla_details.product_variants', 'raw_salla.variants', 'raw_salla.skus',
+), 1)
+CATALOG_FULL_PROJECTION = dict.fromkeys((
+    '_id', 'id', 'salla_product_id', 'mezan_product_id', 'name', 'sku', 'main_image',
+    'cost_price_from_salla', 'cost_price', 'cost', 'variants', 'options',
+    'raw_salla', 'raw_salla_details',
+), 1)
+CATALOG_COMPANIONS = (
+    'mezan_product_cost_profiles_v2', 'mezan_product_option_cost_bindings_v2',
+    'mezan_product_resource_bindings_v2', 'mezan_cost_resources_v2',
+)
+
+
+def _catalog_json(value):
+    # Preserve Mongo physical identity types in the durable JSON evidence.
+    from bson import json_util
+    return json.loads(json_util.dumps(value))
+
+
+def _catalog_cohort(user_id, orders):
+    numbers = []
+    for order in orders:
+        assert order.get('user_id') in (None, user_id)
+        number = str(order.get('order_number') or '')
+        assert number, 'Unidentified order in frozen catalog cohort'
+        numbers.append(number)
+    assert len(numbers) == len(set(numbers))
+    return {'user_id': str(user_id), 'order_numbers': sorted(numbers),
+            'order_count': len(orders)}
+
+
+def _catalog_command(operation, command, *, database_name):
+    return {
+        'operation': operation, 'collection': command.get(operation),
+        'database': database_name, 'command_database': command.get('$db'),
+        'filter': _catalog_json(command.get('filter', {})),
+        'projection': copy.deepcopy(command.get('projection', {})),
+        'unreviewed_fields': sorted(set(command) - {
+            'find', 'filter', 'projection', '$db', 'lsid', '$clusterTime',
+        }),
+    }
+
+
+class _CatalogReadDB:
+    """Observe the actual cursor results/cap without adding another DB read."""
+    def __init__(self, db, audit):
+        self.db, self.audit = db, audit
+
+    def __getitem__(self, name):
+        assert name == CATALOG_COLLECTION, 'Unexpected collection in catalog loader'
+        base, audit = self.db[name], self.audit
+
+        class Collection:
+            def find(self, query, projection):
+                record = {'filter': _catalog_json(query),
+                          'projection': copy.deepcopy(projection), 'limits': [], 'rows': []}
+                audit['reads'].append(record)
+                cursor = base.find(query, projection)
+
+                class Cursor:
+                    async def to_list(self, length):
+                        record['limits'].append(length)
+                        rows = await cursor.to_list(length=length)
+                        record['rows'].extend({
+                            'physical_id': _catalog_json(row['_id']),
+                            'salla_product_id': str(row.get('salla_product_id') or ''),
+                        } for row in rows)
+                        return rows
+
+                return Cursor()
+
+        return Collection()
+
+
+async def _catalog_capture_fence(loader, *args, catalog_module, real_enrich,
+                                after_capture=None, **kwargs):
+    """Preserve the frozen driver's post-full-capture/pre-companion schedule.
+
+    The old first enrichment happened after the full cost-bearing catalog read.
+    Alias indexing now precedes that read, so placing the same test fence there
+    would test a different race. Only instrumentation moves: capture the selected
+    full rows first, then release the unchanged independent writer before any
+    companion reads. Production alias/hydration races are separately tested as
+    retryable 503 followed by a successful fresh request; no race JSON exception
+    or claim of arbitrary concurrent-write parity is made here.
+    """
+    sync_fence = catalog_module.enrich_current_salla_cost
+    with patch.object(catalog_module, 'enrich_current_salla_cost', real_enrich):
+        result = await loader(*args, **kwargs)
+    if after_capture is not None:
+        await after_capture()
+    elif sync_fence is not real_enrich:
+        # Invoke the frozen synchronous thread fence on an isolated captured row;
+        # its enrichment return value cannot change the runtime's captured maps.
+        row = next((row for index in result[1] for row in index.values()), None)
+        assert row is not None, 'Frozen mutation fence requires a captured product'
+        sync_fence(copy.deepcopy(row))
+    return result
+
+
+def _catalog_fixture_spec(fixture_case):
+    assert fixture_case, 'Catalog read changes require an immutable fixture identity'
+    family_and_case = fixture_case.split('::')[1]
+    family, case = family_and_case[:-1].split('[', 1)
+    if family == 'test_dashboard_mixed_permissions_and_tenants':
+        return family, case, (['0'] if case == 'other_owner'
+                              else [str(i) for i in range(40)])
+    if family == 'test_existing_independent_read_mutations':
+        assert case in {'status', 'payment_status', 'shipping_status', 'payment_only',
+                        'shipping_only', 'product_profile_cost', 'embedded_order_cost',
+                        'advertising_google', 'date_universe', 'irrelevant_note'}
+        return family, case, ['0']
+    assert family == 'test_mutations_during_index_preserve_captured_catalog_and_later_reads'
+    assert case in {'catalog', 'profile', 'product_binding', 'option_binding', 'resource', 'policy'}
+    return family, case, ['0', '1']
+
+
+def _assert_catalog_read_contract(audit, baseline, response, fixture_case):
+    """Return only the independently proved raw-count normalization delta."""
+    catalog = audit['catalog']
+    assert set(catalog) == {'version', 'cohorts', 'loads', 'commands', 'cost_commands', 'reads'}
+    assert catalog['version'] == 1
+    cohorts = audit['cohorts']
+    expected_cohorts = [{'user_id': row['user_id'],
+                         'order_numbers': [order['order_number'] for order in row['orders']],
+                         'order_count': len(row['orders'])} for row in cohorts]
+    assert catalog['cohorts'] == expected_cohorts, 'Catalog cost cohort changed'
+    if not cohorts:
+        assert not any(catalog[key] for key in ('loads', 'commands', 'cost_commands', 'reads'))
+        return 0, {}
+    assert len(cohorts) == 1
+    cohort = expected_cohorts[0]
+    owner, numbers = cohort['user_id'], cohort['order_numbers']
+    assert owner == audit['owner_id']
+    # Bind the instrumentation's orders to the independently enumerated frozen
+    # financial cohort, not just a candidate-supplied aggregate row count.
+    frozen = _frozen_financial_cohort(response, fixture_case)
+    decisions = [[owner, '', number, '', False, False, '', False] for number in numbers]
+    assert hashlib.sha256(json.dumps(sorted(decisions), ensure_ascii=False,
+                                    separators=(',', ':')).encode()).hexdigest() == frozen['eligibility_digest']
+    family, case, catalog_ids = _catalog_fixture_spec(fixture_case)
+    if not numbers:
+        assert not any(catalog[key] for key in ('loads', 'commands', 'cost_commands', 'reads')), \
+            'Empty cost cohort performed a query, write, or catalog load'
+        assert audit['traffic_cohorts'] == []
+        if family == 'test_dashboard_mixed_permissions_and_tenants':
+            assert case == 'empty_period'
+            counts = dict(zip((CATALOG_COLLECTION, *CATALOG_COMPANIONS), (40, 37, 1, 2, 1)))
+            counts['order_status_policy'] = 1
+            assert baseline['collections']['order_status_policy'] == 2
+        else:
+            assert family == 'test_existing_independent_read_mutations'
+            assert case in {'status', 'payment_status', 'shipping_status',
+                            'payment_only', 'shipping_only', 'date_universe'}
+            counts = dict(zip((CATALOG_COLLECTION, *CATALOG_COMPANIONS), (1, 1, 0, 0, 0)))
+            counts['order_status_policy'] = 0
+            assert baseline['collections']['order_status_policy'] == 0
+        for collection in (CATALOG_COLLECTION, *CATALOG_COMPANIONS):
+            assert baseline['collections'].get(collection) == counts[collection]
+        # Restore exactly the old six finds for comparison. Other query and
+        # document counts, including the separate policy read, stay strict.
+        return -6, {key: -value for key, value in counts.items()}
+
+    assert catalog['loads'] == [cohort], 'Catalog must load exactly once for a nonempty cohort'
+    assert len(audit['traffic_cohorts']) == 1
+    assert baseline['collections'][CATALOG_COLLECTION] == len(catalog_ids)
+    reads, commands = catalog['reads'], catalog['commands']
+    assert reads, 'Missing alias read for nonempty cohort'
+    assert all(row['operation'] in {'find', 'aggregate'} for row in catalog['cost_commands']), \
+        'Unexpected operation within cost calculation'
+    assert [row for row in catalog['cost_commands'] if row['collection'] == CATALOG_COLLECTION] == commands, \
+        'Catalog read occurred outside the audited loader'
+    alias_rows = reads[0]['rows']
+    # The immutable query has no sort; its owner-prefix index may yield lexical
+    # rather than insertion order. Keep the observed order in raw evidence, but
+    # require only the exact finite identity set here. Duplicate-alias winner
+    # order is checked by the separate full-loader parity fixtures.
+    assert Counter(row['salla_product_id'] for row in alias_rows) == Counter(catalog_ids), \
+        'Frozen owner catalog identities changed'
+    physical = {row['salla_product_id']: row['physical_id'] for row in alias_rows}
+    physical_keys = [json.dumps(value, sort_keys=True) for value in physical.values()]
+    assert len(physical_keys) == len(set(physical_keys))
+    assert all(set(value) == {'$oid'} and isinstance(value['$oid'], str)
+               and len(value['$oid']) == 24 for value in physical.values())
+    # Immutable seed_mixed has one product per number. Item 12 is empty, item 21
+    # has a globally ambiguous name, and item 20 resolves uniquely by name. The
+    # other-owner fixture and mutation fixtures have only direct product IDs.
+    selected = [str(int(number) - 1000000) for number in numbers]
+    if family == 'test_dashboard_mixed_permissions_and_tenants' and case != 'other_owner':
+        selected = [identity for identity in selected if identity not in {'12', '21'}]
+    assert len(selected) == len(set(selected)) and set(selected) <= set(catalog_ids)
+    selected_physical = [physical[identity] for identity in selected]
+    expected_queries = [({'user_id': owner}, CATALOG_ALIAS_PROJECTION, 100000)]
+    if selected:
+        expected_queries.append(({'user_id': owner, '_id': {'$in': selected_physical}},
+                                 CATALOG_FULL_PROJECTION, len(selected)))
+    assert len(reads) == len(commands) == len(expected_queries)
+
+    def canonical_query(query):
+        query = copy.deepcopy(query)
+        if '_id' in query and isinstance(query['_id'], dict) and '$in' in query['_id']:
+            query['_id']['$in'] = sorted(query['_id']['$in'], key=lambda value: json.dumps(value, sort_keys=True))
+        return query
+
+    for command, read, (query, projection, limit) in zip(commands, reads, expected_queries):
+        expected = {'operation': 'find', 'collection': CATALOG_COLLECTION,
+                    'database': audit['database'], 'command_database': audit['database'],
+                    'filter': canonical_query(query), 'projection': projection, 'unreviewed_fields': []}
+        observed = copy.deepcopy(command)
+        observed['filter'] = canonical_query(observed['filter'])
+        assert observed == expected, 'Unexpected catalog query, owner, physical winners, projection or operation'
+        assert set(read) == {'filter', 'projection', 'limits', 'rows'}
+        assert canonical_query(read['filter']) == expected['filter']
+        assert read['projection'] == projection and read['limits'] == [limit]
+    if selected:
+        expected_rows = [{'physical_id': physical[identity], 'salla_product_id': identity}
+                         for identity in selected]
+        canonical_rows = lambda rows: Counter(json.dumps(row, sort_keys=True) for row in rows)
+        assert canonical_rows(reads[1]['rows']) == canonical_rows(expected_rows), \
+            'Hydration returned missing, duplicate, or unrelated physical products'
+    return int(bool(selected)), ({CATALOG_COLLECTION: len(selected)} if selected else {})
 
 
 def _traffic_cohort(user_id, orders):
@@ -494,7 +726,7 @@ def _frozen_financial_cohort(response, fixture_case):
         indices = [0, 1]
     assert response['totals']['total_orders'] == len(indices), 'Frozen cohort/order count disagrees'
     decisions = [[owner, '', str(1000000 + i), '', False, False, '', False] for i in indices]
-    return {'reader_version': 'financial-cohort-proof-history-v1',
+    return {'reader_version': 'financial-cohort-deferred-dashboard-v2',
             'total_orders': len(indices), 'financial_eligible_orders': len(indices),
             'excluded_unpaid_orders': 0, 'review_orders': 0, 'complete': True,
             'review_reason_counts': {}, 'eligibility_digest': hashlib.sha256(
@@ -602,7 +834,7 @@ def expected_cost_completeness_json(historical_json, *, fixture_case=None):
 
 
 def assert_runtime_read_contract(runtime, baseline, *, fixture_case=None):
-    """Subtract only individually audited empty authority reads from raw data."""
+    """Normalize only independently audited read changes; preserve raw evidence."""
     assert set(runtime) == set(baseline) | {'cost_authority_audit'}
     assert runtime['json'] == expected_cost_completeness_json(baseline['json'], fixture_case=fixture_case), 'Unapproved JSON response change'
     audit = runtime['cost_authority_audit']
@@ -621,7 +853,14 @@ def assert_runtime_read_contract(runtime, baseline, *, fixture_case=None):
         'Unexpected payment fee query, owner, projection, operation or count'
     response = json.loads(runtime['json'])
     assert len(audit['cohorts']) == (0 if 'http_error' in response else 1)
-    assert len(audit['traffic_cohorts']) == len(audit['cohorts'])
+    if fixture_case is not None and ('payment_breakdown' in response or 'http_error' in response):
+        assert 'catalog' in audit, 'Complete frozen runtime evidence requires the catalog audit'
+    catalog_commands, catalog_documents = (0, {})
+    if 'catalog' in audit:
+        catalog_commands, catalog_documents = _assert_catalog_read_contract(
+            audit, baseline, response, fixture_case)
+    else:
+        assert len(audit['traffic_cohorts']) == len(audit['cohorts'])
     assert not (set(baseline['collections']) & AUTHORITY_COLLECTIONS)
     for collection in AUTHORITY_COLLECTIONS:
         assert runtime['collections'].get(collection, 0) == 0, 'Legacy fixture unexpectedly read historical cost rows'
@@ -665,6 +904,19 @@ def assert_runtime_read_contract(runtime, baseline, *, fixture_case=None):
     if extra_documents:
         normalized['documents'] -= extra_documents
         normalized['collections']['unified_orders'] -= extra_documents
+    if catalog_commands:
+        assert normalized['commands'].get('find', 0) >= max(catalog_commands, 0)
+        normalized['commands']['find'] = normalized['commands'].get('find', 0) - catalog_commands
+        if normalized['commands']['find'] == 0:
+            del normalized['commands']['find']
+    for collection, count in catalog_documents.items():
+        if catalog_commands < 0:
+            if collection == 'order_status_policy':
+                assert collection in normalized['collections'], 'Separate policy read disappeared'
+            else:
+                assert collection not in normalized['collections'], 'Empty cohort retained an old cost read'
+        normalized['documents'] -= count
+        normalized['collections'][collection] = normalized['collections'].get(collection, 0) - count
     assert normalized == baseline, 'Existing Mongo commands or document counts changed'
 
 
@@ -702,12 +954,20 @@ def pytest_collection_modifyitems(session, config, items):
                      'database': _fixture_database_name(args[0]), 'cohorts': [], 'commands': [],
                      'traffic_cohorts': [], 'traffic_commands': [],
                      'google_cohorts': [], 'google_commands': [],
-                     'payment_fee_cohorts': [], 'payment_fee_commands': []}
+                     'payment_fee_cohorts': [], 'payment_fee_commands': [],
+                     'catalog': {'version': 1, 'cohorts': [], 'loads': [],
+                                 'commands': [], 'cost_commands': [], 'reads': []}}
             commands = args[1]
             original_started = commands.started
 
             def started(event):
                 original_started(event)
+                if active_cost_audit.get() is audit:
+                    command = _catalog_command(event.command_name, event.command,
+                                               database_name=event.database_name)
+                    audit['catalog']['cost_commands'].append(command)
+                    if active_catalog_audit.get() is audit:
+                        audit['catalog']['commands'].append(command)
                 if active_payment_fee_audit.get() is audit:
                     audit['payment_fee_commands'].append(_payment_fee_command(
                         event.command_name, event.command, database_name=event.database_name))
@@ -775,6 +1035,10 @@ def pytest_collection_modifyitems(session, config, items):
         original_index = dash.index_current_catalog_products_cooperative
         original_ads = dash.build_salla_ads_executive_breakdown_cooperative
         original_cost = dash.build_mezan_v2_product_cost_cooperative
+        original_catalog_loader = (getattr(dash, '_load_cohort_catalog_products', None)
+                                   if ARM == 'runtime' else None)
+        if ARM == 'runtime':
+            assert original_catalog_loader is not None, 'Runtime catalog instrumentation is mandatory'
         original_traffic = getattr(dash, 'load_product_traffic_sources', None)
         original_google = getattr(dash, 'load_google_dashboard_spend', None)
         original_fee_setup = (payment_method_fee_status.load_fee_setup_context
@@ -789,7 +1053,7 @@ def pytest_collection_modifyitems(session, config, items):
 
         async def index(products):
             calls['index'] += 1
-            if hook is None:
+            if hook is None or original_catalog_loader is not None:
                 return await original_index(products)
             with patch.object(cpu, 'CPUWorkBudget', ForcedBudget):
                 return await original_index(products)
@@ -805,7 +1069,33 @@ def pytest_collection_modifyitems(session, config, items):
                 user_id = args[1] if len(args) > 1 else kwargs['user_id']
                 orders = args[2] if len(args) > 2 else kwargs['orders']
                 audit['cohorts'].append(_cohort_evidence(user_id, orders))
-            return await original_cost(*args, **kwargs)
+                audit['catalog']['cohorts'].append(_catalog_cohort(user_id, orders))
+            token = active_cost_audit.set(audit)
+            try:
+                return await original_cost(*args, **kwargs)
+            finally:
+                active_cost_audit.reset(token)
+
+        async def catalog_loader(db, user_id, orders):
+            audit = active_authority_audit.get()
+            assert audit is not None, 'Missing catalog audit in runtime fixture'
+            audit['catalog']['loads'].append(_catalog_cohort(user_id, orders))
+
+            async def load():
+                token = active_catalog_audit.set(audit)
+                try:
+                    return await original_catalog_loader(_CatalogReadDB(db, audit['catalog']), user_id, orders)
+                finally:
+                    active_catalog_audit.reset(token)
+
+            async def after_capture():
+                await ForcedBudget(cpu.PRODUCT_INDEX_BUDGET_MS).checkpoint()
+
+            return await _catalog_capture_fence(
+                load, catalog_module=product_catalog_cost_resolution,
+                real_enrich=dash.enrich_current_salla_cost,
+                after_capture=after_capture if hook is not None else None,
+            )
 
         async def parser(orders):
             calls['parser'] += 1
@@ -859,6 +1149,8 @@ def pytest_collection_modifyitems(session, config, items):
              patch.object(dash, 'index_current_catalog_products_cooperative', index), \
              patch.object(dash, 'build_salla_ads_executive_breakdown_cooperative', ads), \
              patch.object(dash, 'build_mezan_v2_product_cost_cooperative', cost), \
+             (patch.object(dash, '_load_cohort_catalog_products', catalog_loader)
+              if original_catalog_loader is not None else nullcontext()), \
              patch.object(dash, 'load_product_traffic_sources', traffic, create=True), \
              patch.object(dash, 'load_google_dashboard_spend', google, create=True), \
              (patch.object(payment_method_fee_status, 'load_fee_setup_context', fee_setup)

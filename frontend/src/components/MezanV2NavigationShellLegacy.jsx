@@ -230,7 +230,7 @@ function SectionButton({ section, active, open, onToggle, onNavigate, expandSing
         active ? "bg-emerald-200 text-slate-950 shadow-sm" : "text-slate-100 hover:bg-white/10 hover:text-white",
     ].join(" ");
 
-    if (!expandSingle && (singleItem || section.entryTo)) {
+    if (section.directEntry || (!expandSingle && (singleItem || section.entryTo))) {
         return (
             <Link to={section.entryTo || section.items[0].to} className={buttonClass} onClick={onNavigate} data-testid={`mezan-v2-primary-${section.id}`} title={section.label}>
                 <Icon size={21} weight="duotone" className="shrink-0" />
@@ -308,7 +308,7 @@ export default function MezanV2NavigationShell({ location, onOpenAll, searchForm
                 </div>
             </div>
 
-            {visibleSection && (restricted ? Boolean(openSection) : visibleSection.items.length > 1) && (
+            {visibleSection && !visibleSection.directEntry && (restricted ? Boolean(openSection) : visibleSection.items.length > 1) && (
                 <nav className="relative z-[60] flex flex-nowrap items-center gap-1 overflow-x-auto whitespace-nowrap border-t border-white/10 bg-[#0B4938] px-2 shadow-inner scrollbar-thin sm:px-5" aria-label={`صفحات ${visibleSection.label}`} data-testid={`mezan-v2-secondary-${visibleSection.id}`} data-navigation-source={openSection ? "opened" : "active"}>
                     {visibleSection.items.map((item) => {
                         const active = isNavigationItemActive(location, item);

@@ -430,3 +430,20 @@ A complete order-ID set reconciliation was not obtained: the existing diagnostic
 4. For backend release, follow the repository `AGENTS.md` protocol v5 from the then-current reviewed production source, prepare a new governed source/intent pair and perform the required release verification. This task created no lease, no release intent, no merge and no deployment.
 
 Production changed by this task: **no**. No production financial, order, supplier, notification, email or message writes were performed. The repository-wide issue ledger was not posted to; this record and the draft PRs are the durable handoff.
+
+
+## Integration checkpoint: current production and app-first release — 2026-11-22
+
+The user authorized implementation and publication of the employee customer-refund page and shared app/Mezan permission. The user subsequently asked to publish the employee app first if Mezan publication needs to wait. This supersedes the older backend-before-mobile sequencing above; new server-dependent capabilities must remain unavailable on the old backend without breaking existing features.
+
+This checkpoint merges reviewed production `9b4fb716b430c32073b5ea7abaeaff62646d9633` into the existing task source `b797434470b2f20c219f0b9b1b07b7e43e6ff3e0`. The automatic merge had no conflicts. Only `backend/server.py` and `backend/operational_balance_workspace.py` have newly combined source blobs; other incoming changes are retained production bytes. The production intent is inherited unchanged and is not a new release intent.
+
+Fresh post-integration verification: the employee financial-notice, push, real-Mongo push integration, courier summary and operational-context suites passed together: **76 passed +7 subtests, zero skips, exit0**. The temporary Mongo process used an isolated loopback database and a task lock. `git diff --check` also passed. These checks establish this integration slice, not publication readiness for the subsequent refund feature.
+
+The separate customer-money implementation remains owned by the other conversation: PR2060 source `eb7a9e002bbe723eba62223dbf446f070710a8bc`, publication candidate PR2067 source `4c308b19bb5d972bea5fff092bc0efbe9b70b29f`. Their checkout, source branch and release lease are untouched. Our app adapter and permission work are isolated; there is no second financial writer.
+
+The requested mobile flow is form → local save/review → final confirmation. Only final confirmation may call the canonical execution writer. Success returns to the eight-row table and shows a green three-second popup; failure shows a three-second warning and keeps the draft. No real customer refund, provider action or bank transfer is used for testing.
+
+Outstanding work at this checkpoint: finish and review the isolated refund read/permission adapter and mobile screens; ensure mobile backward compatibility with current production notification registration/counts, monitoring and queue APIs; run integrated verification; checkpoint and build the authorized employee app. The new refund menu requires the explicit server capability, including owners, before it can issue new endpoint requests. Mezan publication remains deferred and requires a fresh source/intent pair under protocolv5 after the other release is settled.
+
+Production changed by this checkpoint: **no**. No production merge, shared `/app` modification, release lease, publish click, financial write or external notification was performed. Issue1006 is at its comment limit; this task document and the draft PR preserve continuation.

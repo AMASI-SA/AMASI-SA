@@ -35,33 +35,34 @@ async def calculate(db):
     return result
 
 
-def test_proved_unpaid_keeps_registry_counts_but_excludes_estimated_money():
+def test_unpaid_dashboard_defers_history_preserves_costs_and_blocks_final_profit():
     async def scenario(db):
         await seed(db)
         result = await calculate(db)
         totals = result["totals"]
         assert totals["total_orders"] == totals["salla_reference_orders_count"] == 2
-        assert totals["total_sales"] == 100
-        assert totals["computed_product_cost"] == 10
-        assert totals["total_payment_fees"] == 9.76
-        assert totals["net_profit"] == 80.24
+        assert totals["total_sales"] == 200
+        assert totals["computed_product_cost"] == 40
+        assert totals["total_payment_fees"] is None
+        assert totals["net_profit"] is None
         assert totals["excluded_orders_count"] == 0 and totals["excluded_gross"] == 0
         assert sum(row["count"] for row in result["source_breakdown"]) == 2
         coverage = result["financial_cohort"]
-        assert coverage["total_orders"] == 2 and coverage["financial_eligible_orders"] == 1
-        assert coverage["excluded_unpaid_orders"] == 1 and coverage["review_orders"] == 0 and coverage["complete"]
+        assert coverage["total_orders"] == 2 and coverage["financial_eligible_orders"] == 2
+        assert coverage["excluded_unpaid_orders"] == 0 and coverage["review_orders"] == 1 and not coverage["complete"]
     run(scenario)
 
 
-def test_all_proved_unpaid_is_complete_zero_money_with_nonzero_order_count():
+def test_all_unpaid_dashboard_is_pending_not_certified_zero():
     async def scenario(db):
         await seed(db, only_unpaid=True)
         result = await calculate(db)
         assert result["totals"]["total_orders"] == 1
-        assert result["financial_cohort"]["financial_eligible_orders"] == 0
-        for key in ("total_sales", "computed_product_cost", "total_payment_fees", "net_profit"):
-            assert result["totals"][key] == 0
-        assert result["financial_cohort"]["complete"] is True
+        assert result["financial_cohort"]["financial_eligible_orders"] == 1
+        assert result["totals"]["total_sales"] == 100
+        assert result["totals"]["computed_product_cost"] == 30
+        assert result["totals"]["net_profit"] is None
+        assert result["financial_cohort"]["complete"] is False
     run(scenario)
 
 
@@ -84,13 +85,14 @@ def test_prior_financial_fact_prevents_dropping_waiting_order_and_its_cost(kind)
     run(scenario)
 
 
-def test_foreign_owner_history_does_not_veto_proved_unpaid_exclusion():
+def test_foreign_owner_history_does_not_authorize_dashboard_exclusion():
     async def scenario(db):
         await seed(db)
         await db.mz2_bank_transfer_receipt_events.insert_one({"user_id": "other", "status": "posted", "facts": {"order_number": "unpaid"}})
         result = await calculate(db)
-        assert result["financial_cohort"]["excluded_unpaid_orders"] == 1
-        assert result["totals"]["total_sales"] == 100
+        assert result["financial_cohort"]["excluded_unpaid_orders"] == 0
+        assert result["totals"]["total_sales"] == 200
+        assert result["totals"]["net_profit"] is None
     run(scenario)
 
 
@@ -109,9 +111,11 @@ def test_uncertain_waiting_stays_in_registry_and_profit_remains_unknown(actual):
     run(scenario)
 
 
-def test_failed_history_lookup_keeps_waiting_order_for_review(monkeypatch):
+def test_dashboard_never_starts_history_reads_even_with_unpaid_candidates(monkeypatch):
+    calls = []
     async def unavailable(*args, **kwargs):
-        raise TimeoutError("isolated history read unavailable")
+        calls.append(True)
+        raise AssertionError("dashboard must not read financial history")
     monkeypatch.setattr("awaiting_payment_history._load", unavailable)
 
     async def scenario(db):
@@ -119,7 +123,8 @@ def test_failed_history_lookup_keeps_waiting_order_for_review(monkeypatch):
         result = await calculate(db)
         assert result["totals"]["total_orders"] == 2 and result["totals"]["total_sales"] == 200
         assert result["financial_cohort"]["excluded_unpaid_orders"] == 0
-        assert result["financial_cohort"]["review_reason_counts"] == {"awaiting_payment_history_unavailable": 1}
+        assert result["financial_cohort"]["review_reason_counts"] == {"awaiting_payment_history_deferred": 1}
+        assert calls == []
         assert result["totals"]["net_profit"] is None
     run(scenario)
 

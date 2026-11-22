@@ -38,6 +38,19 @@ OPERATIONAL_WEB_PAGES = (
     _page("specialized", "الأرصدة الافتتاحية والإعدادات المتخصصة"),
     _page("access", "تحديد حسابات وعمليات الموظفين", BASE + "/access"),
 )
+# These existing source-evidence approvals require the native bank_manage owner
+# boundary. They are separate from assignable employee pages: balances.review
+# grants scoped order issues, not authority to approve historical source facts.
+# The shared context and receipt APIs retain their own existing policies.
+OPERATIONAL_OWNER_REVIEW_PAGES = (
+    {"id": "balances.shipping_review", "to": BASE + "/shipping-review",
+     "owner_only": True, "owner_permission": "bank_manage",
+     "api_paths": ("/completed-shipping-fees/preview", "/completed-shipping-fees/approve")},
+    {"id": "balances.provider_history", "to": BASE + "/provider-history",
+     "owner_only": True, "owner_permission": "bank_manage",
+     "api_paths": ("/provider-history-reviews", "/provider-history-reviews/approve")},
+)
+_OWNER_REVIEW_API_PATHS = frozenset(path for page in OPERATIONAL_OWNER_REVIEW_PAGES for path in page["api_paths"])
 SCOPE_REPORTS = frozenset({"reports", "specialized", "access"})
 WORKSPACE = frozenset(p["id"] for p in OPERATIONAL_WEB_PAGES if p["id"] != "balances.statements" and p["id"].split(".")[1] not in SCOPE_REPORTS)
 
@@ -56,6 +69,10 @@ def enforce_operational_web_pages(modes, path, method, query=None):
         return
     path = path[len(API):].rstrip("/")
     query = query or {}
+    if path in _OWNER_REVIEW_API_PATHS:
+        # No employee page grant delegates these owner approvals. Owners and
+        # unmanaged clients still pass through the canonical router's scope.
+        _deny()
     if path == "/inventory" or path.startswith(("/inventory-", "/standalone-inventory/")):
         # The product workspace catalogue applies its own exact route and method checks.
         return

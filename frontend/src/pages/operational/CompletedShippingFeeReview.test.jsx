@@ -79,7 +79,7 @@ test('approval requires reviewed evidence, sends one exact token, and never reca
     }, { timeout: 30000 });
     expect(api.post).toHaveBeenCalledTimes(2);
     expect(button('اعتماد أجرة')).toBeUndefined();
-    expect(host.textContent).toContain('اضغط زر تحديث الأرصدة في هذه الصفحة');
+    expect(host.textContent).toContain('حدّث الأرصدة من المركز المالي');
 });
 
 test('native conflicts show their reason and offer no approval', async () => {

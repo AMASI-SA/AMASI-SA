@@ -90,7 +90,7 @@ def test_no_placeholder_financial_digest_is_bound_to_frozen_owner_and_order_iden
     actual = cohort('other_owner', 1)
     decisions = [['fixture-other', '', '1000000', '', False, False, '', False]]
     assert actual == {
-        'reader_version': 'financial-cohort-proof-history-v1', 'total_orders': 1,
+        'reader_version': 'financial-cohort-deferred-dashboard-v2', 'total_orders': 1,
         'financial_eligible_orders': 1, 'excluded_unpaid_orders': 0,
         'review_orders': 0, 'complete': True, 'review_reason_counts': {},
         'eligibility_digest': hashlib.sha256(json.dumps(decisions, separators=(',', ':')).encode()).hexdigest(),

@@ -46,6 +46,28 @@ const ACCOUNTING_LOCATION = {
     search: "?workspace=financial&page=shipping-cod",
 };
 
+test.each([
+    ["/dashboard-advanced", ""],
+    ["/operational-balances", ""],
+    ["/operational-balances", "?view=tools"],
+    ["/operational-balances/provider-fees", ""],
+    ["/operational-balances/access", ""],
+    ["/operational-balances/shipping-review", ""],
+    ["/operational-balances/provider-history", "?provider=paypal"],
+])("balances opens its workspace directly from %s%s without a secondary menu", (pathname, search) => {
+    const markup = renderToStaticMarkup(<MezanV2NavigationShell location={{ pathname, search }} onOpenAll={() => {}} />);
+    const host = document.createElement("div");
+    host.innerHTML = markup;
+    const entry = host.querySelector('[data-testid="mezan-v2-primary-operational-balances"]');
+    expect(entry.tagName).toBe("A");
+    expect(entry.getAttribute("href")).toBe("/operational-balances");
+    expect(entry.hasAttribute("aria-expanded")).toBe(false);
+    expect(host.querySelector('[data-testid="mezan-v2-secondary-operational-balances"]')).toBeNull();
+    if (pathname.startsWith("/operational-balances")) {
+        expect(activeNavigationSection({ pathname, search })?.id).toBe("operational-balances");
+    }
+});
+
 test("Mezan 2 shell is limited to Mezan 2 routes including the advanced dashboard", () => {
     [
         "/shipping-settings-v2",
@@ -306,7 +328,9 @@ test("provider statement review is connected inside the operational Mezan 2 navi
     const markup = renderToStaticMarkup(<MezanV2NavigationShell location={location} onOpenAll={() => {}} />);
     expect(isMezanV2Route(location.pathname)).toBe(true);
     expect(activeNavigationSection(location)?.id).toBe("operational-balances");
-    expect(markup).toContain('href="/operational-balances/provider-statements"');
-    expect(markup).toContain("مطابقة كشوف منصات الدفع");
+    expect(markup).toContain('href="/operational-balances"');
+    expect(markup).not.toContain('data-testid="mezan-v2-secondary-operational-balances"');
+    expect(MEZAN_V2_NAV_SECTIONS.find(section => section.id === "operational-balances").items)
+        .toContainEqual({ to: "/operational-balances/provider-statements", label: "مطابقة كشوف منصات الدفع" });
     expect(markup).not.toContain('href="/payment-settlements"');
 });

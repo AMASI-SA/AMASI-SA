@@ -60,4 +60,6 @@ test('discloses excluded principal separately from calculated net without adding
   expect(host.querySelector('.note').textContent).toContain('2 طلب');
   expect(host.querySelector('.note').textContent).toContain('غير مشمولة في الصافي المحتسب');
   expect(host.querySelector('tbody').textContent).toContain('1,019.73');
+  expect(host.querySelector('h3 [data-brand="paypal"] img').getAttribute('src')).toBe('/operational-ui/brands/paypal.png');
+  expect(host.querySelector('h3').textContent).toBe('من أين جاء رصيد باي بال؟');
 });

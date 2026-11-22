@@ -1,5 +1,5 @@
 import React from 'react';
-import { Amount } from './ApprovedFinanceUI';
+import { Amount, ResourceIcon } from './ApprovedFinanceUI';
 import { minorUnits, movementDate } from './simpleBalancesModel';
 
 const feeLabels = { actual: 'فعلية', actual_settlement: 'فعلية', mixed: 'فعلية وتقديرية', plan_estimate: 'تقديرية', average_estimate: 'تقديرية' };
@@ -12,7 +12,7 @@ export default function ProviderOrders({ result, name, canOpenOrderDetails }) {
   const asOf = result.resource?.provider_position?.as_of;
   return <>
     {asOf && <p className="under">آخر احتساب محفوظ · <bdi>{movementDate({recorded_at: asOf}, true)}</bdi></p>}
-    {result.amounts?.length > 0 && <div className="panel sheet"><div className="section-head"><h3>من أين جاء رصيد {name}؟</h3><small>من بداية الأرصدة حتى آخر احتساب</small></div>
+    {result.amounts?.length > 0 && <div className="panel sheet"><div className="section-head"><h3 className="mz-resource-label"><ResourceIcon resource={{kind:'provider',id:result.resource?.id,name}} size="sm"/><span>من أين جاء رصيد {name}؟</span></h3><small>من بداية الأرصدة حتى آخر احتساب</small></div>
       <div className="scroll"><table className="ledger"><thead><tr>{['العملة', 'الافتتاحي', 'دفع العملاء', 'الاستردادات', 'العمولات', 'صافي التسويات', 'المتبقي لنا'].map(label =>
         <th scope="col" key={label}>{label}</th>)}</tr></thead><tbody>{result.amounts.map(row =>
           <tr key={row.currency}><th scope="row">{row.currency}</th>

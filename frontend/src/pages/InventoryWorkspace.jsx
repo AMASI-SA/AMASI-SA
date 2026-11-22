@@ -15,20 +15,29 @@ const StocktakeWorkbench=lazy(()=>import('./inventory/StocktakeWorkbench'));
 
 // A web catalog grant reads only the existing scoped warehouse projection.
 // Management context and all inventory writers remain outside this lane.
-export default function InventoryWorkspace({ accessMode = null }) {
-  return accessMode ? <InventoryReadOnlyWorkspace/> : <InventoryManagement/>;
+export default function InventoryWorkspace({ accessMode = null, embedded = false }) {
+  return accessMode ? <InventoryReadOnlyWorkspace embedded={embedded}/> : <InventoryManagement embedded={embedded}/>;
 }
 
-function InventoryReadOnlyWorkspace() {
+function WorkspaceFrame({ embedded, active, children }) {
+  return embedded ? <div className="mz-inventory-ui mz-inventory-embedded" dir="rtl">{children}</div>
+    : <InventorySuiteFrame active={active}>{children}</InventorySuiteFrame>;
+}
+function tabQuery(params, tab, item) {
+  const from = params.getAll('from');
+  return { ...(from.length === 1 && from[0] === 'operational-tools' ? { from: from[0] } : {}), tab, ...(item ? { item } : {}) };
+}
+
+function InventoryReadOnlyWorkspace({ embedded }) {
   const [params,setParams]=useSearchParams();
   const view=params.get('tab')==='reports'?'reports':'stock';
-  return <InventorySuiteFrame active={view==='reports'?'reports':'catalog'}>
+  return <WorkspaceFrame embedded={embedded} active={view==='reports'?'reports':'catalog'}>
     <InventoryAvailability context={{permissions:{reports:true},session_scope:'mezan-web-stock'}}
-      view={view} onNavigate={value=>{if(['stock','reports'].includes(value))setParams({tab:value});}}/>
-  </InventorySuiteFrame>;
+      view={view} onNavigate={value=>{if(['stock','reports'].includes(value))setParams(tabQuery(params,value));}}/>
+  </WorkspaceFrame>;
 }
 
-function InventoryManagement() {
+function InventoryManagement({ embedded }) {
   const [params, setParams] = useSearchParams();
   const [context, setContext] = useState(null);
   const [stocktakeContext,setStocktakeContext]=useState(null);
@@ -62,11 +71,11 @@ function InventoryManagement() {
   const requested = params.get('tab');
   const selected = requested || tabs[0]?.[0] || 'home';
   const allowed = tabs.some(([id]) => id === selected);
-  const navigate = (value,item) => setParams({tab:value,...(item?{item}:{})});
+  const navigate = (value,item) => setParams(tabQuery(params,value,item));
   const frameActive = ({stock:'catalog',opening:'entry',purchase:'purchases',purchases:'purchases'})[selected] || selected;
   const titles={opening:['إضافة المخزون','سجّل الكميات الموجودة ومواصفاتها وتكلفتها وموقعها.'],purchase:['شراء مخزون','تسجيل شراء مستقل لبضاعة مخزنية للطلبات القادمة.'],purchases:['فواتير شراء المخزون','مراجعة فواتير المخزون المسجلة من المسار الحالي.']};
   const capabilityError=!allowed?(['stocktake','adjustments','movements'].includes(selected)?stocktakeError:error):'';
-  return <InventorySuiteFrame active={frameActive}>
+  return <WorkspaceFrame embedded={embedded} active={frameActive}>
     <main className="mz-stock-management" dir="rtl">
       {loading ? <div className="mz-stock-empty" role="status"><ArrowsClockwise size={30} className="animate-spin"/>جارٍ تحميل صلاحيات المخزون…</div> : <>
         {capabilityError&&<div role="alert" className="mz-stock-notice is-error"><WarningCircle size={22}/>{capabilityError}<button type="button" onClick={()=>setRevision(value=>value+1)}>إعادة المحاولة</button></div>}
@@ -87,5 +96,5 @@ function InventoryManagement() {
           <footer className="mz-stock-workspace-footer"><Link to="/operational-balances">الأرصدة التشغيلية</Link><Link to="/operational-balances/financial-position">المركز المالي التشغيلي</Link></footer></>}
       </>}
     </main>
-  </InventorySuiteFrame>;
+  </WorkspaceFrame>;
 }

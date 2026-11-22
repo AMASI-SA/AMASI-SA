@@ -475,7 +475,9 @@ async def entities(db, owner, kind, *, include_unready=False, operational_state=
         return [{'id': p, 'name': {'salla': 'سلة', 'tabby': 'تابي', 'tamara': 'تمارا', 'emkan': 'إمكان', 'paypal': 'باي بال'}[p],
                  'kind': kind, 'currency': 'SAR'} for p in PROVIDERS]
     if kind == 'courier':
-        setups = await rows(db, owner, 'mz2_shipping_setup_v2')
+        # Keep complete courier identities/aliases, but not unrelated contract,
+        # request and audit histories embedded in the same setup document.
+        setups = await rows(db, owner, 'mz2_shipping_setup_v2', fields=('user_id', 'couriers'))
         if len(setups) > 1:
             raise ValueError('shipping_setup_ambiguous')
         source = [dict(r, id=r.get('courier_key'), currency='SAR',
@@ -565,11 +567,24 @@ async def entities(db, owner, kind, *, include_unready=False, operational_state=
         from operational_ad_funding import bindings as funding_bindings
         bindings, funding_conflicts = funding_bindings(operational_state, owner, bindings)
         policies = await rows(db, owner, 'mz2_ad_automation_policies_v2')
+        account_index, unindexed_accounts = {}, []
+        for account in accounts:
+            key = (account.get('mezan_integration_account_id'), account.get('external_account_id'))
+            # Index ordinary persisted string identities without coercing case
+            # or types. Keep duplicates and the original comparison for legacy
+            # values, including unhashable identities.
+            if all(type(value) is str for value in key):
+                account_index.setdefault(key, []).append(account)
+            else:
+                unindexed_accounts.append(account)
         source = []
         for binding in bindings:
             if not usable(binding) or not binding.get('confirmed_by') or not binding.get('confirmed_at'):
                 continue
-            matches = [a for a in accounts if a.get('mezan_integration_account_id') == binding.get('integration_account_id')
+            key = (binding.get('integration_account_id'), binding.get('platform_account_id'))
+            candidates = (account_index.get(key, []) + unindexed_accounts
+                          if all(type(value) is str for value in key) else accounts)
+            matches = [a for a in candidates if a.get('mezan_integration_account_id') == binding.get('integration_account_id')
                        and a.get('external_account_id') == binding.get('platform_account_id')
                        and a.get('provider') == AD_SOURCES.get(binding.get('platform'), (None,))[0]]
             if len(matches) != 1 or matches[0].get('connection_status') != 'connected':

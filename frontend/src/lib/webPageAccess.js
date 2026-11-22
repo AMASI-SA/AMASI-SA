@@ -1,5 +1,6 @@
 import { detailPageIdAt } from "./webDetailAccess";
 import { ADVERTISING_PROVIDER_IDS } from "./integrationWorkspaces";
+import { STATEMENT_PROVIDERS } from "../pages/operational/providerStatementPresentation";
 
 export const WEB_PERMISSIONS_PATH = "/employees-v2?workspace=permissions";
 
@@ -92,6 +93,15 @@ export function grantedPageAt(pages, location) {
         if (requested.getAll("view").length !== 1 || !Object.hasOwn(employeeReportGroups, requested.get("view"))
             || ["workspace", "tab", "section", "action"].some(key=>requested.has(key))) return null;
         return pages.find(page=>!page.owner_only && page.id === "balances.reports") || null;
+    }
+    if (pathname === financePath + "/provider-statements" && requested.has("provider")) {
+        const providers = requested.getAll("provider");
+        if (providers.length !== 1 || !Object.hasOwn(STATEMENT_PROVIDERS, providers[0])
+            || [...requested.keys()].some(key => key !== "provider")) return null;
+        // A supported display filter keeps the exact page grant and mode.
+        // The statement API still owns account scope and write permissions.
+        const grant = grantedPageAt(pages, { pathname, search: "", hash: location.hash });
+        return grant?.id === "balances.statements" ? grant : null;
     }
     return pages.find((page) => !page.owner_only && [page.to, ...(page.aliases || [])].some((address) => {
         const target = new URL(address, "https://mezan.invalid");

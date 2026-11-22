@@ -23,6 +23,24 @@ from test_operational_read_runtime import ThreadedMotorCursor
 
 
 INPUTS = {SNAPSHOTS, LIFECYCLES, PLANS}
+ESTIMATE_CATALOG_SELECTOR = "owned_bundle_estimate_catalog"
+# This fixture's shawl recipe includes its parent and the rose component.
+# Pin the owned estimate's query/projection rather than its position among
+# unrelated dashboard alias and selected-document catalog reads.
+ESTIMATE_CATALOG_QUERY = {
+    "user_id": OWNER,
+    "$or": [
+        {"salla_product_id": {"$in": ["rose", "shawl"]}},
+        {"mezan_product_id": {"$in": ["rose", "shawl"]}},
+        {"id": {"$in": ["rose", "shawl"]}},
+    ],
+}
+ESTIMATE_CATALOG_PROJECTION = {
+    "_id": 0, "id": 1, "salla_product_id": 1,
+    "mezan_product_id": 1, "name": 1, "options": 1,
+    "raw_salla": 1, "raw_salla_details": 1, "variants": 1,
+    "cost_price_from_salla": 1, "cost_price": 1, "cost": 1,
+}
 
 
 class ProductBoundary:
@@ -300,10 +318,15 @@ def threaded_reads(monkeypatch, boundary, overrides):
         class Collection:
             def select(self, method, args):
                 counts[name] = counts.get(name, 0) + 1
-                cursor = overrides.get((name, counts[name]))
+                query = args[0] if method == 'find' else args[0][0]['$match']
+                selector = counts[name]
+                if (name == dashboard.PRODUCTS and method == 'find'
+                        and query == ESTIMATE_CATALOG_QUERY
+                        and args[1] == ESTIMATE_CATALOG_PROJECTION):
+                    selector = ESTIMATE_CATALOG_SELECTOR
+                cursor = overrides.get((name, selector))
                 if cursor is None:
                     return getattr(normal, method)(*args)
-                query = args[0] if method == 'find' else args[0][0]['$match']
                 assert query['user_id'] == OWNER
                 return cursor
             def find(self, query, projection=None):
@@ -315,6 +338,35 @@ def threaded_reads(monkeypatch, boundary, overrides):
         return Collection()
     monkeypatch.setattr(AsyncIOMotorDatabase, '__getitem__', collection)
     return counts
+
+
+@pytest.mark.asyncio
+async def test_estimate_catalog_interception_excludes_unrelated_direct_reads(monkeypatch, bundle_db):
+    product = await bundle_db[dashboard.PRODUCTS].find_one({"user_id": OWNER, "salla_product_id": "shawl"})
+    boundary = ProductBoundary(monkeypatch, bundle_db)
+    owned_cursor = object()
+    counts = threaded_reads(monkeypatch, boundary, {
+        (dashboard.PRODUCTS, ESTIMATE_CATALOG_SELECTOR): owned_cursor,
+    })
+    try:
+        unrelated_reads = [
+            ({"user_id": OWNER}, dashboard.PRODUCT_COST_ALIAS_PROJECTION),
+            ({"user_id": OWNER, "_id": {"$in": [product["_id"]]}},
+             {**dashboard.PRODUCT_COST_CATALOG_PROJECTION, "_id": 1}),
+            ({**ESTIMATE_CATALOG_QUERY, "user_id": "different-owner"}, ESTIMATE_CATALOG_PROJECTION),
+            (ESTIMATE_CATALOG_QUERY, {**ESTIMATE_CATALOG_PROJECTION, "_id": 1}),
+            ({**ESTIMATE_CATALOG_QUERY, "extra_scope": True}, ESTIMATE_CATALOG_PROJECTION),
+        ]
+        for query, projection in unrelated_reads:
+            assert boundary.db[dashboard.PRODUCTS].find(query, projection) is not owned_cursor
+        # The exact owned read is selected even after five unrelated reads;
+        # there is no implicit assumption that it is the second/third query.
+        assert boundary.db[dashboard.PRODUCTS].find(
+            deepcopy(ESTIMATE_CATALOG_QUERY), deepcopy(ESTIMATE_CATALOG_PROJECTION),
+        ) is owned_cursor
+        assert counts[dashboard.PRODUCTS] == len(unrelated_reads) + 1
+    finally:
+        boundary.client.close()
 
 
 async def cleanup_workers(boundary, task, cursors):
@@ -398,7 +450,7 @@ async def test_every_owned_authority_phase_drains_motor_before_lease_release(mon
         await bundle_db[RESOURCES].insert_one({'user_id': OWNER, 'id': 'wrapping', 'unit_cost': 2})
     keys = {
         'definitions': [(BUNDLES, 1)], 'units': [(UNITS, 1)], 'corrections': [(CORRECTIONS, 1)],
-        'estimate_definitions': [(BUNDLES, 2)], 'estimate_catalog': [(PRODUCTS, 2)],
+        'estimate_definitions': [(BUNDLES, 2)], 'estimate_catalog': [(PRODUCTS, ESTIMATE_CATALOG_SELECTOR)],
         'estimate_inputs': [(name, 2) for name in (COST_PROFILES, BINDINGS, PRODUCT_RESOURCE_BINDINGS)],
         'estimate_resources': [(RESOURCES, 2)],
     }[phase]

@@ -17,6 +17,26 @@ MAX_SOURCE_ROWS = 2000
 STATES = "operational_balance_states_v1"
 
 
+def defer_financial_cohort_history(orders):
+    """Dashboard reads never start an owner-wide financial scan.
+
+    Only the operational balance calculation may authorize an exclusion after
+    checking prior money and costs. Until then preserve the order and surface
+    incomplete profit, without caching a claim that its history is empty.
+    """
+    result = []
+    for order in orders:
+        decision = order.get(ELIGIBILITY_FIELD) or {}
+        if decision.get("eligible") is False:
+            order = {**order, ELIGIBILITY_FIELD: {
+                **decision, "eligible": True, "review_required": True,
+                "history_checked": False,
+                "reason_code": "awaiting_payment_history_deferred",
+            }}
+        result.append(order)
+    return result
+
+
 def _identity(value):
     # bool is an int subclass; it must never bind to order 1.
     return str(value) if type(value) in (str, int) and str(value).strip() else None
@@ -52,6 +72,8 @@ def known_financial_history(state, orders, *, owner):
     are used; no substring match and no inferred payment from order status.
     A malformed owner state raises rather than asserting an empty history.
     """
+    from operational_balance_archive import _checkpoint
+
     if not isinstance(state, dict) or state.get("owner_id") != owner:
         raise ValueError("awaiting_payment_history_owner_invalid")
     engine = state.get("engine")
@@ -65,6 +87,7 @@ def known_financial_history(state, orders, *, owner):
         if not isinstance(records, dict):
             raise ValueError("awaiting_payment_history_facts_invalid")
         for key, row in records.items():
+            _checkpoint()
             if not isinstance(key, str) or not isinstance(row, dict):
                 raise ValueError("awaiting_payment_history_fact_invalid")
             matched = _matches(row, (("order_number", False), ("order_id", True),
@@ -87,6 +110,7 @@ def known_financial_history(state, orders, *, owner):
     if not isinstance(movements, list):
         raise ValueError("awaiting_payment_history_movements_invalid")
     for row in movements:
+        _checkpoint()
         if not isinstance(row, dict):
             raise ValueError("awaiting_payment_history_movement_invalid")
         protected.update(_matches(row, (("order_number", False), ("order_id", True)), by_number, by_native))
@@ -94,6 +118,7 @@ def known_financial_history(state, orders, *, owner):
         if not isinstance(allocations, list):
             raise ValueError("awaiting_payment_history_allocations_invalid")
         for allocation in allocations:
+            _checkpoint()
             if (not isinstance(allocation, dict) or not isinstance(allocation.get("obligation_id"), str)
                     or not allocation["obligation_id"].strip()):
                 raise ValueError("awaiting_payment_history_allocation_invalid")
@@ -212,7 +237,7 @@ async def _read_state(db, owner):
     return await _prepare_read(partial(unpack_financial_snapshot, selected={"facts", "obligations"}), rows[0])
 
 
-async def _guard_batch(db, owner, orders, *, state=None):
+async def _guard_batch(db, owner, orders, *, state=None, protected_orders=None):
     """Return same-order copies; authorize only checked proposed exclusions.
 
     Use an owner-scoped snapshot DB/session when available. ``state`` may reuse
@@ -242,11 +267,17 @@ async def _guard_batch(db, owner, orders, *, state=None):
     try:
         by_number, by_native = _indices(candidates)
         with source_read_budget(20):
-            if state is None:
-                current_state = await _read_state(db, owner)
+            if protected_orders is None:
+                if state is None:
+                    current_state = await _read_state(db, owner)
+                else:
+                    current_state = await _prepare_read(partial(unpack_financial_snapshot, selected={"facts", "obligations"}), state) if SNAPSHOT in state else state
+                protected = (await _prepare_read(partial(known_financial_history, owner=owner), current_state, candidates)
+                             if current_state is not None else set())
             else:
-                current_state = await _prepare_read(partial(unpack_financial_snapshot, selected={"facts", "obligations"}), state) if SNAPSHOT in state else state
-            protected = known_financial_history(current_state, candidates, owner=owner) if current_state is not None else set()
+                # Request-local evidence only: never reuse an empty-history
+                # decision across requests or financial revisions.
+                protected = set(protected_orders)
             specs = _source_specs(owner, by_number, by_native)
             loaded = await _load(db, owner, specs)
             piece_numbers, invoice_numbers = {}, {}
@@ -322,11 +353,13 @@ async def guard_financial_cohort_history(db, owner, orders, *, state=None):
                 shared = {"owner_id": owner, "engine": {"facts": {}, "obligations": {}}, "movements": []}
             if SNAPSHOT in shared:
                 shared = await _prepare_read(partial(unpack_financial_snapshot, selected={"facts", "obligations"}), shared)
+            protected = await _prepare_read(partial(known_financial_history, owner=owner), shared, proposed)
         except Exception:
             shared = {}  # Invalid state retains every proposed exclusion.
+            protected = None
         checked = {}
         for start in range(0, len(proposed), MAX_CANDIDATES):
             originals = proposed[start:start + MAX_CANDIDATES]
-            batch = await _guard_batch(db, owner, originals, state=shared)
+            batch = await _guard_batch(db, owner, originals, state=shared, protected_orders=protected)
             checked.update((id(original), value) for original, value in zip(originals, batch))
         return [checked.get(id(row), {**row, ELIGIBILITY_FIELD: dict(row.get(ELIGIBILITY_FIELD) or {})}) for row in orders]
