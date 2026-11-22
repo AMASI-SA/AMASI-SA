@@ -1,0 +1,136 @@
+{
+  "task_id": "TABBY-DASHBOARD-FEES-20261122",
+  "status": "source_verified_draft_pr_ci_in_progress",
+  "updated_at_utc": "2026-11-22 15:34:05 UTC",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/tabby-weekly-fee-estimates-20261122",
+  "production_branch": "hotfix/prod-snap-meta-final",
+  "source_base": "9b4fb716b430c32073b5ea7abaeaff62646d9633",
+  "verified_implementation_commit": "26af7fff4b17f172f04f3a864c8615735b3d94be",
+  "verified_implementation_tree": "91e17637d4bcac41a0bc41bbb43bc6f731f1a525",
+  "scope": "Restore numeric Tabby payment-fee and net-profit reporting when installment-plan metadata or a weekly fee sample is absent, using accepted statement evidence and the existing Operational Balances average. Restate historical reports when accepted settlement evidence changes.",
+  "changed_files": [
+    ".github/workflows/prod-dashboard-v2-ad-fx-payment-fees.yml",
+    "backend/dashboard_ads_costs.py",
+    "backend/dashboard_operational_statement_fees.py",
+    "backend/dashboard_payment_fees.py",
+    "backend/dashboard_v2_routes.py",
+    "backend/provider_fee_statement_actual_sources.py",
+    "backend/provider_fee_weekly_average.py",
+    "backend/provider_fee_weekly_sources.py",
+    "backend/server.py",
+    "backend/tests/test_dashboard_card_snapshots.py",
+    "backend/tests/test_dashboard_operational_statement_fees.py",
+    "backend/tests/test_dashboard_weekly_payment_fees.py",
+    "backend/tests/test_provider_fee_statement_actual_sources.py",
+    "backend/tests/test_provider_fee_weekly_average.py",
+    "backend/tests/test_provider_fee_weekly_sources.py",
+    "frontend/src/components/ProfitSummaryCard.jsx",
+    "frontend/src/components/ProfitSummaryCard.paymentFees.test.jsx",
+    "frontend/src/lib/paymentFeeCompleteness.js",
+    "frontend/src/lib/paymentFeeRows.js",
+    "frontend/src/pages/AdvancedDashboard.jsx",
+    "frontend/src/pages/AdvancedDashboard.paymentFees.test.jsx"
+  ],
+  "completed_behavior": [
+    "Accepted, fully covered per-order statement fees take precedence over estimates. Existing known-plan dated tariff behavior is retained.",
+    "Missing Tabby plan data uses a weighted fee average from the seven completed Riyadh calendar days preceding the report day.",
+    "A genuinely empty weekly sample uses the exact validated current average profile and period from Operational Balances; no hardcoded percentage or zero-fee substitute.",
+    "Variable fee, fixed fee, VAT, FX and cent rounding use the existing operational fee calculation rules.",
+    "Report order selection and accepted-evidence cutoff are separate: accepted later statements can raise or lower older reports' fees and net profit.",
+    "Accepted operational source revision changes invalidate the executive dashboard cache, including universal Tabby tariff configurations.",
+    "An accepted actual replaces its estimate once; current capture, refund identity, currency, account, split-payment and cancellation evidence is validated first.",
+    "Dashboard rows and totals retain numeric values with Arabic estimate labels and source details; actual replacement removes estimate metadata.",
+    "Source reads are owner-scoped, bounded, revision-checked, memoized once per request and offloaded from the event loop where needed.",
+    "No financial writes and no change to Operational Balances calculation behavior."
+  ],
+  "verification": [
+    {
+      "name": "Focused backend integration and regressions",
+      "command": "PYTHONPATH=backend .venv/bin/python -m pytest --noconftest -q backend/tests/test_dashboard_weekly_payment_fees.py backend/tests/test_provider_fee_weekly_average.py backend/tests/test_provider_fee_weekly_sources.py backend/tests/test_dashboard_operational_statement_fees.py backend/tests/test_provider_fee_statement_actual_sources.py backend/tests/test_dashboard_dated_payment_fees.py backend/tests/test_dashboard_card_snapshots.py backend/tests/test_dashboard_v2_ad_account_costs.py --tb=short",
+      "exit_status": 0,
+      "result": "205 passed; 6 pre-existing deprecation warnings."
+    },
+    {
+      "name": "Frontend fee display and replacement contracts",
+      "command": "Governed frontend_release_toolchain.execute: yarn --cwd frontend test --watchAll=false --runInBand --runTestsByPath src/components/ProfitSummaryCard.paymentFees.test.jsx src/pages/AdvancedDashboard.paymentFees.test.jsx src/components/DashboardAnalyticsPlacement.test.js",
+      "toolchain": {
+        "node": "22.23.2",
+        "yarn": "1.22.22"
+      },
+      "exit_status": 0,
+      "result": "46 tests passed in 3 suites."
+    },
+    {
+      "name": "Frozen fee-read contract and cache compatibility",
+      "exit_status": 0,
+      "result": "58 tests passed, including the source-revision cache and request-memo behavior."
+    },
+    {
+      "name": "Independent final review",
+      "exit_status": 0,
+      "result": "No remaining blocking findings. Final targeted review verified 14 current-basis, native/canonical refund, actual replacement, historical restatement and memoization cases."
+    },
+    {
+      "name": "Whitespace and source preservation",
+      "command": "git diff --check; Git blob/tree identity comparison during remote preservation",
+      "exit_status": 0,
+      "result": "Clean diff; all 21 remote blobs and the full implementation tree matched the locally verified commit exactly."
+    }
+  ],
+  "acceptance_cases": [
+    "Weighted weekly average excludes older high-fee rows and keeps fixed fee and VAT separate.",
+    "Empty week uses the exact operational average and its actual source period.",
+    "A later accepted statement changes an older report's average and net profit without changing its order selection.",
+    "Matched actual fees replace estimates without double counting; estimate flags disappear.",
+    "New refunds, changed refund references, cancelled orders and mismatched payment bases cannot silently reuse stale accepted actual fees.",
+    "Duplicate canonical/native refunds are counted once; signed fee refunds retain their meaning.",
+    "Source revision races and conflicting evidence remain explicit, not zero-valued fees."
+  ],
+  "pull_request": {
+    "number": 2068,
+    "url": "https://github.com/AMASI-SA/AMASI-SA/pull/2068",
+    "draft": true,
+    "merged": false,
+    "observed_base_sha": "9b4fb716b430c32073b5ea7abaeaff62646d9633",
+    "observed_mergeable": true
+  },
+  "ci": {
+    "state": "in_progress",
+    "observed_source_sha": "26af7fff4b17f172f04f3a864c8615735b3d94be",
+    "focused_workflow": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45038882515",
+    "note": "This is a point-in-time handoff. Inspect the current PR head and current runs before merge; earlier run results are not evidence for a changed source."
+  },
+  "review": {
+    "independent_code_review": "passed",
+    "external_pr_review": "not_requested"
+  },
+  "release": {
+    "state": "not_prepared_not_published",
+    "production_changed": false,
+    "shared_app_changed": false,
+    "lease_created": false,
+    "release_intent_created": false,
+    "rehearsal_performed": false,
+    "merge_performed": false,
+    "deployment_performed": false,
+    "authorization": "Current instructions authorize implementation, remote preservation and review. AGENTS.md requires a separately authorized production publish.",
+    "inherited_intent": "The inherited production intent does not describe this candidate and must not be used to deploy it."
+  },
+  "incomplete": [
+    "Observe the current-head CI runs and resolve any regression caused by this change.",
+    "For an authorized release, select the complete final source A, prepare governed reproducible proof and intent-only B, perform the clean-clone rehearsal, then follow the production guard and publication protocol.",
+    "After any authorized publication, require explicit deployment success and official three-probe verification on the production site."
+  ],
+  "risks": [
+    "Missing plan data and an empty week are covered when the verified operational average exists. Conflicting or unverifiable financial evidence remains an explicit completeness issue.",
+    "Historical management reports are intentionally restated using current accepted settlement evidence."
+  ],
+  "unrelated_work_preserved": [
+    "Operational Balances arithmetic, source import and financial posting behavior are unchanged.",
+    "The user withdrew the separate ledger-table layout request; no table-restoration change is included.",
+    "Production branch, shared application files, existing release intent and other task work remain unchanged."
+  ],
+  "continuation_record": "This task status document and PR2068 are the handoff artifacts. No issue comment or message to another person was sent.",
+  "next_safe_action": "Fetch the task branch, verify the implementation commit and its tree, inspect current git status and PR2068 head/checks, and finish the pending CI observation. Do not deploy the inherited release intent or create a production lease without separately authorized release work."
+}
