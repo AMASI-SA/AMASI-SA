@@ -1,0 +1,18 @@
+{
+  "source_git_sha": "23e9514b9e8a33bffb2363bb1d3afd792355ab2c",
+  "deployment_git_sha": "9b4fb716b430c32073b5ea7abaeaff62646d9633",
+  "release_id": "rg5-3ec8529aa0398fbe08b591ca47b175f1fd41af183c6fdae0fc21da4c223c618c",
+  "actor": "codex-aramex-pr2062-authorized",
+  "prepublish_exit": 0,
+  "ready_to_publish": true,
+  "prepublish_raw_sha256": "322fb13fd7d805bad5a178064e6804a959afa8f0f42366418ab3b9311aee145d",
+  "publish_requested_at_utc": "2026-11-22T15:29:55.342Z",
+  "publication_attempts": 1,
+  "domain": "mezansalla.com",
+  "previous_platform_deployment": "d8c03a2",
+  "observed_after_click": "Publishing... (disabled)",
+  "new_deployment_success_observed": false,
+  "verify3_completed": false,
+  "native_acceptance_completed": false,
+  "own_lease_active": true
+}

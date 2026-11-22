@@ -121,6 +121,20 @@ Republish. Capture new deployment success/version. Run original verify3 and
 actual original/control Native ADB. Successful verify must close this own lease
 and final status report inactive. Public Production has not changed yet.
 
+Original prepublish succeeded0/ready_to_publish=true for exact A/M/RID,
+raw SHA256322fb13fd7d805bad5a178064e6804a959afa8f0f42366418ab3b9311aee145d.
+Immediately followed by ONE authorized Republish click for mezansalla.com at
+2026-11-22T15:29:55.342Z. Actual UI changed to disabled Publishing...,so the
+request started. Durable pr2062-publication-start.json. Do not click again.
+Own lease remains active; do not clear a foreign lease or change Root source.
+No new deployment success/identity/verify3/Native acceptance is claimed yet.
+
+Next: observe a newer explicit deployment success/version,record sanitized
+Cloud adapter evidence if exposed (runtime logs alone are not full build argv),
+run unchanged original verify --url https://mezansalla.com for all3 probes,
+test original Aramex and SMSA control via ADB,then original status inactive.
+Archive raw verification proof and final remotely recoverable handoff.
+
 ## Current successor: strict external classifier, freshly verified
 
 Branch `codex/aramex-intransit-label-reprint-v2-20261122` is constructed directly
