@@ -235,3 +235,49 @@ The isolated actual-host source checkout and frozen dependency prefetch complete
 successfully in 48.746 seconds; Yarn installation itself took 29.78 seconds.
 That is preparation only, not an adapter rehearsal or publication. The shared
 source, existing services, data, untracked files and lease remain unchanged.
+
+## Publication checkpoint — 22 November, 12:24 UTC / 15:24 Riyadh
+
+**Evidence-only continuation branch; do not deploy this branch.** The reviewed
+release is PR [#2059](https://github.com/AMASI-SA/AMASI-SA/pull/2059).
+Source A is `d396049f8fedf72c394169a451d45b227ad52376`; intent-only B is
+`8e5d0113be0daabe0989037c67315f2fc3d46574`. Normal merge
+`c302943e330bcdd534a4a5697b8ef813dfb7cb6e` has exactly B's tree
+`2eaeb022fa3cfc087026302158b35bcbc33ac990`. A remains an ancestor and only
+the intent path changes after A. The production branch now points to this merge.
+
+All applicable PR gates passed: 28 successful checks and six expected
+condition/path-scoped skips, with no pending or failed checks. The six required
+release executions all actually passed on B. Operational backend ran 6,265 tests
+plus 90 subtests, with the new catalog/fairness minimums enforced. The isolated
+Mongo review gate executed at least 41 LocalAssemblyTests and rejected all
+skips/errors/failures. Stock eligibility ran 5,525 tests plus 97 subtests with
+the same zero-skip protection. Counts overlap and must not be summed.
+
+The unchanged deployment adapter also succeeded in the isolated actual-host
+checkout at B: 67.103 seconds, exit 0, Host Node 24.19.0. It produced the exact
+reviewed source A, runtime identity and frontend artifact; both package-boundary
+proofs and backend health passed. The host proof covered 1,290 backend and 1,758
+frontend files. Its retained log SHA256 is
+`cd7f9cff2bd74b99db7043ab93da296e5ed8ecd2132bd59a85d67242cccc9d84`.
+
+After a fresh inactive original-guard check, the shared workspace fast-forwarded
+to the reviewed merge and received the verified generated outputs. The old
+generated output was backed up; all 417 unrelated untracked files and the
+separate supplier Preview service were preserved. The original guard prepared
+the lease at 12:21:13 UTC for actor
+`codex-operational-home-loading-recovery-20261122`; original prepublish exited 0.
+
+**One authorized publication was submitted. Do not click Republish again.**
+Emergent shows Deployment Started at 15:22 Riyadh and Building your website.
+There is not yet an observed new Deployment Succeeded. Runtime recovery and
+authenticated cold-home acceptance remain unverified. The release ID is
+`rg5-aceb392af7809d9099ba92b27d4bb3d802999148c91013a5bba1cca5ad5f6c8e`.
+Machine-readable state, source/artifact identities and check links are in
+`evidence/release-state.json`.
+
+Next safe action: observe this in-progress publication. After an explicit newer
+success, run the original `/app/scripts/production_release_guard.py verify
+--url https://mezansalla.com`, retain its three matching probes, then obtain
+fresh inactive status and cold initial home acceptance. The owner lease must
+not be cleared manually or replaced. No Production recovery is claimed yet.
