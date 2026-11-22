@@ -96,6 +96,12 @@ class CarrierBarcodeRequest(BaseModel):
     barcode: str = Field(min_length=1, max_length=256)
 
 
+class CarrierHandoffScanRequest(CarrierBarcodeRequest):
+    request_id: str | None = Field(default=None, max_length=64)
+    session_id: str | None = Field(default=None, max_length=64)
+    expected_scope: str | None = Field(default=None, max_length=64)
+
+
 async def ensure_fulfillment_indexes(db: Any) -> None:
     if isinstance(db, (SessionDatabase, OperationalDatabase)):
         return  # Indexes are prepared before entering the owner transaction.
@@ -121,6 +127,19 @@ async def ensure_fulfillment_indexes(db: Any) -> None:
             ("carrier_handoff_scanned_at", DESCENDING),
         ],
         name="ix_carrier_handoff_employee_v2",
+    )
+    await db[WORKFLOWS].create_index(
+        [("user_id", ASCENDING), ("carrier_handoff_employee_id", ASCENDING),
+         ("carrier_handoff_receipt.request_id", ASCENDING)], unique=True,
+        partialFilterExpression={"carrier_handoff_receipt.request_id": {"$type": "string"}},
+        name="uq_carrier_handoff_receipt_request_v1",
+    )
+    await db[WORKFLOWS].create_index(
+        [("user_id", ASCENDING), ("carrier_handoff_employee_id", ASCENDING),
+         ("carrier_handoff_receipt.session_scope", ASCENDING),
+         ("carrier_handoff_receipt.session_id", ASCENDING),
+         ("carrier_handoff_receipt.received_at", DESCENDING)],
+        name="ix_carrier_handoff_session_v1",
     )
     await db[FULFILLMENT_DECISIONS].create_index(
         [("user_id", ASCENDING), ("order_number", ASCENDING)],
@@ -2743,8 +2762,9 @@ def make_fulfillment_v2_router(
             "stage": "completed",
             "carrier_handoff_state": "with_handoff_employee",
         }
-        if not context["is_owner"]:
-            query["carrier_handoff_employee_id"] = context["actor_id"]
+        actor = effective_operation_actor(user, context)
+        if not context["is_owner"] or actor["id"] != context["merchant_id"]:
+            query["carrier_handoff_employee_id"] = actor["id"]
         workflows = await db[WORKFLOWS].find(
             query,
             {"_id": 0},
@@ -2767,6 +2787,35 @@ def make_fulfillment_v2_router(
             "total": len(items),
             "poll_seconds": 15,
         }
+
+    @router.get("/carrier-handoff/mobile")
+    async def mobile_carrier_handoff_page(
+        bucket: str = Query(pattern="^(received|waiting)$"),
+        page: int = Query(default=1, ge=1, le=1024),
+        page_size: int = Query(default=8, ge=8, le=8),
+        query: str = Query(default="", max_length=180),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        from mobile_carrier_handoff import queue_page
+        context = await _actor_context(db, user)
+        _require_permission(context, "fulfillment.carrier.handoff", responsibility="carrier_handoff")
+        actor = effective_operation_actor(user, context)
+        return await queue_page(db, context["merchant_id"], {"id": actor["id"], "name": actor["name"]},
+            bucket=bucket, page=page, query=query)
+
+    @router.get("/carrier-handoff/mobile/sessions/{session_id}")
+    async def mobile_carrier_handoff_session(
+        session_id: str,
+        expected_scope: str = Query(min_length=64, max_length=64),
+        request_id: str | None = Query(default=None, max_length=64),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        from mobile_carrier_handoff import session_summary
+        context = await _actor_context(db, user)
+        _require_permission(context, "fulfillment.carrier.handoff", responsibility="carrier_handoff")
+        actor = effective_operation_actor(user, context)
+        return await session_summary(db, context["merchant_id"], {"id": actor["id"], "name": actor["name"]},
+            session_id, expected_scope, request_id)
 
     @router.get("/delivery-tracking")
     async def list_delivery_tracking_shipments(
@@ -2812,7 +2861,7 @@ def make_fulfillment_v2_router(
 
     @router.post("/carrier-handoff/scan")
     async def scan_carrier_handoff_shipment(
-        payload: CarrierBarcodeRequest,
+        payload: CarrierHandoffScanRequest,
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         context = await _actor_context(db, user)
@@ -2821,17 +2870,40 @@ def make_fulfillment_v2_router(
             "fulfillment.carrier.handoff",
             responsibility="carrier_handoff",
         )
+        actor = effective_operation_actor(user, context)
+        receipt_context = None
+        if any(value is not None for value in (payload.request_id, payload.session_id, payload.expected_scope)):
+            from mobile_carrier_handoff import check_scope, checked_uuid
+            receipt_context = {
+                "request_id": checked_uuid(payload.request_id, "request_id"),
+                "session_id": checked_uuid(payload.session_id, "session_id"),
+                "session_scope": check_scope(context["merchant_id"], actor["id"], payload.expected_scope),
+            }
         try:
-            return await receive_carrier_shipment(
-                db,
-                user_id=context["merchant_id"],
-                scanned_barcode=payload.barcode,
-                actor_id=context["actor_id"],
-                actor_name=(
-                    _text(user.get("name") or user.get("email"))
-                    or "موظف تسليم الشحن"
-                ),
-            )
+            async def receive(scoped):
+                # The owner fence may have waited behind a permission change.
+                # Reauthorize the original login, never its borrowed merchant
+                # principal, immediately before the canonical custody writer.
+                current_actor = await db["users"].find_one({"id": actor["id"]}, {"_id": 0})
+                if (not current_actor or current_actor.get("disabled") is True
+                        or current_actor.get("is_active") is False or current_actor.get("deleted_at")):
+                    raise HTTPException(403, detail={"code": "carrier_handoff_actor_changed"})
+                if user.get("_session_client") == "amasi_mobile":
+                    from mobile_app_request_context import mobile_app_request_user
+                    current_actor = await mobile_app_request_user(db,
+                        {**current_actor, "_session_client": "amasi_mobile"},
+                        path="/api/fulfillment-v2/carrier-handoff/scan", method="POST")
+                fresh = await _actor_context(db, current_actor)
+                _require_permission(fresh, "fulfillment.carrier.handoff", responsibility="carrier_handoff")
+                fresh_actor = effective_operation_actor(current_actor, fresh)
+                if fresh["merchant_id"] != context["merchant_id"] or fresh_actor["id"] != actor["id"]:
+                    raise HTTPException(403, detail={"code": "carrier_handoff_actor_changed"})
+                return await receive_carrier_shipment(
+                    scoped, user_id=context["merchant_id"], scanned_barcode=payload.barcode,
+                    actor_id=actor["id"], actor_name=fresh_actor["name"],
+                    receipt_context=receipt_context, require_current_status=True,
+                )
+            return await operational_owner(db, context["merchant_id"], receive)
         except CarrierHandoffError as exc:
             raise _carrier_handoff_http_error(exc) from exc
 
