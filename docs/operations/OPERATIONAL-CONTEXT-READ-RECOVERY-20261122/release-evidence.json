@@ -1,0 +1,237 @@
+{
+  "schema_version": 1,
+  "task_id": "OPERATIONAL-CONTEXT-READ-RECOVERY-20261122",
+  "recorded_at_utc": "2026-11-22T02:17:51Z",
+  "repository": "AMASI-SA/AMASI-SA",
+  "pull_request": {
+    "number": 2057,
+    "url": "https://github.com/AMASI-SA/AMASI-SA/pull/2057",
+    "branch": "codex/operational-context-read-recovery-20261122"
+  },
+  "evidence_branch": {
+    "name": "codex/operational-context-release-evidence-20261122",
+    "based_on": "5758240bd83ed3018737ae59808f55415d80a689",
+    "deploy_this_branch": false,
+    "remote_checkpoint": "pending_root"
+  },
+  "provenance": {
+    "base_M3": "02e8be41e6f1972806f0e095b8fdc38645a7f113",
+    "source_A": "cde10efae4fb5b83f69b1c875f8c5c9ec6e6607c",
+    "source_A_tree": "08f64de11d97f7a07311bcfeac767ae1b8b49555",
+    "frozen_B": "5758240bd83ed3018737ae59808f55415d80a689",
+    "frozen_B_tree": "277655692b1444382ac62ff77a9d38d299f5520b",
+    "A_sole_parent_is_M3": true,
+    "B_sole_parent_is_A": true,
+    "A_to_B_changed_paths": [
+      "release/release-intent-v5.json"
+    ],
+    "M3_to_A_changed_paths": [
+      ".github/workflows/operational-balance-web.yml",
+      "backend/operational_balance_routes.py",
+      "backend/tests/test_operational_context_snapshot_reader.py",
+      "docs/operations/OPERATIONAL-CONTEXT-READ-RECOVERY-20261122/STATUS.md"
+    ],
+    "original_candidate_and_B_validation": {
+      "result": "passed",
+      "evidence_basis": "reported_by_release_owner"
+    },
+    "object_and_byte_checks": {
+      "result": "passed",
+      "evidence_basis": "independent_local_read_only_inspection"
+    }
+  },
+  "frozen_identity": {
+    "release_id": "rg5-5dcb1c33768a3de12da4360e427a0c511205441d3d445098ddcdee7cf61a1fdb",
+    "intent_blob": "fabaeac56443c42a85aacea12c575fdd28bd6766",
+    "intent_bytes": 1466981,
+    "intent_sha256": "a02a9d3a5fb64ba55cd09afeab25de19b488f6bbfffd7964ae51a934967f42cd",
+    "candidate_equals_tracked_B_bytes": true,
+    "frontend_artifact_tree_sha256": "65582eef5ae1c6aef9fc774c2ea10e5168c2fb396535c34b44be266526817526",
+    "build_meta_sha256": "97fbd42dcc0a23791b8695c6bac558bef994cfbc5e915697cec673f9ea69bfdc",
+    "proof_sha256": "6d7691f62239836263b0781c78e4434f008fe4e82a94989344009852fe07e0c6",
+    "clean_pass_count": 2,
+    "retained_pass": 2,
+    "passes_have_equal_artifact_and_build_meta": true,
+    "toolchain": {
+      "node": "22.23.2",
+      "yarn": "1.22.22",
+      "vite": "8.2.4"
+    },
+    "manifest_file_counts": {
+      "frontend_source": 1378,
+      "backend_runtime_source": 1289,
+      "release_control_source": 322
+    }
+  },
+  "local_build": {
+    "result": "passed_after_rejected_initial_attempt",
+    "all_recorded_log_sizes_and_hashes_checked": true,
+    "initial_attempt": {
+      "source_bootstrap": false,
+      "build_exit_code": 0,
+      "stale_metadata_source": "e41695244bbe0bfde4052e074d623b8c60f16331",
+      "freeze": {
+        "step": "freeze",
+        "started_at": "2026-11-22T02:12:00.112413+00:00",
+        "finished_at": "2026-11-22T02:12:01.710196+00:00",
+        "seconds": 1.598,
+        "exit_code": 2,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderr_bytes": 192,
+        "stderr_sha256": "34b95e3beb7c00bee1c26f5b7ade83e4597287488e1d90097ee3d8a9368ca02b"
+      },
+      "result": "rejected_stale_build_before_freezing"
+    },
+    "corrected_attempt": {
+      "source_bootstrap": true,
+      "build": {
+        "step": "bootstrap-build",
+        "started_at": "2026-11-22T02:12:30.040253+00:00",
+        "finished_at": "2026-11-22T02:12:49.209287+00:00",
+        "seconds": 19.169,
+        "exit_code": 0,
+        "stdout_bytes": 67611,
+        "stdout_sha256": "9f12396ad1e3a13f0d14a1958565142446202cfb2d2f9f098eaeaee3d4c1f32f",
+        "stderr_bytes": 3386,
+        "stderr_sha256": "b395ffe52b6d524e7f93e49fb3ec5584a95f2746a23d58af8fff22699bbf1e7d"
+      },
+      "freeze": {
+        "step": "bootstrap-freeze",
+        "started_at": "2026-11-22T02:12:49.211175+00:00",
+        "finished_at": "2026-11-22T02:12:51.328977+00:00",
+        "seconds": 2.118,
+        "exit_code": 0,
+        "stdout_bytes": 1466981,
+        "stdout_sha256": "a02a9d3a5fb64ba55cd09afeab25de19b488f6bbfffd7964ae51a934967f42cd",
+        "stderr_bytes": 191,
+        "stderr_sha256": "0604ec8a9b64dd638d49c48dd13c51b35b27ad6df92b1fdb64c3bdc06f561460"
+      },
+      "result": "passed",
+      "diagnostic": "Ignored backend/release_identity.json absent in source worktree; freeze exit 0 and subsequent original provenance validation passed."
+    },
+    "wrong_artifact_published": false,
+    "record_file_sha256": {
+      "steps.json": "3c3d2a12b555ca014bf542968654518fc731e3d09974f14f09c6bb49de29fe88",
+      "bootstrap-steps.json": "1fb15298d1d8b049c3a32a2ed4f135212d74b56590477d97f37eba927c707343",
+      "identity-summary.json": "35bccd031856e74c630b36f887ae8f58b7c0727fb1f45430e8a02fc3f518a3b4"
+    }
+  },
+  "host_rehearsal": {
+    "result": "passed",
+    "evidence_basis": "actual_host_observation_reported_by_release_owner",
+    "started_at_utc": "2026-11-22T02:15:52.228358Z",
+    "finished_at_utc": "2026-11-22T02:16:49.662978Z",
+    "seconds": 57.435,
+    "exit_code": 0,
+    "command": "yarn --cwd frontend build",
+    "stage": "/tmp/mezan-pr2057-release-20261122-dee_dv_x",
+    "fresh_app_guard_active": false,
+    "app_source_before": "02e8be41e6f1972806f0e095b8fdc38645a7f113",
+    "app_tracked_clean_before": true,
+    "app_source_or_outputs_changed": false,
+    "host_node": "24.19.0",
+    "host_yarn": "1.22.22",
+    "governed_node": "22.23.2",
+    "generated_identity_matches_frozen_A_and_release": true,
+    "stage_tracked_clean_after": true,
+    "lease_created": false,
+    "stdout_bytes": 203976,
+    "stdout_sha256": "f8f6f649153d594e3a14b259df358dee3c2b90cfb034c1444e921cbccada696c",
+    "stderr_bytes": 10336,
+    "stderr_sha256": "f11342fef07ae04c2b69eae68876032a8f71528006be040fa1d3a6e7fe967e75",
+    "staged_git_head": "5758240bd83ed3018737ae59808f55415d80a689"
+  },
+  "implementation": {
+    "route": "GET /api/operational-balances/context",
+    "change": "Use the existing current financial-position state reader only at this context boundary; map only its documented HTTP 503 current-snapshot error to the previous context error payload.",
+    "source_file_sha256": {
+      "backend/operational_balance_routes.py": "092fd7915285a2f654400631b3f70001e8b9eb11d205565fa2dae3650b50f14b",
+      "backend/tests/test_operational_context_snapshot_reader.py": "fa4f9d765197ad062a2c753f52ce2453abdd516fd4cc38cfe4c561131d2c697d",
+      ".github/workflows/operational-balance-web.yml": "2982cf400c28f0c05d96e7c88bfc1c061c983fd6dbad6c4c01ec1ce57b4e485e"
+    },
+    "preserved": [
+      "successful context JSON bytes",
+      "native authorization and fresh actor scope",
+      "permission/session/bank logic",
+      "current packet and manifest integrity checks",
+      "exact current-corruption 503 payload",
+      "all full writer and audit readers"
+    ],
+    "intentional_boundary": "Historical audit page bodies are not materialized for context; full readers still reject corrupt or missing historical pages.",
+    "ci_registration": {
+      "module": "backend/tests/test_operational_context_snapshot_reader.py",
+      "minimum_executed": 21,
+      "existing_thresholds_changed": false
+    }
+  },
+  "focused_verification": {
+    "python": "3.12.14",
+    "real_database_or_api_writes": false,
+    "red_on_unchanged_M3": {
+      "failed": 11,
+      "passed": 10,
+      "seconds": 5.83,
+      "exit_code": 1
+    },
+    "new_module_green": {
+      "passed": 21,
+      "seconds": 6.28,
+      "exit_code": 0
+    },
+    "combined_neighboring_regressions": {
+      "passed": 71,
+      "seconds": 13.23,
+      "exit_code": 0,
+      "includes_new_21": true,
+      "modules": [
+        "test_operational_context_snapshot_reader.py",
+        "test_operational_financial_position_state.py",
+        "test_operational_balance_financial_position_routes.py",
+        "test_operational_balance_supplier_workspace.py"
+      ]
+    },
+    "commands": "STATUS.md#verification",
+    "git_diff_check": "passed",
+    "AST_boundary_comparison_to_M3": "passed"
+  },
+  "independent_review": {
+    "reviewer": "catalog_payload_evidence",
+    "result": "passed",
+    "scope": "Exact route/test hashes above; current-corruption mapping, raw JSON parity, query-budget/integrity boundary, denial controls, downstream inventory reader trace.",
+    "tests_rerun_by_reviewer": false,
+    "requested_changes": []
+  },
+  "prior_M3": {
+    "production_commit": "02e8be41e6f1972806f0e095b8fdc38645a7f113",
+    "evidence_commit": "4ee3d64159cba4edd20133f81ec938cf33068ae8",
+    "evidence_url": "https://github.com/AMASI-SA/AMASI-SA/blob/4ee3d64159cba4edd20133f81ec938cf33068ae8/docs/operations/OPERATIONAL-WORKSPACE-RELEASE-20261122/release-evidence.json",
+    "original_live_identity_probes_passed": 3,
+    "fresh_guard_active": false,
+    "does_not_establish_inventory_recovery": true
+  },
+  "current_release_state": {
+    "exact_head": "5758240bd83ed3018737ae59808f55415d80a689",
+    "ci": {
+      "status": "pending",
+      "triggered_workflows": 12,
+      "failures_observed": 0,
+      "accounting_workflow": "not_triggered_path_filter_not_a_pass",
+      "evidence_basis": "latest_release_owner_observation_at_this_checkpoint"
+    },
+    "merged": false,
+    "lease_created": false,
+    "published": false,
+    "production_changed_by_this_patch": false,
+    "original_live_identity_verification": "pending",
+    "live_inventory_acceptance": "pending"
+  },
+  "limitations": [
+    "No matching live inventory/context response timing proves the original failure cause.",
+    "The existing reader still loads and decodes the remaining current aggregate; no total memory or latency bound is claimed.",
+    "Current header/packet/manifest validation is retained; historical page-body validation is intentionally excluded only from context.",
+    "Native stocktake, physical inventory projection, catalogs, payment writes and broader server pressure are unchanged.",
+    "Local focused tests, immutable build identity and host rehearsal do not substitute for exact-B CI, actual publication or normal authenticated inventory acceptance."
+  ],
+  "next_safe_action": "Root checkpoints these evidence-only files, finishes required exact-B CI, then follows the unchanged normal-merge and fresh original guard/adapter publication protocol. After explicit deployment success, require three original live identity probes and inactive guard, plus one normal authenticated inventory load. Never deploy this evidence branch."
+}
