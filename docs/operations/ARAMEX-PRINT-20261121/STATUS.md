@@ -33,6 +33,15 @@ shared source stayed unchanged. No lease/publication. Durable result is
 pointer `/tmp/aramex-pr2061-stage.txt` must be inspected before materialization;
 it is not a deployment source and does not replace Cloud Build verification.
 
+Exact-B readiness45030907372 passed both host20.20.2/24.19.0 clean-clone
+configured adapter rehearsals. Remaining cross-domain checks must pass before
+merge. The tracked `evidence/materialize-pr2061.py` pins A/B/J/identity/intent
+and isolated-stage proof, requires a separately supplied reviewed normal merge
+SHA/tree-equivalent B, an inactive original guard and clean shared source,
+preserves previous generated outputs, and runs the original verifier. It does
+not create a lease or publish; syntax checked. Cloud Build still rebuilds its
+own artifacts, ignoring this local materialization. Use only after reviewed M.
+
 ## Current source milestone (2026-11-22)
 
 The six red actual-route cases now pass after a narrow change to
