@@ -1462,6 +1462,8 @@ def make_operational_balance_router(db, current_user):
     install_workspace_routes(router, db, current_user, scope)
     from operational_workspace_refunds import install_refund_routes
     install_refund_routes(router, db, current_user, scope)
+    from operational_workspace_customer_collections import install_customer_collection_routes
+    install_customer_collection_routes(router, db, current_user, scope)
     from operational_workspace_pending import install_pending_command_routes
     install_pending_command_routes(router, db, current_user, scope)
     return router

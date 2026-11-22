@@ -36,6 +36,9 @@ def provider_position(computed, provider, *, show_orders):
     result["uncomputed_principal"] = sar.get("uncomputed_principal")
     result["uncomputed_principal_complete"] = bool(sar.get("uncomputed_principal_complete")) and not foreign
     if show_orders:
+        result["customer_adjustments"] = sar.get("customer_adjustments", {
+            "currency": "SAR", "refund_pending_count": 0, "refund_pending_amount": "0.00",
+            "collection_pending_count": 0, "collection_pending_amount": "0.00"})
         result["uncomputed_orders"] = sum(row.get("uncomputed_orders", 0) for _, row in scopes)
         count_known = scopes and all(row.get("paid_orders") is not None and row.get("paid_orders_complete")
                                      and row["paid_orders"] == len(row.get("paid_order_ids", [])) for _, row in scopes)
