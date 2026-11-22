@@ -1,3 +1,61 @@
+# Evidence checkpoint — PR2076 source passed, intent-only B frozen
+
+This evidence branch is for continuation and reviewed host commands only.
+**Do not merge or deploy the evidence branch.** Candidate deployment remains
+B `5bb05036d8095a87c6635c0a431c2c19d24d8f78`, tree
+`8f915a681de43fed9da1ec98685a56f87a4c8bcb`, on
+`codex/operational-demand-latency-r3-20261122` / Draft PR2076.
+Its sole parent is frozen source A
+`108024c00b7f367fd1d6b15874d7a73d55de2620`, tree
+`1aa73c0a2024533f7a67ad32d64c540521b70cd8`, whose sole parent is N
+`24270ebdfdebb83282389308a2349cdb27e2b8e4`.
+
+All eleven exact-A workflows passed;22 checks succeeded and6 scope/event
+conditions skipped, with no pending/failure/neutral. Operational acceptance:
+backend6502 plus90subtests, demand96, shipping16 plus18subtests,
+frontend1657/103suites, browser33 and canonical-worker4. Counts overlap.
+Original two-build Readiness45061492807 produced artifact14769134921;
+ZIP digest, exact candidate bytes and the original candidate/source-manifest
+validators passed. The new intent was committed unchanged as B's only path.
+Original load_release_intent/verify_release_intent_git also passed on clean B.
+See the PR2076 A/B receipts under evidence/ for exact identities and run links.
+
+Runtime: `rg5-e4e41b98edc9f49b8e74adad2a905d362b7113b5b1a1fa83436a4c1ba8c4b918`.
+Artifact: `dcaa1f2b805c44427be8df2f5b466b85d7860bade43a3799009156300397300b`.
+Intent SHA256: `3a56ff073fcb3b7e362500a3be1966e2c513194f4679d5bb81a139a338c866c6`.
+Source A/B must not be amended, rebased, squashed or mixed with later source.
+
+Exact-B CI is now running, including Readiness45062567651, Operational45062567766
+and Security45062567741. Both original clean-clone host adapter jobs are still
+subject to completion and independent artifact acceptance. The source-stage
+CI receipts are not substituted for B's release gate.
+
+## Host coordination blocker
+The latest foreign PR2074 record reports actual staging and prepublish PASS
+with its own lease ACTIVE, prepared2026-11-22T19:36:26.794349+00:00,
+actor codex-customer-inventory-unified-2074-20261122. No final live verification
+has yet been reported. Preserve that lease and its publication handoff.
+Our task has not merged, changed /app, created a lease, or published.
+
+MANUAL-HOST-REHEARSAL-2076.py is a reviewed **disabled draft**, SHA256
+`940f5067af6ed35102938176712a01838ca3089a71d4fc99e338b560cb2a17a1`.
+A/N/B and candidate identity pins are concrete, but
+BASE_RELEASE_COMPLETION_EVIDENCE_COMMIT remains None, stopping before all
+host/Git/network operations. Its structure was independently reviewed; the
+Git trace/config-routing issue was fixed. It may be enabled only after
+reviewing the foreign original verified=true/checks3/exact-N identity receipt,
+final inactive guard and released serial handoff, with fresh refs/guard checks.
+No helper execution or live probe has occurred.
+
+Next: finish exact-B CI and independent clean-clone adapter artifact review;
+re-read Issue1006 for foreign completion; then pin and review the concrete
+host handoff. No additional user permission is needed for the authorized scope.
+Actual host terminal access is unavailable here, so the owner executes the
+reviewed pinned command. First-visible Production latency remains unverified.
+
+---
+
+## Frozen source record (retained)
 # Operational balances cold-load latency — R3 integration on current Production branch
 
 ## Current handoff: R3 preserves merged customer/inventory behavior

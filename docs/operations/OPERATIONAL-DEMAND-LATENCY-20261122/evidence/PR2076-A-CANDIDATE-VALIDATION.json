@@ -1,0 +1,19 @@
+{
+  "source_git_sha": "108024c00b7f367fd1d6b15874d7a73d55de2620",
+  "source_base_git_sha": "24270ebdfdebb83282389308a2349cdb27e2b8e4",
+  "source_A_tree": "1aa73c0a2024533f7a67ad32d64c540521b70cd8",
+  "runtime_id": "rg5-e4e41b98edc9f49b8e74adad2a905d362b7113b5b1a1fa83436a4c1ba8c4b918",
+  "artifact_tree_sha256": "dcaa1f2b805c44427be8df2f5b466b85d7860bade43a3799009156300397300b",
+  "proof_sha256": "30bcd91b489c6cb585c4b560937b4cd22f21b02f8ce78bab6e417b17b224eac3",
+  "workflow_run": 45061492807,
+  "artifact_id": 14769134921,
+  "artifact_zip_bytes": 429260,
+  "artifact_zip_sha256": "ddeeec2646205699c8d8f5623db6994e589b4a56a6531c5c836f0ee8a5e3d91f",
+  "intent_bytes": 1492318,
+  "intent_sha256": "3a56ff073fcb3b7e362500a3be1966e2c513194f4679d5bb81a139a338c866c6",
+  "intent_git_blob": "3f1b3c7101dd125593f4f38970b079ae37fc2bf4",
+  "original_candidate_loader": "PASS",
+  "original_git_source_manifests": "PASS",
+  "local_validation_exit_code": 0,
+  "local_validation_note": "Original candidate validation passed in exact clean source-only checkout; ignored runtime identity was not generated."
+}
