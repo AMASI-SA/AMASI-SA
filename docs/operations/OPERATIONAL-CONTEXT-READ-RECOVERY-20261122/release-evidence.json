@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "task_id": "OPERATIONAL-CONTEXT-READ-RECOVERY-20261122",
-  "recorded_at_utc": "2026-11-22T03:17:13Z",
+  "recorded_at_utc": "2026-11-22T03:35:07Z",
   "repository": "AMASI-SA/AMASI-SA",
   "pull_request": {
     "number": 2058,
@@ -15,11 +15,11 @@
     "name": "codex/operational-context-release-evidence-20261122",
     "based_on": "5758240bd83ed3018737ae59808f55415d80a689",
     "deploy_this_branch": false,
-    "remote_checkpoint": "4cff7fa7a5331fc71c1997b0c5d8d059aa6fc758",
-    "remote_checkpoint_tree": "25e4e48c343241de9e82a4ec67e9fbcd4fc71bd9",
+    "remote_checkpoint": "aa9e2f85356a15c3d6407486ae3b70f2fd5e4b8f",
+    "remote_checkpoint_tree": "741c15f42e3993e95cc9f6ecaf9235878507c517",
     "remote_checkpoint_scope": "previous_evidence_record_before_this_update",
     "earlier_checkpoint": "1ac7888c1563b7b1d624c9e77196d5c8f8493a85",
-    "previous_checkpoint": "698cf345369dc1f6fa3cb6a739ecc1e7c1acaa20"
+    "previous_checkpoint": "4cff7fa7a5331fc71c1997b0c5d8d059aa6fc758"
   },
   "provenance": {
     "base_M3": "02e8be41e6f1972806f0e095b8fdc38645a7f113",
@@ -62,6 +62,16 @@
       "root_original_adapter_load_and_provenance_validation": "passed",
       "root_original_guard_assert_reviewed_source_relation": "passed",
       "runtime_source_identity_remains_A2": true
+    },
+    "user_reference_ancestry": {
+      "source_git_sha": "eeef3913ae2e1b8fa4b58f3835478e1ed17b2988",
+      "ancestor_of_M4": true,
+      "check": "git merge-base --is-ancestor",
+      "exit_code": 0,
+      "evidence_basis": "release owner read-only local Git check",
+      "M3_to_M4_changed_path_count": 6,
+      "frontend_source_changed_from_M3": false,
+      "additional_legacy_rg5_mapping_inferred": false
     }
   },
   "frozen_identity": {
@@ -924,23 +934,28 @@
     "lease_created": true,
     "published": true,
     "production_changed_by_this_patch": true,
-    "original_live_identity_verification": "running",
+    "original_live_identity_verification": "passed",
     "live_inventory_acceptance": "passed_validated_empty_current_scope",
     "deployment_git_sha": "1c4008e315c35ec4419e76400a9faddb94b9d5a2",
     "merged_at_utc": "2026-11-22T02:47:45Z",
     "github_production_ref": "1c4008e315c35ec4419e76400a9faddb94b9d5a2",
     "app_last_verified_head": "1c4008e315c35ec4419e76400a9faddb94b9d5a2",
     "app_installation": "passed",
-    "production_change_field_scope": "new_platform_publication_and_version_observed; intended_runtime_identity_verification_pending",
+    "production_change_field_scope": "new publication and intended A2/M4 identity confirmed by original verifier; bounded UI acceptance passed",
     "lease_actor": "chatgpt-pr2058-release-20261122-b90f3c3040a7",
     "prepare": "passed",
     "prepublish": "passed",
     "publication_started": true,
     "published_field_meaning": "explicit_platform_completion_observed",
-    "lease_closure": "pending",
+    "lease_closure": "confirmed",
     "platform_version": "66dda85",
-    "fresh_guard_inactive_after_verify": false,
-    "live_home_acceptance": "passed_normal_render"
+    "fresh_guard_inactive_after_verify": true,
+    "live_home_acceptance": "passed_normal_render",
+    "lease_current_active": false,
+    "live_tools_acceptance": "passed_normal_render",
+    "live_fees_acceptance": "passed_normal_render_configuration_requirement_retained",
+    "completion_scope": "governed publication, intended three-probe identity, fresh matching-lease closure and observed stock/home/tools/fees acceptance complete",
+    "github_production_ref_reconfirmed_at_utc": "2026-11-22T03:25:19Z"
   },
   "limitations": [
     "No matching live inventory/context response timing proves the original failure cause.",
@@ -949,7 +964,7 @@
     "Native stocktake, physical inventory projection, catalogs, payment writes and broader server pressure are unchanged.",
     "Current 83-case verification and immutable A2 build do not replace fresh exact-B2 CI, host rehearsal, publication or normal authenticated inventory acceptance; B1 evidence is archived only."
   ],
-  "next_safe_action": "Checkpoint observed platform success/version66dda85 and bounded stock/home acceptance. Let the existing original verify process finish under the matching lease; record its actual three-probe result and a fresh original inactive-guard status only when observed. Do not republish, reuse prior probes or infer performance/total inventory from the UI snapshots. Never deploy the evidence branch.",
+  "next_safe_action": "Root durably checkpoints these final two evidence files and delivers the completed release report with the live homepage. No further publication, lease recreation or optional testing is required for this completed scope. Preserve the frozen A2/B2 pair, verified M4 baseline and separate blocked B1 archive. Apple Pay active-tariff setup remains unchanged business configuration. Never deploy the evidence branch.",
   "archived_attempts": [
     {
       "attempt": "B1",
@@ -1638,7 +1653,7 @@
     }
   },
   "publication": {
-    "status": "platform_succeeded_identity_verification_running",
+    "status": "completed_and_original_identity_verified",
     "evidence_basis": "single_authorized_UI_action_observed_by_release_owner",
     "ui_flow": [
       "Free republishes",
@@ -1680,14 +1695,20 @@
     "prior_M3_version": "ccb1df5"
   },
   "original_live_verification": {
-    "status": "running",
+    "status": "passed",
     "original_guard_unmodified": true,
-    "started_at_utc": "2026-11-22T03:11:51.651163Z",
+    "started_at_utc": "2026-11-22T03:11:51.683178+00:00",
     "process_id": 44288,
     "runner_path": "/tmp/mezan-pr2058-release-20261122-0agkk3um/verify-runner.py",
     "runner_bytes": 2935,
     "runner_sha256": "512a385336f20bbd1a1ef8d335a2b969a238774bd302c76cbbd3a2aabe78f759",
-    "latest_observed_progress": {
+    "exit_code": 0,
+    "passed_probe_count": 3,
+    "all_three_probes_passed": true,
+    "lease_closed": true,
+    "fresh_guard_inactive_observed": true,
+    "launcher_started_at_utc": "2026-11-22T03:11:51.651163Z",
+    "earlier_progress_snapshot": {
       "at_utc": "2026-11-22T03:12:53.543662Z",
       "pid_alive": true,
       "started": true,
@@ -1695,11 +1716,51 @@
       "stderr_bytes": 0,
       "final_result_observed": false
     },
-    "exit_code": null,
-    "passed_probe_count": null,
-    "all_three_probes_passed": null,
-    "lease_closed": null,
-    "fresh_guard_inactive_observed": false
+    "finished_at_utc": "2026-11-22T03:26:39.628247+00:00",
+    "seconds": 887.945,
+    "verified": true,
+    "expected_identity_match": true,
+    "source_git_sha": "a8e655aabbeaef64486a1a80f13551dc97dd9259",
+    "source_base_git_sha": "02e8be41e6f1972806f0e095b8fdc38645a7f113",
+    "deployment_git_sha": "1c4008e315c35ec4419e76400a9faddb94b9d5a2",
+    "release_id": "rg5-9d69963c0ee7f5c299595495519175af5074f703f4e318b82b870b0407554a49",
+    "frontend_artifact_tree_sha256": "65582eef5ae1c6aef9fc774c2ea10e5168c2fb396535c34b44be266526817526",
+    "checked_requests_per_probe": 760,
+    "computed_total_checked_requests": 2280,
+    "total_count_derivation": "760 multiplied by 3; not an independently captured complete URL list or unique-URL count",
+    "separate_all_URL_list_capture": false,
+    "distinct_boot_observations": [
+      "2026-11-22T03:09:22.675835+00:00",
+      "2026-11-22T03:09:29.769479+00:00"
+    ],
+    "single_boot_or_no_restart_claimed": false,
+    "restart_count_inferred": false,
+    "summary_path": "/tmp/mezan-pr2058-release-20261122-0agkk3um/verification-summary.json",
+    "summary_sha256": "8178421179fb7075b9995788c7573c73b796385ad7177714eb860f08bb0cacc5",
+    "stdout_path": "/tmp/mezan-pr2058-release-20261122-0agkk3um/verify.stdout.json",
+    "stdout_bytes": 42559,
+    "stdout_sha256": "69e9aacecb37cc815c1719850941bbe8acb1dbdf5a35857aa51d0902e60af098",
+    "stderr_path": "/tmp/mezan-pr2058-release-20261122-0agkk3um/verify.stderr.log",
+    "stderr_bytes": 0,
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "evidence_basis": "actual host verification summary parsed and observed by release owner",
+    "final_wrapper_status": {
+      "exit_code": 0,
+      "guard_active": false,
+      "incomplete": false,
+      "app_git_head": "1c4008e315c35ec4419e76400a9faddb94b9d5a2",
+      "app_tracked_clean": true,
+      "untracked_path_count": 417
+    },
+    "separate_fresh_original_status": {
+      "observed_at_utc": "2026-11-22T03:28:41.521040+00:00",
+      "exact_output": {
+        "active": false
+      },
+      "app_git_head": "1c4008e315c35ec4419e76400a9faddb94b9d5a2",
+      "app_tracked_clean": true,
+      "retained_result": "/tmp/mezan-pr2058-release-20261122-0agkk3um/fresh-final-result.json"
+    }
   },
   "live_UI_acceptance": {
     "evidence_basis": "normal_live_UI_observations_by_release_owner_plus_read_only_frozen_source_flow_interpretation",
@@ -1743,7 +1804,9 @@
       "orders_needing_review_panel_present": true,
       "loading_or_error_visible": false,
       "financial_value_audit_claimed": false,
-      "amounts_account_names_order_ids_or_raw_snapshots_retained": false
+      "amounts_account_names_order_ids_or_raw_snapshots_retained": false,
+      "final_reconfirmed_and_marked_user_deliverable": true,
+      "user_deliverable_url": "https://mezansalla.com/operational-balances?view=home"
     },
     "acceptance_interpretation": {
       "bootstrap": "Promise.allSettled concurrent operational/context and native stocktakes/context reads",
@@ -1760,6 +1823,59 @@
       "generic_error_after_filters": "inventory retrieval or shape validation; rechecked permissions can also fail"
     },
     "historical_failure_cause_proven": false,
-    "original_identity_verification_satisfied_by_UI": false
+    "original_identity_verification_satisfied_by_UI": false,
+    "tools": {
+      "result": "passed_normal_render",
+      "observed_at_utc": "2026-11-22T03:17:14.960Z",
+      "url": "https://mezansalla.com/operational-balances?view=tools",
+      "navigation": "visible_header_link",
+      "specialist_groups_rendered": true,
+      "initial_navigation_attempt": {
+        "offscreen_drawer_link_did_not_navigate": true,
+        "viewport_pixels": [
+          674,
+          493
+        ],
+        "recovered_by": "closing drawer and clicking visible header link",
+        "source": "ordinary React Router Link without special handler",
+        "recorded_as_product_defect": false
+      }
+    },
+    "fees": {
+      "result": "passed_normal_render",
+      "observed_at_utc": "2026-11-22T03:17:56.036Z",
+      "url": "https://mezansalla.com/operational-balances/provider-fees",
+      "navigation": "normal tools link",
+      "unified_shell_and_payment_fee_heading_rendered": true,
+      "ApplePay_configuration_status": "تحتاج تعرفة سارية",
+      "business_configuration_changed": false,
+      "other_rates_or_account_names_retained": false
+    }
+  },
+  "remaining_business_configuration": [
+    {
+      "feature": "Apple Pay",
+      "status": "active tariff required",
+      "visible_label": "تحتاج تعرفة سارية",
+      "changed_in_this_release": false
+    }
+  ],
+  "completion": {
+    "status": "complete_with_documented_scope_limits",
+    "publication": true,
+    "original_three_probe_identity": true,
+    "fresh_inactive_guard": true,
+    "observed_UI_pages": [
+      "stock",
+      "home",
+      "tools",
+      "fees"
+    ],
+    "remaining_business_configuration": "Apple Pay active tariff required, unchanged",
+    "historical_failure_cause_proven": false,
+    "sustained_performance_bound_proven": false,
+    "single_boot_or_no_restart_claimed": false,
+    "global_inventory_zero_inferred": false,
+    "final_home_url": "https://mezansalla.com/operational-balances?view=home"
   }
 }

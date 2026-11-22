@@ -2,7 +2,7 @@
 
 ## Current release — PR #2058 / A2 and B2
 
-**Evidence checkpoint: 2026-11-22 03:17:13 UTC.** The current candidate is
+**Evidence checkpoint: 2026-11-22 03:35:07 UTC.** The current candidate is
 [PR #2058](https://github.com/AMASI-SA/AMASI-SA/pull/2058), branch
 `codex/operational-context-read-lifetime-20261122`, in `AMASI-SA/AMASI-SA`.
 Source A2 and intent-only B2 remain frozen. All required exact-B2 CI has
@@ -14,10 +14,12 @@ original `prepare` and final `prepublish` passed. The single authorized
 publication has now **succeeded on the platform**, latest version **66dda85**:
 the newest green **Deployment finished** item is labeled **Nov 22, 06:10 AM,
 Asia/Aden**, and republish is enabled. Normal stock and home navigation also
-passed the bounded UI acceptance checks below. **The original three-probe live
-identity verification is still running, with no result observed; lease closure
-and a fresh inactive guard are not yet established.** Platform/UI success is
-separate from that remaining governed identity gate.
+passed the bounded UI acceptance checks below. **The unmodified original live verifier passed all three checks for the intended
+A2/M4/release identity, and a separate fresh original status confirmed
+`{"active": false}`.** Governed publication, identity verification, matching lease
+closure and the observed stock/home/tools/fees UI acceptance are complete.
+Apple Pay still requires an active tariff; business configuration was unchanged.
+The historical failure cause and sustained performance under load remain unproved.
 
 PR #2057 / B1 is a **superseded, blocked attempt**, archived below with both
 failed backend jobs and its completed matrix. Root confirmed #2057 was closed **without merge**, with its frozen head
@@ -29,8 +31,8 @@ This document and adjacent `release-evidence.json` are maintained only on
 `codex/operational-context-release-evidence-20261122`, originally based on B1.
 **This evidence branch must never be deployed or merged into a frozen release.**
 The previous durable evidence checkpoint is
-`4cff7fa7a5331fc71c1997b0c5d8d059aa6fc758`, tree
-`25e4e48c343241de9e82a4ec67e9fbcd4fc71bd9`. Root owns the next remote checkpoint
+`aa9e2f85356a15c3d6407486ae3b70f2fd5e4b8f`, tree
+`741c15f42e3993e95cc9f6ecaf9235878507c517`. Root owns the next remote checkpoint
 and all release actions. This author changes only these two evidence documents.
 
 ## Current immutable identity
@@ -135,21 +137,46 @@ visible label/timestamp observed together. Overview enabled republish, and the
 new latest platform version is **66dda85**. Prior M3 version **ccb1df5** is now a
 previous entry; it is not credited as this new success. The current event ID
 was not observed. No ordinal deployment number is inferred from the history.
-These observations establish platform publication success, while the intended
-runtime identity remains subject to the original verification below.
+These observations establish platform publication success. The intended
+runtime identity also passed the original verification below.
 
-### Original live identity verification running
+### Original live verification passed; lease closure confirmed
 
-Root launched the **unmodified original verify** at
-**2026-11-22T03:11:51.651163Z**, PID **44288**, via
-`/tmp/mezan-pr2058-release-20261122-0agkk3um/verify-runner.py`.
-The launcher is **2,935 bytes**, SHA-256
-`512a385336f20bbd1a1ef8d335a2b969a238774bd302c76cbbd3a2aabe78f759`.
-The latest reported progress snapshot, **03:12:53.543662Z**, showed the PID alive
-and started, with stdout/stderr still empty and no final result. No individual
-probe count, three-probe success, verification exit code, lease closure or fresh
-inactive status has been observed. Empty output while running is not treated as
-a failure or acceptance.
+Root launched the unmodified original verifier at
+**2026-11-22T03:11:51.651163Z**, PID **44288**, using the stage's
+`verify-runner.py` (**2,935 bytes**, SHA-256
+`512a385336f20bbd1a1ef8d335a2b969a238774bd302c76cbbd3a2aabe78f759`).
+The final observed summary records actual verification start
+**03:11:51.683178+00:00**, finish **03:26:39.628247+00:00**,
+**887.945 s**, exit **0**, `verified=true`, **3 checks** and
+`expected_identity_match=true`. It binds base M3, source A2
+`a8e655aabbeaef64486a1a80f13551dc97dd9259`, deployment M4
+`1c4008e315c35ec4419e76400a9faddb94b9d5a2` and release
+`rg5-9d69963c0ee7f5c299595495519175af5074f703f4e318b82b870b0407554a49`.
+The verified frontend artifact remains
+`65582eef5ae1c6aef9fc774c2ea10e5168c2fb396535c34b44be266526817526`.
+
+Each probe reported **760 checked requests**. **2,280** is the computed
+**760 × 3** count, not an independently captured complete URL list, unique-URL
+count or performance measurement. The accepted probes contained **two distinct
+boot observations**, **2026-11-22T03:09:22.675835+00:00** and
+**03:09:29.769479+00:00**. No single-boot, no-restart or restart-count claim is made.
+
+The actual host retained `verification-summary.json`, SHA-256
+`8178421179fb7075b9995788c7573c73b796385ad7177714eb860f08bb0cacc5`,
+and raw `verify.stdout.json`, **42,559 bytes**, SHA-256
+`69e9aacecb37cc815c1719850941bbe8acb1dbdf5a35857aa51d0902e60af098`.
+`verify.stderr.log` was empty. The final wrapper status exited 0, with guard
+active **false**, incomplete **false**, `/app` at M4, tracked-clean, and **417
+untracked paths**. These filenames are under
+`/tmp/mezan-pr2058-release-20261122-0agkk3um`; full raw outputs are not copied here.
+
+A **separate fresh original status** at
+**2026-11-22T03:28:41.521040+00:00** returned exactly `{"active": false}`.
+Fresh `/app` checks again confirmed M4 and tracked-clean state; the stage retains
+`fresh-final-result.json` and final status files. Root independently reconfirmed
+GitHub's production ref at M4 at **03:25:19Z**. The matching release lease is
+closed, and the current governed publication/verification gate is complete.
 
 ## Live UI acceptance after publication
 
@@ -199,9 +226,28 @@ No loading or error state was visible. This records successful normal rendering,
 not an audit of the displayed financial values. No amounts, account names,
 order IDs, row contents or raw snapshots are retained in these evidence files.
 
-These two normal UI visits passed after platform success. They do not establish
-historical incident causation, sustained performance under load, or completion
-of the separately running governed identity verification.
+### Tools and payment fees — passed; configuration unchanged
+
+Tools passed at **2026-11-22T03:17:14.960Z** after normal navigation through the
+visible header link to
+`https://mezansalla.com/operational-balances?view=tools`; the specialist groups
+rendered. An initial drawer-link attempt below the **674 × 493** viewport did
+not navigate. Closing the drawer and using the visible header link recovered it;
+source inspection found an ordinary React Router link without a special handler.
+That offscreen targeting attempt is not recorded as a product defect.
+
+Payment fees passed at **03:17:56.036Z** through the normal tools link to
+`https://mezansalla.com/operational-balances/provider-fees`, with the unified shell
+and **رسوم طرق الدفع** heading. The **Apple Pay** row still said
+**«تحتاج تعرفة سارية»**. This remaining business configuration was not changed by
+the release. No other rates, account names or business row data are retained.
+
+Root finally reconfirmed the homepage and marked
+`https://mezansalla.com/operational-balances?view=home` as the user deliverable.
+The observed UI checks and original identity verification are complete within
+this scope. They do not establish historical incident causation, sustained
+performance under load, total inventory beyond the displayed stock scope, or
+completion of the remaining Apple Pay tariff configuration.
 
 ## Implementation and integrity boundary
 
@@ -279,7 +325,7 @@ only `backend/tests/test_operational_balance_active_read_lifetime.py`.
 These reviewed bytes are now in source A2 and frozen B2. The governed build
 and freeze below passed, as did a fresh actual-host B2 rehearsal and final
 exact-B2 CI. Shared-host installation and platform publication passed, followed by bounded
-stock/home UI acceptance. Original live identity verification is still running. The correction does not turn archived B1 into a passing release.
+stock/home UI acceptance. Original live identity verification passed and the fresh guard is inactive. The correction does not turn archived B1 into a passing release.
 
 ## Fresh A2 governed build and freeze
 
@@ -501,28 +547,31 @@ then observed a fresh inactive guard. The
 is preserved at `4ee3d64159cba4edd20133f81ec938cf33068ae8`. It establishes prior
 M3 identity, not this new patch or inventory recovery. Current B2 was normally merged as M4, installed and published on the platform.
 Stock and home passed the bounded UI acceptance above. The original governed
-identity verification and lease closure remain unconfirmed.
+identity verification passed and matching lease closure was independently
+confirmed by fresh original status.
 
-## Next safe action — finish the running original verification
+## Completion and next safe action
 
-1. Root checkpoints these two evidence files with observed platform version
-   **66dda85**, completed publication and bounded stock/home acceptance. Preserve
-   the source/frozen branches, archived B1 failure and retained host evidence.
-2. Continue the already-running original verify process for this matching lease.
-   Inspect its actual final result; do not count the platform green state or UI
-   visits as any of the three required identity probes.
-3. If the original verification succeeds, retain all three intended A2/release
-   probes and confirm the original guard's fresh inactive status. If it fails or
-   remains blocked, record the actual result and retain the owner's lease state;
-   do not claim closure, complete release acceptance or a successful probe count.
-4. Preserve the stock result as **validated empty in the displayed scope** and
-   the observation interval as **not request latency**. No further form writes,
-   retries or synthetic load are needed for these completed UI observations.
+The release is published as platform version **66dda85**, with the intended
+A2/M4 identity accepted by the original **3/3** verification, a separately
+confirmed inactive original guard, and observed stock/home/tools/fees acceptance.
+The stock result is a validated empty state within the displayed scope; its
+19-second observation window is not request latency. Two boot observations
+were retained, without any no-restart claim. Apple Pay's active-tariff requirement
+remains an unchanged business configuration item.
 
-The remaining release gate is the original live identity verification followed
-by observed lease closure/inactive status. This evidence branch must never be
-deployed. Do not republish or recreate the lease merely because verification is
-still running.
+Root should now durably checkpoint these two final evidence files on the evidence
+branch and deliver the completion report with the live homepage link. No further
+publication, lease recreation, optional testing or historical-source rewrite is
+required for this completed release. Future work should start from the verified
+M4 baseline and preserve the frozen A2/B2 pair and the separate blocked B1 archive.
+This evidence branch must never be deployed.
+
+Root's additional read-only Git check confirmed user-referenced source
+`eeef3913ae2e1b8fa4b58f3835478e1ed17b2988` is an ancestor of M4
+(`merge-base --is-ancestor`, exit 0). M3-to-M4 contains exactly the six known
+paths and no frontend-source change, retaining M3's published UI. No additional
+mapping of the old runtime `rg5` identifier is inferred from that ancestry.
 
 This evidence author has made no staging, commit, ref, remote, source or host
 change, and has posted no Issue #1006 comment. Root owns release actions and the
