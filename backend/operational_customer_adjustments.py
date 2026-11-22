@@ -20,7 +20,8 @@ from salla_payment_collection import provider_order_page_balance, provider_order
 
 ZERO = Decimal("0.00")
 MAX_ORDERS = 20000
-READ_OPERATIONS = ("customer.refund_request", "customer.refund_execute", "customer.collection")
+REFUND_READ_OPERATIONS = ("customer.refund_read", "customer.refund_request", "customer.refund_execute")
+READ_OPERATIONS = (*REFUND_READ_OPERATIONS, "customer.collection")
 DIGITS = str.maketrans("٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹", "01234567890123456789")
 FINANCIAL_FIELDS = ("id", "reference_id", "order_number", "currency", "amounts", "total", "total_amount",
                     "date", "created_at", "order_date", "updated_at", "date_updated", "status",
@@ -325,7 +326,7 @@ async def customer_adjustments_page(db, owner, policy, state, *, direction=None,
         fail("operational_customer_adjustments_capacity", "عدد الطلبات يتطلب قراءة مقسمة؛ تعذر احتساب إجمالي موثوق", 503)
     state = _indexed_state(state)
     has_bank = any(r.get("kind") == "bank" and r.get("use") for r in policy.resources)
-    can_refund = any(policy.can_operation(key) for key in READ_OPERATIONS[:2])
+    can_refund = any(policy.can_operation(key) for key in REFUND_READ_OPERATIONS)
     can_collect = policy.can_operation("customer.collection")
     summary = {"refund_pending_amount": ZERO, "refund_pending_count": 0,
                "collection_pending_amount": ZERO, "collection_pending_count": 0, "unknown_count": 0}
@@ -399,7 +400,7 @@ def install_customer_adjustment_routes(router, db, current_user, scope):
             actor, owner, _ = await scope(db, user, "workspace")
             policy = await load_access(db, actor, owner)
             policy.require_enabled()
-            required = READ_OPERATIONS[:2] if direction == "refund" else (READ_OPERATIONS[2],) if direction == "collection" else READ_OPERATIONS
+            required = REFUND_READ_OPERATIONS if direction == "refund" else ("customer.collection",) if direction == "collection" else READ_OPERATIONS
             if not any(policy.can_operation(operation) for operation in required):
                 fail("operational_operation_forbidden", "ليست لديك صلاحية مراجعة فروق الطلبات", 403)
             result = await customer_adjustments_page(db, owner, policy, await read(db, owner),

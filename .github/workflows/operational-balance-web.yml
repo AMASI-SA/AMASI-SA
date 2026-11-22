@@ -83,6 +83,9 @@ jobs:
           backend/tests/test_operational_refresh_parallel_profit.py
           backend/tests/test_operational_refresh_party_issue_index.py
           backend/tests/test_operational_workspace_refunds.py
+          backend/tests/test_customer_refund_access.py
+          backend/tests/test_customer_refund_read_only_bridge.py
+          backend/tests/test_mobile_customer_refund_reads.py
           backend/tests/test_operational_workspace_refund_execution.py
           backend/tests/test_operational_workspace_customer_collections.py
           backend/tests/test_operational_customer_*.py
@@ -152,6 +155,9 @@ jobs:
           assert len([c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_workspace_refunds']) >= 23, 'Scoped financial-only refund contracts missing'
           for suite, minimum in (('test_operational_customer_payment_basis', 10),
                                  ('test_customer_inventory_unified_activity', 3),
+                                 ('test_customer_refund_access', 1),
+                                 ('test_customer_refund_read_only_bridge', 2),
+                                 ('test_mobile_customer_refund_reads', 13),
                                  ('test_operational_customer_adjustments', 3),
                                  ('test_operational_workspace_refund_execution', 8),
                                  ('test_operational_workspace_customer_collections', 11),
@@ -315,6 +321,7 @@ jobs:
           '**/ShippingCompanySettings.test.jsx'
           '**/MezanSuppliersV2.test.jsx'
           '**/EmployeesV2Management.test.jsx'
+          '**/CustomerRefundAccessDialog.test.jsx'
           '**/OperationalSupplierAccount.test.jsx'
           '**/mezanSuppliersV2.test.js'
           '**/SupplierPaymentWorkspace.test.jsx'
@@ -332,7 +339,7 @@ jobs:
           if (!r.success || r.numPassedTests < 289 || r.numPassedTestSuites < 23 ||
               r.numFailedTests || r.numFailedTestSuites || r.numPendingTests ||
               r.numPendingTestSuites || r.numTodoTests) process.exit(1);
-          for (const suffix of ['SalaryStart.test.jsx', 'EmployeesV2Management.test.jsx', 'OperationalSupplierAccount.test.jsx',
+          for (const suffix of ['SalaryStart.test.jsx', 'EmployeesV2Management.test.jsx', 'CustomerRefundAccessDialog.test.jsx', 'OperationalSupplierAccount.test.jsx',
                                 'SimpleBalances.test.jsx', 'SimpleBalanceAccess.test.jsx', 'SimpleOrderRefunds.test.jsx',
                                 'ApprovedEntry.test.jsx', 'ApprovedFinance.test.jsx', 'ApprovedLedger.test.jsx',
                                 'CustomerReturns.test.jsx', 'ApprovedCustomerCollections.test.jsx', 'CustomerAdjustments.test.jsx',

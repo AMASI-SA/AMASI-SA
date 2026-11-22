@@ -271,6 +271,8 @@ async def _linked_external_entry(db, owner, actor, payload, operation, resources
         state["movements"].extend([external_row, counterpart])
         audit(state, actor["id"], "workspace_external_payment", None,
               {"id": identity, "movements": [external_row, counterpart]}, LABELS[payload["reason"]], source, stamp)
+        from employee_finance_notifications import stage_employee_financial_notifications
+        await stage_employee_financial_notifications(db, owner, state, counterpart)
         result = {"saved": True, "movement_id": identity, "party_type": "external_person", "party_id": external["id"]}
         remember(state, action, payload, result)
         return result

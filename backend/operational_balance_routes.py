@@ -421,7 +421,8 @@ async def scope(db, principal, permission):
         access = await mobile_app_access_for_user(db, actor)
         granted = set(access.get("permissions") or []) if access.get("enabled") else set()
         required = {"view": {OPERATIONAL_APP_WRITE, OPERATIONAL_APP_READ},
-                    "move": {OPERATIONAL_APP_WRITE}, "reports": {OPERATIONAL_APP_READ}}.get(permission, set())
+                    "move": {OPERATIONAL_APP_WRITE}, "reports": {OPERATIONAL_APP_READ},
+                    "provider_statements": {"app.page.provider_statements"}}.get(permission, set())
         if not granted.intersection(required):
             fail("operational_app_permission_required", "لا توجد صلاحية لهذه الوظيفة", 403)
     # Legacy handlers retain their owner behavior. The router gate below blocks
@@ -441,6 +442,14 @@ def make_operational_balance_router(db, current_user):
         if path == "/access" or path.startswith("/access/"):
             # Owner-only checks live on the administration routes. /current
             # remains available to a disabled staff policy to explain denial.
+            return
+        if user.get("_session_client") == "amasi_mobile" and path.startswith("/provider-statements"):
+            allowed = (request.method == "GET" and (path == "/provider-statements/mobile" or
+                re.fullmatch(r"/provider-statements/mobile/[a-f0-9]{64}/review", path))) or (
+                request.method == "POST" and path == "/provider-statements/mobile/upload")
+            if not allowed:
+                fail("operational_app_route_not_allowed", "هذه الوظيفة غير متاحة في التطبيق", 403)
+            await scope(db, user, "provider_statements")
             return
         if path == "/workspace" or path.startswith("/workspace/"):
             from operational_balance_access import load_access

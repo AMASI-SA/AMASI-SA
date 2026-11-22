@@ -10,7 +10,16 @@ from pymongo.errors import (
 )
 
 import auth
-from mobile_app_permissions import MOBILE_APP_PERMISSIONS, mobile_app_access_for_user
+from customer_refund_access import CUSTOMER_REFUNDS_APP_PERMISSION
+from provider_statement_access import PROVIDER_STATEMENTS_APP_PERMISSION
+from mobile_app_permissions import (
+    EMPLOYEE_BALANCE_PERMISSION,
+    MOBILE_APP_ACCESS,
+    MOBILE_APP_MANAGER,
+    MOBILE_APP_PERMISSIONS,
+    OPERATIONAL_APP_PERMISSIONS,
+    mobile_app_access_for_user,
+)
 from runtime_mongo import main_client_options
 
 
@@ -143,4 +152,39 @@ async def test_owner_mobile_access_is_catalogue_derived_without_second_db_read()
 
     assert result["owner_override"] is True
     assert result["enabled"] is True
-    assert set(result["permissions"]) == set(MOBILE_APP_PERMISSIONS)
+    assert set(result["permissions"]) == (
+        set(MOBILE_APP_PERMISSIONS) | {CUSTOMER_REFUNDS_APP_PERMISSION, EMPLOYEE_BALANCE_PERMISSION, PROVIDER_STATEMENTS_APP_PERMISSION}
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("extra_native_permissions", [[], [CUSTOMER_REFUNDS_APP_PERMISSION], [PROVIDER_STATEMENTS_APP_PERMISSION]])
+async def test_manager_native_grant_cannot_derive_shared_refund_access(extra_native_permissions):
+    class _ManagerAccessDb:
+        def __getitem__(self, name):
+            assert name == MOBILE_APP_ACCESS
+            return self
+
+        async def find_one(self, query, _projection):
+            assert query == {"owner_user_id": "owner-1", "user_id": "manager-1"}
+            return {
+                "enabled": True,
+                "permissions": [MOBILE_APP_MANAGER, *extra_native_permissions],
+            }
+
+    result = await mobile_app_access_for_user(
+        _ManagerAccessDb(),
+        {"id": "manager-1", "role": "viewer", "created_by": "owner-1"},
+    )
+
+    # The shared capability is owner/policy-derived, never a native catalogue
+    # entry that the manager wildcard or a forged native grant can expand.
+    assert CUSTOMER_REFUNDS_APP_PERMISSION not in MOBILE_APP_PERMISSIONS
+    assert result["owner_override"] is False
+    assert result["enabled"] is True
+    assert result["manager"] is True
+    assert set(result["permissions"]) == (
+        (set(MOBILE_APP_PERMISSIONS) - OPERATIONAL_APP_PERMISSIONS) | {EMPLOYEE_BALANCE_PERMISSION}
+    )
+    assert CUSTOMER_REFUNDS_APP_PERMISSION not in result["permissions"]
+    assert PROVIDER_STATEMENTS_APP_PERMISSION not in result["permissions"]

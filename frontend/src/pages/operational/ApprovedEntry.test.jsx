@@ -35,6 +35,20 @@ beforeEach(() => {
 });
 afterEach(()=>{act(()=>root.unmount());host.remove();});
 const render=async component=>act(async()=>root.render(<MemoryRouter>{component}</MemoryRouter>));
+test('a shared refund-read grant can inspect the same pending inbox without any write controls', async () => {
+  const scoped = {...context(), operations:['customer.refund_read']};
+  api.refundOrder.mockResolvedValue({...order(),can_request:false,can_record_execution:false});
+  await render(<ApprovedRefund context={scoped} identity="refund-read" readOnly onBack={()=>{}} onSaved={saved}/>);
+  expect(api.customerAdjustments).toHaveBeenCalledTimes(1);
+  expect(host.textContent).not.toContain('عرض طلبات الإرجاع غير متاح');
+  await change('رقم الطلب في سلة','245');
+  await act(async()=>host.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+  expect(api.refundOrder).toHaveBeenCalledWith('245',expect.objectContaining({signal:expect.any(AbortSignal)}));
+  expect(host.textContent).toContain('سجل إرجاعات الطلب');
+  expect(api.requestRefund).not.toHaveBeenCalled();
+  expect(api.registerPending).not.toHaveBeenCalled();
+  expect(host.querySelector('input[name="amount"]')).toBeNull();
+});
 const button=txt=>[...host.querySelectorAll('button')].find(b=>b.textContent.includes(txt));
 async function click(text){await act(async()=>button(text).click());}
 async function change(label,value){

@@ -6,12 +6,15 @@ import pytest
 
 from ai_store_access_contract import PERMISSIONS, effective_permissions
 from mobile_app_permissions import (
+    EMPLOYEE_BALANCE_PERMISSION,
     MOBILE_APP_PERMISSIONS,
     effective_mobile_app_permissions,
     mobile_app_access_for_user,
     validate_mobile_app_permissions,
 )
 import supplier_receiving_routes
+from customer_refund_access import CUSTOMER_REFUNDS_APP_PERMISSION
+from provider_statement_access import PROVIDER_STATEMENTS_APP_PERMISSION
 
 
 class _Collection:
@@ -81,7 +84,7 @@ def test_employee_may_have_mobile_pages_with_zero_mezan_permissions():
         "owner_override": False,
         "owner_baseline": False,
         "manager": False,
-        "permissions": ["app.page.orders"],
+        "permissions": [EMPLOYEE_BALANCE_PERMISSION, "app.page.orders"],
     }
     assert effective_mobile_app_permissions(access) == ["app.page.orders"]
 
@@ -92,7 +95,24 @@ def test_owner_always_receives_every_mobile_app_permission():
         {"id": "owner-1", "role": "owner"},
     ))
     assert result["owner_override"] is True
-    assert set(result["permissions"]) == MOBILE_APP_PERMISSIONS
+    assert set(result["permissions"]) == MOBILE_APP_PERMISSIONS | {CUSTOMER_REFUNDS_APP_PERMISSION, EMPLOYEE_BALANCE_PERMISSION, PROVIDER_STATEMENTS_APP_PERMISSION}
+
+
+@pytest.mark.parametrize("user_change,access_change", [
+    ({"disabled": True}, {}), ({"is_active": False}, {}), ({"active": False}, {}),
+    ({"archived": True}, {}), ({"is_archived": True}, {}), ({"deleted": True}, {}), ({"is_deleted": True}, {}),
+    ({"role": "store_driver"}, {}), ({}, {"enabled": False}), ({}, {"permissions": []}),
+    ({}, {"permissions": [EMPLOYEE_BALANCE_PERMISSION]}),
+])
+def test_self_balance_capability_cannot_enable_a_disabled_or_ungranted_account(user_change, access_change):
+    assert EMPLOYEE_BALANCE_PERMISSION not in MOBILE_APP_PERMISSIONS
+    with pytest.raises(ValueError, match="unknown_mobile_app_permission"):
+        validate_mobile_app_permissions([EMPLOYEE_BALANCE_PERMISSION])
+    access = {"owner_user_id": "owner-1", "user_id": "employee-1", "enabled": True,
+              "permissions": ["app.page.orders"], **access_change}
+    user = {"id": "employee-1", "created_by": "owner-1", "role": "viewer", **user_change}
+    result = asyncio.run(mobile_app_access_for_user(_Db(access), user))
+    assert EMPLOYEE_BALANCE_PERMISSION not in result["permissions"]
 
 
 def test_supplier_receiving_translates_actions_only_for_signed_mobile_session(monkeypatch):

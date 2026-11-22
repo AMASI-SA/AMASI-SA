@@ -5,6 +5,14 @@ on:
     paths:
       - "backend/fulfillment_v2_routes.py"
       - "backend/preparation_piece_operations.py"
+      - "backend/assembly_board_read.py"
+      - "backend/assembly_board_groups.py"
+      - "backend/mobile_operations_monitoring_routes.py"
+      - "backend/monitoring_preparation_counts.py"
+      - "backend/tests/test_monitoring_preparation_counts.py"
+      - "backend/tests/test_monitoring_lazy_directory.py"
+      - "backend/tests/test_assembly_board_read.py"
+      - "backend/tests/test_assembly_board_groups.py"
       - "backend/purchase_invoices_routes.py"
       - "backend/purchase_receiving_service.py"
       - "backend/tests/test_fulfillment_read_performance.py"
@@ -34,12 +42,16 @@ jobs:
           mongomock-motor==0.0.36 bcrypt==4.1.3 PyJWT httpx
           pytest pytest-asyncio openpyxl cryptography reportlab
           python-multipart pymupdf pillow qrcode arabic-reshaper
-          python-bidi python-dotenv tzdata
+          python-bidi python-dotenv tzdata email-validator==2.3.0
       - name: Verify query counts, permissions, balances and index initialization
         working-directory: backend
         run: >-
           python -m pytest -q --tb=short
           tests/test_fulfillment_read_performance.py
+          tests/test_assembly_board_read.py
+          tests/test_assembly_board_groups.py
+          tests/test_monitoring_preparation_counts.py
+          tests/test_monitoring_lazy_directory.py
           tests/test_purchase_invoice_read_performance.py
           tests/test_completed_current_shipment_display.py
           tests/test_order_engine_repository.py

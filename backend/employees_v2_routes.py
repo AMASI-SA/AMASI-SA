@@ -1742,6 +1742,10 @@ async def _set_employee_account_access(
 
 def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
     router = APIRouter(prefix="/employees-v2", tags=["Employees V2"])
+    from customer_refund_access import install_customer_refund_access_routes
+    install_customer_refund_access_routes(router, db, current_user)
+    from provider_statement_access import install_provider_statement_access_routes
+    install_provider_statement_access_routes(router, db, current_user)
 
     @router.get("/mobile-directory")
     async def mobile_employee_directory(

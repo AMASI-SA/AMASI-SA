@@ -88,6 +88,7 @@ class DeviceRegistration(BaseModel):
     token: str | None = Field(default=None, max_length=256)
     subscription: dict | None = None
     notification_presentation: str | None = Field(default=None, max_length=64)
+    financial_notifications_version: int | None = Field(default=None, strict=True, ge=1, le=1000)
 
 
 class DeviceRemoval(BaseModel):
@@ -140,6 +141,10 @@ def make_operational_push_router(db, current_user):
             # registration, including downgrade to an APK without the module.
             "notification_presentation": ANDROID_RTL_PRESENTATION if (
                 payload.kind == "expo" and payload.notification_presentation == ANDROID_RTL_PRESENTATION) else None,
+            # Native v1 rendering alone does not prove that this client can
+            # open financial notices or include them in its authoritative badge.
+            "financial_notifications_version": 1 if (
+                payload.kind == "expo" and payload.financial_notifications_version == 1) else None,
             "active": True, "updated_at": now(),
         }}, upsert=True)
         return {"ok": True}
@@ -171,7 +176,18 @@ def _logical_push_key(device, recipient_id, event_id):
 
 
 async def enqueue_operational_push(db, *, recipient_id, event_id, order_number=None,
-                                   instruction_id=None, priority="normal", created_at=None):
+                                   instruction_id=None, priority="normal", created_at=None,
+                                   notification_type=None, financial_notice_id=None, merchant_id=None):
+    financial = notification_type == "employee_finance"
+    if notification_type not in (None, "employee_finance"):
+        raise ValueError("unsupported_notification_type")
+    if financial:
+        if (not isinstance(merchant_id, str) or not merchant_id.strip()
+                or not re.fullmatch(r"fn_[a-f0-9]{64}", str(financial_notice_id or ""))
+                or financial_notice_id != event_id or instruction_id):
+            raise ValueError("invalid_financial_notification_identity")
+    elif financial_notice_id is not None:
+        raise ValueError("invalid_financial_notification_identity")
     if not enabled():
         return
     # Unread instructions remain visible in the authenticated inbox indefinitely,
@@ -180,7 +196,10 @@ async def enqueue_operational_push(db, *, recipient_id, event_id, order_number=N
         created = created_at if created_at.tzinfo else created_at.replace(tzinfo=timezone.utc)
         if created < now() - timedelta(days=2):
             return
-    devices = await db[DEVICES].find({"actor_id": recipient_id, "active": True}).to_list(100)
+    device_query = {"actor_id": recipient_id, "active": True}
+    if financial:
+        device_query.update({"merchant_id": merchant_id, "kind": "expo", "financial_notifications_version": 1})
+    devices = await db[DEVICES].find(device_query).to_list(100)
     for device in devices:
         key = _logical_push_key(device, recipient_id, event_id)
         installation = str(device.get("installation_id") or "").strip()
@@ -229,6 +248,7 @@ async def enqueue_operational_push(db, *, recipient_id, event_id, order_number=N
             "actor_id": recipient_id, "event_id": str(event_id),
             "instruction_id": str(instruction_id or ""), "status": "pending", "attempts": 0,
             "priority": priority,
+            **({"notification_type": "employee_finance", "financial_notice_id": financial_notice_id} if financial else {}),
             "created_at": now(), "next_at": now(), "expires_at": now() + timedelta(days=2),
         }}, upsert=True)
 
@@ -264,7 +284,8 @@ async def send_to_provider(device, payload, *, ticket=None):
                     if type(count) is int and 0 <= count <= 2147483647:
                         content["unread_count"] = count
                     data = {key: payload[key] for key in (
-                        "event_id", "instruction_id", "priority", "notice_id", "conversation_id") if key in payload}
+                        "event_id", "instruction_id", "priority", "notice_id", "conversation_id",
+                        "notification_type", "financial_notice_id", "recipient_id") if key in payload}
                     data["amasi_notification"] = content
                     # No top-level presentation fields, including channelId:
                     # FCM must enter our native handler while the app is closed.
@@ -307,6 +328,27 @@ async def send_to_provider(device, payload, *, ticket=None):
         return {"status": "invalid_device" if status in (404, 410) else "retry"}
 
 
+def _financial_device_matches(device, job):
+    return bool(device and device.get("kind") == "expo"
+        and device.get("financial_notifications_version") == 1
+        and device.get("actor_id") == job.get("actor_id")
+        and device.get("merchant_id") == job.get("merchant_id")
+        and re.fullmatch(r"fn_[a-f0-9]{64}", str(job.get("financial_notice_id") or ""))
+        and job.get("event_id") == job.get("financial_notice_id")
+        and not job.get("instruction_id"))
+
+
+async def _native_unread_count(db, device):
+    from operational_instruction_conversations import conversation_unread_count
+    count = await conversation_unread_count(db,
+        merchant_id=device["merchant_id"], actor_id=device["actor_id"])
+    if device.get("financial_notifications_version") == 1:
+        from employee_finance_notifications import financial_unread_count
+        count += await financial_unread_count(db,
+            merchant_id=device["merchant_id"], actor_id=device["actor_id"])
+    return count
+
+
 async def deliver_one(db, sender=send_to_provider):
     claim = uuid.uuid4().hex
     job = await db[OUTBOX].find_one_and_update({"status": {"$in": ["pending", "retry", "receipt_pending", "sending"]}, "next_at": {"$lte": now()}, "expires_at": {"$gt": now()}},
@@ -315,48 +357,61 @@ async def deliver_one(db, sender=send_to_provider):
         return False
     device = await db[DEVICES].find_one({"_id": job["device_id"], "generation": job["generation"]})
     result = {"status": "discarded"}
-    if await device_is_active(db, device):
+    financial = job.get("notification_type") == "employee_finance"
+    known_type = job.get("notification_type") in (None, "employee_finance")
+    if (known_type and (not financial or _financial_device_matches(device, job))
+            and await device_is_active(db, device)):
         try:
             payload = {"title": "أماسي — تنبيه مستعجل" if job.get("priority") == "urgent" else "أماسي — تعليمات الطلب", "body": "لديك تحديث على مهمة. افتح التطبيق للاطلاع والتأكيد.",
                 "event_id": job["event_id"], "instruction_id": job["instruction_id"], "priority": job.get("priority", "normal")}
             if not job.get("ticket"):
                 rich_content = False
-                from operational_instruction_conversations import push_is_resolved, push_reference
-                if await push_is_resolved(db, merchant_id=device["merchant_id"],
-                        recipient_id=job["actor_id"], event_id=job["event_id"]):
-                    payload = None
+                if financial:
+                    from employee_finance_notifications import financial_push_payload
+                    payload = await financial_push_payload(db, device, job)
+                    if payload is not None:
+                        unread = await _native_unread_count(db, device)
+                        # Counts may await while the notice is read, the employee
+                        # link is revoked or the account loses app access.
+                        payload = await financial_push_payload(db, device, job)
+                        if payload is not None:
+                            payload["unread_count"] = unread
                 else:
-                    payload.update(await push_reference(db, merchant_id=device["merchant_id"],
-                        recipient_id=job["actor_id"], event_id=job["event_id"]))
-                    if device["kind"] == "expo":
-                        from operational_push_preview import native_notification_payload
-                        generic_payload = payload
-                        payload = await native_notification_payload(db, device, job, payload)
-                        rich_content = payload is not None and payload is not generic_payload
-                        if payload is generic_payload:
-                            # A genuinely missing legacy notice has no saved
-                            # conversation context. Preserve its instruction-only
-                            # tap; never emit a reference the detail route rejects.
-                            payload.pop("notice_id", None)
-                            payload.pop("conversation_id", None)
-                        if rich_content and device.get("notification_presentation") == ANDROID_RTL_PRESENTATION:
-                            from operational_instruction_conversations import EVENTS, conversation_unread_count
-                            # The same scoped active-conversation count as the
-                            # new inbox, without backfill or business mutations.
-                            # An unfinished projection is unknown, never zero.
-                            source = await db["operational_instruction_notifications_v1"].find_one({
-                                "_id": job["event_id"], "merchant_id": device["merchant_id"],
-                                "recipient_id": device["actor_id"], "conversation_pending": {"$ne": True},
-                            }, {"_id": 1})
-                            projected = await db[EVENTS].find_one({"merchant_id": device["merchant_id"],
-                                "recipient_id": device["actor_id"], "source_notice_id": job["event_id"]},
-                                {"_id": 1}) if source else None
-                            if projected:
-                                payload["unread_count"] = await conversation_unread_count(db,
-                                    merchant_id=device["merchant_id"], actor_id=device["actor_id"])
-                if payload is not None and await push_is_resolved(db, merchant_id=device["merchant_id"],
-                        recipient_id=job["actor_id"], event_id=job["event_id"]):
-                    payload = None
+                    from operational_instruction_conversations import push_is_resolved, push_reference
+                    if await push_is_resolved(db, merchant_id=device["merchant_id"],
+                            recipient_id=job["actor_id"], event_id=job["event_id"]):
+                        payload = None
+                    else:
+                        payload.update(await push_reference(db, merchant_id=device["merchant_id"],
+                            recipient_id=job["actor_id"], event_id=job["event_id"]))
+                        if device["kind"] == "expo":
+                            from operational_push_preview import native_notification_payload
+                            generic_payload = payload
+                            payload = await native_notification_payload(db, device, job, payload)
+                            rich_content = payload is not None and payload is not generic_payload
+                            if payload is generic_payload:
+                                # A genuinely missing legacy notice has no saved
+                                # conversation context. Preserve its instruction-only
+                                # tap; never emit a reference the detail route rejects.
+                                payload.pop("notice_id", None)
+                                payload.pop("conversation_id", None)
+                            if rich_content and device.get("notification_presentation") == ANDROID_RTL_PRESENTATION:
+                                from operational_instruction_conversations import EVENTS
+                                # The same scoped active-conversation count as the
+                                # new inbox, without backfill or business mutations.
+                                # An unfinished projection is unknown, never zero.
+                                source = await db["operational_instruction_notifications_v1"].find_one({
+                                    "_id": job["event_id"], "merchant_id": device["merchant_id"],
+                                    "recipient_id": device["actor_id"], "conversation_pending": {"$ne": True},
+                                }, {"_id": 1})
+                                projected = await db[EVENTS].find_one({"merchant_id": device["merchant_id"],
+                                    "recipient_id": device["actor_id"], "source_notice_id": job["event_id"]},
+                                    {"_id": 1}) if source else None
+                                if projected:
+                                    payload["unread_count"] = await _native_unread_count(db, device)
+                    if payload is not None and await push_is_resolved(db, merchant_id=device["merchant_id"],
+                            recipient_id=job["actor_id"], event_id=job["event_id"]):
+                        payload = None
                 if payload is not None and rich_content:
                     from operational_push_preview import native_recipient_authorized
                     if not await native_recipient_authorized(db, device):
@@ -370,6 +425,7 @@ async def deliver_one(db, sender=send_to_provider):
                         "actor_id": device["actor_id"], "merchant_id": device["merchant_id"],
                         "session_id": device["session_id"], "kind": device["kind"],
                         "installation_id": device.get("installation_id"), "token": device.get("token"),
+                        **({"financial_notifications_version": 1} if financial else {}),
                     })
                     if await device_is_active(db, current):
                         device = current
@@ -396,7 +452,11 @@ async def deliver_one(db, sender=send_to_provider):
 
 async def run(db):
     from operational_instruction_conversations import ensure_indexes
+    from employee_finance_notifications import (
+        ensure_financial_notification_indexes, retry_employee_financial_notifications,
+    )
     await ensure_indexes(db)
+    await ensure_financial_notification_indexes(db)
     await db["operational_instruction_notifications_v1"].create_index([
         ("merchant_id", 1), ("recipient_id", 1), ("read_at", 1), ("created_at", -1), ("id", -1)])
     await db["operational_instruction_notifications_v1"].create_index([
@@ -410,6 +470,12 @@ async def run(db):
     cursor = ""
     progress_cursor = ""
     while True:
+        # The small committed-intent projection drains even when provider push
+        # is disabled. A financial retry cannot stop instruction delivery.
+        try:
+            await retry_employee_financial_notifications(db)
+        except Exception:
+            log.warning("employee financial notice retry deferred")
         try:
             from operational_instruction_comments import retry_comment_notifications
             await retry_comment_notifications(db)
