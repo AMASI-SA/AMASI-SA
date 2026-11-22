@@ -1,0 +1,53 @@
+{
+  "argv": [
+    "/workspace/scratch/81f2839b514c/courier-test-env/bin/python",
+    "-B",
+    "-m",
+    "pytest",
+    "--noconftest",
+    "-p",
+    "no:cacheprovider",
+    "-q",
+    "backend/tests/test_demand_read_store.py",
+    "backend/tests/test_demand_read_jobs.py",
+    "backend/tests/test_demand_read_runner_lifecycle.py",
+    "backend/tests/test_operational_workspace_demand_reads.py",
+    "backend/tests/test_operational_workspace_demand_http.py",
+    "backend/tests/test_dashboard_demand_builders.py",
+    "backend/tests/test_assembly_demand_builders.py",
+    "backend/tests/test_customer_inventory_unified_activity.py",
+    "backend/tests/test_operational_inventory_purchase_receipts.py::test_partial_then_remaining_receipts_are_once_only_and_financially_independent",
+    "backend/tests/test_operational_inventory_payment_allocation.py::test_native_owner_allocation_concurrent_replay_keeps_cash_and_original_identity",
+    "--asyncio-mode=auto",
+    "--tb=short",
+    "--basetemp=/tmp/mezan-r3-backend-interop-6ma0_k6g/pytest",
+    "--junitxml=/workspace/scratch/e3ebab9db878/r3-validation/backend-demand-customer-inventory.xml"
+  ],
+  "cwd": "/workspace/scratch/e3ebab9db878/mezan-latency-r3",
+  "database": "owned disposable loopback replica, UUID-scoped databases only",
+  "dependencies": {
+    "mongomock-motor": "0.0.36",
+    "motor": "3.7.1",
+    "pymongo": "4.19.0",
+    "pytest": "9.2.0",
+    "pytest-asyncio": "1.4.1.post1"
+  },
+  "environment": {
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHON_DOTENV_DISABLED": "1"
+  },
+  "production_base": "24270ebdfdebb83282389308a2349cdb27e2b8e4",
+  "test_source_sha256": {
+    "backend/demand_read_runner.py": "f07c980a90622beda33d99c91bba96bd185169c953dcad09cbcb0e66eb10d5f8",
+    "backend/tests/test_assembly_demand_builders.py": "acb21c48534dbb064d4aa807e5d02bae544d4d8960bc7628d54652b359307905",
+    "backend/tests/test_customer_inventory_unified_activity.py": "37628facca78a4b80eb16cbd36b297257e941a835c9500870e4373ed475036f4",
+    "backend/tests/test_dashboard_demand_builders.py": "a4013c15e7946d7ddefb5d915e35a766a07aa6b3822b079fc4d5b480f5779f81",
+    "backend/tests/test_demand_read_jobs.py": "63156c0b2841bbd070b94184d7348d130480d60dbe6fbf8348b0200ae65e2fa1",
+    "backend/tests/test_demand_read_runner_lifecycle.py": "745ac953d52c48c4614a2de80e5467ec38df64f98e56ccc289e6378e9a0f0af7",
+    "backend/tests/test_demand_read_store.py": "0f08019096c81844e014828f40b503189978c6290a08557058cf989512b60514",
+    "backend/tests/test_operational_inventory_payment_allocation.py": "90649ef3c5d2c07acccaf3fece0ef4b4c56594b17ce70c70c897969d1f2b8c24",
+    "backend/tests/test_operational_inventory_purchase_receipts.py": "5ec788951c488003902f03d12abc9eef6aab3c0f793c3abdb0cb1370a91f821e",
+    "backend/tests/test_operational_workspace_demand_http.py": "e732eec4cc7b55793d809931dac4b581809ebb1a0b70adb260b6d3a27ae57e9f",
+    "backend/tests/test_operational_workspace_demand_reads.py": "cf530eb377d93e9fdea66d62e8c4e7c86c9c999740ca71ca549bd2c209ad639c"
+  }
+}

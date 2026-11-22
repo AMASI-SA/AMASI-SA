@@ -1,0 +1,4484 @@
+{
+  "scope": "Actual demandRead + visibleOperationalRead, fake clock and HTTP; scratch in-memory candidate only",
+  "sourceSha256": "7929b97f1eb2662551c2120a64e8544b5cdb85d7be2369affb13ee708ccc80bf",
+  "records": [
+    {
+      "mode": "original",
+      "scenario": "ready_0",
+      "readyAt": 0,
+      "displayedAt": 0,
+      "detectionLag": 0,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 0,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 1,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 0,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_two",
+      "scenario": "ready_0",
+      "readyAt": 0,
+      "displayedAt": 0,
+      "detectionLag": 0,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 0,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 1,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 0,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_three",
+      "scenario": "ready_0",
+      "readyAt": 0,
+      "displayedAt": 0,
+      "detectionLag": 0,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 0,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 1,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 0,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "original",
+      "scenario": "ready_1100",
+      "readyAt": 1100,
+      "displayedAt": 1500,
+      "detectionLag": 400,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 0,
+          "status": 202
+        },
+        {
+          "at": 500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 500,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1500,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 3,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_two",
+      "scenario": "ready_1100",
+      "readyAt": 1100,
+      "displayedAt": 1500,
+      "detectionLag": 400,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 0,
+          "status": 202
+        },
+        {
+          "at": 500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 500,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1500,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 3,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_three",
+      "scenario": "ready_1100",
+      "readyAt": 1100,
+      "displayedAt": 1500,
+      "detectionLag": 400,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 0,
+          "status": 202
+        },
+        {
+          "at": 500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 500,
+          "status": 202
+        },
+        {
+          "at": 1000,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1000,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1500,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 4,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "original",
+      "scenario": "ready_1400",
+      "readyAt": 1400,
+      "displayedAt": 1500,
+      "detectionLag": 100,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 0,
+          "status": 202
+        },
+        {
+          "at": 500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 500,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1500,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 3,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_two",
+      "scenario": "ready_1400",
+      "readyAt": 1400,
+      "displayedAt": 1500,
+      "detectionLag": 100,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 0,
+          "status": 202
+        },
+        {
+          "at": 500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 500,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1500,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 3,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_three",
+      "scenario": "ready_1400",
+      "readyAt": 1400,
+      "displayedAt": 1500,
+      "detectionLag": 100,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 0,
+          "status": 202
+        },
+        {
+          "at": 500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 500,
+          "status": 202
+        },
+        {
+          "at": 1000,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1000,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1500,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 4,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "original",
+      "scenario": "ready_1600",
+      "readyAt": 1600,
+      "displayedAt": 3500,
+      "detectionLag": 1900,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 0,
+          "status": 202
+        },
+        {
+          "at": 500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 500,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1500,
+          "status": 202
+        },
+        {
+          "at": 3500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 3500,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 4,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_two",
+      "scenario": "ready_1600",
+      "readyAt": 1600,
+      "displayedAt": 2000,
+      "detectionLag": 400,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 0,
+          "status": 202
+        },
+        {
+          "at": 500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 500,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1500,
+          "status": 202
+        },
+        {
+          "at": 2000,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2000,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 4,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_three",
+      "scenario": "ready_1600",
+      "readyAt": 1600,
+      "displayedAt": 2000,
+      "detectionLag": 400,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 0,
+          "status": 202
+        },
+        {
+          "at": 500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 500,
+          "status": 202
+        },
+        {
+          "at": 1000,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1000,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1500,
+          "status": 202
+        },
+        {
+          "at": 2000,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2000,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 5,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "original",
+      "scenario": "ready_2000",
+      "readyAt": 2000,
+      "displayedAt": 3500,
+      "detectionLag": 1500,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 0,
+          "status": 202
+        },
+        {
+          "at": 500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 500,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1500,
+          "status": 202
+        },
+        {
+          "at": 3500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 3500,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 4,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_two",
+      "scenario": "ready_2000",
+      "readyAt": 2000,
+      "displayedAt": 2000,
+      "detectionLag": 0,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 0,
+          "status": 202
+        },
+        {
+          "at": 500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 500,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1500,
+          "status": 202
+        },
+        {
+          "at": 2000,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2000,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 4,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_three",
+      "scenario": "ready_2000",
+      "readyAt": 2000,
+      "displayedAt": 2000,
+      "detectionLag": 0,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 0,
+          "status": 202
+        },
+        {
+          "at": 500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 500,
+          "status": 202
+        },
+        {
+          "at": 1000,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1000,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1500,
+          "status": 202
+        },
+        {
+          "at": 2000,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2000,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 5,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "original",
+      "scenario": "ready_2200",
+      "readyAt": 2200,
+      "displayedAt": 3500,
+      "detectionLag": 1300,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 0,
+          "status": 202
+        },
+        {
+          "at": 500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 500,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1500,
+          "status": 202
+        },
+        {
+          "at": 3500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 3500,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 4,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_two",
+      "scenario": "ready_2200",
+      "readyAt": 2200,
+      "displayedAt": 2500,
+      "detectionLag": 300,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 0,
+          "status": 202
+        },
+        {
+          "at": 500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 500,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1500,
+          "status": 202
+        },
+        {
+          "at": 2000,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2000,
+          "status": 202
+        },
+        {
+          "at": 2500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2500,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 5,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_three",
+      "scenario": "ready_2200",
+      "readyAt": 2200,
+      "displayedAt": 2500,
+      "detectionLag": 300,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 0,
+          "status": 202
+        },
+        {
+          "at": 500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 500,
+          "status": 202
+        },
+        {
+          "at": 1000,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1000,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1500,
+          "status": 202
+        },
+        {
+          "at": 2000,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2000,
+          "status": 202
+        },
+        {
+          "at": 2500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2500,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 6,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "original",
+      "scenario": "ready_4200",
+      "readyAt": 4200,
+      "displayedAt": 5500,
+      "detectionLag": 1300,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 0,
+          "status": 202
+        },
+        {
+          "at": 500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 500,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1500,
+          "status": 202
+        },
+        {
+          "at": 3500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 3500,
+          "status": 202
+        },
+        {
+          "at": 5500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 5500,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 5,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_two",
+      "scenario": "ready_4200",
+      "readyAt": 4200,
+      "displayedAt": 5500,
+      "detectionLag": 1300,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 0,
+          "status": 202
+        },
+        {
+          "at": 500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 500,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1500,
+          "status": 202
+        },
+        {
+          "at": 2000,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2000,
+          "status": 202
+        },
+        {
+          "at": 2500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2500,
+          "status": 202
+        },
+        {
+          "at": 3500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 3500,
+          "status": 202
+        },
+        {
+          "at": 5500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 5500,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 7,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_three",
+      "scenario": "ready_4200",
+      "readyAt": 4200,
+      "displayedAt": 5500,
+      "detectionLag": 1300,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 0,
+          "status": 202
+        },
+        {
+          "at": 500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 500,
+          "status": 202
+        },
+        {
+          "at": 1000,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1000,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1500,
+          "status": 202
+        },
+        {
+          "at": 2000,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2000,
+          "status": 202
+        },
+        {
+          "at": 2500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2500,
+          "status": 202
+        },
+        {
+          "at": 3500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 3500,
+          "status": 202
+        },
+        {
+          "at": 5500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 5500,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 8,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "original",
+      "scenario": "ready_5100",
+      "readyAt": 5100,
+      "displayedAt": 5500,
+      "detectionLag": 400,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 0,
+          "status": 202
+        },
+        {
+          "at": 500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 500,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1500,
+          "status": 202
+        },
+        {
+          "at": 3500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 3500,
+          "status": 202
+        },
+        {
+          "at": 5500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 5500,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 5,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_two",
+      "scenario": "ready_5100",
+      "readyAt": 5100,
+      "displayedAt": 5500,
+      "detectionLag": 400,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 0,
+          "status": 202
+        },
+        {
+          "at": 500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 500,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1500,
+          "status": 202
+        },
+        {
+          "at": 2000,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2000,
+          "status": 202
+        },
+        {
+          "at": 2500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2500,
+          "status": 202
+        },
+        {
+          "at": 3500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 3500,
+          "status": 202
+        },
+        {
+          "at": 5500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 5500,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 7,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_three",
+      "scenario": "ready_5100",
+      "readyAt": 5100,
+      "displayedAt": 5500,
+      "detectionLag": 400,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 0,
+          "status": 202
+        },
+        {
+          "at": 500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 500,
+          "status": 202
+        },
+        {
+          "at": 1000,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1000,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1500,
+          "status": 202
+        },
+        {
+          "at": 2000,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2000,
+          "status": 202
+        },
+        {
+          "at": 2500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2500,
+          "status": 202
+        },
+        {
+          "at": 3500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 3500,
+          "status": 202
+        },
+        {
+          "at": 5500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 5500,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 8,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "original",
+      "scenario": "ready_1600_network_100",
+      "readyAt": 1600,
+      "displayedAt": 1800,
+      "detectionLag": 200,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 100,
+          "status": 202
+        },
+        {
+          "at": 600,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 700,
+          "status": 202
+        },
+        {
+          "at": 1700,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1800,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 3,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_two",
+      "scenario": "ready_1600_network_100",
+      "readyAt": 1600,
+      "displayedAt": 1800,
+      "detectionLag": 200,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 100,
+          "status": 202
+        },
+        {
+          "at": 600,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 700,
+          "status": 202
+        },
+        {
+          "at": 1700,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1800,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 3,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_three",
+      "scenario": "ready_1600_network_100",
+      "readyAt": 1600,
+      "displayedAt": 1900,
+      "detectionLag": 300,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 100,
+          "status": 202
+        },
+        {
+          "at": 600,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 700,
+          "status": 202
+        },
+        {
+          "at": 1200,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1300,
+          "status": 202
+        },
+        {
+          "at": 1800,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1900,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 4,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "original",
+      "scenario": "ready_2200_network_100",
+      "readyAt": 2200,
+      "displayedAt": 3900,
+      "detectionLag": 1700,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 100,
+          "status": 202
+        },
+        {
+          "at": 600,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 700,
+          "status": 202
+        },
+        {
+          "at": 1700,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1800,
+          "status": 202
+        },
+        {
+          "at": 3800,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 3900,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 4,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_two",
+      "scenario": "ready_2200_network_100",
+      "readyAt": 2200,
+      "displayedAt": 2400,
+      "detectionLag": 200,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 100,
+          "status": 202
+        },
+        {
+          "at": 600,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 700,
+          "status": 202
+        },
+        {
+          "at": 1700,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1800,
+          "status": 202
+        },
+        {
+          "at": 2300,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2400,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 4,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_three",
+      "scenario": "ready_2200_network_100",
+      "readyAt": 2200,
+      "displayedAt": 2500,
+      "detectionLag": 300,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 100,
+          "status": 202
+        },
+        {
+          "at": 600,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 700,
+          "status": 202
+        },
+        {
+          "at": 1200,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1300,
+          "status": 202
+        },
+        {
+          "at": 1800,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1900,
+          "status": 202
+        },
+        {
+          "at": 2400,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2500,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 5,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "original",
+      "scenario": "ready_4200_network_100",
+      "readyAt": 4200,
+      "displayedAt": 6000,
+      "detectionLag": 1800,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 100,
+          "status": 202
+        },
+        {
+          "at": 600,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 700,
+          "status": 202
+        },
+        {
+          "at": 1700,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1800,
+          "status": 202
+        },
+        {
+          "at": 3800,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 3900,
+          "status": 202
+        },
+        {
+          "at": 5900,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 6000,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 5,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_two",
+      "scenario": "ready_4200_network_100",
+      "readyAt": 4200,
+      "displayedAt": 6200,
+      "detectionLag": 2000,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 100,
+          "status": 202
+        },
+        {
+          "at": 600,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 700,
+          "status": 202
+        },
+        {
+          "at": 1700,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1800,
+          "status": 202
+        },
+        {
+          "at": 2300,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2400,
+          "status": 202
+        },
+        {
+          "at": 2900,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 3000,
+          "status": 202
+        },
+        {
+          "at": 4000,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 4100,
+          "status": 202
+        },
+        {
+          "at": 6100,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 6200,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 7,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_three",
+      "scenario": "ready_4200_network_100",
+      "readyAt": 4200,
+      "displayedAt": 4200,
+      "detectionLag": 0,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 100,
+          "status": 202
+        },
+        {
+          "at": 600,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 700,
+          "status": 202
+        },
+        {
+          "at": 1200,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1300,
+          "status": 202
+        },
+        {
+          "at": 1800,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1900,
+          "status": 202
+        },
+        {
+          "at": 2400,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2500,
+          "status": 202
+        },
+        {
+          "at": 3000,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 3100,
+          "status": 202
+        },
+        {
+          "at": 4100,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 4200,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 7,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "original",
+      "scenario": "ready_5100_network_100",
+      "readyAt": 5100,
+      "displayedAt": 6000,
+      "detectionLag": 900,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 100,
+          "status": 202
+        },
+        {
+          "at": 600,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 700,
+          "status": 202
+        },
+        {
+          "at": 1700,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1800,
+          "status": 202
+        },
+        {
+          "at": 3800,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 3900,
+          "status": 202
+        },
+        {
+          "at": 5900,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 6000,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 5,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_two",
+      "scenario": "ready_5100_network_100",
+      "readyAt": 5100,
+      "displayedAt": 6200,
+      "detectionLag": 1100,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 100,
+          "status": 202
+        },
+        {
+          "at": 600,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 700,
+          "status": 202
+        },
+        {
+          "at": 1700,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1800,
+          "status": 202
+        },
+        {
+          "at": 2300,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2400,
+          "status": 202
+        },
+        {
+          "at": 2900,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 3000,
+          "status": 202
+        },
+        {
+          "at": 4000,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 4100,
+          "status": 202
+        },
+        {
+          "at": 6100,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 6200,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 7,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_three",
+      "scenario": "ready_5100_network_100",
+      "readyAt": 5100,
+      "displayedAt": 6300,
+      "detectionLag": 1200,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 100,
+          "status": 202
+        },
+        {
+          "at": 600,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 700,
+          "status": 202
+        },
+        {
+          "at": 1200,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1300,
+          "status": 202
+        },
+        {
+          "at": 1800,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1900,
+          "status": 202
+        },
+        {
+          "at": 2400,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2500,
+          "status": 202
+        },
+        {
+          "at": 3000,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 3100,
+          "status": 202
+        },
+        {
+          "at": 4100,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 4200,
+          "status": 202
+        },
+        {
+          "at": 6200,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 6300,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 8,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "original",
+      "scenario": "ready_5700_network_100",
+      "readyAt": 5700,
+      "displayedAt": 6000,
+      "detectionLag": 300,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 100,
+          "status": 202
+        },
+        {
+          "at": 600,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 700,
+          "status": 202
+        },
+        {
+          "at": 1700,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1800,
+          "status": 202
+        },
+        {
+          "at": 3800,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 3900,
+          "status": 202
+        },
+        {
+          "at": 5900,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 6000,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 5,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_two",
+      "scenario": "ready_5700_network_100",
+      "readyAt": 5700,
+      "displayedAt": 6200,
+      "detectionLag": 500,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 100,
+          "status": 202
+        },
+        {
+          "at": 600,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 700,
+          "status": 202
+        },
+        {
+          "at": 1700,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1800,
+          "status": 202
+        },
+        {
+          "at": 2300,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2400,
+          "status": 202
+        },
+        {
+          "at": 2900,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 3000,
+          "status": 202
+        },
+        {
+          "at": 4000,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 4100,
+          "status": 202
+        },
+        {
+          "at": 6100,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 6200,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 7,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_three",
+      "scenario": "ready_5700_network_100",
+      "readyAt": 5700,
+      "displayedAt": 6300,
+      "detectionLag": 600,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 100,
+          "status": 202
+        },
+        {
+          "at": 600,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 700,
+          "status": 202
+        },
+        {
+          "at": 1200,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1300,
+          "status": 202
+        },
+        {
+          "at": 1800,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1900,
+          "status": 202
+        },
+        {
+          "at": 2400,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2500,
+          "status": 202
+        },
+        {
+          "at": 3000,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 3100,
+          "status": 202
+        },
+        {
+          "at": 4100,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 4200,
+          "status": 202
+        },
+        {
+          "at": 6200,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 6300,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 8,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "original",
+      "scenario": "ready_1600_network_400",
+      "readyAt": 1600,
+      "displayedAt": 2700,
+      "detectionLag": 1100,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 400,
+          "status": 202
+        },
+        {
+          "at": 900,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1300,
+          "status": 202
+        },
+        {
+          "at": 2300,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2700,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 3,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_two",
+      "scenario": "ready_1600_network_400",
+      "readyAt": 1600,
+      "displayedAt": 2700,
+      "detectionLag": 1100,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 400,
+          "status": 202
+        },
+        {
+          "at": 900,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1300,
+          "status": 202
+        },
+        {
+          "at": 2300,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2700,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 3,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_three",
+      "scenario": "ready_1600_network_400",
+      "readyAt": 1600,
+      "displayedAt": 2200,
+      "detectionLag": 600,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 400,
+          "status": 202
+        },
+        {
+          "at": 900,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1300,
+          "status": 202
+        },
+        {
+          "at": 1800,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2200,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 3,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "original",
+      "scenario": "ready_2200_network_400",
+      "readyAt": 2200,
+      "displayedAt": 2700,
+      "detectionLag": 500,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 400,
+          "status": 202
+        },
+        {
+          "at": 900,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1300,
+          "status": 202
+        },
+        {
+          "at": 2300,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2700,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 3,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_two",
+      "scenario": "ready_2200_network_400",
+      "readyAt": 2200,
+      "displayedAt": 2700,
+      "detectionLag": 500,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 400,
+          "status": 202
+        },
+        {
+          "at": 900,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1300,
+          "status": 202
+        },
+        {
+          "at": 2300,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2700,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 3,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_three",
+      "scenario": "ready_2200_network_400",
+      "readyAt": 2200,
+      "displayedAt": 2200,
+      "detectionLag": 0,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 400,
+          "status": 202
+        },
+        {
+          "at": 900,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1300,
+          "status": 202
+        },
+        {
+          "at": 1800,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2200,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 3,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "original",
+      "scenario": "ready_4200_network_400",
+      "readyAt": 4200,
+      "displayedAt": 5100,
+      "detectionLag": 900,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 400,
+          "status": 202
+        },
+        {
+          "at": 900,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1300,
+          "status": 202
+        },
+        {
+          "at": 2300,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2700,
+          "status": 202
+        },
+        {
+          "at": 4700,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 5100,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 4,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_two",
+      "scenario": "ready_4200_network_400",
+      "readyAt": 4200,
+      "displayedAt": 4500,
+      "detectionLag": 300,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 400,
+          "status": 202
+        },
+        {
+          "at": 900,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1300,
+          "status": 202
+        },
+        {
+          "at": 2300,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2700,
+          "status": 202
+        },
+        {
+          "at": 3200,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 3600,
+          "status": 202
+        },
+        {
+          "at": 4100,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 4500,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 5,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_three",
+      "scenario": "ready_4200_network_400",
+      "readyAt": 4200,
+      "displayedAt": 4900,
+      "detectionLag": 700,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 400,
+          "status": 202
+        },
+        {
+          "at": 900,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1300,
+          "status": 202
+        },
+        {
+          "at": 1800,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2200,
+          "status": 202
+        },
+        {
+          "at": 2700,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 3100,
+          "status": 202
+        },
+        {
+          "at": 3600,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 4000,
+          "status": 202
+        },
+        {
+          "at": 4500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 4900,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 6,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "original",
+      "scenario": "ready_5100_network_400",
+      "readyAt": 5100,
+      "displayedAt": 5100,
+      "detectionLag": 0,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 400,
+          "status": 202
+        },
+        {
+          "at": 900,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1300,
+          "status": 202
+        },
+        {
+          "at": 2300,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2700,
+          "status": 202
+        },
+        {
+          "at": 4700,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 5100,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 4,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_two",
+      "scenario": "ready_5100_network_400",
+      "readyAt": 5100,
+      "displayedAt": 5900,
+      "detectionLag": 800,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 400,
+          "status": 202
+        },
+        {
+          "at": 900,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1300,
+          "status": 202
+        },
+        {
+          "at": 2300,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2700,
+          "status": 202
+        },
+        {
+          "at": 3200,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 3600,
+          "status": 202
+        },
+        {
+          "at": 4100,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 4500,
+          "status": 202
+        },
+        {
+          "at": 5500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 5900,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 6,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_three",
+      "scenario": "ready_5100_network_400",
+      "readyAt": 5100,
+      "displayedAt": 6300,
+      "detectionLag": 1200,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 400,
+          "status": 202
+        },
+        {
+          "at": 900,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1300,
+          "status": 202
+        },
+        {
+          "at": 1800,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2200,
+          "status": 202
+        },
+        {
+          "at": 2700,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 3100,
+          "status": 202
+        },
+        {
+          "at": 3600,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 4000,
+          "status": 202
+        },
+        {
+          "at": 4500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 4900,
+          "status": 202
+        },
+        {
+          "at": 5900,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 6300,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 7,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "original",
+      "scenario": "ready_5700_network_400",
+      "readyAt": 5700,
+      "displayedAt": 7500,
+      "detectionLag": 1800,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 400,
+          "status": 202
+        },
+        {
+          "at": 900,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1300,
+          "status": 202
+        },
+        {
+          "at": 2300,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2700,
+          "status": 202
+        },
+        {
+          "at": 4700,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 5100,
+          "status": 202
+        },
+        {
+          "at": 7100,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 7500,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 5,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_two",
+      "scenario": "ready_5700_network_400",
+      "readyAt": 5700,
+      "displayedAt": 5900,
+      "detectionLag": 200,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 400,
+          "status": 202
+        },
+        {
+          "at": 900,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1300,
+          "status": 202
+        },
+        {
+          "at": 2300,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2700,
+          "status": 202
+        },
+        {
+          "at": 3200,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 3600,
+          "status": 202
+        },
+        {
+          "at": 4100,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 4500,
+          "status": 202
+        },
+        {
+          "at": 5500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 5900,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 6,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_three",
+      "scenario": "ready_5700_network_400",
+      "readyAt": 5700,
+      "displayedAt": 6300,
+      "detectionLag": 600,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 400,
+          "status": 202
+        },
+        {
+          "at": 900,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1300,
+          "status": 202
+        },
+        {
+          "at": 1800,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2200,
+          "status": 202
+        },
+        {
+          "at": 2700,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 3100,
+          "status": 202
+        },
+        {
+          "at": 3600,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 4000,
+          "status": 202
+        },
+        {
+          "at": 4500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 4900,
+          "status": 202
+        },
+        {
+          "at": 5900,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 6300,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 7,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "original",
+      "scenario": "ready_1600_network_1000",
+      "readyAt": 1600,
+      "displayedAt": 2500,
+      "detectionLag": 900,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 1000,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2500,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 2,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_two",
+      "scenario": "ready_1600_network_1000",
+      "readyAt": 1600,
+      "displayedAt": 2500,
+      "detectionLag": 900,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 1000,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2500,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 2,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_three",
+      "scenario": "ready_1600_network_1000",
+      "readyAt": 1600,
+      "displayedAt": 2500,
+      "detectionLag": 900,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 1000,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2500,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 2,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "original",
+      "scenario": "ready_2200_network_1000",
+      "readyAt": 2200,
+      "displayedAt": 2500,
+      "detectionLag": 300,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 1000,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2500,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 2,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_two",
+      "scenario": "ready_2200_network_1000",
+      "readyAt": 2200,
+      "displayedAt": 2500,
+      "detectionLag": 300,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 1000,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2500,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 2,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_three",
+      "scenario": "ready_2200_network_1000",
+      "readyAt": 2200,
+      "displayedAt": 2500,
+      "detectionLag": 300,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 1000,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2500,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 2,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "original",
+      "scenario": "ready_4200_network_1000",
+      "readyAt": 4200,
+      "displayedAt": 4500,
+      "detectionLag": 300,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 1000,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2500,
+          "status": 202
+        },
+        {
+          "at": 3500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 4500,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 3,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_two",
+      "scenario": "ready_4200_network_1000",
+      "readyAt": 4200,
+      "displayedAt": 4500,
+      "detectionLag": 300,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 1000,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2500,
+          "status": 202
+        },
+        {
+          "at": 3500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 4500,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 3,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_three",
+      "scenario": "ready_4200_network_1000",
+      "readyAt": 4200,
+      "displayedAt": 5500,
+      "detectionLag": 1300,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 1000,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2500,
+          "status": 202
+        },
+        {
+          "at": 3000,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 4000,
+          "status": 202
+        },
+        {
+          "at": 4500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 5500,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 4,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "original",
+      "scenario": "ready_5100_network_1000",
+      "readyAt": 5100,
+      "displayedAt": 7500,
+      "detectionLag": 2400,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 1000,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2500,
+          "status": 202
+        },
+        {
+          "at": 3500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 4500,
+          "status": 202
+        },
+        {
+          "at": 6500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 7500,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 4,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_two",
+      "scenario": "ready_5100_network_1000",
+      "readyAt": 5100,
+      "displayedAt": 6000,
+      "detectionLag": 900,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 1000,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2500,
+          "status": 202
+        },
+        {
+          "at": 3500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 4500,
+          "status": 202
+        },
+        {
+          "at": 5000,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 6000,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 4,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_three",
+      "scenario": "ready_5100_network_1000",
+      "readyAt": 5100,
+      "displayedAt": 5500,
+      "detectionLag": 400,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 1000,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2500,
+          "status": 202
+        },
+        {
+          "at": 3000,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 4000,
+          "status": 202
+        },
+        {
+          "at": 4500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 5500,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 4,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "original",
+      "scenario": "ready_5700_network_1000",
+      "readyAt": 5700,
+      "displayedAt": 7500,
+      "detectionLag": 1800,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 1000,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2500,
+          "status": 202
+        },
+        {
+          "at": 3500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 4500,
+          "status": 202
+        },
+        {
+          "at": 6500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 7500,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 4,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_two",
+      "scenario": "ready_5700_network_1000",
+      "readyAt": 5700,
+      "displayedAt": 6000,
+      "detectionLag": 300,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 1000,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2500,
+          "status": 202
+        },
+        {
+          "at": 3500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 4500,
+          "status": 202
+        },
+        {
+          "at": 5000,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 6000,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 4,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_three",
+      "scenario": "ready_5700_network_1000",
+      "readyAt": 5700,
+      "displayedAt": 7000,
+      "detectionLag": 1300,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 1000,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2500,
+          "status": 202
+        },
+        {
+          "at": 3000,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 4000,
+          "status": 202
+        },
+        {
+          "at": 4500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 5500,
+          "status": 202
+        },
+        {
+          "at": 6000,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 7000,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 5,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "original",
+      "scenario": "ready_2000_hint_12000",
+      "readyAt": 2000,
+      "displayedAt": 12000,
+      "detectionLag": 10000,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 0,
+          "status": 202
+        },
+        {
+          "at": 12000,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 12000,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 2,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_two",
+      "scenario": "ready_2000_hint_12000",
+      "readyAt": 2000,
+      "displayedAt": 12000,
+      "detectionLag": 10000,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 0,
+          "status": 202
+        },
+        {
+          "at": 12000,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 12000,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 2,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_three",
+      "scenario": "ready_2000_hint_12000",
+      "readyAt": 2000,
+      "displayedAt": 12000,
+      "detectionLag": 10000,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 0,
+          "status": 202
+        },
+        {
+          "at": 12000,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 12000,
+          "status": 200
+        }
+      ],
+      "countAtHorizon": 2,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "original",
+      "scenario": "pending_to_5000",
+      "readyAt": null,
+      "displayedAt": null,
+      "detectionLag": null,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 0,
+          "status": 202
+        },
+        {
+          "at": 500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 500,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1500,
+          "status": 202
+        },
+        {
+          "at": 3500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 3500,
+          "status": 202
+        }
+      ],
+      "countAtHorizon": 4,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_two",
+      "scenario": "pending_to_5000",
+      "readyAt": null,
+      "displayedAt": null,
+      "detectionLag": null,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 0,
+          "status": 202
+        },
+        {
+          "at": 500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 500,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1500,
+          "status": 202
+        },
+        {
+          "at": 2000,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2000,
+          "status": 202
+        },
+        {
+          "at": 2500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2500,
+          "status": 202
+        },
+        {
+          "at": 3500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 3500,
+          "status": 202
+        }
+      ],
+      "countAtHorizon": 6,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_three",
+      "scenario": "pending_to_5000",
+      "readyAt": null,
+      "displayedAt": null,
+      "detectionLag": null,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 0,
+          "status": 202
+        },
+        {
+          "at": 500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 500,
+          "status": 202
+        },
+        {
+          "at": 1000,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1000,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1500,
+          "status": 202
+        },
+        {
+          "at": 2000,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2000,
+          "status": 202
+        },
+        {
+          "at": 2500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2500,
+          "status": 202
+        },
+        {
+          "at": 3500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 3500,
+          "status": 202
+        }
+      ],
+      "countAtHorizon": 7,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "original",
+      "scenario": "pending_to_10000",
+      "readyAt": null,
+      "displayedAt": null,
+      "detectionLag": null,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 0,
+          "status": 202
+        },
+        {
+          "at": 500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 500,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1500,
+          "status": 202
+        },
+        {
+          "at": 3500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 3500,
+          "status": 202
+        },
+        {
+          "at": 5500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 5500,
+          "status": 202
+        },
+        {
+          "at": 7500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 7500,
+          "status": 202
+        },
+        {
+          "at": 9500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 9500,
+          "status": 202
+        }
+      ],
+      "countAtHorizon": 7,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_two",
+      "scenario": "pending_to_10000",
+      "readyAt": null,
+      "displayedAt": null,
+      "detectionLag": null,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 0,
+          "status": 202
+        },
+        {
+          "at": 500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 500,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1500,
+          "status": 202
+        },
+        {
+          "at": 2000,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2000,
+          "status": 202
+        },
+        {
+          "at": 2500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2500,
+          "status": 202
+        },
+        {
+          "at": 3500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 3500,
+          "status": 202
+        },
+        {
+          "at": 5500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 5500,
+          "status": 202
+        },
+        {
+          "at": 7500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 7500,
+          "status": 202
+        },
+        {
+          "at": 9500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 9500,
+          "status": 202
+        }
+      ],
+      "countAtHorizon": 9,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_three",
+      "scenario": "pending_to_10000",
+      "readyAt": null,
+      "displayedAt": null,
+      "detectionLag": null,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 0,
+          "status": 202
+        },
+        {
+          "at": 500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 500,
+          "status": 202
+        },
+        {
+          "at": 1000,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1000,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1500,
+          "status": 202
+        },
+        {
+          "at": 2000,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2000,
+          "status": 202
+        },
+        {
+          "at": 2500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2500,
+          "status": 202
+        },
+        {
+          "at": 3500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 3500,
+          "status": 202
+        },
+        {
+          "at": 5500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 5500,
+          "status": 202
+        },
+        {
+          "at": 7500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 7500,
+          "status": 202
+        },
+        {
+          "at": 9500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 9500,
+          "status": 202
+        }
+      ],
+      "countAtHorizon": 10,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "original",
+      "scenario": "pending_to_30000",
+      "readyAt": null,
+      "displayedAt": null,
+      "detectionLag": null,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 0,
+          "status": 202
+        },
+        {
+          "at": 500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 500,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1500,
+          "status": 202
+        },
+        {
+          "at": 3500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 3500,
+          "status": 202
+        },
+        {
+          "at": 5500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 5500,
+          "status": 202
+        },
+        {
+          "at": 7500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 7500,
+          "status": 202
+        },
+        {
+          "at": 9500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 9500,
+          "status": 202
+        },
+        {
+          "at": 11500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 11500,
+          "status": 202
+        },
+        {
+          "at": 13500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 13500,
+          "status": 202
+        },
+        {
+          "at": 15500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 15500,
+          "status": 202
+        },
+        {
+          "at": 17500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 17500,
+          "status": 202
+        },
+        {
+          "at": 19500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 19500,
+          "status": 202
+        },
+        {
+          "at": 21500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 21500,
+          "status": 202
+        },
+        {
+          "at": 23500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 23500,
+          "status": 202
+        },
+        {
+          "at": 25500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 25500,
+          "status": 202
+        },
+        {
+          "at": 27500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 27500,
+          "status": 202
+        },
+        {
+          "at": 29500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 29500,
+          "status": 202
+        }
+      ],
+      "countAtHorizon": 17,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_two",
+      "scenario": "pending_to_30000",
+      "readyAt": null,
+      "displayedAt": null,
+      "detectionLag": null,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 0,
+          "status": 202
+        },
+        {
+          "at": 500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 500,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1500,
+          "status": 202
+        },
+        {
+          "at": 2000,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2000,
+          "status": 202
+        },
+        {
+          "at": 2500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2500,
+          "status": 202
+        },
+        {
+          "at": 3500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 3500,
+          "status": 202
+        },
+        {
+          "at": 5500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 5500,
+          "status": 202
+        },
+        {
+          "at": 7500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 7500,
+          "status": 202
+        },
+        {
+          "at": 9500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 9500,
+          "status": 202
+        },
+        {
+          "at": 11500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 11500,
+          "status": 202
+        },
+        {
+          "at": 13500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 13500,
+          "status": 202
+        },
+        {
+          "at": 15500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 15500,
+          "status": 202
+        },
+        {
+          "at": 17500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 17500,
+          "status": 202
+        },
+        {
+          "at": 19500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 19500,
+          "status": 202
+        },
+        {
+          "at": 21500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 21500,
+          "status": 202
+        },
+        {
+          "at": 23500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 23500,
+          "status": 202
+        },
+        {
+          "at": 25500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 25500,
+          "status": 202
+        },
+        {
+          "at": 27500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 27500,
+          "status": 202
+        },
+        {
+          "at": 29500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 29500,
+          "status": 202
+        }
+      ],
+      "countAtHorizon": 19,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_three",
+      "scenario": "pending_to_30000",
+      "readyAt": null,
+      "displayedAt": null,
+      "detectionLag": null,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 0,
+          "status": 202
+        },
+        {
+          "at": 500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 500,
+          "status": 202
+        },
+        {
+          "at": 1000,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1000,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1500,
+          "status": 202
+        },
+        {
+          "at": 2000,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2000,
+          "status": 202
+        },
+        {
+          "at": 2500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 2500,
+          "status": 202
+        },
+        {
+          "at": 3500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 3500,
+          "status": 202
+        },
+        {
+          "at": 5500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 5500,
+          "status": 202
+        },
+        {
+          "at": 7500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 7500,
+          "status": 202
+        },
+        {
+          "at": 9500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 9500,
+          "status": 202
+        },
+        {
+          "at": 11500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 11500,
+          "status": 202
+        },
+        {
+          "at": 13500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 13500,
+          "status": 202
+        },
+        {
+          "at": 15500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 15500,
+          "status": 202
+        },
+        {
+          "at": 17500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 17500,
+          "status": 202
+        },
+        {
+          "at": 19500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 19500,
+          "status": 202
+        },
+        {
+          "at": 21500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 21500,
+          "status": 202
+        },
+        {
+          "at": 23500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 23500,
+          "status": 202
+        },
+        {
+          "at": 25500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 25500,
+          "status": 202
+        },
+        {
+          "at": 27500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 27500,
+          "status": 202
+        },
+        {
+          "at": 29500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 29500,
+          "status": 202
+        }
+      ],
+      "countAtHorizon": 20,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "original",
+      "scenario": "unmount_250",
+      "readyAt": null,
+      "displayedAt": null,
+      "detectionLag": null,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 0,
+          "status": 202
+        }
+      ],
+      "countAtHorizon": 1,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_two",
+      "scenario": "unmount_250",
+      "readyAt": null,
+      "displayedAt": null,
+      "detectionLag": null,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 0,
+          "status": 202
+        }
+      ],
+      "countAtHorizon": 1,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_three",
+      "scenario": "unmount_250",
+      "readyAt": null,
+      "displayedAt": null,
+      "detectionLag": null,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 0,
+          "status": 202
+        }
+      ],
+      "countAtHorizon": 1,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "original",
+      "scenario": "hidden_750",
+      "readyAt": null,
+      "displayedAt": null,
+      "detectionLag": null,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 0,
+          "status": 202
+        },
+        {
+          "at": 500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 500,
+          "status": 202
+        }
+      ],
+      "countAtHorizon": 2,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_two",
+      "scenario": "hidden_750",
+      "readyAt": null,
+      "displayedAt": null,
+      "detectionLag": null,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 0,
+          "status": 202
+        },
+        {
+          "at": 500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 500,
+          "status": 202
+        }
+      ],
+      "countAtHorizon": 2,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_three",
+      "scenario": "hidden_750",
+      "readyAt": null,
+      "displayedAt": null,
+      "detectionLag": null,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 0,
+          "status": 202
+        },
+        {
+          "at": 500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 500,
+          "status": 202
+        }
+      ],
+      "countAtHorizon": 2,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "original",
+      "scenario": "offline_1700",
+      "readyAt": null,
+      "displayedAt": null,
+      "detectionLag": null,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 0,
+          "status": 202
+        },
+        {
+          "at": 500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 500,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1500,
+          "status": 202
+        }
+      ],
+      "countAtHorizon": 3,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_two",
+      "scenario": "offline_1700",
+      "readyAt": null,
+      "displayedAt": null,
+      "detectionLag": null,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 0,
+          "status": 202
+        },
+        {
+          "at": 500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 500,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1500,
+          "status": 202
+        }
+      ],
+      "countAtHorizon": 3,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_three",
+      "scenario": "offline_1700",
+      "readyAt": null,
+      "displayedAt": null,
+      "detectionLag": null,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1",
+          "responseAt": 0,
+          "status": 202
+        },
+        {
+          "at": 500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 500,
+          "status": 202
+        },
+        {
+          "at": 1000,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1000,
+          "status": 202
+        },
+        {
+          "at": 1500,
+          "poll": "1",
+          "consumer": "probe-consumer-1",
+          "responseAt": 1500,
+          "status": 202
+        }
+      ],
+      "countAtHorizon": 4,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 1,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "original",
+      "scenario": "hidden_during_request",
+      "readyAt": null,
+      "displayedAt": null,
+      "detectionLag": null,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1"
+        }
+      ],
+      "countAtHorizon": 1,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 0,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_two",
+      "scenario": "hidden_during_request",
+      "readyAt": null,
+      "displayedAt": null,
+      "detectionLag": null,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1"
+        }
+      ],
+      "countAtHorizon": 1,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 0,
+      "remainingTimers": 0,
+      "errors": []
+    },
+    {
+      "mode": "additive_three",
+      "scenario": "hidden_during_request",
+      "readyAt": null,
+      "displayedAt": null,
+      "detectionLag": null,
+      "calls": [
+        {
+          "at": 0,
+          "poll": null,
+          "consumer": "probe-consumer-1"
+        }
+      ],
+      "countAtHorizon": 1,
+      "extraCallsAfterCleanup": 0,
+      "maximumConcurrentRequests": 1,
+      "consumerCount": 1,
+      "deleteCount": 0,
+      "remainingTimers": 0,
+      "errors": []
+    }
+  ]
+}

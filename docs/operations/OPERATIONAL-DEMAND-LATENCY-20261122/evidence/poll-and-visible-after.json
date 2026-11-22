@@ -1,0 +1,494 @@
+{
+  "success": true,
+  "numTotalTests": 78,
+  "numPassedTests": 78,
+  "numFailedTests": 0,
+  "numPendingTests": 0,
+  "numTotalTestSuites": 2,
+  "numPassedTestSuites": 2,
+  "numFailedTestSuites": 0,
+  "startTime": 1795373848125,
+  "normalization": "Original Jest JSON; retain counts, names, statuses and failure messages; omit snapshot/runtime maps.",
+  "suites": [
+    {
+      "name": "frontend/src/lib/demandRead.test.js",
+      "status": "passed",
+      "assertions": [
+        {
+          "fullName": "only an explicit preparation polls, with one consumer, then a ready result remains complete",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "ordinary preparation adds two early checks, then returns to the two-second cadence",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a projection completed at two seconds is displayed at the two-second check",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "an immediate ready result starts no poll and remains complete",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a slow preparation adds only two checks over thirty seconds",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "an in-flight readiness request never overlaps another poll",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "hidden during preparation releases demand and cancels the early checks",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "offline during preparation releases demand and cancels the early checks",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a slower server backpressure hint is never shortened, including beyond ten seconds",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "invalid timer hint 2147483648 fails instead of causing a rapid polling loop",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "invalid timer hint 1e+40 fails instead of causing a rapid polling loop",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "invalid timer hint -1 fails instead of causing a rapid polling loop",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "invalid timer hint 0.5 fails instead of causing a rapid polling loop",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "invalid timer hint null fails instead of causing a rapid polling loop",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "aborting preparation clears the poll and releases only its own consumer",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "hidden starts no network request",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "offline starts no network request",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a failed preparation is an error and cannot become an endless poll",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a family release URL is used without crossing into another origin",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a late preparing response after cancellation releases interest without polling",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        }
+      ]
+    },
+    {
+      "name": "frontend/src/pages/operational/visibleOperationalRead.test.js",
+      "status": "passed",
+      "assertions": [
+        {
+          "fullName": "aggregate success does not claim native matching from incomplete outcome {\"status\":\"completed\",\"selected\":0,\"outcomes\":[]}",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "aggregate success does not claim native matching from incomplete outcome {\"status\":\"deferred\",\"reason\":\"native_evidence_budget_exhausted\"}",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "aggregate success does not claim native matching from incomplete outcome {\"status\":\"completed\",\"selected\":1,\"outcomes\":[{\"order_id\":\"8101\",\"status\":\"blocked\",\"reason\":\"courier_native_shipment_mismatch\"}]}",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "aggregate success does not claim native matching from incomplete outcome {\"status\":\"completed\",\"selected\":1,\"outcomes\":[{\"order_id\":\"8101\",\"status\":\"source_changed\"}]}",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "aggregate success does not claim native matching from incomplete outcome {\"status\":\"completed\",\"selected\":1,\"outcomes\":[{\"order_id\":\"8101\",\"status\":\"unavailable\"}]}",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "aggregate success does not claim native matching from incomplete outcome {\"status\":\"completed\",\"selected\":1,\"outcomes\":[{\"order_id\":\"another-order\",\"status\":\"saved\"}]}",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "unknown blocked reason text is not rendered from the native response",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "saved execution evidence and unchanged evidence are reported without asserting delivery",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a failed aggregate preserves the saved native result without claiming recalculation",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a failed aggregate preserves the unchanged native result without claiming recalculation",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a failed aggregate preserves the already_eligible native result without claiming recalculation",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a failed aggregate preserves the blocked native result without claiming recalculation",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a failed aggregate preserves the unavailable native result without claiming recalculation",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a failed aggregate preserves the source_changed native result without claiming recalculation",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a scoped 409 failure retains only the selected native receipt",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a scoped 408 failure retains only the selected native receipt",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "an error receipt with scope_changed cannot become selected-order evidence",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "an error receipt with scope_missing cannot become selected-order evidence",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "an error receipt with not_targeted cannot become selected-order evidence",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "an error receipt with other_order cannot become selected-order evidence",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "an error receipt with duplicate cannot become selected-order evidence",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "an error receipt with unknown_status cannot become selected-order evidence",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "an error receipt with unknown_failure cannot become selected-order evidence",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a scoped unavailable receipt explains native_evidence_access_denied without exposing provider text",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a scoped unavailable receipt explains native_evidence_request_timeout without exposing provider text",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "hidden mount does no work; one visible completion never polls or refreshes on focus/visibility",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "hiding aborts a pending read and its result; cleanup prevents later visibility work",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "replacing a pending read waits for its cancellation and never displays its old scope",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "offline reads wait for a user page to become active",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "recoverable operational_refresh_in_progress keeps a warning for the saved snapshot without retry",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "recoverable operational_capacity_requires_archive keeps a warning for the saved snapshot without retry",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "recoverable operational_source_setup_incomplete keeps a warning for the saved snapshot without retry",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "permission failure 401 never falls back to financial data",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "permission failure 403 never falls back to financial data",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "abort during refresh blocks any subsequent report fetch",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "refresh timeout evidence logs only allowed finite stage fields, once for that request",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "source failure evidence uses its own label and preserves the saved-report warning without retry",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "timing evidence keeps at most the final 64 valid stages, including terminal cancellation",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "status 500 and code operational_refresh_timeout do not log refresh timing evidence",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "status 408 and code operational_source_read_timeout do not log refresh timing evidence",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "status 500 and code operational_source_setup_incomplete do not log refresh timing evidence",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "status 408 and code operational_source_setup_incomplete do not log refresh timing evidence",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "status 409 and code operational_refresh_in_progress do not log refresh timing evidence",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "status 409 and code operational_refresh_lease_lost do not log refresh timing evidence",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "late failure after hidden with status 408 is not logged or converted to saved-read permission",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "late failure after hidden with status 409 is not logged or converted to saved-read permission",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "late failure after aborted with status 408 is not logged or converted to saved-read permission",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "late failure after aborted with status 409 is not logged or converted to saved-read permission",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "late failure after offline with status 408 is not logged or converted to saved-read permission",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "late failure after offline with status 409 is not logged or converted to saved-read permission",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a bounded financial read owns only one visible attempt an initially hidden page defers without spending its active budget",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a bounded financial read owns only one visible attempt visibility interruption consumes the attempt rather than restarting it repeatedly",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a bounded financial read owns only one visible attempt connection interruption consumes the attempt rather than restarting it repeatedly",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a bounded financial read owns only one visible attempt a promise that ignores abort cannot keep presentation loading past the deadline",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a bounded financial read owns only one visible attempt waiting for cancelled physical work has the same deadline and never releases its reservation early",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a bounded financial read owns only one visible attempt lane waiting and the subsequent request share one auth-chain deadline",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a bounded financial read owns only one visible attempt a hidden confirmation follow-up is consumed immediately instead of deferred",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a bounded financial read owns only one visible attempt success and cleanup leave no timer or activity-triggered requests",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        }
+      ]
+    }
+  ]
+}

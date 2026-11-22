@@ -25,8 +25,11 @@ async def execute(key, token, generation):
 
 
 def watch_parent_pipe():
+    # A buffered stdin read would hold its lock during interpreter shutdown.
+    parent_fd = sys.stdin.fileno()
     def parent_closed():
-        sys.stdin.buffer.read()
+        while os.read(parent_fd, 65536):
+            pass
         os._exit(2)
     threading.Thread(target=parent_closed, daemon=True).start()
 
