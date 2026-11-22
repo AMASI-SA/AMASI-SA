@@ -1,0 +1,48 @@
+{
+  "script": "MANUAL-HOST-STAGE-2074.py",
+  "sha256": "e52f11663f943d9a4ab24f917b9ccd4a83ea8526cf1dd471867029c3fda3adde",
+  "bytes": 21483,
+  "original_commit": "1dd476b69fe0ca89a89ff9a1c1da5d2dfc646ecf",
+  "original_sha256": "cdd6d5a5393af9f5518907c7b8999c1b8908a3256d3d5da4ca43b91217dc709a",
+  "bindings": {
+    "J": "06763ffd6e3c3f7c861769b61d2c4e6b9b2d5f35",
+    "A": "4e6c8a61bd1566e061a4f312e797ce239b582475",
+    "B": "447e83bfb95d2627877d46c7baa528e454a2e143",
+    "M": "24270ebdfdebb83282389308a2349cdb27e2b8e4",
+    "TREE": "6a906db6cf4fd3dda4b550483a0ef96067c6f1ed",
+    "RID": "rg5-2e0e3797d6ff3b955a3a23fd31487bd92721e70f316f3bdf34cab0d94c5d630f",
+    "ARTIFACT": "68278a1d40fc16b2852359eeee963b12bb1820e675e691d74410ce4f47f5123b"
+  },
+  "candidate": "/tmp/mezan-pr2074-icmywyrd/repo",
+  "original_functions_unchanged": [
+    "run",
+    "git",
+    "original",
+    "real_directory",
+    "digest",
+    "inventory",
+    "same",
+    "copy_verified",
+    "move_verified",
+    "checkpoint",
+    "inactive",
+    "shared",
+    "unrelated",
+    "sidecars",
+    "dependency_root",
+    "cache_shape",
+    "validate_outputs"
+  ],
+  "checks": {
+    "python_ast": "passed",
+    "embedded_original_output_validator_ast": "passed",
+    "original_filesystem_self_test": "passed",
+    "absent_cache_no_fabrication": "passed",
+    "present_cache_shape_refusal": "passed",
+    "rehearsal_proof_source_binding_and_ambiguity_refusal": "passed"
+  },
+  "execution_scope": "only --self-test in synthetic local temporary directory; main and host untouched",
+  "lease_calls_in_stage": false,
+  "publication": false,
+  "recovery_policy": "refuse ordinary rerun after partial state/source transition; preserve journal and retained old files; no automatic rollback or cleanup"
+}
