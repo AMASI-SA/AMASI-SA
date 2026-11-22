@@ -14,6 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
+      PYTHONDONTWRITEBYTECODE: "1"
       SOURCE_A: e9d80ff2e7a3b21fb25221516bb05e02819fd902
       SOURCE_J: 02cd99e5b2b68c95341c87590abcf572c885e697
       TARGET: codex/mezan86-reviewed-v5-intent-20261123
