@@ -12,6 +12,7 @@ import { isStatement, minorUnits, movementDate, movementRecorder, movementTitle,
 
 import SupplierInvoiceDetail from './SupplierInvoiceDetail';
 import ProviderOrders from './ProviderOrders';
+import { CustomerAdjustmentBadges } from './CustomerAdjustments';
 
 const pageSize = 8;
 function defaultPeriod(start) {
@@ -127,7 +128,7 @@ function PeriodPrint({ resource, period, scope }) {
     {print?.scope === scope && createPortal(<div dir="rtl" className="sb-print-root"><print.StatementDocument statement={print.value} printing /></div>, document.body)}</>;
 }
 
-function LedgerPage({ context, identity, resource, canOpenOrderDetails = false, initialInvoice, initialMovement, onDetail, onAdd, onPurchase, onBack, onReviewOrders, onHistory, onExpected, onReviewCollections, onStatements, onProviderHistory, canUploadStatements = false }) {
+function LedgerPage({ context, identity, resource, canOpenOrderDetails = false, initialInvoice, initialMovement, onDetail, onAdd, onPurchase, onBack, onReviewOrders, onHistory, onExpected, onReviewCollections, onReviewCustomerRefunds, onReviewCustomerCollections, onStatements, onProviderHistory, canUploadStatements = false }) {
   const initialDate = initialInvoice?.date || initialMovement?.date;
   const [period, setPeriod] = useState(() => initialDate
     ? {date_from:initialDate, date_to:initialDate} : defaultPeriod(context.ledger_start));
@@ -221,6 +222,12 @@ function LedgerPage({ context, identity, resource, canOpenOrderDetails = false, 
     {resource?.access?.movements === 'own' && <p className="note">يعرض هذا الكشف الحركات التي سجّلتها أنت.</p>}
     {result?.balance_note && <p className="note">{result.balance_note}</p>}
     <WorkspaceSnapshot snapshot={result?.snapshot}/>
+    {resource?.kind === 'provider' && resource.access?.movements === 'all' && resource.access?.report &&
+      <section className="customer-adjustment-links screen-only" aria-label="رد المبالغ وتحصيل المتبقي">
+        <CustomerAdjustmentBadges summary={shownResource.customer_adjustments || shownResource.provider_position?.customer_adjustments}/>
+        {onReviewCustomerRefunds && <button className="textbtn" type="button" onClick={onReviewCustomerRefunds}>مراجعة رد مبالغ العملاء</button>}
+        {onReviewCustomerCollections && <button className="textbtn" type="button" onClick={onReviewCustomerCollections}>مراجعة تحصيل المتبقي على العملاء</button>}
+      </section>}
     {(issueCount > 0 || issueCount === null) && onReviewOrders && <button type="button" className="issue-notice screen-only" onClick={() => onReviewOrders(resource)}>
       <IconBox name="clipboard-list" tone="c-wait" /><span><strong>{issueLabel(issueCount)}</strong><small>{resource?.kind === 'bank' ? 'إيصالات تحويل غير معتمدة بسبب حالة الطلب' : 'عرض طلبات المراجعة في آخر احتساب'}</small></span><b>عرض الطلبات <Icon name="chevron-left" /></b></button>}
     {resource && result?.pos_summary && <dl className="detail-list">{[['إيصالات الشبكة المعتمدة','approved'],['المحوّل إلى البنوك','bank_received'],['الرسوم الفعلية','fees']]

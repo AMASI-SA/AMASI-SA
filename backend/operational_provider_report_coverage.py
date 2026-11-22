@@ -101,6 +101,7 @@ def provider_evidence_coverage(projection):
 def provider_customer_payments(projection):
     """Return the page breakdown and distinct evidenced gross payments in each native currency."""
     from operational_provider_transaction_evidence import is_closed_tender_balance, is_partial_tender_balance
+    from operational_customer_payment_basis import is_adjusted_payment_balance
 
     records = {}
     for key, row in projection["details"].get("facts", {}).items():
@@ -121,7 +122,8 @@ def provider_customer_payments(projection):
             continue
         try:
             paid, gross = (Decimal(str(row[k])) for k in ("paid", "gross"))
-            due = None if (is_closed_tender_balance(row, currency) or is_partial_tender_balance(row, currency)) else Decimal(str(row["remaining"]))
+            due = None if (is_closed_tender_balance(row, currency) or is_partial_tender_balance(row, currency)
+                           or is_adjusted_payment_balance(row, currency)) else Decimal(str(row["remaining"]))
             if (not all(n.is_finite() and n >= 0 for n in (paid, gross))
                     or (due is not None and (not due.is_finite() or due < 0 or paid + due != gross))):
                 continue

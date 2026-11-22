@@ -560,7 +560,7 @@ def _row(policy, resource, item, amount, side, description):
 
 def _index_ledger_sources(state, computed, resources):
     """Group this request's rows once; ledger projection retains every access check."""
-    sources = {"openings": (), "obligations": (), "movements": (), "customer_returns": (), "driver_receipts": ()}
+    sources = {"openings": (), "obligations": (), "movements": (), "customer_returns": (), "customer_collections": (), "driver_receipts": ()}
     indexed = {(row["kind"], row["id"], row["currency"]): {name: [] for name in sources}
                for row in checked_rows(resources) if row["access"]["movements"] != "none"}
     if not indexed:
@@ -586,6 +586,8 @@ def _index_ledger_sources(state, computed, resources):
             append("movements", cash, item)
     for item in checked_rows(state.get("customer_returns", [])):
         append("customer_returns", (item.get("refund_source_type"), item.get("refund_source_id"), item.get("currency")), item)
+    for item in checked_rows(state.get("customer_collections", [])):
+        append("customer_collections", (item.get("destination_type"), item.get("destination_id"), item.get("currency")), item)
     if any(key[0] == "store_driver" for key in indexed):
         from operational_driver_review_report import validated_review_facts
         facts, _ = validated_review_facts(state)
@@ -644,7 +646,8 @@ def ledger_items(state, computed, resource, policy, *, sources=None, make_row=No
     kind, identity, currency = resource["kind"], resource["id"], resource["currency"]
     if sources is None:
         sources = {"openings": state.get("openings", {}).values(), "obligations": computed["obligations"],
-                   "movements": state.get("movements", []), "customer_returns": state.get("customer_returns", [])}
+                   "movements": state.get("movements", []), "customer_returns": state.get("customer_returns", []),
+                   "customer_collections": state.get("customer_collections", [])}
     result = []
     for item in checked_rows(sources["openings"]):
         if resource["access"]["movements"] != "all" or not resource["access"].get("balance", False):
@@ -699,6 +702,10 @@ def ledger_items(state, computed, resource, policy, *, sources=None, make_row=No
         for case in checked_rows(sources["customer_returns"]):
             if (case.get("refund_source_type"), case.get("refund_source_id"), case.get("currency")) != (kind, identity, currency):
                 continue
+            if kind == "bank":
+                from operational_workspace_refunds import recorded_bank_refund_match
+                if recorded_bank_refund_match(state, case):
+                    continue
             if case.get("status") == "provider_matched":
                 if kind != "provider":
                     continue
@@ -725,7 +732,11 @@ def ledger_items(state, computed, resource, policy, *, sources=None, make_row=No
                 if fact_backed_employee_refund(state, case):
                     continue
             elif kind != "bank":
-                continue
+                if case.get("financial_effect") != "confirmed_provider_refund_debit":
+                    continue
+                from operational_workspace_refunds import recorded_provider_refund_match
+                if recorded_provider_refund_match(state, case):
+                    continue
             execution_stamp = case.get("refunded_at") or case.get("updated_at") or case.get("created_at")
             confirmer = case.get("confirmed_by")
             item = {**case, "id": "customer_return:" + case["id"], "party_type": kind, "party_id": identity,
@@ -736,6 +747,27 @@ def ledger_items(state, computed, resource, policy, *, sources=None, make_row=No
             if not _can_row(policy, resource, item):
                 continue
             result.append(make_row(policy, resource, item, Decimal(case["amount"]), "for_party", "رد مبلغ طلب"))
+        from operational_customer_collection_effects import collection_projection
+        for case in checked_rows(sources.get("customer_collections", [])):
+            if (case.get("status") != "confirmed" or
+                    (case.get("destination_type"), case.get("destination_id"), case.get("currency")) != (kind, identity, currency)):
+                continue
+            effect = collection_projection(state, case)
+            matched = effect["matched_evidence_id"]
+            item = {**case, "id": "customer_collection:" + case["id"], "party_type": kind, "party_id": identity,
+                    "actor_id": case["created_by"], "recorded_by": case["created_by_snapshot"],
+                    "occurred_at": case["executed_at"], "kind": "collection", "note": case["reason"]}
+            if not _can_row(policy, resource, item):
+                continue
+            informational = not effect["principal_delta"]
+            row = make_row(policy, resource, item, Decimal(case["amount"]) if informational else effect["principal_delta"],
+                           "informational" if informational else "for_us",
+                           "مطابقة تحصيل طلب" if matched else "تحصيل يحتاج ربط المصدر" if effect["review_code"] else "تحصيل متبقي طلب")
+            row.update(informational=informational, fee_amount=case.get("fee_amount"),
+                       net_amount=case.get("net_amount"), fee_status=case.get("fee_status"),
+                       confirmed_amount=case["amount"], source_overlap_amount=fmt(effect["source_overlap_amount"]),
+                       needs_matching=bool(effect["review_code"]))
+            result.append(row)
     if kind == "store_driver":
         if "driver_receipts" in sources:
             facts = sources["driver_receipts"]

@@ -50,6 +50,32 @@ test('opening a directory directly never prepares home or other pages', async ()
   expect(api.home).not.toHaveBeenCalled(); expect(api.context).not.toHaveBeenCalled(); expect(api.options).not.toHaveBeenCalled();
 });
 
+test('reviews use bootstrap capabilities and retain customer adjustment links without loading accounts', async () => {
+  api.bootstrap.mockResolvedValue({...bootstrap('actor'),
+    operations:['customer.refund_execute','customer.collection','courier.review'],
+    capabilities:{review_orders:true,review_collections:true}});
+  await open('/operational-balances?view=reviews');
+  const links=[...host.querySelectorAll('main a')].map(anchor=>anchor.getAttribute('href'));
+  for(const view of ['refund','customer-collections','issues','collections']) expect(links).toContain('/operational-balances?view='+view);
+  expect(host.textContent).toContain('مبالغ العملاء بانتظار التأكيد');
+  expect(api.bootstrap).toHaveBeenCalledTimes(1);
+  for(const read of [api.home,api.directory,api.options,api.context,api.selection]) expect(read).not.toHaveBeenCalled();
+});
+
+test('demand provider cards retain snapshot dates and separate refund and collection amounts', async () => {
+  const provider={...resource('تابي','500.00'),kind:'provider',access:{balance:true,movements:'all',report:true},order_issues_count:0,
+    customer_adjustments:{currency:'SAR',refund_pending_count:2,refund_pending_amount:'100.00',collection_pending_count:1,collection_pending_amount:'25.00'}};
+  api.directory.mockResolvedValue({...page([provider]),snapshot:{display_only:true,as_of:'2026-11-18T12:00:00Z',generated_at:'2026-11-22T09:00:00Z'}});
+  await open('/operational-balances?view=assets');
+  expect(host.querySelector('[aria-label="تاريخ البيانات المحفوظة"]').textContent).toContain('آخر احتساب للمصادر');
+  const card=host.querySelector('.resource');
+  expect(card.querySelector('.number').textContent).toContain('500.00');
+  expect(card.querySelector('.adjustment-badge.refund').textContent).toContain('2 طلب · رد ينتظر التأكيد 100.00');
+  expect(card.querySelector('.adjustment-badge.collection').textContent).toContain('1 طلب · تحصيل ينتظر التأكيد 25.00');
+  expect(card.querySelector('.issue-badge')).toBeNull();
+  expect(api.directory).toHaveBeenCalledTimes(1);expect(api.home).not.toHaveBeenCalled();expect(api.context).not.toHaveBeenCalled();
+});
+
 test('navigating away aborts a pending home and its late result cannot populate the directory', async () => {
   let finish;
   api.home.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
