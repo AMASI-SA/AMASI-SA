@@ -1,0 +1,30 @@
+{
+  "kind": "pr2076_conditional_rehearsal_handoff_review",
+  "source_git_sha": "108024c00b7f367fd1d6b15874d7a73d55de2620",
+  "deployment_candidate": "5bb05036d8095a87c6635c0a431c2c19d24d8f78",
+  "production_base": "24270ebdfdebb83282389308a2349cdb27e2b8e4",
+  "previous_verification_receipt_commit": "3be5f8df326ed27bec6976a344283e26a90510fd",
+  "previous_verified": true,
+  "previous_checks": 3,
+  "previous_final_guard": {
+    "active": false
+  },
+  "previous_ui_fact_in_receipt": false,
+  "operator_ui_fact_received": false,
+  "operator_input_required": "2074 OK after new Deployment Succeeded for PR2074 before its successful verification",
+  "helper_sha256": "c2a091a9ea9c33baf99c2daaba4cc7c5f0cc02751248b0e1428bb5659d4e692d",
+  "unpinned_launcher_sha256": "6051f3a2339868a91713c36822cb8d1535ea5eacac296ce9aa11e49c4c448fdd",
+  "independent_review": "PASS",
+  "syntax_and_pin_only_checks": "PASS",
+  "isolated_tty_seam": {
+    "heredoc_equivalent": true,
+    "affirmative_exit": 0,
+    "empty_enter_exit": 1,
+    "eof_exit": 1
+  },
+  "actual_launcher_or_helper_main_executed": false,
+  "shared_app_accessed": false,
+  "production_probed": false,
+  "new_lease_created": false,
+  "scope": "Only isolated rehearsal after operator fact and original fresh guard; no deployment or predecessor completion inferred."
+}

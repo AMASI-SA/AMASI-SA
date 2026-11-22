@@ -1,4 +1,4 @@
-"""Disabled launcher; root assigns E/H only after the reviewed release handoff."""
+"""Reviewed rehearsal launcher; confirms the predecessor's UI success first."""
 import hashlib
 import os
 from pathlib import Path
@@ -28,6 +28,17 @@ def main():
     if any(name in os.environ for name in rejected) or any(
             name.startswith("GIT_TRACE") for name in os.environ):
         raise SystemExit("STOP: unexpected CI, Git routing or tracing environment")
+    try:
+        with open("/dev/tty", "r", encoding="utf-8") as terminal_in, \
+                open("/dev/tty", "w", encoding="utf-8") as terminal_out:
+            terminal_out.write("هل ظهرت Deployment Succeeded الجديدة لتحديث العملاء والمخزون #2074 قبل تشغيل أمر التحقق الناجح؟\n"
+                           "بعد رؤيتها اكتب 2074 OK للمتابعة، أو اضغط Enter للتوقف:\n> ")
+            terminal_out.flush()
+            confirmed = terminal_in.readline().strip() == "2074 OK"
+    except OSError:
+        raise SystemExit("STOP: interactive confirmation of the previous UI success is required") from None
+    if not confirmed:
+        raise SystemExit("STOP: previous Deployment Succeeded was not confirmed; no host change")
     env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", GIT_TERMINAL_PROMPT="0")
 
     def call(label, argv, *, cwd="/app", timeout=300):
@@ -72,7 +83,7 @@ print('INACTIVE')
     if hashlib.sha256(code).hexdigest() != H:
         raise SystemExit("STOP: reviewed rehearsal command checksum mismatch")
     print("REVIEWED_REHEARSAL_COMMAND_VERIFIED", flush=True)
-    sys.argv = [P, "--diagnostic"]
+    sys.argv = [P, "--diagnostic", "--base-ui-success-confirmed"]
     exec(compile(code, P, "exec"), globals())
 
 

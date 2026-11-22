@@ -1,3 +1,54 @@
+# PR2076 — concrete isolated rehearsal handoff, conditional on operator UI fact
+
+The owner requested deployment code. Frozen B/sourceA/ProductionN remain:
+B5bb05036d8095a87c6635c0a431c2c19d24d8f78,
+A108024c00b7f367fd1d6b15874d7a73d55de2620,
+N24270ebdfdebb83282389308a2349cdb27e2b8e4.
+Fresh exact-B CI/ref review passed unchanged:11 success workflows plus the
+expected TikTok skip;24 successful checks plus6 conditional skips; no failures
+or pending checks. No source or intent edit, merge, host change or lease action.
+
+## Predecessor evidence now available
+Immutable foreign receipt3be5f8df326ed27bec6976a344283e26a90510fd at
+docs/operations/CUSTOMER-INVENTORY-UNIFIED-20261122/HOST-PUBLISHED-VERIFY-PASS-20261122.json
+proves original verified:true/checks3, exact N/source4e6c8a61/runtime2e0,
+774 Frontend request descriptors, boot observations after prepare and final
+original status exactly active:false. Root and independent reviewer inspected
+the receipt. Its UI success fact is explicitly missing and it is NOT itself
+a full release-completion receipt; do not claim otherwise or replay its verify.
+
+## Conditional operator command
+The reviewed helper now pins that **verification** receipt, and requires
+--base-ui-success-confirmed before any host/Git/network work. The reviewed
+launcher asks on /dev/tty whether the NEW Deployment Succeeded for PR2074
+appeared before its successful verification. It accepts only the exact
+operator answer2074 OK; empty input, EOF or unavailable TTY stops. It passes
+the flag only after that answer, records the fact as operator-confirmed, and
+does not claim assistant observation. No operator answer has yet been received.
+
+After that condition, the original fresh guard/HEAD/clean checks and exact
+remote N/B pins remain mandatory. The operation is only the bounded read-only
+latency diagnostic and original isolated /tmp adapter rehearsal. It does not
+merge, stage shared output, prepare a lease, publish, or close a foreign lease.
+The user must return REHEARSAL_SUCCESS/full sanitized output before the next
+authorized merge/staging/publication step is made concrete.
+
+Helper SHA256 c2a091a9ea9c33baf99c2daaba4cc7c5f0cc02751248b0e1428bb5659d4e692d.
+Its structure and minimal operator-condition delta were independently reviewed.
+The launcher initially had a nonseekable TTY r+ issue; it was corrected to
+separate read/write handles. A bounded extracted-gate test on a synthetic PTY
+with heredoc-like stdin passed exact affirmative and correctly stopped empty
+Enter/EOF. No actual launcher/helper main, shared host, guard, Git or network
+operation was executed during those local tests.
+
+This checkpoint freezes the helper; a subsequent evidence-only checkpoint
+will pin its immutable commit and helper hash in the final launcher. Never
+deploy this evidence branch. Actual performance publication and live page
+latency remain unverified.
+
+---
+
+## Earlier handoff record (superseded prerequisite status)
 # PR2076 — code and release validation complete; host handoff blocked by predecessor lease
 
 ## Authoritative current state

@@ -1,12 +1,11 @@
-"""Disabled R3 isolated rehearsal; source and predecessor are pinned below.
+"""Pinned R3 isolated rehearsal, conditional on the operator's prior UI fact.
 
-B, B's tree, and the base-release completion receipt remain unassigned.
-Runtime/artifact/proof/intent pins come from the fresh exact-A readiness result.
-The release owner must first inspect the foreign
-original verified=true/checks=3 receipt for exact N/source/release identity,
-its final inactive guard, and the released serial handoff in the ledger.
-Only then may BASE_RELEASE_COMPLETION_EVIDENCE_COMMIT bind that reviewed
-persisted evidence. An inactive guard alone does not release the handoff.
+The pinned predecessor receipt proves original verified=true/checks=3 for
+exact N/source/release identity and final inactive guard. It does not include
+an explicit Deployment Succeeded UI observation. The operator must confirm
+that the new UI success appeared before its successful verification, in the
+reviewed launcher before --base-ui-success-confirmed is set.
+This program never manufactures that fact or repeats the preceding release.
 
 Run with Python -B. Optional --diagnostic reads bounded host metadata before
 the build. No shared checkout, dependency, output, backup or lease is changed.
@@ -38,8 +37,8 @@ RELEASE_ID = "rg5-e4e41b98edc9f49b8e74adad2a905d362b7113b5b1a1fa83436a4c1ba8c4b9
 ARTIFACT = "dcaa1f2b805c44427be8df2f5b466b85d7860bade43a3799009156300397300b"
 PROOF = "30bcd91b489c6cb585c4b560937b4cd22f21b02f8ce78bab6e417b17b224eac3"
 INTENT_SHA256 = "3a56ff073fcb3b7e362500a3be1966e2c513194f4679d5bb81a139a338c866c6"
-# Coordination proof, not a live observation and never a lease substitute.
-BASE_RELEASE_COMPLETION_EVIDENCE_COMMIT = None
+# Original live verification/closure proof; prior UI success is operator input.
+BASE_RELEASE_VERIFICATION_EVIDENCE_COMMIT = "3be5f8df326ed27bec6976a344283e26a90510fd"
 BASE_RELEASE_SOURCE = "4e6c8a61bd1566e061a4f312e797ce239b582475"
 BASE_RELEASE_ID = "rg5-2e0e3797d6ff3b955a3a23fd31487bd92721e70f316f3bdf34cab0d94c5d630f"
 PRODUCTION_REF = "refs/heads/hotfix/prod-snap-meta-final"
@@ -65,11 +64,11 @@ def pinned():
     pending = [name for name, value in {
         "B": B, "B_TREE": B_TREE, "RELEASE_ID": RELEASE_ID,
         "ARTIFACT": ARTIFACT, "PROOF": PROOF, "INTENT_SHA256": INTENT_SHA256,
-        "BASE_RELEASE_COMPLETION_EVIDENCE_COMMIT": BASE_RELEASE_COMPLETION_EVIDENCE_COMMIT,
+        "BASE_RELEASE_VERIFICATION_EVIDENCE_COMMIT": BASE_RELEASE_VERIFICATION_EVIDENCE_COMMIT,
     }.items() if value is None]
     require(not pending, "draft disabled: missing reviewed pins: " + ", ".join(pending))
     require(all(isinstance(value, str) and re.fullmatch(r"[0-9a-f]{40}", value)
-                for value in (N, A, A_TREE, B, B_TREE, BASE_RELEASE_COMPLETION_EVIDENCE_COMMIT)),
+                for value in (N, A, A_TREE, B, B_TREE, BASE_RELEASE_VERIFICATION_EVIDENCE_COMMIT)),
             "invalid commit/tree/evidence pins")
     require(isinstance(RELEASE_ID, str) and re.fullmatch(r"rg5-[0-9a-f]{64}", RELEASE_ID)
         and all(isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value)
@@ -77,6 +76,8 @@ def pinned():
         "invalid reviewed identity/artifact/proof/intent pins")
     require(B not in (N, A) and B_TREE != A_TREE,
             "B must be the separate reviewed intent-only commit")
+    require("--base-ui-success-confirmed" in sys.argv[1:],
+            "operator must first confirm Deployment Succeeded for previous PR2074")
 
 
 def environment():
@@ -296,11 +297,14 @@ def main():
     pinned()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--diagnostic", action="store_true")
+    parser.add_argument("--base-ui-success-confirmed", action="store_true")
     args = parser.parse_args()
-    show("BASE_COMPLETION_EVIDENCE", {
+    show("BASE_VERIFICATION_EVIDENCE", {
         "deployment_git_sha": N, "source_git_sha": BASE_RELEASE_SOURCE,
         "release_id": BASE_RELEASE_ID,
-        "evidence_commit": BASE_RELEASE_COMPLETION_EVIDENCE_COMMIT,
+        "evidence_commit": BASE_RELEASE_VERIFICATION_EVIDENCE_COMMIT,
+        "ui_success_confirmed_by_operator": args.base_ui_success_confirmed,
+        "ui_success_observed_by_assistant": False,
         "current_production_probe_performed": False,
     })
     env = environment()
@@ -359,7 +363,8 @@ def main():
     show("REHEARSAL_SUCCESS", {"built": True, "source_base": N, "source": A,
         "deployment": B, "release_id": RELEASE_ID, "artifact_tree": ARTIFACT,
         "proof_sha256": PROOF, "package_boundaries_verified": True,
-        "base_completion_evidence_commit": BASE_RELEASE_COMPLETION_EVIDENCE_COMMIT,
+        "base_verification_evidence_commit": BASE_RELEASE_VERIFICATION_EVIDENCE_COMMIT,
+        "base_ui_success_confirmed_by_operator": args.base_ui_success_confirmed,
         "shared_tracked_clean": True, "guard_active": False, "directory": str(work),
         "build_log": str(log)})
     print("DONE: isolated rehearsal only; no shared source/output/dependency change, lease or publish", flush=True)
