@@ -1,5 +1,17 @@
 # CUSTOMER-INVENTORY-UNIFIED-20261122
 
+## Follow-up — page functionality review, 23 November 2026 Riyadh
+
+The owner subsequently requested a read-only check of the published customer refund/collection and inventory/purchase/receiving pages. **Live page verdict: INCONCLUSIVE because browser access failed.** This follow-up does not reopen the completed PR2074 release or hold any subsequent publication.
+
+Cloud Browser tab creation timed out after 40 seconds; recovery inventory timed out after 20 seconds. The documented native fallback exposed a browser privacy interstitial for mezansalla.com, **NET::ERR_CERT_AUTHORITY_INVALID**, which was not bypassed. No authenticated page data or forms were observed; no live business write, publication or guard change occurred. These browser/environment errors do not establish a site outage.
+
+A read-only source review mapped the pages and existing tests at frozen B. Root independently reread InventorySuiteFrame.jsx and InventoryWorkspace.jsx at the current Git Production head **02cd99e5b2b68c95341c87590abcf572c885e697**. The generic suite links still route purchases to /purchase-invoices and receiving to /inventory-receiving-v2; this update's inventory invoice/receiving pages are local tabs **/inventory-v2?tab=purchases** and **/inventory-v2?tab=receipts**, with the latter labeled **استلام مشتريات المخزون**. This is a confirmed source navigation difference and potential usability confusion, not a live receiving failure.
+
+The current Git head belongs to subsequent PR2076. Its owner-run deployment handoff is preserved; the Git reference is not being presented as a newly observed runtime identity. Prior original verify3 and completed PR2074 evidence remain valid historical release evidence, and are not substituted for a fresh interactive page check.
+
+Full bounded checklist and evidence: [POST-PUBLISH-PAGES-20261123.json](POST-PUBLISH-PAGES-20261123.json). Next safe step: resume the listed read-only page checks in a working authenticated browser, preserving existing local drafts and without saving financial or stock test records. No source repair or deployment was performed by this review.
+
 ## Current state — COMPLETED; combined release published and verified; serial handoff RELEASED
 
 The owner confirmed **«نعم ظهر»** in direct reply to the question whether a **new Deployment Succeeded** appeared in Emergent before the original verification command. This is explicit owner UI confirmation; root does not claim direct observation or an exact UI event timestamp. It completes the sole remaining documentation gate.

@@ -1,0 +1,163 @@
+{
+  "task_id": "CUSTOMER-INVENTORY-UNIFIED-20261122",
+  "review_id": "POST-PUBLISH-PAGES-20261123",
+  "requested_scope": "Read-only functional check of the published customer refund/collection and inventory/purchase/receiving pages.",
+  "recorded_at_utc": "2026-11-22T21:12:16Z",
+  "user_timezone": "Asia/Riyadh",
+  "recorded_local_date": "2026-11-23",
+  "verdict": "partial",
+  "live_page_verdict": "inconclusive_browser_access_blocked",
+  "previous_release_completion_unchanged": true,
+  "previous_completion_commit": "b46798fab681471a0fdf9450c30d6446a4f55ffa",
+  "historical_release": {
+    "deployment_git_sha": "24270ebdfdebb83282389308a2349cdb27e2b8e4",
+    "source_git_sha": "4e6c8a61bd1566e061a4f312e797ce239b582475",
+    "verified": true,
+    "checks": 3,
+    "final_guard_status": {
+      "active": false
+    },
+    "evidence": "RELEASE-COMPLETION-2074.json",
+    "is_fresh_page_functionality_proof": false
+  },
+  "fresh_repository_observation": {
+    "production_git_sha": "02cd99e5b2b68c95341c87590abcf572c885e697",
+    "subsequent_pr": 2076,
+    "coordination_state": "Subsequent release owner has merged and issued a host deployment handoff; actual staging/publication remains pending in the latest record read by this review.",
+    "current_live_runtime_identity_observed": false,
+    "no_interference_with_subsequent_handoff": true
+  },
+  "browser_attempts": [
+    {
+      "method": "Cloud Browser via cua_repl",
+      "action": "Create a tab for https://mezansalla.com",
+      "result": "js execution timed out; kernel reset",
+      "timeout_seconds": 40,
+      "application_page_observed": false
+    },
+    {
+      "method": "Cloud Browser via cua_repl",
+      "action": "Recover inventory after timeout",
+      "result": "js execution timed out; kernel reset",
+      "timeout_seconds": 20,
+      "application_page_observed": false
+    },
+    {
+      "method": "Documented native Sky fallback",
+      "action": "Inspect available Chromium windows and attempt normal HTTPS navigation",
+      "result": "Cloud Chromium window became unavailable; remaining native window displays browser privacy interstitial for https://mezansalla.com with NET::ERR_CERT_AUTHORITY_INVALID.",
+      "security_warning_bypassed": false,
+      "application_page_observed": false
+    }
+  ],
+  "no_confirmed_site_outage_or_bot_block": true,
+  "authentication_entered": false,
+  "live_authenticated_data_observed": false,
+  "source_review": {
+    "reviewer": "live_page_contracts",
+    "baseline_commit": "447e83bfb95d2627877d46c7baa528e454a2e143",
+    "existing_tests_read_only": true,
+    "new_test_execution": false,
+    "root_rechecked_navigation_files_at_current_git_head": [
+      "frontend/src/components/inventory/suite/InventorySuiteFrame.jsx",
+      "frontend/src/pages/InventoryWorkspace.jsx"
+    ],
+    "navigation_observation": {
+      "classification": "confirmed_source_navigation_difference; live usability unverified",
+      "confidence": "high for source mapping",
+      "generic_purchases_link": "/purchase-invoices",
+      "generic_receiving_link": "/inventory-receiving-v2",
+      "inventory_purchase_tab": "/inventory-v2?tab=purchase",
+      "inventory_invoice_list_tab": "/inventory-v2?tab=purchases",
+      "new_inventory_receiving_tab": "/inventory-v2?tab=receipts",
+      "user_visible_receiving_tab": "استلام مشتريات المخزون",
+      "interpretation": "Generic inventory-suite purchases and receiving navigation point at different existing workflows. The new inventory purchase/receiving flow is reached through local InventoryWorkspace tabs. This may confuse navigation; it is not direct evidence of failed receiving or missing invoices."
+    }
+  },
+  "page_checklist": [
+    {
+      "label": "Customer refund",
+      "route": "/operational-balances?view=refund",
+      "checks": [
+        "Pending adjustments and separately colored refund/collection amounts",
+        "Refund history tabs",
+        "Read existing order lookup and suggested refund, banks/providers/history"
+      ],
+      "live_result": "not_observed"
+    },
+    {
+      "label": "Customer collection",
+      "route": "/operational-balances?view=customer-collections",
+      "checks": [
+        "Pending collection and amount",
+        "Confirmed collection history",
+        "Read existing order and suggested collection"
+      ],
+      "live_result": "not_observed"
+    },
+    {
+      "label": "Inventory stock",
+      "route": "/inventory-v2?tab=stock",
+      "checks": [
+        "Stock rows or explicit empty state",
+        "Search and read item"
+      ],
+      "live_result": "not_observed"
+    },
+    {
+      "label": "Inventory entry options",
+      "route": "/inventory-v2?tab=opening",
+      "checks": [
+        "Product/component choice and selected marker",
+        "Stable dependent options",
+        "Optional blank/no/explicit deferral and required physical options"
+      ],
+      "live_result": "not_observed"
+    },
+    {
+      "label": "Inventory purchase editor",
+      "route": "/inventory-v2?tab=purchase",
+      "checks": [
+        "Supplier/invoice number/date fields",
+        "70% wide desktop form above 1000px",
+        "Single editor and compact existing drafts"
+      ],
+      "live_result": "not_observed",
+      "preserve_existing_local_draft": true
+    },
+    {
+      "label": "Inventory invoice list",
+      "route": "/inventory-v2?tab=purchases",
+      "checks": [
+        "Receiving/payment state separation",
+        "Purchased/received/remaining quantities",
+        "Existing receipt history"
+      ],
+      "live_result": "not_observed"
+    },
+    {
+      "label": "Later inventory receiving",
+      "route": "/inventory-v2?tab=receipts",
+      "checks": [
+        "Default pending filter",
+        "Received/all tabs",
+        "Open existing invoice receiving context and close without saving"
+      ],
+      "live_result": "not_observed"
+    }
+  ],
+  "permissions_boundaries": [
+    "Inventory entry and later receiving are exposed only when can_manage_inventory_opening is true; preserve permission gates.",
+    "Do not modify auto-saved purchase drafts owned by the user.",
+    "Do not save invoices, stock entries, receipts, financial movements or customer confirmations as live test data."
+  ],
+  "system_changes_by_review": {
+    "production_source": false,
+    "production_ref": false,
+    "release_guard": false,
+    "publish": false,
+    "business_records": false
+  },
+  "final_safe_next_step": "Resume using a working authenticated Mezan browser. Owner-supplied screenshots or a short recording can support a bounded visual review meanwhile; they do not replace execution of all page behaviors. Preserve completed PR2074 handoff and do not replay release verification.",
+  "remaining_work": "Direct live observations of all listed page loads, data, forms and safe navigation."
+}
