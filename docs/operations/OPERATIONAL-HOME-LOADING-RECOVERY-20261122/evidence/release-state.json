@@ -2,8 +2,8 @@
   "task": "OPERATIONAL-HOME-LOADING-RECOVERY-20261122",
   "evidence_branch": "codex/operational-home-loading-release-evidence-20261122",
   "evidence_only_do_not_deploy": true,
-  "as_of_utc": "2026-11-22 13:01:22 UTC",
-  "phase": "published_verified_latency_investigation_blocked",
+  "as_of_utc": "2026-11-22 13:26:42 UTC",
+  "phase": "published_verified_latency_db_auth_blocked",
   "repository": "AMASI-SA/AMASI-SA",
   "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/2059",
   "source_base": "1c4008e315c35ec4419e76400a9faddb94b9d5a2",
@@ -359,7 +359,7 @@
     "unrelated_preview_service_unchanged": true,
     "real_financial_test_writes": false
   },
-  "next_safe_action": "Do not republish this already verified candidate or reopen its closed lease. Ask for the minimum explicit approval for read-only production database diagnostics. If granted, inspect only relevant indexes/query plans/bounded statistics; preserve source and data. Current evidence does not justify a speculative index/projection/cache patch.",
+  "next_safe_action": "Request explicit permission for secure submission of the Production Mongo URL to mongoview.emergent.host, explaining the credential access and viewer edit capability; retain a read-only diagnostic action scope.",
   "original_requested_update": {
     "source": "eeef3913ae2e1b8fa4b58f3835478e1ed17b2988",
     "ancestor_of_deployment": true,
@@ -447,5 +447,24 @@
     "connection_credentials_revealed_or_copied": false,
     "viewer_closed": true,
     "requested_next_scope": "Explicit approval for read-only production database diagnostics: indexes, query plans and bounded statistics. No index/data/financial mutations."
+  },
+  "database_diagnostics_followup": {
+    "user_readonly_access_authorized": true,
+    "authorization_scope": "Production index definitions, query plans and bounded performance statistics; no data/index/financial mutations",
+    "production_ref_rechecked": "c302943e330bcdd534a4a5697b8ef813dfb7cb6e",
+    "prior_evidence_commit": "529bd8574031e5be30a2319e890796c74f561074",
+    "viewer_connection_form_opened": true,
+    "viewer_origin": "https://mongoview.emergent.host",
+    "authentication_method": "Production MongoDB URL via browserAuth secure credential field",
+    "credential_values_read_or_submitted": false,
+    "database_queries_executed": 0,
+    "database_mutations_executed": 0,
+    "new_deployment_or_release_lease": false,
+    "blocked_action": "browserAuth secure credential request and submission",
+    "rejection_source": "automatic approval review, not a manual user rejection",
+    "rejection_reason": "Read-only diagnostic authorization did not explicitly authorize disclosing the Production connection credential to the viewer or its broader potential read/edit/manage privileges.",
+    "request_created_or_submitted": false,
+    "workaround_attempted": false,
+    "next_safe_action": "Request explicit permission for secure submission of the Production Mongo URL to mongoview.emergent.host, explaining the credential access and viewer edit capability; retain a read-only diagnostic action scope."
   }
 }

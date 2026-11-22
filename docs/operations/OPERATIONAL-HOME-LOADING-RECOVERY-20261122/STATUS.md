@@ -1,11 +1,15 @@
 # Operational home loading recovery — 22 November 2026
 
-**Latest checkpoint, 13:01 UTC / 16:01 Riyadh:** PR #2059 is merged and
-published as platform version `d8c03a2`. Original Release Guard verification
-passed 3/3 and the lease is inactive. The page renders, but intermittent latency
-remains open. Private Production database inspection was denied by automatic
-approval review; explicit read-only diagnostic access is the next permission
-boundary. See the final section below and `evidence/postpublication-latency.md`.
+**Latest checkpoint, 13:26 UTC / 16:26 Riyadh:** PR #2059 remains published
+and verified; the production Git ref still points to
+`c302943e330bcdd534a4a5697b8ef813dfb7cb6e`. The owner explicitly authorized
+read-only Production database diagnostics in the next turn. The Production
+viewer opened to its connection form, but automatic approval review rejected
+the secure connection-credential request before any user prompt or submission.
+The remaining boundary is explicit authorization to submit the Production Mongo
+connection URL to `mongoview.emergent.host`, a viewer that supports editing as
+well as reading. No credential was read/submitted and no Production database
+query or mutation ran. See `evidence/database-readonly-access.md`.
 This continuation branch is evidence-only and must never be deployed.
 
 ## Scope and current state
