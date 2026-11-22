@@ -1,5 +1,151 @@
 # Operational demand reads — implementation checkpoint
 
+## Latest verified handoff — final source and prepared intent, 22 November 2026
+
+This section supersedes the in-progress release status in the historical sections
+below. **Implementation and source CI are complete; this performance change has
+not been merged to Production or deployed.** User publication authorization is
+already explicit. The blocker is current trusted access to the shared host and
+the original release protocol, not missing user permission.
+
+### Immutable references
+
+| Role | Exact reference |
+| --- | --- |
+| Production base J, freshly checked on GitHub | `9b4fb716b430c32073b5ea7abaeaff62646d9633` |
+| Tested source A | `063611ff163c90d80cdbf96446a28584fe429846` |
+| A tree | `383b716d1d39c6556fed5f440d324a9c9b83d301` |
+| Source branch / open Draft PR | `codex/operational-demand-release-20261122`, PR 2069 |
+| Prepared intent-only B | `5db36bd28ae86acaca8ceeb9cceee8e350916f12` |
+| B tree | `057c273506c237af2035c7976cc7fe8e9aacaeb2` |
+| B branch, remotely saved without a PR | `codex/operational-demand-intent-20261122` |
+| Evidence branch | `codex/operational-demand-evidence-20261122` |
+
+B changes **only** `release/release-intent-v5.json` relative to A. Its bytes are
+exactly the successful governed CI artifact, not a new local rebuild. Root fetched
+the remote B and passed the original `load_release_intent()` and
+`verify_release_intent_git()` validators (exit 0), verified the one-file diff,
+and confirmed a clean B worktree. The missing ignored local runtime identity
+warning during import is not a runtime verification result.
+
+Prepared runtime identity (not claimed live):
+`rg5-90a88a6e7ac6a65670274d6180be0338d689f64d91efbf5cdfbbf651ca182bf7`.
+
+Frontend artifact tree:
+`9437b75f8c005e379a7132e62c97e90af71e596d1907ba935f6a2a01da2cd4f4`.
+Intent JSON SHA256:
+`640a6377f38bc153527943f12c8e8c12c446f33c9bcaaecdf4de580647a33177`.
+
+CI run `45039209765`, artifact `14760874536`, froze two matching clean builds
+of A with Node22.23.2/Yarn1.22.22, identical artifact and build-meta hashes.
+Reviewed-B adapter rehearsal was skipped for source A. It has **not** yet run for
+B and must not be described as complete.
+
+### Final verification and measurements
+
+All **47/47 workflow runs** on exact A succeeded, with no failed or unfinished
+runs. The separate job-level count is 74 successful and 6 conditionally skipped;
+this is not a skipped-test count. PR2069 remains draft, open, unmerged, and points
+to A. Production J was unchanged at the latest read. See
+`ci-063611ff-workflows.json` for the full immutable run list.
+
+Operational run `45039209722` / artifact `14761975629`:
+6,307 original Backend tests, **93 demand-read tests** including all 6 HTTP cases,
+1,485 Frontend tests in95 suites, and14 report/12 simplified-balance browser
+scenarios passed. Worker/Mongo, authorization, runtime reference comparison,
+assembly, preparation, shipping, Qoyod, stock and release checks also succeeded.
+
+Final same-data controlled evidence (200 suppliers /5,000 movements):
+
+- Filtered register20 pages: reports20→1 and full snapshot reads20→1 including
+  initial preparation; **95% less repeated work**, all rows/totals/pagination
+  equal and financial source unchanged.
+- Register p95: legacy531.962ms → ready11.252ms. Six concurrent ready reads:
+  40.493ms total. Cold1,098.065ms is an **in-process counting seam**, not proof
+  of CPU isolation.
+- Actual child-process home: first correct HTTP200 **1,441.15ms** at250ms
+  readiness checks; complete child lifecycle3,417.28ms. The child was still alive
+  when the correct result became available.
+- Ready home p95 **7.821ms**,20 reads; six concurrent ready reads37.919ms.
+  Home payload85,388→3,816 bytes and resources222→3.
+- During the real child: health-equivalent route max1.948ms, actual staff
+  bootstrap max13.967ms (102 probes each). These are controlled probes, not
+  deployed health or browser measurements.
+- Child build701.147ms, job wall744.228ms, CPU724.908ms, peakRSS361,872KiB.
+  Mongo driver p95=1.19ms, checkout p95=.05ms, zero timeouts. Driver timings
+  include driver/network costs and do not establish Mongo executionStats.
+
+The earlier local first-useful2,123.58ms target miss and one unattributed
+1,227.84ms staff-bootstrap outlier remain preserved below and in REPORT-ar.md.
+The successful final run does not erase them or prove stable Production p95.
+No Production stress test, financial write, external sync or speculative
+canonical index was performed.
+
+### Current blocker and exact next safe action
+
+The cloud browser renderer failed with error9. A native recovery briefly exposed
+old terminal output, then Chrome exited; a newly launched native Chrome showed
+`NET::ERR_CERT_AUTHORITY_INVALID` for both Mezan and the Emergent code-server.
+No warning was bypassed or TLS protection reduced. The earlier visible
+`active:false` terminal output was **old**, not a valid fresh guard check. A
+new read-only command was interrupted by the browser crash before a verified
+result; no shared /app source write followed.
+
+The final supported control retry also failed: the runtime had reset after
+inactivity, and its inventory call timed out and reset again. No page, current
+guard result or live identity was obtained by that retry. Latest Issue1006
+coordination (comment6238987123 updated2026-11-22T15:55:59Z) also records separate
+inventory PR2065 awaiting management-browser recovery, with no deployment.
+Its source/intent and permission scope remain unrelated and must be preserved.
+
+The user has now offered to run the terminal command manually. The adjacent
+MANUAL-PREFLIGHT.py uses the original guard status, read-only Git identity/ref
+inspection and three bounded HTTPS identity reads with normal certificate
+verification. It stops on active/incomplete guard state, makes no source or
+business changes, and prints only selected identity fields. Await its actual
+output; supplying the script does not establish a fresh inactive guard or live
+release identity. Do not proceed with rehearsal merely because it was sent.
+
+The original AGENTS.md requires fresh shared `active:false` **before a release
+rehearsal or /app changes**. Moving PR2069 from A to reviewed B would automatically
+schedule the rehearsal. Therefore B was safely saved on a separate branch with
+no PR; release readiness pushes are limited to Production. No workflow-dispatch,
+lease, /app update, Production merge or publish was started for this improvement.
+
+Next safe sequence:
+
+1. Restore a trusted browser/admin connection; do not bypass a certificate warning.
+   Read current Issue1006 coordination and fetch Production and both task refs.
+2. In the real shared host run `cd /app` then
+   `python scripts/production_release_guard.py status`. Continue only on a fresh
+   `active:false`; never close or modify another conversation's lease.
+3. Inspect fresh `/api/health` and canonical/cache-busted `/build-meta.json`;
+   compare the live source with current Production, A and B. Old screenshots
+   or a prior release do not prove current identity.
+4. If Production still equals J, fast-forward the source PR branch A→B with an
+   expected-head check, then complete reviewed-B CI/rehearsal. If J has advanced,
+   inspect and preserve that change; do not force-merge this stale frozen intent.
+5. Follow the original v5 host rehearsal, exact intent/source checks, prepare and
+   prepublish; publish using existing authorization. Never use inherited ignored
+   outputs as build inputs or `git reset --hard`.
+6. Require a newer explicit Deployment Succeeded and the original guard's three
+   consecutive matching live probes; then require `active:false` and test the
+   actual requested pages without Production load testing.
+
+Still unproven: actual Production recovery/error causes; real user network/paint;
+cold multi-owner queue contention; mobile cold deadlines; full Production DB
+execution plans; fresh live identity/shared guard after J. Unversioned display
+sources retain explicit bounded freshness (catalog up to300s; dashboard/assembly
+15s) and are never authorization for a financial mutation.
+
+All current evidence is saved separately so the frozen A/B trees remain unchanged.
+The full Arabic report and raw final metrics are adjacent to this document.
+PR metadata records the exact evidence checkpoint SHA after the branch is saved.
+Production changed by this performance implementation: **no**.
+
+---
+
+
 ## Scope and authority
 
 User requested implementation, testing, merge and publication of a comprehensive

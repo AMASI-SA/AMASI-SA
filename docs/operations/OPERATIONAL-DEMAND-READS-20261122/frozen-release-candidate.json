@@ -1,0 +1,48 @@
+{
+  "status": "prepared_not_deployed",
+  "repository": "AMASI-SA/AMASI-SA",
+  "production_base_git_sha": "9b4fb716b430c32073b5ea7abaeaff62646d9633",
+  "source_git_sha": "063611ff163c90d80cdbf96446a28584fe429846",
+  "source_tree": "383b716d1d39c6556fed5f440d324a9c9b83d301",
+  "source_branch": "codex/operational-demand-release-20261122",
+  "pull_request": 2069,
+  "intent_git_sha": "5db36bd28ae86acaca8ceeb9cceee8e350916f12",
+  "intent_tree": "057c273506c237af2035c7976cc7fe8e9aacaeb2",
+  "intent_branch": "codex/operational-demand-intent-20261122",
+  "intent_sha256": "640a6377f38bc153527943f12c8e8c12c446f33c9bcaaecdf4de580647a33177",
+  "runtime_release_id": "rg5-90a88a6e7ac6a65670274d6180be0338d689f64d91efbf5cdfbbf651ca182bf7",
+  "frontend_artifact_tree_sha256": "9437b75f8c005e379a7132e62c97e90af71e596d1907ba935f6a2a01da2cd4f4",
+  "build_meta_sha256": "07a335c15b77739b1ea0bc284b6ed63a5eb2a664daa976af5f29a91661c41bb1",
+  "proof_sha256": "7e7ddaca5746c68e270d4aa810324208aa196d70e73f185f80beb1b2e7b9c6c1",
+  "freeze_ci": {
+    "workflow_run_id": 45039209765,
+    "artifact_id": 14760874536,
+    "artifact_zip_sha256": "4147e7951d2be8b17d95643d31497ac3b2aa7a3ce025dc0594b5e184e7d57c94",
+    "clean_builds": 2,
+    "matching": true,
+    "node": "22.23.2",
+    "yarn": "1.22.22"
+  },
+  "verification": {
+    "original_load_release_intent": "PASS",
+    "original_verify_release_intent_git": "PASS",
+    "exit_code": 0,
+    "changed_paths_from_source": [
+      "release/release-intent-v5.json"
+    ],
+    "remote_tree_equals_local": true,
+    "worktree_clean": true,
+    "source_ci_workflows": {
+      "success": 47,
+      "failure": 0,
+      "incomplete": 0
+    },
+    "reviewed_B_rehearsal": "not_started",
+    "fresh_shared_guard": "unavailable",
+    "production_merge": false,
+    "published": false,
+    "live_probes": "not_run"
+  },
+  "blocker": "Browser NET::ERR_CERT_AUTHORITY_INVALID; restore trusted access and obtain fresh original shared guard active:false before rehearsal. Do not bypass warning or alter another lease.",
+  "evidence_branch": "codex/operational-demand-evidence-20261122"
+}
