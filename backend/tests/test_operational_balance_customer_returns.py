@@ -557,3 +557,40 @@ def test_refund_from_bank_still_allowed_when_original_order_was_paid_by_tamara()
         assert bank['actual']=='980.00'
         assert (await order_view(db,'owner','1001'))['total']=='150.00'
     run(scenario)
+
+
+def test_owner_mobile_bank_return_without_reference_and_evidence_boundaries():
+    async def scenario(db):
+        await fixture(db)
+        path = '/api/operational-balances/customer-returns'
+        body = command(status='refunded', amount='30.00', expected_session_scope=digest(['owner', 'owner']))
+        del body['refund_reference']
+        async with client(db, 'owner', mobile=False) as web:
+            response = await web.post(path, json={**body, 'request_id': 'web-missing-ref'})
+            assert response.json()['detail']['code'] == 'customer_return_reference_required'
+        async with client(db, 'owner') as mobile:
+            for changes, code in [
+                ({'refund_source_type': 'provider', 'refund_source_id': 'tamara'}, 'customer_return_reference_required'),
+                ({'refunded_at': None}, 'customer_return_date_invalid'),
+                ({'amount': '301'}, 'customer_return_amount_exceeded'),
+                ({'case_type': 'order_compensation', 'status': 'salla_refund_confirmed',
+                  'already_refunded_in_salla': True, 'items': [], 'note': 'استرداد سابق في سلة'},
+                 'customer_compensation_reference_required'),
+            ]:
+                result = await mobile.post(path, json={**body, **changes, 'request_id': 'invalid-' + code})
+                assert result.json()['detail']['code'] == code
+            pending = {**body, 'status': 'pending', 'request_id': 'pending-before-bank-confirmation'}
+            case = (await mobile.post(path, json=pending)).json()
+            confirm = path + '/' + case['id'] + '/confirm'
+            receipts = await asyncio.gather(*(mobile.post(confirm, json=body) for _ in range(2)))
+            assert all(reply.status_code == 200 for reply in receipts)
+            assert receipts[0].json()['refund_reference'] == ''
+            assert receipts[0].json()['id'] == receipts[1].json()['id'] == case['id']
+            # A second payment on a different return may legitimately have no reference.
+            second = await mobile.post(path, json={**body, 'request_id': 'another-item-return',
+                                                   'items': [{'id': 'b', 'quantity': 1}]})
+            assert second.status_code == 200, second.text
+        state = await read(db, 'owner')
+        assert len(state['customer_returns']) == 2
+        assert report(state)['summary']['actual_liquidity'] == '940.00'
+    run(scenario)

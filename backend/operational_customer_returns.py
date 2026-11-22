@@ -197,7 +197,7 @@ def shipping_obligations(state):
                             'order_id': case['order_id'], 'order_number': case['order_number'], 'reference': shipping['reference']}
 
 
-async def save_case(db, owner, actor, payload, *, case_id=None, clock=None):
+async def save_case(db, owner, actor, payload, *, case_id=None, clock=None, source="mezan2"):
     stamp = clock or now()
     await claim_movement(db, owner, actor, {**payload, '_operation': 'customer_return', '_case_id': case_id})
     async def apply(state):
@@ -254,7 +254,7 @@ async def save_case(db, owner, actor, payload, *, case_id=None, clock=None):
                 fail('customer_compensation_duplicate', 'مرجع الاسترداد مسجل على هذا الطلب مسبقًا', 409)
             kind = payload.get('refund_source_type')
             identity = payload.get('refund_source_id')
-            source = None
+            refund_account = None
             if confirmed:
                 observed = order['salla_refund_observation']
                 if observed['status'] != 'observed_requires_execution_evidence':
@@ -277,7 +277,7 @@ async def save_case(db, owner, actor, payload, *, case_id=None, clock=None):
                 if previously_recorded + value > money(observed['amount']):
                     fail('customer_compensation_amount_exceeds_salla',
                          'المبلغ يتجاوز الاستردادات المرصودة في سلة بعد احتساب العمليات السابقة', 409)
-                source = await entity(db, owner, kind, identity, 'SAR')
+                refund_account = await entity(db, owner, kind, identity, 'SAR')
                 if kind == 'bank' and any(
                         m.get('bank_id') == identity and m.get('reference') == ref
                         for m in state['movements']):
@@ -316,7 +316,7 @@ async def save_case(db, owner, actor, payload, *, case_id=None, clock=None):
                 'amount': fmt(value),
                 'refund_source_type': kind if confirmed else None,
                 'refund_source_id': identity if confirmed else None,
-                'refund_source_name': source['name'] if source else None,
+                'refund_source_name': refund_account['name'] if refund_account else None,
                 'refund_reference': ref,
                 'refunded_at': refunded_at.isoformat(),
                 'note': note,
@@ -385,13 +385,15 @@ async def save_case(db, owner, actor, payload, *, case_id=None, clock=None):
             if paid + value > money(case['order_total']):
                 fail('customer_return_amount_exceeded', 'المبلغ يتجاوز المتبقي القابل للاسترداد')
             kind, identity = payload['refund_source_type'], payload['refund_source_id']
-            source = await entity(db, owner, kind, identity, 'SAR')
-            ref = payload['refund_reference'].strip()
-            if not ref:
+            refund_account = await entity(db, owner, kind, identity, 'SAR')
+            ref = (payload.get('refund_reference') or '').strip()
+            if not ref and (kind != 'bank' or source != 'employee_app'):
                 fail('customer_return_reference_required', 'أدخل مرجع عملية رد المبلغ')
-            if any(r['status'] == 'refunded' and r['refund_source_type'] == kind and r['refund_source_id'] == identity and r['refund_reference'] == ref for r in cases):
+            if ref and any(r.get('status') in {'refunded', 'salla_refund_confirmed'} and r.get('refund_source_type') == kind
+                           and r.get('refund_source_id') == identity and r.get('refund_reference') == ref for r in cases):
                 fail('customer_return_refund_duplicate', 'عملية رد المبلغ مسجلة بالفعل')
-            if kind == 'bank' and any(m.get('bank_id') == identity and m.get('reference') == ref and m.get('direction') == 'outgoing' for m in state['movements']):
+            if ref and kind == 'bank' and any(m.get('bank_id') == identity and m.get('direction') == 'outgoing'
+                    and (m.get('reference') or '').strip() == ref for m in state['movements']):
                 fail('customer_return_refund_duplicate', 'الاسترداد مسجل كحركة بنكية بالفعل')
             try:
                 refunded_at = instant(payload['refunded_at'])
@@ -434,7 +436,7 @@ async def save_case(db, owner, actor, payload, *, case_id=None, clock=None):
                 case['provider_fee_model_version'] = projection.get('fee_model_version', 1)
                 case['payment_snapshot'] = {k:v for k,v in payment.items() if k != 'refunds'}
             case.update(status='refunded', amount=fmt(value), refund_source_type=kind, refund_source_id=identity,
-                        refund_source_name=source['name'], refund_reference=ref, refunded_at=refunded_at.isoformat(), confirmed_by=actor)
+                        refund_source_name=refund_account['name'], refund_reference=ref, refunded_at=refunded_at.isoformat(), confirmed_by=actor)
         elif case['status'] == 'refunded':
             # A second confirmation cannot change an executed refund or reverse it.
             if payload['status'] != 'refunded' or any(str(payload.get(k)) != str(case.get(k)) for k in ['amount','refund_source_type','refund_source_id','refund_reference']):
@@ -453,7 +455,7 @@ async def save_case(db, owner, actor, payload, *, case_id=None, clock=None):
             if state.get('engine', {}).get('obligations', {}).get('provider:' + case['order_id'], {}).get('incomplete'):
                 fail('customer_return_provider_incomplete', 'تعذر احتساب أثر الاسترداد على المنصة')
         shipping_obligations(state)
-        audit(state, actor, 'customer_return_saved', before, case, payload.get('note', ''), 'mezan2', stamp)
+        audit(state, actor, 'customer_return_saved', before, case, payload.get('note', ''), source, stamp)
         remember(state, 'customer_return:' + actor, payload, case)
         return case
     try:

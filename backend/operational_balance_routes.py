@@ -246,7 +246,7 @@ class Freeze(Request):
 class ExchangeContribution(Input):
     bank_id: str = Field(min_length=1, max_length=200)
     amount: str = Field(min_length=1, max_length=30)
-    reference: str = Field(min_length=1, max_length=160)
+    reference: str = Field(default="", max_length=160)
     paid_at: str = Field(min_length=1, max_length=40)
     existing_movement_id: str | None = Field(default=None, max_length=200)
 
@@ -1089,15 +1089,15 @@ def make_operational_balance_router(db, current_user):
 
     @router.post("/customer-exchanges")
     async def exchange_create(payload: ExchangeCreate, user=Depends(move_guard)):
-        actor, owner, _ = await scope(db, user, "move")
+        actor, owner, source = await scope(db, user, "move")
         from operational_balance_exchanges import save_exchange
-        return await case_response(await save_exchange(db, owner, actor["id"], payload.model_dump()),"exchanges",user)
+        return await case_response(await save_exchange(db, owner, actor["id"], payload.model_dump(), source=source),"exchanges",user)
 
     @router.post("/customer-exchanges/{case_id}/actions")
     async def exchange_action(case_id: str, payload: ExchangePurchase | ExchangePaid | ExchangeShipped, user=Depends(move_guard)):
-        actor, owner, _ = await scope(db, user, "move")
+        actor, owner, source = await scope(db, user, "move")
         from operational_balance_exchanges import save_exchange
-        return await case_response(await save_exchange(db, owner, actor["id"], payload.model_dump(), case_id=case_id),"exchanges",user)
+        return await case_response(await save_exchange(db, owner, actor["id"], payload.model_dump(), case_id=case_id, source=source),"exchanges",user)
 
     @router.get("/customer-returns")
     async def customer_returns(request: HttpRequest, user=Depends(current_user)):
@@ -1119,15 +1119,15 @@ def make_operational_balance_router(db, current_user):
 
     @router.post("/customer-returns")
     async def create_customer_return(payload: CustomerReturn, user=Depends(move_guard)):
-        actor, owner, _ = await scope(db, user, "move")
+        actor, owner, source = await scope(db, user, "move")
         from operational_customer_returns import save_case
-        return await case_response(await save_case(db, owner, actor["id"], payload.model_dump()),"returns",user)
+        return await case_response(await save_case(db, owner, actor["id"], payload.model_dump(), source=source),"returns",user)
 
     @router.post("/customer-returns/{case_id}/confirm")
     async def confirm_customer_return(case_id: str, payload: CustomerReturn, user=Depends(move_guard)):
-        actor, owner, _ = await scope(db, user, "move")
+        actor, owner, source = await scope(db, user, "move")
         from operational_customer_returns import save_case
-        return await case_response(await save_case(db, owner, actor["id"], payload.model_dump(), case_id=case_id),"returns",user)
+        return await case_response(await save_case(db, owner, actor["id"], payload.model_dump(), case_id=case_id, source=source),"returns",user)
 
     @router.get("/obligations")
     async def allocation_choices(request: HttpRequest, party_type: PartyType, party_id: str, user=Depends(current_user)):

@@ -78,6 +78,10 @@ jobs:
           backend/tests/test_operational_refresh_party_issue_index.py
           backend/tests/test_operational_workspace_refunds.py
           backend/tests/test_operational_workspace_statements.py
+          backend/tests/test_operational_workspace_account_history.py
+          backend/tests/test_operational_movement_reversal_effects.py
+          backend/tests/test_operational_movement_reversal_routes.py
+          backend/tests/test_operational_ad_and_entry_latency.py
           backend/tests/test_operational_completed_shipping*.py
           backend/tests/test_operational_read_runtime.py
           backend/tests/test_operational_financial_review_groups.py
@@ -110,6 +114,11 @@ jobs:
                         'test_dashboard_awaiting_financial_cohort',
                         'test_operational_balance_awaiting_cohort_readers'):
               assert any(suite in c.get('classname', '') for c in cases), suite + ' not collected'
+          for suite in ('test_operational_workspace_account_history',
+                        'test_operational_movement_reversal_effects',
+                        'test_operational_movement_reversal_routes',
+                        'test_operational_ad_and_entry_latency'):
+              assert any(c.get('classname', '').rsplit('.', 1)[-1] == suite for c in cases), suite + ' not collected'
           assert len([c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_workspace_refunds']) >= 23, 'Scoped financial-only refund contracts missing'
           assert len([c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_workspace_statements']) >= 10, 'Scoped period statements missing'
           assert len([c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_balance_reviews']) >= 7, 'Scoped receipt-review permissions missing'
@@ -136,7 +145,7 @@ jobs:
                         'test_operational_balance_provider_settlement_guard'):
               assert any(suite in c.get('classname', '') for c in cases), suite + ' not collected'
           assert len([c for c in cases if 'test_operational_balance_salary_start_mongo' in c.get('classname', '')]) == 5
-          assert len([c for c in cases if 'test_operational_driver_review_mongo' in c.get('classname', '')]) == 16
+          assert len([c for c in cases if 'test_operational_driver_review_mongo' in c.get('classname', '')]) == 17
           for suite, minimum in (
               ('test_operational_completed_shipping_admission', 23),
               ('test_operational_completed_shipping_expansion', 10),
@@ -230,6 +239,7 @@ jobs:
               r.numPendingTestSuites || r.numTodoTests) process.exit(1);
           for (const suffix of ['SalaryStart.test.jsx', 'EmployeesV2Management.test.jsx', 'OperationalSupplierAccount.test.jsx',
                                 'SimpleBalances.test.jsx', 'SimpleBalanceAccess.test.jsx', 'SimpleOrderRefunds.test.jsx',
+                                'ApprovedLedger.test.jsx',
                                 'SimpleBalanceStatement.test.jsx', 'SimpleBalanceReviews.test.jsx',
                                 'simpleBalancesApi.test.js', 'simpleBalancesModel.test.js', 'simpleBalancesPending.test.jsx',
                                 'OperationalFinancialPosition.test.jsx', 'DriverPaymentReview.test.jsx',
