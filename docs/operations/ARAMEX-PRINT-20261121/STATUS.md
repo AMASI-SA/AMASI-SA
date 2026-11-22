@@ -1,5 +1,29 @@
 # ARAMEX-PRINT-20261121: verified external-label reprint repair, release pending
 
+## Immutable current PR2062 candidate (supersedes PR2061)
+
+Evidence branch `codex/aramex-intransit-label-evidence-v2-20261122` is never a
+deployment input. Release branch `codex/aramex-intransit-label-reprint-v2-20261122`:
+- J c302943e330bcdd534a4a5697b8ef813dfb7cb6e;
+- A 23e9514b9e8a33bffb2363bb1d3afd792355ab2c;
+- B 44c5e4867435d45a651881f0da101f3dcb338061 (intent-only after A);
+- RID rg5-3ec8529aa0398fbe08b591ca47b175f1fd41af183c6fdae0fc21da4c223c618c;
+- intent SHA256 46e51af37e48e739923187905423695f078e6027df0922ca52b047e49c5b22c0.
+
+Candidate artifact14757807892 from source readiness45032318734, ZIP SHA256
+048544736a38293cfb6fa6e715f2f439e7ec17a1ffc32910954bdaeb79338483.
+Independent Git manifests (Frontend1379,Backend1289,control322) and deterministic
+identity matched. Source frontend/preflight/host20/24 checks passed. Exact-B
+CI and new independent ARM64 rehearsal remain required. New tracked helpers
+`evidence/rehearse-pr2062.py` and `evidence/materialize-pr2062.py` pin this exact
+A/B/J/RID/intent and use a separate pr2062 isolated stage; syntax checked.
+Do not reuse PR2061 stages, intent, identity or evidence as this candidate's proof.
+
+No new lease, merge or publication; Production unchanged by successor.
+Next: fresh inactive original guard, new exact-B ARM64 rehearsal, all exact-B
+checks and host20/24 adapter rehearsals, then normal merge/tree-equivalent B,
+guarded authorized publication, original verify3 and original/control Native ADB.
+
 ## Current successor: strict external classifier, freshly verified
 
 Branch `codex/aramex-intransit-label-reprint-v2-20261122` is constructed directly
