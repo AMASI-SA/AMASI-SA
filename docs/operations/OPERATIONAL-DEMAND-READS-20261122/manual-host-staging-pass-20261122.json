@@ -1,0 +1,67 @@
+{
+  "evidence_source": "User returned actual Emergent /app terminal output on 2026-11-22.",
+  "executed_helper_commit": "85372740b2e9ad3db453102413749ce03d807299",
+  "executed_helper_sha256": "cdd6d5a5393af9f5518907c7b8999c1b8908a3256d3d5da4ca43b91217dc709a",
+  "candidate_proof_verified": true,
+  "old_j_source_proof": {
+    "source": "23e9514b9e8a33bffb2363bb1d3afd792355ab2c",
+    "verified": true
+  },
+  "shared_proof_verified": true,
+  "original_frontend_verifier_completed": true,
+  "final_phase": "ready-for-root-review",
+  "result": {
+    "staged": true,
+    "deployment_git_sha": "06763ffd6e3c3f7c861769b61d2c4e6b9b2d5f35",
+    "source_git_sha": "063611ff163c90d80cdbf96446a28584fe429846",
+    "release_id": "rg5-90a88a6e7ac6a65670274d6180be0338d689f64d91efbf5cdfbbf651ca182bf7",
+    "artifact_tree": "9437b75f8c005e379a7132e62c97e90af71e596d1907ba935f6a2a01da2cd4f4",
+    "unrelated_untracked_files_preserved": 432,
+    "guard_active": false,
+    "prepare_started": false,
+    "published": false,
+    "backup_directory": "/tmp/mezan-pr2069-preserved-pls7dhb7",
+    "retained_local_directory": "/app/.git/pr2069-stage-takiu9ut"
+  },
+  "final_line": "DONE: staged and verified only; no prepare, prepublish or publication",
+  "fresh_production": "06763ffd6e3c3f7c861769b61d2c4e6b9b2d5f35",
+  "merge_workflows": [
+    {
+      "id": 45047720790,
+      "name": "Mezan Release Readiness",
+      "sha": "06763ffd6e3c3f7c861769b61d2c4e6b9b2d5f35",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 45047720904,
+      "name": "Security Gate",
+      "sha": "06763ffd6e3c3f7c861769b61d2c4e6b9b2d5f35",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 45047720784,
+      "name": "CodeQL",
+      "sha": "06763ffd6e3c3f7c861769b61d2c4e6b9b2d5f35",
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ],
+  "next_commands": [
+    {
+      "file": "RUN-HOST-PREPARE-2069.sh",
+      "bytes": 2777,
+      "sha256": "fc67188130fae295963410e1569717bfcbd9ab8ce4783197260fbf76a8d7d05c",
+      "syntax": "passed",
+      "host_execution": "not_started"
+    },
+    {
+      "file": "RUN-HOST-VERIFY-2069.sh",
+      "bytes": 287,
+      "sha256": "55c20939d9936fc0ec95c16bd8785c0dbc2844acedf2a3542ebd9e1d0faf8075",
+      "syntax": "passed",
+      "host_execution": "not_started"
+    }
+  ]
+}

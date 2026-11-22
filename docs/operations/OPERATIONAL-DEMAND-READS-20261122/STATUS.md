@@ -1,5 +1,50 @@
 # Operational demand reads — implementation checkpoint
 
+## Actual shared-host staging PASS — original prepare/prepublish is next
+
+The user returned successful execution of the pinned staging helper from the
+actual Emergent /app terminal. /app now fast-forwarded to exact M
+`06763ffd6e3c3f7c861769b61d2c4e6b9b2d5f35`. The retained candidate and shared
+artifacts passed the original source, frontend build, reproducibility and runtime
+identity validators. The old J loader passed after verified cache quarantine.
+
+STAGING_RESULT reports staged=true, exact A
+`063611ff163c90d80cdbf96446a28584fe429846`, release
+`rg5-90a88a6e7ac6a65670274d6180be0338d689f64d91efbf5cdfbbf651ca182bf7`,
+artifact tree
+`9437b75f8c005e379a7132e62c97e90af71e596d1907ba935f6a2a01da2cd4f4`,
+and **all 432 unrelated untracked files preserved**.
+The original shared guard was fully inactive at completion; prepare_started=false
+and published=false. These actual results supersede older staging-pending entries.
+
+Preserved backups: `/tmp/mezan-pr2069-preserved-pls7dhb7`.
+Retained originals/staging: `/app/.git/pr2069-stage-takiu9ut`.
+Keep both while completing the release. Evidence:
+`manual-host-staging-pass-20261122.json`.
+
+Fresh root/independent GitHub reads confirm Production still M and no competing
+handoff. New M workflows all passed: Readiness 45047720790, Security 45047720904,
+CodeQL 45047720784. Earlier exact-B validation remains valid.
+
+Next command `RUN-HOST-PREPARE-2069.sh` calls the unchanged original
+prepare and prepublish directly. It pins M/A/RID/protocol, refuses any existing
+or incomplete lease, prints concise outputs, checks the exact own lease after
+prepublish, and does not abort or publish. Actor:
+`codex-operational-demand-2069-20261122`. This command passed shell/Python
+syntax review; it has not been executed on the host at this checkpoint.
+
+After PREPUBLISH_PASSED with ready_to_publish=true, perform one authorized
+production publish from Emergent project salla-analytics. Require a NEW explicit
+Deployment Succeeded, then run `RUN-HOST-VERIFY-2069.sh`: the unchanged original
+verify --url https://mezansalla.com, followed by status only if verify succeeds.
+Completion requires verified=true, checks=3, exact expected release, and final
+guard active=false. Keep any active lease on failure for review.
+
+Production publication remains pending. The task retains the serial handoff;
+other source work remains separate and preserves /app. Do not deploy evidence.
+
+---
+
 ## Reviewed shared-host staging command ready — execution pending
 
 PR2069 is merged as M `06763ffd6e3c3f7c861769b61d2c4e6b9b2d5f35`.
