@@ -6,14 +6,106 @@ Status: implementation verified locally and preserved in two draft PRs. No produ
 
 | Component | Repository | Reviewed base | Source checkpoint | Draft PR |
 |---|---|---|---|---|
-| Backend | AMASI-SA/AMASI-SA | `6cfd09f40796b4ee739ce73484013029f3e3099d` | `f3a6bf907b7d9cc899627018792905ee0bb33a33` | [#2050](https://github.com/AMASI-SA/AMASI-SA/pull/2050) |
-| Employee app | AMASI-SA/amasi-mobile | `cabbb8b3949816092d1761f8b3512b4baf6dc8da` | `89e7dca352c075a95dff0897554dda4d6362ad60` | [#373](https://github.com/AMASI-SA/amasi-mobile/pull/373) |
+| Backend | AMASI-SA/AMASI-SA | `a3ccb098591306d0020c160302161281be97f2c9` | `30fd38b5ba8b65b1c0a726de640ca6329e6c3470` | [#2050](https://github.com/AMASI-SA/AMASI-SA/pull/2050) |
+| Employee app | AMASI-SA/amasi-mobile | `998520d15331f08aa6b4ecd82a596f4c01fd4d1e` | `136c282e26b7f1216090a03e96c37fc7e0bfb257` | [#373](https://github.com/AMASI-SA/amasi-mobile/pull/373) |
 
 Task branch in both repositories: `codex/assembly-queues-fast-read-20261121`.
 Backend target: `hotfix/prod-snap-meta-final`. Mobile target: `codex/assembly-print-lifecycle-20261108`.
 Source checkpoint SHAs above are immutable and recoverable. The later documentation-only checkpoint on each task branch adds this record; verify its parent/source diff before continuing.
 
-## Latest follow-up: two unread previews with visit-only dismissal — 2026-11-22
+## Latest follow-up: private employee financial notifications — 2026-11-22
+
+The user requested a formal phone notification whenever an employee records a financial entry on another employee's account. This follow-up implements notifications for **new manual operational employee/custody ledger entries**, including the linked employee salary-settlement counterpart. It is a source checkpoint, not a deployed release.
+
+### Accepted behavior
+
+- The phone notification is titled **أماسي — إشعار مالي**. Example wording: **تم تسجيل دفعة لك بمبلغ 500.00 ريال بواسطة شهاب.** The actual kind, exact amount and registrar are derived from the successfully recorded movement. Refunds, charges, settlement and custody handover/adjustments retain their own truthful labels. Recording a movement is not described as a verified bank transfer.
+- Tapping a valid financial notification opens only its recipient's authenticated entry detail. The screen shows the employee, entry kind, amount, registrar, description and movement date separately from recording time. Push text is never used as authoritative detail.
+- The existing notification screen has a lightweight **الإشعارات المالية** entry. The dedicated list loads at most ten own notices per page on navigation/focus; it adds no application-start list hydration or polling timer.
+- List reads do not acknowledge notices. An authorized rendered detail is acknowledged once; an acknowledgement failure leaves the entry visible and exposes an explicit retry.
+- The two newest unread human messages above My Products remain a separate preview, with the already accepted current-visit-only X behavior. Financial notices do not displace those messages.
+- No historical backfill or automatic payroll flood was added. Separate legacy/general-ledger and native-P01 payroll writers were not converted; their data-dependent activation should not be described as impossible or dead.
+
+### Save, scope and delivery contract
+
+- Movement plus compact immutable notification intent commit inside the **same existing revision CAS** as the money and idempotency receipt. An unsuccessful save cannot produce a notice; replaying a save does not create another intent.
+- A bounded drain inside the **existing** operational push worker materializes deterministic notice IDs with $setOnInsert, then removes committed intents under a revision CAS. Draining also increments the revision, preventing an older whole-state writer from resurrecting the queue.
+- The drain runs even when provider push delivery is disabled. Provider retry failure does not roll back, repeat or misreport a successful financial save. There is no new worker/timer, historical ledger scan, automatic balance calculation or reconciliation job.
+- The recipient is resolved from the current merchant-scoped V2 employee account association. Current account status, application access, employee binding, notice unread state, device generation and recipient are revalidated before dispatch. Canonical workspace-only application access is included, with revocation tests.
+- Notification indexes are created in existing worker startup, never in GET. The pending-state query is flag-indexed and projects only a compact pending slice; delivery batches are bounded at ten.
+- GET `/employee-finance/notifications/me` returns a private ten-entry cursor page. GET `/employee-finance/notifications/{id}` returns authorized detail. POST `/employee-finance/notifications/{id}/read` changes only that notice's read status. Responses use no-store; driver access and cross-account access are rejected.
+- Expo devices must explicitly advertise `financial_notifications_version: 1`. Existing native presentation support alone is insufficient. Missing, downgraded or unsupported capability suppresses a financial push; old instruction notifications retain their contract.
+- The existing badge/count query can explicitly include financial unread count. The new client requires `financial_included: true`; an old backend's unacknowledged zero must not clear a financial tray.
+- The real mobile write gate allows only the exact authenticated POST `/employee-finance/notifications/fn_<64 lowercase hex>/read`. No neighboring financial write permission is added. The existing authentication-preservation guard accepts only the exact import and allowance-line delta; original immutable pins and negative controls remain.
+- Cold/warm notification taps are recipient/session/query-scope fenced and deduplicated. Blur, background and account invalidation cancel private reads and discard stale responses.
+
+### Source checkpoint and preservation
+
+Backend: [`30fd38b5ba8b65b1c0a726de640ca6329e6c3470`](https://github.com/AMASI-SA/AMASI-SA/commit/30fd38b5ba8b65b1c0a726de640ca6329e6c3470), parent `a3ccb098591306d0020c160302161281be97f2c9`, tree `390daf0d6b98e240a0cd2baddbba3644f411934d`.
+
+Mobile: [`136c282e26b7f1216090a03e96c37fc7e0bfb257`](https://github.com/AMASI-SA/amasi-mobile/commit/136c282e26b7f1216090a03e96c37fc7e0bfb257), parent `998520d15331f08aa6b4ecd82a596f4c01fd4d1e`, tree `e9895622f1097c26d8455331a550a72d75da9377`.
+
+Exact remote blobs match the frozen source manifests. Full nontruncated tree comparisons verify exactly **12 backend files** and **14 mobile files** changed; respectively **6,179** and **851** other files are unchanged. This intentionally extends the notification integration while preserving earlier queues, monitoring, product readiness notices, two-message preview, shipment feedback and persistent match prompt. No package manifest, lockfile or Android native source changed. The following documentation-only successors alter only this STATUS file.
+
+### Verification
+
+- Root final backend execution: **154 tests PASS, zero skips, exit 0**. This covers all three new finance suites and neighboring push, presentation, preview, conversation, account-scope and sender-directory suites.
+- Producer owner regression: **110 tests PASS, zero skips** (16 new producer/API tests plus 94 existing financial writer tests).
+- Independent reviewer: **33 backend tests PASS, zero skips** (16 producer/API, 7 transport, 10 real Mongo movement-to-notice/push/count/race integration), then verified all 26 source file sizes, SHA256 and Git blob hashes remained unchanged.
+- Root actual mobile financial component/repository/client suite: **11 behavior groups PASS**. Includes the real API client with all business-write flags disabled, exact endpoint allowance, denied adjacent writes, signed-out/stale accounts, cold/warm taps, detail/read retries and combined-count compatibility.
+- Root neighboring checks: notification badge, **10 My Products preview groups**, **8 shipment feedback groups**, **10 print-return/matching lifecycle groups**, and registration recovery PASS. Reviewer also independently reran financial behavior, badge, unavailable notice and authentication/registration checks.
+- TypeScript 5.9.3 resolves the **eight actual production roots through 744 source/declaration files, zero diagnostics**. ESLint: **zero errors**, one independently reproduced pre-existing PushSettings cleanup-ref warning.
+- This local workspace is a reconstructed snapshot without Git history. Registration/authentication preservation was executed through a narrow fixture reader for seven exact immutable git-show blobs. Their original SHA256 and Git blob hashes were independently verified; original assertions and five negative controls executed. CI continues to use real Git history; this local check is not represented as a full Git checkout or remote CI.
+- Backend CI [Mobile Order Tracking 45031480991](https://github.com/AMASI-SA/AMASI-SA/actions/runs/45031480991) at the exact source **passed**: real-Mongo route/permission regressions and minimum **16/7/10 no-skips** requirements all succeeded.
+- Mobile CI [45031791858](https://github.com/AMASI-SA/amasi-mobile/actions/runs/45031791858) at the exact source **failed before test execution**: completed `frontend-checks` job `137236774040` has `runner_id: 0`, `steps: []`. The paired lifecycle [45031791804](https://github.com/AMASI-SA/amasi-mobile/actions/runs/45031791804) also failed before recorded steps. Cause remains unresolved; no retry loop or relaxed gate.
+- Broader backend [Operational Balance Web run 45031480959](https://github.com/AMASI-SA/AMASI-SA/actions/runs/45031480959), job `137235824728`, failed before collection: pytest exit 4, no tests ran, first missing path `backend/tests/test_operational_catalog_read_scope.py`. This is a verified workflow/source revision mismatch: the unchanged head/parent workflow blob `c15917fb4e98aba8bd3e5da39378a6a41d100734` lacks the three new test references, while synthetic merge `23f9968be6347305e7e423099be07466de233297` executes workflow blob `90dd840a217aaa30595d00d8ec8d6f9008562977` with those references but explicitly checks out the PR head. The other two missing head paths are `test_order_batch_cpu_fairness.py` and `test_operational_context_snapshot_reader.py`. All three belong to that merged workflow/source set, not this finance patch. No failing finance assertion was observed in that job, but the broad gate is unresolved. No unrelated workflow repair or test suppression was included.
+
+CI snapshot observed **2026-11-22 17:18 Asia/Riyadh**. All local tests use synthetic data, disposable loopback Mongo and mocked provider/network boundaries. They do not establish physical-device banner acceptance, real Expo receipt success or production load latency.
+
+### Next safe action and release boundary
+
+Before a separately requested rollout, deploy the compatible backend and startup indexes **before** distributing new mobile JavaScript. The old backend rejects the new registration field, and the new client intentionally rejects a count response lacking financial inclusion acknowledgement. Resolve the remaining CI requirements and perform the existing physical-device notification/account-switch checks before publication.
+
+No live employee movement was written, live phone push sent, APK built/distributed, OTA published, PR merged, production deployed or new production financial job enabled in this follow-up. The existing task branch remains a draft. The continuation record is maintained here and in the PR bodies; no separate issue message was sent.
+
+#### Mobile frozen source files
+
+| Path | Git blob SHA |
+|---|---|
+| `frontend/src/api/client.ts` | `0f568b6f5bb1a2c1bcc6c4cf64d722b1ca740bbb` |
+| `frontend/src/features/instructions/writePolicy.ts` | `129c172cd2539d16b70998f04ccce9fc7cc34758` |
+| `frontend/src/features/instructions/PushSettings.tsx` | `abd5fd565428cd114ae67ebea52174800aa9edb6` |
+| `frontend/src/features/instructions/repository.ts` | `8345833e4c51795312a258cb44c9190b6131d5d2` |
+| `frontend/src/features/instructions/InstructionsScreen.tsx` | `d04072cb6843d60808186b192fcd571cb77dcbbf` |
+| `frontend/src/features/financialNotifications/repository.ts` | `c365cf9b4bb388d3cabfa4ec655be27f7125c1de` |
+| `frontend/src/features/financialNotifications/FinancialNotificationsScreen.tsx` | `8c81fe7eaeaefd97a796cd34b7b45c5a8b400de0` |
+| `frontend/app/employee-finance-notifications.tsx` | `41fc8082656b8a47da048b7daf5d7405ee938b38` |
+| `frontend/scripts/verify-financial-notifications.cjs` | `4c40e06cd97798e2f1fdf48225f2c5594e1bc4eb` |
+| `frontend/scripts/verify-notification-badge.cjs` | `e668f852714b85e2b926e1a144dae49b9a9b2bf0` |
+| `frontend/scripts/verify-notification-unavailable.cjs` | `cdfde78f6449e30c532dcfa6c1f8de3f41263ebb` |
+| `frontend/scripts/verify-push-registration-recovery.cjs` | `6f78df66a8cf8d318cffcebeee2da8a2201678c3` |
+| `frontend/scripts/verify-build25-auth-preservation.cjs` | `c9c09baa4b96762c4043ee5efb9fd0711d79875f` |
+| `.github/workflows/mobile-ci.yml` | `f908e34c09ecaa6d74910305085d7fa22d506566` |
+
+#### Backend frozen source files
+
+| Path | Git blob SHA |
+|---|---|
+| `backend/employee_finance_notifications.py` | `fa565af0374c57b1193ed1de4e9f87acb80c35bc` |
+| `backend/employee_finance_notification_routes.py` | `bd5210f579fbb1e8cbc4990a492608e69fbcabf8` |
+| `backend/operational_balance_service.py` | `5b7ee357ef25139d12838f77a3e174493b2f7302` |
+| `backend/operational_balance_workspace.py` | `49ad778bfffbb38e906b0767bdcf83fb709d3825` |
+| `backend/mobile_app_request_context.py` | `e0dda6be2533f0cfad1c57a2053ce98919bd5c1e` |
+| `backend/server.py` | `3cb1bbce16b65aa2979a8acc30bd4d52964a6d72` |
+| `backend/tests/test_employee_finance_notifications.py` | `6e7ddd55d5747d496375b021b85163b2391c1510` |
+| `backend/operational_push.py` | `a2ce4eb2a2bff2049e2c6fce3075d518d4e119e7` |
+| `backend/order_tracking_notes_routes.py` | `0c88173ab71af09dfcbc545156a751ad492db7fe` |
+| `backend/tests/test_employee_financial_push.py` | `0b535e74381ff10222c6e3d5ab4fc70482253090` |
+| `backend/tests/test_employee_financial_push_integration.py` | `6f3af9c266294c3d7bdc10587cc68b08c4d37886` |
+| `.github/workflows/mobile-order-tracking.yml` | `5d032a44e0af8956d29113cd49c9aac5612bfa24` |
+
+
+## Earlier follow-up: two unread previews with visit-only dismissal — 2026-11-22
 
 The final user correction is **two unread notifications total**, not two per employee or three employees. The latest clarification makes the X a **current-visit dismissal only**. This follow-up is implemented and verified, saved in the existing draft PRs, and is not a release.
 
