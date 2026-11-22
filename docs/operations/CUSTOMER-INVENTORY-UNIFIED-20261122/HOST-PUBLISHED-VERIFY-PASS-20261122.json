@@ -1,7 +1,7 @@
 {
   "task_id": "CUSTOMER-INVENTORY-UNIFIED-20261122",
   "evidence_kind": "owner_supplied_actual_Emergent_terminal_transcript",
-  "status": "live_original_verify3_passed_own_lease_closed_ui_success_confirmation_pending",
+  "status": "completed_published_and_verified_own_lease_closed_serial_handoff_released",
   "accepted_at_utc": "2026-11-22T20:16:53Z",
   "repository": "AMASI-SA/AMASI-SA",
   "unified_pr": "https://github.com/AMASI-SA/AMASI-SA/pull/2074",
@@ -923,15 +923,26 @@
     "new_explicit_deployment_succeeded_observed_by_root": false,
     "new_explicit_deployment_succeeded_explicitly_reported_in_attachment": false,
     "publish_click_count_observed": null,
-    "pending_fact": "Owner confirmation that a new Deployment Succeeded appeared for this attempt before the successful verification command.",
-    "no_retry_or_new_publish_requested": true
+    "pending_fact": null,
+    "no_retry_or_new_publish_requested": true,
+    "owner_confirmation": {
+      "evidence_kind": "explicit_owner_confirmation_in_conversation",
+      "owner_response": "نعم ظهر",
+      "question_answered": "هل ظهرت لك عبارة Deployment Succeeded الجديدة في لوحة Emergent قبل تشغيل أمر التحقق؟",
+      "recorded_at_utc": "2026-11-22T20:39:36Z",
+      "new_deployment_succeeded_confirmed": true,
+      "before_original_verify_confirmed": true,
+      "direct_ui_observation_by_root": false,
+      "exact_ui_event_timestamp_supplied": false
+    }
   },
   "coordination": {
     "lease_active": false,
     "do_not_replay_prepare_prepublish_publish_or_verify": true,
-    "release_completion_receipt_eligible_for_next_publication": false,
-    "remaining_completion_gate": "Only the explicit new Deployment Succeeded UI fact required by AGENTS.md and the owner's release instructions is not included in the terminal attachment. Do not manufacture or infer a UI observation. Preserve successful live verification and closed lease.",
-    "next_safe_action": "Obtain the owner's brief confirmation of the new Deployment Succeeded for this attempt, then record final handoff release. A subsequent task must separately reread its own current refs, ledger and actual original guard; this result is not authorization to skip its gates."
+    "release_completion_receipt_eligible_for_next_publication": true,
+    "remaining_completion_gate": null,
+    "next_safe_action": "This release is complete. No more action or replay is needed for PR2074. A subsequent authorized task must freshly read current Git refs, coordination and actual original release guard before any /app mutation or rehearsal; the historical inactive status does not establish the guard state at that later boundary.",
+    "serial_handoff_released": true
   },
   "preserved": {
     "unrelated_untracked_files": 432,
@@ -955,6 +966,9 @@
       "Both boot observations after prepare",
       "No rejection or error in transcript"
     ],
-    "remaining_evidence": "No explicit Deployment Succeeded UI statement is present; keep that fact pending owner confirmation without replaying any deployment step."
-  }
+    "remaining_evidence": null,
+    "final_completion_review": "release_code_review accepted the explicit owner UI confirmation as satisfying the sole remaining gate; no new tools, live requests or writes performed by reviewer."
+  },
+  "completed_at_utc": "2026-11-22T20:39:36Z",
+  "completion_evidence_parent_commit": "3be5f8df326ed27bec6976a344283e26a90510fd"
 }

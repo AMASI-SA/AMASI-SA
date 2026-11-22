@@ -1,10 +1,12 @@
 # CUSTOMER-INVENTORY-UNIFIED-20261122
 
-## Current state — live original verification PASSED; own lease CLOSED
+## Current state — COMPLETED; combined release published and verified; serial handoff RELEASED
 
-The owner returned the actual Emergent terminal output from the retained post-success verification command. The unchanged original verifier reported **verified:true**, **checks:3**, the exact combined release identities, and all expected Frontend artifact checks. Its final original guard status is exactly **{"active":false}**. The customer-confirmation and inventory/purchasing/receiving source is verified together on https://mezansalla.com.
+The owner confirmed **«نعم ظهر»** in direct reply to the question whether a **new Deployment Succeeded** appeared in Emergent before the original verification command. This is explicit owner UI confirmation; root does not claim direct observation or an exact UI event timestamp. It completes the sole remaining documentation gate.
 
-This is owner-supplied actual host output, independently parsed and checked against frozen intent. Root did not click publication, run another live probe, clear a lease or claim a direct UI observation. The attachment does **not** include an explicit new **Deployment Succeeded** report. The terminal/live-verification gate is complete; the only remaining protocol documentation item is the owner's confirmation of that new UI success for this attempt. Do not republish or recreate the lease to obtain that confirmation.
+The retained original verification already reported **verified:true**, **checks:3**, exact combined source/deployment/base/runtime/artifact identities and final original guard status exactly **{"active":false}**. The customer-confirmation and inventory/purchasing/receiving updates were published together in this one combined release on https://mezansalla.com. Root and independent review accepted the full evidence. **No remaining work or publication hold belongs to this task.**
+
+Completion recorded on 2026-11-22 at 20:39:36 UTC (23:39:36 Riyadh); this is a record time, not a publication timestamp. See [RELEASE-COMPLETION-2074.json](RELEASE-COMPLETION-2074.json) and [full live verification](HOST-PUBLISHED-VERIFY-PASS-20261122.json).
 
 | Identity | Value |
 |---|---|
@@ -48,19 +50,21 @@ The earlier original guard was exactly inactive before shared staging and prepar
 
 Original prepare and prepublish passed for the recorded actor and identities. Their historical active lease has now been closed by successful original verification. Preserve the backups and unrelated files. See [HOST-STAGING-PREPUBLISH-PASS-20261122.json](HOST-STAGING-PREPUBLISH-PASS-20261122.json) for that historical stage.
 
-## Exact next safe action
+## Final serial handoff
 
-Obtain the owner's brief confirmation that a **new Deployment Succeeded** appeared for this attempt before the verification command, as required by AGENTS.md and the owner's release instructions, then record the final serial handoff release. No new permission, code execution, re-staging, prepare, prepublish, publication, verification replay or manual lease deletion is requested.
+**This task's publication handoff is released.** The original verifier already closed its own matching lease; no lease mutation was performed to record completion. No further staging, prepare, prepublish, publish, verify or cleanup is needed for PR2074.
 
-The live combined source and the inactive guard are already evidenced. Until the UI fact is confirmed, this receipt records successful verification and closed lease but does not claim the complete UI gate or release the final serial publication handoff. A subsequent task must freshly read its own refs/coordination and the actual original guard before its own work; this evidence does not replace those checks.
+A subsequent authorized task may continue its own release process after freshly reading the current Git refs, this coordination ledger and the actual original guard before changing /app or starting a rehearsal. The recorded inactive status is evidence of this completed verification; it does not replace a later task's fresh guard check. Preserve all unrelated files, historical backups and foreign leases.
+
+The new explicit UI success is now confirmed by the owner. Prior records that show UI confirmation pending or this task's serial handoff held are historical and superseded by this completion.
 
 ## Preserved verification and scope
 
-All17 applicable exact-B workflows passed, including actual Node20.20.2 and24.19.0 clean-clone adapters. Independent acceptance checked eleven artifact ZIP hashes, both internal tar checksums, all original artifact/identity/package proofs, exact JSON MIME CI routing and operational/stock tests. Operational backend6502+90subtests, demand93, shipping16+18subtests, frontend1620/103suites, browser33=14+12+7, worker4; stock5525+97subtests. Counts overlap. All three combined supplier/customer/demand regressions executed on isolated real Mongo.
+All 17 applicable exact-B workflows passed, including actual Node 20.20.2 and 24.19.0 clean-clone adapters. Independent acceptance checked eleven artifact ZIP hashes, both internal tar checksums, all original artifact/identity/package proofs, exact JSON MIME CI routing and operational/stock tests. Operational backend6502+90subtests, demand93, shipping16+18subtests, frontend1620/103suites, browser33=14+12+7, worker4; stock5525+97subtests. Counts overlap. All three combined supplier/customer/demand regressions executed on isolated real Mongo.
 
 The complete inventory source and customer confirmations are combined in this single release. PR2065/2067 remain independently unpublished provenance, and superseded PR2073 remains closed without merge. Preserve unrelated PR2075/current tasks and every foreign file/lease. The withdrawn slowness report remains outside this task.
 
 Source/build/host packaging evidence remains in EVIDENCE-4e6c8a61.json, EVIDENCE-447e83bf.json, the Node20/24 and operational artifact reviews, NORMAL-MERGE-2074.json, HOST-REHEARSAL-PASS-20261122.json and MANUAL-DEPLOYMENT-HANDOFF-2074.json. Earlier documents stating that host staging, prepare or live verification is pending, or that this lease remains active, are superseded by this accepted result. Frozen release source is unchanged; this branch is evidence only and must not be deployed.
 
 
-**Observed changes:** Production Git and shared /app staging YES; live combined release VERIFIED; own lease CLOSED / final active false. Explicit newer UI Deployment Succeeded fact not supplied in the attachment; that one documentation item remains. Canonical coordination: https://github.com/AMASI-SA/AMASI-SA/issues/1006#issuecomment-6238987123
+**Observed changes:** Production Git and shared /app staging YES; live combined release VERIFIED; own lease CLOSED / final active false; new Deployment Succeeded explicitly confirmed by owner; task COMPLETE and serial handoff RELEASED. No source/intent/Production-ref mutation or deployment replay was performed while recording completion. Canonical coordination: https://github.com/AMASI-SA/AMASI-SA/issues/1006#issuecomment-6238987123
