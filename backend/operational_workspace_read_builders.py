@@ -30,7 +30,7 @@ FAMILIES = frozenset({
 ASSET_KINDS = ("bank", "cash", "provider", "pos_receivable", "ad_account")
 PARTY_KINDS = ("supplier", "employee", "employee_custody", "courier", "store_driver",
                "external_person", "owner_withdrawal", "operating_expense")
-PROJECTION_VERSION = "workspace-v1"
+PROJECTION_VERSION = "workspace-v2"
 HEADER_FIELDS = {"_id": 1, "owner_id": 1, "revision": 1, "status": 1,
                  "started_at": 1, "engine.as_of": 1}
 _PATHS = {"operational_home": "home", "operational_directory": "directory",
@@ -45,8 +45,8 @@ _FILTERS = {
     "operational_directory": {"group", "kind", "q"},
     "operational_options": {"operation", "role", "kind", "selected_kind", "selected_id", "q"},
     "operational_resource": {"ad_bank_fx"},
-    "operational_ledger": {"ad_bank_fx", "provider_orders", "q", "date_from", "date_to", "courier_history"},
-    "operational_register": {"q", "date_from", "date_to", "direction", "status", "courier_history"},
+    "operational_ledger": {"ad_bank_fx", "provider_orders", "q", "date_from", "date_to", "courier_history", "account_history"},
+    "operational_register": {"q", "date_from", "date_to", "direction", "status", "courier_history", "account_history"},
     "operational_statement": {"date_from", "date_to", "purpose"},
     "operational_report": {"view", "expected_revision", "expected_as_of", "expected_started_at"},
 }
@@ -91,7 +91,7 @@ def validate_spec(spec):
     if (spec.get("period") != {k: filters.get(k) for k in ("date_from", "date_to")}
             or spec.get("currency") is not None):
         raise ValueError("demand_read_request_invalid")
-    for key in ("ad_bank_fx", "provider_orders", "courier_history"):
+    for key in ("ad_bank_fx", "provider_orders", "courier_history", "account_history"):
         if key in filters and type(filters[key]) is not bool:
             raise ValueError("demand_read_request_invalid")
     if "q" in filters and (not isinstance(filters["q"], str) or len(filters["q"]) > 160):
@@ -521,6 +521,8 @@ async def _ledger(db, actor, owner, policy, state, target, filters, family):
     from operational_workspace_projection import balance_note, compact_rows, projected_balance_status, statement as period_statement
     from operational_workspace_ledger_filters import filter_activity
     from operational_workspace_supplier_invoices import fill_historical_headers
+    from operational_movement_reversal import ReversalIndex
+    from operational_workspace_reversals import add_reversal_actions
     kind, identity = target
     provider_orders = filters.get("provider_orders", False)
     resources, computed = await resource_catalog(db, owner, policy, state, selected_resource=target,
@@ -541,7 +543,8 @@ async def _ledger(db, actor, owner, policy, state, target, filters, family):
             "uncomputed_principal", "uncomputed_principal_complete", "uncomputed_orders")}}
             for currency, accounts in groups.items() for item in accounts if item["provider"] == identity]
         return {"header": {"resource": resource, "provider_orders": True, "amounts": amounts, "undated": undated}, "rows": rows}
-    rows = await prepare_in_thread(ledger_items, state, computed, resource, policy)
+    reversals = ReversalIndex() if family == "operational_ledger" else None
+    rows = await prepare_in_thread(ledger_items, state, computed, resource, policy, reversals=reversals)
     if family == "operational_statement":
         result = await prepare_in_thread(period_statement, resource, rows, date_from=first, date_to=last,
             actor=_actor_snapshot(actor), generated_at=now(), purpose=filters.get("purpose", "view"),
@@ -575,6 +578,9 @@ async def _ledger(db, actor, owner, policy, state, target, filters, family):
         display = list(filter_activity(rows, q=q, date_from=first, date_to=last))
     else:
         display = compact_rows(rows)
+    # Persist display actions in the worker from the same snapshot and effective
+    # policy as the ledger. Mutation still revalidates every grant under CAS.
+    await prepare_in_thread(add_reversal_actions, display, state, policy, reversals)
     return {"header": {"resource": resource, **summary, "balance_status": balance_status,
         "balance_note": balance_note(balance_status), "courier_summary": courier_summary(state, computed, resource),
         "expected_collections": expected_collections(state, computed, resource, policy)}, "rows": display}
@@ -582,21 +588,32 @@ async def _ledger(db, actor, owner, policy, state, target, filters, family):
 
 async def _register(db, owner, policy, state, target, filters):
     from operational_balance_workspace import resource_catalog, _index_ledger_sources, ledger_items, _courier_history
-    from operational_workspace_projection import compact_rows, row_order
+    from operational_workspace_projection import balance_note, compact_rows, projected_balance_status, row_order
     from operational_workspace_ledger_filters import filter_activity
     from operational_workspace_supplier_invoices import fill_historical_headers
+    from operational_movement_reversal import ReversalIndex
+    from operational_workspace_reversals import add_reversal_actions
+    account_history = filters.get("account_history", False)
     resources, computed = await resource_catalog(db, owner, policy, state, selected_resource=target,
+        provider_positions=bool(account_history and target and target[0] == "provider"),
         **({"selected_kinds": {target[0]}, "identities_by_kind": {target[0]: [target[1]]}} if target else {}))
     if target and not any(r["access"]["movements"] != "none" for r in resources):
         fail("operational_workspace_not_found", "الكشف غير متاح", 404)
     await fill_historical_headers(db, owner, resources, computed, state, policy)
-    indexed = await prepare_in_thread(_index_ledger_sources, state, computed, resources)
+    reversals = ReversalIndex()
+    indexed = await prepare_in_thread(_index_ledger_sources, state, computed, resources, reversals=reversals)
+    header = {}
     unique = {}
     for resource in checked_rows(resources):
         if resource["access"]["movements"] == "none":
             continue
         sources = indexed[(resource["kind"], resource["id"], resource["currency"])]
         rows = await prepare_in_thread(ledger_items, state, computed, resource, policy, sources=sources)
+        if account_history and target:
+            # ledger_items reconciles the complete account before filtering or
+            # immutable-row pagination; never recompute from a visible page.
+            status = projected_balance_status(resource, rows)
+            header.update(balance_status=status, balance_note=balance_note(status))
         if any(filters.get(k) for k in ("q", "date_from", "direction", "status")):
             display = filter_activity(rows, **{k: filters.get(k) for k in ("q", "date_from", "date_to", "direction", "status")})
         else:
@@ -606,16 +623,18 @@ async def _register(db, owner, policy, state, target, filters):
         for row in checked_rows(display):
             unique.setdefault(row["event_id"], row)
     items = sorted(unique.values(), key=row_order, reverse=True)
-    if filters.get("courier_history"):
+    if not (account_history and target) and (filters.get("courier_history") or account_history):
         history = {}
+        history_kinds = {"courier", "store_driver"} if account_history else {"courier"}
         for resource in resources:
-            if (resource["kind"] == "courier" and resource["access"]["balance"] and resource["access"]["movements"] == "all"
-                    and any(row["party_type"] == "courier" and row["party_id"] == resource["id"] and not row.get("summary") for row in items)):
-                history[(resource["id"], resource["currency"])] = await prepare_in_thread(_courier_history, state, resource, policy)
+            if (resource["kind"] in history_kinds and resource["access"]["balance"] and resource["access"]["movements"] == "all"
+                    and any(row["party_type"] == resource["kind"] and row["party_id"] == resource["id"] and not row.get("summary") for row in items)):
+                history[(resource["kind"], resource["id"], resource["currency"])] = await prepare_in_thread(_courier_history, state, resource, policy)
         for row in items:
-            if row["party_type"] == "courier" and not row.get("summary"):
-                row["balance_after"] = history.get((row["party_id"], row["currency"]), {}).get(row["id"])
-    return {"header": {}, "rows": items}
+            if row["party_type"] in history_kinds and not row.get("summary"):
+                row["balance_after"] = history.get((row["party_type"], row["party_id"], row["currency"]), {}).get(row["id"])
+    await prepare_in_thread(add_reversal_actions, items, state, policy, reversals)
+    return {"header": header, "rows": items}
 
 
 async def _position(db, actor, owner, policy, state):

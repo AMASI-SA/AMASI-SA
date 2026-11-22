@@ -22,7 +22,7 @@ def _page(key, label, url=None, *, write=None):
 OPERATIONAL_WEB_PAGES = (
     _page("home", "رئيسية الأرصدة التشغيلية", BASE),
     _page("assets", "الأصول والحسابات"), _page("parties", "الأشخاص والجهات"),
-    _page("log", "سجل الحركات المالية", BASE + "/daily-movements"),
+    _page("log", "سجل الحركات المالية", BASE + "/daily-movements", write="عكس حركة مالية ضمن الصلاحيات الممنوحة"),
     _page("entry", "حركة مالية جديدة", write=WRITE_ENTRY),
     _page("refund", "رد مبلغ لعميل برقم الطلب", write="تسجيل ومتابعة رد المبلغ حسب صلاحيات الحساب"),
     _page("customer-collections", "تحصيل متبقي طلب عميل", write="توثيق التحصيل المنفذ وعمولته على الحساب المصرح به"),
@@ -111,6 +111,8 @@ def enforce_operational_web_pages(modes, path, method, query=None):
         return _allow(modes, "assets" if kind in ASSETS else "parties") if kind else _allow(modes, "assets", "parties")
     if re.fullmatch(r"/workspace/supplier-invoices/[^/]+/[^/]+", path) and method == "GET":
         return _allow(modes, "parties", "log")
+    if re.fullmatch(r"/workspace/movements/[^/]+/reverse", path) and method == "POST":
+        return _allow(modes, "log", write=True)
     if path == "/workspace/movements" and method == "GET":
         return _allow(modes, "log")
     match = re.fullmatch(r"/workspace/specialist/(returns|exchanges|fees|reports|specialized|access)", path)
@@ -233,7 +235,8 @@ def limit_workspace_policy(policy):
         (op.startswith("customer.refund") and "refund" in pages) or
         (op == "customer.collection" and "customer-collections" in pages) or
         (op == "courier.review" and "collections" in pages) or
-        (not op.startswith(("customer.refund", "provider.statement_")) and op not in {"courier.review", "customer.collection"} and modes.get("balances.entry") == "write")))
+        (op == "movements.reverse" and modes.get("balances.log") == "write") or
+        (not op.startswith(("customer.refund", "provider.statement_")) and op not in {"courier.review", "customer.collection", "movements.reverse"} and modes.get("balances.entry") == "write")))
     if resources == policy.resources and operations == policy.operations:
         return policy
     return replace(policy, resources=resources, operations=operations)

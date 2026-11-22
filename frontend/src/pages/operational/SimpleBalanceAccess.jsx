@@ -8,6 +8,7 @@ import './simpleBalances.css';
 import './operationalToolTheme.css';
 
 const operationLabels = {
+  movements: 'الحركات المالية اليومية',
   employee: 'الموظفون', supplier: 'الموردون', external: 'الجهات الخارجية', accounts: 'الحسابات',
   custody: 'العهد', expense: 'المصروفات', owner: 'المالك', provider: 'مزودو الدفع',
   ads: 'الإعلانات', courier: 'الشحن والتوصيل', customer: 'العملاء', entities: 'إضافة الحسابات',

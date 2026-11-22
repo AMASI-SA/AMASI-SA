@@ -56,9 +56,15 @@ def _invoice(state, invoice_id):
 
 
 def _linked_movements(state):
-    return {payment.get('movement_id')
-            for record in (state.get('native_purchase_links') or {}).values()
-            for payment in (record.get('payments') or {}).values()}
+    linked = {payment.get('movement_id')
+              for record in (state.get('native_purchase_links') or {}).values()
+              for payment in (record.get('payments') or {}).values()}
+    # Reversals append an inverse without changing the original payment. Both
+    # sides are unavailable, including when a reversal wins an allocation CAS.
+    for movement in checked_rows(state.get('movements', [])):
+        if movement.get('reverse_of'):
+            linked.update((movement.get('id'), movement['reverse_of']))
+    return linked
 
 
 def _candidate(movement, supplier_id, linked):

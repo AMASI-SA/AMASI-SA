@@ -223,3 +223,46 @@ def test_runtime_read_allowlist_and_no_source_or_accounting_writes():
         await save_exchange(safe,'owner','staff',action(case,'contribution',contribution={'bank_id':'bank','amount':'30','reference':'guard-ref','paid_at':NOW}),case_id=case['id'],clock=NOW)
         assert not any('journal' in n or 'ledger' in n for n in touched)
     run(scenario)
+
+
+def test_owner_mobile_exchange_contributions_without_reference_are_distinct_and_links_reuse_credit():
+    async def scenario(db):
+        await seed(db)
+        scope = digest(['owner', 'owner'])
+        q = await shipping_quote(db, 'owner', 'courier', 'carrier', NOW, '1001')
+        paid = {'bank_id': 'bank', 'amount': '30.00', 'paid_at': NOW}
+        new = command(expected_session_scope=scope, shipping_quote_hash=digest(q), contribution=paid)
+        path = '/api/operational-balances/customer-exchanges'
+        async with client(db, 'owner', mobile=False) as web:
+            missing = await web.post(path, json={**new, 'request_id': 'web-missing-bank-reference'})
+            assert missing.status_code == 422 and missing.json()['detail']['code'] == 'exchange_contribution_invalid'
+        async with client(db, 'owner') as mobile:
+            replies = await asyncio.gather(*(mobile.post(path, json=new) for _ in range(2)))
+            assert all(response.status_code == 200 for response in replies), replies[0].text
+            case = replies[0].json()
+            assert replies[1].json() == case and case['contributions'][0]['reference'] == ''
+            url = path + '/' + case['id'] + '/actions'
+            async def contribute(request_id, **changes):
+                return await mobile.post(url, json=action(case, 'contribution', expected_session_scope=scope,
+                    request_id=request_id, contribution={**paid, **changes}))
+            assert (await contribute('another-bank-payment', reference='  ')).status_code == 200
+            assert (await contribute('without-date', paid_at='invalid')).status_code in {409, 422}
+            assert (await contribute('wrong-bank', bank_id='foreign')).status_code >= 400
+            # The source credit already hit the bank. Selecting its ID must re-use the recorded amount.
+            existing = await create_movement(db, 'owner', 'owner', {**movement(), 'request_id': 'existing-credit',
+                'party_type': 'bank', 'party_id': 'bank', 'direction': 'incoming', 'kind': 'collection',
+                'amount': '30', 'reference': '  A  '}, clock=NOW)
+            assert (await contribute('wrong-link-ref', existing_movement_id=existing['id'], reference='B')).status_code == 409
+            assert (await contribute('wrong-link-amount', existing_movement_id=existing['id'], amount='29')).status_code == 409
+            linked = await contribute('matched-bank-credit', existing_movement_id=existing['id'])
+            assert linked.status_code == 200, linked.text
+            rows = linked.json()['contributions']
+            assert len({row['movement_id'] for row in rows}) == 3
+            assert rows[-1]['movement_id'] == existing['id'] and rows[-1]['reference'] == 'A'
+            assert (await contribute('matched-bank-credit', existing_movement_id=existing['id'])).json() == linked.json()
+            assert (await contribute('reused-bank-credit', existing_movement_id=existing['id'])).status_code == 409
+        state = await read(db, 'owner')
+        assert len(state['movements']) == 3
+        assert all(row['reference'] == '' for row in state['movements'] if row.get('exchange_id'))
+        assert report(state)['summary']['actual_liquidity'] == '1090.00'
+    run(scenario)
