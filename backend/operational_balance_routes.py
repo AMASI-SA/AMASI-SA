@@ -775,7 +775,17 @@ def make_operational_balance_router(db, current_user):
     async def context(request: HttpRequest, user=Depends(current_user)):
         async def read_page():
             actor, owner, source = await scope(db, user, "view")
-            state = await read(db, owner)
+            from operational_financial_position_state import read_financial_position_state
+            from fastapi import HTTPException as SnapshotHTTPException
+            try:
+                # Context needs current fields, never historical audit contents.
+                state = await read_financial_position_state(db, owner)
+            except SnapshotHTTPException as exc:
+                if (exc.status_code == 503 and isinstance(exc.detail, dict)
+                        and exc.detail.get("code") == "operational_financial_snapshot_invalid"):
+                    # Retain this endpoint's existing current-corruption response.
+                    fail("operational_audit_archive_invalid", "تعذر التحقق من اكتمال سجل التدقيق التشغيلي", 503)
+                raise
             permissions = {}
             for key in ("view", "move", "manage", "reports"):
                 try:
