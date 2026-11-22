@@ -1008,21 +1008,33 @@ def make_order_tracking_notes_router(
         return await unread_preview(db, merchant_id=context["merchant_id"], actor_id=context["actor_id"])
 
     @router.get("/notifications/me")
-    async def my_notifications(directory_only: bool = False, count_only: bool = False,
+    async def my_notifications(response: Response, directory_only: bool = False, count_only: bool = False,
         sender_id: str = Query(default="", max_length=128),
         read_state: Literal["all", "unread", "read"] = "all",
-        conversation_only: bool = False, view: Literal["alerts", "history"] = "alerts",
+        conversation_only: bool = False, include_financial: bool = False,
+        view: Literal["alerts", "history"] = "alerts",
         q: str = Query(default="", max_length=120),
         cursor: str | None = Query(default=None, max_length=1024), user: dict = Depends(instruction_user)):
         context = await _actor_context(db, user)
+        async def with_financial_count(result):
+            if count_only and include_financial:
+                from employee_finance_notifications import financial_unread_count
+                financial = await financial_unread_count(db,
+                    merchant_id=context["merchant_id"], actor_id=context["actor_id"])
+                response.headers["Cache-Control"] = "no-store"
+                return {**result, "unread_count": result["unread_count"] + financial,
+                    "financial_unread_count": financial, "financial_included": True}
+            return result
         if conversation_only:
             from operational_instruction_conversations import conversation_listing
-            return await conversation_listing(db, merchant_id=context["merchant_id"], actor_id=context["actor_id"],
+            result = await conversation_listing(db, merchant_id=context["merchant_id"], actor_id=context["actor_id"],
                 directory_only=directory_only, count_only=count_only, sender_id=sender_id,
                 read_state=read_state, cursor=cursor, q=q, view=view)
+            return await with_financial_count(result)
         if count_only:
-            return {"count_only": True, "unread_count": await db[NOTIFICATIONS].count_documents({
-                "merchant_id": context["merchant_id"], "recipient_id": context["actor_id"], "read_at": None})}
+            return await with_financial_count({"count_only": True,
+                "unread_count": await db[NOTIFICATIONS].count_documents({
+                    "merchant_id": context["merchant_id"], "recipient_id": context["actor_id"], "read_at": None})})
         if directory_only or sender_id:
             from operational_notification_directory import sender_directory, sender_page
             if directory_only:

@@ -101,7 +101,9 @@ def _notification_route_allowed(path: str, method: str, *, driver=False) -> bool
         r"/api/operational-notifications/devices/(?:register|unregister)"]
     if not driver:
         common_get += [rf"{root}/instructions/mine/history", rf"{root}/orders/{resource}", rf"{root}/search",
-            rf"{root}/notifications/me/unread-preview"]
+            rf"{root}/notifications/me/unread-preview", r"/api/employee-finance/notifications/me",
+            rf"/api/employee-finance/notifications/{resource}"]
+        common_post += [rf"/api/employee-finance/notifications/{resource}/read"]
         common_post += [rf"{root}/orders/{resource}/instructions", rf"{root}/instructions/{resource}/(?:approve|reject|complete|stop-acknowledgment|send-edit)", rf"{root}/instructions/{resource}/tasks/claim"]
     return any(re.fullmatch(pattern, path) for pattern in (common_get if method == "GET" else common_post if method == "POST" else []))
 

@@ -4793,6 +4793,8 @@ api.include_router(make_endpoint_ledger_coverage_router(db, current_user))
 app.include_router(make_mezan_mcp_router(db))
 from operational_push import make_operational_push_router
 api.include_router(make_operational_push_router(db, current_user))
+from employee_finance_notification_routes import make_employee_finance_notification_router
+api.include_router(make_employee_finance_notification_router(db, current_user))
 from operational_instruction_comments import make_instruction_comments_router
 api.include_router(make_instruction_comments_router(db, current_user))
 app.include_router(api)
