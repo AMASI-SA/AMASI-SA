@@ -123,6 +123,23 @@ test('balance-only account opened from a directory loads its own balance without
   expect(host.textContent).toContain('170.45');
 });
 
+test('a demand provider ledger keeps saved snapshot dates with customer adjustment review actions',async()=>{
+  const provider={...bank,kind:'provider',id:'tabby',name:'تابي',order_issues_count:0,
+    customer_adjustments:{currency:'SAR',refund_pending_count:1,refund_pending_amount:'100.00',collection_pending_count:2,collection_pending_amount:'25.00'}};
+  api.ledger.mockImplementation(async(kind,id,params)=>({...paged(params),resource:provider,provider_orders:true,
+    items:[],total:0,total_pages:0,page:0,snapshot:{display_only:true,as_of:'2026-11-18T12:00:00Z',generated_at:'2026-11-22T09:00:00Z'}}));
+  const onReviewCustomerRefunds=jest.fn(),onReviewCustomerCollections=jest.fn();
+  await render({resource:provider,context:{...ctx,demandOnly:true,resources:[]},onReviewCustomerRefunds,onReviewCustomerCollections});
+  expect(host.querySelector('[aria-label="تاريخ البيانات المحفوظة"]').textContent).toContain('تجهيز هذا العرض');
+  const actions=host.querySelector('[aria-label="رد المبالغ وتحصيل المتبقي"]');
+  expect(actions.querySelector('.adjustment-badge.refund').textContent).toContain('100.00');
+  expect(actions.querySelector('.adjustment-badge.collection').textContent).toContain('25.00');
+  await click('مراجعة رد مبالغ العملاء');await click('مراجعة تحصيل المتبقي على العملاء');
+  expect(onReviewCustomerRefunds).toHaveBeenCalledTimes(1);expect(onReviewCustomerCollections).toHaveBeenCalledTimes(1);
+  expect(api.ledger).toHaveBeenCalledTimes(1);expect(api.ledger.mock.calls[0][3].demand).toBe(true);
+  expect(api.movements).not.toHaveBeenCalled();expect(api.statement).not.toHaveBeenCalled();
+});
+
 
 test.each(['tabby','tamara','salla'])('supported provider %s exposes permissioned contextual statement links',async id=>{
   const provider={...bank,kind:'provider',id,name:id};

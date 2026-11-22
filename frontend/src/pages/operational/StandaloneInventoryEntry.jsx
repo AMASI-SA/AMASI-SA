@@ -1,9 +1,10 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {Link} from 'react-router-dom';
+import {Check} from '@phosphor-icons/react';
 import {operationalApi as api, messageFor, requestId} from './api';
 import {Field, Notice} from './OpeningBalances';
 import {InventoryProductPicker,InventoryProductOptions,InventoryProductPhoto} from '../../components/inventory/suite/InventoryProductFields';
-import {validateInventoryConfiguration} from '../../lib/inventoryProductConfiguration';
+import {inventoryConfiguration,inventoryConfigDescription,validateInventoryConfiguration} from '../../lib/inventoryProductConfiguration';
 
 const unitLabel = unit => ({piece: 'قطعة', m: 'متر', kg: 'كيلوجرام'}[unit] || unit);
 
@@ -93,9 +94,9 @@ export default function StandaloneInventoryEntry({context}) {
         <legend>إدخال منتج واحد</legend>
         {!line ? <>
           <Field label="نوع الصنف"><select value={kind} onChange={e => {setKind(e.target.value); setSearch('');}}><option value="product">منتجات</option><option value="component">مكونات</option></select></Field>
-          <InventoryProductPicker items={matches} query={search} onQueryChange={setSearch} initialOpen label="بحث بالاسم أو الرقم المخزني" onPick={p=>setLine({...p,kind,quantity:'1',unit_cost:'',location_id:'',purchase_configuration:{state:kind==='product'?'ready':'raw',selections:[],inputs:[]}})}/>
+          <InventoryProductPicker items={matches} query={search} onQueryChange={setSearch} initialOpen label="بحث بالاسم أو الرقم المخزني" onPick={p=>setLine({...p,kind,quantity:'1',unit_cost:'',location_id:'',purchase_configuration:kind==='product'&&p.configuration_contract_version===2?inventoryConfiguration(p):{state:kind==='product'?'ready':'raw',selections:[],inputs:[]}})}/>
         </> : <div className="mz-purchase-line">
-          <div className="mz-product-selected"><InventoryProductPhoto product={line}/><div><h3>{line.name}</h3><span>الرقم المخزني <bdi>{line.sku||'غير محدد'}</bdi></span></div><button type="button" onClick={()=>setLine(null)}>تغيير الصنف</button></div>
+          <div className="mz-product-selected"><InventoryProductPhoto product={line}/><div><h3>{line.name}</h3><span><Check size={14} aria-hidden="true"/> مختار · الرقم المخزني <bdi>{line.sku||'غير محدد'}</bdi></span></div><button type="button" onClick={()=>setLine(null)}>تغيير الصنف</button></div>
           {line.kind==='product'&&<InventoryProductOptions product={line} config={line.purchase_configuration} onChange={config=>update({purchase_configuration:config})}/>}
           <Field label="موقع التخزين"><select value={line.location_id} onChange={e=>update({location_id:e.target.value})}><option value="">اختر الموقع</option>{catalog.locations.map(l=><option key={l.id} value={l.id}>{l.name||l.code}{l.warehouse_name?' · '+l.warehouse_name:''}</option>)}</select></Field>
           <div className="mz-stock-amounts">
@@ -107,7 +108,7 @@ export default function StandaloneInventoryEntry({context}) {
       </fieldset>
       <div className="op-table"><table><caption>آخر 100 إضافة مثبتة — جميع الكميات في صفحة المخزون الحالي</caption>
         <thead><tr>{['المنتج', 'الحالة والمواصفات', 'الموقع', 'الكمية', 'تكلفة الوحدة', 'الإجمالي'].map(t => <th key={t}>{t}</th>)}</tr></thead>
-        <tbody>{catalog.entries.flatMap(entry => entry.lines.map((item, i) => <tr key={`${entry.id}:${i}`}><td>{item.name}</td><td>{item.preparation_state === 'ready_complete' ? 'جاهز' : 'يحتاج تجهيز'} · {Object.entries(item.specifications || {}).map(([k,v]) => `${k}: ${v}`).join(' · ')}</td><td>{item.location_name}</td><td>{item.quantity} {unitLabel(item.unit)}</td><td>{item.unit_cost}</td><td>{item.total_cost}</td></tr>))}</tbody>
+        <tbody>{catalog.entries.flatMap(entry => entry.lines.map((item, i) => <tr key={`${entry.id}:${i}`}><td>{item.name}</td><td>{item.purchase_configuration?inventoryConfigDescription(item):<>{item.preparation_state === 'ready_complete' ? 'جاهز' : 'يحتاج تجهيز'} · {Object.entries(item.specifications || {}).map(([k,v]) => `${k}: ${v}`).join(' · ')}</>}</td><td>{item.location_name}</td><td>{item.quantity} {unitLabel(item.unit)}</td><td>{item.unit_cost}</td><td>{item.total_cost}</td></tr>))}</tbody>
       </table>{!catalog.entries.length && <p>لم تُضف كميات بعد.</p>}</div>
     </>}
   </section>;

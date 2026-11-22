@@ -57,7 +57,7 @@ export default function ApprovedEntry(props) {
     props.context.permission_version, props.mode, props.resource?.kind, props.resource?.id])} {...props} />;
 }
 
-function EntryWorkflow({ context, resource, mode = 'choose', onBack, onSaved, onPurchase, onRefund }) {
+function EntryWorkflow({ context, resource, mode = 'choose', onBack, onSaved, onPurchase, onRefund, onCustomerCollection }) {
   const [selected, setSelected] = useState(modes[mode] ? mode : 'choose');
   const resourceId = resource && resourceKey(resource);
   const allowedTarget = resource && (context.demandOnly ? resource : context.resources.find(item => resourceKey(item) === resourceId));
@@ -92,6 +92,7 @@ function EntryWorkflow({ context, resource, mode = 'choose', onBack, onSaved, on
       </button>}
       {!carrierContext && movementChoice('move')}
       {!carrierContext && onRefund && (granted.has('customer.refund_request') || granted.has('customer.refund_execute')) && <button type="button" className="quickbtn" onClick={onRefund}><IconBox name="corner-down-left" tone="c-out" />إرجاع مبلغ لعميل برقم الطلب</button>}
+      {!carrierContext && onCustomerCollection && granted.has('customer.collection') && <button type="button" className="quickbtn" onClick={onCustomerCollection}><IconBox name="arrow-down-left" tone="c-in"/>تحصيل متبقي طلب من العميل</button>}
     </div></>;
   return <MovementFields key={selected} context={context} resource={allowedTarget} mode={selected} onBack={onBack} onChangeMode={() => setSelected('choose')} onSaved={onSaved} />;
 }

@@ -1,3 +1,4 @@
+import {inventoryConfigDescription} from '../../../lib/inventoryProductConfiguration';
 import { ArrowLeft, CheckCircle, Cube, WarningCircle, Warehouse, ChartBar, Plus, Receipt, ClipboardText } from "@phosphor-icons/react";
 
 export const inventoryNumber = (value) => value == null || value === "" || !Number.isFinite(Number(value)) ? null : Number(value);
@@ -6,7 +7,7 @@ export const inventoryDisplay = (value) => {
   return number === null ? "غير متاح" : number.toLocaleString("ar-SA", { maximumFractionDigits: 6 });
 };
 export const inventoryUnit = (value) => ({ piece: "قطعة", gram: "جرام", kg: "كيلوجرام", m: "متر", job: "خدمة" }[value] || value || "وحدة غير محددة");
-export const stockSpecifications = (specifications) => Object.entries(specifications || {}).map(([name, value]) => name + ": " + value).join(" · ") || "بدون تخصيص";
+export const stockSpecifications = (specifications,row) => row?.purchase_configuration ? inventoryConfigDescription(row) : Object.entries(specifications || {}).map(([name, value]) => name + ": " + value).join(" · ") || "بدون تخصيص";
 export const rowNeedsReview = (row) => Boolean(row.availability_issues?.length) || inventoryNumber(row.available) === null || inventoryNumber(row.held) > 0;
 const strictTotal = (rows, field) => rows.some((row) => inventoryNumber(row[field]) === null) ? null : rows.reduce((sum, row) => sum + inventoryNumber(row[field]), 0);
 
@@ -42,7 +43,7 @@ export function InventoryProjectionMetrics({ summary }) {
 }
 
 function ProjectionItem({ row }) {
-  return <span className="mz-stock-item"><span className="mz-stock-item-icon">{row.main_image ? <img alt="" src={row.main_image}/> : <Cube size={23}/>}</span><span><strong>{row.name}</strong><small><bdi>{row.sku || (row.resource_id ? "مكوّن مخزني" : "بدون رقم مخزني")}</bdi> · {stockSpecifications(row.specifications)}</small></span></span>;
+  return <span className="mz-stock-item"><span className="mz-stock-item-icon">{row.main_image ? <img alt="" src={row.main_image}/> : <Cube size={23}/>}</span><span><strong>{row.name}</strong><small><bdi>{row.sku || (row.resource_id ? "مكوّن مخزني" : "بدون رقم مخزني")}</bdi> · {stockSpecifications(row.specifications,row)}</small></span></span>;
 }
 
 export function InventoryHomeProjection({ result, context, onNavigate }) {

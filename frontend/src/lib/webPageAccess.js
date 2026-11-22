@@ -36,7 +36,7 @@ export const employeeSettingGroups = {
 const financeViews = {
     home: "home", assets: "assets", parties: "parties", log: "log", entry: "entry",
     "special-entry": "entry", refund: "refund", reviews: "review", issues: "review",
-    collections: "collections", position: "position", tools: "tools", specialized: "specialized",
+    collections: "collections", "customer-collections": "customer-collections", position: "position", tools: "tools", specialized: "specialized",
 };
 
 // Both finance entry points render the same authenticated views. Legacy workspace

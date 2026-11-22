@@ -71,6 +71,9 @@ export default function ApprovedOperations({ context, onBack, pages=null }) {
   if (grants.has('customer.refund_request') || grants.has('customer.refund_execute')) {
     employeeLinks.push(['رد مبلغ برقم الطلب', workspace + '?view=refund', 'corner-down-left']);
   }
+  if (grants.has('customer.collection')) {
+    employeeLinks.push(['تحصيل متبقي طلب', workspace + '?view=customer-collections', 'arrow-down-left']);
+  }
   if (grants.has('courier.review') && (context.demandOnly ? context.capabilities?.review_collections === true : context.resources.some(r => r.kind === 'store_driver' && r.access?.movements === 'all'))) {
     employeeLinks.push(['مراجعة تحصيلات الموصلين', workspace + '?view=collections', 'list-checks']);
   }

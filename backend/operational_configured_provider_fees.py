@@ -311,10 +311,23 @@ def refresh_provider_fee_inputs(state, sources):
     for order in sources.get("orders", []):
         payment = order.get("payment") or {}
         valuation = order.get("customer_payment_sar") or {}
+        identity = str(order["id"])
+        observation = order.get("retained_customer_adjustment") or {}
+        saved = orders.get(identity) or {}
+        saved_payment = saved.get("payment") or {}
+        if (not payment and observation and observation.get("order_id") == identity
+                and observation.get("order_number") == saved.get("order_number") == order.get("order_number")
+                and observation.get("currency") == saved.get("currency") == order.get("currency") == "SAR"
+                and observation.get("provider") == saved_payment.get("provider") in PROVIDERS
+                and not saved_payment.get("split") and observation.get("proof_hash")
+                and observation.get("customer_adjustment", {}).get("proof_hash") == observation["proof_hash"]):
+            # Do not replace the saved capture, rail, plan or pricing date with
+            # a zero-paid terminal snapshot. Only its review observation moves.
+            saved_payment["customer_adjustment"] = deepcopy(observation["customer_adjustment"])
+            saved["retained_customer_adjustment"] = deepcopy(observation)
         if (payment.get("provider") not in PROVIDERS and not payment.get("split")
                 and not PROVIDERS.intersection(valuation.get("native", {}))):
             continue
-        identity = str(order["id"])
         orders[identity] = {k: deepcopy(order[k]) for k in (
             "order_number", "currency", "created_at", "updated_at", "payment", "customer_payment_sar") if k in order}
     state["engine"]["provider_fee_inputs"] = {

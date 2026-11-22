@@ -19,6 +19,7 @@ test.each([
     ["balances.parties",balances+"?view=parties",balances+"/daily-movements?view=ledger&kind=supplier&id=123"],
     ["balances.review",balances+"?view=reviews",balances+"?view=issues&kind=courier&id=mobile"],
     ["balances.entry",balances+"?view=entry",balances+"?view=special-entry&kind=bank&id=123"],
+    ["balances.customer-collections",balances+"?view=customer-collections",balances+"?view=customer-collections&order=245"],
     ["balances.statements",balances+"/provider-statements",balances+"/provider-statements#history"],
     ["home.dashboard","/dashboard-advanced","/dashboard-advanced?from=2026-11-01"],
     ["fulfillment.files","/fulfillment-v2?stage=reviewed&view=files","/fulfillment-v2?view=files&stage=reviewed"],
@@ -27,6 +28,9 @@ test.each([
 
 test.each([
     ["balances.home",balances,balances+"?view=entry"],
+    ["balances.collections",balances+"?view=collections",balances+"?view=customer-collections"],
+    ["balances.refund",balances+"?view=refund",balances+"?view=customer-collections"],
+    ["balances.customer-collections",balances+"?view=customer-collections",balances+"?view=collections"],
     ["balances.log",balances+"/daily-movements",balances+"/daily-movements?tab=parties"],
     ["balances.assets",balances+"?view=assets",balances+"?view=ledger&kind=supplier&id=123"],
     ["balances.parties",balances+"?view=parties",balances+"?view=ledger&kind=bank&id=123"],

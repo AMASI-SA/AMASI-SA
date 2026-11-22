@@ -58,6 +58,16 @@ it('limits employee links to granted actions within their existing route and den
   expect(operationalApi.financialPosition).not.toHaveBeenCalled();
 });
 
+it('demand-only tools keep customer actions and courier capability without fetching an account list',async()=>{
+  const staff={...context,actor:{id:'staff',is_owner:false},resources:[],demandOnly:true,
+    operations:['customer.refund_execute','customer.collection','courier.review'],capabilities:{review_collections:true}};
+  await show(<ApprovedOperations context={staff}/>,'/operational-balances/daily-movements');
+  expect(links()).toEqual(['refund','customer-collections','collections'].map(view=>'/operational-balances/daily-movements?view='+view));
+  await show(<ApprovedOperations context={{...staff,capabilities:{review_collections:false}}}/>);
+  expect(links()).toEqual(['refund','customer-collections'].map(view=>'/operational-balances/daily-movements?view='+view));
+  expect(http.get).not.toHaveBeenCalled();expect(operationalApi.financialPosition).not.toHaveBeenCalled();
+});
+
 it('reads one saved summary, excludes prepaid shipping cash, retains unknown debts and native-currency wallets',async()=>{
   const open=jest.fn();
   await show(<ApprovedPosition context={context} identity="owner" onOpen={open}/>);
