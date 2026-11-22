@@ -1,0 +1,71 @@
+{
+  "recorded_at_utc": "2026-11-22T16:54:33Z",
+  "execution_time_utc": null,
+  "provenance": "Complete user-supplied output from actual Emergent /app MANUAL-HOST-BUILD-PREFLIGHT.py; assistant did not execute this command",
+  "head_precondition": "9b4fb716b430c32073b5ea7abaeaff62646d9633",
+  "tracked_clean_precondition": true,
+  "guard": {
+    "active": false,
+    "incomplete": false
+  },
+  "disk": [
+    {
+      "scope": "app",
+      "free_mib": 70.6,
+      "total_mib": 9979.3
+    },
+    {
+      "scope": "tmp",
+      "free_mib": 233023,
+      "total_mib": 284945.1
+    },
+    {
+      "scope": "toolchain_cache",
+      "free_mib": 233023,
+      "total_mib": 284945.1
+    }
+  ],
+  "caches": {
+    "directories": 1,
+    "sample": [
+      "backend/__pycache__"
+    ],
+    "loose_bytecode": 0,
+    "loose_sample": []
+  },
+  "owned_outputs": [
+    {
+      "path": "frontend/build",
+      "present": true,
+      "symlink": false
+    },
+    {
+      "path": "frontend/node_modules",
+      "present": true,
+      "symlink": false
+    },
+    {
+      "path": "frontend/.release",
+      "present": true,
+      "symlink": false
+    },
+    {
+      "path": "backend/release_identity.json",
+      "present": true,
+      "symlink": false
+    }
+  ],
+  "release_entries": {
+    "count": 1,
+    "names": [
+      "reproducible-build.json"
+    ]
+  },
+  "intent_preflight": {
+    "passed": false,
+    "error_type": "DeploymentAdapterError",
+    "message": "release source manifests are invalid: Backend runtime source contains prepackaged bytecode: __pycache__"
+  },
+  "next_action": "Original isolated /tmp candidate rehearsal; preserve all /app source, bytecode and outputs",
+  "production_changed": false
+}

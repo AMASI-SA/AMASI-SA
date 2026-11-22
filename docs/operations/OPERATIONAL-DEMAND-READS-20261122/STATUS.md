@@ -1,5 +1,61 @@
 # Operational demand reads — implementation checkpoint
 
+## Actual host build preflight returned — isolated rehearsal next
+
+The owner supplied the complete output of MANUAL-HOST-BUILD-PREFLIGHT.py from
+the actual Emergent /app terminal. Recorded at2026-11-22T16:54:33Z; exact command
+execution time was not supplied. The script passed the clean-J precondition.
+
+- Original guard: active:false, incomplete:false.
+- /app: **70.6 MiB free** of9979.3MiB.
+- /tmp and the existing toolchain-cache filesystem: **233023.0 MiB free**.
+- Exactly one protected bytecode directory: backend/__pycache__; no loose bytecode.
+- frontend/build, node_modules, .release and backend/release_identity.json exist
+  as real nonsymlink paths. .release contains only reproducible-build.json.
+- Original loader correctly refused:
+  `DeploymentAdapterError release source manifests are invalid: Backend runtime source contains prepackaged bytecode: __pycache__`.
+
+The preceding unknown-space/preflight-pending state is superseded. This is a
+host packaging obstacle; it does not change the reviewed A/B source or the
+successful CI. Do not disable the manifest/bytecode check or delete platform files.
+
+**Next concrete action:** run adjacent MANUAL-HOST-ISOLATED-REHEARSAL.py.
+Its reviewed bytes SHA256:
+`475ec8ea80ad8ba69e69f26f940851b379b3e000749d2e76aadab1d51f404768`.
+It freshly checks the original shared guard, clean J and exact remote J/B,
+creates a unique clean clone in /tmp, obtains exact B, checks B tree and original
+intent/Git validation in a separate process, and invokes the original
+`frontend/yarn build` package adapter there. Only the reviewed public client
+origin is supplied; no /app .env or ignored output is copied.
+
+The command stores Git remote URL only in process memory and suppresses sensitive
+Git error argv/stderr. It does not save a credential-bearing URL to config or
+FETCH_HEAD. It stops on inherited CI/Git-routing markers. It reads the adapter's
+literal success proof and materialized identity without regenerating missing
+proof. Original shared guard/head/clean state are checked again after rehearsal.
+No prepare, prepublish or shared source/output mutation is included.
+
+Local verification: syntax PASS; actual local clean clone/fetch exact B,
+no FETCH_HEAD/no alternate-object file, exact tree, clean tracked source,
+and original load_release_intent/verify_release_intent_git all PASS, exit0.
+Independent review corrected a proposed duplicate post-build materialization;
+the saved script only reads the output. **Actual host authentication and the
+actual host adapter execution are still pending.** A successful local Git
+transport test is not a claim that remote credentials worked on Emergent.
+
+Leave backend/__pycache__ and all current generated outputs in /app for this
+step; the clean clone excludes them naturally. The original /app packaging
+failure still requires a later reversible, verified staging step after a
+successful isolated rehearsal. Do not claim the disk/cache issue is fixed yet.
+
+Production and PR2069 still identify J and frozen B. Exact-B47 applicable
+workflows remain successful. Separate PR2065/2072 have no new lease/merge or
+exclusive release claim in the latest ledger read. This task claims no shared
+publication ownership while providing the isolated manual rehearsal.
+**Production changed: no; no merge, /app edit, new lease or publish.**
+
+---
+
 ## Current release handoff — exact B complete; host preflight pending
 
 Fresh GitHub verification on 2026-11-22 at 16:41 UTC confirms that B
