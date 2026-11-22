@@ -53,12 +53,21 @@ existing tests. The source fallback now remains SAR-only and the established
 statement-refund alias guard is preserved. The integrated commit requires its
 own CI run; the earlier checkpoint's failed runs are not a passing release gate.
 
-## Integrated implementation — awaiting exact-commit CI
+## Integrated implementation — complete, awaiting final exact-commit CI
+
+Integrated checkpoint 2: `9eed2a573a3b32e92e55b3e4696e3a3512b1bdb3`.
+Its Frontend CI job passed **92 suites / 1,448 tests**. Backend and the wider
+jobs were still running when the final small source-metadata follow-up was
+prepared. Final results belong to the exact follow-up commit recorded in PR #2060.
 
 Completed in the task working tree:
 
 - Read-only adjustment inbox, separate refund/collection amounts and counts,
   and original paid proof retained for lookup when a terminal source reports zero.
+- Terminal zero-paid source observations also refresh report-only adjustment
+  metadata. Original captured facts, claim, pricing date and fee inputs remain
+  authoritative; the source still returns no new payment candidate. Only the
+  exact matching observation warning becomes informational on the platform card.
 - Explicit accountant-recorded bank/original-provider refund execution, with
   same-case confirmation of an existing reservation and fresh proof checks.
 - Separate customer collection page, partial receipts, actual destination,
@@ -98,6 +107,12 @@ introduced by this implementation.
 - Frontend: **149 passed in 10 suites**, in one combined run using the CI flag
   `--resetMocks=false`; no skips or failures. Package and lockfiles unchanged.
 - Root collection rerun: **16 passed**. Counts above overlap; do not add them.
+- Final terminal-source metadata follow-up: **154 passed** across the customer
+  basis, payment currentness, statement reconciliation, configured fees and
+  customer provider projection suites. A final unrelated-warning assertion was
+  added and the full customer basis suite reran: **27 passed**. The regression
+  verifies unchanged facts/claim/fees, idempotent metadata refresh, separate
+  pending refund and actual-source debit only after execution.
 - Root combined 20-file run: **580 passed**, with **4 setup failures** because
   the local real Mongo service is unavailable (`127.0.0.1:27305`). All four
   are real-Mongo cases in `test_operational_balance_daily_financial_movements`;
@@ -126,8 +141,6 @@ list and required-suite assertions now include the new financial and UI tests.
 
 - Preserve this integrated milestone and inspect the CI results on that exact
   commit, including the real-Mongo backend and frontend jobs.
-- A report-only refresh for terminal zero-paid adjustment metadata is being
-  finalized; it must not pass a retained payment into source recognition.
 - Without line/version history, simultaneous product return and product
   addition cannot be reconstructed from their net total alone. Review the
   separate source evidence; do not infer customer debt from an executed refund.

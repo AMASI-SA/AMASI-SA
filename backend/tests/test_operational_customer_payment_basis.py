@@ -174,3 +174,92 @@ def test_retained_page_has_no_invented_capture_time_and_keeps_refunded_principal
     basis = retained(raw, source, state)
     assert basis["paid_amount"] == "200.00" and not basis["payment"].get("captures")
     assert basis["payment"]["order_page_balance"] == page
+
+
+def cached_adjustment_fixture():
+    from operational_balance_sources import collect_sources
+    from test_operational_balance_sources import DB, row, run
+    from test_operational_balance_configured_provider_fees import settings
+
+    raw, source = document(total="200.00", refund="0.00", captured=True)
+    state = {"owner_id": "owner", "status": "active", "started_at": "2026-10-31T10:00:00+00:00",
+             "openings": {}, "movements": []}
+    db = DB({"unified_orders": [source], "settings": [row(**settings("مدى", "1", "1", "15"))]})
+    initial = run(collect_sources(db, "owner", state["started_at"], AS_OF, operational_state=state))
+    state = reconcile(state, initial, AS_OF)
+    raw["updated_at"] = AS_OF
+    raw["total"]["amount"] = "199.20"
+    raw["payment"].update(status="refunded", paid_amount="0.00")
+    raw["payment_actions"]["refund_action"].update(paid_amount="0.00", refund_amount="0.80")
+    raw["payment_actions"]["remaining_action"]["paid_amount"] = "0.00"
+    raw["status"] = "refunded"
+    return raw, source, state, db
+
+
+@pytest.mark.parametrize("status", ["refunded", "cancelled"])
+def test_zero_paid_terminal_refresh_updates_only_cached_adjustment_and_keeps_original_cash_and_fees(status):
+    from operational_balance_sources import collect_sources
+    from test_operational_balance_sources import run
+    from test_operational_balance_configured_provider_fees import platform
+    from test_operational_customer_provider_projection import refund
+
+    raw, source, state, db = cached_adjustment_fixture()
+    raw["status"] = raw["payment"]["status"] = status
+    original = deepcopy(state)
+    sources = run(collect_sources(db, "owner", state["started_at"], AS_OF, operational_state=state))
+    observed, = sources["orders"]
+    assert observed.get("payment") is None  # Never replay retained money into recognition.
+    assert observed["retained_customer_adjustment"]["customer_adjustment"]["refund_hint_amount"] == "0.80"
+    refreshed = reconcile(state, sources, AS_OF)
+    assert state == original
+    assert refreshed["engine"]["facts"] == original["engine"]["facts"]
+    assert refreshed["engine"]["obligations"]["provider:" + raw["id"]] == original["engine"]["obligations"]["provider:" + raw["id"]]
+    old_input = original["engine"]["provider_fee_inputs"]["orders"][raw["id"]]
+    new_input = refreshed["engine"]["provider_fee_inputs"]["orders"][raw["id"]]
+    assert new_input["updated_at"] == old_input["updated_at"]  # Original fee date remains unchanged.
+    assert {key: value for key, value in new_input["payment"].items() if key != "customer_adjustment"} == {
+        key: value for key, value in old_input["payment"].items() if key != "customer_adjustment"}
+    card = platform(refreshed, "salla")
+    assert (card["gross"], card["known_fees"], card["known_net"]) == ("200.00", "3.45", "196.55")
+    assert card["pending_orders"] == 0
+    assert card["customer_adjustments"] == {"currency": "SAR", "refund_pending_count": 1,
+        "refund_pending_amount": "0.80", "collection_pending_count": 0, "collection_pending_amount": "0.00"}
+    # The observation cannot conceal an independent fee/statement problem.
+    fee_review = deepcopy(refreshed)
+    fee_review["engine"]["issues"].append({"code": "provider_statement_fee_review_required",
+        "source_id": raw["id"], "scope": "provider_payment", "provider": "salla", "currency": "SAR"})
+    assert "provider_statement_fee_review_required" in {
+        reason["code"] for reason in platform(fee_review, "salla")["pending_reasons"]}
+    repeated = reconcile(refreshed, sources, AS_OF)
+    assert repeated["engine"]["facts"] == refreshed["engine"]["facts"]
+    assert platform(repeated, "salla") == card
+    repeated["customer_returns"] = [refund(order_id=raw["id"], order_number=raw["reference_id"])]
+    confirmed = platform(repeated, "salla")
+    assert confirmed["known_net"] == "195.75" and confirmed["known_fees"] == "3.45"
+    assert confirmed["customer_adjustments"]["refund_pending_count"] == 0
+    assert confirmed["customer_adjustments"]["collection_pending_count"] == 0
+
+
+@pytest.mark.parametrize("mutation", ["reference", "stale", "currency", "paid_conflict", "same_version", "saved_newer"])
+def test_terminal_report_metadata_keeps_source_identity_currency_and_zero_paid_guards(mutation):
+    from operational_balance_sources import collect_sources
+    from test_operational_balance_sources import run
+
+    raw, source, state, db = cached_adjustment_fixture()
+    if mutation == "reference":
+        raw["payment"]["reference"] = "unrelated-reference"
+    elif mutation == "stale":
+        source["g47_salla_snapshot"] = {"source_updated_at": "2026-11-04T10:00:00+00:00"}
+    elif mutation == "currency":
+        raw["payment_actions"]["remaining_action"]["currency"] = "USD"
+    elif mutation == "same_version":
+        raw["updated_at"] = UPDATED
+    elif mutation == "saved_newer":
+        state["engine"]["order_versions"][raw["id"]] = "2026-11-04T10:00:00+00:00"
+    else:
+        raw["payment_actions"]["remaining_action"]["paid_amount"] = "1.00"
+    sources = run(collect_sources(db, "owner", state["started_at"], AS_OF, operational_state=state))
+    assert sources["orders"][0].get("payment") is None
+    assert "retained_customer_adjustment" not in sources["orders"][0]
+    assert any(issue.get("scope") == "provider_payment" and not issue.get("customer_adjustment_proof")
+               for issue in sources["issues"])

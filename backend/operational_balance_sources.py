@@ -1766,6 +1766,17 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                         issue(out, 'cod_collection_contract_incomplete', identity)
                 if normalized_payment is not None:
                     order['payment'] = bind_statement_plan(normalized_payment, statement_plans, order_number)
+                elif identity not in statement_refund_index and operational_state:
+                    from operational_customer_payment_basis import retained_adjustment_observation
+                    observation = retained_adjustment_observation(raw, order['currency'], total, created, now,
+                        owner=owner, order_number=order_number, provider_order_id=identity, source=source,
+                        state=operational_state, issues=payment_issues, rows=txn_by_order.get(order_number, ()))
+                    if observation is not None:
+                        # Reporting metadata only. Frozen cash/fees remain the
+                        # authority; never feed the retained payment to posting.
+                        order['retained_customer_adjustment'] = observation
+                        payment_issues = [{**problem, 'customer_adjustment_proof': observation['proof_hash']}
+                                          for problem in payment_issues]
                 for payment_issue in payment_issues:
                     await cpu_budget.checkpoint()
                     calculation_checkpoint()

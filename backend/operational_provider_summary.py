@@ -4,6 +4,7 @@ from decimal import Decimal
 
 from operational_configured_provider_fees import cash, configured_terms, estimate_fee_details, number
 from operational_fee_methods import fee_rail
+from operational_customer_payment_basis import is_retained_adjustment_issue
 from operational_payment_evidence import DIAGNOSTICS
 from operational_provider_balance_sar import sar_amount
 from operational_provider_report_coverage import PLATFORMS
@@ -290,6 +291,8 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
     average_blocked = set()
     alias_held = set()
     for issue in state.get("engine", {}).get("issues", []):
+        if is_retained_adjustment_issue(state, issue):
+            continue
         if issue.get("code") == "provider_statement_refund_alias_review":
             oid = str(issue.get("order_id") or str(issue.get("source_id") or "").removeprefix("provider:"))
             alias_held.add((oid, issue.get("provider")))
@@ -585,7 +588,7 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
     for issue in state.get("engine", {}).get("issues", []):
         code = str(issue.get("code") or "")
         source_id = str(issue.get("source_id") or "")
-        if not source_id or code == "provider_net_balance_incomplete":
+        if not source_id or code == "provider_net_balance_incomplete" or is_retained_adjustment_issue(state, issue):
             continue
         if issue.get("scope") != "provider_payment" and not source_id.startswith("provider:"):
             continue

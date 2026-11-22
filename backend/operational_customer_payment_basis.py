@@ -17,6 +17,10 @@ from operational_payment_evidence import (
 
 ADJUSTED_PAYMENT_SOURCE = "canonical_salla_adjusted_payment"
 ZERO = Decimal(0)
+RETAINED_ADJUSTMENT_ISSUES = frozenset({
+    "provider_refund_execution_evidence_required", "provider_cancellation_execution_evidence_required",
+    "provider_capture_status_conflict", "provider_payment_amount_conflict",
+})
 
 
 def _cash(value):
@@ -285,3 +289,68 @@ def retained_confirmed_paid_basis(raw, currency, total, created_at, as_of, *, ow
                 "payment": retained, "proof_hash": proof_hash}
     except (ValueError, KeyError, TypeError):
         return None
+
+
+def retained_adjustment_observation(raw, currency, total, created_at, as_of, *, owner,
+                                    order_number, provider_order_id, source, state, issues, rows=()):
+    """Refresh terminal zero-paid review metadata; never return a payment candidate."""
+    try:
+        if not issues or any(issue.get("code") not in RETAINED_ADJUSTMENT_ISSUES for issue in issues):
+            return None
+        payment = _object(raw.get("payment"))
+        actions = _object(raw.get("payment_actions"))
+        containers = (raw, payment, _object(actions.get("refund_action")), _object(actions.get("remaining_action")))
+        values = [_amount(row["paid_amount"], currency) for row in containers if row.get("paid_amount") is not None]
+        status = raw.get("status")
+        status = status.get("slug") or status.get("name") if isinstance(status, dict) else status
+        states = {str(value).strip().lower() for value in (status, payment.get("status"), raw.get("payment_status"))}
+        terminal = {"refunded", "restored", "مسترجع", "cancelled", "canceled", "ملغي", "ملغى", "reversed", "voided"}
+        if (not values or any(value != ZERO for value in values) or not states.intersection(terminal)
+                or any(row.get("currency") not in (None, currency) for row in containers)):
+            return None
+        basis = retained_confirmed_paid_basis(raw, currency, total, created_at, as_of,
+            owner=owner, order_number=order_number, provider_order_id=provider_order_id,
+            source=source, state=state, rows=rows)
+        if basis is None:
+            return None
+        engine = state.get("engine") or {}
+        previous = (engine.get("provider_fee_inputs") or {}).get("orders", {}).get(provider_order_id) or {}
+        saved = previous.get("payment") or {}
+        if (previous.get("currency") != currency or saved.get("provider") != basis["provider"]
+                or saved.get("split") or previous.get("order_number") != order_number):
+            return None
+        stamp = _instant(raw.get("updated_at") or raw.get("date_updated"))
+        if stamp <= _instant(previous.get("updated_at")):
+            return None
+        version = (engine.get("order_versions") or {}).get(provider_order_id)
+        if version and stamp < _instant(version):
+            return None
+        prior = previous.get("retained_customer_adjustment") or {}
+        if prior:
+            prior_stamp = _instant(prior.get("source_updated_at"))
+            if stamp < prior_stamp or (stamp == prior_stamp and any(
+                    prior.get("customer_adjustment", {}).get(key) != basis[key]
+                    for key in ("order_total", "refund_hint_amount"))):
+                return None
+        return {"order_id": provider_order_id, "order_number": order_number, "provider": basis["provider"],
+            "currency": currency, "source_updated_at": stamp.isoformat(), "proof_hash": basis["proof_hash"],
+            "issue_codes": sorted({issue["code"] for issue in issues}),
+            "customer_adjustment": deepcopy(basis["payment"]["customer_adjustment"])}
+    except (ValueError, KeyError, TypeError):
+        return None
+
+
+def is_retained_adjustment_issue(state, issue):
+    """Only the exact retained report observation is informational on the card."""
+    proof = issue.get("customer_adjustment_proof")
+    if not proof or issue.get("code") not in RETAINED_ADJUSTMENT_ISSUES:
+        return False
+    oid = str(issue.get("source_id") or "").removeprefix("provider:")
+    saved = state.get("engine", {}).get("provider_fee_inputs", {}).get("orders", {}).get(oid) or {}
+    observed = saved.get("retained_customer_adjustment") or {}
+    payment = saved.get("payment") or {}
+    return bool(observed.get("proof_hash") == proof
+        and observed.get("order_id") == oid and observed.get("currency") == issue.get("currency") == saved.get("currency")
+        and observed.get("provider") == issue.get("provider") == payment.get("provider")
+        and issue.get("code") in observed.get("issue_codes", ())
+        and payment.get("customer_adjustment") == observed.get("customer_adjustment"))
