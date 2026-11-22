@@ -1,11 +1,11 @@
 {
   "task_id": "TABBY-DASHBOARD-FEES-20261122",
-  "status": "r2_superseded_by_new_production_base_r3_integration_started",
-  "updated_at_utc": "2026-11-22T20:56:55.552333+00:00",
+  "status": "r3_frozen_intent_B_exact_final_CI_running",
+  "updated_at_utc": "2026-11-22T21:05:58.140151+00:00",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tabby-weekly-fees-release-evidence-20261122",
   "production_branch": "hotfix/prod-snap-meta-final",
-  "source_base": "24270ebdfdebb83282389308a2349cdb27e2b8e4",
+  "source_base": "02cd99e5b2b68c95341c87590abcf572c885e697",
   "historical_pr": 2068,
   "historical_source": "63c3f4ed08a4cb23d723326332774b6c21bcf212",
   "historical_intent_commit": "2b381e6c2fa353f985f2a515f753757073bb9516",
@@ -49,9 +49,9 @@
   "verification": [
     {
       "name": "Combined backend integration/regression",
-      "command": "PYTHONPATH=backend .venv/bin/python -m pytest --noconftest -q backend/tests/test_dashboard_weekly_payment_fees.py backend/tests/test_provider_fee_weekly_average.py backend/tests/test_provider_fee_weekly_sources.py backend/tests/test_dashboard_operational_statement_fees.py backend/tests/test_provider_fee_statement_actual_sources.py backend/tests/test_dashboard_dated_payment_fees.py backend/tests/test_dashboard_card_snapshots.py backend/tests/test_dashboard_v2_ad_account_costs.py backend/tests/test_dashboard_weekly_read_model.py backend/tests/test_dashboard_demand_builders.py --tb=short",
+      "command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=backend /workspace/scratch/a719d7c39de9/mezan-weekly-tabby/.venv/bin/python -B -m pytest --noconftest -q backend/tests/test_dashboard_weekly_payment_fees.py backend/tests/test_provider_fee_weekly_average.py backend/tests/test_provider_fee_weekly_sources.py backend/tests/test_dashboard_operational_statement_fees.py backend/tests/test_provider_fee_statement_actual_sources.py backend/tests/test_dashboard_dated_payment_fees.py backend/tests/test_dashboard_card_snapshots.py backend/tests/test_dashboard_v2_ad_account_costs.py backend/tests/test_dashboard_weekly_read_model.py backend/tests/test_dashboard_demand_builders.py --tb=short",
       "exit_status": 0,
-      "result": "216 passed, zero skipped/failed, six existing deprecation warnings."
+      "result": "Fresh R3 run:216 passed, zero skipped/failed, six existing deprecation warnings,7.69s."
     },
     {
       "name": "Frontend fee, demand and snapshot integration",
@@ -60,7 +60,7 @@
         "yarn": "1.22.22"
       },
       "exit_status": 0,
-      "result": "117 tests passed across six suites: ProfitSummaryCard.paymentFees, AdvancedDashboard.paymentFees, DashboardAnalyticsPlacement, AdvancedDashboard.cardRefresh, useDashboardCardSnapshot, demandRead."
+      "result": "Fresh R3 run:123 tests passed across the same six suites;6/6 suites, zero failed/skipped. New production demandRead tests account for the six additional tests. Governed Node22.23.2/Yarn1.22.22; external Jest cache;8.211s."
     },
     {
       "name": "Exact focused-workflow static contract",
@@ -74,12 +74,12 @@
     },
     {
       "name": "Red/green integration",
-      "result": "Four snapshot failures reproduced before card port; three direct canonical-reader cases failed before legacy port; fee-estimate rendering failed before UI port. All pass after integration."
+      "result": "Historical R2 red/green:four snapshot failures before card port;three direct reader failures before legacy port;fee-estimate rendering failure before UI port. All passed after integration. No new red reproduction needed for byte-identical R3 fee code."
     },
     {
       "name": "Independent integrated backend review",
       "exit_status": 0,
-      "result": "No blocking findings. Four focused real-reader/demand/replacement cases passed. Original core fee modules match reviewed source; server and demand store/jobs/runner unchanged. Existing worker fences reauthorize before build, after materialization and before serving ready results. Focused workflow includes all ten backend and six frontend suites and their affected test paths."
+      "result": "R2 backend logic review passed. Fresh R3 backend/frontend preservation reviews passed:23 Tabby code/workflow paths byte-identical to R2;42 production paths byte-identical to J3. New production runner and polling changes retained. Existing worker source fences and focused workflow tests remain intact."
     }
   ],
   "new_acceptance_evidence": [
@@ -94,19 +94,45 @@
     "published": false,
     "lease_created": false,
     "shared_guard": "Owner supplied actual /app status exactly active:false in current conversation. Fresh guard required at next shared action boundary.",
-    "base_release": "Canonical ledger reports PR2074 original verified:true/checks:3 and matching lease closure; frozen source4e6c8a61bd1566e061a4f312e797ce239b582475, deployment24270ebdfdebb83282389308a2349cdb27e2b8e4. This task has not observed its UI publication.",
-    "old_intent": "Do not reuse historical PR2068 intent. Current Production intent remains unchanged in source; generate fresh candidate for this source/base.",
-    "terminal_access": "Local workspace is separate from actual Emergent /app; owner runs pinned reviewed host command when ready. No paid chat or live financial writes."
+    "base_release": "PR2076 merged normally at02cd99e5b2b68c95341c87590abcf572c885e697 on2026-11-22T20:50:43Z. Its own host rehearsal passed; its publication/verify handoff remains separate. Do not stage or publish this task until that serial handoff is released and original host guard is freshly inactive.",
+    "old_intent": "Historical PR2068 and PR2077 candidates are superseded. R3 inherits current J3 intent unchanged; generate a fresh reviewed candidate from this new source/base.",
+    "terminal_access": "Local workspace is separate from actual Emergent /app; owner runs pinned reviewed host command when ready. No paid chat or live financial writes.",
+    "PR2076_handoff": "Canonical ledgerupdated21:00:22UTC: pinned staging/prepare command issued, ownerexecution/publication/verify3stillpending. Preserve its serial handoff; no sharedmutation or publication overlap."
   },
   "next_safe_actions": [
-    "Preserve this evidence branch; never deploy it or its historical R2 candidate.",
-    "Build a new source A on current Production02cd99e5 with the reviewed Tabby patch and fresh integrated checks; freeze a new intent after exact-source candidate validation.",
-    "Read current PR2076 handoff and actual inactive guard before any shared work. Do not interfere with its foreign staging, lease, publication or verification."
+    "Complete all exactB CI and two clean-clone adapters; independently validate original artifacts and finalidentity.",
+    "Recheck current ProductionJ3 and PR2076 serial handoff. No shared/productiontransition while foreignhandoff remainsactive.",
+    "After accepted gates and releasedhandoff, ordinarymerge preservingA/B; validateDtree/parents; fillreviewedhelperpins and preserveimmutablebundle/launcher; ownerexecutesfreshguardedcommand.",
+    "Require new explicitDeploymentSucceeded, originalownlease verify3 and finalinactive beforeclaiming livecompletion."
   ],
-  "source_branch": "codex/tabby-weekly-fee-estimates-r2-20261122",
-  "source_A": "a9d1f681534c179a822e7eaa080429b82f1c0e01",
-  "source_tree": "b2a0c1989cf8b1eb7ce8de74f9bec61d2135b748",
-  "pr": 2077,
+  "r3_integration": {
+    "reason": "Production advanced through PR2076 while R2 exact-source CI completed; build a new candidate on the new base.",
+    "prior_pr": 2077,
+    "prior_source_A": "a9d1f681534c179a822e7eaa080429b82f1c0e01",
+    "prior_created_intent_B_not_promoted": "90da9de4a7eeaf521b6e145c887bd3fba35cc997",
+    "prior_A_ci": {
+      "checks": 52,
+      "success": 46,
+      "conditional_skips": 6,
+      "failure": 0,
+      "pending": 0
+    },
+    "production_delta_files_preserved": 42,
+    "overlap": [],
+    "tabby_code_and_workflow_files_byte_identical_to_R2": 23,
+    "preserved_behavior": [
+      "Raw-descriptor demand runner watcher and parent-EOF cancellation",
+      "Targeted operational ledger/report first-read optimizations",
+      "Two bounded early readiness polls with existing serial/cancellation/backpressure behavior",
+      "Original operational workflow with lifecycle suite and minimum-three-case gate"
+    ],
+    "independent_review": "PASS: index and worktree source bytes, inherited intent and demand runner match the intended immutable commits."
+  },
+  "source_branch": "codex/tabby-weekly-fee-estimates-r3-20261122",
+  "source_A": "d6443504c7d16eba00142526478abf10de336f99",
+  "source_tree": "e6276df03a18a84151769cab964049f2f25089c7",
+  "pr": 2079,
+  "historical_r2_evidence_commit": "68abe1c8376a4d40ddde917cf058bd742278a8ea",
   "r2_final_ci": {
     "all_terminal": true,
     "checks": 52,
@@ -120,17 +146,7 @@
     "readiness_run_id": 45067547728,
     "operational_run_id": 45067547750
   },
-  "supersession": {
-    "reason": "Production advanced after successful R2 source CI and before branch promotion to intent B. Do not deploy this historical candidate.",
-    "new_base": "02cd99e5b2b68c95341c87590abcf572c885e697",
-    "merged_pr": 2076,
-    "new_base_merged_at": "2026-11-22T20:50:43Z",
-    "other_task_files": 42,
-    "overlap_with_tabby_files": [],
-    "next_source_branch": "codex/tabby-weekly-fee-estimates-r3-20261122",
-    "R2_B_created_but_not_promoted": "90da9de4a7eeaf521b6e145c887bd3fba35cc997"
-  },
-  "manual_helper_review": {
+  "manual_helper_review_R2": {
     "result": "APPROVED corrected logic; activation pins disabled",
     "files": [
       "MANUAL-HOST-ISOLATED-REHEARSAL-2077.py",
@@ -151,6 +167,51 @@
     ],
     "D": null,
     "evidence_pin": null,
+    "host_execution": false
+  },
+  "source_ci": {
+    "readiness_run": 45069421102,
+    "focused_run": 45069421280,
+    "security_run": 45069421186,
+    "operational_run": 45069421018,
+    "read_performance_run": 45069421391,
+    "complete": false,
+    "required_4": "PASS app15368",
+    "focused_backend": "216PASS",
+    "focused_frontend": "123PASS/6suites and buildPASS",
+    "candidate": "Original source two-build candidate and full independent auditPASS",
+    "long_A_checks": "Five still running at normalPR update toB; superseded/cancelled runs are not counted as passed.",
+    "transition_rationale": "Final B changes only intent and runs the complete exact-head CI. Advance normalPRrevision after source required/focused/build/candidate acceptance; do not wait for duplicate superseded long-source suites. No gate or workflow weakened."
+  },
+  "remote_local_tree_equivalence": {
+    "local_source_checkpoint": "ce84487e217dc948a22294b3c27af9a680688161",
+    "remote_source_A": "d6443504c7d16eba00142526478abf10de336f99",
+    "tree": "e6276df03a18a84151769cab964049f2f25089c7",
+    "equal": true,
+    "clean_source_clone_verified": true
+  },
+  "intent_B": "d5036d9609b7155ee137d07ff802bbce5be265c5",
+  "intent_B_tree": "83fc2223913c996c19f4fa676da9cfa8c54ebb49",
+  "runtime_id": "rg5-b26fcb18b80fb02cb6b77c0781819c2467f4a6a20d7d2350516febf22957fa11",
+  "frontend_artifact": "d37d10537c6b55f4f0e4a4392ed40eca5bef962ea6cabaf822acc6a5e47a9d99",
+  "final_B_ci": {
+    "complete": false,
+    "required": "All exactB gates including Operational/Stock/security/CodeQL/G47 and both Node20/24 clean-clone adapters mustpass beforemerge."
+  },
+  "manual_helper_review_R3": {
+    "logic": "Independent normalized-AST comparison of five operational helpersPASS; only PR/branch/release constants changed from corrected R2.",
+    "tests": "Bounded local selftest and both bash -nPASS; syntheticpins apply only after disabledentrypointchecks.",
+    "known_pins": {
+      "A": "d6443504c7d16eba00142526478abf10de336f99",
+      "J": "02cd99e5b2b68c95341c87590abcf572c885e697",
+      "B": "d5036d9609b7155ee137d07ff802bbce5be265c5",
+      "tree": "83fc2223913c996c19f4fa676da9cfa8c54ebb49",
+      "runtime": "rg5-b26fcb18b80fb02cb6b77c0781819c2467f4a6a20d7d2350516febf22957fa11",
+      "artifact": "d37d10537c6b55f4f0e4a4392ed40eca5bef962ea6cabaf822acc6a5e47a9d99"
+    },
+    "D": null,
+    "EVIDENCE": null,
+    "helper_hashes": null,
     "host_execution": false
   }
 }

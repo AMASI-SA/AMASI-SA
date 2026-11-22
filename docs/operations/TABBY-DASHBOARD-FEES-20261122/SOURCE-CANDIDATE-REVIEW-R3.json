@@ -1,0 +1,62 @@
+{
+  "artifact_id": 14772563283,
+  "run_id": 45069421102,
+  "source_A": "d6443504c7d16eba00142526478abf10de336f99",
+  "base_J": "02cd99e5b2b68c95341c87590abcf572c885e697",
+  "runtime_id": "rg5-b26fcb18b80fb02cb6b77c0781819c2467f4a6a20d7d2350516febf22957fa11",
+  "zip_bytes": 429879,
+  "zip_sha256": "ef90a37f67f127907c17e72be0d3ed4b2898600150a01e0fe77cc4b8ad5c03aa",
+  "intent_bytes": 1494540,
+  "intent_sha256": "8c25a9bb065a566fbebc22a3f5a8e9a347ab6af901d8462871bddc37a7574218",
+  "frontend_tree": "d37d10537c6b55f4f0e4a4392ed40eca5bef962ea6cabaf822acc6a5e47a9d99",
+  "frontend_source": {
+    "file_count": 1402,
+    "git_tree_oid": "970fcb2c724cf78e8577a314fbfb7d003ced658c",
+    "scope": "git_head_frontend_tree_v1",
+    "tree_sha256": "0c99e3715e4c8d804c382ba9bc0bbebe0ed16c42a8c917574e0b2023c2f69b06"
+  },
+  "backend_manifest_count": 1314,
+  "control_manifest_count": 328,
+  "build_meta": {
+    "bytes": 579432,
+    "path": "build-meta.json",
+    "sha256": "5e747e5f70f0f1770fbf267f874434899ae3bd9cebc6f76b3e32bec94f5d5a15"
+  },
+  "reproducibility_proof": {
+    "bytes": 1521,
+    "path": "frontend/.release/reproducible-build.json",
+    "sha256": "57614c5d0cee0333edb375ce520b61c5fe89905afa54d00a284606c972688687"
+  },
+  "source_tree": "e6276df03a18a84151769cab964049f2f25089c7",
+  "source_parent_exact": true,
+  "source_intent_history_empty": true,
+  "official_candidate_validator_exit": 0,
+  "independent_review": "PASS",
+  "records_verified": 3044,
+  "unique_git_blobs": 3033,
+  "source_bytes_verified": 42759863,
+  "critical_file_hashes": {
+    "frontend_build_identity.py": "7896dfa2c9b4fea8c426b47c5b75e331380c0a4a3f947028aa4f5afa101f9d87",
+    "integrations/qoyod_manual/routes.py": "e3950202ab1b465608124ef1d142f330038086d6f69d21418dc0be99e9fa64ce",
+    "integrations/qoyod_manual/send.py": "8900d5fd895c1240dbb81f5a650e205e9c5b3c04b08dc38f426125fe405b05b0",
+    "release_identity.py": "ee4c098266722c10f6d973927f25de3602081c4923f9992f1de85d71775fca4d",
+    "release_protocol_v5.py": "1961ac18a5363ec425ceec4f98f96f611d378b09e19380d4756bd6776987d8ef",
+    "server.py": "ee1b995ccf86fd6594d8fb48c4b0659a43b39037a3b26d7e07abb3d19c76f3d4"
+  },
+  "toolchain": {
+    "node": "22.23.2",
+    "vite": "8.2.4",
+    "yarn": "1.22.22"
+  },
+  "intent_blob": "b8ff1ce5bb86196776c2533bf41a0cb7e4b12a8a",
+  "intent_commit_B": "d5036d9609b7155ee137d07ff802bbce5be265c5",
+  "B_tree": "83fc2223913c996c19f4fa676da9cfa8c54ebb49",
+  "B_original_load_and_git_validators": "PASS exact remoteB in clean clone",
+  "B_parent_exact": true,
+  "B_changed_paths": [
+    "release/release-intent-v5.json"
+  ],
+  "branch_promoted_to_B": true,
+  "merged": false,
+  "published": false
+}
