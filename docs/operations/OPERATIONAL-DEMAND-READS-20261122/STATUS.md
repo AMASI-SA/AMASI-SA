@@ -11,7 +11,8 @@ No Production pressure tests, external synchronization, background reconciliatio
 or computation for unopened pages is authorized by opening a page.
 
 Repository: `AMASI-SA/AMASI-SA`.
-Task branch: `codex/operational-load-stage-diagnostics-20261122`.
+Active source-candidate branch: `codex/operational-demand-release-20261122`.
+Preserved implementation/CI history: `codex/operational-load-stage-diagnostics-20261122`.
 Implementation started at Production base `c302943e330bcdd534a4a5697b8ef813dfb7cb6e`.
 Fresh fetch during integration found newer Production `9b4fb716b430c32073b5ea7abaeaff62646d9633`
 (PR 2062, strict external-carrier AWB reprint). Its seven changed files do not
@@ -387,3 +388,22 @@ complete corrected CI, then require the original current shared guard status,
 governed rehearsal, authorized publish and three live verification probes. Keep
 PR2066 as the recoverable implementation/CI history; no other conversation's work
 or lease is to be changed.
+
+### Clean source-candidate checkpoint
+
+Created and fetched remote source candidate
+`dd1c476717f03b96c2c83ddba8d9187e8cb39bde`, tree
+`c23356af18833731e2814128544ce91d3309649d`, on
+`codex/operational-demand-release-20261122`. Its direct parent is fresh Production
+J `9b4fb716b430c32073b5ea7abaeaff62646d9633`. The complete tree is byte-identical to
+the final implementation follow-up, including the bootstrap read-budget fix,
+corrected runtime oracle adapter, unchanged assertions and all retained evidence.
+No Production source, AWB change, release intent, guard or lease was altered.
+The old task branch and Draft PR2066 remain intact as the verified history.
+
+Active local worktree: `/workspace/scratch/b90f3c3040a7/mezan-demand-release`.
+The earlier worktree must not be used for further source changes. The present
+documentation-only follow-up records this exact remotely recoverable checkpoint.
+Next: validate the original candidate-transition rule, open the final Draft PR,
+and complete CI on its exact head. A successful candidate build still does not
+authorize bypassing the current shared guard or constitute a deployment.
