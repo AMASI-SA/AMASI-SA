@@ -1,5 +1,5 @@
 {
-  "status": "prepared_not_deployed",
+  "status": "prepared_B_in_PR_CI_pending_not_deployed",
   "repository": "AMASI-SA/AMASI-SA",
   "production_base_git_sha": "9b4fb716b430c32073b5ea7abaeaff62646d9633",
   "source_git_sha": "063611ff163c90d80cdbf96446a28584fe429846",
@@ -37,12 +37,16 @@
       "failure": 0,
       "incomplete": 0
     },
-    "reviewed_B_rehearsal": "not_started",
-    "fresh_shared_guard": "unavailable",
+    "reviewed_B_rehearsal": "scheduled in run45042790594; pending",
+    "fresh_shared_guard": {
+      "active": false,
+      "observed_at_utc": "2026-11-22T16:14:07Z",
+      "provenance": "user supplied original terminal output"
+    },
     "production_merge": false,
     "published": false,
-    "live_probes": "not_run"
+    "live_probes": "preflight health matches current J; default build-meta403; candidate not published"
   },
-  "blocker": "Browser NET::ERR_CERT_AUTHORITY_INVALID; restore trusted access and obtain fresh original shared guard active:false before rehearsal. Do not bypass warning or alter another lease.",
+  "blocker": "Exact-B CI and host adapter pending. Current default metadata fetch returned403; original guarded-reader diagnostic supplied, not yet executed. Browser remains unavailable; user offers manual terminal execution. Fresh shared guard is required again before host mutation.",
   "evidence_branch": "codex/operational-demand-evidence-20261122"
 }

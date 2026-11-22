@@ -1,5 +1,45 @@
 # Operational demand reads — implementation checkpoint
 
+## Release handoff progress — user terminal preflight, 22 November 16:14 UTC
+
+This update supersedes the awaiting-preflight and Draft-PR state below. The user
+executed the supplied read-only command in the actual shared Emergent terminal
+and returned its output: original guard **active:false**, shared HEAD and remote
+Production **9b4fb716b430c32073b5ea7abaeaff62646d9633**, tracked source clean,
+432 untracked files. They remain preserved. Evidence/provenance is recorded in
+`manual-host-preflight-20261122T161407Z.json`.
+
+Live health returned200 with source23e9514b9e8a33bffb2363bb1d3afd792355ab2c and
+runtime rg5-3ec8529aa0398fbe08b591ca47b175f1fd41af183c6fdae0fc21da4c223c618c,
+matching current J's tracked intent; all three printed identity/hash/build flags
+were true. Both default-urllib build-meta requests returned403. Their content,
+MIME and exact bytes remain unverified. No cause is inferred and no403 is accepted
+as a passing release probe.
+
+Root independently re-read Issue1006 coordination, PR2069 and GitHub refs; J/A/B
+still matched. With this fresh shared inactive-guard result, root fast-forwarded
+the source PR branch from A063611ff163c90d80cdbf96446a28584fe429846 to frozen
+B5db36bd28ae86acaca8ceeb9cceee8e350916f12 using expected-A compare-and-swap and
+force:false. PR2069 is now ready for review, open and unmerged. Its actual B
+tree/content remain exactly the independently validated intent-only transition.
+
+Exact-B CI has started. Original Release Readiness run45042790594 includes the
+reviewed-B Node20/24 adapter rehearsals. Initial inventory:48 distinct workflows,
+47 applicable queued/running and one unrelated conditional TikTok skip. Three
+older Snapchat runs are superseded by ready-for-review runs; do not count their
+cancellations as success or failure of the latest gates. Final B results remain
+pending; source A's47 successful workflows are not relabeled as B results.
+
+Next: diagnose metadata using the original guarded reader without changing it,
+finish exact-B CI/rehearsal, then freshly recheck shared guard/current Production
+before the authorized merge/host handoff. The user can run the next host command;
+the assistant browser remains unavailable. No shared source update, new lease,
+Production merge or publication has occurred. Preserve separate PR2065 and all
+other conversation work. Never weaken TLS, modify the guard, or close a foreign
+lease to make progress.
+
+---
+
 ## Latest verified handoff — final source and prepared intent, 22 November 2026
 
 This section supersedes the in-progress release status in the historical sections

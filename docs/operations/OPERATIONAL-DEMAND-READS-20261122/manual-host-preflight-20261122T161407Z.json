@@ -1,0 +1,64 @@
+{
+  "provenance": "User-supplied actual Emergent terminal output; not an assistant-operated browser observation",
+  "observed_at_utc": "2026-11-22T16:14:07Z",
+  "guard": {
+    "active": false
+  },
+  "shared_workspace": {
+    "head": "9b4fb716b430c32073b5ea7abaeaff62646d9633",
+    "branch": "hotfix/prod-snap-meta-final",
+    "tracked_changes": "clean",
+    "untracked_count": 432
+  },
+  "remote_refs": {
+    "production": "9b4fb716b430c32073b5ea7abaeaff62646d9633",
+    "source_at_probe": "063611ff163c90d80cdbf96446a28584fe429846",
+    "intent": "5db36bd28ae86acaca8ceeb9cceee8e350916f12"
+  },
+  "live_health": {
+    "http_status": 200,
+    "content_type": "application/json",
+    "body_sha256": "516464c5226b6b0fb9bd4c8c355f4e090e40eeac38935cb1a7b46137fc4fc449",
+    "source_git_sha": "23e9514b9e8a33bffb2363bb1d3afd792355ab2c",
+    "git_sha": "23e9514b9e8a33bffb2363bb1d3afd792355ab2c",
+    "release_id": "rg5-3ec8529aa0398fbe08b591ca47b175f1fd41af183c6fdae0fc21da4c223c618c",
+    "verified_identity_available": true,
+    "critical_file_hashes_match": true,
+    "frontend_build_verified": true,
+    "boot_started_at": "2026-11-22T15:39:02.394039+00:00",
+    "ok": true
+  },
+  "build_metadata": [
+    {
+      "path": "/build-meta.json",
+      "http_status": 403,
+      "error_type": "HTTPError"
+    },
+    {
+      "path": "/build-meta.json?preflight=1795364048",
+      "http_status": 403,
+      "error_type": "HTTPError"
+    }
+  ],
+  "interpretation": {
+    "live_health_matches_J_intent": true,
+    "build_metadata_unverified": true,
+    "build_metadata_cause": "not established",
+    "performance_candidate_deployed": false
+  },
+  "subsequent_github_action": {
+    "source_branch_fast_forwarded_from_A_to_B": true,
+    "expected_old_sha": "063611ff163c90d80cdbf96446a28584fe429846",
+    "new_sha": "5db36bd28ae86acaca8ceeb9cceee8e350916f12",
+    "pull_request": 2069,
+    "ready_for_review": true,
+    "reviewed_B_CI": "started; latest applicable runs queued/running",
+    "release_readiness_run_id": 45042790594
+  },
+  "unchanged": {
+    "production_branch": true,
+    "shared_source": true,
+    "lease": true,
+    "financial_data": true
+  }
+}
