@@ -1,5 +1,13 @@
 # Operational home loading recovery — 22 November 2026
 
+**Latest checkpoint, 13:01 UTC / 16:01 Riyadh:** PR #2059 is merged and
+published as platform version `d8c03a2`. Original Release Guard verification
+passed 3/3 and the lease is inactive. The page renders, but intermittent latency
+remains open. Private Production database inspection was denied by automatic
+approval review; explicit read-only diagnostic access is the next permission
+boundary. See the final section below and `evidence/postpublication-latency.md`.
+This continuation branch is evidence-only and must never be deployed.
+
 ## Scope and current state
 
 The owner reports that `https://mezansalla.com/operational-balances` remains on
@@ -281,3 +289,59 @@ success, run the original `/app/scripts/production_release_guard.py verify
 --url https://mezansalla.com`, retain its three matching probes, then obtain
 fresh inactive status and cold initial home acceptance. The owner lease must
 not be cleared manually or replaced. No Production recovery is claimed yet.
+
+## Verified publication; latency investigation remains open — 13:01 UTC
+
+The single publication finished at **15:32 Riyadh / 12:32 UTC**. Emergent showed
+a newer green `Deployment finished` entry and the current published version
+`d8c03a2`, with a green success-status marker. The UI label is recorded exactly;
+the available administration screen did not expose a complete Cloud Build
+command transcript. The unchanged actual-host adapter rehearsal and subsequent
+public artifact/identity verification provide the retained handoff evidence.
+
+The original guard ran from 12:35:05.613091 UTC to 12:49:54.824478 UTC, exit 0,
+**verified=true, checks=3**, and 760 public-file requests per probe. All probes
+matched source A, the reviewed runtime identity and the frontend artifact.
+Elapsed time was 889.211 seconds. Guard stdout SHA256:
+`3923cdff9252f54098ec18ae4e85cf6326216dd5e3ceaf4670fb4067ac4bc147`.
+The original guard closed its matching lease; fresh status was **active=false**.
+The production branch was rechecked at 13:01 UTC and still points exactly to
+`c302943e330bcdd534a4a5697b8ef813dfb7cb6e`.
+
+The user's earlier complete-update source
+`eeef3913ae2e1b8fa4b58f3835478e1ed17b2988` is an ancestor of this release.
+No rollback was performed. The first cold home navigation displayed authenticated
+cards, accounts and recent movements. A repeat reload still showed the context
+loader at the 25.198-second observation, then eventually rendered without retry.
+After guard completion, a fresh entry document was observed ready by 6.255
+seconds; entry-to-home forced a fresh full-context read and was observed ready
+by 15.592 seconds. These are UI observation bounds with tool overhead, not HTTP
+or database timing benchmarks. The final review tab displays the home at
+`https://mezansalla.com/operational-balances?view=home`.
+
+**The performance incident is not declared resolved.** Postpublication logs
+included four upstream health timeouts and assembly completions of 126–185
+seconds despite fast application health samples. A later displayed window had
+no upstream timeout among its visible lines, one 2.820-second context completion
+and one 82.156-second assembly completion. Those unpaired snapshots do not
+establish the dominant phase, current stream state or route percentiles.
+The complete evidence, timing caveats, source trace and existing index
+declarations are in `evidence/postpublication-latency.md`.
+
+### Permission boundary and next safe action
+
+Automatic approval review rejected opening/snapshotting the private Production
+Mongo viewer, citing absent explicit authorization for that database surface
+and possible exposure of schema/production data. The viewer was closed without
+reading database contents, schema or query plans. Mongo connection credentials
+were not revealed or copied. No index or financial/data mutation was attempted.
+Source review, bounded public health reads, ordinary app navigation and
+administration-log review continued as safer alternatives.
+
+The next step requires the user's explicit permission for **read-only
+Production database diagnostics: relevant indexes, query plans and bounded
+statistics**. This is not permission to create an index or change financial/data
+records. Do not republish this already verified candidate, reopen its lease,
+repeat the completed checks, or make a speculative projection/cache/index fix.
+Resume from the evidence branch, recheck current production and guard state,
+then obtain the smallest missing diagnostic evidence within the approved scope.

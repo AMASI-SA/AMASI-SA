@@ -2,8 +2,8 @@
   "task": "OPERATIONAL-HOME-LOADING-RECOVERY-20261122",
   "evidence_branch": "codex/operational-home-loading-release-evidence-20261122",
   "evidence_only_do_not_deploy": true,
-  "as_of_utc": "2026-11-22T12:24:27Z",
-  "phase": "publication_in_progress",
+  "as_of_utc": "2026-11-22 13:01:22 UTC",
+  "phase": "published_verified_latency_investigation_blocked",
   "repository": "AMASI-SA/AMASI-SA",
   "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/2059",
   "source_base": "1c4008e315c35ec4419e76400a9faddb94b9d5a2",
@@ -289,14 +289,68 @@
     "prepared_at": "2026-11-22T12:21:13.931494+00:00",
     "prepublish_exit": 0,
     "ui_confirmed_state": "Publishing...",
-    "publication_submissions": 1
+    "publication_submissions": 1,
+    "confirmed_at_utc": "2026-11-22 12:35:24 UTC",
+    "platform_version": "d8c03a2",
+    "ui_finished_at_riyadh": "2026-11-22 15:32",
+    "ui_result_label": "Deployment finished",
+    "ui_success_indicator": "green status-success dot on current published version",
+    "original_guard_verification_started": true
   },
   "guard_verification": {
-    "completed": false,
-    "checks": 0
+    "completed": true,
+    "verified": true,
+    "exit_code": 0,
+    "checks": 3,
+    "public_requests_per_probe": 760,
+    "elapsed_seconds": 889.211,
+    "started_at_utc": "2026-11-22T12:35:05.613091+00:00",
+    "finished_at_utc": "2026-11-22T12:49:54.824478+00:00",
+    "boot_started_at_observations": [
+      "2026-11-22T12:32:04.423339+00:00"
+    ],
+    "guard_stdout_sha256": "3923cdff9252f54098ec18ae4e85cf6326216dd5e3ceaf4670fb4067ac4bc147",
+    "fresh_original_guard_active": false
   },
   "cold_home_acceptance": {
-    "completed": false
+    "first": {
+      "observed_at_utc": "2026-11-22 12:36:27 UTC",
+      "url": "https://mezansalla.com/operational-balances",
+      "title": "الرئيسية · ميزان ٢",
+      "cold_new_tab": true,
+      "initial_auth_check_observed": true,
+      "authenticated_home_rendered": true,
+      "accounts_section_present": true,
+      "balances_card_present": true,
+      "recent_movements_present": true,
+      "review_link_present": true,
+      "loading_placeholder_absent": true,
+      "retry_clicked": false,
+      "credentials_reentered": false,
+      "financial_values_not_recorded": true,
+      "latency_seconds_measured": null
+    },
+    "repeated": {
+      "started_at_utc": "2026-11-22T12:42:18.428Z",
+      "loading_placeholder_still_present_at_observed_seconds": 25.198,
+      "later_home_rendered": true,
+      "explicit_retry": false,
+      "completion_latency_measured": false
+    },
+    "directory_then_full": {
+      "directory_cold_started_at_utc": "2026-11-22T12:53:47.768Z",
+      "directory_ready_observed_by_seconds": 6.255,
+      "full_context_navigation_started_at_utc": "2026-11-22T12:54:37.074Z",
+      "full_context_ready_observed_by_seconds": 15.592,
+      "full_context_forced_new_key": true,
+      "cached_home_to_entry_seconds_not_query_evidence": 0.237
+    },
+    "final_url": "https://mezansalla.com/operational-balances?view=home",
+    "final_home_rendered": true,
+    "load_reliability_and_latency_resolved": false,
+    "timing_limit": "UI tool-observation times include tool/inspection overhead; they are not precise request durations, network TTFB, or performance percentiles.",
+    "app_errors_observed": 0,
+    "console_limit": "Four observed console errors concern the browser metadata extension, not an identified application render/network error."
   },
   "preserved": {
     "untracked_files": 417,
@@ -305,5 +359,93 @@
     "unrelated_preview_service_unchanged": true,
     "real_financial_test_writes": false
   },
-  "next_safe_action": "Observe the already-submitted Emergent publication; do not republish. After explicit new Deployment Succeeded, run the original /app production_release_guard.py verify and confirm three probes plus inactive status. Then verify authenticated cold /operational-balances home."
+  "next_safe_action": "Do not republish this already verified candidate or reopen its closed lease. Ask for the minimum explicit approval for read-only production database diagnostics. If granted, inspect only relevant indexes/query plans/bounded statistics; preserve source and data. Current evidence does not justify a speculative index/projection/cache patch.",
+  "original_requested_update": {
+    "source": "eeef3913ae2e1b8fa4b58f3835478e1ed17b2988",
+    "ancestor_of_deployment": true,
+    "deployment": "c302943e330bcdd534a4a5697b8ef813dfb7cb6e",
+    "pr2046_merge": "a9d0aec2939a706dcc16f9948e7a81cfe019e66f"
+  },
+  "public_health_sample": {
+    "observed_at_utc": "2026-11-22T12:39:27.839677+00:00",
+    "live": {
+      "status": 200,
+      "elapsed_ms": 649.4
+    },
+    "health": {
+      "status": 200,
+      "elapsed_ms": 859.33,
+      "release_id": "rg5-aceb392af7809d9099ba92b27d4bb3d802999148c91013a5bba1cca5ad5f6c8e",
+      "source_git_sha": "d396049f8fedf72c394169a451d45b227ad52376",
+      "verified_identity_available": true,
+      "backend_runtime_source_verified": true,
+      "critical_file_hashes_match": true,
+      "frontend_build_verified": true,
+      "release_control_source_bound": true,
+      "boot_started_at": "2026-11-22T12:32:21.811558+00:00"
+    },
+    "limit": "Two bounded host-to-public samples; transport-inclusive times do not establish route-wide recovery."
+  },
+  "live_log_evidence": {
+    "first_window_utc": [
+      "2026-11-22 12:36:35",
+      "2026-11-22 12:37:14"
+    ],
+    "app_health": {
+      "n": 16,
+      "min_ms": 44.849,
+      "median_ms": 82.802,
+      "max_ms": 145.576
+    },
+    "assembly": {
+      "n": 3,
+      "min_ms": 126005.984,
+      "median_ms": 179662.408,
+      "max_ms": 184558.173
+    },
+    "health_proxy_timeouts_utc": [
+      "2026-11-22 12:36:43",
+      "2026-11-22 12:36:53",
+      "2026-11-22 12:37:03",
+      "2026-11-22 12:37:13"
+    ],
+    "later_displayed_window_utc": [
+      "2026-11-22 12:53:49",
+      "2026-11-22 12:54:16"
+    ],
+    "later_samples": {
+      "health": {
+        "n": 12,
+        "min_ms": 25.939,
+        "median_ms": 82.696,
+        "max_ms": 195.974
+      },
+      "home_context": {
+        "n": 1,
+        "status": 200,
+        "duration_ms": 2819.886
+      },
+      "assembly": {
+        "n": 1,
+        "status": 200,
+        "duration_ms": 82155.949
+      },
+      "proxy_timeouts_visible": 0
+    },
+    "limitations": [
+      "Displayed logs are snapshots, not guaranteed current real-time streams.",
+      "No request IDs or query flags; individual UI observations cannot be paired conclusively.",
+      "Application timing excludes pre-ASGI queue/dispatch delay.",
+      "No p95, full recovery, or dominant-stage claim."
+    ]
+  },
+  "approval_block": {
+    "action": "Open and inspect private production Mongo viewer",
+    "rejected_by": "automatic approval review",
+    "reason": "Page repair/publication authorization did not explicitly authorize entering this private database surface, with risk of exposing schema or production data.",
+    "database_contents_schema_plans_read": false,
+    "connection_credentials_revealed_or_copied": false,
+    "viewer_closed": true,
+    "requested_next_scope": "Explicit approval for read-only production database diagnostics: indexes, query plans and bounded statistics. No index/data/financial mutations."
+  }
 }
