@@ -1,0 +1,25 @@
+{
+  "reviewer": "cold_read_profile",
+  "result": "PASS",
+  "review_type": "independent static review only",
+  "reviewed_file": "/workspace/scratch/e3ebab9db878/mezan-latency-r2/docs/operations/OPERATIONAL-DEMAND-LATENCY-20261122/MANUAL-HOST-LATENCY-DIAGNOSTIC.py",
+  "reviewed_sha256": "4a31ea3266f497389d6d46f072cb628825e6c520bf8f6787df3396edc736445e",
+  "host_script_executed": false,
+  "host_files_or_network_accessed": false,
+  "checks": [
+    "Four metadata-only reads use existing demand_read_pending named index, six rows per status, maximum 24 rows and 1500 ms server execution limit.",
+    "Connection, selection and socket timeouts are configured; original guard status uses a five-second subprocess timeout without bypassing its lock.",
+    "Guard output is reconstructed and validated as exact boolean fields inside child and parent; no raw lease or actor output.",
+    "Metadata family and status use strict string allowlists; only bounded attempts, timestamps, derived timing and consumer count are emitted.",
+    "Queued or timestamp-inconsistent rows do not emit old-generation start-to-ready measurements.",
+    "Two conventional regular non-symlink log files are read at most two MiB each; at most 24 numeric allowlisted metric samples are emitted.",
+    "Database exceptions emit only their type; connection values, row IDs, owners, consumers, specs, headers and financial payloads are not emitted.",
+    "No application endpoint, queue demand/wake, build, index creation, source/index edit, release lease operation or business mutation is invoked.",
+    "Host evidence explicitly remains unverified as production scope."
+  ],
+  "resolved_findings": [
+    "status type/allowlist validation",
+    "bounded original guard status and boolean-only output"
+  ],
+  "unresolved_blockers": []
+}

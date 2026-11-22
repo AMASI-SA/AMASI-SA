@@ -1,0 +1,44 @@
+OWNER LEDGER REGRESSION — CAPTURED BASELINE TOOL OUTPUT
+
+Repository: /workspace/scratch/e3ebab9db878/mezan-latency-r2
+Source baseline: 8920c8ed5bc5acc6643286256098e70e59695949
+The regression test was added before changing ApprovedFinance.jsx or ApprovedLedger.jsx.
+This file records the observed baseline run; it is not a rerun against the final implementation.
+Working directory: /workspace/scratch/e3ebab9db878/mezan-latency-r2/frontend
+Command:
+CI=true node node_modules/react-scripts/scripts/test.js --watchAll=false --runInBand --resetMocks=false --resolver ./scripts/jest-package-exports.cjs --cacheDirectory=/tmp/mezan-ledger-jest-cache src/pages/operational/ApprovedFinance.demand.test.jsx -t 'an owner opens one ledger'
+Exit status: 1
+
+FAIL src/pages/operational/ApprovedFinance.demand.test.jsx
+  ✕ an owner opens one ledger without a selection read and exposes only its validated resource (306 ms)
+  ○ skipped home requests only bootstrap and exact compact home, never totals its card subset
+  ○ skipped opening a directory directly never prepares home or other pages
+  ○ skipped navigating away aborts a pending home and its late result cannot populate the directory
+  ○ skipped directory pagination and search go to the server without loading a full catalog
+  ○ skipped an identity change drops the previous bootstrap and home binding
+  ○ skipped a changed permission binding requires a fresh bootstrap on explicit retry
+  ○ skipped a selected resource from a different scope is rejected before its ledger opens
+  ○ skipped saved source time and display preparation time remain separate
+
+  ● an owner opens one ledger without a selection read and exposes only its validated resource
+
+    expect(jest.fn()).toHaveBeenCalledTimes(expected)
+
+    Expected number of calls: 1
+    Received number of calls: 0
+
+      130 |   await open('/operational-balances?view=ledger&kind=bank&id=direct-bank');
+      131 |   expect(api.bootstrap).toHaveBeenCalledTimes(1);
+    > 132 |   expect(api.ledger).toHaveBeenCalledTimes(1);
+          |                      ^
+      133 |   expect(api.selection).not.toHaveBeenCalled();
+      134 |   expect(host.textContent).not.toContain(item.name);
+      135 |   expect(host.textContent).not.toContain('سجّل حركة');
+
+      at Object.<anonymous> (src/pages/operational/ApprovedFinance.demand.test.jsx:132:22)
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 8 skipped, 9 total
+Snapshots:   0 total
+Time:        2.169 s
+Ran all test suites matching /src\/pages\/operational\/ApprovedFinance.demand.test.jsx/i with tests matching "an owner opens one ledger".

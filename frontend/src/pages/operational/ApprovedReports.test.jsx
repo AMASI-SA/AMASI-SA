@@ -53,6 +53,69 @@ it('reads one real saved summary and preserves unknown/partial totals without su
   expect(host.textContent).not.toContain('عرفات');expect(host.textContent).not.toContain('DEMO');
 });
 
+it.each(['accounts','suppliers','expected'])('opens the requested report view directly without building summary first: %s',async view=>{
+  await show({},`/operational-balances?view=reports&report_tab=${view}`);
+  expect(operationalApi.financialPosition.mock.calls.map(([config])=>config.params)).toEqual([{view}]);
+  expect(host.querySelector('.report-scope')).not.toBeNull();
+  expect(host.querySelector('[data-testid=report-table-cod_expected]')).not.toBeNull();
+  expect(host.textContent).toContain('250.25');
+  expect(operationalApi.refreshBalances).not.toHaveBeenCalled();
+});
+
+it('anchors later report views to the first validated detail and reads a real summary only when requested',async()=>{
+  operationalApi.financialPosition.mockImplementation(config=>{
+    const value=snapshot(config.params.view);
+    if(config.params.view!=='summary')value.currencies.SAR.profit_rows=[];
+    return Promise.resolve(value);
+  });
+  await show({},'/operational-balances?view=reports&report_tab=accounts');
+  await tab('المبيعات والربح');
+  expect(operationalApi.financialPosition.mock.calls.map(([config])=>config.params)).toEqual([
+    {view:'accounts'},
+    {view:'summary',expected_revision:7,expected_as_of:'2026-11-21T18:00:00+03:00',expected_started_at:'2026-11-01T00:00:00+03:00'},
+  ]);
+  expect(host.textContent).toContain('3,000.00');
+  await tab('المطابقة والمصادر');
+  expect(operationalApi.financialPosition).toHaveBeenCalledTimes(2);
+  await tab('البنوك والصناديق');
+  expect(operationalApi.financialPosition).toHaveBeenCalledTimes(3);
+  expect(operationalApi.financialPosition.mock.calls[2][0].params.expected_revision).toBe(7);
+  await tab('الموردون');
+  expect(operationalApi.financialPosition).toHaveBeenLastCalledWith(expect.objectContaining({params:{view:'suppliers',
+    expected_revision:7,expected_as_of:'2026-11-21T18:00:00+03:00',expected_started_at:'2026-11-01T00:00:00+03:00'}}));
+});
+
+it('reuses an explicitly requested summary across later details without substituting the first detail DTO',async()=>{
+  operationalApi.financialPosition.mockImplementation(config=>{
+    const value=snapshot(config.params.view);
+    if(config.params.view!=='summary')value.currencies.SAR.metrics.liquidity='999.00';
+    return Promise.resolve(value);
+  });
+  await show({},'/operational-balances?view=reports&report_tab=accounts');
+  await tab('الصورة الكاملة');
+  expect(host.querySelector('.report-metric').textContent).toContain('1,234.56');
+  await tab('الموردون');
+  await tab('الصورة الكاملة');
+  expect(operationalApi.financialPosition.mock.calls.map(([config])=>config.params.view)).toEqual(['accounts','summary','suppliers']);
+  expect(host.querySelector('.report-metric').textContent).toContain('1,234.56');
+  expect(host.querySelector('.report-metric').textContent).not.toContain('999.00');
+});
+
+it('does not anchor a cancelled first view or request an unopened summary',async()=>{
+  let finishFirst;
+  operationalApi.financialPosition.mockImplementationOnce(()=>new Promise(resolve=>{finishFirst=resolve;}))
+    .mockImplementation(config=>Promise.resolve(snapshot(config.params.view,{revision:8})));
+  await show({},'/operational-balances?view=reports&report_tab=accounts');
+  const first=operationalApi.financialPosition.mock.calls[0][0];
+  await tab('الموردون');
+  expect(first.signal.aborted).toBe(true);
+  await act(async()=>finishFirst(snapshot('accounts')));
+  expect(operationalApi.financialPosition.mock.calls.map(([config])=>config.params)).toEqual([{view:'accounts'},{view:'suppliers'}]);
+  await tab('المبالغ والتكاليف المحتملة');
+  expect(operationalApi.financialPosition.mock.calls[2][0].params.expected_revision).toBe(8);
+  expect(host.querySelector('[role=alert]')).toBeNull();
+});
+
 it('shows real profit components and excluded unpaid counts without turning missing tax/financing into zero',async()=>{
   await show({},'/operational-balances?view=reports&report_tab=profit');
   expect(host.textContent).toContain('450.25');expect(host.textContent).toContain('3,000.00');
@@ -130,13 +193,50 @@ it('hides all report amounts after permission is revoked on a detail read',async
   expect(host.textContent).toContain('1,234.56');
 });
 
-it('retries a changed snapshot by rereading summary before the bound detail',async()=>{
+it('retries a changed snapshot by reading the requested view as a fresh anchor',async()=>{
   let attempt=0;operationalApi.financialPosition.mockImplementation(config=>{attempt++;if(attempt===2)return Promise.reject({response:{status:409}});return Promise.resolve(snapshot(config.params.view,{revision:attempt>2?8:7}));});
   await show();await tab('البنوك والصناديق');
   await act(async()=>button('إعادة قراءة لقطة متسقة').click());
-  expect(operationalApi.financialPosition.mock.calls.map(([config])=>config.params.view)).toEqual(['summary','accounts','summary','accounts']);
+  expect(operationalApi.financialPosition.mock.calls.map(([config])=>config.params.view)).toEqual(['summary','accounts','accounts']);
+  expect(operationalApi.financialPosition.mock.calls[2][0].params).toEqual({view:'accounts'});
+  await tab('المبالغ والتكاليف المحتملة');
   expect(operationalApi.financialPosition.mock.calls[3][0].params.expected_revision).toBe(8);
   expect(host.querySelector('[role=alert]')).toBeNull();
+});
+
+it.each([401,403,409])('blocks all old figures after status %s until explicit retry establishes a fresh requested view',async status=>{
+  let fresh=false;
+  operationalApi.financialPosition.mockImplementation(config=>config.params.view==='suppliers'
+    ? Promise.reject({response:{status}}) : Promise.resolve(snapshot(config.params.view,{revision:fresh?8:7})));
+  await show({},'/operational-balances?view=reports&report_tab=accounts');
+  await tab('الموردون');
+  expect(host.querySelector('[role=alert]')).not.toBeNull();
+  expect(host.querySelector('.report-scope')).toBeNull();
+  expect(host.textContent).not.toContain('250.25');
+  await tab('البنوك والصناديق');
+  expect(host.querySelector('[data-testid=report-table-cod_expected]')).toBeNull();
+  expect(operationalApi.financialPosition).toHaveBeenCalledTimes(2);
+  fresh=true;
+  await act(async()=>button('إعادة قراءة لقطة متسقة').click());
+  expect(operationalApi.financialPosition.mock.calls[2][0].params).toEqual({view:'accounts'});
+  expect(host.querySelector('[role=alert]')).toBeNull();
+  expect(host.textContent).toContain('250.25');
+  await tab('المبيعات والربح');
+  expect(operationalApi.financialPosition.mock.calls[3][0].params.expected_revision).toBe(8);
+  expect(host.textContent).toContain('3,000.00');
+});
+
+it.each([{revision:undefined},{as_of:null},{started_at:'invalid'},{session_scope:'other-owner'},
+  {permission_version:2},{permissions:{reports:false}}])('cannot anchor an invalid first requested detail %s',async change=>{
+  operationalApi.financialPosition.mockImplementation(config=>Promise.resolve(snapshot(config.params.view,{permission_version:1,...change})));
+  await show({context:{...context,demandOnly:true}},'/operational-balances?view=reports&report_tab=accounts');
+  expect(operationalApi.financialPosition.mock.calls.map(([config])=>config.params)).toEqual([{view:'accounts'}]);
+  expect(host.querySelector('[role=alert]')).not.toBeNull();
+  expect(host.querySelector('.report-scope')).toBeNull();
+  expect(host.textContent).not.toContain('250.25');
+  await tab('الصورة الكاملة');
+  expect(operationalApi.financialPosition).toHaveBeenCalledTimes(1);
+  expect(host.querySelector('.report-metric')).toBeNull();
 });
 
 it('preserves exact large cent values and nulls in source tables',async()=>{

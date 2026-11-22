@@ -143,3 +143,44 @@ test.each(['emkan','paypal'])('provider %s never advertises an unsupported state
   await render({resource:provider,onStatements:jest.fn(),canUploadStatements:true});
   expect(host.textContent).not.toContain('إضافة كشف');
 });
+
+test('an owner ledger opened by identity still prints a fresh complete period from page two', async () => {
+  const item = { ...bank, operations: [], access: { ...bank.access, use: true } };
+  api.ledger.mockImplementation(async (kind, id, params) => ({ ...paged(params), resource: item,
+    session_scope: ctx.session_scope, permission_version: ctx.permission_version, owner_override: true }));
+  const previousPrint = window.print; let printed;
+  window.print = jest.fn(() => { printed = document.body.querySelectorAll('.sb-print-root tbody tr').length; });
+  try {
+    await render({ resource: null, target: { kind: 'bank', id: 'bank' }, context: { ...ctx, demandOnly: true } });
+    expect(api.ledger).toHaveBeenCalledTimes(1);
+    await click('التالي');
+    expect(api.ledger).toHaveBeenCalledTimes(2);
+    expect(host.querySelectorAll('tbody tr')).toHaveLength(3);
+    await click('طباعة الكشف');
+    expect(api.statement).toHaveBeenCalledTimes(1);
+    expect(api.statement.mock.calls[0][2]).toEqual({ date_from: '2026-11-03', date_to: '2026-11-19', purpose: 'print' });
+    expect(printed).toBe(11);
+  } finally { window.print = previousPrint; }
+});
+
+test('an owner ad ledger displays the authorized FX amounts without synthesizing a balance', async () => {
+  const item = { ...bank, kind: 'ad_account', id: 'ads', name: 'الحساب الإعلاني', currency: 'USD',
+    operations: [], access: { ...bank.access, use: true }, balance: null,
+    ad_amounts: { currency: 'SAR', prepaid: '0.00', payable: '23.45', native: { prepaid: '0.00', payable: '6.11' } } };
+  api.ledger.mockResolvedValue({ resource: item, items: [], page: 1, page_size: 8, total: 0, total_pages: 1,
+    session_scope: ctx.session_scope, permission_version: ctx.permission_version, owner_override: true });
+  await render({ resource: null, target: { kind: 'ad_account', id: 'ads' }, context: { ...ctx, demandOnly: true } });
+  expect(api.ledger).toHaveBeenCalledTimes(1);
+  expect(api.ledger.mock.calls[0].slice(0, 2)).toEqual(['ad_account', 'ads']);
+  expect(api.ledger.mock.calls[0][3]).toEqual(expect.objectContaining({ demand: true, signal: expect.any(AbortSignal) }));
+  expect(host.textContent).toContain('23.45'); expect(host.textContent).toContain('6.11');
+  expect(host.textContent).toContain('قبل الرسوم'); expect(host.textContent).not.toContain('الحساب متوازن');
+  expect(api.resource).not.toHaveBeenCalled();
+});
+
+test('a direct ledger target cannot expose a former resource after owner authority is lost', async () => {
+  await render({ target: { kind: 'bank', id: 'bank' }, context: { ...ctx, actor: { id: 'staff', is_owner: false } } });
+  expect(api.ledger).not.toHaveBeenCalled(); expect(api.movements).not.toHaveBeenCalled();
+  expect(host.querySelector('[role="alert"]')).not.toBeNull();
+  expect(host.textContent).not.toContain(bank.name);
+});

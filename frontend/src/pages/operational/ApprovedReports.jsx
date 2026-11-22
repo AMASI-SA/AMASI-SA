@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { formatRiyadhDateTime } from '../../lib/dates';
 import { operationalApi } from './api';
 import { assertWorkspace, retryWorkspaceRead, useWorkspaceRead } from './workspaceReadHooks';
+import { simpleBalanceError } from './simpleBalancesApi';
 import { Heading, Icon } from './ApprovedFinanceUI';
 import { collectionLabel, currencyCodes, deliveryOrderLabel, destinationLabel, filterDeliveries, formatPositionCount, formatPositionMoney, isPositionContract, paymentLabel, readableMessages, UNAVAILABLE } from './financialPositionDisplay';
 import { financialSnapshotKey, financialSnapshotParams, hasFinancialSnapshot, sameFinancialSnapshot } from './financialPositionViews';
@@ -22,7 +23,8 @@ export const REPORT_TABS = [
 const list = value => Array.isArray(value) ? value : [];
 const known = value => formatPositionMoney(value) !== UNAVAILABLE;
 const currentLabel = { summary: 'الصورة المالية الحالية', profit: 'مبيعات الفترة وتكاليفها وربحها', expected: 'ما قد يدخل وما قد نتحمله لاحقًا' };
-const error = message => Object.assign(new Error(message), { localMessage: message });
+const error = message => Object.assign(new Error(message), { localMessage: message,
+  response: { status: 409, data: { detail: { message } } } });
 
 function validate(report, context, view, expected) {
   if (context.demandOnly) assertWorkspace(report, context);
@@ -157,33 +159,49 @@ export default function ApprovedReports({ context, identity }) {
   const selected = REPORT_TABS.find(([key]) => key === query.get('report_tab')) || REPORT_TABS[0];
   const [tab, title, view] = selected;
   const [chosenCurrency, setCurrency] = useState('');
-  const [revoked, setRevoked] = useState(null);
+  const [attempt, setAttempt] = useState(0);
   const enabled = context.actor?.is_owner === true && context.status === 'active';
   const scope = JSON.stringify([identity, context.session_scope, context.permission_version]);
-  const summary = useWorkspaceRead(async config => validate(await operationalApi.financialPosition({...config,params:{view:'summary'}}),context,'summary'),scope,enabled);
-  const snapshot = summary.data;
+  // One explicit reading session owns its first validated snapshot. Acquiring
+  // that anchor must not change the request key and repeat the same cold build.
+  const session = useMemo(() => ({ snapshot: null, summary: null, failure: null }), [scope, attempt, enabled]);
+  const read = useWorkspaceRead(async config => {
+    try {
+      const expected = session.snapshot;
+      if (view === 'summary' && session.summary) return validate(session.summary, context, view, expected);
+      const report = validate(await operationalApi.financialPosition({ ...config,
+        params: { view, ...(expected ? financialSnapshotParams(expected) : {}) } }), context, view, expected);
+      // A response from a closed tab may finish physically, but cannot bind
+      // the next visible view or a different account's reading session.
+      if (!config.signal?.aborted) {
+        if (!session.snapshot) session.snapshot = Object.freeze({ session_scope: report.session_scope,
+          revision: report.revision, as_of: report.as_of, started_at: report.started_at,
+          currencyCodes: Object.freeze(currencyCodes(report)) });
+        // Preserve summary reuse without retaining every detailed report.
+        if (view === 'summary') session.summary = report;
+      }
+      return report;
+    } catch (cause) {
+      if (!config.signal?.aborted && [401,403,409].includes(cause?.response?.status)) session.failure = cause;
+      throw cause;
+    }
+  }, JSON.stringify([scope, attempt, view]), enabled && !session.failure);
+  const snapshot = session.snapshot;
   const snapshotKey = financialSnapshotKey(snapshot);
-  const detail = useWorkspaceRead(async config => validate(await operationalApi.financialPosition({...config,
-    params:{view,...financialSnapshotParams(snapshot)}}),context,view,snapshot),JSON.stringify([scope,snapshotKey,view]),enabled && Boolean(snapshot) && view !== 'summary');
-  const detailDenied = [401,403].includes(detail.status);
-  useEffect(()=>{if(detailDenied && snapshot)setRevoked({scope,snapshot});},[detailDenied,scope,snapshot]);
-  // Switching tabs must not redisplay cached owner figures after a revoked
-  // permission. Only a fresh successful summary read can clear this boundary.
-  const denied = detailDenied || revoked?.scope === scope && revoked?.snapshot === snapshot;
-  const retry = () => {
-    const failed = detail.error ? detail : summary;
-    if ([401,403,409].includes(failed.status) && context.reloadWorkspace) retryWorkspaceRead(failed,context);
-    else summary.reload();
-  };
-  const report = denied ? null : view === 'summary' ? snapshot : detail.data;
-  const codes = currencyCodes(report || snapshot);
+  // Failed authority or binding checks block every tab until an explicit
+  // retry establishes a fresh snapshot for the currently requested view.
+  const denied = Boolean(session.failure);
+  const retry = () => retryWorkspaceRead({ status: session.failure?.response?.status || read.status,
+    reload: () => setAttempt(value => value + 1) }, context);
+  const report = denied ? null : read.data;
+  const codes = report ? currencyCodes(report) : snapshot?.currencyCodes || [];
   const currency = codes.includes(chosenCurrency) ? chosenCurrency : codes.includes('SAR') ? 'SAR' : codes[0];
   const figures = report?.currencies?.[currency];
   const changeTab = key => { const params = new URLSearchParams(location.search); params.set('report_tab',key); navigate({...location,search:'?' + params}); };
-  const failure = summary.error || detail.error || (denied ? 'توقفت صلاحية قراءة التقرير. أعد القراءة بعد التحقق من صلاحياتك.' : '');
+  const failure = denied ? simpleBalanceError(session.failure) : read.error;
   return <div className="approved-reports">
     <Heading title="التقارير" subtitle="الأرصدة، الحقوق، الالتزامات، والتكاليف والربح من مصادر ميزان الفعلية.">
-      {enabled && <button className="button" type="button" onClick={retry} disabled={summary.loading}><Icon name="refresh-cw"/>إعادة قراءة التقرير</button>}
+      {enabled && <button className="button" type="button" onClick={retry} disabled={read.loading}><Icon name="refresh-cw"/>إعادة قراءة التقرير</button>}
     </Heading>
     {!context.actor?.is_owner ? <p role="alert" className="note">التقارير المالية الشاملة متاحة لمالك الحساب.</p>
       : !enabled ? <p className="note">تتاح التقارير بعد اعتماد الأرصدة الافتتاحية وبدء التشغيل.</p>

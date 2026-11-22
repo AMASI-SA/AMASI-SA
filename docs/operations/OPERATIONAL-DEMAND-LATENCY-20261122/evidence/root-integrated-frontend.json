@@ -1,0 +1,1250 @@
+{
+  "success": true,
+  "numTotalTests": 196,
+  "numPassedTests": 196,
+  "numFailedTests": 0,
+  "numPendingTests": 0,
+  "numTotalTestSuites": 10,
+  "numPassedTestSuites": 10,
+  "numFailedTestSuites": 0,
+  "startTime": 1795374056137,
+  "normalization": "Original Jest JSON; retain counts, names, statuses and failure messages; omit snapshot/runtime maps.",
+  "suites": [
+    {
+      "name": "frontend/src/pages/operational/ApprovedEntry.test.jsx",
+      "status": "passed",
+      "assertions": [
+        {
+          "fullName": "a supplier payment reviews endpoint identities before registering a single financial intent",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "demand entry loads only the selected payee kind and then its selected source group before saving unchanged intent",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "changing payee type aborts the old source options and excludes their late response",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "opening a supplier ledger fixes the payee and separates funded custody from unavailable sources",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "changing payee type clears the previous payee and funding identity",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "refund open and typing perform zero reads until explicit order lookup; amounts and history come from that lookup",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "an internal transfer uses a different receiving account and preserves the shipping wallet bank reference",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "the USD advertising payment uses the selected account quote only and the existing bank charge contract",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "independent embroidery invoice supports mixed lines, Arabic decimals, preview and safe confirmation",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "incoming receipts can still be deposited to an empty bank",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a lost acknowledgement can be recovered after the chosen bank has been exhausted",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "the expanded server defaults do not create a false mismatch or trigger another payment",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "switching from Inma to Ahli requires a confirmed atomic discard, then explicit submission using a new ID",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a receipt returned during discard or GET never executes a replacement payment",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a saved recovery navigates directly to the confirmed receipt even when the replacement bank differs",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a proven rejection displays the actual reason while an unconfirmed discard keeps the exact pending identity",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "registration returning a previous receipt immediately opens it without executing a payment",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a lost discard result can be recovered by GET without executing a financial write",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "directory-only payout resolves one source group, rejects changed ACL and offers only funded authorized custody on retry",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "carrier entry keeps receive and payment in one workflow with the exact cash amount and no implicit offset",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        }
+      ]
+    },
+    {
+      "name": "frontend/src/pages/operational/visibleOperationalRead.test.js",
+      "status": "passed",
+      "assertions": [
+        {
+          "fullName": "aggregate success does not claim native matching from incomplete outcome {\"status\":\"completed\",\"selected\":0,\"outcomes\":[]}",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "aggregate success does not claim native matching from incomplete outcome {\"status\":\"deferred\",\"reason\":\"native_evidence_budget_exhausted\"}",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "aggregate success does not claim native matching from incomplete outcome {\"status\":\"completed\",\"selected\":1,\"outcomes\":[{\"order_id\":\"8101\",\"status\":\"blocked\",\"reason\":\"courier_native_shipment_mismatch\"}]}",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "aggregate success does not claim native matching from incomplete outcome {\"status\":\"completed\",\"selected\":1,\"outcomes\":[{\"order_id\":\"8101\",\"status\":\"source_changed\"}]}",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "aggregate success does not claim native matching from incomplete outcome {\"status\":\"completed\",\"selected\":1,\"outcomes\":[{\"order_id\":\"8101\",\"status\":\"unavailable\"}]}",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "aggregate success does not claim native matching from incomplete outcome {\"status\":\"completed\",\"selected\":1,\"outcomes\":[{\"order_id\":\"another-order\",\"status\":\"saved\"}]}",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "unknown blocked reason text is not rendered from the native response",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "saved execution evidence and unchanged evidence are reported without asserting delivery",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a failed aggregate preserves the saved native result without claiming recalculation",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a failed aggregate preserves the unchanged native result without claiming recalculation",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a failed aggregate preserves the already_eligible native result without claiming recalculation",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a failed aggregate preserves the blocked native result without claiming recalculation",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a failed aggregate preserves the unavailable native result without claiming recalculation",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a failed aggregate preserves the source_changed native result without claiming recalculation",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a scoped 409 failure retains only the selected native receipt",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a scoped 408 failure retains only the selected native receipt",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "an error receipt with scope_changed cannot become selected-order evidence",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "an error receipt with scope_missing cannot become selected-order evidence",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "an error receipt with not_targeted cannot become selected-order evidence",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "an error receipt with other_order cannot become selected-order evidence",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "an error receipt with duplicate cannot become selected-order evidence",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "an error receipt with unknown_status cannot become selected-order evidence",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "an error receipt with unknown_failure cannot become selected-order evidence",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a scoped unavailable receipt explains native_evidence_access_denied without exposing provider text",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a scoped unavailable receipt explains native_evidence_request_timeout without exposing provider text",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "hidden mount does no work; one visible completion never polls or refreshes on focus/visibility",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "hiding aborts a pending read and its result; cleanup prevents later visibility work",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "replacing a pending read waits for its cancellation and never displays its old scope",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "offline reads wait for a user page to become active",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "recoverable operational_refresh_in_progress keeps a warning for the saved snapshot without retry",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "recoverable operational_capacity_requires_archive keeps a warning for the saved snapshot without retry",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "recoverable operational_source_setup_incomplete keeps a warning for the saved snapshot without retry",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "permission failure 401 never falls back to financial data",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "permission failure 403 never falls back to financial data",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "abort during refresh blocks any subsequent report fetch",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "refresh timeout evidence logs only allowed finite stage fields, once for that request",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "source failure evidence uses its own label and preserves the saved-report warning without retry",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "timing evidence keeps at most the final 64 valid stages, including terminal cancellation",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "status 500 and code operational_refresh_timeout do not log refresh timing evidence",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "status 408 and code operational_source_read_timeout do not log refresh timing evidence",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "status 500 and code operational_source_setup_incomplete do not log refresh timing evidence",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "status 408 and code operational_source_setup_incomplete do not log refresh timing evidence",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "status 409 and code operational_refresh_in_progress do not log refresh timing evidence",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "status 409 and code operational_refresh_lease_lost do not log refresh timing evidence",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "late failure after hidden with status 408 is not logged or converted to saved-read permission",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "late failure after hidden with status 409 is not logged or converted to saved-read permission",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "late failure after aborted with status 408 is not logged or converted to saved-read permission",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "late failure after aborted with status 409 is not logged or converted to saved-read permission",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "late failure after offline with status 408 is not logged or converted to saved-read permission",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "late failure after offline with status 409 is not logged or converted to saved-read permission",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a bounded financial read owns only one visible attempt an initially hidden page defers without spending its active budget",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a bounded financial read owns only one visible attempt visibility interruption consumes the attempt rather than restarting it repeatedly",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a bounded financial read owns only one visible attempt connection interruption consumes the attempt rather than restarting it repeatedly",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a bounded financial read owns only one visible attempt a promise that ignores abort cannot keep presentation loading past the deadline",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a bounded financial read owns only one visible attempt waiting for cancelled physical work has the same deadline and never releases its reservation early",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a bounded financial read owns only one visible attempt lane waiting and the subsequent request share one auth-chain deadline",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a bounded financial read owns only one visible attempt a hidden confirmation follow-up is consumed immediately instead of deferred",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a bounded financial read owns only one visible attempt success and cleanup leave no timer or activity-triggered requests",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        }
+      ]
+    },
+    {
+      "name": "frontend/src/pages/operational/ApprovedReports.test.jsx",
+      "status": "passed",
+      "assertions": [
+        {
+          "fullName": "reads one real saved summary and preserves unknown/partial totals without summing currencies or refreshing sources",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "opens the requested report view directly without building summary first: accounts",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "opens the requested report view directly without building summary first: suppliers",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "opens the requested report view directly without building summary first: expected",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "anchors later report views to the first validated detail and reads a real summary only when requested",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "reuses an explicitly requested summary across later details without substituting the first detail DTO",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "does not anchor a cancelled first view or request an unopened summary",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "shows real profit components and excluded unpaid counts without turning missing tax/financing into zero",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "binds each detail view to the initial snapshot and keeps potential COD separate from current money",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "rejects a detail snapshot mismatch { revision: 8 }",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "rejects a detail snapshot mismatch { as_of: '2026-11-22T18:00:00+03:00' }",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "rejects a detail snapshot mismatch { session_scope: 'another-owner' }",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "rejects a detail snapshot mismatch { started_at: '2026-10-01T00:00:00+03:00' }",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "rejects a detail snapshot mismatch { view: 'all' }",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "never requests owner aggregates when context disallows reports { actor: [Object] }",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "never requests owner aggregates when context disallows reports { status: 'draft' }",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "never requests owner aggregates when context disallows reports { status: 'frozen' }",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "discards visible figures immediately across identity changes and ignores a late former owner response",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "withholds a report when permission or snapshot identity is missing",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "does not certify Salla reconciliation, and does not sum a paginated refund list",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "labels partial provider totals and opens order reasons inline without leaving the report",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "hides all report amounts after permission is revoked on a detail read",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "retries a changed snapshot by reading the requested view as a fresh anchor",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "blocks all old figures after status 401 until explicit retry establishes a fresh requested view",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "blocks all old figures after status 403 until explicit retry establishes a fresh requested view",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "blocks all old figures after status 409 until explicit retry establishes a fresh requested view",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "cannot anchor an invalid first requested detail { revision: undefined }",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "cannot anchor an invalid first requested detail { as_of: null }",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "cannot anchor an invalid first requested detail { started_at: 'invalid' }",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "cannot anchor an invalid first requested detail { session_scope: 'other-owner' }",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "cannot anchor an invalid first requested detail { permission_version: 2 }",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "cannot anchor an invalid first requested detail { permissions: [Object] }",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "preserves exact large cent values and nulls in source tables",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "separates courier responsibility from customer collection and retained shipping fees",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "does not certify a pending driver collection amount as cash received",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "keeps incomplete unidentified provider review cases visible in the same report",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "exposes forecast currencies absent from the original summary, empty summary=false",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "exposes forecast currencies absent from the original summary, empty summary=true",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        }
+      ]
+    },
+    {
+      "name": "frontend/src/pages/operational/ApprovedFinance.demand.test.jsx",
+      "status": "passed",
+      "assertions": [
+        {
+          "fullName": "home requests only bootstrap and exact compact home, never totals its card subset",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "opening a directory directly never prepares home or other pages",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "navigating away aborts a pending home and its late result cannot populate the directory",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "directory pagination and search go to the server without loading a full catalog",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "an identity change drops the previous bootstrap and home binding",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a changed permission binding requires a fresh bootstrap on explicit retry",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a selected resource from a different scope is rejected before its ledger opens",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "saved source time and display preparation time remain separate",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "an owner opens one ledger without a selection read and exposes only its validated resource",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "an owner ledger with a mismatched session cannot expose its resource or actions",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "an owner ledger with a mismatched permission cannot expose its resource or actions",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "an owner ledger with a mismatched owner cannot expose its resource or actions",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "an owner ledger with a mismatched resource cannot expose its resource or actions",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a balance-only employee keeps selection and never requests a ledger",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "owner provider orders remain the default and changing the tab reads only that ledger view",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "owner receipt recovery binds the first ledger query and opens its confirmed movement",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "owner saved invoice filters the first ledger and retains permissioned supplier actions",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a late owner ledger cannot replace a different resource after navigation",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        }
+      ]
+    },
+    {
+      "name": "frontend/src/pages/operational/ApprovedLedger.test.jsx",
+      "status": "passed",
+      "assertions": [
+        {
+          "fullName": "one read for account, eight rows, typing is debounced and totals still describe the entire period",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "statement print is a fresh full-period permissioned read independent of the on-screen page",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "bank ledger opens unposted status holds separately from credited movements",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "global tab does not fetch resource ledgers, and account with no movement permission starts no read",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "shows the approver next to the date and loads invoice lines only after opening the row",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a confirmed recovery opens its exact receipt on the server-selected ledger page",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "balance-only account opened from a directory loads its own balance without a ledger query",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "supported provider tabby exposes permissioned contextual statement links",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "supported provider tamara exposes permissioned contextual statement links",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "supported provider salla exposes permissioned contextual statement links",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "provider emkan never advertises an unsupported statement importer",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "provider paypal never advertises an unsupported statement importer",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "an owner ledger opened by identity still prints a fresh complete period from page two",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "an owner ad ledger displays the authorized FX amounts without synthesizing a balance",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a direct ledger target cannot expose a former resource after owner authority is lost",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        }
+      ]
+    },
+    {
+      "name": "frontend/src/lib/demandRead.test.js",
+      "status": "passed",
+      "assertions": [
+        {
+          "fullName": "only an explicit preparation polls, with one consumer, then a ready result remains complete",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "ordinary preparation adds two early checks, then returns to the two-second cadence",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a projection completed at two seconds is displayed at the two-second check",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "an immediate ready result starts no poll and remains complete",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a slow preparation adds only two checks over thirty seconds",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "an in-flight readiness request never overlaps another poll",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "hidden during preparation releases demand and cancels the early checks",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "offline during preparation releases demand and cancels the early checks",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a slower server backpressure hint is never shortened, including beyond ten seconds",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "invalid timer hint 2147483648 fails instead of causing a rapid polling loop",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "invalid timer hint 1e+40 fails instead of causing a rapid polling loop",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "invalid timer hint -1 fails instead of causing a rapid polling loop",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "invalid timer hint 0.5 fails instead of causing a rapid polling loop",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "invalid timer hint null fails instead of causing a rapid polling loop",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "aborting preparation clears the poll and releases only its own consumer",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "hidden starts no network request",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "offline starts no network request",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a failed preparation is an error and cannot become an endless poll",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a family release URL is used without crossing into another origin",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a late preparing response after cancellation releases interest without polling",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        }
+      ]
+    },
+    {
+      "name": "frontend/src/pages/operational/ApprovedFinance.loading.test.jsx",
+      "status": "passed",
+      "assertions": [
+        {
+          "fullName": "/operational-balances ends a stalled bootstrap attempt after 30 seconds and recovers only on explicit retry",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "/operational-balances?view=home ends a stalled bootstrap attempt after 30 seconds and recovers only on explicit retry",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "retry remains bounded while an aborted predecessor is still physically pending",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "initially hidden entry exposes recovery without starting a deferred read",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "initially offline entry exposes recovery without starting a deferred read",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "hidden interruption leaves a paused attempt and never automatically repeats its request",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "offline interruption leaves a paused attempt and never automatically repeats its request",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "an identity change cannot expose the old result or wait indefinitely behind its request",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "an ordinary bootstrap rejection exposes retry without substituting financial data",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a missing authenticated user id offers authentication recovery instead of a disabled balance loader",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "balance readers without the policy retain their existing hidden-page deferral",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        }
+      ]
+    },
+    {
+      "name": "frontend/src/pages/operational/simpleBalancesApi.test.js",
+      "status": "passed",
+      "assertions": [
+        {
+          "fullName": "ledger reads encode resource identifiers and retain cancellation, page size, and focus",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "new workspace reads and opted-in ledger use demand transport without changing legacy reads",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "an explicit write preserves the idempotency key, session binding, and typed source",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "permission save is an explicit version-checked PUT and preserves denial",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "refund requests bind the order and confirmations do not add editable source fields",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "pending-command registration and recovery use scoped authenticated endpoints",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "reports and printing each request a fresh cancellable GET without changing financial writes",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "automatic history and protected receipt reads retain their request scope and binary response",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "discard uses the atomic financial endpoint and preserves a proven Arabic refusal",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        }
+      ]
+    },
+    {
+      "name": "frontend/src/pages/operational/ApprovedCashBoxes.test.jsx",
+      "status": "passed",
+      "assertions": [
+        {
+          "fullName": "owner creates a SAR cash account and sees its refreshed ledger without recording money",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "the cash group has an add action with no existing accounts",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "cash subtotal follows authorized physical balances 0",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "cash subtotal follows authorized physical balances 1",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "cash subtotal follows authorized physical balances 2",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "provider cards show known partial totals and keep protected amounts and counts hidden",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        }
+      ]
+    },
+    {
+      "name": "frontend/src/pages/operational/workspaceReadHooks.test.jsx",
+      "status": "passed",
+      "assertions": [
+        {
+          "fullName": "a delayed hidden-page DELETE cannot cancel a resumed read of the same query",
+          "status": "passed",
+          "duration": null,
+          "failureMessages": []
+        }
+      ]
+    }
+  ]
+}
