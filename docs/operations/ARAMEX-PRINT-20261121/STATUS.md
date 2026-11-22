@@ -1,4 +1,46 @@
-# ARAMEX-PRINT-20261121: replacement source candidate on current Production
+# ARAMEX-PRINT-20261121: outbound external-label reprint regression WIP
+
+New branch `codex/aramex-intransit-label-reprint-20261122` starts directly from
+reviewed Production `c302943e330bcdd534a4a5697b8ef813dfb7cb6e` (PR2059).
+Previous task evidence checkpoint adcb4f38cb000c34fef0f4d7e9ea1b0fb6861035 and
+all frozen A/B/M pairs remain unchanged. Latest authorization renews publication.
+
+The parser repair is ALREADY deployed inside source
+d396049f8fedf72c394169a451d45b227ad52376 / runtime
+rg5-aceb392af7809d9099ba92b27d4bb3d802999148c91013a5bba1cca5ad5f6c8e.
+Shipping module SHA256 db6401ac99121e6691a17ea0eccd6309d4dca430a6a7782f4b0009d10cf3398f
+matches exactly. Do not republish that candidate. Owner evidence checkpoint
+529bd8574031e5be30a2319e890796c74f561074 records original verify3 exit0,760
+requests/probe and inactive lease. Own fresh original guard also reports inactive.
+Both current canonical/cache-busted build-meta probes through the unchanged
+guard fetch routine returned200/application-json/exact reviewed SHA256
+abbc0f54ce6063852b165e10f4caa7f9b6520624b9412c2162f5569c30e0cb1e.
+
+Actual ADB acceptance still fails: existing-label fetch completes but print
+remains disabled. The UI freezes post-dispatch carrier reprints by requiring
+the exact completed state. No relink/scope diagnosis follows. The strict native
+carrier reader currently accepts only completed despite its existing outbound
+status set including shipped/delivering/delivered for other callers.
+
+Added six synthetic actual-route regressions: shipped/delivering/delivered x
+refresh/complete-and-refresh with a current official external AWB and durable
+assembly proof. Initial run:6 failed in16.58s, all HTTP409
+order_status_not_completed. Command: python -B -m pytest --noconftest
+--asyncio-mode=auto -q --tb=short backend/tests/test_external_carrier_reprint_status.py.
+No production code changed yet. This WIP is not ready for merge or publication.
+Fresh rerun after adding pre-result side-effect assertions:6 failed in4.34s,
+all at the intended HTTP200 expectation. Prior assertions passed: provider GET
+only, unchanged canonical order, unchanged assembly/stage, no manual refresh.
+
+Next: repair only existing external-carrier reprint eligibility. Preserve
+assembly/employee permission/current-child/replacement/cancellation fences;
+do not relax internal courier document issuance or change Salla statuses,
+financial state, linking or scopes. Verify native UI compatibility and the
+original/control in ADB after a new reviewed v5 release. Root-case printing is
+unverified until actual acceptance. No task lease or new publication; no shared
+workspace mutation by this follow-up. Checkpoint/Issue1006 must precede long work.
+
+## Previous parser repair history
 
 Current source branch: `codex/aramex-order-payload-release-v2-20261121`, directly
 based on reviewed Production `6e41bf25b936e8c4047df75bb170610dfc71b7f7` (PR2039).
