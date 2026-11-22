@@ -97,3 +97,17 @@ test.each(['hidden','unmount'])('submitted provider proof and approval remain du
     if(departure==='hidden')await visibility('visible');
     expect(api.providerHistoryReviews).toHaveBeenCalledTimes(1);
 });
+
+
+test('selected platform keeps history review scoped and clears approval input when it changes',async()=>{
+    api.providerHistoryReviews.mockResolvedValue({items:[fixture,{...fixture,order_id:'tabby-id',provider:'tabby',order_number:'456'}],session_scope:'scope'});
+    await act(async()=>root.render(<ProviderHistoryReview sessionScope="scope" providerId="tamara"/>));
+    await choose();
+    expect([...host.querySelectorAll('option')].map(o=>o.value)).toEqual(['','id']);
+    expect(host.querySelector('form')).not.toBeNull();
+    await act(async()=>root.render(<ProviderHistoryReview sessionScope="scope" providerId="tabby"/>));
+    expect(host.querySelector('form')).toBeNull();
+    await act(async()=>button('مراجعة مستحقات').click());
+    expect([...host.querySelectorAll('option')].map(o=>o.value)).toEqual(['','tabby-id']);
+    expect(api.approveProviderHistory).not.toHaveBeenCalled();
+});

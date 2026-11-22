@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { todaySA } from '../../lib/dates';
-import { AdAmount, AdBalance, Amount, Heading, Icon, IconBox, MovementIcon, isAsset, issueLabel, styleOf } from './ApprovedFinanceUI';
+import { AdAmount, AdBalance, Amount, Heading, Icon, IconBox, MovementIcon, ResourceIcon, isAsset, issueLabel, styleOf } from './ApprovedFinanceUI';
 import { simpleBalancesApi as api, simpleBalanceError } from './simpleBalancesApi';
 import { useBalanceRead } from './simpleBalancesHooks';
+import CarrierAccountSummary from './CarrierAccountSummary';
 import { isStatement, minorUnits, movementDate, movementRecorder, movementTitle, resourceKey, signedResourceBalance } from './simpleBalancesModel';
 
 import SupplierInvoiceDetail from './SupplierInvoiceDetail';
@@ -122,7 +123,7 @@ function PeriodPrint({ resource, period, scope }) {
     {print?.scope === scope && createPortal(<div dir="rtl" className="sb-print-root"><print.StatementDocument statement={print.value} printing /></div>, document.body)}</>;
 }
 
-function LedgerPage({ context, identity, resource, canOpenOrderDetails = false, initialInvoice, initialMovement, onDetail, onAdd, onPurchase, onBack, onReviewOrders, onHistory, onExpected, onReviewCollections }) {
+function LedgerPage({ context, identity, resource, canOpenOrderDetails = false, initialInvoice, initialMovement, onDetail, onAdd, onPurchase, onBack, onReviewOrders, onHistory, onExpected, onReviewCollections, onStatements, onProviderHistory, canUploadStatements = false }) {
   const initialDate = initialInvoice?.date || initialMovement?.date;
   const [period, setPeriod] = useState(() => initialDate
     ? {date_from:initialDate, date_to:initialDate} : defaultPeriod(context.ledger_start));
@@ -181,7 +182,7 @@ function LedgerPage({ context, identity, resource, canOpenOrderDetails = false, 
   return <>
     {resource && onBack && <button type="button" className="textbtn back" onClick={() => onBack(resource)}><Icon name="chevron-left" />
       {isAsset(resource.kind) ? 'الأصول والحسابات' : 'الأشخاص والجهات'}</button>}
-    <Heading title={resource?.name || 'سجل الحركات'} subtitle={resource ? styleOf(resource)[0] + ' · كشف الحساب' : 'ابحث باسم الحساب أو الموظف أو رقم الطلب أو المرجع.'}>
+    <Heading title={resource ? <span className="mz-resource-label"><ResourceIcon resource={resource} size="lg"/><span>{resource.name}</span></span> : 'سجل الحركات'} subtitle={resource ? styleOf(resource)[0] + ' · كشف الحساب' : 'ابحث باسم الحساب أو الموظف أو رقم الطلب أو المرجع.'}>
       {onPurchase && <button type="button" className="button primary" onClick={onPurchase}><Icon name="receipt-text" />شراء آجل</button>}
       {onAdd && <button type="button" className="button primary" onClick={() => onAdd(resource)}><Icon name="plus" />{resource?.kind === 'ad_account' ? 'شحن رصيد الإعلان' : resource?.kind === 'supplier' && resource.operations?.includes('supplier.payment') ? 'تسديد مبلغ' : resource ? 'سجّل حركة' : 'حركة مالية جديدة'}</button>}
       {summary?.can_print && <PeriodPrint key={JSON.stringify([scope, period, resourceKey(resource)])} resource={resource} scope={scope} period={period} />}
@@ -190,10 +191,18 @@ function LedgerPage({ context, identity, resource, canOpenOrderDetails = false, 
       <button type="button" className={'button' + (providerOrders ? ' primary' : '')} aria-pressed={providerOrders} onClick={() => selectTab('orders')}>طلبات {resource.name}</button>
       <button type="button" className={'button' + (!providerOrders ? ' primary' : '')} aria-pressed={!providerOrders} onClick={() => selectTab('movements')}>كشف الحركات والتسويات</button>
     </div>}
+    {resource?.kind === 'provider' && <div className="filters screen-only" role="group" aria-label="كشوف المنصة ومراجعاتها">
+      {onStatements && ['salla','tabby','tamara'].includes(resource.id) && <>
+        {canUploadStatements && <button type="button" className="button" onClick={() => onStatements(resource, 'upload')}><Icon name="upload"/>إضافة كشف {resource.name}</button>}
+        <button type="button" className="button" onClick={() => onStatements(resource, 'history')}>الكشوف السابقة</button>
+      </>}
+      {onProviderHistory && <button type="button" className="button" onClick={() => onProviderHistory(resource)}>مراجعة الطلبات السابقة</button>}
+    </div>}
     {resource && readable && <section className="panel sheet"><div className="section-head"><h2>كشف الفترة</h2><Icon name="calendar-days" /></div>
       <Range value={period} start={context.ledger_start} onChange={changePeriod} />
       {providerOrders && <button type="button" className="textbtn" aria-pressed={allDates} onClick={() => { setAllDates(true); setPage(1); }}>كل التواريخ{allDates && ' · معروضة'}</button>}</section>}
     {summary && <Metrics period={summary} resource={resource} />}
+    {resource?.kind === 'courier' && !read.loading && !read.error && result && <CarrierAccountSummary resource={shownResource} summary={result.courier_summary}/>}
     {detailRead.loading && <p role="status" className="note">جارٍ تحميل رصيد الحساب…</p>}
     {detailRead.error && <p role="alert" className="note">{detailRead.error} <button type="button" onClick={detailRead.reload}>إعادة المحاولة</button></p>}
     {resource?.kind === 'ad_account' && resource.access?.balance && <div className="metric accent"><small>الرصيد الحالي</small><strong><AdBalance resource={shownResource} /></strong></div>}

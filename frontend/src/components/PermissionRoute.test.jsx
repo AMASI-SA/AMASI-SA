@@ -1,12 +1,24 @@
 import { renderToStaticMarkup } from "react-dom/server";
+import { MemoryRouter } from "react-router-dom";
 
 let mockCurrentUser;
 let mockCurrentLoading = false;
 
-jest.mock("react-router-dom", () => ({
-    Navigate: ({ to }) => <div data-testid="navigate">{to}</div>,
-    useLocation: () => ({ pathname: "/customer-intelligence" }),
-}), { virtual: true });
+// Use the real router with its CommonJS DOM entry so App-route test ordering
+// cannot change this installed module into a different virtual mock identity.
+jest.mock("react-router/dom", () => {
+    const { TextEncoder, TextDecoder } = require("util");
+    if (!global.TextEncoder) global.TextEncoder = TextEncoder;
+    if (!global.TextDecoder) global.TextDecoder = TextDecoder;
+    const path = require("path");
+    const packagePath = require.resolve("react-router/package.json");
+    let target = require(packagePath).exports["./dom"];
+    while (target && typeof target === "object") {
+        target = target.require || target.node || target.default;
+    }
+    if (typeof target !== "string") throw new Error("react-router/dom CommonJS export missing");
+    return require(path.resolve(path.dirname(packagePath), target));
+}, { virtual: true });
 
 jest.mock("../context/AuthContext", () => ({
     useAuth: () => ({ user: mockCurrentUser, loading: mockCurrentLoading }),
@@ -27,9 +39,11 @@ test("owner and explicitly permitted employee can open customer intelligence", (
 test("an unrelated employee permission cannot open the inbox", () => {
     mockCurrentUser = { is_owner: false, permissions: ["orders.view"] };
     const markup = renderToStaticMarkup(
-        <PermissionRoute permission={PERMISSION}>
-            <div data-testid="protected-inbox">inbox</div>
-        </PermissionRoute>,
+        <MemoryRouter initialEntries={["/customer-intelligence"]}>
+            <PermissionRoute permission={PERMISSION}>
+                <div data-testid="protected-inbox">inbox</div>
+            </PermissionRoute>
+        </MemoryRouter>,
     );
 
     expect(markup).toContain('data-testid="permission-route-denied"');
@@ -39,9 +53,11 @@ test("an unrelated employee permission cannot open the inbox", () => {
 test("permitted employee receives the protected content", () => {
     mockCurrentUser = { is_owner: false, permissions: [PERMISSION] };
     const markup = renderToStaticMarkup(
-        <PermissionRoute permission={PERMISSION}>
-            <div data-testid="protected-inbox">inbox</div>
-        </PermissionRoute>,
+        <MemoryRouter initialEntries={["/customer-intelligence"]}>
+            <PermissionRoute permission={PERMISSION}>
+                <div data-testid="protected-inbox">inbox</div>
+            </PermissionRoute>
+        </MemoryRouter>,
     );
 
     expect(markup).toContain('data-testid="protected-inbox"');

@@ -56,3 +56,44 @@ test.each(['stocktake','adjustments','movements'])('native accounting inventory 
     expect(permitted(native,address+'&action=post')).toBeUndefined();
     expect(permitted(native,'/inventory-v2?tab=opening')).toBeUndefined();
 });
+
+test.each(['tabby','tamara','salla'])('a supported %s statement filter retains the same assigned page and read/write mode',provider=>{
+    for(const mode of ['read','write']) {
+        const grant=selected('balances.statements',balances+'/provider-statements',{mode});
+        for(const hash of ['','#history','#upload']) {
+            const target=new URL(balances+'/provider-statements?provider='+provider+hash,'https://mezan.invalid');
+            expect(grantedPageAt([grant],target)).toBe(grant);
+        }
+    }
+});
+
+test('a statement provider filter preserves the exact reviewed alias and fragment boundary',()=>{
+    const grant=selected('balances.statements','/reviewed-statement-entry',{
+        mode:'read',aliases:[balances+'/provider-statements#history'],
+    });
+    expect(grantedPageAt([grant],new URL(balances+'/provider-statements?provider=tabby#history','https://mezan.invalid'))).toBe(grant);
+    expect(permitted(grant,balances+'/provider-statements?provider=tabby#upload')).toBeUndefined();
+    expect(permitted(grant,balances+'/provider-statements?provider=tabby')).toBeUndefined();
+});
+
+test.each([
+    'provider=', 'provider=paypal', 'provider=emkan', 'provider=TABBY', 'provider=__proto__',
+    'provider=tabby&provider=tabby', 'provider=tabby&provider=tamara',
+    ...['workspace','view','stage','tab','section','action','page','kind','id'].map(key=>'provider=tabby&'+key+'=other'),
+])('statement filters reject unsupported, ambiguous or extra selectors: %s',query=>{
+    const grant=selected('balances.statements',balances+'/provider-statements',{mode:'write'});
+    expect(permitted(grant,balances+'/provider-statements?'+query+'#history')).toBeUndefined();
+});
+
+test('a statement filter cannot borrow accounting, asset, report or owner-only page authority',()=>{
+    const target=new URL(balances+'/provider-statements?provider=tabby#history','https://mezan.invalid');
+    for(const id of ['accounting.inventory.view','balances.assets','balances.reports','unrelated.page']) {
+        expect(grantedPageAt([selected(id,balances+'/provider-statements',{mode:'write'})],target)).toBeNull();
+    }
+    expect(grantedPageAt([],target)).toBeNull();
+    expect(grantedPageAt([selected('balances.statements',balances+'/provider-statements',{owner_only:true,mode:'write'})],target)).toBeNull();
+    const statement=selected('balances.statements',balances+'/provider-statements',{mode:'read'});
+    expect(permitted(statement,'/integrations-v2?workspace=financial&provider=tabby')).toBeUndefined();
+    expect(permitted(statement,balances+'/provider-fees?provider=tabby')).toBeUndefined();
+    expect(permitted(statement,balances+'/provider-history?provider=tabby')).toBeUndefined();
+});

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import api from '../../lib/api';
 import { requestId } from './api';
 import { visibleOperationalRead } from './visibleOperationalRead';
+import { ResourceIcon } from './ApprovedFinanceUI';
 
 const base = '/operational-balances/completed-shipping-fees';
 const hash = /^[a-f0-9]{64}$/;
@@ -96,10 +97,11 @@ export default function CompletedShippingFeeReview({ orders = [], sessionScope }
             || data.pending_reconciliation !== true) throw new Error('تعذر التحقق من حفظ الاعتماد؛ أعد المعاينة قبل المحاولة التالية.');
         setResult(previous => ({ ...previous, can_approve: false, already_approved: true, approval_state: 'pending_reconciliation' }));
         setConfirmed(false); setReference(''); pending.current = null;
-        setNotice('حُفظ اعتماد أجرة هذا الطلب. اضغط زر تحديث الأرصدة في هذه الصفحة للتحقق من الدليل والسداد وإظهار الأثر المعروض.');
+        setNotice('حُفظ اعتماد أجرة هذا الطلب. حدّث الأرصدة من المركز المالي للتحقق من الدليل والسداد وإظهار الأثر المعروض.');
     };
 
     return <section className="ofp-no-print" dir="rtl">
+        <p>تُعرض شركة الشحن من دليل الطلب وتعرفة الشحن. في الشحن المسبق تُعرض محفظة السداد مستقلة عن الشركة؛ ظهور سلة كمحفظة لا يجعلها شركة الشحن.</p>
         <button className="ofp-button" type="button" disabled={busy} aria-expanded={open}
             onClick={() => setOpen(value => !value)}>مراجعة أجور تم التنفيذ</button>
         {open && <fieldset disabled={busy} className="space-y-3 border rounded p-3">
@@ -115,7 +117,7 @@ export default function CompletedShippingFeeReview({ orders = [], sessionScope }
             {result && result.session_scope === sessionScope && <div className="space-y-3">
                 {result.issues.length > 0 && <ul role="alert">{result.issues.map((row, index) => <li key={row.code + index}>{row.message}</li>)}</ul>}
                 {result.candidate && <>
-                    <p>الطلب {result.order_number} · {result.candidate.party_name || result.candidate.party_id} · أجرة أساسية {result.candidate.amount} {result.candidate.currency}</p>
+                    <p><ResourceIcon resource={{kind:"courier",id:result.candidate.party_id,name:result.candidate.party_name}}/> الطلب {result.order_number} · {result.candidate.party_name || result.candidate.party_id} · أجرة أساسية {result.candidate.amount} {result.candidate.currency}</p>
                     <p>تم التنفيذ: {time(result.candidate.completed_at)} بتوقيت الرياض. بداية التشغيل: {time(result.period_start)}.</p>
                     <p>{result.candidate.payment_mode === 'prepaid'
                         ? `الشحن مسبق الدفع من الصندوق المعتمد: ${result.candidate.cash_account_name || 'غير متاح'}.`
@@ -134,9 +136,9 @@ export default function CompletedShippingFeeReview({ orders = [], sessionScope }
                     </li>)}</ul> : <p>لا توجد سجلات ذات صلة معروضة في هذه المعاينة.</p>}
                 </div>)}
                 {result.already_approved && <p role="status">{result.approval_state === 'applied'
-                    ? 'هذه الأجرة مثبتة بالفعل؛ لا يلزم اعتماد إضافي.' : 'الأجرة معتمدة؛ اضغط زر تحديث الأرصدة في هذه الصفحة لإظهار أثرها.'}</p>}
+                    ? 'هذه الأجرة مثبتة بالفعل؛ لا يلزم اعتماد إضافي.' : 'الأجرة معتمدة؛ حدّث الأرصدة من المركز المالي لإظهار أثرها.'}</p>}
                 {!result.already_approved && result.candidate && result.approval_state === 'not_required'
-                    && <p>لا تحتاج هذه الأجرة اعتمادًا تاريخيًا؛ يتحقق تحديث الأرصدة داخل هذه الصفحة من الدليل الحالي.</p>}
+                    && <p>لا تحتاج هذه الأجرة اعتمادًا تاريخيًا؛ يتحقق تحديث الأرصدة في المركز المالي من الدليل الحالي.</p>}
                 {result.can_approve && <div className="space-y-2">
                     <label className="block">مرجع مستند المطابقة <input value={reference} minLength={3} maxLength={300}
                         onChange={event => setReference(event.target.value)} /></label>

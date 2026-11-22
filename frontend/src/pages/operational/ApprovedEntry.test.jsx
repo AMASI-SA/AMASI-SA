@@ -306,3 +306,21 @@ test('directory-only payout resolves one source group, rejects changed ACL and o
   expect(Array.from(payoutField('خرج المبلغ من').options).slice(1).map(o=>o.textContent)).toEqual(['عهدة مستلمة']);
   expect(api.accountGroup.mock.calls.map(([kind])=>kind)).toEqual(['employee_custody','employee_custody']);
 });
+
+
+test('carrier entry keeps receive and payment in one workflow with the exact cash amount and no implicit offset',async()=>{
+  const ctx=context(),carrier=resource('courier','أرامكس');
+  ctx.operations.push('courier.receive','courier.pay');ctx.resources.push(carrier);
+  await render(<ApprovedEntry context={ctx} resource={carrier} mode="choose" onBack={()=>{}} onSaved={saved}/>);
+  expect(button('حوّلت بين حسابين')).toBeUndefined();
+  await click('استلام تحصيل من أرامكس');
+  expect(host.textContent).toContain('لا تخصم أجور الشحن تلقائيًا');
+  await change('دخل المبلغ في',JSON.stringify(['bank','الإنماء']));
+  await change('المبلغ المستلم فعليًا (ريال)','7700');
+  await click('مراجعة الحركة');
+  expect(api.entry).not.toHaveBeenCalled();
+  await click('تأكيد وتسجيل الحركة');
+  expect(api.entry).toHaveBeenCalledTimes(1);
+  expect(api.entry.mock.calls[0][0]).toMatchObject({party_type:'courier',party_id:'أرامكس',amount:'7700.00',reason:'collection',side:'for_party',source_type:'bank',source_id:'الإنماء'});
+  expect(api.entry.mock.calls[0][0]).not.toHaveProperty('offset_amount');
+});

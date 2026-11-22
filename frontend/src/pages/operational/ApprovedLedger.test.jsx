@@ -122,3 +122,24 @@ test('balance-only account opened from a directory loads its own balance without
   expect(api.resource).toHaveBeenCalledWith('bank','bank',expect.objectContaining({signal:expect.any(AbortSignal)}));
   expect(host.textContent).toContain('170.45');
 });
+
+
+test.each(['tabby','tamara','salla'])('supported provider %s exposes permissioned contextual statement links',async id=>{
+  const provider={...bank,kind:'provider',id,name:id};
+  api.ledger.mockImplementation(async(kind,ident,params)=>({...paged(params),resource:provider,provider_orders:true}));
+  const onStatements=jest.fn(),onProviderHistory=jest.fn();
+  await render({resource:provider,onStatements,onProviderHistory,canUploadStatements:true});
+  await click('إضافة كشف'); await click('الكشوف السابقة'); await click('مراجعة الطلبات السابقة');
+  expect(onStatements.mock.calls).toEqual([[provider,'upload'],[provider,'history']]);
+  expect(onProviderHistory).toHaveBeenCalledWith(provider);
+  await render({resource:provider,onStatements,canUploadStatements:false});
+  expect(host.textContent).not.toContain('إضافة كشف');
+  expect(host.textContent).toContain('الكشوف السابقة');
+});
+
+test.each(['emkan','paypal'])('provider %s never advertises an unsupported statement importer',async id=>{
+  const provider={...bank,kind:'provider',id,name:id};
+  api.ledger.mockImplementation(async(kind,ident,params)=>({...paged(params),resource:provider,provider_orders:true}));
+  await render({resource:provider,onStatements:jest.fn(),canUploadStatements:true});
+  expect(host.textContent).not.toContain('إضافة كشف');
+});

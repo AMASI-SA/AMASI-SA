@@ -15,6 +15,10 @@ import {
 import "./operational.css";
 import "./providerStatements.css";
 import OperationalToolBack from './OperationalToolBack';
+import { ResourceIcon } from './ApprovedFinanceUI';
+
+const providerNames = { ...STATEMENT_PROVIDERS, emkan: "إمكان", paypal: "باي بال" };
+const statementPath = provider => `/operational-balances/provider-statements${provider ? `?provider=${encodeURIComponent(provider)}` : ""}`;
 
 const date = value => typeof value === "string" && value && Number.isFinite(Date.parse(value)) ? formatRiyadhDateTime(value) : "غير متاح";
 const accepts = row => Boolean(statementConfirmationAction(row));
@@ -77,29 +81,38 @@ function AverageSummary({ value, provider, currency, compact = false }) {
     </section>;
 }
 
-function Frame({ children }) {
+function Frame({ children, providerId }) {
     const pages = managedWebPages(useOptionalAuth()?.user);
     return <main className="op-page op-statements mz-finance-tool" dir="rtl" data-testid="provider-statements-page">
-        <OperationalToolBack/><header><span className="op-eyebrow">ميزان 2 · الأرصدة التشغيلية</span><h1>مطابقة كشوف منصات الدفع</h1>
+        <OperationalToolBack/><header><span className="op-eyebrow">ميزان 2 · الأرصدة التشغيلية</span><h1>مطابقة كشوف منصات الدفع{providerNames[providerId] ? ` · ${providerNames[providerId]}` : ""}</h1>
             <p>ارفع كشف تابي أو تمارا أو سلة. نتعرف على المنصة تلقائيًا ونطابق عمليات الكشف مع سجلات الدفع والرد المحفوظة.</p>
             {grantedWebLink(pages, "/operational-balances/financial-position?view=providers") && <a className="op-statement-link" href="/operational-balances/financial-position?view=providers">عرض أرصدة منصات الدفع</a>}
         </header>{children}
     </main>;
 }
 
-export default function ProviderStatements() {
+export default function ProviderStatements({ providerId: selectedProvider } = {}) {
+    const providerId = selectedProvider ?? new URLSearchParams(window.location.search).get("provider") ?? "";
+    const supported = !providerId || Object.hasOwn(STATEMENT_PROVIDERS, providerId);
     const auth = useOptionalAuth();
     const user = auth?.user;
     const owner = user?.is_owner === true || String(user?.role || "").toLowerCase() === "owner";
     const grant = managedWebPages(user)?.find(page => page.id === "balances.statements");
     const identity = JSON.stringify([grant?.mode, user?.id, user?.created_by, user?.owner_id, user?.merchant_id, user?.tenant_id, user?.role, user?.is_owner, auth?.authStatus]);
-    if (auth?.loading) return <Frame><p role="status">جارٍ التحقق من الجلسة…</p></Frame>;
-    if (!user || (!owner && !grant)) return <Frame><p role="alert" className="op-error">مطابقة كشوف المنصات متاحة لمالك الحساب فقط.</p></Frame>;
-    return <Frame><StatementWorkspace key={identity} writable={owner || grant?.mode === "write"} /></Frame>;
+    if (auth?.loading) return <Frame providerId={providerId}><p role="status">جارٍ التحقق من الجلسة…</p></Frame>;
+    if (!user || (!owner && !grant)) return <Frame providerId={providerId}><p role="alert" className="op-error">مطابقة كشوف المنصات متاحة لمالك الحساب فقط.</p></Frame>;
+    if (!supported) return <Frame providerId={providerId}><section className="op-statement-upload" role="status">
+        <h2>{providerNames[providerId] ? `كشوف ${providerNames[providerId]}` : "منصة غير معروفة"}</h2>
+        <p>الاستيراد الآلي المتاح هنا لكشوف تابي وتمارا وسلة فقط. لا يوجد مستورد معتمد لهذه المنصة في هذه الصفحة.</p>
+        <a className="op-statement-link" href={statementPath()}>عرض الكشوف المدعومة</a>
+    </section></Frame>;
+    return <Frame providerId={providerId}><StatementWorkspace key={JSON.stringify([identity, providerId])} providerId={providerId} writable={owner || grant?.mode === "write"} /></Frame>;
 }
 
-function StatementWorkspace({ writable }) {
+function StatementWorkspace({ writable, providerId }) {
+    const inProvider = item => !providerId || item.provider === providerId;
     const pages = managedWebPages(useOptionalAuth()?.user);
+    const ledgerPath = `/operational-balances?view=ledger&kind=provider&id=${encodeURIComponent(providerId)}`;
     const focusSection = useRef(window.location.hash.slice(1));
     function revealAnchor(node) {
         if (node && node.id === focusSection.current) {
@@ -282,7 +295,7 @@ function StatementWorkspace({ writable }) {
     }
     function upload(event) {
         event.preventDefault();
-        if (!file || busy || pendingCommand.current || !context.current?.permissions.upload) return;
+        if (!file || !writable || busy || pendingCommand.current || !context.current?.permissions.upload) return;
         send({ kind: "upload", file, body: { request_id: requestId(), expected_session_scope: context.current.session_scope, expected_started_at: context.current.started_at } });
     }
     function toggleSavedFiles() {
@@ -294,14 +307,14 @@ function StatementWorkspace({ writable }) {
         }
     }
     function chooseSavedFile(id) {
-        if (!canUseSaved || !savedFiles.items.some(item => item.id === id && item.can_import)) return;
+        if (!canUseSaved || !savedFiles.items.some(item => item.id === id && item.can_import && inProvider(item))) return;
         setSelectedSavedId(id); setFile(null); setFileKey(value => value + 1); setError(""); setNotice("");
         currentDetail.current = null; setDetail(null); clearSelection();
     }
     function useSavedFile(event) {
         event.preventDefault();
         if (!canUseSaved) return;
-        const selected = savedFiles.items.find(item => item.id === selectedSavedId && item.can_import && item.original_available);
+        const selected = savedFiles.items.find(item => item.id === selectedSavedId && item.can_import && item.original_available && inProvider(item));
         if (!selected) return;
         send({ kind: "saved", id: selected.id, body: { request_id: requestId(), expected_session_scope: savedFiles.session_scope,
             expected_started_at: savedFiles.started_at, expected_file_hash: selected.file_hash } });
@@ -309,7 +322,7 @@ function StatementWorkspace({ writable }) {
     function confirm(event) {
         event.preventDefault();
         const reviewed = currentDetail.current;
-        if (busy || pendingCommand.current || !reviewed || !acknowledged || !reviewed.permissions.confirm) return;
+        if (!writable || busy || pendingCommand.current || !reviewed || !inProvider(reviewed.statement) || !acknowledged || !reviewed.permissions.confirm) return;
         const selected = reviewed.rows.filter(row => Object.hasOwn(choices, row.id));
         if (!selected.length || selected.some(row => !accepts(row)
             || (row.existing.length && !row.existing.some(record => record.id === choices[row.id])))) return;
@@ -326,10 +339,17 @@ function StatementWorkspace({ writable }) {
         && (!row.existing.length || row.existing.some(record => record.id === choices[row.id])));
     const recordsNewEvents = selected.some(createsEvent);
     const disabled = Boolean(busy || pending || !readable || !history?.active || denied);
-    const canConfirm = writable && detail?.active && detail?.permissions.confirm && history?.session_scope === detail?.session_scope;
-    const canUseSaved = !disabled && history?.permissions.upload && savedFiles?.active && savedFiles.permissions.upload
+    const canConfirm = writable && detail && inProvider(detail.statement) && detail.active && detail?.permissions.confirm && history?.session_scope === detail?.session_scope;
+    const historyItems = history?.items.filter(inProvider) || [];
+    const savedItems = savedFiles?.items.filter(inProvider) || [];
+    const canUseSaved = writable && !disabled && history?.permissions.upload && savedFiles?.active && savedFiles.permissions.upload
         && Boolean(savedFiles.started_at) && savedFiles.session_scope === history?.session_scope && savedFiles.started_at === history?.started_at;
     return <>
+        {providerId && <div className="op-statement-toolbar" aria-label="سياق المنصة">
+            <strong>كشوف {providerNames[providerId]}</strong><a className="op-statement-link" href={statementPath()}>كل المنصات</a>
+            {grantedWebLink(pages, ledgerPath) && <a className="op-statement-link" href={ledgerPath}>العودة إلى حساب {providerNames[providerId]}</a>}
+            <p>يُكتشف نوع الكشف من الملف نفسه. اختيار الحساب لا يغيّر منصة العمليات.</p>
+        </div>}
         {error && <p role="alert" className="op-error">{error}</p>}
         {notice && <p role="status" className="op-success">{notice}</p>}
         {denied ? <p className="op-muted">تعذّر الوصول إلى كشوف المنصات ضمن صلاحيات هذا الحساب.</p> : <>
@@ -354,14 +374,14 @@ function StatementWorkspace({ writable }) {
                     {!savedFiles ? <p className="op-muted">{busy === "saved_read" ? "جارٍ قراءة بيانات الملفات المحفوظة…" : "لم تتوفر قائمة ملفات للعرض؛ أعد قراءتها عند الحاجة."}</p>
                         : <form onSubmit={useSavedFile} data-testid="provider-saved-file-use">
                             {savedFiles.has_more && <p className="op-muted">تعرض القائمة أحدث {savedFiles.items.length} ملفًا. توجد ملفات أقدم محفوظة.</p>}
-                            {!savedFiles.items.length ? <p className="op-muted">لا توجد كشوف منصات محفوظة متاحة في هذه القائمة.</p>
-                                : <PaginatedReportTable rows={savedFiles.items} label="الكشوف السابقة المتاحة" resetKey={`${savedFiles.session_scope}:${savedFiles.started_at}`}>
+                            {!savedItems.length ? <p className="op-muted">لا توجد كشوف منصات محفوظة متاحة في هذه القائمة.</p>
+                                : <PaginatedReportTable rows={savedItems} label="الكشوف السابقة المتاحة" resetKey={`${savedFiles.session_scope}:${savedFiles.started_at}`}>
                                     {rows => <div className="op-table"><table><thead><tr><th>اختيار</th><th>المنصة والكشف</th><th>وقت الرفع</th><th>حالة الأصل</th></tr></thead>
                                         <tbody>{rows.map(item => <tr key={item.id} data-testid={`saved-provider-file-${item.id}`}>
                                             <td><label><input type="radio" name="saved-provider-file" aria-label={`اختيار الكشف المحفوظ ${item.filename || item.statement_reference || item.id}`}
                                                 checked={selectedSavedId === item.id} disabled={!canUseSaved || !item.can_import}
                                                 onChange={() => chooseSavedFile(item.id)} /> اختيار</label></td>
-                                            <td><strong>{STATEMENT_PROVIDERS[item.provider]}</strong><span>{statementText(item.filename)}</span><small>{statementText(item.statement_reference)}</small></td>
+                                            <td><strong><ResourceIcon resource={{kind:"provider",id:item.provider}} size="sm"/> {STATEMENT_PROVIDERS[item.provider]}</strong><span>{statementText(item.filename)}</span><small>{statementText(item.statement_reference)}</small></td>
                                             <td>{date(item.uploaded_at)}</td><td>{item.can_import ? "الملف الأصلي متاح للمطابقة" : savedStatementUnavailableReason(item)}</td>
                                         </tr>)}</tbody></table></div>}
                                 </PaginatedReportTable>}
@@ -370,7 +390,7 @@ function StatementWorkspace({ writable }) {
                         </form>}
                 </section>}
                 {writable && <form id="upload" tabIndex={-1} ref={revealAnchor} onSubmit={upload} className="op-statement-upload" data-testid="provider-statement-upload">
-                    <h2>رفع كشف للمطابقة</h2>
+                    <h2>رفع كشف{providerId ? ` ${providerNames[providerId]}` : ""} للمطابقة</h2>
                     <label className="op-field">ملف كشف المنصة
                         <input key={fileKey} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                             aria-label="ملف كشف المنصة" disabled={disabled || !history.permissions.upload || !history.started_at} onChange={chooseFile} />
@@ -380,7 +400,8 @@ function StatementWorkspace({ writable }) {
                     <p className="op-muted">رفع الكشف أو اعتماد مطابقته لا يثبت وصول تحويل إلى البنك.</p>
                 </form>}
                 {detail && <section className="op-statement-review" aria-label="مطابقة الكشف" data-testid="provider-statement-review">
-                    <header><h2>{STATEMENT_PROVIDERS[detail.statement.provider]} · مطابقة الكشف</h2>
+                    {!inProvider(detail.statement) && <p role="alert" className="op-error">الملف الذي تمت قراءته يخص {providerNames[detail.statement.provider]}، وليس {providerNames[providerId]}. عُرضت هوية الملف كما وردت في المصدر؛ الاعتماد غير متاح ضمن حساب المنصة المختارة. <a href={`${statementPath(detail.statement.provider)}#history`}>افتح سجل {providerNames[detail.statement.provider]} لمراجعة الكشف</a></p>}
+                    <header><h2><ResourceIcon resource={{kind:"provider",id:detail.statement.provider}}/> {STATEMENT_PROVIDERS[detail.statement.provider]} · مطابقة الكشف</h2>
                         <p>المرجع: <bdi>{statementText(detail.statement.statement_reference)}</bdi> · العملة: <bdi>{statementText(detail.statement.native_currency)}</bdi></p>
                         <p className="op-muted">{statementText(detail.statement.filename)} · مصادر الأرصدة كما في: {date(detail.as_of)}</p>
                         <p className="op-muted">دليل رسوم الكشف كما في: {date(detail.statement_evidence_as_of)}</p>
@@ -441,9 +462,9 @@ function StatementWorkspace({ writable }) {
                 </section>}
                 <section id="history" tabIndex={-1} ref={revealAnchor} className="op-statement-history" aria-label="الكشوف المحفوظة"><h2>الكشوف المحفوظة</h2>
                     {history.has_more === true && <p className="op-muted">يعرض السجل أحدث {history.items.length} كشفًا. توجد كشوف أقدم محفوظة.</p>}
-                    {!history.items.length ? <p className="op-muted">لم تُرفع كشوف في هذه الصفحة بعد.</p> : <PaginatedReportTable rows={history.items} label="الكشوف المحفوظة" resetKey={history.session_scope}>
+                    {!historyItems.length ? <p className="op-muted">لا توجد كشوف مطابقة للمنصة المختارة ضمن السجل المعروض.</p> : <PaginatedReportTable rows={historyItems} label="الكشوف المحفوظة" resetKey={history.session_scope}>
                         {rows => <div className="op-table"><table><thead><tr><th>المنصة والكشف</th><th>وقت الرفع</th><th>العمليات</th><th>آخر نتيجة مطابقة</th><th>فتح</th></tr></thead>
-                            <tbody>{rows.map(item => <tr key={item.id}><td><strong>{STATEMENT_PROVIDERS[item.provider]}</strong><span>{statementText(item.statement_reference)}</span><small>{statementText(item.filename)}</small>
+                            <tbody>{rows.map(item => <tr key={item.id}><td><strong><ResourceIcon resource={{kind:"provider",id:item.provider}} size="sm"/> {STATEMENT_PROVIDERS[item.provider]}</strong><span>{statementText(item.statement_reference)}</span><small>{statementText(item.filename)}</small>
                                 <AverageSummary compact value={item.statement_average} provider={item.provider} currency={item.native_currency} /></td>
                                 <td>{date(item.uploaded_at)}</td><td>{item.row_count} · <bdi>{statementText(item.native_currency)}</bdi></td>
                                 <td>{item.counts === null ? <span>لم تُحفظ مطابقة بعد</span> : <>

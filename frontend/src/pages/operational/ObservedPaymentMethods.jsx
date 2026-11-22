@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { todaySA } from "../../lib/dates";
 import { paymentFeeRows, policyTax } from "./paymentFeeDirectory";
 import { saveObservedPaymentMethodCommission } from "../../services/accountingOnboarding";
+import { ResourceIcon } from './ApprovedFinanceUI';
 
 const fields = [
     ["commission_percent", "نسبة العمولة %", 100],
@@ -106,7 +107,9 @@ export default function ObservedPaymentMethods({ setup, onSaved, policies = empt
                     const values = policy ? [policy.percentage, policy.fixed_amount, policyTax(policy)]
                         : fields.map(([key]) => !row.scope && stored ? valueText(method[key]) : "—");
                     return <tr key={row.key} id={"fee-" + method.key} tabIndex={-1}>
-                        <th scope="row"><bdi>{row.label}</bdi>
+                        <th scope="row"><span className="mz-resource-label"><ResourceIcon size="sm" resource={{kind:'provider',
+                            id: row.scope?.payment_method || row.scope?.provider || method.fee_scope?.payment_method || method.fee_scope?.provider || method.inherits_from || method.name,
+                            name: row.label}}/><bdi>{row.label}</bdi></span>
                             {row.names.some(name => name !== row.label) && <small>{row.names.map(name => <bdi key={name}>{name}</bdi>)}</small>}</th>
                         <td className="fee-source">{policy ? <>تعرفة ميزان 2<small>من <bdi>{policy.effective_from}</bdi></small></>
                             : row.scope ? row.policies.length ? "أكثر من تعرفة أو خطة" : "تحتاج تعرفة سارية"

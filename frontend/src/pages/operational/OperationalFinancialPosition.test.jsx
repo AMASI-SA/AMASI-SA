@@ -1377,6 +1377,8 @@ test("provider rows stay compact while every explanation and source component ap
     await render("providers");
     const card = host.querySelector('[data-testid="financial-table-providers"]');
     const table = card.querySelector(".ofp-table-scroll > table"), row = table.querySelector("tbody tr");
+    expect(row.querySelector('[data-brand="tabby"] img').getAttribute('src')).toBe('/operational-ui/brands/tabby.png');
+    expect(row.cells[0].textContent).toBe('تابي');
     expect(row.cells[6].textContent).toBe("تحتاج مراجعة");
     expect(row.cells[7].textContent).toBe("7.574738%");
     expect(row.textContent).not.toMatch(/الوصف الكامل|قبل الضريبة|TABBY-SAR|TABBY-KWD|KWD|2026-11-15|رسم ثابت/);
@@ -1399,6 +1401,33 @@ test("provider rows stay compact while every explanation and source component ap
     expect(requestedViews()).toEqual(["providers"]);
     expect(operationalApi.refreshBalances).not.toHaveBeenCalled();
     expect(JSON.stringify(payload)).toBe(original);
+});
+
+test("account row icons respect typed bank, POS and cash identities without altering balances", async () => {
+    const payload=rawFixture();
+    const columns=[{key:'name',label:'الحساب',type:'text'},{key:'available',label:'المتاح',type:'money'}];
+    payload.currencies.SAR.tables=[
+        {id:'banks_network',title:'البنوك وأجهزة الشبكة',section:'actual',complete:true,columns,rows:[
+            {id:'bank:account:b1:SAR',name:'بنك الراجحي',available:'100.15'},
+            {id:'pos_receivable:terminal:SAR',name:'بنك الراجحي',available:'0.00'},
+        ],totals:{available:'100.15'}},
+        {id:'cash',title:'الصناديق',section:'actual',complete:true,columns,rows:[
+            {id:'cash:wallet:SAR',name:'سلة',available:'45.00'},
+        ],totals:{available:'45.00'}},
+    ];
+    const original=JSON.stringify(payload);
+    serve(payload); await render('accounts');
+    const banks=host.querySelectorAll('[data-testid="financial-table-banks_network"] tbody tr');
+    expect(banks[0].querySelector('[data-brand="alrajhi"]')).not.toBeNull();
+    expect(banks[0].cells[1].textContent).toBe('100.15');
+    expect(banks[1].querySelector('[data-brand]')).toBeNull();
+    expect(banks[1].querySelector('use').getAttribute('href')).toBe('/operational-ui/icons.svg#credit-card');
+    const cash=host.querySelector('[data-testid="financial-table-cash"] tbody tr');
+    expect(cash.querySelector('[data-brand]')).toBeNull();
+    expect(cash.querySelector('use').getAttribute('href')).toBe('/operational-ui/icons.svg#banknote');
+    expect(cash.cells[1].textContent).toBe('45.00');
+    expect(JSON.stringify(payload)).toBe(original);
+    expect(operationalApi.refreshBalances).not.toHaveBeenCalled();
 });
 
 test("the provider review count remains an accessible numeric button with the existing reasons popup", async () => {

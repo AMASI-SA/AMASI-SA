@@ -1,5 +1,7 @@
 import React from 'react';
 import { ledgerDisplayAmount, minorUnits } from './simpleBalancesModel';
+import BrandIcon from './BrandIcon';
+import { brandForResource } from './brandIconModel';
 
 export function Icon({ name, className = '' }) {
   return <svg aria-hidden="true" className={`ico ${className}`}><use href={`/operational-ui/icons.svg#${name}`} /></svg>;
@@ -58,6 +60,10 @@ export const assetGroups = [['البنوك',['bank']],['الصناديق وال�
 export const partyGroups = [['الموردون',['supplier']],['الموظفون والعهد',['employee','employee_custody']],['الشحن والموصلون',['courier','store_driver']],['الجهات الخارجية',['external_person']],['حسابات المالك والمصروفات',['owner_withdrawal','operating_expense']]];
 export const isAsset = kind => assetGroups.some(([, kinds]) => kinds.includes(kind));
 export const styleOf = r => r.prepaid_shipping_cash ? ['رصيد شحن مقدم','package-check','cash'] : kindStyles[r.kind] || ['جهة','building-2','party'];
+export function ResourceIcon({ resource, size = 'md', className = '' }) {
+  const [, icon, tone] = styleOf(resource || {});
+  return <BrandIcon brand={brandForResource(resource)} fallbackName={icon} fallbackTone={tone} size={size} className={className} />;
+}
 export function searchable(value) {
   return String(value || '').normalize('NFKC').replace(/[\u064B-\u065F\u0670\u0640]/g, '').replace(/[أإآٱ]/g,'ا').replace(/ى/g,'ي').replace(/[٠-٩]/g,d=>String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))).trim().toLowerCase();
 }

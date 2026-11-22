@@ -130,6 +130,9 @@ const AIControlCenter = lazy(() => import("./pages/AIControlCenter"));
 import { Toaster } from "./components/ui/sonner";
 
 const ApprovedFinanceRoute = lazy(() => import("./pages/operational/ApprovedFinanceRoute"));
+const ApprovedSpecializedPage = lazy(() => import("./pages/operational/ApprovedSpecializedPage"));
+const ApprovedReviewPage = lazy(() => import("./pages/operational/ApprovedReviewPage"));
+const OperationalContextRoute = lazy(() => import("./pages/operational/OperationalContextRoute"));
 const InventoryWorkspace = lazy(() => import("./pages/InventoryWorkspace"));
 const ProviderFeeSetup = lazy(() => import("./pages/operational/ProviderFeeSetup"));
 const ProviderStatements = lazy(() => import("./pages/operational/ProviderStatements"));
@@ -148,18 +151,20 @@ function PublicOnly({ children }) {
     return children;
 }
 
-function AppRoutes() {
+export function AppRoutes() {
     return (
         <Routes>
             <Route path="/operational-balances" element={<ProtectedRoute><ApprovedFinanceRoute /></ProtectedRoute>} />
-            <Route path="/inventory-v2" element={<ProtectedRoute><Layout><InventoryWorkspace /></Layout></ProtectedRoute>} />
-            <Route path="/operational-balances/provider-fees" element={<ProtectedRoute><Layout><ProviderFeeSetup /></Layout></ProtectedRoute>} />
-            <Route path="/operational-balances/provider-statements" element={<ProtectedRoute><Layout><ProviderStatements /></Layout></ProtectedRoute>} />
-            <Route path="/operational-balances/financial-position" element={<ProtectedRoute><Layout><OperationalFinancialPosition /></Layout></ProtectedRoute>} />
+            <Route path="/inventory-v2" element={<ProtectedRoute><OperationalContextRoute><InventoryWorkspace /></OperationalContextRoute></ProtectedRoute>} />
+            <Route path="/operational-balances/provider-fees" element={<ProtectedRoute><ApprovedSpecializedPage><ProviderFeeSetup /></ApprovedSpecializedPage></ProtectedRoute>} />
+            <Route path="/operational-balances/provider-statements" element={<ProtectedRoute><ApprovedSpecializedPage><ProviderStatements /></ApprovedSpecializedPage></ProtectedRoute>} />
+            <Route path="/operational-balances/financial-position" element={<ProtectedRoute><ApprovedSpecializedPage><OperationalFinancialPosition /></ApprovedSpecializedPage></ProtectedRoute>} />
+            <Route path="/operational-balances/shipping-review" element={<ProtectedRoute><OwnerOnlyRoute><ApprovedSpecializedPage><ApprovedReviewPage kind="shipping" /></ApprovedSpecializedPage></OwnerOnlyRoute></ProtectedRoute>} />
+            <Route path="/operational-balances/provider-history" element={<ProtectedRoute><OwnerOnlyRoute><ApprovedSpecializedPage><ApprovedReviewPage kind="provider" /></ApprovedSpecializedPage></OwnerOnlyRoute></ProtectedRoute>} />
             <Route path="/operational-balances/daily-movements" element={<ProtectedRoute><ApprovedFinanceRoute /></ProtectedRoute>} />
-            <Route path="/operational-balances/access" element={<ProtectedRoute><OwnerOnlyRoute><Layout><SimpleBalanceAccess /></Layout></OwnerOnlyRoute></ProtectedRoute>} />
-            <Route path="/operational-balances/customer-returns" element={<ProtectedRoute><Layout><OperationalCustomerReturns /></Layout></ProtectedRoute>} />
-            <Route path="/operational-balances/customer-exchanges" element={<ProtectedRoute><Layout><OperationalCustomerExchanges /></Layout></ProtectedRoute>} />
+            <Route path="/operational-balances/access" element={<ProtectedRoute><OwnerOnlyRoute><ApprovedSpecializedPage><SimpleBalanceAccess /></ApprovedSpecializedPage></OwnerOnlyRoute></ProtectedRoute>} />
+            <Route path="/operational-balances/customer-returns" element={<ProtectedRoute><ApprovedSpecializedPage><OperationalCustomerReturns /></ApprovedSpecializedPage></ProtectedRoute>} />
+            <Route path="/operational-balances/customer-exchanges" element={<ProtectedRoute><ApprovedSpecializedPage><OperationalCustomerExchanges /></ApprovedSpecializedPage></ProtectedRoute>} />
             <Route path="/login" element={<PublicOnly><Login /></PublicOnly>} />
             <Route path="/register" element={<PublicOnly><Register /></PublicOnly>} />
 
@@ -194,7 +199,7 @@ function AppRoutes() {
             <Route path="/shipping/transfers" element={<ProtectedRoute><Layout><ShippingTransfers /></Layout></ProtectedRoute>} />
             <Route path="/shipping/cod-settlements" element={<ProtectedRoute><Layout><LegacyRedirect oldLabel="تسويات COD" replacement="/shipping/orders-ledger" replacementLabel="دفتر الشحن التفصيلي" reason="نفس الـ Stub المكرّر." /></Layout></ProtectedRoute>} />
             <Route path="/shipping/settings" element={<ProtectedRoute><Layout><ShippingCompanySettings /></Layout></ProtectedRoute>} />
-            <Route path="/shipping-settings-v2" element={<ProtectedRoute><Layout><ShippingCompanySettings mezan2 /></Layout></ProtectedRoute>} />
+            <Route path="/shipping-settings-v2" element={<ProtectedRoute><OperationalContextRoute><ShippingCompanySettings mezan2 /></OperationalContextRoute></ProtectedRoute>} />
             <Route path="/make-webhook" element={<ProtectedRoute><Layout><MakeWebhook /></Layout></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><Layout><Profile /></Layout></ProtectedRoute>} />
             <Route path="/team" element={<ProtectedRoute><Layout><TeamManagement /></Layout></ProtectedRoute>} />
@@ -204,7 +209,7 @@ function AppRoutes() {
             <Route path="/accounts/:id" element={<ProtectedRoute><Layout><AccountDetails /></Layout></ProtectedRoute>} />
             <Route path="/transfers" element={<ProtectedRoute><Layout><LegacyRedirect oldLabel="التحويلات بين الحسابات" replacement="/new-transaction" replacementLabel="حركة مالية جديدة (موحّدة)" reason="تم توحيد التحويلات داخل شاشة الإدخال المالي." /></Layout></ProtectedRoute>} />
             <Route path="/reconciliation" element={<ProtectedRoute><Layout><LegacyRedirect oldLabel="المطابقة والتسويات" replacement="/accounting/reconciliation" replacementLabel="تقرير المطابقة (Ledger)" reason="النسخة الجديدة تعتمد Ledger SSOT." /></Layout></ProtectedRoute>} />
-            <Route path="/financial-position" element={<ProtectedRoute><Layout><LegacyRedirect oldLabel="المركز المالي" replacement="/financial-position-ledger" replacementLabel="المركز المالي (Ledger)" reason="النسخة الجديدة مبنية على Ledger مباشرة." /></Layout></ProtectedRoute>} />
+            <Route path="/financial-position" element={<ProtectedRoute><Navigate to="/operational-balances?view=position" replace /></ProtectedRoute>} />
             <Route path="/financial-input-hub" element={<ProtectedRoute><Layout><LegacyRedirect oldLabel="مركز الإدخال المالي" replacement="/new-transaction" replacementLabel="حركة مالية جديدة (موحّدة)" reason="تم استبداله بشاشة الإدخال الموحّدة." /></Layout></ProtectedRoute>} />
             <Route path="/counterparties" element={<ProtectedRoute><Layout><LegacyRedirect oldLabel="قائمة الأطراف الموحَّدة" replacement="/suppliers-new" replacementLabel="الموردون" reason="تم استبدال شاشة الأطراف القديمة بصفحة الموردين الجديدة المبنية على financial_movements." /></Layout></ProtectedRoute>} />
             <Route path="/purchase-invoices" element={<ProtectedRoute><Layout><PurchaseInvoices /></Layout></ProtectedRoute>} />

@@ -23,6 +23,8 @@ import CompletedShippingFeeReview from "./CompletedShippingFeeReview";
 import { canMatchCourierOrder, canReadOperationalPage, courierRecoveryMessage, visibleOperationalRead, refreshVisibleSnapshot } from "./visibleOperationalRead";
 import { FINANCIAL_PAGES, financialPage, financialViewFromSearch, financialViewHref,
     financialSnapshotKey, financialSnapshotParams, hasFinancialSnapshot, sameFinancialSnapshot } from "./financialPositionViews";
+import { ResourceIcon } from './ApprovedFinanceUI';
+import { positionRowResource } from './brandIconModel';
 
 async function downloadWorkbook(report, currency, filters, page, filename, shouldContinue) {
     const { downloadFinancialPositionWorkbook } = await import("./financialPositionPresentation");
@@ -63,7 +65,9 @@ function DataCell({ value, column }) {
     return positionText(value);
 }
 
-function ReportCell({ row, column, provider, currency, printing, confirmationControl, courierControl, name }) {
+function ReportCell({ row, column, provider, currency, printing, confirmationControl, courierControl, name, tableId }) {
+    const resource = column.key === "name" ? positionRowResource(tableId, row) : null;
+    if (resource) return <span className="mz-resource-label"><ResourceIcon resource={resource} size="sm"/><span>{positionText(row.name)}</span></span>;
     if (provider) {
         if (column.key === "fee_description") return <ProviderFeeStatus row={row} />;
         if (column.key === "source_average_description") return <ProviderSourceAverage row={row} currency={currency} />;
@@ -90,7 +94,7 @@ function ReportTable({ table, printing, confirmationControl, courierControl, cur
             <thead><tr>{columns.map(column => <th scope="col" key={column.key}>{column.label}</th>)}</tr></thead>
             <tbody>{rows.map((row, index) => <tr key={row.id || index}>{columns.map(column =>
                 <td key={column.key} className={column.type === "text" ? "ofp-label-cell" : "ofp-value-cell"}>
-                    <ReportCell row={row} column={column} provider={provider} currency={currency} printing={printing}
+                    <ReportCell row={row} column={column} provider={provider} currency={currency} printing={printing} tableId={table.id}
                         confirmationControl={confirmationControl} courierControl={table.id === "couriers" ? courierControl : undefined} name={table.title} /></td>)}</tr>)}
                 {!table.rows?.length && <tr><td className="ofp-empty-cell" colSpan={Math.max(columns.length, 1)}>{table.complete === true ? "لا توجد أرصدة مسجلة لهذا القسم." : "لم تتوفر بيانات مكتملة لهذا القسم."}</td></tr>}
             </tbody>
@@ -156,7 +160,7 @@ function DeliveryDetails({ delivery, filters, onFiltersChange, currency }) {
                 {isAramexStatusFee(row) && <><small>وقت التنفيذ الفعلي: {row.completed_at ? formatRiyadhDateTime(row.completed_at) : UNAVAILABLE}</small><small>وقت احتساب الأجرة: {row.fee_recorded_at ? formatRiyadhDateTime(row.fee_recorded_at) : UNAVAILABLE}</small></>}
                 <small>التسليم: {row.delivered_at ? formatRiyadhDateTime(row.delivered_at) : UNAVAILABLE}</small>
                 {["delivered_order_created_after_start", "owner_confirmed_after_start"].includes(row.recognition_basis) && <small>وقت التسجيل: {row.recorded_at ? formatRiyadhDateTime(row.recorded_at) : UNAVAILABLE}</small>}</td>
-            <td><strong>{positionText(row.party_name)}</strong><small>{PARTY_LABELS[row.party_type] || UNAVAILABLE}</small>
+            <td><strong className="mz-resource-label"><ResourceIcon resource={{kind:row.party_type,id:row.party_id,name:row.party_name}} size="sm"/><span>{positionText(row.party_name)}</span></strong><small>{PARTY_LABELS[row.party_type] || UNAVAILABLE}</small>
                 {(isAramexStatusFee(row) || row.recognition_event === "order_completed" || ["delivered_order_created_after_start", "owner_confirmed_after_start"].includes(row.recognition_basis)) && <small>{shippingRecognitionLabel(row)}</small>}
                 {isAramexStatusFee(row) && <small>حالة الطلب عند احتساب الأجرة: {shippingFeeStatusLabel(row)}</small>}
                 {isAramexStatusFee(row) && deliveryRecognitionLabel(row) !== UNAVAILABLE && <small>إثبات التسليم: {deliveryRecognitionLabel(row)}</small>}
