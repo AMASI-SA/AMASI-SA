@@ -38,6 +38,11 @@ on:
       - "backend/review_gift_address.py"
       - "backend/tests/test_review_gift_address.py"
       - "backend/preparation_piece_operations.py"
+      - "backend/preparation_assignment_v2.py"
+      - "backend/supplier_dispatch_pdf.py"
+      - "backend/supplier_dispatch_share_evidence.py"
+      - "backend/tests/test_preparation_assignment_v2.py"
+      - "backend/tests/test_combined_preparation_assignment_contract.py"
       - "backend/supplier_receipt_ready_policy.py"
       - "backend/tests/test_supplier_receipt_ready_policy.py"
       - "backend/tests/test_operational_item_ready_policy.py"
@@ -159,6 +164,25 @@ jobs:
             sleep 1
           done
           docker exec review-rs mongosh --port 27018 --quiet --eval 'if(!db.hello().isWritablePrimary){quit(1)}'
+      - name: Verify employee and supplier assignment in one real transaction
+        run: |
+          python -m pytest --noconftest -p no:cacheprovider -q --tb=short --asyncio-mode=auto \
+            tests/test_preparation_assignment_v2.py \
+            tests/test_combined_preparation_assignment_contract.py \
+            --junitxml="$RUNNER_TEMP/combined-preparation-assignment.xml"
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          cases = list(ET.parse(Path(os.environ["RUNNER_TEMP"]) / "combined-preparation-assignment.xml").iter("testcase"))
+          assert cases, "Missing combined preparation assignment cases"
+          rejected = [row.attrib.get("name") for row in cases
+                      if any(row.find(tag) is not None for tag in ("skipped", "failure", "error"))]
+          assert not rejected, rejected
+          for name in ("test_preparation_assignment_v2", "test_combined_preparation_assignment_contract"):
+              assert any(name in row.attrib.get("classname", "") for row in cases), name
+          print(f"Combined preparation assignment: {len(cases)} executed; real Mongo; zero skips/failures/errors")
+          PY
       - name: Verify explicit-refresh preparation recovery with real Mongo
         run: |
           python - <<'PY'

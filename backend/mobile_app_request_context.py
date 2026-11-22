@@ -48,6 +48,7 @@ MOBILE_ROUTE_PERMISSIONS: tuple[tuple[str, frozenset[str]], ...] = (
     ("/api/order-review-customer-waiting-v1", _permissions("app.page.pending_review")),
     ("/api/order-review-export-controls-v1", _permissions("app.page.pending_review")),
     ("/api/mobile-reviewed-preparation-v1", _permissions("app.page.reviewed_preparation")),
+    ("/api/preparation-assignment-v2", _permissions("app.page.reviewed_preparation")),
     ("/api/reviewed-preparation-batches-v1", _permissions("app.page.reviewed_preparation")),
     ("/api/reviewed-products-v1", _permissions("app.page.reviewed_preparation")),
     ("/api/reviewed-product-sorting-v1", _permissions("app.page.reviewed_preparation")),

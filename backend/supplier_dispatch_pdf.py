@@ -14,11 +14,13 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 
+from mobile_app_permissions import MOBILE_APP_MANAGER
 from order_review_routes import _merchant_user_id, _text
 from preparation_pdf_amasi_a4_layout import generate_amasi_product_file_pdf
 from preparation_supplier_dispatch import (
     DISPATCHES,
     DISPATCH_STATUS_RECEIVED,
+    _actor_id,
     _is_manager,
     _require_preparation_worker,
 )
@@ -278,7 +280,12 @@ def make_supplier_dispatch_pdf_router(db: Any, current_user: Callable) -> APIRou
         )
         if not dispatch:
             raise HTTPException(status_code=404, detail={"code": "supplier_dispatch_not_found"})
-        if not _is_manager(worker) and _text(dispatch.get("sent_by_id")) != _text(worker.get("id")):
+        # The native bridge borrows an owner-shaped tenant principal. It never
+        # grants that owner's management authority to an ordinary app employee.
+        # Preserve explicit native managers and genuine legacy web managers.
+        manager = (MOBILE_APP_MANAGER in set(worker.get("_mobile_app_permissions") or [])
+            if _text(worker.get("_mobile_actor_id")) else _is_manager(worker))
+        if not manager and _text(dispatch.get("sent_by_id")) != _actor_id(worker):
             raise HTTPException(status_code=403, detail={"code": "supplier_dispatch_not_owned_by_employee"})
         return user_id, dispatch
 

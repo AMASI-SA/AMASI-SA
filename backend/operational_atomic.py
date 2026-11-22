@@ -37,6 +37,17 @@ _PROFILES = {
         "mezan_employees_v2", "mezan_employee_salary_contracts_v2",
         "mezan_employee_events_v2",
     }),
+    "preparation_assignment": frozenset({
+        "mezan_preparation_assignment_requests_v2", "mezan_sequence_counters_v2",
+        "mezan_preparation_file_registry_v2", "mezan_preparation_batches_v2",
+        "mezan_preparation_unit_allocations_v2", "mezan_preparation_pieces_v1",
+        "mezan_preparation_piece_events_v1", "mezan_supplier_dispatches_v1",
+        "mezan_supplier_dispatch_events_v1", "order_review_events",
+        # These two allow only a metadata fence on an already linked account
+        # and grant. No account/permission creation or mutation is admitted.
+        "users", "mezan_mobile_app_access_v1",
+        "unified_orders", "order_review_workflows",
+    }),
     "driver_cash_delivery": frozenset({
         "store_delivery_assignments", "store_delivery_collections", "store_delivery_driver_earnings",
         "store_delivery_delivery_proofs", "store_delivery_events", "unified_orders", "order_review_workflows",
@@ -259,7 +270,7 @@ class _Collection:
                     _reject(self.__state)
                 if args and isinstance(args[0], dict):
                     query = args[0]
-                    if self.__state["profile"] == "fulfillment" and self.__collection.name == "mezan_mobile_app_access_v1":
+                    if self.__state["profile"] in {"fulfillment", "preparation_assignment"} and self.__collection.name == "mezan_mobile_app_access_v1":
                         # Source refresh reauthorizes the employee inside this
                         # transaction. Here user_id identifies the employee;
                         # owner_user_id, not user_id, is the tenant boundary.
@@ -292,6 +303,18 @@ class _Collection:
             name = self.__collection.name
             if name not in _PROFILES[self.__state["profile"]]:
                 _reject(self.__state)
+            if self.__state["profile"] == "preparation_assignment" and name in {"users", "mezan_mobile_app_access_v1"}:
+                return await self._preparation_access_fence(name, method, args, kwargs)
+            if self.__state["profile"] == "preparation_assignment" and name in {"unified_orders", "order_review_workflows"}:
+                # Revalidation must conflict with a source/review change which
+                # races the snapshot. It cannot advance an order or edit money.
+                query = args[0] if args and isinstance(args[0], dict) else {}
+                if (method != "update_one" or len(args) != 2 or kwargs
+                        or set(query) != {"user_id", "order_number"} or query.get("user_id") != self.__owner
+                        or not isinstance(query.get("order_number"), str) or not query["order_number"]
+                        or args[1] != {"$inc": {"preparation_assignment_fence": 1}}):
+                    _reject(self.__state)
+                return await self.__collection.update_one(*args, session=self.__session)
             if name == "order_review_auth_sessions_v2":
                 binding = self.__state.get("review_session")
                 expected = ({"_id": binding["origin_session_ref"], "user_id": self.__owner,
@@ -373,6 +396,37 @@ class _Collection:
                     _reject(self.__state)
             return await getattr(self.__collection, method)(*args, session=self.__session, **kwargs)
         return write
+
+    async def _preparation_access_fence(self, name, method, args, kwargs):
+        """Conflict with concurrent account/grant revocation without changing it."""
+        if (method != "update_one" or len(args) != 2 or kwargs
+                or not isinstance(args[0], dict)
+                or args[1] != {"$inc": {"preparation_assignment_fence": 1}}):
+            _reject(self.__state)
+        query = args[0]
+        if name == "users":
+            subject = query.get("id")
+            if set(query) != {"id"} or not isinstance(subject, str) or not subject:
+                _reject(self.__state, "operational_owner_scope_conflict")
+            row = await self.__collection.find_one(query, session=self.__session)
+            if (not row or row.get("disabled") is True or row.get("is_active") is False
+                    or row.get("deleted_at")):
+                _reject(self.__state, "preparation_assignment_account_unavailable")
+            linked = (subject == self.__owner and (row.get("role") == "owner" or row.get("is_owner") is True))
+            if subject != self.__owner:
+                linked = row.get("created_by") == self.__owner
+                if not row.get("created_by"):
+                    linked = bool(await self.__state["db"]["mezan_employees_v2"].find_one(
+                        {"user_id": self.__owner, "account_user_id": subject}, {"_id": 0, "id": 1}))
+            if not linked:
+                _reject(self.__state, "operational_owner_scope_conflict")
+            self.__state.setdefault("preparation_fenced_accounts", set()).add(subject)
+        else:
+            subject = query.get("user_id")
+            if (query != {"owner_user_id": self.__owner, "user_id": subject}
+                    or subject not in self.__state.get("preparation_fenced_accounts", set())):
+                _reject(self.__state, "operational_owner_scope_conflict")
+        return await self.__collection.update_one(query, args[1], session=self.__session)
 
     async def _employee_access(self, name, method, args, kwargs):
         """Suspend/restore an existing login; never grant a role or password."""

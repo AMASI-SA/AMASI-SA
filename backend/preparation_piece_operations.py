@@ -617,29 +617,18 @@ async def _service_context_for_batch(
     return context
 
 
-async def materialize_preparation_pieces(
+async def prepare_preparation_piece_documents(
     db: Any,
     *,
     user_id: str,
     registry: dict[str, Any],
+    batch: dict[str, Any],
 ) -> list[dict[str, Any]]:
-    """Idempotently create physical pieces after file registration."""
-    batch_id = _text(registry.get("batch_id"))
-    if not batch_id:
-        raise HTTPException(
-            status_code=409,
-            detail={"code": "preparation_file_batch_missing"},
-        )
-    await ensure_piece_operation_indexes(db)
-    batch = await db[BATCHES].find_one(
-        {"user_id": user_id, "id": batch_id, "status": "ready"},
-        {"_id": 0},
-    )
-    if not batch:
-        raise HTTPException(
-            status_code=409,
-            detail={"code": "preparation_batch_missing_for_piece_materialization"},
-        )
+    """Prepare the canonical physical/service snapshots without publishing them.
+
+    The ordinary materializer and atomic employee/supplier assignment share the
+    same bundle exclusions, line service plans, options, holds and durations.
+    """
     from reviewed_products_catalog import bundle_parent_line_ids
     bundle_lines = await bundle_parent_line_ids(db, user_id,
         [_text(line.get("order_number")) for line in batch.get("lines", []) if isinstance(line, dict)])
@@ -759,6 +748,28 @@ async def materialize_preparation_pieces(
         batch=batch,
         registry=registry,
         pieces=pieces,
+    )
+    return pieces
+
+
+async def materialize_preparation_pieces(
+    db: Any,
+    *,
+    user_id: str,
+    registry: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Idempotently create physical pieces after file registration."""
+    batch_id = _text(registry.get("batch_id"))
+    if not batch_id:
+        raise HTTPException(409, detail={"code": "preparation_file_batch_missing"})
+    await ensure_piece_operation_indexes(db)
+    batch = await db[BATCHES].find_one(
+        {"user_id": user_id, "id": batch_id, "status": "ready"}, {"_id": 0},
+    )
+    if not batch:
+        raise HTTPException(409, detail={"code": "preparation_batch_missing_for_piece_materialization"})
+    pieces = await prepare_preparation_piece_documents(
+        db, user_id=user_id, registry=registry, batch=batch,
     )
     for piece in pieces:
         await db[PIECES].update_one(

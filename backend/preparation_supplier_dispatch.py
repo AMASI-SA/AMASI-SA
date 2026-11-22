@@ -243,6 +243,14 @@ def _actor_name(user: dict[str, Any]) -> str:
     ) or "موظف"
 
 
+def _supplier_custody_employee(piece: dict[str, Any]) -> str:
+    # Combined assignment records a different real operator in the audit field.
+    # Current custody remains the responsible employee, including later moves.
+    if _text(piece.get("assignment_request_id")) and _text(piece.get("assignment_responsible_employee_id")):
+        return _text(piece.get("responsible_employee_id"))
+    return _text(piece.get("sent_to_supplier_by_id"))
+
+
 def _is_manager(user: dict[str, Any]) -> bool:
     role = _normalized(user.get("role"))
     return bool(
@@ -1340,7 +1348,7 @@ async def _employee_workspace(
     supplier_rows: dict[str, dict[str, Any]] = {}
     for piece in pieces:
         supplier_id = _text(piece.get("supplier_id"))
-        if not supplier_id or _text(piece.get("sent_to_supplier_by_id")) != employee_id:
+        if not supplier_id or _supplier_custody_employee(piece) != employee_id:
             continue
         account = supplier_rows.setdefault(supplier_id, {
             "supplier_id": supplier_id,
@@ -1368,7 +1376,7 @@ async def _employee_workspace(
         account_pieces = [
             row for row in pieces
             if _text(row.get("supplier_id")) == supplier_id
-            and _text(row.get("sent_to_supplier_by_id")) == employee_id
+            and _supplier_custody_employee(row) == employee_id
         ]
         account["products"] = (
             _piece_products(account_pieces, registry_by_batch=registry_by_batch)
@@ -1579,6 +1587,241 @@ async def _mark_orders_started_if_fully_dispatched(
         pieces=pieces,
         actor=actor,
     )
+
+
+async def publish_supplier_dispatch(
+    db: Any, *, user_id: str, client_request_id: str,
+    registry_by_file: dict[str, dict[str, Any]],
+    selected_by_file: dict[str, list[dict[str, Any]]],
+    supplier: dict[str, Any], employee_id: str, employee_name: str,
+    actor: dict[str, Any], note: str | None = None,
+    atomic: bool = False, assignment_request_id: str | None = None,
+    dispatch_id: str | None = None,
+) -> dict[str, Any]:
+    """Publish the canonical dispatch/cards/events after caller validation.
+
+    Ordinary self-dispatch retains its compensation/stage semantics. The v2
+    caller supplies a restricted owner transaction, a separately authorized
+    assignee and exact new-file units; an error aborts all assignment writes.
+    """
+    source_file_numbers = list(registry_by_file)
+    selected = [piece for number in source_file_numbers for piece in selected_by_file[number]]
+    selected_batch_ids = sorted({
+        _text(piece.get("batch_id"))
+        for piece in selected
+        if _text(piece.get("batch_id"))
+    })
+    print_batches = (
+        await db[BATCHES].find(
+            {"user_id": user_id, "id": {"$in": selected_batch_ids}},
+            {
+                "_id": 0,
+                "id": 1,
+                "lines.order_item_id": 1,
+                "lines.group_key": 1,
+                "lines.selected_image_url": 1,
+                "lines.resolved_image_url": 1,
+                "lines.image_url": 1,
+                "lines.image_candidates": 1,
+                "lines.shipping_company": 1,
+                "lines.total_products_in_order": 1,
+                "lines.file_spec_fields": 1,
+                "lines.product_options": 1,
+                "lines.service_spec_fields": 1,
+                "lines.preparation_note": 1,
+            },
+        ).to_list(max(1, len(selected_batch_ids)))
+        if selected_batch_ids
+        else []
+    )
+    _hydrate_piece_print_facts_from_batches(selected, print_batches)
+
+    dispatch_id = dispatch_id or f"sdv1_{uuid.uuid4().hex}"
+    now = _now()
+    piece_ids = [_text(row.get("piece_id")) for row in selected]
+    supplier_file_number = (
+        source_file_numbers[0]
+        if len(source_file_numbers) == 1
+        else f"SF-{now.astimezone(ZoneInfo('Asia/Riyadh')).strftime('%Y%m%d')}-{dispatch_id[-6:].upper()}"
+    )
+    source_files = []
+    lines = []
+    for file_number in source_file_numbers:
+        registry = registry_by_file[file_number]
+        file_lines = supplier_dispatch_lines(
+            selected_by_file[file_number],
+            supplier,
+        )
+        source_file = {
+            "file_number": file_number,
+            "batch_id": _text(registry.get("batch_id")),
+            "file_title": _text(registry.get("file_title")) or file_number,
+            "registered_at": registry.get("registered_at"),
+            "piece_count": len(selected_by_file[file_number]),
+            "lines": file_lines,
+            "cards": supplier_dispatch_cards(selected_by_file[file_number]),
+        }
+        source_files.append(source_file)
+        lines.extend([
+            {**line, "source_file_number": file_number}
+            for line in file_lines
+        ])
+    shell = {
+        "id": dispatch_id,
+        "user_id": user_id,
+        "client_request_id": client_request_id,
+        "status": "building",
+        "file_number": supplier_file_number,
+        "supplier_file_number": supplier_file_number,
+        "source_file_numbers": source_file_numbers,
+        "source_files": source_files,
+        "batch_id": (
+            _text(registry_by_file[source_file_numbers[0]].get("batch_id"))
+            if len(source_file_numbers) == 1
+            else None
+        ),
+        "supplier_id": _text(supplier.get("id")),
+        "supplier_name": _text(supplier.get("company_name")),
+        "sent_by_id": employee_id,
+        "sent_by_name": employee_name,
+        "piece_ids": piece_ids,
+        "piece_count": len(piece_ids),
+        "lines": lines,
+        "note": _text(note) or None,
+        "created_at": now,
+        "mezan_only": True,
+        "salla_updated": False,
+        "qoyod_updated": False,
+    }
+    if assignment_request_id:
+        # Legacy readers use sent_by_id as custody ownership. Preserve that key,
+        # while explicit audit fields identify the different assigning operator.
+        shell.update({"responsible_employee_id": employee_id,
+            "responsible_employee_name": employee_name,
+            "performed_by_id": _actor_id(actor), "performed_by_name": _actor_name(actor),
+            "assignment_request_id": assignment_request_id})
+    try:
+        await db[DISPATCHES].insert_one(dict(shell))
+    except DuplicateKeyError:
+        if atomic:
+            raise HTTPException(409, detail={"code": "supplier_dispatch_request_conflict"})
+        duplicate = await db[DISPATCHES].find_one(
+            {"user_id": user_id, "client_request_id": client_request_id},
+            {"_id": 0, "user_id": 0},
+        )
+        return {"ok": bool(duplicate), "dispatch": duplicate}
+
+    result = await db[PIECES].update_many(
+        {
+            "user_id": user_id,
+            "piece_id": {"$in": piece_ids},
+            "responsible_employee_id": employee_id,
+            "experiment_archived_at": None,
+            "status": {"$in": [PIECE_STATUS_ASSIGNED, PIECE_STATUS_IN_PROGRESS]},
+            "$or": [
+                {"supplier_dispatch_status": {"$exists": False}},
+                {"supplier_dispatch_status": None},
+                {"supplier_dispatch_status": ""},
+                {"supplier_dispatch_status": DISPATCH_STATUS_PARTIAL},
+            ],
+        },
+        {"$set": {
+            "status": PIECE_STATUS_IN_PROGRESS,
+            "execution_status": "sent_to_supplier",
+            "supplier_dispatch_id": dispatch_id,
+            "supplier_dispatch_status": DISPATCH_STATUS_SENT,
+            "supplier_id": _text(supplier.get("id")),
+            "supplier_name": _text(supplier.get("company_name")),
+            "sent_to_supplier_at": now,
+            "sent_to_supplier_by_id": _actor_id(actor),
+            "sent_to_supplier_by_name": _actor_name(actor),
+            "updated_at": now,
+            "mezan_only": True,
+            "salla_updated": False,
+            "qoyod_updated": False,
+        }},
+    )
+    if int(result.modified_count or 0) != len(piece_ids):
+        if atomic:
+            raise HTTPException(409, detail={"code": "supplier_dispatch_piece_conflict"})
+        await db[PIECES].update_many(
+            {"user_id": user_id, "supplier_dispatch_id": dispatch_id},
+            {"$set": {
+                "status": PIECE_STATUS_ASSIGNED,
+                "execution_status": "not_started",
+                "updated_at": _now(),
+            }, "$unset": {
+                "supplier_dispatch_id": "",
+                "supplier_dispatch_status": "",
+                "supplier_id": "",
+                "supplier_name": "",
+                "sent_to_supplier_at": "",
+                "sent_to_supplier_by_id": "",
+                "sent_to_supplier_by_name": "",
+            }},
+        )
+        await db[DISPATCHES].update_one(
+            {"user_id": user_id, "id": dispatch_id, "status": "building"},
+            {"$set": {
+                "status": "failed_piece_conflict",
+                "failed_at": _now(),
+                "updated_at": _now(),
+            }},
+        )
+        raise HTTPException(status_code=409, detail={"code": "supplier_dispatch_piece_conflict"})
+
+    # Atomic assignment publishes every piece of its new file together. It
+    # starts the file, not the entire order: the canonical all-unit reconciliation
+    # runs outside the transaction and alone controls order/Salla advancement.
+    completed_source_file_numbers = list(source_file_numbers) if atomic else []
+    if not atomic:
+        for file_number in source_file_numbers:
+            completed = await _mark_orders_started_if_fully_dispatched(
+                db, user_id=user_id, registry=registry_by_file[file_number], actor=actor,
+            )
+            if completed:
+                completed_source_file_numbers.append(file_number)
+    ready_patch = {
+        "status": DISPATCH_STATUS_SENT,
+        "sent_at": now,
+        "updated_at": now,
+        "completed_source_file_numbers": completed_source_file_numbers,
+    }
+    await db[DISPATCHES].update_one(
+        {"user_id": user_id, "id": dispatch_id, "status": "building"},
+        {"$set": ready_patch},
+    )
+    shell.update(ready_patch)
+    event = {
+        "id": uuid.uuid4().hex,
+        "user_id": user_id,
+        "client_request_id": client_request_id,
+        "event_type": "preparation_pieces_sent_to_supplier",
+        "dispatch_id": dispatch_id,
+        "file_number": supplier_file_number,
+        "supplier_file_number": supplier_file_number,
+        "source_file_numbers": source_file_numbers,
+        "supplier_id": _text(supplier.get("id")),
+        "supplier_name": _text(supplier.get("company_name")),
+        "piece_ids": piece_ids,
+        "piece_count": len(piece_ids),
+        "actor_id": _actor_id(actor),
+        "actor_name": _actor_name(actor),
+        "occurred_at": now,
+        "mezan_only": True,
+        "salla_updated": False,
+        "qoyod_updated": False,
+    }
+    await db[DISPATCH_EVENTS].insert_one(dict(event))
+    await db[PIECE_EVENTS].insert_one(dict(event))
+    return {
+        "ok": True,
+        "dispatch": {key: value for key, value in shell.items() if key != "user_id"},
+        "moved_to_supplier_account": True,
+        "mezan_only": True,
+        "salla_updated": False,
+        "qoyod_updated": False,
+    }
 
 
 def make_preparation_supplier_dispatch_router(
@@ -1817,210 +2060,12 @@ def make_preparation_supplier_dispatch_router(
         #     if blocker:
         #         raise HTTPException(status_code=409, detail=blocker)
 
-        selected_batch_ids = sorted({
-            _text(piece.get("batch_id"))
-            for piece in selected
-            if _text(piece.get("batch_id"))
-        })
-        print_batches = (
-            await db[BATCHES].find(
-                {"user_id": user_id, "id": {"$in": selected_batch_ids}},
-                {
-                    "_id": 0,
-                    "id": 1,
-                    "lines.order_item_id": 1,
-                    "lines.group_key": 1,
-                    "lines.selected_image_url": 1,
-                    "lines.resolved_image_url": 1,
-                    "lines.image_url": 1,
-                    "lines.image_candidates": 1,
-                    "lines.shipping_company": 1,
-                    "lines.total_products_in_order": 1,
-                    "lines.file_spec_fields": 1,
-                    "lines.product_options": 1,
-                    "lines.service_spec_fields": 1,
-                    "lines.preparation_note": 1,
-                },
-            ).to_list(max(1, len(selected_batch_ids)))
-            if selected_batch_ids
-            else []
+        return await publish_supplier_dispatch(
+            db, user_id=user_id, client_request_id=payload.client_request_id,
+            registry_by_file=registry_by_file, selected_by_file=selected_by_file,
+            supplier=supplier, employee_id=employee_id, employee_name=_actor_name(worker),
+            actor=worker, note=payload.note,
         )
-        _hydrate_piece_print_facts_from_batches(selected, print_batches)
-
-        dispatch_id = f"sdv1_{uuid.uuid4().hex}"
-        now = _now()
-        piece_ids = [_text(row.get("piece_id")) for row in selected]
-        supplier_file_number = (
-            source_file_numbers[0]
-            if len(source_file_numbers) == 1
-            else f"SF-{now.astimezone(ZoneInfo('Asia/Riyadh')).strftime('%Y%m%d')}-{dispatch_id[-6:].upper()}"
-        )
-        source_files = []
-        lines = []
-        for file_number in source_file_numbers:
-            registry = registry_by_file[file_number]
-            file_lines = supplier_dispatch_lines(
-                selected_by_file[file_number],
-                supplier,
-            )
-            source_file = {
-                "file_number": file_number,
-                "batch_id": _text(registry.get("batch_id")),
-                "file_title": _text(registry.get("file_title")) or file_number,
-                "registered_at": registry.get("registered_at"),
-                "piece_count": len(selected_by_file[file_number]),
-                "lines": file_lines,
-                "cards": supplier_dispatch_cards(selected_by_file[file_number]),
-            }
-            source_files.append(source_file)
-            lines.extend([
-                {**line, "source_file_number": file_number}
-                for line in file_lines
-            ])
-        shell = {
-            "id": dispatch_id,
-            "user_id": user_id,
-            "client_request_id": payload.client_request_id,
-            "status": "building",
-            "file_number": supplier_file_number,
-            "supplier_file_number": supplier_file_number,
-            "source_file_numbers": source_file_numbers,
-            "source_files": source_files,
-            "batch_id": (
-                _text(registry_by_file[source_file_numbers[0]].get("batch_id"))
-                if len(source_file_numbers) == 1
-                else None
-            ),
-            "supplier_id": _text(supplier.get("id")),
-            "supplier_name": _text(supplier.get("company_name")),
-            "sent_by_id": employee_id,
-            "sent_by_name": _actor_name(worker),
-            "piece_ids": piece_ids,
-            "piece_count": len(piece_ids),
-            "lines": lines,
-            "note": _text(payload.note) or None,
-            "created_at": now,
-            "mezan_only": True,
-            "salla_updated": False,
-            "qoyod_updated": False,
-        }
-        try:
-            await db[DISPATCHES].insert_one(dict(shell))
-        except DuplicateKeyError:
-            duplicate = await db[DISPATCHES].find_one(
-                {"user_id": user_id, "client_request_id": payload.client_request_id},
-                {"_id": 0, "user_id": 0},
-            )
-            return {"ok": bool(duplicate), "dispatch": duplicate}
-
-        result = await db[PIECES].update_many(
-            {
-                "user_id": user_id,
-                "piece_id": {"$in": piece_ids},
-                "responsible_employee_id": employee_id,
-                "experiment_archived_at": None,
-                "status": {"$in": [PIECE_STATUS_ASSIGNED, PIECE_STATUS_IN_PROGRESS]},
-                "$or": [
-                    {"supplier_dispatch_status": {"$exists": False}},
-                    {"supplier_dispatch_status": None},
-                    {"supplier_dispatch_status": ""},
-                    {"supplier_dispatch_status": DISPATCH_STATUS_PARTIAL},
-                ],
-            },
-            {"$set": {
-                "status": PIECE_STATUS_IN_PROGRESS,
-                "execution_status": "sent_to_supplier",
-                "supplier_dispatch_id": dispatch_id,
-                "supplier_dispatch_status": DISPATCH_STATUS_SENT,
-                "supplier_id": _text(supplier.get("id")),
-                "supplier_name": _text(supplier.get("company_name")),
-                "sent_to_supplier_at": now,
-                "sent_to_supplier_by_id": employee_id,
-                "sent_to_supplier_by_name": _actor_name(worker),
-                "updated_at": now,
-                "mezan_only": True,
-                "salla_updated": False,
-                "qoyod_updated": False,
-            }},
-        )
-        if int(result.modified_count or 0) != len(piece_ids):
-            await db[PIECES].update_many(
-                {"user_id": user_id, "supplier_dispatch_id": dispatch_id},
-                {"$set": {
-                    "status": PIECE_STATUS_ASSIGNED,
-                    "execution_status": "not_started",
-                    "updated_at": _now(),
-                }, "$unset": {
-                    "supplier_dispatch_id": "",
-                    "supplier_dispatch_status": "",
-                    "supplier_id": "",
-                    "supplier_name": "",
-                    "sent_to_supplier_at": "",
-                    "sent_to_supplier_by_id": "",
-                    "sent_to_supplier_by_name": "",
-                }},
-            )
-            await db[DISPATCHES].update_one(
-                {"user_id": user_id, "id": dispatch_id, "status": "building"},
-                {"$set": {
-                    "status": "failed_piece_conflict",
-                    "failed_at": _now(),
-                    "updated_at": _now(),
-                }},
-            )
-            raise HTTPException(status_code=409, detail={"code": "supplier_dispatch_piece_conflict"})
-
-        completed_source_file_numbers = []
-        for file_number in source_file_numbers:
-            completed = await _mark_orders_started_if_fully_dispatched(
-                db,
-                user_id=user_id,
-                registry=registry_by_file[file_number],
-                actor=worker,
-            )
-            if completed:
-                completed_source_file_numbers.append(file_number)
-        ready_patch = {
-            "status": DISPATCH_STATUS_SENT,
-            "sent_at": now,
-            "updated_at": now,
-            "completed_source_file_numbers": completed_source_file_numbers,
-        }
-        await db[DISPATCHES].update_one(
-            {"user_id": user_id, "id": dispatch_id, "status": "building"},
-            {"$set": ready_patch},
-        )
-        shell.update(ready_patch)
-        event = {
-            "id": uuid.uuid4().hex,
-            "user_id": user_id,
-            "client_request_id": payload.client_request_id,
-            "event_type": "preparation_pieces_sent_to_supplier",
-            "dispatch_id": dispatch_id,
-            "file_number": supplier_file_number,
-            "supplier_file_number": supplier_file_number,
-            "source_file_numbers": source_file_numbers,
-            "supplier_id": _text(supplier.get("id")),
-            "supplier_name": _text(supplier.get("company_name")),
-            "piece_ids": piece_ids,
-            "piece_count": len(piece_ids),
-            "actor_id": employee_id,
-            "actor_name": _actor_name(worker),
-            "occurred_at": now,
-            "mezan_only": True,
-            "salla_updated": False,
-            "qoyod_updated": False,
-        }
-        await db[DISPATCH_EVENTS].insert_one(dict(event))
-        await db[PIECE_EVENTS].insert_one(dict(event))
-        return {
-            "ok": True,
-            "dispatch": {key: value for key, value in shell.items() if key != "user_id"},
-            "moved_to_supplier_account": True,
-            "mezan_only": True,
-            "salla_updated": False,
-            "qoyod_updated": False,
-        }
 
     @router.post("/rejections", status_code=201)
     async def reject_pieces(
