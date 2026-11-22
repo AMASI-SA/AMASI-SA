@@ -24,6 +24,15 @@ Next: fresh inactive original guard, new exact-B ARM64 rehearsal, all exact-B
 checks and host20/24 adapter rehearsals, then normal merge/tree-equivalent B,
 guarded authorized publication, original verify3 and original/control Native ADB.
 
+Exact-B independent ARM64 adapter and original verifier now passed,65.206s;
+identity/intent/artifact exact, shared source unchanged, no lease/publication.
+Durable proof: `evidence/pr2062-arm64-result.json`, tracked helper. Supplementary
+stage pointer is `/tmp/aramex-pr2062-stage.txt`, separate from superseded stages.
+Source-A readiness45032318734 and real-Mongo Shipping45032318674 passed. After
+exact B was pushed, duplicate source-A Native45032318759 and CodeQL45032318607
+runs were intentionally cancelled; exact-B counterparts remain mandatory.
+The local546+59subtests proof and all frozen pairs remain unchanged.
+
 ## Current successor: strict external classifier, freshly verified
 
 Branch `codex/aramex-intransit-label-reprint-v2-20261122` is constructed directly

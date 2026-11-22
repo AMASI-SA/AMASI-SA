@@ -1,0 +1,17 @@
+{
+  "source": "23e9514b9e8a33bffb2363bb1d3afd792355ab2c",
+  "deployment": "44c5e4867435d45a651881f0da101f3dcb338061",
+  "release": "rg5-3ec8529aa0398fbe08b591ca47b175f1fd41af183c6fdae0fc21da4c223c618c",
+  "success": true,
+  "arch": "aarch64",
+  "lease_created": false,
+  "published": false,
+  "host_node": "v24.19.0",
+  "host_yarn": "1.22.22",
+  "adapter_exit": 0,
+  "verifier_exit": 0,
+  "shared_unchanged": true,
+  "intent_sha256": "46e51af37e48e739923187905423695f078e6027df0922ca52b047e49c5b22c0",
+  "artifact_tree_sha256": "1aa92ab8ee890e1deb23f3c6742d75bb5748401b73ac45eb17e7d86aee378a88",
+  "elapsed_seconds": 65.206
+}
