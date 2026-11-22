@@ -1,5 +1,63 @@
 # Operational demand reads — implementation checkpoint
 
+## Current release handoff — exact B complete; host preflight pending
+
+Fresh GitHub verification on 2026-11-22 at 16:41 UTC confirms that B
+`5db36bd28ae86acaca8ceeb9cceee8e350916f12` has **47 successful applicable
+workflows**, one unrelated conditional TikTok workflow skip, and no running,
+pending or failed latest workflow. The 51 historical runs reduce to 48 latest
+workflows; three older Snapchat runs were superseded, two of them cancelled.
+Full latest-run inventory: `ci-5db36bd-workflows.json`.
+
+- Operational Balance Web `45042790752` completed successfully at
+  16:38:33 UTC / 19:38:33 Asia/Riyadh. The original backend contracts and all
+  93 demand-read cases passed; the latter have zero skips/failures/errors.
+- Release Readiness `45042790594` passed, including both original clean-clone
+  adapters (Node20 job `137271867490`, Node24 job `137271867502`).
+  Both retain source A `063611ff163c90d80cdbf96446a28584fe429846`,
+  artifact tree `9437b75f8c005e379a7132e62c97e90af71e596d1907ba935f6a2a01da2cd4f4`
+  and proof `7e7ddaca5746c68e270d4aa810324208aa196d70e73f185f80beb1b2e7b9c6c1`.
+- PR2069 is open, ready, mergeable/clean and **unmerged** at exact B. Production
+  still points to J `9b4fb716b430c32073b5ea7abaeaff62646d9633`.
+- Independent local original `load_release_intent` and
+  `verify_release_intent_git` passed on B; tracked source is clean and A..B
+  changes only the intent. No frozen source/intent commit was changed.
+
+The previous user's four original-reader metadata probes on J remain valid
+historical evidence; do not repeat the earlier 403 investigation unless the
+failure returns. They do not prove a new deployment or current lease state.
+
+The supported cloud browser inventory initially responded, but opening Emergent
+timed out and reset the runtime; the next supported inventory retry also timed
+out/reset. No live page, fresh host guard or publish control was reached.
+Publication authorization persists; access and host evidence are the blocker.
+
+**Exact next step:** run the adjacent unchanged
+`MANUAL-HOST-BUILD-PREFLIGHT.py` in actual `/app` with
+`PYTHONDONTWRITEBYTECODE=1 python -B`, and return its complete output.
+This is read-only. It checks clean J, original inactive guard, current disk
+space, protected source bytecode, generated-output paths, all direct
+`frontend/.release` entries, and the original intent loader. Its syntax was
+checked locally; **it has not been executed on the actual host by this turn**.
+
+Do not combine this first command with a fast-forward/build: current free
+space and output contents are unknown. Code inspection confirms the original
+adapter replaces the entire `frontend/.release` directory as well as build,
+node_modules and backend release identity. Preserve the previously reported
+432 untracked files and any other task's artifacts. After reviewing fresh host
+output, re-read current Production/ledger, normal-merge the unchanged frozen
+pair only if still current, safely fast-forward with content/mode preservation,
+and follow the original adapter, prepare/prepublish, one authorized publication,
+new explicit success, official verify3 and inactive guard.
+
+This checkpoint changes documentation/evidence only. **Production changed: no.**
+No source merge, shared host mutation, new lease, paid Emergent chat, business
+write or publication was performed. Separate inventory PR2065 and all other
+releases remain untouched. This newest section supersedes older pending-B
+statements below; all historic evidence remains retained.
+
+---
+
 ## Original-reader metadata acceptance — four of four passed
 
 The user has now executed the unchanged original guard reader against current
