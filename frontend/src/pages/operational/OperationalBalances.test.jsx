@@ -458,7 +458,7 @@ test('supplier card retains dedicated inventory invoice settlement outside purch
   await click('مورد المخزون');
   await input(host.querySelector('select'),'inventory-payment');
   expect(host.textContent).toContain('سداد فاتورة مورد');
-  expect(host.textContent).not.toContain('حفظ الشراء');
+  expect(host.textContent).not.toContain('مراجعة الفاتورة');
   expect([...host.querySelectorAll('select')][0].value).toBe('supplier');
   await click('العودة للمورد');
   expect(host.textContent).toContain('حفظ الحركة');
@@ -468,9 +468,9 @@ test('purchase navigation excludes reports and main reports contain read-only in
   api.context.mockResolvedValue({session_scope:'test-owner:test-actor',status:'active',permissions:{move:true,reports:true}});
   await render(<OperationalBalances/>);
   expect(host.textContent).toContain('فواتير وكميات المشتريات');
-  expect(host.textContent).not.toContain('حفظ الشراء');
+  expect(host.textContent).not.toContain('مراجعة الفاتورة');
   await click('شراء المخزون');
-  expect(host.textContent).toContain('حفظ الشراء');
+  expect(host.textContent).toContain('مراجعة الفاتورة');
   expect(host.textContent).not.toContain('فواتير وكميات المشتريات');
   expect(host.textContent).not.toContain('إجمالي الكميات المشتراة');
 });

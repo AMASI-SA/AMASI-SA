@@ -27,6 +27,7 @@ _OWNED = frozenset({
     "warehouse_location_events", "unified_orders",
 })
 _PROFILES = {
+    "purchase_receiving": frozenset({"mz2_inventory_purchase_receipts_v1", "warehouse_locations", "mezan_inventory_receipts_v2", "warehouse_location_events", "operational_balance_states_v1"}),
     "standalone_inventory": frozenset({"mz2_standalone_inventory_entries_v1", "warehouse_locations", "mezan_inventory_receipts_v2", "warehouse_location_events"}),
     "opening_inventory": frozenset({"mz2_operational_inventory_openings_v1", "warehouse_locations", "mezan_inventory_receipts_v2", "warehouse_location_events"}),
     "bundle_catalog": frozenset({"mezan_bundle_definitions_v2"}),
@@ -329,9 +330,22 @@ class _Collection:
                 _reject(self.__state)
             if self.__state["profile"] in {"opening_inventory", "standalone_inventory"} and (method != "update_one" if name == "warehouse_locations" else method != "insert_one"):
                 _reject(self.__state)
+            if self.__state["profile"] == "purchase_receiving" and (method != "update_one" if name in {"warehouse_locations", "operational_balance_states_v1"} else method != "insert_one"):
+                _reject(self.__state)
             if self.__state["profile"] == "physical_receipt" and method not in {"insert_one", "update_one"}:
                 _reject(self.__state)
             args = list(deepcopy(args))
+            if self.__state["profile"] == "purchase_receiving" and name == "operational_balance_states_v1":
+                # Receiving may fence an existing operational snapshot, but it
+                # has no capability to edit its invoices, debt, cash or audit.
+                if (method != "update_one" or len(args) != 2 or kwargs
+                        or not isinstance(args[0], dict)
+                        or set(args[0]) != {"_id", "owner_id", "revision"}
+                        or args[0]["_id"] != self.__owner or args[0]["owner_id"] != self.__owner
+                        or type(args[0]["revision"]) is not int or args[0]["revision"] < 1
+                        or args[1] != {"$inc": {"revision": 1}}):
+                    _reject(self.__state)
+                return await self.__collection.update_one(*args, session=self.__session)
             if self.__state["profile"] == "employee_lifecycle" and name == "operational_balance_states_v1":
                 if (method != "update_one" or len(args) != 2 or kwargs
                         or not isinstance(args[0], dict)
@@ -431,6 +445,11 @@ class _Collection:
         return await self.__collection.update_one(query, args[1], session=self.__session)
 
     def _document(self, name, doc):
+        if self.__state["profile"] == "purchase_receiving":
+            from operational_inventory_purchase_receipts import validate_insert
+            if not validate_insert(name, doc):
+                _reject(self.__state)
+            return
         if self.__state["profile"] == "standalone_inventory":
             from standalone_inventory_entry import validate_insert
             if not validate_insert(name, doc):
@@ -493,6 +512,11 @@ class _Collection:
             _reject(self.__state)
 
     async def _update(self, name, query, update, kwargs):
+        if self.__state["profile"] == "purchase_receiving":
+            from operational_inventory_purchase_receipts import validate_update
+            if kwargs.get("upsert") or not await validate_update(self.__state["db"], self.__owner, name, query, update):
+                _reject(self.__state)
+            return
         if self.__state["profile"] == "standalone_inventory":
             from standalone_inventory_entry import validate_update
             if kwargs.get("upsert") or not await validate_update(self.__state["db"], self.__owner, name, query, update):
@@ -680,11 +704,12 @@ async def operational_owner(db, owner, callback, *, profile="fulfillment", revie
         raise HTTPException(409, detail={"code": "operational_owner_required"})
     from inventory_write_gate import ACTIVE as INVENTORY_ADMISSION
     admission = INVENTORY_ADMISSION.get()
-    if admission and len(admission) > 2 and admission[2] and profile != "standalone_inventory":
+    independent_profiles = {"standalone_inventory", "purchase_receiving"}
+    if admission and len(admission) > 2 and admission[2] and profile not in independent_profiles:
         raise HTTPException(409, detail={"code": "standalone_inventory_profile_required"})
-    if profile in {"opening_inventory", "standalone_inventory"}:
+    if profile in {"opening_inventory", *independent_profiles}:
         if (admission is None or admission[0] != owner
-                or (bool(admission[2]) if len(admission) > 2 else False) != (profile == "standalone_inventory")):
+                or (bool(admission[2]) if len(admission) > 2 else False) != (profile in independent_profiles)):
             raise HTTPException(409, detail={"code": "opening_inventory_admission_required"})
     if profile not in _PROFILES:
         raise HTTPException(409, detail={"code": "operational_profile_invalid"})

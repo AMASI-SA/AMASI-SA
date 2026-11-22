@@ -24,6 +24,40 @@ LOCATIONS = 'warehouse_locations'
 SOURCE = 'operational_opening_inventory'
 SCHEMA = 'operational-opening-inventory-v1'
 PENDING = 'PENDING_FINANCIAL_VALUATION'
+STANDALONE_SOURCES = frozenset({'standalone_inventory_entry', 'standalone_inventory_purchase_receipt'})
+CONFIGURATION_FIELDS = frozenset({'purchase_configuration', 'purchase_option_labels', 'deferred_option_labels'})
+
+
+def stable_configuration_key(product_id, variant_id, sku, config):
+    from inventory_option_configuration import configuration_identity
+    return digest(['inventory-option-configuration-v2', product_id, variant_id, sku, configuration_identity(config)])
+
+
+def configuration_snapshot(doc):
+    """New fixed/deferred identities retain separate human-readable labels."""
+    return {key: deepcopy(doc[key]) for key in CONFIGURATION_FIELDS if key in doc}
+
+
+def valid_configuration_snapshot(doc):
+    fields = CONFIGURATION_FIELDS & doc.keys()
+    if not fields:
+        return True
+    if fields != CONFIGURATION_FIELDS or doc.get('item_type') != 'product':
+        return False
+    config = doc.get('purchase_configuration')
+    if (not isinstance(config, dict) or set(config) != {'state', 'selections', 'inputs', 'deferred_option_ids'}
+            or not all(isinstance(config.get(k), list) for k in ('selections', 'inputs', 'deferred_option_ids'))
+            or not isinstance(doc.get('purchase_option_labels'), list) or not isinstance(doc.get('deferred_option_labels'), list)
+            or config.get('state') != ('raw' if config['deferred_option_ids'] else 'ready')):
+        return False
+    try:
+        from inventory_option_configuration import configuration_specifications
+        return (doc.get('specifications') == configuration_specifications(config)
+            and doc.get('configuration_key') == stable_configuration_key(
+                doc.get('product_id'), doc.get('salla_variant_id'), doc.get('sku'), config)
+            and doc.get('preparation_state') == ('requires_preparation' if config['deferred_option_ids'] else 'ready_complete'))
+    except (KeyError, TypeError, ValueError, AttributeError):
+        return False
 
 
 class OpeningLine(BaseModel):
@@ -154,7 +188,7 @@ def _require_empty_locations(locs):
             fail('opening_inventory_existing_stock', 'يوجد مخزون سابق؛ يلزم مطابقته قبل تسجيل افتتاحية')
 
 
-async def compile_preview(db, owner, request, *, standalone=False):
+async def compile_preview(db, owner, request, *, standalone=False, allow_duplicate_lines=False):
     if not standalone and await db[BATCHES].find_one({'_id': owner, 'user_id': owner}):
         fail('opening_inventory_already_approved', 'اعتمد المخزون الافتتاحي مسبقًا؛ يلزم مسار تسوية مستقل')
     locs = await records(db, owner, LOCATIONS)
@@ -176,14 +210,15 @@ async def compile_preview(db, owner, request, *, standalone=False):
             definitions[line['item_id']] = await db['mezan_bundle_definitions_v2'].find_one(
                 {'user_id': owner, 'product_id': line['item_id']})
     return await prepare_in_thread(_compile_preview_rows, owner, request, standalone, locs,
-        candidates, raw_products, raw_components, raw_warehouses, available, definitions)
+        candidates, raw_products, raw_components, raw_warehouses, available, definitions, allow_duplicate_lines)
 
 
 def _compile_preview_rows(owner, request, standalone, locs, candidates, raw_products,
-                          raw_components, raw_warehouses, available, definitions):
+                          raw_components, raw_warehouses, available, definitions, allow_duplicate_lines=False):
     preparation_checkpoint()
     rows = []; used = set(); capacity = {}; snapshots = []
     for line in checked_rows(request['lines']):
+        option_snapshot = {}
         product = candidates.get((line['kind'], line['item_id']))
         location = available.get(line['location_id'])
         if not product or not location:
@@ -208,7 +243,7 @@ def _compile_preview_rows(owner, request, standalone, locs, candidates, raw_prod
                 if not isinstance(occupancy, dict) or not isinstance(occupancy.get('items'), list):
                     fail('standalone_inventory_occupancy_invalid', 'بيانات الموقع تحتاج مطابقة', 409)
                 items = occupancy['items']
-                if any(not isinstance(item, dict) or item.get('source_type') != 'standalone_inventory_entry'
+                if any(not isinstance(item, dict) or item.get('source_type') not in STANDALONE_SOURCES
                        or item.get('valuation_status') != PENDING or not valid_quantity(item) for item in items):
                     fail('standalone_inventory_occupancy_invalid', 'الموقع يحتوي مخزونًا من مسار آخر؛ اختر موقعًا مستقلًا', 409)
                 total = occupancy.get('total_quantity')
@@ -229,9 +264,10 @@ def _compile_preview_rows(owner, request, standalone, locs, candidates, raw_prod
                     or raw.get('type') in {'service', 'digital'} or definition and definition.get('product_type') == 'composite'):
                 fail('opening_inventory_nonphysical_product', 'هذا المنتج يتطلب مسار مكونات أو منتج غير مخزني', 422)
             config, labels = configuration(line['purchase_configuration'], product)
-            normalized_names = [next(iter(canonical_specifications({v['name']: 'x'})), '') for v in labels]
-            if len(set(normalized_names)) != len(normalized_names) or '' in normalized_names:
-                fail('opening_inventory_ambiguous_options', 'أسماء خيارات المنتج متعارضة؛ يلزم تصحيح تعريفها', 422)
+            if 'deferred_option_ids' not in config:
+                normalized_names = [next(iter(canonical_specifications({v['name']: 'x'})), '') for v in labels]
+                if len(set(normalized_names)) != len(normalized_names) or '' in normalized_names:
+                    fail('opening_inventory_ambiguous_options', 'أسماء خيارات المنتج متعارضة؛ يلزم تصحيح تعريفها', 422)
             variants = raw.get('variants') or []
             if not isinstance(variants, list) or raw.get('variants_count', len(variants)) != len(variants):
                 fail('opening_inventory_options_incomplete', 'تركيبات المنتج غير مكتملة', 422)
@@ -249,9 +285,17 @@ def _compile_preview_rows(owner, request, standalone, locs, candidates, raw_prod
                     fail('opening_inventory_variant_required', 'اختر تركيبة منتج واحدة مثبتة في ميزان 2', 422)
                 variant = matches[0]['id']
             state = 'ready_complete' if config['state'] == 'ready' else 'requires_preparation'
-            specs = canonical_specifications({v['name']: v.get('value', '') for v in labels})
             sku = str((matches[0].get('sku') if variants else None) or raw.get('sku') or product['id'])
-            key = build_inventory_configuration_key(sku=sku, preparation_state=state, specifications=specs)
+            if 'deferred_option_ids' in config:
+                from inventory_option_configuration import configuration_specifications
+                specs = configuration_specifications(config)
+                key = stable_configuration_key(product['id'], variant, sku, config)
+                option_snapshot = {'purchase_configuration': config, 'purchase_option_labels': labels,
+                    'deferred_option_labels': [{'option_id': oid, 'name': next(option['name'] for option in product['options'] if option['id'] == oid)}
+                                               for oid in config['deferred_option_ids']]}
+            else:
+                specs = canonical_specifications({v['name']: v.get('value', '') for v in labels})
+                key = build_inventory_configuration_key(sku=sku, preparation_state=state, specifications=specs)
             identity = {'item_type': 'product', 'product_id': product['id'], 'mezan_product_id': product['id'],
                         'salla_variant_id': variant, 'sku': sku, 'configuration_key': key}
         else:
@@ -263,7 +307,10 @@ def _compile_preview_rows(owner, request, standalone, locs, candidates, raw_prod
             identity = {'item_type': 'stock_component', 'resource_id': product['id'],
                         'sku': sku, 'configuration_key': digest(['opening-component', product['id']])}
         fingerprint = digest([identity, location['id']])
-        if fingerprint in used:
+        # Independently referenced purchase lines retain their original invoice
+        # identity even if they arrive into the same actual shelf. Capacity is
+        # still summed below; ordinary opening/entry keeps duplicate rejection.
+        if fingerprint in used and not (standalone and allow_duplicate_lines):
             fail('opening_inventory_duplicate_line', 'اجمع كمية المنتج وخياراته في الموقع نفسه بسطر واحد', 422)
         used.add(fingerprint)
         unit = product.get('unit') or 'piece'
@@ -281,7 +328,8 @@ def _compile_preview_rows(owner, request, standalone, locs, candidates, raw_prod
                      'location_id': location['id'], 'warehouse_id': location['warehouse_id'],
                      'location_name': (location['name'] + ' — ' + location['warehouse_name']) if standalone else location['name'], 'quantity': quantity, 'unit_cost': format(cost, '.2f'),
                      'total_cost': line_total(cost, quantity), 'inventory_identity': identity,
-                     'preparation_state': state, 'specifications': specs, 'purchase_configuration': config})
+                     'preparation_state': state, 'specifications': specs, 'purchase_configuration': config,
+                     **option_snapshot})
         snapshots.append([raw, stored, definition, location, warehouse])
     by_unit = {}
     for row in checked_rows(rows):
@@ -340,8 +388,9 @@ def validate_insert(name, doc, *, source=SOURCE, batches=BATCHES):
         allowed = {'_id','id','user_id','source_type','schema_version','source_id','source_line_id','status','valuation_status','financial_effect','inventory_identity','quantity','location_id','warehouse_id','preparation_state','specifications','operational_unit_cost','operational_total_cost','currency','recorded_by','created_at'} | identity_fields(doc)
         if 'unit' in doc:
             allowed.add('unit')
+        allowed |= CONFIGURATION_FIELDS & doc.keys()
         return (valid_quantity(doc) and set(doc) == allowed and doc.get('source_type') == source and doc.get('schema_version') == SCHEMA
-                and doc.get('valuation_status') == PENDING and doc.get('financial_effect') == 'none' and doc.get('status') == 'posted')
+                and valid_configuration_snapshot(doc) and doc.get('valuation_status') == PENDING and doc.get('financial_effect') == 'none' and doc.get('status') == 'posted')
     return name == 'warehouse_location_events' and set(doc) == {'_id','id','user_id','event_type','receipt_id','quantity','recorded_by','occurred_at'} and doc.get('event_type') == source
 
 
@@ -374,8 +423,9 @@ async def validate_update(db, owner, name, query, update, *, source=SOURCE):
     allowed = {'receipt_id','lot_id','source_type','source_id','source_line_id','valuation_status','quantity','preparation_state','specifications','condition','placed_at'} | identity_fields(item)
     if 'unit' in item:
         allowed.add('unit')
+    allowed |= CONFIGURATION_FIELDS & item.keys()
     if (not isinstance(item, dict) or set(item) != allowed or item.get('source_type') != source
-            or item.get('valuation_status') != PENDING or not valid_quantity(item)
+            or item.get('valuation_status') != PENDING or not valid_quantity(item) or not valid_configuration_snapshot(item)
             or update['$inc']['occupancy.total_quantity'] != item['quantity']
             or set(update['$set']) != {'state','updated_at'}
             or update['$set']['state'] != 'occupied'):
@@ -395,7 +445,7 @@ async def validate_update(db, owner, name, query, update, *, source=SOURCE):
     return bool(proof and validate_insert(RECEIPTS, {k:v for k,v in proof.items()}, source=source)
         and proof['location_id'] == query.get('id') and item['lot_id'] == proof['id']
         and all(item.get(k) == v for k,v in proof['inventory_identity'].items())
-        and all(item.get(k) == proof.get(k) for k in ('quantity','unit','source_id','source_line_id','preparation_state','specifications')))
+        and all(item.get(k) == proof.get(k) for k in ('quantity','unit','source_id','source_line_id','preparation_state','specifications', *CONFIGURATION_FIELDS)))
 
 
 def projected_evidence(location, item, witnesses):
@@ -405,14 +455,14 @@ def projected_evidence(location, item, witnesses):
     derived from this evidence, and legacy/adopted native sources are unchanged.
     """
     source = item.get('source_type')
-    if source not in {SOURCE, 'standalone_inventory_entry'} or len(witnesses) != 1:
+    if source not in {SOURCE, *STANDALONE_SOURCES} or len(witnesses) != 1:
         return {}
     proof = witnesses[0]
     if (not validate_insert(RECEIPTS, proof, source=source) or proof.get('id') != item.get('receipt_id')
             or proof.get('location_id') != location.get('id')
             or proof.get('warehouse_id') != location.get('warehouse_id')
             or any(item.get(k) != v for k,v in proof['inventory_identity'].items())
-            or any(item.get(k) != proof.get(k) for k in ('quantity','unit','source_id','source_line_id','preparation_state','specifications','valuation_status'))):
+            or any(item.get(k) != proof.get(k) for k in ('quantity','unit','source_id','source_line_id','preparation_state','specifications','valuation_status', *CONFIGURATION_FIELDS))):
         return {}
     try:
         cost = money(proof['operational_unit_cost'])
@@ -423,6 +473,7 @@ def projected_evidence(location, item, witnesses):
     return {'operational_unit_cost': format(cost, '.2f'),
             'operational_inventory_value': proof['operational_total_cost'],
             'operational_cost_basis': SCHEMA, 'operational_currency': 'SAR',
+            **configuration_snapshot(proof),
             **({'unit': proof['unit']} if proof.get('unit') else {}),
             'financial_effect': 'none', 'fulfillment_eligible': False}
 
@@ -437,12 +488,14 @@ async def place_compiled(scoped, owner, compiled, timestamp, batch_id, *, source
             'location_id': line['location_id'], 'warehouse_id': line['warehouse_id'],
             'preparation_state': line['preparation_state'], 'specifications': line['specifications'],
             'operational_unit_cost': line['unit_cost'], 'operational_total_cost': line['total_cost'],
-            'currency': 'SAR', 'recorded_by': owner, 'created_at': timestamp}
+            'currency': 'SAR', 'recorded_by': owner, 'created_at': timestamp,
+            **(configuration_snapshot(line) if 'deferred_option_ids' in line['purchase_configuration'] else {})}
         await scoped[RECEIPTS].insert_one(proof)
         item = {**identity, 'receipt_id': rid, 'lot_id': rid, 'source_type': source,
                 'source_id': batch_id, 'source_line_id': str(index), 'valuation_status': PENDING,
                 'quantity': line['quantity'], 'unit': line['unit'], 'preparation_state': line['preparation_state'],
-                'specifications': line['specifications'], 'condition': 'good', 'placed_at': timestamp}
+                'specifications': line['specifications'], 'condition': 'good', 'placed_at': timestamp,
+                **(configuration_snapshot(line) if 'deferred_option_ids' in line['purchase_configuration'] else {})}
         # Explicit owner selection is not a barcode scan. Preserve scan
         # evidence rather than manufacturing last_verified_scan metadata.
         await scoped[LOCATIONS].update_one({'id': line['location_id'], 'user_id': owner, 'occupancy': None},

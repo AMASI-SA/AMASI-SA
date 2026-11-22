@@ -1010,6 +1010,15 @@ def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=Fa
                 due = "outstanding_payable" if paying else "outstanding_receivable"
                 opposite = "outstanding_receivable" if paying else "outstanding_payable"
                 gross = amount + Decimal(movement.get("actual_fee_amount", "0"))
+                if movement["party_type"] == "supplier":
+                    # A later explicit allocation attaches this SAME payment
+                    # to invoice evidence. That amount was already deducted in
+                    # the obligation pass above; only the residual affects the
+                    # account now. Other party and legacy empty-list paths keep
+                    # their original arithmetic.
+                    gross -= sum((Decimal(a["amount"]) for a in movement.get("allocations", [])), Decimal(0))
+                    if gross < 0:
+                        raise ValueError("supplier_account_allocations_exceed_payment")
                 covered = min(gross, party[due])
                 party[due] -= covered
                 party[opposite] += gross - covered
