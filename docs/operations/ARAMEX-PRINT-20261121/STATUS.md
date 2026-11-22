@@ -1,5 +1,22 @@
 # ARAMEX-PRINT-20261121: verified external-label reprint repair, release pending
 
+## PR2061 superseded before merge (additional RED review evidence)
+
+Do not merge or publish PR2061. A final source review found that the new
+post-dispatch fence unnecessarily called the broad legacy courier classifier.
+That classifier treats every app_id=0 as internal, while the existing strict
+Native classifier correctly retains recognized external carriers such as Aramex.
+Four new synthetic route cases set only current shipment meta.app_id=0:
+completed still reads the official Aramex PDF, but shipped/delivering/delivered
+fail409. Fresh focused result:3 failed,10 passed,exit1,3.22s. This proves a
+candidate regression; it does not claim the live target has this metadata.
+
+Preserve the immutable PR2061 A/B and successful rehearsal evidence. No merge,
+lease or new publication occurred. Next: construct a fresh source branch on the
+latest reviewed Production base, keep only the strict classifier in this fence,
+make all13 cases green, and freeze a new A/B after fresh verification. Never
+rewrite the existing frozen pair. Evidence branch remains non-deployable.
+
 ## Immutable PR2061 candidate
 
 Evidence branch `codex/aramex-intransit-label-evidence-20261122` is never a

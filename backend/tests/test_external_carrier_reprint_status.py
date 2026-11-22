@@ -47,3 +47,26 @@ async def test_external_reprint_statuses_do_not_enable_local_document_generation
     assert document.await_count == 0
     assert all(method == "GET" for method, _, _ in calls)
     assert await db.unified_orders.find_one(KEY) == before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["completed", "shipped", "delivering", "delivered"])
+async def test_known_external_awb_with_zero_app_remains_external(monkeypatch, status):
+    async with external_case(monkeypatch, status=status) as (db, calls, client):
+        original = compat.call_salla
+
+        async def provider(*args, **kwargs):
+            response = await original(*args, **kwargs)
+            for row in response["data"].get("shipments", []):
+                row["meta"] = {"app_id": 0}
+            return response
+
+        monkeypatch.setattr(compat, "call_salla", provider)
+        response = await client.post(PATH + "/refresh")
+
+        assert response.status_code == 200, response.text
+        assert response.json()["ready"] is True
+        assert response.json()["label_url"] == "https://files.example/aramex-synthetic.pdf"
+        assert response.json()["courier_name"] == "أرامكس - شحن دولي"
+        assert response.json().get("label_type") != "store_courier"
+        assert calls and all(method == "GET" for method, _, _ in calls)
