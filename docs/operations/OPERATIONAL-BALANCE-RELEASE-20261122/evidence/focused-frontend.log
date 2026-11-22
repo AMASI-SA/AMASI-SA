@@ -1,0 +1,19 @@
+(node:19) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+yarn run v1.22.22
+$ react-scripts test --resolver ./scripts/jest-package-exports.cjs --watch=false --runInBand --resetMocks=false --runTestsByPath src/pages/operational/ApprovedLedger.test.jsx src/pages/operational/SimpleBalanceAccess.test.jsx src/pages/operational/SimpleBalanceStatement.test.jsx src/pages/operational/simpleBalancesApi.test.js src/pages/operational/simpleBalancesModel.test.js --json --outputFile=/tmp/mezan-combined-frontend.json
+(node:40) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS src/pages/operational/SimpleBalanceAccess.test.jsx
+PASS src/pages/operational/SimpleBalanceStatement.test.jsx
+PASS src/pages/operational/ApprovedLedger.test.jsx
+PASS src/pages/operational/simpleBalancesModel.test.js
+PASS src/pages/operational/simpleBalancesApi.test.js
+
+Test Suites: 5 passed, 5 total
+Tests:       76 passed, 76 total
+Snapshots:   0 total
+Time:        4.27 s
+Ran all test suites within paths "src/pages/operational/ApprovedLedger.test.jsx", "src/pages/operational/SimpleBalanceAccess.test.jsx", "src/pages/operational/SimpleBalanceStatement.test.jsx", "src/pages/operational/simpleBalancesApi.test.js", "src/pages/operational/simpleBalancesModel.test.js".
+Test results written to: ../../../../../tmp/mezan-combined-frontend.json
+Done in 5.53s.

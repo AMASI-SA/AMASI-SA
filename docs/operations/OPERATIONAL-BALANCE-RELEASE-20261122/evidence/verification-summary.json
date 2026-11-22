@@ -1,0 +1,107 @@
+{
+  "schema_version": 1,
+  "task": "OPERATIONAL-BALANCE-RELEASE-20261122",
+  "deployment_candidate": false,
+  "note": "Evidence-only branch; never deploy this branch or append evidence to the frozen A/B branch.",
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/2072",
+  "source_a": "db105b1fb7297314b9dbc9a830e8d98bc0211992",
+  "intent_b": "4f65fef9dfed30f078c13b3b48a8b60f932e541b",
+  "tree_b": "350d703002cfeb4f14135f868ce5a765233c0268",
+  "base_j": "9b4fb716b430c32073b5ea7abaeaff62646d9633",
+  "release_id": "rg5-9b86cd8258fff8a6b3657a314a71e9145ca423245ad7d6b58b6895939886982a",
+  "intent_sha256": "7d7e3ef4789fdf4e49b3a1d54da592e993abceac783eb0f7603fbffb2d0a9617",
+  "backend": {
+    "passed": 101,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 0,
+    "python": "3.12.14",
+    "scope": "focused local",
+    "tested_source": "f091a4c324c13b672590033e924229f8cf940cbb",
+    "canonical_backend_and_frontend_trees_equal": true
+  },
+  "frontend": {
+    "passed": 76,
+    "suites": 5,
+    "failed": 0,
+    "pending": 0,
+    "node": "22.23.2",
+    "yarn": "1.22.22"
+  },
+  "adapter": {
+    "command": "cd frontend && yarn build",
+    "entrypoint": "scripts/build-entry.cjs -> scripts/emergent_deployment_adapter.py",
+    "checkout": "clean clone of exact B",
+    "exit_code": 0,
+    "seconds": 54.9,
+    "built": true,
+    "isolated_packages_verified": true,
+    "independent_exact_payload_review": "PASS"
+  },
+  "predecessor_j_original_loader": "PASS after fetching four missing historical immutable Git blobs from the original repository",
+  "hashes": {
+    "frontend_artifact_tree_sha256": "f3dd98a5ad5249204bbb1bafcb947313d9b9c650839c13ed9bd13cdb31382510",
+    "reproducibility_proof_sha256": "2f86bb38f0070b5054b758dc2a84a6183d96aae61ec8c09c0c6d162e56f3f5a8",
+    "build_meta_sha256": "27fd6d3447761e5c208d62f194ba02adfaf9908298ad3a2924c9ceb1c0f7b428",
+    "backend_identity_sha256": "036309ee7f60aab9050799c07ba9735826aee1d320f34925ee91d8b5870b925b"
+  },
+  "ci": {
+    "status": "required exact-B jobs in progress or queued; not complete at this checkpoint",
+    "operational_run": 45043091461,
+    "readiness_run": 45043091158,
+    "stock_run": 45043091179,
+    "browser_acceptance_job": {
+      "id": 137271660994,
+      "conclusion": "success"
+    },
+    "real_mongo_local_cases_unverified": 97
+  },
+  "local_environment_notes": [
+    "Mongo-dependent scenarios first failed before execution because port27305 had no server; these attempts are not passing evidence.",
+    "Official Mongo8.0.12 archive and SHA256 were verified, but mongod --version aborted in tcmalloc CPU discovery before any server started. No system workaround or test bypass was used.",
+    "The first adapter invocation was stopped because wrapping the configured adapter in the toolchain exec lock makes its own nested ensure wait. The direct configured yarn build completed successfully; no release guard was changed."
+  ],
+  "production": {
+    "merged": false,
+    "shared_workspace_changed": false,
+    "lease_created": false,
+    "published": false,
+    "financial_writes": false,
+    "current_shared_guard": "unverified: management browser timed out",
+    "observed_live_source": "23e9514b9e8a33bffb2363bb1d3afd792355ab2c"
+  },
+  "android": {
+    "pr": 376,
+    "state": "Draft",
+    "release": "deferred by owner",
+    "built": false,
+    "distributed": false
+  },
+  "files": [
+    {
+      "file": "focused-backend.xml",
+      "bytes": 17784,
+      "sha256": "b0bc20884f40c96c7a16e880cf19ed08e82c4602064b46c4f3ec50aa6ca8f900"
+    },
+    {
+      "file": "focused-backend-run.json",
+      "bytes": 890,
+      "sha256": "c5c618eb103e2fb847aa5b85dbb7d516210e0fbe60a3c69c419120685cf221ae"
+    },
+    {
+      "file": "focused-frontend.json",
+      "bytes": 21997,
+      "sha256": "552b573f97d7461b49b6dc9395962b58e4aa90bad3c54ea6473c07a3361ec5d0"
+    },
+    {
+      "file": "focused-frontend.log",
+      "bytes": 1565,
+      "sha256": "483145319a7064a95bb5cc5bf526ad2207d07a622725969e0c8763cecc0c2c24"
+    },
+    {
+      "file": "configured-adapter.log",
+      "bytes": 214628,
+      "sha256": "c684605b40ddb096adc6be77c3f7eef15d3433e05d8e1a9499e0032b4e092ba2"
+    }
+  ]
+}

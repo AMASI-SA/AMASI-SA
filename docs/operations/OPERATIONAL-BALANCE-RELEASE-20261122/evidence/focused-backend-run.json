@@ -1,0 +1,26 @@
+{
+  "source_sha_start": "f091a4c324c13b672590033e924229f8cf940cbb",
+  "source_sha_end": "f091a4c324c13b672590033e924229f8cf940cbb",
+  "exit_code": 0,
+  "seconds": 30.52,
+  "command": [
+    "/workspace/scratch/dfe063f5aca0/mezan-testenv/bin/python",
+    "-B",
+    "-m",
+    "pytest",
+    "--noconftest",
+    "-q",
+    "-p",
+    "no:cacheprovider",
+    "backend/tests/test_operational_movement_reversal_effects.py",
+    "backend/tests/test_operational_movement_reversal_routes.py",
+    "backend/tests/test_operational_workspace_account_history.py",
+    "backend/tests/test_operational_ad_and_entry_latency.py",
+    "backend/tests/test_operational_balance_workspace.py",
+    "--asyncio-mode=auto",
+    "--tb=short",
+    "--junitxml=/workspace/scratch/dfe063f5aca0/mezan-testenv/focused-local-backend.xml"
+  ],
+  "python": "Python 3.12.14",
+  "mongo": "not used; mock-compatible suites only"
+}
