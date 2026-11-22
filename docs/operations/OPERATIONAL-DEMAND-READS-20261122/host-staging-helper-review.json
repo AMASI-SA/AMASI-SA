@@ -1,0 +1,29 @@
+{
+  "task": "OPERATIONAL-DEMAND-READS-20261122",
+  "kind": "reviewed_host_staging_helper",
+  "script": "MANUAL-HOST-STAGE-2069.py",
+  "sha256": "cdd6d5a5393af9f5518907c7b8999c1b8908a3256d3d5da4ca43b91217dc709a",
+  "bytes": 17177,
+  "deployment_git_sha": "06763ffd6e3c3f7c861769b61d2c4e6b9b2d5f35",
+  "expected_shared_git_sha": "9b4fb716b430c32073b5ea7abaeaff62646d9633",
+  "source_git_sha": "063611ff163c90d80cdbf96446a28584fe429846",
+  "intent_commit": "5db36bd28ae86acaca8ceeb9cceee8e350916f12",
+  "tree": "057c273506c237af2035c7976cc7fe8e9aacaeb2",
+  "actual_candidate": "/tmp/mezan-pr2069-0mhyfa47/repo",
+  "checks": {
+    "ast": "passed",
+    "filesystem_fixture": "passed",
+    "git_transport_fixture": "passed",
+    "root_original_api_review": "passed",
+    "independent_final_review": "passed"
+  },
+  "shared_staging_executed": false,
+  "prepare_started": false,
+  "runtime_published": false,
+  "notes": [
+    "Normal merge M already confirmed on Production.",
+    "Candidate rehearsal passed on actual host; staging not yet run.",
+    "No change to frozen A/B/M or production code.",
+    "Partial staging interruption requires journal inspection; no automatic source reset."
+  ]
+}

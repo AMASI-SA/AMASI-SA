@@ -1,5 +1,48 @@
 # Operational demand reads — implementation checkpoint
 
+## Reviewed shared-host staging command ready — execution pending
+
+PR2069 is merged as M `06763ffd6e3c3f7c861769b61d2c4e6b9b2d5f35`.
+The actual same-host original-adapter rehearsal passed at
+`/tmp/mezan-pr2069-0mhyfa47/repo`. Production Git points to M, whose tree is
+exactly B. **Actual shared /app staging and runtime publication remain pending.**
+
+Reviewed helper: `MANUAL-HOST-STAGE-2069.py`.
+SHA256: `cdd6d5a5393af9f5518907c7b8999c1b8908a3256d3d5da4ca43b91217dc709a` (17177 bytes).
+
+The helper checks exact clean J and inactive original guard; confirms remote M
+and its ordered J/B parents and frozen tree; validates the retained same-host
+candidate with the original source/build/proof validators; and checks free space.
+It preserves verified backups of the three generated outputs and the one
+observed ignored bytecode cache in a unique /tmp directory, stages output copies
+inside the real /app/.git, and journals phases. It quarantines only the verified
+regular .pyc cache, proves the old J source with the original loader before FF,
+fetches M locally from the temp clone, and fast-forwards the shared source.
+Only frontend/build, frontend/.release/reproducible-build.json and
+backend/release_identity.json are replaced. The .release parent and extra
+entries remain in place. Dependencies are not reinstalled or moved. The merge
+command disables auto maintenance/GC only for that command because /app is small.
+
+Original validators then recheck the shared artifacts and reviewed identity,
+and compare unrelated untracked file content/modes/link targets, .env sidecars
+and the dependency root. The helper ends with inactive guard and STAGING_RESULT;
+it does not prepare, prepublish or publish. Old files remain both in verified
+/tmp backups and in .git/retired. A partial interruption requires inspection of
+the printed journal/retained paths; do not blindly rerun or reset shared source.
+
+Validation completed locally: AST; file backup/swap/mode/refusal fixtures;
+three-repository Git transport/ordinary-merge/FF fixture preserving a foreign
+file; root review of the original validator APIs; independent final script review.
+These checks are not evidence of actual shared-host staging. Root and the
+independent reviewer found no concrete blocker for the pinned command.
+
+Next: execute the hash-pinned helper on the actual host and inspect its complete
+result. Only after successful shared validation, use the original /app
+prepare/prepublish flow, publish once, and require original three-probe verify
+plus inactive final guard. The evidence branch is never a deployment source.
+
+---
+
 ## PR2069 merged — exact tree retained; shared host staging pending
 
 PR2069 was merged normally at2026-11-22T17:08:10Z as
