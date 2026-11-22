@@ -1,0 +1,19 @@
+{
+  "source_git_sha": "dd3a9ea29fce28e2fa87332cff4a6d46f776e0d3",
+  "source_tree": "ee385c9c71a19833e08b5e5d7470d94fe4b646f4",
+  "source_base_git_sha": "02cd99e5b2b68c95341c87590abcf572c885e697",
+  "source_base_tree": "8f915a681de43fed9da1ec98685a56f87a4c8bcb",
+  "sole_parent": "02cd99e5b2b68c95341c87590abcf572c885e697",
+  "intent_inherited_unchanged": true,
+  "full_history_intent_changes": [],
+  "tracked_clean": true,
+  "backend_unique_accepted": 214,
+  "backend_initial_failures_are_rechecked": true,
+  "frontend_passed": 101,
+  "frontend_suites": 7,
+  "reviewed_source_hashes_verified": true,
+  "pr": 2080,
+  "remote_branch": "codex/operational-balance-server-r3-20261122",
+  "production_changed_by_task": false,
+  "host_rehearsal_performed": false
+}

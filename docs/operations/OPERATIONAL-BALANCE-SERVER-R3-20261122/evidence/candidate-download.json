@@ -1,0 +1,13 @@
+{
+  "id": 14773520519,
+  "size": 429772,
+  "digest": "sha256:4da0cc40b81b6f48e7ced7ca11dd5e8a0dcd4b51caa65b6799ab15ae6750446c",
+  "run": 45070050540,
+  "source": "dd3a9ea29fce28e2fa87332cff4a6d46f776e0d3",
+  "zip_sha256": "4da0cc40b81b6f48e7ced7ca11dd5e8a0dcd4b51caa65b6799ab15ae6750446c",
+  "intent_bytes": 1493695,
+  "intent_sha256": "0e0c7a6167dae598450358db6a1399b080cb7c69e176d28c5c31a0585ed287dc",
+  "base": "02cd99e5b2b68c95341c87590abcf572c885e697",
+  "runtime": "rg5-b2aa207d2f63107c64d9c0b66ce5cc567aa5ebb074753cf889227de4c448e008",
+  "artifact_tree": "000b707f16f0f3447cfe30f8e0e5edafc58ef55698ff2444e3fcca67f5ffb4db"
+}

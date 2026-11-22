@@ -1,0 +1,41 @@
+......................F................................................. [ 33%]
+...........F............................................................ [ 67%]
+......................................................................   [100%]
+=================================== FAILURES ===================================
+____ test_actual_assembly_child_reads_canonical_fixture_and_publishes_ready ____
+backend/tests/test_demand_read_jobs.py:256: in test_actual_assembly_child_reads_canonical_fixture_and_publishes_ready
+    assert ready is not None, (row["status"], row.get("error_code"), collected)
+E   AssertionError: ('queued', 'read_preparation_failed', [{'family': 'assembly_board', 'pid': 281, 'wall_ms': 86.9161049995455, 'outcome': 'failed'}])
+E   assert None is not None
+_ test_actual_child_keeps_health_and_bootstrap_responsive_on_same_large_fixture _
+backend/tests/test_operational_workspace_demand_http.py:360: in test_actual_child_keeps_health_and_bootstrap_responsive_on_same_large_fixture
+    assert ready.status_code == 200, (ready.text, metrics)
+E   AssertionError: ('{"status":"preparing","key":"fe9f52058223afa9de2546eb8c1e8f9d5721d9d70970a2fe68c5008745bcd888","retry_after_ms":2000...fe68c5008745bcd888"}', [{'family': 'operational_home', 'pid': 690, 'wall_ms': 94.65312999964226, 'outcome': 'failed'}])
+E   assert 202 == 200
+E    +  where 202 = <Response [202 Accepted]>.status_code
+=============================== warnings summary ===============================
+backend/recurring_obligations_routes.py:295
+  /workspace/scratch/dfe063f5aca0/mezan-server-r3/backend/recurring_obligations_routes.py:295: PydanticDeprecatedSince20: Pydantic V1 style `@root_validator` validators are deprecated. You should migrate to Pydantic V2 style `@model_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    @root_validator(skip_on_failure=True)
+
+backend/recurring_obligations_routes.py:319
+  /workspace/scratch/dfe063f5aca0/mezan-server-r3/backend/recurring_obligations_routes.py:319: PydanticDeprecatedSince20: Pydantic V1 style `@root_validator` validators are deprecated. You should migrate to Pydantic V2 style `@model_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    @root_validator(skip_on_failure=True)
+
+backend/settlements_routes.py:135
+  /workspace/scratch/dfe063f5aca0/mezan-server-r3/backend/settlements_routes.py:135: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    @validator("adjustment_type")
+
+backend/settlements_routes.py:141
+  /workspace/scratch/dfe063f5aca0/mezan-server-r3/backend/settlements_routes.py:141: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    @validator("source")
+
+backend/settlements_routes.py:154
+  /workspace/scratch/dfe063f5aca0/mezan-server-r3/backend/settlements_routes.py:154: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    @validator("adjustment_type")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED backend/tests/test_demand_read_jobs.py::test_actual_assembly_child_reads_canonical_fixture_and_publishes_ready
+FAILED backend/tests/test_operational_workspace_demand_http.py::test_actual_child_keeps_health_and_bootstrap_responsive_on_same_large_fixture
+2 failed, 212 passed, 5 warnings in 82.26s (0:01:22)

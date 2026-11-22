@@ -1,0 +1,27 @@
+{
+  "source_sha": "dd3a9ea29fce28e2fa87332cff4a6d46f776e0d3",
+  "run_id": 45070050550,
+  "run_attempt": 1,
+  "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45070050550",
+  "conclusion": "failure",
+  "classification": "confirmed GitHub startup infrastructure failure",
+  "job_count": 0,
+  "tests_started": false,
+  "annotation": "Internal server error. Correlation ID: 2447cc82-e285-46a5-889a-6cb329a8b420",
+  "public_page_evidence": {
+    "obtained_by": "/root via unauthenticated public HTTP GET",
+    "independent_local_content_check": true,
+    "path": "/workspace/scratch/dfe063f5aca0/server-r3-evidence/g47-public-run-page.html",
+    "bytes": 154075,
+    "sha256": "b36f04bd1fa66f32d2031cfffeaa40be5185b296f97ab44b9b0fd2712266a63a"
+  },
+  "workflow_bytes_unchanged_from_production": true,
+  "parent_reported_retry": {
+    "action": "one targeted rerun_failed_workflow_run_jobs",
+    "http_status": 403,
+    "message": "This workflow run cannot be retried"
+  },
+  "subsequent_trigger_actions_by_this_agent": false,
+  "source_a_fully_green": false,
+  "remaining_required_gate": "A failure remains preserved; normal independently planned v5 B must execute and pass all required gates including G47"
+}

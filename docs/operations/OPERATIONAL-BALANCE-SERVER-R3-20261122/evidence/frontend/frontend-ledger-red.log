@@ -1,0 +1,53 @@
+(node:20) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+yarn run v1.22.22
+$ react-scripts test --resolver ./scripts/jest-package-exports.cjs --watch=false --runInBand --resetMocks=false --runTestsByPath src/pages/operational/ApprovedLedger.test.jsx --json --outputFile=/workspace/scratch/dfe063f5aca0/server-r3-review/frontend-ledger-red.json
+(node:41) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+FAIL src/pages/operational/ApprovedLedger.test.jsx
+  ✓ one read for account, eight rows, typing is debounced and totals still describe the entire period (139 ms)
+  ✓ statement print is a fresh full-period permissioned read independent of the on-screen page (56 ms)
+  ✓ bank ledger opens unposted status holds separately from credited movements (28 ms)
+  ✓ global tab does not fetch resource ledgers, and account with no movement permission starts no read (23 ms)
+  ✓ shows the approver next to the date and loads invoice lines only after opening the row (23 ms)
+  ✓ a confirmed recovery opens its exact receipt on the server-selected ledger page (41 ms)
+  ✓ balance-only account opened from a directory loads its own balance without a ledger query (5 ms)
+  ✓ a demand provider ledger keeps saved snapshot dates with customer adjustment review actions (19 ms)
+  ✓ an owner provider ledger rejects customer badges and actions from a different scope (4 ms)
+  ✓ supported provider tabby exposes permissioned contextual statement links (26 ms)
+  ✓ supported provider tamara exposes permissioned contextual statement links (25 ms)
+  ✓ supported provider salla exposes permissioned contextual statement links (22 ms)
+  ✓ provider emkan never advertises an unsupported statement importer (14 ms)
+  ✓ provider paypal never advertises an unsupported statement importer (19 ms)
+  ✓ an owner ledger opened by identity still prints a fresh complete period from page two (44 ms)
+  ✓ an owner ad ledger displays the authorized FX amounts without synthesizing a balance (6 ms)
+  ✓ a direct ledger target cannot expose a former resource after owner authority is lost (2 ms)
+  ✓ authorized staff confirm a linked reversal with a reason and reload the displayed statement (29 ms)
+  ✓ an uncertain reversal keeps the same command on retry; unrelated staff never see the action (52 ms)
+  ✕ an owner identity ledger reverses a page-two movement through a new scoped demand without fetching its resource (47 ms)
+
+  ● an owner identity ledger reverses a page-two movement through a new scoped demand without fetching its resource
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      316 |   expect(host.textContent).toContain('جارٍ تحميل كشف الحساب');
+      317 |   await act(async () => releaseReload());
+    > 318 |   expect(host.querySelector('dialog').open).toBe(true);
+          |                                             ^
+      319 |   expect(host.querySelectorAll('tbody tr')).toHaveLength(3);
+      320 |   expect(host.querySelector('dialog').textContent).toContain('تم عكس الحركة');
+      321 |   expect(host.querySelector('dialog').textContent).toContain('reversal-page-two');
+
+      at Object.<anonymous> (src/pages/operational/ApprovedLedger.test.jsx:318:45)
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 19 passed, 20 total
+Snapshots:   0 total
+Time:        2.063 s
+Ran all test suites within paths "src/pages/operational/ApprovedLedger.test.jsx".
+Test results written to: ../../server-r3-review/frontend-ledger-red.json
+error Command failed with exit code 1.
+info Visit https://yarnpkg.com/en/docs/cli/run for documentation about this command.

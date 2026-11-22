@@ -1,0 +1,53 @@
+{
+  "added_backend_suites_and_presence_guards": [
+    "test_operational_workspace_account_history",
+    "test_operational_movement_reversal_effects",
+    "test_operational_movement_reversal_routes",
+    "test_operational_ad_and_entry_latency"
+  ],
+  "all_existing_jobs_steps_and_metadata_retained": true,
+  "base_production_git_sha": "02cd99e5b2b68c95341c87590abcf572c885e697",
+  "changed_run_steps": [
+    {
+      "job": "backend",
+      "step": "Run operational contracts"
+    },
+    {
+      "job": "backend",
+      "step": "Reject missing or skipped tests"
+    },
+    {
+      "job": "backend",
+      "step": "Reject missing, skipped or failed demand-read acceptance"
+    }
+  ],
+  "exact_approved_diff_only": true,
+  "frontend_and_performance_gates_retained": true,
+  "job_step_counts": {
+    "backend": 12,
+    "background-demand-only": 7,
+    "browser-acceptance": 10,
+    "frontend": 7
+  },
+  "kind": "r3_workflow_readonly_review_v1",
+  "result": "PASS",
+  "source_modified_by_this_review": false,
+  "threshold_increases": {
+    "customer_inventory_unified_activity": [
+      3,
+      5
+    ],
+    "driver_review_mongo": [
+      16,
+      17
+    ],
+    "workspace_demand_reads": [
+      38,
+      48
+    ]
+  },
+  "workflow": ".github/workflows/operational-balance-web.yml",
+  "workflow_executed_by_this_review": false,
+  "workflow_sha256": "7c3d48da2648bf34614ad776508bcc526978a4aaaac8ec963a70aca95d4d1c0b",
+  "yaml_parse": "PASS"
+}

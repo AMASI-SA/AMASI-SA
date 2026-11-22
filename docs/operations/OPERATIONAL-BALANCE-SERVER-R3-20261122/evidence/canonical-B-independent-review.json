@@ -1,0 +1,48 @@
+{
+  "A": "dd3a9ea29fce28e2fa87332cff4a6d46f776e0d3",
+  "B": "9a500a21013a08f750009be656362481986eb208",
+  "B_tree": "2cbd2842ed2506642a1321a47e35f69a766fcf89",
+  "N": "02cd99e5b2b68c95341c87590abcf572c885e697",
+  "changed_paths": [
+    "release/release-intent-v5.json"
+  ],
+  "exact_B_CI_acceptance": "not evaluated by this identity review; complete exact-B success including G47 remains required before host/merge",
+  "github_writes_retries_or_git_mutations_performed": false,
+  "helper_enabled": false,
+  "host_merge_or_publication_approved": false,
+  "intent_bytes": 1493695,
+  "intent_identical_to_accepted_CI_candidate": true,
+  "intent_sha256": "0e0c7a6167dae598450358db6a1399b080cb7c69e176d28c5c31a0585ed287dc",
+  "kind": "pr2080_canonical_B_independent_review_v1",
+  "original_validators": {
+    "exit_code": 0,
+    "load_release_intent": "PASS",
+    "verify_release_intent_git": "PASS"
+  },
+  "parents": [
+    "dd3a9ea29fce28e2fa87332cff4a6d46f776e0d3"
+  ],
+  "predecessor_completion_receipt_pinned": false,
+  "remote_readback": {
+    "candidate_ref": "refs/heads/codex/operational-balance-server-r3-20261122",
+    "evidence_urls": [
+      "https://api.github.com/repos/AMASI-SA/AMASI-SA/git/commits/9a500a21013a08f750009be656362481986eb208",
+      "https://api.github.com/repos/AMASI-SA/AMASI-SA/git/ref/heads/codex/operational-balance-server-r3-20261122"
+    ],
+    "head": "9a500a21013a08f750009be656362481986eb208",
+    "parent": "dd3a9ea29fce28e2fa87332cff4a6d46f776e0d3",
+    "tree": "2cbd2842ed2506642a1321a47e35f69a766fcf89"
+  },
+  "result": "PASS_IDENTITY_AND_INTENT_ONLY_CONTRACT",
+  "reviewer": "web_review",
+  "runtime_release_id": "rg5-b2aa207d2f63107c64d9c0b66ce5cc567aa5ebb074753cf889227de4c448e008",
+  "source_A_G47_preserved": {
+    "attempt": 1,
+    "conclusion": "failure",
+    "correlation_id": "2447cc82-e285-46a5-889a-6cb329a8b420",
+    "jobs": 0,
+    "public_error": "Internal server error",
+    "run_id": 45070050550
+  },
+  "worktree_unchanged": true
+}

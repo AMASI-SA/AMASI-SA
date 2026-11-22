@@ -1,0 +1,43 @@
+{
+  "status": "PASS",
+  "base": "02cd99e5b2b68c95341c87590abcf572c885e697",
+  "inherited_intent_unchanged": true,
+  "preserved_N_paths": [
+    "backend/demand_read_runner.py",
+    "frontend/src/lib/demandRead.js",
+    "frontend/src/pages/operational/ApprovedFinance.jsx",
+    "frontend/src/pages/operational/ApprovedReports.jsx"
+  ],
+  "unchanged_prior_reviewed_backend_paths": [
+    "backend/operational_balance_access.py",
+    "backend/operational_balance_exchanges.py",
+    "backend/operational_balance_routes.py",
+    "backend/operational_balance_service.py",
+    "backend/operational_balance_workspace.py",
+    "backend/operational_customer_returns.py",
+    "backend/operational_inventory_payment_allocation.py",
+    "backend/operational_movement_reversal.py",
+    "backend/operational_web_page_policy.py",
+    "backend/operational_workspace_read_builders.py",
+    "backend/operational_workspace_reversals.py",
+    "backend/tests/test_customer_inventory_unified_activity.py",
+    "backend/tests/test_operational_ad_and_entry_latency.py",
+    "backend/tests/test_operational_balance_customer_returns.py",
+    "backend/tests/test_operational_balance_exchanges.py",
+    "backend/tests/test_operational_balance_workspace.py",
+    "backend/tests/test_operational_driver_review_mongo.py",
+    "backend/tests/test_operational_movement_reversal_effects.py",
+    "backend/tests/test_operational_movement_reversal_routes.py",
+    "backend/tests/test_operational_workspace_account_history.py",
+    "backend/tests/test_operational_workspace_demand_reads.py"
+  ],
+  "workflow_jobs_preserved": [
+    "backend",
+    "background-demand-only",
+    "browser-acceptance",
+    "frontend"
+  ],
+  "demand_minimum": 48,
+  "runner_lifecycle_minimum": 3,
+  "customer_inventory_minimum": 5
+}

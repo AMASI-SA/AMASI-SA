@@ -1,0 +1,161 @@
+{
+  "observed_at_utc": "2026-11-22 21:19:29 UTC",
+  "pr": 2080,
+  "source_sha": "dd3a9ea29fce28e2fa87332cff4a6d46f776e0d3",
+  "source_tree": "ee385c9c71a19833e08b5e5d7470d94fe4b646f4",
+  "source_parent_sha": "02cd99e5b2b68c95341c87590abcf572c885e697",
+  "overall": "SOURCE_A_NOT_FULLY_GREEN",
+  "all_workflow_runs_terminal": true,
+  "run_counts": {
+    "success": 9,
+    "failure": 3
+  },
+  "check_counts": {
+    "success": 19,
+    "skipped": 6,
+    "cancelled": 2
+  },
+  "failures": [
+    {
+      "id": 45070050550,
+      "name": "G47 Focused Integration",
+      "path": ".github/workflows/g47-focused-integration.yml",
+      "head_sha": "dd3a9ea29fce28e2fa87332cff4a6d46f776e0d3",
+      "head_branch": "codex/operational-balance-server-r3-20261122",
+      "event": "pull_request",
+      "attempt": 1,
+      "status": "completed",
+      "conclusion": "failure",
+      "created_at": "2026-11-22T21:05:01Z",
+      "updated_at": "2026-11-22T21:05:50Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45070050550"
+    },
+    {
+      "id": 45070050599,
+      "name": "Operational Balance Web",
+      "path": ".github/workflows/operational-balance-web.yml",
+      "head_sha": "dd3a9ea29fce28e2fa87332cff4a6d46f776e0d3",
+      "head_branch": "codex/operational-balance-server-r3-20261122",
+      "event": "pull_request",
+      "attempt": 1,
+      "status": "completed",
+      "conclusion": "failure",
+      "created_at": "2026-11-22T21:05:01Z",
+      "updated_at": "2026-11-22T21:17:02Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45070050599"
+    },
+    {
+      "id": 45070050575,
+      "name": "Operational Stock Eligibility",
+      "path": ".github/workflows/operational-stock-eligibility.yml",
+      "head_sha": "dd3a9ea29fce28e2fa87332cff4a6d46f776e0d3",
+      "head_branch": "codex/operational-balance-server-r3-20261122",
+      "event": "pull_request",
+      "attempt": 1,
+      "status": "completed",
+      "conclusion": "failure",
+      "created_at": "2026-11-22T21:05:01Z",
+      "updated_at": "2026-11-22T21:17:02Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45070050575"
+    }
+  ],
+  "g47": {
+    "run_id": 45070050550,
+    "classification": "confirmed GitHub internal startup error before any jobs",
+    "correlation_id": "2447cc82-e285-46a5-889a-6cb329a8b420",
+    "jobs": 0,
+    "parent_reported_targeted_retry": {
+      "status": 403,
+      "message": "This workflow run cannot be retried"
+    },
+    "retained_evidence": "g47-confirmed-infrastructure.json"
+  },
+  "operational_backend": {
+    "run_id": 45070050599,
+    "job_id": 137354765710,
+    "job_conclusion": "cancelled",
+    "completion_utc": "2026-11-22T21:17:02Z",
+    "partial_progress": "72%; no assertion failure reported in retrieved partial log",
+    "log_diagnostic": "The runner has received a shutdown signal. This can happen when the runner service is stopped, or a manually started runner is canceled.",
+    "log_diagnostic_utc": "2026-11-22T21:17:04.9203743Z",
+    "accepted_as_pass": false,
+    "backend_result_artifact_available": false
+  },
+  "stock": {
+    "run_id": 45070050575,
+    "job_id": 137354765383,
+    "job_conclusion": "cancelled",
+    "completion_utc": "2026-11-22T21:17:02Z",
+    "log_endpoint": "404 BlobNotFound",
+    "result_artifacts_available": false,
+    "accepted_as_pass": false
+  },
+  "cancellation_causality": {
+    "pr_head_observed_after_cancellations": "dd3a9ea29fce28e2fa87332cff4a6d46f776e0d3",
+    "attributed_to_B_advance": false,
+    "reason": "No branch advance was observed at the cancellation follow-up; preserve direct runner-shutdown evidence without guessing initiator"
+  },
+  "source_A_successes": {
+    "frontend_tests": 1660,
+    "frontend_suites": 103,
+    "canonical_worker_tests": 4,
+    "browser_mobile_inventory_receiving": true,
+    "readiness": true
+  },
+  "readiness": {
+    "run_id": 45070050540,
+    "artifact_id": 14773520519,
+    "name": "release-v5-reviewed-intent-candidate",
+    "zip_bytes": 429772,
+    "head_sha": "dd3a9ea29fce28e2fa87332cff4a6d46f776e0d3",
+    "available": true
+  },
+  "conditional_skips": {
+    "count": 6,
+    "reasons": [
+      "Two Snapchat publication and two Snapchat settings jobs are outside changed-file scope",
+      "Clean-clone rehearsal requires reviewed B; current candidate is A",
+      "Manual redeploy job requires push; current event is pull_request"
+    ]
+  },
+  "artifacts": {
+    "operational": [
+      {
+        "id": 14773700272,
+        "name": "operational-frontend-results",
+        "bytes": 52855
+      },
+      {
+        "id": 14773191310,
+        "name": "inventory-purchase-browser-results",
+        "bytes": 784464
+      },
+      {
+        "id": 14773071859,
+        "name": "operational-balances-browser-results",
+        "bytes": 752621
+      },
+      {
+        "id": 14772629323,
+        "name": "operational-worker-results",
+        "bytes": 746
+      },
+      {
+        "id": 14772544621,
+        "name": "simple-balances-browser-results",
+        "bytes": 1089560
+      }
+    ],
+    "stock": []
+  },
+  "remaining_required_gate": "Full fresh exact-B CI including G47, Operational Backend and Stock Eligibility must execute and pass before host/merge; A's failed or cancelled gates remain historical failures/cancellations.",
+  "actions_by_this_agent": "read-only monitoring and local evidence only; no retry, dispatch, re-request, freeze, source/git/remote/host mutation",
+  "files": [
+    "runs-terminal.json",
+    "checks-terminal.json",
+    "operational-backend-cancelled.log",
+    "initial-ci.json",
+    "readiness-and-g47-startup.json",
+    "g47-confirmed-infrastructure.json"
+  ]
+}

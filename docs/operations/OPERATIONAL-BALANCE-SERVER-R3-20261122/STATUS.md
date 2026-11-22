@@ -1,101 +1,82 @@
-# Operational balance reversal server handoff — R3
+# PR2080 server publication evidence — intent frozen; exact-B CI running
 
-## Owner instruction
+This is an evidence-only branch. Never merge or deploy it. The product branch is
+`codex/operational-balance-server-r3-20261122`; the user requested manual server
+publication code after Android1.0.27/code30 was distributed.
 
-The owner requests manual server publication code: «ارسل كود النشر بنشر».
-Android 1.0.27 / code30 is already distributed with the reversal UI. This task
-prepares its server capability, scoped account running balances and optional bank
-references. The owner will execute the reviewed terminal handoff and publication.
-Do not rebuild Android, use paid Emergent chat, or create live financial tests.
+## Immutable source and intent
 
-## Current source base and immutable provenance
+- Production base N: 02cd99e5b2b68c95341c87590abcf572c885e697 (PR2076 merge).
+- Source A: dd3a9ea29fce28e2fa87332cff4a6d46f776e0d3.
+- A tree: ee385c9c71a19833e08b5e5d7470d94fe4b646f4; sole parent N.
+- Intent-only B: 9a500a21013a08f750009be656362481986eb208.
+- B tree: 2cbd2842ed2506642a1321a47e35f69a766fcf89; sole parent A.
+- B changes only release/release-intent-v5.json. N..A intent history is empty.
+- Intent1493695bytes, SHA2560e0c7a6167dae598450358db6a1399b080cb7c69e176d28c5c31a0585ed287dc.
+- Runtime rg5-b2aa207d2f63107c64d9c0b66ce5cc567aa5ebb074753cf889227de4c448e008.
+- Frontend artifact000b707f16f0f3447cfe30f8e0e5edafc58ef55698ff2444e3fcca67f5ffb4db.
 
-- Task branch: codex/operational-balance-server-r3-20261122.
-- Reviewed Production N: 02cd99e5b2b68c95341c87590abcf572c885e697.
-- N is the ordinary PR2076 performance merge, with tree
-  8f915a681de43fed9da1ec98685a56f87a4c8bcb and parents
-  24270ebdfdebb83282389308a2349cdb27e2b8e4 and
-  5bb05036d8095a87c6635c0a431c2c19d24d8f78.
-- Earlier feature source db105b1fb7297314b9dbc9a830e8d98bc0211992 / PR2072
-  and its B4f65fef9dfed30f078c13b3b48a8b60f932e541b remain immutable history.
-- R2 source 022224d26d6e77a7af93206d30883c2cf575cbb8 / PR2078 integrated
-  those features with the current demand worker and customer/inventory services.
-  Its local 126 distinct Backend cases and 218 Frontend assertions passed.
-  Its candidate was accepted by original validators but became stale when N
-  advanced during exact-source CI. No R2 B was created; never deploy its candidate.
-- R3 inherits N's tracked intent unchanged. Fresh source CI and a fresh governed
-  candidate, intent-only B and exact-B CI are required. Never reuse either old pair.
+The original candidate loader and Git-rederived manifests passed on clean A.
+Independent review accepted the exact ZIP/intent/source/proof and two governed
+builds. Original load_release_intent and verify_release_intent_git also passed
+on canonical clean B. [Canonical validation](evidence/canonical-B-validation.json).
+[Retained exact candidate](evidence/release-intent-candidate.json) is byte-identical
+to B's intent; Readiness45070050540 artifact14773520519 ZIP SHA256 is
+4da0cc40b81b6f48e7ced7ca11dd5e8a0dcd4b51caa65b6799ab15ae6750446c.
 
-## Preserved and integrated behavior
+## Accepted local integration
 
-Keep all N performance behavior: owner ledger directly uses one validated ledger
-job after bootstrap; reports request the visible view first; bounded early polling
-retains one consumer and serial backpressure; the raw stdin runner watcher retains
-parent-EOF cancellation while allowing ordinary child shutdown.
+214 distinct Backend cases verified using an owned temporary loopback Mongo
+replica and actual worker children. First212pass/2fail diagnosed the test venv's
+missing repository-declared python-dotenv1.2.2; after installing that pin, both
+failed cases and3 lifecycle cases passed5/5 with unchanged source/test hashes.
+Initial failure evidence is retained. The counts overlap and are not added as217.
 
-Add append-only manual movement reversal with reason/review/confirmation, stable
-retry identity, original-to-counter-entry linkage and independent own-movement
-permission checks. Demand read snapshots project the same eligibility and reversal
-metadata. Bind account_history to immutable demand identity and compute running
-balances across scoped pre-filter history before pagination. Keep optional bank
-references accepted in the existing mobile entry paths.
+Frontend101pass/7suites on Node22.23.2/Yarn1.22.22, with no failure or skip.
+A delayed-refetch test first proved the owner-ledger success dialog remounted
+closed; the minimal resource-ready effect fix made that test and all7suites pass.
+Independent source/workflow reviews and root's exact source hash checks pass.
+Every newer performance/customer/inventory path and gate is preserved.
 
-Retain all customer refund/collection routes, badges and permission boundaries and
-inventory/purchase/receiving behavior. Exclude both sides of a reversed supplier
-payment from allocation, including CAS revalidation. Allocating first still blocks
-reversal; reversing first blocks allocation without a second balance effect.
+## Source-A CI — retained failures, not relabeled green
 
-Workflow integration retains every N test and count gate, including three runner
-lifecycle cases, and adds the reversal/history/latency suites. New demand and
-customer/inventory collection minimums are48 and5 respectively; no gate is relaxed.
+Source A ended with9 successful workflows and3 failed workflows; jobs19success,
+6 conditional skips and2cancelled. Frontend1660/103suites, browser/mobile/receiving,
+canonicalworker4, Readiness and other completed checks passed.
 
-## Verification at this source checkpoint
+G4745070050550 failed before creating jobs. Its public annotation confirms a
+GitHub internal server error, correlation2447cc82-e285-46a5-889a-6cb329a8b420.
+One targeted retry returned403 This workflow run cannot be retried; no alternate
+retry or dispatch was attempted. Operational backend45070050599 and stock45070050575
+were cancelled together at21:17:02UTC before B existed. The backend log reports
+runner shutdown after partial progress. These incomplete jobs did not pass and
+were not cancelled by the later B update. Raw terminal status and partial logs
+are retained under evidence/ci-source-A.
 
-Fresh Frontend integration passed 101 cases in seven affected suites on governed
-Node22.23.2/Yarn1.22.22, with no failures or skips. A new owner-ledger page-two
-reversal case proves a fresh scoped demand, preserved pagination and no extra
-resource/global/statement read. Strengthening it with a delayed response and
-dialog.open exposed a real remount defect: the successful reversal detail was
-recreated closed after the owner resource returned. The original test failed only
-that assertion; adding resource readiness to the existing dialog effect made the
-same test and all seven suites pass. No permission or read-validation change.
+The normal planned v5 intent-only B follows the accepted build candidate; no
+source/workflow/test/assertion was changed to affect these failures. All final
+release gates must execute afresh and PASS on B before host work or merge.
 
-Fresh Backend integration verified 214 distinct cases across a disposable owned
-loopback Mongo replica and actual worker child processes: all seven demand suites,
-reversal/history/latency, inventory allocation/receiving, customer collections and
-page grants. The first run passed212 and failed only the two actual-child cases
-because the local test virtualenv lacked the repository-pinned python-dotenv1.2.2.
-After installing that declared dependency, both cases and the three lifecycle
-cases passed (5/5); source/test hashes were unchanged. The initial failure and
-focused recheck evidence are retained, and the counts are not added as217.
+## Current exact-B CI and host state
 
-Independent integration review and workflow comparison pass. Every N gate is
-retained. All reviewed R2 Backend changes are byte-identical; the runner and its
-lifecycle cases remain N's exact bytes. Original R2 exact-source CI also finished
-with23 successful checks and6 conditional skips, but is historical only.
+Exact-B CI is running: Readiness45071567803, Operational45071567938,
+Stock45071567946 and G4745071567954. Both actual clean-clone host Node20.20.2
+and24.19.0 adapters are required, alongside all applicable complete test/security
+jobs. No B CI approval or host rehearsal is claimed at this checkpoint.
 
-Fresh R3 exact-source CI, build candidate and B are pending after this source
-checkpoint. Local or CI evidence does not represent an actual Emergent rehearsal.
+PR2074 is complete/released at b46798fab681471a0fdf9450c30d6446a4f55ffa.
+The21:14UTC canonical ledger still gives PR2076 the serial host handoff. It has
+issued pinned staging/prepare/publication code but owner execution and original
+live verify3/new UI success/final inactive status are pending. Evidence32661e1a8e6ff3a868eb3ffd010bc9d2f9a38dc2
+records that foreign state. Do not replay its rehearsal or clear its lease.
 
-## Serial host coordination
+Next safe action: finish and independently accept complete exact-B CI/artifacts;
+read fresh Production and prior handoff; only after actual predecessor completion
+and a fresh original inactive guard may the owner run this task's pinned isolated
+host rehearsal. Rehearsal is not staging or publication. Actual PASS precedes an
+ordinary tree-equivalent merge and separately reviewed guarded staging.
 
-PR2074 is complete: receipt b46798fab681471a0fdf9450c30d6446a4f55ffa
-records owner-confirmed new Deployment Succeeded, original verify3 and closed
-guard. Its old UI/lease blockers are superseded.
-
-PR2076 owns the current serial host handoff. Its owner-run isolated rehearsal
-passed at evidence51b3ba6fe1b0fa87db5c4897cb2fff66ca4d53a2, and its ordinary
-merge is N. Its staging, original prepare/prepublish and live completion are
-separately coordinated. This task must not overlap that host work, clear a foreign
-lease, or rerun its completed steps. Wait for its authoritative completion and
-released handoff, then read the unchanged actual guard afresh before rehearsal.
-
-Next: finish R3 review/tests; create and checkpoint its source; accept exact-source
-CI/candidate, freeze intent-only B and accept exact-B CI; then prepare a pinned host
-command using current completion evidence and fresh refs. Rehearsal and staging
-have different ref fences. Preserve all unrelated host files/settings/outputs.
-
-Production changed by this task: NO. No host source mutation, lease, publish,
-financial reversal/receipt approval/sync/backfill, or production test write.
-Automatic continuation remains paused. PR bodies are durable coordination records
-because canonical Issue1006 has reached its comment limit.
+Production changed by this task:NO. Shared host changes:NO. Own lease:NONE.
+Publish/financial reversal/receipt approval/sync/backfill/production tests:NONE.
+Automatic continuation remains paused. PR2078 is closed unmerged as superseded;
+old source/intent histories remain preserved. PR2080 is the canonical successor.

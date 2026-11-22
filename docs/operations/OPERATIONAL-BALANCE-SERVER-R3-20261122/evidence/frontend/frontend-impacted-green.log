@@ -1,0 +1,21 @@
+(node:20) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+yarn run v1.22.22
+$ react-scripts test --resolver ./scripts/jest-package-exports.cjs --watch=false --runInBand --resetMocks=false --runTestsByPath src/pages/operational/ApprovedLedger.test.jsx src/pages/operational/ApprovedFinance.demand.test.jsx src/pages/operational/ApprovedFinance.loading.test.jsx src/pages/operational/workspaceReadHooks.test.jsx src/pages/operational/simpleBalancesApi.test.js src/pages/operational/simpleBalancesModel.test.js src/pages/operational/SimpleBalanceAccess.test.jsx --json --outputFile=/workspace/scratch/dfe063f5aca0/server-r3-review/frontend-impacted-green.json
+(node:41) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS src/pages/operational/ApprovedLedger.test.jsx
+PASS src/pages/operational/SimpleBalanceAccess.test.jsx
+PASS src/pages/operational/ApprovedFinance.demand.test.jsx
+PASS src/pages/operational/ApprovedFinance.loading.test.jsx
+PASS src/pages/operational/simpleBalancesApi.test.js
+PASS src/pages/operational/workspaceReadHooks.test.jsx
+PASS src/pages/operational/simpleBalancesModel.test.js
+
+Test Suites: 7 passed, 7 total
+Tests:       101 passed, 101 total
+Snapshots:   0 total
+Time:        4.363 s, estimated 7 s
+Ran all test suites within paths "src/pages/operational/ApprovedLedger.test.jsx", "src/pages/operational/ApprovedFinance.demand.test.jsx", "src/pages/operational/ApprovedFinance.loading.test.jsx", "src/pages/operational/workspaceReadHooks.test.jsx", "src/pages/operational/simpleBalancesApi.test.js", "src/pages/operational/simpleBalancesModel.test.js", "src/pages/operational/SimpleBalanceAccess.test.jsx".
+Test results written to: ../../server-r3-review/frontend-impacted-green.json
+Done in 5.13s.

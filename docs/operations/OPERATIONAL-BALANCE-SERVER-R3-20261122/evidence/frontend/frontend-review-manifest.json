@@ -1,0 +1,66 @@
+{
+  "base_production_git_sha": "02cd99e5b2b68c95341c87590abcf572c885e697",
+  "changes": [
+    "Retained all performance and reversal tests from both merge sides.",
+    "Added owner-identity page-two reversal integration coverage with delayed demand refresh, open dialog, fresh consumer, retained page and no redundant resource/global/statement reads.",
+    "Added resource to dialog opening effect dependencies; no permission or data-path change."
+  ],
+  "diff_check": "PASS",
+  "evidence_sha256": {
+    "frontend-impacted-green.json": "167a675a1eddf9d73c40e662dfa3f972b8512c2e7da7cfe3fda8de69470f3e4a",
+    "frontend-impacted-green.log": "81b9acc2cecefc0325b196ebcc8ea5ccd65d9a4d2b3d17674c78fc44ef7a7089",
+    "frontend-ledger-red.json": "c45191fb3f8bf03a371efdf10c5579f588180228b9251c976100fe9fcea43e3e",
+    "frontend-ledger-red.log": "5a2b325a4c177ea84a319beaf532a9498d19042b194c8f5a3c63b35347fdef35",
+    "workflow-review.json": "9c2101f257d6864181a89844b615d54aba32df052c2a972f6c89a19c517d60be"
+  },
+  "git_add_or_commit_performed_by_reviewer": false,
+  "green": {
+    "exit": 0,
+    "failed": 0,
+    "json": "frontend-impacted-green.json",
+    "log": "frontend-impacted-green.log",
+    "passed": 101,
+    "pending": 0,
+    "suite_cases": {
+      "ApprovedFinance.demand.test.jsx": 22,
+      "ApprovedFinance.loading.test.jsx": 11,
+      "ApprovedLedger.test.jsx": 20,
+      "SimpleBalanceAccess.test.jsx": 23,
+      "simpleBalancesApi.test.js": 10,
+      "simpleBalancesModel.test.js": 14,
+      "workspaceReadHooks.test.jsx": 1
+    },
+    "suites": 7
+  },
+  "host_or_publish_action": false,
+  "independent_readonly_review": "Approved minimal resource-ready effect and delayed-refetch regression after identifying original lifecycle defect.",
+  "initial_harness_attempt": {
+    "cause": "Governed exec sets cwd to repository root; corrected invocation to yarn --cwd frontend.",
+    "exit": 1,
+    "log": "frontend-impacted.log",
+    "tests_collected": false
+  },
+  "kind": "r3_frontend_integration_review_v1",
+  "red": {
+    "exit": 1,
+    "failed": 1,
+    "failure": "dialog.open expected true, received false after delayed owner-ledger refetch",
+    "json": "frontend-ledger-red.json",
+    "log": "frontend-ledger-red.log",
+    "passed": 19
+  },
+  "result": "PASS",
+  "scope": "Preserve identity-ledger performance and reversal behavior; repair dialog remount after delayed refresh.",
+  "source_sha256": {
+    "frontend/src/pages/operational/ApprovedLedger.jsx": "f50ea0e82e3b1343d35f203a2e95e6e84d028138759660ba9ca736ca45502cd8",
+    "frontend/src/pages/operational/ApprovedLedger.test.jsx": "f8ce45c66c167e4c11c7173bae0613cfd9d6d755e4c78f3e4eea0a19613cab71"
+  },
+  "toolchain": {
+    "dependency_reuse": "ignored symlink to mezan-2072-rehearsal/frontend/node_modules after exact package.json and yarn.lock SHA256 equality",
+    "entry": "python scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend test --watch=false --runInBand --resetMocks=false --runTestsByPath <seven affected suites> --json --outputFile=<scratch report>",
+    "lock_sha256": "862f7bf9705d442f27cf5be1e98ab0a5d2295bf349b974145c524cbb3f8fc884",
+    "node": "22.23.2",
+    "package_sha256": "718c01031cbe680b5febe01a061515d081d8b011f6ebe0b75670ecf09b53c50c",
+    "yarn": "1.22.22"
+  }
+}

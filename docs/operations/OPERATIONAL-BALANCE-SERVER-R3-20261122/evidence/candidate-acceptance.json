@@ -1,0 +1,15 @@
+{
+  "status": "PASS",
+  "source": "dd3a9ea29fce28e2fa87332cff4a6d46f776e0d3",
+  "base": "02cd99e5b2b68c95341c87590abcf572c885e697",
+  "intent_sha256": "0e0c7a6167dae598450358db6a1399b080cb7c69e176d28c5c31a0585ed287dc",
+  "runtime": "rg5-b2aa207d2f63107c64d9c0b66ce5cc567aa5ebb074753cf889227de4c448e008",
+  "artifact_tree": "000b707f16f0f3447cfe30f8e0e5edafc58ef55698ff2444e3fcca67f5ffb4db",
+  "source_scopes_verified": [
+    "frontend",
+    "backend_runtime_source",
+    "release_control_source"
+  ],
+  "release_approved": false,
+  "remaining_gate": "G47 startup failure and remaining source CI; no B or host approval inferred"
+}

@@ -1,0 +1,38 @@
+{
+  "ENABLED": false,
+  "adapter_or_artifact_build_executed": false,
+  "disabled_state_static_check": "PASS",
+  "embedded_validator_wrapper_syntax": "PASS",
+  "exact_B_CI_acceptance_required_before_host": true,
+  "files": {
+    "DRAFT-HOST-ISOLATED-REHEARSAL-2080.py": {
+      "bytes": 17496,
+      "sha256": "4743cce85ad7fbded04fc5cb3ebf01cd534e5c93b0b1479b2d3516776752c5df"
+    },
+    "LAUNCHER-REVIEW-2080.md": {
+      "bytes": 4880,
+      "sha256": "dd48eb37e463249a82b9dd203ebad418c08cbe0c9cdc5cceb184d249df90cd09"
+    }
+  },
+  "first_main_operation": "validate_pins",
+  "helper_executed": false,
+  "host_access_or_command_executed": false,
+  "kind": "pr2080_r3_disabled_rehearsal_draft_review_v2",
+  "known_pins": {
+    "A": "dd3a9ea29fce28e2fa87332cff4a6d46f776e0d3",
+    "A_TREE": "ee385c9c71a19833e08b5e5d7470d94fe4b646f4",
+    "B": "9a500a21013a08f750009be656362481986eb208",
+    "B_TREE": "2cbd2842ed2506642a1321a47e35f69a766fcf89",
+    "INTENT_SHA256": "0e0c7a6167dae598450358db6a1399b080cb7c69e176d28c5c31a0585ed287dc",
+    "N": "02cd99e5b2b68c95341c87590abcf572c885e697",
+    "RELEASE_ID": "rg5-b2aa207d2f63107c64d9c0b66ce5cc567aa5ebb074753cf889227de4c448e008",
+    "RELEASE_REF": "refs/heads/codex/operational-balance-server-r3-20261122"
+  },
+  "lease_merge_publish_or_github_write": false,
+  "predecessor_release_handoff": "No completed/released PR2076 receipt is pinned; do not infer UI success or closure.",
+  "separate_serial_approval_record_required": false,
+  "syntax": "PASS",
+  "unfrozen_pins": {
+    "PREVIOUS_RELEASE_COMPLETION_PIN": null
+  }
+}

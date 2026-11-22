@@ -1,0 +1,21 @@
+{
+  "kind": "github_workflow_startup_failure",
+  "run_id": 45070050550,
+  "source_git_sha": "dd3a9ea29fce28e2fa87332cff4a6d46f776e0d3",
+  "attempt": 1,
+  "jobs_started": 0,
+  "conclusion": "failure",
+  "classification": "GitHub internal startup error before any test jobs",
+  "public_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45070050550",
+  "public_get_status": 200,
+  "public_html_sha256": "b36f04bd1fa66f32d2031cfffeaa40be5185b296f97ab44b9b0fd2712266a63a",
+  "visible_annotation": "Internal server error. Correlation ID: 2447cc82-e285-46a5-889a-6cb329a8b420",
+  "single_targeted_retry": {
+    "method": "rerun_failed_workflow_run_jobs",
+    "http_status": 403,
+    "message": "This workflow run cannot be retried"
+  },
+  "no_alternative_retry_attempted": true,
+  "workflow_unchanged_from_previous_green_source": true,
+  "gate_passed": false
+}
