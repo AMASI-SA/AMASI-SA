@@ -20,6 +20,7 @@ def test_departing_panel_cancels_saved_state_read_without_writers(monkeypatch, p
     import operational_balance_exchanges as exchanges
     import operational_customer_returns as returns
     import operational_financial_activity as activity
+    import operational_financial_position_state as financial_state
 
     async def scenario():
         entered, stopped = asyncio.Event(), asyncio.Event()
@@ -44,7 +45,10 @@ def test_departing_panel_cancels_saved_state_read_without_writers(monkeypatch, p
             return None
 
         monkeypatch.setattr(routes, "scope", scope)
-        monkeypatch.setattr(routes, "read", read)
+        if path == "/context":
+            monkeypatch.setattr(financial_state, "read_financial_position_state", read)
+        else:
+            monkeypatch.setattr(routes, "read", read)
         monkeypatch.setattr(routes, "entity", entity)
         monkeypatch.setattr(sources, "entities", empty)
         monkeypatch.setattr(returns, "order_view", empty)

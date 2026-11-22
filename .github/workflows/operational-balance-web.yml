@@ -80,6 +80,7 @@ jobs:
           backend/tests/test_operational_read_runtime.py
           backend/tests/test_operational_financial_review_groups.py
           backend/tests/test_operational_financial_position_state.py
+          backend/tests/test_operational_context_snapshot_reader.py
           backend/tests/test_operational_financial_position_views.py
           backend/tests/test_operational_open_cost_exposure.py
           backend/tests/test_operational_bundle_cost_projection.py
@@ -145,6 +146,7 @@ jobs:
               ('test_operational_read_runtime', 10),
               ('test_operational_financial_review_groups', 1),
               ('test_operational_financial_position_state', 25),
+              ('test_operational_context_snapshot_reader', 21),
               ('test_operational_financial_position_views', 48),
               ('test_operational_driver_review_packed_state', 3),
               ('test_operational_balance_delivery_start_rule', 53),
