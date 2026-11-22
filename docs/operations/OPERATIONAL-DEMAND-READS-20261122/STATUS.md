@@ -1,5 +1,34 @@
 # Operational demand reads — implementation checkpoint
 
+## Original-reader metadata acceptance — four of four passed
+
+The user has now executed the unchanged original guard reader against current
+clean J and returned **4/4 successful metadata assertions**: Accept application/json
+and */*, each canonical and original release_check cache-busted. Every response
+was200/application-json UTF8,569,254 bytes and SHA256
+f99566ecba3bddd6a54521c9df95c0eceacd465a264b70da872598290a5c4e08, exactly matching
+J's reviewed intent. The original JSON/MIME and exact-byte assertions passed;
+fresh original guard remained active:false. Full evidence/provenance is in
+`manual-metadata-four-probes-20261122.json`.
+
+The earlier default-urllib403 cause remains unknown; it did not recur with the
+original reviewed reader. No headers, guard code, TLS validation or permission
+controls were changed. This proves the existing J metadata slice, not a new
+candidate publication or the final three official release verification probes.
+
+Exact-B CI continues without a current-run failure. Both host engine/dispatcher
+contracts have passed, but the distinct clean-clone adapter rehearsals and other
+remaining gates are not yet complete. Next manual read-only preparation must
+check the original current-J adapter loader, protected source caches and available
+disk space before invoking an adapter that replaces generated output directories.
+The historical /app92MiB ENOSPC record is not a fresh disk measurement. Do not
+delete caches, arbitrary untracked files or other conversations' artifacts.
+
+No source or lease change in shared /app, Production merge or publication has
+occurred. Keep the frozen A/B pair unchanged while finishing the release gates.
+
+---
+
 ## Release handoff progress — user terminal preflight, 22 November 16:14 UTC
 
 This update supersedes the awaiting-preflight and Draft-PR state below. The user

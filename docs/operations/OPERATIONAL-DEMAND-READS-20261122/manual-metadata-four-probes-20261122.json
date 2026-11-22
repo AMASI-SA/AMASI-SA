@@ -1,0 +1,68 @@
+{
+  "provenance": "User-supplied actual Emergent terminal output from unchanged original guard reader",
+  "recorded_at_utc": "2026-11-22T16:23:48Z",
+  "current_production_git_sha": "9b4fb716b430c32073b5ea7abaeaff62646d9633",
+  "release_guard": {
+    "active": false,
+    "incomplete_lease_directory": false
+  },
+  "expected_metadata": {
+    "bytes": 569254,
+    "path": "build-meta.json",
+    "sha256": "f99566ecba3bddd6a54521c9df95c0eceacd465a264b70da872598290a5c4e08"
+  },
+  "probes": [
+    {
+      "accept": "application/json",
+      "cache_bust": false,
+      "http_status": 200,
+      "content_type": "application/json; charset=utf-8",
+      "server": "cloudflare",
+      "cf_mitigated": null,
+      "bytes": 569254,
+      "sha256": "f99566ecba3bddd6a54521c9df95c0eceacd465a264b70da872598290a5c4e08",
+      "original_json_mime_assertion": "passed",
+      "original_exact_bytes_assertion": "passed"
+    },
+    {
+      "accept": "application/json",
+      "cache_bust": true,
+      "http_status": 200,
+      "content_type": "application/json; charset=utf-8",
+      "server": "cloudflare",
+      "cf_mitigated": null,
+      "bytes": 569254,
+      "sha256": "f99566ecba3bddd6a54521c9df95c0eceacd465a264b70da872598290a5c4e08",
+      "original_json_mime_assertion": "passed",
+      "original_exact_bytes_assertion": "passed"
+    },
+    {
+      "accept": "*/*",
+      "cache_bust": false,
+      "http_status": 200,
+      "content_type": "application/json; charset=utf-8",
+      "server": "cloudflare",
+      "cf_mitigated": null,
+      "bytes": 569254,
+      "sha256": "f99566ecba3bddd6a54521c9df95c0eceacd465a264b70da872598290a5c4e08",
+      "original_json_mime_assertion": "passed",
+      "original_exact_bytes_assertion": "passed"
+    },
+    {
+      "accept": "*/*",
+      "cache_bust": true,
+      "http_status": 200,
+      "content_type": "application/json; charset=utf-8",
+      "server": "cloudflare",
+      "cf_mitigated": null,
+      "bytes": 569254,
+      "sha256": "f99566ecba3bddd6a54521c9df95c0eceacd465a264b70da872598290a5c4e08",
+      "original_json_mime_assertion": "passed",
+      "original_exact_bytes_assertion": "passed"
+    }
+  ],
+  "validated": 4,
+  "required": 4,
+  "scope": "Metadata slice for existing J release only; no candidate publish or original3probe completion claimed",
+  "previous_default_urllib_403_cause": "not established; did not recur using original reviewed reader"
+}

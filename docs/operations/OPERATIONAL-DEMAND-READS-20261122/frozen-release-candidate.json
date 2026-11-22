@@ -45,8 +45,15 @@
     },
     "production_merge": false,
     "published": false,
-    "live_probes": "preflight health matches current J; default build-meta403; candidate not published"
+    "live_probes": "Existing J health matches and original reader metadata4/4 exact bytes/JSON/MIME passed; candidate not published",
+    "current_J_metadata": {
+      "validated": 4,
+      "required": 4,
+      "sha256": "f99566ecba3bddd6a54521c9df95c0eceacd465a264b70da872598290a5c4e08",
+      "bytes": 569254,
+      "provenance": "user supplied original reader terminal output"
+    }
   },
-  "blocker": "Exact-B CI and host adapter pending. Current default metadata fetch returned403; original guarded-reader diagnostic supplied, not yet executed. Browser remains unavailable; user offers manual terminal execution. Fresh shared guard is required again before host mutation.",
+  "blocker": "Exact-B CI and actual host adapter pending. Metadata preflight succeeded4/4 under original protocol. Need fresh host loader/cache/disk inspection before selecting original adapter workspace. Browser remains unavailable; user performs manual terminal steps.",
   "evidence_branch": "codex/operational-demand-evidence-20261122"
 }
