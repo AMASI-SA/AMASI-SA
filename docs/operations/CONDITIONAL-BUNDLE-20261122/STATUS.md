@@ -10,6 +10,25 @@ Production and business records have not been changed. No release lease,
 merge, publication, order conversion, catalog write, supplier receipt, or
 invoice change has been performed by this task.
 
+## Recoverable source checkpoint
+
+- Repository: `AMASI-SA/AMASI-SA`.
+- Remote branch: `codex/conditional-hoodie-bundle-20261122`.
+- Draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/2071.
+- Source commit: `c19f8daf312196d77957e389d96c23f8630487c1`.
+- Verified source tree: `fbf2a2747cd4a671aab968079606ef3ed115f5a4`.
+
+The remote commit was fetched and its tree verified identical to the local
+tested tree. This status update is documentation-only after that source
+checkpoint. Read the PR's current head for the latest handoff commit; do not
+mistake it for a governed release-intent commit. The repository continuation
+issue (#1006) is at its comment limit, so the Draft PR and this document retain
+the task-specific handoff. No issue comment was sent.
+
+Review outcome: no concrete blocker found in the bounded source scope after
+the two reproduced defects were fixed. Operational completion remains blocked
+as described below. GitHub CI and live acceptance are not claimed passed.
+
 ## Requested behavior
 
 One commercial product offers either of two individual garments or a pair.
