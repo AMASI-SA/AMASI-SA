@@ -1,0 +1,349 @@
+{
+  "total_count": 2,
+  "jobs": [
+    {
+      "id": 137359454096,
+      "run_id": 45071567954,
+      "workflow_name": "G47 Focused Integration",
+      "head_branch": "codex/operational-balance-server-r3-20261122",
+      "run_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45071567954",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOSoue_c8AAAAf-0LvkA",
+      "head_sha": "9a500a21013a08f750009be656362481986eb208",
+      "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/jobs/137359454096",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45071567954/job/137359454096",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-22T21:20:39Z",
+      "started_at": "2026-11-22T21:20:40Z",
+      "completed_at": "2026-11-22T21:24:27Z",
+      "name": "G47 real Mongo purchase, payment, opening and component lifecycle",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-11-22T21:20:41Z",
+          "completed_at": "2026-11-22T21:20:42Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-11-22T21:20:42Z",
+          "completed_at": "2026-11-22T21:20:45Z"
+        },
+        {
+          "name": "Record exact tested source",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-11-22T21:20:45Z",
+          "completed_at": "2026-11-22T21:20:45Z"
+        },
+        {
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-11-22T21:20:45Z",
+          "completed_at": "2026-11-22T21:20:45Z"
+        },
+        {
+          "name": "Install focused test dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-11-22T21:20:45Z",
+          "completed_at": "2026-11-22T21:20:55Z"
+        },
+        {
+          "name": "Start ephemeral loopback-only Mongo fixtures",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-11-22T21:20:55Z",
+          "completed_at": "2026-11-22T21:21:10Z"
+        },
+        {
+          "name": "Verify current Salla products projection and bounded repair",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-11-22T21:21:10Z",
+          "completed_at": "2026-11-22T21:21:32Z"
+        },
+        {
+          "name": "Require Salla projection transactions to execute without skips",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8,
+          "started_at": "2026-11-22T21:21:32Z",
+          "completed_at": "2026-11-22T21:21:32Z"
+        },
+        {
+          "name": "Retain Salla projection and transaction evidence",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9,
+          "started_at": "2026-11-22T21:21:32Z",
+          "completed_at": "2026-11-22T21:21:33Z"
+        },
+        {
+          "name": "Run all G47 acceptance suites with real transactions",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10,
+          "started_at": "2026-11-22T21:21:33Z",
+          "completed_at": "2026-11-22T21:23:43Z"
+        },
+        {
+          "name": "Verify native inventory counts and purchase configurations",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11,
+          "started_at": "2026-11-22T21:23:43Z",
+          "completed_at": "2026-11-22T21:24:00Z"
+        },
+        {
+          "name": "Require native inventory transactions and permission tests without skips",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 12,
+          "started_at": "2026-11-22T21:24:00Z",
+          "completed_at": "2026-11-22T21:24:00Z"
+        },
+        {
+          "name": "Retain native inventory transaction evidence",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13,
+          "started_at": "2026-11-22T21:24:00Z",
+          "completed_at": "2026-11-22T21:24:01Z"
+        },
+        {
+          "name": "Require executed passing tests with no skips",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 14,
+          "started_at": "2026-11-22T21:24:01Z",
+          "completed_at": "2026-11-22T21:24:01Z"
+        },
+        {
+          "name": "Retain G47 backend test evidence",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 15,
+          "started_at": "2026-11-22T21:24:01Z",
+          "completed_at": "2026-11-22T21:24:02Z"
+        },
+        {
+          "name": "Run unified bundle cost and historical reporting acceptance",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 16,
+          "started_at": "2026-11-22T21:24:02Z",
+          "completed_at": "2026-11-22T21:24:24Z"
+        },
+        {
+          "name": "Require executed cost acceptance and real Mongo tests without skips",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 17,
+          "started_at": "2026-11-22T21:24:24Z",
+          "completed_at": "2026-11-22T21:24:24Z"
+        },
+        {
+          "name": "Retain unified order cost test evidence",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 18,
+          "started_at": "2026-11-22T21:24:24Z",
+          "completed_at": "2026-11-22T21:24:25Z"
+        },
+        {
+          "name": "Remove only this job's ephemeral Mongo fixtures",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 19,
+          "started_at": "2026-11-22T21:24:25Z",
+          "completed_at": "2026-11-22T21:24:25Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 37,
+          "started_at": "2026-11-22T21:24:25Z",
+          "completed_at": "2026-11-22T21:24:25Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 38,
+          "started_at": "2026-11-22T21:24:25Z",
+          "completed_at": "2026-11-22T21:24:26Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 39,
+          "started_at": "2026-11-22T21:24:26Z",
+          "completed_at": "2026-11-22T21:24:26Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/137359454096",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000115902,
+      "runner_name": "GitHub Actions 1000115902",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 137359454393,
+      "run_id": 45071567954,
+      "workflow_name": "G47 Focused Integration",
+      "head_branch": "codex/operational-balance-server-r3-20261122",
+      "run_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45071567954",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOSoue_c8AAAAf-0LwuQ",
+      "head_sha": "9a500a21013a08f750009be656362481986eb208",
+      "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/jobs/137359454393",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45071567954/job/137359454393",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-22T21:20:39Z",
+      "started_at": "2026-11-22T21:20:41Z",
+      "completed_at": "2026-11-22T21:22:10Z",
+      "name": "G47 purchase and receiving UI tests and build",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-11-22T21:20:42Z",
+          "completed_at": "2026-11-22T21:20:43Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-11-22T21:20:43Z",
+          "completed_at": "2026-11-22T21:20:46Z"
+        },
+        {
+          "name": "Record exact tested source",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-11-22T21:20:46Z",
+          "completed_at": "2026-11-22T21:20:46Z"
+        },
+        {
+          "name": "Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-11-22T21:20:46Z",
+          "completed_at": "2026-11-22T21:20:51Z"
+        },
+        {
+          "name": "Enable Yarn Classic",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-11-22T21:20:51Z",
+          "completed_at": "2026-11-22T21:20:51Z"
+        },
+        {
+          "name": "Install locked frontend dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-11-22T21:20:51Z",
+          "completed_at": "2026-11-22T21:21:29Z"
+        },
+        {
+          "name": "Test purchase approval, supplier payment and inventory receiving UI",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-11-22T21:21:29Z",
+          "completed_at": "2026-11-22T21:21:39Z"
+        },
+        {
+          "name": "Require executed UI tests with no skips",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8,
+          "started_at": "2026-11-22T21:21:39Z",
+          "completed_at": "2026-11-22T21:21:39Z"
+        },
+        {
+          "name": "Retain G47 UI test evidence",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9,
+          "started_at": "2026-11-22T21:21:39Z",
+          "completed_at": "2026-11-22T21:21:40Z"
+        },
+        {
+          "name": "Verify the integrated inventory suite UI and read-only grants",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10,
+          "started_at": "2026-11-22T21:21:40Z",
+          "completed_at": "2026-11-22T21:21:59Z"
+        },
+        {
+          "name": "Build current source through the existing GitHub entry point",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11,
+          "started_at": "2026-11-22T21:21:59Z",
+          "completed_at": "2026-11-22T21:22:06Z"
+        },
+        {
+          "name": "Post Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 21,
+          "started_at": "2026-11-22T21:22:06Z",
+          "completed_at": "2026-11-22T21:22:07Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 22,
+          "started_at": "2026-11-22T21:22:07Z",
+          "completed_at": "2026-11-22T21:22:07Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 23,
+          "started_at": "2026-11-22T21:22:07Z",
+          "completed_at": "2026-11-22T21:22:07Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/137359454393",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000115903,
+      "runner_name": "GitHub Actions 1000115903",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    }
+  ]
+}

@@ -1,0 +1,154 @@
+# Selected original GitHub job log lines; timestamps retained; ANSI color escapes removed.
+# Repository AMASI-SA/AMASI-SA; run 45071567803; job 137359766070; Emergent Host Node 20.20.2 clean-clone adapter rehearsal.
+# API reports job success and steps 12, 13, 14 success. No live Emergent deployment is established.
+
+L39 2026-11-22T21:21:45.5761140Z   ref: 9a500a21013a08f750009be656362481986eb208
+L2658 2026-11-22T21:21:53.6746737Z 9a500a21013a08f750009be656362481986eb208
+L2686 2026-11-22T21:21:54.1256727Z 9a500a21013a08f750009be656362481986eb208
+L3005 2026-11-22T21:22:35.7861626Z mv "$REHEARSAL_REPO/.git" "$RUNNER_TEMP/mezan-rehearsal-v5.git"
+L3027 2026-11-22T21:22:35.7986911Z   yarn build | tee "$RUNNER_TEMP/mezan-adapter-build-v5.log"
+L3045 2026-11-22T21:22:35.9650836Z $ node scripts/build-entry.cjs
+L3054 2026-11-22T21:22:57.4299782Z   "node_version": "v22.23.2",
+L3498 2026-11-22T21:23:21.7344491Z Frontend build identity: 000b707f16f0f3447cfe30f8e0e5edafc58ef55698ff2444e3fcca67f5ffb4db
+L3868 2026-11-22T21:23:27.9325553Z Frontend build identity: 000b707f16f0f3447cfe30f8e0e5edafc58ef55698ff2444e3fcca67f5ffb4db
+L3869 2026-11-22T21:23:27.9361620Z Frontend reproducibility proof: a159459c17824c50f3c8810cf11dd6825a9e576994131f037daadc397cd6d18f
+L7627 2026-11-22T21:23:33.5650081Z {"architecture": "x86_64", "backend_root": "/tmp/tmp.hQyiIy5HST/repo/backend", "configured_package_build_command": "cd frontend && yarn build", "declared_backend_package_root": "backend", "declared_frontend_package_root": "frontend", "declared_frontend_static_root": "frontend/build", "frontend_root": "/tmp/tmp.hQyiIy5HST/repo/frontend", "git_directory_present": false, "governed_build_command": "governed-toolchain exec -- yarn --cwd frontend build:release", "governed_install_command": "governed-toolchain exec -- yarn --cwd frontend install --frozen-lockfile --non-interactive", "host_node": "v20.20.2", "host_python": "3.11.18", "host_yarn": "1.22.22", "kind": "emergent_cloud_build_evidence_v1", "outer_build_command_observed": false, "outer_install_command": null, "outer_install_command_observed": false, "platform_snapshot_workspace_shared_observed": false, "repository_root": "/tmp/tmp.hQyiIy5HST/repo", "schema_version": 1, "source_roots_declared_co_parented": true, "system": "Linux", "working_directory": "/tmp/tmp.hQyiIy5HST/repo/frontend"}
+L7629 2026-11-22T21:23:33.5654083Z {
+L7630 2026-11-22T21:23:33.5654245Z   "built": true,
+L7631 2026-11-22T21:23:33.5654635Z   "frontend_artifact_tree_sha256": "000b707f16f0f3447cfe30f8e0e5edafc58ef55698ff2444e3fcca67f5ffb4db",
+L7632 2026-11-22T21:23:33.5655029Z   "package_boundary": {
+L7633 2026-11-22T21:23:33.5655219Z     "backend": {
+L7634 2026-11-22T21:23:33.5655405Z       "file_count": 1313,
+L7635 2026-11-22T21:23:33.5655631Z       "git_directory_present": false,
+L7636 2026-11-22T21:23:33.5655867Z       "health_verified": true,
+L7637 2026-11-22T21:23:33.5656072Z       "identity": {
+L7638 2026-11-22T21:23:33.5656381Z         "bytes": 492777,
+L7639 2026-11-22T21:23:33.5656605Z         "path": "release_identity.json",
+L7640 2026-11-22T21:23:33.5656951Z         "sha256": "87a75786c6041126212a124aa8dec614c5183d1e7176968ab3004fc3d6843521"
+L7641 2026-11-22T21:23:33.5657255Z       },
+L7642 2026-11-22T21:23:33.5657436Z       "isolated_verified": true,
+L7643 2026-11-22T21:23:33.5657819Z       "package_tree_sha256": "ae797d0db6dd8b6558e3477d3f62500ed9de126f0771de226725c9aaaa6ace68",
+L7644 2026-11-22T21:23:33.5658191Z       "runtime_root": "backend",
+L7645 2026-11-22T21:23:33.5658417Z       "sibling_frontend_present": false
+L7646 2026-11-22T21:23:33.5658629Z     },
+L7647 2026-11-22T21:23:33.5658795Z     "frontend": {
+L7648 2026-11-22T21:23:33.5659155Z       "artifact_tree_sha256": "000b707f16f0f3447cfe30f8e0e5edafc58ef55698ff2444e3fcca67f5ffb4db",
+L7649 2026-11-22T21:23:33.5659772Z       "build_meta": {
+L7650 2026-11-22T21:23:33.5660081Z         "bytes": 579707,
+L7651 2026-11-22T21:23:33.5660308Z         "path": "build/build-meta.json",
+L7652 2026-11-22T21:23:33.5660660Z         "sha256": "9b79083c4ece9cccdc8e0ff28295070fa8cb74776d99ece2601465e5f8f2548e"
+L7653 2026-11-22T21:23:33.5660969Z       },
+L7654 2026-11-22T21:23:33.5661183Z       "content_type_contract": "application/json",
+L7655 2026-11-22T21:23:33.5661423Z       "file_count": 1789,
+L7656 2026-11-22T21:23:33.5661650Z       "isolated_runtime_artifact_verified": true,
+L7657 2026-11-22T21:23:33.5662046Z       "package_tree_sha256": "52083eb83e9d259fc8db6111d9e934192f29b6d9e99f2833c43cecdff9710afd",
+L7658 2026-11-22T21:23:33.5662403Z       "runtime_root": "frontend",
+L7659 2026-11-22T21:23:33.5662637Z       "static_root": "frontend/build"
+L7660 2026-11-22T21:23:33.5662837Z     },
+L7661 2026-11-22T21:23:33.5663065Z     "kind": "mezan_release_package_boundary_proof_v1",
+L7662 2026-11-22T21:23:33.5663463Z     "release_id": "rg5-b2aa207d2f63107c64d9c0b66ce5cc567aa5ebb074753cf889227de4c448e008",
+L7663 2026-11-22T21:23:33.5663806Z     "schema_version": 1,
+L7664 2026-11-22T21:23:33.5664114Z     "source_git_sha": "dd3a9ea29fce28e2fa87332cff4a6d46f776e0d3"
+L7665 2026-11-22T21:23:33.5664375Z   },
+L7666 2026-11-22T21:23:33.5664540Z   "protocol_version": 5,
+L7667 2026-11-22T21:23:33.5664893Z   "release_id": "rg5-b2aa207d2f63107c64d9c0b66ce5cc567aa5ebb074753cf889227de4c448e008",
+L7668 2026-11-22T21:23:33.5665301Z   "source_git_sha": "dd3a9ea29fce28e2fa87332cff4a6d46f776e0d3"
+L7669 2026-11-22T21:23:33.5665563Z }
+L11572 2026-11-22T21:23:36.7311421Z cd "$REHEARSAL_REPO/frontend"
+L11573 2026-11-22T21:23:36.7311996Z timeout --signal=TERM 60s yarn start > "$RUNNER_TEMP/mezan-governed-runtime.log" 2>&1 &
+L11574 2026-11-22T21:23:36.7312572Z runtime_pid=$!
+L11575 2026-11-22T21:23:36.7312864Z cleanup_runtime() {
+L11576 2026-11-22T21:23:36.7313195Z   kill "$runtime_pid" 2>/dev/null || true
+L11577 2026-11-22T21:23:36.7313602Z   wait "$runtime_pid" 2>/dev/null || true
+L11578 2026-11-22T21:23:36.7313961Z }
+L11579 2026-11-22T21:23:36.7314239Z trap cleanup_runtime EXIT
+L11580 2026-11-22T21:23:36.7314566Z python - <<'PY'
+L11581 2026-11-22T21:23:36.7314854Z import json
+L11582 2026-11-22T21:23:36.7315122Z import os
+L11583 2026-11-22T21:23:36.7315377Z import time
+L11584 2026-11-22T21:23:36.7315651Z from pathlib import Path
+L11585 2026-11-22T21:23:36.7316039Z from urllib.error import URLError
+L11586 2026-11-22T21:23:36.7316626Z from urllib.request import Request, urlopen
+L11587 2026-11-22T21:23:36.7317010Z 
+L11588 2026-11-22T21:23:36.7317355Z expected = Path("build/build-meta.json").read_bytes()
+L11589 2026-11-22T21:23:36.7317786Z urls = (
+L11590 2026-11-22T21:23:36.7318111Z     "http://127.0.0.1:3000/build-meta.json",
+L11591 2026-11-22T21:23:36.7318585Z     "http://127.0.0.1:3000/build-meta.json?release_check="
+L11592 2026-11-22T21:23:36.7319090Z     + os.environ["INTENT_SOURCE_SHA"],
+L11593 2026-11-22T21:23:36.7319460Z )
+L11594 2026-11-22T21:23:36.7319709Z for url in urls:
+L11595 2026-11-22T21:23:36.7320288Z   for accept in ("application/json", "*/*"):
+L11596 2026-11-22T21:23:36.7320674Z       last_error = None
+L11597 2026-11-22T21:23:36.7320989Z       for _ in range(40):
+L11598 2026-11-22T21:23:36.7321301Z           try:
+L11599 2026-11-22T21:23:36.7321680Z               request = Request(url, headers={"Accept": accept})
+L11600 2026-11-22T21:23:36.7322176Z               with urlopen(request, timeout=2) as response:
+L11601 2026-11-22T21:23:36.7322621Z                   body = response.read()
+L11602 2026-11-22T21:23:36.7323046Z                   content_type = response.headers.get(
+L11603 2026-11-22T21:23:36.7323463Z                       "Content-Type", ""
+L11604 2026-11-22T21:23:36.7323827Z                   ).lower()
+L11605 2026-11-22T21:23:36.7324231Z               media_type = content_type.split(";", 1)[0].strip()
+L11606 2026-11-22T21:23:36.7324791Z               assert media_type == "application/json", content_type
+L11607 2026-11-22T21:23:36.7325180Z               assert body == expected
+L11608 2026-11-22T21:23:36.7325441Z               assert isinstance(json.loads(body), dict)
+L11609 2026-11-22T21:23:36.7325764Z               assert body != Path("build/index.html").read_bytes()
+L11610 2026-11-22T21:23:36.7326032Z               break
+L11611 2026-11-22T21:23:36.7326510Z           except (AssertionError, OSError, URLError) as error:
+L11612 2026-11-22T21:23:36.7326817Z               last_error = error
+L11613 2026-11-22T21:23:36.7327036Z               time.sleep(0.5)
+L11614 2026-11-22T21:23:36.7327244Z       else:
+L11615 2026-11-22T21:23:36.7327432Z           raise AssertionError(
+L11616 2026-11-22T21:23:36.7327715Z               "governed runtime did not serve exact JSON metadata "
+L11617 2026-11-22T21:23:36.7328035Z               f"for {url} accept={accept}: {last_error}"
+L11618 2026-11-22T21:23:36.7328279Z           )
+L11619 2026-11-22T21:23:36.7328457Z production_request = Request(
+L11620 2026-11-22T21:23:36.7328715Z     "http://127.0.0.1:3000/build-meta.json",
+L11621 2026-11-22T21:23:36.7329034Z     headers={"Accept": "application/json", "Host": "mezansalla.com"},
+L11622 2026-11-22T21:23:36.7329317Z )
+L11623 2026-11-22T21:23:36.7329541Z with urlopen(production_request, timeout=2) as response:
+L11624 2026-11-22T21:23:36.7330051Z     production_body = response.read()
+L11625 2026-11-22T21:23:36.7330372Z     production_type = response.headers.get("Content-Type", "").lower()
+L11626 2026-11-22T21:23:36.7330762Z assert production_type.split(";", 1)[0].strip() == "application/json"
+L11627 2026-11-22T21:23:36.7331073Z assert production_body == expected
+L11628 2026-11-22T21:23:36.7331294Z 
+L11629 2026-11-22T21:23:36.7331466Z preview_request = Request(
+L11630 2026-11-22T21:23:36.7331711Z     "http://127.0.0.1:3000/build-meta.json",
+L11631 2026-11-22T21:23:36.7331945Z     headers={
+L11632 2026-11-22T21:23:36.7332153Z         "Accept": "application/json",
+L11633 2026-11-22T21:23:36.7332446Z         "Host": "salla-analytics.preview.emergentagent.com",
+L11634 2026-11-22T21:23:36.7332724Z     },
+L11635 2026-11-22T21:23:36.7332884Z )
+L11636 2026-11-22T21:23:36.7333100Z with urlopen(preview_request, timeout=2) as response:
+L11637 2026-11-22T21:23:36.7333385Z     preview_body = response.read()
+L11638 2026-11-22T21:23:36.7333675Z     preview_type = response.headers.get("Content-Type", "").lower()
+L11639 2026-11-22T21:23:36.7334034Z assert preview_type.split(";", 1)[0].strip() == "application/json"
+L11640 2026-11-22T21:23:36.7334333Z assert preview_body == expected
+L11641 2026-11-22T21:23:36.7334535Z 
+L11642 2026-11-22T21:23:36.7334698Z metadata = json.loads(expected)
+L11643 2026-11-22T21:23:36.7334930Z hashed_asset = next(
+L11644 2026-11-22T21:23:36.7335128Z     record["path"]
+L11645 2026-11-22T21:23:36.7335351Z     for record in metadata["public_files"]
+L11646 2026-11-22T21:23:36.7335618Z     if record["path"].startswith("assets/")
+L11647 2026-11-22T21:23:36.7335976Z )
+L11648 2026-11-22T21:23:36.7336144Z asset_request = Request(
+L11649 2026-11-22T21:23:36.7336551Z     "http://127.0.0.1:3000/" + hashed_asset,
+L11650 2026-11-22T21:23:36.7336810Z     headers={"Host": "mezansalla.com"},
+L11651 2026-11-22T21:23:36.7337030Z )
+L11652 2026-11-22T21:23:36.7337243Z with urlopen(asset_request, timeout=2) as response:
+L11653 2026-11-22T21:23:36.7337518Z     response.read()
+L11654 2026-11-22T21:23:36.7337786Z     asset_cache = response.headers.get("Cache-Control", "").lower()
+L11655 2026-11-22T21:23:36.7338087Z assert "immutable" in asset_cache
+L11656 2026-11-22T21:23:36.7338331Z assert "max-age=31536000" in asset_cache
+L11657 2026-11-22T21:23:36.7338552Z 
+L11658 2026-11-22T21:23:36.7338711Z shell_request = Request(
+L11659 2026-11-22T21:23:36.7338946Z     "http://127.0.0.1:3000/snapchat-accounts",
+L11660 2026-11-22T21:23:36.7339210Z     headers={"Host": "mezansalla.com"},
+L11661 2026-11-22T21:23:36.7339434Z )
+L11662 2026-11-22T21:23:36.7339652Z with urlopen(shell_request, timeout=2) as response:
+L11663 2026-11-22T21:23:36.7339921Z     shell_body = response.read()
+L11664 2026-11-22T21:23:36.7340210Z     shell_type = response.headers.get("Content-Type", "").lower()
+L11665 2026-11-22T21:23:36.7340571Z     shell_cache = response.headers.get("Cache-Control", "").lower()
+L11666 2026-11-22T21:23:36.7340890Z assert shell_type.startswith("text/html")
+L11667 2026-11-22T21:23:36.7341194Z assert shell_body == Path("build/index.html").read_bytes()
+L11668 2026-11-22T21:23:36.7341479Z assert "no-store" in shell_cache
+L11669 2026-11-22T21:23:36.7341690Z PY

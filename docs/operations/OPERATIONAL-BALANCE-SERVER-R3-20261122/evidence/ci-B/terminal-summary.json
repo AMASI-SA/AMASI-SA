@@ -1,0 +1,255 @@
+{
+  "observed_at_utc": "2026-11-22 21:35:20 UTC",
+  "repository": "AMASI-SA/AMASI-SA",
+  "pull_request": 2080,
+  "conclusion": "All required exact-B CI gates completed successfully. Conditional scope/event skips retained as skipped.",
+  "deployment_git_sha_B": "9a500a21013a08f750009be656362481986eb208",
+  "deployment_git_tree_B": "2cbd2842ed2506642a1321a47e35f69a766fcf89",
+  "sole_parent_source_A": "dd3a9ea29fce28e2fa87332cff4a6d46f776e0d3",
+  "source_tree_A": "ee385c9c71a19833e08b5e5d7470d94fe4b646f4",
+  "A_to_B_paths": [
+    "release/release-intent-v5.json"
+  ],
+  "verified_live_git_ref": "9a500a21013a08f750009be656362481986eb208",
+  "verified_pr_head": "9a500a21013a08f750009be656362481986eb208",
+  "verified_pr_base": "02cd99e5b2b68c95341c87590abcf572c885e697",
+  "pr_draft": true,
+  "pr_open": true,
+  "pr_merged": false,
+  "workflow_counts": {
+    "success": 12,
+    "skipped": 1
+  },
+  "check_counts": {
+    "success": 25,
+    "skipped": 6
+  },
+  "failures": [],
+  "pending": [],
+  "cancellations": [],
+  "workflows": [
+    {
+      "id": 45071567928,
+      "name": "TikTok Creator Release Candidate",
+      "head_sha": "9a500a21013a08f750009be656362481986eb208",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "skipped",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45071567928"
+    },
+    {
+      "id": 45071567792,
+      "name": "Snapchat Direct Active Publication",
+      "head_sha": "9a500a21013a08f750009be656362481986eb208",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45071567792"
+    },
+    {
+      "id": 45071567944,
+      "name": "Qoyod Payment Freshness",
+      "head_sha": "9a500a21013a08f750009be656362481986eb208",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45071567944"
+    },
+    {
+      "id": 45071567926,
+      "name": "Mobile Order Tracking",
+      "head_sha": "9a500a21013a08f750009be656362481986eb208",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45071567926"
+    },
+    {
+      "id": 45071567828,
+      "name": "Snapchat Settings Management V2",
+      "head_sha": "9a500a21013a08f750009be656362481986eb208",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45071567828"
+    },
+    {
+      "id": 45071567796,
+      "name": "Store Delivery V1",
+      "head_sha": "9a500a21013a08f750009be656362481986eb208",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45071567796"
+    },
+    {
+      "id": 45071567823,
+      "name": "MZ2 Employee Salary and Password",
+      "head_sha": "9a500a21013a08f750009be656362481986eb208",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45071567823"
+    },
+    {
+      "id": 45071567841,
+      "name": "Security Gate",
+      "head_sha": "9a500a21013a08f750009be656362481986eb208",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45071567841"
+    },
+    {
+      "id": 45071567803,
+      "name": "Mezan Release Readiness",
+      "head_sha": "9a500a21013a08f750009be656362481986eb208",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45071567803"
+    },
+    {
+      "id": 45071567954,
+      "name": "G47 Focused Integration",
+      "head_sha": "9a500a21013a08f750009be656362481986eb208",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45071567954"
+    },
+    {
+      "id": 45071567839,
+      "name": "CodeQL",
+      "head_sha": "9a500a21013a08f750009be656362481986eb208",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45071567839"
+    },
+    {
+      "id": 45071567946,
+      "name": "Operational Stock Eligibility",
+      "head_sha": "9a500a21013a08f750009be656362481986eb208",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45071567946"
+    },
+    {
+      "id": 45071567938,
+      "name": "Operational Balance Web",
+      "head_sha": "9a500a21013a08f750009be656362481986eb208",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45071567938"
+    }
+  ],
+  "skipped_checks": [
+    {
+      "id": 137360404593,
+      "name": "Emergent manual redeploy required",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45071567803/job/137360404593"
+    },
+    {
+      "id": 137359526594,
+      "name": "Publication frontend and existing media flow",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45071567792/job/137359526594"
+    },
+    {
+      "id": 137359526240,
+      "name": "Publication backend and existing write guards",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45071567792/job/137359526240"
+    },
+    {
+      "id": 137359518786,
+      "name": "Backend settings and zero-write regressions",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45071567828/job/137359518786"
+    },
+    {
+      "id": 137359518664,
+      "name": "Frontend Snapchat settings tests and build",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45071567828/job/137359518664"
+    },
+    {
+      "id": 137359455937,
+      "name": "reviewed-candidate",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45071567928/job/137359455937"
+    }
+  ],
+  "skip_explanation": {
+    "TikTok": "Branch-specific reviewed-candidate condition false on this operational release branch.",
+    "Snapchat": "Four frontend/backend jobs intentionally skipped by unchanged-file scope; each workflow's scope guard succeeded.",
+    "manual_redeploy": "Manual redeploy job requires push event; this execution is pull_request. This is not an actual host deployment."
+  },
+  "required_adapter_jobs": [
+    {
+      "id": 137359766070,
+      "node": "20.20.2",
+      "conclusion": "success"
+    },
+    {
+      "id": 137359766064,
+      "node": "24.19.0",
+      "conclusion": "success"
+    }
+  ],
+  "test_counts_per_suite_do_not_sum_as_unique": {
+    "operational_contracts": {
+      "passed": 6564,
+      "subtests_passed": 90
+    },
+    "durable_demand": {
+      "passed": 106,
+      "skip_fail_error": 0
+    },
+    "shipping": {
+      "passed": 16,
+      "subtests_passed": 18
+    },
+    "stock_eligibility": {
+      "passed": 5531,
+      "subtests_passed": 97,
+      "skip_fail_error": 0
+    },
+    "G47": {
+      "passed": 331,
+      "subtests_passed": 127,
+      "skip_fail_error": 0
+    },
+    "salla_projection": {
+      "passed": 238,
+      "subtests_passed": 88,
+      "skip_fail_error": 0
+    },
+    "native_inventory": {
+      "passed": 58,
+      "skip_fail_error": 0
+    },
+    "order_cost": {
+      "passed": 436,
+      "skip_fail_error": 0
+    },
+    "operational_frontend": {
+      "passed": 1660,
+      "suites_passed": 103
+    }
+  },
+  "artifact_groups": [
+    "readiness-artifacts.json",
+    "g47-artifacts.json",
+    "stock-artifacts.json",
+    "operational-artifacts.json"
+  ],
+  "previous_A_results_counted_as_B": false,
+  "previous_A_history": "A G47 startup infrastructure failure and retry 403, plus cancelled A Operational/Stock jobs, remain preserved separately in server-r3-ci-evidence. No A result was substituted for B.",
+  "reviewer_operations": {
+    "source_changed": false,
+    "remote_changed": false,
+    "ci_rerun_or_dispatch": false,
+    "host_or_production_changed": false,
+    "local_evidence_only": true
+  },
+  "host_acceptance_limit": "Clean-clone adapters are isolated CI rehearsals, not actual-host publication or proof of the current host checkout. Root owns current Production/base/host/lease checks before user handoff."
+}

@@ -1,0 +1,139 @@
+{
+  "B": "9a500a21013a08f750009be656362481986eb208",
+  "excluded_reproducible_working_material": [
+    "downloads/*.zip",
+    "exact-B-source-scopes.tar",
+    "validation-host*",
+    "generated*/outputs",
+    "tmp"
+  ],
+  "files": [
+    {
+      "bytes": 8811,
+      "path": "audit_artifacts.py",
+      "sha256": "d5933520a9c53c602f23651c24ecf647aef73fef10503e8db38aa61b9c98517b"
+    },
+    {
+      "bytes": 4350,
+      "path": "download-manifest.json",
+      "sha256": "ab037d3fc769de32e12641619656193532e7b9de040a28cea4d5f74837da03d9"
+    },
+    {
+      "bytes": 207934,
+      "path": "evidence20/mezan-adapter-build-v5.log",
+      "sha256": "98595ff88e44952bb621c3039efb216ed1f9c919abe42d3336ab9ac9f070af7f"
+    },
+    {
+      "bytes": 1102,
+      "path": "evidence20/mezan-adapter-environment-v5.json",
+      "sha256": "b6d4b16e4cd27146c20c1eb3ea104cc8afd231d0f45436e4f2f3739332aad68b"
+    },
+    {
+      "bytes": 517,
+      "path": "evidence20/mezan-governed-runtime.log",
+      "sha256": "6b044a1f87d3bac861cc339eeb0aeded72d03bf0875166be91258043db4660d2"
+    },
+    {
+      "bytes": 1278,
+      "path": "evidence20/mezan-package-boundary-v5.json",
+      "sha256": "f4d29da8e5a0913b9fd7e1fd326f4e683a82348d1c7c1f9a0e8ff991b2f16537"
+    },
+    {
+      "bytes": 207931,
+      "path": "evidence24/mezan-adapter-build-v5.log",
+      "sha256": "97cca01988e063000731a96b43446de8da3931998fe874f89da3e05c03130857"
+    },
+    {
+      "bytes": 1102,
+      "path": "evidence24/mezan-adapter-environment-v5.json",
+      "sha256": "c0c7cbbaa2a9e13a4d3e91c860dd6bc38eccf121fb48eacf3589eb68256fed76"
+    },
+    {
+      "bytes": 518,
+      "path": "evidence24/mezan-governed-runtime.log",
+      "sha256": "67a49e8096751d3eb8a2ce7317ba30f639a158a7055caa26ac0ddd1f1fda754b"
+    },
+    {
+      "bytes": 1278,
+      "path": "evidence24/mezan-package-boundary-v5.json",
+      "sha256": "f4d29da8e5a0913b9fd7e1fd326f4e683a82348d1c7c1f9a0e8ff991b2f16537"
+    },
+    {
+      "bytes": 835,
+      "path": "extraction-initial-git-archive-mode-refusal.log",
+      "sha256": "263b6b9a7e18fe0e84968e50d72c4fff8fe7498d7ec85a2dfe041f936c181fcb"
+    },
+    {
+      "bytes": 2146,
+      "path": "extraction-review.json",
+      "sha256": "ee032642ecb15cca1120051abb8076e43d5a6fa6ff06c19db61301f2e87d73b4"
+    },
+    {
+      "bytes": 2146,
+      "path": "extraction-review.log",
+      "sha256": "ee032642ecb15cca1120051abb8076e43d5a6fa6ff06c19db61301f2e87d73b4"
+    },
+    {
+      "bytes": 8572,
+      "path": "finalize_review.py",
+      "sha256": "77dcf54def1ae11328a93df56f95324b8e3df18b88240e887143c6904e5cd851"
+    },
+    {
+      "bytes": 75806,
+      "path": "generated20/generated-file-records.json",
+      "sha256": "8fb3925d5b76689cd1e5b15557d993cfa1d9faac1522c3184d4d064989d9c267"
+    },
+    {
+      "bytes": 75806,
+      "path": "generated24/generated-file-records.json",
+      "sha256": "8fb3925d5b76689cd1e5b15557d993cfa1d9faac1522c3184d4d064989d9c267"
+    },
+    {
+      "bytes": 3502,
+      "path": "host20-original-validator-review.json",
+      "sha256": "943c6e99f1b1f7f25115a02042ab4e49abfc7b9faae2b8a2cfb56d51aaaf0e3b"
+    },
+    {
+      "bytes": 3502,
+      "path": "host20-original-validator.log",
+      "sha256": "943c6e99f1b1f7f25115a02042ab4e49abfc7b9faae2b8a2cfb56d51aaaf0e3b"
+    },
+    {
+      "bytes": 3502,
+      "path": "host24-original-validator-review.json",
+      "sha256": "0ff441e3ae15726a53b1eae3b6b36bbedcf1e5bcb0faca26209dfc955370c592"
+    },
+    {
+      "bytes": 3502,
+      "path": "host24-original-validator.log",
+      "sha256": "0ff441e3ae15726a53b1eae3b6b36bbedcf1e5bcb0faca26209dfc955370c592"
+    },
+    {
+      "bytes": 12472,
+      "path": "log-review/node20-job-137359766070-excerpts.log",
+      "sha256": "2d512f7b5ed02000d3164f7f820f88484152849f549c2afe08d955f10ccafd45"
+    },
+    {
+      "bytes": 12472,
+      "path": "log-review/node24-job-137359766064-excerpts.log",
+      "sha256": "cc45f5e7e3964760e03458ff6a32509131cec0ec06a444a2a8b2ae4a77876106"
+    },
+    {
+      "bytes": 15699,
+      "path": "log-review/review-summary.json",
+      "sha256": "44c0874f61041ec279d86f76eaddfd729bb7eb1f2bd936d5f16db2a819496c24"
+    },
+    {
+      "bytes": 5721,
+      "path": "validate_one.py",
+      "sha256": "90d7879489b731b153370b3ec9f708a937b60e5a9702b8b54a8b511c9addf1a4"
+    },
+    {
+      "bytes": 6650,
+      "path": "verification-summary.json",
+      "sha256": "6f2c02237bd01750f8ccdcaccdcc380a0272c6476a5ac97bc510b3acd531e0e1"
+    }
+  ],
+  "kind": "artifact_review_checkpoint_manifest_v1",
+  "total_bytes": 667154
+}

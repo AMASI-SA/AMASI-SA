@@ -1,0 +1,649 @@
+﻿2026-11-22T21:20:57.0023671Z Current runner version: '2.338.2'
+2026-11-22T21:20:57.0047045Z ##[group]Runner Image Provisioner
+2026-11-22T21:20:57.0048424Z Hosted Compute Agent
+2026-11-22T21:20:57.0049019Z Version: 20261111.635
+2026-11-22T21:20:57.0049745Z Commit: b8a594ea514ff44cadb5342986c68b1eac6e22ed
+2026-11-22T21:20:57.0050597Z Build Date: 2026-11-11T01:49:01Z
+2026-11-22T21:20:57.0051391Z Worker ID: {bd2c4b12-8784-4dd8-b7cf-92da6e4de481}
+2026-11-22T21:20:57.0052235Z Region: southcentralus
+2026-11-22T21:20:57.0052880Z Cloud: Azure
+2026-11-22T21:20:57.0053499Z ##[endgroup]
+2026-11-22T21:20:57.0055044Z ##[group]Operating System
+2026-11-22T21:20:57.0055733Z Ubuntu
+2026-11-22T21:20:57.0056151Z 26.04.1
+2026-11-22T21:20:57.0056494Z LTS
+2026-11-22T21:20:57.0056828Z ##[endgroup]
+2026-11-22T21:20:57.0057231Z ##[group]Runner Image
+2026-11-22T21:20:57.0057687Z Image: ubuntu-26.04
+2026-11-22T21:20:57.0058258Z Version: 20261116.202.1
+2026-11-22T21:20:57.0059462Z Included Software: https://github.com/actions/runner-images/blob/ubuntu26/20261116.202/images/ubuntu/Ubuntu2604-Readme.md
+2026-11-22T21:20:57.0061079Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu26%2F20261116.202
+2026-11-22T21:20:57.0061908Z ##[endgroup]
+2026-11-22T21:20:57.0062924Z ##[group]GITHUB_TOKEN Permissions
+2026-11-22T21:20:57.0064733Z Contents: read
+2026-11-22T21:20:57.0065224Z Metadata: read
+2026-11-22T21:20:57.0065717Z ##[endgroup]
+2026-11-22T21:20:57.0067575Z Secret source: Actions
+2026-11-22T21:20:57.0068656Z Cache mode: write
+2026-11-22T21:20:57.0069134Z Prepare workflow directory
+2026-11-22T21:20:57.0358812Z Prepare all required actions
+2026-11-22T21:20:57.0396274Z Getting action download info
+2026-11-22T21:20:57.2863071Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-11-22T21:20:57.4479637Z Download action repository 'actions/setup-python@v5' (SHA:a26af69be951a213d495a4c3e4e4022e16d87065)
+2026-11-22T21:20:57.5730030Z Download action repository 'actions/upload-artifact@v4' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+2026-11-22T21:20:57.7801811Z Complete job name: Stock eligibility, reservation and consumption on isolated Mongo
+2026-11-22T21:20:57.8404772Z ##[group]Run actions/checkout@v4
+2026-11-22T21:20:57.8405220Z with:
+2026-11-22T21:20:57.8405485Z   ref: 9a500a21013a08f750009be656362481986eb208
+2026-11-22T21:20:57.8405832Z   repository: AMASI-SA/AMASI-SA
+2026-11-22T21:20:57.8407935Z   token: ***
+2026-11-22T21:20:57.8408428Z   ssh-strict: true
+2026-11-22T21:20:57.8408671Z   ssh-user: git
+2026-11-22T21:20:57.8408943Z   persist-credentials: true
+2026-11-22T21:20:57.8409219Z   clean: true
+2026-11-22T21:20:57.8409472Z   sparse-checkout-cone-mode: true
+2026-11-22T21:20:57.8409770Z   fetch-depth: 1
+2026-11-22T21:20:57.8410008Z   fetch-tags: false
+2026-11-22T21:20:57.8410257Z   show-progress: true
+2026-11-22T21:20:57.8410505Z   lfs: false
+2026-11-22T21:20:57.8410739Z   submodules: false
+2026-11-22T21:20:57.8410991Z   set-safe-directory: true
+2026-11-22T21:20:57.8411274Z   allow-unsafe-pr-checkout: false
+2026-11-22T21:20:57.8411668Z env:
+2026-11-22T21:20:57.8412051Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27462/?replicaSet=operationalphysical
+2026-11-22T21:20:57.8412573Z   MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
+2026-11-22T21:20:57.8413109Z   OPERATIONAL_TEST_MONGO_URI: mongodb://127.0.0.1:27462/?replicaSet=operationalphysical
+2026-11-22T21:20:57.8413564Z   PYTHONDONTWRITEBYTECODE: 1
+2026-11-22T21:20:57.8413844Z   PYTHONPATH: ..:.:tests
+2026-11-22T21:20:57.8414137Z   MEZAN_SALLA_BRANCH_INVENTORY_SYNC_ENABLED: false
+2026-11-22T21:20:57.8414467Z ##[endgroup]
+2026-11-22T21:21:00.1807245Z Syncing repository: AMASI-SA/AMASI-SA
+2026-11-22T21:21:00.1809043Z ##[group]Getting Git version info
+2026-11-22T21:21:00.1809491Z Working directory is '/home/runner/work/AMASI-SA/AMASI-SA'
+2026-11-22T21:21:00.1823977Z [command]/usr/bin/git version
+2026-11-22T21:21:00.1906148Z git version 2.56.1
+2026-11-22T21:21:00.1918627Z ##[endgroup]
+2026-11-22T21:21:00.1929249Z Temporarily overriding HOME='/home/runner/work/_temp/8e1e2c6e-0f71-4524-b8b7-d16b49ec20c6' before making global git config changes
+2026-11-22T21:21:00.1930885Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-22T21:21:00.1933269Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/AMASI-SA/AMASI-SA
+2026-11-22T21:21:00.2360284Z Deleting the contents of '/home/runner/work/AMASI-SA/AMASI-SA'
+2026-11-22T21:21:00.2363056Z ##[group]Initializing the repository
+2026-11-22T21:21:00.2366257Z [command]/usr/bin/git init /home/runner/work/AMASI-SA/AMASI-SA
+2026-11-22T21:21:00.2742971Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-11-22T21:21:00.2743680Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-11-22T21:21:00.2744259Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-11-22T21:21:00.2744750Z hint: call:
+2026-11-22T21:21:00.2745001Z hint:
+2026-11-22T21:21:00.2745348Z hint: 	git config --global init.defaultBranch <name>
+2026-11-22T21:21:00.2745782Z hint:
+2026-11-22T21:21:00.2746148Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-11-22T21:21:00.2746697Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-11-22T21:21:00.2747133Z hint:
+2026-11-22T21:21:00.2747388Z hint: 	git branch -m <name>
+2026-11-22T21:21:00.2747677Z hint:
+2026-11-22T21:21:00.2748203Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-11-22T21:21:00.2889281Z Initialized empty Git repository in /home/runner/work/AMASI-SA/AMASI-SA/.git/
+2026-11-22T21:21:00.2901209Z [command]/usr/bin/git remote add origin https://github.com/AMASI-SA/AMASI-SA
+2026-11-22T21:21:00.3129314Z ##[endgroup]
+2026-11-22T21:21:00.3130120Z ##[group]Disabling automatic garbage collection
+2026-11-22T21:21:00.3132664Z [command]/usr/bin/git config --local gc.auto 0
+2026-11-22T21:21:00.3162885Z ##[endgroup]
+2026-11-22T21:21:00.3163343Z ##[group]Setting up auth
+2026-11-22T21:21:00.3168749Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-22T21:21:00.3198943Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-22T21:21:00.5277172Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-22T21:21:00.5309131Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-22T21:21:00.5532006Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-22T21:21:00.5560812Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-22T21:21:00.5794993Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-11-22T21:21:00.5832907Z ##[endgroup]
+2026-11-22T21:21:00.5834014Z ##[group]Fetching the repository
+2026-11-22T21:21:00.5840164Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin 9a500a21013a08f750009be656362481986eb208
+2026-11-22T21:21:01.8871944Z From https://github.com/AMASI-SA/AMASI-SA
+2026-11-22T21:21:01.8872522Z  * branch            9a500a21013a08f750009be656362481986eb208 -> FETCH_HEAD
+2026-11-22T21:21:01.8874605Z ##[endgroup]
+2026-11-22T21:21:01.8875027Z ##[group]Determining the checkout info
+2026-11-22T21:21:01.8876508Z ##[endgroup]
+2026-11-22T21:21:01.8880600Z [command]/usr/bin/git sparse-checkout disable
+2026-11-22T21:21:01.9075385Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-11-22T21:21:01.9103004Z ##[group]Checking out the ref
+2026-11-22T21:21:01.9105383Z [command]/usr/bin/git checkout --progress --force 9a500a21013a08f750009be656362481986eb208
+2026-11-22T21:21:02.3532790Z Note: switching to '9a500a21013a08f750009be656362481986eb208'.
+2026-11-22T21:21:02.3533210Z 
+2026-11-22T21:21:02.3533355Z You are in 'detached HEAD' state. You can look around, make experimental
+2026-11-22T21:21:02.3533681Z changes and commit them, and you can discard any commits you make in this
+2026-11-22T21:21:02.3533965Z state without impacting any branches by switching back to a branch.
+2026-11-22T21:21:02.3535076Z 
+2026-11-22T21:21:02.3535419Z If you want to create a new branch to retain commits you create, you may
+2026-11-22T21:21:02.3535838Z do so (now or later) by using -c with the switch command. Example:
+2026-11-22T21:21:02.3536068Z 
+2026-11-22T21:21:02.3536166Z   git switch -c <new-branch-name>
+2026-11-22T21:21:02.3536273Z 
+2026-11-22T21:21:02.3536343Z Or undo this operation with:
+2026-11-22T21:21:02.3536436Z 
+2026-11-22T21:21:02.3536496Z   git switch -
+2026-11-22T21:21:02.3536632Z 
+2026-11-22T21:21:02.3536777Z Turn off this advice by setting config variable advice.detachedHead to false
+2026-11-22T21:21:02.3536975Z 
+2026-11-22T21:21:02.3537151Z HEAD is now at 9a500a2 Freeze reviewed operational reversal release intent on current Production
+2026-11-22T21:21:02.3609953Z ##[endgroup]
+2026-11-22T21:21:02.3654885Z [command]/usr/bin/git log -1 --format=%H
+2026-11-22T21:21:02.3677218Z 9a500a21013a08f750009be656362481986eb208
+2026-11-22T21:21:02.3907162Z ##[group]Run git rev-parse HEAD
+2026-11-22T21:21:02.3907431Z [36;1mgit rev-parse HEAD[0m
+2026-11-22T21:21:02.3907594Z [36;1mgit rev-parse 'HEAD^{tree}'[0m
+2026-11-22T21:21:02.3938876Z shell: /usr/bin/bash -e {0}
+2026-11-22T21:21:02.3939041Z env:
+2026-11-22T21:21:02.3939274Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27462/?replicaSet=operationalphysical
+2026-11-22T21:21:02.3939638Z   MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
+2026-11-22T21:21:02.3939983Z   OPERATIONAL_TEST_MONGO_URI: mongodb://127.0.0.1:27462/?replicaSet=operationalphysical
+2026-11-22T21:21:02.3940270Z   PYTHONDONTWRITEBYTECODE: 1
+2026-11-22T21:21:02.3940425Z   PYTHONPATH: ..:.:tests
+2026-11-22T21:21:02.3940587Z   MEZAN_SALLA_BRANCH_INVENTORY_SYNC_ENABLED: false
+2026-11-22T21:21:02.3940763Z ##[endgroup]
+2026-11-22T21:21:02.4014375Z 9a500a21013a08f750009be656362481986eb208
+2026-11-22T21:21:02.4028822Z 2cbd2842ed2506642a1321a47e35f69a766fcf89
+2026-11-22T21:21:02.4131514Z ##[group]Run actions/setup-python@v5
+2026-11-22T21:21:02.4131683Z with:
+2026-11-22T21:21:02.4131810Z   python-version: 3.12
+2026-11-22T21:21:02.4131949Z   check-latest: false
+2026-11-22T21:21:02.4133328Z   token: ***
+2026-11-22T21:21:02.4133527Z   update-environment: true
+2026-11-22T21:21:02.4133705Z   allow-prereleases: false
+2026-11-22T21:21:02.4133845Z   freethreaded: false
+2026-11-22T21:21:02.4133976Z env:
+2026-11-22T21:21:02.4134178Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27462/?replicaSet=operationalphysical
+2026-11-22T21:21:02.4134477Z   MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
+2026-11-22T21:21:02.4134800Z   OPERATIONAL_TEST_MONGO_URI: mongodb://127.0.0.1:27462/?replicaSet=operationalphysical
+2026-11-22T21:21:02.4135056Z   PYTHONDONTWRITEBYTECODE: 1
+2026-11-22T21:21:02.4135206Z   PYTHONPATH: ..:.:tests
+2026-11-22T21:21:02.4135362Z   MEZAN_SALLA_BRANCH_INVENTORY_SYNC_ENABLED: false
+2026-11-22T21:21:02.4135538Z ##[endgroup]
+2026-11-22T21:21:02.5216292Z ##[group]Installed versions
+2026-11-22T21:21:02.6003049Z (node:2180) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-22T21:21:02.6003701Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-22T21:21:02.6004089Z Successfully set up CPython (3.12.16)
+2026-11-22T21:21:02.6004659Z ##[endgroup]
+2026-11-22T21:21:02.6107193Z ##[group]Run python -m pip install fastapi==0.141.1 pydantic==2.13.5 pymongo==4.18.1 motor==3.7.1 pytest==9.0.3 pytest-asyncio==1.3.0 httpx==0.28.1 email-validator==2.3.0 openpyxl==3.1.5 python-dotenv==1.2.3 cryptography==50.0.0 bcrypt==4.1.3 PyJWT==2.13.0 python-multipart==0.0.20 mongomock-motor==0.0.36 reportlab==5.0.1 Pillow==12.3.0 qrcode==8.2 arabic-reshaper==3.0.1 python-bidi==0.6.11 PyMuPDF==1.28.2 tzdata==2026.4
+2026-11-22T21:21:02.6108900Z [36;1mpython -m pip install fastapi==0.141.1 pydantic==2.13.5 pymongo==4.18.1 motor==3.7.1 pytest==9.0.3 pytest-asyncio==1.3.0 httpx==0.28.1 email-validator==2.3.0 openpyxl==3.1.5 python-dotenv==1.2.3 cryptography==50.0.0 bcrypt==4.1.3 PyJWT==2.13.0 python-multipart==0.0.20 mongomock-motor==0.0.36 reportlab==5.0.1 Pillow==12.3.0 qrcode==8.2 arabic-reshaper==3.0.1 python-bidi==0.6.11 PyMuPDF==1.28.2 tzdata==2026.4[0m
+2026-11-22T21:21:02.6242636Z shell: /usr/bin/bash -e {0}
+2026-11-22T21:21:02.6242953Z env:
+2026-11-22T21:21:02.6243413Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27462/?replicaSet=operationalphysical
+2026-11-22T21:21:02.6244015Z   MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
+2026-11-22T21:21:02.6244664Z   OPERATIONAL_TEST_MONGO_URI: mongodb://127.0.0.1:27462/?replicaSet=operationalphysical
+2026-11-22T21:21:02.6245191Z   PYTHONDONTWRITEBYTECODE: 1
+2026-11-22T21:21:02.6245506Z   PYTHONPATH: ..:.:tests
+2026-11-22T21:21:02.6245844Z   MEZAN_SALLA_BRANCH_INVENTORY_SYNC_ENABLED: false
+2026-11-22T21:21:02.6246277Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:21:02.6246824Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib/pkgconfig
+2026-11-22T21:21:02.6247333Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:21:02.6247693Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:21:02.6248138Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:21:02.6248488Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib
+2026-11-22T21:21:02.6248783Z ##[endgroup]
+2026-11-22T21:21:05.4631277Z Collecting fastapi==0.141.1
+2026-11-22T21:21:05.5243129Z   Downloading fastapi-0.141.1-py3-none-any.whl.metadata (27 kB)
+2026-11-22T21:21:05.6152129Z Collecting pydantic==2.13.5
+2026-11-22T21:21:05.6304449Z   Downloading pydantic-2.13.5-py3-none-any.whl.metadata (110 kB)
+2026-11-22T21:21:05.8497237Z Collecting pymongo==4.18.1
+2026-11-22T21:21:05.8761353Z   Downloading pymongo-4.18.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (10 kB)
+2026-11-22T21:21:05.9027044Z Collecting motor==3.7.1
+2026-11-22T21:21:05.9179215Z   Downloading motor-3.7.1-py3-none-any.whl.metadata (21 kB)
+2026-11-22T21:21:05.9470405Z Collecting pytest==9.0.3
+2026-11-22T21:21:05.9629033Z   Downloading pytest-9.0.3-py3-none-any.whl.metadata (7.6 kB)
+2026-11-22T21:21:05.9853675Z Collecting pytest-asyncio==1.3.0
+2026-11-22T21:21:06.0006408Z   Downloading pytest_asyncio-1.3.0-py3-none-any.whl.metadata (4.1 kB)
+2026-11-22T21:21:06.0291983Z Collecting httpx==0.28.1
+2026-11-22T21:21:06.0453197Z   Downloading httpx-0.28.1-py3-none-any.whl.metadata (7.1 kB)
+2026-11-22T21:21:06.0682901Z Collecting email-validator==2.3.0
+2026-11-22T21:21:06.0867296Z   Downloading email_validator-2.3.0-py3-none-any.whl.metadata (26 kB)
+2026-11-22T21:21:06.1073466Z Collecting openpyxl==3.1.5
+2026-11-22T21:21:06.1239883Z   Downloading openpyxl-3.1.5-py2.py3-none-any.whl.metadata (2.5 kB)
+2026-11-22T21:21:06.1475298Z Collecting python-dotenv==1.2.3
+2026-11-22T21:21:06.1648375Z   Downloading python_dotenv-1.2.3-py3-none-any.whl.metadata (29 kB)
+2026-11-22T21:21:06.2741733Z Collecting cryptography==50.0.0
+2026-11-22T21:21:06.2901553Z   Downloading cryptography-50.0.0-cp311-abi3-manylinux_2_34_x86_64.whl.metadata (4.3 kB)
+2026-11-22T21:21:06.3245962Z Collecting bcrypt==4.1.3
+2026-11-22T21:21:06.3414607Z   Downloading bcrypt-4.1.3-cp39-abi3-manylinux_2_28_x86_64.whl.metadata (9.5 kB)
+2026-11-22T21:21:06.3662983Z Collecting PyJWT==2.13.0
+2026-11-22T21:21:06.3818419Z   Downloading pyjwt-2.13.0-py3-none-any.whl.metadata (3.4 kB)
+2026-11-22T21:21:06.4025814Z Collecting python-multipart==0.0.20
+2026-11-22T21:21:06.4192141Z   Downloading python_multipart-0.0.20-py3-none-any.whl.metadata (1.8 kB)
+2026-11-22T21:21:06.4636745Z Collecting mongomock-motor==0.0.36
+2026-11-22T21:21:06.4858610Z   Downloading mongomock_motor-0.0.36-py3-none-any.whl.metadata (2.0 kB)
+2026-11-22T21:21:06.5525373Z Collecting reportlab==5.0.1
+2026-11-22T21:21:06.5677139Z   Downloading reportlab-5.0.1-py3-none-any.whl.metadata (1.6 kB)
+2026-11-22T21:21:06.6820379Z Collecting Pillow==12.3.0
+2026-11-22T21:21:06.6995849Z   Downloading pillow-12.3.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (9.1 kB)
+2026-11-22T21:21:06.7193334Z Collecting qrcode==8.2
+2026-11-22T21:21:06.7341008Z   Downloading qrcode-8.2-py3-none-any.whl.metadata (17 kB)
+2026-11-22T21:21:06.7644810Z Collecting arabic-reshaper==3.0.1
+2026-11-22T21:21:06.7806860Z   Downloading arabic_reshaper-3.0.1-py3-none-any.whl.metadata (13 kB)
+2026-11-22T21:21:06.8362793Z Collecting python-bidi==0.6.11
+2026-11-22T21:21:06.8525942Z   Downloading python_bidi-0.6.11-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (5.3 kB)
+2026-11-22T21:21:06.9422091Z Collecting PyMuPDF==1.28.2
+2026-11-22T21:21:06.9600600Z   Downloading pymupdf-1.28.2-cp310-abi3-manylinux_2_28_x86_64.whl.metadata (26 kB)
+2026-11-22T21:21:06.9815899Z Collecting tzdata==2026.4
+2026-11-22T21:21:06.9972876Z   Downloading tzdata-2026.4-py2.py3-none-any.whl.metadata (1.4 kB)
+2026-11-22T21:21:07.0212098Z Collecting starlette>=0.46.0 (from fastapi==0.141.1)
+2026-11-22T21:21:07.0361306Z   Downloading starlette-1.10.0-py3-none-any.whl.metadata (6.6 kB)
+2026-11-22T21:21:07.0579935Z Collecting typing-extensions>=4.8.0 (from fastapi==0.141.1)
+2026-11-22T21:21:07.0726285Z   Downloading typing_extensions-4.16.0-py3-none-any.whl.metadata (3.3 kB)
+2026-11-22T21:21:07.0899614Z Collecting typing-inspection>=0.4.2 (from fastapi==0.141.1)
+2026-11-22T21:21:07.1051464Z   Downloading typing_inspection-0.4.5-py3-none-any.whl.metadata (2.6 kB)
+2026-11-22T21:21:07.1242186Z Collecting annotated-doc>=0.0.2 (from fastapi==0.141.1)
+2026-11-22T21:21:07.1396716Z   Downloading annotated_doc-0.0.7-py3-none-any.whl.metadata (6.4 kB)
+2026-11-22T21:21:07.1657621Z Collecting annotated-types>=0.6.0 (from pydantic==2.13.5)
+2026-11-22T21:21:07.1811524Z   Downloading annotated_types-0.8.0-py3-none-any.whl.metadata (15 kB)
+2026-11-22T21:21:07.6123217Z Collecting pydantic-core==2.46.5 (from pydantic==2.13.5)
+2026-11-22T21:21:07.6272427Z   Downloading pydantic_core-2.46.5-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (6.6 kB)
+2026-11-22T21:21:07.6478516Z Collecting dnspython<3.0.0,>=2.7.0 (from pymongo==4.18.1)
+2026-11-22T21:21:07.6640500Z   Downloading dnspython-2.9.2-py3-none-any.whl.metadata (5.8 kB)
+2026-11-22T21:21:07.6846580Z Collecting iniconfig>=1.0.1 (from pytest==9.0.3)
+2026-11-22T21:21:07.7004485Z   Downloading iniconfig-2.3.1-py3-none-any.whl.metadata (2.8 kB)
+2026-11-22T21:21:07.7231451Z Collecting packaging>=22 (from pytest==9.0.3)
+2026-11-22T21:21:07.7382313Z   Downloading packaging-26.3-py3-none-any.whl.metadata (3.5 kB)
+2026-11-22T21:21:07.7596614Z Collecting pluggy<2,>=1.5 (from pytest==9.0.3)
+2026-11-22T21:21:07.7749961Z   Downloading pluggy-1.7.0-py3-none-any.whl.metadata (5.0 kB)
+2026-11-22T21:21:07.7962053Z Collecting pygments>=2.7.2 (from pytest==9.0.3)
+2026-11-22T21:21:07.8109732Z   Downloading pygments-2.21.0-py3-none-any.whl.metadata (2.5 kB)
+2026-11-22T21:21:07.8424900Z Collecting anyio (from httpx==0.28.1)
+2026-11-22T21:21:07.8581313Z   Downloading anyio-4.16.0-py3-none-any.whl.metadata (4.7 kB)
+2026-11-22T21:21:07.8846705Z Collecting certifi (from httpx==0.28.1)
+2026-11-22T21:21:07.9026515Z   Downloading certifi-2026.11.20-py3-none-any.whl.metadata (2.5 kB)
+2026-11-22T21:21:07.9274417Z Collecting httpcore==1.* (from httpx==0.28.1)
+2026-11-22T21:21:07.9430144Z   Downloading httpcore-1.0.9-py3-none-any.whl.metadata (21 kB)
+2026-11-22T21:21:07.9812485Z Collecting idna (from httpx==0.28.1)
+2026-11-22T21:21:07.9962729Z   Downloading idna-3.20-py3-none-any.whl.metadata (7.2 kB)
+2026-11-22T21:21:08.0186126Z Collecting et-xmlfile (from openpyxl==3.1.5)
+2026-11-22T21:21:08.0414301Z   Downloading et_xmlfile-2.0.0-py3-none-any.whl.metadata (2.7 kB)
+2026-11-22T21:21:08.1699076Z Collecting cffi>=2.0.0 (from cryptography==50.0.0)
+2026-11-22T21:21:08.1853923Z   Downloading cffi-2.1.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (2.5 kB)
+2026-11-22T21:21:08.2097956Z Collecting mongomock<5.0.0,>=4.1.2 (from mongomock-motor==0.0.36)
+2026-11-22T21:21:08.2318141Z   Downloading mongomock-4.3.0-py2.py3-none-any.whl.metadata (12 kB)
+2026-11-22T21:21:08.3130163Z Collecting charset-normalizer (from reportlab==5.0.1)
+2026-11-22T21:21:08.3292028Z   Downloading charset_normalizer-3.5.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (46 kB)
+2026-11-22T21:21:08.3529923Z Collecting h11>=0.16 (from httpcore==1.*->httpx==0.28.1)
+2026-11-22T21:21:08.3694941Z   Downloading h11-0.16.0-py3-none-any.whl.metadata (8.3 kB)
+2026-11-22T21:21:08.4031356Z Collecting pytz (from mongomock<5.0.0,>=4.1.2->mongomock-motor==0.0.36)
+2026-11-22T21:21:08.4186341Z   Downloading pytz-2026.6-py2.py3-none-any.whl.metadata (22 kB)
+2026-11-22T21:21:08.4406019Z Collecting sentinels (from mongomock<5.0.0,>=4.1.2->mongomock-motor==0.0.36)
+2026-11-22T21:21:08.4558384Z   Downloading sentinels-1.1.1-py3-none-any.whl.metadata (3.0 kB)
+2026-11-22T21:21:08.4762327Z Collecting pycparser (from cffi>=2.0.0->cryptography==50.0.0)
+2026-11-22T21:21:08.4958599Z   Downloading pycparser-3.12-py3-none-any.whl.metadata (9.7 kB)
+2026-11-22T21:21:08.5224479Z Downloading fastapi-0.141.1-py3-none-any.whl (131 kB)
+2026-11-22T21:21:08.5439678Z Downloading pydantic-2.13.5-py3-none-any.whl (472 kB)
+2026-11-22T21:21:08.5972085Z Downloading pymongo-4.18.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (1.0 MB)
+2026-11-22T21:21:08.6146352Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.0/1.0 MB 97.0 MB/s  0:00:00
+2026-11-22T21:21:08.6296089Z Downloading motor-3.7.1-py3-none-any.whl (74 kB)
+2026-11-22T21:21:08.6473543Z Downloading pytest-9.0.3-py3-none-any.whl (375 kB)
+2026-11-22T21:21:08.6645294Z Downloading pytest_asyncio-1.3.0-py3-none-any.whl (15 kB)
+2026-11-22T21:21:08.6809341Z Downloading httpx-0.28.1-py3-none-any.whl (73 kB)
+2026-11-22T21:21:08.6981848Z Downloading email_validator-2.3.0-py3-none-any.whl (35 kB)
+2026-11-22T21:21:08.7154403Z Downloading openpyxl-3.1.5-py2.py3-none-any.whl (250 kB)
+2026-11-22T21:21:08.7475601Z Downloading python_dotenv-1.2.3-py3-none-any.whl (22 kB)
+2026-11-22T21:21:08.7644476Z Downloading cryptography-50.0.0-cp311-abi3-manylinux_2_34_x86_64.whl (4.7 MB)
+2026-11-22T21:21:08.8030549Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.7/4.7 MB 122.1 MB/s  0:00:00
+2026-11-22T21:21:08.8185058Z Downloading bcrypt-4.1.3-cp39-abi3-manylinux_2_28_x86_64.whl (283 kB)
+2026-11-22T21:21:08.8384743Z Downloading pyjwt-2.13.0-py3-none-any.whl (31 kB)
+2026-11-22T21:21:08.8553489Z Downloading python_multipart-0.0.20-py3-none-any.whl (24 kB)
+2026-11-22T21:21:08.8742760Z Downloading mongomock_motor-0.0.36-py3-none-any.whl (7.3 kB)
+2026-11-22T21:21:08.8977418Z Downloading reportlab-5.0.1-py3-none-any.whl (2.0 MB)
+2026-11-22T21:21:08.9127407Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.0/2.0 MB 130.0 MB/s  0:00:00
+2026-11-22T21:21:08.9286303Z Downloading pillow-12.3.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (6.9 MB)
+2026-11-22T21:21:08.9811559Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 6.9/6.9 MB 135.7 MB/s  0:00:00
+2026-11-22T21:21:08.9962145Z Downloading qrcode-8.2-py3-none-any.whl (45 kB)
+2026-11-22T21:21:09.0166565Z Downloading arabic_reshaper-3.0.1-py3-none-any.whl (20 kB)
+2026-11-22T21:21:09.0388272Z Downloading python_bidi-0.6.11-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (296 kB)
+2026-11-22T21:21:09.0565390Z Downloading pymupdf-1.28.2-cp310-abi3-manylinux_2_28_x86_64.whl (25.8 MB)
+2026-11-22T21:21:09.2736091Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 25.8/25.8 MB 120.3 MB/s  0:00:00
+2026-11-22T21:21:09.2933467Z Downloading tzdata-2026.4-py2.py3-none-any.whl (347 kB)
+2026-11-22T21:21:09.3153577Z Downloading pydantic_core-2.46.5-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (2.1 MB)
+2026-11-22T21:21:09.3333738Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.1/2.1 MB 113.3 MB/s  0:00:00
+2026-11-22T21:21:09.3487811Z Downloading dnspython-2.9.2-py3-none-any.whl (360 kB)
+2026-11-22T21:21:09.3668297Z Downloading httpcore-1.0.9-py3-none-any.whl (78 kB)
+2026-11-22T21:21:09.3846157Z Downloading mongomock-4.3.0-py2.py3-none-any.whl (64 kB)
+2026-11-22T21:21:09.4031258Z Downloading pluggy-1.7.0-py3-none-any.whl (27 kB)
+2026-11-22T21:21:09.4320358Z Downloading annotated_doc-0.0.7-py3-none-any.whl (5.3 kB)
+2026-11-22T21:21:09.4501472Z Downloading annotated_types-0.8.0-py3-none-any.whl (13 kB)
+2026-11-22T21:21:09.4674845Z Downloading cffi-2.1.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (221 kB)
+2026-11-22T21:21:09.4853073Z Downloading h11-0.16.0-py3-none-any.whl (37 kB)
+2026-11-22T21:21:09.5027716Z Downloading idna-3.20-py3-none-any.whl (69 kB)
+2026-11-22T21:21:09.5203136Z Downloading iniconfig-2.3.1-py3-none-any.whl (7.6 kB)
+2026-11-22T21:21:09.5376534Z Downloading packaging-26.3-py3-none-any.whl (129 kB)
+2026-11-22T21:21:09.5561859Z Downloading pygments-2.21.0-py3-none-any.whl (1.3 MB)
+2026-11-22T21:21:09.5624734Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.3/1.3 MB 215.0 MB/s  0:00:00
+2026-11-22T21:21:09.5775210Z Downloading starlette-1.10.0-py3-none-any.whl (80 kB)
+2026-11-22T21:21:09.5959567Z Downloading anyio-4.16.0-py3-none-any.whl (134 kB)
+2026-11-22T21:21:09.6131893Z Downloading typing_extensions-4.16.0-py3-none-any.whl (45 kB)
+2026-11-22T21:21:09.6303936Z Downloading typing_inspection-0.4.5-py3-none-any.whl (14 kB)
+2026-11-22T21:21:09.6499130Z Downloading certifi-2026.11.20-py3-none-any.whl (127 kB)
+2026-11-22T21:21:09.6696134Z Downloading charset_normalizer-3.5.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (257 kB)
+2026-11-22T21:21:09.6880507Z Downloading et_xmlfile-2.0.0-py3-none-any.whl (18 kB)
+2026-11-22T21:21:09.7227634Z Downloading pycparser-3.12-py3-none-any.whl (62 kB)
+2026-11-22T21:21:09.7402358Z Downloading pytz-2026.6-py2.py3-none-any.whl (506 kB)
+2026-11-22T21:21:09.7588682Z Downloading sentinels-1.1.1-py3-none-any.whl (3.7 kB)
+2026-11-22T21:21:10.0749525Z Installing collected packages: pytz, tzdata, typing-extensions, sentinels, qrcode, python-multipart, python-dotenv, python-bidi, PyMuPDF, PyJWT, pygments, pycparser, pluggy, Pillow, packaging, iniconfig, idna, h11, et-xmlfile, dnspython, charset-normalizer, certifi, bcrypt, arabic-reshaper, annotated-types, annotated-doc, typing-inspection, reportlab, pytest, pymongo, pydantic-core, openpyxl, mongomock, httpcore, email-validator, cffi, anyio, starlette, pytest-asyncio, pydantic, motor, httpx, cryptography, mongomock-motor, fastapi
+2026-11-22T21:21:13.9452770Z 
+2026-11-22T21:21:13.9477814Z Successfully installed Pillow-12.3.0 PyJWT-2.13.0 PyMuPDF-1.28.2 annotated-doc-0.0.7 annotated-types-0.8.0 anyio-4.16.0 arabic-reshaper-3.0.1 bcrypt-4.1.3 certifi-2026.11.20 cffi-2.1.1 charset-normalizer-3.5.2 cryptography-50.0.0 dnspython-2.9.2 email-validator-2.3.0 et-xmlfile-2.0.0 fastapi-0.141.1 h11-0.16.0 httpcore-1.0.9 httpx-0.28.1 idna-3.20 iniconfig-2.3.1 mongomock-4.3.0 mongomock-motor-0.0.36 motor-3.7.1 openpyxl-3.1.5 packaging-26.3 pluggy-1.7.0 pycparser-3.12 pydantic-2.13.5 pydantic-core-2.46.5 pygments-2.21.0 pymongo-4.18.1 pytest-9.0.3 pytest-asyncio-1.3.0 python-bidi-0.6.11 python-dotenv-1.2.3 python-multipart-0.0.20 pytz-2026.6 qrcode-8.2 reportlab-5.0.1 sentinels-1.1.1 starlette-1.10.0 typing-extensions-4.16.0 typing-inspection-0.4.5 tzdata-2026.4
+2026-11-22T21:21:14.1268157Z ##[group]Run set -euo pipefail
+2026-11-22T21:21:14.1268418Z [36;1mset -euo pipefail[0m
+2026-11-22T21:21:14.1268829Z [36;1mdocker run -d --name eligibility-rs -p 127.0.0.1:27462:27462 mongo:8.0.12 --port 27462 --replSet operationalphysical --bind_ip_all --setParameter transactionLifetimeLimitSeconds=5[0m
+2026-11-22T21:21:14.1269372Z [36;1mdocker run -d --name eligibility-standalone -p 127.0.0.1:27019:27019 mongo:8.0.12 --port 27019 --bind_ip_all[0m
+2026-11-22T21:21:14.1269809Z [36;1mfor attempt in $(seq 1 40); do[0m
+2026-11-22T21:21:14.1270101Z [36;1m  if docker exec eligibility-rs mongosh --port 27462 --quiet --eval 'db.adminCommand({ping:1})'; then break; fi[0m
+2026-11-22T21:21:14.1270386Z [36;1m  sleep 1[0m
+2026-11-22T21:21:14.1270513Z [36;1mdone[0m
+2026-11-22T21:21:14.1270828Z [36;1mdocker exec eligibility-rs mongosh --port 27462 --quiet --eval 'rs.initiate({_id:"operationalphysical",members:[{_id:0,host:"127.0.0.1:27462"}]})'[0m
+2026-11-22T21:21:14.1271217Z [36;1mfor attempt in $(seq 1 40); do[0m
+2026-11-22T21:21:14.1271529Z [36;1m  if docker exec eligibility-rs mongosh --port 27462 --quiet --eval 'if(!db.hello().isWritablePrimary){quit(1)}'; then break; fi[0m
+2026-11-22T21:21:14.1271837Z [36;1m  sleep 1[0m
+2026-11-22T21:21:14.1271958Z [36;1mdone[0m
+2026-11-22T21:21:14.1272206Z [36;1mdocker exec eligibility-rs mongosh --port 27462 --quiet --eval 'if(!db.hello().isWritablePrimary){quit(1)}'[0m
+2026-11-22T21:21:14.1272668Z [36;1mdocker exec eligibility-standalone mongosh --port 27019 --quiet --eval 'const h=db.hello(); if(h.setName || !h.isWritablePrimary){quit(1)}'[0m
+2026-11-22T21:21:14.1304065Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-11-22T21:21:14.1304266Z env:
+2026-11-22T21:21:14.1304478Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27462/?replicaSet=operationalphysical
+2026-11-22T21:21:14.1304769Z   MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
+2026-11-22T21:21:14.1305071Z   OPERATIONAL_TEST_MONGO_URI: mongodb://127.0.0.1:27462/?replicaSet=operationalphysical
+2026-11-22T21:21:14.1305322Z   PYTHONDONTWRITEBYTECODE: 1
+2026-11-22T21:21:14.1305471Z   PYTHONPATH: ..:.:tests
+2026-11-22T21:21:14.1305638Z   MEZAN_SALLA_BRANCH_INVENTORY_SYNC_ENABLED: false
+2026-11-22T21:21:14.1305850Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:21:14.1306097Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib/pkgconfig
+2026-11-22T21:21:14.1306341Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:21:14.1306562Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:21:14.1306782Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:21:14.1307016Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib
+2026-11-22T21:21:14.1307206Z ##[endgroup]
+2026-11-22T21:21:15.4531123Z Unable to find image 'mongo:8.0.12' locally
+2026-11-22T21:21:16.0489094Z 8.0.12: Pulling from library/mongo
+2026-11-22T21:21:16.4402827Z 91469349d2c2: Pulling fs layer
+2026-11-22T21:21:16.4403171Z 578438e6cda5: Pulling fs layer
+2026-11-22T21:21:16.4403406Z cb52df844465: Pulling fs layer
+2026-11-22T21:21:16.4403632Z 0a07b2b41243: Pulling fs layer
+2026-11-22T21:21:16.4403846Z f1102db351d8: Pulling fs layer
+2026-11-22T21:21:16.4404064Z b71466b94f26: Pulling fs layer
+2026-11-22T21:21:16.4405424Z d713d16a8043: Pulling fs layer
+2026-11-22T21:21:16.4405892Z e701e7c9324a: Pulling fs layer
+2026-11-22T21:21:16.5563692Z cb52df844465: Download complete
+2026-11-22T21:21:16.5564394Z f1e7f9f13931: Download complete
+2026-11-22T21:21:16.6574583Z fcd5c905ac2b: Download complete
+2026-11-22T21:21:16.6577037Z 91469349d2c2: Download complete
+2026-11-22T21:21:16.6577689Z 578438e6cda5: Download complete
+2026-11-22T21:21:16.6578418Z e701e7c9324a: Download complete
+2026-11-22T21:21:16.7557452Z d713d16a8043: Download complete
+2026-11-22T21:21:16.7560073Z f1102db351d8: Download complete
+2026-11-22T21:21:16.9607700Z b71466b94f26: Download complete
+2026-11-22T21:21:18.6610926Z b71466b94f26: Pull complete
+2026-11-22T21:21:18.8555559Z 0a07b2b41243: Download complete
+2026-11-22T21:21:18.8604963Z e701e7c9324a: Pull complete
+2026-11-22T21:21:18.8617613Z f1102db351d8: Pull complete
+2026-11-22T21:21:18.9586166Z cb52df844465: Pull complete
+2026-11-22T21:21:18.9616401Z 578438e6cda5: Pull complete
+2026-11-22T21:21:18.9635784Z d713d16a8043: Pull complete
+2026-11-22T21:21:21.2529994Z 91469349d2c2: Pull complete
+2026-11-22T21:21:21.2537223Z 0a07b2b41243: Pull complete
+2026-11-22T21:21:21.2541184Z Digest: sha256:95a98776f273721a295b03098578b06bc10281bb56aa828c77e9f60ecc70b150
+2026-11-22T21:21:21.2541712Z Status: Downloaded newer image for mongo:8.0.12
+2026-11-22T21:21:27.9947024Z fcd973486993b97348da74a5ae44d120a6f6550976f2dfd130b68ab7fbf14818
+2026-11-22T21:21:28.8446690Z d2b7486ac758bd888b666620919de8f069758723b1a7a0e84639e9156f9e8751
+2026-11-22T21:21:29.3001188Z { ok: 1 }
+2026-11-22T21:21:29.6499384Z {
+2026-11-22T21:21:29.6499643Z   ok: 1,
+2026-11-22T21:21:29.6499876Z   '$clusterTime': {
+2026-11-22T21:21:29.6501204Z     clusterTime: Timestamp({ t: 1795382489, i: 1 }),
+2026-11-22T21:21:29.6501603Z     signature: {
+2026-11-22T21:21:29.6501895Z       hash: Binary.createFromBase64('AAAAAAAAAAAAAAAAAAAAAAAAAAA=', 0),
+2026-11-22T21:21:29.6502240Z       keyId: Long('0')
+2026-11-22T21:21:29.6502437Z     }
+2026-11-22T21:21:29.6502603Z   },
+2026-11-22T21:21:29.6502815Z   operationTime: Timestamp({ t: 1795382489, i: 1 })
+2026-11-22T21:21:29.6503082Z }
+2026-11-22T21:21:30.6765599Z ##[group]Run set -euo pipefail
+2026-11-22T21:21:30.6765851Z [36;1mset -euo pipefail[0m
+2026-11-22T21:21:30.6766071Z [36;1mpython -m pytest --noconftest -p no:cacheprovider -q --tb=short \[0m
+2026-11-22T21:21:30.6767066Z [36;1m  tests/test_operational_inventory_projection_eligibility.py tests/test_operational_balance*.py tests/test_stock_eligibility_acceptance.py tests/test_operational_physical_stock_prerequisites.py tests/test_stock_eligibility_receipt_evidence_gap.py tests/test_stock_component_consumption.py tests/test_fulfillment_v2_contract.py tests/test_product_inventory_receipt_routes.py tests/test_product_fulfillment_rules.py tests/test_salla_inventory_sync_rules.py \[0m
+2026-11-22T21:21:30.6768388Z [36;1m  tests/test_physical_receipt_financial_adoption.py::PhysicalAdoptionTests::test_partial_single_invoice_adoption_is_rejected_without_effects \[0m
+2026-11-22T21:21:30.6769005Z [36;1m  tests/test_physical_receipt_financial_adoption.py::PhysicalAdoptionTests::test_valued_returns_reject_and_pending_residual_return_preserves_valuation \[0m
+2026-11-22T21:21:30.6769403Z [36;1m  tests/test_inventory_write_gate.py \[0m
+2026-11-22T21:21:30.6769599Z [36;1m  tests/test_inventory_default_closed.py \[0m
+2026-11-22T21:21:30.6769815Z [36;1m  --junitxml="$RUNNER_TEMP/eligibility-backend.xml"[0m
+2026-11-22T21:21:30.6800596Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-11-22T21:21:30.6800805Z env:
+2026-11-22T21:21:30.6801032Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27462/?replicaSet=operationalphysical
+2026-11-22T21:21:30.6801333Z   MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
+2026-11-22T21:21:30.6801640Z   OPERATIONAL_TEST_MONGO_URI: mongodb://127.0.0.1:27462/?replicaSet=operationalphysical
+2026-11-22T21:21:30.6801899Z   PYTHONDONTWRITEBYTECODE: 1
+2026-11-22T21:21:30.6802050Z   PYTHONPATH: ..:.:tests
+2026-11-22T21:21:30.6802213Z   MEZAN_SALLA_BRANCH_INVENTORY_SYNC_ENABLED: false
+2026-11-22T21:21:30.6802441Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:21:30.6802699Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib/pkgconfig
+2026-11-22T21:21:30.6802942Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:21:30.6803169Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:21:30.6803398Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:21:30.6803634Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib
+2026-11-22T21:21:30.6803853Z ##[endgroup]
+2026-11-22T21:22:51.4411091Z ........................................................................ [  1%]
+2026-11-22T21:23:06.6688268Z ........................................................................ [  2%]
+2026-11-22T21:23:23.1991099Z ........................................................................ [  3%]
+2026-11-22T21:23:23.4467648Z ........................................................................ [  5%]
+2026-11-22T21:23:23.9119642Z ........................................................................ [  6%]
+2026-11-22T21:23:41.1752232Z ................................................................................................................................ [  8%]
+2026-11-22T21:23:41.4639594Z ............................ [  9%]
+2026-11-22T21:23:45.9519775Z ................................................ [ 10%]
+2026-11-22T21:23:53.2106975Z ........................................................................ [ 11%]
+2026-11-22T21:23:55.9821401Z ........................................................................ [ 12%]
+2026-11-22T21:23:56.1855834Z ........................................................................ [ 14%]
+2026-11-22T21:23:56.3618799Z ........................................................................ [ 15%]
+2026-11-22T21:23:56.5130797Z ........................................................................ [ 16%]
+2026-11-22T21:23:56.5773095Z ........................................................................ [ 18%]
+2026-11-22T21:23:59.0124753Z ........................................................................ [ 19%]
+2026-11-22T21:23:59.2937776Z ........................................................................ [ 20%]
+2026-11-22T21:24:03.5588291Z ........................................................................ [ 21%]
+2026-11-22T21:24:03.6550262Z ........................................................................ [ 23%]
+2026-11-22T21:24:03.6880324Z ........................................................................ [ 24%]
+2026-11-22T21:24:04.0411226Z ........................................................................ [ 25%]
+2026-11-22T21:24:04.4253642Z ........................................................................ [ 27%]
+2026-11-22T21:24:13.1769638Z ........................................................................ [ 28%]
+2026-11-22T21:24:21.6093602Z ........................................................................ [ 29%]
+2026-11-22T21:24:25.7472691Z ........................................................................ [ 31%]
+2026-11-22T21:24:26.1055912Z ........................................................................ [ 32%]
+2026-11-22T21:24:26.2910780Z ........................................................................ [ 33%]
+2026-11-22T21:24:29.7456641Z ........................................................................ [ 34%]
+2026-11-22T21:24:41.2497405Z ........................................................................ [ 36%]
+2026-11-22T21:24:41.2950685Z ........................................................................ [ 37%]
+2026-11-22T21:24:41.4654246Z ........................................................................ [ 38%]
+2026-11-22T21:24:41.9991302Z ........................................................................ [ 40%]
+2026-11-22T21:24:44.9365092Z ........................................................................ [ 41%]
+2026-11-22T21:24:52.2119732Z ........................................................................ [ 42%]
+2026-11-22T21:25:02.7625340Z ........................................................................ [ 44%]
+2026-11-22T21:25:12.6512340Z ........................................................................ [ 45%]
+2026-11-22T21:25:33.1273860Z ........................................................................ [ 46%]
+2026-11-22T21:25:50.0240639Z ........................................................................ [ 47%]
+2026-11-22T21:26:03.6390165Z ........................................................................ [ 49%]
+2026-11-22T21:26:03.6895242Z ........................................................................ [ 50%]
+2026-11-22T21:26:10.0313456Z ........................................................................ [ 51%]
+2026-11-22T21:26:12.5946715Z ........................................................................ [ 53%]
+2026-11-22T21:26:21.4356370Z ........................................................................ [ 54%]
+2026-11-22T21:26:25.4032235Z ........................................................................ [ 55%]
+2026-11-22T21:26:25.7389015Z ........................................................................ [ 57%]
+2026-11-22T21:26:29.0261849Z ........................................................................ [ 58%]
+2026-11-22T21:26:53.9941840Z ........................................................................ [ 59%]
+2026-11-22T21:26:55.5761202Z ........................................................................ [ 60%]
+2026-11-22T21:26:55.9741845Z ........................................................................ [ 62%]
+2026-11-22T21:26:56.2517647Z ........................................................................ [ 63%]
+2026-11-22T21:26:56.6320518Z ........................................................................ [ 64%]
+2026-11-22T21:26:56.6764290Z ........................................................................ [ 66%]
+2026-11-22T21:26:58.4457452Z ........................................................................ [ 67%]
+2026-11-22T21:27:04.5104073Z ........................................................................ [ 68%]
+2026-11-22T21:27:06.0495727Z ........................................................................ [ 70%]
+2026-11-22T21:27:06.0788196Z ........................................................................ [ 71%]
+2026-11-22T21:27:07.0284640Z ........................................................................ [ 72%]
+2026-11-22T21:27:13.8345886Z ........................................................................ [ 73%]
+2026-11-22T21:27:27.1209230Z ........................................................................ [ 75%]
+2026-11-22T21:27:27.6062895Z ........................................................................ [ 76%]
+2026-11-22T21:27:35.4585454Z .................................................................. [ 77%]
+2026-11-22T21:27:36.0794050Z ........................................................................ [ 79%]
+2026-11-22T21:27:37.3513031Z ........................................................................ [ 80%]
+2026-11-22T21:27:37.3845331Z ........................................................................ [ 81%]
+2026-11-22T21:27:41.4910704Z ........................................................................ [ 82%]
+2026-11-22T21:27:41.6642316Z ........................................................................ [ 84%]
+2026-11-22T21:27:48.7453130Z ........................................................................ [ 85%]
+2026-11-22T21:27:48.9683750Z ........................................................................ [ 86%]
+2026-11-22T21:28:07.6201821Z ........................................................................ [ 88%]
+2026-11-22T21:28:23.2513308Z ........................................................................ [ 89%]
+2026-11-22T21:28:25.4464440Z ........................................................................ [ 90%]
+2026-11-22T21:28:25.5581318Z ........................................................................ [ 92%]
+2026-11-22T21:28:25.8849324Z ........................................................................ [ 93%]
+2026-11-22T21:28:28.8137914Z ........................................................................ [ 94%]
+2026-11-22T21:29:00.1941096Z ........................................................................ [ 96%]
+2026-11-22T21:29:11.1412620Z ........................................................................ [ 97%]
+2026-11-22T21:29:20.5435864Z ................................................................. [ 98%]
+2026-11-22T21:29:31.4913712Z ........................................................................ [ 99%]
+2026-11-22T21:29:50.4869217Z ............                                                             [100%]
+2026-11-22T21:29:50.4869580Z =============================== warnings summary ===============================
+2026-11-22T21:29:50.4869808Z recurring_obligations_routes.py:295
+2026-11-22T21:29:50.4871337Z   /home/runner/work/AMASI-SA/AMASI-SA/backend/recurring_obligations_routes.py:295: PydanticDeprecatedSince20: Pydantic V1 style `@root_validator` validators are deprecated. You should migrate to Pydantic V2 style `@model_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+2026-11-22T21:29:50.4873182Z     @root_validator(skip_on_failure=True)
+2026-11-22T21:29:50.4873367Z 
+2026-11-22T21:29:50.4873476Z recurring_obligations_routes.py:319
+2026-11-22T21:29:50.4875210Z   /home/runner/work/AMASI-SA/AMASI-SA/backend/recurring_obligations_routes.py:319: PydanticDeprecatedSince20: Pydantic V1 style `@root_validator` validators are deprecated. You should migrate to Pydantic V2 style `@model_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+2026-11-22T21:29:50.4876492Z     @root_validator(skip_on_failure=True)
+2026-11-22T21:29:50.4876623Z 
+2026-11-22T21:29:50.4876898Z tests/test_operational_balance_app_permissions.py::test_native_permission_admin_keeps_staff_identity
+2026-11-22T21:29:50.4877832Z   /home/runner/work/AMASI-SA/AMASI-SA/backend/liabilities_routes.py:170: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+2026-11-22T21:29:50.4878833Z     @validator("ad_provider")
+2026-11-22T21:29:50.4878935Z 
+2026-11-22T21:29:50.4879111Z tests/test_operational_balance_app_permissions.py::test_native_permission_admin_keeps_staff_identity
+2026-11-22T21:29:50.4880034Z   /home/runner/work/AMASI-SA/AMASI-SA/backend/liabilities_routes.py:177: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+2026-11-22T21:29:50.4880848Z     @validator("employee_salary_id")
+2026-11-22T21:29:50.4880952Z 
+2026-11-22T21:29:50.4881124Z tests/test_operational_balance_app_permissions.py::test_native_permission_admin_keeps_staff_identity
+2026-11-22T21:29:50.4882039Z   /home/runner/work/AMASI-SA/AMASI-SA/backend/liabilities_routes.py:183: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+2026-11-22T21:29:50.4882845Z     @validator("paid_from_account_id")
+2026-11-22T21:29:50.4882958Z 
+2026-11-22T21:29:50.4883122Z tests/test_operational_balance_app_permissions.py::test_native_permission_admin_keeps_staff_identity
+2026-11-22T21:29:50.4884035Z   /home/runner/work/AMASI-SA/AMASI-SA/backend/liabilities_routes.py:191: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+2026-11-22T21:29:50.4884844Z     @validator("supplier_name")
+2026-11-22T21:29:50.4884941Z 
+2026-11-22T21:29:50.4885112Z tests/test_operational_balance_app_permissions.py::test_native_permission_admin_keeps_staff_identity
+2026-11-22T21:29:50.4886027Z   /home/runner/work/AMASI-SA/AMASI-SA/backend/liabilities_routes.py:207: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+2026-11-22T21:29:50.4887085Z     @validator("counterparty_name")
+2026-11-22T21:29:50.4887188Z 
+2026-11-22T21:29:50.4887420Z tests/test_operational_balance_courier_identity.py::test_shipping_settings_model_round_trips_exact_code_and_rejects_malformed_identity
+2026-11-22T21:29:50.4888643Z   server.py:497: PydanticDeprecatedSince20: Pydantic V1 style `@root_validator` validators are deprecated. You should migrate to Pydantic V2 style `@model_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+2026-11-22T21:29:50.4889733Z     @root_validator(pre=False, skip_on_failure=True)
+2026-11-22T21:29:50.4889888Z 
+2026-11-22T21:29:50.4891180Z -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2026-11-22T21:29:50.4891659Z 5531 passed, 8 warnings, 97 subtests passed in 497.31s (0:08:17)
+2026-11-22T21:29:52.1580056Z ##[group]Run python - <<'PY'
+2026-11-22T21:29:52.1580284Z [36;1mpython - <<'PY'[0m
+2026-11-22T21:29:52.1580423Z [36;1mimport os[0m
+2026-11-22T21:29:52.1580562Z [36;1mfrom pathlib import Path[0m
+2026-11-22T21:29:52.1580741Z [36;1mimport xml.etree.ElementTree as ET[0m
+2026-11-22T21:29:52.1580983Z [36;1mreport = Path(os.environ["RUNNER_TEMP"]) / "eligibility-backend.xml"[0m
+2026-11-22T21:29:52.1581244Z [36;1mcases = list(ET.parse(report).iter("testcase"))[0m
+2026-11-22T21:29:52.1581460Z [36;1massert cases, "No Eligibility tests executed"[0m
+2026-11-22T21:29:52.1581733Z [36;1mrejected = [(row.attrib.get("classname"), row.attrib.get("name")) for row in cases[0m
+2026-11-22T21:29:52.1582068Z [36;1m            if any(row.find(tag) is not None for tag in ("skipped", "failure", "error"))][0m
+2026-11-22T21:29:52.1582387Z [36;1massert not rejected, f"Eligibility skipped or failed cases: {rejected}"[0m
+2026-11-22T21:29:52.1583194Z [36;1mexpected = {'test_operational_physical_stock_prerequisites', 'test_salla_inventory_sync_rules', 'test_stock_eligibility_acceptance', 'test_product_fulfillment_rules', 'test_product_inventory_receipt_routes', 'test_fulfillment_v2_contract', 'test_stock_eligibility_receipt_evidence_gap', 'test_stock_component_consumption'}[0m
+2026-11-22T21:29:52.1584061Z [36;1mexpected |= {"test_operational_inventory_projection_eligibility"} | {path.stem for path in Path("tests").glob("test_operational_balance*.py")}[0m
+2026-11-22T21:29:52.1584466Z [36;1mexpected.add("test_physical_receipt_financial_adoption")[0m
+2026-11-22T21:29:52.1584701Z [36;1mexpected.add("test_inventory_write_gate")[0m
+2026-11-22T21:29:52.1584908Z [36;1mexpected.add("test_inventory_default_closed")[0m
+2026-11-22T21:29:52.1585188Z [36;1mobserved = {part for row in cases for part in row.attrib.get("classname", "").split(".")}[0m
+2026-11-22T21:29:52.1585550Z [36;1massert expected <= observed, f"Suites without executed cases: {sorted(expected - observed)}"[0m
+2026-11-22T21:29:52.1585911Z [36;1mprint(f"Eligibility: {len(cases)} executed test cases, zero skips/failures/errors")[0m
+2026-11-22T21:29:52.1586155Z [36;1mPY[0m
+2026-11-22T21:29:52.1614515Z shell: /usr/bin/bash -e {0}
+2026-11-22T21:29:52.1614670Z env:
+2026-11-22T21:29:52.1614885Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27462/?replicaSet=operationalphysical
+2026-11-22T21:29:52.1615185Z   MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
+2026-11-22T21:29:52.1615489Z   OPERATIONAL_TEST_MONGO_URI: mongodb://127.0.0.1:27462/?replicaSet=operationalphysical
+2026-11-22T21:29:52.1615744Z   PYTHONDONTWRITEBYTECODE: 1
+2026-11-22T21:29:52.1615896Z   PYTHONPATH: ..:.:tests
+2026-11-22T21:29:52.1616053Z   MEZAN_SALLA_BRANCH_INVENTORY_SYNC_ENABLED: false
+2026-11-22T21:29:52.1616268Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:29:52.1616516Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib/pkgconfig
+2026-11-22T21:29:52.1616897Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:29:52.1617126Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:29:52.1617347Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:29:52.1617570Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib
+2026-11-22T21:29:52.1617761Z ##[endgroup]
+2026-11-22T21:29:52.2090204Z Eligibility: 5531 executed test cases, zero skips/failures/errors
+2026-11-22T21:29:52.2250129Z ##[group]Run actions/upload-artifact@v4
+2026-11-22T21:29:52.2250317Z with:
+2026-11-22T21:29:52.2250510Z   name: eligibility-backend-9a500a21013a08f750009be656362481986eb208
+2026-11-22T21:29:52.2250770Z   path: /home/runner/work/_temp/eligibility-backend.xml
+2026-11-22T21:29:52.2250961Z   if-no-files-found: error
+2026-11-22T21:29:52.2251105Z   compression-level: 6
+2026-11-22T21:29:52.2251236Z   overwrite: false
+2026-11-22T21:29:52.2251370Z   include-hidden-files: false
+2026-11-22T21:29:52.2251530Z env:
+2026-11-22T21:29:52.2251735Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27462/?replicaSet=operationalphysical
+2026-11-22T21:29:52.2252029Z   MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
+2026-11-22T21:29:52.2252335Z   OPERATIONAL_TEST_MONGO_URI: mongodb://127.0.0.1:27462/?replicaSet=operationalphysical
+2026-11-22T21:29:52.2252585Z   PYTHONDONTWRITEBYTECODE: 1
+2026-11-22T21:29:52.2252734Z   PYTHONPATH: ..:.:tests
+2026-11-22T21:29:52.2252939Z   MEZAN_SALLA_BRANCH_INVENTORY_SYNC_ENABLED: false
+2026-11-22T21:29:52.2253151Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:29:52.2253392Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib/pkgconfig
+2026-11-22T21:29:52.2253631Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:29:52.2253851Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:29:52.2254069Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:29:52.2254290Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib
+2026-11-22T21:29:52.2254487Z ##[endgroup]
+2026-11-22T21:29:52.3364493Z (node:15399) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-22T21:29:52.3365058Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-22T21:29:52.3396290Z With the provided path, there will be 1 file uploaded
+2026-11-22T21:29:52.3400173Z Artifact name is valid!
+2026-11-22T21:29:52.3415844Z Root directory input is valid!
+2026-11-22T21:29:52.7393556Z Beginning upload of artifact content to blob storage
+2026-11-22T21:29:52.8795690Z (node:15399) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-11-22T21:29:53.0781844Z Uploaded bytes 93764
+2026-11-22T21:29:53.1202281Z Finished uploading artifact content to blob storage!
+2026-11-22T21:29:53.1202870Z SHA256 digest of uploaded artifact zip is 94b28a8ab4221637ed65fb0cb96845a7d31deb95943f8e1fc1af94967fafe677
+2026-11-22T21:29:53.1204115Z Finalizing artifact upload
+2026-11-22T21:29:53.4565380Z Artifact eligibility-backend-9a500a21013a08f750009be656362481986eb208.zip successfully finalized. Artifact ID 14773394443
+2026-11-22T21:29:53.4566483Z Artifact eligibility-backend-9a500a21013a08f750009be656362481986eb208 has been successfully uploaded! Final size is 93764 bytes. Artifact ID is 14773394443
+2026-11-22T21:29:53.4571325Z Artifact download URL: https://github.com/AMASI-SA/AMASI-SA/actions/runs/45071567946/artifacts/14773394443
+2026-11-22T21:29:53.4762871Z ##[group]Run docker rm --force eligibility-rs eligibility-standalone
+2026-11-22T21:29:53.4763194Z [36;1mdocker rm --force eligibility-rs eligibility-standalone[0m
+2026-11-22T21:29:53.4791676Z shell: /usr/bin/bash -e {0}
+2026-11-22T21:29:53.4791824Z env:
+2026-11-22T21:29:53.4792044Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27462/?replicaSet=operationalphysical
+2026-11-22T21:29:53.4792507Z   MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
+2026-11-22T21:29:53.4792814Z   OPERATIONAL_TEST_MONGO_URI: mongodb://127.0.0.1:27462/?replicaSet=operationalphysical
+2026-11-22T21:29:53.4793073Z   PYTHONDONTWRITEBYTECODE: 1
+2026-11-22T21:29:53.4793232Z   PYTHONPATH: ..:.:tests
+2026-11-22T21:29:53.4793395Z   MEZAN_SALLA_BRANCH_INVENTORY_SYNC_ENABLED: false
+2026-11-22T21:29:53.4793614Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:29:53.4793865Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib/pkgconfig
+2026-11-22T21:29:53.4794140Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:29:53.4794371Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:29:53.4794596Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:29:53.4794820Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib
+2026-11-22T21:29:53.4795015Z ##[endgroup]
+2026-11-22T21:29:53.7686365Z eligibility-rs
+2026-11-22T21:29:53.7686665Z eligibility-standalone
+2026-11-22T21:29:53.7772160Z Post job cleanup.
+2026-11-22T21:29:53.8598990Z (node:15524) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-22T21:29:53.8599615Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-22T21:29:53.8751341Z Post job cleanup.
+2026-11-22T21:29:53.9402462Z [command]/usr/bin/git version
+2026-11-22T21:29:53.9443456Z git version 2.56.1
+2026-11-22T21:29:53.9470995Z Temporarily overriding HOME='/home/runner/work/_temp/1f94f081-be61-406e-9324-c5097029258c' before making global git config changes
+2026-11-22T21:29:53.9471746Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-22T21:29:53.9475000Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/AMASI-SA/AMASI-SA
+2026-11-22T21:29:53.9515956Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-22T21:29:53.9580568Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-22T21:29:53.9895515Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-22T21:29:53.9939221Z http.https://github.com/.extraheader
+2026-11-22T21:29:53.9970691Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-11-22T21:29:54.0039661Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-22T21:29:54.0330143Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-22T21:29:54.0369073Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-22T21:29:54.0793379Z Cleaning up orphan processes
+2026-11-22T21:29:54.1092389Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-python@v5, actions/upload-artifact@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

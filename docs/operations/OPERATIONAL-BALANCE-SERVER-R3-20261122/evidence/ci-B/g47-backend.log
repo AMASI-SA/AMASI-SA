@@ -1,0 +1,881 @@
+﻿2026-11-22T21:20:41.4861160Z Current runner version: '2.338.2'
+2026-11-22T21:20:41.4878991Z ##[group]Runner Image Provisioner
+2026-11-22T21:20:41.4879596Z Hosted Compute Agent
+2026-11-22T21:20:41.4879975Z Version: 20261111.635
+2026-11-22T21:20:41.4880372Z Commit: b8a594ea514ff44cadb5342986c68b1eac6e22ed
+2026-11-22T21:20:41.4880864Z Build Date: 2026-11-11T01:49:01Z
+2026-11-22T21:20:41.4881326Z Worker ID: {5ea84fad-91f8-429c-b376-5f9d9de6fdee}
+2026-11-22T21:20:41.4881817Z Region: centralus
+2026-11-22T21:20:41.4882181Z Cloud: Azure
+2026-11-22T21:20:41.4882520Z ##[endgroup]
+2026-11-22T21:20:41.4883342Z ##[group]Operating System
+2026-11-22T21:20:41.4883754Z Ubuntu
+2026-11-22T21:20:41.4884071Z 26.04.1
+2026-11-22T21:20:41.4884438Z LTS
+2026-11-22T21:20:41.4884759Z ##[endgroup]
+2026-11-22T21:20:41.4885124Z ##[group]Runner Image
+2026-11-22T21:20:41.4885555Z Image: ubuntu-26.04
+2026-11-22T21:20:41.4885929Z Version: 20261116.202.1
+2026-11-22T21:20:41.4886718Z Included Software: https://github.com/actions/runner-images/blob/ubuntu26/20261116.202/images/ubuntu/Ubuntu2604-Readme.md
+2026-11-22T21:20:41.4887650Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu26%2F20261116.202
+2026-11-22T21:20:41.4888552Z ##[endgroup]
+2026-11-22T21:20:41.4889257Z ##[group]GITHUB_TOKEN Permissions
+2026-11-22T21:20:41.4890685Z Contents: read
+2026-11-22T21:20:41.4891042Z Metadata: read
+2026-11-22T21:20:41.4891488Z ##[endgroup]
+2026-11-22T21:20:41.4892828Z Secret source: Actions
+2026-11-22T21:20:41.4893459Z Cache mode: write
+2026-11-22T21:20:41.4894090Z Prepare workflow directory
+2026-11-22T21:20:41.5206158Z Prepare all required actions
+2026-11-22T21:20:41.5251187Z Getting action download info
+2026-11-22T21:20:41.7682037Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-11-22T21:20:41.8431602Z Download action repository 'actions/setup-python@v5' (SHA:a26af69be951a213d495a4c3e4e4022e16d87065)
+2026-11-22T21:20:41.9280405Z Download action repository 'actions/upload-artifact@v4' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+2026-11-22T21:20:42.0984927Z Complete job name: G47 real Mongo purchase, payment, opening and component lifecycle
+2026-11-22T21:20:42.1635415Z ##[group]Run actions/checkout@v4
+2026-11-22T21:20:42.1635858Z with:
+2026-11-22T21:20:42.1636130Z   ref: 9a500a21013a08f750009be656362481986eb208
+2026-11-22T21:20:42.1636476Z   repository: AMASI-SA/AMASI-SA
+2026-11-22T21:20:42.1638833Z   token: ***
+2026-11-22T21:20:42.1639080Z   ssh-strict: true
+2026-11-22T21:20:42.1639330Z   ssh-user: git
+2026-11-22T21:20:42.1639594Z   persist-credentials: true
+2026-11-22T21:20:42.1639874Z   clean: true
+2026-11-22T21:20:42.1640131Z   sparse-checkout-cone-mode: true
+2026-11-22T21:20:42.1640432Z   fetch-depth: 1
+2026-11-22T21:20:42.1640685Z   fetch-tags: false
+2026-11-22T21:20:42.1640941Z   show-progress: true
+2026-11-22T21:20:42.1641197Z   lfs: false
+2026-11-22T21:20:42.1641432Z   submodules: false
+2026-11-22T21:20:42.1641688Z   set-safe-directory: true
+2026-11-22T21:20:42.1641977Z   allow-unsafe-pr-checkout: false
+2026-11-22T21:20:42.1642376Z env:
+2026-11-22T21:20:42.1642688Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=g47test
+2026-11-22T21:20:42.1643208Z   MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
+2026-11-22T21:20:42.1643645Z   PYTHONDONTWRITEBYTECODE: 1
+2026-11-22T21:20:42.1643924Z ##[endgroup]
+2026-11-22T21:20:42.3944289Z Syncing repository: AMASI-SA/AMASI-SA
+2026-11-22T21:20:42.3946063Z ##[group]Getting Git version info
+2026-11-22T21:20:42.3946756Z Working directory is '/home/runner/work/AMASI-SA/AMASI-SA'
+2026-11-22T21:20:42.3947921Z [command]/usr/bin/git version
+2026-11-22T21:20:42.3948658Z git version 2.56.1
+2026-11-22T21:20:42.3950260Z ##[endgroup]
+2026-11-22T21:20:42.3954528Z Temporarily overriding HOME='/home/runner/work/_temp/40145554-5326-4724-ab22-669032eafcbf' before making global git config changes
+2026-11-22T21:20:42.3955629Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-22T21:20:42.3956307Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/AMASI-SA/AMASI-SA
+2026-11-22T21:20:42.3995341Z Deleting the contents of '/home/runner/work/AMASI-SA/AMASI-SA'
+2026-11-22T21:20:42.3997733Z ##[group]Initializing the repository
+2026-11-22T21:20:42.4000249Z [command]/usr/bin/git init /home/runner/work/AMASI-SA/AMASI-SA
+2026-11-22T21:20:42.4095010Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-11-22T21:20:42.4096081Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-11-22T21:20:42.4097128Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-11-22T21:20:42.4097903Z hint: call:
+2026-11-22T21:20:42.4098418Z hint:
+2026-11-22T21:20:42.4098937Z hint: 	git config --global init.defaultBranch <name>
+2026-11-22T21:20:42.4099543Z hint:
+2026-11-22T21:20:42.4100118Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-11-22T21:20:42.4101048Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-11-22T21:20:42.4101820Z hint:
+2026-11-22T21:20:42.4102223Z hint: 	git branch -m <name>
+2026-11-22T21:20:42.4102698Z hint:
+2026-11-22T21:20:42.4103319Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-11-22T21:20:42.4107443Z Initialized empty Git repository in /home/runner/work/AMASI-SA/AMASI-SA/.git/
+2026-11-22T21:20:42.4116159Z [command]/usr/bin/git remote add origin https://github.com/AMASI-SA/AMASI-SA
+2026-11-22T21:20:42.4164955Z ##[endgroup]
+2026-11-22T21:20:42.4165768Z ##[group]Disabling automatic garbage collection
+2026-11-22T21:20:42.4167115Z [command]/usr/bin/git config --local gc.auto 0
+2026-11-22T21:20:42.4195025Z ##[endgroup]
+2026-11-22T21:20:42.4195749Z ##[group]Setting up auth
+2026-11-22T21:20:42.4199996Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-22T21:20:42.4227375Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-22T21:20:42.4616746Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-22T21:20:42.4646071Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-22T21:20:42.4880299Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-22T21:20:42.4909218Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-22T21:20:42.5129419Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-11-22T21:20:42.5165146Z ##[endgroup]
+2026-11-22T21:20:42.5165739Z ##[group]Fetching the repository
+2026-11-22T21:20:42.5174028Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin 9a500a21013a08f750009be656362481986eb208
+2026-11-22T21:20:45.1305826Z From https://github.com/AMASI-SA/AMASI-SA
+2026-11-22T21:20:45.1307680Z  * branch            9a500a21013a08f750009be656362481986eb208 -> FETCH_HEAD
+2026-11-22T21:20:45.1310801Z ##[endgroup]
+2026-11-22T21:20:45.1312010Z ##[group]Determining the checkout info
+2026-11-22T21:20:45.1313179Z ##[endgroup]
+2026-11-22T21:20:45.1316188Z [command]/usr/bin/git sparse-checkout disable
+2026-11-22T21:20:45.1648841Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-11-22T21:20:45.2135920Z ##[group]Checking out the ref
+2026-11-22T21:20:45.2138663Z [command]/usr/bin/git checkout --progress --force 9a500a21013a08f750009be656362481986eb208
+2026-11-22T21:20:45.6670894Z Note: switching to '9a500a21013a08f750009be656362481986eb208'.
+2026-11-22T21:20:45.6671302Z 
+2026-11-22T21:20:45.6671531Z You are in 'detached HEAD' state. You can look around, make experimental
+2026-11-22T21:20:45.6672489Z changes and commit them, and you can discard any commits you make in this
+2026-11-22T21:20:45.6673006Z state without impacting any branches by switching back to a branch.
+2026-11-22T21:20:45.6673313Z 
+2026-11-22T21:20:45.6673542Z If you want to create a new branch to retain commits you create, you may
+2026-11-22T21:20:45.6673998Z do so (now or later) by using -c with the switch command. Example:
+2026-11-22T21:20:45.6674255Z 
+2026-11-22T21:20:45.6674374Z   git switch -c <new-branch-name>
+2026-11-22T21:20:45.6674562Z 
+2026-11-22T21:20:45.6674686Z Or undo this operation with:
+2026-11-22T21:20:45.6674858Z 
+2026-11-22T21:20:45.6674955Z   git switch -
+2026-11-22T21:20:45.6675122Z 
+2026-11-22T21:20:45.6675389Z Turn off this advice by setting config variable advice.detachedHead to false
+2026-11-22T21:20:45.6675741Z 
+2026-11-22T21:20:45.6676017Z HEAD is now at 9a500a2 Freeze reviewed operational reversal release intent on current Production
+2026-11-22T21:20:45.6693279Z ##[endgroup]
+2026-11-22T21:20:45.6738030Z [command]/usr/bin/git log -1 --format=%H
+2026-11-22T21:20:45.6760282Z 9a500a21013a08f750009be656362481986eb208
+2026-11-22T21:20:45.6944509Z ##[group]Run git rev-parse HEAD
+2026-11-22T21:20:45.6944802Z [36;1mgit rev-parse HEAD[0m
+2026-11-22T21:20:45.6945007Z [36;1mgit rev-parse 'HEAD^{tree}'[0m
+2026-11-22T21:20:45.6978485Z shell: /usr/bin/bash -e {0}
+2026-11-22T21:20:45.6978693Z env:
+2026-11-22T21:20:45.6979015Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=g47test
+2026-11-22T21:20:45.6979368Z   MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
+2026-11-22T21:20:45.6979684Z   PYTHONDONTWRITEBYTECODE: 1
+2026-11-22T21:20:45.6979879Z ##[endgroup]
+2026-11-22T21:20:45.7053796Z 9a500a21013a08f750009be656362481986eb208
+2026-11-22T21:20:45.7068672Z 2cbd2842ed2506642a1321a47e35f69a766fcf89
+2026-11-22T21:20:45.7175112Z ##[group]Run actions/setup-python@v5
+2026-11-22T21:20:45.7175335Z with:
+2026-11-22T21:20:45.7175506Z   python-version: 3.12
+2026-11-22T21:20:45.7175715Z   check-latest: false
+2026-11-22T21:20:45.7177156Z   token: ***
+2026-11-22T21:20:45.7177330Z   update-environment: true
+2026-11-22T21:20:45.7177525Z   allow-prereleases: false
+2026-11-22T21:20:45.7177712Z   freethreaded: false
+2026-11-22T21:20:45.7177884Z env:
+2026-11-22T21:20:45.7178236Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=g47test
+2026-11-22T21:20:45.7178572Z   MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
+2026-11-22T21:20:45.7178862Z   PYTHONDONTWRITEBYTECODE: 1
+2026-11-22T21:20:45.7179051Z ##[endgroup]
+2026-11-22T21:20:45.8111252Z ##[group]Installed versions
+2026-11-22T21:20:45.8193656Z (node:2188) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-22T21:20:45.8194475Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-22T21:20:45.8194941Z Successfully set up CPython (3.12.16)
+2026-11-22T21:20:45.8195446Z ##[endgroup]
+2026-11-22T21:20:45.8291938Z ##[group]Run python -m pip install fastapi==0.141.1 pydantic==2.13.5 email-validator==2.3.0 pymongo==4.18.2 motor==3.7.1 pytest==9.0.3 pytest-asyncio==1.3.0 httpx==0.28.1 openpyxl==3.1.5 python-dotenv==1.2.3 cryptography==50.0.0 bcrypt==4.1.3 PyJWT==2.13.0 python-multipart==0.0.20 mongomock-motor==0.0.36 reportlab==5.0.1 Pillow==12.3.0 qrcode==8.2 arabic-reshaper==3.0.1 python-bidi==0.6.11 PyMuPDF==1.28.2 tzdata==2026.4
+2026-11-22T21:20:45.8293483Z [36;1mpython -m pip install fastapi==0.141.1 pydantic==2.13.5 email-validator==2.3.0 pymongo==4.18.2 motor==3.7.1 pytest==9.0.3 pytest-asyncio==1.3.0 httpx==0.28.1 openpyxl==3.1.5 python-dotenv==1.2.3 cryptography==50.0.0 bcrypt==4.1.3 PyJWT==2.13.0 python-multipart==0.0.20 mongomock-motor==0.0.36 reportlab==5.0.1 Pillow==12.3.0 qrcode==8.2 arabic-reshaper==3.0.1 python-bidi==0.6.11 PyMuPDF==1.28.2 tzdata==2026.4[0m
+2026-11-22T21:20:45.8339551Z shell: /usr/bin/bash -e {0}
+2026-11-22T21:20:45.8339754Z env:
+2026-11-22T21:20:45.8340027Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=g47test
+2026-11-22T21:20:45.8340479Z   MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
+2026-11-22T21:20:45.8340742Z   PYTHONDONTWRITEBYTECODE: 1
+2026-11-22T21:20:45.8340960Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:20:45.8341254Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib/pkgconfig
+2026-11-22T21:20:45.8341527Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:20:45.8341787Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:20:45.8342041Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:20:45.8342298Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib
+2026-11-22T21:20:45.8342523Z ##[endgroup]
+2026-11-22T21:20:46.5712324Z Collecting fastapi==0.141.1
+2026-11-22T21:20:46.6296189Z   Downloading fastapi-0.141.1-py3-none-any.whl.metadata (27 kB)
+2026-11-22T21:20:46.7268436Z Collecting pydantic==2.13.5
+2026-11-22T21:20:46.7418272Z   Downloading pydantic-2.13.5-py3-none-any.whl.metadata (110 kB)
+2026-11-22T21:20:46.7921557Z Collecting email-validator==2.3.0
+2026-11-22T21:20:46.8069349Z   Downloading email_validator-2.3.0-py3-none-any.whl.metadata (26 kB)
+2026-11-22T21:20:46.9811040Z Collecting pymongo==4.18.2
+2026-11-22T21:20:46.9992470Z   Downloading pymongo-4.18.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (10 kB)
+2026-11-22T21:20:47.0228917Z Collecting motor==3.7.1
+2026-11-22T21:20:47.0376496Z   Downloading motor-3.7.1-py3-none-any.whl.metadata (21 kB)
+2026-11-22T21:20:47.0675195Z Collecting pytest==9.0.3
+2026-11-22T21:20:47.0827663Z   Downloading pytest-9.0.3-py3-none-any.whl.metadata (7.6 kB)
+2026-11-22T21:20:47.1078989Z Collecting pytest-asyncio==1.3.0
+2026-11-22T21:20:47.1239609Z   Downloading pytest_asyncio-1.3.0-py3-none-any.whl.metadata (4.1 kB)
+2026-11-22T21:20:47.1803803Z Collecting httpx==0.28.1
+2026-11-22T21:20:47.1965029Z   Downloading httpx-0.28.1-py3-none-any.whl.metadata (7.1 kB)
+2026-11-22T21:20:47.2243166Z Collecting openpyxl==3.1.5
+2026-11-22T21:20:47.2394901Z   Downloading openpyxl-3.1.5-py2.py3-none-any.whl.metadata (2.5 kB)
+2026-11-22T21:20:47.2613528Z Collecting python-dotenv==1.2.3
+2026-11-22T21:20:47.2790715Z   Downloading python_dotenv-1.2.3-py3-none-any.whl.metadata (29 kB)
+2026-11-22T21:20:47.3811509Z Collecting cryptography==50.0.0
+2026-11-22T21:20:47.3974246Z   Downloading cryptography-50.0.0-cp311-abi3-manylinux_2_34_x86_64.whl.metadata (4.3 kB)
+2026-11-22T21:20:47.4347421Z Collecting bcrypt==4.1.3
+2026-11-22T21:20:47.4517642Z   Downloading bcrypt-4.1.3-cp39-abi3-manylinux_2_28_x86_64.whl.metadata (9.5 kB)
+2026-11-22T21:20:47.4749593Z Collecting PyJWT==2.13.0
+2026-11-22T21:20:47.4898471Z   Downloading pyjwt-2.13.0-py3-none-any.whl.metadata (3.4 kB)
+2026-11-22T21:20:47.5115085Z Collecting python-multipart==0.0.20
+2026-11-22T21:20:47.5265067Z   Downloading python_multipart-0.0.20-py3-none-any.whl.metadata (1.8 kB)
+2026-11-22T21:20:47.5772125Z Collecting mongomock-motor==0.0.36
+2026-11-22T21:20:47.5954950Z   Downloading mongomock_motor-0.0.36-py3-none-any.whl.metadata (2.0 kB)
+2026-11-22T21:20:47.6599930Z Collecting reportlab==5.0.1
+2026-11-22T21:20:47.6747556Z   Downloading reportlab-5.0.1-py3-none-any.whl.metadata (1.6 kB)
+2026-11-22T21:20:47.7734323Z Collecting Pillow==12.3.0
+2026-11-22T21:20:47.7893151Z   Downloading pillow-12.3.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (9.1 kB)
+2026-11-22T21:20:47.8117308Z Collecting qrcode==8.2
+2026-11-22T21:20:47.8273543Z   Downloading qrcode-8.2-py3-none-any.whl.metadata (17 kB)
+2026-11-22T21:20:47.8500825Z Collecting arabic-reshaper==3.0.1
+2026-11-22T21:20:47.8686990Z   Downloading arabic_reshaper-3.0.1-py3-none-any.whl.metadata (13 kB)
+2026-11-22T21:20:47.9257835Z Collecting python-bidi==0.6.11
+2026-11-22T21:20:47.9427813Z   Downloading python_bidi-0.6.11-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (5.3 kB)
+2026-11-22T21:20:48.0257277Z Collecting PyMuPDF==1.28.2
+2026-11-22T21:20:48.0408626Z   Downloading pymupdf-1.28.2-cp310-abi3-manylinux_2_28_x86_64.whl.metadata (26 kB)
+2026-11-22T21:20:48.0644273Z Collecting tzdata==2026.4
+2026-11-22T21:20:48.0792574Z   Downloading tzdata-2026.4-py2.py3-none-any.whl.metadata (1.4 kB)
+2026-11-22T21:20:48.1061934Z Collecting starlette>=0.46.0 (from fastapi==0.141.1)
+2026-11-22T21:20:48.1211222Z   Downloading starlette-1.10.0-py3-none-any.whl.metadata (6.6 kB)
+2026-11-22T21:20:48.1529966Z Collecting typing-extensions>=4.8.0 (from fastapi==0.141.1)
+2026-11-22T21:20:48.1678616Z   Downloading typing_extensions-4.16.0-py3-none-any.whl.metadata (3.3 kB)
+2026-11-22T21:20:48.1897637Z Collecting typing-inspection>=0.4.2 (from fastapi==0.141.1)
+2026-11-22T21:20:48.2049534Z   Downloading typing_inspection-0.4.5-py3-none-any.whl.metadata (2.6 kB)
+2026-11-22T21:20:48.2258665Z Collecting annotated-doc>=0.0.2 (from fastapi==0.141.1)
+2026-11-22T21:20:48.2411033Z   Downloading annotated_doc-0.0.7-py3-none-any.whl.metadata (6.4 kB)
+2026-11-22T21:20:48.2647313Z Collecting annotated-types>=0.6.0 (from pydantic==2.13.5)
+2026-11-22T21:20:48.2799200Z   Downloading annotated_types-0.8.0-py3-none-any.whl.metadata (15 kB)
+2026-11-22T21:20:48.7023447Z Collecting pydantic-core==2.46.5 (from pydantic==2.13.5)
+2026-11-22T21:20:48.7176406Z   Downloading pydantic_core-2.46.5-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (6.6 kB)
+2026-11-22T21:20:48.7476633Z Collecting dnspython>=2.0.0 (from email-validator==2.3.0)
+2026-11-22T21:20:48.7630492Z   Downloading dnspython-2.9.2-py3-none-any.whl.metadata (5.8 kB)
+2026-11-22T21:20:48.7903368Z Collecting idna>=2.0.0 (from email-validator==2.3.0)
+2026-11-22T21:20:48.8051835Z   Downloading idna-3.20-py3-none-any.whl.metadata (7.2 kB)
+2026-11-22T21:20:48.8335088Z Collecting iniconfig>=1.0.1 (from pytest==9.0.3)
+2026-11-22T21:20:48.8514156Z   Downloading iniconfig-2.3.1-py3-none-any.whl.metadata (2.8 kB)
+2026-11-22T21:20:48.9030197Z Collecting packaging>=22 (from pytest==9.0.3)
+2026-11-22T21:20:48.9176881Z   Downloading packaging-26.3-py3-none-any.whl.metadata (3.5 kB)
+2026-11-22T21:20:48.9385303Z Collecting pluggy<2,>=1.5 (from pytest==9.0.3)
+2026-11-22T21:20:48.9546951Z   Downloading pluggy-1.7.0-py3-none-any.whl.metadata (5.0 kB)
+2026-11-22T21:20:48.9788976Z Collecting pygments>=2.7.2 (from pytest==9.0.3)
+2026-11-22T21:20:48.9948860Z   Downloading pygments-2.21.0-py3-none-any.whl.metadata (2.5 kB)
+2026-11-22T21:20:49.0212062Z Collecting anyio (from httpx==0.28.1)
+2026-11-22T21:20:49.0371706Z   Downloading anyio-4.16.0-py3-none-any.whl.metadata (4.7 kB)
+2026-11-22T21:20:49.0749033Z Collecting certifi (from httpx==0.28.1)
+2026-11-22T21:20:49.0899518Z   Downloading certifi-2026.11.20-py3-none-any.whl.metadata (2.5 kB)
+2026-11-22T21:20:49.1254615Z Collecting httpcore==1.* (from httpx==0.28.1)
+2026-11-22T21:20:49.1401792Z   Downloading httpcore-1.0.9-py3-none-any.whl.metadata (21 kB)
+2026-11-22T21:20:49.1622145Z Collecting et-xmlfile (from openpyxl==3.1.5)
+2026-11-22T21:20:49.1785096Z   Downloading et_xmlfile-2.0.0-py3-none-any.whl.metadata (2.7 kB)
+2026-11-22T21:20:49.2728813Z Collecting cffi>=2.0.0 (from cryptography==50.0.0)
+2026-11-22T21:20:49.2900674Z   Downloading cffi-2.1.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (2.5 kB)
+2026-11-22T21:20:49.3121519Z Collecting mongomock<5.0.0,>=4.1.2 (from mongomock-motor==0.0.36)
+2026-11-22T21:20:49.3285891Z   Downloading mongomock-4.3.0-py2.py3-none-any.whl.metadata (12 kB)
+2026-11-22T21:20:49.4053655Z Collecting charset-normalizer (from reportlab==5.0.1)
+2026-11-22T21:20:49.4204177Z   Downloading charset_normalizer-3.5.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (46 kB)
+2026-11-22T21:20:49.4553012Z Collecting h11>=0.16 (from httpcore==1.*->httpx==0.28.1)
+2026-11-22T21:20:49.4710958Z   Downloading h11-0.16.0-py3-none-any.whl.metadata (8.3 kB)
+2026-11-22T21:20:49.5061606Z Collecting pytz (from mongomock<5.0.0,>=4.1.2->mongomock-motor==0.0.36)
+2026-11-22T21:20:49.5210168Z   Downloading pytz-2026.6-py2.py3-none-any.whl.metadata (22 kB)
+2026-11-22T21:20:49.5423270Z Collecting sentinels (from mongomock<5.0.0,>=4.1.2->mongomock-motor==0.0.36)
+2026-11-22T21:20:49.5588820Z   Downloading sentinels-1.1.1-py3-none-any.whl.metadata (3.0 kB)
+2026-11-22T21:20:49.5807154Z Collecting pycparser (from cffi>=2.0.0->cryptography==50.0.0)
+2026-11-22T21:20:49.5957498Z   Downloading pycparser-3.12-py3-none-any.whl.metadata (9.7 kB)
+2026-11-22T21:20:49.6310165Z Downloading fastapi-0.141.1-py3-none-any.whl (131 kB)
+2026-11-22T21:20:49.6521610Z Downloading pydantic-2.13.5-py3-none-any.whl (472 kB)
+2026-11-22T21:20:49.6860769Z Downloading email_validator-2.3.0-py3-none-any.whl (35 kB)
+2026-11-22T21:20:49.7060302Z Downloading pymongo-4.18.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (1.0 MB)
+2026-11-22T21:20:49.7265755Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.0/1.0 MB 47.8 MB/s  0:00:00
+2026-11-22T21:20:49.7434132Z Downloading motor-3.7.1-py3-none-any.whl (74 kB)
+2026-11-22T21:20:49.7607703Z Downloading pytest-9.0.3-py3-none-any.whl (375 kB)
+2026-11-22T21:20:49.7798256Z Downloading pytest_asyncio-1.3.0-py3-none-any.whl (15 kB)
+2026-11-22T21:20:49.7969222Z Downloading httpx-0.28.1-py3-none-any.whl (73 kB)
+2026-11-22T21:20:49.8183805Z Downloading openpyxl-3.1.5-py2.py3-none-any.whl (250 kB)
+2026-11-22T21:20:49.8356584Z Downloading python_dotenv-1.2.3-py3-none-any.whl (22 kB)
+2026-11-22T21:20:49.8554609Z Downloading cryptography-50.0.0-cp311-abi3-manylinux_2_34_x86_64.whl (4.7 MB)
+2026-11-22T21:20:49.8988807Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.7/4.7 MB 107.6 MB/s  0:00:00
+2026-11-22T21:20:49.9139614Z Downloading bcrypt-4.1.3-cp39-abi3-manylinux_2_28_x86_64.whl (283 kB)
+2026-11-22T21:20:49.9311513Z Downloading pyjwt-2.13.0-py3-none-any.whl (31 kB)
+2026-11-22T21:20:49.9505860Z Downloading python_multipart-0.0.20-py3-none-any.whl (24 kB)
+2026-11-22T21:20:49.9740084Z Downloading mongomock_motor-0.0.36-py3-none-any.whl (7.3 kB)
+2026-11-22T21:20:50.0070207Z Downloading reportlab-5.0.1-py3-none-any.whl (2.0 MB)
+2026-11-22T21:20:50.0180936Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.0/2.0 MB 175.9 MB/s  0:00:00
+2026-11-22T21:20:50.0333104Z Downloading pillow-12.3.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (6.9 MB)
+2026-11-22T21:20:50.0904357Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 6.9/6.9 MB 127.6 MB/s  0:00:00
+2026-11-22T21:20:50.1097358Z Downloading qrcode-8.2-py3-none-any.whl (45 kB)
+2026-11-22T21:20:50.1277818Z Downloading arabic_reshaper-3.0.1-py3-none-any.whl (20 kB)
+2026-11-22T21:20:50.1468441Z Downloading python_bidi-0.6.11-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (296 kB)
+2026-11-22T21:20:50.1638343Z Downloading pymupdf-1.28.2-cp310-abi3-manylinux_2_28_x86_64.whl (25.8 MB)
+2026-11-22T21:20:50.3967535Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 25.8/25.8 MB 110.3 MB/s  0:00:00
+2026-11-22T21:20:50.4118620Z Downloading tzdata-2026.4-py2.py3-none-any.whl (347 kB)
+2026-11-22T21:20:50.4299387Z Downloading pydantic_core-2.46.5-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (2.1 MB)
+2026-11-22T21:20:50.4410987Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.1/2.1 MB 183.8 MB/s  0:00:00
+2026-11-22T21:20:50.4563939Z Downloading dnspython-2.9.2-py3-none-any.whl (360 kB)
+2026-11-22T21:20:50.4736221Z Downloading httpcore-1.0.9-py3-none-any.whl (78 kB)
+2026-11-22T21:20:50.4905540Z Downloading mongomock-4.3.0-py2.py3-none-any.whl (64 kB)
+2026-11-22T21:20:50.5071826Z Downloading pluggy-1.7.0-py3-none-any.whl (27 kB)
+2026-11-22T21:20:50.5234245Z Downloading annotated_doc-0.0.7-py3-none-any.whl (5.3 kB)
+2026-11-22T21:20:50.5463306Z Downloading annotated_types-0.8.0-py3-none-any.whl (13 kB)
+2026-11-22T21:20:50.5628225Z Downloading cffi-2.1.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (221 kB)
+2026-11-22T21:20:50.5803440Z Downloading h11-0.16.0-py3-none-any.whl (37 kB)
+2026-11-22T21:20:50.6860516Z Downloading idna-3.20-py3-none-any.whl (69 kB)
+2026-11-22T21:20:50.8249451Z Downloading iniconfig-2.3.1-py3-none-any.whl (7.6 kB)
+2026-11-22T21:20:50.9452570Z Downloading packaging-26.3-py3-none-any.whl (129 kB)
+2026-11-22T21:20:51.1243839Z Downloading pygments-2.21.0-py3-none-any.whl (1.3 MB)
+2026-11-22T21:20:51.1910524Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.3/1.3 MB 15.2 MB/s  0:00:00
+2026-11-22T21:20:51.2061695Z Downloading starlette-1.10.0-py3-none-any.whl (80 kB)
+2026-11-22T21:20:51.3382807Z Downloading anyio-4.16.0-py3-none-any.whl (134 kB)
+2026-11-22T21:20:51.5951826Z Downloading typing_extensions-4.16.0-py3-none-any.whl (45 kB)
+2026-11-22T21:20:51.6260432Z Downloading typing_inspection-0.4.5-py3-none-any.whl (14 kB)
+2026-11-22T21:20:51.6431937Z Downloading certifi-2026.11.20-py3-none-any.whl (127 kB)
+2026-11-22T21:20:51.6599445Z Downloading charset_normalizer-3.5.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (257 kB)
+2026-11-22T21:20:51.6779393Z Downloading et_xmlfile-2.0.0-py3-none-any.whl (18 kB)
+2026-11-22T21:20:51.6959876Z Downloading pycparser-3.12-py3-none-any.whl (62 kB)
+2026-11-22T21:20:51.7127176Z Downloading pytz-2026.6-py2.py3-none-any.whl (506 kB)
+2026-11-22T21:20:51.7302265Z Downloading sentinels-1.1.1-py3-none-any.whl (3.7 kB)
+2026-11-22T21:20:51.9070038Z Installing collected packages: pytz, tzdata, typing-extensions, sentinels, qrcode, python-multipart, python-dotenv, python-bidi, PyMuPDF, PyJWT, pygments, pycparser, pluggy, Pillow, packaging, iniconfig, idna, h11, et-xmlfile, dnspython, charset-normalizer, certifi, bcrypt, arabic-reshaper, annotated-types, annotated-doc, typing-inspection, reportlab, pytest, pymongo, pydantic-core, openpyxl, mongomock, httpcore, email-validator, cffi, anyio, starlette, pytest-asyncio, pydantic, motor, httpx, cryptography, mongomock-motor, fastapi
+2026-11-22T21:20:55.6695681Z 
+2026-11-22T21:20:55.6721720Z Successfully installed Pillow-12.3.0 PyJWT-2.13.0 PyMuPDF-1.28.2 annotated-doc-0.0.7 annotated-types-0.8.0 anyio-4.16.0 arabic-reshaper-3.0.1 bcrypt-4.1.3 certifi-2026.11.20 cffi-2.1.1 charset-normalizer-3.5.2 cryptography-50.0.0 dnspython-2.9.2 email-validator-2.3.0 et-xmlfile-2.0.0 fastapi-0.141.1 h11-0.16.0 httpcore-1.0.9 httpx-0.28.1 idna-3.20 iniconfig-2.3.1 mongomock-4.3.0 mongomock-motor-0.0.36 motor-3.7.1 openpyxl-3.1.5 packaging-26.3 pluggy-1.7.0 pycparser-3.12 pydantic-2.13.5 pydantic-core-2.46.5 pygments-2.21.0 pymongo-4.18.2 pytest-9.0.3 pytest-asyncio-1.3.0 python-bidi-0.6.11 python-dotenv-1.2.3 python-multipart-0.0.20 pytz-2026.6 qrcode-8.2 reportlab-5.0.1 sentinels-1.1.1 starlette-1.10.0 typing-extensions-4.16.0 typing-inspection-0.4.5 tzdata-2026.4
+2026-11-22T21:20:55.8193565Z ##[group]Run set -euo pipefail
+2026-11-22T21:20:55.8193800Z [36;1mset -euo pipefail[0m
+2026-11-22T21:20:55.8194177Z [36;1mdocker run -d --name g47-rs -p 127.0.0.1:27018:27018 mongo:8.0.12 --port 27018 --replSet g47test --bind_ip_all --setParameter transactionLifetimeLimitSeconds=5[0m
+2026-11-22T21:20:55.8194667Z [36;1mdocker run -d --name g47-standalone -p 127.0.0.1:27019:27019 mongo:8.0.12 --port 27019 --bind_ip_all[0m
+2026-11-22T21:20:55.8194945Z [36;1mfor attempt in $(seq 1 40); do[0m
+2026-11-22T21:20:55.8195244Z [36;1m  if docker exec g47-rs mongosh --port 27018 --quiet --eval 'db.adminCommand({ping:1})'; then break; fi[0m
+2026-11-22T21:20:55.8195530Z [36;1m  sleep 1[0m
+2026-11-22T21:20:55.8195655Z [36;1mdone[0m
+2026-11-22T21:20:55.8195932Z [36;1mdocker exec g47-rs mongosh --port 27018 --quiet --eval 'rs.initiate({_id:"g47test",members:[{_id:0,host:"127.0.0.1:27018"}]})'[0m
+2026-11-22T21:20:55.8196253Z [36;1mfor attempt in $(seq 1 40); do[0m
+2026-11-22T21:20:55.8196592Z [36;1m  if docker exec g47-rs mongosh --port 27018 --quiet --eval 'if(!db.hello().isWritablePrimary){quit(1)}'; then break; fi[0m
+2026-11-22T21:20:55.8196895Z [36;1m  sleep 1[0m
+2026-11-22T21:20:55.8197020Z [36;1mdone[0m
+2026-11-22T21:20:55.8197255Z [36;1mdocker exec g47-rs mongosh --port 27018 --quiet --eval 'if(!db.hello().isWritablePrimary){quit(1)}'[0m
+2026-11-22T21:20:55.8197691Z [36;1mdocker exec g47-standalone mongosh --port 27019 --quiet --eval 'const h=db.hello(); if(h.setName || !h.isWritablePrimary){quit(1)}'[0m
+2026-11-22T21:20:55.8231134Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-11-22T21:20:55.8231344Z env:
+2026-11-22T21:20:55.8231541Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=g47test
+2026-11-22T21:20:55.8231832Z   MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
+2026-11-22T21:20:55.8232068Z   PYTHONDONTWRITEBYTECODE: 1
+2026-11-22T21:20:55.8232261Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:20:55.8232522Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib/pkgconfig
+2026-11-22T21:20:55.8232776Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:20:55.8233006Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:20:55.8233242Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:20:55.8233472Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib
+2026-11-22T21:20:55.8233670Z ##[endgroup]
+2026-11-22T21:20:55.9200077Z Unable to find image 'mongo:8.0.12' locally
+2026-11-22T21:20:56.4035138Z 8.0.12: Pulling from library/mongo
+2026-11-22T21:20:56.6074232Z 91469349d2c2: Pulling fs layer
+2026-11-22T21:20:56.6074552Z d713d16a8043: Pulling fs layer
+2026-11-22T21:20:56.6074779Z b71466b94f26: Pulling fs layer
+2026-11-22T21:20:56.6075012Z cb52df844465: Pulling fs layer
+2026-11-22T21:20:56.6075232Z f1102db351d8: Pulling fs layer
+2026-11-22T21:20:56.6075450Z 0a07b2b41243: Pulling fs layer
+2026-11-22T21:20:56.6075694Z e701e7c9324a: Pulling fs layer
+2026-11-22T21:20:56.6075911Z 578438e6cda5: Pulling fs layer
+2026-11-22T21:20:56.7230219Z 578438e6cda5: Download complete
+2026-11-22T21:20:56.8236885Z cb52df844465: Download complete
+2026-11-22T21:20:56.8238394Z d713d16a8043: Download complete
+2026-11-22T21:20:56.8242699Z e701e7c9324a: Download complete
+2026-11-22T21:20:56.8259194Z f1102db351d8: Download complete
+2026-11-22T21:20:56.8275829Z 91469349d2c2: Download complete
+2026-11-22T21:20:56.9224322Z f1e7f9f13931: Download complete
+2026-11-22T21:20:56.9225059Z fcd5c905ac2b: Download complete
+2026-11-22T21:20:57.1228207Z b71466b94f26: Download complete
+2026-11-22T21:20:58.4278517Z b71466b94f26: Pull complete
+2026-11-22T21:20:59.0222727Z 0a07b2b41243: Download complete
+2026-11-22T21:20:59.0243408Z e701e7c9324a: Pull complete
+2026-11-22T21:20:59.0256454Z f1102db351d8: Pull complete
+2026-11-22T21:20:59.1234221Z 578438e6cda5: Pull complete
+2026-11-22T21:20:59.1246213Z cb52df844465: Pull complete
+2026-11-22T21:20:59.1247933Z d713d16a8043: Pull complete
+2026-11-22T21:21:01.4018793Z 91469349d2c2: Pull complete
+2026-11-22T21:21:01.4024079Z 0a07b2b41243: Pull complete
+2026-11-22T21:21:01.4024440Z Digest: sha256:95a98776f273721a295b03098578b06bc10281bb56aa828c77e9f60ecc70b150
+2026-11-22T21:21:01.4024872Z Status: Downloaded newer image for mongo:8.0.12
+2026-11-22T21:21:08.4644077Z 21207456508cebe12caf5a24ce9ff7dd480ecb3a043689d6eb3e8214d8116ce0
+2026-11-22T21:21:08.6930441Z 8fd7dd5d3cb5683f6d0855da043e812a1a96b282ab7b500b912ba7d04c2d72ce
+2026-11-22T21:21:09.1600283Z { ok: 1 }
+2026-11-22T21:21:09.4931309Z {
+2026-11-22T21:21:09.4931587Z   ok: 1,
+2026-11-22T21:21:09.4931794Z   '$clusterTime': {
+2026-11-22T21:21:09.4932103Z     clusterTime: Timestamp({ t: 1795382469, i: 1 }),
+2026-11-22T21:21:09.4932404Z     signature: {
+2026-11-22T21:21:09.4932708Z       hash: Binary.createFromBase64('AAAAAAAAAAAAAAAAAAAAAAAAAAA=', 0),
+2026-11-22T21:21:09.4933065Z       keyId: Long('0')
+2026-11-22T21:21:09.4933265Z     }
+2026-11-22T21:21:09.4933443Z   },
+2026-11-22T21:21:09.4933706Z   operationTime: Timestamp({ t: 1795382469, i: 1 })
+2026-11-22T21:21:09.4933975Z }
+2026-11-22T21:21:10.4294842Z ##[group]Run python -m pytest --noconftest -p no:cacheprovider -q --tb=short \
+2026-11-22T21:21:10.4295203Z [36;1mpython -m pytest --noconftest -p no:cacheprovider -q --tb=short \[0m
+2026-11-22T21:21:10.4295478Z [36;1m  tests/test_salla_products_projection.py \[0m
+2026-11-22T21:21:10.4295704Z [36;1m  tests/test_salla_products_projection_integration.py \[0m
+2026-11-22T21:21:10.4296084Z [36;1m  tests/test_salla_products_projection_repair.py \[0m
+2026-11-22T21:21:10.4296296Z [36;1m  tests/test_salla_order_items_snapshot.py \[0m
+2026-11-22T21:21:10.4296662Z [36;1m  tests/test_shipping_pending_snapshot_recovery.py::PendingPrintTests::test_assignment_ignores_pending_components_and_missing_label \[0m
+2026-11-22T21:21:10.4297203Z [36;1m  tests/test_shipping_pending_snapshot_recovery.py::PendingPrintTests::test_assignment_without_workflow_preserves_print_and_assembly_evidence \[0m
+2026-11-22T21:21:10.4297776Z [36;1m  tests/test_shipping_pending_snapshot_recovery.py::PendingPrintTests::test_assignment_rechecks_carrier_and_initial_status_before_confirming \[0m
+2026-11-22T21:21:10.4298342Z [36;1m  tests/test_salla_raw_snapshot_preservation.py \[0m
+2026-11-22T21:21:10.4298561Z [36;1m  tests/test_salla_single_order_status_resync.py \[0m
+2026-11-22T21:21:10.4298766Z [36;1m  tests/test_order_engine_salla_refresh.py \[0m
+2026-11-22T21:21:10.4298969Z [36;1m  tests/test_salla_scheduled_reconciliation.py \[0m
+2026-11-22T21:21:10.4299177Z [36;1m  tests/test_salla_sync_component_snapshot.py \[0m
+2026-11-22T21:21:10.4299380Z [36;1m  tests/test_sold_product_cost_details.py \[0m
+2026-11-22T21:21:10.4299570Z [36;1m  tests/test_report_raw_option_recovery.py \[0m
+2026-11-22T21:21:10.4299760Z [36;1m  tests/test_report_option_identity.py \[0m
+2026-11-22T21:21:10.4299984Z [36;1m  --junitxml="$RUNNER_TEMP/salla-products-projection.xml"[0m
+2026-11-22T21:21:10.4329325Z shell: /usr/bin/bash -e {0}
+2026-11-22T21:21:10.4329475Z env:
+2026-11-22T21:21:10.4329664Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=g47test
+2026-11-22T21:21:10.4329933Z   MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
+2026-11-22T21:21:10.4330163Z   PYTHONDONTWRITEBYTECODE: 1
+2026-11-22T21:21:10.4330345Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:21:10.4330593Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib/pkgconfig
+2026-11-22T21:21:10.4330840Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:21:10.4331058Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:21:10.4331275Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:21:10.4331494Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib
+2026-11-22T21:21:10.4331681Z   PYTHONPATH: .:tests
+2026-11-22T21:21:10.4331812Z ##[endgroup]
+2026-11-22T21:21:20.1967149Z ................................................................................................................................ [ 53%]
+2026-11-22T21:21:29.9423769Z ........................................................................ [ 84%]
+2026-11-22T21:21:31.0794425Z ......................................                                   [100%]
+2026-11-22T21:21:31.0795051Z =============================== warnings summary ===============================
+2026-11-22T21:21:31.0795754Z tests/test_report_raw_option_recovery.py::test_dashboard_and_sold_http_read_provider_choices_without_writes
+2026-11-22T21:21:31.0797057Z   /home/runner/work/AMASI-SA/AMASI-SA/backend/recurring_obligations_routes.py:295: PydanticDeprecatedSince20: Pydantic V1 style `@root_validator` validators are deprecated. You should migrate to Pydantic V2 style `@model_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+2026-11-22T21:21:31.0798303Z     @root_validator(skip_on_failure=True)
+2026-11-22T21:21:31.0798589Z 
+2026-11-22T21:21:31.0799517Z tests/test_report_raw_option_recovery.py::test_dashboard_and_sold_http_read_provider_choices_without_writes
+2026-11-22T21:21:31.0801021Z   /home/runner/work/AMASI-SA/AMASI-SA/backend/recurring_obligations_routes.py:319: PydanticDeprecatedSince20: Pydantic V1 style `@root_validator` validators are deprecated. You should migrate to Pydantic V2 style `@model_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+2026-11-22T21:21:31.0802330Z     @root_validator(skip_on_failure=True)
+2026-11-22T21:21:31.0802441Z 
+2026-11-22T21:21:31.0802565Z -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2026-11-22T21:21:31.0802845Z 238 passed, 2 warnings, 88 subtests passed in 19.05s
+2026-11-22T21:21:32.1307113Z ##[group]Run python - <<'PY'
+2026-11-22T21:21:32.1307332Z [36;1mpython - <<'PY'[0m
+2026-11-22T21:21:32.1307476Z [36;1mimport os[0m
+2026-11-22T21:21:32.1307615Z [36;1mfrom pathlib import Path[0m
+2026-11-22T21:21:32.1307790Z [36;1mimport xml.etree.ElementTree as ET[0m
+2026-11-22T21:21:32.1308157Z [36;1mreport = Path(os.environ["RUNNER_TEMP"]) / "salla-products-projection.xml"[0m
+2026-11-22T21:21:32.1308426Z [36;1mcases = list(ET.parse(report).iter("testcase"))[0m
+2026-11-22T21:21:32.1308648Z [36;1massert cases, "No Salla projection tests executed"[0m
+2026-11-22T21:21:32.1308917Z [36;1mrejected = [(row.get("classname"), row.get("name")) for row in cases[0m
+2026-11-22T21:21:32.1309217Z [36;1m            if any(row.find(tag) is not None for tag in ("skipped", "failure", "error"))][0m
+2026-11-22T21:21:32.1309533Z [36;1massert not rejected, f"Salla projection skipped or failed: {rejected}"[0m
+2026-11-22T21:21:32.1309890Z [36;1mexpected = {"test_salla_products_projection", "test_salla_products_projection_integration",[0m
+2026-11-22T21:21:32.1310234Z [36;1m            "test_salla_products_projection_repair", "test_salla_order_items_snapshot",[0m
+2026-11-22T21:21:32.1310493Z [36;1m            "test_salla_sync_component_snapshot"}[0m
+2026-11-22T21:21:32.1310753Z [36;1mobserved = {part for row in cases for part in row.get("classname", "").split(".")}[0m
+2026-11-22T21:21:32.1311067Z [36;1massert expected <= observed, f"Missing suites: {sorted(expected - observed)}"[0m
+2026-11-22T21:21:32.1311391Z [36;1mprint(f"Salla projection: {len(cases)} executed cases, zero skips/failures/errors")[0m
+2026-11-22T21:21:32.1311635Z [36;1mPY[0m
+2026-11-22T21:21:32.1340671Z shell: /usr/bin/bash -e {0}
+2026-11-22T21:21:32.1340825Z env:
+2026-11-22T21:21:32.1341012Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=g47test
+2026-11-22T21:21:32.1341287Z   MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
+2026-11-22T21:21:32.1341519Z   PYTHONDONTWRITEBYTECODE: 1
+2026-11-22T21:21:32.1341707Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:21:32.1341959Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib/pkgconfig
+2026-11-22T21:21:32.1342202Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:21:32.1342449Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:21:32.1342676Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:21:32.1342899Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib
+2026-11-22T21:21:32.1343089Z ##[endgroup]
+2026-11-22T21:21:32.1686695Z Salla projection: 238 executed cases, zero skips/failures/errors
+2026-11-22T21:21:32.1785735Z ##[group]Run actions/upload-artifact@v4
+2026-11-22T21:21:32.1785907Z with:
+2026-11-22T21:21:32.1786109Z   name: salla-products-projection-9a500a21013a08f750009be656362481986eb208
+2026-11-22T21:21:32.1786394Z   path: /home/runner/work/_temp/salla-products-projection.xml
+2026-11-22T21:21:32.1786600Z   if-no-files-found: error
+2026-11-22T21:21:32.1786741Z   compression-level: 6
+2026-11-22T21:21:32.1786872Z   overwrite: false
+2026-11-22T21:21:32.1787003Z   include-hidden-files: false
+2026-11-22T21:21:32.1787142Z env:
+2026-11-22T21:21:32.1787316Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=g47test
+2026-11-22T21:21:32.1787585Z   MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
+2026-11-22T21:21:32.1787816Z   PYTHONDONTWRITEBYTECODE: 1
+2026-11-22T21:21:32.1788004Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:21:32.1788377Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib/pkgconfig
+2026-11-22T21:21:32.1788890Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:21:32.1789108Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:21:32.1789328Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:21:32.1789551Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib
+2026-11-22T21:21:32.1789736Z ##[endgroup]
+2026-11-22T21:21:32.2940552Z (node:3024) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-22T21:21:32.2941101Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-22T21:21:32.2972953Z With the provided path, there will be 1 file uploaded
+2026-11-22T21:21:32.2983953Z Artifact name is valid!
+2026-11-22T21:21:32.2990549Z Root directory input is valid!
+2026-11-22T21:21:32.5522584Z Beginning upload of artifact content to blob storage
+2026-11-22T21:21:32.5678523Z (node:3024) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-11-22T21:21:32.7200421Z Uploaded bytes 5779
+2026-11-22T21:21:32.7614416Z Finished uploading artifact content to blob storage!
+2026-11-22T21:21:32.7619434Z SHA256 digest of uploaded artifact zip is 59e8d00bf54313468ca6a1d2110fcd68c95b0bde8870b7dd620a69f529abd36b
+2026-11-22T21:21:32.7620398Z Finalizing artifact upload
+2026-11-22T21:21:33.1854742Z Artifact salla-products-projection-9a500a21013a08f750009be656362481986eb208.zip successfully finalized. Artifact ID 14773557555
+2026-11-22T21:21:33.1856044Z Artifact salla-products-projection-9a500a21013a08f750009be656362481986eb208 has been successfully uploaded! Final size is 5779 bytes. Artifact ID is 14773557555
+2026-11-22T21:21:33.1860357Z Artifact download URL: https://github.com/AMASI-SA/AMASI-SA/actions/runs/45071567954/artifacts/14773557555
+2026-11-22T21:21:33.1990842Z ##[group]Run set -euo pipefail
+2026-11-22T21:21:33.1991054Z [36;1mset -euo pipefail[0m
+2026-11-22T21:21:33.1991240Z [36;1mtest -f tests/test_g47_opening_inventory.py[0m
+2026-11-22T21:21:33.1991485Z [36;1mtest -f tests/test_g47_supplier_payment_integration.py[0m
+2026-11-22T21:21:33.1991772Z [36;1mpython -m pytest --noconftest -p no:cacheprovider -q --tb=short \[0m
+2026-11-22T21:21:33.1992077Z [36;1m  tests/test_g47*.py tests/test_stock_component_consumption.py \[0m
+2026-11-22T21:21:33.1992426Z [36;1m  tests/test_bundle_catalog_v2.py tests/test_bundle_fulfillment_v2.py tests/test_sold_bundles_v2.py \[0m
+2026-11-22T21:21:33.1992813Z [36;1m  tests/test_product_bundle_policy.py tests/test_bundle_composition_lifecycle.py \[0m
+2026-11-22T21:21:33.1993139Z [36;1m  tests/test_bundle_composition_acceptance.py \[0m
+2026-11-22T21:21:33.1993362Z [36;1m  --junitxml="$RUNNER_TEMP/g47-backend.xml"[0m
+2026-11-22T21:21:33.2023446Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-11-22T21:21:33.2023662Z env:
+2026-11-22T21:21:33.2023860Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=g47test
+2026-11-22T21:21:33.2024157Z   MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
+2026-11-22T21:21:33.2024400Z   PYTHONDONTWRITEBYTECODE: 1
+2026-11-22T21:21:33.2024601Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:21:33.2024860Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib/pkgconfig
+2026-11-22T21:21:33.2025123Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:21:33.2025360Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:21:33.2025592Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:21:33.2025832Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib
+2026-11-22T21:21:33.2026043Z ##[endgroup]
+2026-11-22T21:22:31.2339210Z ......................................................................................................... [ 31%]
+2026-11-22T21:23:25.2716964Z ................................................................................................................................ [ 70%]
+2026-11-22T21:23:33.4267909Z ........................................................................ [ 92%]
+2026-11-22T21:23:39.4344263Z ..........................                                               [100%]
+2026-11-22T21:23:39.4344655Z =============================== warnings summary ===============================
+2026-11-22T21:23:39.4344989Z liabilities_routes.py:170
+2026-11-22T21:23:39.4346300Z   /home/runner/work/AMASI-SA/AMASI-SA/backend/liabilities_routes.py:170: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+2026-11-22T21:23:39.4347375Z     @validator("ad_provider")
+2026-11-22T21:23:39.4347478Z 
+2026-11-22T21:23:39.4347535Z liabilities_routes.py:177
+2026-11-22T21:23:39.4348525Z   /home/runner/work/AMASI-SA/AMASI-SA/backend/liabilities_routes.py:177: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+2026-11-22T21:23:39.4349573Z     @validator("employee_salary_id")
+2026-11-22T21:23:39.4349680Z 
+2026-11-22T21:23:39.4349732Z liabilities_routes.py:183
+2026-11-22T21:23:39.4351032Z   /home/runner/work/AMASI-SA/AMASI-SA/backend/liabilities_routes.py:183: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+2026-11-22T21:23:39.4351776Z     @validator("paid_from_account_id")
+2026-11-22T21:23:39.4351884Z 
+2026-11-22T21:23:39.4351938Z liabilities_routes.py:191
+2026-11-22T21:23:39.4352653Z   /home/runner/work/AMASI-SA/AMASI-SA/backend/liabilities_routes.py:191: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+2026-11-22T21:23:39.4353385Z     @validator("supplier_name")
+2026-11-22T21:23:39.4353479Z 
+2026-11-22T21:23:39.4353532Z liabilities_routes.py:207
+2026-11-22T21:23:39.4354251Z   /home/runner/work/AMASI-SA/AMASI-SA/backend/liabilities_routes.py:207: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+2026-11-22T21:23:39.4354986Z     @validator("counterparty_name")
+2026-11-22T21:23:39.4355087Z 
+2026-11-22T21:23:39.4355204Z -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2026-11-22T21:23:39.4355472Z 331 passed, 5 warnings, 127 subtests passed in 123.23s (0:02:03)
+2026-11-22T21:23:43.3931148Z ##[group]Run python -m pytest --noconftest -p no:cacheprovider -q --tb=short tests/test_inventory_stocktake.py tests/test_inventory_stocktake_permissions.py tests/test_inventory_stocktake_integration.py tests/test_purchase_configuration_contract.py tests/test_native_purchase_configuration_mongo.py --junitxml="$RUNNER_TEMP/native-inventory.xml"
+2026-11-22T21:23:43.3932333Z [36;1mpython -m pytest --noconftest -p no:cacheprovider -q --tb=short tests/test_inventory_stocktake.py tests/test_inventory_stocktake_permissions.py tests/test_inventory_stocktake_integration.py tests/test_purchase_configuration_contract.py tests/test_native_purchase_configuration_mongo.py --junitxml="$RUNNER_TEMP/native-inventory.xml"[0m
+2026-11-22T21:23:43.3959812Z shell: /usr/bin/bash -e {0}
+2026-11-22T21:23:43.3959956Z env:
+2026-11-22T21:23:43.3960126Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=g47test
+2026-11-22T21:23:43.3960413Z   MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
+2026-11-22T21:23:43.3960629Z   PYTHONDONTWRITEBYTECODE: 1
+2026-11-22T21:23:43.3960807Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:23:43.3961039Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib/pkgconfig
+2026-11-22T21:23:43.3961264Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:23:43.3961468Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:23:43.3961674Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:23:43.3961895Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib
+2026-11-22T21:23:43.3962070Z   PYTHONPATH: .:tests
+2026-11-22T21:23:43.3962193Z ##[endgroup]
+2026-11-22T21:24:00.0443079Z ..........................................................               [100%]
+2026-11-22T21:24:00.0443546Z 58 passed in 15.67s
+2026-11-22T21:24:00.6515643Z ##[group]Run python - <<'PY'
+2026-11-22T21:24:00.6516116Z [36;1mpython - <<'PY'[0m
+2026-11-22T21:24:00.6516468Z [36;1mimport os[0m
+2026-11-22T21:24:00.6516753Z [36;1mfrom pathlib import Path[0m
+2026-11-22T21:24:00.6517182Z [36;1mimport xml.etree.ElementTree as ET[0m
+2026-11-22T21:24:00.6517788Z [36;1mcases = list(ET.parse(Path(os.environ['RUNNER_TEMP']) / 'native-inventory.xml').iter('testcase'))[0m
+2026-11-22T21:24:00.6518714Z [36;1massert cases and not [c.attrib for c in cases if any(c.find(t) is not None for t in ('failure', 'error', 'skipped'))][0m
+2026-11-22T21:24:00.6519441Z [36;1mexpected = {'test_inventory_stocktake', 'test_inventory_stocktake_permissions',[0m
+2026-11-22T21:24:00.6520102Z [36;1m            'test_inventory_stocktake_integration', 'test_purchase_configuration_contract',[0m
+2026-11-22T21:24:00.6520692Z [36;1m            'test_native_purchase_configuration_mongo'}[0m
+2026-11-22T21:24:00.6521278Z [36;1mobserved = {part for c in cases for part in c.get('classname', '').split('.')}[0m
+2026-11-22T21:24:00.6521896Z [36;1massert expected <= observed, sorted(expected - observed)[0m
+2026-11-22T21:24:00.6522403Z [36;1mprint(len(cases), 'native inventory cases PASS; zero skips')[0m
+2026-11-22T21:24:00.6522840Z [36;1mPY[0m
+2026-11-22T21:24:00.6558547Z shell: /usr/bin/bash -e {0}
+2026-11-22T21:24:00.6558926Z env:
+2026-11-22T21:24:00.6559277Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=g47test
+2026-11-22T21:24:00.6559853Z   MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
+2026-11-22T21:24:00.6560368Z   PYTHONDONTWRITEBYTECODE: 1
+2026-11-22T21:24:00.6560718Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:24:00.6561034Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib/pkgconfig
+2026-11-22T21:24:00.6561328Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:24:00.6561710Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:24:00.6561996Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:24:00.6562310Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib
+2026-11-22T21:24:00.6562560Z ##[endgroup]
+2026-11-22T21:24:00.6897142Z 58 native inventory cases PASS; zero skips
+2026-11-22T21:24:00.6981767Z ##[group]Run actions/upload-artifact@v4
+2026-11-22T21:24:00.6981941Z with:
+2026-11-22T21:24:00.6982113Z   name: native-inventory-9a500a21013a08f750009be656362481986eb208
+2026-11-22T21:24:00.6982353Z   path: /home/runner/work/_temp/native-inventory.xml
+2026-11-22T21:24:00.6982536Z   if-no-files-found: error
+2026-11-22T21:24:00.6982677Z   compression-level: 6
+2026-11-22T21:24:00.6982947Z   overwrite: false
+2026-11-22T21:24:00.6983072Z   include-hidden-files: false
+2026-11-22T21:24:00.6983210Z env:
+2026-11-22T21:24:00.6983378Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=g47test
+2026-11-22T21:24:00.6983634Z   MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
+2026-11-22T21:24:00.6983856Z   PYTHONDONTWRITEBYTECODE: 1
+2026-11-22T21:24:00.6984045Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:24:00.6984281Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib/pkgconfig
+2026-11-22T21:24:00.6984539Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:24:00.6984752Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:24:00.6984964Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:24:00.6985189Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib
+2026-11-22T21:24:00.6985370Z ##[endgroup]
+2026-11-22T21:24:00.8234680Z (node:4805) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-22T21:24:00.8235121Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-22T21:24:00.8268706Z With the provided path, there will be 1 file uploaded
+2026-11-22T21:24:00.8272610Z Artifact name is valid!
+2026-11-22T21:24:00.8289011Z Root directory input is valid!
+2026-11-22T21:24:01.1322308Z Beginning upload of artifact content to blob storage
+2026-11-22T21:24:01.1453329Z (node:4805) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-11-22T21:24:01.2986176Z Uploaded bytes 1977
+2026-11-22T21:24:01.3356261Z Finished uploading artifact content to blob storage!
+2026-11-22T21:24:01.3356921Z SHA256 digest of uploaded artifact zip is c5efe43d68ffc44d3cfe2b6efb2afe238d5b98bbe2770cc77982101ba3741c7f
+2026-11-22T21:24:01.3357532Z Finalizing artifact upload
+2026-11-22T21:24:01.6965351Z Artifact native-inventory-9a500a21013a08f750009be656362481986eb208.zip successfully finalized. Artifact ID 14773184206
+2026-11-22T21:24:01.6966345Z Artifact native-inventory-9a500a21013a08f750009be656362481986eb208 has been successfully uploaded! Final size is 1977 bytes. Artifact ID is 14773184206
+2026-11-22T21:24:01.6971320Z Artifact download URL: https://github.com/AMASI-SA/AMASI-SA/actions/runs/45071567954/artifacts/14773184206
+2026-11-22T21:24:01.7104459Z ##[group]Run python - <<'PY'
+2026-11-22T21:24:01.7104693Z [36;1mpython - <<'PY'[0m
+2026-11-22T21:24:01.7104840Z [36;1mimport os[0m
+2026-11-22T21:24:01.7104976Z [36;1mfrom pathlib import Path[0m
+2026-11-22T21:24:01.7105150Z [36;1mimport xml.etree.ElementTree as ET[0m
+2026-11-22T21:24:01.7105400Z [36;1mreport = Path(os.environ["RUNNER_TEMP"]) / "g47-backend.xml"[0m
+2026-11-22T21:24:01.7105632Z [36;1mcases = list(ET.parse(report).iter("testcase"))[0m
+2026-11-22T21:24:01.7105853Z [36;1massert cases, "No G47 tests executed"[0m
+2026-11-22T21:24:01.7106108Z [36;1mrejected = [(row.attrib.get("classname"), row.attrib.get("name")) for row in cases[0m
+2026-11-22T21:24:01.7106425Z [36;1m            if any(row.find(tag) is not None for tag in ("skipped", "failure", "error"))][0m
+2026-11-22T21:24:01.7106709Z [36;1massert not rejected, f"G47 skipped or failed cases: {rejected}"[0m
+2026-11-22T21:24:01.7107060Z [36;1mexpected = {path.stem for path in Path("tests").glob("test_g47*.py")} | {"test_stock_component_consumption"}[0m
+2026-11-22T21:24:01.7107422Z [36;1mexpected |= {"test_bundle_catalog_v2", "test_bundle_fulfillment_v2", "test_sold_bundles_v2"}[0m
+2026-11-22T21:24:01.7107742Z [36;1mexpected |= {"test_product_bundle_policy", "test_bundle_composition_lifecycle"}[0m
+2026-11-22T21:24:01.7108008Z [36;1mexpected |= {"test_bundle_composition_acceptance"}[0m
+2026-11-22T21:24:01.7108430Z [36;1mobserved = {part for row in cases for part in row.attrib.get("classname", "").split(".")}[0m
+2026-11-22T21:24:01.7109028Z [36;1massert expected <= observed, f"Suites without executed cases: {sorted(expected - observed)}"[0m
+2026-11-22T21:24:01.7109341Z [36;1mprint(f"G47: {len(cases)} executed test cases, zero skips/failures/errors")[0m
+2026-11-22T21:24:01.7109559Z [36;1mPY[0m
+2026-11-22T21:24:01.7137306Z shell: /usr/bin/bash -e {0}
+2026-11-22T21:24:01.7137457Z env:
+2026-11-22T21:24:01.7137634Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=g47test
+2026-11-22T21:24:01.7137910Z   MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
+2026-11-22T21:24:01.7151646Z   PYTHONDONTWRITEBYTECODE: 1
+2026-11-22T21:24:01.7151863Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:24:01.7152110Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib/pkgconfig
+2026-11-22T21:24:01.7152348Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:24:01.7152576Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:24:01.7152806Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:24:01.7153022Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib
+2026-11-22T21:24:01.7153220Z ##[endgroup]
+2026-11-22T21:24:01.7515837Z G47: 331 executed test cases, zero skips/failures/errors
+2026-11-22T21:24:01.7605122Z ##[group]Run actions/upload-artifact@v4
+2026-11-22T21:24:01.7605296Z with:
+2026-11-22T21:24:01.7605468Z   name: g47-backend-9a500a21013a08f750009be656362481986eb208
+2026-11-22T21:24:01.7605684Z   path: /home/runner/work/_temp/g47-backend.xml
+2026-11-22T21:24:01.7605873Z   if-no-files-found: error
+2026-11-22T21:24:01.7606020Z   compression-level: 6
+2026-11-22T21:24:01.7606153Z   overwrite: false
+2026-11-22T21:24:01.7606292Z   include-hidden-files: false
+2026-11-22T21:24:01.7606433Z env:
+2026-11-22T21:24:01.7606611Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=g47test
+2026-11-22T21:24:01.7606878Z   MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
+2026-11-22T21:24:01.7607121Z   PYTHONDONTWRITEBYTECODE: 1
+2026-11-22T21:24:01.7607318Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:24:01.7607564Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib/pkgconfig
+2026-11-22T21:24:01.7607835Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:24:01.7608247Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:24:01.7608499Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:24:01.7608722Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib
+2026-11-22T21:24:01.7608912Z ##[endgroup]
+2026-11-22T21:24:01.8824735Z (node:4820) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-22T21:24:01.8825242Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-22T21:24:01.8859233Z With the provided path, there will be 1 file uploaded
+2026-11-22T21:24:01.8868780Z Artifact name is valid!
+2026-11-22T21:24:01.8869458Z Root directory input is valid!
+2026-11-22T21:24:02.1545560Z Beginning upload of artifact content to blob storage
+2026-11-22T21:24:02.1712161Z (node:4820) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-11-22T21:24:02.2847979Z Uploaded bytes 8237
+2026-11-22T21:24:02.3232583Z Finished uploading artifact content to blob storage!
+2026-11-22T21:24:02.3233013Z SHA256 digest of uploaded artifact zip is 0548ca599bb471d437082cd41cbac91ca45627d2a8d3fd3ae7b18144599783b6
+2026-11-22T21:24:02.3233500Z Finalizing artifact upload
+2026-11-22T21:24:02.6706167Z Artifact g47-backend-9a500a21013a08f750009be656362481986eb208.zip successfully finalized. Artifact ID 14773458203
+2026-11-22T21:24:02.6706845Z Artifact g47-backend-9a500a21013a08f750009be656362481986eb208 has been successfully uploaded! Final size is 8237 bytes. Artifact ID is 14773458203
+2026-11-22T21:24:02.6710422Z Artifact download URL: https://github.com/AMASI-SA/AMASI-SA/actions/runs/45071567954/artifacts/14773458203
+2026-11-22T21:24:02.6842354Z ##[group]Run set -euo pipefail
+2026-11-22T21:24:02.6842595Z [36;1mset -euo pipefail[0m
+2026-11-22T21:24:02.6842830Z [36;1mpython -m pytest --noconftest -p no:cacheprovider -q --tb=short \[0m
+2026-11-22T21:24:02.6843090Z [36;1m  tests/test_order_cost_authority.py \[0m
+2026-11-22T21:24:02.6843319Z [36;1m  tests/test_bundle_reporting_financial.py \[0m
+2026-11-22T21:24:02.6843538Z [36;1m  tests/test_bundle_reporting_cost_policy.py \[0m
+2026-11-22T21:24:02.6843753Z [36;1m  tests/test_bundle_financial_lifecycle.py \[0m
+2026-11-22T21:24:02.6843967Z [36;1m  tests/test_order_cost_identity_projection.py \[0m
+2026-11-22T21:24:02.6844186Z [36;1m  tests/test_authority_review_regressions.py \[0m
+2026-11-22T21:24:02.6844402Z [36;1m  tests/test_order_cost_final_review.py \[0m
+2026-11-22T21:24:02.6844622Z [36;1m  tests/test_order_cost_authority_mongo.py \[0m
+2026-11-22T21:24:02.6844823Z [36;1m  tests/test_order_option_cost_snapshots.py \[0m
+2026-11-22T21:24:02.6845070Z [36;1m  tests/test_dashboard_bundle_cost_authority.py \[0m
+2026-11-22T21:24:02.6845285Z [36;1m  tests/test_dashboard_v2_product_cost.py \[0m
+2026-11-22T21:24:02.6845488Z [36;1m  tests/test_sold_products_report_v2.py \[0m
+2026-11-22T21:24:02.6845688Z [36;1m  tests/test_order_currency_accounting.py \[0m
+2026-11-22T21:24:02.6845898Z [36;1m  tests/test_order_cost_reporting_repair.py \[0m
+2026-11-22T21:24:02.6846105Z [36;1m  tests/test_order_cost_financial_readers.py \[0m
+2026-11-22T21:24:02.6846334Z [36;1m  tests/test_customer_cohort_profit_report.py \[0m
+2026-11-22T21:24:02.6846555Z [36;1m  tests/test_mezan_attribution_profit_bridge.py \[0m
+2026-11-22T21:24:02.6846772Z [36;1m  tests/test_mezan_attribution_owner_routes.py \[0m
+2026-11-22T21:24:02.6846986Z [36;1m  tests/test_bundle_base_definition_repair.py \[0m
+2026-11-22T21:24:02.6847197Z [36;1m  tests/test_snapchat_bundle_cost_authority.py \[0m
+2026-11-22T21:24:02.6847464Z [36;1m  tests/test_snapchat_campaign_profitability_exact_reuse_v2.py \[0m
+2026-11-22T21:24:02.6847732Z [36;1m  tests/test_snapchat_campaign_created_order_semantics_v1.py \[0m
+2026-11-22T21:24:02.6847991Z [36;1m  tests/test_snapchat_campaign_current_catalog_cost_v1.py \[0m
+2026-11-22T21:24:02.6848430Z [36;1m  tests/test_snapchat_profitability_cache_scope_v1.py \[0m
+2026-11-22T21:24:02.6848668Z [36;1m  tests/test_marketing_bundle_cost_authority.py \[0m
+2026-11-22T21:24:02.6848896Z [36;1m  tests/test_marketing_report_orders.py \[0m
+2026-11-22T21:24:02.6849091Z [36;1m  tests/test_marketing_reports.py \[0m
+2026-11-22T21:24:02.6849294Z [36;1m  --junitxml="$RUNNER_TEMP/g47-order-cost.xml"[0m
+2026-11-22T21:24:02.6878416Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-11-22T21:24:02.6878619Z env:
+2026-11-22T21:24:02.6878807Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=g47test
+2026-11-22T21:24:02.6879103Z   MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
+2026-11-22T21:24:02.6879336Z   PYTHONDONTWRITEBYTECODE: 1
+2026-11-22T21:24:02.6879544Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:24:02.6879795Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib/pkgconfig
+2026-11-22T21:24:02.6880054Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:24:02.6880290Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:24:02.6880515Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:24:02.6880751Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib
+2026-11-22T21:24:02.6880948Z   PYTHONPATH: .:tests
+2026-11-22T21:24:02.6881097Z ##[endgroup]
+2026-11-22T21:24:11.5924120Z ........................................................................ [ 16%]
+2026-11-22T21:24:15.9575560Z ........................................................................ [ 33%]
+2026-11-22T21:24:18.1703303Z ........................................................................ [ 49%]
+2026-11-22T21:24:18.8687537Z ........................................................................ [ 66%]
+2026-11-22T21:24:22.5580675Z ........................................................................ [ 82%]
+2026-11-22T21:24:23.4259406Z ........................................................................ [ 99%]
+2026-11-22T21:24:24.0040547Z ....                                                                     [100%]
+2026-11-22T21:24:24.0041002Z =============================== warnings summary ===============================
+2026-11-22T21:24:24.0041230Z recurring_obligations_routes.py:295
+2026-11-22T21:24:24.0042115Z   /home/runner/work/AMASI-SA/AMASI-SA/backend/recurring_obligations_routes.py:295: PydanticDeprecatedSince20: Pydantic V1 style `@root_validator` validators are deprecated. You should migrate to Pydantic V2 style `@model_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+2026-11-22T21:24:24.0043000Z     @root_validator(skip_on_failure=True)
+2026-11-22T21:24:24.0043125Z 
+2026-11-22T21:24:24.0043198Z recurring_obligations_routes.py:319
+2026-11-22T21:24:24.0043992Z   /home/runner/work/AMASI-SA/AMASI-SA/backend/recurring_obligations_routes.py:319: PydanticDeprecatedSince20: Pydantic V1 style `@root_validator` validators are deprecated. You should migrate to Pydantic V2 style `@model_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+2026-11-22T21:24:24.0045107Z     @root_validator(skip_on_failure=True)
+2026-11-22T21:24:24.0045284Z 
+2026-11-22T21:24:24.0045368Z accounts_routes.py:363
+2026-11-22T21:24:24.0046558Z   /home/runner/work/AMASI-SA/AMASI-SA/backend/accounts_routes.py:363: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+2026-11-22T21:24:24.0047848Z     @validator("account_type")
+2026-11-22T21:24:24.0048032Z 
+2026-11-22T21:24:24.0048258Z accounts_routes.py:383
+2026-11-22T21:24:24.0049375Z   /home/runner/work/AMASI-SA/AMASI-SA/backend/accounts_routes.py:383: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+2026-11-22T21:24:24.0050750Z     @validator("status")
+2026-11-22T21:24:24.0050890Z 
+2026-11-22T21:24:24.0050955Z accounts_routes.py:399
+2026-11-22T21:24:24.0052288Z   /home/runner/work/AMASI-SA/AMASI-SA/backend/accounts_routes.py:399: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+2026-11-22T21:24:24.0053463Z     @validator("transaction_type")
+2026-11-22T21:24:24.0053578Z 
+2026-11-22T21:24:24.0053638Z accounts_routes.py:405
+2026-11-22T21:24:24.0054393Z   /home/runner/work/AMASI-SA/AMASI-SA/backend/accounts_routes.py:405: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+2026-11-22T21:24:24.0055548Z     @validator("status")
+2026-11-22T21:24:24.0055639Z 
+2026-11-22T21:24:24.0055976Z ../../../../../../opt/hostedtoolcache/Python/3.12.16/x64/lib/python3.12/site-packages/fastapi/testclient.py:1
+2026-11-22T21:24:24.0056563Z   /opt/hostedtoolcache/Python/3.12.16/x64/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+2026-11-22T21:24:24.0057077Z     from starlette.testclient import TestClient as TestClient  # noqa
+2026-11-22T21:24:24.0057239Z 
+2026-11-22T21:24:24.0057361Z -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2026-11-22T21:24:24.0057590Z 436 passed, 7 warnings in 20.39s
+2026-11-22T21:24:24.4511958Z ##[group]Run python - <<'PY'
+2026-11-22T21:24:24.4512334Z [36;1mpython - <<'PY'[0m
+2026-11-22T21:24:24.4512551Z [36;1mimport os[0m
+2026-11-22T21:24:24.4512776Z [36;1mfrom pathlib import Path[0m
+2026-11-22T21:24:24.4513059Z [36;1mimport xml.etree.ElementTree as ET[0m
+2026-11-22T21:24:24.4513450Z [36;1mreport = Path(os.environ["RUNNER_TEMP"]) / "g47-order-cost.xml"[0m
+2026-11-22T21:24:24.4513848Z [36;1mcases = list(ET.parse(report).iter("testcase"))[0m
+2026-11-22T21:24:24.4514210Z [36;1massert cases, "No order cost acceptance tests executed"[0m
+2026-11-22T21:24:24.4514658Z [36;1mrejected = [(row.attrib.get("classname"), row.attrib.get("name")) for row in cases[0m
+2026-11-22T21:24:24.4515170Z [36;1m            if any(row.find(tag) is not None for tag in ("skipped", "failure", "error"))][0m
+2026-11-22T21:24:24.4515641Z [36;1massert not rejected, f"Order cost skipped or failed cases: {rejected}"[0m
+2026-11-22T21:24:24.4515979Z [36;1mexpected = {[0m
+2026-11-22T21:24:24.4516348Z [36;1m    "test_order_cost_authority", "test_order_cost_identity_projection",[0m
+2026-11-22T21:24:24.4516882Z [36;1m    "test_bundle_reporting_financial", "test_bundle_reporting_cost_policy", "test_bundle_financial_lifecycle",[0m
+2026-11-22T21:24:24.4517513Z [36;1m    "test_authority_review_regressions", "test_order_cost_final_review",[0m
+2026-11-22T21:24:24.4517988Z [36;1m    "test_order_cost_authority_mongo", "test_order_option_cost_snapshots",[0m
+2026-11-22T21:24:24.4518657Z [36;1m    "test_dashboard_bundle_cost_authority", "test_dashboard_v2_product_cost",[0m
+2026-11-22T21:24:24.4519128Z [36;1m    "test_sold_products_report_v2", "test_order_currency_accounting",[0m
+2026-11-22T21:24:24.4519597Z [36;1m    "test_order_cost_reporting_repair", "test_bundle_base_definition_repair",[0m
+2026-11-22T21:24:24.4520091Z [36;1m    "test_order_cost_financial_readers", "test_customer_cohort_profit_report",[0m
+2026-11-22T21:24:24.4520512Z [36;1m    "test_mezan_attribution_profit_bridge",[0m
+2026-11-22T21:24:24.4520829Z [36;1m    "test_mezan_attribution_owner_routes",[0m
+2026-11-22T21:24:24.4521261Z [36;1m    "test_snapchat_bundle_cost_authority", "test_snapchat_campaign_profitability_exact_reuse_v2",[0m
+2026-11-22T21:24:24.4521867Z [36;1m    "test_snapchat_campaign_created_order_semantics_v1", "test_snapchat_campaign_current_catalog_cost_v1",[0m
+2026-11-22T21:24:24.4522482Z [36;1m    "test_snapchat_profitability_cache_scope_v1", "test_marketing_bundle_cost_authority",[0m
+2026-11-22T21:24:24.4522957Z [36;1m    "test_marketing_report_orders", "test_marketing_reports",[0m
+2026-11-22T21:24:24.4523285Z [36;1m}[0m
+2026-11-22T21:24:24.4523625Z [36;1mobserved = {part for row in cases for part in row.attrib.get("classname", "").split(".")}[0m
+2026-11-22T21:24:24.4524213Z [36;1massert expected <= observed, f"Cost suites without executed cases: {sorted(expected - observed)}"[0m
+2026-11-22T21:24:24.4524767Z [36;1mprint(f"Order cost: {len(cases)} executed cases, zero skips/failures/errors")[0m
+2026-11-22T21:24:24.4525138Z [36;1mPY[0m
+2026-11-22T21:24:24.4563987Z shell: /usr/bin/bash -e {0}
+2026-11-22T21:24:24.4564247Z env:
+2026-11-22T21:24:24.4564559Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=g47test
+2026-11-22T21:24:24.4565019Z   MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
+2026-11-22T21:24:24.4565636Z   PYTHONDONTWRITEBYTECODE: 1
+2026-11-22T21:24:24.4565949Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:24:24.4566344Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib/pkgconfig
+2026-11-22T21:24:24.4566748Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:24:24.4567105Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:24:24.4567466Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:24:24.4567832Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib
+2026-11-22T21:24:24.4568379Z ##[endgroup]
+2026-11-22T21:24:24.4939643Z Order cost: 436 executed cases, zero skips/failures/errors
+2026-11-22T21:24:24.5022905Z ##[group]Run actions/upload-artifact@v4
+2026-11-22T21:24:24.5023093Z with:
+2026-11-22T21:24:24.5023265Z   name: g47-order-cost-9a500a21013a08f750009be656362481986eb208
+2026-11-22T21:24:24.5023501Z   path: /home/runner/work/_temp/g47-order-cost.xml
+2026-11-22T21:24:24.5023705Z   if-no-files-found: error
+2026-11-22T21:24:24.5023859Z   compression-level: 6
+2026-11-22T21:24:24.5023992Z   overwrite: false
+2026-11-22T21:24:24.5024134Z   include-hidden-files: false
+2026-11-22T21:24:24.5024281Z env:
+2026-11-22T21:24:24.5024470Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=g47test
+2026-11-22T21:24:24.5024746Z   MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
+2026-11-22T21:24:24.5024979Z   PYTHONDONTWRITEBYTECODE: 1
+2026-11-22T21:24:24.5025178Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:24:24.5025428Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib/pkgconfig
+2026-11-22T21:24:24.5025708Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:24:24.5025937Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:24:24.5026258Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:24:24.5026487Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib
+2026-11-22T21:24:24.5026682Z ##[endgroup]
+2026-11-22T21:24:24.6571875Z (node:5086) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-22T21:24:24.6572571Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-22T21:24:24.6606534Z With the provided path, there will be 1 file uploaded
+2026-11-22T21:24:24.6610336Z Artifact name is valid!
+2026-11-22T21:24:24.6610935Z Root directory input is valid!
+2026-11-22T21:24:24.9467977Z Beginning upload of artifact content to blob storage
+2026-11-22T21:24:24.9596907Z (node:5086) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-11-22T21:24:25.0917795Z Uploaded bytes 9939
+2026-11-22T21:24:25.1256623Z Finished uploading artifact content to blob storage!
+2026-11-22T21:24:25.1257160Z SHA256 digest of uploaded artifact zip is 8a14817af1b80cefdeaa133c4ed3ad92205e2d9737a7153fd3dab2c41c1b1b45
+2026-11-22T21:24:25.1257962Z Finalizing artifact upload
+2026-11-22T21:24:25.5778627Z Artifact g47-order-cost-9a500a21013a08f750009be656362481986eb208.zip successfully finalized. Artifact ID 14773458269
+2026-11-22T21:24:25.5779584Z Artifact g47-order-cost-9a500a21013a08f750009be656362481986eb208 has been successfully uploaded! Final size is 9939 bytes. Artifact ID is 14773458269
+2026-11-22T21:24:25.5783921Z Artifact download URL: https://github.com/AMASI-SA/AMASI-SA/actions/runs/45071567954/artifacts/14773458269
+2026-11-22T21:24:25.5918344Z ##[group]Run docker rm --force g47-rs g47-standalone
+2026-11-22T21:24:25.5918741Z [36;1mdocker rm --force g47-rs g47-standalone[0m
+2026-11-22T21:24:25.5956375Z shell: /usr/bin/bash -e {0}
+2026-11-22T21:24:25.5956645Z env:
+2026-11-22T21:24:25.5956947Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=g47test
+2026-11-22T21:24:25.5957646Z   MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
+2026-11-22T21:24:25.5957988Z   PYTHONDONTWRITEBYTECODE: 1
+2026-11-22T21:24:25.5958491Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:24:25.5958766Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib/pkgconfig
+2026-11-22T21:24:25.5959028Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:24:25.5959264Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:24:25.5959508Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T21:24:25.5959784Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib
+2026-11-22T21:24:25.5959988Z ##[endgroup]
+2026-11-22T21:24:25.8873987Z g47-rs
+2026-11-22T21:24:25.8874240Z g47-standalone
+2026-11-22T21:24:25.8957082Z Post job cleanup.
+2026-11-22T21:24:25.9799036Z (node:5207) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-22T21:24:25.9799766Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-22T21:24:25.9947637Z Post job cleanup.
+2026-11-22T21:24:26.0569974Z [command]/usr/bin/git version
+2026-11-22T21:24:26.0609584Z git version 2.56.1
+2026-11-22T21:24:26.0636167Z Temporarily overriding HOME='/home/runner/work/_temp/c55ee8d9-c5be-4b74-aa43-85b6c27db2a5' before making global git config changes
+2026-11-22T21:24:26.0636959Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-22T21:24:26.0640270Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/AMASI-SA/AMASI-SA
+2026-11-22T21:24:26.0678926Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-22T21:24:26.0713268Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-22T21:24:26.1026237Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-22T21:24:26.1047120Z http.https://github.com/.extraheader
+2026-11-22T21:24:26.1069858Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-11-22T21:24:26.1110778Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-22T21:24:26.1403895Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-22T21:24:26.1433529Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-22T21:24:26.1785544Z Cleaning up orphan processes
+2026-11-22T21:24:26.2101446Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-python@v5, actions/upload-artifact@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

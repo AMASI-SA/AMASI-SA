@@ -1,0 +1,436 @@
+﻿2026-11-22T21:20:57.1011044Z Current runner version: '2.338.2'
+2026-11-22T21:20:57.1030813Z ##[group]Runner Image Provisioner
+2026-11-22T21:20:57.1031445Z Hosted Compute Agent
+2026-11-22T21:20:57.1031921Z Version: 20261111.635
+2026-11-22T21:20:57.1032371Z Commit: b8a594ea514ff44cadb5342986c68b1eac6e22ed
+2026-11-22T21:20:57.1032894Z Build Date: 2026-11-11T01:49:01Z
+2026-11-22T21:20:57.1033398Z Worker ID: {03e14ff2-09e1-4ead-b4c0-a8cb881a38d3}
+2026-11-22T21:20:57.1033918Z Region: us-east-1
+2026-11-22T21:20:57.1034321Z Cloud: AWS
+2026-11-22T21:20:57.1034696Z ##[endgroup]
+2026-11-22T21:20:57.1036218Z ##[group]Operating System
+2026-11-22T21:20:57.1036692Z Ubuntu
+2026-11-22T21:20:57.1037067Z 26.04.1
+2026-11-22T21:20:57.1037440Z LTS
+2026-11-22T21:20:57.1037798Z ##[endgroup]
+2026-11-22T21:20:57.1038165Z ##[group]Runner Image
+2026-11-22T21:20:57.1038661Z Image: ubuntu-26.04
+2026-11-22T21:20:57.1039066Z Version: 20261116.88.1
+2026-11-22T21:20:57.1039952Z Included Software: https://github.com/actions/runner-images/blob/ubuntu26/20261116.88/images/ubuntu/Ubuntu2604-Readme.md
+2026-11-22T21:20:57.1041023Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu26%2F20261116.88
+2026-11-22T21:20:57.1041799Z ##[endgroup]
+2026-11-22T21:20:57.1042552Z ##[group]GITHUB_TOKEN Permissions
+2026-11-22T21:20:57.1044705Z Contents: read
+2026-11-22T21:20:57.1045110Z Metadata: read
+2026-11-22T21:20:57.1045783Z ##[endgroup]
+2026-11-22T21:20:57.1047430Z Secret source: Actions
+2026-11-22T21:20:57.1048114Z Cache mode: write
+2026-11-22T21:20:57.1048738Z Prepare workflow directory
+2026-11-22T21:20:57.1334887Z Prepare all required actions
+2026-11-22T21:20:57.1373391Z Getting action download info
+2026-11-22T21:20:57.2706837Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-11-22T21:20:58.3016618Z Download action repository 'actions/setup-node@v4' (SHA:49933ea5288caeca8642d1e84afbd3f7d6820020)
+2026-11-22T21:20:58.4830391Z Download action repository 'actions/upload-artifact@v4' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+2026-11-22T21:20:58.7283409Z Complete job name: Operational Balance Frontend
+2026-11-22T21:20:58.8119212Z ##[group]Run actions/checkout@v4
+2026-11-22T21:20:58.8120388Z with:
+2026-11-22T21:20:58.8121172Z   ref: 9a500a21013a08f750009be656362481986eb208
+2026-11-22T21:20:58.8122195Z   persist-credentials: false
+2026-11-22T21:20:58.8123094Z   repository: AMASI-SA/AMASI-SA
+2026-11-22T21:20:58.8129796Z   token: ***
+2026-11-22T21:20:58.8130609Z   ssh-strict: true
+2026-11-22T21:20:58.8131350Z   ssh-user: git
+2026-11-22T21:20:58.8132081Z   clean: true
+2026-11-22T21:20:58.8132878Z   sparse-checkout-cone-mode: true
+2026-11-22T21:20:58.8133771Z   fetch-depth: 1
+2026-11-22T21:20:58.8134536Z   fetch-tags: false
+2026-11-22T21:20:58.8135310Z   show-progress: true
+2026-11-22T21:20:58.8136218Z   lfs: false
+2026-11-22T21:20:58.8136971Z   submodules: false
+2026-11-22T21:20:58.8137760Z   set-safe-directory: true
+2026-11-22T21:20:58.8138675Z   allow-unsafe-pr-checkout: false
+2026-11-22T21:20:58.8139723Z env:
+2026-11-22T21:20:58.8140429Z   CI: true
+2026-11-22T21:20:58.8141157Z ##[endgroup]
+2026-11-22T21:21:01.9736411Z Syncing repository: AMASI-SA/AMASI-SA
+2026-11-22T21:21:01.9738026Z ##[group]Getting Git version info
+2026-11-22T21:21:01.9738460Z Working directory is '/home/runner/work/AMASI-SA/AMASI-SA'
+2026-11-22T21:21:01.9739506Z [command]/usr/bin/git version
+2026-11-22T21:21:01.9743692Z git version 2.56.1
+2026-11-22T21:21:01.9757177Z ##[endgroup]
+2026-11-22T21:21:01.9766402Z Temporarily overriding HOME='/home/runner/work/_temp/8e816e44-6ea5-49b5-a854-3b4d12add088' before making global git config changes
+2026-11-22T21:21:01.9767436Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-22T21:21:01.9769992Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/AMASI-SA/AMASI-SA
+2026-11-22T21:21:01.9877006Z Deleting the contents of '/home/runner/work/AMASI-SA/AMASI-SA'
+2026-11-22T21:21:01.9878251Z ##[group]Initializing the repository
+2026-11-22T21:21:01.9878751Z [command]/usr/bin/git init /home/runner/work/AMASI-SA/AMASI-SA
+2026-11-22T21:21:02.0743449Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-11-22T21:21:02.0744254Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-11-22T21:21:02.0744810Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-11-22T21:21:02.0745236Z hint: call:
+2026-11-22T21:21:02.0745742Z hint:
+2026-11-22T21:21:02.0746140Z hint: 	git config --global init.defaultBranch <name>
+2026-11-22T21:21:02.0746498Z hint:
+2026-11-22T21:21:02.0746829Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-11-22T21:21:02.0747327Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-11-22T21:21:02.0747718Z hint:
+2026-11-22T21:21:02.0747978Z hint: 	git branch -m <name>
+2026-11-22T21:21:02.0748261Z hint:
+2026-11-22T21:21:02.0748615Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-11-22T21:21:02.0771881Z Initialized empty Git repository in /home/runner/work/AMASI-SA/AMASI-SA/.git/
+2026-11-22T21:21:02.0781747Z [command]/usr/bin/git remote add origin https://github.com/AMASI-SA/AMASI-SA
+2026-11-22T21:21:02.0849209Z ##[endgroup]
+2026-11-22T21:21:02.0849717Z ##[group]Disabling automatic garbage collection
+2026-11-22T21:21:02.0851964Z [command]/usr/bin/git config --local gc.auto 0
+2026-11-22T21:21:02.0876487Z ##[endgroup]
+2026-11-22T21:21:02.0877027Z ##[group]Setting up auth
+2026-11-22T21:21:02.0881570Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-22T21:21:02.0903849Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-22T21:21:02.2035866Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-22T21:21:02.2061642Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-22T21:21:02.2248727Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-22T21:21:02.2273272Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-22T21:21:02.2461990Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-11-22T21:21:02.2490099Z ##[endgroup]
+2026-11-22T21:21:02.2490605Z ##[group]Fetching the repository
+2026-11-22T21:21:02.2496432Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin 9a500a21013a08f750009be656362481986eb208
+2026-11-22T21:21:03.1453226Z From https://github.com/AMASI-SA/AMASI-SA
+2026-11-22T21:21:03.1454067Z  * branch            9a500a21013a08f750009be656362481986eb208 -> FETCH_HEAD
+2026-11-22T21:21:03.1456670Z ##[endgroup]
+2026-11-22T21:21:03.1457216Z ##[group]Determining the checkout info
+2026-11-22T21:21:03.1459205Z ##[endgroup]
+2026-11-22T21:21:03.1463870Z [command]/usr/bin/git sparse-checkout disable
+2026-11-22T21:21:03.1521667Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-11-22T21:21:03.1549723Z ##[group]Checking out the ref
+2026-11-22T21:21:03.1552941Z [command]/usr/bin/git checkout --progress --force 9a500a21013a08f750009be656362481986eb208
+2026-11-22T21:21:03.5642625Z Note: switching to '9a500a21013a08f750009be656362481986eb208'.
+2026-11-22T21:21:03.5643097Z 
+2026-11-22T21:21:03.5643311Z You are in 'detached HEAD' state. You can look around, make experimental
+2026-11-22T21:21:03.5643742Z changes and commit them, and you can discard any commits you make in this
+2026-11-22T21:21:03.5644150Z state without impacting any branches by switching back to a branch.
+2026-11-22T21:21:03.5644398Z 
+2026-11-22T21:21:03.5644564Z If you want to create a new branch to retain commits you create, you may
+2026-11-22T21:21:03.5645150Z do so (now or later) by using -c with the switch command. Example:
+2026-11-22T21:21:03.5645388Z 
+2026-11-22T21:21:03.5645766Z   git switch -c <new-branch-name>
+2026-11-22T21:21:03.5645946Z 
+2026-11-22T21:21:03.5646078Z Or undo this operation with:
+2026-11-22T21:21:03.5646215Z 
+2026-11-22T21:21:03.5646344Z   git switch -
+2026-11-22T21:21:03.5646542Z 
+2026-11-22T21:21:03.5646721Z Turn off this advice by setting config variable advice.detachedHead to false
+2026-11-22T21:21:03.5646983Z 
+2026-11-22T21:21:03.5647198Z HEAD is now at 9a500a2 Freeze reviewed operational reversal release intent on current Production
+2026-11-22T21:21:03.5663711Z ##[endgroup]
+2026-11-22T21:21:03.5713911Z [command]/usr/bin/git log -1 --format=%H
+2026-11-22T21:21:03.5735717Z 9a500a21013a08f750009be656362481986eb208
+2026-11-22T21:21:03.5745033Z ##[group]Removing auth
+2026-11-22T21:21:03.5750767Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-22T21:21:03.5769992Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-22T21:21:03.5967301Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-22T21:21:03.5983440Z http.https://github.com/.extraheader
+2026-11-22T21:21:03.5988219Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-11-22T21:21:03.6008195Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-22T21:21:03.6189539Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-22T21:21:03.6210371Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-22T21:21:03.6389436Z ##[endgroup]
+2026-11-22T21:21:03.6588883Z ##[group]Run actions/setup-node@v4
+2026-11-22T21:21:03.6589183Z with:
+2026-11-22T21:21:03.6589401Z   node-version: 22.23.2
+2026-11-22T21:21:03.6589633Z   always-auth: false
+2026-11-22T21:21:03.6589879Z   check-latest: false
+2026-11-22T21:21:03.6591749Z   token: ***
+2026-11-22T21:21:03.6591969Z env:
+2026-11-22T21:21:03.6592159Z   CI: true
+2026-11-22T21:21:03.6592358Z ##[endgroup]
+2026-11-22T21:21:03.8466789Z Attempting to download 22.23.2...
+2026-11-22T21:21:03.9077211Z (node:2449) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-22T21:21:03.9096761Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-22T21:21:04.4017694Z Acquiring 22.23.2 - x64 from https://github.com/actions/node-versions/releases/download/22.23.2-30508424155/node-22.23.2-linux-x64.tar.gz
+2026-11-22T21:21:04.9043347Z Extracting ...
+2026-11-22T21:21:04.9154225Z [command]/usr/bin/tar xz --strip 1 --warning=no-unknown-keyword --overwrite -C /home/runner/work/_temp/3bcd610f-87a5-493c-b5b5-bfebc30c354d -f /home/runner/work/_temp/14a859f9-c4c8-46f3-a18d-491fbd7baa45
+2026-11-22T21:21:05.5247033Z Adding to the cache ...
+2026-11-22T21:21:06.5559985Z ##[group]Environment details
+2026-11-22T21:21:07.0850654Z node: v22.23.2
+2026-11-22T21:21:07.0851053Z npm: 10.9.8
+2026-11-22T21:21:07.0851301Z yarn: 1.22.22
+2026-11-22T21:21:07.0851813Z ##[endgroup]
+2026-11-22T21:21:07.0979426Z ##[group]Run corepack enable && corepack prepare yarn@1.22.22 --activate
+2026-11-22T21:21:07.0979947Z [36;1mcorepack enable && corepack prepare yarn@1.22.22 --activate[0m
+2026-11-22T21:21:07.1003972Z shell: /usr/bin/bash -e {0}
+2026-11-22T21:21:07.1004345Z env:
+2026-11-22T21:21:07.1004553Z   CI: true
+2026-11-22T21:21:07.1004787Z ##[endgroup]
+2026-11-22T21:21:07.1969789Z Preparing yarn@1.22.22 for immediate activation...
+2026-11-22T21:21:07.3405061Z ##[group]Run yarn install --frozen-lockfile --non-interactive
+2026-11-22T21:21:07.3405830Z [36;1myarn install --frozen-lockfile --non-interactive[0m
+2026-11-22T21:21:07.3426154Z shell: /usr/bin/bash -e {0}
+2026-11-22T21:21:07.3426437Z env:
+2026-11-22T21:21:07.3426666Z   CI: true
+2026-11-22T21:21:07.3426946Z ##[endgroup]
+2026-11-22T21:21:07.5223154Z yarn install v1.22.22
+2026-11-22T21:21:07.5778029Z [1/5] Validating package.json...
+2026-11-22T21:21:07.5800121Z [2/5] Resolving packages...
+2026-11-22T21:21:07.6181285Z warning Resolution field "uuid@11.1.1" is incompatible with requested version "uuid@^8.3.0"
+2026-11-22T21:21:07.6197280Z warning Resolution field "glob@14.0.3" is incompatible with requested version "glob@^7.1.4"
+2026-11-22T21:21:07.6199135Z warning Resolution field "minimatch@11.0.3" is incompatible with requested version "minimatch@^5.1.0"
+2026-11-22T21:21:07.6227198Z warning Resolution field "glob@14.0.3" is incompatible with requested version "glob@^7.2.3"
+2026-11-22T21:21:07.6247161Z warning Resolution field "glob@14.0.3" is incompatible with requested version "glob@^7.1.3"
+2026-11-22T21:21:07.6357420Z warning Resolution field "postcss-selector-parser@7.1.6" is incompatible with requested version "postcss-selector-parser@^6.1.2"
+2026-11-22T21:21:07.6374535Z warning Resolution field "postcss-selector-parser@7.1.6" is incompatible with requested version "postcss-selector-parser@^6.1.1"
+2026-11-22T21:21:07.6468650Z warning Resolution field "minimatch@11.0.3" is incompatible with requested version "minimatch@^3.1.2"
+2026-11-22T21:21:07.6472624Z warning Resolution field "minimatch@11.0.3" is incompatible with requested version "minimatch@^3.1.2"
+2026-11-22T21:21:07.6527030Z warning Resolution field "minimatch@11.0.3" is incompatible with requested version "minimatch@^3.1.5"
+2026-11-22T21:21:07.6536967Z warning Resolution field "minimatch@11.0.3" is incompatible with requested version "minimatch@^3.1.2"
+2026-11-22T21:21:07.6917940Z warning Resolution field "minimatch@11.0.3" is incompatible with requested version "minimatch@^3.1.2"
+2026-11-22T21:21:07.6928142Z warning Resolution field "minimatch@11.0.3" is incompatible with requested version "minimatch@^3.1.2"
+2026-11-22T21:21:07.6974046Z warning Resolution field "minimatch@11.0.3" is incompatible with requested version "minimatch@^3.1.2"
+2026-11-22T21:21:07.7161677Z warning Resolution field "minimatch@11.0.3" is incompatible with requested version "minimatch@^3.1.2"
+2026-11-22T21:21:07.7163150Z warning Resolution field "minimatch@11.0.3" is incompatible with requested version "minimatch@^3.0.5"
+2026-11-22T21:21:07.7206891Z warning Resolution field "minimatch@11.0.3" is incompatible with requested version "minimatch@^3.1.2"
+2026-11-22T21:21:07.7219992Z warning Resolution field "minimatch@11.0.3" is incompatible with requested version "minimatch@^3.1.2"
+2026-11-22T21:21:07.7246078Z warning Resolution field "postcss-selector-parser@7.1.6" is incompatible with requested version "postcss-selector-parser@^6.0.10"
+2026-11-22T21:21:07.7248023Z warning Resolution field "postcss-selector-parser@7.1.6" is incompatible with requested version "postcss-selector-parser@^6.0.10"
+2026-11-22T21:21:07.7251566Z warning Resolution field "postcss-selector-parser@7.1.6" is incompatible with requested version "postcss-selector-parser@^6.0.9"
+2026-11-22T21:21:07.7252952Z warning Resolution field "postcss-selector-parser@7.1.6" is incompatible with requested version "postcss-selector-parser@^6.0.9"
+2026-11-22T21:21:07.7254237Z warning Resolution field "postcss-selector-parser@7.1.6" is incompatible with requested version "postcss-selector-parser@^6.0.10"
+2026-11-22T21:21:07.7258411Z warning Resolution field "postcss-selector-parser@7.1.6" is incompatible with requested version "postcss-selector-parser@^6.0.4"
+2026-11-22T21:21:07.7259675Z warning Resolution field "postcss-selector-parser@7.1.6" is incompatible with requested version "postcss-selector-parser@^6.0.10"
+2026-11-22T21:21:07.7261413Z warning Resolution field "postcss-selector-parser@7.1.6" is incompatible with requested version "postcss-selector-parser@^6.0.9"
+2026-11-22T21:21:07.7262823Z warning Resolution field "postcss-selector-parser@7.1.6" is incompatible with requested version "postcss-selector-parser@^6.0.9"
+2026-11-22T21:21:07.7263997Z warning Resolution field "postcss-selector-parser@7.1.6" is incompatible with requested version "postcss-selector-parser@^6.0.10"
+2026-11-22T21:21:07.7265213Z warning Resolution field "postcss-selector-parser@7.1.6" is incompatible with requested version "postcss-selector-parser@^6.0.10"
+2026-11-22T21:21:07.7299498Z warning Resolution field "postcss-selector-parser@7.1.6" is incompatible with requested version "postcss-selector-parser@^6.0.10"
+2026-11-22T21:21:07.7300719Z warning Resolution field "glob@14.0.3" is incompatible with requested version "glob@^7.1.6"
+2026-11-22T21:21:07.7301593Z warning Resolution field "minimatch@11.0.3" is incompatible with requested version "minimatch@^3.0.4"
+2026-11-22T21:21:07.7302514Z warning Resolution field "minimatch@11.0.3" is incompatible with requested version "minimatch@^3.0.5"
+2026-11-22T21:21:07.7324627Z warning Resolution field "glob@14.0.3" is incompatible with requested version "glob@^7.1.3"
+2026-11-22T21:21:07.7337427Z warning Resolution field "glob@14.0.3" is incompatible with requested version "glob@^7.1.6"
+2026-11-22T21:21:07.7453069Z warning Resolution field "glob@14.0.3" is incompatible with requested version "glob@^7.1.4"
+2026-11-22T21:21:07.7454040Z warning Resolution field "minimatch@11.0.3" is incompatible with requested version "minimatch@^3.0.4"
+2026-11-22T21:21:07.7547143Z warning Resolution field "glob@14.0.3" is incompatible with requested version "glob@^7.1.2"
+2026-11-22T21:21:07.7548010Z warning Resolution field "glob@14.0.3" is incompatible with requested version "glob@^7.1.1"
+2026-11-22T21:21:07.7558255Z warning Resolution field "glob@14.0.3" is incompatible with requested version "glob@^7.1.3"
+2026-11-22T21:21:07.7706064Z warning Resolution field "postcss-selector-parser@7.1.6" is incompatible with requested version "postcss-selector-parser@^6.0.9"
+2026-11-22T21:21:07.7758694Z warning Resolution field "postcss-selector-parser@7.1.6" is incompatible with requested version "postcss-selector-parser@^6.0.5"
+2026-11-22T21:21:07.7759889Z warning Resolution field "postcss-selector-parser@7.1.6" is incompatible with requested version "postcss-selector-parser@^6.0.5"
+2026-11-22T21:21:07.7761155Z warning Resolution field "postcss-selector-parser@7.1.6" is incompatible with requested version "postcss-selector-parser@^6.0.5"
+2026-11-22T21:21:07.7887364Z warning Resolution field "postcss-selector-parser@7.1.6" is incompatible with requested version "postcss-selector-parser@^6.0.4"
+2026-11-22T21:21:07.8027550Z warning Resolution field "minimatch@11.0.3" is incompatible with requested version "minimatch@^5.0.1"
+2026-11-22T21:21:07.8363771Z [3/5] Fetching packages...
+2026-11-22T21:21:19.8090979Z [4/5] Linking dependencies...
+2026-11-22T21:21:19.8161487Z warning " > react-day-picker@8.10.1" has incorrect peer dependency "date-fns@^2.28.0 || ^3.0.0".
+2026-11-22T21:21:19.8162717Z warning " > react-day-picker@8.10.1" has incorrect peer dependency "react@^16.8.0 || ^17.0.0 || ^18.0.0".
+2026-11-22T21:21:19.8176262Z warning " > @babel/plugin-proposal-private-property-in-object@7.21.11" has unmet peer dependency "@babel/core@^7.0.0-0".
+2026-11-22T21:21:19.8177987Z warning "@babel/plugin-proposal-private-property-in-object > @babel/helper-create-class-features-plugin@7.29.7" has unmet peer dependency "@babel/core@^7.0.0".
+2026-11-22T21:21:19.8179737Z warning "@babel/plugin-proposal-private-property-in-object > @babel/plugin-syntax-private-property-in-object@7.14.5" has unmet peer dependency "@babel/core@^7.0.0-0".
+2026-11-22T21:21:19.8186392Z warning "@babel/plugin-proposal-private-property-in-object > @babel/helper-create-class-features-plugin > @babel/helper-replace-supers@7.29.7" has unmet peer dependency "@babel/core@^7.0.0".
+2026-11-22T21:21:19.8198942Z warning "react-scripts > eslint-config-react-app > eslint-plugin-flowtype@8.0.3" has unmet peer dependency "@babel/plugin-syntax-flow@^7.14.5".
+2026-11-22T21:21:19.8200824Z warning "react-scripts > eslint-config-react-app > eslint-plugin-flowtype@8.0.3" has unmet peer dependency "@babel/plugin-transform-react-jsx@^7.14.9".
+2026-11-22T21:21:19.8216602Z warning "react-scripts > react-dev-utils > fork-ts-checker-webpack-plugin@6.5.3" has unmet peer dependency "typescript@>= 2.7".
+2026-11-22T21:21:19.8247648Z warning "react-scripts > eslint-config-react-app > @typescript-eslint/eslint-plugin > tsutils@3.21.0" has unmet peer dependency "typescript@>=2.8.0 || >= 3.2.0-dev || >= 3.3.0-dev || >= 3.4.0-dev || >= 3.5.0-dev || >= 3.6.0-dev || >= 3.6.0-beta || >= 3.7.0-dev || >= 3.7.0-beta".
+2026-11-22T21:21:19.8257389Z warning "react-scripts > postcss-preset-env > @csstools/postcss-cascade-layers > @csstools/selector-specificity@2.2.0" has incorrect peer dependency "postcss-selector-parser@^6.0.10".
+2026-11-22T21:21:19.8436065Z warning Workspaces can only be enabled in private projects.
+2026-11-22T21:21:19.8479403Z warning Workspaces can only be enabled in private projects.
+2026-11-22T21:21:34.5715792Z [5/5] Building fresh packages...
+2026-11-22T21:21:34.9901659Z Done in 27.47s.
+2026-11-22T21:21:35.0191444Z ##[group]Run node node_modules/react-scripts/bin/react-scripts.js test --watch=false --runInBand --resetMocks=false --resolver ./scripts/jest-package-exports.cjs --testMatch '**/src/pages/operational/**/*.test.{js,jsx,ts,tsx}' '**/EmployeeWebAccess.test.jsx' '**/webPageAccess.test.js' '**/EmployeeOperationsReadPage.test.jsx' '**/EmployeeMarketingRead.test.jsx' '**/EmployeeAdditionalPage.test.jsx' '**/EmployeeDetailPage.test.jsx' '**/OrdersV2.navigation.test.jsx' '**/MezanV2NavigationShell.employees.test.jsx' '**/MezanV2NavigationShell.test.jsx' '**/MezanV2NavigationShell.accountingFirstRun.test.jsx' '**/OrderDetailsV2.shippingIdentity.test.jsx' '**/ProviderFeeCompleteness.test.jsx' '**/ShippingCompanySettings.test.jsx' '**/MezanSuppliersV2.test.jsx' '**/EmployeesV2Management.test.jsx' '**/OperationalSupplierAccount.test.jsx' '**/mezanSuppliersV2.test.js' '**/SupplierPaymentWorkspace.test.jsx' '**/src/lib/safeSpreadsheet.test.js' '**/src/lib/demandRead.test.js' '**/src/hooks/useDashboardCardSnapshot.test.jsx' '**/src/components/fulfillment/PreparationWorkDashboard.loading.test.jsx' '**/src/lib/inventoryProductConfiguration.test.js' '**/src/components/inventory/suite/InventoryProductFields.test.jsx' --json --outputFile=operational-frontend.json
+2026-11-22T21:21:35.0197965Z [36;1mnode node_modules/react-scripts/bin/react-scripts.js test --watch=false --runInBand --resetMocks=false --resolver ./scripts/jest-package-exports.cjs --testMatch '**/src/pages/operational/**/*.test.{js,jsx,ts,tsx}' '**/EmployeeWebAccess.test.jsx' '**/webPageAccess.test.js' '**/EmployeeOperationsReadPage.test.jsx' '**/EmployeeMarketingRead.test.jsx' '**/EmployeeAdditionalPage.test.jsx' '**/EmployeeDetailPage.test.jsx' '**/OrdersV2.navigation.test.jsx' '**/MezanV2NavigationShell.employees.test.jsx' '**/MezanV2NavigationShell.test.jsx' '**/MezanV2NavigationShell.accountingFirstRun.test.jsx' '**/OrderDetailsV2.shippingIdentity.test.jsx' '**/ProviderFeeCompleteness.test.jsx' '**/ShippingCompanySettings.test.jsx' '**/MezanSuppliersV2.test.jsx' '**/EmployeesV2Management.test.jsx' '**/OperationalSupplierAccount.test.jsx' '**/mezanSuppliersV2.test.js' '**/SupplierPaymentWorkspace.test.jsx' '**/src/lib/safeSpreadsheet.test.js' '**/src/lib/demandRead.test.js' '**/src/hooks/useDashboardCardSnapshot.test.jsx' '**/src/components/fulfillment/PreparationWorkDashboard.loading.test.jsx' '**/src/lib/inventoryProductConfiguration.test.js' '**/src/components/inventory/suite/InventoryProductFields.test.jsx' --json --outputFile=operational-frontend.json[0m
+2026-11-22T21:21:35.0219969Z shell: /usr/bin/bash -e {0}
+2026-11-22T21:21:35.0220325Z env:
+2026-11-22T21:21:35.0220537Z   CI: true
+2026-11-22T21:21:35.0220776Z ##[endgroup]
+2026-11-22T21:21:40.9360477Z PASS src/pages/operational/OperationalFinancialPosition.test.jsx (5.299 s)
+2026-11-22T21:21:43.1427612Z PASS src/pages/operational/ProviderStatements.test.jsx
+2026-11-22T21:21:45.5564601Z PASS src/pages/operational/OperationalBalances.test.jsx
+2026-11-22T21:21:46.5424063Z PASS src/pages/operational/SimpleBalanceAccess.test.jsx
+2026-11-22T21:21:48.7027941Z PASS src/pages/EmployeesV2Management.test.jsx
+2026-11-22T21:21:50.2032391Z PASS src/pages/operational/InventoryPurchases.test.jsx
+2026-11-22T21:21:51.8474487Z PASS src/pages/operational/ApprovedEntry.test.jsx
+2026-11-22T21:21:52.8175918Z PASS src/pages/operational/ProviderFeeSetup.test.jsx
+2026-11-22T21:21:53.5006594Z PASS src/pages/MezanSuppliersV2.test.jsx
+2026-11-22T21:21:53.7080095Z PASS src/pages/operational/financialPositionPresentation.test.js
+2026-11-22T21:21:53.7857369Z PASS src/pages/operational/visibleOperationalRead.test.js
+2026-11-22T21:21:54.5624954Z PASS src/pages/operational/ApprovedReports.test.jsx
+2026-11-22T21:21:54.8667977Z PASS src/pages/operational/DomainDetails.test.jsx
+2026-11-22T21:21:55.3258357Z PASS src/pages/operational/SimpleOrderRefunds.test.jsx
+2026-11-22T21:21:56.2144767Z PASS src/pages/operational/ApprovedFinance.demand.test.jsx
+2026-11-22T21:21:56.6818483Z PASS src/pages/operational/PendingOrdersDialog.test.jsx
+2026-11-22T21:21:57.0790075Z PASS src/pages/operational/SimpleBalances.test.jsx
+2026-11-22T21:21:57.5646602Z PASS src/pages/operational/ApprovedLedger.test.jsx
+2026-11-22T21:21:58.1347967Z PASS src/pages/operational/InventoryPurchaseReceipts.test.jsx
+2026-11-22T21:21:58.6435322Z PASS src/pages/operational/OpeningInventory.test.jsx
+2026-11-22T21:21:59.0137207Z PASS src/pages/operational/inventoryPurchaseWorkflow.test.js
+2026-11-22T21:21:59.4767586Z PASS src/pages/operational/OperationalBalances.readLoad.test.jsx
+2026-11-22T21:22:00.0988461Z PASS src/pages/operational/DriverBankStatementReview.test.jsx
+2026-11-22T21:22:00.2450522Z PASS src/hooks/useDashboardCardSnapshot.test.jsx
+2026-11-22T21:22:00.8274496Z PASS src/pages/operational/NativePurchaseReview.test.jsx
+2026-11-22T21:22:01.1355111Z PASS src/pages/operational/DailyFinancialMovements.test.jsx
+2026-11-22T21:22:01.3512660Z PASS src/pages/operational/DeliveryFeeReview.test.jsx
+2026-11-22T21:22:01.6140108Z PASS src/pages/operational/SimpleBalanceStatement.test.jsx
+2026-11-22T21:22:02.3237048Z PASS src/components/EmployeeWebAccess.test.jsx
+2026-11-22T21:22:03.1533999Z PASS src/pages/operational/InventoryPurchaseDraft.test.jsx
+2026-11-22T21:22:03.4820171Z PASS src/components/MezanV2NavigationShell.test.jsx
+2026-11-22T21:22:03.9652475Z PASS src/pages/operational/SalaryStart.test.jsx
+2026-11-22T21:22:04.2429743Z PASS src/pages/operational/ApprovedCustomerCollections.test.jsx
+2026-11-22T21:22:04.4326291Z PASS src/pages/operational/ObservedPaymentMethods.test.jsx
+2026-11-22T21:22:04.5119690Z PASS src/pages/operational/simpleBalancesPending.test.jsx
+2026-11-22T21:22:04.8010272Z PASS src/pages/operational/ApprovedOperations.test.jsx
+2026-11-22T21:22:05.0578085Z PASS src/pages/operational/CompletedShippingFeeReview.test.jsx
+2026-11-22T21:22:05.6811004Z PASS src/pages/operational/SimpleBalances.navigation.test.jsx
+2026-11-22T21:22:06.4557112Z PASS src/pages/operational/ApprovedFinance.test.jsx
+2026-11-22T21:22:06.5277506Z PASS src/lib/demandRead.test.js
+2026-11-22T21:22:06.6908122Z PASS src/components/suppliers/SupplierPaymentWorkspace.test.jsx
+2026-11-22T21:22:06.7873940Z PASS src/pages/operational/ProviderFeeDetails.test.jsx
+2026-11-22T21:22:07.2433540Z PASS src/pages/operational/InventoryWorkspace.test.jsx
+2026-11-22T21:22:07.4278215Z PASS src/pages/operational/ApprovedFinance.loading.test.jsx
+2026-11-22T21:22:07.4735680Z PASS src/pages/operational/simpleBalancesApi.test.js
+2026-11-22T21:22:07.8450766Z PASS src/pages/operational/OperationalAncillaryReads.test.jsx
+2026-11-22T21:22:08.2021812Z PASS src/pages/operational/DriverPaymentReview.test.jsx
+2026-11-22T21:22:08.3538064Z PASS src/pages/operational/SupplierAdjustments.test.jsx
+2026-11-22T21:22:08.8053469Z PASS src/components/MezanV2NavigationShell.accountingFirstRun.test.jsx
+2026-11-22T21:22:08.9327378Z PASS src/pages/operational/ProviderHistoryReview.test.jsx
+2026-11-22T21:22:09.2305254Z PASS src/pages/operational/ReceivingInvoiceCoverage.test.jsx
+2026-11-22T21:22:09.5248573Z PASS src/pages/operational/CustomerExchanges.test.jsx
+2026-11-22T21:22:09.5620297Z PASS src/pages/operational/simpleBalancesModel.test.js
+2026-11-22T21:22:09.6183749Z PASS src/lib/inventoryProductConfiguration.test.js
+2026-11-22T21:22:10.1044136Z PASS src/pages/operational/ExternalOperationControls.test.jsx
+2026-11-22T21:22:10.2160218Z PASS src/pages/operational/SimpleBalanceReviews.test.jsx
+2026-11-22T21:22:10.2678698Z PASS src/lib/webPageAccess.test.js
+2026-11-22T21:22:10.7197498Z PASS src/pages/OrderDetailsV2.shippingIdentity.test.jsx
+2026-11-22T21:22:10.9073002Z PASS src/pages/operational/ApprovedCashBoxes.test.jsx
+2026-11-22T21:22:11.2334138Z PASS src/pages/operational/InventoryAvailability.test.jsx
+2026-11-22T21:22:11.4742882Z PASS src/pages/operational/CustomerReturns.test.jsx
+2026-11-22T21:22:11.6540297Z PASS src/pages/operational/ApprovedSpecializedPage.test.jsx
+2026-11-22T21:22:11.9289224Z PASS src/pages/operational/OperationalCostExposure.test.jsx
+2026-11-22T21:22:12.4883982Z PASS src/components/ProviderFeeCompleteness.test.jsx
+2026-11-22T21:22:12.8537101Z PASS src/pages/operational/StandaloneInventoryEntry.test.jsx
+2026-11-22T21:22:12.9582553Z PASS src/pages/ShippingCompanySettings.test.jsx
+2026-11-22T21:22:13.1080898Z PASS src/pages/operational/ApprovedOrderIssues.test.jsx
+2026-11-22T21:22:13.1885093Z PASS src/pages/EmployeeMarketingRead.test.jsx
+2026-11-22T21:22:13.2669743Z PASS src/pages/operational/CustomerWalletBalance.test.jsx
+2026-11-22T21:22:13.3241741Z PASS src/pages/operational/AdFundingSettings.test.jsx
+2026-11-22T21:22:13.4377156Z PASS src/pages/operational/ProviderOrders.test.jsx
+2026-11-22T21:22:13.4786835Z PASS src/pages/operational/brandIconModel.test.js
+2026-11-22T21:22:13.5495003Z PASS src/pages/operational/BrandIcon.test.jsx
+2026-11-22T21:22:13.6218721Z PASS src/pages/operational/OperationalCustomerReads.test.jsx
+2026-11-22T21:22:13.7049961Z PASS src/pages/EmployeeDetailPage.test.jsx
+2026-11-22T21:22:13.7683140Z PASS src/pages/operational/CarrierAccountSummary.test.jsx
+2026-11-22T21:22:14.0138046Z PASS src/components/inventory/suite/InventoryProductFields.test.jsx
+2026-11-22T21:22:14.0692012Z PASS src/pages/operational/AdAccountSelection.test.jsx
+2026-11-22T21:22:14.1511290Z PASS src/pages/operational/EmployeeBalanceSpecialist.test.jsx
+2026-11-22T21:22:14.1822340Z PASS src/pages/operational/providerStatementsApi.test.js
+2026-11-22T21:22:14.2166020Z PASS src/services/mezanSuppliersV2.test.js
+2026-11-22T21:22:14.2499271Z PASS src/pages/operational/financialPositionApi.test.js
+2026-11-22T21:22:14.5015761Z PASS src/pages/operational/PaginatedReportTable.test.jsx
+2026-11-22T21:22:14.5677875Z PASS src/pages/operational/ApprovedReviewPage.test.jsx
+2026-11-22T21:22:14.6072383Z PASS src/pages/operational/workspaceReadHooks.test.jsx
+2026-11-22T21:22:14.6670092Z PASS src/pages/operational/CustomerAdjustments.test.jsx
+2026-11-22T21:22:14.8928006Z PASS src/components/suppliers/OperationalSupplierAccount.test.jsx
+2026-11-22T21:22:14.9573047Z PASS src/lib/safeSpreadsheet.test.js
+2026-11-22T21:22:15.3463314Z PASS src/components/fulfillment/PreparationWorkDashboard.loading.test.jsx
+2026-11-22T21:22:15.3779743Z PASS src/pages/operational/operationalCustomerReviewApi.test.js
+2026-11-22T21:22:15.4043381Z PASS src/pages/operational/inventoryCommandStorage.test.js
+2026-11-22T21:22:15.7066191Z PASS src/pages/operational/OrderDetailsV2.paymentSummary.test.jsx
+2026-11-22T21:22:15.7628049Z PASS src/pages/operational/MovementHistory.test.jsx
+2026-11-22T21:22:16.2012624Z PASS src/pages/OrdersV2.navigation.test.jsx
+2026-11-22T21:22:16.4270649Z PASS src/components/MezanV2NavigationShell.employees.test.jsx
+2026-11-22T21:22:16.4677796Z PASS src/pages/operational/AramexOrderStatus.test.jsx
+2026-11-22T21:22:16.5325617Z PASS src/pages/EmployeeOperationsReadPage.test.jsx
+2026-11-22T21:22:16.5888239Z PASS src/pages/EmployeeAdditionalPage.test.jsx
+2026-11-22T21:22:16.6175055Z PASS src/pages/operational/deliveryAfterStartApi.test.js
+2026-11-22T21:22:16.6449872Z PASS src/pages/operational/nativePurchaseLinkApi.test.js
+2026-11-22T21:22:16.6727717Z PASS src/pages/operational/salaryStartApi.test.js
+2026-11-22T21:22:16.6955110Z PASS src/pages/operational/operationalAncillaryApi.test.js
+2026-11-22T21:22:16.9348165Z PASS src/pages/operational/financialPositionReadBudget.test.js
+2026-11-22T21:22:16.9361832Z 
+2026-11-22T21:22:16.9369412Z Test Suites: 103 passed, 103 total
+2026-11-22T21:22:16.9370127Z Tests:       1660 passed, 1660 total
+2026-11-22T21:22:16.9370496Z Snapshots:   0 total
+2026-11-22T21:22:16.9370784Z Time:        41.511 s
+2026-11-22T21:22:16.9371068Z Ran all test suites.
+2026-11-22T21:22:16.9400527Z Test results written to: operational-frontend.json
+2026-11-22T21:22:17.1833150Z ##[group]Run node - <<'JS'
+2026-11-22T21:22:17.1833690Z [36;1mnode - <<'JS'[0m
+2026-11-22T21:22:17.1834087Z [36;1mconst r = require('./operational-frontend.json');[0m
+2026-11-22T21:22:17.1834689Z [36;1mif (!r.success || r.numPassedTests < 289 || r.numPassedTestSuites < 23 ||[0m
+2026-11-22T21:22:17.1835487Z [36;1m    r.numFailedTests || r.numFailedTestSuites || r.numPendingTests ||[0m
+2026-11-22T21:22:17.1836515Z [36;1m    r.numPendingTestSuites || r.numTodoTests) process.exit(1);[0m
+2026-11-22T21:22:17.1837280Z [36;1mfor (const suffix of ['SalaryStart.test.jsx', 'EmployeesV2Management.test.jsx', 'OperationalSupplierAccount.test.jsx',[0m
+2026-11-22T21:22:17.1838107Z [36;1m                      'SimpleBalances.test.jsx', 'SimpleBalanceAccess.test.jsx', 'SimpleOrderRefunds.test.jsx',[0m
+2026-11-22T21:22:17.1838919Z [36;1m                      'ApprovedEntry.test.jsx', 'ApprovedFinance.test.jsx', 'ApprovedLedger.test.jsx',[0m
+2026-11-22T21:22:17.1839827Z [36;1m                      'CustomerReturns.test.jsx', 'ApprovedCustomerCollections.test.jsx', 'CustomerAdjustments.test.jsx',[0m
+2026-11-22T21:22:17.1840551Z [36;1m                      'webPageAccess.test.js',[0m
+2026-11-22T21:22:17.1841127Z [36;1m                      'SimpleBalanceStatement.test.jsx', 'SimpleBalanceReviews.test.jsx',[0m
+2026-11-22T21:22:17.1842231Z [36;1m                      'simpleBalancesApi.test.js', 'simpleBalancesModel.test.js', 'simpleBalancesPending.test.jsx',[0m
+2026-11-22T21:22:17.1843033Z [36;1m                      'OperationalFinancialPosition.test.jsx', 'DriverPaymentReview.test.jsx',[0m
+2026-11-22T21:22:17.1843747Z [36;1m                      'NativePurchaseReview.test.jsx', 'nativePurchaseLinkApi.test.js',[0m
+2026-11-22T21:22:17.1844458Z [36;1m                      'ExternalOperationControls.test.jsx', 'ProviderFeeSetup.test.jsx',[0m
+2026-11-22T21:22:17.1845236Z [36;1m                      'ProviderFeeCompleteness.test.jsx', 'OrderDetailsV2.shippingIdentity.test.jsx',[0m
+2026-11-22T21:22:17.1846378Z [36;1m                      'safeSpreadsheet.test.js', 'demandRead.test.js', 'workspaceReadHooks.test.jsx',[0m
+2026-11-22T21:22:17.1847164Z [36;1m                      'useDashboardCardSnapshot.test.jsx', 'PreparationWorkDashboard.loading.test.jsx',[0m
+2026-11-22T21:22:17.1847953Z [36;1m                      'ApprovedFinance.demand.test.jsx', 'ApprovedFinance.loading.test.jsx',[0m
+2026-11-22T21:22:17.1848681Z [36;1m                      'ApprovedEntry.test.jsx', 'ApprovedLedger.test.jsx', 'ApprovedReports.test.jsx',[0m
+2026-11-22T21:22:17.1849410Z [36;1m                      'ApprovedOperations.test.jsx', 'inventoryProductConfiguration.test.js',[0m
+2026-11-22T21:22:17.1850135Z [36;1m                      'InventoryProductFields.test.jsx', 'InventoryPurchaseDraft.test.jsx',[0m
+2026-11-22T21:22:17.1850911Z [36;1m                      'InventoryPurchaseReceipts.test.jsx', 'inventoryPurchaseWorkflow.test.js',[0m
+2026-11-22T21:22:17.1851604Z [36;1m                      'inventoryCommandStorage.test.js', 'InventoryPurchases.test.jsx',[0m
+2026-11-22T21:22:17.1852195Z [36;1m                      'StandaloneInventoryEntry.test.jsx']) {[0m
+2026-11-22T21:22:17.1852752Z [36;1m  const suite = r.testResults.find(s => s.name.endsWith('/' + suffix));[0m
+2026-11-22T21:22:17.1853753Z [36;1m  if (!suite || !suite.assertionResults.length || suite.assertionResults.some(t => t.status !== 'passed'))[0m
+2026-11-22T21:22:17.1854518Z [36;1m    throw Error('Combined UI suite missing or incomplete: ' + suffix);[0m
+2026-11-22T21:22:17.1854975Z [36;1m}[0m
+2026-11-22T21:22:17.1855797Z [36;1mfor (const [suffix, minimum] of [['demandRead.test.js', 14], ['workspaceReadHooks.test.jsx', 1],[0m
+2026-11-22T21:22:17.1856416Z [36;1m                                ['useDashboardCardSnapshot.test.jsx', 26],[0m
+2026-11-22T21:22:17.1856983Z [36;1m                                ['PreparationWorkDashboard.loading.test.jsx', 3]]) {[0m
+2026-11-22T21:22:17.1857805Z [36;1m  const suite = r.testResults.find(s => s.name.endsWith('/' + suffix));[0m
+2026-11-22T21:22:17.1858321Z [36;1m  if (!suite || suite.assertionResults.length < minimum)[0m
+2026-11-22T21:22:17.1858889Z [36;1m    throw Error('Demand lifecycle coverage missing: ' + suffix);[0m
+2026-11-22T21:22:17.1859313Z [36;1m}[0m
+2026-11-22T21:22:17.1859580Z [36;1mJS[0m
+2026-11-22T21:22:17.1886717Z shell: /usr/bin/bash -e {0}
+2026-11-22T21:22:17.1887253Z env:
+2026-11-22T21:22:17.1887536Z   CI: true
+2026-11-22T21:22:17.1887836Z ##[endgroup]
+2026-11-22T21:22:17.2267100Z ##[group]Run actions/upload-artifact@v4
+2026-11-22T21:22:17.2267429Z with:
+2026-11-22T21:22:17.2267652Z   name: operational-frontend-results
+2026-11-22T21:22:17.2267930Z   path: frontend/operational-frontend.json
+2026-11-22T21:22:17.2268232Z   if-no-files-found: error
+2026-11-22T21:22:17.2268502Z   compression-level: 6
+2026-11-22T21:22:17.2268739Z   overwrite: false
+2026-11-22T21:22:17.2268978Z   include-hidden-files: false
+2026-11-22T21:22:17.2269229Z env:
+2026-11-22T21:22:17.2269444Z   CI: true
+2026-11-22T21:22:17.2269672Z ##[endgroup]
+2026-11-22T21:22:17.3558374Z (node:2588) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-22T21:22:17.3559076Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-22T21:22:17.3591896Z With the provided path, there will be 1 file uploaded
+2026-11-22T21:22:17.3598982Z Artifact name is valid!
+2026-11-22T21:22:17.3612063Z Root directory input is valid!
+2026-11-22T21:22:17.5709431Z Beginning upload of artifact content to blob storage
+2026-11-22T21:22:17.6757536Z (node:2588) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-11-22T21:22:17.7296767Z Uploaded bytes 52804
+2026-11-22T21:22:17.7498748Z Finished uploading artifact content to blob storage!
+2026-11-22T21:22:17.7499396Z SHA256 digest of uploaded artifact zip is 776e65c3ed1107b0f308487db38a1caa6a81740f148403d159ab2cf6695d7e27
+2026-11-22T21:22:17.7500089Z Finalizing artifact upload
+2026-11-22T21:22:18.0918064Z Artifact operational-frontend-results.zip successfully finalized. Artifact ID 14773881708
+2026-11-22T21:22:18.0918934Z Artifact operational-frontend-results has been successfully uploaded! Final size is 52804 bytes. Artifact ID is 14773881708
+2026-11-22T21:22:18.0924964Z Artifact download URL: https://github.com/AMASI-SA/AMASI-SA/actions/runs/45071567938/artifacts/14773881708
+2026-11-22T21:22:18.1052299Z Post job cleanup.
+2026-11-22T21:22:18.1982815Z (node:2602) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-22T21:22:18.1983533Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-22T21:22:18.2097229Z Post job cleanup.
+2026-11-22T21:22:18.2784218Z [command]/usr/bin/git version
+2026-11-22T21:22:18.2821501Z git version 2.56.1
+2026-11-22T21:22:18.2852857Z Temporarily overriding HOME='/home/runner/work/_temp/9a47c143-d383-4825-8062-f314815b81b1' before making global git config changes
+2026-11-22T21:22:18.2853594Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-22T21:22:18.2857628Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/AMASI-SA/AMASI-SA
+2026-11-22T21:22:18.2888307Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-22T21:22:18.2913650Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-22T21:22:18.3113201Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-22T21:22:18.3141364Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-22T21:22:18.3347457Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-22T21:22:18.3380529Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-22T21:22:18.3718570Z Cleaning up orphan processes
+2026-11-22T21:22:18.3992293Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-node@v4, actions/upload-artifact@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

@@ -1,0 +1,122 @@
+{
+  "kind": "pr2080_exact_source_intent_ci_artifact_acceptance",
+  "source_git_sha": "dd3a9ea29fce28e2fa87332cff4a6d46f776e0d3",
+  "source_base_git_sha": "02cd99e5b2b68c95341c87590abcf572c885e697",
+  "intent_git_sha": "9a500a21013a08f750009be656362481986eb208",
+  "intent_tree": "2cbd2842ed2506642a1321a47e35f69a766fcf89",
+  "intent_sha256": "0e0c7a6167dae598450358db6a1399b080cb7c69e176d28c5c31a0585ed287dc",
+  "runtime_release_id": "rg5-b2aa207d2f63107c64d9c0b66ce5cc567aa5ebb074753cf889227de4c448e008",
+  "result": "TECHNICAL_GATES_PASS_HOST_HANDOFF_PENDING",
+  "original_source_and_intent_validators": "PASS",
+  "independent_source_and_artifact_reviews": "PASS",
+  "exact_B_checks": {
+    "success": 25,
+    "skipped": [
+      "Emergent manual redeploy required",
+      "Publication frontend and existing media flow",
+      "Publication backend and existing write guards",
+      "Backend settings and zero-write regressions",
+      "Frontend Snapchat settings tests and build",
+      "reviewed-candidate"
+    ],
+    "failed": 0,
+    "pending": 0
+  },
+  "exact_B_runs": [
+    {
+      "id": 45071567928,
+      "name": "TikTok Creator Release Candidate",
+      "conclusion": "skipped",
+      "attempt": 1
+    },
+    {
+      "id": 45071567792,
+      "name": "Snapchat Direct Active Publication",
+      "conclusion": "success",
+      "attempt": 1
+    },
+    {
+      "id": 45071567944,
+      "name": "Qoyod Payment Freshness",
+      "conclusion": "success",
+      "attempt": 1
+    },
+    {
+      "id": 45071567926,
+      "name": "Mobile Order Tracking",
+      "conclusion": "success",
+      "attempt": 1
+    },
+    {
+      "id": 45071567828,
+      "name": "Snapchat Settings Management V2",
+      "conclusion": "success",
+      "attempt": 1
+    },
+    {
+      "id": 45071567796,
+      "name": "Store Delivery V1",
+      "conclusion": "success",
+      "attempt": 1
+    },
+    {
+      "id": 45071567823,
+      "name": "MZ2 Employee Salary and Password",
+      "conclusion": "success",
+      "attempt": 1
+    },
+    {
+      "id": 45071567938,
+      "name": "Operational Balance Web",
+      "conclusion": "success",
+      "attempt": 1
+    },
+    {
+      "id": 45071567841,
+      "name": "Security Gate",
+      "conclusion": "success",
+      "attempt": 1
+    },
+    {
+      "id": 45071567803,
+      "name": "Mezan Release Readiness",
+      "conclusion": "success",
+      "attempt": 1
+    },
+    {
+      "id": 45071567954,
+      "name": "G47 Focused Integration",
+      "conclusion": "success",
+      "attempt": 1
+    },
+    {
+      "id": 45071567839,
+      "name": "CodeQL",
+      "conclusion": "success",
+      "attempt": 1
+    },
+    {
+      "id": 45071567946,
+      "name": "Operational Stock Eligibility",
+      "conclusion": "success",
+      "attempt": 1
+    }
+  ],
+  "artifact_acceptance_sha256": "6f2c02237bd01750f8ccdcaccdcc380a0272c6476a5ac97bc510b3acd531e0e1",
+  "frontend_generated_files_equal_across_hosts": 389,
+  "source_A_infrastructure_failures_preserved": true,
+  "host_rehearsal_completed": false,
+  "ordinary_merge_completed": false,
+  "shared_host_stage_completed": false,
+  "own_lease_created": false,
+  "production_published_by_task": false,
+  "foreign_handoff": {
+    "pr": 2076,
+    "latest_evidence_commit": "32661e1a8e6ff3a868eb3ffd010bc9d2f9a38dc2",
+    "canonical_record": "awaiting owner execution, UI success and original verification/closure",
+    "public_runtime_observed_serving_expected_source": true,
+    "actual_shared_guard_observed_by_this_task": false,
+    "release_completion_inferred_from_public_health": false
+  },
+  "next_safe_action": "Owner runs informational original guard/current-head check and provides prior publication closure evidence; after predecessor handoff release and exact refs, run this task's actual isolated host adapter rehearsal before ordinary merge."
+}

@@ -1,0 +1,120 @@
+{
+  "B": "9a500a21013a08f750009be656362481986eb208",
+  "artifacts": [
+    {
+      "head_sha": "9a500a21013a08f750009be656362481986eb208",
+      "id": 14773262444,
+      "label": "generated24",
+      "members": [
+        {
+          "bytes": 3841914,
+          "path": "mezan-generated-release-v5.tar.gz",
+          "sha256": "b599211b839e343197ecb77152ed5ee08faba7fae89b06bb466ad45e5ea85d99"
+        },
+        {
+          "bytes": 100,
+          "path": "mezan-generated-release-v5.sha256",
+          "sha256": "b2302491c54e2708aab37c672d7f9a49105cddf522c856694f674fec4d8fbf1c"
+        }
+      ],
+      "name": "release-v5-generated-outputs-host-24.19.0",
+      "run_id": 45071567803,
+      "safe_extraction": "PASS",
+      "sha256": "d09f127768086d8060bdb5d2226e44f6633d2423d97bd109bdba3efccfe8895e",
+      "size": 3833353,
+      "zip_path": "/workspace/scratch/dfe063f5aca0/server-r3-b-artifacts/downloads/generated24.zip"
+    },
+    {
+      "head_sha": "9a500a21013a08f750009be656362481986eb208",
+      "id": 14773207599,
+      "label": "generated20",
+      "members": [
+        {
+          "bytes": 3841948,
+          "path": "mezan-generated-release-v5.tar.gz",
+          "sha256": "5eb3738160dd24b5781e05ef7eb06645219fe9a7bad71b56c3cff82fe80f1249"
+        },
+        {
+          "bytes": 100,
+          "path": "mezan-generated-release-v5.sha256",
+          "sha256": "f483682eca0bfac0cea61712608d38648238e066319add737962d280b785e34d"
+        }
+      ],
+      "name": "release-v5-generated-outputs-host-20.20.2",
+      "run_id": 45071567803,
+      "safe_extraction": "PASS",
+      "sha256": "718243da3bfec8dc56cc28173da80a2feaf0619a1c8c1756eebb0e87141da65c",
+      "size": 3833741,
+      "zip_path": "/workspace/scratch/dfe063f5aca0/server-r3-b-artifacts/downloads/generated20.zip"
+    },
+    {
+      "head_sha": "9a500a21013a08f750009be656362481986eb208",
+      "id": 14773082955,
+      "label": "evidence20",
+      "members": [
+        {
+          "bytes": 1102,
+          "path": "mezan-adapter-environment-v5.json",
+          "sha256": "b6d4b16e4cd27146c20c1eb3ea104cc8afd231d0f45436e4f2f3739332aad68b"
+        },
+        {
+          "bytes": 207934,
+          "path": "mezan-adapter-build-v5.log",
+          "sha256": "98595ff88e44952bb621c3039efb216ed1f9c919abe42d3336ab9ac9f070af7f"
+        },
+        {
+          "bytes": 1278,
+          "path": "mezan-package-boundary-v5.json",
+          "sha256": "f4d29da8e5a0913b9fd7e1fd326f4e683a82348d1c7c1f9a0e8ff991b2f16537"
+        },
+        {
+          "bytes": 517,
+          "path": "mezan-governed-runtime.log",
+          "sha256": "6b044a1f87d3bac861cc339eeb0aeded72d03bf0875166be91258043db4660d2"
+        }
+      ],
+      "name": "release-v5-clean-clone-evidence-host-20.20.2",
+      "run_id": 45071567803,
+      "safe_extraction": "PASS",
+      "sha256": "44f7244e1016f8d1c7c0562491d509f8dffc3580754c5ce21604db4d9db4ad85",
+      "size": 64206,
+      "zip_path": "/workspace/scratch/dfe063f5aca0/server-r3-b-artifacts/downloads/evidence20.zip"
+    },
+    {
+      "head_sha": "9a500a21013a08f750009be656362481986eb208",
+      "id": 14772624671,
+      "label": "evidence24",
+      "members": [
+        {
+          "bytes": 207931,
+          "path": "mezan-adapter-build-v5.log",
+          "sha256": "97cca01988e063000731a96b43446de8da3931998fe874f89da3e05c03130857"
+        },
+        {
+          "bytes": 1278,
+          "path": "mezan-package-boundary-v5.json",
+          "sha256": "f4d29da8e5a0913b9fd7e1fd326f4e683a82348d1c7c1f9a0e8ff991b2f16537"
+        },
+        {
+          "bytes": 518,
+          "path": "mezan-governed-runtime.log",
+          "sha256": "67a49e8096751d3eb8a2ce7317ba30f639a158a7055caa26ac0ddd1f1fda754b"
+        },
+        {
+          "bytes": 1102,
+          "path": "mezan-adapter-environment-v5.json",
+          "sha256": "c0c7cbbaa2a9e13a4d3e91c860dd6bc38eccf121fb48eacf3589eb68256fed76"
+        }
+      ],
+      "name": "release-v5-clean-clone-evidence-host-24.19.0",
+      "run_id": 45071567803,
+      "safe_extraction": "PASS",
+      "sha256": "e61d06215835fe02fee7e583afc18dbc9dfdded2e74d0fa2da9d52e10e2391fc",
+      "size": 64206,
+      "zip_path": "/workspace/scratch/dfe063f5aca0/server-r3-b-artifacts/downloads/evidence24.zip"
+    }
+  ],
+  "kind": "exact_B_four_artifact_download_v1",
+  "metadata_and_zip_sha256": "PASS",
+  "run_id": 45071567803
+}

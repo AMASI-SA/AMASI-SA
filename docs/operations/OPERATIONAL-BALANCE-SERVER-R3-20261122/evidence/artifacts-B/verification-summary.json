@@ -1,0 +1,156 @@
+{
+  "A": "dd3a9ea29fce28e2fa87332cff4a6d46f776e0d3",
+  "B": "9a500a21013a08f750009be656362481986eb208",
+  "B_tree": "2cbd2842ed2506642a1321a47e35f69a766fcf89",
+  "N": "02cd99e5b2b68c95341c87590abcf572c885e697",
+  "actual_CI_job_and_downloaded_log_evidence": {
+    "20": {
+      "Accept_values": [
+        "application/json",
+        "*/*"
+      ],
+      "JSON_response_body_equals_generated_metadata": "PASS",
+      "canonical_and_cache_busted_JSON_MIME": "PASS",
+      "downloaded_adapter_log_proof_exact_to_original_job_log": true,
+      "downloaded_adapter_log_proof_exact_to_recomputed_boundary": true,
+      "gitless_configured_adapter_build": true,
+      "job_id": 137359766070,
+      "job_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45071567803/job/137359766070",
+      "per_response_output_printed": false,
+      "runtime_probe_target": "http://127.0.0.1:3000 inside CI",
+      "two_matching_builds": true
+    },
+    "24": {
+      "Accept_values": [
+        "application/json",
+        "*/*"
+      ],
+      "JSON_response_body_equals_generated_metadata": "PASS",
+      "canonical_and_cache_busted_JSON_MIME": "PASS",
+      "downloaded_adapter_log_proof_exact_to_original_job_log": true,
+      "downloaded_adapter_log_proof_exact_to_recomputed_boundary": true,
+      "gitless_configured_adapter_build": true,
+      "job_id": 137359766064,
+      "job_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45071567803/job/137359766064",
+      "per_response_output_printed": false,
+      "runtime_probe_target": "http://127.0.0.1:3000 inside CI",
+      "two_matching_builds": true
+    }
+  },
+  "all_generated_path_mode_size_bytes_identical_across_hosts": true,
+  "artifacts": [
+    {
+      "id": 14773262444,
+      "label": "generated24",
+      "name": "release-v5-generated-outputs-host-24.19.0",
+      "sha256": "d09f127768086d8060bdb5d2226e44f6633d2423d97bd109bdba3efccfe8895e",
+      "size": 3833353
+    },
+    {
+      "id": 14773207599,
+      "label": "generated20",
+      "name": "release-v5-generated-outputs-host-20.20.2",
+      "sha256": "718243da3bfec8dc56cc28173da80a2feaf0619a1c8c1756eebb0e87141da65c",
+      "size": 3833741
+    },
+    {
+      "id": 14773082955,
+      "label": "evidence20",
+      "name": "release-v5-clean-clone-evidence-host-20.20.2",
+      "sha256": "44f7244e1016f8d1c7c0562491d509f8dffc3580754c5ce21604db4d9db4ad85",
+      "size": 64206
+    },
+    {
+      "id": 14772624671,
+      "label": "evidence24",
+      "name": "release-v5-clean-clone-evidence-host-24.19.0",
+      "sha256": "e61d06215835fe02fee7e583afc18dbc9dfdded2e74d0fa2da9d52e10e2391fc",
+      "size": 64206
+    }
+  ],
+  "audit_harness_note": "Initial source git-archive extraction refused Git's default tar.umask 0002 directory mode 0775; retry used command-local tar.umask 0022 for canonical checkout modes. Original generated archives and original validators were unchanged; initial refusal log retained.",
+  "build_meta": {
+    "bytes": 579707,
+    "path": "build-meta.json",
+    "sha256": "9b79083c4ece9cccdc8e0ff28295070fa8cb74776d99ece2601465e5f8f2548e"
+  },
+  "findings": [],
+  "four_ZIP_sizes_and_digests_exact_to_GitHub_metadata": true,
+  "frontend_artifact_tree_sha256": "000b707f16f0f3447cfe30f8e0e5edafc58ef55698ff2444e3fcca67f5ffb4db",
+  "frozen_B_still_clean_after_all_validation": true,
+  "generated_file_bytes_per_host": 13242286,
+  "generated_files_per_host": 389,
+  "inner_tar_sidecar_digests_verified": true,
+  "intent_sha256": "0e0c7a6167dae598450358db6a1399b080cb7c69e176d28c5c31a0585ed287dc",
+  "kind": "exact_B_four_artifact_independent_acceptance_v1",
+  "limitations": {
+    "CI_recorded_host_runtimes": [
+      "v20.20.2",
+      "v24.19.0"
+    ],
+    "actual_Emergent_host_rehearsal": false,
+    "all_other_B_workflows_reviewed_by_this_report": false,
+    "generated_archive_contains_full_source": false,
+    "governed_build_runtime": "Node22.23.2 / Yarn1.22.22",
+    "local_artifact_build_or_install_performed": false,
+    "production_deployment": false,
+    "source_used_for_local_package_verification": "read-only exact-B Git archive, plus actual downloaded generated outputs"
+  },
+  "original_validators": {
+    "actual_backend_identity_exact_to_frozen_intent": "PASS",
+    "actual_frontend_artifact_metadata_and_proof_exact_to_frozen_intent": "PASS",
+    "backend_source_records": 1312,
+    "frontend_source_records": 1403,
+    "isolated_backend_identity_and_health": "PASS",
+    "isolated_package_boundary_exact_to_both_CI_evidence_files": "PASS",
+    "load_release_intent": "PASS",
+    "release_control_source_records": 328,
+    "validation_node": "v22.23.2",
+    "validation_python": "3.12.14",
+    "validator_files_unchanged_from_frozen_B": true
+  },
+  "package_boundary": {
+    "backend": {
+      "file_count": 1313,
+      "git_directory_present": false,
+      "health_verified": true,
+      "identity": {
+        "bytes": 492777,
+        "path": "release_identity.json",
+        "sha256": "87a75786c6041126212a124aa8dec614c5183d1e7176968ab3004fc3d6843521"
+      },
+      "isolated_verified": true,
+      "package_tree_sha256": "ae797d0db6dd8b6558e3477d3f62500ed9de126f0771de226725c9aaaa6ace68",
+      "runtime_root": "backend",
+      "sibling_frontend_present": false
+    },
+    "frontend": {
+      "artifact_tree_sha256": "000b707f16f0f3447cfe30f8e0e5edafc58ef55698ff2444e3fcca67f5ffb4db",
+      "build_meta": {
+        "bytes": 579707,
+        "path": "build/build-meta.json",
+        "sha256": "9b79083c4ece9cccdc8e0ff28295070fa8cb74776d99ece2601465e5f8f2548e"
+      },
+      "content_type_contract": "application/json",
+      "file_count": 1789,
+      "isolated_runtime_artifact_verified": true,
+      "package_tree_sha256": "52083eb83e9d259fc8db6111d9e934192f29b6d9e99f2833c43cecdff9710afd",
+      "runtime_root": "frontend",
+      "static_root": "frontend/build"
+    },
+    "kind": "mezan_release_package_boundary_proof_v1",
+    "release_id": "rg5-b2aa207d2f63107c64d9c0b66ce5cc567aa5ebb074753cf889227de4c448e008",
+    "schema_version": 1,
+    "source_git_sha": "dd3a9ea29fce28e2fa87332cff4a6d46f776e0d3"
+  },
+  "reproducibility_proof": {
+    "bytes": 1521,
+    "path": "frontend/.release/reproducible-build.json",
+    "sha256": "a159459c17824c50f3c8810cf11dd6825a9e576994131f037daadc397cd6d18f"
+  },
+  "result": "PASS_FOR_REQUESTED_ARTIFACTS_AND_TWO_READINESS_HOST_JOBS",
+  "run_id": 45071567803,
+  "run_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45071567803",
+  "runtime_release_id": "rg5-b2aa207d2f63107c64d9c0b66ce5cc567aa5ebb074753cf889227de4c448e008",
+  "safe_archive_extraction": "PASS (no traversal, links, special entries, duplicates, or unexpected generated paths)"
+}

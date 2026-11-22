@@ -1,0 +1,59 @@
+{
+  "A": "dd3a9ea29fce28e2fa87332cff4a6d46f776e0d3",
+  "B": "9a500a21013a08f750009be656362481986eb208",
+  "B_tree": "2cbd2842ed2506642a1321a47e35f69a766fcf89",
+  "N": "02cd99e5b2b68c95341c87590abcf572c885e697",
+  "frozen_after": {
+    "head": "9a500a21013a08f750009be656362481986eb208",
+    "parent": "dd3a9ea29fce28e2fa87332cff4a6d46f776e0d3",
+    "status_porcelain": "",
+    "tree": "2cbd2842ed2506642a1321a47e35f69a766fcf89"
+  },
+  "frozen_before": {
+    "head": "9a500a21013a08f750009be656362481986eb208",
+    "parent": "dd3a9ea29fce28e2fa87332cff4a6d46f776e0d3",
+    "status_porcelain": "",
+    "tree": "2cbd2842ed2506642a1321a47e35f69a766fcf89"
+  },
+  "host_generated_files_identical": true,
+  "hosts": {
+    "20": {
+      "archive_sha256": "5eb3738160dd24b5781e05ef7eb06645219fe9a7bad71b56c3cff82fe80f1249",
+      "exact_frozen_B_intent": true,
+      "file_count": 389,
+      "records_sha256": "51bd4773e883c1fea6f838f965a781dfbbd34be55341e7c10edcbcd7664ccaaf",
+      "safe_extraction": "PASS",
+      "sidecar_verified": true,
+      "total_file_bytes": 13242286
+    },
+    "24": {
+      "archive_sha256": "b599211b839e343197ecb77152ed5ee08faba7fae89b06bb466ad45e5ea85d99",
+      "exact_frozen_B_intent": true,
+      "file_count": 389,
+      "records_sha256": "51bd4773e883c1fea6f838f965a781dfbbd34be55341e7c10edcbcd7664ccaaf",
+      "safe_extraction": "PASS",
+      "sidecar_verified": true,
+      "total_file_bytes": 13242286
+    }
+  },
+  "intent_sha256": "0e0c7a6167dae598450358db6a1399b080cb7c69e176d28c5c31a0585ed287dc",
+  "kind": "exact_B_generated_artifact_extraction_v1",
+  "run_id": 45071567803,
+  "source_reconstruction": {
+    "archive_sha256": "9b78b576d17f11fdfbbd22a1b42ba84d1970925079910c7b7730e020fc38391d",
+    "file_count": 4809,
+    "git_archive_tar_umask": "0022 (canonical checkout file modes 0644/0755)",
+    "scopes": [
+      "backend",
+      "frontend",
+      "scripts",
+      ".github",
+      "release"
+    ],
+    "source": "read-only git archive of exact B; not supplied inside generated artifact",
+    "unmodified_frozen_source": true
+  },
+  "status": "PASS",
+  "zip_count": 4,
+  "zip_digests_reverified": true
+}

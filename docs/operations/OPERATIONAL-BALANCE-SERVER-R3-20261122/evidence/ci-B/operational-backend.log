@@ -1,0 +1,871 @@
+﻿2026-11-22T21:20:56.2225295Z Current runner version: '2.338.2'
+2026-11-22T21:20:56.2250891Z ##[group]Runner Image Provisioner
+2026-11-22T21:20:56.2251812Z Hosted Compute Agent
+2026-11-22T21:20:56.2252491Z Version: 20261111.635
+2026-11-22T21:20:56.2253123Z Commit: b8a594ea514ff44cadb5342986c68b1eac6e22ed
+2026-11-22T21:20:56.2254078Z Build Date: 2026-11-11T01:49:01Z
+2026-11-22T21:20:56.2254864Z Worker ID: {879b4184-0010-437e-9155-3da145ef9991}
+2026-11-22T21:20:56.2255556Z Region: westus
+2026-11-22T21:20:56.2256164Z Cloud: Azure
+2026-11-22T21:20:56.2256697Z ##[endgroup]
+2026-11-22T21:20:56.2258153Z ##[group]Operating System
+2026-11-22T21:20:56.2258947Z Ubuntu
+2026-11-22T21:20:56.2259473Z 26.04.1
+2026-11-22T21:20:56.2260040Z LTS
+2026-11-22T21:20:56.2260577Z ##[endgroup]
+2026-11-22T21:20:56.2261131Z ##[group]Runner Image
+2026-11-22T21:20:56.2261811Z Image: ubuntu-26.04
+2026-11-22T21:20:56.2262373Z Version: 20261116.202.1
+2026-11-22T21:20:56.2263866Z Included Software: https://github.com/actions/runner-images/blob/ubuntu26/20261116.202/images/ubuntu/Ubuntu2604-Readme.md
+2026-11-22T21:20:56.2265456Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu26%2F20261116.202
+2026-11-22T21:20:56.2266510Z ##[endgroup]
+2026-11-22T21:20:56.2267620Z ##[group]GITHUB_TOKEN Permissions
+2026-11-22T21:20:56.2269739Z Contents: read
+2026-11-22T21:20:56.2270357Z Metadata: read
+2026-11-22T21:20:56.2271026Z ##[endgroup]
+2026-11-22T21:20:56.2273174Z Secret source: Actions
+2026-11-22T21:20:56.2274342Z Cache mode: write
+2026-11-22T21:20:56.2275187Z Prepare workflow directory
+2026-11-22T21:20:56.2741565Z Prepare all required actions
+2026-11-22T21:20:56.2790695Z Getting action download info
+2026-11-22T21:20:56.6081715Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-11-22T21:20:56.7150036Z Download action repository 'actions/setup-python@v5' (SHA:a26af69be951a213d495a4c3e4e4022e16d87065)
+2026-11-22T21:20:56.7856149Z Download action repository 'actions/upload-artifact@v4' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+2026-11-22T21:20:56.9643131Z Complete job name: Operational Balance Backend
+2026-11-22T21:20:57.0584657Z ##[group]Run actions/checkout@v4
+2026-11-22T21:20:57.0585627Z with:
+2026-11-22T21:20:57.0586118Z   ref: 9a500a21013a08f750009be656362481986eb208
+2026-11-22T21:20:57.0586738Z   persist-credentials: false
+2026-11-22T21:20:57.0587285Z   repository: AMASI-SA/AMASI-SA
+2026-11-22T21:20:57.0591291Z   token: ***
+2026-11-22T21:20:57.0591728Z   ssh-strict: true
+2026-11-22T21:20:57.0592171Z   ssh-user: git
+2026-11-22T21:20:57.0592590Z   clean: true
+2026-11-22T21:20:57.0593037Z   sparse-checkout-cone-mode: true
+2026-11-22T21:20:57.0593722Z   fetch-depth: 1
+2026-11-22T21:20:57.0594169Z   fetch-tags: false
+2026-11-22T21:20:57.0594615Z   show-progress: true
+2026-11-22T21:20:57.0595058Z   lfs: false
+2026-11-22T21:20:57.0595475Z   submodules: false
+2026-11-22T21:20:57.0595927Z   set-safe-directory: true
+2026-11-22T21:20:57.0596440Z   allow-unsafe-pr-checkout: false
+2026-11-22T21:20:57.0597223Z env:
+2026-11-22T21:20:57.0597687Z   PYTHONPATH: backend:backend/tests
+2026-11-22T21:20:57.0598278Z   PYTHON_DOTENV_DISABLED: 1
+2026-11-22T21:20:57.0599086Z   OPERATIONAL_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-22T21:20:57.0600155Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-22T21:20:57.0601187Z   DEMAND_READ_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-22T21:20:57.0601995Z ##[endgroup]
+2026-11-22T21:20:57.3336960Z Syncing repository: AMASI-SA/AMASI-SA
+2026-11-22T21:20:57.3339912Z ##[group]Getting Git version info
+2026-11-22T21:20:57.3341081Z Working directory is '/home/runner/work/AMASI-SA/AMASI-SA'
+2026-11-22T21:20:57.3342160Z [command]/usr/bin/git version
+2026-11-22T21:20:57.3393858Z git version 2.56.1
+2026-11-22T21:20:57.3420187Z ##[endgroup]
+2026-11-22T21:20:57.3438746Z Temporarily overriding HOME='/home/runner/work/_temp/c625d397-4303-4067-aef2-477895283920' before making global git config changes
+2026-11-22T21:20:57.3441927Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-22T21:20:57.3445580Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/AMASI-SA/AMASI-SA
+2026-11-22T21:20:57.3540501Z Deleting the contents of '/home/runner/work/AMASI-SA/AMASI-SA'
+2026-11-22T21:20:57.3542399Z ##[group]Initializing the repository
+2026-11-22T21:20:57.3543832Z [command]/usr/bin/git init /home/runner/work/AMASI-SA/AMASI-SA
+2026-11-22T21:20:57.3668003Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-11-22T21:20:57.3670199Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-11-22T21:20:57.3672228Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-11-22T21:20:57.3674070Z hint: call:
+2026-11-22T21:20:57.3675171Z hint:
+2026-11-22T21:20:57.3676315Z hint: 	git config --global init.defaultBranch <name>
+2026-11-22T21:20:57.3677523Z hint:
+2026-11-22T21:20:57.3678739Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-11-22T21:20:57.3680457Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-11-22T21:20:57.3681712Z hint:
+2026-11-22T21:20:57.3682390Z hint: 	git branch -m <name>
+2026-11-22T21:20:57.3683199Z hint:
+2026-11-22T21:20:57.3684415Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-11-22T21:20:57.3686079Z Initialized empty Git repository in /home/runner/work/AMASI-SA/AMASI-SA/.git/
+2026-11-22T21:20:57.3707663Z [command]/usr/bin/git remote add origin https://github.com/AMASI-SA/AMASI-SA
+2026-11-22T21:20:57.3760630Z ##[endgroup]
+2026-11-22T21:20:57.3762116Z ##[group]Disabling automatic garbage collection
+2026-11-22T21:20:57.3764061Z [command]/usr/bin/git config --local gc.auto 0
+2026-11-22T21:20:57.3803303Z ##[endgroup]
+2026-11-22T21:20:57.3804684Z ##[group]Setting up auth
+2026-11-22T21:20:57.3811847Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-22T21:20:57.3850360Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-22T21:20:57.4336079Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-22T21:20:57.4379320Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-22T21:20:57.4672394Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-22T21:20:57.4709541Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-22T21:20:57.4996859Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-11-22T21:20:57.5039283Z ##[endgroup]
+2026-11-22T21:20:57.5040300Z ##[group]Fetching the repository
+2026-11-22T21:20:57.5049398Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin 9a500a21013a08f750009be656362481986eb208
+2026-11-22T21:20:59.9979997Z From https://github.com/AMASI-SA/AMASI-SA
+2026-11-22T21:20:59.9982654Z  * branch            9a500a21013a08f750009be656362481986eb208 -> FETCH_HEAD
+2026-11-22T21:20:59.9989254Z ##[endgroup]
+2026-11-22T21:20:59.9990954Z ##[group]Determining the checkout info
+2026-11-22T21:20:59.9993229Z ##[endgroup]
+2026-11-22T21:20:59.9997815Z [command]/usr/bin/git sparse-checkout disable
+2026-11-22T21:21:00.0062698Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-11-22T21:21:00.0098132Z ##[group]Checking out the ref
+2026-11-22T21:21:00.0100769Z [command]/usr/bin/git checkout --progress --force 9a500a21013a08f750009be656362481986eb208
+2026-11-22T21:21:00.6147619Z Note: switching to '9a500a21013a08f750009be656362481986eb208'.
+2026-11-22T21:21:00.6148749Z 
+2026-11-22T21:21:00.6149269Z You are in 'detached HEAD' state. You can look around, make experimental
+2026-11-22T21:21:00.6150337Z changes and commit them, and you can discard any commits you make in this
+2026-11-22T21:21:00.6151410Z state without impacting any branches by switching back to a branch.
+2026-11-22T21:21:00.6152021Z 
+2026-11-22T21:21:00.6152545Z If you want to create a new branch to retain commits you create, you may
+2026-11-22T21:21:00.6153876Z do so (now or later) by using -c with the switch command. Example:
+2026-11-22T21:21:00.6154499Z 
+2026-11-22T21:21:00.6154793Z   git switch -c <new-branch-name>
+2026-11-22T21:21:00.6155236Z 
+2026-11-22T21:21:00.6165221Z Or undo this operation with:
+2026-11-22T21:21:00.6165671Z 
+2026-11-22T21:21:00.6165930Z   git switch -
+2026-11-22T21:21:00.6166267Z 
+2026-11-22T21:21:00.6167211Z Turn off this advice by setting config variable advice.detachedHead to false
+2026-11-22T21:21:00.6168149Z 
+2026-11-22T21:21:00.6177926Z HEAD is now at 9a500a2 Freeze reviewed operational reversal release intent on current Production
+2026-11-22T21:21:00.6187190Z ##[endgroup]
+2026-11-22T21:21:00.6227174Z [command]/usr/bin/git log -1 --format=%H
+2026-11-22T21:21:00.6255253Z 9a500a21013a08f750009be656362481986eb208
+2026-11-22T21:21:00.6270107Z ##[group]Removing auth
+2026-11-22T21:21:00.6270838Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-22T21:21:00.6304459Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-22T21:21:00.6598045Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-22T21:21:00.6625441Z http.https://github.com/.extraheader
+2026-11-22T21:21:00.6634210Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-11-22T21:21:00.6669381Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-22T21:21:00.6957826Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-22T21:21:00.6992126Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-22T21:21:00.7276362Z ##[endgroup]
+2026-11-22T21:21:00.7547333Z ##[group]Run actions/setup-python@v5
+2026-11-22T21:21:00.7547758Z with:
+2026-11-22T21:21:00.7548057Z   python-version: 3.11
+2026-11-22T21:21:00.7548372Z   check-latest: false
+2026-11-22T21:21:00.7551379Z   token: ***
+2026-11-22T21:21:00.7551695Z   update-environment: true
+2026-11-22T21:21:00.7552042Z   allow-prereleases: false
+2026-11-22T21:21:00.7552367Z   freethreaded: false
+2026-11-22T21:21:00.7552669Z env:
+2026-11-22T21:21:00.7552963Z   PYTHONPATH: backend:backend/tests
+2026-11-22T21:21:00.7553350Z   PYTHON_DOTENV_DISABLED: 1
+2026-11-22T21:21:00.7554029Z   OPERATIONAL_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-22T21:21:00.7554734Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-22T21:21:00.7555420Z   DEMAND_READ_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-22T21:21:00.7555941Z ##[endgroup]
+2026-11-22T21:21:00.8940294Z ##[group]Installed versions
+2026-11-22T21:21:00.9053200Z (node:2554) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-22T21:21:00.9054549Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-22T21:21:00.9055402Z Successfully set up CPython (3.11.18)
+2026-11-22T21:21:00.9056095Z ##[endgroup]
+2026-11-22T21:21:00.9248598Z ##[group]Run python -m pip install pytest==9.1.1 pytest-asyncio==1.3.0 fastapi==0.142.2 pydantic==2.13.5 httpx==0.28.1 motor==3.7.1 pymongo==4.18.3 python-multipart==0.0.32 cryptography==50.0.0 reportlab==4.5.1 PyMuPDF==1.28.2 qrcode==8.2 bcrypt==4.1.3 PyJWT==2.15.0 mongomock==4.3.0 mongomock-motor==0.0.36 openpyxl==3.1.5 email-validator==2.3.0 python-dotenv==1.2.2
+2026-11-22T21:21:00.9251298Z [36;1mpython -m pip install pytest==9.1.1 pytest-asyncio==1.3.0 fastapi==0.142.2 pydantic==2.13.5 httpx==0.28.1 motor==3.7.1 pymongo==4.18.3 python-multipart==0.0.32 cryptography==50.0.0 reportlab==4.5.1 PyMuPDF==1.28.2 qrcode==8.2 bcrypt==4.1.3 PyJWT==2.15.0 mongomock==4.3.0 mongomock-motor==0.0.36 openpyxl==3.1.5 email-validator==2.3.0 python-dotenv==1.2.2[0m
+2026-11-22T21:21:00.9308590Z shell: /usr/bin/bash -e {0}
+2026-11-22T21:21:00.9309029Z env:
+2026-11-22T21:21:00.9309431Z   PYTHONPATH: backend:backend/tests
+2026-11-22T21:21:00.9310177Z   PYTHON_DOTENV_DISABLED: 1
+2026-11-22T21:21:00.9311336Z   OPERATIONAL_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-22T21:21:00.9312602Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-22T21:21:00.9314026Z   DEMAND_READ_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-22T21:21:00.9315053Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.18/x64
+2026-11-22T21:21:00.9315985Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.18/x64/lib/pkgconfig
+2026-11-22T21:21:00.9316874Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+2026-11-22T21:21:00.9317647Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+2026-11-22T21:21:00.9318431Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+2026-11-22T21:21:00.9319187Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.18/x64/lib
+2026-11-22T21:21:00.9319882Z ##[endgroup]
+2026-11-22T21:21:01.7832461Z Collecting pytest==9.1.1
+2026-11-22T21:21:01.8366302Z   Downloading pytest-9.1.1-py3-none-any.whl.metadata (7.6 kB)
+2026-11-22T21:21:01.8616687Z Collecting pytest-asyncio==1.3.0
+2026-11-22T21:21:01.8757743Z   Downloading pytest_asyncio-1.3.0-py3-none-any.whl.metadata (4.1 kB)
+2026-11-22T21:21:01.9386535Z Collecting fastapi==0.142.2
+2026-11-22T21:21:01.9550442Z   Downloading fastapi-0.142.2-py3-none-any.whl.metadata (27 kB)
+2026-11-22T21:21:02.0679133Z Collecting pydantic==2.13.5
+2026-11-22T21:21:02.0820589Z   Downloading pydantic-2.13.5-py3-none-any.whl.metadata (110 kB)
+2026-11-22T21:21:02.1212856Z Collecting httpx==0.28.1
+2026-11-22T21:21:02.1349733Z   Downloading httpx-0.28.1-py3-none-any.whl.metadata (7.1 kB)
+2026-11-22T21:21:02.1568093Z Collecting motor==3.7.1
+2026-11-22T21:21:02.1708417Z   Downloading motor-3.7.1-py3-none-any.whl.metadata (21 kB)
+2026-11-22T21:21:02.4746703Z Collecting pymongo==4.18.3
+2026-11-22T21:21:02.4993164Z   Downloading pymongo-4.18.3-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (10 kB)
+2026-11-22T21:21:02.5215080Z Collecting python-multipart==0.0.32
+2026-11-22T21:21:02.5345920Z   Downloading python_multipart-0.0.32-py3-none-any.whl.metadata (2.1 kB)
+2026-11-22T21:21:02.7012833Z Collecting cryptography==50.0.0
+2026-11-22T21:21:02.7151911Z   Downloading cryptography-50.0.0-cp311-abi3-manylinux_2_34_x86_64.whl.metadata (4.3 kB)
+2026-11-22T21:21:02.8144808Z Collecting reportlab==4.5.1
+2026-11-22T21:21:02.8288119Z   Downloading reportlab-4.5.1-py3-none-any.whl.metadata (1.7 kB)
+2026-11-22T21:21:02.9813282Z Collecting PyMuPDF==1.28.2
+2026-11-22T21:21:02.9952054Z   Downloading pymupdf-1.28.2-cp310-abi3-manylinux_2_28_x86_64.whl.metadata (26 kB)
+2026-11-22T21:21:03.0157835Z Collecting qrcode==8.2
+2026-11-22T21:21:03.0309115Z   Downloading qrcode-8.2-py3-none-any.whl.metadata (17 kB)
+2026-11-22T21:21:03.0735956Z Collecting bcrypt==4.1.3
+2026-11-22T21:21:03.0882213Z   Downloading bcrypt-4.1.3-cp39-abi3-manylinux_2_28_x86_64.whl.metadata (9.5 kB)
+2026-11-22T21:21:03.1114970Z Collecting PyJWT==2.15.0
+2026-11-22T21:21:03.1261732Z   Downloading pyjwt-2.15.0-py3-none-any.whl.metadata (3.5 kB)
+2026-11-22T21:21:03.1469654Z Collecting mongomock==4.3.0
+2026-11-22T21:21:03.1622302Z   Downloading mongomock-4.3.0-py2.py3-none-any.whl.metadata (12 kB)
+2026-11-22T21:21:03.1835759Z Collecting mongomock-motor==0.0.36
+2026-11-22T21:21:03.1984705Z   Downloading mongomock_motor-0.0.36-py3-none-any.whl.metadata (2.0 kB)
+2026-11-22T21:21:03.2192722Z Collecting openpyxl==3.1.5
+2026-11-22T21:21:03.2330237Z   Downloading openpyxl-3.1.5-py2.py3-none-any.whl.metadata (2.5 kB)
+2026-11-22T21:21:03.2527436Z Collecting email-validator==2.3.0
+2026-11-22T21:21:03.2663424Z   Downloading email_validator-2.3.0-py3-none-any.whl.metadata (26 kB)
+2026-11-22T21:21:03.2881278Z Collecting python-dotenv==1.2.2
+2026-11-22T21:21:03.3019410Z   Downloading python_dotenv-1.2.2-py3-none-any.whl.metadata (27 kB)
+2026-11-22T21:21:03.3210115Z Collecting iniconfig>=1.0.1 (from pytest==9.1.1)
+2026-11-22T21:21:03.3355392Z   Downloading iniconfig-2.3.1-py3-none-any.whl.metadata (2.8 kB)
+2026-11-22T21:21:03.3565467Z Collecting packaging>=22 (from pytest==9.1.1)
+2026-11-22T21:21:03.3741728Z   Downloading packaging-26.3-py3-none-any.whl.metadata (3.5 kB)
+2026-11-22T21:21:03.3934288Z Collecting pluggy<2,>=1.5 (from pytest==9.1.1)
+2026-11-22T21:21:03.4080940Z   Downloading pluggy-1.7.0-py3-none-any.whl.metadata (5.0 kB)
+2026-11-22T21:21:03.4346302Z Collecting pygments>=2.7.2 (from pytest==9.1.1)
+2026-11-22T21:21:03.4480059Z   Downloading pygments-2.21.0-py3-none-any.whl.metadata (2.5 kB)
+2026-11-22T21:21:03.4717381Z Collecting typing-extensions>=4.12 (from pytest-asyncio==1.3.0)
+2026-11-22T21:21:03.4860171Z   Downloading typing_extensions-4.16.0-py3-none-any.whl.metadata (3.3 kB)
+2026-11-22T21:21:03.5168901Z Collecting starlette>=0.46.0 (from fastapi==0.142.2)
+2026-11-22T21:21:03.5301634Z   Downloading starlette-1.10.0-py3-none-any.whl.metadata (6.6 kB)
+2026-11-22T21:21:03.5508737Z Collecting typing-inspection>=0.4.2 (from fastapi==0.142.2)
+2026-11-22T21:21:03.5754563Z   Downloading typing_inspection-0.4.5-py3-none-any.whl.metadata (2.6 kB)
+2026-11-22T21:21:03.5946129Z Collecting annotated-doc>=0.0.2 (from fastapi==0.142.2)
+2026-11-22T21:21:03.6111840Z   Downloading annotated_doc-0.0.7-py3-none-any.whl.metadata (6.4 kB)
+2026-11-22T21:21:03.6363507Z Collecting opentelemetry-api>=1.44.0 (from fastapi==0.142.2)
+2026-11-22T21:21:03.6518597Z   Downloading opentelemetry_api-1.45.2-py3-none-any.whl.metadata (1.4 kB)
+2026-11-22T21:21:03.6704775Z Collecting annotated-types>=0.6.0 (from pydantic==2.13.5)
+2026-11-22T21:21:03.6863843Z   Downloading annotated_types-0.8.0-py3-none-any.whl.metadata (15 kB)
+2026-11-22T21:21:04.3792869Z Collecting pydantic-core==2.46.5 (from pydantic==2.13.5)
+2026-11-22T21:21:04.3941305Z   Downloading pydantic_core-2.46.5-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (6.6 kB)
+2026-11-22T21:21:04.4226425Z Collecting anyio (from httpx==0.28.1)
+2026-11-22T21:21:04.4363294Z   Downloading anyio-4.16.0-py3-none-any.whl.metadata (4.7 kB)
+2026-11-22T21:21:04.4622962Z Collecting certifi (from httpx==0.28.1)
+2026-11-22T21:21:04.4758686Z   Downloading certifi-2026.11.20-py3-none-any.whl.metadata (2.5 kB)
+2026-11-22T21:21:04.4992228Z Collecting httpcore==1.* (from httpx==0.28.1)
+2026-11-22T21:21:04.5139629Z   Downloading httpcore-1.0.9-py3-none-any.whl.metadata (21 kB)
+2026-11-22T21:21:04.5363226Z Collecting idna (from httpx==0.28.1)
+2026-11-22T21:21:04.5500196Z   Downloading idna-3.20-py3-none-any.whl.metadata (7.2 kB)
+2026-11-22T21:21:04.5721543Z Collecting dnspython<3.0.0,>=2.7.0 (from pymongo==4.18.3)
+2026-11-22T21:21:04.5860847Z   Downloading dnspython-2.9.2-py3-none-any.whl.metadata (5.8 kB)
+2026-11-22T21:21:04.6937870Z Collecting cffi>=2.0.0 (from cryptography==50.0.0)
+2026-11-22T21:21:04.7079054Z   Downloading cffi-2.1.1-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (2.5 kB)
+2026-11-22T21:21:04.8734826Z Collecting pillow>=9.0.0 (from reportlab==4.5.1)
+2026-11-22T21:21:04.8874509Z   Downloading pillow-13.0.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (9.1 kB)
+2026-11-22T21:21:05.0216013Z Collecting charset-normalizer (from reportlab==4.5.1)
+2026-11-22T21:21:05.0358656Z   Downloading charset_normalizer-3.5.2-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (46 kB)
+2026-11-22T21:21:05.1389496Z Collecting pytz (from mongomock==4.3.0)
+2026-11-22T21:21:05.1541640Z   Downloading pytz-2026.6-py2.py3-none-any.whl.metadata (22 kB)
+2026-11-22T21:21:05.1770541Z Collecting sentinels (from mongomock==4.3.0)
+2026-11-22T21:21:05.1928151Z   Downloading sentinels-1.1.1-py3-none-any.whl.metadata (3.0 kB)
+2026-11-22T21:21:05.2156305Z Collecting et-xmlfile (from openpyxl==3.1.5)
+2026-11-22T21:21:05.2293870Z   Downloading et_xmlfile-2.0.0-py3-none-any.whl.metadata (2.7 kB)
+2026-11-22T21:21:05.2529181Z Collecting h11>=0.16 (from httpcore==1.*->httpx==0.28.1)
+2026-11-22T21:21:05.2668559Z   Downloading h11-0.16.0-py3-none-any.whl.metadata (8.3 kB)
+2026-11-22T21:21:05.2909239Z Collecting pycparser (from cffi>=2.0.0->cryptography==50.0.0)
+2026-11-22T21:21:05.3238082Z   Downloading pycparser-3.12-py3-none-any.whl.metadata (9.7 kB)
+2026-11-22T21:21:05.3579538Z Downloading pytest-9.1.1-py3-none-any.whl (386 kB)
+2026-11-22T21:21:05.3887516Z Downloading pytest_asyncio-1.3.0-py3-none-any.whl (15 kB)
+2026-11-22T21:21:05.4120679Z Downloading fastapi-0.142.2-py3-none-any.whl (144 kB)
+2026-11-22T21:21:05.4298631Z Downloading pydantic-2.13.5-py3-none-any.whl (472 kB)
+2026-11-22T21:21:05.4504863Z Downloading httpx-0.28.1-py3-none-any.whl (73 kB)
+2026-11-22T21:21:05.4679038Z Downloading motor-3.7.1-py3-none-any.whl (74 kB)
+2026-11-22T21:21:05.4894056Z Downloading pymongo-4.18.3-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (1.0 MB)
+2026-11-22T21:21:05.5042885Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.0/1.0 MB 83.6 MB/s  0:00:00
+2026-11-22T21:21:05.5182746Z Downloading python_multipart-0.0.32-py3-none-any.whl (30 kB)
+2026-11-22T21:21:05.5343904Z Downloading cryptography-50.0.0-cp311-abi3-manylinux_2_34_x86_64.whl (4.7 MB)
+2026-11-22T21:21:05.5645953Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.7/4.7 MB 163.8 MB/s  0:00:00
+2026-11-22T21:21:05.5813039Z Downloading reportlab-4.5.1-py3-none-any.whl (2.0 MB)
+2026-11-22T21:21:05.6080879Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.0/2.0 MB 70.3 MB/s  0:00:00
+2026-11-22T21:21:05.6257751Z Downloading pymupdf-1.28.2-cp310-abi3-manylinux_2_28_x86_64.whl (25.8 MB)
+2026-11-22T21:21:05.8367481Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 25.8/25.8 MB 122.5 MB/s  0:00:00
+2026-11-22T21:21:05.8508981Z Downloading qrcode-8.2-py3-none-any.whl (45 kB)
+2026-11-22T21:21:05.8911077Z Downloading bcrypt-4.1.3-cp39-abi3-manylinux_2_28_x86_64.whl (283 kB)
+2026-11-22T21:21:05.9085898Z Downloading pyjwt-2.15.0-py3-none-any.whl (33 kB)
+2026-11-22T21:21:05.9237805Z Downloading mongomock-4.3.0-py2.py3-none-any.whl (64 kB)
+2026-11-22T21:21:05.9417123Z Downloading mongomock_motor-0.0.36-py3-none-any.whl (7.3 kB)
+2026-11-22T21:21:05.9572524Z Downloading openpyxl-3.1.5-py2.py3-none-any.whl (250 kB)
+2026-11-22T21:21:05.9731123Z Downloading email_validator-2.3.0-py3-none-any.whl (35 kB)
+2026-11-22T21:21:05.9886970Z Downloading python_dotenv-1.2.2-py3-none-any.whl (22 kB)
+2026-11-22T21:21:06.0108978Z Downloading pydantic_core-2.46.5-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (2.1 MB)
+2026-11-22T21:21:06.0287872Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.1/2.1 MB 117.2 MB/s  0:00:00
+2026-11-22T21:21:06.0428265Z Downloading dnspython-2.9.2-py3-none-any.whl (360 kB)
+2026-11-22T21:21:06.0620005Z Downloading httpcore-1.0.9-py3-none-any.whl (78 kB)
+2026-11-22T21:21:06.0783931Z Downloading pluggy-1.7.0-py3-none-any.whl (27 kB)
+2026-11-22T21:21:06.0945691Z Downloading annotated_doc-0.0.7-py3-none-any.whl (5.3 kB)
+2026-11-22T21:21:06.1103247Z Downloading annotated_types-0.8.0-py3-none-any.whl (13 kB)
+2026-11-22T21:21:06.1280209Z Downloading cffi-2.1.1-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (217 kB)
+2026-11-22T21:21:06.1475417Z Downloading h11-0.16.0-py3-none-any.whl (37 kB)
+2026-11-22T21:21:06.1643263Z Downloading idna-3.20-py3-none-any.whl (69 kB)
+2026-11-22T21:21:06.1817032Z Downloading iniconfig-2.3.1-py3-none-any.whl (7.6 kB)
+2026-11-22T21:21:06.1973147Z Downloading opentelemetry_api-1.45.2-py3-none-any.whl (60 kB)
+2026-11-22T21:21:06.2130322Z Downloading packaging-26.3-py3-none-any.whl (129 kB)
+2026-11-22T21:21:06.2290594Z Downloading pillow-13.0.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (7.1 MB)
+2026-11-22T21:21:06.2774410Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 7.1/7.1 MB 150.6 MB/s  0:00:00
+2026-11-22T21:21:06.2917634Z Downloading pygments-2.21.0-py3-none-any.whl (1.3 MB)
+2026-11-22T21:21:06.2980644Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.3/1.3 MB 233.2 MB/s  0:00:00
+2026-11-22T21:21:06.3121532Z Downloading starlette-1.10.0-py3-none-any.whl (80 kB)
+2026-11-22T21:21:06.3278702Z Downloading anyio-4.16.0-py3-none-any.whl (134 kB)
+2026-11-22T21:21:06.3443088Z Downloading typing_extensions-4.16.0-py3-none-any.whl (45 kB)
+2026-11-22T21:21:06.3595133Z Downloading typing_inspection-0.4.5-py3-none-any.whl (14 kB)
+2026-11-22T21:21:06.3754365Z Downloading certifi-2026.11.20-py3-none-any.whl (127 kB)
+2026-11-22T21:21:06.3916087Z Downloading charset_normalizer-3.5.2-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (269 kB)
+2026-11-22T21:21:06.4075629Z Downloading et_xmlfile-2.0.0-py3-none-any.whl (18 kB)
+2026-11-22T21:21:06.4245927Z Downloading pycparser-3.12-py3-none-any.whl (62 kB)
+2026-11-22T21:21:06.4404262Z Downloading pytz-2026.6-py2.py3-none-any.whl (506 kB)
+2026-11-22T21:21:06.4574760Z Downloading sentinels-1.1.1-py3-none-any.whl (3.7 kB)
+2026-11-22T21:21:06.7118044Z Installing collected packages: pytz, typing-extensions, sentinels, qrcode, python-multipart, python-dotenv, PyMuPDF, PyJWT, pygments, pycparser, pluggy, pillow, packaging, iniconfig, idna, h11, et-xmlfile, dnspython, charset-normalizer, certifi, bcrypt, annotated-types, annotated-doc, typing-inspection, reportlab, pytest, pymongo, pydantic-core, opentelemetry-api, openpyxl, mongomock, httpcore, email-validator, cffi, anyio, starlette, pytest-asyncio, pydantic, motor, httpx, cryptography, mongomock-motor, fastapi
+2026-11-22T21:21:11.5612848Z 
+2026-11-22T21:21:11.5637344Z Successfully installed PyJWT-2.15.0 PyMuPDF-1.28.2 annotated-doc-0.0.7 annotated-types-0.8.0 anyio-4.16.0 bcrypt-4.1.3 certifi-2026.11.20 cffi-2.1.1 charset-normalizer-3.5.2 cryptography-50.0.0 dnspython-2.9.2 email-validator-2.3.0 et-xmlfile-2.0.0 fastapi-0.142.2 h11-0.16.0 httpcore-1.0.9 httpx-0.28.1 idna-3.20 iniconfig-2.3.1 mongomock-4.3.0 mongomock-motor-0.0.36 motor-3.7.1 openpyxl-3.1.5 opentelemetry-api-1.45.2 packaging-26.3 pillow-13.0.0 pluggy-1.7.0 pycparser-3.12 pydantic-2.13.5 pydantic-core-2.46.5 pygments-2.21.0 pymongo-4.18.3 pytest-9.1.1 pytest-asyncio-1.3.0 python-dotenv-1.2.2 python-multipart-0.0.32 pytz-2026.6 qrcode-8.2 reportlab-4.5.1 sentinels-1.1.1 starlette-1.10.0 typing-extensions-4.16.0 typing-inspection-0.4.5
+2026-11-22T21:21:11.7289202Z ##[group]Run set -euo pipefail
+2026-11-22T21:21:11.7289584Z [36;1mset -euo pipefail[0m
+2026-11-22T21:21:11.7290300Z [36;1mdocker run -d --name operational-projection-rs -p 127.0.0.1:27305:27305 mongo:8.0.12 --port 27305 --replSet operationalprojection --bind_ip_all --wiredTigerCacheSizeGB 1[0m
+2026-11-22T21:21:11.7291046Z [36;1mfor attempt in $(seq 1 40); do[0m
+2026-11-22T21:21:11.7291614Z [36;1m  if docker exec operational-projection-rs mongosh --port 27305 --quiet --eval 'db.adminCommand({ping:1})'; then break; fi[0m
+2026-11-22T21:21:11.7292165Z [36;1m  sleep 1[0m
+2026-11-22T21:21:11.7292371Z [36;1mdone[0m
+2026-11-22T21:21:11.7292978Z [36;1mdocker exec operational-projection-rs mongosh --port 27305 --quiet --eval 'rs.initiate({_id:"operationalprojection",members:[{_id:0,host:"127.0.0.1:27305"}]})'[0m
+2026-11-22T21:21:11.7293922Z [36;1mfor attempt in $(seq 1 40); do[0m
+2026-11-22T21:21:11.7294577Z [36;1m  if docker exec operational-projection-rs mongosh --port 27305 --quiet --eval 'if(!db.hello().isWritablePrimary){quit(1)}'; then break; fi[0m
+2026-11-22T21:21:11.7295178Z [36;1m  sleep 1[0m
+2026-11-22T21:21:11.7295377Z [36;1mdone[0m
+2026-11-22T21:21:11.7296074Z [36;1mdocker exec operational-projection-rs mongosh --port 27305 --quiet --eval 'if(!db.hello().isWritablePrimary){quit(1)}'[0m
+2026-11-22T21:21:11.7331447Z shell: /usr/bin/bash -e {0}
+2026-11-22T21:21:11.7331694Z env:
+2026-11-22T21:21:11.7331904Z   PYTHONPATH: backend:backend/tests
+2026-11-22T21:21:11.7332179Z   PYTHON_DOTENV_DISABLED: 1
+2026-11-22T21:21:11.7332660Z   OPERATIONAL_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-22T21:21:11.7333262Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-22T21:21:11.7334193Z   DEMAND_READ_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-22T21:21:11.7334698Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.18/x64
+2026-11-22T21:21:11.7335134Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.18/x64/lib/pkgconfig
+2026-11-22T21:21:11.7335560Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+2026-11-22T21:21:11.7335957Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+2026-11-22T21:21:11.7336341Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+2026-11-22T21:21:11.7336725Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.18/x64/lib
+2026-11-22T21:21:11.7337065Z ##[endgroup]
+2026-11-22T21:21:11.8351915Z Unable to find image 'mongo:8.0.12' locally
+2026-11-22T21:21:12.5791611Z 8.0.12: Pulling from library/mongo
+2026-11-22T21:21:12.8018752Z 91469349d2c2: Pulling fs layer
+2026-11-22T21:21:12.8019671Z b71466b94f26: Pulling fs layer
+2026-11-22T21:21:12.8020689Z e701e7c9324a: Pulling fs layer
+2026-11-22T21:21:12.8021310Z f1102db351d8: Pulling fs layer
+2026-11-22T21:21:12.8021750Z d713d16a8043: Pulling fs layer
+2026-11-22T21:21:12.8023392Z cb52df844465: Pulling fs layer
+2026-11-22T21:21:12.8024499Z 578438e6cda5: Pulling fs layer
+2026-11-22T21:21:12.8025244Z 0a07b2b41243: Pulling fs layer
+2026-11-22T21:21:13.0387892Z cb52df844465: Download complete
+2026-11-22T21:21:13.0392339Z 578438e6cda5: Download complete
+2026-11-22T21:21:13.0401227Z 91469349d2c2: Download complete
+2026-11-22T21:21:13.0402065Z e701e7c9324a: Download complete
+2026-11-22T21:21:13.0407647Z d713d16a8043: Download complete
+2026-11-22T21:21:13.1389793Z f1102db351d8: Download complete
+2026-11-22T21:21:13.2389196Z b71466b94f26: Download complete
+2026-11-22T21:21:13.3385444Z f1e7f9f13931: Download complete
+2026-11-22T21:21:13.3393791Z fcd5c905ac2b: Download complete
+2026-11-22T21:21:14.2480609Z b71466b94f26: Pull complete
+2026-11-22T21:21:14.3386306Z 0a07b2b41243: Download complete
+2026-11-22T21:21:14.3434988Z e701e7c9324a: Pull complete
+2026-11-22T21:21:14.4422640Z cb52df844465: Pull complete
+2026-11-22T21:21:14.4437786Z 578438e6cda5: Pull complete
+2026-11-22T21:21:14.4461995Z d713d16a8043: Pull complete
+2026-11-22T21:21:14.4474284Z f1102db351d8: Pull complete
+2026-11-22T21:21:17.4406675Z 0a07b2b41243: Pull complete
+2026-11-22T21:21:17.4620415Z 91469349d2c2: Pull complete
+2026-11-22T21:21:17.4621428Z Digest: sha256:95a98776f273721a295b03098578b06bc10281bb56aa828c77e9f60ecc70b150
+2026-11-22T21:21:17.4653772Z Status: Downloaded newer image for mongo:8.0.12
+2026-11-22T21:21:20.0656288Z 81c5cf89fbdc4d509ad2bc74a22ab42e047b0dc49081b9ba7980da61b8b8b9aa
+2026-11-22T21:21:20.7477185Z { ok: 1 }
+2026-11-22T21:21:21.2375244Z {
+2026-11-22T21:21:21.2375972Z   ok: 1,
+2026-11-22T21:21:21.2376867Z   '$clusterTime': {
+2026-11-22T21:21:21.2377377Z     clusterTime: Timestamp({ t: 1795382481, i: 1 }),
+2026-11-22T21:21:21.2377917Z     signature: {
+2026-11-22T21:21:21.2378491Z       hash: Binary.createFromBase64('AAAAAAAAAAAAAAAAAAAAAAAAAAA=', 0),
+2026-11-22T21:21:21.2379148Z       keyId: Long('0')
+2026-11-22T21:21:21.2379493Z     }
+2026-11-22T21:21:21.2379780Z   },
+2026-11-22T21:21:21.2380151Z   operationTime: Timestamp({ t: 1795382481, i: 1 })
+2026-11-22T21:21:21.2380666Z }
+2026-11-22T21:21:22.1714193Z ##[group]Run test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE"
+2026-11-22T21:21:22.1714695Z [36;1mtest "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE"[0m
+2026-11-22T21:21:22.1715283Z [36;1mgit rev-parse HEAD > operational-source-sha.txt[0m
+2026-11-22T21:21:22.1715688Z [36;1mgit rev-parse HEAD^{tree} > operational-source-tree.txt[0m
+2026-11-22T21:21:22.1751403Z shell: /usr/bin/bash -e {0}
+2026-11-22T21:21:22.1751655Z env:
+2026-11-22T21:21:22.1751886Z   PYTHONPATH: backend:backend/tests
+2026-11-22T21:21:22.1752161Z   PYTHON_DOTENV_DISABLED: 1
+2026-11-22T21:21:22.1752587Z   OPERATIONAL_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-22T21:21:22.1753195Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-22T21:21:22.1754129Z   DEMAND_READ_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-22T21:21:22.1754648Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.18/x64
+2026-11-22T21:21:22.1755135Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.18/x64/lib/pkgconfig
+2026-11-22T21:21:22.1755573Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+2026-11-22T21:21:22.1755965Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+2026-11-22T21:21:22.1756349Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+2026-11-22T21:21:22.1756729Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.18/x64/lib
+2026-11-22T21:21:22.1757118Z   EXPECTED_SOURCE: 9a500a21013a08f750009be656362481986eb208
+2026-11-22T21:21:22.1757427Z ##[endgroup]
+2026-11-22T21:21:22.1902334Z ##[group]Run python -B -m pytest --noconftest -q backend/tests/test_operational_balance*.py backend/tests/test_inventory_option_configuration.py backend/tests/test_inventory_payment_allocation_lineage.py backend/tests/test_customer_inventory_unified_activity.py backend/tests/test_operational_inventory_purchase_receipts.py backend/tests/test_operational_inventory_payment_allocation.py backend/tests/test_operational_catalog_read_scope.py backend/tests/test_order_batch_cpu_fairness.py backend/tests/test_awaiting_payment*.py backend/tests/test_dashboard_awaiting_financial_cohort.py backend/tests/test_web_page_access.py backend/tests/test_web_page_catalog_security.py backend/tests/test_web_employee_page_reads.py backend/tests/test_web_marketing_page_permissions.py backend/tests/test_web_legacy_page_policy.py backend/tests/test_web_legacy_config_read.py backend/tests/test_web_extra_pages.py backend/tests/test_web_detail_pages.py backend/tests/test_operational_refresh_parallel_profit.py backend/tests/test_operational_refresh_party_issue_index.py backend/tests/test_operational_workspace_refunds.py backend/tests/test_operational_workspace_refund_execution.py backend/tests/test_operational_workspace_customer_collections.py backend/tests/test_operational_customer_*.py backend/tests/test_operational_workspace_statements.py backend/tests/test_operational_workspace_account_history.py backend/tests/test_operational_movement_reversal_effects.py backend/tests/test_operational_movement_reversal_routes.py backend/tests/test_operational_ad_and_entry_latency.py backend/tests/test_operational_completed_shipping*.py backend/tests/test_operational_read_runtime.py backend/tests/test_operational_financial_review_groups.py backend/tests/test_operational_financial_position_state.py backend/tests/test_operational_context_snapshot_reader.py backend/tests/test_read_path_diagnostics.py backend/tests/test_operational_context_read_diagnostics.py backend/tests/test_assembly_read_diagnostics.py backend/tests/test_operational_financial_position_views.py backend/tests/test_operational_open_cost_exposure.py backend/tests/test_operational_bundle_cost_projection.py backend/tests/test_operational_supplier_invoice_cutover.py backend/tests/test_store_delivery_noncash_review.py backend/tests/test_operational_driver_review_mongo.py backend/tests/test_operational_driver_review_packed_state.py backend/tests/test_provider_fee_source_terms.py backend/tests/test_provider_fee_runtime_binding.py backend/tests/test_bnpl_fee_completeness_boundaries.py --asyncio-mode=auto --tb=short --junitxml=operational-backend.xml
+2026-11-22T21:21:22.1921006Z [36;1mpython -B -m pytest --noconftest -q backend/tests/test_operational_balance*.py backend/tests/test_inventory_option_configuration.py backend/tests/test_inventory_payment_allocation_lineage.py backend/tests/test_customer_inventory_unified_activity.py backend/tests/test_operational_inventory_purchase_receipts.py backend/tests/test_operational_inventory_payment_allocation.py backend/tests/test_operational_catalog_read_scope.py backend/tests/test_order_batch_cpu_fairness.py backend/tests/test_awaiting_payment*.py backend/tests/test_dashboard_awaiting_financial_cohort.py backend/tests/test_web_page_access.py backend/tests/test_web_page_catalog_security.py backend/tests/test_web_employee_page_reads.py backend/tests/test_web_marketing_page_permissions.py backend/tests/test_web_legacy_page_policy.py backend/tests/test_web_legacy_config_read.py backend/tests/test_web_extra_pages.py backend/tests/test_web_detail_pages.py backend/tests/test_operational_refresh_parallel_profit.py backend/tests/test_operational_refresh_party_issue_index.py backend/tests/test_operational_workspace_refunds.py backend/tests/test_operational_workspace_refund_execution.py backend/tests/test_operational_workspace_customer_collections.py backend/tests/test_operational_customer_*.py backend/tests/test_operational_workspace_statements.py backend/tests/test_operational_workspace_account_history.py backend/tests/test_operational_movement_reversal_effects.py backend/tests/test_operational_movement_reversal_routes.py backend/tests/test_operational_ad_and_entry_latency.py backend/tests/test_operational_completed_shipping*.py backend/tests/test_operational_read_runtime.py backend/tests/test_operational_financial_review_groups.py backend/tests/test_operational_financial_position_state.py backend/tests/test_operational_context_snapshot_reader.py backend/tests/test_read_path_diagnostics.py backend/tests/test_operational_context_read_diagnostics.py backend/tests/test_assembly_read_diagnostics.py backend/tests/test_operational_financial_position_views.py backend/tests/test_operational_open_cost_exposure.py backend/tests/test_operational_bundle_cost_projection.py backend/tests/test_operational_supplier_invoice_cutover.py backend/tests/test_store_delivery_noncash_review.py backend/tests/test_operational_driver_review_mongo.py backend/tests/test_operational_driver_review_packed_state.py backend/tests/test_provider_fee_source_terms.py backend/tests/test_provider_fee_runtime_binding.py backend/tests/test_bnpl_fee_completeness_boundaries.py --asyncio-mode=auto --tb=short --junitxml=operational-backend.xml[0m
+2026-11-22T21:21:22.1962092Z shell: /usr/bin/bash -e {0}
+2026-11-22T21:21:22.1962348Z env:
+2026-11-22T21:21:22.1962558Z   PYTHONPATH: backend:backend/tests
+2026-11-22T21:21:22.1962842Z   PYTHON_DOTENV_DISABLED: 1
+2026-11-22T21:21:22.1963277Z   OPERATIONAL_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-22T21:21:22.1964297Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-22T21:21:22.1964875Z   DEMAND_READ_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-22T21:21:22.1965392Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.18/x64
+2026-11-22T21:21:22.1965820Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.18/x64/lib/pkgconfig
+2026-11-22T21:21:22.1966241Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+2026-11-22T21:21:22.1966621Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+2026-11-22T21:21:22.1967001Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+2026-11-22T21:21:22.1967378Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.18/x64/lib
+2026-11-22T21:21:22.1967698Z ##[endgroup]
+2026-11-22T21:22:58.1870226Z ........................................................................ [  1%]
+2026-11-22T21:23:12.7446982Z ........................................................................ [  2%]
+2026-11-22T21:23:24.5443391Z ........................................................................ [  3%]
+2026-11-22T21:23:25.0648239Z ........................................................................ [  4%]
+2026-11-22T21:23:36.2897105Z ........................................................................ [  5%]
+2026-11-22T21:23:39.4693738Z ........................................................ [  6%]
+2026-11-22T21:23:48.2978563Z ............................................................................ [  7%]
+2026-11-22T21:23:57.6206695Z ........................................................................ [  8%]
+2026-11-22T21:24:05.2466965Z ........................................................................ [  9%]
+2026-11-22T21:24:05.5224489Z ........................................................................ [ 10%]
+2026-11-22T21:24:05.9171289Z ........................................................................ [ 11%]
+2026-11-22T21:24:06.3355787Z ........................................................................ [ 12%]
+2026-11-22T21:24:06.5022833Z ........................................................................ [ 14%]
+2026-11-22T21:24:06.8138405Z ........................................................................ [ 15%]
+2026-11-22T21:24:10.2147430Z ........................................................................ [ 16%]
+2026-11-22T21:24:14.8856587Z ........................................................................ [ 17%]
+2026-11-22T21:24:15.5597949Z ........................................................................ [ 18%]
+2026-11-22T21:24:15.6258138Z ........................................................................ [ 19%]
+2026-11-22T21:24:15.6945711Z ........................................................................ [ 20%]
+2026-11-22T21:24:16.6332529Z ........................................................................ [ 21%]
+2026-11-22T21:24:21.9969837Z ........................................................................ [ 22%]
+2026-11-22T21:24:36.2687014Z ........................................................................ [ 23%]
+2026-11-22T21:24:37.9210944Z ........................................................................ [ 25%]
+2026-11-22T21:24:43.9666777Z ........................................................................ [ 26%]
+2026-11-22T21:24:44.0277648Z ........................................................................ [ 27%]
+2026-11-22T21:24:44.8524069Z ........................................................................ [ 28%]
+2026-11-22T21:25:04.0335934Z ........................................................................ [ 29%]
+2026-11-22T21:25:04.7229533Z ........................................................................ [ 30%]
+2026-11-22T21:25:04.8677672Z ........................................................................ [ 31%]
+2026-11-22T21:25:05.7798854Z ........................................................................ [ 32%]
+2026-11-22T21:25:06.3091687Z ........................................................................ [ 33%]
+2026-11-22T21:25:09.6162647Z ........................................................................ [ 34%]
+2026-11-22T21:25:28.9919156Z ........................................................................ [ 36%]
+2026-11-22T21:25:35.5404246Z ........................................................................ [ 37%]
+2026-11-22T21:25:53.8758492Z ........................................................................ [ 38%]
+2026-11-22T21:26:21.8200034Z ........................................................................ [ 39%]
+2026-11-22T21:26:44.3508906Z ........................................................................ [ 40%]
+2026-11-22T21:26:44.4874168Z ........................................................................ [ 41%]
+2026-11-22T21:26:44.5861926Z ........................................................................ [ 42%]
+2026-11-22T21:26:52.6381065Z ........................................................................ [ 43%]
+2026-11-22T21:27:00.0166149Z ........................................................................ [ 44%]
+2026-11-22T21:27:07.9773942Z ........................................................................ [ 45%]
+2026-11-22T21:27:10.1169773Z ........................................................................ [ 46%]
+2026-11-22T21:27:14.3892523Z ........................................................................ [ 48%]
+2026-11-22T21:27:28.5463722Z ........................................................................ [ 49%]
+2026-11-22T21:27:48.9651068Z ........................................................................ [ 50%]
+2026-11-22T21:27:49.4150280Z ........................................................................ [ 51%]
+2026-11-22T21:27:50.1141281Z ........................................................................ [ 52%]
+2026-11-22T21:27:50.4626324Z ........................................................................ [ 53%]
+2026-11-22T21:27:50.7058294Z ........................................................................ [ 54%]
+2026-11-22T21:27:52.1711962Z ........................................................................ [ 55%]
+2026-11-22T21:27:53.0391765Z ........................................................................ [ 56%]
+2026-11-22T21:28:01.3598414Z ........................................................................ [ 57%]
+2026-11-22T21:28:01.6492773Z ........................................................................ [ 59%]
+2026-11-22T21:28:02.6368440Z ........................................................................ [ 60%]
+2026-11-22T21:28:05.2026069Z ........................................................................ [ 61%]
+2026-11-22T21:28:15.8792293Z ........................................................................ [ 62%]
+2026-11-22T21:28:28.8385799Z ........................................................................ [ 63%]
+2026-11-22T21:28:37.1618649Z .................................................................. [ 64%]
+2026-11-22T21:28:39.0871391Z ........................................................................ [ 65%]
+2026-11-22T21:28:41.0707775Z ........................................................................ [ 66%]
+2026-11-22T21:28:41.1376372Z ........................................................................ [ 67%]
+2026-11-22T21:28:41.2028783Z ........................................................................ [ 68%]
+2026-11-22T21:28:45.5186233Z ........................................................................ [ 69%]
+2026-11-22T21:28:50.8034009Z ........................................................................ [ 71%]
+2026-11-22T21:28:53.8529352Z ........................................................................ [ 72%]
+2026-11-22T21:29:05.9083844Z ........................................................................ [ 73%]
+2026-11-22T21:29:27.0016709Z ........................................................................ [ 74%]
+2026-11-22T21:29:38.8015120Z ........................................................................ [ 75%]
+2026-11-22T21:29:41.9810561Z ........................................................................ [ 76%]
+2026-11-22T21:29:42.4664024Z ........................................................................ [ 77%]
+2026-11-22T21:29:46.1594079Z ........................................................................ [ 78%]
+2026-11-22T21:30:06.9395129Z ........................................................................ [ 79%]
+2026-11-22T21:30:30.5316719Z ........................................................................ [ 80%]
+2026-11-22T21:30:45.5753395Z ........................................................................ [ 81%]
+2026-11-22T21:30:49.3552493Z ........................................................................ [ 83%]
+2026-11-22T21:30:49.4151309Z ........................................................................ [ 84%]
+2026-11-22T21:30:51.4866774Z ........................................................................ [ 85%]
+2026-11-22T21:30:59.4625425Z ........................................................................ [ 86%]
+2026-11-22T21:31:05.9256125Z ........................................................................ [ 87%]
+2026-11-22T21:31:55.4608057Z ........................................................................ [ 88%]
+2026-11-22T21:32:17.8602944Z ........................................................................ [ 89%]
+2026-11-22T21:32:35.5215594Z ........................................................................ [ 90%]
+2026-11-22T21:32:37.9349992Z ........................................................................ [ 91%]
+2026-11-22T21:32:46.5951595Z ........................................................................ [ 92%]
+2026-11-22T21:33:01.3119520Z ........................................................................ [ 94%]
+2026-11-22T21:33:08.5986544Z ........................................................................ [ 95%]
+2026-11-22T21:33:09.6347521Z ........................................................................ [ 96%]
+2026-11-22T21:33:09.7436350Z ........................................................................ [ 97%]
+2026-11-22T21:33:10.1373060Z ........................................................................ [ 98%]
+2026-11-22T21:33:14.3087909Z ........................................................................ [ 99%]
+2026-11-22T21:33:15.2297768Z ..............................                                           [100%]
+2026-11-22T21:33:15.2298517Z =============================== warnings summary ===============================
+2026-11-22T21:33:15.2299131Z backend/recurring_obligations_routes.py:295
+2026-11-22T21:33:15.2301914Z   /home/runner/work/AMASI-SA/AMASI-SA/backend/recurring_obligations_routes.py:295: PydanticDeprecatedSince20: Pydantic V1 style `@root_validator` validators are deprecated. You should migrate to Pydantic V2 style `@model_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+2026-11-22T21:33:15.2304887Z     @root_validator(skip_on_failure=True)
+2026-11-22T21:33:15.2305215Z 
+2026-11-22T21:33:15.2305411Z backend/recurring_obligations_routes.py:319
+2026-11-22T21:33:15.2308164Z   /home/runner/work/AMASI-SA/AMASI-SA/backend/recurring_obligations_routes.py:319: PydanticDeprecatedSince20: Pydantic V1 style `@root_validator` validators are deprecated. You should migrate to Pydantic V2 style `@model_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+2026-11-22T21:33:15.2310903Z     @root_validator(skip_on_failure=True)
+2026-11-22T21:33:15.2311224Z 
+2026-11-22T21:33:15.2311734Z ../../../../../opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/fastapi/testclient.py:1
+2026-11-22T21:33:15.2313766Z   /opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+2026-11-22T21:33:15.2315407Z     from starlette.testclient import TestClient as TestClient  # noqa
+2026-11-22T21:33:15.2315876Z 
+2026-11-22T21:33:15.2316512Z backend/tests/test_operational_balance_app_permissions.py::test_native_permission_admin_keeps_staff_identity
+2026-11-22T21:33:15.2319541Z   /home/runner/work/AMASI-SA/AMASI-SA/backend/liabilities_routes.py:170: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+2026-11-22T21:33:15.2322186Z     @validator("ad_provider")
+2026-11-22T21:33:15.2322460Z 
+2026-11-22T21:33:15.2323045Z backend/tests/test_operational_balance_app_permissions.py::test_native_permission_admin_keeps_staff_identity
+2026-11-22T21:33:15.2326851Z   /home/runner/work/AMASI-SA/AMASI-SA/backend/liabilities_routes.py:177: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+2026-11-22T21:33:15.2329394Z     @validator("employee_salary_id")
+2026-11-22T21:33:15.2329688Z 
+2026-11-22T21:33:15.2330231Z backend/tests/test_operational_balance_app_permissions.py::test_native_permission_admin_keeps_staff_identity
+2026-11-22T21:33:15.2333229Z   /home/runner/work/AMASI-SA/AMASI-SA/backend/liabilities_routes.py:183: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+2026-11-22T21:33:15.2336030Z     @validator("paid_from_account_id")
+2026-11-22T21:33:15.2336309Z 
+2026-11-22T21:33:15.2336854Z backend/tests/test_operational_balance_app_permissions.py::test_native_permission_admin_keeps_staff_identity
+2026-11-22T21:33:15.2339800Z   /home/runner/work/AMASI-SA/AMASI-SA/backend/liabilities_routes.py:191: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+2026-11-22T21:33:15.2342413Z     @validator("supplier_name")
+2026-11-22T21:33:15.2342683Z 
+2026-11-22T21:33:15.2343248Z backend/tests/test_operational_balance_app_permissions.py::test_native_permission_admin_keeps_staff_identity
+2026-11-22T21:33:15.2346422Z   /home/runner/work/AMASI-SA/AMASI-SA/backend/liabilities_routes.py:207: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+2026-11-22T21:33:15.2348984Z     @validator("counterparty_name")
+2026-11-22T21:33:15.2349275Z 
+2026-11-22T21:33:15.2350048Z backend/tests/test_operational_balance_courier_identity.py::test_shipping_settings_model_round_trips_exact_code_and_rejects_malformed_identity
+2026-11-22T21:33:15.2353003Z   server.py:497: PydanticDeprecatedSince20: Pydantic V1 style `@root_validator` validators are deprecated. You should migrate to Pydantic V2 style `@model_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+2026-11-22T21:33:15.2355456Z     @root_validator(pre=False, skip_on_failure=True)
+2026-11-22T21:33:15.2355829Z 
+2026-11-22T21:33:15.2356571Z backend/tests/test_dashboard_awaiting_financial_cohort.py::test_unpaid_dashboard_defers_history_preserves_costs_and_blocks_final_profit
+2026-11-22T21:33:15.2359765Z   /home/runner/work/AMASI-SA/AMASI-SA/backend/settlements_routes.py:135: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+2026-11-22T21:33:15.2362368Z     @validator("adjustment_type")
+2026-11-22T21:33:15.2362656Z 
+2026-11-22T21:33:15.2363397Z backend/tests/test_dashboard_awaiting_financial_cohort.py::test_unpaid_dashboard_defers_history_preserves_costs_and_blocks_final_profit
+2026-11-22T21:33:15.2366742Z   /home/runner/work/AMASI-SA/AMASI-SA/backend/settlements_routes.py:141: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+2026-11-22T21:33:15.2369449Z     @validator("source")
+2026-11-22T21:33:15.2369696Z 
+2026-11-22T21:33:15.2370437Z backend/tests/test_dashboard_awaiting_financial_cohort.py::test_unpaid_dashboard_defers_history_preserves_costs_and_blocks_final_profit
+2026-11-22T21:33:15.2373528Z   /home/runner/work/AMASI-SA/AMASI-SA/backend/settlements_routes.py:154: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+2026-11-22T21:33:15.2376169Z     @validator("adjustment_type")
+2026-11-22T21:33:15.2376432Z 
+2026-11-22T21:33:15.2376781Z -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2026-11-22T21:33:15.2377577Z 6564 passed, 12 warnings, 90 subtests passed in 711.80s (0:11:51)
+2026-11-22T21:33:16.4405713Z ##[group]Run python -B -m pytest --noconftest -p no:cacheprovider -q backend/tests/test_demand_read_store.py backend/tests/test_demand_read_jobs.py backend/tests/test_demand_read_runner_lifecycle.py backend/tests/test_operational_workspace_demand_reads.py backend/tests/test_operational_workspace_demand_http.py backend/tests/test_dashboard_demand_builders.py backend/tests/test_assembly_demand_builders.py --asyncio-mode=auto --tb=short --junitxml=operational-demand-read.xml
+2026-11-22T21:33:16.4409016Z [36;1mpython -B -m pytest --noconftest -p no:cacheprovider -q backend/tests/test_demand_read_store.py backend/tests/test_demand_read_jobs.py backend/tests/test_demand_read_runner_lifecycle.py backend/tests/test_operational_workspace_demand_reads.py backend/tests/test_operational_workspace_demand_http.py backend/tests/test_dashboard_demand_builders.py backend/tests/test_assembly_demand_builders.py --asyncio-mode=auto --tb=short --junitxml=operational-demand-read.xml[0m
+2026-11-22T21:33:16.4443128Z shell: /usr/bin/bash -e {0}
+2026-11-22T21:33:16.4443377Z env:
+2026-11-22T21:33:16.4444035Z   PYTHONPATH: backend:backend/tests
+2026-11-22T21:33:16.4444430Z   PYTHON_DOTENV_DISABLED: 1
+2026-11-22T21:33:16.4444868Z   OPERATIONAL_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-22T21:33:16.4445470Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-22T21:33:16.4446050Z   DEMAND_READ_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-22T21:33:16.4446559Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.18/x64
+2026-11-22T21:33:16.4446976Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.18/x64/lib/pkgconfig
+2026-11-22T21:33:16.4447415Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+2026-11-22T21:33:16.4447795Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+2026-11-22T21:33:16.4448191Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+2026-11-22T21:33:16.4448593Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.18/x64/lib
+2026-11-22T21:33:16.4449033Z   DEMAND_READ_BENCHMARK_REPORT: operational-demand-read-benchmark.json
+2026-11-22T21:33:16.4449571Z   DEMAND_READ_REGISTER_BENCHMARK_REPORT: operational-demand-register-benchmark.json
+2026-11-22T21:33:16.4449993Z ##[endgroup]
+2026-11-22T21:33:55.8905666Z ........................................................................ [ 67%]
+2026-11-22T21:34:19.6818871Z ..................................                                       [100%]
+2026-11-22T21:34:19.6819633Z =============================== warnings summary ===============================
+2026-11-22T21:34:19.6820247Z backend/recurring_obligations_routes.py:295
+2026-11-22T21:34:19.6823831Z   /home/runner/work/AMASI-SA/AMASI-SA/backend/recurring_obligations_routes.py:295: PydanticDeprecatedSince20: Pydantic V1 style `@root_validator` validators are deprecated. You should migrate to Pydantic V2 style `@model_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+2026-11-22T21:34:19.6826910Z     @root_validator(skip_on_failure=True)
+2026-11-22T21:34:19.6827323Z 
+2026-11-22T21:34:19.6827577Z backend/recurring_obligations_routes.py:319
+2026-11-22T21:34:19.6830587Z   /home/runner/work/AMASI-SA/AMASI-SA/backend/recurring_obligations_routes.py:319: PydanticDeprecatedSince20: Pydantic V1 style `@root_validator` validators are deprecated. You should migrate to Pydantic V2 style `@model_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+2026-11-22T21:34:19.6832504Z     @root_validator(skip_on_failure=True)
+2026-11-22T21:34:19.6832729Z 
+2026-11-22T21:34:19.6832846Z backend/settlements_routes.py:135
+2026-11-22T21:34:19.6835430Z   /home/runner/work/AMASI-SA/AMASI-SA/backend/settlements_routes.py:135: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+2026-11-22T21:34:19.6837529Z     @validator("adjustment_type")
+2026-11-22T21:34:19.6837709Z 
+2026-11-22T21:34:19.6837820Z backend/settlements_routes.py:141
+2026-11-22T21:34:19.6839345Z   /home/runner/work/AMASI-SA/AMASI-SA/backend/settlements_routes.py:141: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+2026-11-22T21:34:19.6840827Z     @validator("source")
+2026-11-22T21:34:19.6840979Z 
+2026-11-22T21:34:19.6841091Z backend/settlements_routes.py:154
+2026-11-22T21:34:19.6842607Z   /home/runner/work/AMASI-SA/AMASI-SA/backend/settlements_routes.py:154: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+2026-11-22T21:34:19.6844287Z     @validator("adjustment_type")
+2026-11-22T21:34:19.6844454Z 
+2026-11-22T21:34:19.6844662Z -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2026-11-22T21:34:19.6845088Z 106 passed, 5 warnings in 62.63s (0:01:02)
+2026-11-22T21:34:20.1533464Z ##[group]Run python -B -m pytest --noconftest -q backend/tests/test_dashboard_shipping_ssot.py backend/tests/test_mz2_shipping_calculator.py --tb=short
+2026-11-22T21:34:20.1535112Z [36;1mpython -B -m pytest --noconftest -q backend/tests/test_dashboard_shipping_ssot.py backend/tests/test_mz2_shipping_calculator.py --tb=short[0m
+2026-11-22T21:34:20.1573250Z shell: /usr/bin/bash -e {0}
+2026-11-22T21:34:20.1573724Z env:
+2026-11-22T21:34:20.1574004Z   PYTHONPATH: backend:backend/tests
+2026-11-22T21:34:20.1574279Z   PYTHON_DOTENV_DISABLED: 1
+2026-11-22T21:34:20.1574710Z   OPERATIONAL_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-22T21:34:20.1575308Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-22T21:34:20.1575891Z   DEMAND_READ_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-22T21:34:20.1576386Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.18/x64
+2026-11-22T21:34:20.1577114Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.18/x64/lib/pkgconfig
+2026-11-22T21:34:20.1577654Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+2026-11-22T21:34:20.1578160Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+2026-11-22T21:34:20.1578664Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+2026-11-22T21:34:20.1579154Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.18/x64/lib
+2026-11-22T21:34:20.1579583Z ##[endgroup]
+2026-11-22T21:34:21.1687281Z ................                                       [100%]
+2026-11-22T21:34:21.1688065Z 16 passed, 18 subtests passed in 0.60s
+2026-11-22T21:34:21.2069739Z ##[group]Run python - <<'PY'
+2026-11-22T21:34:21.2070142Z [36;1mpython - <<'PY'[0m
+2026-11-22T21:34:21.2070413Z [36;1mimport xml.etree.ElementTree as ET[0m
+2026-11-22T21:34:21.2070819Z [36;1mcases = ET.parse('operational-backend.xml').findall('.//testcase')[0m
+2026-11-22T21:34:21.2071392Z [36;1massert len(cases) >= 3500, 'Operational test collection incomplete'[0m
+2026-11-22T21:34:21.2071863Z [36;1mfor suite, minimum in (('test_read_path_diagnostics', 15),[0m
+2026-11-22T21:34:21.2072284Z [36;1m                       ('test_operational_context_read_diagnostics', 14),[0m
+2026-11-22T21:34:21.2072685Z [36;1m                       ('test_assembly_read_diagnostics', 11)):[0m
+2026-11-22T21:34:21.2073168Z [36;1m    diagnostic_cases = [c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == suite][0m
+2026-11-22T21:34:21.2074043Z [36;1m    assert len(diagnostic_cases) >= minimum, suite + ' missing cases'[0m
+2026-11-22T21:34:21.2074665Z [36;1m    assert not any(c.find('skipped') is not None for c in diagnostic_cases), suite + ' skipped'[0m
+2026-11-22T21:34:21.2075192Z [36;1mfor suite in ('test_operational_refresh_parallel_profit',[0m
+2026-11-22T21:34:21.2075592Z [36;1m              'test_operational_refresh_party_issue_index',[0m
+2026-11-22T21:34:21.2075958Z [36;1m              'test_awaiting_payment_eligibility',[0m
+2026-11-22T21:34:21.2076300Z [36;1m              'test_awaiting_payment_history',[0m
+2026-11-22T21:34:21.2076622Z [36;1m              'test_awaiting_payment_cohort',[0m
+2026-11-22T21:34:21.2076964Z [36;1m              'test_dashboard_awaiting_financial_cohort',[0m
+2026-11-22T21:34:21.2077352Z [36;1m              'test_operational_balance_awaiting_cohort_readers'):[0m
+2026-11-22T21:34:21.2077848Z [36;1m    assert any(suite in c.get('classname', '') for c in cases), suite + ' not collected'[0m
+2026-11-22T21:34:21.2078331Z [36;1mfor suite in ('test_inventory_option_configuration',[0m
+2026-11-22T21:34:21.2078714Z [36;1m              'test_inventory_payment_allocation_lineage',[0m
+2026-11-22T21:34:21.2079092Z [36;1m              'test_operational_inventory_purchase_receipts',[0m
+2026-11-22T21:34:21.2079489Z [36;1m              'test_operational_inventory_payment_allocation'):[0m
+2026-11-22T21:34:21.2079977Z [36;1m    assert any(suite in c.get('classname', '') for c in cases), suite + ' not collected'[0m
+2026-11-22T21:34:21.2080476Z [36;1mfor suite in ('test_operational_workspace_account_history',[0m
+2026-11-22T21:34:21.2080868Z [36;1m              'test_operational_movement_reversal_effects',[0m
+2026-11-22T21:34:21.2081228Z [36;1m              'test_operational_movement_reversal_routes',[0m
+2026-11-22T21:34:21.2081581Z [36;1m              'test_operational_ad_and_entry_latency'):[0m
+2026-11-22T21:34:21.2082080Z [36;1m    assert any(c.get('classname', '').rsplit('.', 1)[-1] == suite for c in cases), suite + ' not collected'[0m
+2026-11-22T21:34:21.2082946Z [36;1massert len([c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_workspace_refunds']) >= 23, 'Scoped financial-only refund contracts missing'[0m
+2026-11-22T21:34:21.2083964Z [36;1mfor suite, minimum in (('test_operational_customer_payment_basis', 10),[0m
+2026-11-22T21:34:21.2084416Z [36;1m                       ('test_customer_inventory_unified_activity', 5),[0m
+2026-11-22T21:34:21.2085000Z [36;1m                       ('test_operational_customer_adjustments', 3),[0m
+2026-11-22T21:34:21.2085408Z [36;1m                       ('test_operational_workspace_refund_execution', 8),[0m
+2026-11-22T21:34:21.2085850Z [36;1m                       ('test_operational_workspace_customer_collections', 11),[0m
+2026-11-22T21:34:21.2086300Z [36;1m                       ('test_operational_customer_provider_projection', 9)):[0m
+2026-11-22T21:34:21.2086999Z [36;1m    assert len([c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == suite]) >= minimum, suite + ' customer money contracts missing'[0m
+2026-11-22T21:34:21.2088071Z [36;1massert len([c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_workspace_statements']) >= 10, 'Scoped period statements missing'[0m
+2026-11-22T21:34:21.2089107Z [36;1massert len([c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_balance_reviews']) >= 7, 'Scoped receipt-review permissions missing'[0m
+2026-11-22T21:34:21.2090154Z [36;1massert len([c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_balance_review_mongo']) == 3, 'Real scoped review transactions missing'[0m
+2026-11-22T21:34:21.2091254Z [36;1massert len([c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_balance_pending_commands']) >= 33, 'Authenticated pending-command recovery contracts missing'[0m
+2026-11-22T21:34:21.2092298Z [36;1massert any('test_operational_open_cost_exposure' in c.get('classname', '') for c in cases), 'Historical open-cost tests were not collected'[0m
+2026-11-22T21:34:21.2093163Z [36;1mbundle_cases = [c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_bundle_cost_projection'][0m
+2026-11-22T21:34:21.2094007Z [36;1massert len(bundle_cases) >= 67, 'Remaining-product bundle projection tests missing or incomplete'[0m
+2026-11-22T21:34:21.2094751Z [36;1mremaining_cases = [c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_balance_remaining_products'][0m
+2026-11-22T21:34:21.2095489Z [36;1massert len(remaining_cases) >= 50, 'Real-Mongo remaining-product source/report cases missing'[0m
+2026-11-22T21:34:21.2096109Z [36;1mfor required, minimum in (('test_operational_balance_bundle_legacy_receipts', 30),[0m
+2026-11-22T21:34:21.2096636Z [36;1m                          ('test_operational_balance_native_purchase_link', 39),[0m
+2026-11-22T21:34:21.2097110Z [36;1m                          ('test_operational_balance_native_purchase_link_mongo', 18)):[0m
+2026-11-22T21:34:21.2097620Z [36;1m    found = [c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == required][0m
+2026-11-22T21:34:21.2098129Z [36;1m    assert len(found) >= minimum, required + ' mapping acceptance missing'[0m
+2026-11-22T21:34:21.2098850Z [36;1massert any('test_operational_balance_cost_completeness' in c.get('classname', '') for c in cases), 'Scoped cost completeness cases missing'[0m
+2026-11-22T21:34:21.2099856Z [36;1massert len([c for c in cases if 'test_operational_balance_mapping_combined' in c.get('classname', '')]) >= 4, 'Combined R03/R05 Mongo and bounded financial reads missing'[0m
+2026-11-22T21:34:21.2100928Z [36;1massert len([c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_balance_native_purchase_review']) >= 72, 'Native purchase proof cases missing'[0m
+2026-11-22T21:34:21.2101967Z [36;1massert len([c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_balance_external_advances']) >= 28, 'External loan Mongo cases missing'[0m
+2026-11-22T21:34:21.2102705Z [36;1mfor suite in ('test_operational_supplier_invoice_cutover',[0m
+2026-11-22T21:34:21.2103105Z [36;1m              'test_operational_balance_invoice_flow',[0m
+2026-11-22T21:34:21.2103478Z [36;1m              'test_operational_balance_supplier_final_cost',[0m
+2026-11-22T21:34:21.2103981Z [36;1m              'test_operational_balance_unified_supplier_payment',[0m
+2026-11-22T21:34:21.2104537Z [36;1m              'test_operational_balance_provider_settlement_guard'):[0m
+2026-11-22T21:34:21.2105037Z [36;1m    assert any(suite in c.get('classname', '') for c in cases), suite + ' not collected'[0m
+2026-11-22T21:34:21.2105691Z [36;1massert len([c for c in cases if 'test_operational_balance_salary_start_mongo' in c.get('classname', '')]) == 5[0m
+2026-11-22T21:34:21.2106407Z [36;1massert len([c for c in cases if 'test_operational_driver_review_mongo' in c.get('classname', '')]) == 17[0m
+2026-11-22T21:34:21.2106961Z [36;1mfor suite, minimum in ([0m
+2026-11-22T21:34:21.2107428Z [36;1m    ('test_operational_completed_shipping_admission', 23),[0m
+2026-11-22T21:34:21.2107843Z [36;1m    ('test_operational_completed_shipping_expansion', 10),[0m
+2026-11-22T21:34:21.2108252Z [36;1m    ('test_operational_completed_shipping_integration', 16),[0m
+2026-11-22T21:34:21.2108686Z [36;1m    ('test_operational_completed_shipping_preview_lifetime', 1),[0m
+2026-11-22T21:34:21.2109114Z [36;1m    ('test_operational_completed_shipping_producers', 14),[0m
+2026-11-22T21:34:21.2109502Z [36;1m    ('test_operational_completed_shipping_review', 10),[0m
+2026-11-22T21:34:21.2109901Z [36;1m    ('test_operational_completed_shipping_review_index', 10),[0m
+2026-11-22T21:34:21.2110275Z [36;1m    ('test_operational_read_runtime', 10),[0m
+2026-11-22T21:34:21.2110620Z [36;1m    ('test_operational_financial_review_groups', 1),[0m
+2026-11-22T21:34:21.2110990Z [36;1m    ('test_operational_financial_position_state', 25),[0m
+2026-11-22T21:34:21.2111364Z [36;1m    ('test_operational_context_snapshot_reader', 21),[0m
+2026-11-22T21:34:21.2111724Z [36;1m    ('test_operational_catalog_read_scope', 21),[0m
+2026-11-22T21:34:21.2112055Z [36;1m    ('test_order_batch_cpu_fairness', 7),[0m
+2026-11-22T21:34:21.2112399Z [36;1m    ('test_operational_financial_position_views', 48),[0m
+2026-11-22T21:34:21.2112868Z [36;1m    ('test_operational_driver_review_packed_state', 3),[0m
+2026-11-22T21:34:21.2113252Z [36;1m    ('test_operational_balance_delivery_start_rule', 53),[0m
+2026-11-22T21:34:21.2113874Z [36;1m    ('test_operational_balance_piece_index', 13),[0m
+2026-11-22T21:34:21.2114266Z [36;1m    ('test_operational_balance_refresh_stage_timing', 20),[0m
+2026-11-22T21:34:21.2114670Z [36;1m    ('test_operational_balance_delivery_confirmation', 44),[0m
+2026-11-22T21:34:21.2115126Z [36;1m    ('test_operational_balance_delivery_confirmation_integration', 20),[0m
+2026-11-22T21:34:21.2115610Z [36;1m    ('test_operational_balance_delivery_confirmation_lifetime', 4),[0m
+2026-11-22T21:34:21.2116090Z [36;1m    ('test_operational_balance_delivery_confirmation_acquisition', 9),[0m
+2026-11-22T21:34:21.2116460Z [36;1m):[0m
+2026-11-22T21:34:21.2116780Z [36;1m    found = [c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == suite][0m
+2026-11-22T21:34:21.2117327Z [36;1m    assert len(found) >= minimum, suite + ' demand-only/completeness coverage missing'[0m
+2026-11-22T21:34:21.2117936Z [36;1massert not any(c.find(tag) is not None for c in cases for tag in ('skipped', 'failure', 'error'))[0m
+2026-11-22T21:34:21.2118384Z [36;1mPY[0m
+2026-11-22T21:34:21.2150620Z shell: /usr/bin/bash -e {0}
+2026-11-22T21:34:21.2150868Z env:
+2026-11-22T21:34:21.2151078Z   PYTHONPATH: backend:backend/tests
+2026-11-22T21:34:21.2151350Z   PYTHON_DOTENV_DISABLED: 1
+2026-11-22T21:34:21.2151786Z   OPERATIONAL_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-22T21:34:21.2152374Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-22T21:34:21.2152931Z   DEMAND_READ_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-22T21:34:21.2153424Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.18/x64
+2026-11-22T21:34:21.2154153Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.18/x64/lib/pkgconfig
+2026-11-22T21:34:21.2154582Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+2026-11-22T21:34:21.2154964Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+2026-11-22T21:34:21.2155523Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+2026-11-22T21:34:21.2155915Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.18/x64/lib
+2026-11-22T21:34:21.2156236Z ##[endgroup]
+2026-11-22T21:34:21.3477687Z ##[group]Run python - <<'PY'
+2026-11-22T21:34:21.3478047Z [36;1mpython - <<'PY'[0m
+2026-11-22T21:34:21.3478272Z [36;1mimport json[0m
+2026-11-22T21:34:21.3478494Z [36;1mfrom pathlib import Path[0m
+2026-11-22T21:34:21.3478777Z [36;1mimport xml.etree.ElementTree as ET[0m
+2026-11-22T21:34:21.3479198Z [36;1mcases = ET.parse('operational-demand-read.xml').findall('.//testcase')[0m
+2026-11-22T21:34:21.3479612Z [36;1mfor suite, minimum in ([0m
+2026-11-22T21:34:21.3479880Z [36;1m    ('test_demand_read_store', 13),[0m
+2026-11-22T21:34:21.3480176Z [36;1m    ('test_demand_read_jobs', 14),[0m
+2026-11-22T21:34:21.3480482Z [36;1m    ('test_demand_read_runner_lifecycle', 3),[0m
+2026-11-22T21:34:21.3480838Z [36;1m    ('test_operational_workspace_demand_reads', 48),[0m
+2026-11-22T21:34:21.3481223Z [36;1m    ('test_operational_workspace_demand_http', 6),[0m
+2026-11-22T21:34:21.3481632Z [36;1m    ('test_dashboard_demand_builders', 7),[0m
+2026-11-22T21:34:21.3481971Z [36;1m    ('test_assembly_demand_builders', 13),[0m
+2026-11-22T21:34:21.3482243Z [36;1m):[0m
+2026-11-22T21:34:21.3482560Z [36;1m    found = [c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == suite][0m
+2026-11-22T21:34:21.3483123Z [36;1m    assert len(found) >= minimum, (suite + ' missing acceptance cases', len(found), minimum)[0m
+2026-11-22T21:34:21.3483815Z [36;1mnames = {c.get('name') for c in cases}[0m
+2026-11-22T21:34:21.3484266Z [36;1mfor name in ([0m
+2026-11-22T21:34:21.3484662Z [36;1m    'test_immutable_ready_generation_survives_new_client_and_reads_one_indexed_page',[0m
+2026-11-22T21:34:21.3485230Z [36;1m    'test_actual_assembly_child_reads_canonical_fixture_and_publishes_ready',[0m
+2026-11-22T21:34:21.3485780Z [36;1m    'test_actual_child_keeps_health_and_bootstrap_responsive_on_same_large_fixture',[0m
+2026-11-22T21:34:21.3486332Z [36;1m    'test_same_data_twenty_filtered_pages_reuse_one_report_and_source_read',[0m
+2026-11-22T21:34:21.3486863Z [36;1m    'test_statement_reassembles_full_period_and_report_binds_fresh_bootstrap',[0m
+2026-11-22T21:34:21.3487399Z [36;1m    'test_ready_position_and_release_are_actor_scoped_and_do_not_write_money',[0m
+2026-11-22T21:34:21.3487902Z [36;1m    'test_demand_report_has_bootstrap_scope_and_permission_binding',[0m
+2026-11-22T21:34:21.3488273Z [36;1m):[0m
+2026-11-22T21:34:21.3488532Z [36;1m    assert name in names, name + ' was not collected'[0m
+2026-11-22T21:34:21.3488967Z [36;1mfor name in ('test_saved_resource_preserves_explicit_usd_ad_fx_flag',[0m
+2026-11-22T21:34:21.3489436Z [36;1m             'test_ready_statement_disconnect_stops_before_next_chunk',[0m
+2026-11-22T21:34:21.3489911Z [36;1m             'test_admitted_demand_releases_its_consumer_when_http_read_fails',[0m
+2026-11-22T21:34:21.3490447Z [36;1m             'test_bootstrap_identity_read_budget_retains_both_fresh_authority_passes',[0m
+2026-11-22T21:34:21.3490974Z [36;1m             'test_bootstrap_rejects_authority_changes_during_header_read'):[0m
+2026-11-22T21:34:21.3491533Z [36;1m    assert any(n == name or n.startswith(name + '[') for n in names), name + ' was not collected'[0m
+2026-11-22T21:34:21.3492148Z [36;1massert not any(c.find(tag) is not None for c in cases for tag in ('skipped', 'failure', 'error'))[0m
+2026-11-22T21:34:21.3492774Z [36;1mevidence = json.loads(Path('operational-demand-read-benchmark.json').read_text())[0m
+2026-11-22T21:34:21.3493449Z [36;1massert evidence['environment'] == 'isolated loopback Mongo; ASGI transport; no browser/network timing'[0m
+2026-11-22T21:34:21.3494223Z [36;1massert evidence['ready_target_met'] is True[0m
+2026-11-22T21:34:21.3494595Z [36;1massert type(evidence['first_useful_target_met']) is bool[0m
+2026-11-22T21:34:21.3495095Z [36;1massert evidence['child'] and all(row['outcome'] == 'ready' for row in evidence['child'])[0m
+2026-11-22T21:34:21.3495949Z [36;1mregister = json.loads(Path('operational-demand-register-benchmark.json').read_text())[0m
+2026-11-22T21:34:21.3496976Z [36;1massert register['environment'] == 'isolated loopback Mongo; ASGI; in-process builder test seam for exact work counts; no browser/network timing'[0m
+2026-11-22T21:34:21.3497775Z [36;1massert register['report_reduction_fraction'] >= .8 and register['ready_p95_ms'] < 1000[0m
+2026-11-22T21:34:21.3498392Z [36;1massert register['financial_results_equal'] is True and register['source_unchanged'] is True[0m
+2026-11-22T21:34:21.3498957Z [36;1m# Keep the cold result visible even when its target is not met. It is[0m
+2026-11-22T21:34:21.3499459Z [36;1m# controlled ASGI evidence, not a browser or production latency claim.[0m
+2026-11-22T21:34:21.3499943Z [36;1mprint('Cold home target met:', evidence['first_useful_target_met'])[0m
+2026-11-22T21:34:21.3500489Z [36;1mprint('Demand-read acceptance:', len(cases), 'executed cases; zero skips/failures/errors')[0m
+2026-11-22T21:34:21.3500934Z [36;1mPY[0m
+2026-11-22T21:34:21.3533775Z shell: /usr/bin/bash -e {0}
+2026-11-22T21:34:21.3534099Z env:
+2026-11-22T21:34:21.3534314Z   PYTHONPATH: backend:backend/tests
+2026-11-22T21:34:21.3534589Z   PYTHON_DOTENV_DISABLED: 1
+2026-11-22T21:34:21.3535018Z   OPERATIONAL_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-22T21:34:21.3535620Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-22T21:34:21.3536180Z   DEMAND_READ_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-22T21:34:21.3536671Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.18/x64
+2026-11-22T21:34:21.3537089Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.18/x64/lib/pkgconfig
+2026-11-22T21:34:21.3537512Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+2026-11-22T21:34:21.3537884Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+2026-11-22T21:34:21.3538278Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+2026-11-22T21:34:21.3538660Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.18/x64/lib
+2026-11-22T21:34:21.3538990Z ##[endgroup]
+2026-11-22T21:34:21.3871979Z Cold home target met: True
+2026-11-22T21:34:21.3872653Z Demand-read acceptance: 106 executed cases; zero skips/failures/errors
+2026-11-22T21:34:21.4004299Z ##[group]Run actions/upload-artifact@v4
+2026-11-22T21:34:21.4004620Z with:
+2026-11-22T21:34:21.4004852Z   name: operational-backend-results
+2026-11-22T21:34:21.4005772Z   path: operational-backend.xml
+operational-demand-read.xml
+operational-demand-read-benchmark.json
+operational-demand-register-benchmark.json
+operational-source-sha.txt
+operational-source-tree.txt
+
+2026-11-22T21:34:21.4006681Z   if-no-files-found: error
+2026-11-22T21:34:21.4006920Z   compression-level: 6
+2026-11-22T21:34:21.4007139Z   overwrite: false
+2026-11-22T21:34:21.4007356Z   include-hidden-files: false
+2026-11-22T21:34:21.4007606Z env:
+2026-11-22T21:34:21.4007807Z   PYTHONPATH: backend:backend/tests
+2026-11-22T21:34:21.4008075Z   PYTHON_DOTENV_DISABLED: 1
+2026-11-22T21:34:21.4008499Z   OPERATIONAL_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-22T21:34:21.4009094Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-22T21:34:21.4009698Z   DEMAND_READ_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-22T21:34:21.4010204Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.18/x64
+2026-11-22T21:34:21.4010624Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.18/x64/lib/pkgconfig
+2026-11-22T21:34:21.4011046Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+2026-11-22T21:34:21.4011421Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+2026-11-22T21:34:21.4011809Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+2026-11-22T21:34:21.4012200Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.18/x64/lib
+2026-11-22T21:34:21.4012710Z ##[endgroup]
+2026-11-22T21:34:21.5785115Z (node:17227) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-22T21:34:21.5786005Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-22T21:34:21.5886322Z Multiple search paths detected. Calculating the least common ancestor of all paths
+2026-11-22T21:34:21.5900240Z The least common ancestor is /home/runner/work/AMASI-SA/AMASI-SA. This will be the root directory of the artifact
+2026-11-22T21:34:21.5902527Z With the provided path, there will be 6 files uploaded
+2026-11-22T21:34:21.5904298Z Artifact name is valid!
+2026-11-22T21:34:21.5904931Z Root directory input is valid!
+2026-11-22T21:34:21.9877726Z Beginning upload of artifact content to blob storage
+2026-11-22T21:34:22.0433001Z (node:17227) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-11-22T21:34:22.4816231Z Uploaded bytes 121795
+2026-11-22T21:34:22.5545768Z Finished uploading artifact content to blob storage!
+2026-11-22T21:34:22.5546866Z SHA256 digest of uploaded artifact zip is 01934834f684d651880141344d815fb1bfea0d0ddb41b87ea5803e94a366cd67
+2026-11-22T21:34:22.5548885Z Finalizing artifact upload
+2026-11-22T21:34:22.9526386Z Artifact operational-backend-results.zip successfully finalized. Artifact ID 14774230066
+2026-11-22T21:34:22.9527919Z Artifact operational-backend-results has been successfully uploaded! Final size is 121795 bytes. Artifact ID is 14774230066
+2026-11-22T21:34:22.9534312Z Artifact download URL: https://github.com/AMASI-SA/AMASI-SA/actions/runs/45071567938/artifacts/14774230066
+2026-11-22T21:34:22.9676226Z ##[group]Run docker rm --force operational-projection-rs
+2026-11-22T21:34:22.9676675Z [36;1mdocker rm --force operational-projection-rs[0m
+2026-11-22T21:34:22.9709271Z shell: /usr/bin/bash -e {0}
+2026-11-22T21:34:22.9709522Z env:
+2026-11-22T21:34:22.9709731Z   PYTHONPATH: backend:backend/tests
+2026-11-22T21:34:22.9710018Z   PYTHON_DOTENV_DISABLED: 1
+2026-11-22T21:34:22.9710456Z   OPERATIONAL_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-22T21:34:22.9711062Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-22T21:34:22.9711628Z   DEMAND_READ_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+2026-11-22T21:34:22.9712128Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.18/x64
+2026-11-22T21:34:22.9712559Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.18/x64/lib/pkgconfig
+2026-11-22T21:34:22.9712986Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+2026-11-22T21:34:22.9713408Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+2026-11-22T21:34:22.9714153Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+2026-11-22T21:34:22.9714591Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.18/x64/lib
+2026-11-22T21:34:22.9714929Z ##[endgroup]
+2026-11-22T21:34:23.2661633Z operational-projection-rs
+2026-11-22T21:34:23.2766913Z Post job cleanup.
+2026-11-22T21:34:23.4027868Z (node:17304) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-22T21:34:23.4028692Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-22T21:34:23.4253432Z Post job cleanup.
+2026-11-22T21:34:23.5224679Z [command]/usr/bin/git version
+2026-11-22T21:34:23.5274825Z git version 2.56.1
+2026-11-22T21:34:23.5327334Z Temporarily overriding HOME='/home/runner/work/_temp/3ce0e23f-1f8f-4199-b823-20a2f94536e0' before making global git config changes
+2026-11-22T21:34:23.5329325Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-22T21:34:23.5336544Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/AMASI-SA/AMASI-SA
+2026-11-22T21:34:23.5401769Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-22T21:34:23.5448526Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-22T21:34:23.5819313Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-22T21:34:23.5893369Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-22T21:34:23.6239504Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-22T21:34:23.6280916Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-22T21:34:23.6735208Z Cleaning up orphan processes
+2026-11-22T21:34:23.7147192Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-python@v5, actions/upload-artifact@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

@@ -1,0 +1,393 @@
+{
+  "kind": "exact_B_readiness_adapter_job_log_review_v1",
+  "repository": "AMASI-SA/AMASI-SA",
+  "run_id": 45071567803,
+  "deployment_git_sha": "9a500a21013a08f750009be656362481986eb208",
+  "source_git_sha": "dd3a9ea29fce28e2fa87332cff4a6d46f776e0d3",
+  "base_git_sha": "02cd99e5b2b68c95341c87590abcf572c885e697",
+  "runtime_release_id": "rg5-b2aa207d2f63107c64d9c0b66ce5cc567aa5ebb074753cf889227de4c448e008",
+  "result": "PASS_FOR_THE_TWO_CI_REHEARSAL_JOBS",
+  "scope": "Purpose-built GitHub job logs and job/step summaries only; generated artifact archives were not downloaded by this reviewer.",
+  "actual_emergent_host_rehearsal_observed": false,
+  "production_deployment_observed": false,
+  "all_other_CI_claimed": false,
+  "identical_adapter_proofs": true,
+  "jobs": [
+    {
+      "job_id": 137359766070,
+      "job_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45071567803/job/137359766070",
+      "job_name": "Emergent Host Node 20.20.2 clean-clone adapter rehearsal",
+      "status": "completed",
+      "conclusion": "success",
+      "host_node_observed": "v20.20.2",
+      "governed_node": "22.23.2",
+      "host_yarn_observed": "1.22.22",
+      "log_first_timestamp": "2026-11-22T21:21:44.2494981Z",
+      "log_last_timestamp": "2026-11-22T21:23:41.1107278Z",
+      "checkout_B_logged": true,
+      "steps": [
+        {
+          "name": "Create a clean tracked-source clone",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7
+        },
+        {
+          "name": "Prove generated release inputs are absent",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8
+        },
+        {
+          "name": "Record sanitized Host adapter evidence",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9
+        },
+        {
+          "name": "Rehearse a conservative outer Host frozen install",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10
+        },
+        {
+          "name": "Emulate a Cloud Build checkout without Git metadata",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11
+        },
+        {
+          "name": "Invoke the Emergent package adapter under the selected Host Node",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 12
+        },
+        {
+          "name": "Verify artifact, proof, identity, and package boundaries",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13
+        },
+        {
+          "name": "Prove the governed runtime returns build metadata as JSON",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 14
+        },
+        {
+          "name": "Archive verified generated release outputs",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 15
+        },
+        {
+          "name": "Retain verified generated release outputs",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 16
+        },
+        {
+          "name": "Retain sanitized rehearsal evidence",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 17
+        }
+      ],
+      "build_passes": [
+        {
+          "timestamp": "2026-11-22T21:23:21.7344491Z",
+          "sha256": "000b707f16f0f3447cfe30f8e0e5edafc58ef55698ff2444e3fcca67f5ffb4db"
+        },
+        {
+          "timestamp": "2026-11-22T21:23:27.9325553Z",
+          "sha256": "000b707f16f0f3447cfe30f8e0e5edafc58ef55698ff2444e3fcca67f5ffb4db"
+        }
+      ],
+      "reproducibility": {
+        "timestamp": "2026-11-22T21:23:27.9361620Z",
+        "sha256": "a159459c17824c50f3c8810cf11dd6825a9e576994131f037daadc397cd6d18f"
+      },
+      "adapter_proof_timestamp": "2026-11-22T21:23:33.5654083Z",
+      "adapter_proof": {
+        "built": true,
+        "frontend_artifact_tree_sha256": "000b707f16f0f3447cfe30f8e0e5edafc58ef55698ff2444e3fcca67f5ffb4db",
+        "package_boundary": {
+          "backend": {
+            "file_count": 1313,
+            "git_directory_present": false,
+            "health_verified": true,
+            "identity": {
+              "bytes": 492777,
+              "path": "release_identity.json",
+              "sha256": "87a75786c6041126212a124aa8dec614c5183d1e7176968ab3004fc3d6843521"
+            },
+            "isolated_verified": true,
+            "package_tree_sha256": "ae797d0db6dd8b6558e3477d3f62500ed9de126f0771de226725c9aaaa6ace68",
+            "runtime_root": "backend",
+            "sibling_frontend_present": false
+          },
+          "frontend": {
+            "artifact_tree_sha256": "000b707f16f0f3447cfe30f8e0e5edafc58ef55698ff2444e3fcca67f5ffb4db",
+            "build_meta": {
+              "bytes": 579707,
+              "path": "build/build-meta.json",
+              "sha256": "9b79083c4ece9cccdc8e0ff28295070fa8cb74776d99ece2601465e5f8f2548e"
+            },
+            "content_type_contract": "application/json",
+            "file_count": 1789,
+            "isolated_runtime_artifact_verified": true,
+            "package_tree_sha256": "52083eb83e9d259fc8db6111d9e934192f29b6d9e99f2833c43cecdff9710afd",
+            "runtime_root": "frontend",
+            "static_root": "frontend/build"
+          },
+          "kind": "mezan_release_package_boundary_proof_v1",
+          "release_id": "rg5-b2aa207d2f63107c64d9c0b66ce5cc567aa5ebb074753cf889227de4c448e008",
+          "schema_version": 1,
+          "source_git_sha": "dd3a9ea29fce28e2fa87332cff4a6d46f776e0d3"
+        },
+        "protocol_version": 5,
+        "release_id": "rg5-b2aa207d2f63107c64d9c0b66ce5cc567aa5ebb074753cf889227de4c448e008",
+        "source_git_sha": "dd3a9ea29fce28e2fa87332cff4a6d46f776e0d3"
+      },
+      "configured_adapter_evidence": {
+        "architecture": "x86_64",
+        "backend_root": "/tmp/tmp.hQyiIy5HST/repo/backend",
+        "configured_package_build_command": "cd frontend && yarn build",
+        "declared_backend_package_root": "backend",
+        "declared_frontend_package_root": "frontend",
+        "declared_frontend_static_root": "frontend/build",
+        "frontend_root": "/tmp/tmp.hQyiIy5HST/repo/frontend",
+        "git_directory_present": false,
+        "governed_build_command": "governed-toolchain exec -- yarn --cwd frontend build:release",
+        "governed_install_command": "governed-toolchain exec -- yarn --cwd frontend install --frozen-lockfile --non-interactive",
+        "host_node": "v20.20.2",
+        "host_python": "3.11.18",
+        "host_yarn": "1.22.22",
+        "kind": "emergent_cloud_build_evidence_v1",
+        "outer_build_command_observed": false,
+        "outer_install_command": null,
+        "outer_install_command_observed": false,
+        "platform_snapshot_workspace_shared_observed": false,
+        "repository_root": "/tmp/tmp.hQyiIy5HST/repo",
+        "schema_version": 1,
+        "source_roots_declared_co_parented": true,
+        "system": "Linux",
+        "working_directory": "/tmp/tmp.hQyiIy5HST/repo/frontend"
+      },
+      "runtime_route_probe": {
+        "step_number": 14,
+        "conclusion": "success",
+        "script_logged_at": "2026-11-22T21:23:36.7311996Z",
+        "following_archive_step_logged_at": "2026-11-22T21:23:37.3549730Z",
+        "target": "http://127.0.0.1:3000",
+        "canonical_and_cache_busted": true,
+        "accept_values": [
+          "application/json",
+          "*/*"
+        ],
+        "enforced_checks": [
+          "Content-Type application/json",
+          "body exactly equals generated build/build-meta.json",
+          "body parses to JSON object",
+          "body differs from SPA index.html"
+        ],
+        "production_and_preview_host_headers_tested_locally": true,
+        "actual_production_endpoint_requested": false,
+        "per_response_output_printed": false,
+        "evidence_basis": "Executed Python assertion script shown in original log plus API step-14 conclusion success.",
+        "other_checks": [
+          "hashed asset Cache-Control immutable, max-age=31536000",
+          "SPA exact index bytes and Cache-Control no-store"
+        ]
+      }
+    },
+    {
+      "job_id": 137359766064,
+      "job_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45071567803/job/137359766064",
+      "job_name": "Emergent Host Node 24.19.0 clean-clone adapter rehearsal",
+      "status": "completed",
+      "conclusion": "success",
+      "host_node_observed": "v24.19.0",
+      "governed_node": "22.23.2",
+      "host_yarn_observed": "1.22.22",
+      "log_first_timestamp": "2026-11-22T21:21:43.8406011Z",
+      "log_last_timestamp": "2026-11-22T21:23:20.6562606Z",
+      "checkout_B_logged": true,
+      "steps": [
+        {
+          "name": "Create a clean tracked-source clone",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7
+        },
+        {
+          "name": "Prove generated release inputs are absent",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8
+        },
+        {
+          "name": "Record sanitized Host adapter evidence",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9
+        },
+        {
+          "name": "Rehearse a conservative outer Host frozen install",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10
+        },
+        {
+          "name": "Emulate a Cloud Build checkout without Git metadata",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11
+        },
+        {
+          "name": "Invoke the Emergent package adapter under the selected Host Node",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 12
+        },
+        {
+          "name": "Verify artifact, proof, identity, and package boundaries",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13
+        },
+        {
+          "name": "Prove the governed runtime returns build metadata as JSON",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 14
+        },
+        {
+          "name": "Archive verified generated release outputs",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 15
+        },
+        {
+          "name": "Retain verified generated release outputs",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 16
+        },
+        {
+          "name": "Retain sanitized rehearsal evidence",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 17
+        }
+      ],
+      "build_passes": [
+        {
+          "timestamp": "2026-11-22T21:23:05.1272104Z",
+          "sha256": "000b707f16f0f3447cfe30f8e0e5edafc58ef55698ff2444e3fcca67f5ffb4db"
+        },
+        {
+          "timestamp": "2026-11-22T21:23:09.4776173Z",
+          "sha256": "000b707f16f0f3447cfe30f8e0e5edafc58ef55698ff2444e3fcca67f5ffb4db"
+        }
+      ],
+      "reproducibility": {
+        "timestamp": "2026-11-22T21:23:09.4793356Z",
+        "sha256": "a159459c17824c50f3c8810cf11dd6825a9e576994131f037daadc397cd6d18f"
+      },
+      "adapter_proof_timestamp": "2026-11-22T21:23:14.5051758Z",
+      "adapter_proof": {
+        "built": true,
+        "frontend_artifact_tree_sha256": "000b707f16f0f3447cfe30f8e0e5edafc58ef55698ff2444e3fcca67f5ffb4db",
+        "package_boundary": {
+          "backend": {
+            "file_count": 1313,
+            "git_directory_present": false,
+            "health_verified": true,
+            "identity": {
+              "bytes": 492777,
+              "path": "release_identity.json",
+              "sha256": "87a75786c6041126212a124aa8dec614c5183d1e7176968ab3004fc3d6843521"
+            },
+            "isolated_verified": true,
+            "package_tree_sha256": "ae797d0db6dd8b6558e3477d3f62500ed9de126f0771de226725c9aaaa6ace68",
+            "runtime_root": "backend",
+            "sibling_frontend_present": false
+          },
+          "frontend": {
+            "artifact_tree_sha256": "000b707f16f0f3447cfe30f8e0e5edafc58ef55698ff2444e3fcca67f5ffb4db",
+            "build_meta": {
+              "bytes": 579707,
+              "path": "build/build-meta.json",
+              "sha256": "9b79083c4ece9cccdc8e0ff28295070fa8cb74776d99ece2601465e5f8f2548e"
+            },
+            "content_type_contract": "application/json",
+            "file_count": 1789,
+            "isolated_runtime_artifact_verified": true,
+            "package_tree_sha256": "52083eb83e9d259fc8db6111d9e934192f29b6d9e99f2833c43cecdff9710afd",
+            "runtime_root": "frontend",
+            "static_root": "frontend/build"
+          },
+          "kind": "mezan_release_package_boundary_proof_v1",
+          "release_id": "rg5-b2aa207d2f63107c64d9c0b66ce5cc567aa5ebb074753cf889227de4c448e008",
+          "schema_version": 1,
+          "source_git_sha": "dd3a9ea29fce28e2fa87332cff4a6d46f776e0d3"
+        },
+        "protocol_version": 5,
+        "release_id": "rg5-b2aa207d2f63107c64d9c0b66ce5cc567aa5ebb074753cf889227de4c448e008",
+        "source_git_sha": "dd3a9ea29fce28e2fa87332cff4a6d46f776e0d3"
+      },
+      "configured_adapter_evidence": {
+        "architecture": "x86_64",
+        "backend_root": "/tmp/tmp.4fBbVznCy0/repo/backend",
+        "configured_package_build_command": "cd frontend && yarn build",
+        "declared_backend_package_root": "backend",
+        "declared_frontend_package_root": "frontend",
+        "declared_frontend_static_root": "frontend/build",
+        "frontend_root": "/tmp/tmp.4fBbVznCy0/repo/frontend",
+        "git_directory_present": false,
+        "governed_build_command": "governed-toolchain exec -- yarn --cwd frontend build:release",
+        "governed_install_command": "governed-toolchain exec -- yarn --cwd frontend install --frozen-lockfile --non-interactive",
+        "host_node": "v24.19.0",
+        "host_python": "3.11.18",
+        "host_yarn": "1.22.22",
+        "kind": "emergent_cloud_build_evidence_v1",
+        "outer_build_command_observed": false,
+        "outer_install_command": null,
+        "outer_install_command_observed": false,
+        "platform_snapshot_workspace_shared_observed": false,
+        "repository_root": "/tmp/tmp.4fBbVznCy0/repo",
+        "schema_version": 1,
+        "source_roots_declared_co_parented": true,
+        "system": "Linux",
+        "working_directory": "/tmp/tmp.4fBbVznCy0/repo/frontend"
+      },
+      "runtime_route_probe": {
+        "step_number": 14,
+        "conclusion": "success",
+        "script_logged_at": "2026-11-22T21:23:17.0369607Z",
+        "following_archive_step_logged_at": "2026-11-22T21:23:17.6224164Z",
+        "target": "http://127.0.0.1:3000",
+        "canonical_and_cache_busted": true,
+        "accept_values": [
+          "application/json",
+          "*/*"
+        ],
+        "enforced_checks": [
+          "Content-Type application/json",
+          "body exactly equals generated build/build-meta.json",
+          "body parses to JSON object",
+          "body differs from SPA index.html"
+        ],
+        "production_and_preview_host_headers_tested_locally": true,
+        "actual_production_endpoint_requested": false,
+        "per_response_output_printed": false,
+        "evidence_basis": "Executed Python assertion script shown in original log plus API step-14 conclusion success.",
+        "other_checks": [
+          "hashed asset Cache-Control immutable, max-age=31536000",
+          "SPA exact index bytes and Cache-Control no-store"
+        ]
+      }
+    }
+  ]
+}

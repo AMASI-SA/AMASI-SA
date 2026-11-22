@@ -1,0 +1,13 @@
+Traceback (most recent call last):
+  File "/workspace/scratch/dfe063f5aca0/server-r3-b-artifacts/audit_artifacts.py", line 199, in <module>
+    main()
+  File "/workspace/scratch/dfe063f5aca0/server-r3-b-artifacts/audit_artifacts.py", line 161, in main
+    current_records = safe_extract(source_archive, reconstruction, generated=False)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/scratch/dfe063f5aca0/server-r3-b-artifacts/audit_artifacts.py", line 67, in safe_extract
+    name = normalized(item)
+           ^^^^^^^^^^^^^^^^
+  File "/workspace/scratch/dfe063f5aca0/server-r3-b-artifacts/audit_artifacts.py", line 44, in normalized
+    assert member.mode in (0o644, 0o755), (name, oct(member.mode))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ('.github', '0o775')

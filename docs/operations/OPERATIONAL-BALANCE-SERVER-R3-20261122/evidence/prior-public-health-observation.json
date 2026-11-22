@@ -1,0 +1,13 @@
+{
+  "recorded_at_utc": "2026-11-22T21:30:19.218596+00:00",
+  "url": "https://mezansalla.com/api/health",
+  "http_status": 200,
+  "ok": true,
+  "source_git_sha": "108024c00b7f367fd1d6b15874d7a73d55de2620",
+  "release_id": "rg5-e4e41b98edc9f49b8e74adad2a905d362b7113b5b1a1fa83436a4c1ba8c4b918",
+  "verified_identity_available": true,
+  "critical_file_hashes_match": true,
+  "frontend_build_verified": true,
+  "boot_started_at": "2026-11-22T21:14:36.810520+00:00",
+  "interpretation": "Public read confirms predecessor PR2076 runtime is serving; this is not its original verify3 receipt, new UI success, fresh actual guard status or released serial handoff."
+}
