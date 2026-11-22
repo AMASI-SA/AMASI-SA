@@ -1,0 +1,15 @@
+{
+  "platform_deployment_id": "930c6e9",
+  "previous_platform_deployment_id": "d8c03a2",
+  "domain": "mezansalla.com",
+  "publication_attempts": 1,
+  "new_published_version_observed": true,
+  "ui_deployment_event": "Deployment finished Nov 22, 06:39 PM",
+  "ui_event_timezone": "Asia/Riyadh",
+  "literal_Deployment_Succeeded_observed": false,
+  "cloud_adapter_output_exposed_in_progress_details": false,
+  "verified_runtime_identity_observed": false,
+  "original_verify3_completed": false,
+  "native_acceptance_completed": false,
+  "own_lease_active": true
+}

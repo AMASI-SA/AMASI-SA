@@ -135,6 +135,22 @@ run unchanged original verify --url https://mezansalla.com for all3 probes,
 test original Aramex and SMSA control via ADB,then original status inactive.
 Archive raw verification proof and final remotely recoverable handoff.
 
+New published version930c6e9 now appears,Few seconds ago,previous d8c03a2 moved
+down. New task event is exactly Deployment finished Nov22,06:39PM Riyadh.
+Republish returned enabled; View Logs now enabled. This is a newer publication,
+not an old cached success. Literal Deployment Succeeded has not been observed;
+preserve that wording gap. Expanded building details exposed status/timer only,
+no sanitized Cloud adapter stdout/argv. New runtime logs still require inspection;
+do not present them as the complete Cloud Build transcript.
+
+Tracked verify-pr2062.py checks the exact own active lease and expected new
+public identity,then runs the unchanged original verify CLI (all3 probes),keeps
+raw stdout/checksum/compressed proof in persistent recovery directory,and checks
+original status inactive afterward. Syntax reviewed; not yet run. No fake
+verification or alternate lease. Next: start exactly one attempt,monitor its
+progress/result without calling guard status during its operation lock,perform
+actual original/control Native ADB in parallel,archive raw proof after success.
+
 ## Current successor: strict external classifier, freshly verified
 
 Branch `codex/aramex-intransit-label-reprint-v2-20261122` is constructed directly
