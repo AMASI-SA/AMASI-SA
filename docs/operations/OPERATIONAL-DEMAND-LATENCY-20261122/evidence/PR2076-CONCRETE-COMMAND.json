@@ -1,0 +1,19 @@
+{
+  "kind": "pr2076_concrete_operator_command",
+  "launcher_path": "docs/operations/OPERATIONAL-DEMAND-LATENCY-20261122/RUN-HOST-REHEARSAL-2076.py",
+  "launcher_sha256": "30aa6e1a9075e8e27b731d4f4c38b3970a10a8c1fa87b5db4c2a661540761eaf",
+  "helper_evidence_commit": "b23a9eefbb2ffcd94cade26691482579cdacce56",
+  "helper_sha256": "c2a091a9ea9c33baf99c2daaba4cc7c5f0cc02751248b0e1428bb5659d4e692d",
+  "helper_git_blob": "59142006a299696d482184be26274d048d3e4162",
+  "remote_helper_exact_bytes_match": true,
+  "source_git_sha": "108024c00b7f367fd1d6b15874d7a73d55de2620",
+  "candidate_git_sha": "5bb05036d8095a87c6635c0a431c2c19d24d8f78",
+  "production_base": "24270ebdfdebb83282389308a2349cdb27e2b8e4",
+  "previous_verification_evidence": "3be5f8df326ed27bec6976a344283e26a90510fd",
+  "operator_ui_fact_required": true,
+  "operator_ui_fact_received": false,
+  "phase": "conditional isolated rehearsal and bounded diagnostic only",
+  "shared_source_change": false,
+  "lease_action": false,
+  "publish_action": false
+}

@@ -9,8 +9,8 @@ import tempfile
 
 sys.dont_write_bytecode = True
 N = "24270ebdfdebb83282389308a2349cdb27e2b8e4"
-E = None  # Immutable evidence commit containing the enabled, reviewed helper.
-H = None  # SHA-256 of that exact helper; never pin the disabled draft.
+E = "b23a9eefbb2ffcd94cade26691482579cdacce56"
+H = "c2a091a9ea9c33baf99c2daaba4cc7c5f0cc02751248b0e1428bb5659d4e692d"
 P = "docs/operations/OPERATIONAL-DEMAND-LATENCY-20261122/MANUAL-HOST-REHEARSAL-2076.py"
 
 

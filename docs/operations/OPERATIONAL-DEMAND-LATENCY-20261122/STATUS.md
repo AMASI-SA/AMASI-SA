@@ -1,3 +1,34 @@
+# PR2076 — pinned command ready for the owner
+
+The concrete launcher is RUN-HOST-REHEARSAL-2076.py in this evidence branch.
+Its SHA256 is `30aa6e1a9075e8e27b731d4f4c38b3970a10a8c1fa87b5db4c2a661540761eaf`; it downloads the reviewed helper from
+immutable evidence commit`b23a9eefbb2ffcd94cade26691482579cdacce56`, checking helper SHA256
+`c2a091a9ea9c33baf99c2daaba4cc7c5f0cc02751248b0e1428bb5659d4e692d` before execution. Source A/B and ProductionN remain unchanged.
+
+The command is the **first pre-publication step**, not a publish operation:
+explicit operator UI fact for previous2074, fresh original inactive guard and
+N/clean/ref checks, bounded diagnostic, then original isolated adapter build.
+The operator must have observed NEW Deployment Succeeded for previous2074
+before its successful verification, and type2074 OK at the terminal prompt.
+Empty input/EOF/noTTY stops. That answer has not yet been received here; its
+receipt alone remains explicit about missing UI evidence. No prior verification
+or lease closure is repeated. The prior foreign section is preserved untouched.
+
+Expected successful result: REHEARSAL_SUCCESS with exact A108024c0/B5bb05036,
+runtimee4e41b98/artifactdcaa1f2b and original final inactive guard, while shared
+tracked source remains N. Owner returns the full sanitized output. Then root
+reviews the actual rehearsal and completes the already-authorized ordinary
+merge/shared staging/prepare/prepublish/publication/verify3 sequence with fresh
+exact pins. No publication or observed Production latency improvement is claimed.
+
+Fresh exact-B CI and immutable receipt checks passed; independent helper
+review and isolated PTY confirmation checks passed. Root verified remote helper
+bytes exactly equal reviewed bytes. No source edits, actual /app access,
+original guard call, lease creation, merge or publish in this preparation turn.
+
+---
+
+## Conditional handoff review and preserved evidence
 # PR2076 — concrete isolated rehearsal handoff, conditional on operator UI fact
 
 The owner requested deployment code. Frozen B/sourceA/ProductionN remain:
