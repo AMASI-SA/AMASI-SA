@@ -6,6 +6,8 @@ import { getAccountingAccess } from "../services/accountingModule";
 import { useOptionalAuth } from "../context/AuthContext";
 import AccountingFirstRunGate from "../pages/accounting/AccountingFirstRunGate";
 import { getOnboardingSession, listOnboardingSessions } from "../services/accountingOnboarding";
+import { ApprovedFinanceShell } from "../pages/operational/ApprovedFinance";
+import ApprovedOperations from "../pages/operational/ApprovedOperations";
 
 jest.mock("react-router/dom", () => {
     const { TextEncoder, TextDecoder } = require("util");
@@ -39,12 +41,24 @@ function Harness() {
         <output>{location.pathname + location.search}</output></>;
 }
 
+function FinanceWorkspaceHarness({ isOwner }) {
+    const location = useLocation();
+    const { user } = useOptionalAuth();
+    if (location.pathname !== "/operational-balances") return null;
+    const view = new URLSearchParams(location.search).get("view") || "home";
+    const context = { actor: { is_owner: isOwner }, resources: [], operations: [], status: "active", capabilities: {} };
+    return <ApprovedFinanceShell context={context} user={user} view={view} active={view} title="الأرصدة التشغيلية" to={key => "/operational-balances?view=" + key}>
+        {view === "tools" && <ApprovedOperations context={context} />}
+    </ApprovedFinanceShell>;
+}
+
 let root, node;
 beforeEach(() => {
     jest.clearAllMocks();
     useOptionalAuth.mockReturnValue({ user: { id: "owner-fixture", role: "owner" } });
     getAccountingAccess.mockResolvedValue({ user_id: "owner-fixture", is_owner: true, permissions: [] });
     global.IS_REACT_ACT_ENVIRONMENT = true;
+    window.scrollTo = jest.fn();
     node = document.createElement("div"); document.body.appendChild(node); root = createRoot(node);
     listOnboardingSessions.mockResolvedValue({ items: [] });
     getOnboardingSession.mockResolvedValue({ status: "reviewed", reviewed_by: "owner-fixture",
@@ -88,14 +102,24 @@ test("a handed-off reviewed session remains complete without querying financial 
     expect(node.querySelector("output").textContent).toContain("page=home");
 });
 
-test.each([true, false])("the Mezan 2 payment-fee table is linked for owner access %s", async isOwner => {
+test.each([true, false])("direct balances entry retains the payment-fee service in its workspace for owner access %s", async isOwner => {
     useOptionalAuth.mockReturnValue({ user: { id: "owner-fixture", role: isOwner ? "owner" : "employee" } });
     getAccountingAccess.mockResolvedValue({ user_id: "owner-fixture", is_owner: isOwner, permissions: [] });
-    await act(async () => root.render(<MemoryRouter initialEntries={["/operational-balances/financial-position"]}><Harness /></MemoryRouter>));
+    await act(async () => root.render(<MemoryRouter initialEntries={["/dashboard-advanced"]}><Harness /><FinanceWorkspaceHarness isOwner={isOwner} /></MemoryRouter>));
+    const balances = node.querySelector('[data-testid="mezan-v2-primary-operational-balances"]');
+    expect(balances.tagName).toBe("A");
+    expect(balances.getAttribute("href")).toBe("/operational-balances");
+    expect(balances.hasAttribute("aria-expanded")).toBe(false);
+    await act(async () => balances.click());
+    expect(node.querySelector("output").textContent).toBe("/operational-balances");
+    expect(node.querySelector('[data-testid="mezan-v2-secondary-operational-balances"]')).toBeNull();
+    expect(node.querySelector('a[href="/operational-balances/provider-fees"]')).toBeNull();
+    await act(async () => node.querySelector('nav[aria-label="صفحات الأرصدة"] a[href="/operational-balances?view=tools"]').click());
+    expect(node.querySelector("output").textContent).toBe("/operational-balances?view=tools");
     const feeLink = node.querySelector('a[href="/operational-balances/provider-fees"]');
     expect(Boolean(feeLink)).toBe(isOwner);
     if (isOwner) {
-        expect(feeLink.textContent).toBe("رسوم طرق الدفع");
+        expect(feeLink.textContent).toBe("تعرفات وعمولات المنصات");
         await act(async () => feeLink.click());
         expect(node.querySelector("output").textContent).toBe("/operational-balances/provider-fees");
     }

@@ -1,10 +1,16 @@
 import React, { useEffect, useRef, useState } from "react";
 import { operationalApi as api, messageFor, requestId } from "./api";
 import { visibleOperationalRead } from './visibleOperationalRead';
+import { ResourceIcon } from './ApprovedFinanceUI';
 
 const providers = { salla: "سلة", tamara: "تمارا", tabby: "تابي", emkan: "إمكان", paypal: "باي بال" };
 
-export default function ProviderHistoryReview({ sessionScope }) {
+export default function ProviderHistoryReview({ sessionScope, providerId = "" }) {
+    if (providerId && !Object.hasOwn(providers, providerId)) return <p role="alert">اختر منصة دفع معروفة لمراجعة طلباتها.</p>;
+    return <ProviderHistoryWorkspace key={JSON.stringify([sessionScope, providerId])} sessionScope={sessionScope} providerId={providerId}/>;
+}
+
+function ProviderHistoryWorkspace({ sessionScope, providerId }) {
     const [items, setItems] = useState(null), [order, setOrder] = useState(""), [statement, setStatement] = useState("");
     const [file, setFile] = useState(null), [confirmed, setConfirmed] = useState(false), [message, setMessage] = useState(""), [busy, setBusy] = useState(false);
     const intent = useRef(null);
@@ -27,7 +33,7 @@ export default function ProviderHistoryReview({ sessionScope }) {
             onData: result => {
                 if (!current(owner)) return;
                 if (result.session_scope !== owner.scope || !Array.isArray(result.items)) throw new Error('scope');
-                setItems(result.items); setOrder(''); setStatement(''); setFile(null); setConfirmed(false);
+                setItems(providerId ? result.items.filter(row => row.provider === providerId) : result.items); setOrder(''); setStatement(''); setFile(null); setConfirmed(false);
             },
             onError: e => { if (current(owner)) { setItems(null); setMessage(messageFor(e)); } },
             onEnd: () => { if (current(owner)) { lock.current = false; setBusy(false); } },
@@ -54,11 +60,12 @@ export default function ProviderHistoryReview({ sessionScope }) {
         finally { if (current(owner)) { lock.current = false; setBusy(false); } }
     }
     return <section dir="rtl" className="ofp-no-print">
+        <p>{providerId ? `مطابقة طلبات ${providers[providerId]}` : "مطابقة الطلبات السابقة لدى منصات الدفع"}. تعرض القائمة المنصة المثبتة لكل طلب من آخر احتساب، ولا تخص شركة الشحن. تُراجع المبالغ مع الافتتاحي والسدادات قبل أي اعتماد.</p>
         <button className="ofp-button" type="button" disabled={busy} onClick={read}>مراجعة مستحقات الطلبات السابقة لدى المنصات</button>
         {items && <div className="border rounded p-3 space-y-2">
             {!items.length ? <p>لا توجد طلبات بإثبات محفوظ يحتاج هذه المطابقة في آخر احتساب.</p> : <label>الطلب <select aria-label="الطلب المطلوب مطابقته" disabled={busy} value={order} onChange={e => { setOrder(e.target.value); setConfirmed(false); setStatement(""); setFile(null); setMessage(""); }}>
                 <option value="">اختر طلبًا</option>{items.map(r => <option key={r.order_id} value={r.order_id}>{r.order_number} · {providers[r.provider]} · {r.paid} {r.currency}</option>)}</select></label>}
-            {selected && <div key={selected.order_id}><p>{providers[selected.provider]} · دفع العميل {selected.paid} {selected.currency} · المتبقي على العميل {selected.remaining} {selected.currency}</p>
+            {selected && <div key={selected.order_id}><p><ResourceIcon resource={{kind:"provider",id:selected.provider}}/> {providers[selected.provider]} · دفع العميل {selected.paid} {selected.currency} · المتبقي على العميل {selected.remaining} {selected.currency}</p>
                 <p>المبلغ محل المطابقة {selected.paid} {selected.currency}. الافتتاحي {selected.openings.map(o => `${o.amount} ${selected.currency} ${o.direction === "for_us" ? "لنا" : "علينا"}`).join("، ") || "لا يوجد"}. حركات المنصة المحفوظة بهذه العملة {selected.movement_count}.</p>
                 {selected.awaiting_refresh ? <p>مطابقة معتمدة بانتظار الاحتساب.</p> : selected.blocks.length ? <ul>{selected.blocks.map(s => <li key={s}>{s}</li>)}</ul> : <form onSubmit={save}><fieldset disabled={busy} className="space-y-2">
                     <label className="block">مرجع سطر الطلب في كشف المنصة <input required minLength={3} maxLength={250} value={statement} onChange={e => setStatement(e.target.value)} /></label>

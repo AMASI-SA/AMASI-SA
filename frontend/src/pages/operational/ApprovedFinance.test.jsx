@@ -4,10 +4,12 @@ import { MemoryRouter } from 'react-router-dom';
 import { useOptionalAuth } from '../../context/AuthContext';
 import ApprovedFinance from './ApprovedFinance';
 import { simpleBalancesApi as api } from './simpleBalancesApi';
+import { operationalApi } from './api';
 
 jest.mock('react-router-dom', () => { global.TextEncoder = require('util').TextEncoder; return jest.requireActual('react-router'); });
 jest.mock('../../context/AuthContext',()=>({useOptionalAuth:jest.fn()}));
 jest.mock('./simpleBalancesApi',()=>({simpleBalancesApi:{context:jest.fn(),parties:jest.fn(),movements:jest.fn()},simpleBalanceError:()=> 'تعذر التحميل'}));
+jest.mock('./api',()=>({operationalApi:{financialPosition:jest.fn(),refreshBalances:jest.fn()}}));
 global.IS_REACT_ACT_ENVIRONMENT=true;
 const base='/operational-balances/daily-movements';
 const r=(kind,id,name,amount='50.00')=>({kind,id,name,currency:'SAR',access:{balance:true,movements:'all'},balance:{visible:true,side:'for_us',amount},operations:[]});
@@ -74,4 +76,64 @@ test('a payment-only user cannot open the supplier purchase form by URL', async 
   await act(async()=>root.render(<MemoryRouter initialEntries={[base+'?view=special-entry&kind=supplier&id=3&mode=purchase']}><ApprovedFinance/></MemoryRouter>));
   expect(host.textContent).toContain('هذه الصفحة غير متاحة ضمن صلاحياتك');
   expect(host.querySelector('form')).toBeNull();
+});
+
+function ownerReports() {
+  const context = {...ctx, actor:{id:'owner',name:'مالك المتجر',is_owner:true}, ledger_start:'2026-11-01'};
+  useOptionalAuth.mockReturnValue({user:{id:'owner',role:'owner',is_owner:true},loading:false});
+  api.context.mockImplementation(async (config, options) => options.directoryOnly
+    ? {...context,directory_only:true,resources:context.resources.map(({balance,...resource})=>resource)}
+    : context);
+  api.movements.mockResolvedValue({items:[],page:0,page_size:8,total:0,total_pages:0});
+  operationalApi.financialPosition.mockResolvedValue({schema_version:1,authority:'operational_balance_report',
+    view:'summary',status:'active',revision:7,session_scope:context.session_scope,
+    started_at:'2026-11-01T00:00:00+03:00',as_of:'2026-11-22T08:00:00+03:00',permissions:{reports:true},
+    currency_order:['SAR'],forecast_pending:true,currencies:{SAR:{metrics:{liquidity:'431.29'},
+      current_rows:[],profit_rows:[],debt_rows:[],tables:[],completeness:{actual:true}}},issues:[],dependencies:[]});
+  return context;
+}
+const openFinance = view => act(async()=>root.render(<MemoryRouter initialEntries={['/operational-balances?view='+view]}><ApprovedFinance/></MemoryRouter>));
+const openFinanceTab = view => act(async()=>host.querySelector('nav[aria-label="صفحات الأرصدة"] a[href="/operational-balances?view='+view+'"]').click());
+
+test.each(['reports','entry','log'])('opening reports from %s reads directory context once and the actual saved report separately', async start => {
+  ownerReports();
+  await openFinance(start);
+  if (start !== 'reports') {
+    expect(operationalApi.financialPosition).not.toHaveBeenCalled();
+    await openFinanceTab('reports');
+  }
+  expect(api.context).toHaveBeenCalledTimes(1);
+  expect(api.context.mock.calls[0][1]).toEqual({homePreview:false,directoryOnly:true});
+  expect(operationalApi.financialPosition).toHaveBeenCalledTimes(1);
+  expect(operationalApi.financialPosition.mock.calls[0][0].params).toEqual({view:'summary'});
+  expect(host.querySelector('.report-metric').textContent).toContain('431.29');
+  expect(api.movements).toHaveBeenCalledTimes(start === 'log' ? 1 : 0);
+  expect(api.parties).not.toHaveBeenCalled();
+  expect(operationalApi.refreshBalances).not.toHaveBeenCalled();
+});
+
+test('home to reports and back reuses its authorized preview without a second context calculation', async () => {
+  ownerReports();
+  await openFinance('home');
+  expect(host.querySelector('.hero .big').textContent).toContain('90.00');
+  await openFinanceTab('reports');
+  expect(host.querySelector('.report-metric').textContent).toContain('431.29');
+  await openFinanceTab('home');
+  expect(host.querySelector('.hero .big').textContent).toContain('90.00');
+  expect(api.context).toHaveBeenCalledTimes(1);
+  expect(api.context.mock.calls[0][1]).toEqual({homePreview:true});
+  expect(operationalApi.financialPosition).toHaveBeenCalledTimes(1);
+  expect(api.movements).not.toHaveBeenCalled();
+  expect(operationalApi.refreshBalances).not.toHaveBeenCalled();
+});
+
+test.each(['employee','different-actor'])('reports never reads the owner snapshot for %s context', async scenario => {
+  const context = ownerReports();
+  if (scenario === 'employee') {
+    useOptionalAuth.mockReturnValue({user:{id:'employee',role:'employee'},loading:false});
+    api.context.mockResolvedValue({...context,actor:{id:'employee',is_owner:false}});
+  } else api.context.mockResolvedValue({...context,actor:{id:'different-owner',is_owner:true}});
+  await openFinance('reports');
+  expect(operationalApi.financialPosition).not.toHaveBeenCalled();
+  expect(host.querySelector('.report-metric')).toBeNull();
 });

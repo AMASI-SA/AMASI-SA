@@ -1,0 +1,21 @@
+.iconsquare.mz-resource-icon,.mz-finance .iconsquare.mz-resource-icon{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;width:35px;height:35px;min-width:35px;flex:none;overflow:hidden;vertical-align:middle;border-radius:10px}
+.mz-resource-icon{background:var(--tint,#f5eaf0);color:var(--plum,#642b4b)}
+.mz-resource-icon.bank{background:#f5eae3;color:#895232}
+.mz-resource-icon.cash{background:#e6f2ec;color:#306850}
+.mz-resource-icon.provider{background:#e6f3ef;color:#276752}
+.mz-resource-icon.ads{background:#f6eede;color:#73561b}
+.mz-resource-icon.party{background:#eaeef7;color:#475d86}
+.mz-resource-icon.mz-resource-brand,.mz-finance .mz-resource-icon.mz-resource-brand{background:#fff;border:1px solid var(--line,#e7e2e6);color:var(--ink,#281c25);padding:4px}
+.mz-resource-icon img{display:block;width:100%;height:100%;object-fit:contain;border-radius:3px}
+.iconsquare.mz-resource-icon--sm,.mz-finance .iconsquare.mz-resource-icon--sm{width:28px;height:28px;min-width:28px;border-radius:8px}
+.iconsquare.mz-resource-icon--lg,.mz-finance .iconsquare.mz-resource-icon--lg{width:48px;height:48px;min-width:48px;border-radius:12px}
+.mz-resource-icon .ico{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:1.65;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.mz-resource-icon--sm .ico{width:17px;height:17px}
+.mz-brand-wordmark{font-family:Arial,sans-serif;font-size:10px;font-weight:700;line-height:1.2;text-align:center;white-space:normal;overflow-wrap:anywhere;unicode-bidi:isolate}
+.mz-resource-icon--sm .mz-brand-wordmark{font-size:8px}
+.mz-resource-icon--lg .mz-brand-wordmark{font-size:13px}
+.mz-brand-wordmark--emkan{color:#79518e}
+.mz-brand-wordmark--stcpay{color:#542b81}
+.mz-brand-wordmark--mada{color:#166d61}
+.mz-resource-label{display:inline-flex;align-items:center;gap:8px;vertical-align:middle;max-width:100%;min-width:0}
+.mz-resource-label>span:last-child,.mz-resource-label>bdi:last-child{min-width:0;overflow-wrap:anywhere}

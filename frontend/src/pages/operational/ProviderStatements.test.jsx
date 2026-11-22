@@ -42,7 +42,7 @@ const confirmation = (ids = ["missing"], patch = {}) => {
 };
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
 let root, host, mounted;
-const render = async () => { await act(async () => root.render(<ProviderStatements />)); mounted = true; };
+const render = async (props = {}) => { await act(async () => root.render(<ProviderStatements {...props} />)); mounted = true; };
 const button = text => [...host.querySelectorAll("button")].find(node => node.textContent.trim() === text);
 const click = async text => { await act(async () => button(text).click()); };
 const review = async () => click("عرض المطابقة");
@@ -648,5 +648,60 @@ test.each(["read","write"])("the configured employee statement mode %s uses auth
     expect(host.querySelector('[data-testid="provider-statement-upload"]') !== null).toBe(mode === "write");
     expect(host.querySelector('a[href="/operational-balances/financial-position?view=providers"]')).toBeNull();
     expect(api.uploadProviderStatement).not.toHaveBeenCalled();
+    expect(api.confirmProviderStatement).not.toHaveBeenCalled();
+});
+
+test.each(['statements-only','statements-and-assets','owner'])('provider statement ledger return respects %s navigation grants', async access => {
+    if (access !== 'owner') {
+        const pages = [{id:'balances.statements',to:'/operational-balances/provider-statements',section:'balances',mode:'read'}];
+        if (access === 'statements-and-assets') pages.push({id:'balances.assets',to:'/operational-balances?view=assets',section:'balances',mode:'read'});
+        useOptionalAuth.mockReturnValue({user:{id:'employee',role:'employee',web_page_access:{pages}},loading:false,authStatus:'authenticated'});
+    }
+    await render({providerId:'tabby'});
+    const link = host.querySelector('a[href="/operational-balances?view=ledger&kind=provider&id=tabby"]');
+    expect(Boolean(link)).toBe(access !== 'statements-only');
+    expect(host.querySelector('a[href="/operational-balances/provider-statements"]')).not.toBeNull();
+    expect(api.providerStatements).toHaveBeenCalledTimes(1);
+    expect(api.providerStatementReview).not.toHaveBeenCalled();
+    expect(api.uploadProviderStatement).not.toHaveBeenCalled();
+    expect(api.confirmProviderStatement).not.toHaveBeenCalled();
+});
+
+
+test("provider context filters saved and uploaded lists without overriding detected file provider", async () => {
+    api.providerStatements.mockResolvedValue(history({items:[{...statement,counts:{...counts},status:"needs_review"},
+        {...statement,id:"tamara-file",provider:"tamara",filename:"tamara-only.xlsx",counts:{...counts},status:"needs_review"}]}));
+    api.providerStatementSavedFiles.mockResolvedValue(savedFiles({items:[savedFile,{...savedFile,id:"tamara-saved",provider:"tamara",filename:"tamara-saved.xlsx"}]}));
+    await render({providerId:"tabby"});
+    expect(host.querySelector('h1').textContent).toContain('تابي');
+    expect(host.textContent).not.toContain('tamara-only.xlsx');
+    await click("استخدام كشف مرفوع سابقًا");
+    expect(host.textContent).toContain("saved-tabby.xlsx");
+    expect(host.textContent).not.toContain("tamara-saved.xlsx");
+    api.uploadProviderStatement.mockResolvedValue(fixture("tamara"));
+    await choose(); await submit('[data-testid="provider-statement-upload"]');
+    expect(host.querySelector('[role="alert"]').textContent).toContain('الملف الذي تمت قراءته يخص تمارا');
+    expect(host.querySelector('.op-statement-confirm').disabled).toBe(true);
+    expect(api.uploadProviderStatement.mock.calls[0][1]).not.toHaveProperty('provider');
+    await submit('[data-testid="provider-statement-review"] form');
+    expect(api.confirmProviderStatement).not.toHaveBeenCalled();
+});
+
+test.each(['emkan','paypal','unknown'])('unsupported provider %s has no invented importer', async providerId => {
+    await render({providerId});
+    expect(host.textContent).toContain('لا يوجد مستورد معتمد');
+    expect(host.querySelector('input[type=file]')).toBeNull();
+    expect(api.providerStatements).not.toHaveBeenCalled();
+    expect(api.uploadProviderStatement).not.toHaveBeenCalled();
+});
+
+test('changing provider discards the previous review and cannot admit its late response', async () => {
+    const pendingRead=deferred(); api.providerStatementReview.mockReturnValueOnce(pendingRead.promise);
+    await render({providerId:'tabby'}); await review();
+    const signal=api.providerStatementReview.mock.calls[0][1].signal;
+    await render({providerId:'tamara'});
+    expect(signal.aborted).toBe(true);
+    await act(async()=>pendingRead.resolve(fixture('tabby')));
+    expect(host.querySelector('[data-testid="provider-statement-review"]')).toBeNull();
     expect(api.confirmProviderStatement).not.toHaveBeenCalled();
 });
