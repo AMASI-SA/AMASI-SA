@@ -1,0 +1,231 @@
+{
+  "both_hosts_have_identical_frontend_identity_and_package_proof": true,
+  "deployment_git_sha": "5bb05036d8095a87c6635c0a431c2c19d24d8f78",
+  "deployment_git_tree": "8f915a681de43fed9da1ec98685a56f87a4c8bcb",
+  "foreign_completion_evidence_pin": null,
+  "frontend_artifact_tree_sha256": "dcaa1f2b805c44427be8df2f5b466b85d7860bade43a3799009156300397300b",
+  "hosts": [
+    {
+      "evidence_artifact": {
+        "created_at": "2026-11-22T19:48:52Z",
+        "digest": "sha256:14aefc03c526fd720f71fa4fed236e05e39babdde69a6586c79f0ecf77c51b03",
+        "id": 14769624502,
+        "name": "release-v5-clean-clone-evidence-host-20.20.2",
+        "size": 64203,
+        "workflow_run": {
+          "head_branch": "codex/operational-demand-latency-r3-20261122",
+          "head_repository_id": 1250664189,
+          "head_sha": "5bb05036d8095a87c6635c0a431c2c19d24d8f78",
+          "id": 45062567651,
+          "repository_id": 1250664189
+        }
+      },
+      "generated_tar_sha256": "24ec0c76df5a200ce1da991ec27caf31ec3e6f1b0b166cc7ec08645e45895ec6",
+      "gitless_adapter_build_verified": true,
+      "host_node": "20.20.2",
+      "host_yarn": "1.22.22",
+      "http_runtime_acceptance": {
+        "application_json_and_wildcard_accept": true,
+        "canonical_and_cache_busted_metadata": true,
+        "evidence_type": "successful exact-source CI step plus inspected workflow assertions",
+        "hashed_asset_immutable_cache_and_spa_shell_no_store": true,
+        "metadata_exact_bytes_and_json_not_spa": true,
+        "production_and_preview_host_headers": true,
+        "runtime_log_sha256": "f574ad90ab0005a052efd40b4645b6dde225c378bec27577abe2840270c9ee79",
+        "step_name": "Prove the governed runtime returns build metadata as JSON",
+        "step_number": 14
+      },
+      "independent_package_proof_matches_adapter_proof": true,
+      "job_conclusion": "success",
+      "job_id": 137331818078,
+      "original_backend_identity_and_source_validation": true,
+      "original_frontend_byte_and_git_source_validation": true,
+      "original_reproducibility_proof_validation": true,
+      "outputs_artifact": {
+        "created_at": "2026-11-22T19:48:51Z",
+        "digest": "sha256:aa6ec5a96e536bb5924937641c1e944b696ba7602a85bed05d862ff9748a484a",
+        "id": 14770660595,
+        "name": "release-v5-generated-outputs-host-20.20.2",
+        "size": 3831203,
+        "workflow_run": {
+          "head_branch": "codex/operational-demand-latency-r3-20261122",
+          "head_repository_id": 1250664189,
+          "head_sha": "5bb05036d8095a87c6635c0a431c2c19d24d8f78",
+          "id": 45062567651,
+          "repository_id": 1250664189
+        }
+      },
+      "package_boundary": {
+        "backend": {
+          "file_count": 1311,
+          "git_directory_present": false,
+          "health_verified": true,
+          "identity": {
+            "bytes": 492241,
+            "path": "release_identity.json",
+            "sha256": "1b4e728b97a5451f9ba93c6369f4675385b7deae444eb86e1ee9b39aaeafda97"
+          },
+          "isolated_verified": true,
+          "package_tree_sha256": "2d533a504628fd7b6fa148b389dbb5c7981bf3176b0b461f80c99f12e4eb3a31",
+          "runtime_root": "backend",
+          "sibling_frontend_present": false
+        },
+        "frontend": {
+          "artifact_tree_sha256": "dcaa1f2b805c44427be8df2f5b466b85d7860bade43a3799009156300397300b",
+          "build_meta": {
+            "bytes": 579430,
+            "path": "build/build-meta.json",
+            "sha256": "ebea1529807f3f4b33ef42c2fd5ff8a06ce8cadcf033ecb6b764ec9f689c04a0"
+          },
+          "content_type_contract": "application/json",
+          "file_count": 1788,
+          "isolated_runtime_artifact_verified": true,
+          "package_tree_sha256": "a131c7b670a3cf85ff574a1d9bd1d6cfe02b178bd970e9a6925b72f14f94e290",
+          "runtime_root": "frontend",
+          "static_root": "frontend/build"
+        },
+        "kind": "mezan_release_package_boundary_proof_v1",
+        "release_id": "rg5-e4e41b98edc9f49b8e74adad2a905d362b7113b5b1a1fa83436a4c1ba8c4b918",
+        "schema_version": 1,
+        "source_git_sha": "108024c00b7f367fd1d6b15874d7a73d55de2620"
+      },
+      "required_ci_steps_passed": [
+        "Create a clean tracked-source clone",
+        "Prove generated release inputs are absent",
+        "Rehearse a conservative outer Host frozen install",
+        "Emulate a Cloud Build checkout without Git metadata",
+        "Invoke the Emergent package adapter under the selected Host Node",
+        "Verify artifact, proof, identity, and package boundaries",
+        "Prove the governed runtime returns build metadata as JSON",
+        "Archive verified generated release outputs",
+        "Retain verified generated release outputs",
+        "Retain sanitized rehearsal evidence"
+      ]
+    },
+    {
+      "evidence_artifact": {
+        "created_at": "2026-11-22T19:48:48Z",
+        "digest": "sha256:46ebb77c036da147f3fc62c84495ee09e0953972527954340e08ee95c85e4304",
+        "id": 14770446205,
+        "name": "release-v5-clean-clone-evidence-host-24.19.0",
+        "size": 64203,
+        "workflow_run": {
+          "head_branch": "codex/operational-demand-latency-r3-20261122",
+          "head_repository_id": 1250664189,
+          "head_sha": "5bb05036d8095a87c6635c0a431c2c19d24d8f78",
+          "id": 45062567651,
+          "repository_id": 1250664189
+        }
+      },
+      "generated_tar_sha256": "8e53432e61ac133c6889db9afa84dd4ecb68c67a9174b71d5eb73d141232e5d9",
+      "gitless_adapter_build_verified": true,
+      "host_node": "24.19.0",
+      "host_yarn": "1.22.22",
+      "http_runtime_acceptance": {
+        "application_json_and_wildcard_accept": true,
+        "canonical_and_cache_busted_metadata": true,
+        "evidence_type": "successful exact-source CI step plus inspected workflow assertions",
+        "hashed_asset_immutable_cache_and_spa_shell_no_store": true,
+        "metadata_exact_bytes_and_json_not_spa": true,
+        "production_and_preview_host_headers": true,
+        "runtime_log_sha256": "9e9fb5d6f3e6a891844c8928e098bdb8cabc42f8b294d10e39aeb066f8d6ca20",
+        "step_name": "Prove the governed runtime returns build metadata as JSON",
+        "step_number": 14
+      },
+      "independent_package_proof_matches_adapter_proof": true,
+      "job_conclusion": "success",
+      "job_id": 137331818090,
+      "original_backend_identity_and_source_validation": true,
+      "original_frontend_byte_and_git_source_validation": true,
+      "original_reproducibility_proof_validation": true,
+      "outputs_artifact": {
+        "created_at": "2026-11-22T19:48:47Z",
+        "digest": "sha256:cba8f1a5d9d5305b2f3744e3deabb906c0fab6172cde7494bf489ee7eb81c30b",
+        "id": 14769589848,
+        "name": "release-v5-generated-outputs-host-24.19.0",
+        "size": 3830448,
+        "workflow_run": {
+          "head_branch": "codex/operational-demand-latency-r3-20261122",
+          "head_repository_id": 1250664189,
+          "head_sha": "5bb05036d8095a87c6635c0a431c2c19d24d8f78",
+          "id": 45062567651,
+          "repository_id": 1250664189
+        }
+      },
+      "package_boundary": {
+        "backend": {
+          "file_count": 1311,
+          "git_directory_present": false,
+          "health_verified": true,
+          "identity": {
+            "bytes": 492241,
+            "path": "release_identity.json",
+            "sha256": "1b4e728b97a5451f9ba93c6369f4675385b7deae444eb86e1ee9b39aaeafda97"
+          },
+          "isolated_verified": true,
+          "package_tree_sha256": "2d533a504628fd7b6fa148b389dbb5c7981bf3176b0b461f80c99f12e4eb3a31",
+          "runtime_root": "backend",
+          "sibling_frontend_present": false
+        },
+        "frontend": {
+          "artifact_tree_sha256": "dcaa1f2b805c44427be8df2f5b466b85d7860bade43a3799009156300397300b",
+          "build_meta": {
+            "bytes": 579430,
+            "path": "build/build-meta.json",
+            "sha256": "ebea1529807f3f4b33ef42c2fd5ff8a06ce8cadcf033ecb6b764ec9f689c04a0"
+          },
+          "content_type_contract": "application/json",
+          "file_count": 1788,
+          "isolated_runtime_artifact_verified": true,
+          "package_tree_sha256": "a131c7b670a3cf85ff574a1d9bd1d6cfe02b178bd970e9a6925b72f14f94e290",
+          "runtime_root": "frontend",
+          "static_root": "frontend/build"
+        },
+        "kind": "mezan_release_package_boundary_proof_v1",
+        "release_id": "rg5-e4e41b98edc9f49b8e74adad2a905d362b7113b5b1a1fa83436a4c1ba8c4b918",
+        "schema_version": 1,
+        "source_git_sha": "108024c00b7f367fd1d6b15874d7a73d55de2620"
+      },
+      "required_ci_steps_passed": [
+        "Create a clean tracked-source clone",
+        "Prove generated release inputs are absent",
+        "Rehearse a conservative outer Host frozen install",
+        "Emulate a Cloud Build checkout without Git metadata",
+        "Invoke the Emergent package adapter under the selected Host Node",
+        "Verify artifact, proof, identity, and package boundaries",
+        "Prove the governed runtime returns build metadata as JSON",
+        "Archive verified generated release outputs",
+        "Retain verified generated release outputs",
+        "Retain sanitized rehearsal evidence"
+      ]
+    }
+  ],
+  "intent_git_blob": "3f1b3c7101dd125593f4f38970b079ae37fc2bf4",
+  "intent_sha256": "3a56ff073fcb3b7e362500a3be1966e2c513194f4679d5bb81a139a338c866c6",
+  "kind": "pr2076_exact_b_readiness_artifact_review",
+  "lease_action_performed": false,
+  "pr": 2076,
+  "production_probed": false,
+  "release_id": "rg5-e4e41b98edc9f49b8e74adad2a905d362b7113b5b1a1fa83436a4c1ba8c4b918",
+  "repository": "AMASI-SA/AMASI-SA",
+  "reproducibility_proof_sha256": "30bcd91b489c6cb585c4b560937b4cd22f21b02f8ce78bab6e417b17b224eac3",
+  "result": "PASS",
+  "reviewed_at": "2026-11-22T19:55:27.148807+00:00",
+  "schema_version": 1,
+  "scope": "CI artifact/contract evidence; no claim of shared-host or Production readiness",
+  "shared_app_accessed": false,
+  "source_base_git_sha": "24270ebdfdebb83282389308a2349cdb27e2b8e4",
+  "source_git_sha": "108024c00b7f367fd1d6b15874d7a73d55de2620",
+  "workflow": {
+    "conclusion": "success",
+    "id": 45062567651,
+    "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45062567651/jobs",
+    "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45062567651/logs",
+    "name": "Mezan Release Readiness",
+    "run_number": 5504,
+    "status": "completed",
+    "workflow_id": 330739464
+  },
+  "workflow_source_git_sha": "108024c00b7f367fd1d6b15874d7a73d55de2620",
+  "workflow_source_sha256": "68ec9e4760b56a40d36aacc82f4ff3842b690d28b4c80b61e5b7164671f8306c"
+}

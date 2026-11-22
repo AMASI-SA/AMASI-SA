@@ -1,0 +1,17 @@
+{
+  "kind": "pr2076_disabled_host_preparation_review",
+  "helper_sha256": "940f5067af6ed35102938176712a01838ca3089a71d4fc99e338b560cb2a17a1",
+  "helper_structure_independent_review_sha256": "5b1c8087fcae76ae051f4333023c83f673d9b527aabb3cc20aabd1b72cd62d18",
+  "structure_review": "PASS after Git trace/config-routing rejection",
+  "later_delta": "only exact B and B_TREE pins assigned; root verified against immutable Git objects",
+  "completion_evidence_pin": null,
+  "launcher_sha256": "ebf3e5f526223e7f9a1ad2e9ea3447a1d17352829f6ac5dc1d03a9f89d8f8583",
+  "launcher_evidence_pin": null,
+  "launcher_checksum_pin": null,
+  "launcher_root_review": "PASS; first gate disabled, original bounded guard check, captured Git download, immutable helper digest",
+  "helper_executed": false,
+  "launcher_executed": false,
+  "shared_app_accessed": false,
+  "production_probed": false,
+  "lease_action_performed": false
+}

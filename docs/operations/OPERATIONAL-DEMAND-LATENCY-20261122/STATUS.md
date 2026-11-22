@@ -1,3 +1,99 @@
+# PR2076 — code and release validation complete; host handoff blocked by predecessor lease
+
+## Authoritative current state
+All code work and CI for this performance release are complete. The candidate
+is remotely recoverable and unchanged:
+- PR2076 (draft, open, mergeable), branch codex/operational-demand-latency-r3-20261122.
+- Intent-only B: `5bb05036d8095a87c6635c0a431c2c19d24d8f78`.
+- B tree: `8f915a681de43fed9da1ec98685a56f87a4c8bcb`.
+- Frozen source A, B's sole parent: `108024c00b7f367fd1d6b15874d7a73d55de2620`.
+- A tree: `1aa73c0a2024533f7a67ad32d64c540521b70cd8`.
+- Reviewed Production branch N, A's sole parent: `24270ebdfdebb83282389308a2349cdb27e2b8e4`.
+- Runtime: `rg5-e4e41b98edc9f49b8e74adad2a905d362b7113b5b1a1fa83436a4c1ba8c4b918`.
+- Artifact tree: `dcaa1f2b805c44427be8df2f5b466b85d7860bade43a3799009156300397300b`.
+- Intent SHA256: `3a56ff073fcb3b7e362500a3be1966e2c513194f4679d5bb81a139a338c866c6`.
+- Proof SHA256: `30bcd91b489c6cb585c4b560937b4cd22f21b02f8ce78bab6e417b17b224eac3`.
+
+**Evidence branch only; never merge or deploy it.** Source A/B are frozen:
+do not amend/rebase/squash, modify source on B or reuse the old PR2075 intent.
+
+## Final acceptance
+Root independently re-read exact-B runs/checks/PR/Production after the CI
+review:11 workflows success,1 expected branch-gated TikTok skip;24 checks
+success,6 expected scope/event skips; no pending/failure/neutral. All required
+contexts succeeded from the configured GitHub Actions app15368. No reruns.
+Production remained N; PR2076 remained unmerged.
+
+Operational B acceptance: backend6502 plus90subtests, demand96 with zero
+errors/failures/skips, shipping16 plus18subtests, frontend1657/103suites,
+browser33 (14+12+7), canonical worker4. These groups overlap.
+Source A separately passed all11 workflows before B was frozen. Local combined
+tests were194 Frontend and101 Backend, preserving the customer/inventory union.
+See evidence/PR2076-A-CI.json and evidence/PR2076-B-CI.json.
+
+Readiness45062567651 passed both actual clean-clone package adapters under
+host Node20.20.2 and24.19.0. Independent review downloaded all4 artifacts,
+verified ZIP sizes/digests/head B and both inner archive checksums, and ran
+the original frontend artifact/source, reproducibility-proof and backend
+identity/source validators (derived bytecode forbidden). The two hosts have
+identical frontend content, runtime identity and package proofs. Both CI
+HTTP routing steps passed the pinned canonical/cache-busted exact-JSON/MIME
+and cache assertions. Receipt:
+evidence/PR2076-B-READINESS-INDEPENDENT.json, SHA256
+`140f7b19f772e0bab1f2279355dd521c3855552a373278e6d94d325a336c244c`.
+This proves CI artifact contracts; it does not prove actual shared-host
+handoff or first-visible Production latency.
+
+## Concrete remaining blocker and next action
+At the final ledger read2026-11-22T20:00:37Z, the latest actual PR2074 host
+receipt still reported its own active lease after successful staging and
+prepublish, prepared2026-11-22T19:36:26.794349+00:00, actor
+codex-customer-inventory-unified-2074-20261122. Its newer explicit Deployment
+Succeeded and original verified=true/checks3/exact N identity plus final
+inactive status had not been recorded. This task has no direct /app terminal.
+Do not clear that lease, repeat its prepare, merge this performance PR into
+Production during that handoff, or start this release rehearsal.
+
+The next external input is the completed original verification output for
+PR2074 and final guard inactive. This requests evidence, not renewed approval.
+Existing authorization for the performance scope persists. Re-read the
+canonical foreign record, inspect its immutable completion receipt and exact
+N/source4e6c8a61bd1566e061a4f312e797ce239b582475/runtime
+rg5-2e0e3797d6ff3b955a3a23fd31487bd92721e70f316f3bdf34cab0d94c5d630f,
+then verify fresh Production/candidate refs and release the serial handoff.
+
+Only after that proof: assign BASE_RELEASE_COMPLETION_EVIDENCE_COMMIT in
+MANUAL-HOST-REHEARSAL-2076.py, review its final hash, save a new immutable
+evidence checkpoint, and pin that checkpoint/hash as E/H in
+RUN-HOST-REHEARSAL-2076.py. Hand the owner the exact enabled command for its
+bounded diagnostic and isolated original adapter rehearsal. After the actual
+host rehearsal succeeds, continue the authorized ordinary merge, guarded
+staging/prepare/prepublish, explicit publication and original verify3/guard
+closure sequence with newly reviewed exact pins. No deployment claim may
+precede that evidence.
+
+## Preserved disabled host preparation
+- MANUAL-HOST-REHEARSAL-2076.py SHA256
+  `940f5067af6ed35102938176712a01838ca3089a71d4fc99e338b560cb2a17a1`;
+  completion-evidence pin is None.
+- RUN-HOST-REHEARSAL-2076.py SHA256
+  `ebf3e5f526223e7f9a1ad2e9ea3447a1d17352829f6ac5dc1d03a9f89d8f8583`;
+  E/H are None. Both stop before host/Git/network work.
+- Read-only diagnostic SHA256
+  `0b608b157d3092a04f893637963ea864a8d9bfe98592fedb470488e4d7bcfc8a`,
+  expected base N; never executed on the host.
+- Independent helper structure review passed after rejecting inherited Git
+  trace/config routing. Root checked final B pins and reviewed the launcher.
+  No actual helper, guard, public probe, shared source/output or lease action.
+
+**Production changed by this performance task: no. First-visible live latency:
+unverified.** Preserve the load improvement, previous PR2069/2074 host backups,
+and all unrelated files. All prior source tests and measurements below remain
+historical evidence of their stated source/fixture, not live speed guarantees.
+
+---
+
+## Previous evidence checkpoint (superseded release status)
 # Evidence checkpoint — PR2076 source passed, intent-only B frozen
 
 This evidence branch is for continuation and reviewed host commands only.
