@@ -1,0 +1,868 @@
+{
+  "schema_version": 1,
+  "task_id": "OPERATIONAL-WORKSPACE-RELEASE-20261122",
+  "recorded_at_utc": "2026-11-22T01:09:19.075603+00:00",
+  "record_kind": "documentation_only_release_continuation",
+  "repository": "AMASI-SA/AMASI-SA",
+  "evidence_branch": "codex/operational-workspace-release-evidence-20261122",
+  "evidence_branch_base": "e5bbba04e884451c132f18708c51b7b4e6800dc9",
+  "deploy_this_branch": false,
+  "current_state": "frozen_candidate_pending_remaining_exact_B_CI",
+  "production_changed_by_this_UI_release": false,
+  "user_authorization": "The user explicitly requested publication of the complete latest operational balances / Mezan2 UI. Existing authorization is retained; required exact-release gates remain mandatory.",
+  "provenance": {
+    "original_ui_pr": {
+      "number": 2049,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/pull/2049",
+      "head": "32be99e430f835c8c5221d9411a2fabfe1dd00f7",
+      "tree": "32795d8caa61b13110b1c2eed9136a197cd4ed4b",
+      "branch": "codex/operational-workspace-unified-20261121",
+      "fork": "6e41bf25b936e8c4047df75bb170610dfc71b7f7",
+      "disposition": "Original source/history preserved. Its UI delta is integrated onto the already verified performance release; the old source and inherited intent are not deployment targets."
+    },
+    "successor_pr": {
+      "number": 2056,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/pull/2056",
+      "head": "e5bbba04e884451c132f18708c51b7b4e6800dc9",
+      "merge_state": "pending",
+      "merge_commit": null
+    },
+    "first_successor_source": {
+      "sha": "cb2583082b0ca8929ee911eb87b1b5f9fe9b6660",
+      "tree": "41a1a46eb1fd3cf2bb4ad8ca7c741b39ac8f3eb0",
+      "parents": [
+        "0c5e5b98795b8d30289ec0e4d3c95738fd660af1"
+      ],
+      "url": "https://github.com/AMASI-SA/AMASI-SA/commit/cb2583082b0ca8929ee911eb87b1b5f9fe9b6660"
+    },
+    "final_source_A2": {
+      "sha": "e41695244bbe0bfde4052e074d623b8c60f16331",
+      "tree": "cfc496366ce85ee2b36d8a03342e3e9c58b52b56",
+      "parents": [
+        "cb2583082b0ca8929ee911eb87b1b5f9fe9b6660"
+      ],
+      "url": "https://github.com/AMASI-SA/AMASI-SA/commit/e41695244bbe0bfde4052e074d623b8c60f16331"
+    },
+    "intent_commit_B": {
+      "sha": "e5bbba04e884451c132f18708c51b7b4e6800dc9",
+      "tree": "f1ad30399453b8e7d5919dfc2f6e44108458db4f",
+      "parents": [
+        "e41695244bbe0bfde4052e074d623b8c60f16331"
+      ],
+      "url": "https://github.com/AMASI-SA/AMASI-SA/commit/e5bbba04e884451c132f18708c51b7b4e6800dc9"
+    },
+    "reviewed_base_J": {
+      "sha": "0c5e5b98795b8d30289ec0e4d3c95738fd660af1",
+      "tree": "128537a80bcd08f93744f042d6c5927801188a59",
+      "parents": [
+        "10ee7b41204dd1d39c8b91daf9f0a9d899041ebb",
+        "1ce536a61440da42f8f7ede9eb55d86cb29de5ec"
+      ],
+      "url": "https://github.com/AMASI-SA/AMASI-SA/commit/0c5e5b98795b8d30289ec0e4d3c95738fd660af1"
+    },
+    "source_A2_followup_paths": [
+      ".github/workflows/mz2-accounting-module.yml",
+      "docs/operations/OPERATIONAL-WORKSPACE-UNIFIED-20261121/STATUS.md"
+    ],
+    "source_paths_changed_from_J": [
+      ".github/workflows/mz2-accounting-module.yml",
+      "backend/operational_balance_workspace.py",
+      "backend/operational_web_page_policy.py",
+      "backend/operational_workspace_courier_summary.py",
+      "backend/tests/test_operational_balance_courier_summary.py",
+      "backend/tests/test_web_page_catalog_security.py",
+      "docs/operations/OPERATIONAL-WORKSPACE-UNIFIED-20261121/STATUS.md",
+      "docs/operations/noncash-settlement-design.md",
+      "frontend/public/operational-ui/brands/README.md",
+      "frontend/public/operational-ui/brands/apple.png",
+      "frontend/public/operational-ui/brands/aramex.png",
+      "frontend/public/operational-ui/brands/enma.png",
+      "frontend/public/operational-ui/brands/google.png",
+      "frontend/public/operational-ui/brands/mastercard.png",
+      "frontend/public/operational-ui/brands/meta.png",
+      "frontend/public/operational-ui/brands/paypal.png",
+      "frontend/public/operational-ui/brands/rajhi.png",
+      "frontend/public/operational-ui/brands/salla.png",
+      "frontend/public/operational-ui/brands/snap.png",
+      "frontend/public/operational-ui/brands/tabby.png",
+      "frontend/public/operational-ui/brands/tamara.png",
+      "frontend/public/operational-ui/brands/tiktok.png",
+      "frontend/public/operational-ui/brands/visa.png",
+      "frontend/src/App.js",
+      "frontend/src/App.operationalRoutes.test.jsx",
+      "frontend/src/components/EmployeeWebAccess.test.jsx",
+      "frontend/src/components/EmployeeWebLayout.jsx",
+      "frontend/src/components/MezanV2NavigationShell.accountingFirstRun.test.jsx",
+      "frontend/src/components/MezanV2NavigationShell.jsx",
+      "frontend/src/components/MezanV2NavigationShell.test.jsx",
+      "frontend/src/components/MezanV2NavigationShellLegacy.jsx",
+      "frontend/src/components/PermissionRoute.test.jsx",
+      "frontend/src/components/ProtectedRoute.jsx",
+      "frontend/src/lib/webPageAccess.js",
+      "frontend/src/lib/webPageAccess.test.js",
+      "frontend/src/pages/InventoryWorkspace.jsx",
+      "frontend/src/pages/operational/ApprovedDirectory.jsx",
+      "frontend/src/pages/operational/ApprovedEntry.jsx",
+      "frontend/src/pages/operational/ApprovedEntry.test.jsx",
+      "frontend/src/pages/operational/ApprovedFinance.jsx",
+      "frontend/src/pages/operational/ApprovedFinance.test.jsx",
+      "frontend/src/pages/operational/ApprovedFinanceRoute.jsx",
+      "frontend/src/pages/operational/ApprovedFinanceUI.jsx",
+      "frontend/src/pages/operational/ApprovedLedger.jsx",
+      "frontend/src/pages/operational/ApprovedLedger.test.jsx",
+      "frontend/src/pages/operational/ApprovedOperations.jsx",
+      "frontend/src/pages/operational/ApprovedOperations.test.jsx",
+      "frontend/src/pages/operational/ApprovedReports.jsx",
+      "frontend/src/pages/operational/ApprovedReports.test.jsx",
+      "frontend/src/pages/operational/ApprovedReviewPage.jsx",
+      "frontend/src/pages/operational/ApprovedReviewPage.test.jsx",
+      "frontend/src/pages/operational/ApprovedSpecializedPage.jsx",
+      "frontend/src/pages/operational/ApprovedSpecializedPage.test.jsx",
+      "frontend/src/pages/operational/BrandIcon.jsx",
+      "frontend/src/pages/operational/BrandIcon.test.jsx",
+      "frontend/src/pages/operational/CarrierAccountSummary.jsx",
+      "frontend/src/pages/operational/CarrierAccountSummary.test.jsx",
+      "frontend/src/pages/operational/CompletedShippingFeeReview.jsx",
+      "frontend/src/pages/operational/CompletedShippingFeeReview.test.jsx",
+      "frontend/src/pages/operational/InventoryWorkspace.test.jsx",
+      "frontend/src/pages/operational/ObservedPaymentMethods.jsx",
+      "frontend/src/pages/operational/OperationalContextRoute.jsx",
+      "frontend/src/pages/operational/OperationalFinancialPosition.jsx",
+      "frontend/src/pages/operational/OperationalFinancialPosition.test.jsx",
+      "frontend/src/pages/operational/ProviderFeeSetup.jsx",
+      "frontend/src/pages/operational/ProviderFeeSetup.test.jsx",
+      "frontend/src/pages/operational/ProviderHistoryReview.jsx",
+      "frontend/src/pages/operational/ProviderHistoryReview.test.jsx",
+      "frontend/src/pages/operational/ProviderOrders.jsx",
+      "frontend/src/pages/operational/ProviderOrders.test.jsx",
+      "frontend/src/pages/operational/ProviderStatements.jsx",
+      "frontend/src/pages/operational/ProviderStatements.test.jsx",
+      "frontend/src/pages/operational/approvedReports.css",
+      "frontend/src/pages/operational/approvedSpecialized.css",
+      "frontend/src/pages/operational/brandIcon.css",
+      "frontend/src/pages/operational/brandIconModel.js",
+      "frontend/src/pages/operational/brandIconModel.test.js",
+      "frontend/src/pages/operational/carrierAccountSummary.css"
+    ],
+    "source_path_count": 78,
+    "source_integration_rationale": "A normal merge of the older UI branch was evaluated without moving a remote ref. Its inherited intent history violates the unmodified full-history release contract. The successor source uses a sole-parent commit above J, followed by the focused dependency/status commit A2. No frozen source was amended or rebased; B changes only the tracked intent."
+  },
+  "release_contract": {
+    "protocol_version": 5,
+    "intent_schema_version": 2,
+    "intent_kind": "mezan_emergent_release_intent_v1",
+    "production_branch": "hotfix/prod-snap-meta-final",
+    "source_git_sha": "e41695244bbe0bfde4052e074d623b8c60f16331",
+    "source_base_git_sha": "0c5e5b98795b8d30289ec0e4d3c95738fd660af1",
+    "deployment_candidate_git_sha": "e5bbba04e884451c132f18708c51b7b4e6800dc9",
+    "merged_deployment_git_sha": null,
+    "release_id": "rg5-08a665da9e84ab1684f181a7b87701fecc4ac2f74c935ac5ccd32e1a1bd25142",
+    "tracked_intent": {
+      "path": "release/release-intent-v5.json",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/blob/e5bbba04e884451c132f18708c51b7b4e6800dc9/release/release-intent-v5.json",
+      "git_blob": "ff345c482b1049a09dc6c27c7f796fba263efa3f",
+      "filename": "release-intent-v5.json",
+      "bytes": 1466981,
+      "sha256": "995b3073ebdc4af30af64d51debcf27905260a06a59607437c6eb460b3cc893d"
+    },
+    "external_frozen_intent": {
+      "filename": "operational-ui-intent-v5.json",
+      "bytes": 1466981,
+      "sha256": "995b3073ebdc4af30af64d51debcf27905260a06a59607437c6eb460b3cc893d",
+      "matches_tracked_B_bytes": true
+    },
+    "frontend_source_manifest": {
+      "file_count": 1378,
+      "git_tree_oid": "2de557e3c3cacd864433ca93c1b1ddea2579eb43",
+      "scope": "git_head_frontend_tree_v1",
+      "tree_sha256": "861c71ebe02cacff216594610712bafe37c49a0fcd55603b85124cffa6c813d0"
+    },
+    "backend_runtime_source_manifest": {
+      "added_count": 1,
+      "deleted_count": 0,
+      "file_count": 1289,
+      "manifest_sha256": "39f905419aa3144557e82aac0087b0799ae646189a99a21af2db01249d3014ac",
+      "modified_count": 2,
+      "projection_tree_oid": "88edaf8878364a48c62d5907e0d78a17ac3f97f6",
+      "scope": "backend_runtime_package_v1",
+      "scope_tree_oid": "2dfb4f12c2ae061ccd45e85fa4749587d6c0c6e5",
+      "source_base_git_sha": "0c5e5b98795b8d30289ec0e4d3c95738fd660af1",
+      "source_base_root_tree_oid": "128537a80bcd08f93744f042d6c5927801188a59",
+      "source_base_scope_tree_oid": "9c6c4fcd317f0b5d7b3827cf8410a2d721e47767",
+      "source_git_sha": "e41695244bbe0bfde4052e074d623b8c60f16331",
+      "source_root_tree_oid": "cfc496366ce85ee2b36d8a03342e3e9c58b52b56",
+      "tombstone_count": 0,
+      "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tree_sha256": "ff2bf5f1d7f82b1a551688167d851926193148423ee5cac1a4cf2826e21779f4"
+    },
+    "release_control_source_manifest": {
+      "added_count": 0,
+      "deleted_count": 0,
+      "file_count": 322,
+      "manifest_sha256": "4f00e3e9f1595cd1558decb6db009ff71026e4a603f3574a1c0d517d72ebc016",
+      "modified_count": 1,
+      "projection_tree_oid": "3ae6f23c75bef0d312629b1ddda137016a7a0b52",
+      "scope": "release_control_source_v1",
+      "scope_tree_oid": "3ae6f23c75bef0d312629b1ddda137016a7a0b52",
+      "source_base_git_sha": "0c5e5b98795b8d30289ec0e4d3c95738fd660af1",
+      "source_base_root_tree_oid": "128537a80bcd08f93744f042d6c5927801188a59",
+      "source_base_scope_tree_oid": "be30c5554ac5512034b9ef0e356fc59f129d8f8b",
+      "source_git_sha": "e41695244bbe0bfde4052e074d623b8c60f16331",
+      "source_root_tree_oid": "cfc496366ce85ee2b36d8a03342e3e9c58b52b56",
+      "tombstone_count": 0,
+      "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tree_sha256": "0ebbe7a010b0a965542bc28d2502a6c9c9b7a89b62583e5218c5e9c6d3bd0e87"
+    },
+    "critical_backend_file_hashes": {
+      "frontend_build_identity.py": "7896dfa2c9b4fea8c426b47c5b75e331380c0a4a3f947028aa4f5afa101f9d87",
+      "integrations/qoyod_manual/routes.py": "e3950202ab1b465608124ef1d142f330038086d6f69d21418dc0be99e9fa64ce",
+      "integrations/qoyod_manual/send.py": "8900d5fd895c1240dbb81f5a650e205e9c5b3c04b08dc38f426125fe405b05b0",
+      "release_identity.py": "ee4c098266722c10f6d973927f25de3602081c4923f9992f1de85d71775fca4d",
+      "release_protocol_v5.py": "1961ac18a5363ec425ceec4f98f96f611d378b09e19380d4756bd6776987d8ef",
+      "server.py": "123789a3d5fc18b42200a74f09adaf2dd9b10b4bccabc3cca2639543c9911670"
+    },
+    "frontend_build": {
+      "artifact_tree_sha256": "65582eef5ae1c6aef9fc774c2ea10e5168c2fb396535c34b44be266526817526",
+      "build_meta": {
+        "bytes": 568965,
+        "path": "build-meta.json",
+        "sha256": "6ebebcc91ef77f8a3510c2f43fb69b93884680a3d6b43239fd315407221473b5"
+      },
+      "entrypoints": [
+        {
+          "bytes": 1027105,
+          "path": "assets/index-Bcya9bD7.js",
+          "sha256": "cf3e0e609692f8b4079fdb7ece7381ef41359dfec1d4fdbb6426a403b93a6079"
+        },
+        {
+          "bytes": 207340,
+          "path": "assets/index-C3ZLgqtf.css",
+          "sha256": "15623f5c53d81054775d3187c5cb4226f2f2e89a644a2bf9b0dc7e64dd85e22d"
+        }
+      ],
+      "git_sha": "e41695244bbe0bfde4052e074d623b8c60f16331",
+      "index": {
+        "bytes": 3836,
+        "path": "index.html",
+        "sha256": "b97e86a67eba1b11c41306d82466baa201a176b851adee55419568f44fc713c7"
+      },
+      "schema_version": 1,
+      "source": {
+        "file_count": 1378,
+        "git_tree_oid": "2de557e3c3cacd864433ca93c1b1ddea2579eb43",
+        "scope": "git_head_frontend_tree_v1",
+        "tree_sha256": "861c71ebe02cacff216594610712bafe37c49a0fcd55603b85124cffa6c813d0"
+      },
+      "toolchain": {
+        "node": "22.23.2",
+        "vite": "8.2.4",
+        "yarn": "1.22.22"
+      }
+    },
+    "frontend_asset_count": 337,
+    "frontend_public_file_count": 376,
+    "frontend_reproducibility": {
+      "git_sha": "e41695244bbe0bfde4052e074d623b8c60f16331",
+      "kind": "frontend_two_clean_builds_v1",
+      "passes": [
+        {
+          "artifact_tree_sha256": "65582eef5ae1c6aef9fc774c2ea10e5168c2fb396535c34b44be266526817526",
+          "build_meta": {
+            "bytes": 568965,
+            "path": "build-meta.json",
+            "sha256": "6ebebcc91ef77f8a3510c2f43fb69b93884680a3d6b43239fd315407221473b5"
+          },
+          "ordinal": 1
+        },
+        {
+          "artifact_tree_sha256": "65582eef5ae1c6aef9fc774c2ea10e5168c2fb396535c34b44be266526817526",
+          "build_meta": {
+            "bytes": 568965,
+            "path": "build-meta.json",
+            "sha256": "6ebebcc91ef77f8a3510c2f43fb69b93884680a3d6b43239fd315407221473b5"
+          },
+          "ordinal": 2
+        }
+      ],
+      "proof_file": {
+        "bytes": 1521,
+        "path": "frontend/.release/reproducible-build.json",
+        "sha256": "90dfd20f66d9735c6abbe0e71dc7d95e89a20a7a3365689f5c5f3a695410564f"
+      },
+      "retained_pass": 2,
+      "schema_version": 1,
+      "source": {
+        "file_count": 1378,
+        "git_tree_oid": "2de557e3c3cacd864433ca93c1b1ddea2579eb43",
+        "scope": "git_head_frontend_tree_v1",
+        "tree_sha256": "861c71ebe02cacff216594610712bafe37c49a0fcd55603b85124cffa6c813d0"
+      },
+      "toolchain": {
+        "node": "22.23.2",
+        "vite": "8.2.4",
+        "yarn": "1.22.22"
+      }
+    },
+    "full_manifests_authority": "The exact tracked B intent above contains the complete file manifests. These summaries retain its manifest hashes, scopes, trees, counts and critical hashes; they are not a replacement release intent."
+  },
+  "governed_source_build": {
+    "source": "e41695244bbe0bfde4052e074d623b8c60f16331",
+    "toolchain": {
+      "node": "22.23.2",
+      "vite": "8.2.4",
+      "yarn": "1.22.22"
+    },
+    "proof": {
+      "filename": "reproducible-build.json",
+      "bytes": 1521,
+      "sha256": "90dfd20f66d9735c6abbe0e71dc7d95e89a20a7a3365689f5c5f3a695410564f",
+      "passes": [
+        {
+          "ordinal": 1,
+          "build_meta": {
+            "path": "build-meta.json",
+            "bytes": 568965,
+            "sha256": "6ebebcc91ef77f8a3510c2f43fb69b93884680a3d6b43239fd315407221473b5"
+          },
+          "artifact_tree_sha256": "65582eef5ae1c6aef9fc774c2ea10e5168c2fb396535c34b44be266526817526"
+        },
+        {
+          "ordinal": 2,
+          "build_meta": {
+            "path": "build-meta.json",
+            "bytes": 568965,
+            "sha256": "6ebebcc91ef77f8a3510c2f43fb69b93884680a3d6b43239fd315407221473b5"
+          },
+          "artifact_tree_sha256": "65582eef5ae1c6aef9fc774c2ea10e5168c2fb396535c34b44be266526817526"
+        }
+      ],
+      "retained_pass": 2
+    },
+    "build_metadata": {
+      "filename": "build-meta.json",
+      "bytes": 568965,
+      "sha256": "6ebebcc91ef77f8a3510c2f43fb69b93884680a3d6b43239fd315407221473b5"
+    },
+    "original_verify_report": {
+      "filename": "operational-ui-verify-source-a.json",
+      "bytes": 132244,
+      "sha256": "c1ae6ce7f95c5469e35fa05ae51cf03b1ca73f7daa78c5dedf9c9a316468ccf6",
+      "frontend_build_matches_intent": true,
+      "frontend_reproducibility_matches_intent": true
+    },
+    "build_log": {
+      "filename": "operational-ui-build-source-a.log",
+      "bytes": 70997,
+      "sha256": "1a19892d8d7a3972f51fb468c7a8495185bca7e9d715f546df9d8d6ce3bff4ae"
+    },
+    "install_log": {
+      "filename": "operational-ui-install-a.log",
+      "bytes": 7316,
+      "sha256": "e50a5cef8be8861173e007ccc060c0c12ef2851cc820f1f1b510357157cc49d9"
+    },
+    "freeze_stdout": {
+      "filename": "operational-ui-freeze.log",
+      "bytes": 1466981,
+      "sha256": "995b3073ebdc4af30af64d51debcf27905260a06a59607437c6eb460b3cc893d",
+      "matches_external_intent_bytes": true
+    },
+    "generated_outputs_tracking": "Build outputs and proof remain ignored/untracked. They are not committed in this evidence branch."
+  },
+  "preserved_performance_release": {
+    "deployment_git_sha": "0c5e5b98795b8d30289ec0e4d3c95738fd660af1",
+    "source_git_sha": "8665e8acf1d7bb4878cd2fc0b912a20132f1e0c7",
+    "release_id": "rg5-4d0f595ee0711c73459e0cb18711c87657602d7886a885f0ccb1a3013e31dc05",
+    "prior_release_evidence_commit": "01d65a5c53ba6de488d1286a257d136886d3a1d7",
+    "prior_release_evidence_url": "https://github.com/AMASI-SA/AMASI-SA/blob/01d65a5c53ba6de488d1286a257d136886d3a1d7/docs/operations/CATALOG-MEMORY-RECOVERY-20261122/release-continuation-20261122.json",
+    "previous_original_live_verification": {
+      "verified": true,
+      "checks": 3,
+      "finished_at_utc": "2026-11-22T00:24:02.181628Z",
+      "guard_active_after": false
+    },
+    "comparison_fork": "6e41bf25b936e8c4047df75bb170610dfc71b7f7",
+    "production_paths_changed_since_fork": 30,
+    "all_30_paths_identical_between_J_and_source_A2": true,
+    "B_exception": "Only release/release-intent-v5.json changes in B to bind the new UI source. The other 29 production paths remain identical to J.",
+    "dashboard_runtime_sha256": "0d9f4fb40beebbaf8aa27c6cb51d962913cfa2d8399afb82bea1a2e52ac42feb",
+    "paths": [
+      {
+        "path": ".github/workflows/dashboard-card-cadence.yml",
+        "git_blob": "52b089a1b26e6a39a4a86b1fb72a5b4886c3bfb3",
+        "sha256": "5ec6f06f5733cb419b328e92317d60b5e367cc94c07d727b9e84276255784032",
+        "bytes": 6902
+      },
+      {
+        "path": ".github/workflows/dashboard-runtime-adoption.yml",
+        "git_blob": "d8f45c4a0716e324fe1cf286426792721f11a164",
+        "sha256": "f8fad204264fc7f709b6d29579b2064d23cef1b48f33e95d20c610cf242e951a",
+        "bytes": 10044
+      },
+      {
+        "path": "backend/awaiting_payment_cohort.py",
+        "git_blob": "9b6184a7786c8fb95ecbe763be7dd26af0a50894",
+        "sha256": "69536f5efa2e8d72660054bc021dd3e52c294f4790496832740b9e042e47e9a3",
+        "bytes": 2799
+      },
+      {
+        "path": "backend/awaiting_payment_history.py",
+        "git_blob": "d071f74617f3471e475802475d80b780f9fa93ec",
+        "sha256": "9c13931a880ac50ea406f041768c8d7247dbb9d979346cc7e12a1cbbaa24645a",
+        "bytes": 18859
+      },
+      {
+        "path": "backend/dashboard_v2_routes.py",
+        "git_blob": "72b105381ee007b1f88315d8fbc52126ae5bd2ae",
+        "sha256": "0d9f4fb40beebbaf8aa27c6cb51d962913cfa2d8399afb82bea1a2e52ac42feb",
+        "bytes": 129609
+      },
+      {
+        "path": "backend/order_engine/amasi_shipping_compat.py",
+        "git_blob": "cc109dbeb7965a4ea6b9e214eb827432ec9e95ec",
+        "sha256": "db6401ac99121e6691a17ea0eccd6309d4dca430a6a7782f4b0009d10cf3398f",
+        "bytes": 56240
+      },
+      {
+        "path": "backend/server.py",
+        "git_blob": "238da991dc2d76999df395d1e878c39642b657c2",
+        "sha256": "123789a3d5fc18b42200a74f09adaf2dd9b10b4bccabc3cca2639543c9911670",
+        "bytes": 265829
+      },
+      {
+        "path": "backend/tests/dashboard_runtime_gate_plugin.py",
+        "git_blob": "5eb7ca5948b17a56b7ad629d20540ec90508624f",
+        "sha256": "43b6ff8ed59352ab3e2d17928e091e52e9a2f934e23556c36d3af43f353a01ef",
+        "bytes": 63310
+      },
+      {
+        "path": "backend/tests/test_awaiting_payment_history.py",
+        "git_blob": "a1fc18097172ad959d216fe6b1324ef331e6b5cf",
+        "sha256": "5c5512387abc3ab1e15828469a043e98a70a874f49aa7514fa0d4c9f0ef03a59",
+        "bytes": 16801
+      },
+      {
+        "path": "backend/tests/test_carrier_shipment_read_fallback.py",
+        "git_blob": "698d27ad8cf28c13846cb6e7d3d5308e5beaf467",
+        "sha256": "3e4b2b1fd40b0e7d5d75bb267a7fd2ca2bc140ba18e6eea857773a63e1a0354a",
+        "bytes": 31547
+      },
+      {
+        "path": "backend/tests/test_dashboard_ads_costs.py",
+        "git_blob": "f65f8f37e8955d68f9d2acafa1ccd2b09430ca45",
+        "sha256": "fc5382ec9bf23ec81e706de84eb90fa76c29149f2cfb7b21f2597ad512da580c",
+        "bytes": 22262
+      },
+      {
+        "path": "backend/tests/test_dashboard_awaiting_financial_cohort.py",
+        "git_blob": "8e709d57baad758c85f6f5e74969496c9e9fcb14",
+        "sha256": "992f021fda78fe7ffc19d6aa594b11a820fa38e9131c8ef5e4032a18caf16bd5",
+        "bytes": 8455
+      },
+      {
+        "path": "backend/tests/test_dashboard_catalog_cohort_reads.py",
+        "git_blob": "1badda9ccaad171a436a7fd578511926f35356da",
+        "sha256": "ed3ce3a65a5d969237d8d06593dee778d25b16f1ed8814b32ab09a7386209464",
+        "bytes": 13971
+      },
+      {
+        "path": "backend/tests/test_dashboard_runtime_catalog_read_contract.py",
+        "git_blob": "566a1ca9af3cc7a8e6e00ec119b59182e9bf0cbe",
+        "sha256": "71385ba147eaf9d3ae0af34522b7dd2931be2a94dec0eb797b08ac78c638033a",
+        "bytes": 21382
+      },
+      {
+        "path": "backend/tests/test_dashboard_runtime_fee_read_contract.py",
+        "git_blob": "9d62a67523f82dd0fc6f01abc47fb59ae39153f5",
+        "sha256": "361ffa2642022c19e36e46d2dc240a6f911954ca662fcdc8083ce8d166353a46",
+        "bytes": 5889
+      },
+      {
+        "path": "backend/tests/test_dashboard_runtime_source_contract.py",
+        "git_blob": "362010acb568b1469de002644e02e821970afe9a",
+        "sha256": "e30d99074c07a77663532694f6b2f6ad6af0fd23edb8be58bc7edc0eb00fe71c",
+        "bytes": 19343
+      },
+      {
+        "path": "backend/tests/test_operational_balance_awaiting_cohort_readers.py",
+        "git_blob": "4bfb27f91d6b1376ea9b9b91cd8ab18aa4231d12",
+        "sha256": "10476a1a285938c09a721a3440efe3f6bfa0b403ef3e667577491e11e85dd003",
+        "bytes": 10582
+      },
+      {
+        "path": "backend/tests/test_operational_balance_profit_product_authority_parallel.py",
+        "git_blob": "9818b9d0e426914edd570fbb119164c4420b8fa5",
+        "sha256": "1938731b2cf811bd92060dc56091f1ba4d27dd1522c5a6250132b8fce40062ee",
+        "bytes": 29328
+      },
+      {
+        "path": "docs/operations/ARAMEX-PRINT-20261121/LIVE-ORDER-READ-CONTEXT.json",
+        "git_blob": "a94d09452aafbc82ded902490bdb634f58755e42",
+        "sha256": "804d7a79823e89f964465a2b2120ad3d61dc13805bb0ec507cc53879717541a1",
+        "bytes": 1456
+      },
+      {
+        "path": "docs/operations/ARAMEX-PRINT-20261121/STATUS.md",
+        "git_blob": "2d5ee9a25ec795375a489abc76eb00e80e020e93",
+        "sha256": "bfa560a31aebc2e5fb9a6ac712b92c25b08c37ba60fa55e3f2b8e50334c22fe1",
+        "bytes": 15167
+      },
+      {
+        "path": "docs/operations/AWAITING-HISTORY-PERFORMANCE-20261121/STATUS.md",
+        "git_blob": "af0c9b0fcb203a96fe0e01e45f4f835b45999fc9",
+        "sha256": "978b12f5a99bdac635cd8773bf9272af199777b4686c0edfe9970e5f26d5dabc",
+        "bytes": 8858
+      },
+      {
+        "path": "docs/operations/CATALOG-MEMORY-RECOVERY-20261122/STATUS.md",
+        "git_blob": "61d1baae0a1b96ff88971bcd7443234c4a691ddc",
+        "sha256": "d5b6460236297c1776a02084991f32375fe4507fcd8ca6fa37c376628c2abde8",
+        "bytes": 9868
+      },
+      {
+        "path": "docs/operations/CATALOG-MEMORY-RECOVERY-20261122/evidence/README.md",
+        "git_blob": "bff9eb41e05d0adf8626b07d3bb9455a9d535702",
+        "sha256": "7483bdc89693695abc8de7fe1a9ce85714728e6198e22d51ac074bd6ea1acf75",
+        "bytes": 3984
+      },
+      {
+        "path": "docs/operations/CATALOG-MEMORY-RECOVERY-20261122/evidence/baseline.json",
+        "git_blob": "91d19db2adae085954706a245350b5811a5e5f84",
+        "sha256": "4bcc199a4bed6fc3cdc711a2b5950eebc69839b1b9fa879718a72d713505a2b6",
+        "bytes": 5338
+      },
+      {
+        "path": "docs/operations/CATALOG-MEMORY-RECOVERY-20261122/evidence/comparison.json",
+        "git_blob": "5815e23844d4eddba197719e3184f22da034c7ea",
+        "sha256": "41c0d7ead6a72b06255857ec5d715070730e9c106ac782bb1de5341d40a42c2c",
+        "bytes": 3877
+      },
+      {
+        "path": "docs/operations/CATALOG-MEMORY-RECOVERY-20261122/evidence/measure_catalog_payload.py",
+        "git_blob": "61acf6dbbc5894d7b9553d34c2583ee1318908c9",
+        "sha256": "75f77236341bfdcd0b5128f6ea5891f4599fefd9418830d5430f56c259287dd7",
+        "bytes": 7932
+      },
+      {
+        "path": "docs/operations/CATALOG-MEMORY-RECOVERY-20261122/evidence/patched.json",
+        "git_blob": "61da18d4fe4b3a82faebfd0b3fed5736dfc436f6",
+        "sha256": "5221af35e71a70190fe5758a4fb10c618fde3f199d8ddcfe71d9aca43a57de9d",
+        "bytes": 5224
+      },
+      {
+        "path": "frontend/src/components/ProfitSummaryCard.paymentFees.test.jsx",
+        "git_blob": "8e16de6544c12282ec742ae78d36a4a1bd290fc6",
+        "sha256": "3eb90b75b666a30c4cc8f8025f3862026df43e7660092bbd40e5f5b33ba3a216",
+        "bytes": 9585
+      },
+      {
+        "path": "frontend/src/lib/paymentFeeCompleteness.js",
+        "git_blob": "b6395f723109a5c81d52953a09c5e19a78fbd1be",
+        "sha256": "2690b07f9de27f3770c02924a4cdb284b69699ff428d267ac27988ba0cb5f2d2",
+        "bytes": 1722
+      },
+      {
+        "path": "release/release-intent-v5.json",
+        "git_blob": "639befdbcfadecc2c2bebbc310a843b578e9badd",
+        "sha256": "0a8b06b82b9e00aa2b5df997e7336da9a250fd16e0d4b8671218de418ddfac5a",
+        "bytes": 1444324
+      }
+    ],
+    "performance_acceptance_boundary": "Preservation of the released fixes does not establish a fresh sustained/per-request performance measurement for the UI candidate."
+  },
+  "verification": {
+    "full_frontend_regression": {
+      "head_before": "cb2583082b0ca8929ee911eb87b1b5f9fe9b6660",
+      "head_after": "cb2583082b0ca8929ee911eb87b1b5f9fe9b6660",
+      "started_at": "2026-11-22T00:54:40.833126+00:00",
+      "finished_at": "2026-11-22T00:57:26.558416+00:00",
+      "elapsed_seconds": 165.725,
+      "exit_code": 0,
+      "command": [
+        "python",
+        "-B",
+        "scripts/frontend_release_toolchain.py",
+        "exec",
+        "--",
+        "yarn",
+        "--cwd",
+        "frontend",
+        "test",
+        "--watchAll=false",
+        "--runInBand",
+        "--json",
+        "--outputFile=/workspace/scratch/b90f3c3040a7/operational-ui-full-frontend-cb258308.jest.json",
+        "--cacheDirectory=/tmp/operational-ui-full-jest-20261122"
+      ],
+      "log": "/workspace/scratch/b90f3c3040a7/operational-ui-full-frontend-cb258308.log",
+      "json_report": "/workspace/scratch/b90f3c3040a7/operational-ui-full-frontend-cb258308.jest.json",
+      "success": true,
+      "numTotalTestSuites": 456,
+      "numPassedTestSuites": 456,
+      "numFailedTestSuites": 0,
+      "numPendingTestSuites": 0,
+      "numRuntimeErrorTestSuites": 0,
+      "numTotalTests": 4978,
+      "numPassedTests": 4978,
+      "numFailedTests": 0,
+      "numPendingTests": 0,
+      "numTodoTests": 0,
+      "failed_suites": [],
+      "source_label": "First successor A; A2 changes only the accounting CI dependency list and its status document. Frontend/runtime source is unchanged.",
+      "frontend_and_toolchain_diff_after_run_from_A_empty": true,
+      "toolchain": {
+        "node": "22.23.2",
+        "yarn": "1.22.22"
+      },
+      "artifacts": [
+        {
+          "filename": "operational-ui-full-frontend-cb258308.log",
+          "bytes": 286297,
+          "sha256": "661609188fc70e2028960a4b808422a08c412fb09b2c460f1054a0b99caf6bbe"
+        },
+        {
+          "filename": "operational-ui-full-frontend-cb258308.jest.json",
+          "bytes": 1384068,
+          "sha256": "d1a2cba9c97c8facb54c0770f7b9f82ef42e3bf287f47fe5caabbe9ebf611380"
+        },
+        {
+          "filename": "operational-ui-full-frontend-cb258308.summary.json",
+          "bytes": 1157,
+          "sha256": "d9899181fc20ff576c1f1180c0e8b95d084ac08d49108dcaa79720e480cb1735"
+        }
+      ]
+    },
+    "exact_A2_accounting_workflow": {
+      "run_id": 44969247080,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44969247080",
+      "head_sha": "e41695244bbe0bfde4052e074d623b8c60f16331",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at_utc": "2026-11-22T00:58:58Z",
+      "updated_at_utc": "2026-11-22T01:03:04Z",
+      "backend_job_id": 137045171035,
+      "backend_job_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44969247080/job/137045171035",
+      "frontend_job_id": 137045170767,
+      "frontend_job_conclusion": "success",
+      "python_version_observed": "3.11.18",
+      "passed": 93,
+      "failed": 0,
+      "duration_seconds": 2.83,
+      "install_command": "python -m pip install -q fastapi==0.140.0 pydantic==2.13.4 pymongo==4.6.3 bcrypt==4.1.3 PyJWT==2.13.0 cryptography==50.0.0 httpx==0.28.1 openpyxl==3.1.5 python-multipart==0.0.20 pytest==9.0.3 pytest-asyncio",
+      "test_command": "python -m pytest tests/test_mz2_accounting_module.py tests/test_mz2_settlement*_p01.py tests/test_mz2_courier_bank_bindings_p01.py tests/test_financial_accounts.py tests/test_accounting_ledger_v2.py -q --tb=short",
+      "working_directory": "backend",
+      "observation": "Run head/conclusion and sanitized setup/install/test lines were read directly from GitHub. The workflow does not pin pytest-asyncio; no unobserved installed version is asserted."
+    },
+    "dependency_history": {
+      "original_PR2049_omission": "cryptography was omitted from the focused accounting dependency list. The fix uses the canonical existing cryptography==50.0.0 requirement.",
+      "first_successor_A_failure": {
+        "run_id": 44968745105,
+        "job_id": 137043615611,
+        "failed": 5,
+        "passed": 88,
+        "reason": "ModuleNotFoundError: httpx in the focused CI import chain.",
+        "resolution": "A2 adds existing sibling pin httpx==0.28.1; exact A2 CI then passes all 93 tests."
+      }
+    },
+    "final_frozen_B_required_CI": {
+      "head_sha": "e5bbba04e884451c132f18708c51b7b4e6800dc9",
+      "status": "remaining_checks_pending",
+      "conclusion": null,
+      "runs": [],
+      "note": "Release readiness requires the exact B checks bound to source A2. Earlier source-A2 success alone is not final B release acceptance.",
+      "confirmed_successful_gates": {
+        "release_readiness": {
+          "run_id": 44969551332,
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/44969551332",
+          "conclusion": "success",
+          "frontend_build_job_id": 137046090363,
+          "frontend_artifact_tree_matches": true,
+          "host20_job_id": 137046443548,
+          "host24_job_id": 137046443493,
+          "both_host_rehearsals_ran_and_passed": true
+        },
+        "accounting_workflow": {
+          "conclusion": "success",
+          "includes_real_isolated_mongo": true,
+          "backend_job_id": 137046089791,
+          "backend_passed": 93,
+          "backend_duration_seconds": 2.47
+        },
+        "operational_frontend": {
+          "suites_passed": 89,
+          "tests_passed": 1415,
+          "conclusion": "success"
+        },
+        "browser": {
+          "scenario_group_counts": [
+            14,
+            12
+          ],
+          "conclusion": "success"
+        }
+      },
+      "remaining_at_root_observation": [
+        "operational backend",
+        "stock/G47",
+        "security final",
+        "CodeQL"
+      ],
+      "failures_observed": 0,
+      "observation_source": "Root reviewed exact B CI and logs. Overall success is not yet asserted."
+    }
+  },
+  "independent_reviews": [
+    {
+      "reviewer": "hotfix_review",
+      "checkpoint": "cb2583082b0ca8929ee911eb87b1b5f9fe9b6660",
+      "scope": "Immutable successor source ancestry, full-history contract, original 70 candidate paths plus eight integration paths, and preservation of all 30 published recovery paths.",
+      "result": "No blocker reported; original validator passed.",
+      "evidence": "Immutable source A2 STATUS historical checkpoint; later A2 delta is workflow/status only."
+    },
+    {
+      "reviewer": "release_readiness",
+      "checkpoint": "cb2583082b0ca8929ee911eb87b1b5f9fe9b6660",
+      "scope": "Provider-only statement grant matching and navigation owner/employee behavior.",
+      "result": "No material blocker. Exactly one supported provider preserves the original balances.statements object/mode/hash; unsupported/duplicate providers and extra selectors fail closed; backend provider set matches.",
+      "focused_tests": {
+        "passed": 61,
+        "failed": 0,
+        "suites": 2
+      },
+      "reviewed_files": [
+        {
+          "path": "frontend/src/lib/webPageAccess.js",
+          "sha256": "940205d057f9cb81767127cb6d1d546c77f7e0504cbd6b7c7e1232165b2c9c24"
+        },
+        {
+          "path": "frontend/src/lib/webPageAccess.test.js",
+          "sha256": "9990c6451dbb50f6e636d98b0b852215daa4c2cca6539008d6913cac2e69d45c"
+        },
+        {
+          "path": "frontend/src/components/MezanV2NavigationShell.accountingFirstRun.test.jsx",
+          "sha256": "dfbfd4451f4215cb10732b59d08510297a80426e4ac4652bae1668602788aaa5"
+        }
+      ]
+    },
+    {
+      "reviewer": "catalog_payload_evidence",
+      "checkpoint": "cb2583082b0ca8929ee911eb87b1b5f9fe9b6660",
+      "scope": "ApprovedFinance report context, narrow statement provider filter, and visibility of the provider ledger return link.",
+      "result": "Focused red/green evidence retained; six integration suites passed 192 tests. Full independent frontend run also passes.",
+      "test_count": 192
+    },
+    {
+      "reviewer": "hotfix_review",
+      "checkpoint": "e5bbba04e884451c132f18708c51b7b4e6800dc9",
+      "source_checkpoint": "e41695244bbe0bfde4052e074d623b8c60f16331",
+      "result": "PASS: no material blocker. Read-only original validators, no application tests rerun.",
+      "validators": [
+        {
+          "name": "_assert_candidate_source_transition(A2, J)",
+          "exit_code": 0
+        },
+        {
+          "name": "load_release_intent",
+          "exit_code": 0
+        },
+        {
+          "name": "verify_release_intent_git",
+          "exit_code": 0
+        },
+        {
+          "name": "read_frontend_build_identity(require_git_source=True)",
+          "result": "Exact equality with frozen B frontend_build"
+        },
+        {
+          "name": "read_frontend_reproducibility_proof",
+          "result": "Exact equality with frozen B frontend_reproducibility"
+        }
+      ],
+      "source_history_intent_changes_between_J_and_A2": [],
+      "validated_manifest_counts": {
+        "frontend": 1378,
+        "backend_runtime": 1289,
+        "release_control": 322,
+        "critical_hashes": 6
+      },
+      "tracked_external_intent_bytes_match": true,
+      "tracked_intent_git_blob": "ff345c482b1049a09dc6c27c7f796fba263efa3f",
+      "B_sole_parent_is_A2": true,
+      "only_A2_to_B_path": "release/release-intent-v5.json",
+      "clean_source_build_worktree_untouched": true,
+      "observation_source": "Independent reviewer final report; root separately confirmed."
+    }
+  ],
+  "latest_actual_host_observation": {
+    "observed_at_utc": "2026-11-22T01:04:23.943349+00:00",
+    "observed_by": "root through the actual Emergent terminal",
+    "original_guard_status": {
+      "active": false
+    },
+    "app_head": "0c5e5b98795b8d30289ec0e4d3c95738fd660af1",
+    "tracked_clean": true,
+    "untracked_count": 417,
+    "untracked_files_preserved": true,
+    "source_or_lease_changed_at_observation": false,
+    "stage": "/tmp/mezan-pr2056-release-20261122-ix4_840i",
+    "evidence_file": "pre-rehearsal-status.json",
+    "clean_clone_head": "e5bbba04e884451c132f18708c51b7b4e6800dc9",
+    "clean_clone_path": "/tmp/mezan-pr2056-release-20261122-ix4_840i/repo",
+    "adapter_result": "See actual_host_adapter: completed successfully after this pre-rehearsal observation.",
+    "capacity_observation": {
+      "app_available_kib": 23760,
+      "tmp_available_approx_gb": 260,
+      "plan": "Run the clean adapter in /tmp and preserve existing generated output before any later bounded handoff to /app."
+    }
+  },
+  "release_progress": {
+    "source_frozen": true,
+    "intent_only_B_frozen": true,
+    "final_B_CI_passed": null,
+    "actual_host_adapter_passed": true,
+    "merged": false,
+    "merge_sha": null,
+    "original_guard_prepared": false,
+    "original_guard_prepublish_passed": false,
+    "publish_started": false,
+    "newer_platform_completion_observed": false,
+    "original_verify_three_passed": false,
+    "final_guard_inactive": null,
+    "live_UI_acceptance": null
+  },
+  "next_safe_actions": [
+    "Read this record and AGENTS.md; refresh the successor PR, exact B checks, production ref and actual shared-host guard before continuing.",
+    "Complete the remaining exact B required CI. The original actual-host clean-clone adapter has already passed in the new PR2056 stage; retain its proof and do not repeat it without a concrete source/artifact drift or failed prerequisite.",
+    "After acceptance, normally merge PR2056 and verify the merge tree equals B, A2 remains an ancestor, and the diff after A2 contains only release/release-intent-v5.json.",
+    "Preserve unrelated /app files and generated outputs; use the matching original guard prepare and prepublish only after the exact new deployment tree and artifacts are ready.",
+    "Use the existing explicit UI publication authorization for one Publish changes action; require a newer explicit successful completion before original verification.",
+    "Run the original three-probe verify for https://mezansalla.com and the matching release identity; retain canonical/cache-busted build metadata and backend bindings, then confirm the matching lease closes inactive.",
+    "Update only these evidence documents with observed merge/host/publication/live-verification facts. Never deploy this documentation branch."
+  ],
+  "boundaries": [
+    "This record is WIP release evidence, not proof of a deployed UI.",
+    "No production customer data, financial writes, approvals, sync or backfill are used as validation.",
+    "Live performance and complete UI rendering have not yet been measured for this candidate.",
+    "Do not repeat the finished older payment-fee or performance-release publication.",
+    "Original PR2049 history, unrelated worktrees and the older writer navigation-test edit remain preserved."
+  ],
+  "actual_host_adapter": {
+    "head_sha": "e5bbba04e884451c132f18708c51b7b4e6800dc9",
+    "source_git_sha": "e41695244bbe0bfde4052e074d623b8c60f16331",
+    "release_id": "rg5-08a665da9e84ab1684f181a7b87701fecc4ac2f74c935ac5ccd32e1a1bd25142",
+    "stage": "/tmp/mezan-pr2056-release-20261122-ix4_840i",
+    "clone": "/tmp/mezan-pr2056-release-20261122-ix4_840i/repo",
+    "result_file": "adapter-result.json",
+    "started_at_utc": "2026-11-22T01:05:33.508493+00:00",
+    "finished_at_utc": "2026-11-22T01:06:37.831046+00:00",
+    "elapsed_seconds": 64.323,
+    "exit_code": 0,
+    "runtime_identity_equals_frozen_B_intent": true,
+    "frontend_source_artifact_metadata_proof_match": true,
+    "stdout_sha256": "f724d6702631e8661319480873db7052810e67caa6e2feef42990c533f7739db",
+    "stderr_sha256": "497f5fa853881c7a72d27a780637c269420a9bfd59aa53472be569975c40eefd",
+    "observed_by": "Root through the actual shared Emergent terminal",
+    "app_source_installed": false,
+    "own_lease_created": false,
+    "published": false
+  }
+}
