@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import React, { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useOptionalAuth } from '../../context/AuthContext';
 import { grantedWebLink, managedWebPages } from '../../lib/webPageAccess';
@@ -91,13 +91,25 @@ function FinanceWorkspace({context:bootstrap,identity,user,view,to,params,reload
   const refreshAfterReview=()=>{deferredRefresh.current=true;};
   const scoped=params.has('id') || params.has('kind');
   const selectedKind=params.get('kind'), selectedId=params.get('id');
+  // The owner's ledger returns its authorized resource. Keep the request
+  // identity separate from that response; it is not a resource or permission.
+  const ownerLedger=Boolean(view==='ledger' && selectedKind && selectedId && context.actor.is_owner===true);
+  const selectionKey=JSON.stringify([identity,context.session_scope,context.permission_version,selectedKind,selectedId]);
+  const ledgerKey=JSON.stringify([selectionKey,location.key]);
+  const [ledgerSelection,setLedgerSelection]=useState(null);
+  const receiveLedgerResource=useCallback(value=>setLedgerSelection(current=>{
+    if(!value)return current?.key===ledgerKey?null:current;
+    return current?.key===ledgerKey && current.value===value?current:{key:ledgerKey,value};
+  }),[ledgerKey]);
   const selectedRead=useWorkspaceRead(async config=>{
     const value=await api.selection(selectedKind,selectedId,config);
     assertWorkspace(value,context);
     if(value?.kind!==selectedKind || value.id!==selectedId || !value.access || typeof value.name!=='string')throw new Error('invalid selected resource');
     return value;
-  },JSON.stringify([identity,context.session_scope,context.permission_version,selectedKind,selectedId]),Boolean(scoped&&selectedKind&&selectedId));
-  const selected=scoped?selectedRead.data:null;
+  },selectionKey,Boolean(scoped&&selectedKind&&selectedId&&!ownerLedger));
+  const selected=scoped?(ownerLedger?(ledgerSelection?.key===ledgerKey?ledgerSelection.value:null):selectedRead.data):null;
+  const ledgerTarget=ownerLedger?{kind:selectedKind,id:selectedId}:null;
+  const selectedIdentity=ledgerTarget||selected;
   const pages=managedWebPages(user);
   const allowedTo=(viewName,resource)=>grantedWebLink(pages,to(viewName,resource));
   const writePage=id=>!pages||pages.some(p=>p.id===id&&p.mode==='write');
@@ -111,9 +123,9 @@ function FinanceWorkspace({context:bootstrap,identity,user,view,to,params,reload
   const canCollect=allowedTo('collections')&&granted.has('courier.review')&&context.capabilities?.review_collections===true;
   const canCustomerCollect=allowedTo('customer-collections')&&granted.has('customer.collection');
   const addAvailable=allowedTo('entry')&&writePage('balances.entry')&&context.status==='active'&&context.capabilities?.create_entries===true;
-  const canAdd=addAvailable && (!selected||selected.access?.use&&selected.operations?.length>0);
+  const canAdd=addAvailable && (!ownerLedger||Boolean(selected)) && (!selected||selected.access?.use&&selected.operations?.length>0);
   const createCash=context.actor.is_owner && ['draft','active'].includes(context.status) ? ()=>setModal({cash:true}) : null;
-  const canPurchase=addAvailable && granted.has('supplier.accrual') && (selected
+  const canPurchase=addAvailable && (!ownerLedger||Boolean(selected)) && granted.has('supplier.accrual') && (selected
     ? selected.kind==='supplier' && selected.access?.use && selected.operations?.includes('supplier.accrual')
     : context.capabilities?.purchase_suppliers===true);
   const supplierNeedsOtherEntry=selected?.kind==='supplier' && !selected.operations?.includes('supplier.payment');
@@ -147,19 +159,19 @@ function FinanceWorkspace({context:bootstrap,identity,user,view,to,params,reload
   const savedInvoice=location.state?.supplierInvoice;
   const recovered=location.state?.recoveredMovement?.scope===context.session_scope?location.state.recoveredMovement:null;
   const unavailable=<p className="note" role="alert">هذه الصفحة غير متاحة ضمن صلاحياتك.</p>;
-  const title=titles[view]||({ledger:selected&&isAsset(selected.kind)?'كشف الحساب':'كشف الطرف',entry:'حركة مالية جديدة','special-entry':canPurchase && (purchaseMode || selected && params.get('mode')!=='movement')?'فاتورة شراء آجل':'عمليات مالية أخرى',issues:'طلبات تحتاج مراجعة',collections:'مراجعة التحصيلات',refund:'إرجاع مبلغ لعميل','customer-collections':'تحصيل متبقي طلب'})[view]||'الأرصدة التشغيلية';
-  const active=view==='ledger'?(isAsset(selected?.kind)?'assets':'parties'):view==='issues'||view==='collections'?'reviews':['entry','refund','customer-collections'].includes(view)?'home':view;
+  const title=titles[view]||({ledger:selectedIdentity&&isAsset(selectedIdentity.kind)?'كشف الحساب':'كشف الطرف',entry:'حركة مالية جديدة','special-entry':canPurchase && (purchaseMode || selected && params.get('mode')!=='movement')?'فاتورة شراء آجل':'عمليات مالية أخرى',issues:'طلبات تحتاج مراجعة',collections:'مراجعة التحصيلات',refund:'إرجاع مبلغ لعميل','customer-collections':'تحصيل متبقي طلب'})[view]||'الأرصدة التشغيلية';
+  const active=view==='ledger'?(isAsset(selectedIdentity?.kind)?'assets':'parties'):view==='issues'||view==='collections'?'reviews':['entry','refund','customer-collections'].includes(view)?'home':view;
   const shared={context:{...context,resources:selected?[selected]:[]},identity};
   useEffect(()=>{setModal(null);setHistoryPage(1)},[location.key]);
   useEffect(()=>{const previous=document.title;document.title=title+' · ميزان ٢';return()=>{document.title=previous}},[title]);
   const Ledger=ledgerModule || LazyLedger;
   let content;
-  if(scoped&&!selected)content=!selectedKind||!selectedId?unavailable:selectedRead.error
+  if(scoped&&!selected&&!ownerLedger)content=!selectedKind||!selectedId?unavailable:selectedRead.error
     ? <p className="note warning" role="alert">{selectedRead.error} <button type="button" onClick={()=>retryWorkspaceRead(selectedRead,context)}>إعادة المحاولة</button></p>
     : <p role="status">جارٍ تحميل الحساب المحدد…</p>;
   else switch(view){
     case 'assets':case 'parties':content=<ApprovedDirectory key={view} context={context} people={view==='parties'} to={to} onAdd={canAdd?()=>add(null):null} onCreateCash={view==='assets'?createCash:null}/>;break;
-    case 'log':case 'ledger':content=view==='ledger'&&!selected?unavailable:<Ledger key={JSON.stringify([view,selected?.kind,selected?.id])} {...shared} resource={selected} initialMovement={selected?.id===recovered?.id && selected?.kind===recovered?.kind?recovered:null} initialInvoice={selected && savedInvoice?.id===selected.id?savedInvoice:null} onAdd={canAdd && (!supplierNeedsOtherEntry || selected.operations.some(key=>key!=='supplier.accrual')) ? (supplierNeedsOtherEntry?r=>go('special-entry',r,{mode:'movement'}):add) : null} onPurchase={selected && canPurchase?()=>navigate(purchaseLink(selected)):null} onBack={returnDirectory} onReviewOrders={allowedTo('issues')?issues:undefined}
+    case 'log':case 'ledger':content=view==='ledger'&&!selectedIdentity?unavailable:<Ledger key={JSON.stringify([view,selectedIdentity?.kind,selectedIdentity?.id])} {...shared} resource={selected} target={ledgerTarget} onResource={ownerLedger?receiveLedgerResource:undefined} initialMovement={selectedIdentity?.id===recovered?.id && selectedIdentity?.kind===recovered?.kind?recovered:null} initialInvoice={selectedIdentity && savedInvoice?.id===selectedIdentity.id?savedInvoice:null} onAdd={canAdd && (!supplierNeedsOtherEntry || selected.operations.some(key=>key!=='supplier.accrual')) ? (supplierNeedsOtherEntry?r=>go('special-entry',r,{mode:'movement'}):add) : null} onPurchase={selected && canPurchase?()=>navigate(purchaseLink(selected)):null} onBack={returnDirectory} onReviewOrders={allowedTo('issues')?issues:undefined}
       canOpenOrderDetails={Boolean(context.actor?.is_owner || pages?.some(page=>page.id==='detail.order' && !page.owner_only))}
       onStatements={canStatements?(r,section)=>openSpecialist(statementTarget(r,section)):undefined}
       canUploadStatements={Boolean(canStatements && writePage('balances.statements'))}

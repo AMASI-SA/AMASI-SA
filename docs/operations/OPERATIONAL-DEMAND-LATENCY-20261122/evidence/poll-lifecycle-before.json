@@ -1,0 +1,112 @@
+{
+  "success": false,
+  "numTotalTests": 15,
+  "numPassedTests": 0,
+  "numFailedTests": 1,
+  "numPendingTests": 14,
+  "numTotalTestSuites": 1,
+  "numPassedTestSuites": 0,
+  "numFailedTestSuites": 1,
+  "startTime": 1795373784439,
+  "normalization": "Original Jest JSON; retain counts, names, statuses and failure messages; omit snapshot/runtime maps.",
+  "suites": [
+    {
+      "name": "frontend/src/lib/demandRead.test.js",
+      "status": "failed",
+      "assertions": [
+        {
+          "fullName": "only an explicit preparation polls, with one consumer, then a ready result remains complete",
+          "status": "pending",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "ordinary preparation checks at 500ms, 1000ms, then 2000ms and stops at ready",
+          "status": "pending",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a projection completed at two seconds is displayed at the two-second check",
+          "status": "failed",
+          "duration": null,
+          "failureMessages": [
+            "Error: expect(received).toEqual(expected) // deep equality\n\nExpected: {\"at\": 2000, \"value\": {\"result\": \"ready\"}}\nReceived: undefined\n    at Object.<anonymous> (/workspace/scratch/e3ebab9db878/mezan-latency-r2/frontend/src/lib/demandRead.test.js:66:22)"
+          ]
+        },
+        {
+          "fullName": "a slower server backpressure hint is never shortened, including beyond ten seconds",
+          "status": "pending",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "invalid timer hint 2147483648 fails instead of causing a rapid polling loop",
+          "status": "pending",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "invalid timer hint 1e+40 fails instead of causing a rapid polling loop",
+          "status": "pending",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "invalid timer hint -1 fails instead of causing a rapid polling loop",
+          "status": "pending",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "invalid timer hint 0.5 fails instead of causing a rapid polling loop",
+          "status": "pending",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "invalid timer hint null fails instead of causing a rapid polling loop",
+          "status": "pending",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "aborting preparation clears the poll and releases only its own consumer",
+          "status": "pending",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "hidden starts no network request",
+          "status": "pending",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "offline starts no network request",
+          "status": "pending",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a failed preparation is an error and cannot become an endless poll",
+          "status": "pending",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a family release URL is used without crossing into another origin",
+          "status": "pending",
+          "duration": null,
+          "failureMessages": []
+        },
+        {
+          "fullName": "a late preparing response after cancellation releases interest without polling",
+          "status": "pending",
+          "duration": null,
+          "failureMessages": []
+        }
+      ]
+    }
+  ]
+}

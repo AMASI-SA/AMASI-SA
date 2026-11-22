@@ -1,0 +1,59 @@
+{
+  "scope": "Isolated source regression evidence; no production latency measurement",
+  "base": "06763ffd6e3c3f7c861769b61d2c4e6b9b2d5f35",
+  "prior_checkpoint": "8920c8ed5bc5acc6643286256098e70e59695949",
+  "root_executed": {
+    "backend": {
+      "passed": 17,
+      "seconds": 7.08,
+      "exit_code": 0,
+      "evidence": "root-integrated-jobs.xml"
+    },
+    "frontend": {
+      "passed": 196,
+      "suites": 10,
+      "seconds": 6.859,
+      "exit_code": 0,
+      "evidence": "root-integrated-frontend.json"
+    }
+  },
+  "independent_observed_runs": {
+    "ledger_and_neighbors": {
+      "passed": 90,
+      "suites": 7,
+      "evidence": "owner-ledger-green.log"
+    },
+    "reports_and_neighbors": {
+      "passed": 179,
+      "suites": 6,
+      "seconds": 9.19,
+      "source": "Agent tool output; no separate raw artifact retained. Root integrated run separately includes all38 ApprovedReports cases."
+    },
+    "reader_and_visible": {
+      "passed": 78,
+      "suites": 2,
+      "evidence": "poll-and-visible-after.json"
+    }
+  },
+  "sha256": {
+    "backend/demand_read_runner.py": "f07c980a90622beda33d99c91bba96bd185169c953dcad09cbcb0e66eb10d5f8",
+    "backend/tests/test_demand_read_runner_lifecycle.py": "745ac953d52c48c4614a2de80e5467ec38df64f98e56ccc289e6378e9a0f0af7",
+    ".github/workflows/operational-balance-web.yml": "f6f24b53f090ba3f5139f54d628a6166a2e4147dba4332fa7e5c5d0e270e9013",
+    "frontend/src/lib/demandRead.js": "f92f1b14224298f8bac301aaecbe3bc73d335019c43ee5a5949d568b1c4ed08c",
+    "frontend/src/lib/demandRead.test.js": "6508521d883b93fe58ba59dcbf8f275a36cdee22b8a681532fc8955fe1ecb284",
+    "frontend/src/pages/operational/ApprovedFinance.jsx": "ea5e9eb63a5eb48439924992929150f1fc16f2b036a81db8c343546f5c41bd44",
+    "frontend/src/pages/operational/ApprovedFinance.demand.test.jsx": "b6c3e105089df8723f79a1e6cfd07944900601188f7092cad62f1257701c1634",
+    "frontend/src/pages/operational/ApprovedLedger.jsx": "8b2f4e9ec90fdd42575cb87079dfba2ab498fc4f5ece9b6670358b350a7ca473",
+    "frontend/src/pages/operational/ApprovedLedger.test.jsx": "9cf147d0c57407a8998a47d655663b2f1549b62a0f110d1e2f79b9e71e5a3a31",
+    "frontend/src/pages/operational/ApprovedCashBoxes.test.jsx": "c586573ca6384f4b25360643bc2d8ae0d9f69be175959e43842ac1b3f77340c8",
+    "frontend/src/pages/operational/ApprovedReports.jsx": "751fdd24182227d95d1337d8166d880786de59c4556b652ba50b17f9507de9fe",
+    "frontend/src/pages/operational/ApprovedReports.test.jsx": "1f7b00a858932f020700f617c9c349c7d9d0e0d2f8c79efbda082a37c9a5981b"
+  },
+  "reviews": {
+    "runner": "Independent release_preflight review PASS; root integrated17tests PASS",
+    "owner_ledger": "Independent cold_read_profile and release_preflight reviews PASS",
+    "reports": "Root review corrected summary reuse; independent verify_ci final review PASS",
+    "polling": "Root, verify_ci and release_preflight reviews PASS"
+  },
+  "remaining": "Exact final-source CI, protocol-v5 intent/rehearsal and live page latency verification remain pending."
+}

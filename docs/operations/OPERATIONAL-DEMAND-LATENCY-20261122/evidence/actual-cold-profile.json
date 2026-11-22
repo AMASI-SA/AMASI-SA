@@ -1,0 +1,82 @@
+{
+  "scope": "own isolated local replica; no production data or requests; no browser timing",
+  "fixture": {
+    "suppliers": 200,
+    "movements": 5000
+  },
+  "baseline": {
+    "home_ms": 522.2658839993528,
+    "report_ms": 190.02644200008945
+  },
+  "initial_home_http_202_ms": 43.731192003178876,
+  "queued_second_claim_ms": 5.90517899763654,
+  "ready_report_http_ms": 7.263573003001511,
+  "jobs": [
+    {
+      "family": "operational_home",
+      "launch_enter_ms": 3.3776450000004843,
+      "launch_return_ms": 4.178946001047734,
+      "publication_observed_ms": 1143.870234998758,
+      "runner_same_token_at_ready": true,
+      "child_exit_ms": 2502.5542180010234,
+      "exit_code": -6,
+      "run_claim_complete_ms": 2542.462887999136,
+      "child_metrics": {
+        "family": "operational_home",
+        "outcome": "ready",
+        "process_cpu_ms": 1478.44,
+        "mongo_driver_command_timeouts": 0,
+        "build_ms": 627.554,
+        "mongo_driver_command_p99_ms": 50.98,
+        "peak_rss_kib": 147940,
+        "mongo_driver_checkout_p95_ms": 0.05,
+        "mongo_driver_checkout_timeouts": 0,
+        "pid": 107,
+        "authorize_ms": 6.931,
+        "queue_ms": 19.0,
+        "check_calls": 10,
+        "wall_ms": 670.074,
+        "mongo_driver_command_p50_ms": 0.33,
+        "check_ms": 13.652,
+        "mongo_driver_command_p95_ms": 0.84,
+        "materialize_ms": 1.318
+      },
+      "startup_and_shutdown_outside_child_metric_ms": 1872.388887999136,
+      "observed_publication_to_runner_release_ms": 1398.592653000378
+    },
+    {
+      "family": "operational_report",
+      "launch_enter_ms": 1.4916949985490646,
+      "launch_return_ms": 2.440088999719592,
+      "publication_observed_ms": 1093.909827999596,
+      "runner_same_token_at_ready": true,
+      "child_exit_ms": 2393.8454980016104,
+      "exit_code": -6,
+      "run_claim_complete_ms": 2433.9516479994927,
+      "child_metrics": {
+        "family": "operational_report",
+        "outcome": "ready",
+        "process_cpu_ms": 1532.617,
+        "mongo_driver_command_timeouts": 0,
+        "build_ms": 687.665,
+        "mongo_driver_command_p99_ms": 27.47,
+        "peak_rss_kib": 147940,
+        "mongo_driver_checkout_p95_ms": 0.04,
+        "mongo_driver_checkout_timeouts": 0,
+        "pid": 126,
+        "authorize_ms": 6.216,
+        "queue_ms": 2556.0,
+        "check_calls": 7,
+        "wall_ms": 724.47,
+        "mongo_driver_command_p50_ms": 0.36,
+        "check_ms": 8.879,
+        "mongo_driver_command_p95_ms": 1.36,
+        "materialize_ms": 1.251
+      },
+      "startup_and_shutdown_outside_child_metric_ms": 1709.4816479994927,
+      "observed_publication_to_runner_release_ms": 1340.0418199998967
+    }
+  ],
+  "canonical_results_equal": true,
+  "source_unchanged": true
+}

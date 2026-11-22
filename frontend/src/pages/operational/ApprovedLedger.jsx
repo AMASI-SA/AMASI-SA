@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { todaySA } from '../../lib/dates';
 import { AdAmount, AdBalance, Amount, Heading, Icon, IconBox, MovementIcon, ResourceIcon, isAsset, issueLabel, styleOf } from './ApprovedFinanceUI';
 import { simpleBalancesApi as api, simpleBalanceError } from './simpleBalancesApi';
-import { useWorkspaceRead } from './workspaceReadHooks';
+import { assertWorkspace, retryWorkspaceRead, useWorkspaceRead } from './workspaceReadHooks';
 import { useReadDemand } from '../../lib/demandRead';
 import WorkspaceResourcePicker from './WorkspaceResourcePicker';
 import WorkspaceSnapshot from './WorkspaceSnapshot';
@@ -128,13 +128,15 @@ function PeriodPrint({ resource, period, scope }) {
     {print?.scope === scope && createPortal(<div dir="rtl" className="sb-print-root"><print.StatementDocument statement={print.value} printing /></div>, document.body)}</>;
 }
 
-function LedgerPage({ context, identity, resource, canOpenOrderDetails = false, initialInvoice, initialMovement, onDetail, onAdd, onPurchase, onBack, onReviewOrders, onHistory, onExpected, onReviewCollections, onReviewCustomerRefunds, onReviewCustomerCollections, onStatements, onProviderHistory, canUploadStatements = false }) {
+function LedgerPage({ context, identity, resource: suppliedResource, target, onResource, canOpenOrderDetails = false, initialInvoice, initialMovement, onDetail, onAdd, onPurchase, onBack, onReviewOrders, onHistory, onExpected, onReviewCollections, onReviewCustomerRefunds, onReviewCustomerCollections, onStatements, onProviderHistory, canUploadStatements = false }) {
+  const ownerLedger = Boolean(target?.kind && target.id && context.actor?.is_owner === true);
+  const requestResource = target || suppliedResource;
   const initialDate = initialInvoice?.date || initialMovement?.date;
   const [period, setPeriod] = useState(() => initialDate
     ? {date_from:initialDate, date_to:initialDate} : defaultPeriod(context.ledger_start));
   const [focus, setFocus] = useState(initialMovement?.movement || '');
   const openedReceipt = useRef(false);
-  const canSeeOrders = resource?.kind === 'provider' && resource.access?.balance && resource.access?.report && resource.access?.movements === 'all';
+  const canSeeOrders = requestResource?.kind === 'provider' && (ownerLedger || suppliedResource?.access?.balance && suppliedResource.access?.report && suppliedResource.access?.movements === 'all');
   const [providerTab, setProviderTab] = useState(initialMovement ? 'movements' : 'orders'), [allDates, setAllDates] = useState(true);
   const providerOrders = canSeeOrders && providerTab === 'orders';
   const [query, setQuery] = useState(initialInvoice?.number || ''), [draft, setDraft] = useState(initialInvoice?.number || '');
@@ -147,32 +149,55 @@ function LedgerPage({ context, identity, resource, canOpenOrderDetails = false, 
     const timer = setTimeout(() => { setFocus(''); setQuery(draft.trim()); setPage(1); }, 450);
     return () => clearTimeout(timer);
   }, [draft, query]);
-  const selected = !resource && (context.demandOnly ? pickedAccount : context.resources.find(r => resourceKey(r) === account));
+  const selected = !requestResource && (context.demandOnly ? pickedAccount : context.resources.find(r => resourceKey(r) === account));
   const scope = JSON.stringify([identity, context.session_scope, context.permission_version]);
-  const key = JSON.stringify([scope, resource?.kind, resource?.id, account, period.date_from, period.date_to, direction, status, query, page, providerOrders, allDates, focus]);
-  const readable = resource ? resource.access?.movements !== 'none' : context.demandOnly
+  const key = JSON.stringify([scope, requestResource?.kind, requestResource?.id, account, period.date_from, period.date_to, direction, status, query, page, providerOrders, allDates, focus]);
+  const readable = target ? ownerLedger : suppliedResource ? suppliedResource.access?.movements !== 'none' : context.demandOnly
     ? context.capabilities?.read_movements === true : context.resources.some(r => r.access?.movements !== 'none');
   const read = useWorkspaceRead(async config => {
     const params = { ...(providerOrders && allDates ? {} : period), ...(providerOrders && { provider_orders: true }), ...(focus && { focus_id:focus }), page, page_size: pageSize, ...(query && { q: query }), ...(direction && { direction }),
       ...(status && { status }), ...(selected && { kind: selected.kind, id: selected.id }) };
-    const result = resource ? await api.ledger(resource.kind, resource.id, params, config) : await api.movements(params, config);
+    const result = requestResource ? await api.ledger(requestResource.kind, requestResource.id, params, config) : await api.movements(params, config);
     if ((providerOrders && result?.provider_orders !== true) || !Array.isArray(result?.items) || result.items.length > pageSize || result.page_size !== pageSize ||
         !Number.isInteger(result.total) || !Number.isInteger(result.total_pages) || (focus ? !Number.isInteger(result.page) || result.page < 1 || result.page > result.total_pages : result.page !== Math.min(page, result.total_pages)) ||
-        (resource && (result.resource?.kind !== resource.kind || result.resource?.id !== resource.id))) throw new Error('invalid ledger');
+        (requestResource && (result.resource?.kind !== requestResource.kind || result.resource?.id !== requestResource.id))) throw new Error('invalid ledger');
+    if (ownerLedger) {
+      assertWorkspace(result, context);
+      const value = result.resource;
+      if (result.owner_override !== true || typeof value.name !== 'string' || !value.name
+          || typeof value.currency !== 'string' || !value.currency || !Array.isArray(value.operations)
+          || value.access?.movements !== 'all' || !['use', 'balance', 'report', 'print'].every(field => value.access[field] === true)) {
+        throw { response: { status: 409, data: { detail: { message: 'تعذر التحقق من الحساب وصلاحياته. أعد قراءة الصفحة.' } } } };
+      }
+    }
     return result;
   }, key, readable);
+  const result = read.data;
+  const resource = ownerLedger ? result?.resource : suppliedResource;
+  useEffect(() => {
+    if (!ownerLedger) return undefined;
+    onResource?.(result?.resource || null);
+    return () => onResource?.(null);
+  }, [ownerLedger, onResource, result?.resource]);
   const detailRead = useWorkspaceRead(async config => {
     const value = await api.resource(resource.kind, resource.id, config);
     if (!value || value.id !== resource.id || value.kind !== resource.kind || !value.access?.balance)
       throw {localMessage:'تعذر التحقق من رصيد هذا الحساب.'};
     return value;
-  }, JSON.stringify([scope, resource?.kind, resource?.id]), Boolean(context.directoryOnly && resource?.access?.balance && !readable));
-  const result = read.data, summary = resource ? result?.period : null;
+  }, JSON.stringify([scope, requestResource?.kind, requestResource?.id]), Boolean(context.directoryOnly && resource?.access?.balance && !readable));
+  const summary = resource ? result?.period : null;
   useEffect(() => {
     if (!focus || !result || openedReceipt.current) return;
     const row = result.items.find(item => item.id === focus);
     if (row) { openedReceipt.current = true; setDetail(row); }
   }, [focus, result]);
+  useEffect(() => { if (detail && dialog.current && !dialog.current.open) { if (dialog.current.showModal) dialog.current.showModal(); else dialog.current.setAttribute('open', ''); } }, [detail]);
+  if (target && (!ownerLedger || !resource)) return <>
+    <Heading title={isAsset(target.kind) ? 'كشف الحساب' : 'كشف الطرف'}/>
+    {!ownerLedger ? <p role="alert" className="note">هذه الصفحة غير متاحة ضمن صلاحياتك.</p>
+      : read.error ? <p role="alert" className="note">{read.error} <button type="button" onClick={() => retryWorkspaceRead(read, context)}>إعادة المحاولة</button></p>
+        : <p role="status">جارٍ تحميل كشف الحساب…</p>}
+  </>;
   const shownResource = context.directoryOnly || context.demandOnly ? (result?.resource || detailRead.data || resource) : resource;
   const changePeriod = next => { setFocus(''); setPeriod(next); setAllDates(false); setPage(1); };
   const selectTab = target => { setFocus(''); setProviderTab(target); setPage(1); setQuery(''); setDraft(''); };
@@ -180,7 +205,6 @@ function LedgerPage({ context, identity, resource, canOpenOrderDetails = false, 
     <Icon name="search" /><input type="search" maxLength={160} value={draft} aria-label={providerOrders ? 'بحث في طلبات ' + resource.name : resource ? 'بحث في حركات ' + resource.name : 'ابحث في الحركات'}
       placeholder={providerOrders ? 'ابحث برقم الطلب أو مرجع الدفع' : resource ? 'ابحث بالبيان أو المرجع أو اسم الموظف' : 'ابحث في الحركات'} onChange={e => setDraft(e.target.value)} /></form>;
   const show = row => { if (onDetail) onDetail(row); else { setDetail(row); } };
-  useEffect(() => { if (detail && dialog.current && !dialog.current.open) { if (dialog.current.showModal) dialog.current.showModal(); else dialog.current.setAttribute('open', ''); } }, [detail]);
   const issueCount = resource?.access?.movements === 'all' ? shownResource?.order_issues_count : undefined;
   const changeStatus = value => {
     if (['pending', 'rejected'].includes(value) && onReviewCollections) { onReviewCollections(selected || null, value); return; }
@@ -270,5 +294,6 @@ function LedgerPage({ context, identity, resource, canOpenOrderDetails = false, 
 
 export default function ApprovedLedger(props) {
   const { context, identity, resource } = props;
-  return <LedgerPage key={JSON.stringify([identity, context.session_scope, context.permission_version, resource?.kind, resource?.id, props.initialMovement?.movement])} {...props} />;
+  const target = props.target || resource;
+  return <LedgerPage key={JSON.stringify([identity, context.session_scope, context.permission_version, target?.kind, target?.id, props.initialMovement?.movement])} {...props} />;
 }

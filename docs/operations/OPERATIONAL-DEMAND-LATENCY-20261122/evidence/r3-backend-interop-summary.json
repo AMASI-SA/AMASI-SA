@@ -1,0 +1,20 @@
+{
+  "error": 0,
+  "exit_code": 0,
+  "failure": 0,
+  "result": "PASS",
+  "skipped": 0,
+  "suites": {
+    "test_assembly_demand_builders": 14,
+    "test_customer_inventory_unified_activity": 3,
+    "test_dashboard_demand_builders": 8,
+    "test_demand_read_jobs": 14,
+    "test_demand_read_runner_lifecycle": 3,
+    "test_demand_read_store": 13,
+    "test_operational_inventory_payment_allocation": 1,
+    "test_operational_inventory_purchase_receipts": 1,
+    "test_operational_workspace_demand_http": 6,
+    "test_operational_workspace_demand_reads": 38
+  },
+  "tests": 101
+}

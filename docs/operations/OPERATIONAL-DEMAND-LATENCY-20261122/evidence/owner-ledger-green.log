@@ -1,0 +1,32 @@
+OWNER LEDGER REGRESSION — CAPTURED FINAL TOOL OUTPUT
+
+Repository: /workspace/scratch/e3ebab9db878/mezan-latency-r2
+Base HEAD: 8920c8ed5bc5acc6643286256098e70e59695949
+Run after final owner-target authority guard and resource cleanup.
+Working directory: /workspace/scratch/e3ebab9db878/mezan-latency-r2/frontend
+Command:
+CI=true node node_modules/react-scripts/scripts/test.js --watchAll=false --runInBand --resetMocks=false --resolver ./scripts/jest-package-exports.cjs --cacheDirectory=/tmp/mezan-ledger-jest-cache src/pages/operational/ApprovedFinance.test.jsx src/pages/operational/ApprovedFinance.loading.test.jsx src/pages/operational/ApprovedFinance.demand.test.jsx src/pages/operational/ApprovedLedger.test.jsx src/pages/operational/ApprovedCashBoxes.test.jsx src/pages/operational/ApprovedEntry.test.jsx src/pages/operational/simpleBalancesApi.test.js
+Exit status: 0
+
+PASS src/pages/operational/ApprovedLedger.test.jsx
+PASS src/pages/operational/ApprovedEntry.test.jsx
+PASS src/pages/operational/ApprovedFinance.test.jsx
+PASS src/pages/operational/ApprovedFinance.loading.test.jsx
+PASS src/pages/operational/ApprovedFinance.demand.test.jsx
+PASS src/pages/operational/ApprovedCashBoxes.test.jsx
+PASS src/pages/operational/simpleBalancesApi.test.js
+
+Test Suites: 7 passed, 7 total
+Tests:       90 passed, 90 total
+Snapshots:   0 total
+Time:        4.773 s, estimated 6 s
+Ran all test suites matching /src\/pages\/operational\/ApprovedFinance.test.jsx|src\/pages\/operational\/ApprovedFinance.loading.test.jsx|src\/pages\/operational\/ApprovedFinance.demand.test.jsx|src\/pages\/operational\/ApprovedLedger.test.jsx|src\/pages\/operational\/ApprovedCashBoxes.test.jsx|src\/pages\/operational\/ApprovedEntry.test.jsx|src\/pages\/operational\/simpleBalancesApi.test.js/i.
+
+Frozen source SHA256:
+ea5e9eb63a5eb48439924992929150f1fc16f2b036a81db8c343546f5c41bd44  frontend/src/pages/operational/ApprovedFinance.jsx
+8b2f4e9ec90fdd42575cb87079dfba2ab498fc4f5ece9b6670358b350a7ca473  frontend/src/pages/operational/ApprovedLedger.jsx
+b6c3e105089df8723f79a1e6cfd07944900601188f7092cad62f1257701c1634  frontend/src/pages/operational/ApprovedFinance.demand.test.jsx
+9cf147d0c57407a8998a47d655663b2f1549b62a0f110d1e2f79b9e71e5a3a31  frontend/src/pages/operational/ApprovedLedger.test.jsx
+c586573ca6384f4b25360643bc2d8ae0d9f69be175959e43842ac1b3f77340c8  frontend/src/pages/operational/ApprovedCashBoxes.test.jsx
+
+git diff --check: exit status 0, no output.

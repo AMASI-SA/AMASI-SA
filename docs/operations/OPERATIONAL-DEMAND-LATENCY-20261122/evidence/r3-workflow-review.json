@@ -1,0 +1,10 @@
+{
+  "base": "24270ebdfdebb83282389308a2349cdb27e2b8e4",
+  "base_customer_inventory_selectors_counts_browser_acceptance": "unchanged",
+  "lifecycle_minimum_cases": 3,
+  "lifecycle_selector_occurrences": 1,
+  "preserves_all_base_bytes_except_two_insertions": true,
+  "result": "PASS",
+  "sha256": "16e06df0c59bc5fdede840d27a6e31337ff40b87f09eab4bb7e01f63f8748b2f",
+  "source_edits_required": false
+}

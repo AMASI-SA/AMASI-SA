@@ -1,5 +1,6 @@
 import http from './api';
 import { createReadDemand, demandRead } from './demandRead';
+import { visibleOperationalRead } from '../pages/operational/visibleOperationalRead';
 
 jest.mock('./api', () => ({ delete: jest.fn() }));
 const flush = async () => { for (let n = 0; n < 8; n += 1) await Promise.resolve(); };
@@ -30,14 +31,15 @@ test('only an explicit preparation polls, with one consumer, then a ready result
   expect(http.delete).toHaveBeenCalledWith('/operational-balances/workspace/read-demand/projection-1', expect.objectContaining({ params: { consumer_id: scope.consumerId } }));
 });
 
-test('ordinary preparation checks at 500ms, 1000ms, then 2000ms and stops at ready', async () => {
+test('ordinary preparation adds two early checks, then returns to the two-second cadence', async () => {
   const preparing = { ...pending, data: { ...pending.data, retry_after_ms: 2000 } };
   const request = jest.fn().mockResolvedValueOnce(preparing).mockResolvedValueOnce(preparing)
+    .mockResolvedValueOnce(preparing).mockResolvedValueOnce(preparing)
     .mockResolvedValueOnce(preparing).mockResolvedValueOnce(preparing)
     .mockResolvedValue({ status: 200, data: { result: 'ready' } });
   const result = demandRead(request);
   await flush();
-  for (const [calls, delay] of [[1, 500], [2, 1000], [3, 2000], [4, 2000]]) {
+  for (const [calls, delay] of [[1, 500], [2, 1000], [3, 500], [4, 500], [5, 1000], [6, 2000]]) {
     jest.advanceTimersByTime(delay - 1); await flush();
     expect(request).toHaveBeenCalledTimes(calls);
     jest.advanceTimersByTime(1); await flush();
@@ -48,7 +50,107 @@ test('ordinary preparation checks at 500ms, 1000ms, then 2000ms and stops at rea
   expect(request.mock.calls[0][0].headers['X-Mezan-Read-Poll']).toBeUndefined();
   expect(request.mock.calls.slice(1).every(([config]) => config.headers['X-Mezan-Read-Poll'] === '1')).toBe(true);
   jest.advanceTimersByTime(60000); await flush();
-  expect(request).toHaveBeenCalledTimes(5);
+  expect(request).toHaveBeenCalledTimes(7);
+});
+
+test('a projection completed at two seconds is displayed at the two-second check', async () => {
+  const started = Date.now(), controller = new AbortController();
+  const request = jest.fn(() => Promise.resolve(Date.now() - started >= 2000
+    ? { status: 200, data: { result: 'ready' } } : pending));
+  let received;
+  const result = demandRead(request, { signal: controller.signal }).then(value => {
+    received = { at: Date.now() - started, value };
+    return value;
+  });
+  try {
+    await flush();
+    for (const delay of [500, 1000, 500]) { jest.advanceTimersByTime(delay); await flush(); }
+    expect(received).toEqual({ at: 2000, value: { result: 'ready' } });
+    expect(request).toHaveBeenCalledTimes(4);
+    expect(jest.getTimerCount()).toBe(0);
+  } finally {
+    controller.abort();
+    await result.catch(() => {});
+  }
+});
+
+test('an immediate ready result starts no poll and remains complete', async () => {
+  const request = jest.fn().mockResolvedValue({ status: 200, data: { result: 'ready' } });
+  await expect(demandRead(request)).resolves.toEqual({ result: 'ready' });
+  expect(jest.getTimerCount()).toBe(0);
+  jest.advanceTimersByTime(60000); await flush();
+  expect(request).toHaveBeenCalledTimes(1);
+  expect(http.delete).not.toHaveBeenCalled();
+});
+
+test('a slow preparation adds only two checks over thirty seconds', async () => {
+  const controller = new AbortController(), request = jest.fn().mockResolvedValue(pending);
+  const result = demandRead(request, { signal: controller.signal });
+  const failure = expect(result).rejects.toMatchObject({ name: 'AbortError' });
+  try {
+    await flush();
+    for (let elapsed = 0; elapsed < 30000; elapsed += 500) {
+      jest.advanceTimersByTime(500); await flush();
+    }
+    // The prior cadence made 17 requests in this interval, including the first.
+    expect(request).toHaveBeenCalledTimes(19);
+    expect(new Set(request.mock.calls.map(([config]) => config.headers['X-Mezan-Read-Consumer'])).size).toBe(1);
+  } finally {
+    controller.abort();
+    await failure;
+  }
+  expect(jest.getTimerCount()).toBe(0);
+  jest.advanceTimersByTime(60000); await flush();
+  expect(request).toHaveBeenCalledTimes(19);
+  expect(http.delete).toHaveBeenCalledTimes(1);
+});
+
+test('an in-flight readiness request never overlaps another poll', async () => {
+  let complete;
+  const controller = new AbortController();
+  const request = jest.fn().mockResolvedValueOnce(pending)
+    .mockImplementationOnce(() => new Promise(resolve => { complete = resolve; }));
+  const result = demandRead(request, { signal: controller.signal });
+  try {
+    await flush();
+    jest.advanceTimersByTime(500); await flush();
+    expect(request).toHaveBeenCalledTimes(2);
+    jest.advanceTimersByTime(60000); await flush();
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(jest.getTimerCount()).toBe(0);
+    expect(new Set(request.mock.calls.map(([config]) => config.headers['X-Mezan-Read-Consumer'])).size).toBe(1);
+    complete({ status: 200, data: { result: 'ready' } });
+    await expect(result).resolves.toEqual({ result: 'ready' });
+  } finally {
+    controller.abort();
+    complete?.({ status: 200, data: { result: 'ready' } });
+    await result.catch(() => {});
+  }
+});
+
+test.each(['hidden', 'offline'])('%s during preparation releases demand and cancels the early checks', async state => {
+  const request = jest.fn().mockResolvedValue(pending), onData = jest.fn();
+  const dispose = visibleOperationalRead(config => demandRead(request, config), { onData });
+  try {
+    await flush();
+    jest.advanceTimersByTime(500); await flush();
+    expect(request).toHaveBeenCalledTimes(2);
+    if (state === 'hidden') {
+      visibility.mockReturnValue('hidden');
+      document.dispatchEvent(new Event('visibilitychange'));
+    } else {
+      online.mockReturnValue(false);
+      window.dispatchEvent(new Event('offline'));
+    }
+    await flush();
+    expect(jest.getTimerCount()).toBe(0);
+    expect(http.delete).toHaveBeenCalledTimes(1);
+    jest.advanceTimersByTime(60000); await flush();
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(onData).not.toHaveBeenCalled();
+  } finally {
+    dispose();
+  }
 });
 
 test('a slower server backpressure hint is never shortened, including beyond ten seconds', async () => {

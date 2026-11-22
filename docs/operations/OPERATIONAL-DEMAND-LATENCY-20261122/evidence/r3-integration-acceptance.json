@@ -1,0 +1,55 @@
+{
+  "kind": "r3_integration_acceptance",
+  "reviewed_base": "24270ebdfdebb83282389308a2349cdb27e2b8e4",
+  "historical_source": "6dcda12be98a68130954b42c704e209e03a43bcd",
+  "frontend": {
+    "tests": 194,
+    "suites": 10,
+    "failures": 0,
+    "skips": 0,
+    "evidence": "r3-frontend-verification.json"
+  },
+  "backend": {
+    "error": 0,
+    "exit_code": 0,
+    "failure": 0,
+    "result": "PASS",
+    "skipped": 0,
+    "suites": {
+      "test_assembly_demand_builders": 14,
+      "test_customer_inventory_unified_activity": 3,
+      "test_dashboard_demand_builders": 8,
+      "test_demand_read_jobs": 14,
+      "test_demand_read_runner_lifecycle": 3,
+      "test_demand_read_store": 13,
+      "test_operational_inventory_payment_allocation": 1,
+      "test_operational_inventory_purchase_receipts": 1,
+      "test_operational_workspace_demand_http": 6,
+      "test_operational_workspace_demand_reads": 38
+    },
+    "tests": 101
+  },
+  "reviews": {
+    "runner_report_polling_and_diagnostic": "APPROVE; exact earlier source except diagnostic base/message",
+    "finance_ledger_integration": "APPROVE; N customer/inventory UI and validated owner first-ledger path preserved",
+    "workflow": "APPROVE; exact N plus selector and minimum3"
+  },
+  "source_sha256": {
+    "backend/demand_read_runner.py": "f07c980a90622beda33d99c91bba96bd185169c953dcad09cbcb0e66eb10d5f8",
+    "backend/tests/test_demand_read_runner_lifecycle.py": "745ac953d52c48c4614a2de80e5467ec38df64f98e56ccc289e6378e9a0f0af7",
+    ".github/workflows/operational-balance-web.yml": "16e06df0c59bc5fdede840d27a6e31337ff40b87f09eab4bb7e01f63f8748b2f",
+    "frontend/src/lib/demandRead.js": "f92f1b14224298f8bac301aaecbe3bc73d335019c43ee5a5949d568b1c4ed08c",
+    "frontend/src/lib/demandRead.test.js": "6508521d883b93fe58ba59dcbf8f275a36cdee22b8a681532fc8955fe1ecb284",
+    "frontend/src/pages/operational/ApprovedFinance.jsx": "18ec53a15a222deaf0ea74375825d67e583913cae8a8c4d227b56483f81ce201",
+    "frontend/src/pages/operational/ApprovedFinance.demand.test.jsx": "4ba6d4d698db0de78d1220a8d4f05a7e98521e05a794e8857f3a4eb642bd18b2",
+    "frontend/src/pages/operational/ApprovedLedger.jsx": "c37a44a405082dc6d9eebc9bd730f6c686e8a9a0386c9f780a67dddac309c914",
+    "frontend/src/pages/operational/ApprovedLedger.test.jsx": "9c4fa59360f4bd0a3e0395b8714b547a24f9b8f430015dee12babf4d1d8976fb",
+    "frontend/src/pages/operational/ApprovedReports.jsx": "751fdd24182227d95d1337d8166d880786de59c4556b652ba50b17f9507de9fe",
+    "frontend/src/pages/operational/ApprovedReports.test.jsx": "1f7b00a858932f020700f617c9c349c7d9d0e0d2f8c79efbda082a37c9a5981b",
+    "frontend/src/pages/operational/ApprovedCashBoxes.test.jsx": "c586573ca6384f4b25360643bc2d8ae0d9f69be175959e43842ac1b3f77340c8",
+    "docs/operations/OPERATIONAL-DEMAND-LATENCY-20261122/MANUAL-HOST-LATENCY-DIAGNOSTIC.py": "0b608b157d3092a04f893637963ea864a8d9bfe98592fedb470488e4d7bcfc8a"
+  },
+  "production_changed_by_performance_task": false,
+  "production_latency_verified": false,
+  "original_intent_unchanged": true
+}

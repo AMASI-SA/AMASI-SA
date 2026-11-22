@@ -1,0 +1,32 @@
+{
+  "scope": "real ManagedWorker.wake pipe + parent_closed + demand_read_jobs.run; no DB/network/other jobs; mocked claim/index I/O",
+  "records": [
+    {
+      "wake_sent": true,
+      "pipe_delivered": true,
+      "parent_signal_to_marker_ms": 0.5318490002537146,
+      "child_exit_code": 0,
+      "second_claim_ms": 21.001470002374845,
+      "claims": 2,
+      "other_event_woken": false
+    },
+    {
+      "wake_sent": true,
+      "pipe_delivered": true,
+      "parent_signal_to_marker_ms": 0.35720300002139993,
+      "child_exit_code": 0,
+      "second_claim_ms": 20.83955399939441,
+      "claims": 2,
+      "other_event_woken": false
+    },
+    {
+      "wake_sent": false,
+      "pipe_delivered": false,
+      "parent_signal_to_marker_ms": 1981.8689560015628,
+      "child_exit_code": 0,
+      "second_claim_ms": 2002.3459830008505,
+      "claims": 2,
+      "other_event_woken": false
+    }
+  ]
+}

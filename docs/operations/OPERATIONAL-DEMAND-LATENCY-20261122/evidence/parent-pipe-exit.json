@@ -1,0 +1,47 @@
+{
+  "scope": "local no-DB subprocess; original watch function unchanged",
+  "records": [
+    {
+      "case": "entry_import_only",
+      "iteration": 1,
+      "wall_ms": 114.15369200040004,
+      "exit_code": 0,
+      "stderr": ""
+    },
+    {
+      "case": "entry_import_only",
+      "iteration": 2,
+      "wall_ms": 114.32904699904611,
+      "exit_code": 0,
+      "stderr": ""
+    },
+    {
+      "case": "existing_buffered_parent_watch",
+      "iteration": 1,
+      "wall_ms": 1117.1285139971587,
+      "exit_code": -6,
+      "stderr": "Fatal Python error: _enter_buffered_busy: could not acquire lock for <_io.BufferedReader name='<stdin>'> at interpreter shutdown, possibly due to daemon threads\nPython runtime state: finalizing (tstate=0x00000000015b7de0)\n\nCurrent thread 0x00007fa3fde15740 (most recent call first):\n  <no Python frame>\n"
+    },
+    {
+      "case": "existing_buffered_parent_watch",
+      "iteration": 2,
+      "wall_ms": 1117.1228960010922,
+      "exit_code": -6,
+      "stderr": "Fatal Python error: _enter_buffered_busy: could not acquire lock for <_io.BufferedReader name='<stdin>'> at interpreter shutdown, possibly due to daemon threads\nPython runtime state: finalizing (tstate=0x00000000015b7de0)\n\nCurrent thread 0x00007f2d8aaec740 (most recent call first):\n  <no Python frame>\n"
+    },
+    {
+      "case": "scratch_unbuffered_parent_watch",
+      "iteration": 1,
+      "wall_ms": 64.10320600116393,
+      "exit_code": 0,
+      "stderr": ""
+    },
+    {
+      "case": "scratch_unbuffered_parent_watch",
+      "iteration": 2,
+      "wall_ms": 64.47767599820509,
+      "exit_code": 0,
+      "stderr": ""
+    }
+  ]
+}

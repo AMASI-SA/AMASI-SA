@@ -111,9 +111,9 @@ export async function demandRead(request, config = {}, options = {}) {
         demand.claim(value.release_url || `${options.releasePath || '/operational-balances/workspace/read-demand'}/${encodeURIComponent(value.key)}`);
         polling = true;
         assertActive();
-        // Ordinary queue hints allow two early checks before steady polling.
+        // Add only two early checks before returning to the steady cadence.
         // A slower server hint is backpressure and must never be shortened.
-        const cadence = preparingResponses === 0 ? 500 : preparingResponses === 1 ? 1000 : 2000;
+        const cadence = [500, 1000, 500, 500, 1000][preparingResponses] ?? 2000;
         preparingResponses += 1;
         await wait(value.retry_after_ms > 2000 ? value.retry_after_ms : cadence, signal);
         continue;

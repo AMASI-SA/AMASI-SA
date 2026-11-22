@@ -11,7 +11,7 @@ jest.mock('../../context/AuthContext', () => ({useOptionalAuth:jest.fn()}));
 jest.mock('./simpleBalancesApi', () => ({simpleBalancesApi:{bootstrap:jest.fn(),home:jest.fn(),directory:jest.fn(),selection:jest.fn(), ledger:jest.fn()}, simpleBalanceError:()=> 'خطأ'}));
 jest.mock('./api', () => ({operationalApi:{addEntity:jest.fn()},requestId:()=> 'fixture-request',messageFor:()=> 'تعذر الحفظ'}));
 
-const resource=(kind,id,name,amount)=>({kind,id,name,currency:'SAR',access:{balance:true,movements:'all',report:true},
+const resource=(kind,id,name,amount)=>({kind,id,name,currency:'SAR',access:{use:true,balance:true,movements:'all',report:true,print:true},
   balance:{visible:true,side:'for_us',amount},operations:[]});
 const bank=resource('bank','inma','الإنماء','90.00');
 const wallet={...resource('cash','shipping','محفظة سله','654.00'),prepaid_shipping_cash:true};
@@ -44,7 +44,8 @@ function mockContext(value, summary={currency:'SAR',bank:'90.00',cash:null,total
 test('owner creates a SAR cash account and sees its refreshed ledger without recording money',async()=>{
   mockContext(base);
   simpleBalancesApi.selection.mockResolvedValue({...drawer,session_scope:base.session_scope,permission_version:base.permission_version});
-  simpleBalancesApi.ledger.mockResolvedValue({items:[],total:0,page:1,page_size:8});
+  simpleBalancesApi.ledger.mockResolvedValue({resource:drawer,items:[],total:0,page:1,page_size:8,total_pages:1,
+    session_scope:base.session_scope,permission_version:base.permission_version,owner_override:true});
   operationalApi.addEntity.mockResolvedValue(drawer);
   await render('home');
   expect(host.querySelector('.hero').textContent).toContain('لا توجد صناديق نقدية بالريال');
@@ -60,6 +61,8 @@ test('owner creates a SAR cash account and sees its refreshed ledger without rec
   expect(simpleBalancesApi.bootstrap).toHaveBeenCalledTimes(2);
   expect(host.querySelector('h1').textContent).toBe(drawer.name);
   expect(host.textContent).toContain('تمت إضافة الصندوق الرئيسي');
+  expect(simpleBalancesApi.ledger).toHaveBeenCalledTimes(1);
+  expect(simpleBalancesApi.selection).not.toHaveBeenCalled();
 });
 
 test('the cash group has an add action with no existing accounts',async()=>{
