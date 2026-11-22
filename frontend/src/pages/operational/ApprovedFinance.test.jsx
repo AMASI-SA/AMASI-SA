@@ -1,6 +1,6 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useNavigate } from 'react-router-dom';
 import { useOptionalAuth } from '../../context/AuthContext';
 import ApprovedFinance from './ApprovedFinance';
 import { simpleBalancesApi as api } from './simpleBalancesApi';
@@ -8,7 +8,7 @@ import { operationalApi } from './api';
 
 jest.mock('react-router-dom', () => { global.TextEncoder = require('util').TextEncoder; return jest.requireActual('react-router'); });
 jest.mock('../../context/AuthContext',()=>({useOptionalAuth:jest.fn()}));
-jest.mock('./simpleBalancesApi',()=>({simpleBalancesApi:{bootstrap:jest.fn(),home:jest.fn(),directory:jest.fn(),selection:jest.fn(),options:jest.fn(),parties:jest.fn(),movements:jest.fn()},simpleBalanceError:()=> 'تعذر التحميل'}));
+jest.mock('./simpleBalancesApi',()=>({simpleBalancesApi:{bootstrap:jest.fn(),home:jest.fn(),directory:jest.fn(),selection:jest.fn(),options:jest.fn(),parties:jest.fn(),movements:jest.fn(),customerAdjustments:jest.fn()},simpleBalanceError:()=> 'تعذر التحميل'}));
 jest.mock('./api',()=>({operationalApi:{financialPosition:jest.fn(),refreshBalances:jest.fn()}}));
 global.IS_REACT_ACT_ENVIRONMENT=true;
 const base='/operational-balances/daily-movements';
@@ -104,6 +104,67 @@ function ownerReports() {
 }
 const openFinance = view => act(async()=>root.render(<MemoryRouter initialEntries={['/operational-balances?view='+view]}><ApprovedFinance/></MemoryRouter>));
 const openFinanceTab = view => act(async()=>host.querySelector('nav[aria-label="صفحات الأرصدة"] a[href="/operational-balances?view='+view+'"]').click());
+
+
+test('refund read isolation across navigation uses one bootstrap', async () => {
+  const owner = ownerReports();
+  mockContext({...owner, operations:[{key:'customer.refund_read'}]});
+
+  api.customerAdjustments.mockResolvedValue({
+    items:[], page:1, page_size:8, total:0, total_pages:1,
+    summary:{
+      refund_pending_amount:'0.00',
+      refund_pending_count:0,
+      collection_pending_amount:'0.00',
+      collection_pending_count:0,
+      unknown_count:0
+    }
+  });
+
+  function NavigationProbe() {
+    const navigate = useNavigate();
+    return <>
+      <button id="open-refund-test"
+        onClick={() => navigate('/operational-balances?view=refund')}>
+        Refund
+      </button>
+      <button id="open-home-test"
+        onClick={() => navigate('/operational-balances?view=home')}>
+        Home
+      </button>
+      <ApprovedFinance/>
+    </>;
+  }
+
+  await act(async () => root.render(
+    <MemoryRouter initialEntries={['/operational-balances?view=home']}>
+      <NavigationProbe/>
+    </MemoryRouter>
+  ));
+
+  expect(api.bootstrap).toHaveBeenCalledTimes(1);
+  expect(api.home).toHaveBeenCalledTimes(1);
+  expect(api.customerAdjustments).not.toHaveBeenCalled();
+
+  await act(async () => {
+    host.querySelector('#open-refund-test').click();
+  });
+
+  expect(host.textContent).toContain('إرجاع مبلغ لعميل');
+  expect(api.customerAdjustments).toHaveBeenCalledTimes(1);
+  expect(api.home).toHaveBeenCalledTimes(1);
+  expect(api.directory).not.toHaveBeenCalled();
+  expect(api.movements).not.toHaveBeenCalled();
+  expect(api.bootstrap).toHaveBeenCalledTimes(1);
+
+  await act(async () => {
+    host.querySelector('#open-home-test').click();
+  });
+
+  expect(api.home).toHaveBeenCalledTimes(2);
+  expect(api.bootstrap).toHaveBeenCalledTimes(1);
+  expect(api.customerAdjustments).toHaveBeenCalledTimes(1);
+});
 
 test.each(['reports','entry','log'])('opening reports from %s reads bootstrap once and the saved report only on its page', async start => {
   ownerReports();

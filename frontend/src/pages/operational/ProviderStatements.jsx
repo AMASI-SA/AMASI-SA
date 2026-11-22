@@ -97,10 +97,11 @@ export default function ProviderStatements({ providerId: selectedProvider } = {}
     const auth = useOptionalAuth();
     const user = auth?.user;
     const owner = user?.is_owner === true || String(user?.role || "").toLowerCase() === "owner";
-    const grant = managedWebPages(user)?.find(page => page.id === "balances.statements");
-    const identity = JSON.stringify([grant?.mode, user?.id, user?.created_by, user?.owner_id, user?.merchant_id, user?.tenant_id, user?.role, user?.is_owner, auth?.authStatus]);
-    if (auth?.loading) return <Frame providerId={providerId}><p role="status">جارٍ التحقق من الجلسة…</p></Frame>;
-    if (!user || (!owner && !grant)) return <Frame providerId={providerId}><p role="alert" className="op-error">مطابقة كشوف المنصات متاحة لمالك الحساب فقط.</p></Frame>;
+    const grant = managedWebPages(user)?.find(page => page.id === "balances.statements" && ["read", "write"].includes(page.mode));
+    const identity = JSON.stringify([user?.web_page_access, user?.mobile_app_access, user?.permissions,
+        user?.id, user?.created_by, user?.owner_id, user?.merchant_id, user?.tenant_id, user?.role, user?.is_owner, auth?.authStatus]);
+    if (auth?.loading || (auth?.authStatus && auth.authStatus !== "authenticated")) return <Frame providerId={providerId}><p role="status">جارٍ التحقق من الجلسة…</p></Frame>;
+    if (!user || (!owner && !grant)) return <Frame providerId={providerId}><p role="alert" className="op-error">تحتاج صلاحية كشوف منصات الدفع لعرض هذه الصفحة.</p></Frame>;
     if (!supported) return <Frame providerId={providerId}><section className="op-statement-upload" role="status">
         <h2>{providerNames[providerId] ? `كشوف ${providerNames[providerId]}` : "منصة غير معروفة"}</h2>
         <p>الاستيراد الآلي المتاح هنا لكشوف تابي وتمارا وسلة فقط. لا يوجد مستورد معتمد لهذه المنصة في هذه الصفحة.</p>
@@ -164,6 +165,7 @@ function StatementWorkspace({ writable, providerId }) {
 
     function read(kind, id, initial = false) {
         if (writeLock.current || denied) return;
+        if (kind === "saved" && context.current?.permissions.use_saved_file !== true) return;
         if (kind !== "history" && !context.current) return;
         const expectedScope = context.current?.session_scope;
         const expectedStart = context.current?.started_at;
@@ -237,6 +239,7 @@ function StatementWorkspace({ writable, providerId }) {
     async function send(command) {
         if (!writable || !command || writeLock.current || !alive.current || !canReadOperationalPage() || denied) return;
         const current = context.current;
+        if (command.kind === "saved" && current?.permissions.use_saved_file !== true) return;
         if (!current?.active || command.body.expected_session_scope !== current.session_scope
             || current.permissions[intake(command.kind) ? "upload" : "confirm"] !== true) return;
         if (intake(command.kind) && (!current.started_at || command.body.expected_started_at !== current.started_at)) return;
@@ -299,6 +302,7 @@ function StatementWorkspace({ writable, providerId }) {
         send({ kind: "upload", file, body: { request_id: requestId(), expected_session_scope: context.current.session_scope, expected_started_at: context.current.started_at } });
     }
     function toggleSavedFiles() {
+        if (context.current?.permissions.use_saved_file !== true) return;
         if (savedFilesOpen) {
             if (busy === "saved_read") { readGeneration.current += 1; readCleanup.current?.(); setBusy(""); }
             setSavedFilesOpen(false); setSavedFiles(null); setSelectedSavedId("");
@@ -342,7 +346,8 @@ function StatementWorkspace({ writable, providerId }) {
     const canConfirm = writable && detail && inProvider(detail.statement) && detail.active && detail?.permissions.confirm && history?.session_scope === detail?.session_scope;
     const historyItems = history?.items.filter(inProvider) || [];
     const savedItems = savedFiles?.items.filter(inProvider) || [];
-    const canUseSaved = writable && !disabled && history?.permissions.upload && savedFiles?.active && savedFiles.permissions.upload
+    const canUseSaved = writable && !disabled && history?.permissions.use_saved_file === true && history?.permissions.upload
+        && savedFiles?.active && savedFiles.permissions.upload && savedFiles.permissions.use_saved_file === true
         && Boolean(savedFiles.started_at) && savedFiles.session_scope === history?.session_scope && savedFiles.started_at === history?.started_at;
     return <>
         {providerId && <div className="op-statement-toolbar" aria-label="سياق المنصة">
@@ -365,7 +370,7 @@ function StatementWorkspace({ writable, providerId }) {
             </section>}
             {history && <>
                 {!history.active && <p className="op-error">التشغيل غير نشط. يمكنك قراءة الكشوف المحفوظة، ويتاح الرفع والاعتماد أثناء التشغيل.</p>}
-                {writable && <button type="button" className="op-statement-saved-toggle" aria-expanded={savedFilesOpen} onClick={toggleSavedFiles}
+                {writable && history.permissions.use_saved_file === true && <button type="button" className="op-statement-saved-toggle" aria-expanded={savedFilesOpen} onClick={toggleSavedFiles}
                     disabled={(Boolean(busy) && busy !== "saved_read") || Boolean(pending) || !readable}>
                     {savedFilesOpen ? "إغلاق قائمة الكشوف السابقة" : "استخدام كشف مرفوع سابقًا"}</button>}
                 {savedFilesOpen && <section className="op-statement-saved" aria-label="الكشوف المرفوعة سابقًا">

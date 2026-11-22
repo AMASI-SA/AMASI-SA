@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import uuid
+import hashlib
 from datetime import datetime, timezone
 from typing import Any
 
 from order_tracking_notes import enforce_stage_instructions
+from assembly_status_policy import status_values
 
 WORKFLOWS = "order_review_workflows"
 EVENTS = "mezan_fulfillment_events_v2"
@@ -82,10 +84,7 @@ def carrier_handoff_custody_is_visible(
         return False
     if _text(handoff_state).casefold() != "with_handoff_employee":
         return False
-    return workflow_stage_for_salla_status(
-        order_status_slug,
-        order_status_name,
-    ) is None
+    return (status_values(order_status_slug) | status_values(order_status_name)) == {"completed"}
 
 
 def _snapshot(workflow: dict[str, Any]) -> dict[str, Any]:
@@ -277,13 +276,39 @@ async def receive_carrier_shipment(
     scanned_barcode: str,
     actor_id: str,
     actor_name: str,
+    receipt_context: dict[str, str] | None = None,
+    require_current_status: bool = False,
 ) -> dict[str, Any]:
+    """Claim once; a native acknowledgement is saved in the same workflow CAS.
+
+    HTTP callers run this existing writer under operational_owner so source
+    synchronization, custody and the audit event share the same owner fence.
+    Replay reads the saved acknowledgement, including after a status release.
+    """
+    from mobile_carrier_handoff import RECEIPT, public_receipt
+
+    def rejected(code, message, *, status_code=409, details=None):
+        return CarrierHandoffError(code, message, status_code=status_code,
+            details={**(details or {}), "not_applied": True})
+
     barcode = normalize_shipping_barcode(scanned_barcode)
     if not barcode:
-        raise CarrierHandoffError(
+        raise rejected(
             "carrier_label_barcode_required",
             "صوّر باركود بوليصة الشحن أولًا.",
         )
+    barcode_hash = hashlib.sha256(barcode.encode()).hexdigest()
+    if receipt_context:
+        previous = await db[WORKFLOWS].find_one({"user_id": user_id,
+            "carrier_handoff_employee_id": actor_id, RECEIPT + ".request_id": receipt_context["request_id"]},
+            {"_id": 0, RECEIPT: 1, "order_number": 1})
+        if previous:
+            receipt = previous.get(RECEIPT) or {}
+            if (any(receipt.get(key) != value for key, value in receipt_context.items())
+                    or receipt.get("employee_id") != actor_id or receipt.get("barcode_hash") != barcode_hash):
+                raise rejected("carrier_handoff_request_conflict", "استُخدم معرّف المحاولة لشحنة أو جلسة مختلفة.")
+            return {"ok": True, "order_number": receipt["order_number"], "idempotent": True,
+                "outcome": "replayed", "receipt": public_receipt(receipt)}
     workflow = await db[WORKFLOWS].find_one(
         {
             "user_id": user_id,
@@ -293,18 +318,18 @@ async def receive_carrier_shipment(
         {"_id": 0},
     )
     if not workflow:
-        raise CarrierHandoffError(
+        raise rejected(
             "carrier_shipment_not_confirmed_by_labeling",
             "هذه الشحنة لم يؤكد موظف العنونة طباعتها، أو أن الباركود غير صحيح.",
             status_code=404,
         )
     if _text(workflow.get("carrier_label_type")) == "store_courier":
-        raise CarrierHandoffError(
+        raise rejected(
             "store_courier_separate_flow",
             "طلبات مندوب المتجر لا تدخل حساب تسليم شركات الشحن.",
         )
     if workflow.get("carrier_handoff_employee_id"):
-        raise CarrierHandoffError(
+        raise rejected(
             "carrier_shipment_already_received",
             "أُضيفت هذه الشحنة مسبقًا إلى حساب موظف تسليم الشحن.",
             details={
@@ -313,20 +338,38 @@ async def receive_carrier_shipment(
             },
         )
     if _text(workflow.get("stage")) != "completed":
-        raise CarrierHandoffError(
+        raise rejected(
             "carrier_shipment_no_longer_waiting",
             "هذه الشحنة لم تعد بانتظار التسليم لشركة الشحن.",
         )
-    await enforce_stage_instructions(
-        db,
-        user_id=user_id,
-        order_number=_text(workflow.get("order_number")),
-        stage="carrier_handoff",
-        actor_id=actor_id,
-        order_wide=True,
-    )
+    carrier = None
+    if require_current_status or receipt_context:
+        from assembly_status_policy import canonical_status
+        from mobile_carrier_handoff import LIST_PROJECTION, source_identity, external_carrier
+        source = await db["unified_orders"].find_one(
+            {"user_id": user_id, "order_number": workflow.get("order_number")}, LIST_PROJECTION)
+        if not source or not source_identity(source, user_id) or canonical_status(source) != "completed":
+            raise rejected("carrier_shipment_current_status_not_completed", "حالة الطلب الحالية ليست «تم التنفيذ»؛ لم تُستلم الشحنة.")
+        carrier = external_carrier(source, workflow)
+        if not carrier:
+            raise rejected("store_courier_separate_flow", "هذه الشحنة ليست لشركة شحن خارجية؛ لم تُستلم الشحنة.")
+    try:
+        await enforce_stage_instructions(
+            db, user_id=user_id, order_number=_text(workflow.get("order_number")),
+            stage="carrier_handoff", actor_id=actor_id, order_wide=True,
+        )
+    except Exception as exc:
+        from fastapi import HTTPException
+        if isinstance(exc, HTTPException) and isinstance(exc.detail, dict):
+            raise HTTPException(exc.status_code, detail={**exc.detail, "not_applied": True}) from exc
+        raise
 
     now = _now()
+    receipt = None
+    if receipt_context:
+        receipt = {**receipt_context, "receipt_id": str(uuid.uuid4()), "employee_id": actor_id,
+            "order_number": workflow["order_number"], "carrier_key": carrier[0], "carrier_name": carrier[1],
+            "received_at": now, "barcode_hash": barcode_hash}
     result = await db[WORKFLOWS].update_one(
         {
             "user_id": user_id,
@@ -348,11 +391,14 @@ async def receive_carrier_shipment(
                 "carrier_handoff_scanned_at": now,
                 "carrier_handoff_custody_active": True,
                 "updated_at": now,
+                **({RECEIPT: receipt} if receipt else {}),
             }
         },
     )
     if not result.modified_count:
-        raise CarrierHandoffError(
+        # A guarded update which matched no document applied no receipt. A DB
+        # exception is deliberately not translated into this definitive result.
+        raise rejected(
             "carrier_shipment_receive_conflict",
             "استلم موظف آخر الشحنة في اللحظة نفسها؛ حدّث الصفحة.",
         )
@@ -376,7 +422,8 @@ async def receive_carrier_shipment(
         "carrier_handoff_scanned_at": now,
         "carrier_handoff_custody_active": True,
     }
-    return {"ok": True, **_snapshot(updated)}
+    return {"ok": True, **_snapshot(updated), **({"idempotent": False, "outcome": "received",
+        "receipt": public_receipt(receipt)} if receipt else {})}
 
 
 async def advance_carrier_handoff_from_salla_status(

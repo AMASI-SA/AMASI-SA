@@ -18,6 +18,7 @@ from order_review_routes import _merchant_user_id, _text
 from preparation_supplier_dispatch import (
     DISPATCHES,
     DISPATCH_EVENTS,
+    _actor_id,
     _actor_name,
     _now,
     _require_preparation_worker,
@@ -77,7 +78,7 @@ def make_supplier_dispatch_share_evidence_router(db: Any, current_user: Callable
     async def status(dispatch_id: str, user: dict = Depends(current_user)) -> dict[str, Any]:
         worker = await _require_preparation_worker(db, user, permission="preparation.assigned.read")
         user_id = _merchant_user_id(worker)
-        dispatch = await _owned_dispatch(db, user_id=user_id, employee_id=_text(worker.get("id")), dispatch_id=dispatch_id)
+        dispatch = await _owned_dispatch(db, user_id=user_id, employee_id=_actor_id(worker), dispatch_id=dispatch_id)
         return {"ok": True, **_public_status(dispatch)}
 
     @router.post("/{dispatch_id}/evidence")
@@ -88,7 +89,7 @@ def make_supplier_dispatch_share_evidence_router(db: Any, current_user: Callable
     ) -> dict[str, Any]:
         worker = await _require_preparation_worker(db, user, permission="preparation.assigned.work")
         user_id = _merchant_user_id(worker)
-        employee_id = _text(worker.get("id"))
+        employee_id = _actor_id(worker)
         dispatch = await _owned_dispatch(db, user_id=user_id, employee_id=employee_id, dispatch_id=dispatch_id)
         if dispatch.get("share_confirmed") is True:
             return {"ok": True, **_public_status(dispatch)}
@@ -137,7 +138,7 @@ def make_supplier_dispatch_share_evidence_router(db: Any, current_user: Callable
     async def confirm(dispatch_id: str, user: dict = Depends(current_user)) -> dict[str, Any]:
         worker = await _require_preparation_worker(db, user, permission="preparation.assigned.work")
         user_id = _merchant_user_id(worker)
-        employee_id = _text(worker.get("id"))
+        employee_id = _actor_id(worker)
         dispatch = await _owned_dispatch(db, user_id=user_id, employee_id=employee_id, dispatch_id=dispatch_id)
         if dispatch.get("share_confirmed") is True:
             return {"ok": True, **_public_status(dispatch)}

@@ -150,6 +150,165 @@ class TrackingTests(unittest.IsolatedAsyncioTestCase):
         self.user = {**self.owner, "_session_client": "amasi_mobile"}
         await self.get()
 
+    async def test_barcode_lookup_returns_whole_order_and_matched_piece_without_writes(self):
+        await self.source(quantity=2)
+        identity = 'a' * 32
+        await self.piece(identity)
+        await self.piece('b' * 32, unit_index=2)
+        self.commands.names.clear()
+        response = await self.client.get('/api/mobile/order-tracking/lookup',
+            params={'query': 'MEZAN-PIECE:' + identity.upper()})
+        self.assertEqual(response.status_code, 200, response.text)
+        data = response.json()
+        self.assertEqual(data['order_number'], '10001')
+        self.assertEqual(data['matched_piece_id'], identity)
+        self.assertEqual(len(data['items'][0]['pieces']), 2)
+        self.assertEqual(response.headers['cache-control'], 'private, no-store')
+        self.assertFalse(set(self.commands.names) & {'insert', 'update', 'delete', 'findAndModify', 'createIndexes'})
+
+    async def test_barcode_lookup_fails_closed_for_cross_tenant_archived_and_duplicate_identity(self):
+        await self.source()
+        identity = 'c' * 32
+        await self.piece(identity, owner='owner-b')
+        for query in [identity, 'MEZAN-PIECE:' + identity]:
+            response = await self.client.get('/api/mobile/order-tracking/lookup', params={'query': query})
+            self.assertEqual(response.status_code, 404, response.text)
+            self.assertEqual(response.json()['detail']['code'], 'mobile_order_tracking_barcode_not_found')
+        await self.piece(identity, experiment_archived_at=datetime.now(timezone.utc))
+        response = await self.client.get('/api/mobile/order-tracking/lookup', params={'query': identity})
+        self.assertEqual(response.status_code, 404, response.text)
+        await self.piece(identity)
+        await self.piece(identity, number='20002')
+        response = await self.client.get('/api/mobile/order-tracking/lookup', params={'query': identity})
+        self.assertEqual(response.status_code, 409, response.text)
+        self.assertEqual(response.json()['detail']['code'], 'mobile_order_tracking_barcode_ambiguous')
+
+    async def test_barcode_lookup_requires_current_tracking_grant_and_valid_payload(self):
+        await self.source()
+        await self.piece('d' * 32)
+        response = await self.client.get('/api/mobile/order-tracking/lookup', params={'query': 'SKU-not-a-piece'})
+        self.assertEqual(response.status_code, 422, response.text)
+        await self.grant(['app.page.assembly_shipping'])
+        response = await self.client.get('/api/mobile/order-tracking/lookup', params={'query': 'd' * 32})
+        self.assertEqual(response.status_code, 403, response.text)
+
+    async def test_named_service_receipts_are_distinct_from_product_and_assignment(self):
+        await self.source()
+        at1, at2 = '2026-11-10T09:00:00Z', '2026-11-11T09:00:00Z'
+        await self.piece(supplier_dispatch_status='received', supplier_id='service-supplier',
+            supplier_name='مورد التطريز', sent_to_supplier_at='2026-11-09T09:00:00Z',
+            supplier_dispatch_id='dispatch-a', received_at=at2, services=[
+                {'service_id': 'embroidery', 'service_name': 'تطريز الاسم', 'status': 'completed',
+                 'completed_quantity': 1, 'required_quantity': 1, 'completed_at': at2,
+                 'completed_by_supplier_name': 'مورد التطريز', 'supplier_invoice_id': 'receipt-service'},
+                {'service_id': 'packaging', 'service_name': 'تغليف هدية', 'status': 'pending'}],
+            supplier_receiving_history=[
+                {'invoice_id': 'receipt-product', 'supplier_id': 'product-supplier',
+                 'supplier_name': 'محل أماسي الخليج', 'received_by_name': 'هلال', 'received_at': at1, 'services': []},
+                {'invoice_id': 'receipt-service', 'supplier_id': 'service-supplier',
+                 'supplier_name': 'مورد التطريز', 'received_by_name': 'هلال', 'received_at': at2,
+                 'services': [{'service_id': 'embroidery', 'service_name': 'تطريز الاسم'}]}])
+        await self.db.mezan_supplier_dispatches_v1.insert_one({
+            'id': 'dispatch-a', 'user_id': 'owner-a', 'status': 'sent', 'sent_by_id': 'prep-a',
+            'sent_by_name': 'هلال', 'supplier_id': 'product-supplier', 'supplier_name': 'محل أماسي الخليج',
+            'source_files': [{'cards': [{'piece_id': 'piece-a'}]}]})
+        data = await self.get()
+        steps = data['items'][0]['pieces'][0]['route_steps']
+        product = [row for row in steps if row.get('kind') == 'product_supplier_received']
+        self.assertEqual(len(product), 1)
+        self.assertEqual(product[0]['supplier_name'], 'محل أماسي الخليج')
+        assigned = next(row for row in steps if row.get('kind') == 'product_supplier_assigned')
+        self.assertEqual(assigned['supplier_name'], 'محل أماسي الخليج')
+        received = [row for row in steps if row.get('kind') == 'service_supplier_received' and row['state'] == 'done']
+        self.assertEqual(len(received), 1)
+        self.assertEqual(received[0]['service_name'], 'تطريز الاسم')
+        self.assertEqual(received[0]['supplier_name'], 'مورد التطريز')
+        self.assertEqual(received[0]['actor_name'], 'هلال')
+        self.assertTrue(any(row.get('service_name') == 'تغليف هدية' and row['state'] == 'pending' for row in steps))
+        self.assertFalse(any('إسناد خدمة' in row['label'] for row in steps))
+
+    async def test_direct_supplier_assignment_is_one_event_but_older_dispatch_is_preserved(self):
+        from supplier_receiving_direct_assignment import direct_assignment_patch
+        await self.source()
+        patch = direct_assignment_patch(piece={'status': 'assigned'},
+            offer={'current_supplier_id': 'direct', 'current_supplier_name': 'محل أماسي الخليج'},
+            session_id='draft-session', actor_id='prep-a', actor_name='هلال', at='2026-11-10T09:00:00Z')
+        await self.piece(**patch)
+        rows = (await self.get())['items'][0]['pieces'][0]['route_steps']
+        assigned = [row for row in rows if row.get('kind') == 'product_supplier_assigned']
+        self.assertEqual(len(assigned), 1)
+        self.assertEqual(assigned[0]['supplier_name'], 'محل أماسي الخليج')
+        self.assertEqual(assigned[0]['actor_name'], 'هلال')
+        self.assertFalse(any(row.get('kind') == 'product_supplier_received' and row['state'] == 'done' for row in rows))
+        await self.db.mezan_preparation_pieces_v1.update_one({'piece_id': 'piece-a'},
+            {'$set': {'sent_to_supplier_at': '2026-11-09T09:00:00Z'}})
+        rows = (await self.get())['items'][0]['pieces'][0]['route_steps']
+        self.assertEqual(len([row for row in rows if row.get('kind') == 'product_supplier_assigned']), 2)
+
+    async def test_tracking_ready_flag_requires_persisted_approval_and_valid_current_piece(self):
+        await self.source(quantity=2)
+        await self.piece(assembly_status='pending')
+        await self.piece('piece-b', unit_index=2, assembly_status='ready',
+                         assembly_ready_at='2026-11-12T10:00:00Z')
+        pieces = (await self.get())['items'][0]['pieces']
+        self.assertEqual([row['assembly_ready'] for row in pieces], [False, True])
+        await self.db.mezan_preparation_pieces_v1.update_one({'piece_id': 'piece-b'}, {'$set': {'unit_index': 1}})
+        self.assertTrue(all(row['assembly_ready'] is False for row in (await self.get())['items'][0]['pieces']))
+
+    async def test_draft_or_unproven_service_does_not_claim_supplier_receipt(self):
+        await self.source()
+        await self.piece(supplier_dispatch_status='sent', supplier_name='المورد الحالي',
+            supplier_receiving_history=[{'received_at': '2026-11-11T09:00:00Z',
+                'supplier_name': 'مورد المسودة', 'services': [{'service_id': 's', 'service_name': 'خدمة المسودة'}]}],
+            services=[{'service_id': 's', 'service_name': 'خدمة المسودة', 'status': 'pending'},
+                      {'service_id': 'unproven', 'service_name': 'خدمة بلا إثبات المورد', 'status': 'completed'}])
+        rows = (await self.get())['items'][0]['pieces'][0]['route_steps']
+        receipts = [row for row in rows if row.get('kind') in {'product_supplier_received', 'service_supplier_received'}]
+        self.assertTrue(receipts)
+        self.assertTrue(all(row['state'] == 'pending' for row in receipts))
+        self.assertNotIn('مورد المسودة', str(receipts))
+
+    async def test_supplier_changed_without_original_dispatch_does_not_relabel_old_assignment(self):
+        await self.source()
+        await self.piece(supplier_id='later', supplier_name='مورد لاحق',
+            sent_to_supplier_at='2026-11-09T09:00:00Z', supplier_dispatch_status='partial_received',
+            supplier_receiving_history=[{'invoice_id': 'first', 'supplier_id': 'original',
+                'supplier_name': 'المورد الأصلي', 'received_at': '2026-11-10T09:00:00Z'}])
+        rows = (await self.get())['items'][0]['pieces'][0]['route_steps']
+        assignment = next(row for row in rows if row.get('kind') == 'product_supplier_assigned')
+        self.assertIsNone(assignment['supplier_name'])
+        self.assertNotIn('مورد لاحق', assignment['label'])
+        receipt = next(row for row in rows if row.get('kind') == 'product_supplier_received')
+        self.assertEqual(receipt['supplier_name'], 'المورد الأصلي')
+
+    async def test_truncated_history_retains_original_product_receipt_and_reports_bound(self):
+        await self.source()
+        history = [{'invoice_id': f'invoice-{i}', 'supplier_id': f'supplier-{i}',
+                    'supplier_name': f'Supplier {i}', 'received_at': f'2026-11-11T09:{i // 60:02}:{i % 60:02}Z'}
+                   for i in range(105)]
+        await self.piece(supplier_receiving_history=history, supplier_dispatch_status='received')
+        data = await self.get()
+        self.assertTrue(data['truncated'])
+        receipts = [row for row in data['items'][0]['pieces'][0]['route_steps']
+                    if row.get('kind') == 'product_supplier_received']
+        self.assertEqual(len(receipts), 1)
+        self.assertEqual(receipts[0]['supplier_name'], 'Supplier 0')
+
+    async def test_service_history_output_is_bounded_without_losing_physical_receipt(self):
+        await self.source()
+        services = [{'service_id': f'service-{i}', 'service_name': f'Service {i}'} for i in range(100)]
+        await self.piece(supplier_receiving_history=[
+            {'invoice_id': f'invoice-{i}', 'supplier_name': f'Supplier {i}',
+             'received_at': f'2026-11-11T09:0{i}:00Z', 'services': services}
+            for i in range(3)])
+        data = await self.get()
+        self.assertTrue(data['truncated'])
+        rows = data['items'][0]['pieces'][0]['route_steps']
+        service_rows = [row for row in rows if row.get('kind') == 'service_supplier_received']
+        self.assertEqual(len(service_rows), 100)
+        self.assertTrue(all(row['supplier_name'] == 'Supplier 2' for row in service_rows))
+        self.assertEqual(len([row for row in rows if row.get('kind') == 'product_supplier_received']), 1)
+
     async def test_same_order_number_is_tenant_scoped_and_browser_not_native(self):
         await self.source()
         await self.source(owner="owner-b")

@@ -13,11 +13,12 @@ import re
 from typing import Any, Callable
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
 from mobile_app_permissions import MOBILE_APP_CLIENT, mobile_app_access_for_user
 from order_engine.mapper import _map_item, _parse_datetime, map_salla_order
-from preparation_piece_operations import _workflow_assembly_pieces
+from preparation_piece_operations import _workflow_assembly_pieces, _preparation_incomplete_services
+from preparation_piece_barcode import parse_preparation_piece_barcode
 from preparation_supplier_dispatch import piece_is_available_for_supplier_dispatch
 from review_local_policy import LOCAL_COMPLETION_MODE, load_local_review_workflows, local_review_stage_eligible
 from review_completion_readback import committed_proof
@@ -155,49 +156,138 @@ async def _owner_scope(db: Any, principal: dict) -> str:
     return owner
 
 
-def _step(label: str, actor: Any = None, at: Any = None, *, done: bool = True, source: str = "mezan") -> dict:
-    return {"label": label, "actor_name": _text(actor) or None,
-            "at": _iso(at) if done else None, "state": "done" if done else "pending", "source": source}
+def _step(label: str, actor: Any = None, at: Any = None, *, done: bool = True, source: str = "mezan",
+          kind: str | None = None, supplier: Any = None, service: Any = None, employee: Any = None) -> dict:
+    result = {"label": label, "actor_name": _text(actor) or None,
+              "at": _iso(at) if done else None, "state": "done" if done else "pending", "source": source}
+    if kind:
+        result.update(kind=kind, supplier_name=_text(supplier) or None,
+                      service_name=_text(service) or None, responsible_employee_name=_text(employee) or None)
+    return result
 
 
-def _piece_steps(piece: dict) -> tuple[list[dict], bool]:
+def _piece_steps(piece: dict, dispatch: dict | None = None) -> tuple[list[dict], bool]:
     if piece.get("virtual_kind"):
         ready = piece.get("assembly_status") == "ready"
         return [_step("جاهز من التجميع والعنونة", piece.get("assembly_ready_by_name"),
-                      piece.get("assembly_ready_at"), done=ready)], False
+                      piece.get("assembly_ready_at"), done=ready, kind="assembly_ready")], False
     assignments = _rows(piece.get("assignment_history"))
-    receipts = _rows(piece.get("supplier_receiving_history"))
-    truncated = len(assignments) > MAX_HISTORY or len(receipts) > MAX_HISTORY
+    all_receipts = _rows(piece.get("supplier_receiving_history"))
+    services = _rows(piece.get("services"))
+    truncated = any(len(rows) > MAX_HISTORY for rows in (assignments, all_receipts, services))
     assignments = assignments[-MAX_HISTORY:]
-    receipts = receipts[-MAX_HISTORY:]
+    # Only committed receipt history is evidence. A scan/draft is not receipt.
+    receipts = [row for row in all_receipts[-MAX_HISTORY:]
+                if _text(row.get("invoice_id")) and _iso(row.get("received_at"))]
+    first_receipt = min((row for row in all_receipts
+                         if _text(row.get("invoice_id")) and _iso(row.get("received_at"))),
+                        key=lambda row: _iso(row.get("received_at")) or "", default=None)
+    services = services[:MAX_HISTORY]
+    plans = {_text(row.get("service_id")): row for row in services if _text(row.get("service_id"))}
     first = min(assignments, key=lambda row: _iso(row.get("transferred_at")) or "") if assignments else {}
     initial_actor = (first.get("previous_responsible_employee_name")
                      or (piece.get("responsible_employee_name") if not piece.get("reassigned_at") else None))
     steps = []
     if piece.get("assigned_at") or initial_actor:
-        steps.append(_step("تم إسناد المنتج لموظف التجهيز", initial_actor, piece.get("assigned_at")))
+        steps.append(_step("تم إسناد المنتج لموظف التجهيز", initial_actor, piece.get("assigned_at"),
+                           kind="product_employee_assigned", employee=initial_actor))
     for row in assignments:
         steps.append(_step("نُقلت عهدة المنتج إلى موظف التجهيز", row.get("responsible_employee_name"),
-                           row.get("transferred_at")))
+                           row.get("transferred_at"), kind="product_employee_transferred",
+                           employee=row.get("responsible_employee_name")))
     supplier_status = _text(piece.get("supplier_dispatch_status"))
-    if piece.get("sent_to_supplier_at"):
-        steps.append(_step("تم إسناد المنتج إلى المورد", piece.get("supplier_name"), piece.get("sent_to_supplier_at")))
+    dispatch = dispatch or {}
+    # The current supplier can change when a later service is received. Keep
+    # the original dispatch's supplier, never relabel it with the latest one.
+    same_supplier = not first_receipt or not piece.get("supplier_id") or (
+        _text(first_receipt.get("supplier_id")) == _text(piece.get("supplier_id")))
+    original_supplier = dispatch.get("supplier_name") or (
+        piece.get("supplier_name") if not piece.get("supplier_assigned_at_receipt") and same_supplier else None)
+    direct_assignment_at = (_iso(piece.get("supplier_assigned_at"))
+                            if piece.get("supplier_assigned_at_receipt") is True else None)
+    # Direct receipt consent writes both timestamp fields for one assignment.
+    # Keep the named event once; a genuinely earlier dispatch remains separate.
+    if piece.get("sent_to_supplier_at") and (
+            not direct_assignment_at or _iso(piece.get("sent_to_supplier_at")) != direct_assignment_at):
+        steps.append(_step("تم إسناد المنتج إلى المورد" + (" — " + _text(original_supplier) if original_supplier else ""),
+                           dispatch.get("sent_by_name") or piece.get("sent_to_supplier_by_name"),
+                           piece.get("sent_to_supplier_at"), kind="product_supplier_assigned", supplier=original_supplier))
+    if piece.get("supplier_assigned_at_receipt") is True and piece.get("supplier_assigned_at"):
+        steps.append(_step("تم إسناد المنتج إلى المورد" + (" — " + _text(piece.get("supplier_name")) if piece.get("supplier_name") else ""),
+                           piece.get("supplier_assigned_by_name"), piece.get("supplier_assigned_at"),
+                           kind="product_supplier_assigned", supplier=piece.get("supplier_name")))
     if piece.get("supplier_ready_at"):
-        steps.append(_step("جاهز لدى المورد", piece.get("supplier_name"), piece.get("supplier_ready_at")))
-    if receipts:
-        for row in receipts:
-            steps.append(_step("تم الاستلام من المورد" + (" — " + _text(row.get("supplier_name"))
-                               if _text(row.get("supplier_name")) else ""),
-                               row.get("received_by_name"), row.get("received_at")))
+        steps.append(_step("جاهز لدى المورد", original_supplier, piece.get("supplier_ready_at"),
+                           kind="product_supplier_ready", supplier=original_supplier))
+    if first_receipt:
+        # The first durable receipt owns the physical product. Later invoices
+        # complete named services; they must not fabricate a second product.
+        supplier = _text(first_receipt.get("supplier_name"))
+        steps.append(_step("تم الاستلام من المورد" + (" — " + supplier if supplier else ""),
+                           first_receipt.get("received_by_name"), first_receipt.get("received_at"),
+                           kind="product_supplier_received", supplier=supplier))
     elif piece.get("received_at") or supplier_status == "received":
-        steps.append(_step("تم الاستلام من المورد", piece.get("received_by_name"), piece.get("received_at")))
+        steps.append(_step("تم الاستلام من المورد", piece.get("received_by_name"), piece.get("received_at"),
+                           kind="product_supplier_received", supplier=piece.get("supplier_name")))
     elif supplier_status in {"sent", "ready"}:
-        steps.append(_step("تم الاستلام من المورد", done=False))
+        steps.append(_step("تم الاستلام من المورد", done=False, kind="product_supplier_received",
+                           supplier=piece.get("supplier_name")))
+    seen_service_receipts = set()
+    service_event_count = 0
+    for receipt in reversed(receipts):
+        supplied = _rows(receipt.get("services"))
+        truncated |= len(supplied) > MAX_HISTORY
+        supplied = supplied[:MAX_HISTORY]
+        # Some earlier receipts retained IDs only. Resolve their names from
+        # this same piece's plan, not a global service or another order.
+        known_ids = {_text(row.get("service_id")) for row in supplied}
+        service_ids = receipt.get("service_ids") if isinstance(receipt.get("service_ids"), list) else []
+        truncated |= len(service_ids) > MAX_HISTORY
+        for identity in service_ids[:MAX_HISTORY]:
+            identity = _text(identity)
+            if identity in plans and identity not in known_ids:
+                supplied.append(plans[identity])
+                known_ids.add(identity)
+        for service in supplied:
+            identity = _text(service.get("service_id"))
+            name = _text(service.get("service_name") or plans.get(identity, {}).get("service_name"))
+            if not identity or not name:
+                continue
+            if service_event_count >= MAX_HISTORY:
+                truncated = True
+                break
+            supplier = _text(receipt.get("supplier_name"))
+            steps.append(_step(f"تم استلام خدمة {name} من المورد" + (" — " + supplier if supplier else ""),
+                               receipt.get("received_by_name"), receipt.get("received_at"),
+                               kind="service_supplier_received", supplier=supplier, service=name))
+            seen_service_receipts.add((identity, _text(receipt.get("invoice_id"))))
+            service_event_count += 1
+    incomplete_ids = {_text(row.get("service_id")) for row in _preparation_incomplete_services({"services": services})}
+    for service in services:
+        identity = _text(service.get("service_id"))
+        name = _text(service.get("service_name") or service.get("name"))
+        if not identity or not name:
+            continue
+        if identity in incomplete_ids:
+            steps.append(_step(f"استلام خدمة {name} من المورد", done=False,
+                               kind="service_supplier_received", service=name))
+        elif ((identity, _text(service.get("supplier_invoice_id"))) not in seen_service_receipts
+              and service.get("supplier_invoice_id") and _iso(service.get("completed_at"))
+              and _text(service.get("completed_by_supplier_name"))):
+            if service_event_count >= MAX_HISTORY:
+                truncated = True
+                continue
+            supplier = _text(service.get("completed_by_supplier_name"))
+            steps.append(_step(f"تم استلام خدمة {name} من المورد — {supplier}",
+                               at=service.get("completed_at"), kind="service_supplier_received",
+                               supplier=supplier, service=name))
+            service_event_count += 1
     received = piece.get("preparation_receipt_status") == "received"
     steps.append(_step("تم الاستلام من موظف التجهيز", piece.get("preparation_received_by_name"),
-                       piece.get("preparation_received_at"), done=received))
+                       piece.get("preparation_received_at"), done=received,
+                       kind="product_preparation_received", employee=piece.get("preparation_received_from_employee_name")))
     steps.append(_step("جاهز من التجميع والعنونة", piece.get("assembly_ready_by_name"),
-                       piece.get("assembly_ready_at"), done=piece.get("assembly_status") == "ready"))
+                       piece.get("assembly_ready_at"), done=piece.get("assembly_status") == "ready", kind="assembly_ready"))
     # Future milestones at the top match the existing bottom-to-top timeline.
     # Missing event dates remain null; no generic updated_at fills them in.
     pending = [step for step in reversed(steps) if step["state"] == "pending"]
@@ -496,7 +586,8 @@ async def read_order_tracking(db: Any, *, owner: str, number: str) -> dict:
     registries = await db[REGISTRY].find({"user_id": owner, "batch_id": {"$in": batch_ids}},
         {"_id": 0, "batch_id": 1, "registered_at": 1}).to_list(MAX_PIECES + 1) if batch_ids else []
     dispatches = await db[DISPATCHES].find({"user_id": owner, "id": {"$in": dispatch_ids}, "status": {"$ne": "building"}},
-        {"_id": 0, "id": 1, "sent_by_id": 1, "source_files.cards.piece_id": 1}).to_list(MAX_PIECES + 1) if dispatch_ids else []
+        {"_id": 0, "id": 1, "sent_by_id": 1, "sent_by_name": 1, "supplier_name": 1,
+         "source_files.cards.piece_id": 1}).to_list(MAX_PIECES + 1) if dispatch_ids else []
     registry_counts = Counter(_text(row.get("batch_id")) for row in registries)
     registry_by_id = {_text(row.get("batch_id")): row for row in registries if registry_counts[_text(row.get("batch_id"))] == 1}
     dispatch_counts = Counter(_text(row.get("id")) for row in dispatches)
@@ -557,14 +648,18 @@ async def read_order_tracking(db: Any, *, owner: str, number: str) -> dict:
             conflict = True
         if unit is not None and (unit < 1 or (item_id not in observed_only_items and unit > item["quantity"])):
             unit = None
-        steps, history_cut = _piece_steps(piece)
-        truncated |= history_cut
         registry = registry_by_id.get(_text(piece.get("batch_id")), {})
         dispatch = dispatch_by_id.get(_text(piece.get("supplier_dispatch_id")), {})
+        dispatch_piece_ids = {_text(card.get("piece_id")) for source_file in _rows(dispatch.get("source_files"))
+                              for card in _rows(source_file.get("cards"))}
+        steps, history_cut = _piece_steps(piece, dispatch if piece_id in dispatch_piece_ids else {})
+        truncated |= history_cut
         location = _current_location(piece, location_status, workflow, registry, dispatch,
                                      conflicting=conflict, local_review=local_review)
         prior_location = _current_location(piece, "in_progress", workflow, registry, dispatch, conflicting=conflict)
         item["pieces"].append({"piece_id": piece_id, "unit_index": unit, "current_location": location,
+            "assembly_ready": bool(piece.get("assembly_status") == "ready" and not conflict
+                                   and not piece.get("active_hold_id") and piece.get("status") not in {"blocked", "cancelled"}),
             "route_steps": steps, "route_notice": None if local_review else _route_notice(piece, status, label, prior_location, steps)})
     for item in items:
         item["pieces"].sort(key=lambda row: (row["unit_index"] or 0, row["piece_id"]))
@@ -574,12 +669,14 @@ async def read_order_tracking(db: Any, *, owner: str, number: str) -> dict:
             item["quantity"] = len(item["pieces"])
             for piece in item["pieces"]:
                 piece["current_location"] = _unknown()
+                piece["assembly_ready"] = False
         if len(item["pieces"]) > item["quantity"]:
             item["pieces"] = item["pieces"][:int(item["quantity"])]
             incomplete.add(item["order_item_id"])
             truncated = True
             for piece in item["pieces"]:
                 piece["current_location"] = _unknown()
+                piece["assembly_ready"] = False
         count = len(item["pieces"])
         item["coverage"] = ("no_records" if not count else "complete"
                             if count == item["quantity"] and item["order_item_id"] not in incomplete
@@ -602,6 +699,29 @@ async def read_order_tracking(db: Any, *, owner: str, number: str) -> dict:
 
 def make_mobile_order_tracking_router(db: Any, current_user: Callable[..., Any]) -> APIRouter:
     router = APIRouter(prefix="/mobile/order-tracking", tags=["mobile-order-tracking"])
+
+    @router.get("/lookup")
+    async def lookup(response: Response, query: str = Query(min_length=1, max_length=128),
+                     user: dict = Depends(current_user)):
+        owner = await _owner_scope(db, user)
+        identity = parse_preparation_piece_barcode(query)
+        if not identity:
+            raise HTTPException(422, detail={"code": "mobile_order_tracking_barcode_invalid"})
+        # Exact indexed piece identity; never scan products by SKU/name or
+        # borrow an assembly/receiving permission to open a global order.
+        matches = await db[PIECES].find({"user_id": owner, "piece_id": identity,
+                                        "experiment_archived_at": None},
+                                       {"_id": 0, "order_number": 1}).max_time_ms(1500).limit(2).to_list(2)
+        if not matches:
+            raise HTTPException(404, detail={"code": "mobile_order_tracking_barcode_not_found"})
+        if len(matches) != 1 or not re.fullmatch(r"[0-9]{1,32}", _text(matches[0].get("order_number"))):
+            raise HTTPException(409, detail={"code": "mobile_order_tracking_barcode_ambiguous"})
+        result = await read_order_tracking(db, owner=owner, number=_text(matches[0]["order_number"]))
+        matched = [piece for item in result["items"] for piece in item["pieces"] if piece["piece_id"] == identity]
+        if len(matched) != 1:
+            raise HTTPException(409, detail={"code": "mobile_order_tracking_barcode_ambiguous"})
+        response.headers["Cache-Control"] = "private, no-store"
+        return {**result, "matched_piece_id": identity}
 
     @router.get("/{order_number}")
     async def track(order_number: str, response: Response, user: dict = Depends(current_user)):

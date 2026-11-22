@@ -35,7 +35,7 @@ export default function ApprovedRefund({ context, identity, onBack, onSaved, rea
   const recording = Boolean(id) && recordingId === id;
   useEffect(() => { setQuery(number); }, [number]);
   const granted = permittedOperations(context);
-  const allowed = granted.has('customer.refund_request') || granted.has('customer.refund_execute');
+  const allowed = granted.has('customer.refund_read') || granted.has('customer.refund_request') || granted.has('customer.refund_execute');
   const scope = JSON.stringify([identity, context.session_scope, context.permission_version]);
   function go(next) {
     const updated = new URLSearchParams(params);

@@ -48,6 +48,7 @@ MOBILE_ROUTE_PERMISSIONS: tuple[tuple[str, frozenset[str]], ...] = (
     ("/api/order-review-customer-waiting-v1", _permissions("app.page.pending_review")),
     ("/api/order-review-export-controls-v1", _permissions("app.page.pending_review")),
     ("/api/mobile-reviewed-preparation-v1", _permissions("app.page.reviewed_preparation")),
+    ("/api/preparation-assignment-v2", _permissions("app.page.reviewed_preparation")),
     ("/api/reviewed-preparation-batches-v1", _permissions("app.page.reviewed_preparation")),
     ("/api/reviewed-products-v1", _permissions("app.page.reviewed_preparation")),
     ("/api/reviewed-product-sorting-v1", _permissions("app.page.reviewed_preparation")),
@@ -100,7 +101,11 @@ def _notification_route_allowed(path: str, method: str, *, driver=False) -> bool
         rf"{root}/instructions/{resource}/tasks/submit", rf"{root}/instructions/{resource}/tasks/{resource}/comments",
         r"/api/operational-notifications/devices/(?:register|unregister)"]
     if not driver:
-        common_get += [rf"{root}/instructions/mine/history", rf"{root}/orders/{resource}", rf"{root}/search"]
+        common_get += [rf"{root}/instructions/mine/history", rf"{root}/orders/{resource}", rf"{root}/search",
+            rf"{root}/notifications/me/unread-preview", r"/api/employee-finance/notifications/me",
+            rf"/api/employee-finance/notifications/{resource}",
+            r"/api/employee-finance/me/statement", r"/api/employee-finance/me/movements/em_[a-f0-9]{64}"]
+        common_post += [rf"/api/employee-finance/notifications/{resource}/read"]
         common_post += [rf"{root}/orders/{resource}/instructions", rf"{root}/instructions/{resource}/(?:approve|reject|complete|stop-acknowledgment|send-edit)", rf"{root}/instructions/{resource}/tasks/claim"]
     return any(re.fullmatch(pattern, path) for pattern in (common_get if method == "GET" else common_post if method == "POST" else []))
 
@@ -172,7 +177,7 @@ async def mobile_app_request_user(
         return user
 
     if (str(path).startswith("/api/employees-v2/management/employees/")
-            and str(path).rstrip("/").endswith("/mobile-app-permissions")):
+            and str(path).rstrip("/").endswith(("/mobile-app-permissions", "/customer-refund-access", "/provider-statement-access"))):
         # Do not let the merchant-shaped bridge satisfy the owner-only grant API.
         return user
 

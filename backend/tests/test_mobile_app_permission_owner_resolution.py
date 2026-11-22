@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-from mobile_app_permissions import mobile_app_access_for_user
+from mobile_app_permissions import EMPLOYEE_BALANCE_PERMISSION, mobile_app_access_for_user
 
 
 class _Collection:
@@ -53,6 +53,7 @@ def test_linked_legacy_employee_receives_saved_pages_without_created_by():
     assert result["configured"] is True
     assert result["enabled"] is True
     assert result["permissions"] == [
+        EMPLOYEE_BALANCE_PERMISSION,
         "app.page.orders",
         "app.page.pending_review",
     ]
