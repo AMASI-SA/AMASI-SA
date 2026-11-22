@@ -46,20 +46,88 @@
     "backend_identity_sha256": "036309ee7f60aab9050799c07ba9735826aee1d320f34925ee91d8b5870b925b"
   },
   "ci": {
-    "status": "required exact-B jobs in progress or queued; not complete at this checkpoint",
+    "status": "PASS on frozen intent-only B: 14 successful workflow runs, 1 expected unrelated TikTok skip, no failures or pending runs",
+    "source_b": "4f65fef9dfed30f078c13b3b48a8b60f932e541b",
+    "details_file": "ci-summary.json",
     "operational_run": 45043091461,
     "readiness_run": 45043091158,
     "stock_run": 45043091179,
+    "operational_backend": {
+      "run_id": 45043091461,
+      "job_id": 137271661181,
+      "passed": 6325,
+      "subtests_passed": 90,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "required_collection_guard": "success",
+      "shipping_contracts": {
+        "passed": 16,
+        "subtests_passed": 18
+      }
+    },
+    "real_mongo": {
+      "execution": "real isolated replica set in exact-B GitHub Actions",
+      "passed": 97,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "suites": {
+        "customer_returns": 63,
+        "exchanges": 17,
+        "driver_review_mongo": 17
+      }
+    },
+    "stock": {
+      "run_id": 45043091179,
+      "job_id": 137271659070,
+      "passed": 5531,
+      "subtests_passed": 97,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0
+    },
     "browser_acceptance_job": {
-      "id": 137271660994,
+      "job_id": 137271660994,
       "conclusion": "success"
     },
-    "real_mongo_local_cases_unverified": 97
+    "canonical_worker": {
+      "job_id": 137271661116,
+      "conclusion": "success"
+    },
+    "node20_and_node24_clean_clone_adapters": {
+      "run_id": 45043091158,
+      "node20_job_id": 137275653710,
+      "node24_job_id": 137275653711,
+      "conclusion": "success",
+      "manual_redeploy_step": "conditionally skipped; no deployment performed"
+    },
+    "codeql": {
+      "run_id": 45043091323,
+      "python": "success",
+      "javascript_typescript": "success"
+    },
+    "artifact": {
+      "id": 14762848647,
+      "name": "operational-backend-results",
+      "file": "ci-operational-backend-results.zip",
+      "bytes": 108052,
+      "sha256": "f82900f5d4db49b67da7be54b83f6b67d426c17450dd642ebebbc2ffe028ec28",
+      "git_blob": "8874a6fe8326f3e539b366eeade0241eccf6500b",
+      "github_declared_digest_matches_local": true,
+      "xml_cases": 6325,
+      "xml_failed": 0,
+      "xml_errors": 0,
+      "xml_skipped": 0,
+      "recorded_source_equals_b": true,
+      "recorded_tree_equals_b_tree": true
+    }
   },
   "local_environment_notes": [
     "Mongo-dependent scenarios first failed before execution because port27305 had no server; these attempts are not passing evidence.",
     "Official Mongo8.0.12 archive and SHA256 were verified, but mongod --version aborted in tcmalloc CPU discovery before any server started. No system workaround or test bypass was used.",
-    "The first adapter invocation was stopped because wrapping the configured adapter in the toolchain exec lock makes its own nested ensure wait. The direct configured yarn build completed successfully; no release guard was changed."
+    "The first adapter invocation was stopped because wrapping the configured adapter in the toolchain exec lock makes its own nested ensure wait. The direct configured yarn build completed successfully; no release guard was changed.",
+    "All 97 scenarios requiring a real Mongo replica set subsequently executed and passed in exact-B GitHub Actions; the original artifact digest, recorded source/tree and all XML case outcomes were verified. The local Mongo limitation is historical and not an outstanding CI gate."
   ],
   "production": {
     "merged": false,
@@ -68,7 +136,14 @@
     "published": false,
     "financial_writes": false,
     "current_shared_guard": "unverified: management browser timed out",
-    "observed_live_source": "23e9514b9e8a33bffb2363bb1d3afd792355ab2c"
+    "observed_live_source": "23e9514b9e8a33bffb2363bb1d3afd792355ab2c",
+    "current_production_ref": "9b4fb716b430c32073b5ea7abaeaff62646d9633",
+    "candidate_pr_state": "Ready for review; open and unmerged",
+    "superseded_prs": {
+      "2064": "closed, not merged",
+      "2070": "closed, not merged"
+    },
+    "existing_hourly_continuation": "updated to the exact combined PR2072 A/B/runtime; retains actual shared-guard and original verify3 requirements"
   },
   "android": {
     "pr": 376,
@@ -102,6 +177,17 @@
       "file": "configured-adapter.log",
       "bytes": 214628,
       "sha256": "c684605b40ddb096adc6be77c3f7eef15d3433e05d8e1a9499e0032b4e092ba2"
+    },
+    {
+      "file": "ci-operational-backend-results.zip",
+      "bytes": 108052,
+      "sha256": "f82900f5d4db49b67da7be54b83f6b67d426c17450dd642ebebbc2ffe028ec28",
+      "git_blob": "8874a6fe8326f3e539b366eeade0241eccf6500b"
     }
+  ],
+  "last_updated_at_utc": "2026-11-22 16:46:29 UTC",
+  "evidence_files": [
+    "verification-summary.json",
+    "ci-summary.json"
   ]
 }

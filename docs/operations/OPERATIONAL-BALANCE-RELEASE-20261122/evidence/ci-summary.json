@@ -1,0 +1,231 @@
+{
+  "schema_version": 1,
+  "task": "OPERATIONAL-BALANCE-RELEASE-20261122",
+  "recorded_at_utc": "2026-11-22 16:46:29 UTC",
+  "source_a": "db105b1fb7297314b9dbc9a830e8d98bc0211992",
+  "intent_b": "4f65fef9dfed30f078c13b3b48a8b60f932e541b",
+  "tree_b": "350d703002cfeb4f14135f868ce5a765233c0268",
+  "status": "PASS: every applicable exact-B workflow run completed successfully",
+  "workflow_counts": {
+    "successful": 14,
+    "expected_unrelated_skipped": 1,
+    "failed": 0,
+    "pending": 0
+  },
+  "note": "Two Snapchat workflows reran after Ready for review. Counts describe workflow runs, not unique workflows or non-overlapping test cases. TikTok Creator Release Candidate was conditionally skipped; no operational test was skipped.",
+  "runs": [
+    {
+      "id": 45045070774,
+      "name": "Snapchat Settings Management V2",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "4f65fef9dfed30f078c13b3b48a8b60f932e541b",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45045070774"
+    },
+    {
+      "id": 45045070797,
+      "name": "Snapchat Direct Active Publication",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "4f65fef9dfed30f078c13b3b48a8b60f932e541b",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45045070797"
+    },
+    {
+      "id": 45043091146,
+      "name": "TikTok Creator Release Candidate",
+      "status": "completed",
+      "conclusion": "skipped",
+      "head_sha": "4f65fef9dfed30f078c13b3b48a8b60f932e541b",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45043091146"
+    },
+    {
+      "id": 45043091398,
+      "name": "Snapchat Settings Management V2",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "4f65fef9dfed30f078c13b3b48a8b60f932e541b",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45043091398"
+    },
+    {
+      "id": 45043091324,
+      "name": "Security Gate",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "4f65fef9dfed30f078c13b3b48a8b60f932e541b",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45043091324"
+    },
+    {
+      "id": 45043091329,
+      "name": "Store Delivery V1",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "4f65fef9dfed30f078c13b3b48a8b60f932e541b",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45043091329"
+    },
+    {
+      "id": 45043091132,
+      "name": "MZ2 Employee Salary and Password",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "4f65fef9dfed30f078c13b3b48a8b60f932e541b",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45043091132"
+    },
+    {
+      "id": 45043091148,
+      "name": "Snapchat Direct Active Publication",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "4f65fef9dfed30f078c13b3b48a8b60f932e541b",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45043091148"
+    },
+    {
+      "id": 45043091158,
+      "name": "Mezan Release Readiness",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "4f65fef9dfed30f078c13b3b48a8b60f932e541b",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45043091158"
+    },
+    {
+      "id": 45043091461,
+      "name": "Operational Balance Web",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "4f65fef9dfed30f078c13b3b48a8b60f932e541b",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45043091461"
+    },
+    {
+      "id": 45043091216,
+      "name": "G47 Focused Integration",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "4f65fef9dfed30f078c13b3b48a8b60f932e541b",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45043091216"
+    },
+    {
+      "id": 45043091145,
+      "name": "Mobile Order Tracking",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "4f65fef9dfed30f078c13b3b48a8b60f932e541b",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45043091145"
+    },
+    {
+      "id": 45043091178,
+      "name": "Qoyod Payment Freshness",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "4f65fef9dfed30f078c13b3b48a8b60f932e541b",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45043091178"
+    },
+    {
+      "id": 45043091179,
+      "name": "Operational Stock Eligibility",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "4f65fef9dfed30f078c13b3b48a8b60f932e541b",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45043091179"
+    },
+    {
+      "id": 45043091323,
+      "name": "CodeQL",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "4f65fef9dfed30f078c13b3b48a8b60f932e541b",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45043091323"
+    }
+  ],
+  "operational_backend": {
+    "run_id": 45043091461,
+    "job_id": 137271661181,
+    "passed": 6325,
+    "subtests_passed": 90,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 0,
+    "required_collection_guard": "success",
+    "shipping_contracts": {
+      "passed": 16,
+      "subtests_passed": 18
+    }
+  },
+  "mongo_replica_set": {
+    "execution": "real isolated replica set in exact-B GitHub Actions",
+    "passed": 97,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 0,
+    "suites": {
+      "customer_returns": 63,
+      "exchanges": 17,
+      "driver_review_mongo": 17
+    }
+  },
+  "newly_required_suites": {
+    "movement_reversal_effects": 35,
+    "movement_reversal_routes": 3,
+    "workspace_account_history": 4,
+    "ad_and_entry_latency": 11
+  },
+  "stock": {
+    "run_id": 45043091179,
+    "job_id": 137271659070,
+    "passed": 5531,
+    "subtests_passed": 97,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "operational_frontend": {
+    "job_id": 137271660871,
+    "conclusion": "success"
+  },
+  "browser_mobile_and_visibility": {
+    "job_id": 137271660994,
+    "conclusion": "success"
+  },
+  "canonical_worker": {
+    "job_id": 137271661116,
+    "conclusion": "success"
+  },
+  "clean_clone_configured_adapter": {
+    "run_id": 45043091158,
+    "node20_job_id": 137275653710,
+    "node24_job_id": 137275653711,
+    "conclusion": "success",
+    "manual_redeploy_step": "conditionally skipped; no deployment performed"
+  },
+  "codeql": {
+    "run_id": 45043091323,
+    "python": "success",
+    "javascript_typescript": "success"
+  },
+  "original_artifact": {
+    "id": 14762848647,
+    "name": "operational-backend-results",
+    "file": "ci-operational-backend-results.zip",
+    "bytes": 108052,
+    "sha256": "f82900f5d4db49b67da7be54b83f6b67d426c17450dd642ebebbc2ffe028ec28",
+    "git_blob": "8874a6fe8326f3e539b366eeade0241eccf6500b",
+    "github_declared_digest_matches_local": true,
+    "xml_cases": 6325,
+    "xml_failed": 0,
+    "xml_errors": 0,
+    "xml_skipped": 0,
+    "recorded_source_equals_b": true,
+    "recorded_tree_equals_b_tree": true
+  },
+  "production": {
+    "merged": false,
+    "published": false,
+    "current_shared_guard": "unverified: management browser unavailable",
+    "actual_financial_test_writes": false
+  },
+  "android": {
+    "pr": 376,
+    "merged": false,
+    "built": false,
+    "distributed": false,
+    "status": "deferred by owner"
+  }
+}
