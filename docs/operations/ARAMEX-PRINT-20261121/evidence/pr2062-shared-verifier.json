@@ -1,0 +1,16 @@
+{
+  "source": "23e9514b9e8a33bffb2363bb1d3afd792355ab2c",
+  "deployment": "9b4fb716b430c32073b5ea7abaeaff62646d9633",
+  "release": "rg5-3ec8529aa0398fbe08b591ca47b175f1fd41af183c6fdae0fc21da4c223c618c",
+  "initial_materializer_exit": 1,
+  "recovery_helper_exit": 0,
+  "shared_original_verifier_exit": 0,
+  "preserved_cache_roots": 1,
+  "preserved_bytecode_files": 2,
+  "remaining_cache_roots": 0,
+  "shared_tracked_clean": true,
+  "recovery_directory": ".release-preserved/aramex-pr2062-9b4fb716-recovery",
+  "preserved_manifest_sha256": "2258d0e5ec0c3731a5c3145b8a514fad5306aa3c2c280db83eb20702ab645b08",
+  "lease_created": false,
+  "published": false
+}

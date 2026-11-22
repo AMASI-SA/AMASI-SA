@@ -94,6 +94,19 @@ contract (1521 bytes,2f869faab1136b001388064b861b92bb9a6dc06e4fcfedbca06d1801248
 The original release verifier remains unchanged and must pass in full. No cache
 was moved,no lease created,no publication. Next: run corrected pinned helper.
 
+Corrected recovery618961952305373d149bd41b9b2228295fd5d919 now PASSED. The
+unchanged full shared verifier exit0 proves all retained governed artifacts,
+proof and source bytes match reviewed intent. One generated cache root/two
+bytecode files were preserved outside both package roots,zero roots remain,
+tracked source clean,exact M/A/RID. Manifest SHA256
+2258d0e5ec0c3731a5c3145b8a514fad5306aa3c2c280db83eb20702ab645b08.
+Durable report pr2062-shared-verifier.json; persistent local original log is
+/app/.release-preserved/aramex-pr2062-9b4fb716-recovery/shared-verifier-after-bytecode.log.
+No lease/publication yet. Next: confirm correct mezansalla.com Republish panel,
+original prepare actor codex-aramex-pr2062-authorized,record own lease,original
+prepublish immediately before one authorized Republish. Then explicit new
+success,original verify3/inactive and actual original/control Native ADB checks.
+
 ## Current successor: strict external classifier, freshly verified
 
 Branch `codex/aramex-intransit-label-reprint-v2-20261122` is constructed directly
