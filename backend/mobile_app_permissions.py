@@ -227,6 +227,7 @@ async def _mobile_app_access_for_linked_employee(
 
 async def mobile_app_access_for_user(db: Any, user: dict[str, Any]) -> dict[str, Any]:
     from customer_refund_access import CUSTOMER_REFUNDS_APP_PERMISSION, REFUND_FIELD, REFUND_OPERATIONS, load_customer_refund_access
+    from provider_statement_access import PROVIDER_STATEMENTS_APP_PERMISSION, STATEMENT_FIELD, statement_navigation_enabled, _active as statement_account_active
     role = str(user.get("role") or "").strip().casefold()
     is_owner = role == "owner" or user.get("is_owner") is True
     owner_id = (
@@ -264,12 +265,15 @@ async def mobile_app_access_for_user(db: Any, user: dict[str, Any]) -> dict[str,
     # Do not require a second native-permission assignment for this workspace.
     workspace_enabled = False
     refund_enabled = False
+    statements_enabled = False
     if not is_owner:
         from operational_balance_access import POLICY_FIELD, normalized_policy
         workspace = normalized_policy(user.get(POLICY_FIELD), owner=owner_id)
         workspace_active = account_active and bool(owner_id) and workspace["enabled"]
         raw_workspace = user.get(POLICY_FIELD)
         shared_refund = isinstance(raw_workspace, dict) and REFUND_FIELD in raw_workspace
+        shared_statements = isinstance(raw_workspace, dict) and STATEMENT_FIELD in raw_workspace
+        statements_enabled = account_active and statement_navigation_enabled(user, owner_id)
         refund_operations = set(workspace["operations"]) & REFUND_OPERATIONS
         if workspace_active and refund_operations:
             if shared_refund:
@@ -279,10 +283,12 @@ async def mobile_app_access_for_user(db: Any, user: dict[str, Any]) -> dict[str,
         general_operations = set(workspace["operations"]) - REFUND_OPERATIONS
         general_reads = any(row["balance"] or row["report"] or row["print"] or row["movements"] != "none"
                             for row in workspace["resources"])
-        workspace_enabled = workspace_active and bool(general_operations or general_reads or not shared_refund and not refund_operations)
+        workspace_enabled = workspace_active and bool(general_operations or general_reads or not shared_refund and not shared_statements and not refund_operations)
         permissions.difference_update(OPERATIONAL_APP_PERMISSIONS)
         if refund_enabled:
             permissions.add(CUSTOMER_REFUNDS_APP_PERMISSION)
+        if statements_enabled:
+            permissions.add(PROVIDER_STATEMENTS_APP_PERMISSION)
         if workspace_enabled:
             permissions.add(OPERATIONAL_APP_READ)
             if workspace["operations"]:
@@ -295,10 +301,12 @@ async def mobile_app_access_for_user(db: Any, user: dict[str, Any]) -> dict[str,
         permissions.update(MOBILE_APP_PERMISSIONS)
         if role == "owner" and not user.get("_mobile_actor_id") and user.get("active") is not False:
             permissions.add(CUSTOMER_REFUNDS_APP_PERMISSION)
+            if statement_account_active(user):
+                permissions.add(PROVIDER_STATEMENTS_APP_PERMISSION)
     # A self-service navigation capability, not an assignable reporting grant.
     # No new database read belongs on /auth/me. The self endpoint independently
     # reloads the account and its unique active employee link when opened.
-    enabled = bool(account_active and (access is not None or is_owner or workspace_enabled or refund_enabled))
+    enabled = bool(account_active and (access is not None or is_owner or workspace_enabled or refund_enabled or statements_enabled))
     if (enabled and permissions and role != "store_driver" and not user.get("_mobile_actor_id")
             and user.get("active") is not False and not user.get("archived")
             and not user.get("is_archived") and not user.get("deleted") and not user.get("is_deleted")
@@ -306,7 +314,7 @@ async def mobile_app_access_for_user(db: Any, user: dict[str, Any]) -> dict[str,
         permissions.add(EMPLOYEE_BALANCE_PERMISSION)
     permissions_list = sorted(permissions)
     return {
-        "configured": access is not None or is_owner or workspace_enabled or refund_enabled,
+        "configured": access is not None or is_owner or workspace_enabled or refund_enabled or statements_enabled,
         "enabled": enabled,
         "owner_override": bool(is_owner and account_active),
         "owner_baseline": bool(is_owner),

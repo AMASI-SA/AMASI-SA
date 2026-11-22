@@ -1012,6 +1012,14 @@ async def _apply_permissions(db, owner, actor, result):
     return result
 
 
+async def _saved_use_available(db, owner, actor):
+    from operational_balance_access import POLICY_FIELD, load_access
+    from provider_statement_access import STATEMENT_FIELD
+    policy = await load_access(db, {'id': actor}, owner)
+    raw = policy.actor.get(POLICY_FIELD)
+    return policy.owner_override or not (isinstance(raw, dict) and STATEMENT_FIELD in raw)
+
+
 async def _document(db, owner, identity, allowed=PROVIDERS):
     selector = {'_id': identity, 'owner_id': owner}
     if allowed != PROVIDERS:
@@ -1079,7 +1087,8 @@ async def history(db, owner, actor, *, limit=50):
         fail('operational_access_changed', 'تغيرت صلاحياتك؛ أعد فتح الصفحة', 409)
     return {'session_scope': digest([owner, actor]), 'active': active, 'revision': state['revision'],
         'started_at': state.get('started_at'), 'as_of': state.get('engine', {}).get('as_of'),
-        'items': items, 'has_more': len(records) > limit, 'permissions': {'upload': active and bool(uploadable), 'confirm': active and bool(confirmable)}}
+        'items': items, 'has_more': len(records) > limit, 'permissions': {'upload': active and bool(uploadable), 'confirm': active and bool(confirmable),
+            'use_saved_file': active and bool(uploadable) and await _saved_use_available(db, owner, actor)}}
 
 
 def _file_hash(value):
@@ -1157,7 +1166,8 @@ async def saved_files(db, owner, actor, *, limit=50):
         fail('operational_access_changed', 'تغيرت صلاحياتك؛ أعد فتح الصفحة', 409)
     return {'session_scope': digest([owner, actor]), 'started_at': state.get('started_at'),
         'as_of': state.get('engine', {}).get('as_of'), 'active': active, 'items': items,
-        'has_more': len(files) > limit, 'permissions': {'upload': active and bool(uploadable)}}
+        'has_more': len(files) > limit, 'permissions': {'upload': active and bool(uploadable),
+            'use_saved_file': active and bool(uploadable) and await _saved_use_available(db, owner, actor)}}
 
 
 async def use_saved_file(db, owner, actor, file_id, payload):
@@ -1282,7 +1292,7 @@ def _save_statement_average(state, document, actor, stamp):
     return statement_average_summary(profile)
 
 
-async def upload(db, owner, actor, *, content, filename, request_id, expected_session_scope, expected_started_at, clock=None, saved_source=None):
+async def upload(db, owner, actor, *, content, filename, request_id, expected_session_scope, expected_started_at, clock=None, saved_source=None, selected_provider=None):
     await _access(db, owner, actor)
     if expected_session_scope != digest([owner, actor]):
         fail('operational_actor_scope_changed', 'تغير الحساب؛ أعد فتح صفحة الكشوف', 409)
@@ -1295,6 +1305,10 @@ async def upload(db, owner, actor, *, content, filename, request_id, expected_se
     action = ('provider_statement_saved_file_use:' if saved_source else 'provider_statement_upload:') + actor
     payload = {'request_id': request_id, 'expected_session_scope': expected_session_scope,
                'expected_started_at': expected_started_at, 'file_hash': sha256(content).hexdigest()}
+    if selected_provider is not None:
+        if selected_provider not in PROVIDERS:
+            fail('provider_statement_provider_invalid', 'اختر منصة مدعومة', 422)
+        payload['selected_provider'] = selected_provider
     if saved_source:
         payload['source_file_id'] = saved_source['file_id']
     prior = replay(state, action, payload)
@@ -1305,7 +1319,11 @@ async def upload(db, owner, actor, *, content, filename, request_id, expected_se
     try:
         normalized = await prepare_in_thread(normalize_statement, content)
     except ValueError as exc:
-        fail('provider_statement_parse_invalid', str(exc), 422)
+        raise HTTPException(422, detail={'code': 'provider_statement_parse_invalid',
+            'message': str(exc), 'not_applied': True}) from None
+    if selected_provider is not None and normalized['provider'] != selected_provider:
+        raise HTTPException(422, detail={'code': 'provider_statement_provider_mismatch',
+            'message': 'المنصة المختارة لا تطابق ملف الكشف؛ اختر المنصة الصحيحة', 'not_applied': True})
     await _bind_provider(db, owner, actor, normalized['provider'])
     if saved_source and (normalized['provider'] != saved_source['provider'] or normalized['file_hash'] != saved_source['file_hash']):
         fail('provider_statement_saved_provider_conflict', 'هوية المنصة في الملف الأصلي لا تطابق فهرس الكشف المحفوظ؛ لم تتغير الأرصدة', 409)

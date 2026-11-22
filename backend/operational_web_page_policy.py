@@ -137,7 +137,8 @@ _CURRENT = ContextVar("operational_web_page_request", default=None)
 def bind_page_request(user, request):
     from customer_refund_access import bind_customer_refund_request
     web = user.get("_session_client") != "amasi_mobile" and not user.get("_mobile_actor_id")
-    token = _CURRENT.set(BrowserRequest(request.url.path, request.method, dict(request.query_params)) if web else None)
+    statement_mobile = request.url.path.rstrip("/").startswith(API + "/provider-statements/mobile")
+    token = _CURRENT.set(BrowserRequest(request.url.path, request.method, dict(request.query_params)) if web or statement_mobile else None)
     try:
         with bind_customer_refund_request(request):
             yield
@@ -238,6 +239,10 @@ async def statement_access(db, owner, actor):
     from operational_balance_access import load_access
     from operational_balance_store import fail
     policy = await load_access(db, {"id": actor}, owner)
+    from provider_statement_access import _active
+    owner_account = policy.actor if policy.owner_override else await db['users'].find_one({'id': owner}, {'_id': 0})
+    if not _active(policy.actor) or not _active(owner_account):
+        fail('provider_statement_account_inactive', 'الحساب أو حساب المالك غير متاح', 403)
     if policy.owner_override:
         return PROVIDERS, PROVIDERS, PROVIDERS
     request = _CURRENT.get()
@@ -246,6 +251,25 @@ async def statement_access(db, owner, actor):
         fail("provider_statement_owner_required", "لا توجد صلاحية لكشوف المنصات", 403)
     _allow(modes, "statements", write=request.method != "GET")
     policy.require_enabled()
+    from provider_statement_access import shared_statement_grant
+    shared = await shared_statement_grant(db, policy.actor, owner)
+    if shared is not None:
+        if shared["mode"] == "none":
+            _deny()
+        readable = frozenset(shared["providers"])
+        uploadable = readable if shared["mode"] == "write" else frozenset()
+        # The independent upload grant never delegates confirmation or legacy
+        # saved-file reuse. Existing explicit confirm scopes remain separate.
+        confirmable = frozenset(provider for provider in readable if shared["mode"] == "write"
+            and policy.can_operation("provider.statement_confirm")
+            and all(policy.resource("provider", provider)[key] for key in ("use", "report", "balance"))
+            and policy.resource("provider", provider)["movements"] == "all")
+        if "/saved-files" in request.path:
+            _deny()
+        permitted = readable if request.method == "GET" else confirmable if request.path.rstrip("/").endswith("/confirm") else uploadable
+        if not permitted or request.provider is not None and request.provider not in permitted:
+            _deny()
+        return readable, uploadable, confirmable
     readable, uploadable, confirmable = set(), set(), set()
     for provider in PROVIDERS:
         resource = policy.resource("provider", provider)

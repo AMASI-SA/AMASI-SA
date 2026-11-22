@@ -11,6 +11,7 @@ from pymongo.errors import (
 
 import auth
 from customer_refund_access import CUSTOMER_REFUNDS_APP_PERMISSION
+from provider_statement_access import PROVIDER_STATEMENTS_APP_PERMISSION
 from mobile_app_permissions import (
     EMPLOYEE_BALANCE_PERMISSION,
     MOBILE_APP_ACCESS,
@@ -152,12 +153,12 @@ async def test_owner_mobile_access_is_catalogue_derived_without_second_db_read()
     assert result["owner_override"] is True
     assert result["enabled"] is True
     assert set(result["permissions"]) == (
-        set(MOBILE_APP_PERMISSIONS) | {CUSTOMER_REFUNDS_APP_PERMISSION, EMPLOYEE_BALANCE_PERMISSION}
+        set(MOBILE_APP_PERMISSIONS) | {CUSTOMER_REFUNDS_APP_PERMISSION, EMPLOYEE_BALANCE_PERMISSION, PROVIDER_STATEMENTS_APP_PERMISSION}
     )
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("extra_native_permissions", [[], [CUSTOMER_REFUNDS_APP_PERMISSION]])
+@pytest.mark.parametrize("extra_native_permissions", [[], [CUSTOMER_REFUNDS_APP_PERMISSION], [PROVIDER_STATEMENTS_APP_PERMISSION]])
 async def test_manager_native_grant_cannot_derive_shared_refund_access(extra_native_permissions):
     class _ManagerAccessDb:
         def __getitem__(self, name):
@@ -186,3 +187,4 @@ async def test_manager_native_grant_cannot_derive_shared_refund_access(extra_nat
         (set(MOBILE_APP_PERMISSIONS) - OPERATIONAL_APP_PERMISSIONS) | {EMPLOYEE_BALANCE_PERMISSION}
     )
     assert CUSTOMER_REFUNDS_APP_PERMISSION not in result["permissions"]
+    assert PROVIDER_STATEMENTS_APP_PERMISSION not in result["permissions"]

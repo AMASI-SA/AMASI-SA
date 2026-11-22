@@ -161,6 +161,9 @@ def install_access_routes(router, db, current_user, scope):
         previous_policy = target.get(POLICY_FIELD)
         if isinstance(previous_policy, dict) and REFUND_FIELD in previous_policy:
             stored[REFUND_FIELD] = deepcopy(previous_policy[REFUND_FIELD])
+        from provider_statement_access import STATEMENT_FIELD
+        if isinstance(previous_policy, dict) and STATEMENT_FIELD in previous_policy:
+            stored[STATEMENT_FIELD] = deepcopy(previous_policy[STATEMENT_FIELD])
         selector = {"id": user_id, "created_by": owner, "role": {"$ne": "owner"},
                     "deleted_at": {"$in": [None, ""]}}
         # Compare the observed document as well as the public version. This

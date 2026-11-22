@@ -12,7 +12,7 @@ jest.mock("./api", () => ({ operationalApi: { providerStatements: jest.fn(), pro
 
 const scope = "owner-one-period-one", stamp = "2026-11-15T08:00:00Z";
 const snapshot = { session_scope: scope, active: true, revision: 7, started_at: "2026-11-01T00:00:00Z", as_of: stamp,
-    permissions: { upload: true, confirm: true } };
+    permissions: { upload: true, confirm: true, use_saved_file: true } };
 const counts = { matched: 1, missing: 1, different: 1, blocked: 1, confirmed: 0 };
 const statement = { id: "statement-one", provider: "tabby", statement_reference: "SYNTHETIC-STATEMENT", filename: "tabby.xlsx",
     file_hash: "f".repeat(64), native_currency: "SAR", row_count: 4, uploaded_at: stamp };
@@ -34,7 +34,7 @@ const history = (patch = {}) => ({ ...snapshot, items: [{ ...statement, counts: 
 const savedFile = { id: "legacy-tabby-one", provider: "tabby", filename: "saved-tabby.xlsx", statement_reference: "SAVED-TABBY",
     uploaded_at: stamp, file_hash: "a".repeat(64), original_available: true, can_import: true, unavailable_reason: null };
 const savedFiles = (patch = {}) => ({ session_scope: scope, active: true, started_at: snapshot.started_at, as_of: stamp,
-    permissions: { upload: true }, items: [{ ...savedFile }], has_more: false, ...patch });
+    permissions: { upload: true, use_saved_file: true }, items: [{ ...savedFile }], has_more: false, ...patch });
 const confirmation = (ids = ["missing"], patch = {}) => {
     const result = fixture();
     result.rows = result.rows.map(row => ids.includes(row.id) ? { ...row, status: "already_confirmed", can_confirm: false, allowed_actions: [] } : row);
@@ -80,7 +80,7 @@ afterEach(async () => { if (mounted) await act(async () => root.unmount()); host
 
 test.each([null, { id: "employee", role: "employee" }])("non-owner %j cannot load statements or upload", async user => {
     useOptionalAuth.mockReturnValue({ user, loading: false }); await render();
-    expect(host.textContent).toContain("لمالك الحساب فقط"); expect(host.querySelector("form")).toBeNull();
+    expect(host.textContent).toContain("تحتاج صلاحية كشوف منصات الدفع"); expect(host.querySelector("form")).toBeNull();
     expect(api.providerStatements).not.toHaveBeenCalled(); expect(api.uploadProviderStatement).not.toHaveBeenCalled();
 });
 
@@ -704,4 +704,65 @@ test('changing provider discards the previous review and cannot admit its late r
     await act(async()=>pendingRead.resolve(fixture('tabby')));
     expect(host.querySelector('[data-testid="provider-statement-review"]')).toBeNull();
     expect(api.confirmProviderStatement).not.toHaveBeenCalled();
+});
+
+const employeeGrant = (revision = 1, mode = 'write') => ({ id: 'employee', role: 'employee',
+    web_page_access: { revision, pages: [{ id: 'balances.statements', section: 'balances',
+        to: '/operational-balances/provider-statements', mode }] } });
+
+test.each(['read', 'write'])('shared %s grant cannot confirm or use an old original without their separate permissions', async mode => {
+    const permissions = { upload: mode === 'write', confirm: false, use_saved_file: false };
+    useOptionalAuth.mockReturnValue({ user: employeeGrant(1, mode), loading: false, authStatus: 'authenticated' });
+    api.providerStatements.mockResolvedValue(history({ permissions }));
+    api.providerStatementReview.mockResolvedValue({ ...fixture(), permissions });
+    api.uploadProviderStatement.mockResolvedValue({ ...fixture(), permissions });
+    await render();
+    expect(button('استخدام كشف مرفوع سابقًا')).toBeUndefined();
+    if (mode === 'write') { await choose(); await click('رفع الكشف ومطابقته'); }
+    else await review();
+    expect(api.uploadProviderStatement).toHaveBeenCalledTimes(mode === 'write' ? 1 : 0);
+    expect(host.querySelector('[aria-label="اختيار العملية 1002"]').disabled).toBe(true);
+    expect(host.querySelector('.op-statement-confirm').disabled).toBe(true);
+    await submit('[data-testid="provider-statement-review"] form');
+    expect(api.confirmProviderStatement).not.toHaveBeenCalled();
+    expect(api.providerStatementSavedFiles).not.toHaveBeenCalled();
+    expect(api.useSavedProviderStatement).not.toHaveBeenCalled();
+});
+
+test.each([false, undefined, 'true'])('saved-file use requires literal list permission %j even when history allowed it', async permission => {
+    api.providerStatementSavedFiles.mockResolvedValue(savedFiles({ permissions: { upload: true, use_saved_file: permission } }));
+    await render(); await openSavedFiles();
+    const input = host.querySelector('[aria-label="اختيار الكشف المحفوظ saved-tabby.xlsx"]');
+    expect(input.disabled).toBe(true);
+    await submit('[data-testid="provider-saved-file-use"]');
+    expect(api.useSavedProviderStatement).not.toHaveBeenCalled();
+});
+
+test('same-account scope revision discards previous history and fences its late review', async () => {
+    useOptionalAuth.mockReturnValue({ user: employeeGrant(1), loading: false, authStatus: 'authenticated' });
+    const pendingRead = deferred(); api.providerStatementReview.mockReturnValueOnce(pendingRead.promise);
+    await render(); await review();
+    const signal = api.providerStatementReview.mock.calls[0][1].signal;
+    useOptionalAuth.mockReturnValue({ user: employeeGrant(2), loading: false, authStatus: 'authenticated' });
+    api.providerStatements.mockResolvedValue(history({ items: [], permissions: { upload: true, confirm: false, use_saved_file: false } }));
+    await render();
+    expect(signal.aborted).toBe(true);
+    expect(host.textContent).not.toContain('SYNTHETIC-STATEMENT');
+    await act(async () => pendingRead.resolve(fixture()));
+    expect(host.querySelector('[data-testid="provider-statement-review"]')).toBeNull();
+    expect(api.providerStatements).toHaveBeenCalledTimes(2);
+    expect(api.confirmProviderStatement).not.toHaveBeenCalled();
+});
+
+test('revoking statement page access aborts pending upload and removes its late result', async () => {
+    useOptionalAuth.mockReturnValue({ user: employeeGrant(), loading: false, authStatus: 'authenticated' });
+    const pendingUpload = deferred(); api.uploadProviderStatement.mockReturnValueOnce(pendingUpload.promise);
+    await render(); await choose(); await click('رفع الكشف ومطابقته');
+    const signal = api.uploadProviderStatement.mock.calls[0][2].signal;
+    useOptionalAuth.mockReturnValue({ user: { ...employeeGrant(), web_page_access: { revision: 2, pages: [] } }, loading: false, authStatus: 'authenticated' });
+    await render();
+    expect(signal.aborted).toBe(true); expect(host.querySelector('form')).toBeNull();
+    await act(async () => pendingUpload.resolve(fixture()));
+    expect(host.querySelector('[data-testid="provider-statement-review"]')).toBeNull();
+    expect(api.uploadProviderStatement).toHaveBeenCalledTimes(1);
 });

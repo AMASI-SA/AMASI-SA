@@ -270,7 +270,9 @@ def install_customer_refund_access_routes(router, db, current_user):
                 or len(raw.get("resources", [])) != len(policy["resources"])):
             fail("customer_refund_access_invalid", "راجع صلاحيات الحساب الحالية قبل تعديل الاسترجاع", 409)
         other_operations = set(policy["operations"]) - REFUND_OPERATIONS
-        if payload.mode != "none" and not policy["enabled"] and (other_operations or any(
+        from provider_statement_access import STATEMENT_FIELD, normalized_statement_grant
+        other_statements = normalized_statement_grant((raw or {}).get(STATEMENT_FIELD))["mode"] != "none"
+        if payload.mode != "none" and not policy["enabled"] and (other_operations or other_statements or any(
                 row["use"] or row["balance"] or row["report"] or row["print"] or row["movements"] != "none" for row in policy["resources"])):
             fail("customer_refund_workspace_disabled", "صلاحيات الأرصدة الأخرى موقوفة؛ فعّلها صراحة من إدارة الأرصدة قبل إتاحة الاسترجاع", 409)
         sources = await _source_catalog(db, owner)

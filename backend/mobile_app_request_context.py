@@ -176,7 +176,7 @@ async def mobile_app_request_user(
         return user
 
     if (str(path).startswith("/api/employees-v2/management/employees/")
-            and str(path).rstrip("/").endswith(("/mobile-app-permissions", "/customer-refund-access"))):
+            and str(path).rstrip("/").endswith(("/mobile-app-permissions", "/customer-refund-access", "/provider-statement-access"))):
         # Do not let the merchant-shaped bridge satisfy the owner-only grant API.
         return user
 

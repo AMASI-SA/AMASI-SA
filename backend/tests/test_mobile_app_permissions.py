@@ -14,6 +14,7 @@ from mobile_app_permissions import (
 )
 import supplier_receiving_routes
 from customer_refund_access import CUSTOMER_REFUNDS_APP_PERMISSION
+from provider_statement_access import PROVIDER_STATEMENTS_APP_PERMISSION
 
 
 class _Collection:
@@ -94,7 +95,7 @@ def test_owner_always_receives_every_mobile_app_permission():
         {"id": "owner-1", "role": "owner"},
     ))
     assert result["owner_override"] is True
-    assert set(result["permissions"]) == MOBILE_APP_PERMISSIONS | {CUSTOMER_REFUNDS_APP_PERMISSION, EMPLOYEE_BALANCE_PERMISSION}
+    assert set(result["permissions"]) == MOBILE_APP_PERMISSIONS | {CUSTOMER_REFUNDS_APP_PERMISSION, EMPLOYEE_BALANCE_PERMISSION, PROVIDER_STATEMENTS_APP_PERMISSION}
 
 
 @pytest.mark.parametrize("user_change,access_change", [
