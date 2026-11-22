@@ -1,0 +1,14 @@
+{
+  "head": "9b4fb716b430c32073b5ea7abaeaff62646d9633",
+  "tracked_clean": true,
+  "guard_active": false,
+  "temporary_stage_present": false,
+  "bytecode_helper_had_executed": false,
+  "governed_outputs_present": ["backend/release_identity.json", "frontend/build/build-meta.json", "frontend/build/index.html", "frontend/.release/reproducible-build.json"],
+  "local_source": "23e9514b9e8a33bffb2363bb1d3afd792355ab2c",
+  "local_release": "rg5-3ec8529aa0398fbe08b591ca47b175f1fd41af183c6fdae0fc21da4c223c618c",
+  "production_source": "d396049f8fedf72c394169a451d45b227ad52376",
+  "production_release": "rg5-aceb392af7809d9099ba92b27d4bb3d802999148c91013a5bba1cca5ad5f6c8e",
+  "production_verified_flags_true": true,
+  "successor_publication_performed": false
+}

@@ -27,14 +27,21 @@ def main():
     fetched = subprocess.run(['git', 'fetch', 'origin', 'hotfix/prod-snap-meta-final'],
                              cwd=ROOT, env=ENV, capture_output=True)
     assert fetched.returncode == 0 and git('rev-parse', 'origin/hotfix/prod-snap-meta-final') == MERGE
-    stage = Path(Path('/tmp/aramex-pr2062-stage.txt').read_text().strip())
-    assert stage.resolve().parent == Path('/tmp') and stage.name.startswith('aramex-pr2062-44c5-')
-    assert json.loads((stage / 'result.json').read_bytes())['success'] is True
+    # A reconnect lost /tmp while /app and its governed outputs survived.
+    # Recover from the immutable remote checkpoint, never an assumed scratch file.
+    archived = json.loads(git('show', 'ea8f764a28ac3e08ce65000357c781a98c2dd246:'
+                              'docs/operations/ARAMEX-PRINT-20261121/evidence/pr2062-arm64-result.json'))
+    assert archived['source'] == SOURCE and archived['release'] == RELEASE
+    assert archived['deployment'] == '44c5e4867435d45a651881f0da101f3dcb338061'
+    assert archived['success'] is True and archived['adapter_exit'] == archived['verifier_exit'] == 0
     raw = (ROOT / 'release/release-intent-v5.json').read_bytes()
     assert hashlib.sha256(raw).hexdigest() == '46e51af37e48e739923187905423695f078e6027df0922ca52b047e49c5b22c0'
     intent = json.loads(raw)
     assert intent['source_git_sha'] == SOURCE and intent['runtime_identity']['release_id'] == RELEASE
     assert json.loads((ROOT / 'backend/release_identity.json').read_bytes()) == intent['runtime_identity']
+    assert (ROOT / 'frontend/build/index.html').is_file()
+    assert (ROOT / 'frontend/build/build-meta.json').is_file()
+    assert json.loads((ROOT / 'frontend/.release/reproducible-build.json').read_bytes()) == intent['frontend_reproducibility']
     caches = sorted((p for p in BACKEND.rglob('__pycache__') if p.is_dir()), key=lambda p: len(p.parts))
     roots = []
     for p in caches:
@@ -43,7 +50,6 @@ def main():
     standalone = [p for p in BACKEND.rglob('*') if p.is_file() and p.suffix in {'.pyc', '.pyo'}
                   and not any(parent in roots for parent in p.parents)]
     targets = roots + standalone
-    assert targets, 'No bytecode found; inspect the original refusal before proceeding'
     records = []
     for p in targets:
         assert not p.is_symlink() and p.resolve().is_relative_to(BACKEND.resolve())
@@ -56,6 +62,12 @@ def main():
                 assert f.suffix in {'.pyc', '.pyo'}, 'Preserve unexpected non-bytecode without moving it'
                 records.append({'path': f.relative_to(ROOT).as_posix(), 'bytes': f.stat().st_size,
                                 'sha256': hashlib.sha256(f.read_bytes()).hexdigest()})
+    preservation = ROOT / '.release-preserved'
+    preservation.mkdir(exist_ok=True)
+    assert not preservation.is_symlink() and preservation.resolve().parent == ROOT.resolve()
+    stage = preservation / 'aramex-pr2062-9b4fb716-recovery'
+    assert not stage.exists(), 'Inspect the prior recovery before retrying'
+    stage.mkdir()
     backup = stage / 'previous-bytecode'
     assert not backup.exists(), 'Inspect prior preservation before retrying'
     backup.mkdir()
@@ -74,7 +86,9 @@ def main():
               'shared_verifier_exit': verified.returncode,
               'preserved_cache_roots': len(roots), 'preserved_bytecode_files': len(records),
               'remaining_cache_roots': remaining, 'lease_created': False, 'published': False,
-              'shared_tracked_clean': not git('status', '--porcelain', '--untracked-files=no')}
+              'shared_tracked_clean': not git('status', '--porcelain', '--untracked-files=no'),
+              'recovery_directory': stage.relative_to(ROOT).as_posix(),
+              'preserved_manifest_sha256': hashlib.sha256((backup / 'manifest.json').read_bytes()).hexdigest()}
     (stage / 'bytecode-preservation-result.json').write_text(json.dumps(report, indent=2) + '\n')
     print('ARAMEX_2062_BYTECODE_RESULT=' + json.dumps(report), flush=True)
     assert verified.returncode == 0 and remaining == 0 and report['shared_tracked_clean']

@@ -72,6 +72,20 @@ publishes. If caches regrow, stop and inspect the preview service before retryin
 Next: execute this reviewed helper, require verifier0/no cache regrowth/clean
 tracked source, checkpoint proof, then authorized prepare/prepublish/Republish.
 
+Editor reconnected after its session dropped. Supplementary /tmp stage/helper
+are absent; the bytecode recovery had NOT executed. Fresh actual probe confirms
+Root M/trackedclean/original guard inactive,all four governed output paths
+present and local identity exactly A/RID. Public Production still prior source
+d396049f8fedf72c394169a451d45b227ad52376 / rg5-aceb392af7809d9099ba92b27d4bb3d802999148c91013a5bba1cca5ad5f6c8e,
+all identity flags true; no successor publication. Durable reconnect-state.json
+records this discrepancy. Do not assume scratch files survived or republish an
+already-live candidate. The recovery helper now reads archived immutable ARM
+proof from Git checkpoint ea8f764a28ac3e08ce65000357c781a98c2dd246, verifies actual
+retained Root outputs, preserves generated caches in its new uniquely named
+Root .release-preserved directory outside both package roots, and runs the full
+unchanged verifier. No rebuild is needed if that verifier proves every governed
+artifact/proof/source byte still matches the reviewed intent. No lease yet.
+
 ## Current successor: strict external classifier, freshly verified
 
 Branch `codex/aramex-intransit-label-reprint-v2-20261122` is constructed directly
