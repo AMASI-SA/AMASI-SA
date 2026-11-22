@@ -1,5 +1,31 @@
 # Operational demand reads — implementation checkpoint
 
+## Original prepare and prepublish PASSED — own lease active; publish next
+
+The user returned actual original /app guard output with GUARD_BEFORE active=false,
+PREPARED and PREPUBLISH_PASSED for exact M/A/RID/protocol5, and OWN_LEASE_ACTIVE.
+The wrapper also compared the complete live lease to the exact newly prepared
+lease before emitting success. Evidence: `manual-host-prepare-pass-20261122.json`.
+
+Actor: `codex-operational-demand-2069-20261122`.
+Prepared at: `2026-11-22T17:35:06.658523+00:00`.
+Deployment M: `06763ffd6e3c3f7c861769b61d2c4e6b9b2d5f35`.
+Source A: `063611ff163c90d80cdbf96446a28584fe429846`.
+Runtime: `rg5-90a88a6e7ac6a65670274d6180be0338d689f64d91efbf5cdfbbf651ca182bf7`.
+
+**This task now has an actual active original release lease.** Preserve /app,
+generated outputs, backups and the lease. The user has been directed to perform
+one authorized publish in Emergent project salla-analytics immediately after the
+successful prepublish result. The fresh Production ref still points to M.
+
+No new Deployment Succeeded or post-publication verification has been supplied
+yet. After the new success, run the unchanged original verify for mezansalla.com,
+require all three probes and exact identity, then final inactive status.
+Do not run prepare again, clear a foreign lease, or declare deployment success
+from ready_to_publish alone. Other source integrations remain separate.
+
+---
+
 ## Actual shared-host staging PASS — original prepare/prepublish is next
 
 The user returned successful execution of the pinned staging helper from the

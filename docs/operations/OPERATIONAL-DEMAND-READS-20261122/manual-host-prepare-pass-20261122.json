@@ -1,0 +1,32 @@
+{
+  "evidence_source": "User-returned actual Emergent /app terminal output",
+  "guard_before": {
+    "active": false
+  },
+  "prepared": {
+    "deployment_git_sha": "06763ffd6e3c3f7c861769b61d2c4e6b9b2d5f35",
+    "source_git_sha": "063611ff163c90d80cdbf96446a28584fe429846",
+    "release_id": "rg5-90a88a6e7ac6a65670274d6180be0338d689f64d91efbf5cdfbbf651ca182bf7",
+    "protocol_version": 5,
+    "actor": "codex-operational-demand-2069-20261122",
+    "prepared_at": "2026-11-22T17:35:06.658523+00:00"
+  },
+  "prepublish_passed": {
+    "deployment_git_sha": "06763ffd6e3c3f7c861769b61d2c4e6b9b2d5f35",
+    "source_git_sha": "063611ff163c90d80cdbf96446a28584fe429846",
+    "release_id": "rg5-90a88a6e7ac6a65670274d6180be0338d689f64d91efbf5cdfbbf651ca182bf7",
+    "protocol_version": 5,
+    "ready_to_publish": true
+  },
+  "own_lease_active": {
+    "deployment_git_sha": "06763ffd6e3c3f7c861769b61d2c4e6b9b2d5f35",
+    "source_git_sha": "063611ff163c90d80cdbf96446a28584fe429846",
+    "release_id": "rg5-90a88a6e7ac6a65670274d6180be0338d689f64d91efbf5cdfbbf651ca182bf7",
+    "protocol_version": 5,
+    "actor": "codex-operational-demand-2069-20261122",
+    "prepared_at": "2026-11-22T17:35:06.658523+00:00",
+    "active": true
+  },
+  "publication_observed": false,
+  "post_publication_verification_observed": false
+}
