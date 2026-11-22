@@ -1,0 +1,39 @@
+{
+  "task_id": "CUSTOMER-INVENTORY-UNIFIED-20261122",
+  "evidence_kind": "owner_supplied_actual_Emergent_terminal_transcript",
+  "status": "staged_prepared_prepublish_passed_own_lease_active",
+  "deployment_git_sha": "24270ebdfdebb83282389308a2349cdb27e2b8e4",
+  "source_git_sha": "4e6c8a61bd1566e061a4f312e797ce239b582475",
+  "source_base_git_sha": "06763ffd6e3c3f7c861769b61d2c4e6b9b2d5f35",
+  "intent_git_sha": "447e83bfb95d2627877d46c7baa528e454a2e143",
+  "release_id": "rg5-2e0e3797d6ff3b955a3a23fd31487bd92721e70f316f3bdf34cab0d94c5d630f",
+  "protocol_version": 5,
+  "actor": "codex-customer-inventory-unified-2074-20261122",
+  "prepared_at": "2026-11-22T19:36:26.794349+00:00",
+  "staging": {
+    "staged": true,
+    "artifact_tree": "68278a1d40fc16b2852359eeee963b12bb1820e675e691d74410ce4f47f5123b",
+    "candidate_original_proof_verified": true,
+    "shared_original_proof_verified": true,
+    "original_frontend_verifier_passed": true,
+    "unrelated_untracked_files_preserved": 432,
+    "bytecode_cache_was_present": false,
+    "rehearsal_log_sha256": "ef59a7aff3f7ae6c8af6f9d17222d3f3f10c395e7f8644e591dd437df70b9321",
+    "backup_directory": "/tmp/mezan-pr2074-preserved-954nogxv",
+    "retained_local_directory": "/app/.git/pr2074-stage-ti7z2fet"
+  },
+  "guard_before_prepare": {
+    "active": false
+  },
+  "own_lease_active": true,
+  "prepublish": {
+    "ready_to_publish": true,
+    "identity_matches": true
+  },
+  "production_ref_rechecked": "24270ebdfdebb83282389308a2349cdb27e2b8e4",
+  "verify_command": "bash /tmp/mezan-pr2074-deploy-19r0je2x/verify-after-success.sh",
+  "publish_click_observed": false,
+  "new_deployment_succeeded_observed": false,
+  "live_three_probe_verification_observed": false,
+  "next_action": "Click Re-publish changes exactly once immediately. Only after a new explicit Deployment Succeeded run the printed verification command. Do not restage, prepare again, clear the lease or replay an earlier release."
+}
