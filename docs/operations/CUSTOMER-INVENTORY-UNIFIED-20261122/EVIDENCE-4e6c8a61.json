@@ -1,0 +1,614 @@
+{
+  "task": "CUSTOMER-INVENTORY-UNIFIED-20261122",
+  "observed_at_utc": "2026-11-22 17:40:30 UTC",
+  "repository": "AMASI-SA/AMASI-SA",
+  "source": {
+    "sha": "4e6c8a61bd1566e061a4f312e797ce239b582475",
+    "tree": "8f99772552fba3df9a14f55952648aa5d0ed5408",
+    "base_sha": "06763ffd6e3c3f7c861769b61d2c4e6b9b2d5f35",
+    "sole_parent": true,
+    "branch": "codex/customer-inventory-unified-r2-20261122",
+    "pull_request": "https://github.com/AMASI-SA/AMASI-SA/pull/2074",
+    "changed_paths": 97,
+    "inherited_production_intent": true,
+    "intent_path_full_history_changes": 0,
+    "final_production_base_check_matches": true,
+    "mergeable": true
+  },
+  "input_sources": {
+    "customer": {
+      "pr": 2067,
+      "sha": "4c308b19bb5d972bea5fff092bc0efbe9b70b29f"
+    },
+    "inventory": {
+      "pr": 2065,
+      "base": "9b4fb716b430c32073b5ea7abaeaff62646d9633",
+      "source": "5d09108e6d33ed95b7b2946cdb5a382a49aefae7",
+      "complete_source_range_carried": true,
+      "excluded_individual_intent": "9de88ea18b194d9d6b3e964642ae4e06e58a42e1"
+    },
+    "prior_combined": {
+      "pr": 2073,
+      "sha": "1679bb225460688c94a5d60f4b407cedef3fc502",
+      "state": "closed_without_merging_superseded"
+    },
+    "production_demand_reads": {
+      "pr": 2069,
+      "merge": "06763ffd6e3c3f7c861769b61d2c4e6b9b2d5f35",
+      "preserved": true
+    }
+  },
+  "verification": {
+    "workflows": [
+      {
+        "id": 45049380620,
+        "name": "Snapchat Direct Active Publication",
+        "attempt": 1,
+        "event": "pull_request",
+        "head_sha": "4e6c8a61bd1566e061a4f312e797ce239b582475",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45049380620",
+        "created_at": "2026-11-22T17:25:37Z",
+        "updated_at": "2026-11-22T17:25:49Z"
+      },
+      {
+        "id": 45049380696,
+        "name": "Snapchat Settings Management V2",
+        "attempt": 1,
+        "event": "pull_request",
+        "head_sha": "4e6c8a61bd1566e061a4f312e797ce239b582475",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45049380696",
+        "created_at": "2026-11-22T17:25:37Z",
+        "updated_at": "2026-11-22T17:25:50Z"
+      },
+      {
+        "id": 45049380724,
+        "name": "Qoyod Payment Freshness",
+        "attempt": 1,
+        "event": "pull_request",
+        "head_sha": "4e6c8a61bd1566e061a4f312e797ce239b582475",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45049380724",
+        "created_at": "2026-11-22T17:25:37Z",
+        "updated_at": "2026-11-22T17:26:04Z"
+      },
+      {
+        "id": 45049380761,
+        "name": "Mobile Order Tracking",
+        "attempt": 1,
+        "event": "pull_request",
+        "head_sha": "4e6c8a61bd1566e061a4f312e797ce239b582475",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45049380761",
+        "created_at": "2026-11-22T17:25:37Z",
+        "updated_at": "2026-11-22T17:27:00Z"
+      },
+      {
+        "id": 45049380655,
+        "name": "Mezan Release Readiness",
+        "attempt": 1,
+        "event": "pull_request",
+        "head_sha": "4e6c8a61bd1566e061a4f312e797ce239b582475",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45049380655",
+        "created_at": "2026-11-22T17:25:37Z",
+        "updated_at": "2026-11-22T17:26:46Z"
+      },
+      {
+        "id": 45049380616,
+        "name": "Store Delivery V1",
+        "attempt": 1,
+        "event": "pull_request",
+        "head_sha": "4e6c8a61bd1566e061a4f312e797ce239b582475",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45049380616",
+        "created_at": "2026-11-22T17:25:37Z",
+        "updated_at": "2026-11-22T17:27:24Z"
+      },
+      {
+        "id": 45049380619,
+        "name": "MZ2 Employee Salary and Password",
+        "attempt": 1,
+        "event": "pull_request",
+        "head_sha": "4e6c8a61bd1566e061a4f312e797ce239b582475",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45049380619",
+        "created_at": "2026-11-22T17:25:37Z",
+        "updated_at": "2026-11-22T17:27:55Z"
+      },
+      {
+        "id": 45049380764,
+        "name": "Shipping Print Boundary",
+        "attempt": 1,
+        "event": "pull_request",
+        "head_sha": "4e6c8a61bd1566e061a4f312e797ce239b582475",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45049380764",
+        "created_at": "2026-11-22T17:25:37Z",
+        "updated_at": "2026-11-22T17:28:28Z"
+      },
+      {
+        "id": 45049380779,
+        "name": "MZ2 Accounting Module",
+        "attempt": 1,
+        "event": "pull_request",
+        "head_sha": "4e6c8a61bd1566e061a4f312e797ce239b582475",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45049380779",
+        "created_at": "2026-11-22T17:25:37Z",
+        "updated_at": "2026-11-22T17:28:38Z"
+      },
+      {
+        "id": 45049380624,
+        "name": "G47 Focused Integration",
+        "attempt": 1,
+        "event": "pull_request",
+        "head_sha": "4e6c8a61bd1566e061a4f312e797ce239b582475",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45049380624",
+        "created_at": "2026-11-22T17:25:37Z",
+        "updated_at": "2026-11-22T17:30:25Z"
+      },
+      {
+        "id": 45049380593,
+        "name": "Supplier cost report performance",
+        "attempt": 1,
+        "event": "pull_request",
+        "head_sha": "4e6c8a61bd1566e061a4f312e797ce239b582475",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45049380593",
+        "created_at": "2026-11-22T17:25:37Z",
+        "updated_at": "2026-11-22T17:30:38Z"
+      },
+      {
+        "id": 45049380757,
+        "name": "Security Gate",
+        "attempt": 1,
+        "event": "pull_request",
+        "head_sha": "4e6c8a61bd1566e061a4f312e797ce239b582475",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45049380757",
+        "created_at": "2026-11-22T17:25:37Z",
+        "updated_at": "2026-11-22T17:29:44Z"
+      },
+      {
+        "id": 45049380609,
+        "name": "MZ2 Track F native shipping",
+        "attempt": 1,
+        "event": "pull_request",
+        "head_sha": "4e6c8a61bd1566e061a4f312e797ce239b582475",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45049380609",
+        "created_at": "2026-11-22T17:25:37Z",
+        "updated_at": "2026-11-22T17:29:58Z"
+      },
+      {
+        "id": 45049380628,
+        "name": "CodeQL",
+        "attempt": 1,
+        "event": "pull_request",
+        "head_sha": "4e6c8a61bd1566e061a4f312e797ce239b582475",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45049380628",
+        "created_at": "2026-11-22T17:25:37Z",
+        "updated_at": "2026-11-22T17:31:56Z"
+      },
+      {
+        "id": 45049380626,
+        "name": "Operational Stock Eligibility",
+        "attempt": 1,
+        "event": "pull_request",
+        "head_sha": "4e6c8a61bd1566e061a4f312e797ce239b582475",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45049380626",
+        "created_at": "2026-11-22T17:25:37Z",
+        "updated_at": "2026-11-22T17:37:22Z"
+      },
+      {
+        "id": 45049380637,
+        "name": "Review Completion Resumable",
+        "attempt": 1,
+        "event": "pull_request",
+        "head_sha": "4e6c8a61bd1566e061a4f312e797ce239b582475",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45049380637",
+        "created_at": "2026-11-22T17:25:37Z",
+        "updated_at": "2026-11-22T17:37:23Z"
+      },
+      {
+        "id": 45049380713,
+        "name": "Operational Balance Web",
+        "attempt": 1,
+        "event": "pull_request",
+        "head_sha": "4e6c8a61bd1566e061a4f312e797ce239b582475",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45049380713",
+        "created_at": "2026-11-22T17:25:37Z",
+        "updated_at": "2026-11-22T17:37:26Z"
+      }
+    ],
+    "all_17_workflows_passed": true,
+    "counts_overlap_do_not_sum": true,
+    "operational_backend": {
+      "run_id": 45049380713,
+      "job_id": 137290894371,
+      "passed": 6502,
+      "subtests": 90,
+      "seconds": 561.77,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "isolated_real_mongo": true
+    },
+    "demand_contracts": {
+      "passed": 93,
+      "seconds": 46.66,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0
+    },
+    "shipping_calculator": {
+      "passed": 16,
+      "subtests": 18
+    },
+    "operational_frontend": {
+      "run_id": 45049380713,
+      "job_id": 137290894161,
+      "passed": 1620,
+      "suites": 103
+    },
+    "browser_groups": {
+      "passed": 33,
+      "groups": [
+        14,
+        12,
+        7
+      ]
+    },
+    "stock": {
+      "run_id": 45049380626,
+      "job_id": 137290893949,
+      "passed": 5525,
+      "subtests": 97,
+      "seconds": 664.19,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "isolated_real_mongo": true
+    },
+    "canonical_worker": {
+      "run_id": 45049380713,
+      "job_id": 137290894321,
+      "passed": 4,
+      "seconds": 14.43
+    },
+    "g47": {
+      "run_id": 45049380624,
+      "backend_job": 137290893938,
+      "frontend_job": 137290894219,
+      "backend_groups": [
+        {
+          "passed": 238,
+          "subtests": 88
+        },
+        {
+          "passed": 331,
+          "subtests": 127
+        },
+        {
+          "passed": 58
+        },
+        {
+          "passed": 436
+        }
+      ],
+      "frontend_groups": [
+        {
+          "passed": 145,
+          "suites": 10
+        },
+        {
+          "passed": 324,
+          "suites": 22
+        }
+      ]
+    },
+    "unified_activity_cases": [
+      {
+        "name": "test_old_supplier_allocation_and_late_customer_matches_keep_cash_and_history_once",
+        "seconds": 0.671,
+        "result": "passed"
+      },
+      {
+        "name": "test_missing_supplier_lineage_keeps_customer_cash_evidence_but_never_backfills_supplier_history",
+        "seconds": 0.616,
+        "result": "passed"
+      },
+      {
+        "name": "test_demand_resources_keep_pending_adjustments_and_confirmed_interleaved_money",
+        "seconds": 1.04,
+        "result": "passed"
+      }
+    ],
+    "local": {
+      "backend_passed": 115,
+      "frontend_passed": 272,
+      "frontend_suites": 19,
+      "real_mongo_available": false
+    },
+    "inventory_browser": {
+      "run_id": 45049380713,
+      "job_id": 137290894311,
+      "artifact_id": 14765076919,
+      "archive_sha256": "7cd65f90ec0eb84edd316f8aad492758d9e87e4411c5e1c094d323ff88305ede",
+      "source_file_count": 58,
+      "source_manifest_sha256": "e7bb7857a9a2234ee786ebf5ad64b7d28eba97f842c8e3ae362c03b746f82d15",
+      "evidence_sha256": "cd4af16c0a135caa3ad7beeeca2104a0c0f6f468aa5a6f850437b048fd4bafac",
+      "synthetic_only": true,
+      "actual_components": true,
+      "chromium_sandbox": true,
+      "results": [
+        {
+          "name": "Desktop form is centered at 70% with adjacent supplier metadata",
+          "status": "PASS",
+          "request_count": 5
+        },
+        {
+          "name": "Product and component choices show an explicit selected mark in one editor",
+          "status": "PASS",
+          "request_count": 0
+        },
+        {
+          "name": "Conditional yes, literal no and deferred parent keep only visible option values",
+          "status": "PASS",
+          "request_count": 0
+        },
+        {
+          "name": "Newest compact row is first; editing preserves its place and optional omissions stay ready",
+          "status": "PASS",
+          "request_count": 0
+        },
+        {
+          "name": "Mobile single editor and compact draft fit the viewport without horizontal scrolling",
+          "status": "PASS",
+          "request_count": 0
+        },
+        {
+          "name": "Approving an unreceived credit invoice does not call receiving or payment",
+          "status": "PASS",
+          "request_count": 2
+        },
+        {
+          "name": "Awaiting queue receives exactly two of four units and preserves the unpaid balance on reload",
+          "status": "PASS",
+          "request_count": 10
+        }
+      ],
+      "errors": [],
+      "physical_quantity": 2,
+      "payment_call_count": 0,
+      "screenshots": [
+        {
+          "name": "purchase-desktop.png",
+          "sha256": "55e3335d1e1fa0e48cd1f16bde3a36ae5e09eadd4ea43beedbd8b37ddeebeee4"
+        },
+        {
+          "name": "draft-desktop.png",
+          "sha256": "f91ef2870e87c4de815e44d3a546520dbe76736935415c8100aca08ab86e741b"
+        },
+        {
+          "name": "editor-mobile.png",
+          "sha256": "803d371c22a16d0f64fc18e9d2b51b37e409d9d7d620fd5bc2c9aec49298e318"
+        },
+        {
+          "name": "draft-mobile.png",
+          "sha256": "00c39db8dada23b47cd1d46b0f972e39217571a5e86b3a237360f8e9db787aa4"
+        },
+        {
+          "name": "invoice-review-mobile.png",
+          "sha256": "d23cf20a5df89fb609c0278761ea6c844ce8d7c3cef9f840c1c8f08d9bab3ed7"
+        },
+        {
+          "name": "receipt-partial-mobile.png",
+          "sha256": "83493e665c0650938ed643d800e0d2f3f445eb78c4656ce87c53a26e63fcc712"
+        },
+        {
+          "name": "receipt-partial-desktop.png",
+          "sha256": "6acff80a8df3238a69766519e32ccbc67864cdf1120994f4752c27c73134f157"
+        }
+      ]
+    },
+    "candidate": {
+      "status": "passed",
+      "validator": "scripts.emergent_deployment_adapter.load_candidate_release_intent (unchanged from M)",
+      "source_git_sha": "4e6c8a61bd1566e061a4f312e797ce239b582475",
+      "source_base_git_sha": "06763ffd6e3c3f7c861769b61d2c4e6b9b2d5f35",
+      "source_tree": "8f99772552fba3df9a14f55952648aa5d0ed5408",
+      "workflow_run_id": 45049380655,
+      "workflow_attempt": 1,
+      "frontend_job_id": 137290894079,
+      "artifact_id": 14763769992,
+      "archive_sha256": "8e1295ba78c61650d5f64e277b620187099e5c4b428de1162463ded462f9705f",
+      "candidate_sha256": "762a168ddd6bbe86afd29dd6ed8b5add13d33c426d2edc1fbf4d934c772326ab",
+      "runtime_release_id": "rg5-2e0e3797d6ff3b955a3a23fd31487bd92721e70f316f3bdf34cab0d94c5d630f",
+      "frontend_artifact_tree_sha256": "68278a1d40fc16b2852359eeee963b12bb1820e675e691d74410ce4f47f5123b",
+      "build_meta_sha256": "79442ffec3922ad136a5bf643dcd30aa18df74dff6b504535376b954b0c606e0",
+      "reproducibility_proof_sha256": "9d0be398deaf7387a3002143d87e85104f86337880a0d091008b71e2824f9028",
+      "index_sha256": "87ad325682aeb518593cf6e8d4fcfc500dcbe8280d47013f1c6c6042fd90a2de",
+      "toolchain": {
+        "node": "22.23.2",
+        "vite": "8.2.4",
+        "yarn": "1.22.22"
+      },
+      "passes": [
+        {
+          "ordinal": 1,
+          "artifact_tree_sha256": "68278a1d40fc16b2852359eeee963b12bb1820e675e691d74410ce4f47f5123b",
+          "build_meta": {
+            "bytes": 579429,
+            "path": "build-meta.json",
+            "sha256": "79442ffec3922ad136a5bf643dcd30aa18df74dff6b504535376b954b0c606e0"
+          }
+        },
+        {
+          "ordinal": 2,
+          "artifact_tree_sha256": "68278a1d40fc16b2852359eeee963b12bb1820e675e691d74410ce4f47f5123b",
+          "build_meta": {
+            "bytes": 579429,
+            "path": "build-meta.json",
+            "sha256": "79442ffec3922ad136a5bf643dcd30aa18df74dff6b504535376b954b0c606e0"
+          }
+        }
+      ],
+      "retained_pass": 2,
+      "source_file_counts": {
+        "frontend_source": 1402,
+        "backend_runtime_source": 1310,
+        "release_control_source": 328
+      },
+      "clean_after_validation": true,
+      "candidate_outside_checkout": true,
+      "adapter_rehearsal": false,
+      "intent_B_created": false,
+      "host_actions": false
+    },
+    "candidate_is_not_final_intent_or_deployed_identity": true,
+    "source_A_adapter_jobs_intentionally_skipped": true,
+    "benchmarks": {
+      "scope": "isolated synthetic Mongo and ASGI; not browser/network/Production latency",
+      "home": {
+        "resources": 200,
+        "movements": 5000,
+        "first_ready_http_200_ms": 1457.763,
+        "first_ready_under_two_seconds": true,
+        "ready_p95_ms": 5.289,
+        "concurrent_six_ready_total_ms": 26.352,
+        "max_health_ms": 1.508,
+        "max_employee_bootstrap_ms": 13.07,
+        "response_bytes_before": 86287,
+        "response_bytes_after": 3978,
+        "resource_count_before": 222,
+        "resource_count_after": 3,
+        "child_state": "ready"
+      },
+      "register": {
+        "pages": 20,
+        "page_size": 8,
+        "report_builds_before": 20,
+        "report_builds_after": 1,
+        "financial_snapshot_reads_before": 20,
+        "financial_snapshot_reads_after": 1,
+        "reduction_ratio": 0.95,
+        "legacy_p95_ms": 464.747,
+        "ready_p95_ms": 6.597,
+        "cold_build_ms": 994.562,
+        "concurrent_six_ready_total_ms": 28.706,
+        "financial_result_equal": true,
+        "source_unchanged": true
+      }
+    },
+    "artifacts_metadata": [
+      {
+        "id": 14765471412,
+        "name": "operational-backend-results",
+        "run_id": 45049380713,
+        "head_sha": "4e6c8a61bd1566e061a4f312e797ce239b582475",
+        "sha256": "b7b28237c144be72bcc117ab8a09903c1dd82b9889dba073c9b3c64de0badc91",
+        "size_in_bytes": 122286
+      },
+      {
+        "id": 14765076919,
+        "name": "inventory-purchase-browser-results",
+        "run_id": 45049380713,
+        "head_sha": "4e6c8a61bd1566e061a4f312e797ce239b582475",
+        "sha256": "7cd65f90ec0eb84edd316f8aad492758d9e87e4411c5e1c094d323ff88305ede",
+        "size_in_bytes": 783332
+      },
+      {
+        "id": 14765026978,
+        "name": "simple-balances-browser-results",
+        "run_id": 45049380713,
+        "head_sha": "4e6c8a61bd1566e061a4f312e797ce239b582475",
+        "sha256": "de23ec1423b34c94438a8be11dc5313badaf70610f9e7b8453064bcc1f558cc8",
+        "size_in_bytes": 1089751
+      },
+      {
+        "id": 14764773019,
+        "name": "operational-balances-browser-results",
+        "run_id": 45049380713,
+        "head_sha": "4e6c8a61bd1566e061a4f312e797ce239b582475",
+        "sha256": "dea69fa1a7a5ce2c59b9fafa3bb67c43e530b87fcbbb1784495ab3aca397b6a4",
+        "size_in_bytes": 752629
+      },
+      {
+        "id": 14764428321,
+        "name": "operational-frontend-results",
+        "run_id": 45049380713,
+        "head_sha": "4e6c8a61bd1566e061a4f312e797ce239b582475",
+        "sha256": "4ba80c8a10dcb3268247944c9295ea4fc17241bcbce158e0ddf88c0f57568515",
+        "size_in_bytes": 51716
+      },
+      {
+        "id": 14764169159,
+        "name": "operational-worker-results",
+        "run_id": 45049380713,
+        "head_sha": "4e6c8a61bd1566e061a4f312e797ce239b582475",
+        "sha256": "a08c3320597c06e48c5fe80a5107b96e7160b945970ee3760a75615221820a79",
+        "size_in_bytes": 746
+      },
+      {
+        "id": 14765785004,
+        "name": "eligibility-backend-4e6c8a61bd1566e061a4f312e797ce239b582475",
+        "run_id": 45049380626,
+        "head_sha": "4e6c8a61bd1566e061a4f312e797ce239b582475",
+        "sha256": "caf6669d20b5520160681bdf3f00a8a3af1c4eec6637145eda3718660dd3c313",
+        "size_in_bytes": 94479
+      }
+    ],
+    "locally_verified_archive_ids": [
+      14763769992,
+      14765076919,
+      14765471412,
+      14765785004,
+      14764169159
+    ],
+    "visual_review": {
+      "all_seven_inventory_images_reviewed": true,
+      "root_reviewed_primary_three": true,
+      "no_material_clipping_or_overlap": true
+    }
+  },
+  "publication": {
+    "status": "deferred_by_owner_pending_additional_operations",
+    "source_integration_complete": true,
+    "additional_operations_not_yet_provided": true,
+    "final_intent_B_created": false,
+    "production_ref_changed_by_this_task": false,
+    "shared_app_changed_by_this_task": false,
+    "live_runtime_published_by_this_task": false,
+    "release_guard_lease_created": false,
+    "fresh_actual_shared_guard_observed": false,
+    "adapter_rehearsal_executed": false,
+    "live_financial_or_stock_test_writes": false,
+    "paid_emergent_chat_used": false,
+    "other_task_serial_handoff": "PR2069 handoff preserved; current live deployment not asserted"
+  }
+}

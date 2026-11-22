@@ -1,5 +1,104 @@
 # CUSTOMER-INVENTORY-UNIFIED-20261122
 
+## Verified integration checkpoint — publication deferred
+
+This is a post-source evidence record. **Do not deploy this evidence branch.**
+The verified source integration point remains Draft [PR #2074](https://github.com/AMASI-SA/AMASI-SA/pull/2074) on
+`codex/customer-inventory-unified-r2-20261122`. The owner's latest direction
+is to finish combining and verifying these scopes and defer publication until
+further operations join one release.
+
+- Exact source A2: `4e6c8a61bd1566e061a4f312e797ce239b582475`.
+- Exact source tree: `8f99772552fba3df9a14f55952648aa5d0ed5408`.
+- Reviewed current Production M/J, the sole parent:
+  `06763ffd6e3c3f7c861769b61d2c4e6b9b2d5f35`.
+- Final remote Production check still matches M; PR #2074 is open, draft,
+  unmerged, mergeable and clean. Source and inherited intent are unchanged.
+- Complete source ranges from PR #2065 and #2067 are retained. Those PRs stay
+  open and unmerged with publication holds. Prior unified PR #2073 was closed
+  without merging after its source was carried onto M; its branch and proof
+  remain preserved.
+
+### Exact-A2 acceptance
+
+All **17 workflows passed**. The full source-bound record and artifacts are
+in [EVIDENCE-4e6c8a61.json](EVIDENCE-4e6c8a61.json).
+
+| Check | Result |
+|---|---|
+| Operational Backend, real isolated Mongo | 6,502 passed +90 subtests; zero failures/errors/skips |
+| Durable demand store/child/HTTP/builders | 93 passed; zero failures/errors/skips |
+| Shipping summary/calculator | 16 passed +18 subtests |
+| Operational Frontend | 1,620 passed in 103 suites |
+| Browser acceptance | 33 passed (14+12+7) |
+| Stock eligibility/transactions | 5,525 passed +97 subtests; zero failures/errors/skips |
+| Canonical worker | 4 passed |
+| G47, Security Gate, both CodeQL languages and other applicable workflows | Passed |
+| Governed source build and candidate | Two identical passes; original external candidate validator passed |
+
+Counts overlap and must not be added as unique tests. All three unified
+supplier/customer/demand regressions executed on the CI real replica set.
+They preserve bank 969.20, supplier 30, the original 930 historical cash seal
+and provider gross 200 / fees 4.60 / net 195.40 while refund 0.80 and collection 50
+remain unconfirmed. Read-only demand projections do not alter money; stale
+source specs are rejected.
+
+The inventory browser artifact was downloaded and its ZIP hash verified.
+All 58 source hashes match A2; seven original screenshots were reviewed with
+no material overlap/clipping. Desktop at 70%, the single editor, compact drafts,
+mobile layout and exact later receipt of 2 out of 4 units all passed, with zero payment calls.
+
+Fresh demand benchmarks use synthetic Mongo/ASGI, not live/browser timing.
+Home cold first-ready HTTP 200 was 1457.763 ms and ready p95 was 5.289 ms.
+The register reduced report builds 20→1 (95%), with ready p95 6.597ms,
+equal financial results and unchanged source. These measurements do not
+assert Production latency.
+
+### Source-build proof, not final publication identity
+
+Readiness run [45049380655](https://github.com/AMASI-SA/AMASI-SA/actions/runs/45049380655)
+generated candidate artifact 14763769992. Archive SHA256:
+`8e1295ba78c61650d5f64e277b620187099e5c4b428de1162463ded462f9705f`.
+Candidate JSON SHA256:
+`762a168ddd6bbe86afd29dd6ed8b5add13d33c426d2edc1fbf4d934c772326ab`.
+
+The unchanged original candidate validator passed in a separate clean exact-A2
+clone, with candidate outside its checkout. It bound M/A2, all source manifests,
+the two equal artifact/build-meta passes and runtime candidate
+`rg5-2e0e3797d6ff3b955a3a23fd31487bd92721e70f316f3bdf34cab0d94c5d630f`.
+This is **not a deployed identity or frozen B**. The Node 20/24 host dispatcher
+contracts passed; full intent-aware adapter rehearsal jobs were intentionally
+skipped for source A and must not be reported as executed.
+
+### Continuation and publication hold
+
+The integration work is complete and remotely recoverable. Add the remaining
+owner-specified operations to the unified source after reviewing current
+Production and the canonical [Issue #1006 record](https://github.com/AMASI-SA/AMASI-SA/issues/1006#issuecomment-6238987123).
+Any source change requires a new exact-source candidate and verification;
+do not reuse A1 or A2 artifacts for a different source.
+
+No final B, Production merge by this task, shared `/app` mutation, Release
+Guard lease, adapter rehearsal or publication occurred. No live business
+test writes or paid Emergent chat. PR #2069's separate serial handoff is
+preserved; this record does not assert its live outcome. The earlier browser
+connection/certificate observations are retained below for future access
+recovery, but the present publication hold is the owner's explicit direction.
+
+After the final combined scope is complete and the publication hold ends,
+follow unchanged AGENTS.md: fresh actual inactive guard; new intent-only B;
+exact Node 20/24 and official shared adapter proofs; preserved current
+Production and unrelated host files; prepare/prepublish immediately before
+one publication; newer explicit Deployment Succeeded; original three-probe verification with
+matching identity/files/build/JSON MIME and final inactive guard.
+
+## Frozen A2 source-status snapshot
+
+The text below is the source-time preparation snapshot. The verified
+post-source section above and the canonical ledger supersede its pending-CI
+instructions.
+
+
 ## Current r2 integration after concurrent Production advance
 
 The owner's publication deferral remains in force. Continue integrating the
