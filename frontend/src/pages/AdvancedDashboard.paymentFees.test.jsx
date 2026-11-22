@@ -33,6 +33,25 @@ function renderTotals(totals = {}, rows = [], financialCohort = undefined) {
     }} />));
 }
 
+const weeklySource = {
+    provider: "tabby", native_currency: "SAR", basis: "weekly_statement_average",
+    window_start: "2026-11-09", window_end: "2026-11-15",
+    rate_percent: 5.9, fixed_amount_per_sale: 1.5, vat_rate_percent: 15,
+    eligible_sale_rows: 35, stale_source: false,
+};
+const operationalSource = {
+    provider: "tabby", native_currency: "SAR", basis: "operational_balance_average",
+    period_start: "2026-10-01T00:00:00Z", period_end: "2026-11-22T00:00:00Z",
+    source_as_of: "2026-10-31", source_date_basis: "statement_date", accepted_at: "2026-11-01T10:00:00Z",
+    rate_percent: "7.57473800", fixed_amount_per_sale: "1.00000000", vat_rate_percent: "15.00000000",
+    eligible_sale_rows: 100,
+};
+const weeklyRow = {
+    key: "tabby", name: "تابي", orders_count: 5, total_sales: 1000, fee_amount: 40,
+    fees_estimated: true, estimated_orders_count: 2,
+    fee_sources: ["statement", "weekly_statement_average"], fee_estimate_sources: [weeklySource],
+};
+
 test.each([null, 830])("incomplete commission total cannot display final profit %s", (netProfit) => {
     renderTotals({ payment_fees_complete: false, payment_fee_review_reasons: ["payment_awaiting_collection"],
         total_payment_fees: null, net_profit: netProfit },
@@ -106,4 +125,75 @@ test("proved unpaid exclusion is explained without changing registry count or fi
     expect(note).not.toContain("ملغ");
     expect(container.querySelector('[data-testid="advanced-profit-net-hero"]').textContent).toContain("830.00");
     expect(container.querySelector('[data-testid="advanced-profit-kpis"]').textContent).toContain("عدد الطلبات3");
+});
+
+test("weekly commission estimates show numeric totals, reference week and affected orders", () => {
+    renderTotals({ total_payment_fees: 40, net_profit: 810,
+        payment_fees_complete: true, payment_fees_estimated: true,
+        payment_fee_estimate_sources: [weeklySource] }, [weeklyRow]);
+    const fee = container.querySelector('[data-testid="advanced-profit-row-payment"]');
+    expect(fee.textContent).toContain("40.00");
+    expect(fee.textContent).toContain("تقديري · متوسط أسبوعي");
+    const hero = container.querySelector('[data-testid="advanced-profit-net-hero"]');
+    expect(hero.textContent).toContain("810.00");
+    expect(hero.textContent).toContain("تقديري · متوسط أسبوعي");
+    act(() => fee.click());
+    const details = container.querySelector('[data-testid="advanced-profit-payment-details"]');
+    expect(details.textContent).toContain("2026-11-09");
+    expect(details.textContent).toContain("2026-11-15");
+    expect(details.textContent).toContain("عمليات البيع المرجعية: 35");
+    expect(details.textContent).toContain("الطلبات المقدّرة: 2 من 5");
+});
+
+test.each([weeklySource, operationalSource])("an actual fee refresh removes $basis labels and keeps ad bank fees", (source) => {
+    const adFee = { key: "ad_bank_commissions", name: "عمولات الحسابات الإعلانية", fee_amount: 5, total_sales: 50 };
+    renderTotals({ total_payment_fees: 45, net_profit: 805,
+        payment_fees_complete: true, payment_fees_estimated: true,
+        payment_fee_estimate_sources: [source] }, [{ ...weeklyRow, fee_estimate_sources: [source] }, adFee]);
+    act(() => container.querySelector('[data-testid="advanced-profit-row-payment"]').click());
+    expect(container.textContent).toContain("تقديري");
+    renderTotals({ total_payment_fees: 43, net_profit: 807,
+        payment_fees_complete: true, payment_fees_estimated: false,
+        payment_fee_estimate_sources: [] }, [{ ...weeklyRow, fee_amount: 38, fees_estimated: false,
+        estimated_orders_count: 0, fee_estimate_sources: [] }, adFee]);
+    expect(container.textContent).not.toContain("متوسط أسبوعي");
+    expect(container.textContent).not.toContain("نسبة الأرصدة التشغيلية");
+    expect(container.textContent).not.toContain("2026-11-09");
+    expect(container.querySelector('[data-testid="advanced-profit-row-payment"]').textContent).toContain("43.00");
+    expect(container.querySelector('[data-testid="advanced-profit-net-hero"]').textContent).toContain("807.00");
+    expect(container.querySelector('[data-testid="advanced-profit-payment-details"]').textContent).toContain("عمولات الحسابات الإعلانية");
+});
+
+test("without a current week, the existing operational percentage remains estimated with its original period", () => {
+    renderTotals({ total_payment_fees: 88.26, net_profit: 761.74,
+        payment_fees_complete: true, payment_fees_estimated: true,
+        payment_fee_estimate_sources: [operationalSource] }, [{ ...weeklyRow, fee_amount: 88.26,
+        estimated_orders_count: 5, fee_estimate_sources: [operationalSource], fee_sources: ["operational_balance_average"] }]);
+    const fee = container.querySelector('[data-testid="advanced-profit-row-payment"]');
+    expect(fee.textContent).toContain("88.26");
+    expect(fee.textContent).toContain("تقديري · نسبة الأرصدة التشغيلية");
+    const hero = container.querySelector('[data-testid="advanced-profit-net-hero"]');
+    expect(hero.textContent).toContain("761.74");
+    expect(hero.textContent).toContain("تقديري · نسبة الأرصدة التشغيلية");
+    act(() => fee.click());
+    const details = container.querySelector('[data-testid="advanced-profit-payment-details"]');
+    expect(details.textContent).toContain("نسبة العمولة: 7.574738%");
+    expect(details.textContent).toContain("فترة الأرصدة التشغيلية: 2026-10-01T00:00:00Z إلى 2026-11-22T00:00:00Z");
+    expect(details.textContent).toContain("تاريخ الكشف: 2026-10-31");
+    expect(details.textContent).toContain("وقت اعتماد المصدر: 2026-11-01T10:00:00Z");
+    expect(container.textContent).not.toContain("متوسط أسبوعي");
+    expect(container.textContent).not.toContain("أسبوع المرجع");
+});
+
+test("weekly coverage cannot turn an incomplete total into an estimated profit", () => {
+    renderTotals({ total_payment_fees: null, net_profit: 810,
+        payment_fees_complete: false, payment_fees_estimated: true,
+        payment_fee_review_reasons: ["fee_policy_missing"],
+        payment_fee_estimate_sources: [weeklySource] }, [weeklyRow]);
+    expect(container.querySelector('[data-testid="advanced-profit-row-payment"]').textContent).toContain("غير مكتمل");
+    const hero = container.querySelector('[data-testid="advanced-profit-net-hero"]');
+    expect(hero.textContent).toContain("غير مكتمل");
+    expect(hero.textContent).not.toContain("810.00");
+    expect(hero.textContent).not.toContain("متوسط أسبوعي");
+    expect(container.querySelector('[data-testid="advanced-profit-net-margin"]')).toBeNull();
 });

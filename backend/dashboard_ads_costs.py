@@ -147,6 +147,7 @@ class DashboardAdsCostCollector:
                 verified_payment_orders.append(order)
 
         payment_bases: set[str] = set()
+        payment_estimates: dict[str, Any] = {}
         if verified_payment_orders:
             if self.payment_settings is None:
                 complete["payment_fees_sar"] = False
@@ -157,6 +158,9 @@ class DashboardAdsCostCollector:
                     complete["payment_fees_sar"] = False
                     reasons.add("payment_settings_invalid")
                 else:
+                    if payment.get("payment_fees_estimated"):
+                        payment_estimates = {key: deepcopy(payment[key]) for key in (
+                            "payment_fees_estimated", "payment_fee_estimate_sources", "estimated_orders_count")}
                     for row in payment.get("payment_breakdown") or []:
                         # Actual statement rebates may be signed; they are not
                         # another positive charge or a missing fee.
@@ -174,7 +178,10 @@ class DashboardAdsCostCollector:
             "payment_fees_basis": PAYMENT_FEE_BASIS if self.fee_context is not None or any(
                 order.get("payment_fee_status") == "actual" for order in verified_payment_orders) else "merchant_settings_cohort",
             "payment_fee_calculation_bases": sorted(payment_bases),
+            **payment_estimates,
         }
+        if payment_estimates:
+            output["payment_fees_basis"] = payment["basis"]
         flags = {"pieces": "pieces_complete", "product_cost_sar": "product_cost_complete",
                  "shipping_cost_sar": "shipping_cost_complete", "payment_fees_sar": "payment_fees_complete"}
         missing = {"pieces": "pieces_unverified", "product_cost_sar": "product_cost_incomplete",
