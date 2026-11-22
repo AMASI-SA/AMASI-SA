@@ -1,0 +1,230 @@
+{
+  "task": "independent exact-B operational and stock acceptance",
+  "result": "PASS",
+  "source_git_sha": "4e6c8a61bd1566e061a4f312e797ce239b582475",
+  "deployment_intent_git_sha": "447e83bfb95d2627877d46c7baa528e454a2e143",
+  "deployment_tree_sha": "6a906db6cf4fd3dda4b550483a0ef96067c6f1ed",
+  "base_git_sha": "06763ffd6e3c3f7c861769b61d2c4e6b9b2d5f35",
+  "runs": [
+    {
+      "id": 45056863140,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45056863140",
+      "head_sha": "447e83bfb95d2627877d46c7baa528e454a2e143",
+      "status": "completed",
+      "conclusion": "success",
+      "event": "pull_request",
+      "run_attempt": 1,
+      "created_at": "2026-11-22T18:45:18Z",
+      "updated_at": "2026-11-22T18:54:40Z"
+    },
+    {
+      "id": 45056863390,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45056863390",
+      "head_sha": "447e83bfb95d2627877d46c7baa528e454a2e143",
+      "status": "completed",
+      "conclusion": "success",
+      "event": "pull_request",
+      "run_attempt": 1,
+      "created_at": "2026-11-22T18:45:19Z",
+      "updated_at": "2026-11-22T18:53:34Z"
+    }
+  ],
+  "jobs": [
+    {
+      "id": 137313908905,
+      "name": "Operational Balance Frontend",
+      "status": "completed",
+      "conclusion": "success",
+      "all_steps_succeeded": true
+    },
+    {
+      "id": 137313909056,
+      "name": "Operational balances browser, mobile and visibility acceptance",
+      "status": "completed",
+      "conclusion": "success",
+      "all_steps_succeeded": true
+    },
+    {
+      "id": 137313909094,
+      "name": "Operational Balance Backend",
+      "status": "completed",
+      "conclusion": "success",
+      "all_steps_succeeded": true
+    },
+    {
+      "id": 137313909124,
+      "name": "Canonical worker excludes operational balance jobs",
+      "status": "completed",
+      "conclusion": "success",
+      "all_steps_succeeded": true
+    },
+    {
+      "id": 137313908913,
+      "name": "Stock eligibility, reservation and consumption on isolated Mongo",
+      "status": "completed",
+      "conclusion": "success",
+      "all_steps_succeeded": true
+    }
+  ],
+  "backend_log_excerpt": [
+    "2026-11-22T18:53:53.3068196Z 6502 passed, 12 warnings, 90 subtests passed in 477.83s (0:07:57)",
+    "2026-11-22T18:54:33.3648108Z 93 passed, 5 warnings in 39.09s",
+    "2026-11-22T18:54:34.2758519Z 16 passed, 18 subtests passed in 0.35s"
+  ],
+  "artifacts": [
+    {
+      "id": 14768326400,
+      "name": "eligibility-backend-447e83bfb95d2627877d46c7baa528e454a2e143",
+      "run_id": 45056863390,
+      "head_sha": "447e83bfb95d2627877d46c7baa528e454a2e143",
+      "sha256": "c750b37ca8f9b03cba3ff30356bc218a94cc988f819c29e594f161690737a88e",
+      "archive_digest_verified": true,
+      "xml": [
+        {
+          "file": "eligibility-backend.xml",
+          "passed_testcases": 5525,
+          "passed_subtests": 97,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        }
+      ]
+    },
+    {
+      "id": 14768215093,
+      "name": "operational-frontend-results",
+      "run_id": 45056863140,
+      "head_sha": "447e83bfb95d2627877d46c7baa528e454a2e143",
+      "sha256": "005316502843dd4bf3be5b8c1c6d4753497bf26c7cc1acb7dc6ade74c846a0b7",
+      "archive_digest_verified": true,
+      "frontend": {
+        "numPassedTests": 1620,
+        "numPassedTestSuites": 103,
+        "numFailedTests": 0,
+        "numPendingTests": 0,
+        "numRuntimeErrorTestSuites": 0,
+        "success": true
+      }
+    },
+    {
+      "id": 14768320347,
+      "name": "operational-balances-browser-results",
+      "run_id": 45056863140,
+      "head_sha": "447e83bfb95d2627877d46c7baa528e454a2e143",
+      "sha256": "c05b4f72887595fd40714e97fe273bec8fcbef631d490b7e4ac5b61a94db8ca8",
+      "archive_digest_verified": true,
+      "recorded_source_and_tree_verified": true,
+      "source_manifest": {
+        "records": 23,
+        "all_match_exact_B": true
+      },
+      "browser": {
+        "passed_scenarios": 14,
+        "synthetic_only": true,
+        "errors": 0,
+        "screenshots_reinspected": false
+      }
+    },
+    {
+      "id": 14768295380,
+      "name": "simple-balances-browser-results",
+      "run_id": 45056863140,
+      "head_sha": "447e83bfb95d2627877d46c7baa528e454a2e143",
+      "sha256": "49416b4dbbad2382c12a158baa99af0cf0a330638d3d875678bd2b7e14ca4995",
+      "archive_digest_verified": true,
+      "browser": {
+        "passed_scenarios": 12,
+        "synthetic_only": true,
+        "errors": 0,
+        "screenshots_reinspected": false
+      },
+      "source_manifest": {
+        "records": 29,
+        "all_match_exact_B": true
+      }
+    },
+    {
+      "id": 14767459940,
+      "name": "inventory-purchase-browser-results",
+      "run_id": 45056863140,
+      "head_sha": "447e83bfb95d2627877d46c7baa528e454a2e143",
+      "sha256": "4bf1bf42dcb77f390f6d94e85510a0622ae9cdab494ca3817ee8eb633b33d945",
+      "archive_digest_verified": true,
+      "browser": {
+        "passed_scenarios": 7,
+        "synthetic_only": true,
+        "errors": 0,
+        "screenshots_reinspected": false,
+        "payment_call_count": 0,
+        "received_physical_quantity": 2
+      },
+      "source_manifest": {
+        "records": 58,
+        "all_match_exact_B": true
+      }
+    },
+    {
+      "id": 14768285394,
+      "name": "operational-worker-results",
+      "run_id": 45056863140,
+      "head_sha": "447e83bfb95d2627877d46c7baa528e454a2e143",
+      "sha256": "a4ab2259978629e265dfe6b599d9d779f796597bca6e4e2e19e363a185c1059e",
+      "archive_digest_verified": true,
+      "recorded_source_and_tree_verified": true,
+      "xml": [
+        {
+          "file": "operational-worker.xml",
+          "passed_testcases": 4,
+          "passed_subtests": 0,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        }
+      ]
+    },
+    {
+      "id": 14767563979,
+      "name": "operational-backend-results",
+      "run_id": 45056863140,
+      "head_sha": "447e83bfb95d2627877d46c7baa528e454a2e143",
+      "sha256": "b20a5a7f22d4a286d1f5a77baca82849bd30e3a2f3726be92dfa82900256cfb2",
+      "archive_digest_verified": true,
+      "recorded_source_sha_verified": true,
+      "recorded_tree_sha_verified": true,
+      "xml": [
+        {
+          "file": "operational-backend.xml",
+          "passed_testcases": 6502,
+          "passed_subtests": 90,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "unified_regressions_passed": [
+            "test_old_supplier_allocation_and_late_customer_matches_keep_cash_and_history_once",
+            "test_missing_supplier_lineage_keeps_customer_cash_evidence_but_never_backfills_supplier_history",
+            "test_demand_resources_keep_pending_adjustments_and_confirmed_interleaved_money"
+          ]
+        },
+        {
+          "file": "operational-demand-read.xml",
+          "passed_testcases": 93,
+          "passed_subtests": 0,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        }
+      ]
+    }
+  ],
+  "scope_notes": [
+    "Real isolated Mongo fixture setup and no-skip checks completed successfully in operational and stock jobs.",
+    "Counts overlap and must not be summed as unique tests.",
+    "Browser result JSON and source hashes accepted; prior exact-source A2 visual review remains separate evidence.",
+    "No new test execution, source change, remote mutation, shared /app access, lease action, publication or live business write.",
+    "The withdrawn performance task was not resumed; existing demand contract XML was checked as part of unchanged operational workflow."
+  ],
+  "shipping_from_exact_B_job_log": {
+    "passed_testcases": 16,
+    "passed_subtests": 18
+  }
+}

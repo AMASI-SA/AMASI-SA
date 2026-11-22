@@ -1,6 +1,6 @@
 {
   "task_id": "CUSTOMER-INVENTORY-UNIFIED-20261122",
-  "status": "intent_frozen_exact_B_acceptance_in_progress",
+  "status": "exact_B_acceptance_passed_isolated_host_handoff_ready",
   "production_changed": false,
   "source_git_sha": "4e6c8a61bd1566e061a4f312e797ce239b582475",
   "source_base_git_sha": "06763ffd6e3c3f7c861769b61d2c4e6b9b2d5f35",
@@ -13,117 +13,185 @@
   "source_evidence_file": "EVIDENCE-4e6c8a61.json",
   "workflow_runs": [
     {
-      "id": 45056863390,
-      "name": "Operational Stock Eligibility",
-      "status": "in_progress",
-      "conclusion": null
-    },
-    {
       "id": 45056863397,
       "name": "Security Gate",
       "status": "completed",
-      "conclusion": "success"
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45056863397",
+      "requested_commit_sha": "447e83bfb95d2627877d46c7baa528e454a2e143"
     },
     {
-      "id": 45056863078,
-      "name": "Supplier cost report performance",
-      "status": "in_progress",
-      "conclusion": null
+      "id": 45056863390,
+      "name": "Operational Stock Eligibility",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45056863390",
+      "requested_commit_sha": "447e83bfb95d2627877d46c7baa528e454a2e143"
     },
     {
       "id": 45056863257,
       "name": "Review Completion Resumable",
-      "status": "in_progress",
-      "conclusion": null
-    },
-    {
-      "id": 45056863140,
-      "name": "Operational Balance Web",
-      "status": "in_progress",
-      "conclusion": null
-    },
-    {
-      "id": 45056863109,
-      "name": "CodeQL",
-      "status": "in_progress",
-      "conclusion": null
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45056863257",
+      "requested_commit_sha": "447e83bfb95d2627877d46c7baa528e454a2e143"
     },
     {
       "id": 45056863249,
       "name": "Qoyod Payment Freshness",
       "status": "completed",
-      "conclusion": "success"
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45056863249",
+      "requested_commit_sha": "447e83bfb95d2627877d46c7baa528e454a2e143"
     },
     {
       "id": 45056863179,
       "name": "Mobile Order Tracking",
       "status": "completed",
-      "conclusion": "success"
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45056863179",
+      "requested_commit_sha": "447e83bfb95d2627877d46c7baa528e454a2e143"
     },
     {
       "id": 45056863202,
       "name": "Snapchat Settings Management V2",
       "status": "completed",
-      "conclusion": "success"
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45056863202",
+      "requested_commit_sha": "447e83bfb95d2627877d46c7baa528e454a2e143"
     },
     {
       "id": 45056863261,
       "name": "TikTok Creator Release Candidate",
       "status": "completed",
-      "conclusion": "skipped"
+      "conclusion": "skipped",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45056863261",
+      "requested_commit_sha": "447e83bfb95d2627877d46c7baa528e454a2e143"
     },
     {
       "id": 45056863300,
       "name": "Snapchat Direct Active Publication",
       "status": "completed",
-      "conclusion": "success"
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45056863300",
+      "requested_commit_sha": "447e83bfb95d2627877d46c7baa528e454a2e143"
     },
     {
       "id": 45056863089,
       "name": "Store Delivery V1",
       "status": "completed",
-      "conclusion": "success"
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45056863089",
+      "requested_commit_sha": "447e83bfb95d2627877d46c7baa528e454a2e143"
     },
     {
       "id": 45056863320,
       "name": "MZ2 Employee Salary and Password",
       "status": "completed",
-      "conclusion": "success"
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45056863320",
+      "requested_commit_sha": "447e83bfb95d2627877d46c7baa528e454a2e143"
     },
     {
       "id": 45056863157,
       "name": "Shipping Print Boundary",
       "status": "completed",
-      "conclusion": "success"
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45056863157",
+      "requested_commit_sha": "447e83bfb95d2627877d46c7baa528e454a2e143"
     },
     {
       "id": 45056863142,
       "name": "MZ2 Track F native shipping",
       "status": "completed",
-      "conclusion": "success"
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45056863142",
+      "requested_commit_sha": "447e83bfb95d2627877d46c7baa528e454a2e143"
     },
     {
       "id": 45056863086,
       "name": "MZ2 Accounting Module",
       "status": "completed",
-      "conclusion": "success"
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45056863086",
+      "requested_commit_sha": "447e83bfb95d2627877d46c7baa528e454a2e143"
     },
     {
       "id": 45056863176,
       "name": "G47 Focused Integration",
       "status": "completed",
-      "conclusion": "success"
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45056863176",
+      "requested_commit_sha": "447e83bfb95d2627877d46c7baa528e454a2e143"
     },
     {
       "id": 45056863095,
       "name": "Mezan Release Readiness",
       "status": "completed",
-      "conclusion": "success"
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45056863095",
+      "requested_commit_sha": "447e83bfb95d2627877d46c7baa528e454a2e143"
+    },
+    {
+      "id": 45056863078,
+      "name": "Supplier cost report performance",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45056863078",
+      "requested_commit_sha": "447e83bfb95d2627877d46c7baa528e454a2e143"
+    },
+    {
+      "id": 45056863109,
+      "name": "CodeQL",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45056863109",
+      "requested_commit_sha": "447e83bfb95d2627877d46c7baa528e454a2e143"
+    },
+    {
+      "id": 45056863140,
+      "name": "Operational Balance Web",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45056863140",
+      "requested_commit_sha": "447e83bfb95d2627877d46c7baa528e454a2e143"
     }
   ],
   "shared_host_rehearsal_executed": false,
   "lease_created": false,
   "merged": false,
   "published": false,
-  "helper_sha256": "b11576e193ecd80994a3127474433e50a75fa624eb78e22e4bbeca5e5e03c9d6"
+  "helper_sha256": "b11576e193ecd80994a3127474433e50a75fa624eb78e22e4bbeca5e5e03c9d6",
+  "applicable_workflows_passed": 17,
+  "readiness": {
+    "run_id": 45056863095,
+    "head_sha": "447e83bfb95d2627877d46c7baa528e454a2e143",
+    "node20_adapter_passed": true,
+    "node24_adapter_passed": true,
+    "retained_artifacts_independently_validated": true,
+    "review_file": "EXACT-B-NODE20-NODE24-ARTIFACT-REVIEW.json",
+    "review_sha256": "2162c6ae2f7f449211ce1dcdef5be9ee6ccde46ff817aeccb9c4ac253646636c"
+  },
+  "operational": {
+    "run_id": 45056863140,
+    "stock_run_id": 45056863390,
+    "retained_artifacts_independently_validated": true,
+    "review_file": "EXACT-B-OPERATIONAL-ARTIFACT-REVIEW.json",
+    "review_sha256": "0e58b9becb8e9f03ea44d35f84e568bf656961d184a6b9b7181298493201321f"
+  },
+  "handoff": {
+    "helper_evidence_commit": "916e5f5f37e1651e2379174c1afa96e2a0204202",
+    "helper_file": "MANUAL-HOST-ISOLATED-REHEARSAL-2074.py",
+    "helper_sha256": "b11576e193ecd80994a3127474433e50a75fa624eb78e22e4bbeca5e5e03c9d6",
+    "launcher_file": "RUN-HOST-REHEARSAL-2074.sh",
+    "launcher_sha256": "3a8112a283672cb62b99d560c90e4b9a744533e32a7992fb2bc8abeaa94fb3de",
+    "syntax_and_independent_review_passed": true,
+    "remote_helper_bytes_verified": true,
+    "actual_host_execution_pending": true
+  },
+  "final_remote_refs": {
+    "production": "06763ffd6e3c3f7c861769b61d2c4e6b9b2d5f35",
+    "task": "447e83bfb95d2627877d46c7baa528e454a2e143"
+  },
+  "next_action": "Run pinned isolated-host launcher from original /app terminal; do not prepare a lease or publish before observed host proof and later coordinated merge/materialization."
 }

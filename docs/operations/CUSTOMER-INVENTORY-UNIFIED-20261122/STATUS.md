@@ -1,6 +1,6 @@
 # CUSTOMER-INVENTORY-UNIFIED-20261122
 
-## Current state — unified intent frozen; exact-B acceptance in progress
+## Current state — exact-B acceptance passed; isolated host handoff ready
 
 The owner requested publication code, supplied the original shared inactive-guard inspection, withdrew the misdirected slowness report, and asked what to execute next. Release preparation has resumed for the already approved customer refund/collection and inventory/purchase/receiving scopes. No additional source was supplied. The earlier publication deferral is retained in historical commits; this record is the current preparation handoff. No performance work or new performance gate is assigned to this task.
 
@@ -23,9 +23,20 @@ B has A2 as its sole parent and changes only `release/release-intent-v5.json`. I
 
 All 17 exact-A2 source workflows passed. [EVIDENCE-4e6c8a61.json](EVIDENCE-4e6c8a61.json) retains the complete source-bound runs and artifact hashes. Operational backend: 6,502 +90 subtests; demand contracts:93; frontend:1,620 /103 suites; browser:33 (14+12+7); stock:5,525 +97 subtests; worker:4. Counts overlap and must not be summed. Two clean governed builds matched, and the original candidate validator passed outside a clean A2 checkout. Independent candidate revalidation also passed before B creation.
 
-Exact-B [Release Readiness 45056863095](https://github.com/AMASI-SA/AMASI-SA/actions/runs/45056863095) succeeded, including actual clean-clone adapter rehearsals under Node20.20.2 and24.19.0, not merely dispatcher contracts. Both governed builds, original validators and package/JSON routing checks ran. The four retained output/evidence artifacts are under independent acceptance review. Other exact-B workflows still running at this checkpoint are not reported as passed.
+Exact-B [Release Readiness 45056863095](https://github.com/AMASI-SA/AMASI-SA/actions/runs/45056863095) succeeded, including actual clean-clone adapter rehearsals under Node20.20.2 and24.19.0, not merely dispatcher contracts. Both governed builds, original validators and package/JSON routing checks ran. All four retained ZIP digests and both internal tar checksums were independently verified. Original artifact/proof/identity validators and fresh package-boundary checks passed for both outputs; freshly computed package proofs equal the CI artifacts and each other. All 17 applicable exact-B workflows completed successfully. The unrelated TikTok workflow and PR-only manual-publishing handoff were expected skips; neither actual adapter job was skipped.
 
 Original B `load_release_intent` + `verify_release_intent_git` passed in a separate clean local B clone (exit0, clean after). The first attempt in the existing test workspace correctly rejected ignored prepackaged bytecode; the rerun used a new clone without deleting shared files or weakening validation. The missing generated identity diagnostic in a source-only clone was nonfatal; no generated identity was materialized to bypass a check.
+
+## Exact-B acceptance records
+
+- [EVIDENCE-447e83bf.json](EVIDENCE-447e83bf.json): all17 workflow identities and final states.
+- [EXACT-B-NODE20-NODE24-ARTIFACT-REVIEW.json](EXACT-B-NODE20-NODE24-ARTIFACT-REVIEW.json): four artifact digests, original validation results, cross-host package equality and exact JSON MIME CI assertions.
+- [EXACT-B-OPERATIONAL-ARTIFACT-REVIEW.json](EXACT-B-OPERATIONAL-ARTIFACT-REVIEW.json): real-Mongo XML, frontend/worker/browser results and source-bound artifact integrity.
+- Independent helper and launcher reviews plus original clean-B validation are retained alongside these files.
+
+Exact-B result counts: backend6502 +90 subtests, demand93, shipping16 +18subtests, stock5525 +97subtests, frontend1620/103suites, worker4, browser33=14+12+7. All three unified regressions executed; no failures/errors/skips. Seven operational/stock artifact ZIP digests match GitHub metadata. Inventory58, simple29 and operational23 source hashes match exact B. Fresh browser JSON/source acceptance is separate from the prior unchanged-A2 visual review. Counts overlap.
+
+These records establish CI and local artifact acceptance only. They do not assert that the unified source is staged in `/app` or running on Production.
 
 ## Scope and preserved accounting behavior
 
@@ -37,12 +48,12 @@ Confirmed customer payment remains recognized while refund/collection difference
 
 [MANUAL-HOST-ISOLATED-REHEARSAL-2074.py](MANUAL-HOST-ISOLATED-REHEARSAL-2074.py) is adapted from immutable PR2069 helper c01f238687e3193f096d55e6e0deb34fa8a57ec5. Its SHA256 is `b11576e193ecd80994a3127474433e50a75fa624eb78e22e4bbeca5e5e03c9d6` (7,340 bytes). Independent review and outer/child AST checks passed. Changes are limited to identities/ref/temp prefix and stronger explicit identity assertions.
 
-The helper requires a fresh exact inactive original `/app` guard, clean M and unchanged remote M/B refs. It clones locally into a unique `/tmp` directory with no hardlinks, validates B with the original functions, and runs the official `cd frontend; yarn build` entry point only in that isolated clone. It observes the original package proof and rechecks shared state. It does not merge, alter shared outputs, prepare a lease or publish. A launcher must pin the evidence commit and helper SHA256. Do not execute until all exact-B applicable gates pass and artifact acceptance completes.
+The helper requires a fresh exact inactive original `/app` guard, clean M and unchanged remote M/B refs. It clones locally into a unique `/tmp` directory with no hardlinks, validates B with the original functions, and runs the official `cd frontend; yarn build` entry point only in that isolated clone. It observes the original package proof and rechecks shared state. It does not merge, alter shared outputs, prepare a lease or publish. The reviewed [RUN-HOST-REHEARSAL-2074.sh](RUN-HOST-REHEARSAL-2074.sh) launcher pins helper evidence commit `916e5f5f37e1651e2379174c1afa96e2a0204202` and the helper SHA256. Launcher SHA256 is `3a8112a283672cb62b99d560c90e4b9a744533e32a7992fb2bc8abeaa94fb3de` (2,703 bytes). Independent shell/Python syntax and source review passed; remote pinned helper bytes were reread and matched. The launcher has not been executed on the shared host. Exact-B acceptance is now complete; fresh actual guard/base checks occur inside the launcher and again in the helper.
 
 The owner's prior inspection observed `active:false`, clean shared M, inherited intent source063611ff163c90d80cdbf96446a28584fe429846 and `target_source_in_intent:false`. The inspection did not close a lease. These are past observations; the helper must recheck them live. PR2069's foreign lease is now recorded as verified and closed by its owner; preserve all later unrelated task work.
 
 ## Exact next safe action
 
-Finish exact-B CI and retained artifact acceptance. Freeze and verify a pinned launcher in this separate evidence branch, update Issue1006's bounded task section, then hand off the single isolated host rehearsal command. On actual successful rehearsal and fresh unchanged Production/guard checks, the later authorized sequence is non-squash merge, safe shared update/materialization, original prepare/prepublish immediately before one Re-publish changes, a new explicit Deployment Succeeded, original three-probe verification of source/runtime/files/build/exact JSON MIME, and final active:false. No claim of shared-host or live success exists yet.
+Run the pinned `RUN-HOST-REHEARSAL-2074.sh` from the owner's existing Emergent `/app` terminal. Expected successful evidence is original intent source A2/runtime above, `ADAPTER_EXIT 0`, `REHEARSAL_RESULT` with `built:true` and `package_boundaries_verified:true`, final `SHARED_GUARD` inactive, and the final isolated-rehearsal DONE line. Retain the directory/log and stop on any STOP result; do not change the guard or substitute a different identity. Send the final output back to this task for the subsequent coordinated deployment step. On actual successful rehearsal and fresh unchanged Production/guard checks, the later authorized sequence is non-squash merge, safe shared update/materialization, original prepare/prepublish immediately before one Re-publish changes, a new explicit Deployment Succeeded, original three-probe verification of source/runtime/files/build/exact JSON MIME, and final active:false. No claim of shared-host or live success exists yet.
 
 Production changed by this task: **NO**. No shared `/app` mutation, owned lease, merge, publication, live business test writes or paid Emergent chat. This evidence branch is documentation/handoff only; never deploy it. Canonical ledger: https://github.com/AMASI-SA/AMASI-SA/issues/1006#issuecomment-6238987123 .
