@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "task_id": "OPERATIONAL-CONTEXT-READ-RECOVERY-20261122",
-  "recorded_at_utc": "2026-11-22T02:51:37Z",
+  "recorded_at_utc": "2026-11-22T03:01:37Z",
   "repository": "AMASI-SA/AMASI-SA",
   "pull_request": {
     "number": 2058,
@@ -15,11 +15,11 @@
     "name": "codex/operational-context-release-evidence-20261122",
     "based_on": "5758240bd83ed3018737ae59808f55415d80a689",
     "deploy_this_branch": false,
-    "remote_checkpoint": "de285a0a573aa97cdbb9ae62910af1776cba768b",
-    "remote_checkpoint_tree": "9eddfbb00e15a58dfe76f9141514cfc506cc0fbb",
+    "remote_checkpoint": "698cf345369dc1f6fa3cb6a739ecc1e7c1acaa20",
+    "remote_checkpoint_tree": "56970a2dd37d18ffef27a5fca65cc6ff574e3ab5",
     "remote_checkpoint_scope": "previous_evidence_record_before_this_update",
     "earlier_checkpoint": "1ac7888c1563b7b1d624c9e77196d5c8f8493a85",
-    "previous_checkpoint": "aa1baf3d5bd2e84b809ab15b9d034e61c7494308"
+    "previous_checkpoint": "de285a0a573aa97cdbb9ae62910af1776cba768b"
   },
   "provenance": {
     "base_M3": "02e8be41e6f1972806f0e095b8fdc38645a7f113",
@@ -921,17 +921,23 @@
       }
     },
     "merged": true,
-    "lease_created": false,
+    "lease_created": true,
     "published": false,
-    "production_changed_by_this_patch": false,
+    "production_changed_by_this_patch": null,
     "original_live_identity_verification": "pending",
     "live_inventory_acceptance": "pending",
     "deployment_git_sha": "1c4008e315c35ec4419e76400a9faddb94b9d5a2",
     "merged_at_utc": "2026-11-22T02:47:45Z",
     "github_production_ref": "1c4008e315c35ec4419e76400a9faddb94b9d5a2",
-    "app_last_verified_head": "02e8be41e6f1972806f0e095b8fdc38645a7f113",
-    "app_installation": "pending",
-    "production_change_field_scope": "published_runtime; reviewed GitHub production ref has moved to M4"
+    "app_last_verified_head": "1c4008e315c35ec4419e76400a9faddb94b9d5a2",
+    "app_installation": "passed",
+    "production_change_field_scope": "published_runtime_change_not_yet_observed_while_publication_in_progress",
+    "lease_actor": "chatgpt-pr2058-release-20261122-b90f3c3040a7",
+    "prepare": "passed",
+    "prepublish": "passed",
+    "publication_started": true,
+    "published_field_meaning": "explicit_platform_completion_observed",
+    "lease_closure": "pending"
   },
   "limitations": [
     "No matching live inventory/context response timing proves the original failure cause.",
@@ -940,7 +946,7 @@
     "Native stocktake, physical inventory projection, catalogs, payment writes and broader server pressure are unchanged.",
     "Current 83-case verification and immutable A2 build do not replace fresh exact-B2 CI, host rehearsal, publication or normal authenticated inventory acceptance; B1 evidence is archived only."
   ],
-  "next_safe_action": "Root checkpoints final exact-B2 acceptance and reviewed M4 merge before publication, then performs bounded M4 shared-host installation under fresh inactive original guard and unchanged protocol. After original prepare/prepublish, perform only the authorized publication; require explicit platform success, three original identity probes and inactive guard, plus normal authenticated inventory acceptance. Never deploy the evidence branch.",
+  "next_safe_action": "Checkpoint observed M4 installation, original prepare/prepublish and the single publication start. Monitor that existing publication without another click or new lease. After explicit platform success require three original live identity probes for A2/release, inactive guard and normal authenticated inventory acceptance. Never deploy the evidence branch.",
   "archived_attempts": [
     {
       "attempt": "B1",
@@ -1540,5 +1546,123 @@
       },
       "frozen_head_preserved": "5758240bd83ed3018737ae59808f55415d80a689"
     }
-  ]
+  ],
+  "actual_host_installation": {
+    "result": "passed",
+    "evidence_basis": "actual_host_observation_reported_by_release_owner",
+    "deployment_git_sha": "1c4008e315c35ec4419e76400a9faddb94b9d5a2",
+    "installed_tree": "18b335c1eb3d526c82ace35d83aca0d50ce4d1a5",
+    "started_at_utc": "2026-11-22T02:57:23.437178+00:00",
+    "finished_at_utc": "2026-11-22T02:57:24.477101+00:00",
+    "seconds": 1.04,
+    "original_operation_lock_used": true,
+    "original_reviewed_source_relation": "passed",
+    "tracked_clean_after": true,
+    "installed_tree_equals_B2": true,
+    "original_guard_before": {
+      "active": false
+    },
+    "original_guard_after": {
+      "active": false
+    },
+    "guard_observations_precede_prepare": true,
+    "untracked_paths": {
+      "before_count": 417,
+      "after_count": 417,
+      "sets_equal": true,
+      "path_set_sha256": "051756f9b060a319f1c59a283cc85aa2eb8b7cf5d3c078201230ffc8223d28fe",
+      "hash_method": "SHA-256 over NUL-joined sorted path names, as recorded by the installation wrapper",
+      "is_content_hash": false,
+      "same_method_as_prior_stage_assumed": false
+    },
+    "collision_check": {
+      "changed_paths": 6,
+      "collisions": 0
+    },
+    "previous_generated_outputs_preserved_at": "/tmp/mezan-pr2058-release-20261122-0agkk3um/previous-app-generated",
+    "generated_paths": [
+      "frontend/build",
+      "frontend/.release/reproducible-build.json",
+      "backend/release_identity.json"
+    ],
+    "old_generated_bytes": 11604857,
+    "new_generated_bytes": 11604857,
+    "app_free_bytes_before": 14471168,
+    "app_free_bytes_after": 14544896,
+    "generated_hash_checks": {
+      "build_metadata_matches_frozen_contract": true,
+      "reproducibility_proof_matches_frozen_contract": true,
+      "runtime_identity_matches_frozen_contract": true
+    },
+    "retained_result": "/tmp/mezan-pr2058-release-20261122-0agkk3um/install-result.json"
+  },
+  "release_guard_actions": {
+    "prepare": {
+      "result": "passed",
+      "exit_code": 0,
+      "started_at_utc": "2026-11-22T02:58:25.840881Z",
+      "finished_at_utc": "2026-11-22T02:58:28.947651Z",
+      "seconds": 3.107,
+      "prepared_at": "2026-11-22T02:58:27.765266+00:00",
+      "actor": "chatgpt-pr2058-release-20261122-b90f3c3040a7",
+      "protocol_version": 5,
+      "source_base_git_sha": "02e8be41e6f1972806f0e095b8fdc38645a7f113",
+      "source_git_sha": "a8e655aabbeaef64486a1a80f13551dc97dd9259",
+      "deployment_git_sha": "1c4008e315c35ec4419e76400a9faddb94b9d5a2",
+      "release_id": "rg5-9d69963c0ee7f5c299595495519175af5074f703f4e318b82b870b0407554a49",
+      "new_lease_created": true,
+      "stdout_path": "/tmp/mezan-pr2058-release-20261122-0agkk3um/prepare.stdout.json",
+      "stdout_bytes": 644924,
+      "stdout_sha256": "ffc0f65f328308876b63e52dedc9505ac1367686d44be5a5673d418be97a3cf7",
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retained_result": "/tmp/mezan-pr2058-release-20261122-0agkk3um/prepare-result.json"
+    },
+    "prepublish": {
+      "result": "passed",
+      "exit_code": 0,
+      "started_at_utc": "2026-11-22T02:59:28.094257Z",
+      "finished_at_utc": "2026-11-22T02:59:32.032087Z",
+      "seconds": 3.938,
+      "ready_to_publish": true,
+      "protocol_version": 5,
+      "exact_source_deployment_release_match": true,
+      "stdout_sha256": "02c0ae80309a9afdd1e7f7e9c73201881dd49e8ee75d96debb7fa75aab94007c",
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retained_result": "/tmp/mezan-pr2058-release-20261122-0agkk3um/prepublish-result.json",
+      "raw_stdout_retained": true
+    }
+  },
+  "publication": {
+    "status": "started",
+    "evidence_basis": "single_authorized_UI_action_observed_by_release_owner",
+    "ui_flow": [
+      "Free republishes",
+      "Publish changes"
+    ],
+    "publish_changes_clicks": 1,
+    "after_successful_prepublish_finished_at_utc": "2026-11-22T02:59:32.032087Z",
+    "observed_ui_text": "Publishing...",
+    "button_disabled": true,
+    "platform_event_id": null,
+    "platform_version": null,
+    "explicit_platform_success_observed": false,
+    "completed": false,
+    "started_timeline_event": {
+      "label": "Deployment Started",
+      "display_time": "Nov 22, 06:00 AM",
+      "display_timezone": "Asia/Aden",
+      "event_id": null,
+      "version": null
+    },
+    "initial_overview_snapshot": "Packaging your latest changes... •33s",
+    "later_owner_progress_observation": "build ongoing at about 1m13",
+    "distinct_prior_M3_event": {
+      "completion_display_time": "04:37 AM",
+      "display_timezone": "Asia/Aden",
+      "version": "ccb1df5",
+      "credited_as_current_success": false
+    }
+  }
 }

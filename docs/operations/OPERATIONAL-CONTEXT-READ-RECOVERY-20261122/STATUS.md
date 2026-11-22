@@ -2,17 +2,19 @@
 
 ## Current release — PR #2058 / A2 and B2
 
-**Evidence checkpoint: 2026-11-22 02:51:37 UTC.** The current candidate is
+**Evidence checkpoint: 2026-11-22 03:01:37 UTC.** The current candidate is
 [PR #2058](https://github.com/AMASI-SA/AMASI-SA/pull/2058), branch
 `codex/operational-context-read-lifetime-20261122`, in `AMASI-SA/AMASI-SA`.
 Source A2 and intent-only B2 remain frozen. All required exact-B2 CI has
 **passed**, and the fresh actual-host rehearsal passed. PR #2058 was normally
 merged at **2026-11-22T02:47:45Z** as M4
 `1c4008e315c35ec4419e76400a9faddb94b9d5a2`; its tree exactly equals B2.
-The GitHub production ref is M4. At root's latest handoff, shared `/app` still
-held M3 and installation was pending. **No new lease, publication or live
-acceptance is claimed.** The published runtime is not recorded as changed by
-this patch yet.
+The GitHub production ref and installed `/app` are M4. Bounded installation,
+original `prepare` and final `prepublish` passed. Root then clicked the authorized
+**Publish changes exactly once**; the observed UI reads **Publishing...** and is
+disabled. **Publication has started; platform success and the deployed version
+have not yet been observed.** The new lease remains in use for this release.
+Original live identity verification and inventory acceptance are pending.
 
 PR #2057 / B1 is a **superseded, blocked attempt**, archived below with both
 failed backend jobs and its completed matrix. Root confirmed #2057 was closed **without merge**, with its frozen head
@@ -24,8 +26,8 @@ This document and adjacent `release-evidence.json` are maintained only on
 `codex/operational-context-release-evidence-20261122`, originally based on B1.
 **This evidence branch must never be deployed or merged into a frozen release.**
 The previous durable evidence checkpoint is
-`de285a0a573aa97cdbb9ae62910af1776cba768b`, tree
-`9eddfbb00e15a58dfe76f9141514cfc506cc0fbb`. Root owns the next remote checkpoint
+`698cf345369dc1f6fa3cb6a739ecc1e7c1acaa20`, tree
+`56970a2dd37d18ffef27a5fca65cc6ff574e3ab5`. Root owns the next remote checkpoint
 and all release actions. This author changes only these two evidence documents.
 
 ## Current immutable identity
@@ -64,6 +66,72 @@ original adapter load/provenance validation and
 `_assert_reviewed_source_relation(M3, A2, M4)`. The runtime source identity stays
 A2; M4 is the separate deployment commit. This validates the merge relationship,
 not a publication or deployed runtime.
+
+## Actual M4 installation and publication start
+
+The following actual-host observations were supplied by the release owner;
+this evidence author did not operate the host or browser.
+
+### Bounded shared-host installation
+
+M4 was installed in `/app` from **2026-11-22T02:57:23.437178+00:00** to
+**02:57:24.477101+00:00**, **1.040 s**. The original operation lock was used and
+the original reviewed-source relation check passed. The installed checkout was
+tracked-clean at M4, with the exact B2 tree. Original guard status immediately
+before and after installation was exactly `{"active": false}`; those observations
+precede the subsequent new lease.
+
+The before/after sets of **417 untracked paths** were equal. Their path-set
+SHA-256 was
+`051756f9b060a319f1c59a283cc85aa2eb8b7cf5d3c078201230ffc8223d28fe`,
+using the installation record's **NUL-join of sorted path names** method. This
+is path-set evidence, not a content digest, and is not equated with any earlier
+stage's hashing method. Collision checks found none across the six changed paths.
+
+The previous `frontend/build`, `frontend/.release/reproducible-build.json` and
+`backend/release_identity.json` were preserved under
+`/tmp/mezan-pr2058-release-20261122-0agkk3um/previous-app-generated`.
+Recorded old and new generated-output sizes were each **11,604,857 bytes**.
+Free bytes in `/app` were **14,471,168 before** and **14,544,896 after**.
+The installed metadata, reproducibility proof and runtime identity hash checks
+matched the frozen contract. The host retains
+`/tmp/mezan-pr2058-release-20261122-0agkk3um/install-result.json`.
+No untracked path list, raw host log or customer data is copied into these docs.
+
+### Original prepare and prepublish
+
+The original `prepare` ran from **02:58:25.840881Z** to **02:58:28.947651Z** on
+2026-11-22, **3.107 s**, exit **0**. It prepared a new protocol-5 lease at
+**02:58:27.765266+00:00**, actor
+`chatgpt-pr2058-release-20261122-b90f3c3040a7`, bound to base M3, source A2,
+deployment M4 and release
+`rg5-9d69963c0ee7f5c299595495519175af5074f703f4e318b82b870b0407554a49`.
+The retained `prepare.stdout.json` is **644,924 bytes**, SHA-256
+`ffc0f65f328308876b63e52dedc9505ac1367686d44be5a5673d418be97a3cf7`.
+Stderr was empty. A compact `prepare-result.json` is retained in the same stage.
+
+The original final `prepublish` ran from **02:59:28.094257Z** to
+**02:59:32.032087Z**, **3.938 s**, exit **0**, and returned
+`ready_to_publish=true` for the same protocol, source, deployment and release.
+Stdout SHA-256 is
+`02c0ae80309a9afdd1e7f7e9c73201881dd49e8ee75d96debb7fa75aab94007c`;
+stderr was empty. The stage retains compact `prepublish-result.json` and the
+raw stdout. Only concise metadata and hashes are recorded here.
+
+### Single publication in progress
+
+After that successful final prepublish, root used the **Free republishes →
+Publish changes** action exactly **once**. The visible state became
+**Publishing...**, disabled. A new timeline item was then observed as
+**Deployment Started — Nov 22, 06:00 AM**, in **Asia/Aden**. The initial Overview
+snapshot read **Packaging your latest changes... •33s**; root subsequently
+reported the build still ongoing at about **1m13**. This new started item is
+distinct from prior M3's completed **04:37 AM** item, version **ccb1df5**.
+The new event ID, version and completion are still unknown; no
+`Deployment Succeeded` or completed publication is claimed. Do not infer runtime
+identity or inventory recovery from the button or started-event state. The current
+publication must be monitored; another click or a new prepare cycle is not
+needed for this milestone.
 
 ## Implementation and integrity boundary
 
@@ -140,8 +208,8 @@ The original single-module red/green command uses that same prefix/suffix and
 only `backend/tests/test_operational_balance_active_read_lifetime.py`.
 These reviewed bytes are now in source A2 and frozen B2. The governed build
 and freeze below passed, as did a fresh actual-host B2 rehearsal and final
-exact-B2 CI. Shared-host installation and live publication verification remain
-separate pending steps. The correction does not turn archived B1 into a passing release.
+exact-B2 CI. Shared-host installation also passed. Publication has started, with platform
+success and live verification still pending. The correction does not turn archived B1 into a passing release.
 
 ## Fresh A2 governed build and freeze
 
@@ -361,31 +429,30 @@ Root separately completed M3 publication and three original live identity probes
 then observed a fresh inactive guard. The
 [completed M3 evidence](https://github.com/AMASI-SA/AMASI-SA/blob/4ee3d64159cba4edd20133f81ec938cf33068ae8/docs/operations/OPERATIONAL-WORKSPACE-RELEASE-20261122/release-evidence.json)
 is preserved at `4ee3d64159cba4edd20133f81ec938cf33068ae8`. It establishes prior
-M3 identity, not this new patch or inventory recovery. Current B2 has been normally merged as M4, but shared-host installation and
-publication remain pending at this checkpoint.
+M3 identity, not this new patch or inventory recovery. Current B2 was normally merged as M4 and installed. Publication is now in
+progress; platform completion and live identity/inventory verification remain
+pending.
 
-## Next safe action for M4 publication
+## Next safe action for the existing publication
 
-1. Root checkpoints only these two evidence files before publication, preserving
-   current B2 acceptance, the reviewed M4 merge and the closed blocked B1 archive.
-   Do not deploy or merge the evidence branch into the frozen release.
-2. Root performs the bounded shared-host M4 installation under the unchanged
-   protocol: fresh inactive original guard, reviewed production ref, preserved
-   unrelated files and original source/generated-output identity checks. At the
-   latest handoff `/app` still held M3; installation is not recorded complete.
-3. Only after those checks pass, use a fresh lease for original `prepare`, final
-   `prepublish` and a single authorized publication. Prior rehearsals and merge
-   identity do not establish a successful deployment. Do not reuse an old lease.
-4. After explicit platform success, run the original
-   `verify --url https://mezansalla.com`; require all three probes for A2 and its
-   release ID, then confirm an inactive guard. Separately perform one normal
-   authenticated inventory load. If bootstrap or stock loading still fails,
-   retain bounded matching response/timing evidence; identity verification alone
-   is not inventory acceptance.
+1. Root checkpoints these two evidence files with installation, prepare,
+   prepublish and the single observed publication start. Preserve both frozen
+   branches, the closed blocked B1 archive and all retained host-stage evidence.
+2. Monitor the **existing** platform publication for an explicit newer success
+   event and its actual event/version identity. Do not click Publish again,
+   recreate the lease or treat `Publishing...` as completion.
+3. After explicit platform success, run the original
+   `verify --url https://mezansalla.com` under this release's matching lease;
+   require all three probes for A2 and its release ID, then confirm the original
+   guard is inactive. Record an actual failure or blocked verification honestly.
+4. Separately perform one normal authenticated inventory load. If permission
+   bootstrap or the subsequent stock request still fails, retain bounded matching
+   response/timing evidence. Release identity alone does not establish inventory
+   recovery or resolve the original incident's cause.
 
-Installation, lease preparation, publication, original live identity verification
-and live inventory acceptance remain pending in this record. Update only after
-those results are observed.
+Publication completion, original live identity verification, lease closure and
+live inventory acceptance remain pending. Update only after those results are
+observed. This evidence branch must never be deployed.
 
 This evidence author has made no staging, commit, ref, remote, source or host
 change, and has posted no Issue #1006 comment. Root owns release actions and the
