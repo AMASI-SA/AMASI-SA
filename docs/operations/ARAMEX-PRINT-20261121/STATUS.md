@@ -107,6 +107,20 @@ original prepare actor codex-aramex-pr2062-authorized,record own lease,original
 prepublish immediately before one authorized Republish. Then explicit new
 success,original verify3/inactive and actual original/control Native ADB checks.
 
+Original prepare now succeeded,exit0,protocol5,own actor
+codex-aramex-pr2062-authorized,prepared15:24:47.533753UTC. Exact source A,
+deployment M and deterministic RID matched. Raw prepare SHA256
+1c6bf743825f9a28d2846d7f8caa4b1bab6a7f575f233b1bf121c316adf60534;
+durable selected record pr2062-prepare.json. Own lease ACTIVE; never clear a
+foreign lease or alter governed source now. Existing UI Republish panel was
+confirmed for mezansalla.com with previous published d8c03a2. No publish yet.
+M push readiness45033940109,SecurityGate45033940126,CodeQL45033940108 also passed.
+
+Next safe action: original prepublish0 immediately before one authorized UI
+Republish. Capture new deployment success/version. Run original verify3 and
+actual original/control Native ADB. Successful verify must close this own lease
+and final status report inactive. Public Production has not changed yet.
+
 ## Current successor: strict external classifier, freshly verified
 
 Branch `codex/aramex-intransit-label-reprint-v2-20261122` is constructed directly

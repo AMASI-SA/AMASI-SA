@@ -1,0 +1,11 @@
+{
+  "source_git_sha": "23e9514b9e8a33bffb2363bb1d3afd792355ab2c",
+  "deployment_git_sha": "9b4fb716b430c32073b5ea7abaeaff62646d9633",
+  "release_id": "rg5-3ec8529aa0398fbe08b591ca47b175f1fd41af183c6fdae0fc21da4c223c618c",
+  "protocol_version": 5,
+  "actor": "codex-aramex-pr2062-authorized",
+  "prepared_at": "2026-11-22T15:24:47.533753+00:00",
+  "prepare_exit": 0,
+  "raw_sha256": "1c6bf743825f9a28d2846d7f8caa4b1bab6a7f575f233b1bf121c316adf60534",
+  "publication_performed": false
+}
