@@ -1,9 +1,9 @@
 {
   "task_id": "TABBY-DASHBOARD-FEES-20261122",
-  "status": "r2_integrated_source_and_independent_review_passed_remote_ci_pending",
-  "updated_at_utc": "2026-11-22T20:37:28.167519+00:00",
+  "status": "r2_superseded_by_new_production_base_r3_integration_started",
+  "updated_at_utc": "2026-11-22T20:56:55.552333+00:00",
   "repository": "AMASI-SA/AMASI-SA",
-  "branch": "codex/tabby-weekly-fee-estimates-r2-20261122",
+  "branch": "codex/tabby-weekly-fees-release-evidence-20261122",
   "production_branch": "hotfix/prod-snap-meta-final",
   "source_base": "24270ebdfdebb83282389308a2349cdb27e2b8e4",
   "historical_pr": 2068,
@@ -99,8 +99,58 @@
     "terminal_access": "Local workspace is separate from actual Emergent /app; owner runs pinned reviewed host command when ready. No paid chat or live financial writes."
   },
   "next_safe_actions": [
-    "Preserve reviewed integrated source on dedicated R2 branch/Draft PR and complete exact-head CI.",
-    "Verify current Production still matches reviewed base; generate and validate new candidate intent, freeze intent-only B and verify exact B.",
-    "Use actual inactive /app guard and pinned reviewed host helpers for adapter rehearsal, ordinary merge/staging as appropriate, prepare/prepublish, one user publication, and original three-probe verification."
-  ]
+    "Preserve this evidence branch; never deploy it or its historical R2 candidate.",
+    "Build a new source A on current Production02cd99e5 with the reviewed Tabby patch and fresh integrated checks; freeze a new intent after exact-source candidate validation.",
+    "Read current PR2076 handoff and actual inactive guard before any shared work. Do not interfere with its foreign staging, lease, publication or verification."
+  ],
+  "source_branch": "codex/tabby-weekly-fee-estimates-r2-20261122",
+  "source_A": "a9d1f681534c179a822e7eaa080429b82f1c0e01",
+  "source_tree": "b2a0c1989cf8b1eb7ce8de74f9bec61d2135b748",
+  "pr": 2077,
+  "r2_final_ci": {
+    "all_terminal": true,
+    "checks": 52,
+    "success": 46,
+    "conditional_skips": 6,
+    "failure": 0,
+    "pending": 0,
+    "workflows_success": 26,
+    "source_sha": "a9d1f681534c179a822e7eaa080429b82f1c0e01",
+    "focused_run_id": 45067547661,
+    "readiness_run_id": 45067547728,
+    "operational_run_id": 45067547750
+  },
+  "supersession": {
+    "reason": "Production advanced after successful R2 source CI and before branch promotion to intent B. Do not deploy this historical candidate.",
+    "new_base": "02cd99e5b2b68c95341c87590abcf572c885e697",
+    "merged_pr": 2076,
+    "new_base_merged_at": "2026-11-22T20:50:43Z",
+    "other_task_files": 42,
+    "overlap_with_tabby_files": [],
+    "next_source_branch": "codex/tabby-weekly-fee-estimates-r3-20261122",
+    "R2_B_created_but_not_promoted": "90da9de4a7eeaf521b6e145c887bd3fba35cc997"
+  },
+  "manual_helper_review": {
+    "result": "APPROVED corrected logic; activation pins disabled",
+    "files": [
+      "MANUAL-HOST-ISOLATED-REHEARSAL-2077.py",
+      "MANUAL-HOST-STAGE-2077.py",
+      "MANUAL-HOST-PREPARE-PREPUBLISH-2077.py",
+      "RUN-HOST-DEPLOY-2077.sh",
+      "RUN-HOST-VERIFY-2077.sh",
+      "MANUAL-HOST-SELF-TEST-2077.py"
+    ],
+    "checks": [
+      "Bounded Python selftest passed",
+      "Both shell wrappers bash -n passed",
+      "Independent verify-wrapper missing/foreign/wrong-artifact/own-lease cases passed"
+    ],
+    "resolved_findings": [
+      "git merge --ff-only --no-overwrite-ignore preserves ignored collisions",
+      "Original operation mutex covers all shared staging mutation/proof; foreign/incomplete lease stops before mutation"
+    ],
+    "D": null,
+    "evidence_pin": null,
+    "host_execution": false
+  }
 }
