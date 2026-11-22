@@ -25,6 +25,14 @@ Next: finish exact-B checks and independent ARM64 rehearsal, preserve evidence,
 normal-merge B tree unchanged, then authorized guarded publication and actual
 original/control ADB acceptance. Do not rebase/squash A/B or deploy this branch.
 
+Independent exact-B ARM64 rehearsal now passed: configured frontend yarn-build
+adapter exit0, original verifier exit0,92.178s, Node24.19.0/Yarn1.22.22 dispatcher,
+governed toolchain inside adapter. Exact intent/identity/artifact matched and
+shared source stayed unchanged. No lease/publication. Durable result is
+`evidence/pr2061-arm64-result.json`; helper is tracked. Supplementary workspace
+pointer `/tmp/aramex-pr2061-stage.txt` must be inspected before materialization;
+it is not a deployment source and does not replace Cloud Build verification.
+
 ## Current source milestone (2026-11-22)
 
 The six red actual-route cases now pass after a narrow change to
