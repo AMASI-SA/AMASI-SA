@@ -19,7 +19,7 @@ The preceding unknown-space/preflight-pending state is superseded. This is a
 host packaging obstacle; it does not change the reviewed A/B source or the
 successful CI. Do not disable the manifest/bytecode check or delete platform files.
 
-**Next concrete action:** run adjacent MANUAL-HOST-ISOLATED-REHEARSAL.py.
+**Next concrete action:** run adjacent RUN-HOST-ISOLATED-REHEARSAL.sh. The short launcher retrieves only the pinned helper commit c01f238687e3193f096d55e6e0deb34fa8a57ec5 through the existing Git remote in a separate /tmp clone, verifies the exact SHA256 below, then executes MANUAL-HOST-ISOLATED-REHEARSAL.py. It also checks the original guard/clean J before downloading. Neither launcher nor helper changes /app.
 Its reviewed bytes SHA256:
 `475ec8ea80ad8ba69e69f26f940851b379b3e000749d2e76aadab1d51f404768`.
 It freshly checks the original shared guard, clean J and exact remote J/B,
