@@ -1,3 +1,19 @@
+# PR2076 merged; actual rehearsal passed; guarded deployment command reviewed
+
+**Production Git changed YES:** ordinary merge D `02cd99e5b2b68c95341c87590abcf572c885e697`, parents N `24270ebdfdebb83282389308a2349cdb27e2b8e4` and frozen B `5bb05036d8095a87c6635c0a431c2c19d24d8f78`. D tree `8f915a681de43fed9da1ec98685a56f87a4c8bcb` equals B exactly. Frozen source A `108024c00b7f367fd1d6b15874d7a73d55de2620` and intent B are unchanged. GitHub reports a valid verified signature. No actual shared staging, new lease or runtime publication has yet been performed by root.
+
+Premerge root and independent fresh checks accepted24successful checks+6expected skips, with required4 contexts from app15368; no pending/failure/neutral. Previous serial handoff is complete/released under predecessor receipt `b46798fab681471a0fdf9450c30d6446a4f55ffa`. Owner's actual rehearsal PASS is retained at `51b3ba6fe1b0fa87db5c4897cb2fff66ca4d53a2` and in HOST-REHEARSAL-PASS-2076.json. No repeated rehearsal or previous release actions are needed.
+
+The reviewed deployment handoff reuses `/tmp/mezan-pr2076-6gtp8l10/repo` and its original successful adapter.log. It requires actual shared clean N and an inactive original guard; current remote Production D/candidate B; original intent/output/rehearsal proof checks; verified old backups; then FF-only shared N→D and replacement of only build/proof/identity. It preserves unrelated files, sidecars, dependencies and other .release members. It handles absence or presence of only the already-known backend/__pycache__ without deleting unfamiliar data. It measures /app space at execution. Stage failure stops before prepare; no automatic rollback or manual lease clearing occurs.
+
+The wrapper runs original prepare and exact-own-lease prepublish only after successful staging. It saves the original own-lease-fenced verify3 wrapper without executing it. Owner must click Re-publish changes once after PREPUBLISH_PASSED and run the printed VERIFY_COMMAND only after the new explicit Deployment Succeeded for PR2076. Only then can live identity, guard closure and first-visible page latency be accepted.
+
+Three helper files and the draft launcher passed independent source/hash review. Root stage self-test and Python/Bash syntax passed. Details in INDEPENDENT-DEPLOYMENT-COMMAND-REVIEW-2076.json. The launcher at this checkpoint is deliberately disabled until EVIDENCE is pinned to this immutable helper commit; a following evidence checkpoint will provide the exact executable handoff. Evidence branches must never be merged or deployed.
+
+Optional diagnostic was unavailable (exit1); no Production latency measurement or numerical speed improvement is claimed. All prior source/CI/host records below are preserved as history and superseded where their release status differs.
+
+---
+
 # PR2076 actual host rehearsal accepted; predecessor handoff complete
 
 Owner returned the original pinned launcher result: **REHEARSAL_SUCCESS**, adapter exit0, exact frozen A/B/runtime/artifact/proof, isolated package boundaries verified, and original /app guard exactly inactive with clean tracked N before/before-build/final. The retained clone is `/tmp/mezan-pr2076-6gtp8l10/repo`; log `/tmp/mezan-pr2076-6gtp8l10/adapter.log`. Full sanitized acceptance is in `HOST-REHEARSAL-PASS-2076.json`.

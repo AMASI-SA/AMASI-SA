@@ -1,0 +1,77 @@
+{
+  "task_id": "OPERATIONAL-DEMAND-LATENCY-20261122",
+  "reviewed_files": {
+    "MANUAL-HOST-STAGE-2076.py": {
+      "sha256": "3906f0c84731a9de511854ae0a382fd7d0755f92cc9669a03a9c2aa7cb5aac89"
+    },
+    "MANUAL-HOST-PREPARE-PREPUBLISH-2076.py": {
+      "sha256": "a3f7ecac60f74228a7cbccd0e5a6b180424202478f8847910f2c5c74fe25aa67"
+    },
+    "RUN-HOST-VERIFY-2076.sh": {
+      "sha256": "58315f10c66f75c4c6bfb5f8d70803d33125d4cc183888f86c687584c203ff7a"
+    },
+    "RUN-HOST-DEPLOY-2076.sh": {
+      "sha256": "3f80e905cdcebf7204f2567ce722e95d3d672b70ecffda63cacf6e1795d4a93c"
+    }
+  },
+  "helper_independent_review": {
+    "reviewer": "cold_read_profile",
+    "result": "APPROVE",
+    "scope": "stage, prepare/prepublish, original atomic own-lease verify",
+    "cross_file_pins_exact": true,
+    "no_main_or_host_execution": true
+  },
+  "launcher_independent_review": {
+    "reviewer": "release_preflight",
+    "result": "PASS",
+    "sha256": "3f80e905cdcebf7204f2567ce722e95d3d672b70ecffda63cacf6e1795d4a93c",
+    "draft_disabled_until_EVIDENCE_pin": true,
+    "all_three_hashes_match": true,
+    "stage_then_prepare_only_on_success": true,
+    "verify_saved_not_run": true,
+    "no_main_or_host_execution": true
+  },
+  "root_verification": {
+    "stage_self_test": {
+      "exit": 0,
+      "result": "backup bytes/modes, staged replacement, retained rollback, change refusal, destination refusal, symlink refusal, absent-cache preservation, present-cache refusal, rehearsal proof binding"
+    },
+    "python_ast": {
+      "stage": true,
+      "prepare": true,
+      "verify_inner": true,
+      "launcher_inner": true
+    },
+    "bash_syntax": {
+      "verify_exit": 0,
+      "launcher_exit": 0
+    },
+    "whitespace_errors": []
+  },
+  "original_helper_provenance": {
+    "pr": 2074,
+    "commit": "afdbd4e293760938706849232a15f0afe6fa1edf",
+    "stage_sha256": "e52f11663f943d9a4ab24f917b9ccd4a83ea8526cf1dd471867029c3fda3adde"
+  },
+  "adaptations": [
+    "actual N/A/B/D/tree/runtime/artifact and retained successful rehearsal path",
+    "strict environment presence and all GIT_TRACE rejection; GIT_SHALLOW_FILE",
+    "disable optional Git maintenance and force child PYTHONOPTIMIZE=0",
+    "bounded original guard status and fresh remote D/B checks",
+    "exact-own-lease fence under original operation lock before original prepublish body",
+    "sanitized prepare/verify exception output"
+  ],
+  "shared_output_paths": [
+    "frontend/build",
+    "frontend/.release/reproducible-build.json",
+    "backend/release_identity.json"
+  ],
+  "preserve": [
+    "unrelated untracked files",
+    "environment sidecars",
+    "dependency root",
+    "other frontend/.release members",
+    "old outputs and optional known bytecode cache in verified backups"
+  ],
+  "no_main_or_real_host_actions_performed": true
+}

@@ -1,0 +1,40 @@
+{
+  "task_id": "OPERATIONAL-DEMAND-LATENCY-20261122",
+  "pr": 2076,
+  "merged": true,
+  "merge_method": "merge",
+  "deployment_git_sha": "02cd99e5b2b68c95341c87590abcf572c885e697",
+  "parents": [
+    "24270ebdfdebb83282389308a2349cdb27e2b8e4",
+    "5bb05036d8095a87c6635c0a431c2c19d24d8f78"
+  ],
+  "tree": "8f915a681de43fed9da1ec98685a56f87a4c8bcb",
+  "tree_equals_frozen_B": true,
+  "source_git_sha": "108024c00b7f367fd1d6b15874d7a73d55de2620",
+  "source_frozen_unchanged": true,
+  "intent_frozen_unchanged": true,
+  "github_signature_verified": true,
+  "github_signature_reason": "valid",
+  "merged_at_utc": "2026-11-22T20:50:42Z",
+  "premerge_checks": {
+    "total": 30,
+    "success": 24,
+    "expected_conditional_skips": 6,
+    "pending": 0,
+    "failures": 0,
+    "required_contexts_success": true,
+    "required_contexts_app_id": 15368
+  },
+  "actual_host_rehearsal_evidence": "51b3ba6fe1b0fa87db5c4897cb2fff66ca4d53a2",
+  "predecessor_completion_evidence": "b46798fab681471a0fdf9450c30d6446a4f55ffa",
+  "production_changed": {
+    "git": true,
+    "shared_app_by_root": false,
+    "runtime_published_by_root": false
+  },
+  "shared_staging_pending": true,
+  "prepare_pending": true,
+  "publication_pending": true,
+  "original_verify3_pending": true,
+  "original_merge_loader_validation": "separate independent receipt pending; host stage also revalidates original load/Git before shared source change"
+}
