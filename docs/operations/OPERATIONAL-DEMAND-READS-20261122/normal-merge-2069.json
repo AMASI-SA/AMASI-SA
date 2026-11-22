@@ -1,0 +1,24 @@
+{
+  "recorded_at_utc": "2026-11-22T17:08:48Z",
+  "pr": 2069,
+  "merged": true,
+  "merge_commit_sha": "06763ffd6e3c3f7c861769b61d2c4e6b9b2d5f35",
+  "merge_tree": "057c273506c237af2035c7976cc7fe8e9aacaeb2",
+  "ordered_parents": [
+    "9b4fb716b430c32073b5ea7abaeaff62646d9633",
+    "5db36bd28ae86acaca8ceeb9cceee8e350916f12"
+  ],
+  "source_A": "063611ff163c90d80cdbf96446a28584fe429846",
+  "intent_B": "5db36bd28ae86acaca8ceeb9cceee8e350916f12",
+  "tree_equal_B": true,
+  "content_diff_B_to_M": [],
+  "content_diff_A_to_M": [
+    "release/release-intent-v5.json"
+  ],
+  "intent_blob_B_and_M": "113ae3d4b9e0115c3f2b5cc6afaa69e216138613",
+  "shared_host_still_J_at_last_user_check": true,
+  "production_branch_changed": true,
+  "deployed_runtime_changed": false,
+  "host_staging_completed": false,
+  "lease_created": false
+}

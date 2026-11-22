@@ -1,5 +1,31 @@
 # Operational demand reads — implementation checkpoint
 
+## PR2069 merged — exact tree retained; shared host staging pending
+
+PR2069 was merged normally at2026-11-22T17:08:10Z as
+**06763ffd6e3c3f7c861769b61d2c4e6b9b2d5f35**. Root and an independent reviewer
+freshly verified Production points to this M; its ordered parents are J and B,
+and tree057c273506c237af2035c7976cc7fe8e9aacaeb2 is exactly B's tree.
+B..M has zero changed files; A..M changes only release/release-intent-v5.json.
+Intent blob113ae3d4b9e0115c3f2b5cc6afaa69e216138613 is identical in B/M.
+Evidence: `normal-merge-2069.json`.
+
+**Production Git branch changed: YES. Deployed runtime changed: NO.**
+Actual /app remains clean J at the last user-executed check; no shared file
+installation, new lease, publish click or runtime verification has occurred.
+The successful same-host rehearsal remains at/tmp/mezan-pr2069-0mhyfa47/repo.
+
+This task retains the bounded serial source/staging/publication handoff.
+Next: execute a preserved, size-checked shared staging command against exact M,
+then original /app validators. It must quarantine only verified derived bytecode,
+validate J after quarantine to expose any other source issue before fast-forward,
+preserve every unrelated untracked file, and copy only build/proof/identity.
+No dependency replacement is necessary. Keep backups/journal and stop on any
+changed source, active guard, unexpected cache contents or source mismatch.
+Prepare/prepublish remains separate until shared staging has passed.
+
+---
+
 ## Actual host rehearsal PASS — serial merge/staging handoff begins
 
 The user returned the complete successful original-adapter execution from the
