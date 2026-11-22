@@ -223,6 +223,10 @@ async def save_purchase(db, owner, actor, payload, *, source='mezan2', clock=Non
     # Keep old durable request hashes unchanged after schema default insertion.
     if payload.get('supplier_invoice_number') is None:
         payload.pop('supplier_invoice_number', None)
+    if payload.get('receipt_tracking_version') is None:
+        payload.pop('receipt_tracking_version', None)
+    elif type(payload['receipt_tracking_version']) is not int or payload['receipt_tracking_version'] != 1:
+        fail('inventory_receipt_tracking_invalid', 'إصدار تتبع الاستلام غير صالح', 422)
     stamp = clock or now()
     await claim_movement(db, owner, actor, {**payload, '_operation':'inventory_purchase'})
     async def apply(state):
@@ -265,7 +269,8 @@ async def save_purchase(db, owner, actor, payload, *, source='mezan2', clock=Non
         location_rows=await locations(db,owner)
         normalized = []; identities=set(); totals = {key:Decimal(0) for key in ('net','tax','gross')}
         for line in lines:
-            item = await describe(db,owner,line,bases,location_rows) if line.get('purchase_configuration') else available.get(line_identity(line))
+            item = await describe(db,owner,line,bases,location_rows,
+                allow_missing_location=payload.get('receipt_tracking_version') == 1) if line.get('purchase_configuration') else available.get(line_identity(line))
             if not line.get('purchase_configuration') and line.get('location_id'):
                 location=next((l for l in location_rows if l['id']==line['location_id']),None)
                 if not location:fail('inventory_purchase_location_invalid','اختر موقعًا معتمدًا في ميزان 2',422)
@@ -301,6 +306,8 @@ async def save_purchase(db, owner, actor, payload, *, source='mezan2', clock=Non
             **{key:fmt(value) for key,value in totals.items()}, 'currency':'SAR',
             'actor_id':actor,'recorded_at':stamp,'source':source,'note':payload.get('note',''),
             'receipt_basis':'actual_supplier_invoice_operational_only'}
+        if payload.get('receipt_tracking_version') == 1:
+            invoice['receipt_tracking_version'] = 1
         invoices.append(invoice)
         project_inventory(state)
         audit(state,actor,'inventory_purchase_saved',None,invoice,'فاتورة شراء واستلام مخزون تشغيلية',source,stamp)

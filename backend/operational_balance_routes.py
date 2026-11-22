@@ -344,6 +344,7 @@ class PurchaseConfiguration(Input):
     state: Literal['raw','ready']
     selections: list[PurchaseOptionSelection] = Field(default_factory=list, max_length=100)
     inputs: list[InventoryCustomizationValue] = Field(default_factory=list, max_length=100)
+    deferred_option_ids: list[str] | None = Field(default=None, max_length=100)
 
 
 class InventoryLine(Input):
@@ -359,6 +360,7 @@ class InventoryLine(Input):
 
 
 class InventoryPurchase(Request):
+    receipt_tracking_version: Literal[1] | None = None
     expected_session_scope: str = Field(min_length=64, max_length=64)
     supplier_id: str = Field(min_length=1, max_length=200)
     invoice_number: str = Field(default='', max_length=160)
@@ -366,6 +368,13 @@ class InventoryPurchase(Request):
     invoice_date: str = Field(min_length=10, max_length=10)
     lines: list[InventoryLine] = Field(min_length=1, max_length=1000)
     note: str = Field(default='', max_length=1000)
+
+
+class InventoryPaymentAllocation(Request):
+    expected_session_scope: str = Field(min_length=64, max_length=64)
+    movement_id: str = Field(min_length=1, max_length=200)
+    amount: str = Field(min_length=1, max_length=30)
+    business_date: str = Field(min_length=10, max_length=10)
 
 
 async def scope(db, principal, permission):
@@ -694,7 +703,8 @@ def make_operational_balance_router(db, current_user):
         async def read_page():
             _, owner, _ = await scope(db,user,'reports')
             from operational_balance_inventory import inventory_view
-            return await prepare_in_thread(inventory_view, await read(db,owner))
+            from operational_inventory_purchase_receipts import enrich_purchases
+            return await enrich_purchases(db,owner,await prepare_in_thread(inventory_view, await read(db,owner)))
 
         return await run_visible_report_read(request, read_page)
 
@@ -711,7 +721,8 @@ def make_operational_balance_router(db, current_user):
                 if len(invoices)!=1:
                     fail('inventory_invoice_missing','فاتورة الشراء غير موجودة',404)
                 return purchase_view(state,invoices[0])
-            return await prepare_in_thread(invoice_view)
+            from operational_inventory_purchase_receipts import enrich_purchase
+            return await enrich_purchase(db,owner,await prepare_in_thread(invoice_view))
 
         return await run_visible_report_read(request, read_page)
 
@@ -719,7 +730,41 @@ def make_operational_balance_router(db, current_user):
     async def inventory_create(payload:InventoryPurchase,user=Depends(move_guard)):
         actor,owner,source=await scope(db,user,'move')
         from operational_balance_inventory import save_purchase
-        return await save_purchase(db,owner,actor['id'],payload.model_dump(),source=source)
+        from operational_inventory_purchase_receipts import enrich_purchase
+        result = await save_purchase(db,owner,actor['id'],payload.model_dump(exclude_none=True),source=source)
+        return await enrich_purchase(db,owner,result) if result.get('receipt_tracking_version') == 1 else result
+
+    @router.get('/inventory-purchase-payment-candidates')
+    async def inventory_payment_candidates(request: HttpRequest, supplier_id: str, user=Depends(current_user)):
+        from operational_inventory_payment_allocation import candidates
+        return await run_visible_report_read(request,lambda:candidates(db,user,supplier_id=supplier_id))
+
+    @router.get('/inventory-purchases/{invoice_id}/payment-candidates')
+    async def inventory_invoice_payment_candidates(request: HttpRequest, invoice_id: str, user=Depends(current_user)):
+        from operational_inventory_payment_allocation import candidates
+        return await run_visible_report_read(request,lambda:candidates(db,user,invoice_id))
+
+    @router.post('/inventory-purchases/{invoice_id}/allocate-payment')
+    async def inventory_allocate_payment(invoice_id: str, payload: InventoryPaymentAllocation, user=Depends(current_user)):
+        from operational_inventory_payment_allocation import allocate
+        return await allocate(db,user,invoice_id,payload.model_dump())
+
+    @router.get('/inventory-purchases/{invoice_id}/receiving-context')
+    async def inventory_receiving_context(request: HttpRequest, invoice_id: str, user=Depends(current_user)):
+        from operational_inventory_purchase_receipts import context as receiving_context
+        return await run_visible_report_read(request,lambda:receiving_context(db,user,invoice_id))
+
+    from operational_inventory_purchase_receipts import ReceiptRequest, ReceiptApproval
+
+    @router.post('/inventory-purchases/{invoice_id}/receipts/preview')
+    async def inventory_receiving_preview(invoice_id: str, payload: ReceiptRequest, user=Depends(current_user)):
+        from operational_inventory_purchase_receipts import preview
+        return await preview(db,user,invoice_id,payload.model_dump())
+
+    @router.post('/inventory-purchases/{invoice_id}/receipts/save')
+    async def inventory_receiving_save(invoice_id: str, payload: ReceiptApproval, user=Depends(current_user)):
+        from operational_inventory_purchase_receipts import save
+        return await save(db,user,invoice_id,payload.model_dump())
 
     def entry_case(case, kind):
         # Write-only users get the minimum case state required to enter/continue
