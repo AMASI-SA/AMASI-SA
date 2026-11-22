@@ -1,7 +1,7 @@
 {
   "task_id": "TABBY-DASHBOARD-FEES-20261122",
-  "status": "r3_frozen_intent_B_exact_final_CI_running",
-  "updated_at_utc": "2026-11-22T21:13:01.280879+00:00",
+  "status": "r3_B_targeted_CI_recovery_running_and_foreign_host_handoff_pending",
+  "updated_at_utc": "2026-11-22T21:22:00.945258+00:00",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tabby-weekly-fees-release-evidence-20261122",
   "production_branch": "hotfix/prod-snap-meta-final",
@@ -97,13 +97,14 @@
     "base_release": "PR2076 merged normally at02cd99e5b2b68c95341c87590abcf572c885e697 on2026-11-22T20:50:43Z. Its own host rehearsal passed; its publication/verify handoff remains separate. Do not stage or publish this task until that serial handoff is released and original host guard is freshly inactive.",
     "old_intent": "Historical PR2068 and PR2077 candidates are superseded. R3 inherits current J3 intent unchanged; generate a fresh reviewed candidate from this new source/base.",
     "terminal_access": "Local workspace is separate from actual Emergent /app; owner runs pinned reviewed host command when ready. No paid chat or live financial writes.",
-    "PR2076_handoff": "Canonical ledgerupdated21:00:22UTC: pinned staging/prepare command issued, ownerexecution/publication/verify3stillpending. Preserve its serial handoff; no sharedmutation or publication overlap."
+    "PR2076_handoff": "Canonical ledgerupdated21:00:22UTC: pinned staging/prepare command issued, ownerexecution/publication/verify3stillpending. Preserve its serial handoff; no sharedmutation or publication overlap.",
+    "owner_input_needed": "Fresh actual /app HEAD/branch/tracked state and boundedoriginalguardstatus, plus existing PR2076 newSucceeded/originalverify3/finalinactive completion evidence ifalreadyfinished. No permissionrequest; publicationauthorizationpersists.",
+    "owner_handoff_document": "CURRENT-HOST-STATE-HANDOFF-2079.md"
   },
   "next_safe_actions": [
-    "Complete all exactB CI and two clean-clone adapters; independently validate original artifacts and finalidentity.",
-    "Recheck current ProductionJ3 and PR2076 serial handoff. No shared/productiontransition while foreignhandoff remainsactive.",
-    "After accepted gates and releasedhandoff, ordinarymerge preservingA/B; validateDtree/parents; fillreviewedhelperpins and preserveimmutablebundle/launcher; ownerexecutesfreshguardedcommand.",
-    "Require new explicitDeploymentSucceeded, originalownlease verify3 and finalinactive beforeclaiming livecompletion."
+    "Read remoteSTATUS, currentrefs and exactB attempt2gates; accept fullcompletedresults beforemerge.",
+    "Obtain currentactualhoststate and establish PR2076 serialhandoffreleased. Preserveforeignlease/source/artifacts.",
+    "Onlythen ordinarymergecurrentB onunchangedJ3, validateD and activate/preserve reviewedhelperpins; actualhostadapter/stage/prepare/prepublish, singlepublication and originalverify3 remain necessary."
   ],
   "r3_integration": {
     "reason": "Production advanced through PR2076 while R2 exact-source CI completed; build a new candidate on the new base.",
@@ -202,7 +203,23 @@
     "focused_run": 45070030423,
     "focused_backend": "216PASS",
     "focused_frontend": "123PASS/6suites and buildPASS",
-    "required_4": "PASS app15368"
+    "required_4": "PASS app15368",
+    "attempt1": "46success+6conditional skips+2cancelled requiredjobs; workflowfailure. No fullPASS.",
+    "interruption_record": "evidence/CI-INTERRUPTION-ATTEMPT1.json",
+    "recovery": "Exactlyone targeted retry of each cancelledjob requested21:19UTC; successfulcompanionjobs retained; source/workflows unchanged.",
+    "attempt2": {
+      "operational": {
+        "run": 45070030372,
+        "job": 137359126218,
+        "started_at_utc": "2026-11-22T21:19:34Z"
+      },
+      "stock": {
+        "run": 45070030329,
+        "job": 137359144844,
+        "started_at_utc": "2026-11-22T21:19:39Z"
+      }
+    },
+    "retry_policy": "No further automatic retries. Diagnose any failure or repeatinterruption; all gates mustpass."
   },
   "manual_helper_review_R3": {
     "logic": "Independent normalized-AST comparison of five operational helpersPASS; only PR/branch/release constants changed from corrected R2.",

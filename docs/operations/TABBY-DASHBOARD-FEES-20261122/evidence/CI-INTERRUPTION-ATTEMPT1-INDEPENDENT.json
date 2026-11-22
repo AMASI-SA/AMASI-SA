@@ -1,0 +1,309 @@
+{
+  "schema_version": 1,
+  "kind": "exact_head_ci_interruption_attempt1",
+  "recorded_at_utc": "2026-11-22T21:19:22.765Z",
+  "repository": "AMASI-SA/AMASI-SA",
+  "pr_number": 2079,
+  "branch": "codex/tabby-weekly-fee-estimates-r3-20261122",
+  "head_sha": "d5036d9609b7155ee137d07ff802bbce5be265c5",
+  "head_tree": "83fc2223913c996c19f4fa676da9cfa8c54ebb49",
+  "source_sha": "d6443504c7d16eba00142526478abf10de336f99",
+  "production_base_sha": "02cd99e5b2b68c95341c87590abcf572c885e697",
+  "ref_observation": {
+    "observed_at_utc": "2026-11-22T21:17:07Z",
+    "pr_state": "open",
+    "pr_draft": true,
+    "pr_merged": false,
+    "head_unchanged": true,
+    "production_base_unchanged": true,
+    "source_or_workflow_edits": false,
+    "observer_note": "Parent independently freshly verified refs; child PR read confirmed same B/base. Neither child nor parent dispatched or cancelled attempt1."
+  },
+  "aggregate": {
+    "check_runs": 54,
+    "success": 46,
+    "expected_conditional_skips": 6,
+    "cancelled": 2,
+    "workflow_runs": 27,
+    "successful_workflows": 24,
+    "skipped_workflows": 1,
+    "failed_workflows": 2
+  },
+  "interruption": {
+    "same_job_completed_at_utc": "2026-11-22T21:16:07Z",
+    "before_configured_job_timeout": true,
+    "separate_github_hosted_runners": true,
+    "pytest_steps_still_in_progress_in_terminal_metadata": true,
+    "remaining_steps_pending": true,
+    "exact_cause": "UNPROVEN",
+    "test_failure_established": false,
+    "successful_completion_of_interrupted_suites_established": false,
+    "inference": "The simultaneous interruption and missing log blobs are compatible with runner/execution infrastructure loss, but do not establish the cause. Do not label a successful test or confirmed transient infrastructure failure."
+  },
+  "runs": [
+    {
+      "workflow_path": ".github/workflows/operational-balance-web.yml",
+      "configured_timeout_minutes": 25,
+      "run": {
+        "id": 45070030372,
+        "name": "Operational Balance Web",
+        "head_sha": "d5036d9609b7155ee137d07ff802bbce5be265c5",
+        "event": "pull_request",
+        "status": "completed",
+        "conclusion": "failure",
+        "run_attempt": 1,
+        "created_at": "2026-11-22T21:04:49Z",
+        "updated_at": "2026-11-22T21:16:08Z",
+        "actor": "AMASI-SA",
+        "triggering_actor": "AMASI-SA",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45070030372"
+      },
+      "job": {
+        "id": 137354792538,
+        "name": "Operational Balance Backend",
+        "status": "completed",
+        "conclusion": "cancelled",
+        "started_at": "2026-11-22T21:06:44Z",
+        "completed_at": "2026-11-22T21:16:07Z",
+        "runner_id": 1000115859,
+        "runner_name": "GitHub Actions 1000115859",
+        "runner_group_name": "GitHub Actions",
+        "labels": [
+          "ubuntu-latest"
+        ],
+        "head_sha": "d5036d9609b7155ee137d07ff802bbce5be265c5",
+        "run_attempt": 1,
+        "steps": [
+          {
+            "name": "Set up job",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "name": "Run actions/checkout@v4",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "name": "Run actions/setup-python@v5",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "name": "Install isolated test dependencies",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "name": "Start isolated projection Replica Set",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "name": "Record exact tested source",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "name": "Run operational contracts",
+            "status": "in_progress",
+            "conclusion": null
+          },
+          {
+            "name": "Run durable demand-read store, child, HTTP and builder contracts",
+            "status": "pending",
+            "conclusion": null
+          },
+          {
+            "name": "Preserve shipping summary and calculator contracts",
+            "status": "pending",
+            "conclusion": null
+          },
+          {
+            "name": "Reject missing or skipped tests",
+            "status": "pending",
+            "conclusion": null
+          },
+          {
+            "name": "Reject missing, skipped or failed demand-read acceptance",
+            "status": "pending",
+            "conclusion": null
+          },
+          {
+            "name": "Run actions/upload-artifact@v4",
+            "status": "pending",
+            "conclusion": null
+          },
+          {
+            "name": "Remove this job's isolated Mongo fixture",
+            "status": "pending",
+            "conclusion": null
+          },
+          {
+            "name": "Post Run actions/setup-python@v5",
+            "status": "pending",
+            "conclusion": null
+          },
+          {
+            "name": "Post Run actions/checkout@v4",
+            "status": "pending",
+            "conclusion": null
+          }
+        ]
+      },
+      "check": {
+        "id": 137354792538,
+        "head_sha": "d5036d9609b7155ee137d07ff802bbce5be265c5",
+        "status": "completed",
+        "conclusion": "cancelled",
+        "started_at": "2026-11-22T21:06:44Z",
+        "completed_at": "2026-11-22T21:16:07Z",
+        "output": {
+          "title": null,
+          "summary": null,
+          "text": null,
+          "annotations_count": 1,
+          "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/137354792538/annotations"
+        }
+      },
+      "log_access": {
+        "first_attempt_utc": "2026-11-22T21:16:58Z",
+        "second_attempt_utc": "2026-11-22T21:18:49Z",
+        "result": "GitHub redirected log blob unavailable: HTTP404 BlobNotFound",
+        "tool_error_code": "NOT_FOUND"
+      },
+      "annotation_access": {
+        "result": "github_fetch rejected exact check-run annotations URL as outside supported endpoint allowlist; no annotation-specific tool exposed",
+        "public_web_result": "DisabledError"
+      }
+    },
+    {
+      "workflow_path": ".github/workflows/operational-stock-eligibility.yml",
+      "configured_timeout_minutes": 25,
+      "run": {
+        "id": 45070030329,
+        "name": "Operational Stock Eligibility",
+        "head_sha": "d5036d9609b7155ee137d07ff802bbce5be265c5",
+        "event": "pull_request",
+        "status": "completed",
+        "conclusion": "failure",
+        "run_attempt": 1,
+        "created_at": "2026-11-22T21:04:49Z",
+        "updated_at": "2026-11-22T21:16:07Z",
+        "actor": "AMASI-SA",
+        "triggering_actor": "AMASI-SA",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45070030329"
+      },
+      "job": {
+        "id": 137354787746,
+        "name": "Stock eligibility, reservation and consumption on isolated Mongo",
+        "status": "completed",
+        "conclusion": "cancelled",
+        "started_at": "2026-11-22T21:06:01Z",
+        "completed_at": "2026-11-22T21:16:07Z",
+        "runner_id": 1000115851,
+        "runner_name": "GitHub Actions 1000115851",
+        "runner_group_name": "GitHub Actions",
+        "labels": [
+          "ubuntu-latest"
+        ],
+        "head_sha": "d5036d9609b7155ee137d07ff802bbce5be265c5",
+        "run_attempt": 1,
+        "steps": [
+          {
+            "name": "Set up job",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "name": "Run actions/checkout@v4",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "name": "Record exact tested source",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "name": "Run actions/setup-python@v5",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "name": "Install focused test dependencies",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "name": "Start ephemeral loopback-only Mongo fixtures",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "name": "Run all Eligibility acceptance suites with real transactions",
+            "status": "in_progress",
+            "conclusion": null
+          },
+          {
+            "name": "Require executed passing tests with no skips",
+            "status": "pending",
+            "conclusion": null
+          },
+          {
+            "name": "Retain Eligibility backend test evidence",
+            "status": "pending",
+            "conclusion": null
+          },
+          {
+            "name": "Remove only this job's ephemeral Mongo fixtures",
+            "status": "pending",
+            "conclusion": null
+          },
+          {
+            "name": "Post Run actions/setup-python@v5",
+            "status": "pending",
+            "conclusion": null
+          },
+          {
+            "name": "Post Run actions/checkout@v4",
+            "status": "pending",
+            "conclusion": null
+          }
+        ]
+      },
+      "check": {
+        "id": 137354787746,
+        "head_sha": "d5036d9609b7155ee137d07ff802bbce5be265c5",
+        "status": "completed",
+        "conclusion": "cancelled",
+        "started_at": "2026-11-22T21:06:01Z",
+        "completed_at": "2026-11-22T21:16:07Z",
+        "output": {
+          "title": null,
+          "summary": null,
+          "text": null,
+          "annotations_count": 1,
+          "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/137354787746/annotations"
+        }
+      },
+      "log_access": {
+        "first_attempt_utc": "2026-11-22T21:16:58Z",
+        "second_attempt_utc": "2026-11-22T21:18:49Z",
+        "result": "GitHub redirected log blob unavailable: HTTP404 BlobNotFound",
+        "tool_error_code": "NOT_FOUND"
+      },
+      "annotation_access": {
+        "result": "github_fetch rejected exact check-run annotations URL as outside supported endpoint allowlist; no annotation-specific tool exposed",
+        "public_web_result": "DisabledError"
+      }
+    }
+  ],
+  "recovery_plan": {
+    "authorized_by_parent": true,
+    "scope": "Retry only the two cancelled jobs once, preserving attempt1 and the same immutable B; parent dispatches after evidence is saved.",
+    "no_source_or_workflow_changes": true,
+    "no_claim_all_checks_passed": true,
+    "publication_hold": "PR2076 retains serial staging/publication handoff; B gates must be fully accepted before merge."
+  }
+}
