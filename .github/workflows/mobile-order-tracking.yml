@@ -13,12 +13,25 @@ on:
       - "backend/operational_push_preview.py"
       - "backend/operational_instruction_*.py"
       - "backend/operational_notification_directory.py"
+      - "backend/operational_unread_preview.py"
+      - "backend/employee_finance_notification*.py"
+      - "backend/employee_balance_reads.py"
+      - "backend/provider_statement_access.py"
+      - "backend/mobile_provider_statements.py"
+      - "backend/operational_provider_statement*.py"
+      - "backend/operational_web_page_policy.py"
+      - "backend/tests/test_provider_statement_employee_access.py"
+      - "backend/operational_balance_service.py"
+      - "backend/operational_balance_workspace.py"
       - "backend/tests/test_instruction_*.py"
       - "backend/tests/test_operational_*.py"
       - "backend/tests/test_instruction_orders_permission.py"
       - "backend/tests/test_instruction_edit_flow.py"
       - "backend/tests/test_operational_instruction_notifications.py"
       - "backend/tests/test_notification_sender_directory.py"
+      - "backend/tests/test_notification_unread_preview.py"
+      - "backend/tests/test_employee_financ*.py"
+      - "backend/tests/test_employee_balance_reads.py"
       - "backend/tests/test_mobile_order_tracking.py"
       - ".github/workflows/mobile-order-tracking.yml"
   workflow_dispatch:
@@ -90,6 +103,12 @@ jobs:
           tests/test_operational_push_presentation.py
           tests/test_operational_notification_preview_snapshot.py
           tests/test_notification_sender_directory.py
+          tests/test_notification_unread_preview.py
+          tests/test_employee_finance_notifications.py
+          tests/test_employee_balance_reads.py
+          tests/test_provider_statement_employee_access.py
+          tests/test_employee_financial_push.py
+          tests/test_employee_financial_push_integration.py
           tests/test_order_tracking_notes.py
           tests/test_operational_courier_instructions.py
           tests/test_assembly_search_instruction_batch.py
@@ -109,6 +128,12 @@ jobs:
               ('test_operational_push_presentation', 9),
               ('test_operational_notification_preview_snapshot', 6),
               ('test_notification_sender_directory', 7),
+              ('test_notification_unread_preview', 10),
+              ('test_employee_finance_notifications', 16),
+              ('test_employee_balance_reads', 13),
+              ('test_provider_statement_employee_access', 32),
+              ('test_employee_financial_push.', 7),
+              ('test_employee_financial_push_integration', 10),
           ]:
               cases = [row for row in root.iter('testcase') if module in row.get('classname', '')]
               assert len(cases) >= minimum, (module, len(cases))

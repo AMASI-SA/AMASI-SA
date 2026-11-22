@@ -30,7 +30,7 @@ from salla_payment_collection import provider_order_page_balance, provider_order
 
 CASE_TYPE = "financial_refund"
 PROVIDERS = {"tamara": "تمارا", "tabby": "تابي", "salla": "سلة"}
-READ_OPERATIONS = ("customer.refund_request", "customer.refund_execute")
+READ_OPERATIONS = ("customer.refund_read", "customer.refund_request", "customer.refund_execute")
 EXECUTED = {"refunded", "salla_refund_confirmed", "bank_matched"}
 MATCHED = "provider_matched"
 DEFINITIVE_REJECTIONS = {
@@ -906,6 +906,8 @@ def install_refund_routes(router, db, current_user, scope):
             methods = [{"id": "bank", "label": "تحويل بنكي"}] if banks else []
             if order["provider"] in PROVIDERS and policy.resource("provider", order["provider"])["use"]:
                 methods.append({"id": "original", "label": PROVIDERS[order["provider"]]})
+            if not methods:
+                fail("customer_refund_order_unavailable", "الطلب غير متاح ضمن مصادر الاسترجاع المصرح بها", 404)
             result = {key: order[key] for key in ("id", "order_number", "currency", "total")}
             await _external_history(db, owner, order, state)
             capacity = _capacity(state, order)

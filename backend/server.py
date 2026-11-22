@@ -3305,6 +3305,8 @@ attach_operating_expenses_routes(api, db)
 api.include_router(make_recurring_obligations_router(db, current_user))
 from operational_balance_routes import make_operational_balance_router
 api.include_router(make_operational_balance_router(db, current_user))
+from mobile_customer_refund_reads import make_mobile_customer_refund_read_router
+api.include_router(make_mobile_customer_refund_read_router(db, current_user))
 from inventory_stocktake_routes import make_inventory_stocktake_router
 api.include_router(make_inventory_stocktake_router(db, current_user))
 attach_settlements_routes(api, db)
@@ -3694,6 +3696,8 @@ api.include_router(make_endpoint_ledger_coverage_router(db, current_user))
 app.include_router(make_mezan_mcp_router(db))
 from operational_push import make_operational_push_router
 api.include_router(make_operational_push_router(db, current_user))
+from employee_finance_notification_routes import make_employee_finance_notification_router
+api.include_router(make_employee_finance_notification_router(db, current_user))
 from operational_instruction_comments import make_instruction_comments_router
 api.include_router(make_instruction_comments_router(db, current_user))
 app.include_router(api)

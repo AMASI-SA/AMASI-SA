@@ -1,0 +1,31 @@
+{
+  "exitCode": 0,
+  "profile": "mezan-web-assembly-pilot",
+  "version": "1.0.71",
+  "versionCode": 86,
+  "package": "com.amasi.sa.mobile",
+  "owner": "amasi-sa",
+  "slug": "amasi",
+  "projectId": "f285e8fe-06a6-48b4-b095-f1c42d63f7c3",
+  "ota": {
+    "enabled": false,
+    "checkAutomatically": "NEVER",
+    "fallbackToCacheTimeout": 0
+  },
+  "modules": 1835,
+  "assets": 44,
+  "assetReferences": 46,
+  "loggedAssets": 44,
+  "bundle": {
+    "path": "_expo/static/js/android/entry-90368073de3431c233b425de5ea03bf6.hbc",
+    "bytes": 6882447,
+    "MiB": 6.563613,
+    "sha256": "a39c8fd1e5cd702a3810dc2802378b41ccfdd5b02b23f374d059857a3536ba14"
+  },
+  "sourceInputCount": 318,
+  "sourceInputsUnchanged": true,
+  "sourceInputsSha256": "b5cf68973e0563650136bcc33892fc336080e904937f231317e76ec1863c09a8",
+  "apiBase": "https://mezansalla.com/api",
+  "elapsedSeconds": 17.566,
+  "kind": "production-profile Android JavaScript/Hermes export; not an APK or EAS build"
+}

@@ -370,6 +370,7 @@ def make_mobile_operations_monitoring_router(
         from_at: str | None = Query(default=None),
         to_at: str | None = Query(default=None),
         directory_only: bool = False,
+        pending_only: bool = False,
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         owner_id, _ = await require_monitoring_access(user)
@@ -384,7 +385,7 @@ def make_mobile_operations_monitoring_router(
                 "enabled": {"$ne": False},
             },
             {"_id": 0, "user_id": 1, "permissions": 1, "enabled": 1},
-        ).to_list(5000)
+        ).to_list(None if pending_only else 5000)
         permitted_subject_ids = {
             _text(row.get("user_id"))
             for row in app_access_rows
@@ -401,7 +402,7 @@ def make_mobile_operations_monitoring_router(
                 "department": 1,
                 "status": 1,
             },
-        ).sort("display_name", 1).to_list(5000)
+        ).sort("display_name", 1).to_list(None if pending_only else 5000)
         employees = [
             row for row in employees
             if (
@@ -427,6 +428,9 @@ def make_mobile_operations_monitoring_router(
                 "department": None,
                 "status": "active",
             })
+        if pending_only:
+            from monitoring_preparation_counts import preparation_pending_directory
+            return await preparation_pending_directory(db, owner_id=owner_id, employees=employees)
         if directory_only:
             return {
                 "ok": True, "read_only": True, "directory_only": True,
@@ -468,6 +472,13 @@ def make_mobile_operations_monitoring_router(
             "range": {"from_at": start.isoformat(), "to_at": end.isoformat()},
             "employees": rows,
         }
+
+    @router.get("/preparation-pending-counts")
+    async def preparation_pending_counts(user: dict = Depends(current_user)) -> dict[str, Any]:
+        # A dedicated read URL allows older apps/servers to negotiate counts
+        # without an old server silently ignoring pending_only and loading detail.
+        return await preparation_summary(from_at=None, to_at=None, directory_only=False,
+                                         pending_only=True, user=user)
 
     @router.get("/preparation/{employee_id}")
     async def preparation_employee_detail(

@@ -1,7 +1,7 @@
 """Scoped weekly statement upload, read and explicit confirmation."""
 from typing import Literal
 
-from fastapi import Depends, File, Form, Path, Query, Request, UploadFile
+from fastapi import Depends, File, Form, HTTPException, Path, Query, Request, Response, UploadFile
 from pydantic import BaseModel, ConfigDict, Field
 
 from excel_upload_security import read_safe_xlsx_upload
@@ -37,6 +37,52 @@ class SavedStatementUse(BaseModel):
 
 
 def attach_provider_statement_routes(router, db, current_user, scope, guarded):
+    @router.get('/provider-statements/mobile')
+    async def mobile_history(request: Request, response: Response, page: int = Query(default=1, ge=1),
+                             page_size: int = Query(default=10, ge=10, le=10), snapshot: str | None = Query(default=None, pattern=r'^[a-f0-9]{64}$'),
+                             user=Depends(current_user)):
+        from mobile_provider_statements import history_page
+        async def read_page():
+            actor, owner, _ = await scope(db, user, 'provider_statements')
+            return await history_page(db, owner, actor['id'], page=page, snapshot=snapshot)
+        response.headers['Cache-Control'] = 'no-store, private'
+        return await run_visible_report_read(request, read_page)
+
+    @router.get('/provider-statements/mobile/{statement_id}/review')
+    async def mobile_review(request: Request, response: Response, statement_id: str = Path(pattern=r'^[a-f0-9]{64}$'),
+                            page: int = Query(default=1, ge=1), page_size: int = Query(default=10, ge=10, le=10),
+                            preview_hash: str | None = Query(default=None, pattern=r'^[a-f0-9]{64}$'),
+                            user=Depends(current_user)):
+        from mobile_provider_statements import review_page
+        async def read_page():
+            actor, owner, _ = await scope(db, user, 'provider_statements')
+            return await review_page(db, owner, actor['id'], statement_id, page=page, preview_hash=preview_hash)
+        response.headers['Cache-Control'] = 'no-store, private'
+        return await run_visible_report_read(request, read_page)
+
+    @router.post('/provider-statements/mobile/upload')
+    async def mobile_upload(response: Response, file: UploadFile = File(...),
+                            provider: Literal['tabby', 'tamara', 'salla'] = Form(...),
+                            request_id: str = Form(..., min_length=8, max_length=160),
+                            expected_session_scope: str = Form(..., pattern=r'^[a-f0-9]{64}$'),
+                            expected_started_at: str = Form(..., min_length=16, max_length=40),
+                            user=Depends(guarded('provider_statements'))):
+        from mobile_provider_statements import upload_result
+        actor, owner, _ = await scope(db, user, 'provider_statements')
+        try:
+            content = await read_safe_xlsx_upload(file, max_bytes=MAX_FILE_BYTES)
+        except HTTPException as exc:
+            # This boundary has not entered the canonical writer. The client
+            # may safely discard this unusable cached file and choose another.
+            detail = dict(exc.detail) if isinstance(exc.detail, dict) else {'message': str(exc.detail)}
+            raise HTTPException(exc.status_code, detail={**detail, 'not_applied': True}) from None
+        result = await upload(db, owner, actor['id'], content=content,
+            filename=file.filename or 'statement.xlsx', request_id=request_id,
+            expected_session_scope=expected_session_scope, expected_started_at=expected_started_at,
+            selected_provider=provider)
+        response.headers['Cache-Control'] = 'no-store, private'
+        return await upload_result(db, owner, actor['id'], result)
+
     @router.get('/provider-statements/saved-files')
     async def statement_saved_files(request: Request, limit: int = Query(default=50, ge=1, le=100), user=Depends(current_user)):
         async def read_page():

@@ -256,7 +256,7 @@ export default function SimpleOrderRefunds({ context, identity, onBalancesChange
   const page = Math.max(1, Number.parseInt(params.get('refund_page') || '1', 10) || 1);
   const [query, setQuery] = useState(orderNumber);
   const operations = permittedOperations(context);
-  const allowed = operations.has('customer.refund_request') || operations.has('customer.refund_execute');
+  const allowed = operations.has('customer.refund_read') || operations.has('customer.refund_request') || operations.has('customer.refund_execute');
   const scopeKey = JSON.stringify([identity, context.session_scope, context.permission_version]);
   const go = values => setParams({ tab: 'parties', panel: 'refunds', ...Object.fromEntries(Object.entries(values).filter(([, value]) => value !== '' && value != null)) });
   const orderRead = useBalanceRead(async config => {

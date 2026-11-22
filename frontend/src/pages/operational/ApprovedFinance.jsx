@@ -119,7 +119,7 @@ function FinanceWorkspace({context:bootstrap,identity,user,view,to,params,reload
   };
   const home=()=>go('home'), open=r=>go('ledger',r), issues=r=>go('issues',r);
   const granted=new Set(context.operations.map(o=>typeof o==='string'?o:o.key));
-  const canRefund=allowedTo('refund')&&(granted.has('customer.refund_request')||granted.has('customer.refund_execute'));
+  const canRefund=allowedTo('refund')&&(granted.has('customer.refund_read')||granted.has('customer.refund_request')||granted.has('customer.refund_execute'));
   const canCollect=allowedTo('collections')&&granted.has('courier.review')&&context.capabilities?.review_collections===true;
   const canCustomerCollect=allowedTo('customer-collections')&&granted.has('customer.collection');
   const addAvailable=allowedTo('entry')&&writePage('balances.entry')&&context.status==='active'&&context.capabilities?.create_entries===true;
@@ -197,7 +197,7 @@ function FinanceWorkspace({context:bootstrap,identity,user,view,to,params,reload
       <Entry {...shared} resource={selected} mode={params.get('mode')||'choose'} onBack={back} onSaved={saved}
         onPurchase={canPurchase?()=>navigate(purchaseLink(selected)):null} onRefund={canRefund?()=>go('refund'):null} onCustomerCollection={canCustomerCollect?()=>go('customer-collections'):null}/>
       {canAdd && <p className="footnote"><Link className="textbtn" to={to('special-entry',selected,{mode:'movement'})}><Icon name="layers"/>عمليات مالية أخرى</Link></p>}</>;break;
-    case 'refund':content=canRefund?<Refund {...shared} readOnly={!writePage('balances.refund')} onBack={()=>go('entry')} onSaved={refreshAfterReview}/>:unavailable;break;
+    case 'refund':content=canRefund?<Refund {...shared} readOnly={!writePage('balances.refund')||!(granted.has('customer.refund_request')||granted.has('customer.refund_execute'))} onBack={()=>go('entry')} onSaved={refreshAfterReview}/>:unavailable;break;
     case 'customer-collections':content=canCustomerCollect?<CustomerCollections {...shared} readOnly={!writePage('balances.customer-collections')} onBack={()=>go('entry')} onSaved={refreshAfterReview}/>:unavailable;break;
     case 'issues':content=<Issues {...shared} resource={selected} onBack={()=>selected?open(selected):go('reviews')} onReviewCollections={canCollect?collections:undefined}/>;break;
     case 'collections':content=canCollect?<ReviewCollections {...shared} readOnly={!writePage('balances.collections')} driverId={selected?.kind==='store_driver'?selected.id:''} onBack={()=>go('reviews')} onChanged={refreshAfterReview}/>:unavailable;break;

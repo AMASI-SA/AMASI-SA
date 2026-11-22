@@ -63,7 +63,7 @@ def test_delegated_statement_history_detail_and_upload_are_provider_scoped():
             history = await client.get(statement, headers=staff_http())
             assert history.status_code == 200, history.text
             assert [s["provider"] for s in history.json()["items"]] == ["tabby"]
-            assert history.json()["permissions"] == {"upload": False, "confirm": False}
+            assert history.json()["permissions"] == {"upload": False, "confirm": False, "use_saved_file": False}
             detail = await client.get(statement + "/" + tabby["id"] + "/review", headers=staff_http())
             assert detail.status_code == 200 and not detail.json()["permissions"]["confirm"]
             assert (await client.get(statement + "/" + tamara["id"] + "/review", headers=staff_http())).status_code in {403, 404}

@@ -244,7 +244,25 @@ async def test_simultaneous_custody_polls_initialize_indexes_once_per_router():
             for _ in range(4)
         ])
     assert all(response.status_code == 200 for response in responses)
-    assert sum(db.index_calls.values()) == 5
+    assert db.index_calls == Counter({"mezan_preparation_pieces_v1": 5, "mezan_preparation_piece_events_v1": 1})
+
+
+@pytest.mark.asyncio
+async def test_simultaneous_board_polls_initialize_indexes_once_per_router():
+    raw = AsyncMongoMockClient().index_budget
+    await seed_queue(raw, "in_progress", 3)
+    db = ReadCounter(raw)
+    app = FastAPI()
+    async def actor():
+        return {"id": "owner", "role": "owner", "_session_client": "amasi_mobile"}
+    app.include_router(make_preparation_piece_operations_router(db, actor))
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://local.test") as client:
+        responses = await asyncio.gather(*[
+            client.get("/preparation-work-v1/assembly/orders", params={"state": "in_progress"})
+            for _ in range(4)
+        ])
+    assert all(response.status_code == 200 and response.json()["total"] == 3 for response in responses)
+    assert db.index_calls == Counter({"mezan_preparation_pieces_v1": 5, "mezan_preparation_piece_events_v1": 1})
 
 
 @pytest.mark.asyncio
@@ -269,4 +287,4 @@ async def test_index_failure_can_retry_without_marking_the_router_ready(monkeypa
         responses = [await client.get("/preparation-work-v1/receiving/custody") for _ in range(3)]
     assert [response.status_code for response in responses] == [500, 200, 200]
     assert attempts == 2
-    assert sum(db.index_calls.values()) == 5
+    assert db.index_calls == Counter({"mezan_preparation_pieces_v1": 5, "mezan_preparation_piece_events_v1": 1})

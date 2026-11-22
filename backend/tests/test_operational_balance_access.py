@@ -362,7 +362,7 @@ def test_fresh_identity_rejects_disabled_and_reassigned_accounts_and_composes_gu
 
 def test_new_policy_is_the_only_native_balances_navigation_grant():
     async def scenario(db, client):
-        from mobile_app_permissions import mobile_app_access_for_user, OPERATIONAL_APP_READ, OPERATIONAL_APP_WRITE
+        from mobile_app_permissions import mobile_app_access_for_user, OPERATIONAL_APP_READ, OPERATIONAL_APP_WRITE, EMPLOYEE_BALANCE_PERMISSION
         actor = await db.users.find_one({"id": "staff"})
         empty = await mobile_app_access_for_user(db, actor)
         assert OPERATIONAL_APP_READ not in empty["permissions"]
@@ -370,13 +370,13 @@ def test_new_policy_is_the_only_native_balances_navigation_grant():
         actor = await db.users.find_one({"id": "staff"})
         assigned = await mobile_app_access_for_user(db, actor)
         assert assigned["enabled"] is True
-        assert set(assigned["permissions"]) == {OPERATIONAL_APP_READ, OPERATIONAL_APP_WRITE}
+        assert set(assigned["permissions"]) == {OPERATIONAL_APP_READ, OPERATIONAL_APP_WRITE, EMPLOYEE_BALANCE_PERMISSION}
         assert (await client.get(BASE + "/workspace/context", headers=headers(mobile=True))).status_code == 200
         await db.mezan_mobile_app_access_v1.insert_one({"owner_user_id": "owner", "user_id": "staff", "enabled": True,
             "permissions": [OPERATIONAL_APP_READ, OPERATIONAL_APP_WRITE, "app.page.orders"]})
         await save_policy(db, [], [], enabled=False, version=2)
         revoked = await mobile_app_access_for_user(db, await db.users.find_one({"id": "staff"}))
-        assert revoked["permissions"] == ["app.page.orders"]
+        assert set(revoked["permissions"]) == {"app.page.orders", EMPLOYEE_BALANCE_PERMISSION}
         assert (await client.get(BASE + "/workspace/context", headers=headers(mobile=True))).status_code == 403
     run(scenario)
 

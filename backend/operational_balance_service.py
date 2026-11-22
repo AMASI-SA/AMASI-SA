@@ -547,6 +547,8 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
             }
         await prepare_in_thread(audit, state, actor, "movement_saved", None, item,
                                 payload.get("note") or "حركة معتمدة", source, stamp)
+        from employee_finance_notifications import stage_employee_financial_notifications
+        await stage_employee_financial_notifications(db, owner, state, item)
         remember(state, replay_action, payload, item)
         return item
     async def apply(state):

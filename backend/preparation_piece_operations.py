@@ -30,6 +30,7 @@ import read_path_diagnostics as read_diagnostics
 from mobile_operational_flow_policy import FIELD_PREPARATION, is_optional
 from assembly_status_policy import canonical_status
 from assembly_board_groups import assembly_queue_group
+from assembly_board_read import read_active_assembly_board
 from supplier_receipt_ready_policy import (
     POLICY as SUPPLIER_RECEIPT_READY_POLICY, supplier_ready_eligible,
     supplier_completion_covered_current, completed_supplier_policy, supplier_status,
@@ -86,6 +87,7 @@ PIECES = "mezan_preparation_pieces_v1"
 PIECE_EVENTS = "mezan_preparation_piece_events_v1"
 DEFAULT_ESTIMATED_DURATION_MINUTES = 2 * 24 * 60
 MAX_HISTORY_ROWS = 5000
+ASSEMBLY_BOARD_READ_TIMEOUT_SECONDS = 10
 
 PIECE_STATUS_ASSIGNED = "assigned"
 PIECE_STATUS_IN_PROGRESS = "in_progress"
@@ -525,6 +527,12 @@ async def ensure_piece_operation_indexes(db: Any) -> None:
         unique=True,
         name="uq_preparation_piece_physical_unit_v1",
     )
+    # This key is shared with supplier-report startup; Mongo requires the same
+    # canonical name when an identical index already exists.
+    await db[PIECES].create_index(
+        [("user_id", ASCENDING), ("order_number", ASCENDING)],
+        name="ix_preparation_piece_order_cost_v1",
+    )
     await db[PIECES].create_index(
         [
             ("user_id", ASCENDING),
@@ -610,29 +618,18 @@ async def _service_context_for_batch(
     return context
 
 
-async def materialize_preparation_pieces(
+async def prepare_preparation_piece_documents(
     db: Any,
     *,
     user_id: str,
     registry: dict[str, Any],
+    batch: dict[str, Any],
 ) -> list[dict[str, Any]]:
-    """Idempotently create physical pieces after file registration."""
-    batch_id = _text(registry.get("batch_id"))
-    if not batch_id:
-        raise HTTPException(
-            status_code=409,
-            detail={"code": "preparation_file_batch_missing"},
-        )
-    await ensure_piece_operation_indexes(db)
-    batch = await db[BATCHES].find_one(
-        {"user_id": user_id, "id": batch_id, "status": "ready"},
-        {"_id": 0},
-    )
-    if not batch:
-        raise HTTPException(
-            status_code=409,
-            detail={"code": "preparation_batch_missing_for_piece_materialization"},
-        )
+    """Prepare the canonical physical/service snapshots without publishing them.
+
+    The ordinary materializer and atomic employee/supplier assignment share the
+    same bundle exclusions, line service plans, options, holds and durations.
+    """
     from reviewed_products_catalog import bundle_parent_line_ids
     bundle_lines = await bundle_parent_line_ids(db, user_id,
         [_text(line.get("order_number")) for line in batch.get("lines", []) if isinstance(line, dict)])
@@ -752,6 +749,28 @@ async def materialize_preparation_pieces(
         batch=batch,
         registry=registry,
         pieces=pieces,
+    )
+    return pieces
+
+
+async def materialize_preparation_pieces(
+    db: Any,
+    *,
+    user_id: str,
+    registry: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Idempotently create physical pieces after file registration."""
+    batch_id = _text(registry.get("batch_id"))
+    if not batch_id:
+        raise HTTPException(409, detail={"code": "preparation_file_batch_missing"})
+    await ensure_piece_operation_indexes(db)
+    batch = await db[BATCHES].find_one(
+        {"user_id": user_id, "id": batch_id, "status": "ready"}, {"_id": 0},
+    )
+    if not batch:
+        raise HTTPException(409, detail={"code": "preparation_batch_missing_for_piece_materialization"})
+    pieces = await prepare_preparation_piece_documents(
+        db, user_id=user_id, registry=registry, batch=batch,
     )
     for piece in pieces:
         await db[PIECES].update_one(
@@ -3441,6 +3460,14 @@ async def _assembly_search(
                 row["preparation_employee_name_for_receipt"] = None
                 row["assembly_blocker_code"] = (exc.detail or {}).get("code")
                 row["instructions"] = (exc.detail or {}).get("instructions") or []
+    from assembly_pending_stage import assembly_pending_stage
+    display_salla_in_progress = _status_only_assembly_in_progress(source, current_order)
+    for row, piece in zip(rows, pieces):
+        row["assembly_pending_stage"] = assembly_pending_stage(
+            piece, row=row, source=source, workflow=workflow, current_units=supplier_units,
+            preparation_optional=preparation_shortcut_enabled,
+            salla_in_progress=display_salla_in_progress,
+        )
     rows.sort(key=lambda row: (
         0 if row["search_match"] else 1,
         0 if not row["assembly_ready"] else 1,
@@ -3534,6 +3561,7 @@ async def _assembly_order_board(
     limit: int,
     offset: int,
     query: str = "",
+    initialize: Callable[[], Any] | None = None,
 ) -> dict[str, Any]:
     """Return only orders that actually entered Mezan/Amasi preparation.
 
@@ -4716,7 +4744,7 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
     async def list_assembly_orders(
         request: Request,
         state: Literal["in_progress", "completed", "direct_preparation", "supplier_received"] = Query(...),
-        limit: int = Query(100, ge=1, le=300),
+        limit: int = Query(10, ge=1, le=300),
         offset: int = Query(0, ge=0, le=10000),
         q: str = Query(default="", max_length=64),
         demand: bool = False,
@@ -4730,6 +4758,29 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
             "fulfillment.ready.read",
             responsibility="instant_ready",
         )
+        from mobile_app_permissions import MOBILE_APP_CLIENT
+        if user.get("_session_client") == MOBILE_APP_CLIENT:
+            native_limit = 10 if "limit" not in request.query_params else limit
+            try:
+                async with asyncio.timeout(ASSEMBLY_BOARD_READ_TIMEOUT_SECONDS):
+                    await ensure_indexes_once()
+                    if state == "completed":
+                        return await _assembly_order_board(
+                            db, user_id=context["merchant_id"],
+                            state=state, limit=native_limit, offset=offset, query=q,
+                        )
+                    return await read_active_assembly_board(
+                        db, user_id=context["merchant_id"],
+                        state=state, limit=native_limit, offset=offset, query=q,
+                        workflow_pieces=_workflow_assembly_pieces,
+                        order_in_progress=_assembly_in_progress,
+                        source_in_progress=_status_only_assembly_in_progress,
+                    )
+            except TimeoutError as exc:
+                raise HTTPException(
+                    status_code=503,
+                    detail={"code": "assembly_board_read_timeout"},
+                ) from exc
         from assembly_board_read_models import demand_response
         return await demand_response(
             db, user=user, state=state, query=q, limit=limit, offset=offset,
@@ -4743,6 +4794,44 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
     async def release_assembly_demand(key: str, consumer_id: str, user: dict = Depends(current_user)):
         from read_demand_actor import release_current
         return await release_current(db, user, key, consumer_id)
+
+    @router.get("/assembly/order-counts")
+    async def assembly_order_counts(
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        from mobile_app_permissions import MOBILE_APP_CLIENT
+        if user.get("_session_client") != MOBILE_APP_CLIENT:
+            raise HTTPException(
+                status_code=403,
+                detail={"code": "mobile_app_native_required"},
+            )
+        context = await _actor_context(db, user)
+        _require_permission(
+            context, "fulfillment.ready.read",
+            responsibility="instant_ready",
+        )
+        try:
+            async with asyncio.timeout(ASSEMBLY_BOARD_READ_TIMEOUT_SECONDS):
+                await ensure_indexes_once()
+                result = await read_active_assembly_board(
+                    db, user_id=context["merchant_id"],
+                    state="in_progress", limit=0, offset=0, query="",
+                    workflow_pieces=_workflow_assembly_pieces,
+                    order_in_progress=_assembly_in_progress,
+                    source_in_progress=_status_only_assembly_in_progress,
+                )
+        except TimeoutError as exc:
+            raise HTTPException(
+                status_code=503,
+                detail={"code": "assembly_board_read_timeout"},
+            ) from exc
+        return {
+            key: result[key]
+            for key in (
+                "queue_counts", "group_counts", "poll_seconds", "source"
+            )
+        }
+
 
     @router.post("/assembly/pieces/{piece_id}/ready")
     async def mark_assembly_piece_ready(
