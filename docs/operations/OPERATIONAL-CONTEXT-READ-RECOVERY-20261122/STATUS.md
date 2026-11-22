@@ -2,11 +2,13 @@
 
 ## Scope and state
 
-**Evidence checkpoint: 2026-11-22 02:17:51 UTC.** Source A and intent-only B are
+**Evidence checkpoint: 2026-11-22 02:26:10 UTC.** Source A and intent-only B are
 frozen and remotely preserved in [PR #2057](https://github.com/AMASI-SA/AMASI-SA/pull/2057).
 The original adapter also passed an isolated rehearsal on the actual host.
-Exact-B CI is still pending: root observed **12 triggered workflows**, with no
-failures observed at this checkpoint. The Accounting workflow was not triggered
+The exact-B Readiness workflow passed all six required jobs, but the required
+Operational backend job has now **failed**. Release #2057 is **blocked**, with
+stock still running among the **12 triggered workflows**. No overall CI success
+is claimed. The Accounting workflow was not triggered
 by its path filter and is **not** counted as a pass. There has been **no merge,
 lease, publication or live acceptance for #2057**. Production is unchanged by
 this correction at this checkpoint.
@@ -14,8 +16,10 @@ this correction at this checkpoint.
 This document and adjacent `release-evidence.json` are maintained only on
 `codex/operational-context-release-evidence-20261122`, initially based on B.
 **This evidence branch must never be deployed or merged into the frozen release.**
-Root owns its durable remote checkpoint and all release actions. Its new
-recording commits are outside the reviewed source/intent pair.
+Root owns its durable remote checkpoint and all release actions. The previous
+evidence checkpoint is `1ac7888c1563b7b1d624c9e77196d5c8f8493a85`
+(tree `4d5d63b27de8bcfb9be50877230480b1fa0c53fc`). Its new recording commits are
+outside the reviewed source/intent pair.
 
 The implementation branch is
 `codex/operational-context-read-recovery-20261122` in `AMASI-SA/AMASI-SA`.
@@ -122,6 +126,86 @@ adapter selected governed Node **22.23.2**. It exited 0 with the exact A/runtime
 release identity and tracked-clean staged source. Host output hashes, observed
 and supplied by root, are retained in the adjacent JSON. No lease was created.
 This rehearsal does not establish the later Cloud Build or live runtime result.
+
+## Exact-B Readiness CI
+
+[Readiness run 44975098798](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44975098798)
+completed successfully at B `5758240bd83ed3018737ae59808f55415d80a689`.
+The independent reviewers supplied these results directly; this evidence author
+has not duplicated CI monitoring. Readiness passed independently of the later
+Operational backend failure below; stock is still pending.
+
+| Job | Exact job | Result |
+|---|---|---|
+| Backend preflight | [137063105634](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44975098798/job/137063105634) | Success |
+| Host Node 20 dispatcher | [137063105399](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44975098798/job/137063105399) | Success |
+| Host Node 24 dispatcher | [137063105654](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44975098798/job/137063105654) | Success |
+| Frontend build | [137063105669](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44975098798/job/137063105669) | Success |
+| Genuine Host Node 20 clean-clone rehearsal | [137063355717](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44975098798/job/137063355717) | Success |
+| Genuine Host Node 24 clean-clone rehearsal | [137063355676](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44975098798/job/137063355676) | Success |
+| Push-only manual handoff | [137063933315](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44975098798/job/137063933315) | Expected skip; not counted as a pass |
+
+The genuine rehearsals observed host Node **20.20.2** and **24.19.0**,
+respectively, with host Yarn **1.22.22**. Both adapters used governed Node
+**22.23.2**, exercised the no-Git package boundary and JSON-serving checks, and
+emitted the exact frozen release, artifact, metadata and proof hashes above.
+The reviewer confirmed their artifact metadata binds to this run and exact B.
+
+Both isolated Backend packages contained **1,290 files**, had tree SHA-256
+`d5e813202bf8170822077d44ff7a4d566427e39c56805e4803fd2dfd06f73ed3`, and
+passed health identity verification without Git or a sibling Frontend package.
+The generated backend identity was **484,039 bytes**, SHA-256
+`0de2cc5bb77a50e010bddeb14f7ef429709ea04695c74e699fe7b076131ec285`.
+Both isolated Frontend packages contained **1,757 files**, had tree SHA-256
+`7b8b943fb2ec9693c2737da945df9711351edcb16dd7650a26a647a8a291ba81`, and
+passed runtime artifact verification and exact JSON build-metadata serving.
+These are isolated package counts, not test or source-manifest counts.
+
+The adjacent JSON records the four metadata-bound output/evidence artifacts:
+Host 20 **14735481628 / 14735113219**, and Host 24
+**14735352084 / 14735352090**, with their sizes and reported SHA-256 digests.
+Readiness success and clean-clone evidence do not establish publication or live
+inventory acceptance.
+
+## Required exact-B gate failure — release blocked
+
+The independent CI reviewer inspected the completed Operational backend job
+[137063183273](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44975098873/job/137063183273)
+in [run 44975098873](https://github.com/AMASI-SA/AMASI-SA/actions/runs/44975098873),
+at the same frozen B. Its reported pytest result was **1 failed, 6,236 passed,
+plus 90 subtests in 560.51 s**. These counts belong to this one failed job and
+must not be summed with the local 71-case run or other overlapping workflows.
+
+The failing case is
+`test_operational_balance_active_read_lifetime.py::test_departing_panel_cancels_saved_state_read_without_writers[/context]`.
+It waits for the blocked-reader `entered` event. Its fixture still replaces
+`operational_balance_routes.read`, while this route now imports
+`operational_financial_position_state.read_financial_position_state` locally.
+The existing interception therefore no longer reaches this route's saved-state
+read. This identifies a concrete instrumentation mismatch; it does **not**
+waive the cancellation contract or establish that the new reader's cancellation
+behavior has passed. Any minimal test correction must target the actual reader
+and retain the stopped/499 response, no-task-leak and capability-free database
+assertions.
+
+The reviewer supplied result artifact **14735672226**, **107,637 bytes**, SHA-256
+`7d9b7ddcbbde82d0bf8e605d7b6992d8bc7c3e564fc4a7c830239652b102057d`.
+The reviewer downloaded and parsed its JUnit archive, verified that hash and its
+binding to exact B/tree, and confirmed **all 21 new context-snapshot cases
+passed**. The suite contains **6,327 JUnit cases including 90 subtests**, with
+**one failure, zero errors and zero skipped cases**; this is the same failed job,
+not an additional test run. Its downstream shipping and executed-test/no-skips
+steps did **not** execute because of that failure and have not been accepted.
+Root assigned a minimal test-seam correction to a separate worktree on
+`codex/operational-context-read-lifetime-20261122`, based on pre-B source A
+`cde10efae4fb5b83f69b1c875f8c5c9ec6e6607c`. Its authorized source scope is the
+active-read-lifetime test and source status document only. A successor A/B and
+replacement PR are planned; their IDs and final results are not yet available.
+Root will retain #2057 until a replacement exists. This evidence author has
+made no source, test or frozen-intent change. Frozen A/B must remain intact; if a corrected
+source is needed, use a new source/freeze sequence from the pre-B source lineage
+and rerun the required gates at its new exact frozen head. Do not merge or
+publish the currently failing release.
 
 ## Verification
 
@@ -231,13 +315,17 @@ workflow selection and its executed-test gate; this author did not edit CI.
 
 ## Next safe action
 
-1. Root must durably checkpoint only these two evidence files on the evidence
-   branch. This author has not staged, committed, updated refs or written to a
+1. Root must durably checkpoint this next update to the two evidence files on
+   the evidence branch; checkpoint `1ac7888c1563b7b1d624c9e77196d5c8f8493a85`
+   already preserves the previous record. This author has not staged, committed, updated refs or written to a
    remote. No Issue #1006 comment has been posted by this author.
-2. Finish and inspect all required **exact-B** CI results for #2057, including the
-   operational workflow's executed-test/no-skips check. Preserve run/job URLs and
-   actual outcomes; do not count path-filter non-runs or expected skips as passes.
-   The focused 71-case result is not a replacement for that gate.
+2. Root must resolve the required Operational backend failure above without
+   changing frozen A/B or weakening cancellation assertions. If a correction
+   is required, create a successor source from the pre-B source lineage, rebuild
+   and freeze a fresh intent, and inspect all required CI at that exact new head.
+   Preserve the failed B evidence and the final stock outcome. Do not count
+   path-filter non-runs or expected skips as passes. The local 71-case result
+   and successful Readiness workflow do not replace the failed gate.
 3. Only after the required gates pass, root may use the existing authorized
    normal-merge release workflow. Preserve A/B and prove any production merge
    has B's tree and the required source ancestry. Never deploy this evidence
@@ -254,6 +342,8 @@ workflow selection and its executed-test gate; this author did not edit CI.
    the subsequent stock request complete. Capture a bounded matching response
    or timing if it fails; do not infer recovery from release identity alone.
 
-At this checkpoint the unresolved gates are exact-B CI, merge/host installation,
-publication, original live identity verification and live inventory acceptance.
+At this checkpoint the release is blocked by the required Operational backend
+failure. Stock is still pending; any successor release also requires its exact-head
+CI, applicable host checks, merge/host installation, publication, original live
+identity verification and live inventory acceptance.
 The deployment owner must update this evidence after those observed milestones.
