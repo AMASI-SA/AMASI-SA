@@ -41,7 +41,11 @@ def main():
     assert json.loads((ROOT / 'backend/release_identity.json').read_bytes()) == intent['runtime_identity']
     assert (ROOT / 'frontend/build/index.html').is_file()
     assert (ROOT / 'frontend/build/build-meta.json').is_file()
-    assert json.loads((ROOT / 'frontend/.release/reproducible-build.json').read_bytes()) == intent['frontend_reproducibility']
+    # The intent stores the normalized summary plus the exact raw-file record.
+    proof_bytes = (ROOT / 'frontend/.release/reproducible-build.json').read_bytes()
+    proof_record = intent['frontend_reproducibility']['proof_file']
+    assert len(proof_bytes) == proof_record['bytes']
+    assert hashlib.sha256(proof_bytes).hexdigest() == proof_record['sha256']
     caches = sorted((p for p in BACKEND.rglob('__pycache__') if p.is_dir()), key=lambda p: len(p.parts))
     roots = []
     for p in caches:

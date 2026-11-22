@@ -86,6 +86,14 @@ Root .release-preserved directory outside both package roots, and runs the full
 unchanged verifier. No rebuild is needed if that verifier proves every governed
 artifact/proof/source byte still matches the reviewed intent. No lease yet.
 
+Recovery41e exited1 before any bytecode move at an incorrect extra helper
+assertion comparing raw proof JSON to the intent's normalized proof summary.
+This was an operational-helper mistake,not an original-verifier failure or proof
+of artifact corruption. Corrected to the official proof_file bytes/SHA256
+contract (1521 bytes,2f869faab1136b001388064b861b92bb9a6dc06e4fcfedbca06d1801248afa1f).
+The original release verifier remains unchanged and must pass in full. No cache
+was moved,no lease created,no publication. Next: run corrected pinned helper.
+
 ## Current successor: strict external classifier, freshly verified
 
 Branch `codex/aramex-intransit-label-reprint-v2-20261122` is constructed directly
