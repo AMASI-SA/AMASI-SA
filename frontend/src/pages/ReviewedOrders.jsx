@@ -33,6 +33,7 @@ import {
     toggleReviewedPreparationProduct,
 } from "../reviewedPreparationSelection";
 import CustomerServiceInstructionBanner from "../components/fulfillment/CustomerServiceInstructionBanner";
+import SupplierBundlePreparationRecovery from "../components/fulfillment/SupplierBundlePreparationRecovery";
 import {
     reviewedPieceCustomerOptions,
     reviewedPieceOrderNumber,
@@ -183,11 +184,12 @@ function BatchSuccess({ batch, onDownload, downloading }) {
                         <div className="font-black">تم إنشاء ملف التجهيز</div>
                         <div className="mt-1 break-all text-sm font-semibold text-emerald-800">{batch.file_name || `ملف ${batch.batch_id}`}</div>
                         <div className="mt-1 text-xs text-emerald-700">
-                            {batch.allocated_quantity || 0} قطعة • {batch.order_count || 0} طلب
+                            {batch.physical_quantity ?? batch.allocated_quantity ?? 0} قطعة • {batch.order_count || 0} طلب
                             {(batch.transitioned_order_numbers || []).length > 0 && (
                                 <> • انتقل {(batch.transitioned_order_numbers || []).length} طلب إلى قيد التنفيذ</>
                             )}
                         </div>
+                        {batch.assignment_contract === "preparation_assignment_v2" && <p className="mt-2 text-xs font-bold text-emerald-800">أُسند الملف للموظف وينتظر إرساله للمورد.</p>}
                     </div>
                 </div>
                 <button
@@ -219,13 +221,18 @@ export default function ReviewedOrders() {
     const [batchError, setBatchError] = useState("");
     const [lastBatch, setLastBatch] = useState(null);
     const [stageInstructions, setStageInstructions] = useState([]);
+    const [deferSupplierConfirmed, setDeferSupplierConfirmed] = useState(false);
+    const [recoveringBundle, setRecoveringBundle] = useState(false);
     const requestIdRef = useRef("");
 
-    const load = useCallback(async ({ silent = false } = {}) => {
+    const load = useCallback(async ({ silent = false, isCurrent } = {}) => {
+        const active = () => typeof isCurrent !== "function" || isCurrent();
+        if (!active()) return;
         if (!silent) setLoading(true);
         setError("");
         try {
             const nextCatalog = await listReviewedProductCatalog({ limit: 2000, reviewedDate });
+            if (!active()) return;
             if (!reviewedDate && nextCatalog.selectionGrain !== "physical_piece") {
                 throw new Error("تعذّر تحميل بطاقات القطع المنفصلة بأمان. لم يتم عرض كميات مجمعة.");
             }
@@ -235,9 +242,9 @@ export default function ReviewedOrders() {
                 nextCatalog.products,
             ));
         } catch (loadError) {
-            setError(loadError.message);
+            if (active()) setError(loadError.message);
         } finally {
-            if (!silent) setLoading(false);
+            if (!silent && active()) setLoading(false);
         }
     }, [reviewedDate]);
 
@@ -260,35 +267,54 @@ export default function ReviewedOrders() {
         [catalog.categories],
     );
     const shownQuantity = useMemo(
-        () => filteredProducts.reduce((total, product) => total + Number(product.quantity || 0), 0),
+        () => filteredProducts.reduce((total, product) => total + Number(product.quantity || 0)
+            * (product.bundle_supplier === true ? Number(product.physical_quantity || 0) : 1), 0),
         [filteredProducts],
     );
     const selectionSummary = useMemo(
         () => reviewedPreparationSelectionSummary(selectedQuantities),
         [selectedQuantities],
     );
+    const bundleSelection = useMemo(() => {
+        const productsByKey = new Map(catalog.products.map((product) => [product.group_key, product]));
+        const supplierBundle = selectionSummary.selections.some((row) => productsByKey.get(row.group_key)?.bundle_supplier === true);
+        const physicalQuantity = selectionSummary.selections.reduce((total, row) => total +
+            (productsByKey.get(row.group_key)?.bundle_supplier === true
+                ? Number(productsByKey.get(row.group_key).physical_quantity) : row.quantity), 0);
+        return { supplierBundle, physicalQuantity };
+    }, [catalog.products, selectionSummary]);
+    useEffect(() => { setDeferSupplierConfirmed(false); }, [selectedQuantities, catalog.products]);
 
     const toggleCategory = (categoryId) => {
         setSelectedCategoryIds((current) => toggleReviewedCategory(current, categoryId));
     };
 
-    const downloadBatch = useCallback(async (batch) => {
-        if (!batch?.batch_id) return;
+    const downloadBatch = useCallback(async (batch, { isCurrent } = {}) => {
+        const active = () => typeof isCurrent !== "function" || isCurrent();
+        if (!batch?.batch_id || !active()) return;
         setDownloadingBatch(true);
         setBatchError("");
         try {
             await downloadReviewedPreparationBatchPdf(batch.batch_id, batch.file_name);
         } catch (downloadError) {
-            setBatchError(downloadError.message);
+            if (active()) setBatchError(downloadError.message);
         } finally {
-            setDownloadingBatch(false);
+            if (active()) setDownloadingBatch(false);
         }
     }, []);
 
+    const recoveredBundle = useCallback(async (batch, isCurrent = () => true) => {
+        if (!isCurrent()) return;
+        setLastBatch(batch); setSelectedQuantities({}); requestIdRef.current = "";
+        await load({ silent: true, isCurrent });
+        if (isCurrent()) await downloadBatch(batch, { isCurrent });
+    }, [load, downloadBatch]);
+
     const createBatch = async () => {
-        if (selectionSummary.productCount === 0 || creatingBatch || catalog.truncated) return;
+        if (selectionSummary.productCount === 0 || creatingBatch || recoveringBundle || catalog.truncated) return;
+        if (bundleSelection.supplierBundle && !deferSupplierConfirmed) return;
         const confirmed = window.confirm(
-            `إنشاء ملف تجهيز واحد يحتوي ${selectionSummary.totalQuantity} قطعة من ${selectionSummary.productCount} بطاقة محددة؟`,
+            `إنشاء ملف تجهيز واحد يحتوي ${bundleSelection.physicalQuantity} قطعة من ${selectionSummary.productCount} بطاقة محددة؟`,
         );
         if (!confirmed) return;
 
@@ -306,7 +332,11 @@ export default function ReviewedOrders() {
                 selections: selectionSummary.selections.map((selection) => ({
                     ...selection,
                     revision: productsByKey.get(selection.group_key)?.revision || undefined,
+                    ...(bundleSelection.supplierBundle ? { order_number: reviewedPieceOrderNumber(productsByKey.get(selection.group_key)) } : {}),
                 })),
+                supplierBundle: bundleSelection.supplierBundle,
+                physicalQuantity: bundleSelection.physicalQuantity,
+                deferSupplierConfirmed,
             });
             setLastBatch(batch);
             setSelectedQuantities({});
@@ -319,13 +349,15 @@ export default function ReviewedOrders() {
             }
         } catch (createError) {
             setBatchError(createError.message);
+            if (createError?.notApplied === true) requestIdRef.current = "";
             if (createError?.code === "reviewed_selection_stale") {
                 // The refreshed catalog belongs to a new idempotent attempt;
                 // do not retain the failed request until a browser refresh.
                 requestIdRef.current = "";
                 setSelectedQuantities({});
             }
-            if (createError?.code === "customer_service_instruction_action_required") {
+            if (createError?.code === "customer_service_instruction_action_required"
+                || createError?.detail?.code === "customer_service_instruction_action_required") {
                 setStageInstructions(createError?.detail?.instructions || []);
             }
             await load({ silent: true });
@@ -337,21 +369,27 @@ export default function ReviewedOrders() {
     const incidentRecovery = new URLSearchParams(window.location.search).get("incident") === "ams11353-20260825"
         ? <Ams11353IncidentRecovery onRecovered={() => load({ silent: true })} />
         : null;
+    const bundleRecovery = !historical && <SupplierBundlePreparationRecovery onCommitted={recoveredBundle}
+        onNotApplied={() => { requestIdRef.current = ""; }} disabled={creatingBatch} onBusyChange={setRecoveringBundle} />;
 
     // The incident preview must not be hidden behind the reviewed-products
     // catalog request.  That catalog can be slow or temporarily unavailable,
     // while the recovery endpoint is deliberately narrow and independent.
-    if (loading) return <section className="space-y-4" dir="rtl">{incidentRecovery}<div className="flex min-h-80 items-center justify-center"><SpinnerGap size={34} className="animate-spin text-violet-600" /></div></section>;
-    if (error) return <section className="space-y-4" dir="rtl">{incidentRecovery}<div className="rounded-2xl border border-rose-200 bg-rose-50 p-5 text-rose-800"><WarningCircle className="ml-2 inline" />{error}<button type="button" onClick={() => load()} className="mr-3 rounded-xl bg-rose-700 px-4 py-2 text-sm font-black text-white">إعادة المحاولة</button></div></section>;
+    if (loading) return <section className="space-y-4" dir="rtl">{incidentRecovery}{bundleRecovery}<div className="flex min-h-80 items-center justify-center"><SpinnerGap size={34} className="animate-spin text-violet-600" /></div></section>;
+    if (error) return <section className="space-y-4" dir="rtl">{incidentRecovery}{bundleRecovery}<div className="rounded-2xl border border-rose-200 bg-rose-50 p-5 text-rose-800"><WarningCircle className="ml-2 inline" />{error}<button type="button" onClick={() => load()} className="mr-3 rounded-xl bg-rose-700 px-4 py-2 text-sm font-black text-white">إعادة المحاولة</button></div></section>;
 
     return (
         <section className={`space-y-4 ${selectionSummary.productCount > 0 ? "pb-28 sm:pb-24" : ""}`} dir="rtl" data-testid="reviewed-orders-stage" data-view="reviewed-products">
             {incidentRecovery}
+            {bundleRecovery}
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <div>
                         <h2 className="text-xl font-black text-slate-950 sm:text-2xl">{historical ? `المنتجات التي مرّت بالمراجعة بتاريخ ${reviewedDate}` : "قطع تمت مراجعتها"}</h2>
-                        <p className="mt-1 text-sm text-slate-500">{historical ? "عرض تاريخي للكمية الأصلية وأرقام الطلبات، حتى لو انتقلت المنتجات لاحقًا إلى مرحلة أخرى." : "كل بطاقة تمثل قطعة واحدة؛ حدد القطع المطلوبة ثم أنشئ لها ملف تجهيز واحدًا."}</p>
+                        <p className="mt-1 text-sm text-slate-500">{historical ? "عرض تاريخي للكمية الأصلية وأرقام الطلبات، حتى لو انتقلت المنتجات لاحقًا إلى مرحلة أخرى."
+                            : catalog.products.some((product) => product.bundle_supplier === true)
+                                ? "كل بطاقة تمثل قطعة أو بكجًا؛ عدد قطع البكج موضح في بطاقته ويظهر كاملًا في ملف التجهيز."
+                                : "كل بطاقة تمثل قطعة واحدة؛ حدد القطع المطلوبة ثم أنشئ لها ملف تجهيز واحدًا."}</p>
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-center sm:flex sm:text-right">
                         <div className="rounded-xl bg-violet-50 px-3 py-2">
@@ -539,6 +577,7 @@ export default function ReviewedOrders() {
                                                         <div className="mt-1 text-xs font-bold text-slate-400">لا توجد خيارات لهذه القطعة</div>
                                                     )}
                                                     <div className="mt-2 text-[11px] font-bold text-violet-700">القطعة {product.unit_index} من {product.unit_total}</div>
+                                                    {product.bundle_supplier === true && <div className="mt-2 rounded-lg bg-emerald-50 p-2 text-xs font-black text-emerald-900">بكج يحتوي {product.physical_quantity} قطعة</div>}
                                                 </div>
                                             )}
                                         </div>
@@ -588,7 +627,7 @@ export default function ReviewedOrders() {
                             </div>
                             <div className="rounded-xl bg-emerald-50 px-3 py-2">
                                 <div className="text-[10px] font-bold text-emerald-600">قطع هذا الملف</div>
-                                <div className="text-lg font-black text-emerald-950">{selectionSummary.totalQuantity}</div>
+                                <div className="text-lg font-black text-emerald-950">{bundleSelection.physicalQuantity}</div>
                             </div>
                         </div>
                         <div className="flex gap-2">
@@ -603,7 +642,8 @@ export default function ReviewedOrders() {
                             <button
                                 type="button"
                                 onClick={createBatch}
-                                disabled={creatingBatch || catalog.truncated}
+                                disabled={creatingBatch || recoveringBundle || catalog.truncated
+                                    || (bundleSelection.supplierBundle && (!deferSupplierConfirmed || selectionSummary.productCount > 50))}
                                 className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-violet-700 px-5 text-sm font-extrabold text-white shadow-lg shadow-violet-200 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
                             >
                                 {creatingBatch ? <SpinnerGap className="animate-spin" size={21} /> : <FilePdf size={21} weight="duotone" />}
@@ -611,6 +651,16 @@ export default function ReviewedOrders() {
                             </button>
                         </div>
                     </div>
+                    {bundleSelection.supplierBundle && <div className="mt-3 rounded-xl bg-amber-50 p-3 text-xs leading-6 text-amber-950">
+                        <p>سيُسند الملف للموظف المسؤول، ثم ترسله للمورد من شاشة ملفات التجهيز. سيحتفظ البكج بقطع المورد المحددة وتكلفتها.</p>
+                        <label className="mt-2 flex cursor-pointer items-start gap-2 font-black">
+                            <input type="checkbox" checked={deferSupplierConfirmed} disabled={creatingBatch || recoveringBundle}
+                                onChange={(event) => setDeferSupplierConfirmed(event.target.checked)} className="mt-1 h-4 w-4"
+                                data-testid="supplier-bundle-defer-confirmation" />
+                            أؤكد إسناد الملف للموظف وتأجيل إرساله للمورد.
+                        </label>
+                        {selectionSummary.productCount > 50 && <p className="mt-2 font-black text-rose-800">حدّد 50 بطاقة كحد أقصى لإنشاء ملف يحتوي بكجات.</p>}
+                    </div>}
                 </div>
             )}
         </section>

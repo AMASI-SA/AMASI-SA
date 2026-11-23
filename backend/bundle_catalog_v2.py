@@ -26,6 +26,7 @@ from product_v2_details_routes import COST_PROFILES
 from supplier_identity_service import require_supplier_v2
 from security_sensitive_routes import require_product_permission
 from product_bundle_policy_routes import is_text_option
+from product_inventory_rules import normalize_specification_text
 
 BUNDLES = "mezan_bundle_definitions_v2"
 LIMITS = {"max_items": 100, "max_depth": 5, "max_leaves": 500, "max_revisions": 100, "max_total_quantity": 100000}
@@ -108,7 +109,7 @@ async def expand_bundle(db, owner, product_id, *, variant_id=None, selected_opti
                 definitions[key] = overrides.get(key) or await _definition(db, owner, key)
         return definitions[key]
 
-    def selections_for(product, raw, *, validate_required=True, present_ids=None, filled_ids=None):
+    def selections_for(product, raw, *, validate_required=True, present_ids=None, filled_ids=None, option_visibility=None):
         if raw is None:
             raw = []
         if not isinstance(raw, list) or len(raw) > 100:
@@ -186,6 +187,11 @@ async def expand_bundle(db, owner, product_id, *, variant_id=None, selected_opti
                     reject("bundle_unsupported_option_condition", 409)
                 matches = (parent, value) in pairs
                 visible = matches if operator == "=" else any(p[0] == parent for p in pairs) and not matches
+            if option_visibility is not None:
+                # A missing conditional answer is not proof that a supplier
+                # specification was hidden at checkout.
+                known = all(any(chosen[0] == parent for chosen in pairs) for parent in dependencies[oid])
+                option_visibility[oid] = visible if known else None
             chosen = [pair for pair in pairs if pair[0] == oid]
             if validate_required and (chosen or oid in present) and not visible:
                 reject("bundle_hidden_option_selected")
@@ -210,7 +216,7 @@ async def expand_bundle(db, owner, product_id, *, variant_id=None, selected_opti
         seen_slots = set()
         options = {str(o.get("id")): o for o in product.get("options", [])}
         for slot in slots:
-            if not isinstance(slot, dict) or set(slot) - {"slot_id", "variant_id", "variant_rules", "customization_option_ids"}:
+            if not isinstance(slot, dict) or set(slot) - {"slot_id", "variant_id", "variant_rules", "customization_option_ids", "selection_option_ids"}:
                 reject("bundle_invalid_slot")
             slot_id = text_id(slot.get("slot_id"))
             if not slot_id or slot_id in seen_slots:
@@ -233,6 +239,26 @@ async def expand_bundle(db, owner, product_id, *, variant_id=None, selected_opti
             for oid in custom:
                 if not isinstance(oid, str) or oid not in options or options[oid].get("values") or composition_v2 and not is_text_option(options[oid]):
                     reject("bundle_invalid_text_option")
+            choice_ids = slot.get("selection_option_ids", [])
+            if (not isinstance(choice_ids, list) or len(choice_ids) > 100
+                    or any(not isinstance(oid, str) for oid in choice_ids)
+                    or len(set(choice_ids)) != len(choice_ids)
+                    or any(oid not in options or not options[oid].get("values") for oid in choice_ids)):
+                reject("bundle_invalid_selection_option_ids")
+            for oid in choice_ids:
+                option = options[oid]
+                multiple = option.get("type") in {"checkbox", "multiple", "multi_select"}
+                labels = set()
+                for value in option.get("values", []):
+                    name = value.get("name") if isinstance(value, dict) else None
+                    label = normalize_specification_text(name) if isinstance(name, str) else ""
+                    # Receipt matching canonicalizes labels, so distinct value
+                    # IDs must not become the same physical specification. A
+                    # slash in a multi-select label also makes joined subsets
+                    # ambiguous (including leading/trailing slash variants).
+                    if not label or label in labels or multiple and "/" in label:
+                        reject("bundle_invalid_selection_option_labels")
+                    labels.add(label)
 
     async def gather(product, ancestors):
         nonlocal graph_visits
@@ -416,13 +442,14 @@ async def expand_bundle(db, owner, product_id, *, variant_id=None, selected_opti
             return
         await resource({"resource_id": rid, "sourcing_mode": "stock", "required": item.get("required", True), "repeat_policy": "sum"}, multiplier, path + [binding_kind + ":" + bid], True, scope)
 
-    async def current_units(product, row, multiplier, path, pairs, scoped_answers=None):
+    async def current_units(product, row, multiplier, path, pairs, scoped_answers=None, option_visibility=None):
         key = _product_key(product)
         count = quantity(row.get("quantity", 1))
         if count != count.to_integral_value() or count > LIMITS["max_items"]:
             reject("bundle_current_product_quantity_limit")
         slots = row.get("slots") or [{"slot_id": str(i + 1), "variant_id": row.get("variant_id")} for i in range(int(count))]
         variants = product.get("variants") or product.get("skus") or []
+        choice_options = {str(option.get("id")): option for option in product.get("options", [])}
         for slot in slots:
             selected_ids = {rule["variant_id"] for rule in slot.get("variant_rules", []) if all((c["option_id"], c["value_id"]) in pairs for c in rule["conditions"])}
             if len(selected_ids) > 1:
@@ -444,6 +471,19 @@ async def expand_bundle(db, owner, product_id, *, variant_id=None, selected_opti
                     needs_selection.append({"product_id": key, "slot_id": slot["slot_id"], "option_id": oid})
                 else:
                     customization[oid] = local_answers[oid]
+            # A service product can carry separate size/color choice fields for
+            # each physical piece without defining inventory variants. Keep its
+            # frozen choice labels as supplier instructions; the full stable-ID
+            # selection context below still controls sourcing rules.
+            for oid in slot.get("selection_option_ids", []):
+                if (option_visibility or {}).get(oid) is False:
+                    continue
+                selected_values = sorted(value for option, value in pairs if option == oid)
+                if not selected_values:
+                    needs_selection.append({"product_id": key, "slot_id": slot["slot_id"], "option_id": oid})
+                    continue
+                values = {str(value.get("id")): value for value in choice_options[oid].get("values", [])}
+                customization[oid] = " / ".join(values[value]["name"] for value in selected_values)
             sourcing = await source(row)
             if customization and sourcing["sourcing_mode"] == "stock" and not vid:
                 reject("bundle_stock_customization_requires_variant", 409)
@@ -452,6 +492,8 @@ async def expand_bundle(db, owner, product_id, *, variant_id=None, selected_opti
                     "salla_product_id": product.get("salla_product_id"), "variant_id": vid,
                     "name": product.get("name"), "sku": (selected or product).get("sku"), "track_inventory": True,
                     "current_product_reference": True, "slot_id": slot["slot_id"], "customization": customization,
+                    "customization_labels": {oid: choice_options[oid].get("name") for oid in customization
+                                             if oid in choice_options and choice_options[oid].get("name")},
                     "sourcing_policy": deepcopy((metadata[key].get("operation_profile") or {}).get("bundle_sourcing", {})),
                     "selected_options": [{"option_id": a, "value_id": b} for a, b in sorted(pairs)],
                     "quantity": str(multiplier), "unit": row.get("unit", "unit"), "required": row.get("required", True),
@@ -475,7 +517,8 @@ async def expand_bundle(db, owner, product_id, *, variant_id=None, selected_opti
         if vid and selected is None:
             reject("bundle_variant_not_found")
         doc = await definition(key)
-        pairs = selections_for(product, item.get("selected_options"), present_ids=item.get("present_option_ids"), filled_ids=item.get("filled_option_ids"))
+        option_visibility = {}
+        pairs = selections_for(product, item.get("selected_options"), present_ids=item.get("present_option_ids"), filled_ids=item.get("filled_option_ids"), option_visibility=option_visibility)
         local_answers = answers if key == root_key else item.get("option_answers", {})
         if doc and doc.get("product_type") == "composite":
             if len(ancestors) >= LIMITS["max_depth"]:
@@ -488,7 +531,7 @@ async def expand_bundle(db, owner, product_id, *, variant_id=None, selected_opti
             current_start = len(leaves)
             for index, child in active:
                 if child.get("kind") == "current_product":
-                    await current_units(product, {**child, "required": item.get("required", True) and child.get("required", True)}, multiplier, path + [f"{key}@{doc['revision']}:{child.get('rule_id', index)}"], pairs, local_answers)
+                    await current_units(product, {**child, "required": item.get("required", True) and child.get("required", True)}, multiplier, path + [f"{key}@{doc['revision']}:{child.get('rule_id', index)}"], pairs, local_answers, option_visibility)
             # Only an active physical current_product already covers this base.
             # An unselected conditional row must not suppress financial cost.
             # This addition never changes a physical leaf or supplier policy.

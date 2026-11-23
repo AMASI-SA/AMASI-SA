@@ -185,6 +185,16 @@ async def supplier_completion_covered_current(db, source, workflow, pieces, *, o
     unit cannot use the bundle fallback merely because another bundle is ready.
     This function and all collaborators below are read-only.
     """
+    if any(piece.get("bundle_supplier_reference") is not None for piece in pieces):
+        from bundle_supplier_pieces import collapse_ready_supplier_leaves
+        from fastapi import HTTPException
+        try:
+            collapsed = await collapse_ready_supplier_leaves(db, owner, pieces)
+        except HTTPException:
+            return False
+        if collapsed is None:
+            return False
+        pieces = collapsed
     if supplier_completion_covered(source, pieces, owner=owner, number=number):
         return True
     declared = {row.get("order_item_id") for row in

@@ -7,6 +7,7 @@ It never mutates Salla or Qoyod.
 from __future__ import annotations
 
 from collections import defaultdict
+import hashlib
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
@@ -510,6 +511,10 @@ def aggregate_reviewed_products(
                 } if item.get("_review_snapshot_state") else None),
             }
             source_line["ready_item_id"] = stable_ready_item_id(source_line)
+            if state.get("bundle_supplier") is True:
+                source_line.update(bundle_supplier=True,
+                    physical_quantity_per_unit=state["physical_quantity_per_unit"],
+                    bundle_supplier_fingerprint=state["bundle_supplier_fingerprint"])
             group["source_lines"].append(source_line)
 
     if any(UNCATEGORIZED_ID in group["category_ids"] for group in groups.values()):
@@ -530,6 +535,9 @@ def aggregate_reviewed_products(
     for group in groups.values():
         for source_line in group["source_lines"]:
             source_line["line_revision"] = stable_reviewed_line_revision(source_line)
+            if source_line.get("bundle_supplier_fingerprint"):
+                source_line["line_revision"] = hashlib.sha256((source_line["line_revision"] + ":" +
+                    source_line["bundle_supplier_fingerprint"]).encode()).hexdigest()
         group["source_lines"].sort(key=lambda row: (
             0 if _text(row.get("incident_recovery_id")) else 1,
             _text(row.get("reviewed_at")),
@@ -720,6 +728,8 @@ def expand_reviewed_ready_units(catalog: dict[str, Any]) -> dict[str, Any]:
                     "source_order_numbers": [_text(line.get("order_number"))],
                     "source_order_count": 1,
                     "source_line_count": 1,
+                    **({"bundle_supplier": True, "physical_quantity": line["physical_quantity_per_unit"]}
+                       if line.get("bundle_supplier") is True else {}),
                 }
                 row["revision"] = stable_reviewed_product_revision(row)
                 products.append(row)
@@ -887,6 +897,8 @@ async def _load_catalog_pairs(db, *, user_id, workflows, historical=False):
     numbers = list(dict.fromkeys(_text(w.get("order_number")) for w in workflows))
     orders = await get_orders(MongoOrderRepository(db), user_id=user_id, order_numbers=numbers)
     bundle_lines = await bundle_parent_line_ids(db, user_id, numbers)
+    from bundle_supplier_pieces import supplier_bundle_intake_lines
+    supplier_bundles = (await supplier_bundle_intake_lines(db, user_id, numbers)) if any(bundle_lines.values()) else {}
     approved = {} if historical else await load_local_assignment_workflows(
         db, user_id=user_id, workflows=workflows,
     )
@@ -900,8 +912,10 @@ async def _load_catalog_pairs(db, *, user_id, workflows, historical=False):
             workflow = dict(workflow)
             states = {_text(row.get("order_item_id")): dict(row) for row in workflow.get("items", []) if isinstance(row, dict)}
             for line_id in bundle_lines[number]:
+                supported = supplier_bundles.get(number, {}).get(line_id)
                 states[line_id] = {**states.get(line_id, {}), "order_item_id": line_id,
-                    "supplier_export": False, "bundle_requirements_route": True}
+                    **({"bundle_supplier": True, "bundle_requirements_route": False, **supported}
+                       if supported else {"supplier_export": False, "bundle_requirements_route": True})}
             workflow["items"] = list(states.values())
         order = orders.get(number)
         mode = workflow.get("completion_mode")

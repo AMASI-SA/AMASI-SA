@@ -837,6 +837,10 @@ def _hydrate_piece_print_facts_from_batches(
                 )
             except (TypeError, ValueError, OverflowError):
                 piece["total_products_in_order"] = 1
+        if piece.get("bundle_supplier_reference") is not None:
+            # Parent file options can describe both garments; frozen leaf
+            # specifications remain the printing authority for this piece.
+            continue
         if not piece.get("specifications_snapshot"):
             piece["specifications_snapshot"] = list(
                 line.get("file_spec_fields") or []
@@ -1606,6 +1610,12 @@ async def publish_supplier_dispatch(
     """
     source_file_numbers = list(registry_by_file)
     selected = [piece for number in source_file_numbers for piece in selected_by_file[number]]
+    for piece in selected:
+        if piece.get("bundle_supplier_reference") is not None:
+            from bundle_supplier_pieces import validate_supplier_leaf_piece
+            _, leaf = await validate_supplier_leaf_piece(db, user_id, piece)
+            if _text(supplier.get("id")) != leaf["supplier_id"]:
+                raise HTTPException(409, detail={"code": "bundle_supplier_supplier_reconciliation_required"})
     selected_batch_ids = sorted({
         _text(piece.get("batch_id"))
         for piece in selected

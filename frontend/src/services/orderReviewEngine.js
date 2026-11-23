@@ -1,6 +1,7 @@
 import api, { API_BASE } from "../lib/api";
 import { confirmReviewUnitSplit } from "../reviewUnitSplitGuard";
 import { LEGACY_REVIEW_RESOLUTION_MESSAGE } from "../reviewConfirmation";
+import { createSupplierBundlePreparation, notifySupplierBundlePreparationCommitted } from "./supplierBundlePreparation";
 
 function message(error, fallback) {
     const detail = error?.response?.data?.detail;
@@ -128,13 +129,23 @@ export async function repairPreparationBatchCustomerOptions(batchId) {
     }
 }
 
-export async function createReviewedPreparationBatch({ clientRequestId, selections }) {
+export async function createReviewedPreparationBatch({ clientRequestId, selections, supplierBundle = false,
+    physicalQuantity, deferSupplierConfirmed = false }) {
     try {
         const metadata = typeof window !== "undefined"
             ? window.__mezanPreparationFileMetadata
             : null;
         if (!metadata?.fileTitle || !metadata?.responsibleEmployeeId) {
             throw new Error("أكمل اسم الملف والموظف المسؤول قبل إنشاء PDF.");
+        }
+        if (supplierBundle === true) {
+            const pendingSchedule = window.__mezanPreparationFileSchedulePending;
+            const batch = await createSupplierBundlePreparation({ clientRequestId, selections, metadata,
+                physicalQuantity, deferSupplierConfirmed });
+            if (window.__mezanPreparationFileMetadata === metadata) delete window.__mezanPreparationFileMetadata;
+            if (window.__mezanPreparationFileSchedulePending === pendingSchedule) delete window.__mezanPreparationFileSchedulePending;
+            notifySupplierBundlePreparationCommitted(batch);
+            return batch;
         }
         await createPreparationFileDraft({
             client_request_id: clientRequestId,

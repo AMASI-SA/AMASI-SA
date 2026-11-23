@@ -137,9 +137,11 @@ def make_order_engine_router(*args, **kwargs):
 
     from bundle_catalog_v2 import make_bundle_router
     from bundle_fulfillment_v2 import make_bundle_operations_router
+    from bundle_supplier_adoption import make_bundle_supplier_adoption_router
     child_routers = [
         make_bundle_router(db, current_user),
         make_bundle_operations_router(db, current_user),
+        make_bundle_supplier_adoption_router(db, current_user),
         make_warehouse_location_router(db, current_user),
         make_warehouse_location_v2_router(db, current_user),
         make_warehouse_room_router(db, current_user),

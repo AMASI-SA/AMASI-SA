@@ -1010,6 +1010,9 @@ async def build_order_fulfillment_decision(
 
     from bundle_fulfillment_v2 import routing_lines
     bundle_lines = await routing_lines(db, user_id, order)
+    from bundle_supplier_pieces import supplier_bundle_intake_lines
+    supplier_bundles = (await supplier_bundle_intake_lines(db, user_id, [str(order.order_number)])).get(
+        str(order.order_number), {}) if bundle_lines else {}
     lines = []
     for item_index, item in enumerate(order.items):
         product_id = _product_id(item)
@@ -1051,8 +1054,10 @@ async def build_order_fulfillment_decision(
                 "resolved_type": FULFILLMENT_TYPE_INSTANT if bundle_ready else "requires_preparation",
                 "requires_preparation": not bundle_ready,
                 "requires_branch_inventory": False,
-                "supplier_export_eligible": False,
+                "supplier_export_eligible": _text(getattr(item, "order_item_id", None)) in supplier_bundles,
                 "bundle": True, "bundle_ready": bundle_ready,
+                **({"bundle_supplier": True, **supplier_bundles[_text(getattr(item, "order_item_id", None))]}
+                   if _text(getattr(item, "order_item_id", None)) in supplier_bundles else {}),
             }
         elif direct_assembly:
             # This is a stocked warehouse product. It skips supplier and
@@ -1149,7 +1154,7 @@ async def build_order_fulfillment_decision(
         decision.update(ready_to_ship=False, route_stage="reviewed", preparation_stages_required=True)
     if bundle_lines:
         decision["supplier_export_order_required"] = any(
-            row.get("supplier_export_eligible") for row in lines if not row.get("bundle"))
+            row.get("supplier_export_eligible") for row in lines)
     assembly_operational_items = [
         row for row in (operational_items or [])
         if row.get("blocks_order_completion") is not False

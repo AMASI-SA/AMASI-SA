@@ -330,6 +330,8 @@ AUTHORITY_COLLECTIONS = frozenset({
 AUTHORITY_BATCH_SIZE = 250
 # Independently reviewed proof-only projections. Do not import the candidate's
 # constants: adding a field to a production query must require gate review.
+# The frozen leaf reference prevents these ordinary receipt reads from counting
+# bundle pieces again after bundle authority has priced their commercial unit.
 RECEIPT_PROJECTIONS = {
     'mezan_preparation_pieces_v1': {'_id': 0, **dict.fromkeys((
         'id', 'piece_id', 'order_number', 'order_item_id', 'unit_index', 'product_id',
@@ -337,7 +339,7 @@ RECEIPT_PROJECTIONS = {
         'services', 'service_plan_status', 'remaining_service_count',
         'supplier_dispatch_status', 'received_at', 'supplier_receiving_history.invoice_id',
         'service_specifications_snapshot', 'options_raw', 'selected_options',
-        'options', 'custom_fields',
+        'options', 'custom_fields', 'bundle_supplier_reference',
     ), 1)},
     'mezan_supplier_receiving_events_v1': {'_id': 0, **dict.fromkeys((
         'id', 'piece_id', 'order_number', 'order_item_id', 'unit_index', 'product_id',
@@ -345,7 +347,7 @@ RECEIPT_PROJECTIONS = {
         'supplier_invoice_id', 'finalized_at', 'experiment_mode', 'experiment_run_id',
         'financial_invoice_created', 'liability_created', 'supplier_context.id',
         'service_specifications_snapshot', 'options_raw', 'selected_options',
-        'options', 'custom_fields', 'services.condition',
+        'options', 'custom_fields', 'services.condition', 'bundle_supplier_reference',
     ), 1)},
 }
 
@@ -481,14 +483,21 @@ def _expected_authority_commands(audit):
                       'bundle_intake_snapshots', len(batch))
             snapshots('mezan_component_consumption_plans_v1',
                       {'user_id': owner, 'order_id': {'$in': selected}, 'bundle_snapshots': {'$exists': True}},
-                      {'_id': 1, 'order_id': 1, 'bundle_snapshots': 1, 'reconciliation_required': 1, 'lines': 1},
+                      {'_id': 1, 'user_id': 1, 'order_id': 1, 'state': 1,
+                       'bundle_snapshots': 1, 'reconciliation_required': 1, 'lines': 1},
                       'bundle_snapshots', len(batch))
             # These immutable legacy fixtures contain no plans. Any plan or
             # other historical row is a hard failure, not ignored evidence.
+            # Supplier leaf proof now binds the accepted plan's owner/state,
+            # exact unit/order identity, product/variant and frozen revision.
+            # The bridge marker forces proof verification even if a leaf's
+            # receiving channel was removed. Filters/counts remain unchanged.
             find('mezan_component_consumption_units_v1',
                  {'user_id': owner, 'plan_id': {'$in': []}, 'state': {'$ne': 'released'},
                   'order_line_id': {'$in': aliases}},
-                 {'_id': 0, 'plan_id': 1, 'order_line_id': 1, 'unit_index': 1,
+                 {'_id': 1, 'user_id': 1, 'order_id': 1, 'plan_id': 1,
+                  'order_line_id': 1, 'product_id': 1, 'variant_id': 1,
+                  'bundle_revision': 1, 'bundle_supplier_bridge_version': 1, 'unit_index': 1,
                   'state': 1, 'selected_context': 1, 'bundle_leaves': 1})
             find('mezan_order_cost_corrections_v1',
                  {**keys, 'state': 'applied', 'order_item_id': {'$in': aliases}}, {'_id': 0})

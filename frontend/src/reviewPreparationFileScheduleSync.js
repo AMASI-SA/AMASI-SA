@@ -5,6 +5,8 @@ import { updatePreparationFileSchedule } from "./services/preparationWorkService
 const ROOT_ID = "mezan-preparation-file-schedule-sync-root";
 
 export function preparationFileCreatedSchedule(detail, pending) {
+  // The verified assignment receipt already committed the schedule with the file.
+  if (detail?.assignment_contract === "preparation_assignment_v2" && detail?.schedule_committed === true) return null;
   const fileNumber = String(detail?.file_number || "").trim();
   const mode = pending?.mode === "required" ? "required" : "automatic";
   const requiredDueAt = mode === "required"
@@ -15,7 +17,11 @@ export function preparationFileCreatedSchedule(detail, pending) {
   return { fileNumber, mode, requiredDueAt };
 }
 
-async function persistSchedule(event) {
+export async function persistPreparationFileSchedule(event) {
+  // A recovery notification owns no pending modal state. It must not consume a
+  // newer ordinary attempt's deadline, even when that event arrives late.
+  if (event?.detail?.assignment_contract === "preparation_assignment_v2"
+      && event?.detail?.schedule_committed === true) return;
   const pending = window.__mezanPreparationFileSchedulePending;
   const payload = preparationFileCreatedSchedule(event?.detail, pending);
   if (!payload) {
@@ -46,7 +52,7 @@ function start() {
   marker.id = ROOT_ID;
   marker.hidden = true;
   document.body.appendChild(marker);
-  window.addEventListener("mezan:preparation-file-created", persistSchedule);
+  window.addEventListener("mezan:preparation-file-created", persistPreparationFileSchedule);
 }
 
 if (typeof window !== "undefined" && process.env.NODE_ENV !== "test") {

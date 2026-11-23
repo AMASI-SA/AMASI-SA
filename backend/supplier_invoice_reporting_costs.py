@@ -29,11 +29,11 @@ INVOICE_MEMO_MAX_BYTES = 8 * 1024 * 1024
 PIECE_FIELDS = {"_id": 0, **dict.fromkeys(("id", "piece_id", "order_number", "order_item_id", "unit_index", "product_id",
     "variant_id", "salla_variant_id", "experiment_mode", "experiment_run_id", "services", "service_plan_status",
     "remaining_service_count", "supplier_dispatch_status", "received_at", "supplier_receiving_history.invoice_id",
-    "service_specifications_snapshot", "options_raw", "selected_options", "options", "custom_fields"), 1)}
+    "service_specifications_snapshot", "options_raw", "selected_options", "options", "custom_fields", "bundle_supplier_reference"), 1)}
 EVENT_FIELDS = {"_id": 0, **dict.fromkeys(("id", "piece_id", "order_number", "order_item_id", "unit_index", "product_id",
     "variant_id", "salla_variant_id", "event_type", "session_id", "supplier_invoice_id", "finalized_at",
     "experiment_mode", "experiment_run_id", "financial_invoice_created", "liability_created", "supplier_context.id",
-    "service_specifications_snapshot", "options_raw", "selected_options", "options", "custom_fields", "services.condition"), 1)}
+    "service_specifications_snapshot", "options_raw", "selected_options", "options", "custom_fields", "services.condition", "bundle_supplier_reference"), 1)}
 INVOICE_FIELDS = {"_id": 0, **dict.fromkeys(("id", "session_id", "supplier_id", "supplier_snapshot.id", "status", "approved_at",
     "currency", "lines", "subtotal_halalas", "total_halalas", "piece_count", "line_count", "purchase_tax",
     "tax", "vat", "tax_halalas", "vat_halalas", "tax_amount", "vat_amount", "experiment_mode", "experiment_run_id",
@@ -392,8 +392,13 @@ async def load_supplier_invoice_reporting_costs(db: Any, user_id: str, orders: l
             return key, unit, record
 
         scope = {"user_id": user_id, "order_number": {"$in": selected}}
-        pieces = [row for row in await _read(db, PIECES, scope, projection=PIECE_FIELDS) if not row.get("experiment_mode") and not row.get("experiment_run_id")]
-        events = await _read(db, EVENTS, {**scope, "event_type": "supplier_piece_service_recorded"}, projection=EVENT_FIELDS)
+        # Frozen leaf actuals are consumed by bundle authority once per sale
+        # unit; ordinary tuple claims must never charge them a second time.
+        pieces = [row for row in await _read(db, PIECES, scope, projection=PIECE_FIELDS)
+                  if not row.get("experiment_mode") and not row.get("experiment_run_id")
+                  and row.get("bundle_supplier_reference") is None]
+        events = [row for row in await _read(db, EVENTS, {**scope, "event_type": "supplier_piece_service_recorded"}, projection=EVENT_FIELDS)
+                  if row.get("bundle_supplier_reference") is None]
         piece_groups = defaultdict(list)
         for index, piece in enumerate(pieces):
             await _checkpoint(budget, index)

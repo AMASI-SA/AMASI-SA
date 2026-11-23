@@ -643,6 +643,8 @@ def _line_from_batch_storage(
             order_number=row.get("order_number"),
             order_item_id=row.get("order_item_id"),
             unit_index=unit_index,
+            **({"bundle_supplier_reference": row["bundle_supplier_reference"]}
+               if row.get("bundle_supplier_reference") is not None else {}),
         )
     return ProductLine(
         order_number=_text(row.get("order_number")),
@@ -689,7 +691,7 @@ def _line_from_batch_storage(
 def render_preparation_batch_pdf(batch: dict[str, Any]) -> bytes:
     lines = [
         _line_from_batch_storage(row, batch)
-        for row in batch.get("lines") or []
+        for row in (batch.get("physical_print_lines") or batch.get("lines") or [])
         if isinstance(row, dict)
     ]
     if not lines:

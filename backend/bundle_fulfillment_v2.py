@@ -32,6 +32,8 @@ def option_answers(line):
     for row in rows if isinstance(rows, list) else []:
         if not isinstance(row, dict):
             continue
+        if isinstance(row.get("raw"), dict):
+            row = row["raw"]
         option = row.get("option") if isinstance(row.get("option"), dict) else {}
         oid = row.get("option_id") or row.get("id") or option.get("id")
         value = row.get("values") if "values" in row else row.get("value", row.get("text", row.get("answer")))
@@ -242,6 +244,19 @@ async def allocate_leaves(db, owner, leaves, lots, *, unit_id, previous=None):
             leaf["source_override"] = deepcopy(old["source_override"])
         leaf["receipt_ids"] = old.get("receipt_ids", [])
         leaf["actual_cost"] = None
+        if old.get("supplier_receiving_channel") == "supplier_receiving_v1":
+            from bundle_supplier_pieces import UNITS as SUPPLIER_UNITS, supplier_leaf_receipts
+            unit = await db[SUPPLIER_UNITS].find_one({"user_id": owner, "_id": unit_id})
+            if not unit:
+                fail("supplier_unit_required")
+            proofs, amount = await supplier_leaf_receipts(db, owner, unit, old)
+            complete = len(proofs) == quantity_decimal(leaf["quantity"], positive=True)
+            leaf.update(supplier_receiving_channel="supplier_receiving_v1", supplier_receipt_proofs=proofs,
+                received_quantity=str(len(proofs)), reserved_quantity=str(len(proofs)), consumed_quantity="0",
+                state="reserved" if complete else "awaiting_supplier",
+                actual_cost=str(amount) if complete else None, cost_policy="posted_supplier_invoice")
+            result.append(leaf)
+            continue
         if leaf["sourcing_mode"] == "auto":
             resolved, parts = await allocate_automatic(db, owner, leaf, lots, unit_id=unit_id, old=old)
             result.append(resolved)
@@ -368,6 +383,8 @@ async def amend_order(db, owner, plan, lines, version, fingerprint, actor_id, *,
         fail("amendment_requires_review")
     units = await _rows(db[UNITS], {"user_id": owner, "plan_id": plan["_id"]})
     affected = [r for r in units if r["order_line_id"] in changed]
+    if any(r.get("bundle_supplier_bridge_version") for r in affected):
+        fail("supplier_identity_reconciliation_required")
     if any(r["state"] == "consumed" for r in affected):
         fail("consumed_amendment_requires_reconciliation")
     history = [*(plan.get("bundle_amendments") or []), {
@@ -433,6 +450,14 @@ async def capture_actual_cost(db, owner, row):
     if not ready(leaves):
         fail("components_incomplete", order_line_id=row["order_line_id"])
     for leaf in leaves:
+        if leaf.get("supplier_receiving_channel") == "supplier_receiving_v1":
+            from bundle_supplier_pieces import supplier_leaf_receipts
+            proofs, amount = await supplier_leaf_receipts(db, owner, row, leaf)
+            if len(proofs) != quantity_decimal(leaf["quantity"], positive=True):
+                fail("supplier_receipts_incomplete")
+            leaf.update(supplier_receipt_proofs=proofs, actual_cost=str(amount), state="consumed",
+                        consumed_quantity=leaf["quantity"], cost_policy="posted_supplier_invoice")
+            continue
         if leaf.get("sourcing_mode") == "auto":
             segment_rows = []
             for segment in leaf.get("sourcing_segments", []):
@@ -572,6 +597,12 @@ async def refresh_requirements(db, owner, order, *, actor_id, receipt=None, sour
             fail("active_plan_required")
         rows = await _rows(scoped[UNITS], {"user_id": owner, "plan_id": plan["_id"], "state": "reserved"})
         selected = [row for row in rows if row.get("bundle_leaves")]
+        for change in (source_change, receipt):
+            if change and any(row["order_line_id"] == change["order_line_id"]
+                    and any(leaf_key(leaf) == change["leaf_id"]
+                        and leaf.get("supplier_receiving_channel") == "supplier_receiving_v1"
+                        for leaf in row["bundle_leaves"]) for row in selected):
+                fail("supplier_identity_reconciliation_required")
         matched = receipt is None
         changed = source_change is None
         history = list(plan.get("bundle_source_changes") or [])
