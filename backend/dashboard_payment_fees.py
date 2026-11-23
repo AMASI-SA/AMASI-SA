@@ -131,6 +131,13 @@ def merge_statement_estimate_metadata(target, source):
     target["fee_estimate_sources"] = [deepcopy(sources[key]) for key in sorted(sources)]
 
 
+def _payment_evidence_cutoff(context, provider):
+    """Restate Tabby cohorts with request-known evidence, retaining their report window."""
+    if provider == "tabby" and context.get("evidence_as_of") is not None:
+        return context["evidence_as_of"]
+    return context["as_of"]
+
+
 def _statement_average_estimate(order, context, raw, payment, native_currency, created, refunds, refunded):
     """Price only a paid Tabby order whose sole missing qualifier is its plan."""
     average = context.get("weekly_statement_averages", {}).get(native_currency) or {}
@@ -151,7 +158,8 @@ def _statement_average_estimate(order, context, raw, payment, native_currency, c
     native_gross = _stored_original_total(order)
     if native_gross is None or native_gross <= 0:
         raise ValueError("provider_weekly_average_paid_evidence_required")
-    as_of = context["as_of"]
+    evidence_as_of = _payment_evidence_cutoff(context, "tabby")
+    as_of = evidence_as_of
     if isinstance(as_of, date) and not isinstance(as_of, datetime) or isinstance(as_of, str) and len(as_of) == 10:
         as_of = datetime.combine(_policy_day(as_of), time.max, tzinfo=RIYADH)
     normalized, diagnostics = normalize_payment(raw, native_currency, native_gross, created, as_of, page_balance=True)
@@ -167,7 +175,7 @@ def _statement_average_estimate(order, context, raw, payment, native_currency, c
         raise ValueError("provider_weekly_average_paid_evidence_required")
     arguments = {"policies": context["policies"], "currency": native_currency, "method": _method(order),
         "payment": payment, "refunds": refunds, "refunded": refunded, "created_at": created,
-        "observed_at": raw.get("updated_at"), "as_of": context["as_of"], "source_mode": context["source_mode"]}
+        "observed_at": raw.get("updated_at"), "as_of": evidence_as_of, "source_mode": context["source_mode"]}
     allowed, vat, fixed, vat_conflict = _average_gap({}, "tabby", native_gross, arguments)
     if not allowed:
         raise ValueError("provider_weekly_average_policy_conflict")
@@ -372,6 +380,7 @@ def _override(order, context):
                              or has_capture_policies(context.get("policies", []), provider))
     if not governed:
         return None
+    evidence_as_of = _payment_evidence_cutoff(context, provider)
     gross = order_total_sar(order)
     if gross is None:
         raise ValueError("payment_sales_currency_unverified")
@@ -441,7 +450,7 @@ def _override(order, context):
             or payment.get("status") in {"paid", "captured"}):
         # Reuse canonical evidence normalization rather than selecting a tariff
         # by creation date when an authoritative native capture date exists.
-        as_of = context["as_of"]
+        as_of = evidence_as_of
         if ((isinstance(as_of, date) and not isinstance(as_of, datetime))
                 or (isinstance(as_of, str) and len(as_of) == 10)):
             as_of = datetime.combine(_policy_day(as_of), time.max, tzinfo=RIYADH)
@@ -457,7 +466,7 @@ def _override(order, context):
             if not incomplete_capture:
                 raise ValueError(diagnostics[0]["code"] if diagnostics else "provider_capture_evidence_incomplete")
             if payment.get("paid_at") is not None:
-                _check_event_date(payment["paid_at"], created, context["as_of"], "provider_capture_timestamp_conflict")
+                _check_event_date(payment["paid_at"], created, evidence_as_of, "provider_capture_timestamp_conflict")
         else:
             payment = {**payment, "captures": normalized["captures"]}
     refunds = payment.get("refunds") or []
@@ -475,7 +484,7 @@ def _override(order, context):
         stamp = refund.get("refunded_at") or refund.get("executed_at")
         if stamp is None:
             raise ValueError("provider_refund_timestamp_required")
-        _check_event_date(stamp, created, context["as_of"], "provider_refund_timestamp_conflict")
+        _check_event_date(stamp, created, evidence_as_of, "provider_refund_timestamp_conflict")
         identity = refund.get("id")
         if not identity:
             raise ValueError("refund_identity_missing")
@@ -537,15 +546,15 @@ def _override(order, context):
         dates = [_policy_day(row["captured_at"]) for row in captures] if captures else [_policy_day(created)]
     except (ValueError, TypeError, KeyError):
         raise ValueError("provider_fee_transaction_date_required") from None
-    if any(day > _policy_day(context["as_of"]) for day in dates):
+    if any(day > _policy_day(evidence_as_of) for day in dates):
         raise ValueError("provider_fee_transaction_date_invalid")
     authoritative_created = created if (raw.get("created_at") or raw.get("date") or not order.get("order_date_inferred")) else None
     for capture in captures:
-        _check_event_date(capture["captured_at"], authoritative_created, context["as_of"], "provider_capture_timestamp_conflict")
+        _check_event_date(capture["captured_at"], authoritative_created, evidence_as_of, "provider_capture_timestamp_conflict")
     try:
         projection = configured_projection(context["policies"], provider, gross, method=rail if provider == "salla" else method,
             payment=payment, refunds=refunds, refunded=refunded, source_mode=context["source_mode"],
-            created_at=created, observed_at=raw.get("updated_at"), as_of=context["as_of"])
+            created_at=created, observed_at=raw.get("updated_at"), as_of=evidence_as_of)
     except ValueError as error:
         if provider != "tabby" or str(error) != "provider_payment_plan_required":
             raise
