@@ -1925,6 +1925,9 @@ def make_reviewed_preparation_batches_router(
             },
         )
 
+    from preparation_file_status_recovery import register_preparation_status_recovery_routes
+    register_preparation_status_recovery_routes(router, db, current_user)
+
     return router
 
 

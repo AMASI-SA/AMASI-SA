@@ -110,6 +110,51 @@ export async function listPreparationFiles({ limit = 30 } = {}) {
     }
 }
 
+export async function reconcilePreparationBatchStatuses(batchId) {
+    const fallback = "تعذّر تأكيد نتيجة تحديث حالات سلة. حدّث السجل للتحقق قبل إعادة المحاولة.";
+    const path = `/reviewed-preparation-batches-v1/batches/${encodeURIComponent(batchId)}`;
+    const states = ["confirmed", "partial", "pending"];
+    try {
+        const { data: plan } = await api.get(`${path}/status-plan`);
+        const numbers = plan?.order_numbers;
+        if (plan?.batch_id !== batchId || !Array.isArray(numbers) || !numbers.length || numbers.length > 1500
+            || !numbers.every((number) => typeof number === "string" && number.trim() === number && number.length > 0)
+            || new Set(numbers).size !== numbers.length) {
+            throw new Error(fallback);
+        }
+        const membership = new Set(numbers);
+        let result;
+        for (const number of numbers) {
+            // Finish one order before starting the next; the server persists
+            // each result so an interrupted file can be checked again safely.
+            const { data } = await api.post(`${path}/reconcile-status`, { order_number: number });
+            const summary = data?.order_status_sync;
+            const validOrders = Array.isArray(summary?.orders) && summary.orders.length === numbers.length
+                && new Set(summary.orders.map((order) => order?.order_number)).size === numbers.length
+                && summary.orders.every((order) => membership.has(order?.order_number) && states.includes(order.state));
+            const validCounts = validOrders && states.every((state) => (
+                Number.isSafeInteger(summary[`${state}_count`])
+                && summary[`${state}_count`] === summary.orders.filter((order) => order.state === state).length
+            ));
+            if (data?.ok !== true || data.batch_id !== batchId || !states.includes(summary?.state)
+                || !validCounts || (summary.state === "confirmed" && (summary.partial_count || summary.pending_count))) {
+                throw new Error(fallback);
+            }
+            result = { ok: true, batch_id: data.batch_id, order_status_sync: summary };
+        }
+        return result;
+    } catch (cause) {
+        const error = new Error(fallback);
+        error.code = ({
+            401: "preparation_status_session_expired",
+            403: "preparation_status_forbidden",
+            404: "preparation_status_file_not_found",
+            409: "preparation_status_conflict",
+        })[cause?.response?.status] || "preparation_status_unconfirmed";
+        throw error;
+    }
+}
+
 export async function recoverStalePreparationFiles() {
     try {
         return (await api.post("/preparation-file-safety-v1/recover-stale")).data;

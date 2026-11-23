@@ -8,6 +8,9 @@ on:
       - "frontend/src/components/MezanV2NavigationShell.jsx"
       - "frontend/src/components/MezanV2NavigationShell.fulfillment.test.jsx"
       - "frontend/src/components/fulfillment/PreparationFilesRegistry.jsx"
+      - "frontend/src/components/fulfillment/PreparationFilesRegistry.test.jsx"
+      - "frontend/src/services/orderReviewEngine.js"
+      - "frontend/src/services/orderReviewEngine.statusSync.test.js"
       - "frontend/src/pages/FulfillmentV2.jsx"
       - "frontend/src/pages/FulfillmentV2.test.jsx"
       - "frontend/src/reviewPreparationFileMetadataEnhancer.js"
@@ -45,6 +48,8 @@ jobs:
           src/pages/FulfillmentV2.test.jsx
           src/components/MezanV2NavigationShell.fulfillment.test.jsx
           src/preparationFileRegistryUi.test.js
+          src/components/fulfillment/PreparationFilesRegistry.test.jsx
+          src/services/orderReviewEngine.statusSync.test.js
 
       - name: Build Production frontend
         env:

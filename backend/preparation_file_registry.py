@@ -24,6 +24,7 @@ from mobile_app_permissions import (
 from order_review_export_controls import assignable_employee_view
 from order_review_routes import EVENTS, _merchant_user_id, _require_reviewer, _text
 from reviewed_preparation_batches import BATCHES
+from preparation_status_result import preparation_status_sync_view
 from tz_utils import riyadh_now_aware
 
 
@@ -82,6 +83,7 @@ def preparation_file_view(row: dict[str, Any]) -> dict[str, Any]:
         "registered_at": row.get("registered_at"),
         "created_by": _text(row.get("created_by")),
         "created_by_name": _text(row.get("created_by_name")),
+        "order_status_sync": preparation_status_sync_view(row),
         "mezan_only": True,
         "salla_updated": False,
         "qoyod_updated": False,

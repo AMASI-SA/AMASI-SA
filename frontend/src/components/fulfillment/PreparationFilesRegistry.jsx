@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
     ArrowClockwise,
     DownloadSimple,
@@ -10,11 +10,103 @@ import {
 
 import {
     listPreparationFiles,
+    reconcilePreparationBatchStatuses,
     recoverStalePreparationFiles,
     repairPreparationBatchCustomerOptions,
     reviewedPreparationBatchPdfUrl,
 } from "../../services/orderReviewEngine";
 import { preparationFileRecordLabel } from "../../preparationFileRegistryUi";
+
+const STATUS_SYNC_PENDING = "الإسناد محفوظ؛ تحديث حالة سلة لم يكتمل";
+const STATUS_SYNC_REASONS = {
+    preparation_assignment_source_not_eligible: "يلزم التحقق من بيانات الطلب والمخزون الحالية.",
+    local_review_preparation_not_eligible: "تحتاج أهلية مراجعة الطلب إلى التحقق.",
+    preparation_status_scope_changed: "تغيّرت بيانات الطلب أثناء التحقق؛ حدّث الطلب ثم تحقّق من جديد.",
+    preparation_routing_incomplete: "لم يكتمل إسناد جميع قطع الطلب.",
+    preparation_routing_not_proven: "تعذّر تأكيد إسناد جميع قطع الطلب.",
+    direct_preparation_routing_not_proven: "تعذّر تأكيد مسار تجهيز جميع قطع الطلب.",
+    salla_in_progress_confirmation_required: "لم تتأكد نتيجة تحديث سلة السابق بعد.",
+    salla_in_progress_not_confirmed: "لم تتأكد حالة الطلب في سلة بعد.",
+    salla_in_progress_read_failed: "تعذّر قراءة حالة الطلب من سلة.",
+    salla_current_status_not_eligible: "حالة الطلب الحالية في سلة تحتاج إلى المراجعة.",
+    salla_status_writes_disabled: "تحديث حالة سلة غير متاح لهذا الطلب حاليًا.",
+    in_progress_status_not_found: "تعذّر العثور على حالة قيد التنفيذ في سلة.",
+    missing_salla_order_id: "تعذّر التحقق من ارتباط الطلب بسلة.",
+    review_completion_mode_unknown: "تعذّر التحقق من اعتماد مراجعة الطلب.",
+    preparation_status_readback_missing: "لم تتأكد حالة الطلب الحالية في سلة.",
+    preparation_status_not_confirmed: "لم تتأكد حالة الطلب الحالية في سلة.",
+    legacy_assignment_status_requires_verification: "يتطلب إسناد هذا الطلب القديم تحققًا إضافيًا قبل تحديث سلة.",
+    preparation_status_check_failed: "تعذّر فحص حالة الطلب؛ تحقّق من جديد.",
+    preparation_status_not_checked: "لم يُفحص هذا الطلب بعد.",
+    salla_401: "يلزم التحقق من اتصال سلة وصلاحياته.",
+    salla_403: "يلزم التحقق من اتصال سلة وصلاحياته.",
+};
+
+function statusSyncErrorMessage(error) {
+    const messages = {
+        preparation_status_session_expired: "انتهت الجلسة؛ سجّل الدخول ثم تحقّق من حالات الملف.",
+        preparation_status_forbidden: "لا تملك صلاحية تحديث حالات سلة لهذا الملف.",
+        preparation_status_file_not_found: "تعذّر العثور على ملف التجهيز. حدّث السجل.",
+        preparation_status_conflict: "تغيّرت بيانات الملف أو الطلب. حدّث السجل وراجع الطلبات.",
+    };
+    const known = messages[error?.code];
+    return typeof known === "string" ? known : "تعذّر تأكيد نتيجة تحديث حالات سلة. حدّث السجل للتحقق قبل إعادة المحاولة.";
+}
+
+function statusSyncReasonMessage(reason) {
+    const known = STATUS_SYNC_REASONS[reason];
+    if (typeof known === "string") return known;
+    if (typeof reason === "string" && /^salla_(?:verify_)?[1-5][0-9]{2}$/.test(reason)) {
+        return "تعذّر إكمال التحقق من حالة الطلب في سلة.";
+    }
+    return "تعذّر تأكيد تحديث الحالة؛ راجع الطلب ثم تحقّق من جديد.";
+}
+
+function OrderStatusSyncSummary({ summary, error }) {
+    const checked = ["confirmed", "partial", "pending"].includes(summary?.state);
+    const confirmed = checked && summary.state === "confirmed" && !error;
+    const orders = Array.isArray(summary?.orders) ? summary.orders : [];
+    return (
+        <div
+            className={`min-w-0 flex-1 rounded-xl border p-3 text-xs leading-6 ${error || (checked && !confirmed)
+                ? "border-amber-200 bg-amber-50 text-amber-950"
+                : confirmed ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                    : "border-slate-200 bg-white text-slate-600"}`}
+            role="status"
+            aria-live="polite"
+            data-testid="preparation-file-status-sync-summary"
+        >
+            <div className="font-extrabold">
+                {error || (checked && !confirmed) ? STATUS_SYNC_PENDING
+                    : confirmed ? "تم تأكيد حالات الطلبات في سلة."
+                        : "لم تُفحص حالات طلبات هذا الملف بعد."}
+            </div>
+            {error ? <p className="mt-1" data-testid="preparation-file-status-sync-error">{error}</p> : checked && (
+                <>
+                    <p className="mt-1 font-semibold">
+                        مؤكد في سلة: {summary.confirmed_count || 0}
+                        {" • "}إسناد غير مكتمل: {summary.partial_count || 0}
+                        {" • "}تحديث معلق: {summary.pending_count || 0}
+                    </p>
+                    {orders.some((order) => order.state !== "confirmed") && (
+                        <ul className="mt-2 max-h-60 space-y-1 overflow-y-auto" tabIndex={0} aria-label="طلبات الملف التي لم يكتمل تحديثها">
+                            {orders.filter((order) => order.state !== "confirmed").map((order) => (
+                                <li key={order.order_number} className="break-words">
+                                    <span className="font-bold">الطلب #<bdi>{order.order_number}</bdi>: </span>
+                                    {order.state === "partial"
+                                        ? Number.isSafeInteger(order.remaining_quantity) && order.remaining_quantity > 0
+                                            ? `متبقي إسناد ${order.remaining_quantity} قطعة.`
+                                            : "لم يكتمل إسناد جميع قطع الطلب."
+                                        : statusSyncReasonMessage(order.reason)}
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </>
+            )}
+        </div>
+    );
+}
 
 function fileMeta(file = {}) {
     const parts = [];
@@ -34,10 +126,16 @@ export default function PreparationFilesRegistry() {
     const [recovering, setRecovering] = useState(false);
     const [repairingId, setRepairingId] = useState("");
     const [notice, setNotice] = useState("");
+    const [statusResults, setStatusResults] = useState({});
+    const [statusErrors, setStatusErrors] = useState({});
+    const [reconcilingIds, setReconcilingIds] = useState({});
+    const statusRequests = useRef(new Set());
 
     const load = useCallback(async ({ silent = false } = {}) => {
         if (!silent) setLoading(true);
         setError("");
+        setStatusResults({});
+        setStatusErrors({});
         try {
             const response = await listPreparationFiles({ limit: 100 });
             setFiles(response.items || []);
@@ -90,6 +188,23 @@ export default function PreparationFilesRegistry() {
             setError(repairError.message || "تعذّر إصلاح خيارات العميل في الملف.");
         } finally {
             setRepairingId("");
+        }
+    };
+
+    const reconcileStatuses = async (file) => {
+        const batchId = file?.batch_id;
+        if (!batchId || statusRequests.current.has(batchId)) return;
+        statusRequests.current.add(batchId);
+        setReconcilingIds((current) => ({ ...current, [batchId]: true }));
+        setStatusErrors((current) => ({ ...current, [batchId]: "" }));
+        try {
+            const result = await reconcilePreparationBatchStatuses(batchId);
+            setStatusResults((current) => ({ ...current, [batchId]: result.order_status_sync }));
+        } catch (statusError) {
+            setStatusErrors((current) => ({ ...current, [batchId]: statusSyncErrorMessage(statusError) }));
+        } finally {
+            statusRequests.current.delete(batchId);
+            setReconcilingIds((current) => ({ ...current, [batchId]: false }));
         }
     };
 
@@ -187,7 +302,7 @@ export default function PreparationFilesRegistry() {
                                             {fileMeta(file)}
                                         </div>
                                     </div>
-                                    <div className="flex flex-col gap-2 sm:flex-row">
+                                    <div className="flex flex-col gap-2 lg:flex-row">
                                         <button
                                             type="button"
                                             onClick={() => repairOptions(file)}
@@ -221,6 +336,23 @@ export default function PreparationFilesRegistry() {
                                                 تحميل PDF
                                             </button>
                                         )}
+                                        <button
+                                            type="button"
+                                            onClick={() => reconcileStatuses(file)}
+                                            disabled={!file.batch_id || Boolean(reconcilingIds[file.batch_id])}
+                                            aria-busy={Boolean(reconcilingIds[file.batch_id])}
+                                            className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-violet-200 bg-white px-4 text-sm font-extrabold text-violet-800 transition hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                            data-testid="reconcile-preparation-file-statuses"
+                                        >
+                                            <ArrowClockwise size={19} weight="bold" className={reconcilingIds[file.batch_id] ? "animate-spin" : ""} />
+                                            {reconcilingIds[file.batch_id] ? "جاري التحقق من الطلبات…" : "التحقق ونقل الطلبات إلى قيد التنفيذ"}
+                                        </button>
+                                    </div>
+                                    <div className="border-t border-slate-200 pt-3 sm:col-span-2">
+                                        <OrderStatusSyncSummary
+                                            summary={statusResults[file.batch_id] || file.order_status_sync}
+                                            error={statusErrors[file.batch_id]}
+                                        />
                                     </div>
                                 </article>
                             );

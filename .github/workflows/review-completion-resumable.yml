@@ -4,6 +4,13 @@ on:
   pull_request:
     branches: [hotfix/prod-snap-meta-final, codex/review-completion-resumable, codex/review-acceptance-config-guard]
     paths:
+      - "backend/preparation_file_status_recovery.py"
+      - "backend/preparation_status_continuation.py"
+      - "backend/preparation_status_result.py"
+      - "backend/preparation_file_registry.py"
+      - "backend/reviewed_preparation_batches.py"
+      - "backend/tests/test_preparation_status_recovery.py"
+      - "backend/tests/test_assignment_status_continuation.py"
       - "backend/shipping_pending_snapshot_recovery.py"
       - "backend/component_catalog_label_recovery.py"
       - "backend/component_zero_price_recovery.py"
@@ -208,6 +215,8 @@ jobs:
           python -m pytest --noconftest -p no:cacheprovider -q --tb=short \
             tests/test_preparation_refresh_recovery.py \
             tests/test_review_direct_preparation_sync.py \
+            tests/test_preparation_status_recovery.py \
+            tests/test_assignment_status_continuation.py \
             --junitxml="$RUNNER_TEMP/preparation-refresh-recovery.xml"
           python - <<'PY'
           import os
