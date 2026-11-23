@@ -1,0 +1,9 @@
+{
+  "source_git_sha": "deeefceffd9a1e37968513ac4f3833314bb415fd",
+  "source_base_git_sha": "28f6d4ca0fc2b7ea7f140432d8e32c768823b6a4",
+  "deployment_git_sha": "a92283678a25494c7d1870cd1675b8f30847aa6a",
+  "verdict": "PASS",
+  "tree": "868b8595dfeba299bf1f2dfaf1fc32b82d357033",
+  "intent_only": true,
+  "candidate_bytes_identical": true
+}

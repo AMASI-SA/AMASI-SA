@@ -1,0 +1,69 @@
+{
+  "verdict": "PASS",
+  "review_scope": "external candidate provenance, exact source membership, deterministic identity, and embedded reproducibility proof",
+  "reviewed_at_utc": "2026-11-23T22:58:48Z",
+  "source_git_sha": "deeefceffd9a1e37968513ac4f3833314bb415fd",
+  "source_tree": "a7317c4aa62c3d2266937bf60d4f0b2c4f62a27d",
+  "source_base_git_sha": "28f6d4ca0fc2b7ea7f140432d8e32c768823b6a4",
+  "candidate_path": "/workspace/scratch/021675d08c11/release-r4-proof/candidate-a4/release-intent-v5.json",
+  "candidate_bytes": 1515536,
+  "candidate_sha256": "f0b6f57069abe12ff6a8720f4eaded7552a47aeeedb0973021249545d726bea3",
+  "original_python_validator": "scripts.emergent_deployment_adapter.load_candidate_release_intent",
+  "original_node_validator": "frontend/scripts/release-intent.cjs:loadReviewedReleaseIntent",
+  "node_version": "v22.23.2",
+  "node_exit_code": 0,
+  "node_validation": {
+    "source_git_sha": "deeefceffd9a1e37968513ac4f3833314bb415fd",
+    "source_base_git_sha": "28f6d4ca0fc2b7ea7f140432d8e32c768823b6a4",
+    "branch": "hotfix/prod-snap-meta-final",
+    "frontend_file_count": 1437,
+    "frontend_git_tree_oid": "2afcd1cdc0be750a3d7f699f32f13e70f94dca74",
+    "frontend_tree_sha256": "f5dc9f15b3c19667f247322ac5c3cfeea3d4fabb93e8c4852611c044c1057e8d"
+  },
+  "release_id": "rg5-ffe0d4437c779b1e455f084be407f8f2d24735f5bf8e994f77c5bf4cbeb1c55f",
+  "frontend_artifact_tree_sha256": "df85c5736ec64571f44a5db506cb0daf34c1ac584ca3115e4e3ce86ebe80898c",
+  "backend_runtime_source": {
+    "scope": "backend_runtime_package_v1",
+    "file_count": 1337,
+    "tree_sha256": "52bfe8ab845baa3c55171b2a30668c732f0354296fcfe2c3989f9e6527384568"
+  },
+  "release_control_source": {
+    "scope": "release_control_source_v1",
+    "file_count": 328,
+    "tree_sha256": "62d60617ea99c7d3e215dafed9214208b97a9ebc1af149545706c69fce1f743a"
+  },
+  "frontend_test_evidence_matches_source_A": true,
+  "frontend_test_manifest_file_count": 1437,
+  "frontend_test_manifest_sha256": "46aaaaa57318cc23e540f6f8584826b1903922d28af3a6156225041856966379",
+  "worktree_clean_before_and_after": true,
+  "candidate_unchanged": true,
+  "commands": [
+    {
+      "cwd": "/workspace/scratch/021675d08c11/mezan-side-options-release-r4",
+      "argv": [
+        "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python",
+        "-B",
+        "/workspace/scratch/021675d08c11/release-r4-proof/independent_candidate_review.py"
+      ],
+      "environment": {
+        "PYTHONPATH": "backend:.",
+        "PYTHONDONTWRITEBYTECODE": "1"
+      }
+    },
+    {
+      "cwd": "/workspace/scratch/021675d08c11/mezan-side-options-release-r4",
+      "argv": [
+        "/home/agent/.cache/mezan-release-toolchains/v1/node-v22.23.2-yarn-1.22.22-linux-x64/node/bin/node",
+        "-e",
+        "\nconst path = require('node:path');\nconst { loadReviewedReleaseIntent } = require('./frontend/scripts/release-intent.cjs');\nconst verified = loadReviewedReleaseIntent({\n  intentPath: process.argv[1], frontendRoot: path.resolve('frontend'),\n});\nconsole.log(JSON.stringify({\n  source_git_sha: verified.source_git_sha,\n  source_base_git_sha: verified.source_base_git_sha,\n  branch: verified.branch,\n  frontend_file_count: verified.frontend_source.file_count,\n  frontend_git_tree_oid: verified.frontend_source.git_tree_oid,\n  frontend_tree_sha256: verified.frontend_source.tree_sha256,\n}, null, 2));\n",
+        "/workspace/scratch/021675d08c11/release-r4-proof/candidate-a4/release-intent-v5.json"
+      ]
+    }
+  ],
+  "limits": "No build, artifact-byte reproduction, source/ref modification, host access, or deployment performed. CI run/archive provenance was supplied by parent and was not re-fetched by this review.",
+  "python_exit_code": 0,
+  "observed_import_warning": {
+    "message": "release identity validation failed (FileNotFoundError): no backend/release_identity.json in source checkout",
+    "classification": "Non-fatal module import diagnostic. scripts/emergent_deployment_adapter.py imports CRITICAL_FILES from release_identity; that module initializes BOOT_RELEASE_IDENTITY. The generated runtime file is absent at source A. The external candidate embedded runtime identity was separately validated by the original candidate validator and both validation commands exited 0."
+  }
+}

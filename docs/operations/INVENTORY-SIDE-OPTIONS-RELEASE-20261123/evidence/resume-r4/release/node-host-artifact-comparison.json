@@ -1,0 +1,22 @@
+{
+  "all_generated_paths_sizes_sha256_and_bytes_identical": true,
+  "archive_note": "ZIP and tar hashes differ because packaging metadata differs; all 387 generated file payloads are byte-identical.",
+  "build_meta_sha256": "27352445c5504e4bcc4419228d224e0c6528ce2b34724f20a04812472bcbfd91",
+  "frontend_artifact_tree_sha256": "df85c5736ec64571f44a5db506cb0daf34c1ac584ca3115e4e3ce86ebe80898c",
+  "generated_file_count": 387,
+  "hosts": [
+    "20.20.2",
+    "24.19.0"
+  ],
+  "intent_B": "a92283678a25494c7d1870cd1675b8f30847aa6a",
+  "original_artifact_validators_both_hosts": "PASS",
+  "reproducibility_proof_sha256": "663347f65c3e92073486a66ce3566feb78ceab64b5c0b35ba69b7b21f69518c5",
+  "run_id": 45286310883,
+  "runtime_release_id": "rg5-ffe0d4437c779b1e455f084be407f8f2d24735f5bf8e994f77c5bf4cbeb1c55f",
+  "source_A": "deeefceffd9a1e37968513ac4f3833314bb415fd",
+  "tar_member_modes_equal": true,
+  "tar_member_types_and_link_targets_equal": true,
+  "tar_metadata_different_fields": [
+    "mtime"
+  ]
+}

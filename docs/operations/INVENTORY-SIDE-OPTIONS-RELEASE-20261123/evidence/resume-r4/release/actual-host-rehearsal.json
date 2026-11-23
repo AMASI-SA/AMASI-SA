@@ -1,0 +1,33 @@
+{
+  "evidence_type": "root CUA terminal observations; compact transcription, not raw host log",
+  "host_root": "/tmp/mezan-inventory-side-options-r4-20261124",
+  "boundary_observed_at": "2026-11-23T23:03:10.634424+00:00",
+  "shared_head": "28f6d4ca0fc2b7ea7f140432d8e32c768823b6a4",
+  "shared_guard_before": {
+    "active": false
+  },
+  "host_node": "v24.19.0",
+  "host_yarn": "1.22.22",
+  "source_git_sha": "deeefceffd9a1e37968513ac4f3833314bb415fd",
+  "deployment_git_sha": "a92283678a25494c7d1870cd1675b8f30847aa6a",
+  "command": "cd clean-clone/frontend && yarn build",
+  "followup": [
+    "python",
+    "-B",
+    "scripts/verify_frontend_build.py",
+    "--expected-git-sha",
+    "deeefceffd9a1e37968513ac4f3833314bb415fd",
+    "--reviewed-intent-v5"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 74.196,
+  "release_id": "rg5-ffe0d4437c779b1e455f084be407f8f2d24735f5bf8e994f77c5bf4cbeb1c55f",
+  "artifact_tree_sha256": "df85c5736ec64571f44a5db506cb0daf34c1ac584ca3115e4e3ce86ebe80898c",
+  "runtime_identity_matches": true,
+  "tracked_clone_clean": true,
+  "shared_guard_after": {
+    "active": false
+  },
+  "shared_checkout_untouched": true,
+  "raw_logs": "rehearsal.log and rehearsal-result.json on actual host"
+}
