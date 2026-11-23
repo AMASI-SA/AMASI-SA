@@ -1,0 +1,59 @@
+{
+  "verdict": "PASS",
+  "review_basis": "Completed independent read-only review of exact immutable Git blobs; no new tests performed while recording this report.",
+  "E": {
+    "commit": "2b08518f5448d742d1986a45c69e0fb5a66129d7",
+    "parent": "d554801b97a3c13905852b7f31894318476134fe",
+    "tree": "bbdd37d1be84dc08b7ba4980d1fa9af0a51efdd0"
+  },
+  "L": {
+    "commit": "ec9c28cf7cd0829cb5f394ccb343f368a394b879",
+    "parent": "2b08518f5448d742d1986a45c69e0fb5a66129d7",
+    "tree": "89c13ace80896cbbb5e3321a5ac9186ea571ee75"
+  },
+  "helper_sha256_at_E_and_L": {
+    "MANUAL-HOST-ISOLATED-REHEARSAL-2086.py": "5fe424bfb7ace043cd29d31b7124643bcc8f7f53f7dfff570080a2e9d74931ba",
+    "MANUAL-HOST-STAGE-2086.py": "7d2974136db042a4246bf0b30725cf575b600b837904f02d6abe45b981cd083f",
+    "MANUAL-HOST-PREPARE-PREPUBLISH-2086.py": "55900e07e8967edf427dc5e5d655b0bd7457bbfadb2b5c6ce3348ae1c2b63cf4",
+    "RUN-HOST-VERIFY-2086.sh": "4210c4c9a2e6d7cbc418154abb354c967dfc8fa44d4bd30d4bdb93d631ddc043"
+  },
+  "launcher": {
+    "path": "docs/operations/TABBY-DASHBOARD-FEES-20261122/RUN-HOST-DEPLOY-2086.sh",
+    "bytes": 5532,
+    "sha256": "e02d53474616d64fc42f565f4889493af795421599976006295fd5e76539be8b",
+    "EVIDENCE_matches_E": true,
+    "FILES_match_exact_E_helper_hashes": true,
+    "only_EVIDENCE_and_four_checksum_constants_changed": true,
+    "operational_logic_unchanged": true
+  },
+  "pins": {
+    "source_base_N": "c2d244a3349013c06f3fb7824070bfa12bd0bfe0",
+    "source_A": "1725672eeccb1272f183c376b9267e363a028325",
+    "intent_B": "104c6b45cd646418a719496fb8c02ee61ddf5483",
+    "deployment_D": "76efd2c3aa1563939ee3e27a9ae03f27fc1a3d43",
+    "deployment_tree": "72659c9adcd5fcf3880c4ef4332245a65b620fe3",
+    "release_id": "rg5-be6cf2196ab95412377fd5280c5ff7b6fd3204dd20dd74825b43d85e0fe77d13",
+    "artifact_sha256": "9796b20cca6dd4809bcf27ff4e5cf4817b59ecc4005763c70304064850483827",
+    "protocol_version": 5,
+    "all_applicable_helper_pins_match": true
+  },
+  "exact_E_to_L_changed_paths": [
+    "docs/operations/TABBY-DASHBOARD-FEES-20261122/LAUNCHER-CHAIN-2086.json",
+    "docs/operations/TABBY-DASHBOARD-FEES-20261122/RUN-HOST-DEPLOY-2086.sh",
+    "docs/operations/TABBY-DASHBOARD-FEES-20261122/STATUS.json"
+  ],
+  "selftest": {
+    "path": "docs/operations/TABBY-DASHBOARD-FEES-20261122/MANUAL-HOST-SELF-TEST-2086.py",
+    "baseline": "d554801b97a3c13905852b7f31894318476134fe",
+    "sha256": "cdf5918cade892b64af37820440aaa766abac3b6a6889b9177170b23b420d10f",
+    "byte_identical_at_baseline_E_and_L": true
+  },
+  "completed_static_checks": {
+    "python_and_embedded_python_AST": "PASS",
+    "immutable_diff_whitespace": "PASS",
+    "exact_whole_file_constant_substitution": "PASS"
+  },
+  "reviewer_operational_entrypoint_execution": false,
+  "reviewer_host_actions": false,
+  "reviewer_git_mutations": false
+}
