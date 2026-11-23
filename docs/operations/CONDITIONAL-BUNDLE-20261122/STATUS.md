@@ -2,6 +2,91 @@
 
 ## State
 
+### Final source verification and blocked publication — 2026-11-23
+
+This is a documentation-only continuation record on
+`codex/conditional-bundle-release-evidence-20261123`. It is **not a deployment
+input**. Keep the accepted source on
+`codex/conditional-bundle-release-20261123` immutable at
+`9b0bb3161aee3e7ad5f8631d8337c862d1c63eaf` (tree
+`39633d984f5b9af981d9f2be4f201331b13840eb`). Its direct reviewed Production
+base remains `76efd2c3aa1563939ee3e27a9ae03f27fc1a3d43`.
+Current source PR: https://github.com/AMASI-SA/AMASI-SA/pull/2088.
+
+Exact-source CI completed with **24 successful checks, 6 expected conditional
+skips, and no running, failed, cancelled, or timed-out check**. The root reread
+the exact commit's check-run collection after the independent reviewer reported
+completion at 16:06:28 UTC. Both previously red jobs now pass:
+
+- Operational Balance Backend, job `137816877074`, completed 16:05:25 UTC:
+  6,615 passed plus 90 subtests; subsequent selections passed 106 tests and
+  16 tests plus 18 subtests.
+- Stock eligibility/reservation/consumption on isolated Mongo, job
+  `137816875995`, completed 16:05:40 UTC: 5,531 passed plus 97 subtests.
+
+The independent reviewer read the completed job logs. These groups overlap
+and are not a unique combined test total. Source-stage adapter and redeploy
+skips do not establish release acceptance. No source/intent pair B, actual-host
+release rehearsal, task-owned lease, merge, publish, or production verification
+has occurred for this task. The 393/5 local backend and 45-test frontend results
+below remain valid; no source changed after that accepted source commit.
+
+The last completed actual `/app` guard reads still reported the other task's
+active lease owned by `codex-tabby-weekly-fees-2086-20261123`. A later status
+read did not return a new result; no inactive state was observed or inferred.
+The owner must complete and close that lease. Do not abort it, reuse it, or run
+its final verification on the owner's behalf. The user's merge/publication
+authorization persists and does not require another permission request.
+
+Live read-only inspection also established that the product is still ordinary
+and already has a conditional direct-cost binding for the second garment.
+When eventual bundle activation multiplies the base by physical quantity, that
+binding must be handled explicitly to avoid charging the second garment twice.
+No live product, price, cost binding, receipt, order, or invoice was saved.
+
+#### Required operational work before declaring the original goal complete
+
+The existing supplier-receiving workflow uses physical preparation pieces and
+finalized supplier invoices. It is different from native purchase invoices,
+inventory receipts and bundle lot allocation. A native purchase-requirement
+reference alone cannot repair the existing receiving screen.
+
+Keep one commercial parent unit with two immutable bundle leaf identities.
+Adding ordinary unit 2 under commercial quantity 1 is rejected by supplier
+cost reporting, stock unit selection and readiness coverage. Giving both
+pieces ordinary unit 1 instead violates duplicate product-charge protection.
+Do not relax those invariants or modify the commercial sale quantity.
+
+A bounded operational implementation still needs:
+
+1. A supplier-specific leaf bridge: materialize physical leaf pieces with
+   frozen per-piece specs, supplier/custody provenance, independent physical
+   identities and an explicit commercial-parent mapping.
+2. A verified finalized-supplier-invoice receipt channel into bundle actual
+   cost and readiness. Reuse the existing payable once; do not create another
+   purchase invoice or fictitious inventory receipt. Parent readiness must
+   require both covered leaves. Merely setting leaf state to `ready` would
+   incorrectly use catalog cost as actual under the current contract.
+3. An explicit audited conversion for an existing dispatched ordinary piece,
+   allowed only before any receipt, finalized supplier invoice or consumption.
+   Preserve old dispatch/custody history and map/retire the parent identity
+   rather than deleting its intake snapshot. Existing ordinary intake capture,
+   bundle amendment and bundle refresh do not provide this conversion.
+4. Transactional and public-route tests for preview/commit, duplicate/replay,
+   stale and cross-owner evidence, partial versus complete leaf receipt,
+   quantity/cost aggregation, concurrency and exact assembly coverage.
+
+Existing scan removal/session cancellation can reconcile an unfinalized draft
+under its own actor/event fences. They are not a reversal of a closed invoice.
+No migration or receipt was performed during this analysis.
+
+**Next safe action:** re-read the original shared guard and current Production
+base after the owner closes the other lease. Follow the original v5 governed
+source/intent/rehearsal/merge/publish/verify process for the accepted source.
+Resolve and test the operational adapter/conversion before product activation
+or claiming the existing invoice now contains two garments. Evidence branches
+must never be used as deployment input. Production changed **by this task: no**.
+
 ### Resumption on 2026-11-23
 
 The owner explicitly authorized merge and deployment. Browser access is now
