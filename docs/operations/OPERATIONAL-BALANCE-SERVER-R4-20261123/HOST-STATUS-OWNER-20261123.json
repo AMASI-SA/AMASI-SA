@@ -1,0 +1,24 @@
+{
+  "provenance": "Exact JSON supplied by the owner after executing pinned HOST-STATUS-2080.py; observation time was not supplied.",
+  "helper_commit": "34ab7a708b8da7a92160ef93850acee4a1425db8",
+  "helper_sha256": "fd0d5e8d6d45d769ef145fcec9f5b339270b02d096370565afb23ce2f17af43a",
+  "result": {
+    "kind": "pr2080_informational_host_status",
+    "guard": {"active": false},
+    "host_head": "44122bcc986bd1dff1532b9ad62c0268e899a179",
+    "host_branch": "hotfix/prod-snap-meta-final",
+    "tracked_clean": true,
+    "remote_refs": "9a500a21013a08f750009be656362481986eb208\trefs/heads/codex/operational-balance-server-r3-20261122\n44122bcc986bd1dff1532b9ad62c0268e899a179\trefs/heads/hotfix/prod-snap-meta-final",
+    "lease_prepared_or_removed": false,
+    "shared_source_or_outputs_changed": false,
+    "publication_performed": false
+  },
+  "acceptance": {
+    "original_guard_inactive_at_observation": true,
+    "tracked_clean_at_observation": true,
+    "fresh_github_production_ref_matches": true,
+    "old_pr2080_base_is_stale": true,
+    "predecessor_publication_or_verify3_proven_by_this_output": false,
+    "own_host_rehearsal_or_publication_performed": false
+  }
+}

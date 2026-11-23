@@ -189,6 +189,127 @@ def test_saved_register_filters_before_linked_event_deduplication(filters):
     run(scenario)
 
 
+@pytest.mark.parametrize("family,path,target", [
+    ("operational_ledger", "/ledger/bank/bank", ("bank", "bank")),
+    ("operational_register", "/movements", ("bank", "bank")),
+    ("operational_register", "/movements", None),
+])
+def test_saved_reversal_actions_refresh_without_losing_confirmed_customer_receipts(family, path, target):
+    from operational_balance_store import read
+    from test_operational_movement_reversal_routes import command as reverse_command, transfer
+    from test_operational_workspace_customer_collections import BASE as COLLECTIONS, command, bank_amount
+    from test_operational_workspace_refunds import order_fixture
+
+    async def scenario(db, client):
+        await order_fixture(db, paid="200.00", total="300.00")
+        receipt = await client.post(COLLECTIONS, json=await command(client))
+        assert receipt.status_code == 200, receipt.text
+        receipt_id = "customer_collection:" + receipt.json()["item"]["id"]
+        mid = await transfer(client)
+        spec, before = await project(db, family, path, target=target, filters={"account_history": True})
+        by_id = {row["id"]: row for row in before["rows"]}
+        assert by_id[mid]["can_reverse"] is True
+        assert by_id[receipt_id]["amount"] == "40.00" and not by_id[receipt_id].get("can_reverse")
+        result = await client.post(BASE + f"/movements/{mid}/reverse", json=reverse_command("owner"))
+        assert result.status_code == 200, result.text
+        rid = result.json()["id"]
+        with pytest.raises(HTTPException) as stale:
+            await authorize_spec(db, spec)
+        assert stale.value.status_code == 409
+        _, after = await project(db, family, path, target=target, filters={"account_history": True})
+        by_id = {row["id"]: row for row in after["rows"]}
+        assert by_id[mid]["reversal_id"] == rid and not by_id[mid].get("can_reverse")
+        assert by_id[rid]["reverse_of"] == mid and not by_id[rid].get("can_reverse")
+        assert by_id[receipt_id]["amount"] == "40.00" and not by_id[receipt_id].get("can_reverse")
+        assert bank_amount(await read(db, "owner")) == "1040.00"
+        if target:
+            assert after["header"]["balance_status"] == "available"
+            assert by_id[rid]["balance_after"] == "1040.00"
+    run(scenario)
+
+
+@pytest.mark.parametrize("family,path", [
+    ("operational_ledger", "/ledger/store_driver/driver"),
+    ("operational_register", "/movements"),
+])
+def test_saved_driver_history_uses_full_account_before_period_and_hides_restricted_balances(family, path):
+    from operational_balance_store import STATES
+
+    async def scenario(db, client):
+        await db.store_drivers.insert_one({"user_id": "owner", "id": "driver", "name": "الموصل", "status": "active"})
+        claims = [{"id": key, "party_type": "store_driver", "party_id": "driver", "currency": "SAR",
+                   "kind": kind, "direction": direction, "name": "الموصل", "confirmed": amount,
+                   "expected": "0.00", "business_date": day}
+                  for key, kind, direction, amount, day in (
+                      ("delivered-a", "cod", "receivable", "348.44", "2026-11-20"),
+                      ("fee-b", "shipping", "payable", "20.00", "2026-11-21"))]
+        await db[STATES].update_one({"_id": "owner"}, {"$set": {"engine.obligations": {r["id"]: r for r in claims}}})
+        filters = {"account_history": True, "date_from": "2026-11-21", "date_to": "2026-11-21"}
+        _, result = await project(db, family, path, target=("store_driver", "driver"), filters=filters)
+        assert result["header"]["balance_status"] == "available"
+        assert [(row["id"], row["balance_after"]) for row in result["rows"]] == [("fee-b", "-328.44")]
+        for version, (can_balance, movements) in enumerate(((False, "all"), (True, "own")), start=1):
+            await grant(db, operations=[], resources=[resource("store_driver", "driver",
+                balance=can_balance, movements=movements)], version=version)
+            _, limited = await project(db, family, path, target=("store_driver", "driver"),
+                                       filters=filters, actor="staff", mobile=True)
+            assert limited["header"]["balance_status"] == "restricted"
+            assert all(row["balance_after"] is None for row in limited["rows"])
+    run(scenario)
+
+
+@pytest.mark.parametrize("path,query,family,target", [
+    ("/ledger/bank/bank", {}, "operational_ledger", ("bank", "bank")),
+    ("/movements", {"kind": "bank", "id": "bank"}, "operational_register", ("bank", "bank")),
+])
+def test_demand_routes_bind_account_history_to_immutable_projection_identity(path, query, family, target, monkeypatch):
+    from demand_read_store import projection_key
+    from operational_workspace_read_builders import validate_spec
+    observed = []
+
+    async def served(db, user, request, selected_family, **kwargs):
+        observed.append((selected_family, kwargs))
+        return {"status": "accepted"}
+    monkeypatch.setattr("operational_workspace_demand_routes.serve_projection", served)
+
+    async def scenario(db, client):
+        reply = await client.get(BASE + path, params={**query, "demand": True, "account_history": True})
+        assert reply.status_code == 200, reply.text
+        assert observed[0][0] == family and observed[0][1]["resource"] == target
+        assert observed[0][1]["filters"]["account_history"] is True
+        without, _ = await project(db, family, path, target=target, filters={"account_history": False})
+        with_history, _ = await project(db, family, path, target=target, filters={"account_history": True})
+        assert projection_key(without) != projection_key(with_history)
+        invalid = deepcopy(with_history)
+        invalid["filters"]["account_history"] = "true"
+        invalid["request"]["query"] = invalid["filters"]
+        with pytest.raises(ValueError, match="demand_read_request_invalid"):
+            validate_spec(invalid)
+        invalid = deepcopy(with_history)
+        invalid["projection_version"] = "workspace-v1"
+        with pytest.raises(ValueError, match="demand_read_request_invalid"):
+            validate_spec(invalid)
+    run(scenario)
+
+
+@pytest.mark.parametrize("page_grants,expected", [
+    ([("balances.entry", "write"), ("balances.log", "read")], {"external.pay"}),
+    ([("balances.log", "write")], {"movements.reverse"}),
+    ([("balances.customer-collections", "write")], {"customer.collection"}),
+])
+def test_reversal_and_customer_collection_operations_remain_separate_page_grants(page_grants, expected):
+    from test_operational_balance_web_page_grants import pages
+
+    async def scenario(db, client):
+        await grant(db, operations=["movements.reverse", "customer.collection", "external.pay"],
+                    resources=[resource("bank", "bank", movements="all", balance=True)])
+        await pages(db, *page_grants)
+        response = await client.get(BASE + "/bootstrap", headers={"x-test-user": "staff"})
+        assert response.status_code == 200, response.text
+        assert {operation["key"] for operation in response.json()["operations"]} == expected
+    run(scenario)
+
+
 def test_directory_is_scoped_ordered_and_searched_on_server():
     async def scenario(db, client):
         await db.mezan_suppliers_v2.insert_many([

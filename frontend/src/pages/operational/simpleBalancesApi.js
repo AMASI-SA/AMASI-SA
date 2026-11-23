@@ -41,6 +41,7 @@ export const simpleBalancesApi = {
   reviewDecision: (id, body) => data(http.post(`${workspace}/reviews/${encodeURIComponent(id)}`, body, { timeout: 30000 })),
   quoteAd: body => data(http.post(`${workspace}/ad-funding-quote`, body, { timeout: 30000 })),
   entry: body => data(http.post(`${workspace}/entries`, body, { timeout: 30000 })),
+  reverseMovement: (id, body) => data(http.post(`${workspace}/movements/${encodeURIComponent(id)}/reverse`, body, { timeout:30000 })),
   registerPending: (id, body) => data(http.post(`${workspace}/pending-commands/${encodeURIComponent(id)}`, body, { timeout: 30000 })),
   pendingCommand: (id, scope, config) => data(http.get(`${workspace}/pending-commands/${encodeURIComponent(id)}`, {
     ...read(config), params: { expected_session_scope: scope },

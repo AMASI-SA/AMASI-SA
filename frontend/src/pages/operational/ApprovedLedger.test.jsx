@@ -5,6 +5,7 @@ import { simpleBalancesApi as api } from './simpleBalancesApi';
 
 jest.mock('./simpleBalancesApi', () => ({ simpleBalancesApi: { resource: jest.fn(), supplierInvoice: jest.fn(), ledger: jest.fn(), movements: jest.fn(), statement: jest.fn() },
   simpleBalanceError: () => 'تعذر تحميل الكشف' }));
+jest.mock('./api', () => ({ requestId:()=>'a-reversal-request' }));
 jest.mock('../../lib/dates', () => ({ todaySA: () => '2026-11-19' }));
 global.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -219,4 +220,110 @@ test('a direct ledger target cannot expose a former resource after owner authori
   expect(api.ledger).not.toHaveBeenCalled(); expect(api.movements).not.toHaveBeenCalled();
   expect(host.querySelector('[role="alert"]')).not.toBeNull();
   expect(host.textContent).not.toContain(bank.name);
+});
+
+test('authorized staff confirm a linked reversal with a reason and reload the displayed statement', async () => {
+  const original = { ...rows[0], can_reverse: true };
+  const result = () => ({ ...paged({page:1,page_size:8}), items:[original], total:1, total_pages:1 });
+  api.ledger.mockImplementation(async () => result());
+  api.reverseMovement = jest.fn().mockResolvedValue({ id:'reversal-id', reverse_of:original.id });
+  await render({ resource:bank, context:{ ...ctx, status:'active' } });
+  await click('حركة 0');
+  await click('عكس الحركة');
+  expect(api.reverseMovement).not.toHaveBeenCalled();
+  const reason = host.querySelector('dialog textarea');
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(reason, 'تكرار الإدخال');
+    reason.dispatchEvent(new Event('input', { bubbles:true }));
+  });
+  await click('تأكيد العكس');
+  expect(api.reverseMovement).toHaveBeenCalledWith(original.id, {
+    request_id:'a-reversal-request', expected_session_scope:'s', reason:'تكرار الإدخال'
+  });
+  expect(host.querySelector('dialog').textContent).toContain('تم عكس الحركة');
+  expect(api.ledger).toHaveBeenCalledTimes(2);
+  expect([...host.querySelectorAll('dialog button')].some(b=>b.textContent==='عكس الحركة')).toBe(false);
+});
+
+test('an uncertain reversal keeps the same command on retry; unrelated staff never see the action', async () => {
+  const original = { ...rows[0], can_reverse:false };
+  api.movements.mockImplementation(async params => ({...paged(params), items:[original], total:1, total_pages:1}));
+  const current = { ...ctx, status:'active', actor:{id:'staff'} };
+  await render({resource:null, context:current});
+  await click('حركة 0');
+  expect(host.querySelector('dialog').textContent).not.toContain('عكس الحركة');
+  await click('إغلاق');
+  original.can_reverse = true;
+  await render({resource:null, context:{...current, permission_version:2}});
+  await click('حركة 0');
+  await click('عكس الحركة');
+  const submit = () => host.querySelector('dialog button[type="submit"]');
+  expect(submit().disabled).toBe(true);
+  const reason = host.querySelector('dialog textarea');
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(reason, ' خطأ في الحساب ');
+    reason.dispatchEvent(new Event('input', { bubbles:true }));
+  });
+  api.reverseMovement = jest.fn().mockRejectedValueOnce(new Error('timeout'))
+    .mockResolvedValueOnce({ id:'reversal-id', reverse_of:original.id });
+  await click('تأكيد العكس');
+  expect(reason.disabled).toBe(true);
+  await click('إعادة محاولة العكس');
+  const [first, retry] = api.reverseMovement.mock.calls;
+  expect(retry).toEqual(first);
+  expect(first[1].reason).toBe('خطأ في الحساب');
+  expect(host.querySelector('dialog').textContent).toContain('تم عكس الحركة');
+});
+
+test('an owner identity ledger reverses a page-two movement through a new scoped demand without fetching its resource', async () => {
+  const item = { ...bank, operations:['movements.reverse'], access:{ ...bank.access, use:true } };
+  let reversed = false, releaseReload;
+  api.ledger.mockImplementation(async (kind, id, params) => {
+    const result = paged(params);
+    const response = { ...result, resource:item, session_scope:ctx.session_scope,
+      permission_version:ctx.permission_version, owner_override:true,
+      items:result.items.map(row => row.id === '8'
+        ? { ...row, can_reverse:!reversed, ...(reversed && { reversal_id:'reversal-page-two' }) } : row) };
+    if (reversed) return new Promise(resolve => { releaseReload = () => resolve(response); });
+    return response;
+  });
+  api.reverseMovement = jest.fn().mockImplementation(async () => {
+    reversed = true;
+    return { id:'reversal-page-two', reverse_of:'8' };
+  });
+  await render({ resource:null, target:{ kind:'bank', id:'bank' },
+    context:{ ...ctx, status:'active', demandOnly:true, resources:[] } });
+  await click('التالي');
+  const previousDemand = api.ledger.mock.calls[1][3].readDemand;
+  await click('حركة 8');
+  expect(host.querySelector('dialog').open).toBe(true);
+  await click('عكس الحركة');
+  const reason = host.querySelector('dialog textarea');
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(reason, 'تكرار الدفعة');
+    reason.dispatchEvent(new Event('input', { bubbles:true }));
+  });
+  await click('تأكيد العكس');
+  expect(api.reverseMovement).toHaveBeenCalledWith('8', {
+    request_id:'a-reversal-request', expected_session_scope:ctx.session_scope, reason:'تكرار الدفعة'
+  });
+  expect(api.ledger).toHaveBeenCalledTimes(3);
+  expect(api.ledger.mock.calls[2].slice(0, 2)).toEqual(['bank','bank']);
+  expect(api.ledger.mock.calls[2][2]).toEqual(expect.objectContaining({ page:2, page_size:8 }));
+  expect(api.ledger.mock.calls[2][3]).toEqual(expect.objectContaining({ demand:true, signal:expect.any(AbortSignal) }));
+  expect(api.ledger.mock.calls[2][3].readDemand).not.toBe(previousDemand);
+  expect(host.querySelector('dialog')).toBeNull();
+  expect(host.textContent).toContain('جارٍ تحميل كشف الحساب');
+  await act(async () => releaseReload());
+  expect(host.querySelector('dialog').open).toBe(true);
+  expect(host.querySelectorAll('tbody tr')).toHaveLength(3);
+  expect(host.querySelector('dialog').textContent).toContain('تم عكس الحركة');
+  expect(host.querySelector('dialog').textContent).toContain('reversal-page-two');
+  await click('إغلاق');
+  await click('حركة 8');
+  expect(host.querySelector('dialog').textContent).toContain('reversal-page-two');
+  expect([...host.querySelectorAll('dialog button')].some(button => button.textContent === 'عكس الحركة')).toBe(false);
+  expect(api.resource).not.toHaveBeenCalled();
+  expect(api.movements).not.toHaveBeenCalled();
+  expect(api.statement).not.toHaveBeenCalled();
 });
