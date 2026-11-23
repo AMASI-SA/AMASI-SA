@@ -1,0 +1,25 @@
+{
+  "case": "backend-old-D-red",
+  "command": [
+    "/workspace/scratch/bc2035025680/backend-freshness-venv/bin/python",
+    "-m",
+    "pytest",
+    "--noconftest",
+    "-p",
+    "no:cacheprovider",
+    "-q",
+    "backend/tests/test_operational_refresh_read_diagnostics.py",
+    "-k",
+    "snapshot_failure_reports_existing_read_unpack_and_copy_boundaries"
+  ],
+  "cwd": "/workspace/scratch/bc2035025680/recovery-read-diagnostics-20261123",
+  "pythonpath": "/workspace/scratch/bc2035025680/recovery-read-diagnostics-20261123/local-results/pristine/backend:/workspace/scratch/bc2035025680/recovery-read-diagnostics-20261123/backend",
+  "started_at": "2026-11-23T18:29:12.538130+00:00",
+  "duration_seconds": 1.499,
+  "exit_code": 1,
+  "expected_exit_code": 1,
+  "expected_evidence_found": true,
+  "candidate_unchanged": true,
+  "log_sha256": "c3792e2412f28097fad528bf8de1b7b5864ee506995814187a223d6ccfd83248",
+  "status": "PASS"
+}

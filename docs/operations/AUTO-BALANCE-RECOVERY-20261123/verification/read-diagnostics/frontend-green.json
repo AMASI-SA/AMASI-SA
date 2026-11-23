@@ -1,0 +1,20 @@
+{
+  "case": "frontend-green",
+  "command": [
+    "/opt/codex/runtimes/codex-primary-runtime/dependencies/node/bin/node",
+    "/workspace/scratch/bc2035025680/web-freshness-deps/node_modules/jest/bin/jest.js",
+    "--runInBand",
+    "--config",
+    "local-results/jest.config.cjs"
+  ],
+  "cwd": "/workspace/scratch/bc2035025680/recovery-read-diagnostics-20261123",
+  "pythonpath": "/workspace/scratch/bc2035025680/recovery-read-diagnostics-20261123/backend",
+  "started_at": "2026-11-23T18:29:12.521588+00:00",
+  "duration_seconds": 2.039,
+  "exit_code": 0,
+  "expected_exit_code": 0,
+  "expected_evidence_found": true,
+  "candidate_unchanged": true,
+  "log_sha256": "23d03227bf16bd2d8f711d5f220f57d48fffdeb70eba8cd20d58f7f4a840967f",
+  "status": "PASS"
+}

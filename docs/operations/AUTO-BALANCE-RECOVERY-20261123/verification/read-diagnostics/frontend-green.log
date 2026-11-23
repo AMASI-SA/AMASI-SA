@@ -1,0 +1,81 @@
+PASS frontend/src/pages/operational/visibleOperationalRead.test.js
+  ✓ aggregate success does not claim native matching from incomplete outcome {"status":"completed","selected":0,"outcomes":[]} (3 ms)
+  ✓ aggregate success does not claim native matching from incomplete outcome {"status":"deferred","reason":"native_evidence_budget_exhausted"} (1 ms)
+  ✓ aggregate success does not claim native matching from incomplete outcome {"status":"completed","selected":1,"outcomes":[{"order_id":"8101","status":"blocked","reason":"courier_native_shipment_mismatch"}]} (1 ms)
+  ✓ aggregate success does not claim native matching from incomplete outcome {"status":"completed","selected":1,"outcomes":[{"order_id":"8101","status":"source_changed"}]} (1 ms)
+  ✓ aggregate success does not claim native matching from incomplete outcome {"status":"completed","selected":1,"outcomes":[{"order_id":"8101","status":"unavailable"}]}
+  ✓ aggregate success does not claim native matching from incomplete outcome {"status":"completed","selected":1,"outcomes":[{"order_id":"another-order","status":"saved"}]}
+  ✓ unknown blocked reason text is not rendered from the native response
+  ✓ saved execution evidence and unchanged evidence are reported without asserting delivery (1 ms)
+  ✓ a failed aggregate preserves the saved native result without claiming recalculation (1 ms)
+  ✓ a failed aggregate preserves the unchanged native result without claiming recalculation
+  ✓ a failed aggregate preserves the already_eligible native result without claiming recalculation (1 ms)
+  ✓ a failed aggregate preserves the blocked native result without claiming recalculation
+  ✓ a failed aggregate preserves the unavailable native result without claiming recalculation (1 ms)
+  ✓ a failed aggregate preserves the source_changed native result without claiming recalculation (1 ms)
+  ✓ a scoped 409 failure retains only the selected native receipt (2 ms)
+  ✓ a scoped 408 failure retains only the selected native receipt (1 ms)
+  ✓ an error receipt with scope_changed cannot become selected-order evidence (1 ms)
+  ✓ an error receipt with scope_missing cannot become selected-order evidence
+  ✓ an error receipt with not_targeted cannot become selected-order evidence (1 ms)
+  ✓ an error receipt with other_order cannot become selected-order evidence
+  ✓ an error receipt with duplicate cannot become selected-order evidence (1 ms)
+  ✓ an error receipt with unknown_status cannot become selected-order evidence
+  ✓ an error receipt with unknown_failure cannot become selected-order evidence (1 ms)
+  ✓ a scoped unavailable receipt explains native_evidence_access_denied without exposing provider text (1 ms)
+  ✓ a scoped unavailable receipt explains native_evidence_request_timeout without exposing provider text (22 ms)
+  ✓ hidden mount does no work; one visible completion never polls or refreshes on focus/visibility (3 ms)
+  ✓ hiding aborts a pending read and its result; cleanup prevents later visibility work (1 ms)
+  ✓ replacing a pending read waits for its cancellation and never displays its old scope (1 ms)
+  ✓ offline reads wait for a user page to become active (1 ms)
+  ✓ recoverable operational_refresh_in_progress keeps a warning for the saved snapshot without retry (1 ms)
+  ✓ recoverable operational_capacity_requires_archive keeps a warning for the saved snapshot without retry
+  ✓ recoverable operational_source_setup_incomplete keeps a warning for the saved snapshot without retry (1 ms)
+  ✓ permission failure 401 never falls back to financial data
+  ✓ permission failure 403 never falls back to financial data (1 ms)
+  ✓ abort during refresh blocks any subsequent report fetch (1 ms)
+  ✓ refresh timeout evidence logs only allowed finite stage fields, once for that request (1 ms)
+  ✓ source failure evidence uses its own label and preserves the saved-report warning without retry
+  ✓ timing evidence keeps at most the final 64 valid stages, including terminal cancellation
+  ✓ status 500 and code operational_refresh_timeout do not log refresh timing evidence
+  ✓ status 408 and code operational_source_read_timeout do not log refresh timing evidence
+  ✓ status 500 and code operational_source_setup_incomplete do not log refresh timing evidence (1 ms)
+  ✓ status 408 and code operational_source_setup_incomplete do not log refresh timing evidence
+  ✓ status 409 and code operational_refresh_in_progress do not log refresh timing evidence
+  ✓ status 409 and code operational_refresh_lease_lost do not log refresh timing evidence (1 ms)
+  ✓ late failure after hidden with status 408 is not logged or converted to saved-read permission
+  ✓ late failure after hidden with status 409 is not logged or converted to saved-read permission (1 ms)
+  ✓ late failure after aborted with status 408 is not logged or converted to saved-read permission
+  ✓ late failure after aborted with status 409 is not logged or converted to saved-read permission (1 ms)
+  ✓ late failure after offline with status 408 is not logged or converted to saved-read permission (1 ms)
+  ✓ late failure after offline with status 409 is not logged or converted to saved-read permission
+  ✓ primary read evidence survives the canonical 408 failure without changing recovery behavior (2 ms)
+  ✓ primary read evidence survives the canonical 409 failure without changing recovery behavior (2 ms)
+  ✓ primary read evidence is limited to twelve records even without stage timings (1 ms)
+  ✓ invalid primary read field collection is omitted from diagnostic evidence (1 ms)
+  ✓ invalid primary read field cursor_kind is omitted from diagnostic evidence
+  ✓ invalid primary read field outcome is omitted from diagnostic evidence
+  ✓ invalid primary read field queue_ms is omitted from diagnostic evidence (1 ms)
+  ✓ invalid primary read field budget_ms is omitted from diagnostic evidence
+  ✓ invalid primary read field read_elapsed_ms is omitted from diagnostic evidence (1 ms)
+  ✓ invalid primary read field close_ms is omitted from diagnostic evidence
+  ✓ invalid primary read field rows_retained is omitted from diagnostic evidence
+  ✓ invalid primary read field rows_retained is omitted from diagnostic evidence
+  ✓ invalid primary read field last_checkpoint_rows is omitted from diagnostic evidence
+  ✓ a failed diagnostic logger cannot replace the saved-balance failure warning
+  ✓ unrelated failures do not gain read diagnostics or a recovery retry
+  a bounded financial read owns only one visible attempt
+    ✓ an initially hidden page defers without spending its active budget (3 ms)
+    ✓ visibility interruption consumes the attempt rather than restarting it repeatedly (4 ms)
+    ✓ connection interruption consumes the attempt rather than restarting it repeatedly (2 ms)
+    ✓ a promise that ignores abort cannot keep presentation loading past the deadline (1 ms)
+    ✓ waiting for cancelled physical work has the same deadline and never releases its reservation early (8 ms)
+    ✓ lane waiting and the subsequent request share one auth-chain deadline (9 ms)
+    ✓ a hidden confirmation follow-up is consumed immediately instead of deferred (1 ms)
+    ✓ success and cleanup leave no timer or activity-triggered requests (3 ms)
+
+Test Suites: 1 passed, 1 total
+Tests:       73 passed, 73 total
+Snapshots:   0 total
+Time:        1.26 s, estimated 2 s
+Ran all test suites.

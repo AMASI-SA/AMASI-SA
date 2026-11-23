@@ -24,6 +24,53 @@ from operational_financial_activity_runtime import (
 
 _DEADLINE = ContextVar('operational_source_read_deadline', default=None)
 _OWNED_SOURCE_READ = ContextVar('operational_owned_source_read', default=False)
+_PRIMARY_ORDERS_READ = ContextVar('operational_primary_orders_read_observation', default=None)
+
+
+def _observation_clock(observation):
+    if observation is not None:
+        try:
+            return time.monotonic()
+        except Exception:
+            pass
+    return None
+
+
+def _observe(observation, **values):
+    if observation is not None:
+        try:
+            observation.update(values)
+        except Exception:
+            pass
+
+
+def _observe_elapsed(observation, key, started):
+    if observation is not None and started is not None:
+        try:
+            observation[key] = (time.monotonic() - started) * 1000
+        except Exception:
+            pass
+
+
+def _primary_orders_observation(enabled, name):
+    # Only the primary financial source reader opts in. No owner, query, row,
+    # cursor identity or exception text belongs in this request-local record.
+    if not enabled or name != 'unified_orders':
+        return None, None
+    try:
+        context = demand_context()
+        if context is None:
+            return None, None
+        observation = {
+            'collection': 'unified_orders', 'outcome': 'complete', 'cursor_kind': 'unknown',
+            'queue_ms': None, 'budget_ms': 0, 'first_row_ms': None,
+            'rows_retained': 0, 'last_checkpoint_rows': 0, 'last_checkpoint_ms': None,
+            'read_elapsed_ms': None, 'cancel_join_ms': 0, 'close_ms': None,
+            '_queued_at': time.monotonic(),
+        }
+        return context, observation
+    except Exception:
+        return None, None
 
 
 class SourceReadError(ValueError):
@@ -60,6 +107,8 @@ async def read_source_cursor(cursor, count):
     it. Keep iteration shielded instead; cancellation requests a stop before
     another advance and waits for the active read and sequential close.
     """
+    observation = _PRIMARY_ORDERS_READ.get()
+    read_started = _observation_clock(observation)
     if not isinstance(cursor, AgnosticBaseCursor):
         # Deliberately non-Motor, coroutine-based adapters used by offline
         # readers own their awaited work directly. Do not silently accept a
@@ -67,9 +116,17 @@ async def read_source_cursor(cursor, count):
         to_list = getattr(cursor, 'to_list', None)
         if not inspect.iscoroutinefunction(to_list):
             raise ValueError('operational_source_cursor_unsupported')
-        return await to_list(count)
+        _observe(observation, cursor_kind='coroutine')
+        try:
+            result = await to_list(count)
+            if type(result) is list:
+                _observe(observation, rows_retained=len(result))
+            return result
+        finally:
+            _observe_elapsed(observation, 'read_elapsed_ms', read_started)
     if not callable(getattr(cursor, '__anext__', None)) or not callable(getattr(cursor, 'close', None)):
         raise ValueError('operational_source_cursor_unsupported')
+    _observe(observation, cursor_kind='motor')
 
     stop = asyncio.Event()
 
@@ -84,28 +141,45 @@ async def read_source_cursor(cursor, count):
                 if stop.is_set():
                     break
                 result.append(row)
+                if observation is not None and len(result) == 1:
+                    _observe_elapsed(observation, 'first_row_ms', read_started)
                 if len(result) % 256 == 0:
+                    _observe(observation, last_checkpoint_rows=len(result))
+                    _observe_elapsed(observation, 'last_checkpoint_ms', read_started)
                     # Buffered rows can be synchronous. Let request timeout
                     # and disconnect callbacks run before advancing again.
                     await asyncio.sleep(0)
             return result
         finally:
+            _observe(observation, rows_retained=len(result))
             # Never race killCursors/session cleanup with an active getMore.
-            await cursor.close()
+            close_started = _observation_clock(observation)
+            try:
+                await cursor.close()
+            finally:
+                _observe_elapsed(observation, 'close_ms', close_started)
 
     task = asyncio.create_task(consume())
     try:
         return await asyncio.shield(task)
     except asyncio.CancelledError:
         stop.set()
+        join_started = _observation_clock(observation)
         try:
             await join_task(task)
         except (asyncio.CancelledError, Exception):
             pass  # Preserve cancellation after observing the owned read.
+        finally:
+            # This is the existing owned-task join, including sequential close;
+            # it overlaps read_elapsed_ms and is not exclusive driver/DB time.
+            _observe_elapsed(observation, 'cancel_join_ms', join_started)
         raise
+    finally:
+        _observe_elapsed(observation, 'read_elapsed_ms', read_started)
 
 
-async def load_collections(db, owner, names, *, reader, concurrency=4, per_read_timeout=15, on_source_error=None):
+async def load_collections(db, owner, names, *, reader, concurrency=4, per_read_timeout=15,
+                           on_source_error=None, observe_primary_orders=False):
     names = tuple(names)
     if len(names) != len(set(names)):
         raise ValueError('operational_source_duplicate_collection')
@@ -114,12 +188,17 @@ async def load_collections(db, owner, names, *, reader, concurrency=4, per_read_
 
     async def load(name):
         async with semaphore:
+            observation = _PRIMARY_ORDERS_READ.get()
+            if observation is not None:
+                _observe_elapsed(observation, 'queue_ms', observation['_queued_at'])
             remaining = per_read_timeout
             if _DEADLINE.get() is not None:
                 remaining = min(remaining, _DEADLINE.get() - time.monotonic())
             context = demand_context()
             if context is not None and context.read_deadline is not None:
                 remaining = min(remaining, context.read_deadline - time.monotonic())
+            if observation is not None:
+                _observe(observation, budget_ms=max(remaining, 0) * 1000)
             if remaining <= 0:
                 raise SourceReadError('operational_source_read_timeout', name)
             try:
@@ -157,15 +236,33 @@ async def load_collections(db, owner, names, *, reader, concurrency=4, per_read_
                 raise SourceReadError(code, name) from None
 
     async def collect(name):
+        context, observation = _primary_orders_observation(observe_primary_orders, name)
+        observation_token = _PRIMARY_ORDERS_READ.set(observation)
         try:
             return await load(name)
         except SourceReadError as error:
+            _observe(observation, outcome='failed')
             if on_source_error is None:
                 raise
             # Independent report components may finish within the remaining
             # budget. Financial source collections still fail as a group.
             on_source_error(name, error)
             return name, None
+        except asyncio.CancelledError:
+            _observe(observation, outcome='cancelled')
+            raise
+        except BaseException:
+            _observe(observation, outcome='failed')
+            raise
+        finally:
+            _PRIMARY_ORDERS_READ.reset(observation_token)
+            if observation is not None:
+                if observation['queue_ms'] is None:
+                    _observe_elapsed(observation, 'queue_ms', observation['_queued_at'])
+                try:
+                    context.record_primary_orders_read(observation)
+                except Exception:
+                    pass  # Diagnostics cannot replace a financial exception.
 
     tasks = [asyncio.create_task(collect(name)) for name in names]
     try:

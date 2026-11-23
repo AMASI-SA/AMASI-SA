@@ -1,0 +1,116 @@
+{
+  "task": "AUTO-BALANCE-RECOVERY-20261123",
+  "repository": "AMASI-SA/AMASI-SA",
+  "task_branch": "codex/automatic-balance-recovery-20261123",
+  "reviewed_production_base": "422fffc8fb9c381165cc76b1ded5ca595773ce8e",
+  "status": "WIP_CI_STAGE_CONTRACT_CORRECTED_PENDING_LATEST_HEAD_VERIFICATION",
+  "authorization": "Owner authorized guarded web/backend publication and canonical past-day reconciliation. Preserve financial rules, admission, deadlines, idempotency, foreign files and leases; no paid-resource or APK-gate bypass.",
+  "published_release": {
+    "pull_request": 2087,
+    "deployment_git_sha": "422fffc8fb9c381165cc76b1ded5ca595773ce8e",
+    "source_git_sha": "b69d438a20ae123a0c30deb5b73599551dbe9559",
+    "intent_git_sha": "cc3a475ef46cab5438e448ca669d908890b18dc0",
+    "platform_version": "7f4dc33",
+    "platform_result": "Deployment finished, 23Nov20:29 Asia/Aden",
+    "original_guard_verify": "exit0, verified=true, checks=3; matching lease closed, active=false",
+    "verify_evidence_sha256": "a95a43a95eec83f3a75568a90b6202923f5dd38bd162744adbbc72e71a7a3e97"
+  },
+  "historical_recalculation": {
+    "complete": false,
+    "last_successful_saved_calculation": "2026-11-21 17:50 Asia/Riyadh",
+    "attempts": [
+      {
+        "finished_at": "2026-11-23T17:52:04.202Z",
+        "outcome": "operational_refresh_timeout",
+        "phase": "reconciliation cancelled after source collection"
+      },
+      {
+        "finished_at": "2026-11-23T18:01:02.392Z",
+        "outcome": "source_read_timeout",
+        "source": "orders"
+      }
+    ],
+    "retry_policy": "No more blind retries. Existing GET-only status confirmed the first attempt finished/failed; one explicit retry occurred after more than eight minutes. Need material diagnostic or performance change before another canonical attempt.",
+    "financial_rules_changed": false,
+    "manual_financial_entries_created": false
+  },
+  "verified_source_correction": {
+    "problem": "Source health reads raw native bindings only, omitting canonically approved inline operational ad_funding used by financial collection.",
+    "behavior": "Merge both authorities through the existing pure binding function before status filtering; bounded metadata-only projection; fail unknown for malformed, foreign, unconfirmed, future-approved, conflicting or mismatched currency/timezone metadata.",
+    "changed_files": [
+      "backend/operational_source_freshness.py",
+      "backend/tests/test_operational_source_freshness.py"
+    ],
+    "source_sha256": "a07a35e8064724701e059f7bfb3c8024ce72badc06df49c66d6a0d9b23460f6f",
+    "tests_sha256": "0f3d564f7d1c4cbf53f905bccf2b4f57ca0c3199f49ede294786e00c6bd9cd31",
+    "regression": "New operational-authority cases fail against immutable D (exit1); affected suites pass after correction (exit0):88 tests +61 subtests.",
+    "independent_review": "APPROVED exact two-file hashes; independent44 tests +61 subtests PASS. Review found and corrected future approval falsely-current case.",
+    "live_origin_of_saved_ad_bindings": "not independently verified; source parity defect is proven in regression",
+    "no_financial_archive_hydration": true,
+    "no_database_or_provider_write": true
+  },
+  "performance_diagnosis": {
+    "orders_query": "Owner-only full evidence projection over unified_orders, cumulative15-second read deadline and20000-row cap plus overflow sentinel; no evidence/date pruning permitted.",
+    "cause": "Not established beyond orders source-read timeout and previous overall deadline; need DB/query/delivery evidence or finer bounded instrumentation.",
+    "existing_runtime_diagnostics": "18:11:53.840883UTC existing-config check CONFIG_UNAVAILABLE; request_sent=false. No credentials exposed, new token or setting created.",
+    "production_query_plan": "unavailable; no production database credential imported",
+    "resource_configuration_changed": false,
+    "instrumentation": {
+      "patch_sha256": "887b2cdf1ec505876fe6d6d8db1d7ec5e1cdad0758be2381774d024c9fafbebf",
+      "manifest": "verification/read-diagnostics/candidate-manifest.json",
+      "stages": [
+        "snapshot_raw_read",
+        "snapshot_unpack",
+        "snapshot_copy_prepare",
+        "orders_cursor_build",
+        "orders_cursor_read",
+        "orders_rows_validate"
+      ],
+      "read_records": "At most12 fixed-schema primary_orders_reads records, bounded numeric/count fields and fixed enums, carried only by existing canonical408/409 after owned work and sequential close unwind.",
+      "interpretation": "Nested stages and read/join/close measurements overlap; do not add them or call them MongoDB execution, connection-pool wait or exclusive CPU time. snapshot_copy_prepare includes authorization/thread handoff/join. Counts are retained rows, excluding delivery after stop.",
+      "preserved": "15/85second deadlines, complete source cohort/proof projection,20000+overflow row cap, owner admission, lease, CAS, owned cancellation/join/sequential close, task creation and cooperative-yield counts.",
+      "author_checks": "238 backend and73 frontend tests PASS; new regressions fail against immutable D as expected; all candidate hashes unchanged.",
+      "independent_review": "APPROVED exact seven-file candidate; independent238 backend and73 frontend tests PASS, hashes unchanged.",
+      "no_performance_fix_claim": true
+    }
+  },
+  "release_state_for_this_followup": {
+    "source_head_ci": "A2 failed. Require new source HEAD all gates and independent focused green checks; do not substitute predecessor results.",
+    "reviewed_intent": "Not frozen; obtain a new exact-source artifact after its successful readiness run and all gates.",
+    "merged": false,
+    "published": false,
+    "guard_lease_created": false
+  },
+  "native_companion": {
+    "pull_request": "AMASI-SA/amasi-mobile#379",
+    "head": "3548b7f96a871578ae4a17ddb15cf60fa47102ea",
+    "gate": "Required Mobile CI45202060677 retry137818142381 failed before runner assignment; cause unexposed, local PASS does not replace remote gate.",
+    "apk_published": false
+  },
+  "continuation": "Verify this exact integrated source and all current-HEAD gates, obtain its matching reviewed-intent candidate, then freeze intent-only B. Require latest B gates and normal protected merge on unchanged Production base. Recheck exact deployment CI, run independently approved actual /app rehearsal with fresh reviewed envelope, then original prepare/prepublish, one Emergent publish, original verify with3probes and inactive lease. After verified new runtime, one instrumented canonical owner refresh; inspect measured failure if any. Only after success verify business-dated payroll22/23 and eligible ads/shipping21/22 ledger entries and idempotency. Green health or a new timestamp alone does not prove historical completeness. No blind retry, financial-rule/index change, paid resource, APK bypass or foreign cleanup.",
+  "prior_source_checkpoint": "e0e63089637ac5775e163a6dfe3a9e1a4cfb4418",
+  "source_identity_note": "This source document is not self-referential. Exact final source A, intent B, merge D and evolving CI/publication outcomes are recorded in PR2092 and the owned issue1006 section after each checkpoint. Do not edit governed source after freezing the reviewed intent.",
+  "provider_read_only_evidence": {
+    "snapchat": "Existing selected USD account reports for21Nov and21-22Nov are saved and financially complete in the account timezone.21Nov and22Nov each show24confirmed hours. General integration overview incompleteness is not proof of missing financial daily evidence. No provider sync, selection or connection write performed. Account dates/amounts are not a ledger-posting claim."
+  },
+  "reviewed_rehearsal_operator": {
+    "path": "operators/pr2092_guarded_rehearsal.py",
+    "sha256": "eeab2c969ef65e1220ddf1e61865c66377d4e0089fb451f566196d50811de1d8",
+    "review": "verification/rehearsal-operator/REVIEW.json",
+    "executed": false,
+    "release_envelope": "Not yet available. Require exact final A/B/D, reviewed runtime ID/tree, latest-D CI and fresh expected foreign-file count.",
+    "scope": "Private /tmp verified/fsynced backup of all four generated cleanup targets, original operation lock, full source-history intent check, FF-only, unchanged canonical adapter and full proof verification; no lease or publication. Guarded actual rehearsal remains pending."
+  },
+  "previous_publication_checkpoint": "PR2087_PUBLICATION_CHECKPOINT.md",
+  "source_ci_correction": {
+    "prior_source_ci": "OperationalStockEligibility and OperationalBalanceBackend both failed only the two stale stage expectations; exact evidence in verification/source-A2-ci-failure.json.",
+    "supplement_patch_sha256": "04bb2258acdc088809711553163af6dd00070f0776d916f31692f4ae12fbec41",
+    "source_stage_test_sha256": "b642097b0a7cd5513b6a9dc3ae86f2a8463528c4ff74f8705758df1dcf7c8263",
+    "changes": "Add the three new cursor stages to both strict complete-sequence assertions; rename diagnostic regression test byte-identically to test_operational_balance_read_diagnostics.py so both existing CI selectors run it. No runtime/workflow/deadline/test-timeout change.",
+    "rename_sha256": "10785edec5c756ee964c48081cdf5941c61c94a6a9e98c4b4552c72c53dd4fd0",
+    "static_independent_review": "PASS exact bytes, strict expectations, no old-module import, both CI globs include renamed file, all previously reviewed runtime contents unchanged.",
+    "targeted_executable_verification": "Running at checkpoint time; root must obtain green author/nonauthor results and exact current-source CI before intent freeze. Later immutable receipts belong to PR2092/issue1006 without changing frozen source.",
+    "historical_manifest_note": "Original read-diagnostics candidate manifest and tests refer to A2 and its original test filename. The supplemental manifest maps the byte-identical rename for this source.",
+    "source_A2_candidate": "verification/source-A2-readiness-only.json is historical and not releasable; never use its artifact for a successor source SHA."
+  }
+}

@@ -1,0 +1,78 @@
+{
+  "base_git_sha": "422fffc8fb9c381165cc76b1ded5ca595773ce8e",
+  "base_git_blobs": {
+    "backend/operational_source_freshness.py": "d89999dd9c6fafadd5f44ef0ad1bd5fa1b37aca9",
+    "backend/tests/test_operational_source_freshness.py": "115bdc5d5b2e193bbc0ad5b9fb887285cf0e68e6"
+  },
+  "changed_files_sha256": {
+    "backend/operational_source_freshness.py": "a07a35e8064724701e059f7bfb3c8024ce72badc06df49c66d6a0d9b23460f6f",
+    "backend/tests/test_operational_source_freshness.py": "0f3d564f7d1c4cbf53f905bccf2b4f57ca0c3199f49ede294786e00c6bd9cd31"
+  },
+  "patch_sha256": "8a759b495ba23a2ef4a2d95ae8e236c1090d18dff2efcff23450a5e6a90f3320",
+  "runs": [
+    {
+      "name": "regression-red-at-D",
+      "argv": [
+        "/workspace/scratch/bc2035025680/backend-freshness-venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-p",
+        "no:cacheprovider",
+        "-q",
+        "backend/tests/test_operational_source_freshness.py",
+        "-k",
+        "OperationalAdFundingFreshnessTests",
+        "--tb=short"
+      ],
+      "cwd": "/workspace/scratch/bc2035025680/health-ad-binding-fix-20261123",
+      "environment": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONPATH": "baseline/backend:backend"
+      },
+      "exit_code": 1,
+      "expected_exit_code": 1,
+      "log": "/workspace/scratch/bc2035025680/health-ad-binding-fix-20261123/verification/regression-red-at-D.log",
+      "log_sha256": "df3bf33b89620ce6ba6069b8be3cb1f01b26a63266e1f2d28f8cd58bdb03f869",
+      "summary": "35 failed, 10 passed, 31 deselected, 9 subtests passed in 1.09s"
+    },
+    {
+      "name": "affected-green",
+      "argv": [
+        "/workspace/scratch/bc2035025680/backend-freshness-venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-p",
+        "no:cacheprovider",
+        "-q",
+        "backend/tests/test_operational_source_freshness.py",
+        "backend/tests/test_operational_balance_freshness.py",
+        "backend/tests/test_operational_balance_freshness_routes.py"
+      ],
+      "cwd": "/workspace/scratch/bc2035025680/health-ad-binding-fix-20261123",
+      "environment": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONPATH": "backend"
+      },
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "log": "/workspace/scratch/bc2035025680/health-ad-binding-fix-20261123/verification/affected-green.log",
+      "log_sha256": "00f88f61224a7d0919e2d76dc822f454b6bb9472794bc91ca6c1e056e0e23220",
+      "summary": "88 passed, 61 subtests passed in 0.66s"
+    }
+  ],
+  "git_apply_check_exit_code": 0,
+  "independent_review": {
+    "reviewer": "/root/historical_recalculation_contract/source_date_rules",
+    "status": "APPROVED",
+    "reviewed_sha256": {
+      "backend/operational_source_freshness.py": "a07a35e8064724701e059f7bfb3c8024ce72badc06df49c66d6a0d9b23460f6f",
+      "backend/tests/test_operational_source_freshness.py": "0f3d564f7d1c4cbf53f905bccf2b4f57ca0c3199f49ede294786e00c6bd9cd31"
+    },
+    "tests_exit_code": 0,
+    "tests_result": "44 passed, 61 subtests passed"
+  },
+  "live_actions": false,
+  "financial_rule_changes": false
+}

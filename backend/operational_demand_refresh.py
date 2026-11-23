@@ -36,6 +36,8 @@ TIMING_STAGES = frozenset({
     "native_evidence", "aggregate", "source_collection", "source_collision",
     "reconciliation", "profit_snapshot", "bank_claims", "party_catalogs",
     "snapshot_load", "snapshot_compare", "snapshot_pack", "snapshot_commit",
+    "snapshot_raw_read", "snapshot_unpack", "snapshot_copy_prepare",
+    "orders_cursor_build", "orders_cursor_read", "orders_rows_validate",
     "source_primary_reads", "source_fee_settings", "source_setup",
     "source_statements", "source_delivery_history", "source_transactions",
     "source_native_links", "source_bundles", "source_option_catalog",
@@ -46,6 +48,51 @@ TIMING_STAGES = frozenset({
 TIMING_OUTCOMES = frozenset({"complete", "cancelled", "failed"})
 TIMING_LIMIT = 64
 TIMING_MAX_MS = 300000
+PRIMARY_ORDERS_READ_LIMIT = 12
+PRIMARY_ORDERS_ROW_LIMIT = 20001
+PRIMARY_ORDERS_READ_TIMES = (
+    "queue_ms", "budget_ms", "first_row_ms", "last_checkpoint_ms",
+    "read_elapsed_ms", "cancel_join_ms", "close_ms",
+)
+PRIMARY_ORDERS_NULLABLE_TIMES = frozenset({
+    "first_row_ms", "last_checkpoint_ms", "read_elapsed_ms", "close_ms",
+})
+
+
+def _safe_primary_orders_read(value):
+    """Reconstruct a bounded observation; never serialize a cursor or row.
+
+    Read/first-row timings include driver scheduling and delivery. Queue time
+    is the existing source semaphore, not Mongo pool wait. Join/close overlap
+    read elapsed time. Rows/first-row describe retained rows, excluding a row
+    delivered after stop. Coroutine adapters expose no per-row boundaries.
+    None means that boundary was not observed.
+    """
+    if (type(value) is not dict or value.get("collection") != "unified_orders"
+            or type(value.get("collection")) is not str
+            or type(value.get("outcome")) is not str
+            or value["outcome"] not in TIMING_OUTCOMES
+            or type(value.get("cursor_kind")) is not str
+            or value["cursor_kind"] not in {"motor", "coroutine", "unknown"}):
+        return None
+    result = {key: value[key] for key in ("collection", "outcome", "cursor_kind")}
+    for key in ("rows_retained", "last_checkpoint_rows"):
+        count = value.get(key)
+        if type(count) is not int or not 0 <= count <= PRIMARY_ORDERS_ROW_LIMIT:
+            return None
+        result[key] = count
+    if result["last_checkpoint_rows"] > result["rows_retained"]:
+        return None
+    for key in PRIMARY_ORDERS_READ_TIMES:
+        number = value.get(key)
+        if number is None and key in PRIMARY_ORDERS_NULLABLE_TIMES:
+            result[key] = None
+        elif (type(number) in (int, float) and math.isfinite(number)
+              and 0 <= number <= TIMING_MAX_MS):
+            result[key] = round(number, 3)
+        else:
+            return None
+    return result
 
 
 async def _join(task):
@@ -74,6 +121,7 @@ class DemandRefreshContext:
         self.lease_attempted = False
         self.leased = False
         self.stage_timings = deque(maxlen=TIMING_LIMIT)
+        self.primary_orders_reads = deque(maxlen=PRIMARY_ORDERS_READ_LIMIT)
         self.read_deadline = None
 
     def record_stage(self, stage, duration_ms, outcome):
@@ -89,6 +137,23 @@ class DemandRefreshContext:
         self.stage_timings.append({"stage": stage,
                                    "duration_ms": round(duration_ms, 3),
                                    "outcome": outcome})
+
+    def record_primary_orders_read(self, value):
+        # Diagnostics must never replace the source/financial outcome.
+        try:
+            safe = _safe_primary_orders_read(value)
+            if safe is not None:
+                self.primary_orders_reads.append(safe)
+        except Exception:
+            pass
+
+    def primary_read_details(self):
+        try:
+            rows = [_safe_primary_orders_read(value) for value in self.primary_orders_reads]
+            rows = [row for row in rows if row is not None]
+            return {"primary_orders_reads": rows} if rows else {}
+        except Exception:
+            return {}
 
     def cancel(self, *, disconnected=False):
         self.disconnected = self.disconnected or disconnected
@@ -187,10 +252,13 @@ def refresh_stage(stage):
         outcome = "failed"
         raise
     finally:
-        duration_ms = (time.monotonic() - started) * 1000
-        context.record_stage(stage, duration_ms, outcome)
-        _LOG.info("operational_refresh_stage stage=%s duration_ms=%.3f outcome=%s",
-                  stage, duration_ms, outcome)
+        try:
+            duration_ms = (time.monotonic() - started) * 1000
+            context.record_stage(stage, duration_ms, outcome)
+            _LOG.info("operational_refresh_stage stage=%s duration_ms=%.3f outcome=%s",
+                      stage, duration_ms, outcome)
+        except Exception:
+            pass  # Evidence failure cannot change the observed operation.
 
 
 async def checkpoint():
@@ -278,6 +346,7 @@ async def run_visible_refresh(request, db, owner, actor, verify, operation):
                     "code": "operational_refresh_timeout",
                     "message": "انتهت مهلة التحديث؛ احتُفظ بآخر لقطة ناجحة",
                     "stage_timings": list(context.stage_timings),
+                    **context.primary_read_details(),
                 })
             except HTTPException as error:
                 detail = error.detail
@@ -289,7 +358,8 @@ async def run_visible_refresh(request, db, owner, actor, verify, operation):
                                 for key, value in detail.items())
                         and detail == source_failure_detail(detail.get("cause"), detail.get("source_collection"))):
                     raise HTTPException(status_code=error.status_code, headers=error.headers,
-                                        detail={**detail, "stage_timings": list(context.stage_timings)}) from None
+                                        detail={**detail, "stage_timings": list(context.stage_timings),
+                                                **context.primary_read_details()}) from None
                 raise
 
         context.work = asyncio.create_task(work())

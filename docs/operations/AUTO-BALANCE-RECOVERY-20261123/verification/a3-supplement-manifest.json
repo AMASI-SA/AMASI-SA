@@ -1,0 +1,27 @@
+{
+  "base_git_sha": "e0e63089637ac5775e163a6dfe3a9e1a4cfb4418",
+  "changes": [
+    {
+      "action": "update",
+      "path": "backend/tests/test_operational_balance_source_stage_timing.py",
+      "base_sha256": "d969e267737dc6dec299c55e7c3d45d90a806b27cbc2c8a6eec313b947709cd5",
+      "sha256": "b642097b0a7cd5513b6a9dc3ae86f2a8463528c4ff74f8705758df1dcf7c8263",
+      "bytes": 16428
+    },
+    {
+      "action": "delete",
+      "path": "backend/tests/test_operational_refresh_read_diagnostics.py",
+      "base_sha256": "10785edec5c756ee964c48081cdf5941c61c94a6a9e98c4b4552c72c53dd4fd0"
+    },
+    {
+      "action": "add",
+      "path": "backend/tests/test_operational_balance_read_diagnostics.py",
+      "sha256": "10785edec5c756ee964c48081cdf5941c61c94a6a9e98c4b4552c72c53dd4fd0",
+      "bytes": 14159,
+      "renamed_from": "backend/tests/test_operational_refresh_read_diagnostics.py"
+    }
+  ],
+  "runtime_changed": false,
+  "byte_identical_rename": true,
+  "prior_seven_contents_unchanged": true
+}

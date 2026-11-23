@@ -1,0 +1,251 @@
+.......F.FF..                   [100%]
+=================================== FAILURES ===================================
+_ OperationalAdFundingFreshnessTests.test_foreign_unconfirmed_and_malformed_operational_authority_is_unknown (index=0) _
+backend/tests/test_operational_source_freshness.py:516: in test_foreign_unconfirmed_and_malformed_operational_authority_is_unknown
+    self.assertEqual(read(db)["meta"]["state"], "unknown")
+E   AssertionError: 'inactive' != 'unknown'
+E   - inactive
+E   + unknown
+_ OperationalAdFundingFreshnessTests.test_foreign_unconfirmed_and_malformed_operational_authority_is_unknown (index=1) _
+backend/tests/test_operational_source_freshness.py:516: in test_foreign_unconfirmed_and_malformed_operational_authority_is_unknown
+    self.assertEqual(read(db)["meta"]["state"], "unknown")
+E   AssertionError: 'inactive' != 'unknown'
+E   - inactive
+E   + unknown
+_ OperationalAdFundingFreshnessTests.test_foreign_unconfirmed_and_malformed_operational_authority_is_unknown (index=2) _
+backend/tests/test_operational_source_freshness.py:516: in test_foreign_unconfirmed_and_malformed_operational_authority_is_unknown
+    self.assertEqual(read(db)["meta"]["state"], "unknown")
+E   AssertionError: 'inactive' != 'unknown'
+E   - inactive
+E   + unknown
+_ OperationalAdFundingFreshnessTests.test_foreign_unconfirmed_and_malformed_operational_authority_is_unknown (index=3) _
+backend/tests/test_operational_source_freshness.py:516: in test_foreign_unconfirmed_and_malformed_operational_authority_is_unknown
+    self.assertEqual(read(db)["meta"]["state"], "unknown")
+E   AssertionError: 'inactive' != 'unknown'
+E   - inactive
+E   + unknown
+_ OperationalAdFundingFreshnessTests.test_foreign_unconfirmed_and_malformed_operational_authority_is_unknown (index=4) _
+backend/tests/test_operational_source_freshness.py:516: in test_foreign_unconfirmed_and_malformed_operational_authority_is_unknown
+    self.assertEqual(read(db)["meta"]["state"], "unknown")
+E   AssertionError: 'inactive' != 'unknown'
+E   - inactive
+E   + unknown
+_ OperationalAdFundingFreshnessTests.test_foreign_unconfirmed_and_malformed_operational_authority_is_unknown (index=5) _
+backend/tests/test_operational_source_freshness.py:516: in test_foreign_unconfirmed_and_malformed_operational_authority_is_unknown
+    self.assertEqual(read(db)["meta"]["state"], "unknown")
+E   AssertionError: 'inactive' != 'unknown'
+E   - inactive
+E   + unknown
+_ OperationalAdFundingFreshnessTests.test_foreign_unconfirmed_and_malformed_operational_authority_is_unknown (index=6) _
+backend/tests/test_operational_source_freshness.py:516: in test_foreign_unconfirmed_and_malformed_operational_authority_is_unknown
+    self.assertEqual(read(db)["meta"]["state"], "unknown")
+E   AssertionError: 'inactive' != 'unknown'
+E   - inactive
+E   + unknown
+_ OperationalAdFundingFreshnessTests.test_foreign_unconfirmed_and_malformed_operational_authority_is_unknown (index=7) _
+backend/tests/test_operational_source_freshness.py:516: in test_foreign_unconfirmed_and_malformed_operational_authority_is_unknown
+    self.assertEqual(read(db)["meta"]["state"], "unknown")
+E   AssertionError: 'inactive' != 'unknown'
+E   - inactive
+E   + unknown
+_ OperationalAdFundingFreshnessTests.test_foreign_unconfirmed_and_malformed_operational_authority_is_unknown (index=8) _
+backend/tests/test_operational_source_freshness.py:516: in test_foreign_unconfirmed_and_malformed_operational_authority_is_unknown
+    self.assertEqual(read(db)["meta"]["state"], "unknown")
+E   AssertionError: 'inactive' != 'unknown'
+E   - inactive
+E   + unknown
+_ OperationalAdFundingFreshnessTests.test_foreign_unconfirmed_and_malformed_operational_authority_is_unknown (index=9) _
+backend/tests/test_operational_source_freshness.py:516: in test_foreign_unconfirmed_and_malformed_operational_authority_is_unknown
+    self.assertEqual(read(db)["meta"]["state"], "unknown")
+E   AssertionError: 'inactive' != 'unknown'
+E   - inactive
+E   + unknown
+_ OperationalAdFundingFreshnessTests.test_foreign_unconfirmed_and_malformed_operational_authority_is_unknown (index=10) _
+backend/tests/test_operational_source_freshness.py:516: in test_foreign_unconfirmed_and_malformed_operational_authority_is_unknown
+    self.assertEqual(read(db)["meta"]["state"], "unknown")
+E   AssertionError: 'inactive' != 'unknown'
+E   - inactive
+E   + unknown
+_ OperationalAdFundingFreshnessTests.test_foreign_unconfirmed_and_malformed_operational_authority_is_unknown (index=11) _
+backend/tests/test_operational_source_freshness.py:516: in test_foreign_unconfirmed_and_malformed_operational_authority_is_unknown
+    self.assertEqual(read(db)["meta"]["state"], "unknown")
+E   AssertionError: 'inactive' != 'unknown'
+E   - inactive
+E   + unknown
+_ OperationalAdFundingFreshnessTests.test_foreign_unconfirmed_and_malformed_operational_authority_is_unknown (index=12) _
+backend/tests/test_operational_source_freshness.py:516: in test_foreign_unconfirmed_and_malformed_operational_authority_is_unknown
+    self.assertEqual(read(db)["meta"]["state"], "unknown")
+E   AssertionError: 'inactive' != 'unknown'
+E   - inactive
+E   + unknown
+_ OperationalAdFundingFreshnessTests.test_foreign_unconfirmed_and_malformed_operational_authority_is_unknown (index=13) _
+backend/tests/test_operational_source_freshness.py:516: in test_foreign_unconfirmed_and_malformed_operational_authority_is_unknown
+    self.assertEqual(read(db)["meta"]["state"], "unknown")
+E   AssertionError: 'inactive' != 'unknown'
+E   - inactive
+E   + unknown
+_ OperationalAdFundingFreshnessTests.test_native_conflict_is_checked_before_health_inactive_flags (flags={}) _
+backend/tests/test_operational_source_freshness.py:531: in test_native_conflict_is_checked_before_health_inactive_flags
+    self.assertEqual(read(db)["meta"]["state"], "unknown")
+E   AssertionError: 'current' != 'unknown'
+E   - current
+E   + unknown
+_ OperationalAdFundingFreshnessTests.test_native_conflict_is_checked_before_health_inactive_flags (flags={'active': False}) _
+backend/tests/test_operational_source_freshness.py:531: in test_native_conflict_is_checked_before_health_inactive_flags
+    self.assertEqual(read(db)["meta"]["state"], "unknown")
+E   AssertionError: 'inactive' != 'unknown'
+E   - inactive
+E   + unknown
+_ OperationalAdFundingFreshnessTests.test_native_conflict_is_checked_before_health_inactive_flags (flags={'is_active': False}) _
+backend/tests/test_operational_source_freshness.py:531: in test_native_conflict_is_checked_before_health_inactive_flags
+    self.assertEqual(read(db)["meta"]["state"], "unknown")
+E   AssertionError: 'inactive' != 'unknown'
+E   - inactive
+E   + unknown
+_ OperationalAdFundingFreshnessTests.test_native_conflict_is_checked_before_health_inactive_flags (flags={'archived': True}) _
+backend/tests/test_operational_source_freshness.py:531: in test_native_conflict_is_checked_before_health_inactive_flags
+    self.assertEqual(read(db)["meta"]["state"], "unknown")
+E   AssertionError: 'inactive' != 'unknown'
+E   - inactive
+E   + unknown
+_ OperationalAdFundingFreshnessTests.test_operational_and_combined_binding_limits_fail_closed (count=80, native_count=0) _
+backend/tests/test_operational_source_freshness.py:577: in test_operational_and_combined_binding_limits_fail_closed
+    self.assertEqual(read(db)["meta"]["code"], "metadata_limit")
+E   AssertionError: 'source_not_configured' != 'metadata_limit'
+E   - source_not_configured
+E   + metadata_limit
+_ OperationalAdFundingFreshnessTests.test_operational_and_combined_binding_limits_fail_closed (count=26, native_count=25) _
+backend/tests/test_operational_source_freshness.py:577: in test_operational_and_combined_binding_limits_fail_closed
+    self.assertEqual(read(db)["meta"]["code"], "metadata_limit")
+E   AssertionError: 'metadata_invalid' != 'metadata_limit'
+E   - metadata_invalid
+E   ?          ----  ^
+E   + metadata_limit
+E   ?            ^^^
+_ OperationalAdFundingFreshnessTests.test_operational_binding_preserves_stale_failed_disabled_and_missing_proof (reason='stale') _
+backend/tests/test_operational_source_freshness.py:487: in test_operational_binding_preserves_stale_failed_disabled_and_missing_proof
+    self.assertEqual(read(db)["meta"]["code"], expected[reason])
+E   AssertionError: 'source_not_configured' != 'ad_source_stale'
+E   - source_not_configured
+E   + ad_source_stale
+_ OperationalAdFundingFreshnessTests.test_operational_binding_preserves_stale_failed_disabled_and_missing_proof (reason='provider_error') _
+backend/tests/test_operational_source_freshness.py:487: in test_operational_binding_preserves_stale_failed_disabled_and_missing_proof
+    self.assertEqual(read(db)["meta"]["code"], expected[reason])
+E   AssertionError: 'source_not_configured' != 'ad_source_rate_limited'
+E   - source_not_configured
+E   + ad_source_rate_limited
+_ OperationalAdFundingFreshnessTests.test_operational_binding_preserves_stale_failed_disabled_and_missing_proof (reason='disabled') _
+backend/tests/test_operational_source_freshness.py:487: in test_operational_binding_preserves_stale_failed_disabled_and_missing_proof
+    self.assertEqual(read(db)["meta"]["code"], expected[reason])
+E   AssertionError: 'source_not_configured' != 'automatic_sync_disabled'
+E   - source_not_configured
+E   + automatic_sync_disabled
+_ OperationalAdFundingFreshnessTests.test_operational_binding_preserves_stale_failed_disabled_and_missing_proof (reason='missing_account') _
+backend/tests/test_operational_source_freshness.py:487: in test_operational_binding_preserves_stale_failed_disabled_and_missing_proof
+    self.assertEqual(read(db)["meta"]["code"], expected[reason])
+E   AssertionError: 'source_not_configured' != 'metadata_invalid'
+E   - source_not_configured
+E   + metadata_invalid
+_ OperationalAdFundingFreshnessTests.test_operational_metadata_failure_and_deadline_do_not_report_inactive _
+backend/tests/test_operational_source_freshness.py:605: in test_operational_metadata_failure_and_deadline_do_not_report_inactive
+    self.assertEqual(result["meta"]["code"], "metadata_unavailable")
+E   AssertionError: 'source_not_configured' != 'metadata_unavailable'
+E   - source_not_configured
+E   + metadata_unavailable
+_ OperationalAdFundingFreshnessTests.test_operational_only_approved_binding_is_configured_for_each_provider (platform='snapchat') _
+backend/tests/test_operational_source_freshness.py:469: in test_operational_only_approved_binding_is_configured_for_each_provider
+    self.assertEqual(result[platform]["state"], "current")
+E   AssertionError: 'inactive' != 'current'
+E   - inactive
+E   + current
+_ OperationalAdFundingFreshnessTests.test_operational_only_approved_binding_is_configured_for_each_provider (platform='meta') _
+backend/tests/test_operational_source_freshness.py:469: in test_operational_only_approved_binding_is_configured_for_each_provider
+    self.assertEqual(result[platform]["state"], "current")
+E   AssertionError: 'inactive' != 'current'
+E   - inactive
+E   + current
+_ OperationalAdFundingFreshnessTests.test_operational_only_approved_binding_is_configured_for_each_provider (platform='tiktok') _
+backend/tests/test_operational_source_freshness.py:469: in test_operational_only_approved_binding_is_configured_for_each_provider
+    self.assertEqual(result[platform]["state"], "current")
+E   AssertionError: 'inactive' != 'current'
+E   - inactive
+E   + current
+_ OperationalAdFundingFreshnessTests.test_operational_only_approved_binding_is_configured_for_each_provider (platform='google_ads') _
+backend/tests/test_operational_source_freshness.py:469: in test_operational_only_approved_binding_is_configured_for_each_provider
+    self.assertEqual(result[platform]["state"], "current")
+E   AssertionError: 'inactive' != 'current'
+E   - inactive
+E   + current
+_ OperationalAdFundingFreshnessTests.test_operational_projection_never_hydrates_financial_state_or_archive _
+backend/tests/test_operational_source_freshness.py:592: in test_operational_projection_never_hydrates_financial_state_or_archive
+    self.assertEqual(read(db)["meta"]["state"], "current")
+E   AssertionError: 'inactive' != 'current'
+E   - inactive
+E   + current
+_ OperationalAdFundingFreshnessTests.test_operational_reconnect_duplicate_is_not_silently_inactive _
+backend/tests/test_operational_source_freshness.py:538: in test_operational_reconnect_duplicate_is_not_silently_inactive
+    self.assertEqual(read(db)["meta"]["state"], "unknown")
+E   AssertionError: 'inactive' != 'unknown'
+E   - inactive
+E   + unknown
+_ OperationalAdFundingFreshnessTests.test_unconfirmed_or_inactive_native_binding_does_not_override_approved_operational (change={'confirmed_by': None}) _
+backend/tests/test_operational_source_freshness.py:547: in test_unconfirmed_or_inactive_native_binding_does_not_override_approved_operational
+    self.assertEqual(read(db)["meta"]["state"], "current")
+E   AssertionError: 'inactive' != 'current'
+E   - inactive
+E   + current
+_ OperationalAdFundingFreshnessTests.test_unconfirmed_or_inactive_native_binding_does_not_override_approved_operational (change={'status': 'inactive'}) _
+backend/tests/test_operational_source_freshness.py:547: in test_unconfirmed_or_inactive_native_binding_does_not_override_approved_operational
+    self.assertEqual(read(db)["meta"]["state"], "current")
+E   AssertionError: 'inactive' != 'current'
+E   - inactive
+E   + current
+_ OperationalAdFundingFreshnessTests.test_wallet_first_account_currency_and_timezone_must_match (field='currency') _
+backend/tests/test_operational_source_freshness.py:562: in test_wallet_first_account_currency_and_timezone_must_match
+    self.assertEqual(read(db)["meta"]["code"], "metadata_invalid")
+E   AssertionError: 'source_not_configured' != 'metadata_invalid'
+E   - source_not_configured
+E   + metadata_invalid
+_ OperationalAdFundingFreshnessTests.test_wallet_first_account_currency_and_timezone_must_match (field='timezone') _
+backend/tests/test_operational_source_freshness.py:562: in test_wallet_first_account_currency_and_timezone_must_match
+    self.assertEqual(read(db)["meta"]["code"], "metadata_invalid")
+E   AssertionError: 'source_not_configured' != 'metadata_invalid'
+E   - source_not_configured
+E   + metadata_invalid
+=========================== short test summary info ============================
+SUBFAILED(index=0) backend/tests/test_operational_source_freshness.py::OperationalAdFundingFreshnessTests::test_foreign_unconfirmed_and_malformed_operational_authority_is_unknown
+SUBFAILED(index=1) backend/tests/test_operational_source_freshness.py::OperationalAdFundingFreshnessTests::test_foreign_unconfirmed_and_malformed_operational_authority_is_unknown
+SUBFAILED(index=2) backend/tests/test_operational_source_freshness.py::OperationalAdFundingFreshnessTests::test_foreign_unconfirmed_and_malformed_operational_authority_is_unknown
+SUBFAILED(index=3) backend/tests/test_operational_source_freshness.py::OperationalAdFundingFreshnessTests::test_foreign_unconfirmed_and_malformed_operational_authority_is_unknown
+SUBFAILED(index=4) backend/tests/test_operational_source_freshness.py::OperationalAdFundingFreshnessTests::test_foreign_unconfirmed_and_malformed_operational_authority_is_unknown
+SUBFAILED(index=5) backend/tests/test_operational_source_freshness.py::OperationalAdFundingFreshnessTests::test_foreign_unconfirmed_and_malformed_operational_authority_is_unknown
+SUBFAILED(index=6) backend/tests/test_operational_source_freshness.py::OperationalAdFundingFreshnessTests::test_foreign_unconfirmed_and_malformed_operational_authority_is_unknown
+SUBFAILED(index=7) backend/tests/test_operational_source_freshness.py::OperationalAdFundingFreshnessTests::test_foreign_unconfirmed_and_malformed_operational_authority_is_unknown
+SUBFAILED(index=8) backend/tests/test_operational_source_freshness.py::OperationalAdFundingFreshnessTests::test_foreign_unconfirmed_and_malformed_operational_authority_is_unknown
+SUBFAILED(index=9) backend/tests/test_operational_source_freshness.py::OperationalAdFundingFreshnessTests::test_foreign_unconfirmed_and_malformed_operational_authority_is_unknown
+SUBFAILED(index=10) backend/tests/test_operational_source_freshness.py::OperationalAdFundingFreshnessTests::test_foreign_unconfirmed_and_malformed_operational_authority_is_unknown
+SUBFAILED(index=11) backend/tests/test_operational_source_freshness.py::OperationalAdFundingFreshnessTests::test_foreign_unconfirmed_and_malformed_operational_authority_is_unknown
+SUBFAILED(index=12) backend/tests/test_operational_source_freshness.py::OperationalAdFundingFreshnessTests::test_foreign_unconfirmed_and_malformed_operational_authority_is_unknown
+SUBFAILED(index=13) backend/tests/test_operational_source_freshness.py::OperationalAdFundingFreshnessTests::test_foreign_unconfirmed_and_malformed_operational_authority_is_unknown
+SUBFAILED(flags={}) backend/tests/test_operational_source_freshness.py::OperationalAdFundingFreshnessTests::test_native_conflict_is_checked_before_health_inactive_flags
+SUBFAILED(flags={'active': False}) backend/tests/test_operational_source_freshness.py::OperationalAdFundingFreshnessTests::test_native_conflict_is_checked_before_health_inactive_flags
+SUBFAILED(flags={'is_active': False}) backend/tests/test_operational_source_freshness.py::OperationalAdFundingFreshnessTests::test_native_conflict_is_checked_before_health_inactive_flags
+SUBFAILED(flags={'archived': True}) backend/tests/test_operational_source_freshness.py::OperationalAdFundingFreshnessTests::test_native_conflict_is_checked_before_health_inactive_flags
+SUBFAILED(count=80, native_count=0) backend/tests/test_operational_source_freshness.py::OperationalAdFundingFreshnessTests::test_operational_and_combined_binding_limits_fail_closed
+SUBFAILED(count=26, native_count=25) backend/tests/test_operational_source_freshness.py::OperationalAdFundingFreshnessTests::test_operational_and_combined_binding_limits_fail_closed
+SUBFAILED(reason='stale') backend/tests/test_operational_source_freshness.py::OperationalAdFundingFreshnessTests::test_operational_binding_preserves_stale_failed_disabled_and_missing_proof
+SUBFAILED(reason='provider_error') backend/tests/test_operational_source_freshness.py::OperationalAdFundingFreshnessTests::test_operational_binding_preserves_stale_failed_disabled_and_missing_proof
+SUBFAILED(reason='disabled') backend/tests/test_operational_source_freshness.py::OperationalAdFundingFreshnessTests::test_operational_binding_preserves_stale_failed_disabled_and_missing_proof
+SUBFAILED(reason='missing_account') backend/tests/test_operational_source_freshness.py::OperationalAdFundingFreshnessTests::test_operational_binding_preserves_stale_failed_disabled_and_missing_proof
+FAILED backend/tests/test_operational_source_freshness.py::OperationalAdFundingFreshnessTests::test_operational_metadata_failure_and_deadline_do_not_report_inactive
+SUBFAILED(platform='snapchat') backend/tests/test_operational_source_freshness.py::OperationalAdFundingFreshnessTests::test_operational_only_approved_binding_is_configured_for_each_provider
+SUBFAILED(platform='meta') backend/tests/test_operational_source_freshness.py::OperationalAdFundingFreshnessTests::test_operational_only_approved_binding_is_configured_for_each_provider
+SUBFAILED(platform='tiktok') backend/tests/test_operational_source_freshness.py::OperationalAdFundingFreshnessTests::test_operational_only_approved_binding_is_configured_for_each_provider
+SUBFAILED(platform='google_ads') backend/tests/test_operational_source_freshness.py::OperationalAdFundingFreshnessTests::test_operational_only_approved_binding_is_configured_for_each_provider
+FAILED backend/tests/test_operational_source_freshness.py::OperationalAdFundingFreshnessTests::test_operational_projection_never_hydrates_financial_state_or_archive
+FAILED backend/tests/test_operational_source_freshness.py::OperationalAdFundingFreshnessTests::test_operational_reconnect_duplicate_is_not_silently_inactive
+SUBFAILED(change={'confirmed_by': None}) backend/tests/test_operational_source_freshness.py::OperationalAdFundingFreshnessTests::test_unconfirmed_or_inactive_native_binding_does_not_override_approved_operational
+SUBFAILED(change={'status': 'inactive'}) backend/tests/test_operational_source_freshness.py::OperationalAdFundingFreshnessTests::test_unconfirmed_or_inactive_native_binding_does_not_override_approved_operational
+SUBFAILED(field='currency') backend/tests/test_operational_source_freshness.py::OperationalAdFundingFreshnessTests::test_wallet_first_account_currency_and_timezone_must_match
+SUBFAILED(field='timezone') backend/tests/test_operational_source_freshness.py::OperationalAdFundingFreshnessTests::test_wallet_first_account_currency_and_timezone_must_match
+35 failed, 10 passed, 31 deselected, 9 subtests passed in 1.09s

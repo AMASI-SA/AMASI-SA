@@ -1,0 +1,26 @@
+{
+  "case": "backend-green",
+  "command": [
+    "/workspace/scratch/bc2035025680/backend-freshness-venv/bin/python",
+    "-m",
+    "pytest",
+    "--noconftest",
+    "-p",
+    "no:cacheprovider",
+    "-q",
+    "backend/tests/test_operational_refresh_read_diagnostics.py",
+    "backend/tests/test_operational_balance_demand_refresh.py",
+    "backend/tests/test_operational_read_runtime.py",
+    "backend/tests/test_operational_balance_source_diagnostics.py"
+  ],
+  "cwd": "/workspace/scratch/bc2035025680/recovery-read-diagnostics-20261123",
+  "pythonpath": "/workspace/scratch/bc2035025680/recovery-read-diagnostics-20261123/backend",
+  "started_at": "2026-11-23T18:29:12.532096+00:00",
+  "duration_seconds": 4.598,
+  "exit_code": 0,
+  "expected_exit_code": 0,
+  "expected_evidence_found": true,
+  "candidate_unchanged": true,
+  "log_sha256": "21da4ff1368e584aa860d1f33690027f13c2d5cfb5be39259e76ff8182952d63",
+  "status": "PASS"
+}

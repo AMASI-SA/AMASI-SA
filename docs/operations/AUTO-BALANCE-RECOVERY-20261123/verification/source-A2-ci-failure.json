@@ -1,0 +1,36 @@
+{
+  "source_git_sha": "e0e63089637ac5775e163a6dfe3a9e1a4cfb4418",
+  "workflow": "Operational Stock Eligibility",
+  "run_id": 45239573930,
+  "job_id": 137920251705,
+  "conclusion": "failure",
+  "completed_at": "2026-11-23T18:41:29Z",
+  "pytest": {
+    "passed": 5579,
+    "failed": 2,
+    "subtests_passed": 97,
+    "duration_seconds": 471.31
+  },
+  "failed_tests": [
+    "test_real_collection_stage_sequence_preserves_output_and_reads_and_is_silent_outside_visible",
+    "test_real_collection_notifies_once_after_primary_success_before_remaining_reads"
+  ],
+  "test_module": "backend/tests/test_operational_balance_source_stage_timing.py",
+  "cause": "The exact stage expectations omit orders_cursor_build, orders_cursor_read and orders_rows_validate. The second assertion occurs in the primary-completion callback before recording completion, so waiting for the next boundary masks the assertion as a5second timeout. Production callback positioning is unchanged.",
+  "coverage_gap": "The new regression file test_operational_refresh_read_diagnostics.py does not match the existing test_operational_balance*.py selectors in either OperationalBalance or StockEligibility. Rename byte-identically to test_operational_balance_read_diagnostics.py; preserve the workflows and all strict no-skip/no-failure gates.",
+  "release_action": "No intent was frozen and no merge, lease or follow-up publication occurred. A2 candidate remains historical readiness-only evidence and is forbidden for its successor.",
+  "also_failed": {
+    "workflow": "Operational Balance Web",
+    "run_id": 45239574494,
+    "job_id": 137920252704,
+    "step": "Run operational contracts",
+    "same_two_cases": true,
+    "pytest": {
+      "passed": 6707,
+      "failed": 2,
+      "subtests_passed": 151,
+      "duration_seconds": 717.67
+    },
+    "remaining_steps": "Required demand-read and shipping steps skipped after failed first step; not passed."
+  }
+}

@@ -1,0 +1,23 @@
+--- a/backend/tests/test_operational_balance_source_stage_timing.py
++++ b/backend/tests/test_operational_balance_source_stage_timing.py
+@@ -24,6 +24,7 @@
+ PRIVATE = 'private-source-stage order=hidden-order amount=9182.37 token=never-log'
+ ACTOR = 'private-source-stage-actor'
+ SOURCE_STAGES = (
++    'orders_cursor_build', 'orders_cursor_read', 'orders_rows_validate',
+     'source_primary_reads', 'source_fee_settings', 'source_setup', 'source_statements',
+     'source_delivery_history', 'source_transactions', 'source_native_links',
+     'source_bundles', 'source_option_catalog', 'source_order_indexes', 'source_orders', 'source_invoices',
+@@ -227,6 +228,8 @@
+         def ready():
+             assert database.inflight == 0 and 'settings' not in database.sources.reads
+             assert [(row['stage'], row['outcome']) for row in demand_context().stage_timings] == [
++                ('orders_cursor_build', 'complete'), ('orders_cursor_read', 'complete'),
++                ('orders_rows_validate', 'complete'),
+                 ('source_primary_reads', 'complete')]
+             notifications.append('primary-complete')
+ 
+diff --git a/backend/tests/test_operational_refresh_read_diagnostics.py b/backend/tests/test_operational_balance_read_diagnostics.py
+similarity index 100%
+rename from backend/tests/test_operational_refresh_read_diagnostics.py
+rename to backend/tests/test_operational_balance_read_diagnostics.py

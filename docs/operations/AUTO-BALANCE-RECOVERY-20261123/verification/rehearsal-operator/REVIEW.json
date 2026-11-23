@@ -1,0 +1,46 @@
+{
+  "task": "PR2092 guarded rehearsal independent operator review",
+  "reviewer": "/root/historical_recalculation_contract/source_date_rules",
+  "decision": "APPROVED",
+  "helper_sha256": "eeab2c969ef65e1220ddf1e61865c66377d4e0089fb451f566196d50811de1d8",
+  "helper_bytes": 23356,
+  "isolated_test_command": [
+    "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python",
+    "-B",
+    "/workspace/scratch/bc2035025680/pr2092-operator-verification/ISOLATED_CHECKS.py",
+    "/workspace/scratch/bc2035025680/pr2092_guarded_rehearsal.py"
+  ],
+  "isolated_test_started_at_utc": "2026-11-23T18:25:26.722247+00:00",
+  "isolated_test_finished_at_utc": "2026-11-23T18:25:27.805084+00:00",
+  "isolated_test_exit_code": 0,
+  "isolated_test_sha256": "87cd7e19acc0ac9e7503fbf4ced45b035d8df1c175648e313d0cb6db5f08d4b3",
+  "isolated_test_log_sha256": "f9a0e067513f9d969e410080b99c8fb85a30e4713483da14ab2cc770fc7924d1",
+  "scope": "Read-only helper review plus local isolated temporary-directory checks. The real main/protected rehearsal, /app, guard, git, provider APIs, DB and publication were not invoked.",
+  "source_review_assertions": [
+    "Initial inactive guard status precedes import and outer original operation lock; no nested status call under the held lock.",
+    "Exact base J, A/B/D ancestry, deployment and intent trees, full prior-intent history and intent-only final diff are checked.",
+    "Only a reviewed JSON envelope can supply final release hashes; actual exact-D CI remains an external required prerequisite.",
+    "All four canonical cleanup targets are backed up privately before fast-forward; current manifests are rechecked before the unchanged adapter.",
+    "Targets originally absent must still be absent before the adapter, closing the identified unbacked-target creation gap.",
+    "Files, nested backup directories, private JSON parent entries, stage directory and its parent are fsynced.",
+    "Foreign untracked paths, contents, modes and symlink literals are preserved, except the original same-inode runtime metadata file may append without changing its original prefix.",
+    "Normal canonical yarn build, package/frontend validators and complete reproducibility proof comparison remain unchanged.",
+    "No lease preparation, publication, financial operation, reset, automatic rollback or foreign-file deletion is introduced.",
+    "Failure leaves private backups and sanitized receipts; child process groups are terminated on timeout or interruption."
+  ],
+  "isolated_assertions": [
+    "all four generated backups preserve content, modes, literal symlinks and fsync receipt/stage entries",
+    "only same-file prefix-preserving runtime append is accepted",
+    "runtime prefix corruption and byte-identical inode replacement are blocked",
+    "nested mount point is blocked independently of st_dev",
+    "timeout terminates process group including SIGTERM-ignoring descendant and records failure"
+  ],
+  "fixed_review_findings": [
+    "Originally absent generated cleanup targets now require continued absence before adapter execution.",
+    "Atomic private JSON writes and stage creation now durably sync directory entries."
+  ],
+  "limits": [
+    "This review does not certify a particular release envelope, source CI result, actual Emergent rehearsal, publication or historical recalculation.",
+    "The caller must independently verify current exact-D CI and the final reviewed A/B/D envelope before real use."
+  ]
+}
