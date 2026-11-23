@@ -2,6 +2,34 @@
 
 ## State
 
+### Owner preview UI checkpoint — WIP, 2026-11-24
+
+Draft PR #2093 preserves the supplier workflow continuation on
+`codex/conditional-bundle-supplier-20261123`; its initial remote checkpoint was
+`ebdb7d5f5b34cffb0b5f2e6d52e8da28f878770c`, with tree
+`bc41fb6a601ff283d3591d0733a416c3f532a687` matching the local checkpoint.
+
+The order details page now contains an owner-only, explicitly opened adoption
+preview panel. It validates the server's line/revision/physical-piece response,
+shows each piece and its expected cost, requires an audit reason, and retains
+the exact operation key and payload after an ambiguous network outcome. A
+changed order/actor/source revision invalidates a preview and late responses.
+It never sends a receipt or creates a supplier invoice.
+
+Verification: governed Node22.23.2/Yarn1.22.22, five focused frontend suites,
+**38 tests passed**, exit0. The suites cover adoption UI/transport, existing
+bundle operations/transport, and order-details layout. `git diff --check`
+passed. The backend bridge/adoption and capability integration remain active
+local work; this UI checkpoint is not release-ready and must not be published.
+
+The owner raised a separate existing mobile supplier-invoice cancellation and
+re-entry incident during implementation. Its read-only investigation takes
+priority; no cause is attributed to unpublished bundle changes. Preserve the
+bundle source while diagnosing the mobile recovery and display paths. No
+production source, lease, catalog, order, receipt, or financial data was changed.
+Next: finish backend integration, independently review and run real-Mongo
+acceptance, checkpoint all source, then satisfy current-base CI/release gates.
+
 ### Supplier workflow continuation — WIP, 2026-11-23
 
 The owner requested continuation with the existing merge/publication authority.

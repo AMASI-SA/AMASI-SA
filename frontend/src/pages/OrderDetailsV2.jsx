@@ -39,6 +39,7 @@ import ReturnDecisionCard from "../components/orders/ReturnDecisionCard";
 import OrderActivityPanel from "../components/orders/OrderActivityPanel";
 import OrderProfitabilityCard from "../components/orders/OrderProfitabilityCard";
 import BundleOperationalPanel from "../components/orders/BundleOperationalPanel";
+import BundleSupplierAdoptionPanel from "../components/orders/BundleSupplierAdoptionPanel";
 import { printStoreCourierLabel } from "../lib/storeCourierLabelPrint";
 import { formatRiyadhDateTime } from "../lib/dates";
 
@@ -815,6 +816,7 @@ export default function OrderDetailsV2() {
         refreshKey: `${additionsRefreshKey}:${JSON.stringify(order?.payment || {})}`,
     });
     const [returnEngineOpen, setReturnEngineOpen] = useState(false);
+    const [bundleRevision, setBundleRevision] = useState(0);
     const [refreshingFromSalla, setRefreshingFromSalla] = useState(false);
     const [refreshFromSallaError, setRefreshFromSallaError] = useState("");
     const [refreshFromSallaMessage, setRefreshFromSallaMessage] = useState("");
@@ -905,7 +907,16 @@ export default function OrderDetailsV2() {
             </section>
 
             <OrderSummaryCard order={order} items={items} currency={currency} />
-            <BundleOperationalPanel orderNumber={openedOrderNumber} canReceive={userHasPermission(user, "inventory.preparation.receive")} canChangeSource={userHasPermission(user, "products.cost.write")} />
+            <BundleOperationalPanel key={`${openedOrderNumber}:${bundleRevision}`} orderNumber={openedOrderNumber} canReceive={userHasPermission(user, "inventory.preparation.receive")} canChangeSource={userHasPermission(user, "products.cost.write")} />
+            <BundleSupplierAdoptionPanel
+                key={`${user?.id || ""}:${openedOrderNumber}`}
+                orderNumber={openedOrderNumber}
+                actorKey={String(user?.id || "")}
+                isOwner={user?.is_owner === true || user?.role === "owner"}
+                items={itemsLoading || itemsError ? [] : items}
+                sourceRevision={additionsRefreshKey}
+                onApplied={() => setBundleRevision((value) => value + 1)}
+            />
             {(userHasPermission(user, "orders.view") || userHasPermission(user, "customer_intelligence.inbox.read")) && openedOrderNumber && (
                 <OrderTrackingNotesPanel key={openedOrderNumber} orderNumber={openedOrderNumber} embedded />
             )}
