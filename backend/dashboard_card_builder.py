@@ -39,6 +39,25 @@ async def prepare_dashboard_card(db, *, owner_id, section, from_date=None, to_da
     )
     settings = settings or {}
     fee_context = await dashboard.load_fee_setup_context(db, user_id) if section == "executive" else None
+    calculation_fee_context = fee_context
+    weekly_fee_revision = None
+    if fee_context and fee_context.get("complete") and any(
+        row.get("provider") == "tabby" and row.get("status") == "active"
+        and row.get("event_type", "capture") == "capture"
+        for row in fee_context.get("policies", [])
+    ):
+        from provider_fee_weekly_sources import load_weekly_fee_source_state, weekly_fee_source_revision
+        # An accepted statement changes calculation evidence, not tariff setup.
+        # The binding also keys persistent demand cards and their worker fence.
+        try:
+            source_state = await load_weekly_fee_source_state(db, user_id)
+        except ValueError:
+            calculation_fee_context = {**fee_context, "weekly_fee_source_state": {},
+                                       "weekly_fee_source_error": True}
+            weekly_fee_revision = "unavailable"
+        else:
+            calculation_fee_context = {**fee_context, "weekly_fee_source_state": source_state}
+            weekly_fee_revision = weekly_fee_source_revision(source_state)
 
     def filter_key(value: str | None) -> tuple[str, ...]:
         return tuple(sorted({part.strip().casefold() for part in (value or "").split(",") if part.strip()}))
@@ -53,6 +72,7 @@ async def prepare_dashboard_card(db, *, owner_id, section, from_date=None, to_da
         tuple(sorted(policy.items())),
         dashboard.payment_settings_revision(settings) if section == "executive" else None,
         dashboard.fee_setup_revision(fee_context) if section == "executive" else None,
+        weekly_fee_revision,
     )
     filters = {
         "from_date": from_date, "to_date": to_date,
@@ -61,7 +81,8 @@ async def prepare_dashboard_card(db, *, owner_id, section, from_date=None, to_da
     }
 
     return {"key": key, "filters": filters, "settings": settings,
-            "fee_context": fee_context, "today": today}
+            "fee_context": fee_context, "calculation_fee_context": calculation_fee_context,
+            "today": today}
 
 
 async def build_dashboard_card(db, legacy_dashboard, *, owner_id, section, binding, read_only=True):
@@ -76,7 +97,8 @@ async def build_dashboard_card(db, legacy_dashboard, *, owner_id, section, bindi
                 db, legacy_dashboard, user={"id": user_id}, **filters,
                 include_month_kpis=False, include_product_rows=False,
                 include_account_results=True,
-                fee_context=fee_context, persist_settings=not read_only,
+                fee_context=binding.get("calculation_fee_context", fee_context),
+                persist_settings=not read_only,
             ),
             # Setup is owner-wide, so a date or payment filter cannot
             # hide an unresolved method. This reads names only; it does

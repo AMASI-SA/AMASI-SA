@@ -1,0 +1,149 @@
+{
+  "task_id": "TABBY-DASHBOARD-FEES-20261122",
+  "status": "r4_current_production_integration_and_local_verification_passed_remote_candidate_pending",
+  "updated_at_utc": "2026-11-23T15:00:14.621581+00:00",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/tabby-weekly-fee-estimates-r4-20261123",
+  "production_branch": "hotfix/prod-snap-meta-final",
+  "source_base": "c2d244a3349013c06f3fb7824070bfa12bd0bfe0",
+  "source_base_tree": "4fa54935f420e2a546c2237c0fb7b0ef9ef8367d",
+  "source_identity": "The containing immutable source commit A will be recorded in the PR and separate evidence branch; this file is part of A.",
+  "publication_authorization": "Owner explicitly instructed كمل وانشر and requested a terminal publication retry; authority remains in force.",
+  "scope": "Restore numeric Tabby fees and net profit through weekly evidence and the exact Operational Balances fallback; restate historical reports when accepted settlement knowledge changes.",
+  "excluded_scope": "Owner withdrew the ledger-table restoration request. No ledger UI or financial write is included.",
+  "implementation": [
+    "Retain current Production demand-only card/worker and frontend consumer lifecycle.",
+    "Move accepted-source revision into dashboard_card_builder binding.key, which keys persistent demand read models and their source-authorization fence.",
+    "Keep tariff/setup identity separate from calculation evidence; only active Tabby capture policies request compact source revision.",
+    "Create one private memo and current evidence cutoff per standalone _compute_dashboard_v2 calculation, shared across selected-cohort readers.",
+    "Port estimate metadata and dynamic fee authority into legacy_dashboard_reader; preserve server wrapper, cooperative parsing and read-only flags.",
+    "Retain weekly-first estimate, exact operational profile/period fallback, actual-fee replacement, refunds, VAT, FX, rounding and source validation from the reviewed original implementation.",
+    "Preserve unrelated customer/inventory/operational changes and the withdrawn ledger-table request."
+  ],
+  "changed_files": [
+    ".github/workflows/prod-dashboard-v2-ad-fx-payment-fees.yml",
+    "backend/dashboard_ads_costs.py",
+    "backend/dashboard_card_builder.py",
+    "backend/dashboard_operational_statement_fees.py",
+    "backend/dashboard_payment_fees.py",
+    "backend/dashboard_v2_routes.py",
+    "backend/legacy_dashboard_reader.py",
+    "backend/provider_fee_statement_actual_sources.py",
+    "backend/provider_fee_weekly_average.py",
+    "backend/provider_fee_weekly_sources.py",
+    "backend/tests/test_dashboard_card_snapshots.py",
+    "backend/tests/test_dashboard_operational_statement_fees.py",
+    "backend/tests/test_dashboard_weekly_payment_fees.py",
+    "backend/tests/test_dashboard_weekly_read_model.py",
+    "backend/tests/test_provider_fee_statement_actual_sources.py",
+    "backend/tests/test_provider_fee_weekly_average.py",
+    "backend/tests/test_provider_fee_weekly_sources.py",
+    "docs/operations/TABBY-DASHBOARD-FEES-20261122/STATUS.json",
+    "frontend/src/components/ProfitSummaryCard.jsx",
+    "frontend/src/components/ProfitSummaryCard.paymentFees.test.jsx",
+    "frontend/src/lib/paymentFeeCompleteness.js",
+    "frontend/src/lib/paymentFeeRows.js",
+    "frontend/src/pages/AdvancedDashboard.jsx",
+    "frontend/src/pages/AdvancedDashboard.paymentFees.test.jsx"
+  ],
+  "r4_integration": {
+    "previous_source_base": "02cd99e5b2b68c95341c87590abcf572c885e697",
+    "reviewed_source": "d6443504c7d16eba00142526478abf10de336f99",
+    "reason": "Current Production advanced through independently completed PR2082. Generate a fresh source A and intent-only B on the actual clean host/remote base; do not reuse the R3 intent.",
+    "tabby_code_test_workflow_paths_exactly_preserved": 23,
+    "newer_production_paths_exactly_preserved": 120,
+    "path_intersection": [],
+    "semantic_review": "Independent read-only review passed: canonical accepted statement confirmation, normalization, saved-average generation and revision contracts are unchanged. Employee upload uses the same writer with selected_provider validation. Critical fee/demand dependencies are byte-identical; server/mobile/operational changes are preserved.",
+    "frontend_review": "Independent review passed: all 22 newer frontend paths preserved; six Tabby frontend paths equal reviewed R3; package and lockfile unchanged; demand lifecycle suffix unchanged.",
+    "advanced_dashboard_demand_suffix_marker": "export async function loadDashboardPeriodSnapshot",
+    "advanced_dashboard_demand_suffix_sha256": "9fa87f3091e289c27259f95933434fd11b5232d992200572eac1e3df9df0f592"
+  },
+  "verification": [
+    {
+      "name": "Fresh R4 combined backend integration/regression",
+      "command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=backend python -B -m pytest --noconftest -q backend/tests/test_dashboard_weekly_payment_fees.py backend/tests/test_provider_fee_weekly_average.py backend/tests/test_provider_fee_weekly_sources.py backend/tests/test_dashboard_operational_statement_fees.py backend/tests/test_provider_fee_statement_actual_sources.py backend/tests/test_dashboard_dated_payment_fees.py backend/tests/test_dashboard_card_snapshots.py backend/tests/test_dashboard_v2_ad_account_costs.py backend/tests/test_dashboard_weekly_read_model.py backend/tests/test_dashboard_demand_builders.py --tb=short",
+      "exit_status": 0,
+      "result": "216 passed; zero failed/skipped; seven existing deprecation warnings;13.08 seconds."
+    },
+    {
+      "name": "Fresh R4 frontend fees/demand/snapshot integration",
+      "command": "Governed scripts.frontend_release_toolchain.execute: yarn --cwd frontend test --watchAll=false --runInBand --cacheDirectory=<external-cache> --runTestsByPath src/components/ProfitSummaryCard.paymentFees.test.jsx src/pages/AdvancedDashboard.paymentFees.test.jsx src/components/DashboardAnalyticsPlacement.test.js src/pages/AdvancedDashboard.cardRefresh.test.jsx src/hooks/useDashboardCardSnapshot.test.jsx src/lib/demandRead.test.js",
+      "toolchain": {
+        "node": "22.23.2",
+        "yarn": "1.22.22"
+      },
+      "exit_status": 0,
+      "result": "Six suites;123 passed; zero failed/skipped;13.915 seconds. Frozen dependency install passed; no source or lockfile mutations."
+    },
+    {
+      "name": "New Production statement upload compatibility seam",
+      "command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=backend:backend/tests python -B -m pytest --noconftest -q backend/tests/test_provider_statement_employee_access.py::test_upload_reuses_canonical_writer_and_idempotency_without_extra_principal backend/tests/test_provider_statement_employee_access.py::test_selected_platform_must_match_parser_before_any_write --tb=short",
+      "exit_status": 0,
+      "result": "2 passed; zero skipped/failed;4.09 seconds. Initial invocation omitted backend/tests from the import path and did not collect; corrected explicit path passed without source changes."
+    },
+    {
+      "name": "Source preservation and whitespace",
+      "exit_status": 0,
+      "result": "git diff --cached --check and independent exact byte comparisons passed. All 120 newer Production paths and all 23 reviewed Tabby code/test/workflow paths preserved."
+    }
+  ],
+  "new_acceptance_evidence": [
+    "A later accepted statement changes the persistent projection key; an old worker spec is rejected with 409 read_source_changed and HTTP returns 202 rather than serving obsolete fees.",
+    "A Nov11 report reads sale days Nov4-10 despite Nov22 acceptance and returns independently expected commission12.51 SAR.",
+    "An empty historical week uses the exact saved operational profile and source period, without changing financial state.",
+    "Each worker computation loads weekly and actual evidence once across both readers; HTTP does neither heavy load; a reused binding gets a new memo without mutation or serialization of task state."
+  ],
+  "historical_r3": {
+    "pr": 2079,
+    "source": "d6443504c7d16eba00142526478abf10de336f99",
+    "intent_commit": "d5036d9609b7155ee137d07ff802bbce5be265c5",
+    "final_b_checks": {
+      "total": 54,
+      "success": 48,
+      "expected_skipped": 6,
+      "failed": 0,
+      "pending": 0
+    },
+    "latest_workflows": {
+      "total": 27,
+      "success": 26,
+      "expected_skipped": 1
+    },
+    "operational_retry": {
+      "run_id": 45070030372,
+      "attempt": 2,
+      "job_id": 137359126218,
+      "completed_at": "2026-11-22T21:32:27Z",
+      "result": "6502 passed plus90 subtests;96 demand;16 shipping plus18 subtests;no-skip gates passed."
+    },
+    "stock_retry": {
+      "run_id": 45070030329,
+      "attempt": 2,
+      "job_id": 137359144844,
+      "completed_at": "2026-11-22T21:29:20Z",
+      "result": "5525 passed plus97 subtests;no-skip gate passed."
+    },
+    "history": "Attempt1 interruptions retained as history, cause unproven. Do not rerun successful retries. Source A long jobs were superseded by frozen B and are not claimed successful. R3 remains immutable and unmerged; superseded by the new Production base.",
+    "evidence_branch": "codex/tabby-weekly-fees-release-evidence-20261122",
+    "recovered_evidence_commit": "a7d56d40763e5833ab9b792aa74a4f0f12094ace"
+  },
+  "release": {
+    "production_changed_by_this_task": false,
+    "merged": false,
+    "published": false,
+    "lease_created": false,
+    "actual_host_evidence": "Owner supplied clean actual /app at c2d244a3349013c06f3fb7824070bfa12bd0bfe0, branch hotfix/prod-snap-meta-final, upstream +0 -0, original guard exactly active:false. Fresh bounded status remains required at shared action boundaries.",
+    "current_base_release": "Latest PR2082 completion records original verified:true with three matching probes, intended source/deployment/runtime/artifact and final exact inactive guard. Previous PR2076 pending-hold wording is superseded and is not a release blocker.",
+    "current_base_runtime_release_id": "rg5-12e0f132b3ee688815cd2ec401bd34c43706d193492edacc7be6c5ca6e6ade8a",
+    "current_base_artifact_tree_sha256": "27b7717df8a2dcc2b46868da4d103b44d33e2ad07c879da6563ecaef7e545b9a",
+    "coordination": "Issue1006 current November23 auto-balance entry independently confirms clean inactive N; inventory PR2084 and balance freshness are isolated WIP with no publication reservation. Preserve their work.",
+    "inherited_intent": "Current base intent is unchanged in this source checkpoint. A fresh original governed candidate and new intent-only B are still required.",
+    "host_actions": "None in this source checkpoint; actual host adapter rehearsal, matching prepare/prepublish and newer Deployment Succeeded plus original verify3 remain outstanding."
+  },
+  "next_safe_actions": [
+    "Preserve reviewed R4 source A remotely and open its dedicated Draft PR; record exact identity in PR and separate evidence branch.",
+    "Read exact-head required/focused source checks and audit the fresh governed candidate with original validators and full manifests; freeze only release/release-intent-v5.json as B.",
+    "Complete final exact-B CI and both original clean-clone adapter/package proofs, confirm unchanged Production base and coordination, then normal merge preserving A/B.",
+    "Port separately reviewed numbered host helpers; require actual clean expected host and fresh inactive guard; isolated original adapter rehearsal before any lease; preserve unrelated outputs/backups; prepare/prepublish, authorized publication and original three-probe verification."
+  ]
+}
