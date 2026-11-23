@@ -1,16 +1,25 @@
 import http from '../../lib/api';
 import { balanceFreshnessManager, readBalanceFreshness } from './balanceFreshnessApi';
 
-jest.mock('../../lib/api', () => ({ get: jest.fn(), post: jest.fn() }), { virtual: true });
-jest.mock('../../lib/demandRead', () => ({ demandRead: jest.fn() }), { virtual: true });
+// These are real repository modules. A virtual mock can acquire a different
+// resolver identity after another CRA suite has loaded the physical module.
+jest.mock('../../lib/api', () => ({ get: jest.fn(), post: jest.fn() }));
+jest.mock('../../lib/demandRead', () => ({ demandRead: jest.fn() }));
 const OLD = '2026-11-21T14:50:00Z', CURRENT = '2026-11-23T13:59:00Z';
 const health = (scope, patch = {}) => ({ schema_version: 1, actor: { id: 'owner', is_owner: true }, session_scope: scope,
   status: 'active', as_of: OLD, revision: 10, generated_at: '2026-11-23T14:00:00Z',
   freshness: { state: 'stale', max_age_seconds: 7200 }, last_attempt: null, sources: [], issues: [], ...patch });
+let network;
 beforeEach(() => {
   jest.clearAllMocks();
+  network = jest.spyOn(XMLHttpRequest.prototype, 'open').mockImplementation(() => {
+    throw new Error('Unexpected real network request in freshness API contract test');
+  });
   Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
   Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+});
+afterEach(() => {
+  try { expect(network).not.toHaveBeenCalled(); } finally { network.mockRestore(); }
 });
 test('health reader calls only the lightweight read-only endpoint with cancellation', async () => {
   const controller = new AbortController(); http.get.mockResolvedValueOnce({ data: health('read') });

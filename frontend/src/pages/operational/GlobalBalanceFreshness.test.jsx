@@ -3,9 +3,10 @@ import { createRoot } from 'react-dom/client';
 import GlobalBalanceFreshness from './GlobalBalanceFreshness';
 import { readBalanceFreshness } from './balanceFreshnessApi';
 
-let mockAuth, mockLocation;
-jest.mock('react-router-dom', () => ({ useLocation: () => mockLocation }), { virtual: true });
-jest.mock('../../context/AuthContext', () => ({ useAuth: () => mockAuth }), { virtual: true });
+let mockAuth, mockLocation, mockV2Route;
+jest.mock('react-router-dom', () => ({ useLocation: () => mockLocation }));
+jest.mock('../../context/AuthContext', () => ({ useAuth: () => mockAuth }));
+jest.mock('../../components/MezanV2NavigationShell', () => ({ isMezanV2Route: () => mockV2Route }));
 jest.mock('./balanceFreshnessApi', () => ({ readBalanceFreshness: jest.fn() }));
 const OLD = '2026-11-21T14:50:00Z';
 const health = (patch = {}) => ({ schema_version: 1, actor: { id: 'owner', is_owner: true }, session_scope: 'scope',
@@ -23,6 +24,7 @@ beforeEach(() => {
   Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
   mockAuth = { user: { id: 'owner', is_owner: true }, loading: false, authStatus: 'authenticated' };
   mockLocation = { pathname: '/dashboard-v2', key: 'home' };
+  mockV2Route = true;
   readBalanceFreshness.mockReset().mockResolvedValue(health());
   host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host);
 });
@@ -33,6 +35,13 @@ test('persistent global banner reads only lightweight metadata, with source reas
   expect(host.querySelector('[role="alert"]')).not.toBeNull();
   expect(host.textContent).toContain('iMile'); expect(host.textContent).toContain('توقف مصدر الشحن');
   expect(host.textContent).toContain('آخر نجاح');
+});
+test('legacy fixed controls receive clearance while V2 notice placement stays compact', async () => {
+  await render(); expect(host.querySelector('.balance-freshness-legacy-controls')).toBeNull();
+  mockV2Route = false; mockLocation = { pathname: '/history', key: 'legacy' }; await render();
+  expect(host.querySelector('.balance-freshness-legacy-controls')).not.toBeNull();
+  mockV2Route = true; mockLocation = { pathname: '/dashboard-v2', key: 'v2' }; await render();
+  expect(host.querySelector('.balance-freshness-legacy-controls')).toBeNull();
 });
 test.each(['failed', 'unknown', 'running'])('durable %s outcome remains visible even with aggregate current', async outcome => {
   readBalanceFreshness.mockResolvedValueOnce(health({ as_of: '2026-11-23T13:59:00Z', freshness: { state: 'current', max_age_seconds: 7200 },

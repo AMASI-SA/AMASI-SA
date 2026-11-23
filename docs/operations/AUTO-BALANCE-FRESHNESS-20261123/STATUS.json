@@ -1,6 +1,6 @@
 {
   "task": "AUTO-BALANCE-FRESHNESS-20261123",
-  "status": "WIP_IMPLEMENTED_FOCUSED_TESTS_PASS_NOT_RELEASED",
+  "status": "WIP_CI_FIXES_READY_NOT_RELEASED",
   "repository": "AMASI-SA/AMASI-SA",
   "task_branch": "codex/automatic-balance-freshness-20261123",
   "base_commit": "c2d244a3349013c06f3fb7824070bfa12bd0bfe0",
@@ -41,19 +41,21 @@
     "Preserve all existing salary, advertising, shipping, fee and accounting rules."
   ],
   "verification": {
-    "backend_focused": "95 passed,20 subtests passed, isolated Python3.12 environment; no Production DB",
-    "backend_command": "PYTHONPATH=backend python -m pytest --noconftest -q --tb=short backend/tests/test_operational_balance_freshness.py backend/tests/test_operational_balance_freshness_routes.py backend/tests/test_operational_balance_freshness_attempts.py backend/tests/test_operational_source_freshness.py backend/tests/test_operational_balance_demand_refresh.py",
-    "web_focused": "4 suites58 tests PASS; changed JS/JSX parser13 PASS; isolated Node24/Jest27/React19, not governed Node22 build.",
-    "independent_review": "Focused web lifecycle/unknown-outcome review complete. Backend expired-running and orphan-read findings fixed. Native form/running blockers being corrected before checkpoint.",
-    "full_repo_ci": "pending; current HEAD must be checked, no older results accepted",
-    "release_gates": "not run; no A/B intent for this source"
+    "backend_focused": "111 passed,20 subtests passed; includes real canonical demand-refresh router; isolated Python3.12, no Production DB.",
+    "backend_command": "PYTHONPATH=backend python -m pytest --noconftest -q --tb=short backend/tests/test_operational_balance_freshness.py backend/tests/test_operational_balance_freshness_routes.py backend/tests/test_operational_balance_freshness_attempts.py backend/tests/test_operational_source_freshness.py backend/tests/test_operational_balance_demand_refresh.py backend/tests/test_operational_balance_demand_refresh_routes.py",
+    "web_focused": "5 new suites65 tests PASS under actual react-scripts5 transforms and repository Jest resolver; final HEAD whole-repository CI still required.",
+    "independent_review": "Web lifecycle/unknown-outcome and native form/running fencing reviewed. Native33+62 tests and strict manager TypeScript independently PASS; baseline dependency closure Git blob hashes88/88 match c2d244.",
+    "full_repo_ci": "Parent21b5c: Operational Backend and CodeQL/builds passed; frontend3 mock-identity regressions and browser missing-fixture request blocked. Actual resolver fix and new fixture prepared; older results are not final-head acceptance.",
+    "release_gates": "not run; no A/B intent for this source",
+    "browser_acceptance": "Strict synthetic fixture extended to13 cases: saved balances during held POST, failed-source warning retained after receipt and readback, exactly one refresh. Full sandboxed Chromium execution required on latest HEAD.",
+    "browser_review": "Independent static review found no blocker in held-POST synchronization, retained-warning assertions, strict request rejection, hashes or13-scenario CI gate. Explicit390px screenshot viewport."
   },
   "production_changed": false,
   "production_financial_writes": 0,
   "apk_published": false,
   "merge_or_deployment_performed": false,
   "hold": "Do not execute live financial refresh or enable the candidate in Production while the owner's prior no-financial-entry-change restriction remains unresolved. Complete and review isolated source/tests first.",
-  "next_safe_action": "Persist this WIP; create Draft PR against hotfix/prod-snap-meta-final and inspect exact-head CI. Complete native review/tests and separate mobile branch. Resolve remaining UI/whole-repo verification before any activation.",
+  "next_safe_action": "Push reviewed follow-up and inspect latest PR2085 HEAD CI. NativePR379 required Mobile CI fails before runner/checkout and needs job-start diagnosis. No gate weakening, merge, deployment or financial refresh.",
   "scope_update": "Persistent owner-visible source freshness alarm in Mezan web/native, including stalled/failed/unknown source updates and saved calculation age; separate read-only global health from financial refresh.",
   "implemented_backend": [
     "Owner-only GET /operational-balances/freshness with no-store metadata-only bounded reads and authorization recheck.",
@@ -67,6 +69,29 @@
     "Foreground one-shot expiry changes warning only, without network or financial calls.",
     "Page/form/session/visibility fencing; unresolved source warning survives successful aggregate."
   ],
-  "checkpoint_parent_sha": "ff27c23866b89b8731471c2d5f28e1432fd550e6"
+  "checkpoint_parent_sha": "21b5c949720607387da12788ffc942592293bbaa",
+  "pull_request": 2085,
+  "mobile_pull_request": 379,
+  "mobile_source_checkpoint": "3548b7f96a871578ae4a17ddb15cf60fa47102ea",
+  "last_observed_blockers": [
+    {
+      "repository": "AMASI-SA/AMASI-SA",
+      "head": "21b5c949720607387da12788ffc942592293bbaa",
+      "kind": "test_fixture",
+      "jobs": [
+        137780144128,
+        137780142895,
+        137780141780
+      ],
+      "cause": "Virtual mocks used a different module identity under full CRA resolver; strict browser fixture lacked GET/freshness. Fixes prepared without dropping assertions."
+    },
+    {
+      "repository": "AMASI-SA/amasi-mobile",
+      "head": "3548b7f96a871578ae4a17ddb15cf60fa47102ea",
+      "kind": "ci_start",
+      "run": 45202060677,
+      "job": 137787860535,
+      "cause": "Required frontend-checks fails before source execution. Exact annotation reason unavailable; must not infer billing or source failure."
+    }
+  ]
 }
-

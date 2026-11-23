@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { isMezanV2Route } from '../../components/MezanV2NavigationShell';
 import { readBalanceFreshness } from './balanceFreshnessApi';
 import { balanceSnapshot } from './visibleBalanceFreshness';
 import { canReadOperationalPage } from './visibleOperationalRead';
@@ -72,5 +73,6 @@ export default function GlobalBalanceFreshness() {
   const check = useCallback(() => setGeneration(value => value + 1), []);
   if (!enabled || result?.key !== identity) return null;
   return <BalanceFreshnessNotice state={result.value} compact globalNotice
+    legacyControls={!isMezanV2Route(location.pathname)}
     onCheck={check} href="/operational-balances" />;
 }

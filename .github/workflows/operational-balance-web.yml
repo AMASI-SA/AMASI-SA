@@ -542,17 +542,17 @@ jobs:
           const out = process.env.SIMPLE_BALANCES_UAT_OUTPUT;
           const evidence = JSON.parse(fs.readFileSync(path.join(out, 'browser-evidence.json')));
           if (evidence.synthetic_only !== true || evidence.actual_components !== true ||
-              evidence.chromium_sandbox !== true || evidence.results.length !== 12 ||
+              evidence.chromium_sandbox !== true || evidence.results.length !== 13 ||
               evidence.results.some(result => result.status !== 'PASS') || evidence.errors.length) {
-            throw Error('All twelve simple balances browser scenarios must execute and pass');
+            throw Error('All thirteen simple balances browser scenarios must execute and pass');
           }
           for (const name of ['ledger', 'external-form', 'refund', 'access']) {
             for (const size of ['desktop', 'mobile']) {
               if (!fs.statSync(path.join(out, `${name}-${size}.png`)).size) throw Error('Missing component screenshot');
             }
           }
-          for (const name of ['salary-compact-mobile', 'salary-history-mobile', 'statement-mobile', 'reviews-approved-mobile']) {
-            if (!fs.statSync(path.join(out, `${name}.png`)).size) throw Error('Missing period/review screenshot');
+          for (const name of ['salary-compact-mobile', 'salary-history-mobile', 'statement-mobile', 'reviews-approved-mobile', 'automatic-freshness-warning-mobile']) {
+            if (!fs.statSync(path.join(out, `${name}.png`)).size) throw Error('Missing period/review/freshness screenshot');
           }
           JS
           git diff --exit-code
