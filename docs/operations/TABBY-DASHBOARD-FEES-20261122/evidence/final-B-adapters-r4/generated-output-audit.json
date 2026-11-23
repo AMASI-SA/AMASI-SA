@@ -1,0 +1,62 @@
+{
+  "result": "PASS",
+  "source_git_sha": "1725672eeccb1272f183c376b9267e363a028325",
+  "deployment_git_sha": "104c6b45cd646418a719496fb8c02ee61ddf5483",
+  "source_base_git_sha": "c2d244a3349013c06f3fb7824070bfa12bd0bfe0",
+  "hosts": [
+    {
+      "host_node": "20.20.2",
+      "generated_artifact_id": 14833035872,
+      "evidence_artifact_id": 14832926012,
+      "result": "PASS",
+      "tar_sha256": "334ceb2c83de97d667675ffcef54f3cdf1a0dc80442b9be06bceabc09ee2c27a",
+      "generated_file_count": 389,
+      "generated_content_tree_sha256": "249464f77d9773c340ca2a767a2360ca4327b2a5bd8d755a9286a6bd1e5e3c09",
+      "intent_sha256": "b56f866f5c4efc28bc40f16e9eacd42a5052d673b39a482b0b861635e9a3e54e",
+      "identity_record": {
+        "path": "release_identity.json",
+        "bytes": 497295,
+        "sha256": "25e53072fc72485a4f16678b1135e23fe5f7eb22b5219c5059570eb454b10bb0"
+      },
+      "original_frontend_build_identity": "PASS",
+      "original_reproducibility_proof": "PASS",
+      "original_runtime_identity": "PASS",
+      "exact_A_frontend_git_membership": "PASS",
+      "frontend_package_count": 1796,
+      "frontend_package_tree_sha256": "2bc61f6a8a7cc8ee92155653bef45973b59e09eee0b1d9e1e6020c4e1e3caddd",
+      "backend_package_count": 1330,
+      "backend_package_tree_sha256": "20bed31f3ea39179568046f89064fc0bbb2e8b9149fedc581c06e6d60b09eb12",
+      "artifact_tree_sha256": "9796b20cca6dd4809bcf27ff4e5cf4817b59ecc4005763c70304064850483827",
+      "release_id": "rg5-be6cf2196ab95412377fd5280c5ff7b6fd3204dd20dd74825b43d85e0fe77d13"
+    },
+    {
+      "host_node": "24.19.0",
+      "generated_artifact_id": 14830703235,
+      "evidence_artifact_id": 14832167945,
+      "result": "PASS",
+      "tar_sha256": "92e46d0acb7aea2a6c32fd4b5931f02c51b5717fea05485173e05da7d9c0c783",
+      "generated_file_count": 389,
+      "generated_content_tree_sha256": "249464f77d9773c340ca2a767a2360ca4327b2a5bd8d755a9286a6bd1e5e3c09",
+      "intent_sha256": "b56f866f5c4efc28bc40f16e9eacd42a5052d673b39a482b0b861635e9a3e54e",
+      "identity_record": {
+        "path": "release_identity.json",
+        "bytes": 497295,
+        "sha256": "25e53072fc72485a4f16678b1135e23fe5f7eb22b5219c5059570eb454b10bb0"
+      },
+      "original_frontend_build_identity": "PASS",
+      "original_reproducibility_proof": "PASS",
+      "original_runtime_identity": "PASS",
+      "exact_A_frontend_git_membership": "PASS",
+      "frontend_package_count": 1796,
+      "frontend_package_tree_sha256": "2bc61f6a8a7cc8ee92155653bef45973b59e09eee0b1d9e1e6020c4e1e3caddd",
+      "backend_package_count": 1330,
+      "backend_package_tree_sha256": "20bed31f3ea39179568046f89064fc0bbb2e8b9149fedc581c06e6d60b09eb12",
+      "artifact_tree_sha256": "9796b20cca6dd4809bcf27ff4e5cf4817b59ecc4005763c70304064850483827",
+      "release_id": "rg5-be6cf2196ab95412377fd5280c5ff7b6fd3204dd20dd74825b43d85e0fe77d13"
+    }
+  ],
+  "all_389_generated_files_byte_identical_across_hosts": true,
+  "package_boundary_proofs_identical_across_hosts": true,
+  "local_repo_unchanged": true,
+  "scope": "Downloaded artifacts and original read-only identity validators; no dependency installs/builds or host actions."
+}

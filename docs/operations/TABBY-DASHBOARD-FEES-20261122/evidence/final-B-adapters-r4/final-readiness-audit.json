@@ -1,0 +1,166 @@
+{
+  "schema_version": 1,
+  "kind": "independent_r4_B_final_readiness_audit",
+  "result": "PASS",
+  "run_id": 45202221084,
+  "run_attempt": 1,
+  "source_git_sha": "1725672eeccb1272f183c376b9267e363a028325",
+  "deployment_git_sha": "104c6b45cd646418a719496fb8c02ee61ddf5483",
+  "source_base_git_sha": "c2d244a3349013c06f3fb7824070bfa12bd0bfe0",
+  "release_id": "rg5-be6cf2196ab95412377fd5280c5ff7b6fd3204dd20dd74825b43d85e0fe77d13",
+  "artifact_tree_sha256": "9796b20cca6dd4809bcf27ff4e5cf4817b59ecc4005763c70304064850483827",
+  "remote_B_provenance": {
+    "schema_version": 1,
+    "kind": "independent_r4_B_provenance",
+    "result": "PASS",
+    "repository": "AMASI-SA/AMASI-SA",
+    "deployment_git_sha": "104c6b45cd646418a719496fb8c02ee61ddf5483",
+    "source_git_sha": "1725672eeccb1272f183c376b9267e363a028325",
+    "source_base_git_sha": "c2d244a3349013c06f3fb7824070bfa12bd0bfe0",
+    "deployment_tree": "72659c9adcd5fcf3880c4ef4332245a65b620fe3",
+    "parents": [
+      "1725672eeccb1272f183c376b9267e363a028325"
+    ],
+    "comparison": {
+      "status": "ahead",
+      "ahead_by": 1,
+      "behind_by": 0,
+      "base": "1725672eeccb1272f183c376b9267e363a028325",
+      "merge_base": "1725672eeccb1272f183c376b9267e363a028325",
+      "total_commits": 1,
+      "commits": [
+        "104c6b45cd646418a719496fb8c02ee61ddf5483"
+      ],
+      "files": [
+        {
+          "filename": "release/release-intent-v5.json",
+          "sha": "819743a5a6d29a9c6b50502bc3aebd8f8f850220",
+          "status": "modified"
+        }
+      ]
+    },
+    "intent_sha256": "b56f866f5c4efc28bc40f16e9eacd42a5052d673b39a482b0b861635e9a3e54e",
+    "intent_bytes": 1504910,
+    "intent_git_blob": "819743a5a6d29a9c6b50502bc3aebd8f8f850220",
+    "remote_blob_recomputed_from_audited_candidate": true,
+    "pull_request": {
+      "number": 2086,
+      "state": "open",
+      "draft": true,
+      "head": "104c6b45cd646418a719496fb8c02ee61ddf5483",
+      "base": "c2d244a3349013c06f3fb7824070bfa12bd0bfe0",
+      "head_ref": "codex/tabby-weekly-fee-estimates-r4-20261123"
+    },
+    "readiness_run_id": 45202221084,
+    "local_observation": {
+      "head": "e823722752a6e476c83374f191de3b4bd10d320d",
+      "tree": "72659c9adcd5fcf3880c4ef4332245a65b620fe3",
+      "direct_parent": "1725672eeccb1272f183c376b9267e363a028325",
+      "clean": true,
+      "source_bytes_tree_equivalent_to_remote_B": true
+    },
+    "source_urls": [
+      "https://api.github.com/repos/AMASI-SA/AMASI-SA/git/commits/104c6b45cd646418a719496fb8c02ee61ddf5483",
+      "https://api.github.com/repos/AMASI-SA/AMASI-SA/compare/1725672eeccb1272f183c376b9267e363a028325...104c6b45cd646418a719496fb8c02ee61ddf5483",
+      "https://api.github.com/repos/AMASI-SA/AMASI-SA/pulls/2086"
+    ]
+  },
+  "adapter_evidence": [
+    {
+      "host_node": "20.20.2",
+      "job_id": 137790342232,
+      "result": "PASS",
+      "critical_step_count": 11,
+      "all_critical_steps_success": true,
+      "cold_governed_toolchain_installed": true,
+      "governed_node": "22.23.2",
+      "governed_yarn": "1.22.22",
+      "actual_adapter_git_directory_present": false,
+      "final_build_result_exact": true,
+      "requirements_materialization_bound_to_reviewed_control_lock": true,
+      "runtime_json_route_assertions_job_step": "success",
+      "package_boundary_equals_build_result": true
+    },
+    {
+      "host_node": "24.19.0",
+      "job_id": 137790341632,
+      "result": "PASS",
+      "critical_step_count": 11,
+      "all_critical_steps_success": true,
+      "cold_governed_toolchain_installed": true,
+      "governed_node": "22.23.2",
+      "governed_yarn": "1.22.22",
+      "actual_adapter_git_directory_present": false,
+      "final_build_result_exact": true,
+      "requirements_materialization_bound_to_reviewed_control_lock": true,
+      "runtime_json_route_assertions_job_step": "success",
+      "package_boundary_equals_build_result": true
+    }
+  ],
+  "generated_outputs": {
+    "result": "PASS",
+    "source_git_sha": "1725672eeccb1272f183c376b9267e363a028325",
+    "deployment_git_sha": "104c6b45cd646418a719496fb8c02ee61ddf5483",
+    "source_base_git_sha": "c2d244a3349013c06f3fb7824070bfa12bd0bfe0",
+    "hosts": [
+      {
+        "host_node": "20.20.2",
+        "generated_artifact_id": 14833035872,
+        "evidence_artifact_id": 14832926012,
+        "result": "PASS",
+        "tar_sha256": "334ceb2c83de97d667675ffcef54f3cdf1a0dc80442b9be06bceabc09ee2c27a",
+        "generated_file_count": 389,
+        "generated_content_tree_sha256": "249464f77d9773c340ca2a767a2360ca4327b2a5bd8d755a9286a6bd1e5e3c09",
+        "intent_sha256": "b56f866f5c4efc28bc40f16e9eacd42a5052d673b39a482b0b861635e9a3e54e",
+        "identity_record": {
+          "path": "release_identity.json",
+          "bytes": 497295,
+          "sha256": "25e53072fc72485a4f16678b1135e23fe5f7eb22b5219c5059570eb454b10bb0"
+        },
+        "original_frontend_build_identity": "PASS",
+        "original_reproducibility_proof": "PASS",
+        "original_runtime_identity": "PASS",
+        "exact_A_frontend_git_membership": "PASS",
+        "frontend_package_count": 1796,
+        "frontend_package_tree_sha256": "2bc61f6a8a7cc8ee92155653bef45973b59e09eee0b1d9e1e6020c4e1e3caddd",
+        "backend_package_count": 1330,
+        "backend_package_tree_sha256": "20bed31f3ea39179568046f89064fc0bbb2e8b9149fedc581c06e6d60b09eb12",
+        "artifact_tree_sha256": "9796b20cca6dd4809bcf27ff4e5cf4817b59ecc4005763c70304064850483827",
+        "release_id": "rg5-be6cf2196ab95412377fd5280c5ff7b6fd3204dd20dd74825b43d85e0fe77d13"
+      },
+      {
+        "host_node": "24.19.0",
+        "generated_artifact_id": 14830703235,
+        "evidence_artifact_id": 14832167945,
+        "result": "PASS",
+        "tar_sha256": "92e46d0acb7aea2a6c32fd4b5931f02c51b5717fea05485173e05da7d9c0c783",
+        "generated_file_count": 389,
+        "generated_content_tree_sha256": "249464f77d9773c340ca2a767a2360ca4327b2a5bd8d755a9286a6bd1e5e3c09",
+        "intent_sha256": "b56f866f5c4efc28bc40f16e9eacd42a5052d673b39a482b0b861635e9a3e54e",
+        "identity_record": {
+          "path": "release_identity.json",
+          "bytes": 497295,
+          "sha256": "25e53072fc72485a4f16678b1135e23fe5f7eb22b5219c5059570eb454b10bb0"
+        },
+        "original_frontend_build_identity": "PASS",
+        "original_reproducibility_proof": "PASS",
+        "original_runtime_identity": "PASS",
+        "exact_A_frontend_git_membership": "PASS",
+        "frontend_package_count": 1796,
+        "frontend_package_tree_sha256": "2bc61f6a8a7cc8ee92155653bef45973b59e09eee0b1d9e1e6020c4e1e3caddd",
+        "backend_package_count": 1330,
+        "backend_package_tree_sha256": "20bed31f3ea39179568046f89064fc0bbb2e8b9149fedc581c06e6d60b09eb12",
+        "artifact_tree_sha256": "9796b20cca6dd4809bcf27ff4e5cf4817b59ecc4005763c70304064850483827",
+        "release_id": "rg5-be6cf2196ab95412377fd5280c5ff7b6fd3204dd20dd74825b43d85e0fe77d13"
+      }
+    ],
+    "all_389_generated_files_byte_identical_across_hosts": true,
+    "package_boundary_proofs_identical_across_hosts": true,
+    "local_repo_unchanged": true,
+    "scope": "Downloaded artifacts and original read-only identity validators; no dependency installs/builds or host actions."
+  },
+  "limits": [
+    "This verifies GitHub readiness and downloaded adapter outputs; it does not establish actual Emergent Cloud Build or Production verification.",
+    "No local build/install, Git mutation, retry, cancellation, or host action was performed."
+  ]
+}

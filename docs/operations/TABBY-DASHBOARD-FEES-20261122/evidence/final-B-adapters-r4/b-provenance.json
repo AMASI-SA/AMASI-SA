@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "kind": "independent_r4_B_provenance",
+  "result": "PASS",
+  "repository": "AMASI-SA/AMASI-SA",
+  "deployment_git_sha": "104c6b45cd646418a719496fb8c02ee61ddf5483",
+  "source_git_sha": "1725672eeccb1272f183c376b9267e363a028325",
+  "source_base_git_sha": "c2d244a3349013c06f3fb7824070bfa12bd0bfe0",
+  "deployment_tree": "72659c9adcd5fcf3880c4ef4332245a65b620fe3",
+  "parents": [
+    "1725672eeccb1272f183c376b9267e363a028325"
+  ],
+  "comparison": {
+    "status": "ahead",
+    "ahead_by": 1,
+    "behind_by": 0,
+    "base": "1725672eeccb1272f183c376b9267e363a028325",
+    "merge_base": "1725672eeccb1272f183c376b9267e363a028325",
+    "total_commits": 1,
+    "commits": [
+      "104c6b45cd646418a719496fb8c02ee61ddf5483"
+    ],
+    "files": [
+      {
+        "filename": "release/release-intent-v5.json",
+        "sha": "819743a5a6d29a9c6b50502bc3aebd8f8f850220",
+        "status": "modified"
+      }
+    ]
+  },
+  "intent_sha256": "b56f866f5c4efc28bc40f16e9eacd42a5052d673b39a482b0b861635e9a3e54e",
+  "intent_bytes": 1504910,
+  "intent_git_blob": "819743a5a6d29a9c6b50502bc3aebd8f8f850220",
+  "remote_blob_recomputed_from_audited_candidate": true,
+  "pull_request": {
+    "number": 2086,
+    "state": "open",
+    "draft": true,
+    "head": "104c6b45cd646418a719496fb8c02ee61ddf5483",
+    "base": "c2d244a3349013c06f3fb7824070bfa12bd0bfe0",
+    "head_ref": "codex/tabby-weekly-fee-estimates-r4-20261123"
+  },
+  "readiness_run_id": 45202221084,
+  "local_observation": {
+    "head": "e823722752a6e476c83374f191de3b4bd10d320d",
+    "tree": "72659c9adcd5fcf3880c4ef4332245a65b620fe3",
+    "direct_parent": "1725672eeccb1272f183c376b9267e363a028325",
+    "clean": true,
+    "source_bytes_tree_equivalent_to_remote_B": true
+  },
+  "source_urls": [
+    "https://api.github.com/repos/AMASI-SA/AMASI-SA/git/commits/104c6b45cd646418a719496fb8c02ee61ddf5483",
+    "https://api.github.com/repos/AMASI-SA/AMASI-SA/compare/1725672eeccb1272f183c376b9267e363a028325...104c6b45cd646418a719496fb8c02ee61ddf5483",
+    "https://api.github.com/repos/AMASI-SA/AMASI-SA/pulls/2086"
+  ]
+}

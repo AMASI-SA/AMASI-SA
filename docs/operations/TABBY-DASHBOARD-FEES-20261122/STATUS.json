@@ -1,7 +1,7 @@
 {
   "task_id": "TABBY-DASHBOARD-FEES-20261122",
-  "status": "r4_exact_intent_B_frozen_final_CI_running_actual_host_access_verified",
-  "updated_at_utc": "2026-11-23T15:12:50.400290+00:00",
+  "status": "r4_final_B_adapter_proofs_accepted_two_long_CI_jobs_still_running",
+  "updated_at_utc": "2026-11-23T15:20:31.614217+00:00",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tabby-weekly-fees-release-evidence-20261122",
   "production_branch": "hotfix/prod-snap-meta-final",
@@ -140,7 +140,9 @@
     "inherited_intent": "Current base intent is unchanged in this source checkpoint. A fresh original governed candidate and new intent-only B are still required.",
     "host_actions": "Read-only original guard/Git/disk check only; no lease or source/staging mutation/publication.",
     "host_access": "Verified actual signed-in Emergent VS Code terminal; original guard/Git/disk bounded read-only check passed. HOST-ACCESS-READ-2086.json retains observations.",
-    "historical_hold_superseded": true
+    "historical_hold_superseded": true,
+    "live_UI_before_publication": "Root read-only existing dashboard session showed Tabby row and payment total incomplete on2026-11-23, while other provider fee rows were numeric. Use same report for post-publication comparison; no customer data or financial amounts retained here.",
+    "latest_coordination": "Issue1006 canonical comment updated2026-11-23T15:16:16Z: current Production unchangedN; PR2084 explicitly no publication reservation, PR2085 isolated WIP with only its own hold; no substantiated foreign release reservation."
   },
   "next_safe_actions": [
     "Preserve reviewed R4 source A remotely and open its dedicated Draft PR; record exact identity in PR and separate evidence branch.",
@@ -174,7 +176,18 @@
   "final_B_ci": {
     "readiness_run": 45202221084,
     "state": "running",
-    "complete": false
+    "complete": false,
+    "checks_observed": 54,
+    "success_observed": 46,
+    "expected_skips_observed": 6,
+    "in_progress_observed": 2,
+    "focused_run": 45202221194,
+    "focused_backend": "2+214 tests passed from exact job log137788402068",
+    "focused_frontend": "123 tests/six suites plus frontend build passed from exact job log137788401472",
+    "remaining_jobs": [
+      137788593035,
+      137788594170
+    ]
   },
   "candidate_audit": {
     "verdict": "PASS root and independent",
@@ -185,5 +198,17 @@
     "intent_bytes": 1504910,
     "intent_sha256": "b56f866f5c4efc28bc40f16e9eacd42a5052d673b39a482b0b861635e9a3e54e"
   },
-  "manual_helper_review_R4": "MANUAL-HELPER-REVIEW-R4.json"
+  "manual_helper_review_R4": "MANUAL-HELPER-REVIEW-R4.json",
+  "final_B_adapter_review": {
+    "result": "PASS root and independent",
+    "path": "evidence/final-B-adapters-r4/root-acceptance.json",
+    "source_B": "104c6b45cd646418a719496fb8c02ee61ddf5483",
+    "readiness_run": 45202221084,
+    "artifact_ids": [
+      14833035872,
+      14832926012,
+      14830703235,
+      14832167945
+    ]
+  }
 }

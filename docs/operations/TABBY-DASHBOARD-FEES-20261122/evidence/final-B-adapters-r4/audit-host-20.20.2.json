@@ -1,0 +1,64 @@
+{
+  "adapter_built_without_git": true,
+  "base_sha": "c2d244a3349013c06f3fb7824070bfa12bd0bfe0",
+  "build_meta": {
+    "bytes": 581648,
+    "path": "build-meta.json",
+    "sha256": "a7dfdaac6084e38c4075da9a1c6e21aa6f5233bdb4236ae1d67234b91df755e6"
+  },
+  "deployment_sha": "104c6b45cd646418a719496fb8c02ee61ddf5483",
+  "evidence_zip_sha256": "e9647f735f36582564d3cf31bd86ce352326064957d8f3230c347e31e0cd738a",
+  "generated_file_tree_sha256": "249464f77d9773c340ca2a767a2360ca4327b2a5bd8d755a9286a6bd1e5e3c09",
+  "generated_files": 389,
+  "generated_zip_sha256": "af4034c5199ccb471cda9b69433ccc658ae094a6c2cc82806a7abcccc23e2b56",
+  "host_node": "20.20.2",
+  "intent_sha256": "b56f866f5c4efc28bc40f16e9eacd42a5052d673b39a482b0b861635e9a3e54e",
+  "original_readers_passed": true,
+  "package_boundary": {
+    "backend": {
+      "file_count": 1330,
+      "git_directory_present": false,
+      "health_verified": true,
+      "identity": {
+        "bytes": 497295,
+        "path": "release_identity.json",
+        "sha256": "25e53072fc72485a4f16678b1135e23fe5f7eb22b5219c5059570eb454b10bb0"
+      },
+      "isolated_verified": true,
+      "package_tree_sha256": "20bed31f3ea39179568046f89064fc0bbb2e8b9149fedc581c06e6d60b09eb12",
+      "runtime_root": "backend",
+      "sibling_frontend_present": false
+    },
+    "frontend": {
+      "artifact_tree_sha256": "9796b20cca6dd4809bcf27ff4e5cf4817b59ecc4005763c70304064850483827",
+      "build_meta": {
+        "bytes": 581648,
+        "path": "build/build-meta.json",
+        "sha256": "a7dfdaac6084e38c4075da9a1c6e21aa6f5233bdb4236ae1d67234b91df755e6"
+      },
+      "content_type_contract": "application/json",
+      "file_count": 1796,
+      "isolated_runtime_artifact_verified": true,
+      "package_tree_sha256": "2bc61f6a8a7cc8ee92155653bef45973b59e09eee0b1d9e1e6020c4e1e3caddd",
+      "runtime_root": "frontend",
+      "static_root": "frontend/build"
+    },
+    "kind": "mezan_release_package_boundary_proof_v1",
+    "release_id": "rg5-be6cf2196ab95412377fd5280c5ff7b6fd3204dd20dd74825b43d85e0fe77d13",
+    "schema_version": 1,
+    "source_git_sha": "1725672eeccb1272f183c376b9267e363a028325"
+  },
+  "proof_file": {
+    "bytes": 1521,
+    "path": "frontend/.release/reproducible-build.json",
+    "sha256": "82c64c78437e7fc943ad43898354b5263454991b2398d9bf7bdd8d9160c2eed3"
+  },
+  "source_sha": "1725672eeccb1272f183c376b9267e363a028325",
+  "tar_members": 395,
+  "tar_sha256": "334ceb2c83de97d667675ffcef54f3cdf1a0dc80442b9be06bceabc09ee2c27a",
+  "toolchain": {
+    "node": "22.23.2",
+    "vite": "8.2.4",
+    "yarn": "1.22.22"
+  }
+}
