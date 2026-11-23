@@ -28,6 +28,9 @@ if (!out || !path.isAbsolute(out) || path.resolve(out) === root || path.resolve(
     ...['ApprovedFinance.jsx','ApprovedEntry.jsx','ApprovedLedger.jsx','PaymentSourceFields.jsx','PendingEntryActions.jsx',
       'workspaceReadHooks.js','WorkspaceResourcePicker.jsx','WorkspaceSnapshot.jsx']
       .map(file => `frontend/src/pages/operational/${file}`),
+    ...['BalanceFreshnessNotice.jsx', 'balanceFreshness.css', 'balanceFreshnessApi.js',
+      'useBalanceFreshnessExpiry.js', 'useVisibleBalanceFreshness.js', 'visibleBalanceFreshness.js']
+      .map(file => `frontend/src/pages/operational/${file}`),
     'frontend/src/pages/operational/SimpleBalances.jsx', 'frontend/src/pages/operational/SimpleBalanceAccess.jsx',
     'frontend/src/pages/operational/SimpleOrderRefunds.jsx', 'frontend/src/pages/operational/simpleBalancesApi.js',
     'frontend/src/pages/operational/SimpleBalanceStatement.jsx', 'frontend/src/pages/operational/SimpleBalanceReviews.jsx',
@@ -42,3 +45,4 @@ if (!out || !path.isAbsolute(out) || path.resolve(out) === root || path.resolve(
     sha256: Object.fromEntries(files.map(file => [file, crypto.createHash('sha256').update(fs.readFileSync(path.join(root, file))).digest('hex')])),
   }, null, 2));
 })().catch(error => { console.error(error); process.exitCode = 1; });
+

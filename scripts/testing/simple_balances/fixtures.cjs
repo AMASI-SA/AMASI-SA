@@ -29,6 +29,14 @@ const owner = { id: 'synthetic-owner', name: 'مالك الاختبار', role: 
 const staff = { id: 'synthetic-staff', name: 'موظف الاختبار', role: 'employee', is_owner: false, owner_id: owner.id };
 const context = actor => ({ actor, session_scope: scope, permission_version: 3, status: 'active',
   capabilities: { create_entries: true, manage_access: actor.is_owner }, operations, resources });
+const freshness = actor => ({ schema_version: 1, status: 'active',
+  actor: { id: actor.id, is_owner: actor.is_owner }, session_scope: scope, revision: 1,
+  as_of: '2026-11-19T12:00:00Z', generated_at: '2026-11-19T12:00:00Z',
+  freshness: { state: 'current', max_age_seconds: 7200 }, last_attempt: null,
+  sources: ['payroll', 'recurring', 'salla', 'snapchat', 'meta', 'tiktok', 'google_ads'].map(key => ({
+    key, label: key === 'snapchat' ? 'إعلانات Snapchat' : key, state: 'inactive',
+    last_success_at: null, data_through: null, expected_through: null, message: 'مصدر غير مفعّل في بيانات الاختبار',
+  })), issues: [] });
 const ledger = Array.from({ length: 7 }, (_, index) => ({ id: `movement-${index + 1}`, event_id: `event-${index + 1}`,
   description: index % 2 ? 'دفعة مسجلة للجهة — توضيحي' : 'مبلغ مسجل لحساب الجهة — توضيحي',
   business_date: `2026-11-${String(17 - index).padStart(2, '0')}`, recorded_at: '2026-11-17T10:00:00Z',
@@ -56,4 +64,5 @@ const catalog = { operations, resources: resources.map(({ kind, id, name, curren
   resource_kinds: [['external_person', 'الجهات الخارجية'], ['employee', 'الموظفون'], ['supplier', 'الموردون'],
     ['store_driver', 'الموصلون'], ['courier', 'شركات الشحن'],
     ['employee_custody', 'العهد'], ['owner_withdrawal', 'المالك'], ['bank', 'البنوك'], ['cash', 'الصناديق']].map(([key, label]) => ({ key, label })) };
-module.exports = { synthetic_only: true, operations, resources, scope, owner, staff, context, ledger, order, refund, platformRefund, access, catalog };
+module.exports = { synthetic_only: true, operations, resources, scope, owner, staff, context, freshness, ledger, order, refund, platformRefund, access, catalog };
+

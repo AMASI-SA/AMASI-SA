@@ -5,6 +5,8 @@ import { todaySA } from '../../lib/dates';
 import { simpleBalancesApi as api, simpleBalanceError } from './simpleBalancesApi';
 import { authIdentity, useBalanceRead } from './simpleBalancesHooks';
 import { sameWorkspace, useWorkspaceRead } from './workspaceReadHooks';
+import { useVisibleBalanceFreshness } from './useVisibleBalanceFreshness';
+import BalanceFreshnessNotice from './BalanceFreshnessNotice';
 import WorkspaceResourcePicker from './WorkspaceResourcePicker';
 import { usePendingBalanceCommand } from './simpleBalancesPending';
 import PendingEntryActions from './PendingEntryActions';
@@ -388,6 +390,10 @@ function Workspace({ context, identity, reloadContext }) {
     if (selected && (result.resource?.id !== selected.id || result.resource?.kind !== selected.kind)) throw new Error('wrong ledger resource');
     return result;
   }, queryKey, !panel && !dialog && !adding && !invalidFilter && (Boolean(selected) ? selected.access?.movements !== 'none' : !id && tab === 'movements'));
+  const freshness = useVisibleBalanceFreshness({ context, identity,
+    canRefresh: !dialog && !adding && !['refunds', 'reviews'].includes(panel),
+    onConfirmed: () => { read.reload(); reloadContext(); },
+  });
   if (read.data) lastPage.current = { key: queryKey, value: read.data };
   if ([403, 404].includes(read.status)) lastPage.current = null;
   const result = invalidFilter ? null : read.data || (lastPage.current?.key === queryKey ? lastPage.current.value : null);
@@ -449,6 +455,7 @@ function Workspace({ context, identity, reloadContext }) {
         {panel !== 'reviews' && (selected || panel || adding || location.state?.sbReturn) && <button type="button" className="sb-menu" onClick={back}>رجوع</button>}
         {!selected && !panel && <button type="button" className="sb-menu" aria-label="جميع الأقسام" onClick={() => go({ ...values(), panel: 'sections' })}>الأقسام</button>}
       </div></header>
+      {freshness.owner && <BalanceFreshnessNotice state={freshness} canUpdate={freshness.canRefresh} onCheck={freshness.canRefresh ? freshness.retry : undefined} />}
       {sections ? <section className="sb-content"><div className="sb-section-links">
         {[...new Set(context.resources.map(item => item.kind))].filter(item => !isMoneyAccount(item)).map(item => <button type="button" key={item} onClick={() => go({ tab: 'parties', filter: item })}>{resourceLabels[item] || item}</button>)}
         {canReports && <button type="button" onClick={() => go({ tab, panel: 'reports' })}><strong>التقارير المالية</strong><span>كشف حساب حسب النوع والحساب والفترة.</span></button>}

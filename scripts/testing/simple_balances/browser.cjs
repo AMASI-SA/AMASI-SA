@@ -19,6 +19,7 @@ const rows = structuredClone(f.ledger), refunds = [...Array.from({ length: 6 }, 
 const requests = new Set();
 const pendingCommands = new Map(), retiredCommands = new Set();
 let holdEntryRegistration = false, releaseEntryRegistration = null, entryRegistrationStarted = null;
+let balanceHealth = null, releaseBalanceRefresh = null, balanceRefreshStarted = null;
 const assertRegistered = (action, targetId, body) => {
   const pending = pendingCommands.get(body.request_id);
   assert(pending && pending.actor_id === actor.id, 'A financial request requires its authenticated server recovery record');
@@ -59,6 +60,25 @@ const server = http.createServer(async (request, response) => {
       body = JSON.parse(raw); call.body = body;
     }
     if (url.pathname === '/api/auth/me' && request.method === 'GET') return send(200, actor);
+    if (url.pathname === '/api/operational-balances/freshness' && request.method === 'GET') {
+      if (!actor.is_owner) return send(403, { detail: { code: 'operational_freshness_owner_required' } });
+      return send(200, balanceHealth || f.freshness(actor));
+    }
+    if (url.pathname === '/api/operational-balances/refresh' && request.method === 'POST') {
+      assert.equal(actor.is_owner, true);
+      assert.equal(scenario, 'Owner keeps saved balances and failed-source warning across a confirmed refresh',
+        'Fresh/entry/staff fixtures must not dispatch an unsolicited financial refresh');
+      assert.deepEqual(body, { visible: true, expected_session_scope: f.scope });
+      releaseBalanceRefresh = () => {
+        balanceHealth = { ...balanceHealth, as_of: '2026-11-19T12:00:00Z', revision: 2,
+          freshness: { state: 'failed', max_age_seconds: 7200 },
+          last_attempt: { started_at: '2026-11-19T11:59:00Z', finished_at: '2026-11-19T12:00:00Z',
+            outcome: 'success', error_code: null } };
+        send(200, { status: 'refreshed', session_scope: f.scope, as_of: balanceHealth.as_of, revision: 2 });
+      };
+      balanceRefreshStarted?.();
+      return;
+    }
     const base = '/api/operational-balances/workspace';
     const admin = '/api/operational-balances/access';
     if (url.pathname.startsWith(`${base}/pending-commands/`)) {
@@ -266,9 +286,9 @@ async function check(name, action) {
   scenario = name; const before = calls.length; await action();
   results.push({ name, status: 'PASS', request_count: calls.length - before }); console.log(`PASS ${name}`);
 }
-async function deadline(promise) {
+async function deadline(promise, message = 'Recovery registration did not reach the fixture') {
   let timer;
-  try { return await Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(Error('Recovery registration did not reach the fixture')), 5000); })]); }
+  try { return await Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(Error(message)), 5000); })]); }
   finally { clearTimeout(timer); }
 }
 async function capture(page, name) {
@@ -607,7 +627,38 @@ async function capture(page, name) {
       assert.equal(await page.locator('.sbr-row').count(), 1);
       await capture(page, 'reviews-approved-mobile');
     });
-    assert.deepEqual(errors, []); assert.equal(results.length, 12); assert.equal(screenshots.length, 12);
+    await check('Owner keeps saved balances and failed-source warning across a confirmed refresh', async () => {
+      actor = f.owner;
+      await page.setViewportSize({ width: 390, height: 844 });
+      balanceHealth = f.freshness(actor);
+      balanceHealth.as_of = '2026-11-18T12:00:00Z';
+      balanceHealth.freshness.state = 'stale';
+      balanceHealth.sources = balanceHealth.sources.map(source => source.key === 'snapchat'
+        ? { ...source, state: 'failed', last_success_at: '2026-11-18T10:00:00Z',
+          message: 'لم يكتمل تحديث المصدر في بيانات الاختبار.' } : source);
+      balanceHealth.issues = [{ code: 'operational_source_failed', source: 'snapchat', severity: 'error',
+        message: 'لم يكتمل تحديث المصدر في بيانات الاختبار.', last_success_at: '2026-11-18T10:00:00Z' }];
+      const start = calls.length;
+      const posted = page.waitForRequest(request => request.method() === 'POST'
+        && new URL(request.url()).pathname === '/api/operational-balances/refresh');
+      const held = new Promise(resolve => { balanceRefreshStarted = resolve; });
+      await page.goto(ledgerUrl);
+      await deadline(Promise.all([posted, held]), 'Freshness refresh did not reach the fixture');
+      await page.locator('.sb-ledger tbody tr').first().waitFor();
+      assert.equal(await page.locator('.sb-ledger tbody tr').count(), 5, 'Saved rows remain visible while refresh is pending');
+      await page.locator('.balance-freshness-warning').waitFor();
+      assert.equal(typeof releaseBalanceRefresh, 'function');
+      releaseBalanceRefresh();
+      await page.getByRole('button', { name: 'تحديث المصادر', exact: true }).waitFor();
+      await page.locator('.balance-freshness-warning').getByText('إعلانات Snapchat', { exact: false }).first().waitFor();
+      assert.equal(calls.slice(start).filter(call => call.method === 'POST'
+        && call.path === '/api/operational-balances/refresh').length, 1);
+      assert(calls.slice(start).filter(call => call.path.endsWith('/freshness')).length >= 2,
+        'A successful receipt is followed by saved metadata readback');
+      await capture(page, 'automatic-freshness-warning-mobile');
+      balanceHealth = null; releaseBalanceRefresh = null; balanceRefreshStarted = null;
+    });
+    assert.deepEqual(errors, []); assert.equal(results.length, 13); assert.equal(screenshots.length, 13);
     await context.close();
   } finally {
     fs.writeFileSync(path.join(out, 'browser-evidence.json'), JSON.stringify({ synthetic_only: true, actual_components: true, chromium_sandbox: true, results, errors, screenshots, calls }, null, 2));
@@ -619,3 +670,4 @@ async function capture(page, name) {
     chromium_sandbox: true, results, errors, screenshots, calls }, null, 2));
   console.error(error); server.close(); process.exitCode = 1;
 });
+

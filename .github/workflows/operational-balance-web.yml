@@ -67,6 +67,7 @@ jobs:
         run: >-
           python -B -m pytest --noconftest -q
           backend/tests/test_operational_balance*.py
+          backend/tests/test_operational_source_freshness.py
           backend/tests/test_inventory_option_configuration.py
           backend/tests/test_inventory_payment_allocation_lineage.py
           backend/tests/test_customer_inventory_unified_activity.py
@@ -137,6 +138,11 @@ jobs:
           import xml.etree.ElementTree as ET
           cases = ET.parse('operational-backend.xml').findall('.//testcase')
           assert len(cases) >= 3500, 'Operational test collection incomplete'
+          for suite in ('test_operational_balance_freshness', 'test_operational_balance_freshness_routes',
+                        'test_operational_source_freshness'):
+              selected = [c for c in cases if suite in c.get('classname', '')]
+              assert selected, suite + ' not collected'
+              assert not any(c.find('skipped') is not None for c in selected), suite + ' skipped'
           for suite, minimum in (('test_read_path_diagnostics', 15),
                                  ('test_operational_context_read_diagnostics', 14),
                                  ('test_assembly_read_diagnostics', 11)):
@@ -536,17 +542,17 @@ jobs:
           const out = process.env.SIMPLE_BALANCES_UAT_OUTPUT;
           const evidence = JSON.parse(fs.readFileSync(path.join(out, 'browser-evidence.json')));
           if (evidence.synthetic_only !== true || evidence.actual_components !== true ||
-              evidence.chromium_sandbox !== true || evidence.results.length !== 12 ||
+              evidence.chromium_sandbox !== true || evidence.results.length !== 13 ||
               evidence.results.some(result => result.status !== 'PASS') || evidence.errors.length) {
-            throw Error('All twelve simple balances browser scenarios must execute and pass');
+            throw Error('All thirteen simple balances browser scenarios must execute and pass');
           }
           for (const name of ['ledger', 'external-form', 'refund', 'access']) {
             for (const size of ['desktop', 'mobile']) {
               if (!fs.statSync(path.join(out, `${name}-${size}.png`)).size) throw Error('Missing component screenshot');
             }
           }
-          for (const name of ['salary-compact-mobile', 'salary-history-mobile', 'statement-mobile', 'reviews-approved-mobile']) {
-            if (!fs.statSync(path.join(out, `${name}.png`)).size) throw Error('Missing period/review screenshot');
+          for (const name of ['salary-compact-mobile', 'salary-history-mobile', 'statement-mobile', 'reviews-approved-mobile', 'automatic-freshness-warning-mobile']) {
+            if (!fs.statSync(path.join(out, `${name}.png`)).size) throw Error('Missing period/review/freshness screenshot');
           }
           JS
           git diff --exit-code
@@ -613,3 +619,4 @@ jobs:
             ${{ runner.temp }}/operational-balances-browser/financial-full-report.xlsx
             ${{ runner.temp }}/operational-balances-browser/fixture-manifest.json
           if-no-files-found: error
+
