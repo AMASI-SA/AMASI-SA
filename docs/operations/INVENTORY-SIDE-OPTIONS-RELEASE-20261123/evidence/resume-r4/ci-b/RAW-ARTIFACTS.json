@@ -1,0 +1,212 @@
+{
+  "retained": [
+    {
+      "path": "exact-b-ci/ci-reports/g47/g47-backend-a92283678a25494c7d1870cd1675b8f30847aa6a.zip",
+      "size": 8645,
+      "sha256": "31204ac7ca861e65270ceda505e540ed34b88c651724b98f63c67f2659cc3815",
+      "git_blob_sha1": "53bfad8ad29ddf7ce6878bb6ce749ab527e4b40d",
+      "artifact_id": 14872242148,
+      "artifact_name": "g47-backend-a92283678a25494c7d1870cd1675b8f30847aa6a",
+      "workflow_run_id": 45286310766,
+      "source_git_sha": "a92283678a25494c7d1870cd1675b8f30847aa6a",
+      "github_metadata": "exact-b-ci/ci-reports/g47/g47-backend-a92283678a25494c7d1870cd1675b8f30847aa6a-metadata.json",
+      "original_zip_unchanged": true
+    },
+    {
+      "path": "exact-b-ci/ci-reports/g47/g47-frontend-a92283678a25494c7d1870cd1675b8f30847aa6a.zip",
+      "size": 8278,
+      "sha256": "0df000d7b8631d14c3d7a3b2330209c0a99200616f256372b527dd724a09d0a1",
+      "git_blob_sha1": "a7613db0a89bc5db4391d2dad7e5926737b6a0d7",
+      "artifact_id": 14872935378,
+      "artifact_name": "g47-frontend-a92283678a25494c7d1870cd1675b8f30847aa6a",
+      "workflow_run_id": 45286310766,
+      "source_git_sha": "a92283678a25494c7d1870cd1675b8f30847aa6a",
+      "github_metadata": "exact-b-ci/ci-reports/g47/g47-frontend-a92283678a25494c7d1870cd1675b8f30847aa6a-metadata.json",
+      "original_zip_unchanged": true
+    },
+    {
+      "path": "exact-b-ci/ci-reports/g47/g47-order-cost-a92283678a25494c7d1870cd1675b8f30847aa6a.zip",
+      "size": 9997,
+      "sha256": "776ddf49b6fef60d130d347dae7c0963e4daecb9a9b423dffa35e2370b93a7a2",
+      "git_blob_sha1": "d103baf73b421011f7c2522c05c4aefaee653e72",
+      "artifact_id": 14871882664,
+      "artifact_name": "g47-order-cost-a92283678a25494c7d1870cd1675b8f30847aa6a",
+      "workflow_run_id": 45286310766,
+      "source_git_sha": "a92283678a25494c7d1870cd1675b8f30847aa6a",
+      "github_metadata": "exact-b-ci/ci-reports/g47/g47-order-cost-a92283678a25494c7d1870cd1675b8f30847aa6a-metadata.json",
+      "original_zip_unchanged": true
+    },
+    {
+      "path": "exact-b-ci/ci-reports/g47/native-inventory-a92283678a25494c7d1870cd1675b8f30847aa6a.zip",
+      "size": 2126,
+      "sha256": "5eb54541f3cf70dc5dd7e167f097968f143710d2220f67d4e7668ee97c498f71",
+      "git_blob_sha1": "64baf584b03b6302c1edad3397fc21d477a8e707",
+      "artifact_id": 14871598380,
+      "artifact_name": "native-inventory-a92283678a25494c7d1870cd1675b8f30847aa6a",
+      "workflow_run_id": 45286310766,
+      "source_git_sha": "a92283678a25494c7d1870cd1675b8f30847aa6a",
+      "github_metadata": "exact-b-ci/ci-reports/g47/native-inventory-a92283678a25494c7d1870cd1675b8f30847aa6a-metadata.json",
+      "original_zip_unchanged": true
+    },
+    {
+      "path": "exact-b-ci/ci-reports/g47/salla-products-projection-a92283678a25494c7d1870cd1675b8f30847aa6a.zip",
+      "size": 5802,
+      "sha256": "afc81ad72da5c7a429d1f572ccc1f77654c835a7040a3669e4cccd45e5218d56",
+      "git_blob_sha1": "b912d4564c730ab303ea221080e90ba218cfadfc",
+      "artifact_id": 14872121789,
+      "artifact_name": "salla-products-projection-a92283678a25494c7d1870cd1675b8f30847aa6a",
+      "workflow_run_id": 45286310766,
+      "source_git_sha": "a92283678a25494c7d1870cd1675b8f30847aa6a",
+      "github_metadata": "exact-b-ci/ci-reports/g47/salla-products-projection-a92283678a25494c7d1870cd1675b8f30847aa6a-metadata.json",
+      "original_zip_unchanged": true
+    },
+    {
+      "path": "exact-b-ci/ci-reports/g47/supplier-bundle-a92283678a25494c7d1870cd1675b8f30847aa6a.zip",
+      "size": 2384,
+      "sha256": "60ea0a8544e207ad069fc2859a9c5c69521a7ba78cfdb3769abfc2872da37d91",
+      "git_blob_sha1": "3cf0792f8d18212d6a0e757bfcc1761edbdbb6ef",
+      "artifact_id": 14872127223,
+      "artifact_name": "supplier-bundle-a92283678a25494c7d1870cd1675b8f30847aa6a",
+      "workflow_run_id": 45286310766,
+      "source_git_sha": "a92283678a25494c7d1870cd1675b8f30847aa6a",
+      "github_metadata": "exact-b-ci/ci-reports/g47/supplier-bundle-a92283678a25494c7d1870cd1675b8f30847aa6a-metadata.json",
+      "original_zip_unchanged": true
+    },
+    {
+      "path": "exact-b-ci/ci-reports/operational/inventory-purchase-browser-results.zip",
+      "size": 1300431,
+      "sha256": "b2e78a8e0f36eb22791215b421505ff6fa0c10a671269f7b541e5a6d40f62246",
+      "git_blob_sha1": "0f08e2c06a96c431f1fc93b72092640632eb8d57",
+      "artifact_id": 14873055478,
+      "artifact_name": "inventory-purchase-browser-results",
+      "workflow_run_id": 45286310837,
+      "source_git_sha": "a92283678a25494c7d1870cd1675b8f30847aa6a",
+      "github_metadata": "exact-b-ci/ci-reports/operational/inventory-purchase-browser-results-metadata.json",
+      "original_zip_unchanged": true
+    },
+    {
+      "path": "exact-b-ci/ci-reports/operational/operational-backend-results.zip",
+      "size": 130435,
+      "sha256": "b8c757ad9068773ffe74caf6cd331058084be7ea358091bf97ec88e563ce93fa",
+      "git_blob_sha1": "92fc673ebbeefac954bd78370ccb4be3931628b9",
+      "artifact_id": 14873825104,
+      "artifact_name": "operational-backend-results",
+      "workflow_run_id": 45286310837,
+      "source_git_sha": "a92283678a25494c7d1870cd1675b8f30847aa6a",
+      "github_metadata": "exact-b-ci/ci-reports/operational/operational-backend-results-metadata.json",
+      "original_zip_unchanged": true
+    },
+    {
+      "path": "exact-b-ci/ci-reports/operational/operational-balances-browser-results.zip",
+      "size": 752619,
+      "sha256": "1aea693ad4da063dc27997530ddf67ca91e7c6c75d7c86c0f80eb169a9f07c4d",
+      "git_blob_sha1": "449cc04930ef8a2b90f2f88b89a17ebb76066674",
+      "artifact_id": 14873050481,
+      "artifact_name": "operational-balances-browser-results",
+      "workflow_run_id": 45286310837,
+      "source_git_sha": "a92283678a25494c7d1870cd1675b8f30847aa6a",
+      "github_metadata": "exact-b-ci/ci-reports/operational/operational-balances-browser-results-metadata.json",
+      "original_zip_unchanged": true
+    },
+    {
+      "path": "exact-b-ci/ci-reports/operational/operational-frontend-results.zip",
+      "size": 57057,
+      "sha256": "43f5b75eb29f91789ad0887da6b434e806145fb178d104d12d07447c0b6c0e92",
+      "git_blob_sha1": "d87f09f275d5a8230aa13476b0c524513a8928b4",
+      "artifact_id": 14871428830,
+      "artifact_name": "operational-frontend-results",
+      "workflow_run_id": 45286310837,
+      "source_git_sha": "a92283678a25494c7d1870cd1675b8f30847aa6a",
+      "github_metadata": "exact-b-ci/ci-reports/operational/operational-frontend-results-metadata.json",
+      "original_zip_unchanged": true
+    },
+    {
+      "path": "exact-b-ci/ci-reports/operational/operational-worker-results.zip",
+      "size": 749,
+      "sha256": "777c371be36af4c5ab42f75af34fe8b4d64e8cb4ea4c48d45f702e16601e32dc",
+      "git_blob_sha1": "9061995ea512589d283e4b162f1cc1bb9b253d56",
+      "artifact_id": 14872755782,
+      "artifact_name": "operational-worker-results",
+      "workflow_run_id": 45286310837,
+      "source_git_sha": "a92283678a25494c7d1870cd1675b8f30847aa6a",
+      "github_metadata": "exact-b-ci/ci-reports/operational/operational-worker-results-metadata.json",
+      "original_zip_unchanged": true
+    },
+    {
+      "path": "exact-b-ci/ci-reports/operational/simple-balances-browser-results.zip",
+      "size": 1231138,
+      "sha256": "e9075bd7b651f335e651aea92b1676693c853be8dfcf313a0130bf0390d1ed61",
+      "git_blob_sha1": "c7e6dc0e57a3d265a97050232f88a556294ed3a2",
+      "artifact_id": 14872660792,
+      "artifact_name": "simple-balances-browser-results",
+      "workflow_run_id": 45286310837,
+      "source_git_sha": "a92283678a25494c7d1870cd1675b8f30847aa6a",
+      "github_metadata": "exact-b-ci/ci-reports/operational/simple-balances-browser-results-metadata.json",
+      "original_zip_unchanged": true
+    },
+    {
+      "path": "exact-b-ci/ci-reports/stock/eligibility-backend-a92283678a25494c7d1870cd1675b8f30847aa6a.zip",
+      "size": 94732,
+      "sha256": "3c512fca4696734e8764ff54100964bc1821240feb25d11ef7d251f37e49c087",
+      "git_blob_sha1": "fa0878965fa8c0f8d360c293602b2eace290f76d",
+      "artifact_id": 14871474258,
+      "artifact_name": "eligibility-backend-a92283678a25494c7d1870cd1675b8f30847aa6a",
+      "workflow_run_id": 45286310634,
+      "source_git_sha": "a92283678a25494c7d1870cd1675b8f30847aa6a",
+      "github_metadata": "exact-b-ci/ci-reports/stock/eligibility-backend-a92283678a25494c7d1870cd1675b8f30847aa6a-metadata.json",
+      "original_zip_unchanged": true
+    },
+    {
+      "path": "exact-b-ci/host-20.20.2/clean-clone-evidence.zip",
+      "size": 63775,
+      "sha256": "ebb0c91e1279a317a1d0e605fb7ad1c7220d18cd0f5ccfd81a3ee6f5d2b8d9c6",
+      "git_blob_sha1": "2de3d5840be4468bda0915b6a05dbd1cfa224a01",
+      "artifact_id": 14872880827,
+      "artifact_name": "release-v5-clean-clone-evidence-host-20.20.2",
+      "workflow_run_id": 45286310883,
+      "source_git_sha": "a92283678a25494c7d1870cd1675b8f30847aa6a",
+      "github_metadata": "exact-b-ci/host-20.20.2/clean-clone-evidence-metadata.json",
+      "original_zip_unchanged": true
+    },
+    {
+      "path": "exact-b-ci/host-24.19.0/clean-clone-evidence.zip",
+      "size": 63779,
+      "sha256": "8dd824dab86cdff10aed96cfc9a8aa92c0807f7d02424c02229aaa097adc4f99",
+      "git_blob_sha1": "1c2066dc871f208ee5c19949cdcccf79d08d9c48",
+      "artifact_id": 14873120680,
+      "artifact_name": "release-v5-clean-clone-evidence-host-24.19.0",
+      "workflow_run_id": 45286310883,
+      "source_git_sha": "a92283678a25494c7d1870cd1675b8f30847aa6a",
+      "github_metadata": "exact-b-ci/host-24.19.0/clean-clone-evidence-metadata.json",
+      "original_zip_unchanged": true
+    }
+  ],
+  "omitted": [
+    {
+      "path": "exact-b-ci/host-20.20.2/generated-outputs.zip",
+      "size": 3866920,
+      "sha256": "7db365e07f672c9b2e976a9a72dec582263e5269d75bcf7f8188a367af0349b1",
+      "git_blob_sha1": "60c008138c364cf6c325bd89bc4c0ad34c5e8b69",
+      "artifact_id": 14872196395,
+      "artifact_name": "release-v5-generated-outputs-host-20.20.2",
+      "workflow_run_id": 45286310883,
+      "source_git_sha": "a92283678a25494c7d1870cd1675b8f30847aa6a",
+      "github_metadata": "exact-b-ci/host-20.20.2/generated-outputs-metadata.json",
+      "original_zip_unchanged": true,
+      "omission_reason": "Redundant generated asset payload omitted from this compact evidence packet. Original archive metadata, digest, per-file manifests, validator results and selected build/proof/runtime metadata are retained."
+    },
+    {
+      "path": "exact-b-ci/host-24.19.0/generated-outputs.zip",
+      "size": 3867443,
+      "sha256": "18e9aaaea7542747481a2f9212e75b346b84c4ba1c61060803adb364332f9e99",
+      "git_blob_sha1": "dec471989ac25731cf20470f2b21ea02d557d32f",
+      "artifact_id": 14872221229,
+      "artifact_name": "release-v5-generated-outputs-host-24.19.0",
+      "workflow_run_id": 45286310883,
+      "source_git_sha": "a92283678a25494c7d1870cd1675b8f30847aa6a",
+      "github_metadata": "exact-b-ci/host-24.19.0/generated-outputs-metadata.json",
+      "original_zip_unchanged": true,
+      "omission_reason": "Redundant generated asset payload omitted from this compact evidence packet. Original archive metadata, digest, per-file manifests, validator results and selected build/proof/runtime metadata are retained."
+    }
+  ]
+}

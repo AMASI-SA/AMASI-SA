@@ -1,0 +1,22 @@
+{
+  "schema": "final-b-ci-source-bindings-v1",
+  "source_A": "deeefceffd9a1e37968513ac4f3833314bb415fd",
+  "intent_B": "a92283678a25494c7d1870cd1675b8f30847aa6a",
+  "base_J4": "28f6d4ca0fc2b7ea7f140432d8e32c768823b6a4",
+  "tree_B": "868b8595dfeba299bf1f2dfaf1fc32b82d357033",
+  "intent_file": "release/release-intent-v5.json",
+  "intent_sha256": "f0b6f57069abe12ff6a8720f4eaded7552a47aeeedb0973021249545d726bea3",
+  "release_id": "rg5-ffe0d4437c779b1e455f084be407f8f2d24735f5bf8e994f77c5bf4cbeb1c55f",
+  "frontend_artifact_tree_sha256": "df85c5736ec64571f44a5db506cb0daf34c1ac584ca3115e4e3ce86ebe80898c",
+  "reproducibility_proof_sha256": "663347f65c3e92073486a66ce3566feb78ceab64b5c0b35ba69b7b21f69518c5",
+  "operational_workflow_run_id": 45286310837,
+  "readiness_workflow_run_id": 45286310883,
+  "raw_backend_count_evidence": "supplemental/backend-result-lines.json",
+  "final_audit": "exact-b-ci/FINAL-AUDIT.md",
+  "final_summary": "exact-b-ci/final-audit-summary.json",
+  "source_commit_url": "https://github.com/AMASI-SA/AMASI-SA/commit/deeefceffd9a1e37968513ac4f3833314bb415fd",
+  "intent_commit_url": "https://github.com/AMASI-SA/AMASI-SA/commit/a92283678a25494c7d1870cd1675b8f30847aa6a",
+  "retained_original_zip_count": 15,
+  "omitted_generated_zip_count": 2,
+  "scope": "Exact-B CI, immutable source and isolated Node20/24 rehearsal evidence only. Premerge PR snapshots are historical. This packet is not deployable and does not attest to live publication or production business behavior."
+}

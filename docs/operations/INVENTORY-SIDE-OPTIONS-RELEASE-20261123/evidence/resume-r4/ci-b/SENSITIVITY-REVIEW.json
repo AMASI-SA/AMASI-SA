@@ -1,0 +1,20 @@
+{
+  "text_entries_scanned": 126,
+  "binary_entries_count": 29,
+  "public_contract_objects_verified": 12,
+  "synthetic_browser_reports_verified": 3,
+  "high_confidence_sensitive_patterns_found": 0,
+  "reviewed_negative_test_credential_shape_count": 1,
+  "scope": "CI artifacts, source manifests and synthetic fixtures only; no production customer records, arbitrary private environment dump, signed download URL or credential material was introduced.",
+  "approved_public_environment_exception": "Raw artifacts retain the reviewed frozen B public build contract. The backend-origin value is represented by presence and SHA256, not plaintext; NODE_ENV=production and reviewed absence/empty defaults are literal. Every retained environment object exactly matches the immutable intent contract.",
+  "toolchain_metadata": "CI versions, temporary build paths and declared build commands in adapter-environment-v5.json are retained. They are not private runtime environment values.",
+  "synthetic_credential_shape_exception": {
+    "source_git_sha": "deeefceffd9a1e37968513ac4f3833314bb415fd",
+    "source_path": "backend/tests/test_order_cost_authority_mongo.py",
+    "test_function": "test_benchmark_rejects_implicit_remote_credentialed_and_named_databases",
+    "fixture_literal_sha256": "307fcb3d8c3fdcbbf62d6bdcbf3e880008bc251770409c0cd0b1ee679856cfca",
+    "explanation": "One passing XML testcase includes the public literal negative-test Mongo URI that deliberately exercises rejection of credentialed loopback URIs. It exactly matches the immutable source fixture; it is not an operational credential. Raw ZIP bytes remain unchanged."
+  },
+  "scan_limit": "Pattern review is supplemented by source-bound synthetic fixture flags and inspection of artifact/report scope. It is not a universal secret-detection guarantee.",
+  "independent_review": "Integration reviewer independently inspected the 15 ZIPs (32 text entries, 39 XML entries inside XLSX and 29 PNGs) and selected generated metadata, and found no real credential material or credential-field candidates. PNGs contained no embedded metadata. Browser/fixture evidence declares synthetic_only. The backend origin is a fingerprint, not its plaintext value; the literal NODE_ENV contract matches B. The credential-shaped public negative-test fixture identified by the packager is separately recorded above. No edits, fetch, host or browser calls were performed by the integration review."
+}

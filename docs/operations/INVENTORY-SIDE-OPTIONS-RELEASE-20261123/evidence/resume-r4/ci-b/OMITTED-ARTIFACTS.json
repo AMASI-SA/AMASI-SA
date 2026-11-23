@@ -1,0 +1,44 @@
+{
+  "omitted_bytes": 7734363,
+  "artifacts": [
+    {
+      "path": "exact-b-ci/host-20.20.2/generated-outputs.zip",
+      "size": 3866920,
+      "sha256": "7db365e07f672c9b2e976a9a72dec582263e5269d75bcf7f8188a367af0349b1",
+      "git_blob_sha1": "60c008138c364cf6c325bd89bc4c0ad34c5e8b69",
+      "artifact_id": 14872196395,
+      "artifact_name": "release-v5-generated-outputs-host-20.20.2",
+      "workflow_run_id": 45286310883,
+      "source_git_sha": "a92283678a25494c7d1870cd1675b8f30847aa6a",
+      "github_metadata": "exact-b-ci/host-20.20.2/generated-outputs-metadata.json",
+      "original_zip_unchanged": true,
+      "omission_reason": "Redundant generated asset payload omitted from this compact evidence packet. Original archive metadata, digest, per-file manifests, validator results and selected build/proof/runtime metadata are retained."
+    },
+    {
+      "path": "exact-b-ci/host-24.19.0/generated-outputs.zip",
+      "size": 3867443,
+      "sha256": "18e9aaaea7542747481a2f9212e75b346b84c4ba1c61060803adb364332f9e99",
+      "git_blob_sha1": "dec471989ac25731cf20470f2b21ea02d557d32f",
+      "artifact_id": 14872221229,
+      "artifact_name": "release-v5-generated-outputs-host-24.19.0",
+      "workflow_run_id": 45286310883,
+      "source_git_sha": "a92283678a25494c7d1870cd1675b8f30847aa6a",
+      "github_metadata": "exact-b-ci/host-24.19.0/generated-outputs-metadata.json",
+      "original_zip_unchanged": true,
+      "omission_reason": "Redundant generated asset payload omitted from this compact evidence packet. Original archive metadata, digest, per-file manifests, validator results and selected build/proof/runtime metadata are retained."
+    }
+  ],
+  "other_exclusions": [
+    "Extracted JS/CSS/font/image generated build payloads",
+    "node_modules and caches",
+    "Full workflow job logs containing environment sections",
+    "Private host inventories or runtime configuration",
+    "Historical source-test-report-audit-partial.json; superseded by final-audit-summary.json"
+  ],
+  "retained_generated_metadata_per_host": [
+    "backend/release_identity.json",
+    "frontend/build/build-meta.json",
+    "frontend/.release/reproducible-build.json"
+  ],
+  "raw_intent_note": "Canonical intent bytes are in public Git commit a92283678a25494c7d1870cd1675b8f30847aa6a at release/release-intent-v5.json; expected SHA256 f0b6f57069abe12ff6a8720f4eaded7552a47aeeedb0973021249545d726bea3. They are not duplicated in this packet."
+}

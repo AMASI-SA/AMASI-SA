@@ -1,0 +1,138 @@
+{
+  "schema": "final-b-ci-publication-v1",
+  "source_A": "deeefceffd9a1e37968513ac4f3833314bb415fd",
+  "intent_B": "a92283678a25494c7d1870cd1675b8f30847aa6a",
+  "tree_B": "868b8595dfeba299bf1f2dfaf1fc32b82d357033",
+  "repository": "AMASI-SA/AMASI-SA",
+  "repository_folder": "docs/operations/INVENTORY-SIDE-OPTIONS-RELEASE-20261123/evidence/resume-r4/ci-b",
+  "reconstructed_archive": {
+    "path": "final-b-ci-evidence.zip",
+    "size": 4515174,
+    "sha256": "1e7337403a20e2e7f7e80ed7c526622a05de34f9cd15fe7f2c8fb1a4c64b2729",
+    "git_blob_sha1": "2ca62319f8249247e1efba4164747b316f3e6f87"
+  },
+  "ordered_parts": [
+    "final-b-ci-evidence.zip.part001",
+    "final-b-ci-evidence.zip.part002",
+    "final-b-ci-evidence.zip.part003",
+    "final-b-ci-evidence.zip.part004",
+    "final-b-ci-evidence.zip.part005",
+    "final-b-ci-evidence.zip.part006",
+    "final-b-ci-evidence.zip.part007",
+    "final-b-ci-evidence.zip.part008",
+    "final-b-ci-evidence.zip.part009"
+  ],
+  "files": [
+    {
+      "path": "BACKEND-RESULT-LINES.json",
+      "size": 5242,
+      "sha256": "6db68f6b36ad54e3c2ffd4bccfa15795ffb841fbea185ba1ca1b940cc36ecb06",
+      "git_blob_sha1": "58a8e81cd0e0760e55a1f890180bd16042b1db65"
+    },
+    {
+      "path": "BUNDLE-INDEX.json",
+      "size": 17687,
+      "sha256": "13a63ef2528025cee9a64a3066abc00cf7b9643e2a9f34d2782e35ce98a11aa7",
+      "git_blob_sha1": "c39081828d5336f2cb157e0baf70cf7bc685e7e6"
+    },
+    {
+      "path": "FINAL-AUDIT.md",
+      "size": 2330,
+      "sha256": "d4e2c975cdd1c9ab880e067c0de9240bb064fce74c4ae68e2151948b75d282e6",
+      "git_blob_sha1": "ddaa9118c2fec6a1535f4d6acce773b0d72507a0"
+    },
+    {
+      "path": "OMITTED-ARTIFACTS.json",
+      "size": 2454,
+      "sha256": "1bba0701fa750be503c27c51742d31e9ef007a05f9b4d849dc7cf8ed071ca1a8",
+      "git_blob_sha1": "c2a37b90b02ae43e9e5f0155e0171f8f5322e44c"
+    },
+    {
+      "path": "RAW-ARTIFACTS.json",
+      "size": 11259,
+      "sha256": "ac1a807392522db7dfe7348f1ce6647a45d30e919f18890e76f2d6b0c9ed7222",
+      "git_blob_sha1": "bfc680b01e7a733bc98b92d418aedece3dc8c386"
+    },
+    {
+      "path": "README.md",
+      "size": 5369,
+      "sha256": "85de9b2ca068d609fcbffbac2a583fc7013e8cf92a786a49f7ed25d5cd4079f0",
+      "git_blob_sha1": "05b86e2993543e7bbf416275df9c24ef11714587"
+    },
+    {
+      "path": "SENSITIVITY-REVIEW.json",
+      "size": 2448,
+      "sha256": "938d57510ab2d32770302be68f17785a8f0121a1d338619517905edf25ecf6b7",
+      "git_blob_sha1": "f5ab900018e8e60ad6d6f22fcb060d40b0f06714"
+    },
+    {
+      "path": "SOURCE-BINDINGS.json",
+      "size": 1503,
+      "sha256": "aca3477dd93984307d46123ac76a056304f961cb37619b54d37a6f3ceaed70e7",
+      "git_blob_sha1": "9a87ef09c93f13e36a6203b43114b1b73399eeba"
+    },
+    {
+      "path": "final-audit-summary.json",
+      "size": 6236,
+      "sha256": "116ae21a36c2163315b8818e249adedde257861ef821dff249d3514e91248b15",
+      "git_blob_sha1": "291db8b99bba6fd9904846e7bb7ff20ebdd7dd43"
+    },
+    {
+      "path": "final-b-ci-evidence.zip.part001",
+      "size": 524288,
+      "sha256": "fbb52a5609289c629d529595c394d1eafbc8d8a330bada76120c0bb614b0c7b8",
+      "git_blob_sha1": "037606a6382b022915001dcb2ffbe3ca252cd98a"
+    },
+    {
+      "path": "final-b-ci-evidence.zip.part002",
+      "size": 524288,
+      "sha256": "2d7d4a1e2b2f4f97983d0270dc7e04a317974380b5642d65f8eb40dde9c5fa67",
+      "git_blob_sha1": "234f665c4fd992106077fa7ed6abe87484be163e"
+    },
+    {
+      "path": "final-b-ci-evidence.zip.part003",
+      "size": 524288,
+      "sha256": "bd2d3c304c5aa59c45371c19abdd4555bf58f6105b1461b3178eecbd611bc20b",
+      "git_blob_sha1": "16ade6c8823830e66d04ec77979d9a8190995d86"
+    },
+    {
+      "path": "final-b-ci-evidence.zip.part004",
+      "size": 524288,
+      "sha256": "f25184ba120d081d48df1f9ea8ead4f33e1345ebd4cd057233ae756a83137df0",
+      "git_blob_sha1": "569af41b6fa17c49c9f1828adbeb1bd9b8e4d1b4"
+    },
+    {
+      "path": "final-b-ci-evidence.zip.part005",
+      "size": 524288,
+      "sha256": "f222babe743f9cabd3b1693bd49f84242837729668c08e63c1cd757b14114d2e",
+      "git_blob_sha1": "65f8948f7da49aa5fc5bb79fb6edbd20bbb4a33b"
+    },
+    {
+      "path": "final-b-ci-evidence.zip.part006",
+      "size": 524288,
+      "sha256": "0b1561773c7c0a500b4113113a08928fbe481788c759ac038ace7d0c51088a9e",
+      "git_blob_sha1": "f456d7a6b7f18fe4293b5b8c447bdf714c720430"
+    },
+    {
+      "path": "final-b-ci-evidence.zip.part007",
+      "size": 524288,
+      "sha256": "3541c7656767de9afb71cb69a289246511720c7651611862f64bbcde2c69cddc",
+      "git_blob_sha1": "3a54d3775da51e5265de26123336db94c0aeee4e"
+    },
+    {
+      "path": "final-b-ci-evidence.zip.part008",
+      "size": 524288,
+      "sha256": "5bd443b1c9f3a79798761e77705c869d0608a87791f7e7d8b17b8e303531d2cc",
+      "git_blob_sha1": "ea179f20e6ff38e24409194a3f32d5d96716f205"
+    },
+    {
+      "path": "final-b-ci-evidence.zip.part009",
+      "size": 320870,
+      "sha256": "cf4766c93ee1d94a5b46b7c53c3f1b1ebc3a2622d93a7cf4e58b8c37e9e30328",
+      "git_blob_sha1": "fc0413526f762ff1cb7478500c587a410acfdfa2"
+    }
+  ],
+  "retained_raw_zip_count": 15,
+  "omitted_generated_zip_count": 2,
+  "scope": "Evidence only; no source or GitHub write and no live deployment attestation."
+}

@@ -1,0 +1,36 @@
+{
+  "repository": "AMASI-SA/AMASI-SA",
+  "source_git_sha": "a92283678a25494c7d1870cd1675b8f30847aa6a",
+  "run_id": 45286310837,
+  "run_attempt": 1,
+  "job_id": 138083430045,
+  "job_name": "Operational Balance Backend",
+  "job_conclusion": "success",
+  "job_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45286310837/job/138083430045",
+  "summary_lines": [
+    "2026-11-23T23:24:25.7489058Z 6921 passed, 12 warnings, 151 subtests passed in 804.25s (0:13:24)",
+    "2026-11-23T23:25:40.0452227Z 106 passed, 5 warnings in 71.80s (0:01:11)",
+    "2026-11-23T23:25:41.7497726Z 16 passed, 18 subtests passed in 0.62s"
+  ],
+  "pytest_command_headers": [
+    "2026-11-23T23:11:00.0519612Z ##[group]Run python -B -m pytest --noconftest -q backend/tests/test_operational_balance*.py backend/tests/test_operational_source_freshness.py backend/tests/test_inventory_option_configuration.py backend/tests/test_inventory_option_policy.py backend/tests/test_inventory_side_options.py backend/tests/test_inventory_option_binding_conflicts.py backend/tests/test_supplier_option_service_policy.py backend/tests/test_purchase_configuration_contract.py backend/tests/test_preparation_piece_operations.py backend/tests/test_preparation_piece_line_services.py backend/tests/test_product_fulfillment_rules.py backend/tests/test_inventory_payment_allocation_lineage.py backend/tests/test_customer_inventory_unified_activity.py backend/tests/test_operational_inventory_purchase_receipts.py backend/tests/test_operational_inventory_payment_allocation.py backend/tests/test_operational_catalog_read_scope.py backend/tests/test_order_batch_cpu_fairness.py backend/tests/test_awaiting_payment*.py backend/tests/test_dashboard_awaiting_financial_cohort.py backend/tests/test_web_page_access.py backend/tests/test_web_page_catalog_security.py backend/tests/test_web_employee_page_reads.py backend/tests/test_web_marketing_page_permissions.py backend/tests/test_web_legacy_page_policy.py backend/tests/test_web_legacy_config_read.py backend/tests/test_web_extra_pages.py backend/tests/test_web_detail_pages.py backend/tests/test_operational_refresh_parallel_profit.py backend/tests/test_operational_refresh_party_issue_index.py backend/tests/test_operational_workspace_refunds.py backend/tests/test_customer_refund_access.py backend/tests/test_customer_refund_read_only_bridge.py backend/tests/test_mobile_customer_refund_reads.py backend/tests/test_operational_workspace_refund_execution.py backend/tests/test_operational_workspace_customer_collections.py backend/tests/test_operational_customer_*.py backend/tests/test_operational_workspace_statements.py backend/tests/test_operational_workspace_account_history.py backend/tests/test_operational_movement_reversal_effects.py backend/tests/test_operational_movement_reversal_routes.py backend/tests/test_operational_ad_and_entry_latency.py backend/tests/test_operational_completed_shipping*.py backend/tests/test_operational_read_runtime.py backend/tests/test_operational_financial_review_groups.py backend/tests/test_operational_financial_position_state.py backend/tests/test_operational_context_snapshot_reader.py backend/tests/test_read_path_diagnostics.py backend/tests/test_operational_context_read_diagnostics.py backend/tests/test_assembly_read_diagnostics.py backend/tests/test_operational_financial_position_views.py backend/tests/test_operational_open_cost_exposure.py backend/tests/test_operational_bundle_cost_projection.py backend/tests/test_operational_supplier_invoice_cutover.py backend/tests/test_store_delivery_noncash_review.py backend/tests/test_operational_driver_review_mongo.py backend/tests/test_operational_driver_review_packed_state.py backend/tests/test_provider_fee_source_terms.py backend/tests/test_provider_fee_runtime_binding.py backend/tests/test_bnpl_fee_completeness_boundaries.py --asyncio-mode=auto --tb=short --junitxml=operational-backend.xml",
+    "2026-11-23T23:24:27.5175785Z ##[group]Run python -B -m pytest --noconftest -p no:cacheprovider -q backend/tests/test_demand_read_store.py backend/tests/test_demand_read_jobs.py backend/tests/test_demand_read_runner_lifecycle.py backend/tests/test_operational_workspace_demand_reads.py backend/tests/test_operational_workspace_demand_http.py backend/tests/test_dashboard_demand_builders.py backend/tests/test_assembly_demand_builders.py --asyncio-mode=auto --tb=short --junitxml=operational-demand-read.xml",
+    "2026-11-23T23:25:40.6786696Z ##[group]Run python -B -m pytest --noconftest -q backend/tests/test_dashboard_shipping_ssot.py backend/tests/test_mz2_shipping_calculator.py --tb=short"
+  ],
+  "shipping_step": {
+    "name": "Preserve shipping summary and calculator contracts",
+    "status": "completed",
+    "conclusion": "success",
+    "number": 9,
+    "started_at": "2026-11-23T23:25:40Z",
+    "completed_at": "2026-11-23T23:25:41Z"
+  },
+  "counts": {
+    "main_pytest_passed": 6921,
+    "main_subtests_passed_separately": 151,
+    "demand_read_pytest_passed": 106,
+    "shipping_pytest_passed": 16,
+    "shipping_subtests_passed_separately": 18
+  },
+  "scope": "Exact-B raw job result and command lines only. Environment sections and unrelated full log content were not retained. No source-A log is included."
+}

@@ -1,0 +1,163 @@
+{
+  "base_J4": "28f6d4ca0fc2b7ea7f140432d8e32c768823b6a4",
+  "browser": {
+    "inventory_PASS": 8,
+    "inventory_payment_calls": 0,
+    "inventory_physical_quantity": 2,
+    "operational_PASS": 14,
+    "simple_balances_PASS": 13,
+    "source_hash_counts_verified_against_B": [
+      61,
+      35,
+      23
+    ]
+  },
+  "checks": {
+    "all_terminal_at_B": true,
+    "expected_skipped": 6,
+    "success": 42,
+    "superseded_cancelled": 6,
+    "total": 54,
+    "unexpected_or_pending": 0
+  },
+  "host_artifacts": {
+    "all_generated_paths_sizes_sha256_and_bytes_identical": true,
+    "archive_note": "ZIP and tar hashes differ because packaging metadata differs; all 387 generated file payloads are byte-identical.",
+    "build_meta_sha256": "27352445c5504e4bcc4419228d224e0c6528ce2b34724f20a04812472bcbfd91",
+    "frontend_artifact_tree_sha256": "df85c5736ec64571f44a5db506cb0daf34c1ac584ca3115e4e3ce86ebe80898c",
+    "generated_file_count": 387,
+    "hosts": [
+      "20.20.2",
+      "24.19.0"
+    ],
+    "intent_B": "a92283678a25494c7d1870cd1675b8f30847aa6a",
+    "original_artifact_validators_both_hosts": "PASS",
+    "reproducibility_proof_sha256": "663347f65c3e92073486a66ce3566feb78ceab64b5c0b35ba69b7b21f69518c5",
+    "run_id": 45286310883,
+    "runtime_release_id": "rg5-ffe0d4437c779b1e455f084be407f8f2d24735f5bf8e994f77c5bf4cbeb1c55f",
+    "source_A": "deeefceffd9a1e37968513ac4f3833314bb415fd",
+    "tar_member_modes_equal": true,
+    "tar_member_types_and_link_targets_equal": true,
+    "tar_metadata_different_fields": [
+      "mtime"
+    ]
+  },
+  "intent_B": "a92283678a25494c7d1870cd1675b8f30847aa6a",
+  "latest_workflows": {
+    "expected_TikTok_skip": 1,
+    "success": 21,
+    "total": 22,
+    "workflow_set_exact": true
+  },
+  "merge_condition": "Preserve A/B ancestry and exact B tree; root owns fresh shared-host boundary and publication.",
+  "observed_at_utc": "2026-11-23T23:33:17.034099+00:00",
+  "operational_backend": {
+    "artifact_id": 14873825104,
+    "github_digest_matches": true,
+    "recorded_sources": {},
+    "reports": [
+      {
+        "error": 0,
+        "failure": 0,
+        "new_cross_feature_cases": [],
+        "option_modules": {},
+        "report": "operational-demand-read.xml",
+        "skipped": 0,
+        "testcases": 106
+      },
+      {
+        "error": 0,
+        "failure": 0,
+        "new_cross_feature_cases": [
+          "test_informational_services_preserve_supplier_bundle_pieces_and_planned_cost[base]",
+          "test_informational_services_preserve_supplier_bundle_pieces_and_planned_cost[line_services]",
+          "test_real_services_still_block_supplier_bundle_materialization[base]",
+          "test_real_services_still_block_supplier_bundle_materialization[line_services]"
+        ],
+        "option_modules": {
+          "backend.tests.test_inventory_option_binding_conflicts.InformationalOptionServiceConflictsTest": 7,
+          "backend.tests.test_inventory_option_configuration": 32,
+          "backend.tests.test_inventory_option_policy": 34,
+          "backend.tests.test_supplier_option_service_policy": 27
+        },
+        "report": "operational-backend.xml",
+        "skipped": 0,
+        "testcases": 6921
+      }
+    ],
+    "zip_bytes": 130435,
+    "zip_sha256": "b8c757ad9068773ffe74caf6cd331058084be7ea358091bf97ec88e563ce93fa"
+  },
+  "other_report_totals": {
+    "g47_backend": 359,
+    "g47_frontend_suites": 18,
+    "g47_frontend_tests": 241,
+    "g47_order_cost": 436,
+    "native_inventory": 65,
+    "operational_frontend_suites": 111,
+    "operational_frontend_tests": 1779,
+    "operational_worker": 4,
+    "reviewed_Jest_failed_pending_todo": 0,
+    "reviewed_XML_failed_error_skipped": 0,
+    "salla_products_projection": 238,
+    "stock_eligibility": 5594,
+    "supplier_adoption": 51,
+    "supplier_bundle": 120,
+    "supplier_pieces": 69
+  },
+  "package_boundary": {
+    "all_required_members_present": true,
+    "backend_package_files": 1338,
+    "backend_package_tree_sha256": "9e7958f8e22befebb802cbe3f1822a6da1f3fe666e188da166f46b36f4ff0009",
+    "both_CI_package_boundary_proofs_match_independently_derived_package_records": true,
+    "derivation": "Frontend source records in verified build-meta plus all verified build files; backend runtime manifest records plus verified release_identity.json. Canonical file-tree formula from immutable adapter, with SHA256, byte count and path.",
+    "frontend_package_files": 1821,
+    "frontend_package_tree_sha256": "1860fea9b28f732385b1175a0a40a5fb2f05c957288690a835705336ef9795e5",
+    "intent_B": "a92283678a25494c7d1870cd1675b8f30847aa6a",
+    "required_frontend_runtime_source_members": [
+      "package.json",
+      "scripts/governed-preview.cjs",
+      "scripts/start-governed-runtime.cjs",
+      "vite.config.js",
+      "yarn.lock"
+    ],
+    "required_generated_members": [
+      "frontend/build/index.html",
+      "frontend/build/build-meta.json",
+      "frontend/.release/reproducible-build.json",
+      "backend/release_identity.json",
+      "release/release-intent-v5.json"
+    ]
+  },
+  "production_host_or_business_writes_by_auditor": false,
+  "review_completion_log": {
+    "explicit_zero_skip_assertions_passed": true,
+    "job_id": 138083429642,
+    "observed_pass_counts": [
+      70,
+      35,
+      349,
+      1081,
+      125,
+      1
+    ]
+  },
+  "scope": "Immutable source, terminal exact-B CI and Node20/24 artifact/runtime-route evidence; no production verification claimed.",
+  "source_A": "deeefceffd9a1e37968513ac4f3833314bb415fd",
+  "source_boundary": {
+    "A_to_B_changed_paths": [
+      "release/release-intent-v5.json"
+    ],
+    "intent_B": "a92283678a25494c7d1870cd1675b8f30847aa6a",
+    "intent_sha256": "f0b6f57069abe12ff6a8720f4eaded7552a47aeeedb0973021249545d726bea3",
+    "no_non_intent_change_after_A": true,
+    "parent_A": "28f6d4ca0fc2b7ea7f140432d8e32c768823b6a4",
+    "parent_B": "deeefceffd9a1e37968513ac4f3833314bb415fd",
+    "previous_PR2096_source": "6830776f8b164a3af119854471176dd53c767582",
+    "previous_source_to_J4_intent_only": true,
+    "source_A": "deeefceffd9a1e37968513ac4f3833314bb415fd",
+    "tree_B": "868b8595dfeba299bf1f2dfaf1fc32b82d357033"
+  },
+  "tree_B": "868b8595dfeba299bf1f2dfaf1fc32b82d357033",
+  "verdict": "PASS"
+}
