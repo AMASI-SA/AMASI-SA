@@ -1,0 +1,15 @@
+{
+  "kind": "pr2082_canonical_B_original_validation",
+  "validated": true,
+  "B": "0bd6a3fadd33d6354ebdc8dec814bcb80b0d7218",
+  "A": "aec203382b387c3812509084e77c2922aa860877",
+  "N": "44122bcc986bd1dff1532b9ad62c0268e899a179",
+  "B_tree": "4fa54935f420e2a546c2237c0fb7b0ef9ef8367d",
+  "intent_sha256": "59da5ee6a86f3bfa5a1b8446c6aacb8e180144bc15ccaca3e414e1ec23b151ab",
+  "intent_bytes": 1502688,
+  "runtime": "rg5-12e0f132b3ee688815cd2ec401bd34c43706d193492edacc7be6c5ca6e6ade8a",
+  "frontend_artifact": "27b7717df8a2dcc2b46868da4d103b44d33e2ad07c879da6563ecaef7e545b9a",
+  "candidate_byte_identical": true,
+  "source_or_host_outputs_materialized": false,
+  "lease_or_publication_performed": false
+}

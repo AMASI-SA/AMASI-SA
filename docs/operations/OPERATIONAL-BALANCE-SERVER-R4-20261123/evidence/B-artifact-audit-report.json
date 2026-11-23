@@ -1,0 +1,198 @@
+{
+  "verdict": "PASS_EXACT_B_CI_ARTIFACT_AND_ORIGINAL_VALIDATOR_AUDIT",
+  "deployment_B": "0bd6a3fadd33d6354ebdc8dec814bcb80b0d7218",
+  "source_A": "aec203382b387c3812509084e77c2922aa860877",
+  "source_tree": "f133f04fd5759c57f5cce195e35ae03ba53ef6da",
+  "base_N": "44122bcc986bd1dff1532b9ad62c0268e899a179",
+  "runtime_release_id": "rg5-12e0f132b3ee688815cd2ec401bd34c43706d193492edacc7be6c5ca6e6ade8a",
+  "run_id": 45168928015,
+  "cross_host_generated_paths_modes_sizes_hashes_equal": true,
+  "cross_host_original_package_proofs_equal": true,
+  "hosts": {
+    "20.20.2": {
+      "job_id": 137673514315,
+      "artifacts": {
+        "generated": {
+          "id": 14816286486,
+          "name": "release-v5-generated-outputs-host-20.20.2",
+          "size_in_bytes": 3847948,
+          "digest": "sha256:0a3cfc7cc2f0312a881880d492eb98208c47932651fdffa5cc68a264c6665e16"
+        },
+        "evidence": {
+          "id": 14816401360,
+          "name": "release-v5-clean-clone-evidence-host-20.20.2",
+          "size_in_bytes": 64108,
+          "digest": "sha256:4461ec9cb68096be7f0b6618aaf824e4ad5d5a46379f6906a85d07611a7a6910"
+        }
+      },
+      "inner_tar_sha256": "684dcaa5da6c03d08fb4535e328e131a8a6a7b60600ec546df81ab32813fbde0",
+      "generated_entries": 395,
+      "generated_files": 389,
+      "original_validators": {
+        "frontend_identity_and_reproducibility": "PASS",
+        "identity_health": {
+          "validated": true,
+          "release_id": "rg5-12e0f132b3ee688815cd2ec401bd34c43706d193492edacc7be6c5ca6e6ade8a",
+          "source_git_sha": "aec203382b387c3812509084e77c2922aa860877",
+          "source_base_git_sha": "44122bcc986bd1dff1532b9ad62c0268e899a179"
+        },
+        "original_package_boundary_equals_CI": true,
+        "package_boundary": {
+          "backend": {
+            "file_count": 1326,
+            "git_directory_present": false,
+            "health_verified": true,
+            "identity": {
+              "bytes": 496213,
+              "path": "release_identity.json",
+              "sha256": "5a6f00b2b63f02d486490ea57a59ff9440cf0189b629770b71166611b2c21bd4"
+            },
+            "isolated_verified": true,
+            "package_tree_sha256": "3cca51a95b0356323d82cc3845334ee804a84b5f43880f98c7e8c78e9b84a3c8",
+            "runtime_root": "backend",
+            "sibling_frontend_present": false
+          },
+          "frontend": {
+            "artifact_tree_sha256": "27b7717df8a2dcc2b46868da4d103b44d33e2ad07c879da6563ecaef7e545b9a",
+            "build_meta": {
+              "bytes": 581646,
+              "path": "build/build-meta.json",
+              "sha256": "c13f1ac0a7d28dbefca1fd234314521482bc3b34def126d719dc24672bd39368"
+            },
+            "content_type_contract": "application/json",
+            "file_count": 1796,
+            "isolated_runtime_artifact_verified": true,
+            "package_tree_sha256": "6ee49a4ffc5d830b9add707d073aef8a296cac31ed4f4ac0a735d51eb68617b2",
+            "runtime_root": "frontend",
+            "static_root": "frontend/build"
+          },
+          "kind": "mezan_release_package_boundary_proof_v1",
+          "release_id": "rg5-12e0f132b3ee688815cd2ec401bd34c43706d193492edacc7be6c5ca6e6ade8a",
+          "schema_version": 1,
+          "source_git_sha": "aec203382b387c3812509084e77c2922aa860877"
+        }
+      },
+      "CI_runtime_evidence": {
+        "two_actual_build_events": [
+          {
+            "at_utc": "2026-11-23T11:54:09.2508612Z",
+            "artifact_tree_sha256": "27b7717df8a2dcc2b46868da4d103b44d33e2ad07c879da6563ecaef7e545b9a"
+          },
+          {
+            "at_utc": "2026-11-23T11:54:16.3758606Z",
+            "artifact_tree_sha256": "27b7717df8a2dcc2b46868da4d103b44d33e2ad07c879da6563ecaef7e545b9a"
+          }
+        ],
+        "proof_sha256": "d25651371324610544e3f2de69f0bbaba41c0d9ae1f71c60e3dc4ac2b2d2469a",
+        "required_steps_succeeded": [
+          "Create a clean tracked-source clone",
+          "Prove generated release inputs are absent",
+          "Emulate a Cloud Build checkout without Git metadata",
+          "Invoke the Emergent package adapter under the selected Host Node",
+          "Verify artifact, proof, identity, and package boundaries",
+          "Prove the governed runtime returns build metadata as JSON",
+          "Archive verified generated release outputs",
+          "Retain verified generated release outputs",
+          "Retain sanitized rehearsal evidence"
+        ],
+        "canonical_and_cache_busted_JSON_bytes_and_MIME": "Original executed CI assertions and successful step",
+        "route_target": "CI loopback 127.0.0.1:3000; not actual Emergent/Production"
+      }
+    },
+    "24.19.0": {
+      "job_id": 137673514279,
+      "artifacts": {
+        "generated": {
+          "id": 14815243636,
+          "name": "release-v5-generated-outputs-host-24.19.0",
+          "size_in_bytes": 3848306,
+          "digest": "sha256:13f5dbd4b15d5c63496010a4488d13428308e9428b65854bb727b4cafa4ed3dc"
+        },
+        "evidence": {
+          "id": 14814918857,
+          "name": "release-v5-clean-clone-evidence-host-24.19.0",
+          "size_in_bytes": 64106,
+          "digest": "sha256:4bac575148087a63f2c636a7a8c2f75d0fb966dd15397e1d74db772e7c8096fd"
+        }
+      },
+      "inner_tar_sha256": "530579480765aac4a7ba781900e2b7d8637b5924ce4920011d5a445173c365a7",
+      "generated_entries": 395,
+      "generated_files": 389,
+      "original_validators": {
+        "frontend_identity_and_reproducibility": "PASS",
+        "identity_health": {
+          "validated": true,
+          "release_id": "rg5-12e0f132b3ee688815cd2ec401bd34c43706d193492edacc7be6c5ca6e6ade8a",
+          "source_git_sha": "aec203382b387c3812509084e77c2922aa860877",
+          "source_base_git_sha": "44122bcc986bd1dff1532b9ad62c0268e899a179"
+        },
+        "original_package_boundary_equals_CI": true,
+        "package_boundary": {
+          "backend": {
+            "file_count": 1326,
+            "git_directory_present": false,
+            "health_verified": true,
+            "identity": {
+              "bytes": 496213,
+              "path": "release_identity.json",
+              "sha256": "5a6f00b2b63f02d486490ea57a59ff9440cf0189b629770b71166611b2c21bd4"
+            },
+            "isolated_verified": true,
+            "package_tree_sha256": "3cca51a95b0356323d82cc3845334ee804a84b5f43880f98c7e8c78e9b84a3c8",
+            "runtime_root": "backend",
+            "sibling_frontend_present": false
+          },
+          "frontend": {
+            "artifact_tree_sha256": "27b7717df8a2dcc2b46868da4d103b44d33e2ad07c879da6563ecaef7e545b9a",
+            "build_meta": {
+              "bytes": 581646,
+              "path": "build/build-meta.json",
+              "sha256": "c13f1ac0a7d28dbefca1fd234314521482bc3b34def126d719dc24672bd39368"
+            },
+            "content_type_contract": "application/json",
+            "file_count": 1796,
+            "isolated_runtime_artifact_verified": true,
+            "package_tree_sha256": "6ee49a4ffc5d830b9add707d073aef8a296cac31ed4f4ac0a735d51eb68617b2",
+            "runtime_root": "frontend",
+            "static_root": "frontend/build"
+          },
+          "kind": "mezan_release_package_boundary_proof_v1",
+          "release_id": "rg5-12e0f132b3ee688815cd2ec401bd34c43706d193492edacc7be6c5ca6e6ade8a",
+          "schema_version": 1,
+          "source_git_sha": "aec203382b387c3812509084e77c2922aa860877"
+        }
+      },
+      "CI_runtime_evidence": {
+        "two_actual_build_events": [
+          {
+            "at_utc": "2026-11-23T11:53:52.5132567Z",
+            "artifact_tree_sha256": "27b7717df8a2dcc2b46868da4d103b44d33e2ad07c879da6563ecaef7e545b9a"
+          },
+          {
+            "at_utc": "2026-11-23T11:53:57.3256707Z",
+            "artifact_tree_sha256": "27b7717df8a2dcc2b46868da4d103b44d33e2ad07c879da6563ecaef7e545b9a"
+          }
+        ],
+        "proof_sha256": "d25651371324610544e3f2de69f0bbaba41c0d9ae1f71c60e3dc4ac2b2d2469a",
+        "required_steps_succeeded": [
+          "Create a clean tracked-source clone",
+          "Prove generated release inputs are absent",
+          "Emulate a Cloud Build checkout without Git metadata",
+          "Invoke the Emergent package adapter under the selected Host Node",
+          "Verify artifact, proof, identity, and package boundaries",
+          "Prove the governed runtime returns build metadata as JSON",
+          "Archive verified generated release outputs",
+          "Retain verified generated release outputs",
+          "Retain sanitized rehearsal evidence"
+        ],
+        "canonical_and_cache_busted_JSON_bytes_and_MIME": "Original executed CI assertions and successful step",
+        "route_target": "CI loopback 127.0.0.1:3000; not actual Emergent/Production"
+      }
+    }
+  },
+  "limits": [
+    "No build, install, lease or actual host publication performed by this audit.",
+    "CI loopback/runtime and isolated package verification do not prove actual Emergent platform snapshot/deployment.",
+    "No claim about unrelated workflows or all-A/all-B CI gates."
+  ]
+}

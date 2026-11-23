@@ -1,0 +1,58 @@
+{
+  "operational-backend.xml": {
+    "cases": 6615,
+    "suite_totals": [
+      {
+        "name": "pytest",
+        "errors": "0",
+        "failures": "0",
+        "skipped": "0",
+        "tests": "6705",
+        "time": "763.699",
+        "timestamp": "2026-11-23T11:33:23.108306+00:00",
+        "hostname": "runnervm0hi8g"
+      }
+    ],
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "local_omitted_modules_in_real_CI": {
+    "test_operational_inventory_payment_allocation": 29,
+    "test_inventory_payment_allocation_lineage": 25,
+    "test_operational_balance_app_permissions": 40
+  },
+  "local_wire_listener_case_in_real_CI": {
+    "count": 1,
+    "passed": true
+  },
+  "operational-demand-read.xml": {
+    "cases": 106,
+    "suite_totals": [
+      {
+        "name": "pytest",
+        "errors": "0",
+        "failures": "0",
+        "skipped": "0",
+        "tests": "106",
+        "time": "65.515",
+        "timestamp": "2026-11-23T11:46:09.120062+00:00",
+        "hostname": "runnervm0hi8g"
+      }
+    ],
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "frontend": {
+    "numTotalTests": 1675,
+    "numPassedTests": 1675,
+    "numFailedTests": 0,
+    "numPendingTests": 0,
+    "numTodoTests": 0,
+    "numRuntimeErrorTestSuites": 0,
+    "numTotalTestSuites": 104,
+    "numPassedTestSuites": 104,
+    "success": true
+  }
+}

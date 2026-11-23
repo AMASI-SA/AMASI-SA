@@ -1,0 +1,37 @@
+{
+  "helper_sha256": "6f85c5c53418d5229a4bcb05fdb31516e9191331b53c0bff51a17dcefec7ea0f",
+  "source_file": "/workspace/scratch/dfe063f5aca0/r4-release-evidence/HOST-REHEARSE-2082.py",
+  "N": "44122bcc986bd1dff1532b9ad62c0268e899a179",
+  "A": "aec203382b387c3812509084e77c2922aa860877",
+  "A_TREE": "f133f04fd5759c57f5cce195e35ae03ba53ef6da",
+  "B": "0bd6a3fadd33d6354ebdc8dec814bcb80b0d7218",
+  "B_TREE": "4fa54935f420e2a546c2237c0fb7b0ef9ef8367d",
+  "release_id": "rg5-12e0f132b3ee688815cd2ec401bd34c43706d193492edacc7be6c5ca6e6ade8a",
+  "intent_sha256": "59da5ee6a86f3bfa5a1b8446c6aacb8e180144bc15ccaca3e414e1ec23b151ab",
+  "intent_bytes": 1502688,
+  "release_ref": "refs/heads/codex/operational-balance-server-r4-20261123",
+  "original_guard_hashes": {
+    "scripts/production_release_guard.py": {
+      "44122bcc986bd1dff1532b9ad62c0268e899a179": "4e56f1f60f5f79931658b8f95a0aeb2269471025ca84f7e5b651cd284806349a",
+      "aec203382b387c3812509084e77c2922aa860877": "4e56f1f60f5f79931658b8f95a0aeb2269471025ca84f7e5b651cd284806349a",
+      "0bd6a3fadd33d6354ebdc8dec814bcb80b0d7218": "4e56f1f60f5f79931658b8f95a0aeb2269471025ca84f7e5b651cd284806349a"
+    },
+    "backend/frontend_build_identity.py": {
+      "44122bcc986bd1dff1532b9ad62c0268e899a179": "7896dfa2c9b4fea8c426b47c5b75e331380c0a4a3f947028aa4f5afa101f9d87",
+      "aec203382b387c3812509084e77c2922aa860877": "7896dfa2c9b4fea8c426b47c5b75e331380c0a4a3f947028aa4f5afa101f9d87",
+      "0bd6a3fadd33d6354ebdc8dec814bcb80b0d7218": "7896dfa2c9b4fea8c426b47c5b75e331380c0a4a3f947028aa4f5afa101f9d87"
+    },
+    "backend/release_protocol_v5.py": {
+      "44122bcc986bd1dff1532b9ad62c0268e899a179": "1961ac18a5363ec425ceec4f98f96f611d378b09e19380d4756bd6776987d8ef",
+      "aec203382b387c3812509084e77c2922aa860877": "1961ac18a5363ec425ceec4f98f96f611d378b09e19380d4756bd6776987d8ef",
+      "0bd6a3fadd33d6354ebdc8dec814bcb80b0d7218": "1961ac18a5363ec425ceec4f98f96f611d378b09e19380d4756bd6776987d8ef"
+    }
+  },
+  "source_parent_N": true,
+  "intent_parent_A": true,
+  "A_to_B_only_intent": true,
+  "all_identity_pins_match": true,
+  "enabled": false,
+  "helper_main_executed": false,
+  "source_modified": false
+}

@@ -1,0 +1,201 @@
+{
+  "actual_build_started": false,
+  "app_accessed": false,
+  "cases": [
+    {
+      "elapsed_seconds": 0.7503,
+      "exit_code": 2,
+      "initial_signal": "SIGTERM",
+      "leader_mode": "leader-exits-early",
+      "name": "sigterm-leader-exits-early",
+      "owned_pids": [
+        6,
+        7
+      ],
+      "reaped_descendants": [
+        {
+          "pid": 7,
+          "wait_status": 9
+        }
+      ],
+      "repeated_signals_during_cleanup": [
+        "SIGTERM",
+        "SIGHUP",
+        "SIGINT",
+        "SIGTERM",
+        "SIGHUP",
+        "SIGINT",
+        "SIGTERM",
+        "SIGHUP",
+        "SIGINT"
+      ],
+      "retained_receipt": {
+        "built": false,
+        "failure": "isolated rehearsal interrupted by SIGTERM",
+        "failure_type": "Stop",
+        "finished_at": "2026-11-23T12:00:21.623791+00:00",
+        "started_at": "2026-11-23T12:00:20.709033+00:00",
+        "status": "failed_or_interrupted"
+      },
+      "states_after_reaping": {
+        "6": "absent",
+        "7": "absent"
+      },
+      "states_before_reaping": {
+        "6": "absent",
+        "7": "Z"
+      },
+      "status": "passed"
+    },
+    {
+      "elapsed_seconds": 10.0446,
+      "exit_code": 2,
+      "initial_signal": "SIGTERM",
+      "leader_mode": "leader-ignores-term",
+      "name": "sigterm-leader-ignores-term",
+      "owned_pids": [
+        9,
+        10
+      ],
+      "reaped_descendants": [
+        {
+          "pid": 10,
+          "wait_status": 9
+        }
+      ],
+      "repeated_signals_during_cleanup": [
+        "SIGTERM",
+        "SIGHUP",
+        "SIGINT",
+        "SIGTERM",
+        "SIGHUP",
+        "SIGINT",
+        "SIGTERM",
+        "SIGHUP",
+        "SIGINT"
+      ],
+      "retained_receipt": {
+        "built": false,
+        "failure": "isolated rehearsal interrupted by SIGTERM",
+        "failure_type": "Stop",
+        "finished_at": "2026-11-23T12:00:31.936316+00:00",
+        "started_at": "2026-11-23T12:00:21.741866+00:00",
+        "status": "failed_or_interrupted"
+      },
+      "states_after_reaping": {
+        "10": "absent",
+        "9": "absent"
+      },
+      "states_before_reaping": {
+        "10": "Z",
+        "9": "absent"
+      },
+      "status": "passed"
+    },
+    {
+      "elapsed_seconds": 0.7546,
+      "exit_code": 2,
+      "initial_signal": "SIGHUP",
+      "leader_mode": "leader-exits-early",
+      "name": "sighup-leader-exits-early",
+      "owned_pids": [
+        12,
+        13
+      ],
+      "reaped_descendants": [
+        {
+          "pid": 13,
+          "wait_status": 9
+        }
+      ],
+      "repeated_signals_during_cleanup": [
+        "SIGTERM",
+        "SIGHUP",
+        "SIGINT",
+        "SIGTERM",
+        "SIGHUP",
+        "SIGINT",
+        "SIGTERM",
+        "SIGHUP",
+        "SIGINT"
+      ],
+      "retained_receipt": {
+        "built": false,
+        "failure": "isolated rehearsal interrupted by SIGHUP",
+        "failure_type": "Stop",
+        "finished_at": "2026-11-23T12:00:32.943042+00:00",
+        "started_at": "2026-11-23T12:00:32.034322+00:00",
+        "status": "failed_or_interrupted"
+      },
+      "states_after_reaping": {
+        "12": "absent",
+        "13": "absent"
+      },
+      "states_before_reaping": {
+        "12": "absent",
+        "13": "Z"
+      },
+      "status": "passed"
+    },
+    {
+      "elapsed_seconds": 10.0516,
+      "exit_code": 2,
+      "initial_signal": "SIGHUP",
+      "leader_mode": "leader-ignores-term",
+      "name": "sighup-leader-ignores-term",
+      "owned_pids": [
+        15,
+        16
+      ],
+      "reaped_descendants": [
+        {
+          "pid": 16,
+          "wait_status": 9
+        }
+      ],
+      "repeated_signals_during_cleanup": [
+        "SIGTERM",
+        "SIGHUP",
+        "SIGINT",
+        "SIGTERM",
+        "SIGHUP",
+        "SIGINT",
+        "SIGTERM",
+        "SIGHUP",
+        "SIGINT"
+      ],
+      "retained_receipt": {
+        "built": false,
+        "failure": "isolated rehearsal interrupted by SIGHUP",
+        "failure_type": "Stop",
+        "finished_at": "2026-11-23T12:00:43.195898+00:00",
+        "started_at": "2026-11-23T12:00:33.072569+00:00",
+        "status": "failed_or_interrupted"
+      },
+      "states_after_reaping": {
+        "15": "absent",
+        "16": "absent"
+      },
+      "states_before_reaping": {
+        "15": "absent",
+        "16": "Z"
+      },
+      "status": "passed"
+    }
+  ],
+  "failed": 0,
+  "helper_path": "/workspace/scratch/dfe063f5aca0/r4-release-evidence/HOST-REHEARSE-2082.py",
+  "helper_sha256_after": "6f85c5c53418d5229a4bcb05fdb31516e9191331b53c0bff51a17dcefec7ea0f",
+  "helper_sha256_before": "6f85c5c53418d5229a4bcb05fdb31516e9191331b53c0bff51a17dcefec7ea0f",
+  "helper_unchanged": true,
+  "host_or_lease_modified": false,
+  "initial_finding": {
+    "finding": "SIGTERM/SIGHUP bypassed cleanup/finally and could leave the isolated build process group running with a started receipt.",
+    "helper_sha256": "278cf1676626bea460c183d25685030c32362a39f70681fef8839d492726f43c",
+    "severity": "medium"
+  },
+  "main_executed": false,
+  "passed": 4,
+  "scope": "Actual imported handlers/cleanup plus original build-window and receipt AST; owned fake process groups only.",
+  "source_modified": false
+}

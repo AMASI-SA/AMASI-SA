@@ -1,0 +1,40 @@
+[
+  {
+    "id": 14815656670,
+    "name": "operational-backend-results",
+    "size_in_bytes": 123056,
+    "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14815656670",
+    "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14815656670/zip",
+    "expired": false,
+    "created_at": "2026-11-23T11:47:18Z",
+    "expires_at": "2027-02-21T11:32:51Z",
+    "updated_at": "2026-11-23T11:47:18Z",
+    "digest": "sha256:39e633d583931067dda9e196dde379862e2e00346bf823d2fe736129d4a2b5da",
+    "workflow_run": {
+      "id": 45166179571,
+      "repository_id": 1250664189,
+      "head_repository_id": 1250664189,
+      "head_branch": "codex/operational-balance-server-r4-20261123",
+      "head_sha": "aec203382b387c3812509084e77c2922aa860877"
+    }
+  },
+  {
+    "id": 14814512950,
+    "name": "operational-frontend-results",
+    "size_in_bytes": 53343,
+    "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14814512950",
+    "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14814512950/zip",
+    "expired": false,
+    "created_at": "2026-11-23T11:34:43Z",
+    "expires_at": "2027-02-21T11:32:51Z",
+    "updated_at": "2026-11-23T11:34:43Z",
+    "digest": "sha256:dfe209b1d563ac0f3ef55339ac2dc4de69b39263025e26f1267b4c88c446c196",
+    "workflow_run": {
+      "id": 45166179571,
+      "repository_id": 1250664189,
+      "head_repository_id": 1250664189,
+      "head_branch": "codex/operational-balance-server-r4-20261123",
+      "head_sha": "aec203382b387c3812509084e77c2922aa860877"
+    }
+  }
+]

@@ -1,0 +1,19 @@
+{
+  "B": "0bd6a3fadd33d6354ebdc8dec814bcb80b0d7218",
+  "B_TREE": "4fa54935f420e2a546c2237c0fb7b0ef9ef8367d",
+  "actual_host_rehearsal_run": false,
+  "concrete_blockers": [],
+  "coordination_review_sha256": "330e426fefb44157c2cbdd8235f49694318ed48c159fb715c4d06bb9349ffef6",
+  "enabled": false,
+  "helper_sha256": "6f85c5c53418d5229a4bcb05fdb31516e9191331b53c0bff51a17dcefec7ea0f",
+  "original_finding": {
+    "finding": "SIGTERM/SIGHUP bypassed cleanup/finally and could leave the isolated build process group running with a started receipt.",
+    "helper_sha256": "278cf1676626bea460c183d25685030c32362a39f70681fef8839d492726f43c",
+    "severity": "medium"
+  },
+  "pins_match": true,
+  "reviewed_at": "2026-11-23T12:01:39.492745+00:00",
+  "signal_cases_failed": 0,
+  "signal_cases_passed": 4,
+  "verdict": "bounded_helper_review_pass"
+}

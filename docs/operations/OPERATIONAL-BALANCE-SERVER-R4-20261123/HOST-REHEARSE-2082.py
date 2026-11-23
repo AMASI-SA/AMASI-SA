@@ -29,10 +29,10 @@ ENABLED = False
 N = "44122bcc986bd1dff1532b9ad62c0268e899a179"
 A = "aec203382b387c3812509084e77c2922aa860877"
 A_TREE = "f133f04fd5759c57f5cce195e35ae03ba53ef6da"
-B = None
-B_TREE = None
-RELEASE_ID = None
-INTENT_SHA256 = None
+B = "0bd6a3fadd33d6354ebdc8dec814bcb80b0d7218"
+B_TREE = "4fa54935f420e2a546c2237c0fb7b0ef9ef8367d"
+RELEASE_ID = "rg5-12e0f132b3ee688815cd2ec401bd34c43706d193492edacc7be6c5ca6e6ade8a"
+INTENT_SHA256 = "59da5ee6a86f3bfa5a1b8446c6aacb8e180144bc15ccaca3e414e1ec23b151ab"
 RELEASE_REF = "refs/heads/codex/operational-balance-server-r4-20261123"
 
 APP = Path("/app")
@@ -49,6 +49,31 @@ SHA256 = re.compile(r"[0-9a-f]{64}")
 
 class Stop(RuntimeError):
     pass
+
+
+def interrupted(signum, _frame):
+    raise Stop("isolated rehearsal interrupted by " + signal.Signals(signum).name)
+
+
+def stop_owned_build(process):
+    # Repeated terminal termination signals must not interrupt bounded cleanup.
+    for signum in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT):
+        signal.signal(signum, signal.SIG_IGN)
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+    try:
+        process.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        pass
+    # A leader can exit before a descendant that ignored SIGTERM. Finish the
+    # entire still-owned group, not only the Popen leader, before leaving.
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    process.wait(timeout=10)
 
 
 def require(condition, message):
@@ -76,6 +101,8 @@ def main():
     # This is deliberately the first operation. In the delivered draft it stops
     # before reading /app, reading evidence, status, networking, or /tmp creation.
     validate_pins()
+    for signum in (signal.SIGTERM, signal.SIGHUP):
+        signal.signal(signum, interrupted)
     require(not any(name.startswith("GIT_") and name not in {
         "GIT_TERMINAL_PROMPT", "GIT_OPTIONAL_LOCKS"
     } for name in os.environ), "unexpected Git routing or override environment")
@@ -197,12 +224,7 @@ def main():
             except BaseException:
                 # Only this helper's isolated process group, never a host service
                 # or another task's guard/build process, is stopped on interruption.
-                os.killpg(process.pid, signal.SIGTERM)
-                try:
-                    process.wait(timeout=10)
-                except subprocess.TimeoutExpired:
-                    os.killpg(process.pid, signal.SIGKILL)
-                    process.wait()
+                stop_owned_build(process)
                 raise
         report["adapter_exit"] = adapter_exit
         require(adapter_exit == 0, "original adapter failed; complete log and candidate retained")

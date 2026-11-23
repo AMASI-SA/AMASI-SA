@@ -1,0 +1,197 @@
+{
+  "A": "aec203382b387c3812509084e77c2922aa860877",
+  "N": "44122bcc986bd1dff1532b9ad62c0268e899a179",
+  "candidate": {
+    "artifact_id": 14815305161,
+    "candidate_sha256": "59da5ee6a86f3bfa5a1b8446c6aacb8e180144bc15ccaca3e414e1ec23b151ab",
+    "frontend_artifact_tree_sha256": "27b7717df8a2dcc2b46868da4d103b44d33e2ad07c879da6563ecaef7e545b9a",
+    "independent_Git_and_CI_log_verdict": "PASS_WITHIN_REVIEWED_SOURCE_MANIFEST_AND_CI_PROVENANCE_SCOPE",
+    "independent_original_validator_verdict": "PASS_CANDIDATE_DIGEST_PROVENANCE_AND_ORIGINAL_VALIDATORS",
+    "reports": [
+      "independent-candidate-review.json",
+      "candidate-provenance-review.json"
+    ],
+    "run_id": 45166179398,
+    "runtime_release_id": "rg5-12e0f132b3ee688815cd2ec401bd34c43706d193492edacc7be6c5ca6e6ade8a",
+    "source_counts": {
+      "backend": 1325,
+      "frontend": 1410,
+      "release_control": 328
+    },
+    "zip_sha256": "8963716397b59eccdd4319be1edb8fce3288adcabd57d7a025949400fe81e3f3"
+  },
+  "findings": [],
+  "frontend": {
+    "after": {
+      "frontend_file_records_sha256": "9ff52f988530447d5a66e0df377c908231601064ac27ad76c8d47502cefb253f",
+      "frontend_git_tree": "b824aff11e4dca9bdf90dd93846a49ef1c60c779",
+      "frontend_tracked_file_count": 1410,
+      "head": "aec203382b387c3812509084e77c2922aa860877",
+      "tracked_status": ""
+    },
+    "before": {
+      "frontend_file_records_sha256": "9ff52f988530447d5a66e0df377c908231601064ac27ad76c8d47502cefb253f",
+      "frontend_git_tree": "b824aff11e4dca9bdf90dd93846a49ef1c60c779",
+      "frontend_tracked_file_count": 1410,
+      "head": "aec203382b387c3812509084e77c2922aa860877",
+      "tracked_status": ""
+    },
+    "command_record": "execution.json",
+    "confirmed_behaviors": [
+      "Scoped page-two reversal retains its command, reloads through a fresh demand, and reopens its modal after delayed resource remount.",
+      "Owner ledger invalidates foreign or revoked authority and retains pagination/printing without extra global/resource requests.",
+      "Current refund-read grant can inspect without exposing write controls or financial commands.",
+      "Current provider-statement grants, account/revision changes, saved-file reuse boundaries, and both employee grant editors retain current-base behavior."
+    ],
+    "exit_code": 0,
+    "frontend_source_unchanged": true,
+    "frozen_install_exit_code": 0,
+    "frozen_install_yarn_seconds": 1113.71,
+    "governed_node": "22.23.2",
+    "governed_yarn": "1.22.22",
+    "source_preservation": {
+      "currentN_frontend_files_exact": 16,
+      "oldA_frontend_files_exact": 6,
+      "overlap": [],
+      "package_and_lock_exact_to_N": true
+    },
+    "suite_results": [
+      {
+        "cases": 113,
+        "path": "src/pages/operational/ProviderStatements.test.jsx",
+        "status": "passed"
+      },
+      {
+        "cases": 23,
+        "path": "src/pages/operational/SimpleBalanceAccess.test.jsx",
+        "status": "passed"
+      },
+      {
+        "cases": 38,
+        "path": "src/pages/EmployeesV2Management.test.jsx",
+        "status": "passed"
+      },
+      {
+        "cases": 22,
+        "path": "src/pages/operational/ApprovedEntry.test.jsx",
+        "status": "passed"
+      },
+      {
+        "cases": 16,
+        "path": "src/pages/operational/SimpleOrderRefunds.test.jsx",
+        "status": "passed"
+      },
+      {
+        "cases": 22,
+        "path": "src/pages/operational/ApprovedFinance.demand.test.jsx",
+        "status": "passed"
+      },
+      {
+        "cases": 20,
+        "path": "src/pages/operational/ApprovedLedger.test.jsx",
+        "status": "passed"
+      },
+      {
+        "cases": 12,
+        "path": "src/pages/operational/ApprovedFinance.test.jsx",
+        "status": "passed"
+      },
+      {
+        "cases": 16,
+        "path": "src/pages/ProviderStatementAccessDialog.test.jsx",
+        "status": "passed"
+      },
+      {
+        "cases": 11,
+        "path": "src/pages/operational/ApprovedFinance.loading.test.jsx",
+        "status": "passed"
+      },
+      {
+        "cases": 10,
+        "path": "src/pages/operational/simpleBalancesApi.test.js",
+        "status": "passed"
+      },
+      {
+        "cases": 14,
+        "path": "src/pages/operational/simpleBalancesModel.test.js",
+        "status": "passed"
+      },
+      {
+        "cases": 6,
+        "path": "src/pages/operational/ApprovedCashBoxes.test.jsx",
+        "status": "passed"
+      },
+      {
+        "cases": 5,
+        "path": "src/pages/CustomerRefundAccessDialog.test.jsx",
+        "status": "passed"
+      },
+      {
+        "cases": 5,
+        "path": "src/pages/operational/providerStatementsApi.test.js",
+        "status": "passed"
+      },
+      {
+        "cases": 6,
+        "path": "src/services/providerStatementAccess.test.js",
+        "status": "passed"
+      }
+    ],
+    "test_counts": {
+      "numFailedTestSuites": 0,
+      "numFailedTests": 0,
+      "numPassedTestSuites": 16,
+      "numPassedTests": 339,
+      "numPendingTestSuites": 0,
+      "numPendingTests": 0,
+      "numRuntimeErrorTestSuites": 0,
+      "numTodoTests": 0,
+      "numTotalTestSuites": 16,
+      "numTotalTests": 339,
+      "success": true
+    },
+    "test_log": "frontend-tests.log",
+    "test_result_file": "jest-results.json",
+    "wrapper_elapsed_seconds": 36.726
+  },
+  "kind": "r4_independent_frontend_integration_and_candidate_review_v1",
+  "limits": {
+    "B_acceptance_in_this_review": false,
+    "actual_Emergent_host_rehearsal": false,
+    "all_exact_A_workflows_claimed": false,
+    "backend_runtime_tests_performed_by_this_review": false,
+    "frontend_tests_use_synthetic_boundaries": true,
+    "new_application_build": false,
+    "new_product_source_or_test_edits": false,
+    "production_deployment": false
+  },
+  "source_tree": "f133f04fd5759c57f5cce195e35ae03ba53ef6da",
+  "verdict": "PASS_WITHIN_FRONTEND_COMPATIBILITY_WORKFLOW_PRESERVATION_AND_SOURCE_CANDIDATE_SCOPE",
+  "workflow": {
+    "new_thresholds": [
+      {
+        "N_minimum": 3,
+        "source_explanation": "New allocate-first/reverse-first parametrization adds two cases.",
+        "staged_minimum": 5,
+        "suite": "test_customer_inventory_unified_activity"
+      },
+      {
+        "N_exact": 16,
+        "source_explanation": "Existing POS settlement case is parametrized for web and mobile, adding one case.",
+        "staged_exact": 17,
+        "suite": "test_operational_driver_review_mongo"
+      },
+      {
+        "N_minimum": 38,
+        "source_explanation": "Four new parametrized groups contribute 3+2+2+3 cases.",
+        "staged_minimum": 48,
+        "suite": "test_operational_workspace_demand_reads"
+      }
+    ],
+    "no_current_base_gates_removed": true,
+    "no_other_workflow_changed": true,
+    "report": "workflow-review.json",
+    "sha256": "2162f789a6bf0753424918203db2a46aab6d194b369bcc465088d93168ee97e0",
+    "static_verdict": "CLEAR_STATIC_REVIEW_NO_BLOCKER_IDENTIFIED"
+  }
+}

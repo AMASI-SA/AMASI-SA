@@ -1,0 +1,141 @@
+{
+  "verdict": "No compatibility defect found in reviewed R4 integration. Focused local HTTP/mock/contract subset passes. Overall release verification remains partial until required exact-source CI/real-Mongo gates pass.",
+  "source_A": "aec203382b387c3812509084e77c2922aa860877",
+  "source_tree": "f133f04fd5759c57f5cce195e35ae03ba53ef6da",
+  "base_N": "44122bcc986bd1dff1532b9ad62c0268e899a179",
+  "base_tree": "0435b8d41ce261f658c953e41e35b739e57e8963",
+  "completed_local_run": {
+    "exit_code": 0,
+    "passed": 237,
+    "unique_cases": 237,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 0,
+    "deselected": 1,
+    "suites": {
+      "test_operational_movement_reversal_effects": 35,
+      "test_operational_movement_reversal_routes": 3,
+      "test_operational_workspace_account_history": 4,
+      "test_operational_workspace_demand_reads": 48,
+      "test_customer_inventory_unified_activity": 5,
+      "test_customer_refund_access": 36,
+      "test_customer_refund_read_only_bridge": 2,
+      "test_mobile_customer_refund_reads": 12,
+      "test_provider_statement_employee_access": 32,
+      "test_mobile_app_manager_role": 8,
+      "test_mobile_app_permission_owner_resolution": 2,
+      "test_operational_balance_access": 29,
+      "test_operational_balance_web_page_grants": 4,
+      "test_operational_workspace_refund_execution": 17
+    },
+    "started_at": "2026-11-23T11:41:34.396614+00:00",
+    "finished_at": "2026-11-23T11:44:05.463901+00:00",
+    "command_duration_seconds": 150.95,
+    "pytest_duration_seconds": 147.87
+  },
+  "deselected_local_only": {
+    "nodeid": "backend/tests/test_mobile_customer_refund_reads.py::test_status_enrichment_is_bounded_projected_and_conflict_is_explicit",
+    "reason": "Requires a real PyMongo CommandListener wire event; mongomock emits none. Focused failed trace reaches the correct HTTP200/conflict response, then fails len(status_reads)==1 with zero events. Source/test/CI unchanged; not counted as passed."
+  },
+  "modules_omitted_from_corrected_local_subset": [
+    "test_operational_inventory_payment_allocation.py",
+    "test_inventory_payment_allocation_lineage.py",
+    "test_operational_balance_app_permissions.py"
+  ],
+  "omitted_module_scope_note": "These modules contain unconditional real-localhost-Mongo fixtures as well as some pure cases. The corrected run omits entire modules; it does not count any of their cases as passed or claim all omitted cases are Mongo-dependent. Allocation/reversal interaction is still directly exercised by both orderings in test_customer_inventory_unified_activity.",
+  "initial_run": {
+    "complete": false,
+    "exit_code": 130,
+    "reason": "Interrupted owned broad selection after mapping repeated failures to unavailable localhost Mongo fixture; no terminal XML or overall pass claimed. Original progress log/command/source manifest retained. A separate wire-listener case was reproduced and classified explicitly.",
+    "raw_log": "focused-backend.log",
+    "manifest": "focused-command.json",
+    "progress_mapping": "interrupted-progress-map.json"
+  },
+  "environment": {
+    "python": "Python 3.12.14",
+    "CI_python": "3.11",
+    "CI_dependency_pins": "requirements-ci-pins.txt",
+    "installed_versions": "installed-dependencies.txt",
+    "real_Mongo_available": false,
+    "remote_or_live_database_used": false,
+    "dotenv_disabled": true,
+    "bytecode_disabled": true
+  },
+  "source_integrity": {
+    "all_backend_bytes_unchanged_during_completed_run": true,
+    "all_backend_bytes_same_as_initial_interrupted_run": true,
+    "PR2081_backend_paths": 63,
+    "R4_backend_paths": 21,
+    "overlap_paths": [
+      "backend/operational_balance_access.py",
+      "backend/operational_balance_routes.py",
+      "backend/operational_balance_service.py",
+      "backend/operational_balance_workspace.py",
+      "backend/operational_web_page_policy.py"
+    ],
+    "PR2081_nonoverlap_files_preserved_exactly": 58,
+    "inherited_intent_unchanged": true
+  },
+  "risk_to_evidence": [
+    {
+      "risk": "Reversal permission, own movement, every account, web log/write, immediate precommit revocation",
+      "evidence": [
+        "test_operational_movement_reversal_routes",
+        "test_operational_balance_access",
+        "test_operational_balance_web_page_grants"
+      ],
+      "result": "PASS for local HTTP/CAS scenarios"
+    },
+    {
+      "risk": "Reversal monetary effect and original/inverse identity; no double debt settlement",
+      "evidence": [
+        "test_operational_movement_reversal_effects",
+        "test_customer_inventory_unified_activity"
+      ],
+      "result": "PASS including allocation-before-reversal and reversal-before-allocation"
+    },
+    {
+      "risk": "Running balance before page/filter and demand snapshot identity",
+      "evidence": [
+        "test_operational_workspace_account_history",
+        "test_operational_workspace_demand_reads"
+      ],
+      "result": "PASS"
+    },
+    {
+      "risk": "Refund read/source grant cannot become reversal/general financial authority",
+      "evidence": [
+        "test_customer_refund_access",
+        "test_customer_refund_read_only_bridge",
+        "test_mobile_customer_refund_reads",
+        "test_operational_workspace_refund_execution"
+      ],
+      "result": "PASS for executed local cases; wire command budget deferred to CI"
+    },
+    {
+      "risk": "Provider-only grant and manager/borrowed-owner identity separation",
+      "evidence": [
+        "test_provider_statement_employee_access",
+        "test_mobile_app_manager_role",
+        "test_mobile_app_permission_owner_resolution"
+      ],
+      "result": "PASS"
+    },
+    {
+      "risk": "PR2081 atomic profile and customer/provider/owner implementation preserved",
+      "evidence": [
+        "compatibility-static.json"
+      ],
+      "result": "All 58 nonoverlap backend blobs identical to N; five overlap files manually reviewed without lost guards"
+    }
+  ],
+  "remaining": "Exact-source CI must prove real-Mongo transactions/command monitoring and its Python3.11 environment; no live performance, actual host, release lease or publication proof is provided by this review.",
+  "operations": {
+    "source_or_tests_modified": false,
+    "git_modified_by_reviewer": false,
+    "remote_modified": false,
+    "host_modified": false,
+    "leases_modified": false,
+    "local_evidence_and_isolated_venv_only": true
+  }
+}
