@@ -280,12 +280,18 @@ async def _prepare_assignment(db, owner, reviewer, row):
     if repair["refresh_failures"] or repair["unresolved"]:
         _error("preparation_customer_options_verification_failed", "تعذّر التحقق من خيارات العميل؛ لم يُعتمد الإسناد.")
     lines = repair["lines"]
-    batch = {"id": row["batch_id"], "user_id": owner, "title": "تجهيز المنتجات", "lines": lines}
+    from bundle_supplier_pieces import supplier_bundle_print_preview
+    physical_print_lines, bundle_references = await supplier_bundle_print_preview(db, owner, lines, row["batch_id"])
+    physical_quantity = sum(int(line["quantity"]) for line in physical_print_lines)
+    batch = {"id": row["batch_id"], "user_id": owner, "title": "تجهيز المنتجات", "lines": lines,
+        **({"physical_print_lines": physical_print_lines} if bundle_references else {})}
     pdf = batch_module.render_preparation_batch_pdf(batch)
     if not pdf.startswith(b"%PDF"):
         _error("preparation_batch_generation_failed", "تعذّر إنشاء ملف التجهيز.")
     return {"planned": planned, "lines": lines, "pdf_sha256": hashlib.sha256(pdf).hexdigest(),
-        "pdf_size_bytes": len(pdf), "option_repair": repair}
+        "pdf_size_bytes": len(pdf), "option_repair": repair, "physical_quantity": physical_quantity,
+        "physical_print_lines": physical_print_lines if bundle_references else None,
+        "bundle_references": bundle_references}
 
 
 async def _publish_assignment(tx, owner, reviewer, row, prepared, token):
@@ -317,7 +323,7 @@ async def _publish_assignment(tx, owner, reviewer, row, prepared, token):
     registry = {"id": "registry-" + row["client_request_id"], **key,
         "status": "ready", "batch_id": row["batch_id"], "file_number": row["file_number"],
         "file_title": command["file_title"], "file_date": row["file_date"], "file_date_display": row["file_date_display"],
-        "file_name": registry_module.preparation_file_name(command["file_title"], row["file_date"], command["expected_quantity"]),
+        "file_name": registry_module.preparation_file_name(command["file_title"], row["file_date"], prepared["physical_quantity"]),
         "expected_quantity": command["expected_quantity"], "allocated_quantity": command["expected_quantity"],
         "selected_product_count": command["selected_product_count"],
         "order_count": len({line["order_number"] for line in prepared["lines"]}),
@@ -326,7 +332,8 @@ async def _publish_assignment(tx, owner, reviewer, row, prepared, token):
         "schedule_mode": command["schedule_mode"], "required_due_at": _instant(command["required_due_at"]),
         "created_at": row["created_at"], "registered_at": now, "updated_at": now,
         "created_by": actor["id"], "created_by_name": _actor_view(actor)["name"],
-        "execution_status": execution, "piece_count": command["expected_quantity"],
+        "execution_status": execution, "piece_count": prepared["physical_quantity"],
+        **({"physical_quantity": prepared["physical_quantity"]} if prepared["bundle_references"] else {}),
         "piece_registry_status": "ready", "piece_registry_materialized_at": now,
         "assignment_request_id": row["id"], "supplier_assignment": command["supplier_assignment"],
         "request_fingerprint": row["request_fingerprint"], "mezan_only": True,
@@ -336,10 +343,15 @@ async def _publish_assignment(tx, owner, reviewer, row, prepared, token):
         "order_numbers": sorted({line["order_number"] for line in prepared["lines"]}),
         "selections": command["selections"], "pdf_sha256": prepared["pdf_sha256"], "pdf_size_bytes": prepared["pdf_size_bytes"],
         "customer_options_auto_repaired_line_count": prepared["option_repair"]["repaired_line_count"],
-        "customer_options_auto_refreshed_order_numbers": prepared["option_repair"]["refreshed_order_numbers"]}
+        "customer_options_auto_refreshed_order_numbers": prepared["option_repair"]["refreshed_order_numbers"],
+        **({"physical_print_lines": prepared["physical_print_lines"],
+            "card_count": len(prepared["physical_print_lines"])} if prepared["bundle_references"] else {})}
     pieces = await piece_module.prepare_preparation_piece_documents(tx, user_id=owner, registry=registry, batch=batch)
-    if len(pieces) != command["expected_quantity"]:
+    if len(pieces) != prepared["physical_quantity"]:
         _error("preparation_assignment_piece_count_mismatch", "تعذّر التحقق من جميع القطع المادية.")
+    if {piece["piece_id"]: piece["bundle_supplier_reference"] for piece in pieces
+            if piece.get("bundle_supplier_reference") is not None} != prepared["bundle_references"]:
+        _error("bundle_supplier_identity_changed", "تغيّرت مكونات البكج أثناء إنشاء الملف.")
     for piece in pieces:
         piece.update({"assignment_request_id": row["id"], "assignment_responsible_employee_id": employee["id"],
             "assignment_supplier_id": command["supplier_assignment"].get("supplier_id"),
@@ -373,14 +385,17 @@ async def _publish_assignment(tx, owner, reviewer, row, prepared, token):
     file_view = {**preparation_file_view(registry), "schedule_mode": command["schedule_mode"],
         "required_due_at": command["required_due_at"]}
     receipt = {"request_fingerprint": row["request_fingerprint"], "file": file_view,
-        "batch": {"batch_id": row["batch_id"], "status": "ready", "allocated_quantity": len(pieces),
+        "batch": {"batch_id": row["batch_id"], "status": "ready", "allocated_quantity": command["expected_quantity"],
+            **({"physical_quantity": len(pieces)} if prepared["bundle_references"] else {}),
             "selections": command["selections"], "piece_ids": piece_ids},
         "responsible_employee_id": employee["id"], "supplier_assignment": command["supplier_assignment"],
         "piece_ids": piece_ids, "piece_count": len(pieces), "dispatch": ({
             "id": dispatch["id"], "supplier_id": supplier["id"], "supplier_name": _text(supplier.get("company_name")),
             "responsible_employee_id": employee["id"], "piece_ids": piece_ids,
             "piece_count": len(pieces), "status": "sent"} if dispatch else None),
-        "destination": "in_progress" if assigned else "waiting", "committed_at": now.isoformat()}
+        "destination": "in_progress" if assigned else "waiting", "committed_at": now.isoformat(),
+        **({"physical_quantity": len(pieces), "commercial_quantity": command["expected_quantity"],
+            "bundle_references": prepared["bundle_references"]} if prepared["bundle_references"] else {})}
     receipt = jsonable_encoder(receipt)
     event = {"id": row["id"], "user_id": owner, "event_type": "preparation_employee_supplier_assignment_committed",
         "client_request_id": row["client_request_id"], "assignment_request_id": row["id"],
@@ -407,7 +422,10 @@ async def _verified_receipt(db, owner, row):
     if (not isinstance(receipt, dict) or receipt.get("request_fingerprint") != row["request_fingerprint"]
             or row.get("receipt_fingerprint") != _digest(receipt)):
         return None
-    count = command["expected_quantity"]
+    commercial_count = command["expected_quantity"]
+    count = receipt.get("physical_quantity", commercial_count)
+    if type(count) is not int or count < commercial_count or count > commercial_count * 2:
+        return None
     ids = receipt.get("piece_ids") or []
     if len(ids) != count or len(set(ids)) != count:
         return None
@@ -416,20 +434,47 @@ async def _verified_receipt(db, owner, row):
         "request_fingerprint": row["request_fingerprint"]}, {"_id": 0, "id": 1})
     batch = await db[batch_module.BATCHES].find_one({"user_id": owner, "id": row["batch_id"],
         "status": "ready", "assignment_request_id": row["id"], "request_fingerprint": row["request_fingerprint"]},
-        {"_id": 0, "selections": 1, "allocated_quantity": 1})
-    if not file or not batch or batch.get("selections") != command["selections"] or batch.get("allocated_quantity") != count:
+        {"_id": 0, "selections": 1, "allocated_quantity": 1, "physical_quantity": 1})
+    if (not file or not batch or batch.get("selections") != command["selections"]
+            or batch.get("allocated_quantity") != commercial_count
+            or batch.get("physical_quantity", commercial_count) != count):
         return None
     allocations = await db[PREPARATION_UNIT_ALLOCATIONS].find({"user_id": owner,
         "batch_id": row["batch_id"], "status": "committed", "assignment_request_id": row["id"]},
-        {"_id": 0, "order_number": 1, "order_item_id": 1, "unit_index": 1}).to_list(count + 1)
+        {"_id": 0, "order_number": 1, "order_item_id": 1, "unit_index": 1}).to_list(commercial_count + 1)
     pieces = await db[PIECES].find({"user_id": owner, "batch_id": row["batch_id"],
         "piece_id": {"$in": ids}, "assignment_request_id": row["id"],
         "assignment_responsible_employee_id": command["responsible_employee_id"],
         "assignment_supplier_id": command["supplier_assignment"].get("supplier_id")},
-        {"_id": 0, "piece_id": 1, "order_number": 1, "order_item_id": 1, "unit_index": 1}).to_list(count + 1)
+        {"_id": 0}).to_list(count + 1)
     facts = lambda values: {(value.get("order_number"), value.get("order_item_id"), value.get("unit_index")) for value in values}
-    if (len(allocations) != count or len(pieces) != count or len(facts(pieces)) != count
+    if (len(allocations) != commercial_count or len(pieces) != count or len(facts(pieces)) != commercial_count
             or facts(allocations) != facts(pieces) or {piece["piece_id"] for piece in pieces} != set(ids)):
+        return None
+    from bundle_supplier_pieces import validate_supplier_leaf_piece, supplier_leaf_reference, supplier_leaf_piece_id
+    by_commercial = {}
+    refs = {}
+    for piece in pieces:
+        identity = (piece["order_number"], piece["order_item_id"], piece["unit_index"])
+        by_commercial.setdefault(identity, []).append(piece)
+    for members in by_commercial.values():
+        if not any(piece.get("bundle_supplier_reference") is not None for piece in members):
+            if len(members) != 1:
+                return None
+            continue
+        try:
+            authorities = [await validate_supplier_leaf_piece(db, owner, piece) for piece in members]
+            if any(authority is None for authority in authorities):
+                return None
+            unit = authorities[0][0]
+            expected = {supplier_leaf_piece_id(owner, unit, supplier_leaf_reference(unit, leaf, index))
+                for leaf in unit["bundle_leaves"] for index in range(1, int(leaf["quantity"]) + 1)}
+            if {piece["piece_id"] for piece in members} != expected:
+                return None
+            refs.update({piece["piece_id"]: piece["bundle_supplier_reference"] for piece in members})
+        except (HTTPException, ValueError, TypeError, KeyError):
+            return None
+    if refs != (receipt.get("bundle_references") or {}):
         return None
     if command["supplier_assignment"]["mode"] == "assign":
         proof = receipt.get("dispatch") or {}

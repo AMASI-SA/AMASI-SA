@@ -1145,6 +1145,8 @@ async def _supplier_invoice_for_actor(
 
 
 def piece_scan_blocker(piece: dict[str, Any]) -> dict[str, Any] | None:
+    if piece.get("bundle_supplier_retired"):
+        return {"code": "bundle_supplier_parent_retired", "message": "استُبدلت هذه القطعة بقطع البكج؛ استخدم باركود كل قطعة."}
     """Return an explicit fail-closed reason for a non-receivable piece."""
     status = _text(piece.get("status")) or PIECE_STATUS_ASSIGNED
     if status == PIECE_STATUS_RECEIVED or piece.get("received_at"):
@@ -1488,6 +1490,10 @@ async def _supplier_live_piece_services(
     piece: dict[str, Any],
     mongo_session: Any = None,
 ) -> list[dict[str, Any]]:
+    if piece.get("bundle_supplier_reference") is not None:
+        from bundle_supplier_pieces import validate_supplier_leaf_piece
+        await validate_supplier_leaf_piece(db, user_id, piece, session=mongo_session)
+        return []  # This channel freezes finished supplier pieces, without services.
     kwargs = {"session": mongo_session} if mongo_session is not None else {}
     product_id = _text(piece.get("product_id"))
     if not product_id:
@@ -1621,6 +1627,17 @@ async def _supplier_product_reference_price(
     piece: dict[str, Any],
     mongo_session: Any = None,
 ) -> dict[str, Any]:
+    if piece.get("bundle_supplier_reference") is not None:
+        from bundle_supplier_pieces import validate_supplier_leaf_piece
+        _unit, leaf = await validate_supplier_leaf_piece(db, user_id, piece, session=mongo_session)
+        amount = _halalas(leaf["unit_cost"])
+        return {"reference_product_unit_price_halalas": amount,
+            "reference_product_base_unit_price_halalas": amount,
+            "reference_product_option_cost_halalas": 0,
+            "reference_product_price_complete": True,
+            "reference_product_price_source": leaf["cost_source"],
+            "reference_product_evidence": "frozen_bundle_supplier_leaf",
+            "product_price_authority": "mezan_v2", "salla_price_fallback_allowed": False}
     kwargs = {"session": mongo_session} if mongo_session is not None else {}
     product_id = _text(piece.get("product_id"))
     product = await db[PRODUCTS].find_one(
@@ -1834,6 +1851,11 @@ def _receipt_unit(piece: dict[str, Any]) -> tuple[str, str, int] | None:
     if (isinstance(order, str) and order and order == order.strip()
             and isinstance(item, str) and item and item == item.strip()
             and isinstance(index, int) and not isinstance(index, bool) and 0 < index <= 999_999_999):
+        ref = piece.get("bundle_supplier_reference")
+        if ref is not None:
+            if not isinstance(ref, dict) or not ref.get("leaf_id") or not ref.get("leaf_unit_index"):
+                raise HTTPException(409, detail={"code": "bundle_supplier_identity_invalid"})
+            return order, item, index, ref.get("unit_id"), ref["leaf_id"], ref["leaf_unit_index"]
         return order, item, index
     return None
 
@@ -1846,6 +1868,10 @@ async def _include_receipt_aliases(db, merchant_id, session_id, scans, pieces, r
     evidence = set()
     for scan in scans:
         pid = scan["piece_id"]
+        from bundle_supplier_pieces import validate_supplier_leaf_piece
+        authority = await validate_supplier_leaf_piece(db, merchant_id, pieces[pid], session=mongo_session)
+        if authority and scan.get("bundle_supplier_reference") != pieces[pid].get("bundle_supplier_reference"):
+            raise HTTPException(409, detail={"code": "bundle_supplier_identity_changed"})
         unit = _receipt_unit(scan)
         current = _receipt_unit(pieces[pid])
         if not unit or not current:
@@ -1858,7 +1884,7 @@ async def _include_receipt_aliases(db, merchant_id, session_id, scans, pieces, r
             raise HTTPException(409, detail={"code": "supplier_receiving_duplicate_unit_component",
                 "message": "تحتوي الجلسة تكلفة مكررة لوحدة واحدة من سطر الطلب."})
         charges.update(requested[pid])
-        order, item, index = unit
+        order, item, index = unit[:3]
         # Native scans use integers. Older finalizations can store decimal
         # strings with leading zeroes. Keep every lookup exact and indexable.
         indices = groups.setdefault((order, item), set())
@@ -1874,7 +1900,8 @@ async def _include_receipt_aliases(db, merchant_id, session_id, scans, pieces, r
              "event_type": {"$in": ["supplier_piece_scanned", "supplier_piece_service_recorded"]},
              "experiment_mode": {"$ne": True}, "experiment_run_id": {"$in": [None, ""]}},
             {"_id": 0, "piece_id": 1, "event_type": 1, "session_id": 1, "order_number": 1,
-             "order_item_id": 1, "unit_index": 1, "supplier_invoice_id": 1}, session=mongo_session,
+             "order_item_id": 1, "unit_index": 1, "supplier_invoice_id": 1,
+             "bundle_supplier_reference": 1}, session=mongo_session,
         )
         async for event in events:
             pid = event.get("piece_id")
@@ -1903,6 +1930,8 @@ async def _check_prior_invoice_components(
     for line in lines:
         components = _invoice_charge_components(line)
         for pid in line["piece_ids"]:
+            if pieces[pid].get("bundle_supplier_reference") is not None and line.get("services"):
+                raise HTTPException(409, detail={"code": "bundle_supplier_unsupported_invoice_line"})
             requested[pid] = set(components)
     evidence = await _include_receipt_aliases(db, merchant_id, session_id, scans, pieces, requested, mongo_session)
     invoices = db[SUPPLIER_INVOICES].find(
@@ -3199,6 +3228,8 @@ async def resolve_scanned_piece(
                 status_code=404,
                 detail={"code": "supplier_piece_barcode_not_found"},
             )
+        from bundle_supplier_pieces import validate_supplier_leaf_piece
+        await validate_supplier_leaf_piece(db, user_id, piece)
         return piece
 
     if not raw.isdigit():
@@ -3230,6 +3261,8 @@ async def resolve_scanned_piece(
             detail={"code": "supplier_piece_barcode_not_found"},
         )
     if len(rows) == 1:
+        from bundle_supplier_pieces import validate_supplier_leaf_piece
+        await validate_supplier_leaf_piece(db, user_id, rows[0])
         return rows[0]
     eligible = [row for row in rows if piece_scan_blocker(row) is None]
     raise HTTPException(
@@ -3273,6 +3306,12 @@ async def supplier_scan_group_candidates(
     Grouping is deliberately limited to the same materialised preparation
     group. Older rows without a group key remain single-piece scans.
     """
+    if scanned_piece.get("bundle_supplier_reference") is not None:
+        from bundle_supplier_pieces import validate_supplier_leaf_piece
+        await validate_supplier_leaf_piece(db, user_id, scanned_piece)
+        # Slot specifications and leaf positions are not interchangeable with
+        # their commercial sibling even when they share product and unit 1.
+        return [scanned_piece]
     group_key = _text(scanned_piece.get("group_key"))
     batch_id = _text(scanned_piece.get("batch_id"))
     order_item_id = _text(scanned_piece.get("order_item_id"))
@@ -3289,6 +3328,7 @@ async def supplier_scan_group_candidates(
                 "group_key": group_key,
                 "batch_id": batch_id,
                 "order_item_id": order_item_id,
+                "bundle_supplier_reference": None,
                 "status": {"$in": sorted(candidate_statuses)},
                 "$and": [{
                     "$or": [
@@ -3546,6 +3586,7 @@ async def _recent_session_events(
                 _text(price_piece.get("variant_id") or price_piece.get("salla_variant_id")),
                 _text(price_piece.get("sku")).casefold(),
                 _supplier_piece_option_signature(price_piece),
+                str(price_piece.get("bundle_supplier_reference") or ""),
             )
             if cache_key not in product_price_cache:
                 product_price_cache[cache_key] = (
@@ -5379,6 +5420,9 @@ def make_supplier_receiving_router(
                     "order_number": _text(updated_piece.get("order_number")),
                     "order_item_id": _text(updated_piece.get("order_item_id")),
                     "unit_index": updated_piece.get("unit_index"),
+                    **({"bundle_supplier_reference": dict(updated_piece["bundle_supplier_reference"]),
+                        "bundle_supplier_specifications": dict(updated_piece["bundle_supplier_specifications"])}
+                       if updated_piece.get("bundle_supplier_reference") is not None else {}),
                     "product_id": updated_piece.get("product_id"),
                     "product_name": updated_piece.get("product_name"),
                     "sku": updated_piece.get("sku"),
@@ -6713,6 +6757,9 @@ def make_supplier_receiving_router(
                     supplier_id=fresh_session["supplier_id"], expected_total=draft["total_halalas"],
                     actor_id=context["actor_id"], mongo_session=mongo_session,
                 )
+                if any(piece.get("bundle_supplier_reference") is not None for piece in current_pieces):
+                    from bundle_supplier_pieces import finalize_supplier_leaf_receipts
+                    await finalize_supplier_leaf_receipts(db, merchant_id, current_pieces, session=mongo_session)
             return {
                 "ok": True,
                 "financial_integrity_verified": not is_experiment,

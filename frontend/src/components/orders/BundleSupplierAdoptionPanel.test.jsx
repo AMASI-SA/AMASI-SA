@@ -123,9 +123,9 @@ test("invalid preview cannot become an apply action", async () => {
     expect(host.querySelector('[data-testid="bundle-adoption-apply"]')).toBeNull();
 });
 
-test("an invalid apply response never reports completion to the parent", async () => {
+test.each([["same", "same"], ["unrelated-one", "unrelated-two"]])("an apply response with wrong piece identities never reports completion: %j", async (...pieceIds) => {
     const onApplied = jest.fn();
-    applyBundleAdoption.mockResolvedValue({ state: "applied", adoption_id: "adoption-1", preview, piece_ids: ["same", "same"] });
+    applyBundleAdoption.mockResolvedValue({ state: "applied", adoption_id: "adoption-1", preview, piece_ids: pieceIds });
     await render({ onApplied }); await showPreview(); await fillReason(); await click("bundle-adoption-apply");
     expect(host.querySelector('[role="status"]')).toBeNull();
     expect(onApplied).not.toHaveBeenCalled();

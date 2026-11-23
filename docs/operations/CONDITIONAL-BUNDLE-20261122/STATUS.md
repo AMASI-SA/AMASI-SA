@@ -2,6 +2,54 @@
 
 ## State
 
+### Supplier execution source checkpoint — WIP, 2026-11-24
+
+The preceding UI milestone is remotely recoverable at
+`d79b3d40422748807a1f84c3e125657039914e60` (tree
+`11d4518185dde8a044848b270fbeaf4d30663998`) on Draft PR #2093.
+
+This source checkpoint adds frozen physical supplier-leaf identities, native
+supplier invoice proof linkage, audited owner-only pre-receipt adoption,
+strict transaction capabilities, and the corresponding router/UI integration.
+The ordinary parent sale quantity remains unchanged. The new-intake routing,
+per-leaf printable barcodes, separate physical counts, and batched reporting
+proof checks are present but still require focused integration and review.
+
+Observed isolated test milestones (overlapping counts are not additive):
+
+- Initial supplier bridge: 21 real-Mongo tests passed, no skips, before the
+  subsequent intake/reporting additions.
+- Audited adoption: 47 real-Mongo public-route tests passed, no skips, before
+  three new stale-acceptance refusal tests were added.
+- Separate full public-route acceptance: 1 passed. It exercises adoption,
+  refusal of the retired barcode, two scans, one native invoice with quantity2
+  and cost100, public employee receipt, partial then complete Ready, idempotent
+  replay, and the actual reporting loader. It preserves the sale quantity1
+  and the original ordinary intake. Only external provider GET/background
+  wake were replaced; no private consumption helper stands in for Ready.
+- Latest owner UI/transport/layout selection: 39 tests in5 suites passed with
+  governed Node22.23.2/Yarn1.22.22. Wrong physical response identities cannot
+  report completion. Changed Python syntax, workflow YAML and diff checks pass.
+
+The local replica/standalone runner uses owned loopback Mongo7.0.28 and stops
+its children. Mandatory Mongo8 CI, full latest-source acceptance, source-change
+and cancellation review, and independent review remain outstanding. The G47
+workflow now requires both new backend modules with no skipped tests and the
+new frontend suites. Do not merge or publish this WIP.
+
+Separate mobile cancellation/re-entry diagnosis found a pre-existing recovery
+transition which drops scan metadata while retaining draft invoice lines.
+That mobile fix is isolated from this repository. A fresh production health
+read identified source `b69d438a20ae123a0c30deb5b73599551dbe9559` with verified
+identity, critical hashes and frontend build. Its supplier receiving/recovery/
+display files match the reviewed server base. A preview workspace database
+read is not Production evidence. No live business changes were made.
+
+Next: complete and test new-intake/reporting/capability edges, run both complete
+new modules plus existing supplier regression suites on the same immutable
+source, independently review, checkpoint the result, and then evaluate release
+gates against current Production and the actual shared-host guard.
+
 ### Owner preview UI checkpoint — WIP, 2026-11-24
 
 Draft PR #2093 preserves the supplier workflow continuation on

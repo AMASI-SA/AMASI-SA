@@ -19,6 +19,7 @@ import statistics
 import uuid
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from typing import Any, Callable, Iterable, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -197,7 +198,9 @@ def validate_materialized_piece_count(
 ) -> int:
     """Fail closed when a ready file did not produce every physical piece."""
     expected_piece_count = int(
-        batch.get("allocated_quantity")
+        batch.get("physical_quantity")
+        or registry.get("physical_quantity")
+        or batch.get("allocated_quantity")
         or registry.get("allocated_quantity")
         or 0
     )
@@ -516,17 +519,8 @@ def _piece_upsert_update(
 
 
 async def ensure_piece_operation_indexes(db: Any) -> None:
-    await db[PIECES].create_index(
-        [
-            ("user_id", ASCENDING),
-            ("batch_id", ASCENDING),
-            ("order_number", ASCENDING),
-            ("order_item_id", ASCENDING),
-            ("unit_index", ASCENDING),
-        ],
-        unique=True,
-        name="uq_preparation_piece_physical_unit_v1",
-    )
+    from bundle_supplier_pieces import ensure_supplier_piece_identity_index
+    await ensure_supplier_piece_identity_index(db)
     # This key is shared with supplier-report startup; Mongo requires the same
     # canonical name when an identical index already exists.
     await db[PIECES].create_index(
@@ -633,10 +627,16 @@ async def prepare_preparation_piece_documents(
     from reviewed_products_catalog import bundle_parent_line_ids
     bundle_lines = await bundle_parent_line_ids(db, user_id,
         [_text(line.get("order_number")) for line in batch.get("lines", []) if isinstance(line, dict)])
-    if any(_text(line.get("order_item_id")) in bundle_lines[_text(line.get("order_number"))]
-           for line in batch.get("lines", []) if isinstance(line, dict)):
+    has_bundle = any(_text(line.get("order_item_id")) in bundle_lines[_text(line.get("order_number"))]
+           for line in batch.get("lines", []) if isinstance(line, dict))
+    if has_bundle and not registry.get("assignment_request_id"):
         raise HTTPException(409, detail={"code": "bundle_parent_preparation_export_forbidden",
             "requirements_route": "/fulfillment-v2/bundles/report"})
+    if has_bundle:
+        from operational_atomic import _ACTIVE
+        active = _ACTIVE.get()
+        if not active or active["db"] is not db or active["owner"] != user_id or active["profile"] != "preparation_assignment":
+            raise HTTPException(409, detail={"code": "bundle_supplier_assignment_transaction_required"})
     history = await db[PIECES].find(
         {
             "user_id": user_id,
@@ -669,6 +669,27 @@ async def prepare_preparation_piece_documents(
         assigned_at=assigned_at,
         duration_by_signature=duration_history,
     )
+    if has_bundle:
+        from bundle_supplier_pieces import (
+            supplier_leaf_intake_unit, supplier_materialization_query, build_supplier_leaf_pieces,
+        )
+        expanded = []
+        for piece in pieces:
+            number, line_id = _text(piece.get("order_number")), _text(piece.get("order_item_id"))
+            if line_id not in bundle_lines[number]:
+                expanded.append(piece)
+                continue
+            original, unit = await supplier_leaf_intake_unit(db, user_id, number, line_id, piece["unit_index"])
+            leaf_pieces = build_supplier_leaf_pieces(owner=user_id, unit=unit, template=piece)
+            changed = await db["mezan_component_consumption_units_v1"].update_one(
+                supplier_materialization_query(original), {"$set": {
+                    "bundle_leaves": unit["bundle_leaves"], "bundle_supplier_bridge_version": 1}})
+            if changed.matched_count != 1:
+                raise HTTPException(409, detail={"code": "bundle_supplier_unit_changed"})
+            expanded.extend(leaf_pieces)
+        pieces = expanded
+        if batch.get("physical_quantity") != len(pieces) or registry.get("physical_quantity") != len(pieces):
+            raise HTTPException(409, detail={"code": "bundle_supplier_physical_quantity_changed"})
     order_numbers = sorted({
         _text(piece.get("order_number"))
         for piece in pieces
@@ -769,6 +790,12 @@ async def materialize_preparation_pieces(
     )
     if not batch:
         raise HTTPException(409, detail={"code": "preparation_batch_missing_for_piece_materialization"})
+    if registry.get("assignment_request_id") and batch.get("physical_print_lines"):
+        existing = await db[PIECES].find({"user_id": user_id, "batch_id": batch_id,
+            "assignment_request_id": registry["assignment_request_id"]}, {"_id": 0}).to_list(
+                int(registry.get("physical_quantity") or 0) + 1)
+        validate_materialized_piece_count(batch=batch, registry=registry, pieces=existing)
+        return existing
     pieces = await prepare_preparation_piece_documents(
         db, user_id=user_id, registry=registry, batch=batch,
     )
@@ -4053,6 +4080,13 @@ async def _consume_received_supplier_components(
     inventory operation is hidden behind a successful Ready response.
     """
     from stock_component_consumption_service import consume_component_stock
+    if piece.get("bundle_supplier_reference") is not None:
+        from bundle_supplier_pieces import validate_supplier_leaf_piece, supplier_leaf_receipts
+        unit, _leaf = await validate_supplier_leaf_piece(db, user_id, piece)
+        for leaf in unit["bundle_leaves"]:
+            proofs, _amount = await supplier_leaf_receipts(db, user_id, unit, leaf)
+            if len(proofs) != Decimal(str(leaf["quantity"])):
+                return {"state": "deferred", "reason": "bundle_supplier_receipts_incomplete"}
     line_id = _text(piece.get("order_item_id"))
     try:
         unit_index = int(piece.get("unit_index") or 0)
@@ -4172,6 +4206,9 @@ async def _mark_assembly_piece_ready_in_transaction(
     if receipt_evidence_blocker:
         raise HTTPException(409, detail={"code": receipt_evidence_blocker})
     source = await db["unified_orders"].find_one({"user_id": user_id, "order_number": order_number})
+    if piece.get("bundle_supplier_reference") is not None:
+        from bundle_supplier_pieces import validate_supplier_leaf_piece
+        await validate_supplier_leaf_piece(db, user_id, piece)
     supplier_units = supplier_current_units(source, workflow)
     current_piece_blocker = supplier_current_piece_blocker(source, workflow, piece, current_units=supplier_units)
     if current_piece_blocker:

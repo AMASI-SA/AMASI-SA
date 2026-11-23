@@ -526,6 +526,11 @@ def _bundle_cost(snapshot: dict, quantity: Any, units: list[dict] | None = None)
         if Decimal(len(units)) != q or len(set(indexes)) != len(indexes):
             return _unknown(quantity, "bundle_unit_quantity_mismatch")
         leaves = [leaf for unit in units for leaf in unit.get("bundle_leaves") or []]
+        if any(unit.get("state") == "consumed" and any(
+                leaf.get("supplier_receiving_channel") == "supplier_receiving_v1"
+                for leaf in unit.get("bundle_leaves") or [])
+                and unit.get("_supplier_invoice_actual_verified") is not True for unit in units):
+            return _unknown(quantity, "bundle_supplier_invoice_evidence_unverified")
         actual = [decimal(leaf.get("actual_cost")) for leaf in leaves]
         # Actual is valid only for a complete consumption of every physical unit.
         coverage = all(_actual_leaves_cover_snapshot(snapshot, unit) for unit in units)
@@ -771,7 +776,7 @@ async def load_order_cost_authority(db: Any, user_id: str, orders: list[dict], *
         async def read_plans():
             return await _read_snapshots(db, PLANS, {"user_id": user_id, "order_id": {"$in": selected},
                 "bundle_snapshots": {"$exists": True}},
-                {"_id": 1, "order_id": 1, "bundle_snapshots": 1, "reconciliation_required": 1, "lines": 1},
+                {"_id": 1, "user_id": 1, "order_id": 1, "state": 1, "bundle_snapshots": 1, "reconciliation_required": 1, "lines": 1},
                 "bundle_snapshots", len(selected), full=include_frozen_metadata, **read_options)
 
         if parallel_reads:
@@ -781,10 +786,15 @@ async def load_order_cost_authority(db: Any, user_id: str, orders: list[dict], *
         # Default readers and session wrappers retain their audited read shape.
         # Only the positively owned visible path may omit a provably empty read.
         units = await _read(db, UNITS, {"user_id": user_id, "plan_id": {"$in": [p["_id"] for p in plans]},
-            "state": {"$ne": "released"}, "order_line_id": {"$in": sorted(aliases)}}, {"_id": 0, "plan_id": 1, "order_line_id": 1,
-            "unit_index": 1, "state": 1, "selected_context": 1, "bundle_leaves": 1},
+            "state": {"$ne": "released"}, "order_line_id": {"$in": sorted(aliases)}}, {"_id": 1, "user_id": 1, "order_id": 1,
+            "plan_id": 1, "order_line_id": 1, "product_id": 1, "variant_id": 1, "bundle_revision": 1,
+            "bundle_supplier_bridge_version": 1, "unit_index": 1, "state": 1, "selected_context": 1, "bundle_leaves": 1},
             max(10000, sum(int(decimal(item.get("quantity", 1)) or 0) for number in selected for item in order_items(order_map[number]))) + limit,
             **read_options) if plans or not parallel_reads else []
+        from bundle_supplier_pieces import verify_reporting_supplier_units
+        async def read_bundle_proof(collection, query, projection, maximum):
+            return await _read(db, collection, query, projection, maximum, **read_options)
+        await verify_reporting_supplier_units(db, user_id, units, plans, read=read_bundle_proof, budget=budget)
         corrections = await _read(db, CORRECTIONS, {**keys, "state": "applied", "order_item_id": {"$in": sorted(aliases)}},
                                   {"_id": 0}, max(1, limit * 4), **read_options) if include_corrections else []
         item_maps = {}

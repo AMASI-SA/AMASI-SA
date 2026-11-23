@@ -32,6 +32,17 @@ _PROFILES = {
     "opening_inventory": frozenset({"mz2_operational_inventory_openings_v1", "warehouse_locations", "mezan_inventory_receipts_v2", "warehouse_location_events"}),
     "bundle_catalog": frozenset({"mezan_bundle_definitions_v2"}),
     "bundle_policy": frozenset({"mezan_product_cost_profiles_v2", "mezan_product_operation_profiles_v2"}),
+    "bundle_supplier_adoption": frozenset({
+        "mezan_bundle_supplier_adoptions_v1", "mezan_component_consumption_plans_v1",
+        "mezan_component_consumption_units_v1", "mezan_component_order_lifecycle_v1",
+        "mezan_preparation_pieces_v1", "mezan_preparation_piece_events_v1",
+        "mezan_supplier_dispatches_v1", "mezan_supplier_dispatch_events_v1", "order_review_events",
+        "mezan_products_v2", "mezan_product_cost_profiles_v2", "mezan_bundle_definitions_v2",
+        "mezan_product_cost_revisions_v2", "mezan_suppliers_v2", "order_review_workflows",
+        "mezan_product_operation_profiles_v2", "mezan_product_resource_bindings_v2",
+        "mezan_product_option_cost_bindings_v2", "mezan_cost_resources_v2",
+        "unified_orders", "users",
+    }),
     "physical_receipt": frozenset({"warehouse_locations", "mezan_inventory_receipts_v2", "warehouse_location_events"}),
     "fulfillment": _OWNED | {"warehouse_locations", "mezan_inventory_receipts_v2", "products", "payment_transactions", "tamara_attribution_log", "order_review_auth_sessions_v2"},
     "employee_setup": frozenset({
@@ -48,6 +59,7 @@ _PROFILES = {
         # and grant. No account/permission creation or mutation is admitted.
         "users", "mezan_mobile_app_access_v1",
         "unified_orders", "order_review_workflows",
+        "mezan_component_consumption_units_v1",
     }),
     "driver_cash_delivery": frozenset({
         "store_delivery_assignments", "store_delivery_collections", "store_delivery_driver_earnings",
@@ -304,8 +316,26 @@ class _Collection:
             name = self.__collection.name
             if name not in _PROFILES[self.__state["profile"]]:
                 _reject(self.__state)
+            if self.__state["profile"] == "bundle_supplier_adoption":
+                if method not in {"insert_one", "update_one"} or kwargs or len(args) != (1 if method == "insert_one" else 2):
+                    _reject(self.__state)
+                if name == "users":
+                    # Account documents use id/created_by, not tenant user_id.
+                    # This capability only fences existing active identities.
+                    from bundle_supplier_adoption import validate_adoption_update
+                    if method != "update_one" or not await validate_adoption_update(
+                            self.__state["db"], self.__owner, name, args[0], args[1]):
+                        _reject(self.__state)
+                    return await self.__collection.update_one(*args, session=self.__session)
             if self.__state["profile"] == "preparation_assignment" and name in {"users", "mezan_mobile_app_access_v1"}:
                 return await self._preparation_access_fence(name, method, args, kwargs)
+            if self.__state["profile"] == "preparation_assignment" and name == "mezan_component_consumption_units_v1":
+                from bundle_supplier_pieces import validate_supplier_materialization_update
+                if (method != "update_one" or len(args) != 2 or kwargs
+                        or not isinstance(args[0], dict) or args[0].get("user_id") != self.__owner
+                        or not validate_supplier_materialization_update(args[0], args[1])):
+                    _reject(self.__state)
+                return await self.__collection.update_one(*args, session=self.__session)
             if self.__state["profile"] == "preparation_assignment" and name in {"unified_orders", "order_review_workflows"}:
                 # Revalidation must conflict with a source/review change which
                 # races the snapshot. It cannot advance an order or edit money.
@@ -499,6 +529,11 @@ class _Collection:
         return await self.__collection.update_one(query, args[1], session=self.__session)
 
     def _document(self, name, doc):
+        if self.__state["profile"] == "bundle_supplier_adoption":
+            from bundle_supplier_adoption import validate_adoption_insert
+            if not validate_adoption_insert(name, doc):
+                _reject(self.__state)
+            return
         if self.__state["profile"] == "purchase_receiving":
             from operational_inventory_purchase_receipts import validate_insert
             if not validate_insert(name, doc):
@@ -566,6 +601,11 @@ class _Collection:
             _reject(self.__state)
 
     async def _update(self, name, query, update, kwargs):
+        if self.__state["profile"] == "bundle_supplier_adoption":
+            from bundle_supplier_adoption import validate_adoption_update
+            if kwargs or not await validate_adoption_update(self.__state["db"], self.__owner, name, query, update):
+                _reject(self.__state)
+            return
         if self.__state["profile"] == "purchase_receiving":
             from operational_inventory_purchase_receipts import validate_update
             if kwargs.get("upsert") or not await validate_update(self.__state["db"], self.__owner, name, query, update):

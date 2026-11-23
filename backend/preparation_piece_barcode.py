@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import re
 import uuid
+import hashlib
+import json
 from typing import Any
 
 BARCODE_PREFIX = "MEZAN-PIECE:"
@@ -49,9 +51,26 @@ def preparation_piece_id(
     order_number: Any,
     order_item_id: Any,
     unit_index: Any,
+    bundle_supplier_reference: dict | None = None,
 ) -> str:
     """Return a durable id that is unchanged when the same piece is re-filed."""
     del batch_id  # A file/batch must never change the physical piece identity.
+    if bundle_supplier_reference is not None:
+        reference = bundle_supplier_reference
+        if (not isinstance(reference, dict) or type(reference.get("version")) is not int
+                or reference["version"] != 1 or type(reference.get("leaf_unit_index")) is not int
+                or reference["leaf_unit_index"] < 1 or type(unit_index) is not int or unit_index < 1
+                or any(not isinstance(reference.get(key), str) or not reference[key].strip()
+                       for key in ("unit_id", "plan_id", "leaf_id", "leaf_fingerprint"))):
+            raise ValueError("invalid_preparation_bundle_leaf_identity")
+        raw = {"owner": _text(user_id), "order": _text(order_number), "line": _text(order_item_id),
+               "sale_unit": unit_index, "unit_id": reference["unit_id"],
+               "leaf_id": reference["leaf_id"], "leaf_unit_index": reference["leaf_unit_index"]}
+        if not all(raw[key] for key in ("owner", "order", "line")):
+            raise ValueError("invalid_preparation_bundle_leaf_identity")
+        digest = hashlib.sha256(json.dumps(raw, ensure_ascii=False, sort_keys=True,
+            separators=(",", ":"), default=str).encode()).hexdigest()
+        return uuid.uuid5(uuid.NAMESPACE_URL, "mezan-bundle-supplier-piece-v1:" + digest).hex
     raw = preparation_piece_identity_key(
         user_id=user_id,
         order_number=order_number,

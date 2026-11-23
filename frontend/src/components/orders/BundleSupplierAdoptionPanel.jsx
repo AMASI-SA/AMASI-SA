@@ -14,8 +14,8 @@ function validPreview(value, orderNumber, lineId) {
         && Number.isInteger(value.physical_quantity) && value.physical_quantity > 0
         && Array.isArray(value.requirements) && value.requirements.length === value.physical_quantity
         && new Set(value.requirements.map((item) => item.piece_id)).size === value.physical_quantity
-        && value.requirements.every((item) => item.piece_id && item.leaf_id && item.unit_cost != null && Number.isFinite(Number(item.unit_cost)))
-        && value.expected_total_cost != null && Number.isFinite(Number(value.expected_total_cost));
+        && value.requirements.every((item) => item.piece_id && item.leaf_id && item.unit_cost != null && item.unit_cost !== "" && Number.isFinite(Number(item.unit_cost)) && Number(item.unit_cost) >= 0)
+        && value.expected_total_cost != null && value.expected_total_cost !== "" && Number.isFinite(Number(value.expected_total_cost)) && Number(value.expected_total_cost) >= 0;
 }
 
 export default function BundleSupplierAdoptionPanel({ orderNumber, items = [], isOwner = false, actorKey, sourceRevision, onApplied }) {
@@ -81,6 +81,7 @@ export default function BundleSupplierAdoptionPanel({ orderNumber, items = [], i
             if (next?.state !== "applied" || !next.adoption_id || !Array.isArray(next.piece_ids)
                 || next.piece_ids.length !== preview.physical_quantity
                 || new Set(next.piece_ids).size !== preview.physical_quantity
+                || !preview.requirements.every((item) => next.piece_ids.includes(item.piece_id))
                 || next.preview?.preview_hash !== preview.preview_hash) {
                 throw new Error("لم يصل تأكيد واضح للتحويل. أعد المحاولة بنفس العملية للتحقق من نتيجتها.");
             }

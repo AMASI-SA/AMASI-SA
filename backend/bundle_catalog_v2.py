@@ -492,6 +492,8 @@ async def expand_bundle(db, owner, product_id, *, variant_id=None, selected_opti
                     "salla_product_id": product.get("salla_product_id"), "variant_id": vid,
                     "name": product.get("name"), "sku": (selected or product).get("sku"), "track_inventory": True,
                     "current_product_reference": True, "slot_id": slot["slot_id"], "customization": customization,
+                    "customization_labels": {oid: choice_options[oid].get("name") for oid in customization
+                                             if oid in choice_options and choice_options[oid].get("name")},
                     "sourcing_policy": deepcopy((metadata[key].get("operation_profile") or {}).get("bundle_sourcing", {})),
                     "selected_options": [{"option_id": a, "value_id": b} for a, b in sorted(pairs)],
                     "quantity": str(multiplier), "unit": row.get("unit", "unit"), "required": row.get("required", True),

@@ -143,6 +143,37 @@ jobs:
           tests/test_inventory_stocktake_integration.py
           tests/test_purchase_configuration_contract.py tests/test_native_purchase_configuration_mongo.py
           --junitxml="$RUNNER_TEMP/native-inventory.xml"
+      - name: Verify supplier bundle physical pieces and audited adoption
+        env:
+          PYTHONPATH: ".:tests"
+          PYTHON_DOTENV_DISABLED: "1"
+          BUILD20_SCAN_TEST_MONGO_URL: mongodb://127.0.0.1:27018/?replicaSet=g47test
+          BUILD20_INVOICE_TEST_MONGO_URL: mongodb://127.0.0.1:27018/?replicaSet=g47test
+        run: >-
+          python -m pytest --noconftest -p no:cacheprovider -q --tb=short
+          tests/test_bundle_supplier_pieces.py tests/test_bundle_supplier_adoption.py
+          --junitxml="$RUNNER_TEMP/supplier-bundle.xml"
+      - name: Require executed supplier bundle transactions without skips
+        if: always()
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          cases = list(ET.parse(Path(os.environ['RUNNER_TEMP']) / 'supplier-bundle.xml').iter('testcase'))
+          assert cases and not [c.attrib for c in cases if any(c.find(t) is not None for t in ('failure', 'error', 'skipped'))]
+          observed = {part for c in cases for part in c.get('classname', '').split('.')}
+          expected = {'test_bundle_supplier_pieces', 'test_bundle_supplier_adoption'}
+          assert expected <= observed, sorted(expected - observed)
+          print(len(cases), 'supplier bundle cases PASS; zero skips')
+          PY
+      - name: Retain supplier bundle transaction evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: supplier-bundle-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/supplier-bundle.xml
+          if-no-files-found: error
       - name: Require native inventory transactions and permission tests without skips
         if: always()
         run: |
@@ -303,6 +334,7 @@ jobs:
           yarn test --watchAll=false --runInBand --runTestsByPath
           src/pages/PurchaseInvoices.test.jsx src/pages/InventoryReceivingWorkspace.test.jsx
           src/services/productBundles.test.js
+          src/services/bundleSupplierAdoption.test.js
           src/components/products/BundleEditor.test.jsx
           src/components/products/CurrentProductSlots.test.jsx
           src/components/products/BundleProductPolicy.test.jsx
@@ -310,6 +342,8 @@ jobs:
           src/components/products/BundleReportPanel.test.jsx
           src/components/products/ProductCreationPanel.test.jsx
           src/components/orders/BundleOperationalPanel.test.jsx
+          src/components/orders/BundleSupplierAdoptionPanel.test.jsx
+          src/pages/OrderDetailsV2.layout.test.jsx
           src/pages/OrderDetailsV2.shippingIdentity.test.jsx
           --json --outputFile="$RUNNER_TEMP/g47-frontend.json"
       - name: Require executed UI tests with no skips
