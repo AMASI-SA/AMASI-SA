@@ -1,0 +1,670 @@
+{
+  "artifacts": [
+    {
+      "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14839880244/zip",
+      "created_at": "2026-11-23T16:29:27Z",
+      "digest": "sha256:8b9086de8cc9ac06109dbf5e1ab92f18a5eb9888568e12fd2015e151ca448cfa",
+      "expired": false,
+      "expires_at": "2026-12-07T16:29:26Z",
+      "id": 14839880244,
+      "name": "release-v5-generated-outputs-host-24.19.0",
+      "size_in_bytes": 3851393,
+      "updated_at": "2026-11-23T16:29:27Z",
+      "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14839880244",
+      "workflow_run": {
+        "head_branch": "codex/inventory-side-options-release-20261123",
+        "head_repository_id": 1250664189,
+        "head_sha": "499b98735b5cc4eae79d380e4f8d5ec5477175e5",
+        "id": 45216427337,
+        "repository_id": 1250664189
+      }
+    },
+    {
+      "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14839316097/zip",
+      "created_at": "2026-11-23T16:29:28Z",
+      "digest": "sha256:764742f6fd57507d33d1956579bafe63467772fa0486e34c1abdb1ef0ac1d2d0",
+      "expired": false,
+      "expires_at": "2026-12-07T16:29:27Z",
+      "id": 14839316097,
+      "name": "release-v5-clean-clone-evidence-host-24.19.0",
+      "size_in_bytes": 64078,
+      "updated_at": "2026-11-23T16:29:28Z",
+      "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14839316097",
+      "workflow_run": {
+        "head_branch": "codex/inventory-side-options-release-20261123",
+        "head_repository_id": 1250664189,
+        "head_sha": "499b98735b5cc4eae79d380e4f8d5ec5477175e5",
+        "id": 45216427337,
+        "repository_id": 1250664189
+      }
+    },
+    {
+      "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14839211626/zip",
+      "created_at": "2026-11-23T16:29:21Z",
+      "digest": "sha256:552121423e92161e3ca5b3935aef88715cf07bb60990c80cfbe83f74d8506c44",
+      "expired": false,
+      "expires_at": "2026-12-07T16:29:21Z",
+      "id": 14839211626,
+      "name": "release-v5-clean-clone-evidence-host-20.20.2",
+      "size_in_bytes": 64073,
+      "updated_at": "2026-11-23T16:29:21Z",
+      "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14839211626",
+      "workflow_run": {
+        "head_branch": "codex/inventory-side-options-release-20261123",
+        "head_repository_id": 1250664189,
+        "head_sha": "499b98735b5cc4eae79d380e4f8d5ec5477175e5",
+        "id": 45216427337,
+        "repository_id": 1250664189
+      }
+    },
+    {
+      "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14837833147/zip",
+      "created_at": "2026-11-23T16:29:21Z",
+      "digest": "sha256:645b9d7a12c56e59deab866f3459cb6593650bf2c4c9011194b58fcdae2dcf99",
+      "expired": false,
+      "expires_at": "2026-12-07T16:29:20Z",
+      "id": 14837833147,
+      "name": "release-v5-generated-outputs-host-20.20.2",
+      "size_in_bytes": 3852910,
+      "updated_at": "2026-11-23T16:29:21Z",
+      "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14837833147",
+      "workflow_run": {
+        "head_branch": "codex/inventory-side-options-release-20261123",
+        "head_repository_id": 1250664189,
+        "head_sha": "499b98735b5cc4eae79d380e4f8d5ec5477175e5",
+        "id": 45216427337,
+        "repository_id": 1250664189
+      }
+    }
+  ],
+  "expected_deployment_git_sha": "499b98735b5cc4eae79d380e4f8d5ec5477175e5",
+  "jobs": [
+    {
+      "conclusion": "success",
+      "id": 137838694568,
+      "logs_url": null,
+      "name": "Frontend build",
+      "run_id": 45216427337,
+      "status": "completed",
+      "steps": [
+        {
+          "conclusion": "success",
+          "name": "Set up job",
+          "number": 1,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Run actions/checkout@v4",
+          "number": 2,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Run actions/setup-node@v4",
+          "number": 3,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Enable Yarn Classic",
+          "number": 4,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Record governed frontend toolchain",
+          "number": 5,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Install frontend dependencies",
+          "number": 6,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Test governed frontend build contract",
+          "number": 7,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Classify reviewed B or source candidate A",
+          "number": 8,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Build production frontend twice and retain verified build B",
+          "number": 9,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Verify retained frontend artifact and reproducibility proof",
+          "number": 10,
+          "status": "completed"
+        },
+        {
+          "conclusion": "skipped",
+          "name": "Freeze a candidate reviewed intent from the source commit",
+          "number": 11,
+          "status": "completed"
+        },
+        {
+          "conclusion": "skipped",
+          "name": "Retain the candidate reviewed intent",
+          "number": 12,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Prove install and build leave the worktree clean",
+          "number": 13,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Post Run actions/setup-node@v4",
+          "number": 25,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Post Run actions/checkout@v4",
+          "number": 26,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Complete job",
+          "number": 27,
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "conclusion": "success",
+      "id": 137838695395,
+      "logs_url": null,
+      "name": "Backend preflight",
+      "run_id": 45216427337,
+      "status": "completed",
+      "steps": [
+        {
+          "conclusion": "success",
+          "name": "Set up job",
+          "number": 1,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Run actions/checkout@v4",
+          "number": 2,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Run actions/setup-python@v5",
+          "number": 3,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Compile backend Python sources",
+          "number": 4,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Run frontend identity and release guard unit suites",
+          "number": 5,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Post Run actions/setup-python@v5",
+          "number": 9,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Post Run actions/checkout@v4",
+          "number": 10,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Complete job",
+          "number": 11,
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "conclusion": "success",
+      "id": 137838695484,
+      "logs_url": null,
+      "name": "Host Node 24.19.0 engine and dispatcher contract",
+      "run_id": 45216427337,
+      "status": "completed",
+      "steps": [
+        {
+          "conclusion": "success",
+          "name": "Set up job",
+          "number": 1,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Run actions/checkout@v4",
+          "number": 2,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Run actions/setup-python@v5",
+          "number": 3,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Run actions/setup-node@v4",
+          "number": 4,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Enable the observed Yarn Classic version",
+          "number": 5,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Test actual host engine admission and unchanged dispatch",
+          "number": 6,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Post Run actions/setup-node@v4",
+          "number": 10,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Post Run actions/setup-python@v5",
+          "number": 11,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Post Run actions/checkout@v4",
+          "number": 12,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Complete job",
+          "number": 13,
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "conclusion": "success",
+      "id": 137838696027,
+      "logs_url": null,
+      "name": "Host Node 20.20.2 engine and dispatcher contract",
+      "run_id": 45216427337,
+      "status": "completed",
+      "steps": [
+        {
+          "conclusion": "success",
+          "name": "Set up job",
+          "number": 1,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Run actions/checkout@v4",
+          "number": 2,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Run actions/setup-python@v5",
+          "number": 3,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Run actions/setup-node@v4",
+          "number": 4,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Enable the observed Yarn Classic version",
+          "number": 5,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Test actual host engine admission and unchanged dispatch",
+          "number": 6,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Post Run actions/setup-node@v4",
+          "number": 10,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Post Run actions/setup-python@v5",
+          "number": 11,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Post Run actions/checkout@v4",
+          "number": 12,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Complete job",
+          "number": 13,
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "conclusion": "success",
+      "id": 137839379469,
+      "logs_url": null,
+      "name": "Emergent Host Node 20.20.2 clean-clone adapter rehearsal",
+      "run_id": 45216427337,
+      "status": "completed",
+      "steps": [
+        {
+          "conclusion": "success",
+          "name": "Set up job",
+          "number": 1,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Run actions/checkout@v4",
+          "number": 2,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Run actions/setup-python@v5",
+          "number": 3,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Run actions/setup-node@v4",
+          "number": 4,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Select an isolated release toolchain cache",
+          "number": 5,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Enable the runtime-observed Host Yarn version",
+          "number": 6,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Create a clean tracked-source clone",
+          "number": 7,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Prove generated release inputs are absent",
+          "number": 8,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Record sanitized Host adapter evidence",
+          "number": 9,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Rehearse a conservative outer Host frozen install",
+          "number": 10,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Emulate a Cloud Build checkout without Git metadata",
+          "number": 11,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Invoke the Emergent package adapter under the selected Host Node",
+          "number": 12,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Verify artifact, proof, identity, and package boundaries",
+          "number": 13,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Prove the governed runtime returns build metadata as JSON",
+          "number": 14,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Archive verified generated release outputs",
+          "number": 15,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Retain verified generated release outputs",
+          "number": 16,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Retain sanitized rehearsal evidence",
+          "number": 17,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Post Run actions/setup-node@v4",
+          "number": 32,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Post Run actions/setup-python@v5",
+          "number": 33,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Post Run actions/checkout@v4",
+          "number": 34,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Complete job",
+          "number": 35,
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "conclusion": "success",
+      "id": 137839379642,
+      "logs_url": null,
+      "name": "Emergent Host Node 24.19.0 clean-clone adapter rehearsal",
+      "run_id": 45216427337,
+      "status": "completed",
+      "steps": [
+        {
+          "conclusion": "success",
+          "name": "Set up job",
+          "number": 1,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Run actions/checkout@v4",
+          "number": 2,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Run actions/setup-python@v5",
+          "number": 3,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Run actions/setup-node@v4",
+          "number": 4,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Select an isolated release toolchain cache",
+          "number": 5,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Enable the runtime-observed Host Yarn version",
+          "number": 6,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Create a clean tracked-source clone",
+          "number": 7,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Prove generated release inputs are absent",
+          "number": 8,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Record sanitized Host adapter evidence",
+          "number": 9,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Rehearse a conservative outer Host frozen install",
+          "number": 10,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Emulate a Cloud Build checkout without Git metadata",
+          "number": 11,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Invoke the Emergent package adapter under the selected Host Node",
+          "number": 12,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Verify artifact, proof, identity, and package boundaries",
+          "number": 13,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Prove the governed runtime returns build metadata as JSON",
+          "number": 14,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Archive verified generated release outputs",
+          "number": 15,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Retain verified generated release outputs",
+          "number": 16,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Retain sanitized rehearsal evidence",
+          "number": 17,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Post Run actions/setup-node@v4",
+          "number": 32,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Post Run actions/setup-python@v5",
+          "number": 33,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Post Run actions/checkout@v4",
+          "number": 34,
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "Complete job",
+          "number": 35,
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "conclusion": "skipped",
+      "id": 137841128027,
+      "logs_url": null,
+      "name": "Emergent manual redeploy required",
+      "run_id": 45216427337,
+      "status": "completed",
+      "steps": null
+    }
+  ],
+  "run_attempt": 1,
+  "run_id": 45216427337
+}

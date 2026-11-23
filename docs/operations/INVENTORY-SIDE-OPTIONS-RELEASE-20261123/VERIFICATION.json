@@ -40,15 +40,15 @@
   },
   "review": {
     "integration": "accepted; source path intersection empty; upstream25 paths byte-exact",
-    "browser_harness": "independently accepted; no blocking defect; execution pending",
+    "browser_harness": "independently accepted; exact-A execution PASS, 8 scenarios/10 screenshots",
     "new_harness_scenarios": 8,
     "required_screenshots": 10
   },
   "limits": [
-    "Focused local test groups overlap prior runs; do not sum into unique total.",
-    "Product backend/frontend sources and tested tests were unchanged between d195 and45c; new browser harness and documentation do not inherit executed browser acceptance.",
-    "Exact45c full CI, release source A/intent B and Node20/24 clean-clone evidence remain pending.",
-    "ForeignPR2086 lease preserved; original status timeouts do not prove inactive."
+    "Focused groups overlap and are not additive unique test totals.",
+    "Exact-A ordinary CI, source freeze and exact-B Node20/24 readiness are complete.",
+    "Other exact-B gates, normal merge, actual host rehearsal, publication and live verification remain pending.",
+    "No production or live business mutation by this task at this checkpoint."
   ],
   "files": [
     {
@@ -138,6 +138,19 @@
         "sha256": "70005346d66a7b82ad9d59e5211524e070ad5b08c2a2115abe58fc7b6bb3942d"
       }
     },
-    "log_archives": "Deterministic gzip archives preserve exact compiler/verifier stdout bytes, including their original whitespace."
+    "log_archives": "Deterministic gzip archives preserve exact compiler/verifier stdout bytes, including their original whitespace.",
+    "readiness": {
+      "status": "success",
+      "independent_review": "PASS",
+      "root_review": "PASS",
+      "run_id": 45216427337,
+      "hosts": [
+        "20.20.2",
+        "24.19.0"
+      ],
+      "generated_files_per_host": 389,
+      "full_package_proofs_identical": true,
+      "evidence_directory": "evidence/readiness-B-45216427337"
+    }
   }
 }

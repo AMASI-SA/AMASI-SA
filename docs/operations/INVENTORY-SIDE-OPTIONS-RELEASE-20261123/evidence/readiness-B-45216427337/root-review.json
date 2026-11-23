@@ -1,0 +1,19 @@
+{
+  "kind": "inventory-side-options-root-readiness-acceptance-v1",
+  "status": "PASS",
+  "reviewed_at_utc": "2026-11-23T16:38:44.038507+00:00",
+  "source_A": "45c8fb4ea91e5af8523971fbfa2270ee96552224",
+  "intent_B": "499b98735b5cc4eae79d380e4f8d5ec5477175e5",
+  "base_J": "76efd2c3aa1563939ee3e27a9ae03f27fc1a3d43",
+  "run_id": 45216427337,
+  "independent_report_accepted": true,
+  "reviewer_script_read": true,
+  "four_zip_hashes_recomputed": true,
+  "all_generated_paths_bytes_actual_modes_compared": true,
+  "generated_files_per_host": 389,
+  "exact_B_intent_bytes_verified": true,
+  "reproducibility_proof_hash_verified": true,
+  "full_package_proofs_accepted": true,
+  "production_changed": false,
+  "published": false
+}

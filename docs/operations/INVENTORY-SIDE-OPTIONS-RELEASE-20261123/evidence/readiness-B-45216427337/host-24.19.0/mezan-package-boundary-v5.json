@@ -1,0 +1,34 @@
+{
+  "backend": {
+    "file_count": 1333,
+    "git_directory_present": false,
+    "health_verified": true,
+    "identity": {
+      "bytes": 498098,
+      "path": "release_identity.json",
+      "sha256": "b1ce83e416d8c9eaa4b8acec6e167d084d5991f325dfeb8cc41f34f6a44741f2"
+    },
+    "isolated_verified": true,
+    "package_tree_sha256": "066d8616ea083b710a909f855fa0886de12bb908124cd3f4bb011b324cf6b1b9",
+    "runtime_root": "backend",
+    "sibling_frontend_present": false
+  },
+  "frontend": {
+    "artifact_tree_sha256": "5895551a52ba294d373076988d0d1ba75e39855ab28cbd7a7a76c0a4038834e4",
+    "build_meta": {
+      "bytes": 583064,
+      "path": "build/build-meta.json",
+      "sha256": "e9ba47b4ad955ad3381d150eae8bb3a079324a97085684b2c02bd3499f017452"
+    },
+    "content_type_contract": "application/json",
+    "file_count": 1801,
+    "isolated_runtime_artifact_verified": true,
+    "package_tree_sha256": "d3816371db99f50135e55ebff4ff641b048d3546f007ec4409d279fe7e62e7bc",
+    "runtime_root": "frontend",
+    "static_root": "frontend/build"
+  },
+  "kind": "mezan_release_package_boundary_proof_v1",
+  "release_id": "rg5-a762a47336e81b005a6fdfe509695c01a46b991478e27d6dc421913e94c94762",
+  "schema_version": 1,
+  "source_git_sha": "45c8fb4ea91e5af8523971fbfa2270ee96552224"
+}

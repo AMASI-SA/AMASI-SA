@@ -1,0 +1,316 @@
+{
+  "artifacts": [
+    {
+      "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14839880244/zip",
+      "created_at": "2026-11-23T16:29:27Z",
+      "digest": "sha256:8b9086de8cc9ac06109dbf5e1ab92f18a5eb9888568e12fd2015e151ca448cfa",
+      "expired": false,
+      "expires_at": "2026-12-07T16:29:26Z",
+      "extraction_directory": "/workspace/scratch/36b1bc151c92/ci-release-readiness-45216427337/release-v5-generated-outputs-host-24.19.0",
+      "generated_directory": "/workspace/scratch/36b1bc151c92/ci-release-readiness-45216427337/release-v5-generated-outputs-host-24.19.0/generated",
+      "generated_file_count": 389,
+      "id": 14839880244,
+      "inner_archive_sha256": "9ffa8c54056f0a529b94560c98035c11cc2847b89bddf3c1ec3884215d249d91",
+      "inner_archive_sha256_verified": true,
+      "name": "release-v5-generated-outputs-host-24.19.0",
+      "size_in_bytes": 3851393,
+      "updated_at": "2026-11-23T16:29:27Z",
+      "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14839880244",
+      "workflow_run": {
+        "head_branch": "codex/inventory-side-options-release-20261123",
+        "head_repository_id": 1250664189,
+        "head_sha": "499b98735b5cc4eae79d380e4f8d5ec5477175e5",
+        "id": 45216427337,
+        "repository_id": 1250664189
+      },
+      "zip_digest_verified": true,
+      "zip_path": "/workspace/scratch/36b1bc151c92/ci-release-readiness-45216427337/release-v5-generated-outputs-host-24.19.0.zip"
+    },
+    {
+      "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14839316097/zip",
+      "created_at": "2026-11-23T16:29:28Z",
+      "digest": "sha256:764742f6fd57507d33d1956579bafe63467772fa0486e34c1abdb1ef0ac1d2d0",
+      "expired": false,
+      "expires_at": "2026-12-07T16:29:27Z",
+      "extraction_directory": "/workspace/scratch/36b1bc151c92/ci-release-readiness-45216427337/release-v5-clean-clone-evidence-host-24.19.0",
+      "id": 14839316097,
+      "name": "release-v5-clean-clone-evidence-host-24.19.0",
+      "size_in_bytes": 64078,
+      "updated_at": "2026-11-23T16:29:28Z",
+      "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14839316097",
+      "workflow_run": {
+        "head_branch": "codex/inventory-side-options-release-20261123",
+        "head_repository_id": 1250664189,
+        "head_sha": "499b98735b5cc4eae79d380e4f8d5ec5477175e5",
+        "id": 45216427337,
+        "repository_id": 1250664189
+      },
+      "zip_digest_verified": true,
+      "zip_path": "/workspace/scratch/36b1bc151c92/ci-release-readiness-45216427337/release-v5-clean-clone-evidence-host-24.19.0.zip"
+    },
+    {
+      "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14839211626/zip",
+      "created_at": "2026-11-23T16:29:21Z",
+      "digest": "sha256:552121423e92161e3ca5b3935aef88715cf07bb60990c80cfbe83f74d8506c44",
+      "expired": false,
+      "expires_at": "2026-12-07T16:29:21Z",
+      "extraction_directory": "/workspace/scratch/36b1bc151c92/ci-release-readiness-45216427337/release-v5-clean-clone-evidence-host-20.20.2",
+      "id": 14839211626,
+      "name": "release-v5-clean-clone-evidence-host-20.20.2",
+      "size_in_bytes": 64073,
+      "updated_at": "2026-11-23T16:29:21Z",
+      "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14839211626",
+      "workflow_run": {
+        "head_branch": "codex/inventory-side-options-release-20261123",
+        "head_repository_id": 1250664189,
+        "head_sha": "499b98735b5cc4eae79d380e4f8d5ec5477175e5",
+        "id": 45216427337,
+        "repository_id": 1250664189
+      },
+      "zip_digest_verified": true,
+      "zip_path": "/workspace/scratch/36b1bc151c92/ci-release-readiness-45216427337/release-v5-clean-clone-evidence-host-20.20.2.zip"
+    },
+    {
+      "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14837833147/zip",
+      "created_at": "2026-11-23T16:29:21Z",
+      "digest": "sha256:645b9d7a12c56e59deab866f3459cb6593650bf2c4c9011194b58fcdae2dcf99",
+      "expired": false,
+      "expires_at": "2026-12-07T16:29:20Z",
+      "extraction_directory": "/workspace/scratch/36b1bc151c92/ci-release-readiness-45216427337/release-v5-generated-outputs-host-20.20.2",
+      "generated_directory": "/workspace/scratch/36b1bc151c92/ci-release-readiness-45216427337/release-v5-generated-outputs-host-20.20.2/generated",
+      "generated_file_count": 389,
+      "id": 14837833147,
+      "inner_archive_sha256": "a38c110ed6a47c5eff74387e8efb29c649c9765ae13217f57f7788292895f21f",
+      "inner_archive_sha256_verified": true,
+      "name": "release-v5-generated-outputs-host-20.20.2",
+      "size_in_bytes": 3852910,
+      "updated_at": "2026-11-23T16:29:21Z",
+      "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14837833147",
+      "workflow_run": {
+        "head_branch": "codex/inventory-side-options-release-20261123",
+        "head_repository_id": 1250664189,
+        "head_sha": "499b98735b5cc4eae79d380e4f8d5ec5477175e5",
+        "id": 45216427337,
+        "repository_id": 1250664189
+      },
+      "zip_digest_verified": true,
+      "zip_path": "/workspace/scratch/36b1bc151c92/ci-release-readiness-45216427337/release-v5-generated-outputs-host-20.20.2.zip"
+    }
+  ],
+  "comparison": {
+    "all_generated_file_contents_and_modes_identical": true,
+    "archive_container_hashes_identical": false,
+    "archive_container_note": "Each tar.gz matches its own SHA256 sidecar; host archive containers differ while all extracted file paths, contents, lengths and modes match.",
+    "full_package_proofs_identical": true,
+    "generated_file_count_per_host": 389
+  },
+  "deployment_git_sha": "499b98735b5cc4eae79d380e4f8d5ec5477175e5",
+  "frontend_artifact_tree_sha256": "5895551a52ba294d373076988d0d1ba75e39855ab28cbd7a7a76c0a4038834e4",
+  "hosts": {
+    "20.20.2": {
+      "build_log_markers": [
+        "$ node scripts/build-entry.cjs",
+        "\u2713 built in 5.32s",
+        "\u2713 built in 5.81s"
+      ],
+      "build_log_sha256": "7f539047956c7b4a79f61dc28eb7c3f6bb77aee440ebe21cde62a118b3426611",
+      "frontend_build_file_count": 386,
+      "frontend_public_file_count": 383,
+      "full_package_proof": {
+        "backend": {
+          "file_count": 1333,
+          "git_directory_present": false,
+          "health_verified": true,
+          "identity": {
+            "bytes": 498098,
+            "path": "release_identity.json",
+            "sha256": "b1ce83e416d8c9eaa4b8acec6e167d084d5991f325dfeb8cc41f34f6a44741f2"
+          },
+          "isolated_verified": true,
+          "package_tree_sha256": "066d8616ea083b710a909f855fa0886de12bb908124cd3f4bb011b324cf6b1b9",
+          "runtime_root": "backend",
+          "sibling_frontend_present": false
+        },
+        "frontend": {
+          "artifact_tree_sha256": "5895551a52ba294d373076988d0d1ba75e39855ab28cbd7a7a76c0a4038834e4",
+          "build_meta": {
+            "bytes": 583064,
+            "path": "build/build-meta.json",
+            "sha256": "e9ba47b4ad955ad3381d150eae8bb3a079324a97085684b2c02bd3499f017452"
+          },
+          "content_type_contract": "application/json",
+          "file_count": 1801,
+          "isolated_runtime_artifact_verified": true,
+          "package_tree_sha256": "d3816371db99f50135e55ebff4ff641b048d3546f007ec4409d279fe7e62e7bc",
+          "runtime_root": "frontend",
+          "static_root": "frontend/build"
+        },
+        "kind": "mezan_release_package_boundary_proof_v1",
+        "release_id": "rg5-a762a47336e81b005a6fdfe509695c01a46b991478e27d6dc421913e94c94762",
+        "schema_version": 1,
+        "source_git_sha": "45c8fb4ea91e5af8523971fbfa2270ee96552224"
+      },
+      "generated_directory": "/workspace/scratch/36b1bc151c92/ci-release-readiness-45216427337/release-v5-generated-outputs-host-20.20.2/generated",
+      "generated_file_count": 389,
+      "host_environment": {
+        "architecture": "x86_64",
+        "backend_root": "/tmp/tmp.NKhgLrmN46/repo/backend",
+        "configured_package_build_command": "cd frontend && yarn build",
+        "declared_backend_package_root": "backend",
+        "declared_frontend_package_root": "frontend",
+        "declared_frontend_static_root": "frontend/build",
+        "frontend_root": "/tmp/tmp.NKhgLrmN46/repo/frontend",
+        "git_directory_present": true,
+        "governed_build_command": "governed-toolchain exec -- yarn --cwd frontend build:release",
+        "governed_install_command": "governed-toolchain exec -- yarn --cwd frontend install --frozen-lockfile --non-interactive",
+        "host_node": "v20.20.2",
+        "host_python": "3.11.18",
+        "host_yarn": "1.22.22",
+        "kind": "emergent_cloud_build_evidence_v1",
+        "outer_build_command_observed": false,
+        "outer_install_command": null,
+        "outer_install_command_observed": false,
+        "platform_snapshot_workspace_shared_observed": false,
+        "repository_root": "/tmp/tmp.NKhgLrmN46/repo",
+        "schema_version": 1,
+        "source_roots_declared_co_parented": true,
+        "system": "Linux",
+        "working_directory": "/tmp/tmp.NKhgLrmN46/repo/frontend"
+      },
+      "job_conclusion": "success",
+      "job_id": 137839379469,
+      "original_validators_passed": [
+        "_load_and_validate_release_intent",
+        "verify_release_intent_git",
+        "read_frontend_build_identity",
+        "read_frontend_reproducibility_proof",
+        "validate_runtime_release_identity"
+      ],
+      "package_proof_sha256": "4402cc5f1f398a2c508af01a3c61f136c9fb5dda9a7c3d6880f63b9cb0bea961",
+      "required_steps_verified": [
+        "Prove generated release inputs are absent",
+        "Emulate a Cloud Build checkout without Git metadata",
+        "Invoke the Emergent package adapter under the selected Host Node",
+        "Verify artifact, proof, identity, and package boundaries",
+        "Prove the governed runtime returns build metadata as JSON"
+      ],
+      "runtime_log_sha256": "342c8106e6a19979b433f01f8a670060d5e5febcd59b093503d1fc56df7adfbe"
+    },
+    "24.19.0": {
+      "build_log_markers": [
+        "$ node scripts/build-entry.cjs",
+        "\u2713 built in 7.23s",
+        "\u2713 built in 6.95s"
+      ],
+      "build_log_sha256": "e0b2d0998ca04ee9adb87201367a4d32d1167ebaa97d5b251fb0937c3f3c4fa9",
+      "frontend_build_file_count": 386,
+      "frontend_public_file_count": 383,
+      "full_package_proof": {
+        "backend": {
+          "file_count": 1333,
+          "git_directory_present": false,
+          "health_verified": true,
+          "identity": {
+            "bytes": 498098,
+            "path": "release_identity.json",
+            "sha256": "b1ce83e416d8c9eaa4b8acec6e167d084d5991f325dfeb8cc41f34f6a44741f2"
+          },
+          "isolated_verified": true,
+          "package_tree_sha256": "066d8616ea083b710a909f855fa0886de12bb908124cd3f4bb011b324cf6b1b9",
+          "runtime_root": "backend",
+          "sibling_frontend_present": false
+        },
+        "frontend": {
+          "artifact_tree_sha256": "5895551a52ba294d373076988d0d1ba75e39855ab28cbd7a7a76c0a4038834e4",
+          "build_meta": {
+            "bytes": 583064,
+            "path": "build/build-meta.json",
+            "sha256": "e9ba47b4ad955ad3381d150eae8bb3a079324a97085684b2c02bd3499f017452"
+          },
+          "content_type_contract": "application/json",
+          "file_count": 1801,
+          "isolated_runtime_artifact_verified": true,
+          "package_tree_sha256": "d3816371db99f50135e55ebff4ff641b048d3546f007ec4409d279fe7e62e7bc",
+          "runtime_root": "frontend",
+          "static_root": "frontend/build"
+        },
+        "kind": "mezan_release_package_boundary_proof_v1",
+        "release_id": "rg5-a762a47336e81b005a6fdfe509695c01a46b991478e27d6dc421913e94c94762",
+        "schema_version": 1,
+        "source_git_sha": "45c8fb4ea91e5af8523971fbfa2270ee96552224"
+      },
+      "generated_directory": "/workspace/scratch/36b1bc151c92/ci-release-readiness-45216427337/release-v5-generated-outputs-host-24.19.0/generated",
+      "generated_file_count": 389,
+      "host_environment": {
+        "architecture": "x86_64",
+        "backend_root": "/tmp/tmp.tRGsl9LoCp/repo/backend",
+        "configured_package_build_command": "cd frontend && yarn build",
+        "declared_backend_package_root": "backend",
+        "declared_frontend_package_root": "frontend",
+        "declared_frontend_static_root": "frontend/build",
+        "frontend_root": "/tmp/tmp.tRGsl9LoCp/repo/frontend",
+        "git_directory_present": true,
+        "governed_build_command": "governed-toolchain exec -- yarn --cwd frontend build:release",
+        "governed_install_command": "governed-toolchain exec -- yarn --cwd frontend install --frozen-lockfile --non-interactive",
+        "host_node": "v24.19.0",
+        "host_python": "3.11.18",
+        "host_yarn": "1.22.22",
+        "kind": "emergent_cloud_build_evidence_v1",
+        "outer_build_command_observed": false,
+        "outer_install_command": null,
+        "outer_install_command_observed": false,
+        "platform_snapshot_workspace_shared_observed": false,
+        "repository_root": "/tmp/tmp.tRGsl9LoCp/repo",
+        "schema_version": 1,
+        "source_roots_declared_co_parented": true,
+        "system": "Linux",
+        "working_directory": "/tmp/tmp.tRGsl9LoCp/repo/frontend"
+      },
+      "job_conclusion": "success",
+      "job_id": 137839379642,
+      "original_validators_passed": [
+        "_load_and_validate_release_intent",
+        "verify_release_intent_git",
+        "read_frontend_build_identity",
+        "read_frontend_reproducibility_proof",
+        "validate_runtime_release_identity"
+      ],
+      "package_proof_sha256": "4402cc5f1f398a2c508af01a3c61f136c9fb5dda9a7c3d6880f63b9cb0bea961",
+      "required_steps_verified": [
+        "Prove generated release inputs are absent",
+        "Emulate a Cloud Build checkout without Git metadata",
+        "Invoke the Emergent package adapter under the selected Host Node",
+        "Verify artifact, proof, identity, and package boundaries",
+        "Prove the governed runtime returns build metadata as JSON"
+      ],
+      "runtime_log_sha256": "cbb23b82ada3087a3fc3ef3511b5cf1ee3925710e78193143b10a3f065032328"
+    }
+  },
+  "limits": [
+    "Artifact and source validation only; no live production verification or publishing action.",
+    "Actual runtime JSON MIME/cache checks and isolated package health were executed by the successful exact-B CI steps; this review did not start servers or rerun a build.",
+    "Package tree digests were independently recomputed from verified source manifest records and actual generated file bytes; all emitted proof fields were compared, not only flags."
+  ],
+  "protocol_version": 5,
+  "publication_complete": false,
+  "release_id": "rg5-a762a47336e81b005a6fdfe509695c01a46b991478e27d6dc421913e94c94762",
+  "reproducibility_proof_sha256": "70005346d66a7b82ad9d59e5211524e070ad5b08c2a2115abe58fc7b6bb3942d",
+  "review_version": 1,
+  "reviewed_at": "2026-11-23T16:32:14.349741+00:00",
+  "reviewer": "side_options_browser_acceptance",
+  "run_attempt": 1,
+  "run_id": 45216427337,
+  "run_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45216427337",
+  "source_base_git_sha": "76efd2c3aa1563939ee3e27a9ae03f27fc1a3d43",
+  "source_binding": {
+    "B_changes_only_intent": true,
+    "J_to_A_full_history_has_no_intent_change": true,
+    "backend_source_git_records_verified": 1332,
+    "frontend_source_git_records_verified": 1415,
+    "intent_bytes_match_exact_B": true,
+    "release_control_source_git_records_verified": 328
+  },
+  "source_git_sha": "45c8fb4ea91e5af8523971fbfa2270ee96552224",
+  "status": "PASS",
+  "validator_import_note": "Importing the unchanged release_identity module logged that the source checkout has no ignored backend/release_identity.json. No output was created there. Both downloaded identities were then passed explicitly to the original runtime validator and passed full source/critical-hash/deterministic-identity validation."
+}

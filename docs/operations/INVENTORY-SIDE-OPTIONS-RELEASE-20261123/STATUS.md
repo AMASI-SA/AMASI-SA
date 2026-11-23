@@ -68,3 +68,11 @@ Runtime `rg5-a762a47336e81b005a6fdfe509695c01a46b991478e27d6dc421913e94c94762`; 
 Exact-A ordinary run45213472517 is fully successful: backend6810+90subtests, demand106, shipping16+18subtests, frontend1699/106suites, canonicalworker4 and inventorybrowser8/8 with10captures. These groups overlap prior runs and are not summed into a unique test count.
 
 PR2089 was marked ready for review to enable remaining required transition gates; this is not merge or deployment approval evidence. Exact-B readiness45216427337 and operational45216427435 plus all applicable PR checks are running. Node20/24 clean-clone artifacts must be independently accepted. Next: finish those gates, record artifacts and final checks, then ordinary merge with ordered parents[J,B] and exactBtree. Production has not changed by this task; no own lease or host source/output changes.
+
+## Exact-B readiness accepted
+
+Release readiness run [45216427337](https://github.com/AMASI-SA/AMASI-SA/actions/runs/45216427337) succeeded on exact B. Actual clean-clone adapters on Host Node20.20.2 and24.19.0 passed. Independent review accepted four GitHub ZIP digests, both archive checksums, every generated member and all original intent/source/artifact/proof/runtime validators. All389 generated file paths, bytes, lengths and modes match. Full frontend1801-file and backend1333-file package proofs were independently recomputed and match exactly. Root reviewed the report/script and recomputed four ZIP hashes, actual complete generated file hashes/modes, exact B intent bytes and proof hashes. No blocker.
+
+Durable evidence, original package/environment records, generated manifests and compressed exact adapter/runtime logs are under `evidence/readiness-B-45216427337/`. The archive container hashes differ while their complete extracted payloads are identical; each archive matches its own recorded hash.
+
+Accounting and CodeQL gates passed; remaining exact-B operational/stock/resumable gates are monitored independently. PR2089 is unmerged; no D, own lease, host source/output change or publication. Preserve the serial handoff and fresh-check production/guard before a normal merge. Helper bundle preparation is disabled until actual D.
