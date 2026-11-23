@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "kind": "root_actual_host_ui_observation",
+  "task": "INVENTORY-SIDE-OPTIONS-20261123",
+  "recorded_utc": "2026-11-23 23:46:30 UTC",
+  "source_git_sha": "deeefceffd9a1e37968513ac4f3833314bb415fd",
+  "intent_git_sha": "a92283678a25494c7d1870cd1675b8f30847aa6a",
+  "deployment_git_sha": "5cfaac21a1775a0d0761d05aa571f94dbfc02d32",
+  "provenance": "Transcribed from the actual-host VS Code terminal through CUA; not a raw host filesystem export. Private snapshots remain on the host and are not included.",
+  "original_stage_result": {
+    "exit_code": 1,
+    "phase": "preserve-generated-and-derived-cache",
+    "error_type": "AssertionError",
+    "error": "unrelated files changed during preservation",
+    "elapsed_seconds": 95.754
+  },
+  "original_helper_sha256": "d3206d932cd34dfdced81c7ffec89c1fdf8bfcb6c92d7ca59e0f454756c35bae",
+  "diagnostic": {
+    "expected_path_count": 48315,
+    "current_path_count": 48315,
+    "added_paths": 0,
+    "missing_paths": 0,
+    "changed_paths": 12,
+    "changed_fields": [
+      "sha256",
+      "size"
+    ],
+    "changed_scope_only": [
+      ".worktrees/p01-acceptance-state-20260919/mongo/",
+      ".worktrees/p01-acceptance-state-20260919/mongo.log",
+      ".emergent/stripped_env_names"
+    ],
+    "preserved_bytecode_directory_count": 0
+  },
+  "foreign_mongo": {
+    "pid": 311,
+    "start_ticks": 9793546,
+    "comm": "mongod",
+    "exact_dbpath_matches": true,
+    "stopped_or_modified_by_task": false
+  },
+  "preserved_generated_roots": [
+    "frontend/node_modules",
+    "frontend/build",
+    "frontend/.release",
+    "backend/release_identity.json"
+  ],
+  "generated_roots_remaining_in_app": [],
+  "original_commands_executed": [
+    "git fetch origin hotfix/prod-snap-meta-final",
+    "git merge --ff-only --no-autostash --no-overwrite-ignore 5cfaac21a1775a0d0761d05aa571f94dbfc02d32"
+  ],
+  "original_adapter_started": false,
+  "tracked_clean": true,
+  "guard": {
+    "active": false
+  },
+  "published": false,
+  "decision": "Resume forward from verified D only after an independent recovery-helper review, preserving the original failure record and all generated backups. Keep exact path membership, type and mode fencing; permit content/size changes only for the observed live-service scopes, while retaining original hashes for all other unrelated paths. Run the original adapter and verifier, not modified release controls."
+}
