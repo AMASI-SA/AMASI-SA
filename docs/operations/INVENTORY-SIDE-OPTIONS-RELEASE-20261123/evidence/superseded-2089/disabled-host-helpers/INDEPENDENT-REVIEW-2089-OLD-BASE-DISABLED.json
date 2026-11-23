@@ -1,0 +1,244 @@
+{
+  "kind": "mezan_pr2089_independent_helper_review_old_base_disabled_provenance_v1",
+  "recorded_at_utc": "2026-11-23T16:44:52.029961+00:00",
+  "reviewer": "/root/side_options_browser_acceptance",
+  "repository": "AMASI-SA/AMASI-SA",
+  "bundle_directory": "/workspace/scratch/36b1bc151c92/mezan-pr2089-helper-work",
+  "verdict": "PASS_FOR_OLD_BASE_DISABLED_PROVENANCE_ONLY",
+  "activation_allowed": false,
+  "current_release_ready": false,
+  "publication_complete": false,
+  "disabled_bundle_review_blockers": [],
+  "superseded_by_production_base_movement": {
+    "new_base_sha": "422fffc8fb9c381165cc76b1ded5ca595773ce8e",
+    "merged_pr": 2087,
+    "reported_merge_time_utc": "2026-11-23T16:35:00Z",
+    "time_precision": "minute_as_reported",
+    "source": "Parent agent report during final review",
+    "new_base_independently_verified_by_this_reviewer": false,
+    "instruction": "Preserve old frozen A/B/PR2089 and this disabled bundle as provenance. Do not activate any PR2089 helper pins. Prepare fresh source A2 and intent B2 above the new base."
+  },
+  "reviewed_identity": {
+    "J": "76efd2c3aa1563939ee3e27a9ae03f27fc1a3d43",
+    "A": "45c8fb4ea91e5af8523971fbfa2270ee96552224",
+    "B": "499b98735b5cc4eae79d380e4f8d5ec5477175e5",
+    "B_tree": "4816e3468b3fcbcde78ab799760201fcfb2e7171",
+    "D": null,
+    "E": null,
+    "L": null,
+    "release_id": "rg5-a762a47336e81b005a6fdfe509695c01a46b991478e27d6dc421913e94c94762",
+    "artifact_tree_sha256": "5895551a52ba294d373076988d0d1ba75e39855ab28cbd7a7a76c0a4038834e4",
+    "reproducibility_proof_sha256": "70005346d66a7b82ad9d59e5211524e070ad5b08c2a2115abe58fc7b6bb3942d",
+    "actor": "codex-inventory-side-options-2089-20261123",
+    "task_branch": "codex/inventory-side-options-release-20261123",
+    "production_branch": "hotfix/prod-snap-meta-final"
+  },
+  "scope_and_method": {
+    "all_seven_helper_files_read": true,
+    "immutable_original_files_fetched_read_only_from_github": true,
+    "original_bytes_and_git_blob_ids_verified": true,
+    "simultaneous_declared_identity_substitutions_reconstructed_once": true,
+    "only_declared_additional_logic": "Bootstrap pin-shape fail-closed gate and re import before host or network commands.",
+    "unexpected_delta_found": false,
+    "five_deployment_D_slots_literal_none": true,
+    "launcher_evidence_and_four_helper_hashes_unset": true,
+    "bootstrap_url_sha256_and_bytes_unset": true,
+    "fixture_source_inspected": true,
+    "fixture_suite_rerun_by_this_reviewer": false,
+    "retained_fixture_log_output_and_sha256_verified": true
+  },
+  "files": [
+    {
+      "file": "BOOTSTRAP-HOST-2089.py",
+      "reference_sha256": "6cdb8e695bcd14a46accb2e6ae7b9949885536e6ecd04a975a2200cc6fc75fd3",
+      "adapted_sha256": "94e5ecfbd28dcbb001fa08022b9d3967d5fea2a4bc0b8c3ce8794cfb0c53b2e3",
+      "bytes": 1896,
+      "exact_declared_delta": true,
+      "immutable_reference_commit": "fdbce5ed9e5c901b532b96c3e5a4106a93d609a7",
+      "immutable_reference_path": "docs/operations/TABBY-DASHBOARD-FEES-20261122/BOOTSTRAP-HOST-2086.py",
+      "immutable_reference_git_blob": "c4ce36945f5d00e34ac87ec67912d31136f48db5",
+      "remote_reference_bytes_independently_matched": true,
+      "declared_delta_independently_reconstructed_exactly": true,
+      "current_bytes_match_reviewed_snapshot": true
+    },
+    {
+      "file": "MANUAL-HOST-ISOLATED-REHEARSAL-2089.py",
+      "reference_sha256": "5fe424bfb7ace043cd29d31b7124643bcc8f7f53f7dfff570080a2e9d74931ba",
+      "adapted_sha256": "e0c0b0b57f5213bfe2bc35f86b75cd6e71df0bca7eb2d05b6eeda34ef78ec42b",
+      "bytes": 12796,
+      "exact_declared_delta": true,
+      "immutable_reference_commit": "2b08518f5448d742d1986a45c69e0fb5a66129d7",
+      "immutable_reference_path": "docs/operations/TABBY-DASHBOARD-FEES-20261122/MANUAL-HOST-ISOLATED-REHEARSAL-2086.py",
+      "immutable_reference_git_blob": "18e9c33dd31f70870f39f81b658e08aa6b5aadc4",
+      "remote_reference_bytes_independently_matched": true,
+      "declared_delta_independently_reconstructed_exactly": true,
+      "current_bytes_match_reviewed_snapshot": true
+    },
+    {
+      "file": "MANUAL-HOST-PREPARE-PREPUBLISH-2089.py",
+      "reference_sha256": "55900e07e8967edf427dc5e5d655b0bd7457bbfadb2b5c6ce3348ae1c2b63cf4",
+      "adapted_sha256": "41a9b4a03062c88af5c577266230be37b92008b7b7909d687cdc49def6125056",
+      "bytes": 6060,
+      "exact_declared_delta": true,
+      "immutable_reference_commit": "2b08518f5448d742d1986a45c69e0fb5a66129d7",
+      "immutable_reference_path": "docs/operations/TABBY-DASHBOARD-FEES-20261122/MANUAL-HOST-PREPARE-PREPUBLISH-2086.py",
+      "immutable_reference_git_blob": "5a5d2f977b5daf2c2cd8494d7eefd9661d01bc7c",
+      "remote_reference_bytes_independently_matched": true,
+      "declared_delta_independently_reconstructed_exactly": true,
+      "current_bytes_match_reviewed_snapshot": true
+    },
+    {
+      "file": "MANUAL-HOST-SELF-TEST-2089.py",
+      "reference_sha256": "cdf5918cade892b64af37820440aaa766abac3b6a6889b9177170b23b420d10f",
+      "adapted_sha256": "341798dccdc1a55f24edcf72045f81efff660a1b157fe7dd098fa98c9491ac23",
+      "bytes": 28571,
+      "exact_declared_delta": true,
+      "immutable_reference_commit": "2b08518f5448d742d1986a45c69e0fb5a66129d7",
+      "immutable_reference_path": "docs/operations/TABBY-DASHBOARD-FEES-20261122/MANUAL-HOST-SELF-TEST-2086.py",
+      "immutable_reference_git_blob": "4518c5c262ec4711d6b4f14b582f07407aa20928",
+      "remote_reference_bytes_independently_matched": true,
+      "declared_delta_independently_reconstructed_exactly": true,
+      "current_bytes_match_reviewed_snapshot": true
+    },
+    {
+      "file": "MANUAL-HOST-STAGE-2089.py",
+      "reference_sha256": "7d2974136db042a4246bf0b30725cf575b600b837904f02d6abe45b981cd083f",
+      "adapted_sha256": "3e15c02a521ff84255f9aa3e9fc85fa5e1ad5bba8563ee97c9de519845181b04",
+      "bytes": 27376,
+      "exact_declared_delta": true,
+      "immutable_reference_commit": "2b08518f5448d742d1986a45c69e0fb5a66129d7",
+      "immutable_reference_path": "docs/operations/TABBY-DASHBOARD-FEES-20261122/MANUAL-HOST-STAGE-2086.py",
+      "immutable_reference_git_blob": "e1b19d5d5486513529871832f060a29689ad4870",
+      "remote_reference_bytes_independently_matched": true,
+      "declared_delta_independently_reconstructed_exactly": true,
+      "current_bytes_match_reviewed_snapshot": true
+    },
+    {
+      "file": "RUN-HOST-DEPLOY-2089.sh",
+      "reference_sha256": "e02d53474616d64fc42f565f4889493af795421599976006295fd5e76539be8b",
+      "adapted_sha256": "d2a90fd87e7c275973a33957abd447fc9091fefef8777e46eefaac8ee6cd27a2",
+      "bytes": 5220,
+      "exact_declared_delta": true,
+      "immutable_reference_commit": "ec9c28cf7cd0829cb5f394ccb343f368a394b879",
+      "immutable_reference_path": "docs/operations/TABBY-DASHBOARD-FEES-20261122/RUN-HOST-DEPLOY-2086.sh",
+      "immutable_reference_git_blob": "012784b134ea7fd558351a28dc147a061ed9ac58",
+      "remote_reference_bytes_independently_matched": true,
+      "declared_delta_independently_reconstructed_exactly": true,
+      "current_bytes_match_reviewed_snapshot": true
+    },
+    {
+      "file": "RUN-HOST-VERIFY-2089.sh",
+      "reference_sha256": "4210c4c9a2e6d7cbc418154abb354c967dfc8fa44d4bd30d4bdb93d631ddc043",
+      "adapted_sha256": "29b32d3348323a3241d28ce104dcd1e6c7f2cf0067bc8b5f9db8a673dff7b8b7",
+      "bytes": 5315,
+      "exact_declared_delta": true,
+      "immutable_reference_commit": "2b08518f5448d742d1986a45c69e0fb5a66129d7",
+      "immutable_reference_path": "docs/operations/TABBY-DASHBOARD-FEES-20261122/RUN-HOST-VERIFY-2086.sh",
+      "immutable_reference_git_blob": "294483093f53a24db9155a978453dfc8494e9ce5",
+      "remote_reference_bytes_independently_matched": true,
+      "declared_delta_independently_reconstructed_exactly": true,
+      "current_bytes_match_reviewed_snapshot": true
+    }
+  ],
+  "retained_fixture_evidence": {
+    "result_file": "/workspace/scratch/36b1bc151c92/mezan-pr2089-helper-work/SELF-TEST-RESULT-2089.json",
+    "log_file": "/workspace/scratch/36b1bc151c92/mezan-pr2089-helper-work/SELF-TEST-2089.log",
+    "log_sha256": "b535d92dfc3bdded2e7e2e1973ed0d21daffed3bfcb203709a08c9acd95c4de6",
+    "exit_code": 0,
+    "duration_seconds": 26.806,
+    "owned_process_case_count": 7,
+    "pass_markers": [
+      "DISABLED_PIN_TEST_PASS",
+      "SELF_TEST_PASS",
+      "RECEIPT_TEST_PASS",
+      "PACKAGE_PROOF_TEST_PASS",
+      "STAGING_MUTEX_TEST_PASS",
+      "IGNORED_COLLISION_TEST_PASS",
+      "OWNED_PROCESS_CASE_PASS",
+      "OWNED_PROCESS_CASE_PASS",
+      "OWNED_PROCESS_CASE_PASS",
+      "OWNED_PROCESS_CASE_PASS",
+      "OWNED_PROCESS_CASE_PASS",
+      "OWNED_PROCESS_CASE_PASS",
+      "OWNED_PROCESS_CASE_PASS",
+      "OWNED_PROCESS_TEST_PASS",
+      "BUNDLE_SELF_TEST_PASS"
+    ],
+    "coverage": [
+      "Five disabled operational entries refuse before host command.",
+      "Backup bytes and modes, retained rollback, change/destination/symlink refusals, bytecode-cache preservation, rehearsal proof binding.",
+      "Receipt identity, bounded private path, log digest, mode and symlink refusals.",
+      "Full original package proof rejects count, tree, metadata and identity drift.",
+      "Original mutex surrounds all shared mutation, proof and final checks; foreign and incomplete leases preserve bytes.",
+      "Ordinary fast-forward refuses and preserves an ignored host-only collision.",
+      "Owned subprocess success/nonzero/timeout and TERM/HUP leader modes, repeated signals, descendant reaping and unrelated process preservation."
+    ]
+  },
+  "guard_and_adapter_unchanged_J_to_A": {
+    "scripts/production_release_guard.py": "bc03ccfae879dcfcad3fa80a7dc5e63c5aa98252",
+    "scripts/emergent_deployment_adapter.py": "16c4c7c3ccf5ff845b2a9115b0d27f8282515556",
+    "backend/release_protocol_v5.py": "a68993d04a654c4fea62f0bf15b61620946b8080"
+  },
+  "safety_findings": [
+    {
+      "check": "Original guard and non-reentrant mutex preservation",
+      "result": "PASS",
+      "detail": "Stage shared mutations, backups, quarantine, fast-forward, replacements and final proof remain inside the original operation lock. Lock-held lease checks use lexists instead of nested status."
+    },
+    {
+      "check": "Foreign and incomplete lease preservation",
+      "result": "PASS",
+      "detail": "Foreign or incomplete lease causes refusal before shared writes. Verify fences exact identity and actor under the original mutex and calls the original locked verifier."
+    },
+    {
+      "check": "Exact identity and disabled state",
+      "result": "PASS",
+      "detail": "J/A/B/B-tree/runtime/artifact pins are consistent; five D slots are literal None and launcher/bootstrap chain is unset."
+    },
+    {
+      "check": "Immutable launcher/helper pin chain",
+      "result": "PASS",
+      "detail": "Prepared launcher fetches immutable E into an isolated clone and hashes all four operational helpers before use. Bootstrap requires exact commit path, SHA256 and bounded byte count before any host or network command."
+    },
+    {
+      "check": "No automatic publish, abort or foreign cleanup",
+      "result": "PASS",
+      "detail": "Publication is printed as a separate manual UI step. Errors preserve lease, receipts, backups and phase state. Only the original successful verifier releases its own matching lease."
+    },
+    {
+      "check": "Unsafe reentry prevention",
+      "result": "PASS",
+      "detail": "Launch and stage require clean original J and expected remote refs; after source advances to D, a fresh launch refuses. Receipts are exact private, exclusive-created, identity-bound files."
+    },
+    {
+      "check": "Owned subprocess cleanup",
+      "result": "PASS",
+      "detail": "Rehearsal cleanup targets only its spawned process group and uses bounded TERM/KILL handling, preserving unrelated processes."
+    },
+    {
+      "check": "Proof integrity",
+      "result": "PASS",
+      "detail": "Candidate source/tree/parents, original intent and artifact validators, full package-boundary proof comparison, output bytes/modes, sidecars and unrelated untracked files are retained."
+    }
+  ],
+  "future_successor_release_requirements": [
+    "This old-base bundle must remain disabled. Do not fill its D, E, L or bootstrap pins.",
+    "Integrate on the independently confirmed current approved production base; create new frozen source A2 and new intent B2 with fresh artifacts and CI evidence.",
+    "Validate successor merge D2 ordered parents exactly [current approved J2, B2], D2 tree exactly B2 tree, and A2-to-D2 diff intent-only.",
+    "Verify J2..A2 has no release-intent changes using full-history; confirm remote production D2 and task branch exact B2 immediately before host work.",
+    "Create and review a successor helper adaptation with all new identity pins and no reused old release receipt, guard lease, artifact proof or temporary verify path.",
+    "Only after actual D2 verification pin its five deployment identity locations, rerun bounded local fixtures and independently review activation.",
+    "Freeze successor helper E2, hash its four operational helpers, freeze launcher L2, then pin bootstrap exact L2 URL, SHA256 and byte count.",
+    "Record the successor chain in coordination, require original host guard exactly inactive, and execute all original release gates.",
+    "Use one manual publish only after successful prepublish; run the newly printed private verify wrapper only after a new Deployment Succeeded. Do not auto-abort, clean a foreign lease or blindly retry."
+  ],
+  "reviewer_side_effects": {
+    "host_or_app_actions": false,
+    "browser_actions": false,
+    "source_repository_mutation": false,
+    "helper_modifications": false,
+    "new_tests_or_builds": false,
+    "release_activation_or_publication": false,
+    "only_written_artifact": "/workspace/scratch/36b1bc151c92/mezan-pr2089-helper-work/INDEPENDENT-REVIEW-2089-OLD-BASE-DISABLED.json"
+  }
+}

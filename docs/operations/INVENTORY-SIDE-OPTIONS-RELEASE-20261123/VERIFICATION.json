@@ -4,9 +4,9 @@
   "deployable": false,
   "reviewed_base_git_sha": "76efd2c3aa1563939ee3e27a9ae03f27fc1a3d43",
   "tested_source_checkpoint": "d195ef4395be11fd9ee630479bb2cdfa94130e59",
-  "current_source_checkpoint": "45c8fb4ea91e5af8523971fbfa2270ee96552224",
-  "current_source_tree": "cb961c3f1bfb2a340075f193769dfa78b332b14c",
-  "source_branch": "codex/inventory-side-options-release-20261123",
+  "current_source_checkpoint": "739962663346f0e8f0cd31eaed9f6a8a2888e1b2",
+  "current_source_tree": "1432c4e0651e4240b6794060f4745a947849a154",
+  "source_branch": "codex/inventory-side-options-release-r2-20261123",
   "backend": {
     "tests": 415,
     "failures": 0,
@@ -45,10 +45,10 @@
     "required_screenshots": 10
   },
   "limits": [
-    "Focused groups overlap and are not additive unique test totals.",
-    "Exact-A ordinary CI, source freeze and exact-B Node20/24 readiness are complete.",
-    "Other exact-B gates, normal merge, actual host rehearsal, publication and live verification remain pending.",
-    "No production or live business mutation by this task at this checkpoint."
+    "Old exact-A/B CI passed but belongs to the superseded composition.",
+    "New source above422 requires its own CI/build/candidate/intent and exact-B gates.",
+    "ForeignPR2087 handoff preserved; no competing host rehearsal or lease.",
+    "No production/host/business mutation by this task."
   ],
   "files": [
     {
@@ -87,7 +87,7 @@
     "A_to_B_only_changed_path": "release/release-intent-v5.json",
     "J_to_A_full_history_intent_changes": [],
     "PR": "https://github.com/AMASI-SA/AMASI-SA/pull/2089",
-    "PR_state": "open, ready for review, unmerged; remaining exact-B gates running",
+    "PR_state": "superseded production base; unmerged/unpublished immutable provenance",
     "exact_B_readiness_run": 45216427337,
     "exact_B_operational_run": 45216427435,
     "production_changed": false,
@@ -152,5 +152,55 @@
       "full_package_proofs_identical": true,
       "evidence_directory": "evidence/readiness-B-45216427337"
     }
+  },
+  "current_composition_state": "r2 integration above422; oldA/B/PR2089 are superseded provenance",
+  "superseding_boundary": {
+    "kind": "inventory-side-options-concurrent-base-movement-v1",
+    "observed_at_utc": "2026-11-23T16:40:21.409535+00:00",
+    "old_base": "76efd2c3aa1563939ee3e27a9ae03f27fc1a3d43",
+    "old_source": "45c8fb4ea91e5af8523971fbfa2270ee96552224",
+    "old_intent": "499b98735b5cc4eae79d380e4f8d5ec5477175e5",
+    "old_PR": 2089,
+    "old_ci_all_applicable_passed": true,
+    "raw_checks": {
+      "success": 44,
+      "expected_skip": 10,
+      "pending": 0,
+      "failed": 0,
+      "neutral": 0
+    },
+    "new_base": "422fffc8fb9c381165cc76b1ded5ca595773ce8e",
+    "foreign_PR": 2087,
+    "foreign_merge_time_utc": "2026-11-23T16:35:10Z",
+    "shared_guard": {
+      "active": false
+    },
+    "shared_head": "76efd2c3aa1563939ee3e27a9ae03f27fc1a3d43",
+    "shared_tracked_clean": true,
+    "new_branch": "codex/inventory-side-options-release-r2-20261123",
+    "old_pair_and_helper_bundle": "immutable provenance; disabled; no merge or publication",
+    "foreign_handoff": "preserved; own host work queued after foreign verified closure",
+    "own_production_mutation": false,
+    "source_patch_sha256": "4c30a6bd1237b2e95cc06543de0ef2038771ec531eaf084b3c8c8c691b041a27",
+    "source_tree_before_status_refresh": "27e88fabf092ae80d83c7b1f490e271b51711e75",
+    "new_candidate_source_tree": "1432c4e0651e4240b6794060f4745a947849a154"
+  },
+  "r2_source": {
+    "source_A": "739962663346f0e8f0cd31eaed9f6a8a2888e1b2",
+    "source_tree": "1432c4e0651e4240b6794060f4745a947849a154",
+    "base_J": "422fffc8fb9c381165cc76b1ded5ca595773ce8e",
+    "source_branch": "codex/inventory-side-options-release-r2-20261123",
+    "original_guard_before_private_build": {
+      "active": false
+    },
+    "guard_observed_at": "2026-11-23T16:47:12.094194+00:00",
+    "host_head_at_observation": "76efd2c3aa1563939ee3e27a9ae03f27fc1a3d43",
+    "remote_production_at_observation": "422fffc8fb9c381165cc76b1ded5ca595773ce8e",
+    "host_tracked_clean": true,
+    "ordinary_workflow_dispatch": "accepted via authorized terminal gh; operational-balance-web.yml",
+    "own_host_mutation": false,
+    "host_publication": "queued after foreignPR2087 verifiedclosure",
+    "independent_oracle_tree": "27e88fabf092ae80d83c7b1f490e271b51711e75",
+    "oracle_to_A_only_change": "docs/operations/INVENTORY-SIDE-OPTIONS-RELEASE-20261123/STATUS.md"
   }
 }

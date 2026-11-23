@@ -76,3 +76,17 @@ Release readiness run [45216427337](https://github.com/AMASI-SA/AMASI-SA/actions
 Durable evidence, original package/environment records, generated manifests and compressed exact adapter/runtime logs are under `evidence/readiness-B-45216427337/`. The archive container hashes differ while their complete extracted payloads are identical; each archive matches its own recorded hash.
 
 Accounting and CodeQL gates passed; remaining exact-B operational/stock/resumable gates are monitored independently. PR2089 is unmerged; no D, own lease, host source/output change or publication. Preserve the serial handoff and fresh-check production/guard before a normal merge. Helper bundle preparation is disabled until actual D.
+
+## Superseding boundary: concurrent PR2087 merge
+
+All original exact-B gates finished:54raw checks=44success+10expected skips, none pending/failing/neutral. However, fresh pre-merge reads detected Production movement to `422fffc8fb9c381165cc76b1ded5ca595773ce8e`, the normal PR2087 merge at16:35:10UTC. PR2089 became dirty and was not merged or published. Its immutable A/B and all CI remain provenance only. Full raw CI evidence is retained under `evidence/superseded-2089/exact-B-final-CI.json.gz`. The independently reviewed old host helper bundle is retained there disabled; never activate it for the new base.
+
+Root actual original guard at16:40:21UTC was inactive; shared/app remained clean oldJ76efd while remoteProduction was newJ422fffc8. PR2087 own deployment preparation was in progress. Preserve its serial handoff and eventual lease; own host publication is queued after verified closure.
+
+New isolated branch `codex/inventory-side-options-release-r2-20261123` applies the complete oldJ..A source-only interval above newJ. Both source overlaps (workflow and routes) applied cleanly and preserve the additive freshness and inventory requirements. New J intent stays byte-exact. The current candidate tree after status refresh is `1432c4e0651e4240b6794060f4745a947849a154`; source commit and new governed identity are pending. This task has made no production, host or business-record changes.
+
+## R2 source frozen and independently reviewed
+
+New A `739962663346f0e8f0cd31eaed9f6a8a2888e1b2` is a direct child of J422fffc8, tree `1432c4e0651e4240b6794060f4745a947849a154`, on `codex/inventory-side-options-release-r2-20261123`. Independent source oracle27e88fab matches the complete source integration; only the current STATUS refresh differs. Original full-history source-intent path remains empty and inherited59a341intent preserved. Exact-A ordinary workflow dispatch accepted.
+
+Fresh original actual guard before private governed build at16:47:12.094194UTC returned inactive; shared/app still clean76efd2 and remoteProduction422fffc8. Local toolchain bootstrap/install are isolated. No own host rehearsal, staging or lease; shared publication stays queued after foreignPR2087 closure. See `evidence/r2-source-integration/`.

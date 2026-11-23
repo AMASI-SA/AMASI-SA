@@ -1,0 +1,15 @@
+DISABLED_PIN_TEST_PASS: all five entry points refuse before a host command
+SELF_TEST_PASS: backup bytes/modes, staged replacement, retained rollback, change refusal, destination refusal, symlink refusal, absent-cache preservation, present-cache refusal, rehearsal proof binding
+RECEIPT_TEST_PASS: exact release, bounded private path, log digest, mode and symlink refusals
+PACKAGE_PROOF_TEST_PASS: full original proof comparison rejects count, tree, metadata and identity drift
+STAGING_MUTEX_TEST_PASS: all shared mutations/proof/final check hold the original mutex; foreign/incomplete leases preserve all bytes
+IGNORED_COLLISION_TEST_PASS: ordinary fast-forward refuses and preserves an ignored host-only collision
+OWNED_PROCESS_CASE_PASS: success
+OWNED_PROCESS_CASE_PASS: nonzero
+OWNED_PROCESS_CASE_PASS: timeout
+OWNED_PROCESS_CASE_PASS: sigterm-leader-exits-early
+OWNED_PROCESS_CASE_PASS: sigterm-leader-ignores-term
+OWNED_PROCESS_CASE_PASS: sighup-leader-exits-early
+OWNED_PROCESS_CASE_PASS: sighup-leader-ignores-term
+OWNED_PROCESS_TEST_PASS: exit codes, timeout, TERM/HUP with both leader modes, repeated signals, descendant reaping and unrelated process preservation
+BUNDLE_SELF_TEST_PASS: syntax and bounded local safety tests; no host action executed

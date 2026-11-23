@@ -1,0 +1,13 @@
+{
+  "kind": "mezan_pr2089_disabled_helper_self_test_v1",
+  "completed_at_utc": "2026-11-23T16:31:09.951423+00:00",
+  "exit_code": 0,
+  "duration_seconds": 26.806,
+  "log": "/workspace/scratch/36b1bc151c92/mezan-pr2089-helper-work/SELF-TEST-2089.log",
+  "log_sha256": "b535d92dfc3bdded2e7e2e1973ed0d21daffed3bfcb203709a08c9acd95c4de6",
+  "fixture_git_commits_authorized": true,
+  "source_or_evidence_repo_mutation": false,
+  "host_app_or_real_guard_access": false,
+  "build_or_publication": false,
+  "output": "DISABLED_PIN_TEST_PASS: all five entry points refuse before a host command\nSELF_TEST_PASS: backup bytes/modes, staged replacement, retained rollback, change refusal, destination refusal, symlink refusal, absent-cache preservation, present-cache refusal, rehearsal proof binding\nRECEIPT_TEST_PASS: exact release, bounded private path, log digest, mode and symlink refusals\nPACKAGE_PROOF_TEST_PASS: full original proof comparison rejects count, tree, metadata and identity drift\nSTAGING_MUTEX_TEST_PASS: all shared mutations/proof/final check hold the original mutex; foreign/incomplete leases preserve all bytes\nIGNORED_COLLISION_TEST_PASS: ordinary fast-forward refuses and preserves an ignored host-only collision\nOWNED_PROCESS_CASE_PASS: success\nOWNED_PROCESS_CASE_PASS: nonzero\nOWNED_PROCESS_CASE_PASS: timeout\nOWNED_PROCESS_CASE_PASS: sigterm-leader-exits-early\nOWNED_PROCESS_CASE_PASS: sigterm-leader-ignores-term\nOWNED_PROCESS_CASE_PASS: sighup-leader-exits-early\nOWNED_PROCESS_CASE_PASS: sighup-leader-ignores-term\nOWNED_PROCESS_TEST_PASS: exit codes, timeout, TERM/HUP with both leader modes, repeated signals, descendant reaping and unrelated process preservation\nBUNDLE_SELF_TEST_PASS: syntax and bounded local safety tests; no host action executed\n"
+}

@@ -1,0 +1,61 @@
+{
+  "kind": "mezan_pr2089_disabled_helper_static_review_v1",
+  "verified": true,
+  "checked_at_utc": "2026-11-23T16:30:24.792482+00:00",
+  "files": [
+    {
+      "file": "BOOTSTRAP-HOST-2089.py",
+      "reference_sha256": "6cdb8e695bcd14a46accb2e6ae7b9949885536e6ecd04a975a2200cc6fc75fd3",
+      "adapted_sha256": "94e5ecfbd28dcbb001fa08022b9d3967d5fea2a4bc0b8c3ce8794cfb0c53b2e3",
+      "bytes": 1896,
+      "exact_declared_delta": true
+    },
+    {
+      "file": "MANUAL-HOST-ISOLATED-REHEARSAL-2089.py",
+      "reference_sha256": "5fe424bfb7ace043cd29d31b7124643bcc8f7f53f7dfff570080a2e9d74931ba",
+      "adapted_sha256": "e0c0b0b57f5213bfe2bc35f86b75cd6e71df0bca7eb2d05b6eeda34ef78ec42b",
+      "bytes": 12796,
+      "exact_declared_delta": true
+    },
+    {
+      "file": "MANUAL-HOST-PREPARE-PREPUBLISH-2089.py",
+      "reference_sha256": "55900e07e8967edf427dc5e5d655b0bd7457bbfadb2b5c6ce3348ae1c2b63cf4",
+      "adapted_sha256": "41a9b4a03062c88af5c577266230be37b92008b7b7909d687cdc49def6125056",
+      "bytes": 6060,
+      "exact_declared_delta": true
+    },
+    {
+      "file": "MANUAL-HOST-SELF-TEST-2089.py",
+      "reference_sha256": "cdf5918cade892b64af37820440aaa766abac3b6a6889b9177170b23b420d10f",
+      "adapted_sha256": "341798dccdc1a55f24edcf72045f81efff660a1b157fe7dd098fa98c9491ac23",
+      "bytes": 28571,
+      "exact_declared_delta": true
+    },
+    {
+      "file": "MANUAL-HOST-STAGE-2089.py",
+      "reference_sha256": "7d2974136db042a4246bf0b30725cf575b600b837904f02d6abe45b981cd083f",
+      "adapted_sha256": "3e15c02a521ff84255f9aa3e9fc85fa5e1ad5bba8563ee97c9de519845181b04",
+      "bytes": 27376,
+      "exact_declared_delta": true
+    },
+    {
+      "file": "RUN-HOST-DEPLOY-2089.sh",
+      "reference_sha256": "e02d53474616d64fc42f565f4889493af795421599976006295fd5e76539be8b",
+      "adapted_sha256": "d2a90fd87e7c275973a33957abd447fc9091fefef8777e46eefaac8ee6cd27a2",
+      "bytes": 5220,
+      "exact_declared_delta": true
+    },
+    {
+      "file": "RUN-HOST-VERIFY-2089.sh",
+      "reference_sha256": "4210c4c9a2e6d7cbc418154abb354c967dfc8fa44d4bd30d4bdb93d631ddc043",
+      "adapted_sha256": "29b32d3348323a3241d28ce104dcd1e6c7f2cf0067bc8b5f9db8a673dff7b8b7",
+      "bytes": 5315,
+      "exact_declared_delta": true
+    }
+  ],
+  "unexpected_delta": false,
+  "all_executable_copy_stale_labels_absent": true,
+  "python_and_shell_syntax_passed": true,
+  "deployment_pin_configured": false,
+  "host_actions": false
+}

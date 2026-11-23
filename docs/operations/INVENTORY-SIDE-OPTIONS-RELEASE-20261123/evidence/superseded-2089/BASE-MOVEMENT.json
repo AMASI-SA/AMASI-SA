@@ -1,0 +1,31 @@
+{
+  "kind": "inventory-side-options-concurrent-base-movement-v1",
+  "observed_at_utc": "2026-11-23T16:40:21.409535+00:00",
+  "old_base": "76efd2c3aa1563939ee3e27a9ae03f27fc1a3d43",
+  "old_source": "45c8fb4ea91e5af8523971fbfa2270ee96552224",
+  "old_intent": "499b98735b5cc4eae79d380e4f8d5ec5477175e5",
+  "old_PR": 2089,
+  "old_ci_all_applicable_passed": true,
+  "raw_checks": {
+    "success": 44,
+    "expected_skip": 10,
+    "pending": 0,
+    "failed": 0,
+    "neutral": 0
+  },
+  "new_base": "422fffc8fb9c381165cc76b1ded5ca595773ce8e",
+  "foreign_PR": 2087,
+  "foreign_merge_time_utc": "2026-11-23T16:35:10Z",
+  "shared_guard": {
+    "active": false
+  },
+  "shared_head": "76efd2c3aa1563939ee3e27a9ae03f27fc1a3d43",
+  "shared_tracked_clean": true,
+  "new_branch": "codex/inventory-side-options-release-r2-20261123",
+  "old_pair_and_helper_bundle": "immutable provenance; disabled; no merge or publication",
+  "foreign_handoff": "preserved; own host work queued after foreign verified closure",
+  "own_production_mutation": false,
+  "source_patch_sha256": "4c30a6bd1237b2e95cc06543de0ef2038771ec531eaf084b3c8c8c691b041a27",
+  "source_tree_before_status_refresh": "27e88fabf092ae80d83c7b1f490e271b51711e75",
+  "new_candidate_source_tree": "1432c4e0651e4240b6794060f4745a947849a154"
+}
