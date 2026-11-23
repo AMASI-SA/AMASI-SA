@@ -1,0 +1,36 @@
+{
+  "publication_clicked_once": true,
+  "emergent_new_version": "7302fea",
+  "previous_version": "d62ba0b",
+  "event_id": "027fbf62-4f38-5b36-be16-97d5f26e0a83",
+  "started_label": "Deployment Started Nov 23, 06:42 PM",
+  "completed_label": "Deployment finished Nov 23, 06:52 PM",
+  "label_timezone": "Asia/Riyadh",
+  "current_published_version_green": true,
+  "prior_version_moved_to_history": true,
+  "literal_ui_wording_note": "Current UI says Deployment finished, not the older Deployment Succeeded phrase. Independent release state review accepts the new completed successful publication state before unchanged own-lease verifier; literal wording retained.",
+  "runtime_logs": "Backend started successfully and health200 observed; these are not substitutes for release-identity verification.",
+  "cloud_transcript": "Current UI exposes runtime logs, not full Cloud Build transcript; argv/cwd/snapshot-order unknowns are not claimed observed.",
+  "original_verifier": "Started once through reviewed immutable own-lease wrapper and full-output capture. Still running at latest observation; no retry or manual lease clear.",
+  "ui_after_reload": {
+    "date": "2026-11-23",
+    "tabby_numeric": true,
+    "tabby_label": "تقديري · نسبة الأرصدة التشغيلية",
+    "operational_source_period_visible": true,
+    "estimated_order_count_visible": true,
+    "total_payment_fees_numeric": true,
+    "profit_payment_fee_block_removed": true,
+    "separate_product_cost_incompleteness": true
+  },
+  "historical_acceptance": {
+    "date": "2026-11-11",
+    "weekly_label_visible": true,
+    "weekly_reference_window": [
+      "2026-11-04",
+      "2026-11-10"
+    ],
+    "tabby_group_still_incomplete": true,
+    "other_provider_groups_also_incomplete": true,
+    "cause": "Unresolved; inspect persisted read-model reason codes before concluding whether missing collection, conflicts, or calculation defect. No new financial writes."
+  }
+}

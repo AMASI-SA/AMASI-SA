@@ -1,7 +1,7 @@
 {
   "task_id": "TABBY-DASHBOARD-FEES-20261122",
-  "status": "r4_original_host_preflight_passed_emergent_publication_running",
-  "updated_at_utc": "2026-11-23T15:45:37.619806+00:00",
+  "status": "r4_published_original_verifier_running_historical_fee_reason_review",
+  "updated_at_utc": "2026-11-23T16:05:30.668077+00:00",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tabby-weekly-fees-release-evidence-20261122",
   "production_branch": "hotfix/prod-snap-meta-final",
@@ -130,7 +130,7 @@
   "release": {
     "production_changed_by_this_task": false,
     "merged": true,
-    "published": false,
+    "published": true,
     "lease_created": true,
     "actual_host_evidence": "Owner supplied clean actual /app at c2d244a3349013c06f3fb7824070bfa12bd0bfe0, branch hotfix/prod-snap-meta-final, upstream +0 -0, original guard exactly active:false. Fresh bounded status remains required at shared action boundaries.",
     "current_base_release": "Latest PR2082 completion records original verified:true with three matching probes, intended source/deployment/runtime/artifact and final exact inactive guard. Previous PR2076 pending-hold wording is superseded and is not a release blocker.",
@@ -147,7 +147,7 @@
     "production_runtime_changed_by_this_task": false,
     "merge_proof": "MERGE-PROOF-2086.json",
     "actual_host_latest_boundary": "Original PREPUBLISH_PASSED exactD/A/runtime with ready_to_publish:true; own lease prepared2026-11-23T15:41:37.354423+00:00.",
-    "current_handoff": "Publication running. Wait for newer explicit success; then run pinned original own-lease verifier exactly once, preserve full output and verify inactive.",
+    "current_handoff": "New deployment completed. Original verifier running once with full private output capture; preserve own lease. Current-day Tabby/fee total numeric after reload. Historical11Nov retains unknown Tabby group despite valid weekly estimate metadata; read-only cause diagnosis underway.",
     "helper_chain_independent_review": "PASS; INDEPENDENT-LAUNCHER-CHAIN-2086.json; E/L unchanged.",
     "bootstrap_independent_review": "PASS; INDEPENDENT-BOOTSTRAP-REVIEW-2086.json.",
     "actual_host_paths": {
@@ -156,12 +156,16 @@
       "log": "/tmp/mezan-pr2086-rehearsal-t59itjiq/adapter.log",
       "verification_command": "bash /tmp/mezan-pr2086-deploy-y1q5mxhn/verify-after-success.sh"
     },
-    "actual_host_prepublication_evidence": "ACTUAL-HOST-PREPUBLISH-2086.json"
+    "actual_host_prepublication_evidence": "ACTUAL-HOST-PREPUBLISH-2086.json",
+    "verified": false,
+    "emergent_version": "7302fea",
+    "completed_label": "Deployment finished Nov 23, 06:52 PM",
+    "publication_observations": "PUBLICATION-OBSERVATIONS-2086.json"
   },
   "next_safe_actions": [
-    "Observe current new Emergent publication; do not repeat publish.",
-    "After explicit new Deployment Succeeded, execute pinned original verifier with reviewed full-output capture; require checks3 and final exactinactive.",
-    "Reload same2026-11-23 live dashboard and compare Tabby fees, total fee and netprofit; save final evidence."
+    "Allow original verifier to complete; retain full output and exactinactive finalstatus; do not repeat publish or verifier.",
+    "Read only existing11Nov executive snapshot reasoncodes to diagnose unresolved historical Tabby group.",
+    "If real defect, preserve all frozen release pins and prepare a separate isolated reviewed fix; otherwise document exact remaining data condition."
   ],
   "source_branch": "codex/tabby-weekly-fee-estimates-r4-20261123",
   "source_A": "1725672eeccb1272f183c376b9267e363a028325",
