@@ -190,13 +190,16 @@ class Collection:
         for path, included in projection.items():
             if not included:
                 continue
-            original, target = row, result
+            original = row
             keys = path.split(".")
             for key in keys[:-1]:
                 original = original.get(key, {}) if type(original) is dict else {}
-                target = target.setdefault(key, {})
             if type(original) is dict and keys[-1] in original:
-                target[keys[-1]] = deepcopy(original[keys[-1]])
+                target = result
+                for key in keys[:-1]:
+                    target = target.setdefault(key, {})
+                value = deepcopy(original[keys[-1]])
+                target[keys[-1]] = value[:included['$slice']] if type(included) is dict else value
         return result
 
     async def update_one(self, query, update, *, upsert=False):
@@ -298,9 +301,46 @@ def test_reader_projects_metadata_only_and_never_mutates(monkeypatch):
         monkeypatch.setattr(operational_source_freshness, "read_source_freshness", read_sources)
         result = await health.read_freshness(db, OWNER, OWNER, now=NOW)
         assert result["freshness"]["state"] == "current"
+        assert result['entity_coverage']['state'] == 'unknown'
         assert db.data == before and db.writes == []
         assert "12345" not in str(result)
         assert all(not any(field in projection for field in ("snapshot", "movements", "openings")) for _, _, projection in db.reads)
+    asyncio.run(scenario())
+
+
+def test_saved_entity_day_gap_survives_a_successful_recent_clock():
+    from operational_entity_freshness import build_coverage, FIELD
+    state = header()
+    state.update(started_at='2026-11-20T00:00:00+03:00', revision=7)
+    catalog = {'schema_version': 1, 'owner_id': OWNER, 'complete': True, 'total_entities': 1,
+        'rows': [{'entity_type': 'ad_account', 'entity_id': 'snap-sar', 'currency': 'SAR',
+                  'timezone': 'Asia/Riyadh', 'label': 'سناب ريال', 'source_available': True}]}
+    state['engine'][FIELD] = build_coverage(state, {'automatic_source_entities': catalog}, at(30))
+    state['revision'] = 8
+    result = compose(state=state)
+    assert result['freshness']['state'] == 'stale'
+    row = result['entity_coverage']['rows'][0]
+    assert row['label'] == 'سناب ريال' and row['missing_days'] == ['2026-11-20', '2026-11-21', '2026-11-22']
+
+
+def test_entity_metadata_is_bound_and_projected_with_an_explicit_row_cap(monkeypatch):
+    async def scenario():
+        import operational_source_freshness
+        from operational_entity_freshness import FIELD, MAX_ENTITIES
+        db = DB()
+        db.data[STATES][OWNER]['engine'][FIELD] = {'schema_version': 1, 'owner_id': 'foreign',
+            'as_of': at(30), 'calculation_revision': 8, 'complete': True, 'total_entities': 0, 'rows': [],
+            'untrusted_private_payload': 'never-return-this'}
+        async def read_sources(*args, **kwargs):
+            return sources()
+        monkeypatch.setattr(operational_source_freshness, 'read_source_freshness', read_sources)
+        result = await health.read_freshness(db, OWNER, OWNER, now=NOW)
+        assert result['freshness']['state'] == 'unknown' and result['entity_coverage']['rows'] == []
+        assert 'never-return-this' not in str(result) and 'foreign' not in str(result)
+        projections = [projection for name, _, projection in db.reads if name == STATES]
+        assert len(projections) == 2
+        assert all(projection['engine.'+FIELD+'.rows'] == {'$slice': MAX_ENTITIES+1} for projection in projections)
+        assert all('engine' not in projection and 'engine.obligations' not in projection for projection in projections)
     asyncio.run(scenario())
 
 

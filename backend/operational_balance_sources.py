@@ -1367,7 +1367,12 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
         on_primary_reads_complete()
     with refresh_stage('source_fee_settings'):
         fee_settings = await db['settings'].find({'user_id': owner}, {
-            '_id': 0, 'user_id': 1, 'payment_methods': 1, 'updated_at': 1}).to_list(2)
+            '_id': 0, 'user_id': 1, 'payment_methods': 1, 'updated_at': 1,
+            **{'shipping_companies.' + key: 1 for key in ('name', 'salla_carrier_key', 'status',
+                'active', 'is_active', 'archived', 'deleted', 'is_archived', 'is_deleted')}}).to_list(2)
+        # Identity-only additions share the existing bounded owner settings read.
+        # They authorize no rate, charge or financial movement.
+        data['settings'] = fee_settings
         out['provider_fee_settings'] = {}
         modes = {row.get('fee_source_mode') for row in data['mz2_provider_fee_policies_v2'] if row.get('fee_source_mode')}
         out['provider_fee_source_mode'] = 'mz2_policies' if 'mz2_policies' in modes else 'legacy_settings'
@@ -2146,6 +2151,8 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                   order_id=oid, order_number=record['order_number'], party_type=record['party_type'], party_id=record['party_id'])
         finish_coverage(customer_tenders, counted_order_ids - inspected_order_ids)
         finish_issue_index(out)
+        from operational_entity_freshness import source_entities
+        out['automatic_source_entities'] = await prepare_in_thread(source_entities, data, operational_state or {}, out)
         return out
 
 

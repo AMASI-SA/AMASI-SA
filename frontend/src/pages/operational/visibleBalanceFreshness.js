@@ -126,8 +126,12 @@ export function createBalanceFreshnessManager({ read, refresh, now = Date.now })
         confirm(record, snapshot);
         return;
       }
-      if (!snapshot.stale && !explicit) {
-        publish(record, { phase: attempt ? 'unknown' : 'fresh', message: attempt ? unknownMessage : '' });
+      // Opening, returning to, or revealing a page only reads saved health.
+      // Independent, owner-enabled automation owns scheduled calculations;
+      // this cancellable financial lane is reserved for a deliberate click.
+      if (!explicit) {
+        publish(record, { phase: attempt ? 'unknown' : snapshot.stale ? 'stale' : 'fresh',
+          message: attempt ? unknownMessage : '' });
         return;
       }
       if (!client.canRefresh || !eligible(client) || !allowed(record)) {

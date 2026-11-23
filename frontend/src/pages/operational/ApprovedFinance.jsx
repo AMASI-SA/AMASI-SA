@@ -8,6 +8,7 @@ import { movementDate, movementRecorder, movementTitle, validBootstrap } from '.
 import { assertWorkspace, retryWorkspaceRead, useWorkspaceRead } from './workspaceReadHooks';
 import { useVisibleBalanceFreshness } from './useVisibleBalanceFreshness';
 import BalanceFreshnessNotice from './BalanceFreshnessNotice';
+import BalanceAutomationSettings from './BalanceAutomationSettings';
 import WorkspaceResourcePicker from './WorkspaceResourcePicker';
 import { Amount, Heading, Icon, IconBox, isAsset } from './ApprovedFinanceUI';
 import ApprovedHome from './ApprovedHome';
@@ -226,7 +227,7 @@ function FinanceWorkspace({context:bootstrap,identity,user,view,to,params,reload
     default:content=<ApprovedHome context={context} to={to} allowedTo={allowedTo} canAdd={canAdd} onCreateCash={createCash} onDetail={row=>setModal({row})}/>;
   }
   const row=modal?.row;
-  return <ApprovedFinanceShell context={context} user={user} view={view} title={title} active={active} to={to}>{freshness.owner&&<BalanceFreshnessNotice state={freshness} canUpdate={freshness.canRefresh} onCheck={freshness.canRefresh?freshness.retry:undefined}/>}{recovered && <p className="note" role="status">سبق تسجيل الحركة. رقم الإيصال <bdi>{recovered.movement}</bdi></p>}{savedInvoice && <p className="note" role="status">حُفظت فاتورة الشراء الآجل <bdi>{savedInvoice.number}</bdi> على حساب المورد.</p>}{view==='ledger' && selected?.kind==='cash' && selected.id===location.state?.createdCashId && <p className="note" role="status">تمت إضافة {selected.name}.</p>}<React.Fragment key={sourceGeneration}><Suspense fallback={<p className="empty" role="status">جارٍ فتح الصفحة…</p>}>{content}</Suspense></React.Fragment>
+  return <ApprovedFinanceShell context={context} user={user} view={view} title={title} active={active} to={to}>{freshness.owner&&<BalanceFreshnessNotice state={freshness} canUpdate={freshness.canRefresh} onCheck={freshness.canRefresh?freshness.retry:undefined}/>}{recovered && <p className="note" role="status">سبق تسجيل الحركة. رقم الإيصال <bdi>{recovered.movement}</bdi></p>}{savedInvoice && <p className="note" role="status">حُفظت فاتورة الشراء الآجل <bdi>{savedInvoice.number}</bdi> على حساب المورد.</p>}{view==='ledger' && selected?.kind==='cash' && selected.id===location.state?.createdCashId && <p className="note" role="status">تمت إضافة {selected.name}.</p>}{view==='tools'&&freshness.owner&&<BalanceAutomationSettings context={context}/>}<React.Fragment key={sourceGeneration}><Suspense fallback={<p className="empty" role="status">جارٍ فتح الصفحة…</p>}>{content}</Suspense></React.Fragment>
     {modal?.cash && createCash && <Dialog title="إضافة صندوق نقدي" locked={creatingCash} onClose={()=>setModal(null)}>
       <div className="cash-create"><Suspense fallback={<p role="status">جارٍ فتح النموذج…</p>}>
         <AddOperationalEntity kind="cash" onBusyChange={setCreatingCash} onCancel={()=>setModal(null)} onAdded={account=>{

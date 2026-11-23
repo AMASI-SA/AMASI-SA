@@ -16,6 +16,7 @@ from operational_demand_refresh import refresh_stage
 
 
 STATUS_INELIGIBLE = "operational_order_bank_status_ineligible"
+OCCURRENCE_UNPROVEN = "operational_order_bank_occurrence_unproven"
 
 
 class BankReceiptStatusHold(ValueError):
@@ -30,11 +31,41 @@ REVIEW_ACTIONS = {
     STATUS_INELIGIBLE: "غير معتمد بسبب حالة الطلب",
     HISTORY_MISSING: "تحقق من سجل حالة الطلب في سلة لتحديد تاريخ أول حالة مؤهلة لاعتماد الحوالة.",
     HISTORY_UNPROVEN: "راجع سجل الطلب؛ لم يثبت تاريخ انتقال الطلب إلى حالة مؤهلة.",
+    OCCURRENCE_UNPROVEN: "طابق تاريخ الحوالة الأصلي مع مصدرها؛ تحديث الطلب أو تاريخ إعادة الاحتساب لا يثبت تاريخ الحوالة، خاصة عند تعدد طرق الدفع.",
     SOURCE_INVALID: "تحقق من هوية الطلب وحداثة حالة سلة.",
     HISTORICAL_REVIEW: "طابق الحوالة السابقة مع كشف البنك قبل تسجيلها.",
     "operational_order_bank_receipt_evidence_missing": "راجع مرفق الحوالة أو مرجع دفعتها وطابقها مع البنك.",
     "operational_order_bank_payment_incomplete": "راجع مبلغ الحوالة وطرق الدفع المسجلة في سلة.",
 }
+
+
+def original_bank_occurrence(order, state, as_of):
+    """Admit dated new money only after matching already recorded movements.
+
+    Source recognition authenticates the history against the order and owner.
+    Recheck its original time at the write boundary without turning a snapshot
+    observation or a delayed refresh into the date of a financial movement.
+    """
+    from operational_payment_evidence import _instant
+
+    credit = order["bank_credit"]
+    issue = credit.get("occurrence_issue")
+    if issue in {HISTORY_MISSING, HISTORY_UNPROVEN, OCCURRENCE_UNPROVEN}:
+        raise ValueError(issue)
+    evidence = credit.get("preparation_evidence")
+    try:
+        if (not isinstance(evidence, dict) or evidence.get("source") != "salla_order_history"
+                or evidence.get("status") not in {"in_progress", "completed", "delivering", "delivered"}
+                or not isinstance(evidence.get("event_id"), str) or not evidence["event_id"].strip()):
+            raise ValueError(OCCURRENCE_UNPROVEN)
+        original = _instant(credit.get("occurred_at"))
+        if (original != _instant(evidence.get("observed_at"))
+                or not _instant(state["started_at"]) < original <= _instant(as_of)
+                or original < _instant(order["created_at"])):
+            raise ValueError(OCCURRENCE_UNPROVEN)
+    except (KeyError, TypeError, ValueError):
+        raise ValueError(OCCURRENCE_UNPROVEN) from None
+    return original.isoformat()
 
 
 class BankCreditRecognition:
@@ -150,6 +181,18 @@ class BankCreditRecognition:
             raise ValueError("operational_order_bank_amount_invalid")
         credit = {"bank_id": bank["id"], "bank_name": bank["name"], "amount": str(paid),
                   "preparation_evidence": basis}
+        # Date admission is separate from amount/identity recognition. Existing
+        # automatic or manual matches must be suppressed before a missing date
+        # can create a new hold. A mixed bank leg may have arrived after the
+        # order first qualified, so that status alone cannot date the bank leg.
+        if mixed:
+            credit["occurrence_issue"] = OCCURRENCE_UNPROVEN
+        else:
+            try:
+                original = bank_status_evidence(raw, source, **scope, require_history=True)
+                credit.update(occurred_at=original["observed_at"], preparation_evidence=original)
+            except ValueError as exc:
+                credit["occurrence_issue"] = str(exc)
         if native:
             from operational_payment_evidence import _identity
             for leg in raw["payment_methods"]:

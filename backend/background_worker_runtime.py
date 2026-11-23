@@ -47,6 +47,8 @@ async def start_tasks(db, *, wake_event=None, assembly_wake_event=None, read_wak
         tasks.append(asyncio.create_task(campaign_shadow_jobs(db), name='campaign-ai-shadow-jobs'))
         from demand_read_jobs import run as demand_reads
         tasks.append(asyncio.create_task(demand_reads(db, wake_event=read_wake_event), name='demand-read-projections'))
+        from operational_balance_automation import supervise as operational_automation
+        tasks.append(asyncio.create_task(operational_automation(db), name='operational-balance-automation'))
         from integrations_control_center.ads_auto_sync_scheduler import auto_sync_enabled, auto_sync_loop
         if auto_sync_enabled():
             tasks.append(asyncio.create_task(auto_sync_loop(db), name='advertising-sync'))

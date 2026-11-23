@@ -780,11 +780,20 @@ async def refresh(db, owner, *, clock=None):
                 # claim retains fresh request/lease admission and store arbitration.
                 await checkpoint()
                 credit = order["bank_credit"]
+                from operational_bank_credit_recognition import REVIEW_ACTIONS, original_bank_occurrence
+                try:
+                    occurred_at = original_bank_occurrence(order, result, stamp)
+                except ValueError as exc:
+                    code = str(exc)
+                    result["engine"]["issues"].append({"code": code, "source_id": order["id"],
+                        "order_number": order["order_number"], "party_type": "bank", "party_id": credit["bank_id"],
+                        "status": "pending", "required_action": REVIEW_ACTIONS[code]})
+                    continue
                 operation = await claim_movement(db, owner, 'operational_order_worker', payload)
                 item = {**payload, 'id': operation, 'party_type': 'bank', 'party_id': credit['bank_id'],
                         'bank_kind': 'bank', 'bank_name': credit['bank_name'], 'name': credit['bank_name'],
                         'direction': 'incoming', 'kind': 'collection', 'allocations': [], 'actual_fee_amount': '0.00',
-                        'actor_id': 'operational_order_worker', 'source': 'mezan2', 'occurred_at': stamp,
+                        'actor_id': 'operational_order_worker', 'source': 'mezan2', 'occurred_at': occurred_at, 'recorded_at': stamp,
                         'receipt_id': None, 'reference': 'طلب ' + order['order_number'], 'automatic_order_bank': True}
                 if credit.get('bank_transaction_reference'):
                     item['bank_transaction_reference'] = credit['bank_transaction_reference']
@@ -804,6 +813,8 @@ async def refresh(db, owner, *, clock=None):
                 except ValueError:
                     names[kind] = {}
             await run_calculation(_apply_refreshed_party_names, result, names)
+        from operational_entity_freshness import FIELD, build_coverage
+        result["engine"][FIELD] = await run_calculation(build_coverage, result, sources, stamp, entity_names=names)
         state.update(result)
         state["engine"]["as_of"] = stamp
         await checkpoint()
