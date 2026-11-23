@@ -34,6 +34,7 @@ on:
       - 'backend/current_bundle_reporting_estimate.py'
       - 'backend/tests/test_sold_product*'
       - 'backend/tests/test_current_bundle_cost_details.py'
+      - 'backend/tests/test_current_bundle_physical_quantity.py'
       - '.github/workflows/sold-product-cost-details.yml'
 permissions:
   contents: read
@@ -89,6 +90,7 @@ jobs:
           backend/tests/test_supplier_invoice_report_integration.py
           backend/tests/test_product_option_cost_alias_guard.py
           backend/tests/test_current_bundle_cost_details.py
+          backend/tests/test_current_bundle_physical_quantity.py
           backend/tests/test_report_option_identity.py
           backend/tests/test_report_raw_option_recovery.py
           backend/tests/test_dashboard_bundle_cost_authority.py
