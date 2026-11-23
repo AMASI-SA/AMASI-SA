@@ -90,7 +90,13 @@ async def card_app(monkeypatch):
     state = {"today": date(2026, 11, 11), "ads_spend": 4}
 
     async def filtered(*args, **kwargs):
-        reads.append((args[1], deepcopy(kwargs)))
+        context = kwargs.get("fee_context")
+        if context is not None:
+            state.setdefault("fee_contexts", []).append(("collector", context))
+        # Runtime-only read tasks are deliberately not serializable snapshots.
+        recorded = {**kwargs, **({"fee_context": {key: value for key, value in context.items()
+                    if key != "_request_fee_reads"}} if context is not None else {})}
+        reads.append((args[1], deepcopy(recorded)))
         return await original_filtered(*args, **kwargs)
 
     async def cost(*args, **kwargs):
@@ -119,6 +125,8 @@ async def card_app(monkeypatch):
     async def legacy(**kwargs):
         calls["legacy"] += 1
         assert kwargs["allow_self_heal"] is False
+        if kwargs.get("fee_context") is not None:
+            state.setdefault("fee_contexts", []).append(("legacy", kwargs["fee_context"]))
         return {
             "totals": {"total_orders": 1, "total_sales": 100, "total_product_cost": 0,
                        "total_ads_cost": 0, "operating_expenses_total": 0, "operating_salaries_total": 0,
@@ -407,6 +415,136 @@ async def test_dated_tariff_changes_invalidate_executive_setup_without_legacy_ed
     switched = (await env.client.get(path, params=PARAMS)).json()["payment_method_setup"]
     assert switched["fee_revision"] != expired["fee_revision"]
     assert next(row for row in switched["items"] if row["name"] == "mada")["status"] == "needs_commission"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("plan_id", ["Installments3Months", None])
+async def test_accepted_statement_revision_rebuilds_incomplete_executive_without_refresh(card_app, plan_id):
+    from accounting_onboarding_ssot import POLICIES
+    from operational_balance_store import STATES
+    from tests.test_payment_method_fee_status import tariff
+
+    env = card_app
+    await env.db[POLICIES].insert_one({"user_id": "a", "policies": [
+        tariff("tabby", user_id="a", **({"plan_id": plan_id} if plan_id else {})),
+    ]})
+    await env.db[STATES].insert_many([
+        {"_id": owner, "owner_id": owner, "status": "active", "revision": 7,
+         "started_at": "2026-11-01T00:00:00Z", "provider_statement_reconciliation": {}}
+        for owner in ("a", "b")
+    ])
+    env.state["fee_authority"] = {"complete": False, "incomplete_buckets": ["tabby"],
+        "reason_codes": ["provider_payment_plan_required"]}
+    path = "/dashboard-v2/cards/executive"
+    first = (await env.client.get(path, params=PARAMS)).json()
+    initial_calls = env.calls["legacy"]
+    assert first["totals"]["payment_fees_complete"] is False
+    assert first["totals"]["net_profit"] is None
+
+    # A foreign upload and an unchanged local source cannot discard this cache.
+    await env.db[STATES].update_one({"_id": "b"}, {"$inc": {"revision": 1}})
+    assert (await env.client.get(path, params=PARAMS)).json() == first
+    assert env.calls["legacy"] == initial_calls
+
+    # The statement writer commits acceptance and one aggregate revision in a
+    # single CAS. Simulate the resulting fee response at the existing seam.
+    env.state["fee_authority"] = {"complete": True, "incomplete_buckets": [], "reason_codes": []}
+    await env.db[STATES].update_one({"_id": "a"}, {"$inc": {"revision": 1}})
+    current = (await env.client.get(path, params=PARAMS)).json()
+    assert env.calls["legacy"] == initial_calls + 1
+    assert current["totals"]["payment_fees_complete"] is True
+    assert current["totals"]["net_profit"] is not None
+    assert current["payment_method_setup"]["fee_revision"] == first["payment_method_setup"]["fee_revision"]
+    assert (await env.client.get(path, params=PARAMS)).json() == current
+    assert env.calls["legacy"] == initial_calls + 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("policy_overrides", [
+    None,
+    {"provider": "emkan", "plan_id": "plan"},
+    {"provider": "tabby", "plan_id": "plan", "status": "inactive"},
+    {"provider": "tabby", "plan_id": "plan", "event_type": "refund"},
+])
+async def test_unaffected_cards_do_not_read_weekly_statement_state(card_app, monkeypatch, policy_overrides):
+    from accounting_onboarding_ssot import POLICIES
+    import provider_fee_weekly_sources
+    from tests.test_payment_method_fee_status import tariff
+
+    env = card_app
+    if policy_overrides is not None:
+        await env.db[POLICIES].insert_one({"user_id": "a", "policies": [tariff(user_id="a", **policy_overrides)]})
+
+    async def no_weekly_source(*args, **kwargs):
+        raise AssertionError("unaffected card must not load statement acceptance state")
+
+    monkeypatch.setattr(provider_fee_weekly_sources, "load_weekly_fee_source_state", no_weekly_source)
+    for section in ("executive", "top-products", "period-summary"):
+        response = await env.client.get("/dashboard-v2/cards/" + section, params=PARAMS)
+        assert response.status_code == 200, response.text
+
+
+@pytest.mark.asyncio
+async def test_weekly_source_failure_preserves_tariffs_and_recovery_rebuilds_snapshot(card_app, monkeypatch):
+    from accounting_onboarding_ssot import POLICIES
+    import provider_fee_weekly_sources
+    from tests.test_payment_method_fee_status import tariff
+
+    env = card_app
+    await env.db[POLICIES].insert_one({"user_id": "a", "policies": [
+        tariff("tabby", user_id="a", plan_id="Installments3Months"),
+    ]})
+    env.state["fee_authority"] = {"complete": True, "incomplete_buckets": [], "reason_codes": []}
+    original = provider_fee_weekly_sources.load_weekly_fee_source_state
+
+    async def unavailable(*args, **kwargs):
+        raise ValueError("weekly_statement_source_unavailable")
+
+    monkeypatch.setattr(provider_fee_weekly_sources, "load_weekly_fee_source_state", unavailable)
+    path = "/dashboard-v2/cards/executive"
+    response = await env.client.get(path, params=PARAMS)
+    assert response.status_code == 200, response.text
+    failed_source = response.json()
+    assert failed_source["totals"]["payment_fees_complete"] is True
+    assert failed_source["payment_method_setup"]["complete"] is True
+    initial_calls = env.calls["legacy"]
+    assert (await env.client.get(path, params=PARAMS)).json() == failed_source
+    assert env.calls["legacy"] == initial_calls
+
+    monkeypatch.setattr(provider_fee_weekly_sources, "load_weekly_fee_source_state", original)
+    recovered = (await env.client.get(path, params=PARAMS)).json()
+    assert env.calls["legacy"] == initial_calls + 1
+    assert recovered["payment_method_setup"]["fee_revision"] == failed_source["payment_method_setup"]["fee_revision"]
+    assert recovered["totals"]["payment_fees_complete"] is True
+
+
+@pytest.mark.asyncio
+async def test_executive_fee_read_sharing_and_knowledge_cutoff_are_request_local(card_app):
+    from datetime import datetime
+
+    env = card_app
+    path = "/dashboard-v2/cards/executive"
+    first = await env.client.get(path, params=PARAMS)
+    assert first.status_code == 200, first.text
+    contexts = dict(env.state["fee_contexts"])
+    assert contexts["legacy"] is contexts["collector"]
+    shared = contexts["legacy"]["_request_fee_reads"]
+    knowledge = contexts["legacy"]["evidence_as_of"]
+    assert isinstance(shared, dict) and isinstance(knowledge, datetime) and knowledge.tzinfo is not None
+    assert "_request_fee_reads" not in first.text
+    shared["synthetic-marker"] = True
+
+    # A cache hit does not create another computation or a new task context.
+    assert (await env.client.get(path, params=PARAMS)).json() == first.json()
+    assert len(env.state["fee_contexts"]) == 2
+    refreshed = await env.client.get(path, params={**PARAMS, "refresh": True})
+    assert refreshed.status_code == 200, refreshed.text
+    next_contexts = dict(env.state["fee_contexts"][2:])
+    assert next_contexts["legacy"] is next_contexts["collector"]
+    assert next_contexts["legacy"]["_request_fee_reads"] is not shared
+    assert "synthetic-marker" not in next_contexts["legacy"]["_request_fee_reads"]
+    assert next_contexts["legacy"]["evidence_as_of"] >= knowledge
+    assert refreshed.json()["payment_method_setup"]["fee_revision"] == first.json()["payment_method_setup"]["fee_revision"]
 
 
 @pytest.mark.asyncio
