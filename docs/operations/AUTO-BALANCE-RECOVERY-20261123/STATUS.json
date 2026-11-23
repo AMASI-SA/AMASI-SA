@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "task_branch": "codex/automatic-balance-recovery-20261123",
   "reviewed_production_base": "422fffc8fb9c381165cc76b1ded5ca595773ce8e",
-  "status": "REVIEWED_SOURCE_CANDIDATE_PENDING_CURRENT_HEAD_RELEASE_GATES",
+  "status": "WIP_CI_STAGE_CONTRACT_CORRECTED_PENDING_LATEST_HEAD_VERIFICATION",
   "authorization": "Owner authorized guarded web/backend publication and canonical past-day reconciliation. Preserve financial rules, admission, deadlines, idempotency, foreign files and leases; no paid-resource or APK-gate bypass.",
   "published_release": {
     "pull_request": 2087,
@@ -75,8 +75,8 @@
     }
   },
   "release_state_for_this_followup": {
-    "source_head_ci": "Required for final source; older checkpoint results do not transfer.",
-    "reviewed_intent": "not frozen",
+    "source_head_ci": "A2 failed. Require new source HEAD all gates and independent focused green checks; do not substitute predecessor results.",
+    "reviewed_intent": "Not frozen; obtain a new exact-source artifact after its successful readiness run and all gates.",
     "merged": false,
     "published": false,
     "guard_lease_created": false
@@ -88,7 +88,7 @@
     "apk_published": false
   },
   "continuation": "Verify this exact integrated source and all current-HEAD gates, obtain its matching reviewed-intent candidate, then freeze intent-only B. Require latest B gates and normal protected merge on unchanged Production base. Recheck exact deployment CI, run independently approved actual /app rehearsal with fresh reviewed envelope, then original prepare/prepublish, one Emergent publish, original verify with3probes and inactive lease. After verified new runtime, one instrumented canonical owner refresh; inspect measured failure if any. Only after success verify business-dated payroll22/23 and eligible ads/shipping21/22 ledger entries and idempotency. Green health or a new timestamp alone does not prove historical completeness. No blind retry, financial-rule/index change, paid resource, APK bypass or foreign cleanup.",
-  "prior_source_checkpoint": "5daa244248694728160220aa8f0709a92a7d1d0c",
+  "prior_source_checkpoint": "e0e63089637ac5775e163a6dfe3a9e1a4cfb4418",
   "source_identity_note": "This source document is not self-referential. Exact final source A, intent B, merge D and evolving CI/publication outcomes are recorded in PR2092 and the owned issue1006 section after each checkpoint. Do not edit governed source after freezing the reviewed intent.",
   "provider_read_only_evidence": {
     "snapchat": "Existing selected USD account reports for21Nov and21-22Nov are saved and financially complete in the account timezone.21Nov and22Nov each show24confirmed hours. General integration overview incompleteness is not proof of missing financial daily evidence. No provider sync, selection or connection write performed. Account dates/amounts are not a ledger-posting claim."
@@ -101,5 +101,16 @@
     "release_envelope": "Not yet available. Require exact final A/B/D, reviewed runtime ID/tree, latest-D CI and fresh expected foreign-file count.",
     "scope": "Private /tmp verified/fsynced backup of all four generated cleanup targets, original operation lock, full source-history intent check, FF-only, unchanged canonical adapter and full proof verification; no lease or publication. Guarded actual rehearsal remains pending."
   },
-  "previous_publication_checkpoint": "PR2087_PUBLICATION_CHECKPOINT.md"
+  "previous_publication_checkpoint": "PR2087_PUBLICATION_CHECKPOINT.md",
+  "source_ci_correction": {
+    "prior_source_ci": "OperationalStockEligibility and OperationalBalanceBackend both failed only the two stale stage expectations; exact evidence in verification/source-A2-ci-failure.json.",
+    "supplement_patch_sha256": "04bb2258acdc088809711553163af6dd00070f0776d916f31692f4ae12fbec41",
+    "source_stage_test_sha256": "b642097b0a7cd5513b6a9dc3ae86f2a8463528c4ff74f8705758df1dcf7c8263",
+    "changes": "Add the three new cursor stages to both strict complete-sequence assertions; rename diagnostic regression test byte-identically to test_operational_balance_read_diagnostics.py so both existing CI selectors run it. No runtime/workflow/deadline/test-timeout change.",
+    "rename_sha256": "10785edec5c756ee964c48081cdf5941c61c94a6a9e98c4b4552c72c53dd4fd0",
+    "static_independent_review": "PASS exact bytes, strict expectations, no old-module import, both CI globs include renamed file, all previously reviewed runtime contents unchanged.",
+    "targeted_executable_verification": "Running at checkpoint time; root must obtain green author/nonauthor results and exact current-source CI before intent freeze. Later immutable receipts belong to PR2092/issue1006 without changing frozen source.",
+    "historical_manifest_note": "Original read-diagnostics candidate manifest and tests refer to A2 and its original test filename. The supplemental manifest maps the byte-identical rename for this source.",
+    "source_A2_candidate": "verification/source-A2-readiness-only.json is historical and not releasable; never use its artifact for a successor source SHA."
+  }
 }

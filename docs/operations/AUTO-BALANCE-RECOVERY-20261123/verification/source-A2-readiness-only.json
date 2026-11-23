@@ -1,0 +1,41 @@
+{
+  "source_git_sha": "e0e63089637ac5775e163a6dfe3a9e1a4cfb4418",
+  "source_base_git_sha": "422fffc8fb9c381165cc76b1ded5ca595773ce8e",
+  "source_tree": "e38381657de75fcfea11987231e3904d5ae60092",
+  "stage": "/tmp/mezan-pr2092-source-validation-fqdct5hz",
+  "source_ready_at": "2026-11-23T18:37:50.141287+00:00",
+  "canonical_validation_at": "2026-11-23T18:38:32.486175+00:00",
+  "status": "PASS",
+  "intent_sha256": "e33915bfd639111aec34a368f800a663b61c70a8089c54a811700dd2a9b87298",
+  "runtime_release_id": "rg5-2a90c58906e656b2b981f49537e734b67ef9903ad0d1d2f107d78064f65211a8",
+  "app_head_unchanged": true,
+  "notes": "Read original artifact bytes with digest/member/size bounds and called exact A2 load_candidate_release_intent on clean isolated checkout; no adapter/rehearsal/lease/publish/financial call.",
+  "release_approved": false,
+  "limitation": "Canonical readiness passed but another exact-A2 CI gate failed. This artifact is not releasable and must not be reused for a successor source SHA.",
+  "artifact_receipt": {
+    "source_git_sha": "e0e63089637ac5775e163a6dfe3a9e1a4cfb4418",
+    "source_base_git_sha": "422fffc8fb9c381165cc76b1ded5ca595773ce8e",
+    "artifact_id": 14850589354,
+    "run_id": 45239573853,
+    "zip_sha256": "7970f92f5c7d041f627e5984ccd80579f1c45629027b6cd6371b2a843645d3c6",
+    "intent_sha256": "e33915bfd639111aec34a368f800a663b61c70a8089c54a811700dd2a9b87298",
+    "intent_bytes": 1508531,
+    "intent_git_blob": "32f75acaaa474471181030fa94991156f01feac1",
+    "top_level_keys": [
+      "backend_runtime_source",
+      "branch",
+      "client_environment",
+      "critical_file_hashes",
+      "frontend_build",
+      "frontend_reproducibility",
+      "frontend_source",
+      "kind",
+      "protocol_version",
+      "release_control_source",
+      "runtime_identity",
+      "schema_version",
+      "source_base_git_sha",
+      "source_git_sha"
+    ]
+  }
+}

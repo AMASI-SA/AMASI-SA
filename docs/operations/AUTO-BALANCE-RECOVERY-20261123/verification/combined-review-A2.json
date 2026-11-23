@@ -1,0 +1,111 @@
+{
+  "status": "APPROVED",
+  "reviewer": "/root/historical_recalculation_contract",
+  "recorded_at": "2026-11-23T18:35:44.353Z",
+  "scope": "Combined interaction of the previously approved advertising authority health correction and request-local recovery read diagnostics.",
+  "source_git_sha": "e0e63089637ac5775e163a6dfe3a9e1a4cfb4418",
+  "source_tree_sha": "e38381657de75fcfea11987231e3904d5ae60092",
+  "source_parents": [
+    "5daa244248694728160220aa8f0709a92a7d1d0c"
+  ],
+  "reviewed_baseline_git_sha": "422fffc8fb9c381165cc76b1ded5ca595773ce8e",
+  "remote_blob_verification": "Each of nine runtime/test files was independently retrieved by exact source SHA; its returned Git blob matches the locally reviewed bytes.",
+  "files": [
+    {
+      "path": "backend/operational_demand_refresh.py",
+      "blob_sha": "ad5894ae81dd3dbff05a02aeba00337cec8149b2",
+      "display_url": "https://github.com/AMASI-SA/AMASI-SA/blob/e0e63089637ac5775e163a6dfe3a9e1a4cfb4418/backend/operational_demand_refresh.py",
+      "sha256": "e3eae95b059209d8365044d5e5bed05f25a78e668671eb0d3e2c25ac3e11563d"
+    },
+    {
+      "path": "backend/operational_read_runtime.py",
+      "blob_sha": "f9455f204882a0c8497bb78db69e15f27dd921cc",
+      "display_url": "https://github.com/AMASI-SA/AMASI-SA/blob/e0e63089637ac5775e163a6dfe3a9e1a4cfb4418/backend/operational_read_runtime.py",
+      "sha256": "813b62bb2afabd447a527b7c262fcf15a280a0c86746d9f4e8cb0e5987fe7c90"
+    },
+    {
+      "path": "backend/operational_balance_sources.py",
+      "blob_sha": "051f2151863b22968859bf6fc41956459d07d7f3",
+      "display_url": "https://github.com/AMASI-SA/AMASI-SA/blob/e0e63089637ac5775e163a6dfe3a9e1a4cfb4418/backend/operational_balance_sources.py",
+      "sha256": "b9e10ef40ade5fd67369b266b75fa24ebe9696ac3951632aec1d2c19246e637a"
+    },
+    {
+      "path": "backend/operational_balance_store.py",
+      "blob_sha": "20365dafb1250fe379f0ae1d8a1a08f2756bba78",
+      "display_url": "https://github.com/AMASI-SA/AMASI-SA/blob/e0e63089637ac5775e163a6dfe3a9e1a4cfb4418/backend/operational_balance_store.py",
+      "sha256": "0c702206368bb919c0e57fa93841023126753cdbf861c65d361e379062311a83"
+    },
+    {
+      "path": "frontend/src/pages/operational/visibleOperationalRead.js",
+      "blob_sha": "eae71d32b6e3f6d7de7d04363034c72295a64358",
+      "display_url": "https://github.com/AMASI-SA/AMASI-SA/blob/e0e63089637ac5775e163a6dfe3a9e1a4cfb4418/frontend/src/pages/operational/visibleOperationalRead.js",
+      "sha256": "865b93aafed038e48d6456469b56caf4ab77fa287ce092ca45b576f10cbbd221"
+    },
+    {
+      "path": "backend/tests/test_operational_refresh_read_diagnostics.py",
+      "blob_sha": "249c0911e61ab0fcbf7a51c5de6b27e0eac3f46e",
+      "display_url": "https://github.com/AMASI-SA/AMASI-SA/blob/e0e63089637ac5775e163a6dfe3a9e1a4cfb4418/backend/tests/test_operational_refresh_read_diagnostics.py",
+      "sha256": "10785edec5c756ee964c48081cdf5941c61c94a6a9e98c4b4552c72c53dd4fd0"
+    },
+    {
+      "path": "frontend/src/pages/operational/visibleOperationalRead.test.js",
+      "blob_sha": "a047153520c35c24201960ae5ebfcc1b55a18ff1",
+      "display_url": "https://github.com/AMASI-SA/AMASI-SA/blob/e0e63089637ac5775e163a6dfe3a9e1a4cfb4418/frontend/src/pages/operational/visibleOperationalRead.test.js",
+      "sha256": "801dfff16079ea8820481cbcb92f17151d1cde9033680e6c828fb4852a553b28"
+    },
+    {
+      "path": "backend/operational_source_freshness.py",
+      "blob_sha": "6287760ea55b5f3dc5bda510c46d9c4fb175113d",
+      "display_url": "https://github.com/AMASI-SA/AMASI-SA/blob/e0e63089637ac5775e163a6dfe3a9e1a4cfb4418/backend/operational_source_freshness.py",
+      "sha256": "a07a35e8064724701e059f7bfb3c8024ce72badc06df49c66d6a0d9b23460f6f"
+    },
+    {
+      "path": "backend/tests/test_operational_source_freshness.py",
+      "blob_sha": "7e4b6db382a7684438a578f57bbee1672a95f078",
+      "display_url": "https://github.com/AMASI-SA/AMASI-SA/blob/e0e63089637ac5775e163a6dfe3a9e1a4cfb4418/backend/tests/test_operational_source_freshness.py",
+      "sha256": "0f3d564f7d1c4cbf53f905bccf2b4f57ca0c3199f49ede294786e00c6bd9cd31"
+    }
+  ],
+  "release_intent": {
+    "unchanged_from_deployed_D": true,
+    "blob_sha": "59a341dcd70a72d450033ab4883a44bc4890dd27"
+  },
+  "diagnostics_review_receipt": {
+    "path": "local-results/independent-review.json",
+    "sha256": "23458bb2cf78478bb89dd48c8dce90cfa13bced5d38d48835d04e6e1579dbfca"
+  },
+  "blocking_findings": [],
+  "interaction_checks": [
+    "Health uses bounded metadata-only native/operational binding reads and the unchanged pure canonical funding merge; it does not invoke financial collection, mutation or archive hydration.",
+    "load_collections observes primary orders only when explicitly enabled; observe_primary_orders defaults to False. The source collector has exactly one literal True opt-in at its primary source read.",
+    "Health's configuration and provider metadata reads therefore do not enter or alter the primary-read diagnostics context.",
+    "Store changes only wrap existing mutation phases in diagnostic timings; the pure digest helper used by funding authority is unchanged.",
+    "Canonical 408/409 diagnostics remain compatible with existing health failure sanitization, and do not turn a failed refresh into current/refreshed state.",
+    "Release intent is byte-identical to deployed D; this combined code approval does not approve deployment with that old intent."
+  ],
+  "targeted_execution": {
+    "exit_code": 0,
+    "summary": "Two in-memory compatibility assertions passed: enriched 409 source failure and enriched 408 request timeout produce the same sanitized health failure as the corresponding original error.",
+    "python": "/workspace/scratch/bc2035025680/backend-freshness-venv/bin/python -B",
+    "environment": {
+      "PYTHONDONTWRITEBYTECODE": "1",
+      "PYTHONPATH": "/workspace/scratch/bc2035025680/recovery-pr2092-integration/backend:/workspace/scratch/bc2035025680/health-ad-binding-fix-20261123/backend:/workspace/scratch/bc2035025680/recovery-read-diagnostics-20261123/backend"
+    },
+    "assertions": [
+      "safe_failure(HTTPException(409, source_failure_detail(...) | evidence)) == safe_failure(HTTPException(409, source_failure_detail(...)))",
+      "safe_failure(HTTPException(408, timeout | evidence)) == safe_failure(HTTPException(408, timeout))"
+    ],
+    "broad_tests_repeated": false
+  },
+  "prior_verified_suites": {
+    "health": "88 passed, 61 subtests passed; exit 0",
+    "diagnostics_backend": "238 passed; exit 0",
+    "diagnostics_frontend": "73 passed; exit 0"
+  },
+  "limits": [
+    "No CI gate conclusion was inferred from older commits; root owns current-A2 CI and release-gate inspection.",
+    "No runtime edit, GitHub write, live app/database/provider call, publication or financial action occurred in this combined review.",
+    "Diagnostic elapsed/read/join/close times overlap and do not establish exclusive database or CPU cost.",
+    "Successful historical recalculation and production health remain unverified by this code review; final A/B and deployment verification are separate gates."
+  ]
+}

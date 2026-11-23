@@ -24,6 +24,7 @@ from test_operational_balance_sources import DB as SourceDB, NOW, START, order
 PRIVATE = 'private-source-stage order=hidden-order amount=9182.37 token=never-log'
 ACTOR = 'private-source-stage-actor'
 SOURCE_STAGES = (
+    'orders_cursor_build', 'orders_cursor_read', 'orders_rows_validate',
     'source_primary_reads', 'source_fee_settings', 'source_setup', 'source_statements',
     'source_delivery_history', 'source_transactions', 'source_native_links',
     'source_bundles', 'source_option_catalog', 'source_order_indexes', 'source_orders', 'source_invoices',
@@ -227,6 +228,8 @@ def test_real_collection_notifies_once_after_primary_success_before_remaining_re
         def ready():
             assert database.inflight == 0 and 'settings' not in database.sources.reads
             assert [(row['stage'], row['outcome']) for row in demand_context().stage_timings] == [
+                ('orders_cursor_build', 'complete'), ('orders_cursor_read', 'complete'),
+                ('orders_rows_validate', 'complete'),
                 ('source_primary_reads', 'complete')]
             notifications.append('primary-complete')
 
