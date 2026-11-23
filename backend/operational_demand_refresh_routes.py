@@ -9,6 +9,7 @@ from starlette.requests import Request
 
 from operational_balance_store import STATES, digest, fail
 from operational_demand_refresh import demand_context, refresh_stage, run_visible_refresh
+from operational_balance_freshness import begin_attempt, finish_attempt, source_warnings
 
 
 _RECEIPT_FAILURES = frozenset({
@@ -116,11 +117,16 @@ def attach_demand_refresh_routes(router, db, current_user, scope):
 
         completed_receipt = None
         refresh_context = None
+        health_attempt = None
+        health_warnings = []
 
         async def update():
-            nonlocal completed_receipt, refresh_context
+            nonlocal completed_receipt, refresh_context, health_attempt, health_warnings
             from operational_visible_evidence import acquire_visible_evidence
             refresh_context = demand_context()
+            # Start only after the existing lease has admitted the refresh.
+            # This metadata records an attempt; it never admits financial work.
+            health_attempt = await begin_attempt(db, owner)
             with refresh_stage("native_evidence"):
                 options = {"courier_order_id": payload.courier_order_id} if payload.courier_order_id is not None else {}
                 native_evidence = await acquire_visible_evidence(db, owner, **options)
@@ -129,13 +135,15 @@ def attach_demand_refresh_routes(router, db, current_user, scope):
             completed_receipt = _target_receipt(native_evidence, payload.courier_order_id)
             with refresh_stage("aggregate"):
                 state = await refresh(db, owner)
+            health_warnings = source_warnings(state, native_evidence)
             return {"status": "refreshed", "as_of": state.get("engine", {}).get("as_of"),
                     "revision": state.get("revision"), "session_scope": session_scope,
                     "native_evidence": native_evidence}
 
         try:
-            return await run_visible_refresh(request, db, owner, actor_id, verify, update)
+            result = await run_visible_refresh(request, db, owner, actor_id, verify, update)
         except HTTPException as error:
+            await finish_attempt(db, owner, health_attempt, error=error)
             detail = error.detail
             if (completed_receipt is None or type(detail) is not dict
                     or type(detail.get("code")) is not str
@@ -165,5 +173,11 @@ def attach_demand_refresh_routes(router, db, current_user, scope):
             raise HTTPException(status_code=error.status_code, headers=error.headers,
                 detail={**detail, "session_scope": session_scope,
                         "native_evidence": {"courier": completed_receipt}}) from None
+        except BaseException as error:
+            await finish_attempt(db, owner, health_attempt, error=error)
+            raise
+        await finish_attempt(db, owner, health_attempt, result=result, warnings=health_warnings)
+        return result
 
     return router
+

@@ -1,6 +1,7 @@
 import { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
+import GlobalBalanceFreshness from "./pages/operational/GlobalBalanceFreshness";
 import ProtectedRoute from "./components/ProtectedRoute";
 import AuthLoadingScreen from "./components/AuthLoadingScreen";
 import AuthRecoveryScreen from "./components/AuthRecoveryScreen";
@@ -499,6 +500,7 @@ export default function App() {
     return (
         <BrowserRouter>
             <AuthProvider>
+                <GlobalBalanceFreshness />
                 <AppRoutes />
                 <Toaster richColors position="top-center" />
             </AuthProvider>

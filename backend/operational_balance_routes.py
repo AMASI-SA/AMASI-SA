@@ -485,7 +485,7 @@ def make_operational_balance_router(db, current_user):
                 permission = "reports"
             elif re.fullmatch(r"/(inventory-purchases|supplier-adjustments)/entry/[^/]+/.+", path):
                 permission = "move"
-            elif path in {"/reports", "/cost-exposure", "/suppliers", "/supplier-invoice-review", "/financial-position", "/movements", "/daily-financial-movements", "/obligations"} or re.fullmatch(r"/accounts/(bank|cash)/[^/]+", path):
+            elif path in {"/reports", "/freshness", "/cost-exposure", "/suppliers", "/supplier-invoice-review", "/financial-position", "/movements", "/daily-financial-movements", "/obligations"} or re.fullmatch(r"/accounts/(bank|cash)/[^/]+", path):
                 permission = "reports"
             elif path in {"/customer-returns", "/customer-exchanges"}:
                 permission = "reports"
@@ -1443,6 +1443,8 @@ def make_operational_balance_router(db, current_user):
     attach_delivery_confirmation_routes(router, db, current_user, scope, guarded)
     from operational_demand_refresh_routes import attach_demand_refresh_routes
     attach_demand_refresh_routes(router, db, current_user, scope)
+    from operational_balance_freshness_routes import attach_freshness_routes
+    attach_freshness_routes(router, db, current_user, scope)
     from operational_provider_statement_routes import attach_provider_statement_routes
     attach_provider_statement_routes(router, db, current_user, scope, guarded)
     from operational_balance_access_routes import install_access_routes
@@ -1456,3 +1458,4 @@ def make_operational_balance_router(db, current_user):
     from operational_workspace_pending import install_pending_command_routes
     install_pending_command_routes(router, db, current_user, scope)
     return router
+

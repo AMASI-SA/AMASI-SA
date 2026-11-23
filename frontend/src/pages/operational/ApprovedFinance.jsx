@@ -6,6 +6,8 @@ import { simpleBalancesApi as api } from './simpleBalancesApi';
 import { authIdentity } from './simpleBalancesHooks';
 import { movementDate, movementRecorder, movementTitle, validBootstrap } from './simpleBalancesModel';
 import { assertWorkspace, retryWorkspaceRead, useWorkspaceRead } from './workspaceReadHooks';
+import { useVisibleBalanceFreshness } from './useVisibleBalanceFreshness';
+import BalanceFreshnessNotice from './BalanceFreshnessNotice';
 import WorkspaceResourcePicker from './WorkspaceResourcePicker';
 import { Amount, Heading, Icon, IconBox, isAsset } from './ApprovedFinanceUI';
 import ApprovedHome from './ApprovedHome';
@@ -81,6 +83,7 @@ function FinanceWorkspace({context:bootstrap,identity,user,view,to,params,reload
   const navigate=useNavigate(), location=useLocation();
   const [modal,setModal]=useState(null), [historyPage,setHistoryPage]=useState(1);
   const [creatingCash,setCreatingCash]=useState(false);
+  const [sourceGeneration,setSourceGeneration]=useState(0);
   const deferredRefresh=useRef(false);
   useEffect(()=>{
     if(deferredRefresh.current && !['refund','collections','customer-collections'].includes(view)){
@@ -107,6 +110,10 @@ function FinanceWorkspace({context:bootstrap,identity,user,view,to,params,reload
     if(value?.kind!==selectedKind || value.id!==selectedId || !value.access || typeof value.name!=='string')throw new Error('invalid selected resource');
     return value;
   },selectionKey,Boolean(scoped&&selectedKind&&selectedId&&!ownerLedger));
+  const freshness=useVisibleBalanceFreshness({context,identity,
+    canRefresh:!modal&&!['entry','special-entry','refund','customer-collections','collections'].includes(view),
+    onConfirmed:()=>{setSourceGeneration(value=>value+1);selectedRead.reload();},
+  });
   const selected=scoped?(ownerLedger?(ledgerSelection?.key===ledgerKey?ledgerSelection.value:null):selectedRead.data):null;
   const ledgerTarget=ownerLedger?{kind:selectedKind,id:selectedId}:null;
   const selectedIdentity=ledgerTarget||selected;
@@ -219,7 +226,7 @@ function FinanceWorkspace({context:bootstrap,identity,user,view,to,params,reload
     default:content=<ApprovedHome context={context} to={to} allowedTo={allowedTo} canAdd={canAdd} onCreateCash={createCash} onDetail={row=>setModal({row})}/>;
   }
   const row=modal?.row;
-  return <ApprovedFinanceShell context={context} user={user} view={view} title={title} active={active} to={to}>{recovered && <p className="note" role="status">سبق تسجيل الحركة. رقم الإيصال <bdi>{recovered.movement}</bdi></p>}{savedInvoice && <p className="note" role="status">حُفظت فاتورة الشراء الآجل <bdi>{savedInvoice.number}</bdi> على حساب المورد.</p>}{view==='ledger' && selected?.kind==='cash' && selected.id===location.state?.createdCashId && <p className="note" role="status">تمت إضافة {selected.name}.</p>}<Suspense fallback={<p className="empty" role="status">جارٍ فتح الصفحة…</p>}>{content}</Suspense>
+  return <ApprovedFinanceShell context={context} user={user} view={view} title={title} active={active} to={to}>{freshness.owner&&<BalanceFreshnessNotice state={freshness} canUpdate={freshness.canRefresh} onCheck={freshness.canRefresh?freshness.retry:undefined}/>}{recovered && <p className="note" role="status">سبق تسجيل الحركة. رقم الإيصال <bdi>{recovered.movement}</bdi></p>}{savedInvoice && <p className="note" role="status">حُفظت فاتورة الشراء الآجل <bdi>{savedInvoice.number}</bdi> على حساب المورد.</p>}{view==='ledger' && selected?.kind==='cash' && selected.id===location.state?.createdCashId && <p className="note" role="status">تمت إضافة {selected.name}.</p>}<React.Fragment key={sourceGeneration}><Suspense fallback={<p className="empty" role="status">جارٍ فتح الصفحة…</p>}>{content}</Suspense></React.Fragment>
     {modal?.cash && createCash && <Dialog title="إضافة صندوق نقدي" locked={creatingCash} onClose={()=>setModal(null)}>
       <div className="cash-create"><Suspense fallback={<p role="status">جارٍ فتح النموذج…</p>}>
         <AddOperationalEntity kind="cash" onBusyChange={setCreatingCash} onCancel={()=>setModal(null)} onAdded={account=>{

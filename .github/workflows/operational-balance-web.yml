@@ -67,6 +67,7 @@ jobs:
         run: >-
           python -B -m pytest --noconftest -q
           backend/tests/test_operational_balance*.py
+          backend/tests/test_operational_source_freshness.py
           backend/tests/test_inventory_option_configuration.py
           backend/tests/test_inventory_payment_allocation_lineage.py
           backend/tests/test_customer_inventory_unified_activity.py
@@ -137,6 +138,11 @@ jobs:
           import xml.etree.ElementTree as ET
           cases = ET.parse('operational-backend.xml').findall('.//testcase')
           assert len(cases) >= 3500, 'Operational test collection incomplete'
+          for suite in ('test_operational_balance_freshness', 'test_operational_balance_freshness_routes',
+                        'test_operational_source_freshness'):
+              selected = [c for c in cases if suite in c.get('classname', '')]
+              assert selected, suite + ' not collected'
+              assert not any(c.find('skipped') is not None for c in selected), suite + ' skipped'
           for suite, minimum in (('test_read_path_diagnostics', 15),
                                  ('test_operational_context_read_diagnostics', 14),
                                  ('test_assembly_read_diagnostics', 11)):
@@ -613,3 +619,4 @@ jobs:
             ${{ runner.temp }}/operational-balances-browser/financial-full-report.xlsx
             ${{ runner.temp }}/operational-balances-browser/fixture-manifest.json
           if-no-files-found: error
+
