@@ -1,0 +1,59 @@
+[
+  {
+    "id": 14816627096,
+    "name": "operational-backend-results",
+    "size_in_bytes": 123156,
+    "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14816627096",
+    "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14816627096/zip",
+    "expired": false,
+    "created_at": "2026-11-23T12:05:55Z",
+    "expires_at": "2027-02-21T11:51:32Z",
+    "updated_at": "2026-11-23T12:05:55Z",
+    "digest": "sha256:ef97f8043d140055e452b05c648d6180533227544b9fcfd457d108c5e9b957bd",
+    "workflow_run": {
+      "id": 45168927861,
+      "repository_id": 1250664189,
+      "head_repository_id": 1250664189,
+      "head_branch": "codex/operational-balance-server-r4-20261123",
+      "head_sha": "0bd6a3fadd33d6354ebdc8dec814bcb80b0d7218"
+    }
+  },
+  {
+    "id": 14814948906,
+    "name": "operational-frontend-results",
+    "size_in_bytes": 53345,
+    "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14814948906",
+    "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14814948906/zip",
+    "expired": false,
+    "created_at": "2026-11-23T11:53:37Z",
+    "expires_at": "2027-02-21T11:51:32Z",
+    "updated_at": "2026-11-23T11:53:37Z",
+    "digest": "sha256:d8a7d95076c35387b3665fd2f01d8ccd36cbc0edf40ba4febca11b40c7ea86c7",
+    "workflow_run": {
+      "id": 45168927861,
+      "repository_id": 1250664189,
+      "head_repository_id": 1250664189,
+      "head_branch": "codex/operational-balance-server-r4-20261123",
+      "head_sha": "0bd6a3fadd33d6354ebdc8dec814bcb80b0d7218"
+    }
+  },
+  {
+    "id": 14815444243,
+    "name": "eligibility-backend-0bd6a3fadd33d6354ebdc8dec814bcb80b0d7218",
+    "size_in_bytes": 93752,
+    "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14815444243",
+    "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14815444243/zip",
+    "expired": false,
+    "created_at": "2026-11-23T11:59:53Z",
+    "expires_at": "2027-02-21T11:51:32Z",
+    "updated_at": "2026-11-23T11:59:53Z",
+    "digest": "sha256:e47cd13308ac056e273d52bae4fdbc955d52e994ac8ffcdd91501cd3b192b4cc",
+    "workflow_run": {
+      "id": 45168927735,
+      "repository_id": 1250664189,
+      "head_repository_id": 1250664189,
+      "head_branch": "codex/operational-balance-server-r4-20261123",
+      "head_sha": "0bd6a3fadd33d6354ebdc8dec814bcb80b0d7218"
+    }
+  }
+]

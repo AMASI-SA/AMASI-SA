@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Owner-run isolated PR2082 host rehearsal; disabled until exact-B acceptance.
+"""Owner-run isolated PR2082 host rehearsal for the accepted exact-B release.
 
 Preserves current Mezan86 source and adds the reviewed operational reversal and
 account-history source. It never creates/closes a lease, stages /app, merges or
@@ -25,7 +25,7 @@ import sys
 import tempfile
 from datetime import datetime, timezone
 
-ENABLED = False
+ENABLED = True
 N = "44122bcc986bd1dff1532b9ad62c0268e899a179"
 A = "aec203382b387c3812509084e77c2922aa860877"
 A_TREE = "f133f04fd5759c57f5cce195e35ae03ba53ef6da"
@@ -98,8 +98,8 @@ def validate_pins():
 
 
 def main():
-    # This is deliberately the first operation. In the delivered draft it stops
-    # before reading /app, reading evidence, status, networking, or /tmp creation.
+    # Check immutable pins and enabled state before /app, status, networking,
+    # or creation of this helper's isolated work directory.
     validate_pins()
     for signum in (signal.SIGTERM, signal.SIGHUP):
         signal.signal(signum, interrupted)

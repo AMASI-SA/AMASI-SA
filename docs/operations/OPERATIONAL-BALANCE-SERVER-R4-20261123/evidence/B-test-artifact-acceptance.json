@@ -1,0 +1,47 @@
+{
+  "kind": "pr2082_exact_B_downloaded_test_artifact_acceptance",
+  "B": "0bd6a3fadd33d6354ebdc8dec814bcb80b0d7218",
+  "B_tree": "4fa54935f420e2a546c2237c0fb7b0ef9ef8367d",
+  "groups": {
+    "operational": {
+      "testcases": 6615,
+      "reported_tests_including_subtests": 6705,
+      "subtests": 90,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "xml_sha256": "f0a6c8bd24051a41f06e9eed58142fd6a1134e721225aa07e976fbebc3a41d49",
+      "same_testcase_identities_as_accepted_source_A": true
+    },
+    "demand": {
+      "testcases": 106,
+      "reported_tests_including_subtests": 106,
+      "subtests": 0,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "xml_sha256": "1456abc413472ef80bf503f1c4fcfee9a54a18c7a881f1c072726d929c5d37d6",
+      "same_testcase_identities_as_accepted_source_A": true
+    },
+    "stock": {
+      "testcases": 5531,
+      "reported_tests_including_subtests": 5628,
+      "subtests": 97,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "xml_sha256": "bee7a599879aca9b9cad135503389a8d795df3eed1edf9090c9cc68ad5808960"
+    },
+    "frontend": {
+      "success": true,
+      "numPassedTests": 1675,
+      "numTotalTests": 1675,
+      "numPassedTestSuites": 104,
+      "numFailedTests": 0,
+      "numPendingTests": 0,
+      "numTodoTests": 0,
+      "numRuntimeErrorTestSuites": 0
+    }
+  },
+  "actual_host_or_publication_performed": false
+}

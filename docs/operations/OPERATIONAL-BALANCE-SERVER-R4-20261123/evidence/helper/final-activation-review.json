@@ -1,0 +1,147 @@
+{
+  "A_to_B_only_intent": true,
+  "all_handlers_guards_validators_main_identical": true,
+  "app_accessed": false,
+  "baseline_commit": "beda3384ab3b24f8db1663e9e34549111e94ad46",
+  "baseline_repository_path": "docs/operations/OPERATIONAL-BALANCE-SERVER-R4-20261123/HOST-REHEARSE-2082.py",
+  "baseline_sha256": "6f85c5c53418d5229a4bcb05fdb31516e9191331b53c0bff51a17dcefec7ea0f",
+  "baseline_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/contents/docs/operations/OPERATIONAL-BALANCE-SERVER-R4-20261123/HOST-REHEARSE-2082.py?ref=beda3384ab3b24f8db1663e9e34549111e94ad46",
+  "concrete_blockers": [],
+  "enabled_helper_path": "/workspace/scratch/dfe063f5aca0/r4-release-evidence/HOST-REHEARSE-2082.py",
+  "enabled_helper_sha256": "3a41c78f78f19509129a2f8e0f15a903b7505d45b16fea89b9dd54c8621ec2f8",
+  "helper_unchanged_during_review": true,
+  "host_or_lease_operation_performed": false,
+  "kind": "pr2082_independent_final_helper_activation_review",
+  "main_executed": false,
+  "missing_static_preconditions": [],
+  "normalized_AST_identical": true,
+  "only_executable_change": {
+    "ENABLED": {
+      "new": true,
+      "old": false
+    }
+  },
+  "original_guard_hashes": {
+    "backend/frontend_build_identity.py": {
+      "0bd6a3fadd33d6354ebdc8dec814bcb80b0d7218": "7896dfa2c9b4fea8c426b47c5b75e331380c0a4a3f947028aa4f5afa101f9d87",
+      "44122bcc986bd1dff1532b9ad62c0268e899a179": "7896dfa2c9b4fea8c426b47c5b75e331380c0a4a3f947028aa4f5afa101f9d87",
+      "aec203382b387c3812509084e77c2922aa860877": "7896dfa2c9b4fea8c426b47c5b75e331380c0a4a3f947028aa4f5afa101f9d87"
+    },
+    "backend/release_protocol_v5.py": {
+      "0bd6a3fadd33d6354ebdc8dec814bcb80b0d7218": "1961ac18a5363ec425ceec4f98f96f611d378b09e19380d4756bd6776987d8ef",
+      "44122bcc986bd1dff1532b9ad62c0268e899a179": "1961ac18a5363ec425ceec4f98f96f611d378b09e19380d4756bd6776987d8ef",
+      "aec203382b387c3812509084e77c2922aa860877": "1961ac18a5363ec425ceec4f98f96f611d378b09e19380d4756bd6776987d8ef"
+    },
+    "scripts/production_release_guard.py": {
+      "0bd6a3fadd33d6354ebdc8dec814bcb80b0d7218": "4e56f1f60f5f79931658b8f95a0aeb2269471025ca84f7e5b651cd284806349a",
+      "44122bcc986bd1dff1532b9ad62c0268e899a179": "4e56f1f60f5f79931658b8f95a0aeb2269471025ca84f7e5b651cd284806349a",
+      "aec203382b387c3812509084e77c2922aa860877": "4e56f1f60f5f79931658b8f95a0aeb2269471025ca84f7e5b651cd284806349a"
+    }
+  },
+  "original_guard_hashes_verified": true,
+  "pinned_identity": {
+    "A": "aec203382b387c3812509084e77c2922aa860877",
+    "A_TREE": "f133f04fd5759c57f5cce195e35ae03ba53ef6da",
+    "B": "0bd6a3fadd33d6354ebdc8dec814bcb80b0d7218",
+    "B_TREE": "4fa54935f420e2a546c2237c0fb7b0ef9ef8367d",
+    "INTENT_SHA256": "59da5ee6a86f3bfa5a1b8446c6aacb8e180144bc15ccaca3e414e1ec23b151ab",
+    "N": "44122bcc986bd1dff1532b9ad62c0268e899a179",
+    "PRODUCTION_BRANCH": "hotfix/prod-snap-meta-final",
+    "RELEASE_ID": "rg5-12e0f132b3ee688815cd2ec401bd34c43706d193492edacc7be6c5ca6e6ade8a",
+    "RELEASE_REF": "refs/heads/codex/operational-balance-server-r4-20261123"
+  },
+  "pinned_identity_verified": true,
+  "prerequisite_evidence_review": {
+    "all_attempt_1": true,
+    "all_exact_B": true,
+    "check_conclusions": {
+      "skipped": 6,
+      "success": 25
+    },
+    "conditional_skip_explanation": "Four out-of-scope Snapchat jobs, unrelated TikTok reviewed-candidate branch job, and manual deployment notification gated on production push; all applicable test gates executed and passed.",
+    "exact_B_final_CI_path": "/workspace/scratch/dfe063f5aca0/r4-release-evidence/B-final-CI.json",
+    "exact_B_final_CI_sha256": "d57cff9a3a462f7ef8a5fe84b75b39e7162d047076803ee02f79c4aa361eaac8",
+    "four_artifact_acceptance_path": "/workspace/scratch/dfe063f5aca0/r4-release-evidence/ci-B/test-artifact-acceptance.json",
+    "four_artifact_acceptance_sha256": "32996d2a5b3392004783501d694927688855768bd078638edf739b1c52217b53",
+    "four_artifact_audit_accepted": true,
+    "previous_signal_cases_passed": 4,
+    "required_executed_checks": [
+      "Emergent Host Node 20.20.2 clean-clone adapter rehearsal",
+      "Emergent Host Node 24.19.0 clean-clone adapter rehearsal",
+      "Host Node 20.20.2 engine and dispatcher contract",
+      "Host Node 24.19.0 engine and dispatcher contract",
+      "Operational Balance Backend",
+      "Operational Balance Frontend",
+      "Operational balances browser, mobile and visibility acceptance",
+      "Canonical worker excludes operational balance jobs",
+      "G47 real Mongo purchase, payment, opening and component lifecycle",
+      "G47 purchase and receiving UI tests and build",
+      "Stock eligibility, reservation and consumption on isolated Mongo",
+      "Backend security contracts",
+      "Frontend dependency and CSP checks",
+      "Backend preflight",
+      "Frontend build"
+    ],
+    "run_conclusions": {
+      "skipped": 1,
+      "success": 12
+    },
+    "scope": "Reviewed saved exact-B CI and artifact-acceptance records; no CI rerun or artifact test repetition.",
+    "signal_logic_unchanged": true
+  },
+  "reviewed_at": "2026-11-23T12:12:25.528182+00:00",
+  "runtime_preconditions_note": "Fresh host guard/ref/disk checks remain enforced by the unchanged helper; no host observation or actual rehearsal is claimed.",
+  "runtime_preconditions_preserved": [
+    "Fresh original inactive guard, exact shared Production branch/HEAD and tracked cleanliness",
+    "Original guard/dependency hashes and non-symlink original checkout",
+    "Exact current remote Production N and candidate B before and after adapter",
+    "Immutable A/B parents, trees, intent bytes and original intent loader contract",
+    "Isolated owned clone, temporary/cache paths, minimum free-space preflight",
+    "Original adapter and exact runtime/artifact/package-boundary evidence",
+    "Bounded owned-process cleanup and retained result on interruption",
+    "No shared staging, lease creation/closure, merge or publication"
+  ],
+  "source_and_intent_parents_verified": true,
+  "source_modified": false,
+  "tests_repeated": false,
+  "textual_diff": [
+    "--- immutable-disabled-helper",
+    "+++ enabled-helper",
+    "@@ -1,5 +1,5 @@",
+    " #!/usr/bin/env python3",
+    "-\"\"\"Owner-run isolated PR2082 host rehearsal; disabled until exact-B acceptance.",
+    "+\"\"\"Owner-run isolated PR2082 host rehearsal for the accepted exact-B release.",
+    " ",
+    " Preserves current Mezan86 source and adds the reviewed operational reversal and",
+    " account-history source. It never creates/closes a lease, stages /app, merges or",
+    "@@ -25,7 +25,7 @@",
+    " import tempfile",
+    " from datetime import datetime, timezone",
+    " ",
+    "-ENABLED = False",
+    "+ENABLED = True",
+    " N = \"44122bcc986bd1dff1532b9ad62c0268e899a179\"",
+    " A = \"aec203382b387c3812509084e77c2922aa860877\"",
+    " A_TREE = \"f133f04fd5759c57f5cce195e35ae03ba53ef6da\"",
+    "@@ -98,8 +98,8 @@",
+    " ",
+    " ",
+    " def main():",
+    "-    # This is deliberately the first operation. In the delivered draft it stops",
+    "-    # before reading /app, reading evidence, status, networking, or /tmp creation.",
+    "+    # Check immutable pins and enabled state before /app, status, networking,",
+    "+    # or creation of this helper's isolated work directory.",
+    "     validate_pins()",
+    "     for signum in (signal.SIGTERM, signal.SIGHUP):",
+    "         signal.signal(signum, interrupted)"
+  ],
+  "unchanged_definitions": [
+    "Stop",
+    "interrupted",
+    "main",
+    "require",
+    "stop_owned_build",
+    "validate_pins"
+  ],
+  "verdict": "activation_review_pass"
+}

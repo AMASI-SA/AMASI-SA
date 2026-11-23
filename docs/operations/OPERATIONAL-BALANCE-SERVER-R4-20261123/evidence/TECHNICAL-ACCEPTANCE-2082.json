@@ -1,0 +1,102 @@
+{
+  "kind": "pr2082_final_technical_acceptance",
+  "accepted_at": "2026-11-23T12:15:17.362999+00:00",
+  "technical_accepted": true,
+  "N": "44122bcc986bd1dff1532b9ad62c0268e899a179",
+  "A": "aec203382b387c3812509084e77c2922aa860877",
+  "A_tree": "f133f04fd5759c57f5cce195e35ae03ba53ef6da",
+  "B": "0bd6a3fadd33d6354ebdc8dec814bcb80b0d7218",
+  "B_tree": "4fa54935f420e2a546c2237c0fb7b0ef9ef8367d",
+  "intent_sha256": "59da5ee6a86f3bfa5a1b8446c6aacb8e180144bc15ccaca3e414e1ec23b151ab",
+  "runtime_release_id": "rg5-12e0f132b3ee688815cd2ec401bd34c43706d193492edacc7be6c5ca6e6ade8a",
+  "frontend_artifact_tree_sha256": "27b7717df8a2dcc2b46868da4d103b44d33e2ad07c879da6563ecaef7e545b9a",
+  "source_gates": {
+    "workflows_success": 12,
+    "checks_success": 23,
+    "conditional_skips": 6
+  },
+  "final_B_gates": {
+    "applicable_workflows_success": 12,
+    "unrelated_workflow_skips": 1,
+    "checks_success": 25,
+    "conditional_check_skips": 6,
+    "failures": 0,
+    "cancellations": 0,
+    "neutral": 0,
+    "pending": 0,
+    "all_attempt1": true
+  },
+  "tests": {
+    "operational": {
+      "testcases": 6615,
+      "reported_tests_including_subtests": 6705,
+      "subtests": 90,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "xml_sha256": "f0a6c8bd24051a41f06e9eed58142fd6a1134e721225aa07e976fbebc3a41d49",
+      "same_testcase_identities_as_accepted_source_A": true
+    },
+    "demand": {
+      "testcases": 106,
+      "reported_tests_including_subtests": 106,
+      "subtests": 0,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "xml_sha256": "1456abc413472ef80bf503f1c4fcfee9a54a18c7a881f1c072726d929c5d37d6",
+      "same_testcase_identities_as_accepted_source_A": true
+    },
+    "stock": {
+      "testcases": 5531,
+      "reported_tests_including_subtests": 5628,
+      "subtests": 97,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "xml_sha256": "bee7a599879aca9b9cad135503389a8d795df3eed1edf9090c9cc68ad5808960"
+    },
+    "frontend": {
+      "success": true,
+      "numPassedTests": 1675,
+      "numTotalTests": 1675,
+      "numPassedTestSuites": 104,
+      "numFailedTests": 0,
+      "numPendingTests": 0,
+      "numTodoTests": 0,
+      "numRuntimeErrorTestSuites": 0
+    }
+  },
+  "local_tests": {
+    "backend": 237,
+    "frontend": 339,
+    "frontend_suites": 16,
+    "local_environment_failures_retained": true,
+    "omitted_local_real_Mongo_cases_passed_in_CI": true
+  },
+  "four_readiness_artifacts": {
+    "independent_original_validators": "PASS",
+    "root_metadata_download_digest_recheck": "PASS",
+    "cross_host_generated_files": 389,
+    "frontend_package_files": 1796,
+    "backend_package_files": 1326,
+    "CI_JSON_route_and_MIME": "PASS_LOOPBACK_ONLY"
+  },
+  "helper": {
+    "filename": "HOST-REHEARSE-2082.py",
+    "sha256": "3a41c78f78f19509129a2f8e0f15a903b7505d45b16fea89b9dd54c8621ec2f8",
+    "enabled": true,
+    "independent_activation_review": "PASS",
+    "signal_process_cases_passed": 4,
+    "main_executed_by_root_or_reviewers": false
+  },
+  "host": {
+    "actual_isolated_rehearsal_passed": false,
+    "shared_source_or_outputs_changed_by_task": false,
+    "own_lease": "NONE",
+    "merge_performed": false,
+    "publication_performed": false,
+    "prior_PR2081_completion_inferred": false
+  },
+  "next_safe_action": "Owner executes the exact pinned isolated helper; it freshly requires original inactive guard, shared cleanN, remoteN/B and capacity, then original adapter. Retain result/log. Actual PASS precedes this task ordinary tree-equivalent merge and separate guarded stage/prepare/prepublish."
+}
