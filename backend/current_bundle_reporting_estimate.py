@@ -226,6 +226,93 @@ def _cost(product: dict, profile: dict, variant_id: str = "") -> tuple[Decimal |
     return cost, source.startswith("mezan_")
 
 
+def _recipe_selection(row: dict, product: dict, pairs: set) -> bool | None:
+    conditions = row.get("condition")
+    if conditions is None:
+        return True
+    if not isinstance(conditions, dict) or set(conditions) != {"option_id", "value_id"}:
+        _fail("current_bundle_condition_invalid")
+    oid, vid = _id(conditions["option_id"]), _id(conditions["value_id"])
+    option = next((o for o in _options(product) if _id(o.get("id")) == oid), None)
+    if not option or vid not in {_id(v.get("id")) for v in option.get("values") or []
+                                 if isinstance(v, dict)}:
+        _fail("current_bundle_condition_not_in_current_catalog")
+    if (oid, vid) in pairs:
+        return True
+    # Only another proved answer to this option proves non-selection.
+    return False if any(chosen == oid for chosen, _ in pairs) else None
+
+
+def _current_product_quantity(row: dict, product: dict, pairs: set,
+                              variant: str, selected: bool) -> Decimal:
+    """Price a simple physical repeat; slot choices only describe each piece.
+
+    Variant assignment, text customization and component overrides still need
+    the full frozen composition engine. Sourcing does not change this current
+    catalog estimate into evidence of receipt or actual supplier cost.
+    """
+    count = _number(row.get("quantity", 1))
+    if count != count.to_integral_value() or count > 100:
+        _fail("current_bundle_current_product_quantity_invalid")
+    if row.get("variant_id") or selected and (
+            variant or product.get("variants") or product.get("skus") or product.get("variants_count")):
+        _fail("current_bundle_current_product_variant_unresolved")
+    if row.get("sourcing_mode", "stock") not in {"auto", "stock", "supplier"}:
+        _fail("current_bundle_current_product_source_invalid")
+    slots = row.get("slots")
+    if slots is None:
+        return count
+    if not isinstance(slots, list) or len(slots) != int(count):
+        _fail("current_bundle_slot_count_invalid")
+    catalog = {_id(o.get("id")): o for o in _options(product)}
+    choice_decisions = {}
+    if selected:
+        from report_option_identity import resolve_report_choices
+        decisions, _ = resolve_report_choices(
+            {"options_raw": [{"option_id": oid, "values": [{"value_id": vid}]}
+                             for oid, vid in sorted(pairs)]}, product,
+            [{"option_id": oid, "value_id": "__option__"} for oid in catalog])
+        choice_decisions = dict(zip(catalog, decisions))
+    seen = set()
+    for slot in slots:
+        if not isinstance(slot, dict) or set(slot) - {
+                "slot_id", "variant_id", "variant_rules", "customization_option_ids", "selection_option_ids"}:
+            _fail("current_bundle_slot_invalid")
+        sid = _id(slot.get("slot_id"))
+        if not sid or sid in seen:
+            _fail("current_bundle_slot_identity_invalid")
+        seen.add(sid)
+        if slot.get("variant_id") or slot.get("variant_rules", []) != [] or slot.get("customization_option_ids", []) != []:
+            _fail("current_bundle_advanced_slot_unresolved")
+        choices = slot.get("selection_option_ids", [])
+        if (not isinstance(choices, list) or len(choices) > 100 or
+                any(not isinstance(oid, str) for oid in choices) or len(set(choices)) != len(choices)):
+            _fail("current_bundle_slot_choices_invalid")
+        for oid in choices:
+            if oid not in catalog or not catalog[oid].get("values"):
+                _fail("current_bundle_slot_choice_not_in_catalog")
+            if not selected:
+                continue
+            dependencies = catalog[oid].get("show_if") or catalog[oid].get("conditions") or []
+            if not isinstance(dependencies, list) or any(
+                    not isinstance(condition, dict) or set(condition) != {"option_id", "value_id"}
+                    for condition in dependencies):
+                _fail("current_catalog_option_condition_invalid")
+            visible = [_recipe_selection({"condition": condition}, product, pairs)
+                       for condition in dependencies]
+            if False in visible:
+                if any(chosen == oid for chosen, _ in pairs):
+                    _fail("current_bundle_slot_selection_conflicts_with_visibility")
+                continue
+            # The canonical resolver also proves saved provider conditions
+            # omitted by normalized options; absence alone never proves hidden.
+            if choice_decisions[oid] is False:
+                continue
+            if None in visible or choice_decisions[oid] is not True:
+                _fail("current_bundle_slot_selection_unavailable")
+    return count
+
+
 def _build_line_cost(item: dict, root: str, definitions: dict, products: dict,
                      profiles: dict, options: dict, bindings: dict, resources: dict) -> dict:
     quantity = _number(item.get("quantity"))
@@ -247,7 +334,12 @@ def _build_line_cost(item: dict, root: str, definitions: dict, products: dict,
         detail_cells.append({"key": key, "label": str(label or key), "kind": kind,
                              "status": status, "unit_cost": _amount(amount) if amount is not None else None})
 
-    for oid, label in missing_choices:
+    missing_decisions, _ = resolve_report_choices(
+        {"options_raw": selection_evidence}, products[root],
+        [{"option_id": oid, "value_id": "__option__"} for oid, _ in missing_choices])
+    for (oid, label), decision in zip(missing_choices, missing_decisions):
+        if decision is False:
+            continue  # A saved provider condition proves this field was hidden.
         cell("root:choice:" + oid, label, "service", "unresolved")
         missing_reasons.append("current_bundle_sale_selection_unavailable:" + oid)
 
@@ -256,9 +348,33 @@ def _build_line_cost(item: dict, root: str, definitions: dict, products: dict,
         if pid not in products or pid in stack or len(stack) >= 5:
             _fail("current_bundle_product_missing_or_recursive")
         product, profile = products[pid], profiles.get(pid, {})
+        doc = definitions.get(pid)
+        items = doc.get("items") if doc else []
+        if doc and (not isinstance(items, list) or not 1 <= len(items) <= 100):
+            _fail("current_bundle_recipe_invalid")
+        current = []
+        has_current = current_unresolved = False
+        for row in items:
+            if not isinstance(row, dict):
+                _fail("current_bundle_recipe_invalid")
+            if row.get("kind") == "current_product":
+                has_current = True
+                selection = _recipe_selection(row, product, pairs)
+                count = _current_product_quantity(row, product, pairs, variant, selection is True)
+                current_unresolved |= selection is None
+                if selection is True:
+                    current.append(count)
+        # Simultaneous rules may share slots or apply once/sum semantics.
+        # This fallback only proves mutually exclusive physical selections.
+        if len(current) > 1:
+            _fail("current_bundle_overlapping_current_rules_unresolved")
+        current_count = sum(current, Decimal(0))
         base, from_mezan = _cost(product, profile, variant)
         if base is not None:
             mezan_complete &= from_mezan
+            # A selected physical repeat already covers the parent base.
+            # Resource-only compositions retain their existing single base.
+            base *= current_count or Decimal(1)
         base_key = "root:base" if path == "root" else path
         cell(base_key, product.get("name") or pid,
              "product" if path == "root" else "component",
@@ -267,15 +383,24 @@ def _build_line_cost(item: dict, root: str, definitions: dict, products: dict,
             missing_reasons.append("current_bundle_base_missing:" + base_key)
             base = Decimal(0)  # Known subtotal only; completeness remains false.
         physical, services = Decimal(0), Decimal(0)
-        doc = definitions.get(pid)
+
+        def scoped_quantity(count, scope, key, label, kind):
+            if scope not in {"per_bundle", "per_unit"} or scope == "per_unit" and not has_current:
+                _fail("current_bundle_component_scope_unresolved")
+            if scope == "per_bundle":
+                return count
+            if current_unresolved:
+                cell(key, label, kind, "unresolved")
+                missing_reasons.append("current_bundle_sale_selection_unavailable:" + key)
+                return None
+            if not current_count:
+                cell(key, label, kind, "not_required")
+                return None
+            return count * current_count
+
         if doc:
-            items = doc.get("items")
-            if not isinstance(items, list) or not 1 <= len(items) <= 100:
-                _fail("current_bundle_recipe_invalid")
             seen_recipe_items = set()
             for recipe_index, row in enumerate(items):
-                if not isinstance(row, dict):
-                    _fail("current_bundle_recipe_invalid")
                 recipe_key = path + ":recipe:" + str(row.get("id") or recipe_index)
                 recipe_resource = resources.get(_id(row.get("resource_id"))) or {}
                 recipe_product = products.get(_id(row.get("product_id"))) or {}
@@ -289,37 +414,24 @@ def _build_line_cost(item: dict, root: str, definitions: dict, products: dict,
                 if signature in seen_recipe_items and row.get("repeat_policy", "once") != "sum":
                     _fail("current_bundle_duplicate_once_unresolved")
                 seen_recipe_items.add(signature)
-                if any(k in row for k in ("slots", "variant_rules", "option_mappings",
-                                          "customization_mappings", "component_overrides")):
+                if ("slots" in row and row.get("kind") != "current_product" or
+                        any(k in row for k in ("variant_rules", "option_mappings",
+                                               "customization_mappings", "component_overrides"))):
                     _fail("current_bundle_advanced_recipe_unresolved")
-                conditions = row.get("condition")
-                if conditions is not None:
-                    if not isinstance(conditions, dict) or set(conditions) != {"option_id", "value_id"}:
-                        _fail("current_bundle_condition_invalid")
-                    oid, vid = _id(conditions["option_id"]), _id(conditions["value_id"])
-                    catalog_option = next((o for o in _options(product)
-                                           if _id(o.get("id")) == oid), None)
-                    if not catalog_option or vid not in {
-                            _id(v.get("id")) for v in catalog_option.get("values") or []
-                            if isinstance(v, dict)}:
-                        _fail("current_bundle_condition_not_in_current_catalog")
-                    if (oid, vid) not in pairs:
-                        # Only another proved answer to this option proves non-selection.
-                        proved = any(chosen == oid for chosen, _ in pairs)
-                        if not proved:
-                            cell(recipe_key, recipe_label, recipe_kind, "unresolved")
-                            missing_reasons.append("current_bundle_sale_selection_unavailable:" + recipe_key)
-                            continue
-                        cell(recipe_key, recipe_label, recipe_kind, "not_required")
-                        continue
+                selection = _recipe_selection(row, product, pairs)
+                if selection is not True:
+                    cell(recipe_key, recipe_label, recipe_kind, "unresolved" if selection is None else "not_required")
+                    if selection is None:
+                        missing_reasons.append("current_bundle_sale_selection_unavailable:" + recipe_key)
+                    continue
                 count = _number(row.get("quantity", 1))
-                if row.get("component_scope", "per_bundle") != "per_bundle":
-                    _fail("current_bundle_component_scope_unresolved")
                 kind = row.get("kind")
+                scope = row.get("component_scope", "per_bundle")
+                if kind != "resource" and scope != "per_bundle":
+                    _fail("current_bundle_component_scope_unresolved")
                 if kind == "current_product":
-                    if count != 1 or row.get("variant_id") or row.get("sourcing_mode") == "auto":
-                        _fail("current_bundle_extra_parent_unresolved")
-                    # Parent has already been counted exactly once.
+                    # The selected physical count is already in the base cell.
+                    continue
                 elif kind == "product":
                     child = _id(row.get("product_id"))
                     child_pairs = set()
@@ -332,6 +444,9 @@ def _build_line_cost(item: dict, root: str, definitions: dict, products: dict,
                     physical += count * (child_base + child_physical)
                     services += count * child_services
                 elif kind == "resource":
+                    count = scoped_quantity(count, scope, recipe_key, recipe_label, recipe_kind)
+                    if count is None:
+                        continue
                     rid = _id(row.get("resource_id"))
                     key = (pid, rid)
                     if not rid or key in used_resources:
@@ -390,6 +505,18 @@ def _build_line_cost(item: dict, root: str, definitions: dict, products: dict,
                 unit = _sar(binding.get("direct_amount"), binding)
             else:
                 rid = _id(binding.get("resource_id"))
+                if has_current:
+                    scopes = doc.get("component_scopes") or {}
+                    if not isinstance(scopes, dict):
+                        _fail("current_bundle_component_scope_unresolved")
+                    # Legacy single-piece estimates predate explicit scopes;
+                    # both scopes are equivalent only for one proved piece.
+                    default_scope = "per_bundle" if (doc.get("schema_version", 1) == 2 or
+                        current_count == 1 and not current_unresolved) else None
+                    scope = scopes.get(rid, default_scope)
+                    q = scoped_quantity(q, scope, detail_key, detail_label, detail_kind)
+                    if q is None:
+                        continue
                 key = (pid, rid)
                 if not rid or key in used_resources:
                     _fail("current_bundle_resource_duplicate_or_missing")
@@ -500,7 +627,7 @@ async def load_current_bundle_estimates(
     definitions_rows = await read(db["mezan_bundle_definitions_v2"].find(
         {"user_id": owner, "product_type": "composite"},
         {"_id": 0, "product_id": 1, "items": 1,
-         "schema_version": 1, "revision": 1},
+         "schema_version": 1, "revision": 1, "component_scopes": 1},
     ))
     if len(definitions_rows) > 10000:
         return {}
@@ -533,7 +660,7 @@ async def load_current_bundle_estimates(
         ]},
         {"_id": 0, "id": 1, "salla_product_id": 1,
          "mezan_product_id": 1, "name": 1, "options": 1,
-         "raw_salla": 1, "raw_salla_details": 1, "variants": 1,
+         "raw_salla": 1, "raw_salla_details": 1, "variants": 1, "skus": 1, "variants_count": 1,
          "cost_price_from_salla": 1, "cost_price": 1, "cost": 1},
     ))
     if len(catalog) > 10000:
