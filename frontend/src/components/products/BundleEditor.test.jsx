@@ -217,8 +217,52 @@ test("rapid repeated selection adds one card, persists identity, and allows expl
     expect(saved.schema_version).toBe(2);
     expect(saved.items[4]).toMatchObject({ product_id: "new", quantity: "2", unit: "piece", sourcing_mode: "auto", repeat_policy: "sum" });
     expect(saved.items[4].rule_id).toBeTruthy();
+    expect(labeledSelect("التوريد")).toBeUndefined();
     expect(api.put).not.toHaveBeenCalled();
     jest.useRealTimers();
+});
+
+test("new current product can select and persist an explicit supplier before receiving", async () => {
+    bundles.getProductBundle.mockResolvedValue({ definition: { revision: 0, product_type: "normal", items: [] }, expansion: null, limits: { max_items: 100, max_depth: 5, max_leaves: 500 } });
+    let persisted;
+    bundles.saveProductBundle.mockImplementation(async (_id, payload) => {
+        persisted = { ...payload, revision: payload.expected_revision + 1 };
+        return { definition: persisted, expansion: null };
+    });
+    await act(async () => root.render(<BundleEditor productId="current" />));
+    await selectValue(labeledSelect("نوع التركيب"), "composite");
+    await selectValue(labeledSelect("مصدر المكوّن"), "current_product");
+    await act(async () => button("إضافة مكوّن (0/100)").click());
+    expect(labeledSelect("التوريد")).toBeDefined();
+    expect(labeledSelect("التوريد").value).toBe("auto");
+    expect([...labeledSelect("التوريد").options].map((option) => option.value)).toEqual(["auto", "stock", "supplier"]);
+    await inputValue(node.querySelector('[aria-label="كمية المكوّن 1"]'), "2");
+    await selectValue(labeledSelect("التوريد"), "supplier");
+    expect(button("حفظ التركيب وحساب التكلفة").disabled).toBe(true);
+    await act(async () => button("حفظ التركيب وحساب التكلفة").click());
+    expect(bundles.saveProductBundle).not.toHaveBeenCalled();
+    await selectValue(labeledSelect("المورد"), "s2");
+    expect(button("حفظ التركيب وحساب التكلفة").disabled).toBe(false);
+    await act(async () => button("حفظ التركيب وحساب التكلفة").click());
+    expect(persisted.items[0]).toMatchObject({ kind: "current_product", quantity: "2", sourcing_mode: "supplier", supplier_id: "s2" });
+    expect(persisted.items[0].product_id).toBeUndefined();
+    expect(persisted.items[0].resource_id).toBeUndefined();
+
+    bundles.getProductBundle.mockResolvedValue({ definition: persisted, expansion: null, limits: { max_items: 100, max_depth: 5, max_leaves: 500 } });
+    await act(async () => root.unmount()); root = createRoot(node);
+    await act(async () => root.render(<BundleEditor productId="current" />));
+    expect(labeledSelect("التوريد").value).toBe("supplier");
+    expect(labeledSelect("المورد").value).toBe("s2");
+    expect(button("حفظ التركيب وحساب التكلفة").disabled).toBe(true);
+    await selectValue(labeledSelect("التوريد"), "auto");
+    expect(labeledSelect("التوريد").value).toBe("auto");
+    expect(labeledSelect("المورد")).toBeUndefined();
+    await selectValue(labeledSelect("التوريد"), "stock");
+    expect(labeledSelect("التوريد").value).toBe("stock");
+    await selectValue(labeledSelect("التوريد"), "supplier");
+    expect(labeledSelect("المورد").value).toBe("s2");
+    await act(async () => button("حفظ التركيب وحساب التكلفة").click());
+    expect(bundles.saveProductBundle.mock.calls[1][1].items[0]).toMatchObject({ sourcing_mode: "supplier", supplier_id: "s2" });
 });
 
 test("resource card hides supplier for stock and locks catalog unit", async () => {
@@ -229,6 +273,7 @@ test("resource card hides supplier for stock and locks catalog unit", async () =
     await act(async () => node.querySelector('[role="option"]').click());
     expect(labeledSelect("المورد")).toBeUndefined();
     expect([...node.querySelectorAll("label")].filter((label) => label.firstChild?.textContent === "الوحدة")).toHaveLength(0);
+    expect([...labeledSelect("التوريد").options].map((option) => option.value)).toEqual(["stock", "supplier"]);
     await selectValue(labeledSelect("التوريد"), "supplier");
     expect(labeledSelect("المورد")).toBeTruthy();
 });

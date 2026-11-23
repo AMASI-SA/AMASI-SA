@@ -2,6 +2,54 @@
 
 ## State
 
+### Supplier source selection correction — superseding release candidate, 2026-11-24
+
+The previous frozen pair remains immutable and remotely recoverable in Draft
+PR #2093: source A `de53984312a4ff9f04af4782bd78b776802ba9eb`, intent-only B
+`d564cddad2fe05ad2bebe5df61e347e5d9ed0318`. Both governed local builds matched.
+The official `frontend/yarn build` adapter also passed in a separate clean clone
+on the actual Emergent host in91.22 seconds, matching artifact
+`9f57b0ca2d777f6592b6b099c286ad8ee09dbe5669e8db7b35db2f09f7d419fb` and
+release `rg5-010b82665bdd4228b4614c7fd92066ad579c5779a74c1eaef4463e5f8fbd83c9`.
+No lease, `/app` source mutation or Production publication occurred.
+
+A final user-configuration rehearsal found a real setup gap. A newly added
+`current_product` rule defaults to `auto`, but the editor hides its source
+selector while in that mode. The supplier bridge deliberately requires explicit
+finished supplier leaves. A focused public-route Mongo7.0.28 reproduction proved:
+explicit supplier adoption preview200 with two pieces; saving the editor's auto
+recipe200; saving the approved supplier policy200; product preview200 with cost
+100 and supplier segments; adoption preview409 `bundle_supplier_unsupported_recipe`.
+Auto segments remain a separate supported allocation contract; they are not
+silently reinterpreted as finished supplier leaves.
+
+The bounded correction exposes the existing auto/stock/supplier selector for
+current-product rules. Default auto, linked-product behavior, resource behavior,
+backend sourcing, costs and invoice logic remain unchanged. The permanent
+regression exercises the actual UI transition, required supplier choice and saved
+explicit supplier payload, followed by a fresh mount and mode changes. It failed
+on the original JSX because the selector was absent, then passed after the
+bounded change. Governed Node22.23.2/Yarn1.22.22 Jest selection: BundleEditor,
+CurrentProductSlots and BundleProductPolicy, **51 passed in three suites**, zero
+failures. The coordinator independently reran the same selection and reviewed
+the complete diff. A separate reviewer found no remaining confirmed blocker.
+
+This new sibling branch, `codex/conditional-bundle-source-ui-20261124`, starts at
+the prior source A and excludes intent B. It supersedes the unpublished candidate
+without rewriting either frozen commit. Next: verify and review this UI change,
+checkpoint exact new source A, freeze a new intent-only B after two clean governed
+builds, complete its CI and repeat the actual-host adapter rehearsal. Keep the
+previous PR unpublished and cross-link the replacement once remotely saved.
+
+After verified publication, configure three conditional current-product rules:
+Batman one piece, Catwoman one piece, pair two pieces; each explicitly from the
+existing approved supplier, each physical unit cost50. Select only each slot's
+own size/color fields. Keep parent base inclusion off. Remove the pair's old
+direct option-cost binding (setting it to zero still creates an unsupported
+direct-cost leaf), then verify previews50/50/100. Owner adoption is a separate
+audited pre-receipt action and must pass the original dispatch/custody/no-prior-
+receipt conditions. It must never fabricate supplier receipt or payable evidence.
+
 ### Independent review corrections complete — source candidate, 2026-11-24
 
 The preceding remote checkpoint is
