@@ -1,7 +1,7 @@
 {
   "task_id": "TABBY-DASHBOARD-FEES-20261122",
-  "status": "r4_actual_host_original_isolated_adapter_running",
-  "updated_at_utc": "2026-11-23T15:40:42.593179+00:00",
+  "status": "r4_original_host_preflight_passed_emergent_publication_running",
+  "updated_at_utc": "2026-11-23T15:45:37.619806+00:00",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tabby-weekly-fees-release-evidence-20261122",
   "production_branch": "hotfix/prod-snap-meta-final",
@@ -131,14 +131,14 @@
     "production_changed_by_this_task": false,
     "merged": true,
     "published": false,
-    "lease_created": false,
+    "lease_created": true,
     "actual_host_evidence": "Owner supplied clean actual /app at c2d244a3349013c06f3fb7824070bfa12bd0bfe0, branch hotfix/prod-snap-meta-final, upstream +0 -0, original guard exactly active:false. Fresh bounded status remains required at shared action boundaries.",
     "current_base_release": "Latest PR2082 completion records original verified:true with three matching probes, intended source/deployment/runtime/artifact and final exact inactive guard. Previous PR2076 pending-hold wording is superseded and is not a release blocker.",
     "current_base_runtime_release_id": "rg5-12e0f132b3ee688815cd2ec401bd34c43706d193492edacc7be6c5ca6e6ade8a",
     "current_base_artifact_tree_sha256": "27b7717df8a2dcc2b46868da4d103b44d33e2ad07c879da6563ecaef7e545b9a",
     "coordination": "Issue1006 current November23 auto-balance entry independently confirms clean inactive N; inventory PR2084 and balance freshness are isolated WIP with no publication reservation. Preserve their work.",
     "inherited_intent": "Superseded: fresh audited sourceA and intent-onlyB are frozen and ordinarily merged asD; exact identifiers recorded below.",
-    "host_actions": "Reviewed immutable L bootstrap executed once in actual signed-in /app terminal. Original inactive guard/cleanN/remoteD+B/helper hashes passed. Original adapter now running in private isolated /tmp clone; no lease or shared staging yet observed.",
+    "host_actions": "Original actual-host isolated adapter, preservation/staging, prepare and prepublish PASS; launcher exited0; Emergent Publish changes clicked exactly once, new deployment started18:42Riyadh and is building.",
     "host_access": "Verified actual signed-in Emergent VS Code terminal; original guard/Git/disk bounded read-only check passed. HOST-ACCESS-READ-2086.json retains observations.",
     "historical_hold_superseded": true,
     "live_UI_before_publication": "Root read-only existing dashboard session showed Tabby row and payment total incomplete on2026-11-23, while other provider fee rows were numeric. Use same report for post-publication comparison; no customer data or financial amounts retained here.",
@@ -146,8 +146,8 @@
     "production_branch_changed_by_this_task": true,
     "production_runtime_changed_by_this_task": false,
     "merge_proof": "MERGE-PROOF-2086.json",
-    "actual_host_latest_boundary": "Actual launcher fresh original guard reports active:false/incomplete:false immediately before isolated adapter; original intent validator returns exactA/runtime.",
-    "current_handoff": "Authorized serial publication underway; actual isolated rehearsal running. Do not execute a second launcher or publish before original stage/prepare/prepublish PASS.",
+    "actual_host_latest_boundary": "Original PREPUBLISH_PASSED exactD/A/runtime with ready_to_publish:true; own lease prepared2026-11-23T15:41:37.354423+00:00.",
+    "current_handoff": "Publication running. Wait for newer explicit success; then run pinned original own-lease verifier exactly once, preserve full output and verify inactive.",
     "helper_chain_independent_review": "PASS; INDEPENDENT-LAUNCHER-CHAIN-2086.json; E/L unchanged.",
     "bootstrap_independent_review": "PASS; INDEPENDENT-BOOTSTRAP-REVIEW-2086.json.",
     "actual_host_paths": {
@@ -155,12 +155,13 @@
       "rehearsal": "/tmp/mezan-pr2086-rehearsal-t59itjiq",
       "log": "/tmp/mezan-pr2086-rehearsal-t59itjiq/adapter.log",
       "verification_command": "bash /tmp/mezan-pr2086-deploy-y1q5mxhn/verify-after-success.sh"
-    }
+    },
+    "actual_host_prepublication_evidence": "ACTUAL-HOST-PREPUBLISH-2086.json"
   },
   "next_safe_actions": [
-    "Observe current original actual-host adapter and subsequent stage/prepare/prepublish outcome; do not repeat launch.",
-    "After PREPUBLISH_PASSED and launcher exit0, republish once; observe newer explicit Deployment Succeeded.",
-    "Run printed exact-own-lease original verify; retain full output, checks3 and finalinactive; reload same live dashboard report and finalize evidence."
+    "Observe current new Emergent publication; do not repeat publish.",
+    "After explicit new Deployment Succeeded, execute pinned original verifier with reviewed full-output capture; require checks3 and final exactinactive.",
+    "Reload same2026-11-23 live dashboard and compare Tabby fees, total fee and netprofit; save final evidence."
   ],
   "source_branch": "codex/tabby-weekly-fee-estimates-r4-20261123",
   "source_A": "1725672eeccb1272f183c376b9267e363a028325",

@@ -1,0 +1,33 @@
+{
+  "source": "Read-only actual-host receipt and original adapter success proof parsed from full adapter.log; digest independently rechecked against receipt.",
+  "receipt": {
+    "actor": "codex-tabby-weekly-fees-2086-20261123",
+    "artifact_tree": "9796b20cca6dd4809bcf27ff4e5cf4817b59ecc4005763c70304064850483827",
+    "base": "c2d244a3349013c06f3fb7824070bfa12bd0bfe0",
+    "candidate": "/tmp/mezan-pr2086-rehearsal-t59itjiq/repo",
+    "deployment": "76efd2c3aa1563939ee3e27a9ae03f27fc1a3d43",
+    "directory": "/tmp/mezan-pr2086-rehearsal-t59itjiq",
+    "intent_commit": "104c6b45cd646418a719496fb8c02ee61ddf5483",
+    "kind": "mezan_pr2086_rehearsal_v1",
+    "log_sha256": "c550ff1ec470acb31bafb30565c8202edbd785687e953c0ae3eb61ba35b453e9",
+    "release_id": "rg5-be6cf2196ab95412377fd5280c5ff7b6fd3204dd20dd74825b43d85e0fe77d13",
+    "source": "1725672eeccb1272f183c376b9267e363a028325",
+    "tree": "72659c9adcd5fcf3880c4ef4332245a65b620fe3"
+  },
+  "original_adapter_proof": {
+    "built": true,
+    "frontend_artifact_tree_sha256": "9796b20cca6dd4809bcf27ff4e5cf4817b59ecc4005763c70304064850483827",
+    "protocol_version": 5,
+    "release_id": "rg5-be6cf2196ab95412377fd5280c5ff7b6fd3204dd20dd74825b43d85e0fe77d13",
+    "source_git_sha": "1725672eeccb1272f183c376b9267e363a028325"
+  },
+  "package_boundary": {
+    "backend_git_directory": false,
+    "backend_health_verified": true,
+    "backend_isolated_verified": true,
+    "backend_sibling_frontend": false,
+    "frontend_content_type": "application/json",
+    "frontend_runtime_verified": true,
+    "kind": "mezan_release_package_boundary_proof_v1"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "status": "PASS",
+  "phase": "actual host staged and original prepublish passed; new Emergent publication in progress",
+  "deployment_D": "76efd2c3aa1563939ee3e27a9ae03f27fc1a3d43",
+  "source_A": "1725672eeccb1272f183c376b9267e363a028325",
+  "runtime_id": "rg5-be6cf2196ab95412377fd5280c5ff7b6fd3204dd20dd74825b43d85e0fe77d13",
+  "artifact": "9796b20cca6dd4809bcf27ff4e5cf4817b59ecc4005763c70304064850483827",
+  "launcher_L": "ec9c28cf7cd0829cb5f394ccb343f368a394b879",
+  "helper_E": "2b08518f5448d742d1986a45c69e0fb5a66129d7",
+  "launcher_exit": 0,
+  "staging_verified": true,
+  "unrelated_untracked_files_preserved": 432,
+  "bytecode_cache_preserved": true,
+  "rehearsal_log_sha256": "c550ff1ec470acb31bafb30565c8202edbd785687e953c0ae3eb61ba35b453e9",
+  "backup_directory": "/tmp/mezan-pr2086-preserved-2491h7wp",
+  "retained_local_directory": "/app/.git/pr2086-stage-vri704qq",
+  "original_guard_before_prepare": {
+    "active": false
+  },
+  "prepared_at": "2026-11-23T15:41:37.354423+00:00",
+  "actor": "codex-tabby-weekly-fees-2086-20261123",
+  "prepublish_ready": true,
+  "publication_clicked_once": true,
+  "emergent_started_label": "Deployment Started Nov 23, 06:42 PM",
+  "emergent_label_timezone": "Asia/Riyadh",
+  "last_observed_publication_status": "Building your website; Workspace ready; Changes packaged",
+  "verified_live": false
+}

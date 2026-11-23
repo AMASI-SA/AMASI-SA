@@ -1,0 +1,8 @@
+{
+  "status": "PASS",
+  "reviewer": "independent release_state_review",
+  "path": "CAPTURE-HOST-VERIFY-2086.py",
+  "bytes": 2407,
+  "sha256": "de43ebcc5c102cabb0513845953ee5ecf3b112a14b25d06c5091b5b153af0ef8",
+  "review": "Nonexecuting review only. Requires exact private owned original work directory and real /app; exact pinned unchanged verification wrapper; preserves original own-lease fence and three probes; retains complete output with O_EXCL/O_NOFOLLOW/mode0400; no retry, prepare, publish or manual lease clear. Execute only after newer explicit PR2086 Deployment Succeeded."
+}
