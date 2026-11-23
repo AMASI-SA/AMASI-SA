@@ -1,0 +1,123 @@
+{
+  "task": "AUTO-BALANCE-FRESHNESS-20261123",
+  "status": "WIP_CLEAN_SOURCE_TRANSITION_RECHECK_REQUIRED_NOT_RELEASED",
+  "repository": "AMASI-SA/AMASI-SA",
+  "task_branch": "codex/automatic-balance-freshness-source-20261123",
+  "base_commit": "76efd2c3aa1563939ee3e27a9ae03f27fc1a3d43",
+  "mobile_repository": "AMASI-SA/amasi-mobile",
+  "mobile_base_commit": "6634949641c4ca87b002bfcb13434e5a57bc3d21",
+  "problem": "Owner web/native workspace reads saved balances but does not request shared financial source reconciliation; newer manual movements can coexist with old automatic obligations.",
+  "observed_on": "2026-11-23",
+  "timezone": "Asia/Riyadh",
+  "read_only_live_evidence": {
+    "last_saved_calculation": "2026-11-21 17:50 Asia/Riyadh",
+    "report_generation": "2026-11-23 17:24 Asia/Riyadh",
+    "backend_source_git_sha": "aec203382b387c3812509084e77c2922aa860877",
+    "frontend_source_git_sha": "aec203382b387c3812509084e77c2922aa860877",
+    "release_id": "rg5-12e0f132b3ee688815cd2ec401bd34c43706d193492edacc7be6c5ca6e6ade8a",
+    "backend_boot_started_at": "2026-11-23T14:01:49.979996+00:00",
+    "verified_identity_available": true,
+    "critical_file_hashes_match": true,
+    "frontend_build_verified": true,
+    "frontend_artifact_tree_sha256": "27b7717df8a2dcc2b46868da4d103b44d33e2ad07c879da6563ecaef7e545b9a",
+    "shared_workspace_head": "c2d244a3349013c06f3fb7824070bfa12bd0bfe0",
+    "tracked_changes": 0,
+    "release_guard_active": false,
+    "full_release_guard_verification_run": false
+  },
+  "confirmed_source_findings": [
+    "Periodic operational balance worker is intentionally inert; its disablement predates the latest releases.",
+    "GET workspace/report demand preparation does not run financial refresh.",
+    "Native pull-to-refresh currently reloads GET data only.",
+    "POST /operational-balances/refresh is a financial writer: it can persist source evidence, accruals and eligible automatic bank collection movements.",
+    "Calculation freshness is saved engine.as_of, not report generated_at or state revision.",
+    "No production refresh or historical backfill was executed for this incident."
+  ],
+  "planned_scope": [
+    "Owner-only visible-workspace refresh when saved calculation exceeds two hours or crosses a Riyadh business day.",
+    "Render saved balances immediately with truthful calculation time and in-progress/error state.",
+    "Session-bound single-flight; no scheduled worker, hidden retry, polling or background finance.",
+    "Read saved metadata after success or unknown outcome; never infer financial success from HTTP 200 alone.",
+    "Preserve all existing salary, advertising, shipping, fee and accounting rules."
+  ],
+  "verification": {
+    "backend_focused": "111 passed,20 subtests passed; includes real canonical demand-refresh router; isolated Python3.12, no Production DB.",
+    "backend_command": "PYTHONPATH=backend python -m pytest --noconftest -q --tb=short backend/tests/test_operational_balance_freshness.py backend/tests/test_operational_balance_freshness_routes.py backend/tests/test_operational_balance_freshness_attempts.py backend/tests/test_operational_source_freshness.py backend/tests/test_operational_balance_demand_refresh.py backend/tests/test_operational_balance_demand_refresh_routes.py",
+    "web_focused": "5 new suites65 tests PASS under actual react-scripts5 transforms and repository Jest resolver; final HEAD whole-repository CI still required.",
+    "independent_review": "Web lifecycle/unknown-outcome and native form/running fencing reviewed. Native33+62 tests and strict manager TypeScript independently PASS; baseline dependency closure Git blob hashes88/88 match c2d244.",
+    "full_repo_ci": "New clean source HEAD must pass all checks independently. Older7943fb9 source tests passed; a31a24fe release gate failed on full-history intent transition and cannot authorize release.",
+    "release_gates": "not run; no A/B intent for this source",
+    "browser_acceptance": "Parent7943fb9:13/13 strict synthetic browser scenarios PASS; source warning visible after held refresh and saved-metadata readback.",
+    "browser_review": "Independent static review found no blocker in held-POST synchronization, retained-warning assertions, strict request rejection, hashes or13-scenario CI gate. Explicit390px screenshot viewport.",
+    "previous_head_ci": {
+      "head": "7943fb9c629acc7b9c8ad2a41107394ec04377aa",
+      "success": 28,
+      "conditional_skips": 6,
+      "failed": 0,
+      "operational_backend": [
+        6696,
+        106,
+        16
+      ],
+      "operational_frontend": {
+        "suites": 109,
+        "tests": 1740
+      },
+      "browser_scenarios": 13,
+      "browser_errors": 0,
+      "warning_screenshot": "PASS: visually inspected390px view; archive digest and9 changed source hashes verified."
+    }
+  },
+  "production_changed": false,
+  "production_financial_writes": 0,
+  "apk_published": false,
+  "merge_or_deployment_performed": false,
+  "hold": "Do not execute live financial refresh or enable the candidate in Production while the owner's prior no-financial-entry-change restriction remains unresolved. Complete and review isolated source/tests first.",
+  "next_safe_action": "Create replacement Draft PR for clean source-only branch against reviewed base76efd2; preserve/supersede PR2085. Inspect only replacement current HEAD CI. Finish native3548 full isolated Node22 verification and resolve its GitHub pre-runner failure. No production merge, deployment or financial refresh.",
+  "scope_update": "Persistent owner-visible source freshness alarm in Mezan web/native, including stalled/failed/unknown source updates and saved calculation age; separate read-only global health from financial refresh.",
+  "implemented_backend": [
+    "Owner-only GET /operational-balances/freshness with no-store metadata-only bounded reads and authorization recheck.",
+    "Token-fenced persistent refresh diagnostics: running/success/failed/unknown; completion metadata failure cannot leave a permanent running state.",
+    "Independent source proof for payroll, recurring expenses, Salla order/shipping/payment inputs, Snapchat/Meta/TikTok/Google Ads; unconfigured sources inactive, provider partial/failure preserved.",
+    "No provider calls, index DDL, financial mutation or worker startup in health GET."
+  ],
+  "implemented_web": [
+    "Persistent global owner notice; scoped owner-workspace refresh after valid due metadata; saved balances remain visible.",
+    "No automatic retry of ambiguous/failed attempt; explicit scope-bound retry respects physical single-flight and90-second uncertainty period.",
+    "Foreground one-shot expiry changes warning only, without network or financial calls.",
+    "Page/form/session/visibility fencing; unresolved source warning survives successful aggregate."
+  ],
+  "checkpoint_parent_sha": "76efd2c3aa1563939ee3e27a9ae03f27fc1a3d43",
+  "mobile_pull_request": 379,
+  "mobile_source_checkpoint": "3548b7f96a871578ae4a17ddb15cf60fa47102ea",
+  "last_observed_blockers": [
+    {
+      "repository": "AMASI-SA/amasi-mobile",
+      "head": "3548b7f96a871578ae4a17ddb15cf60fa47102ea",
+      "kind": "ci_start",
+      "run": 45202060677,
+      "job": 137787860535,
+      "cause": "Required frontend-checks fails before source execution. Exact annotation reason unavailable; must not infer billing or source failure."
+    },
+    {
+      "repository": "AMASI-SA/AMASI-SA",
+      "head": "a31a24fe7cdec6a377428a251ee73d500a4c4402",
+      "kind": "source_transition",
+      "run": 45206394101,
+      "job": 137803163337,
+      "cause": "source A must change governed source without changing intent: merge full history carries prior intent changes. Replaced by fresh single-parent source-only commit above approved base."
+    }
+  ],
+  "initial_base_commit": "c2d244a3349013c06f3fb7824070bfa12bd0bfe0",
+  "integration": {
+    "base_pr": 2086,
+    "base_commit": "76efd2c3aa1563939ee3e27a9ae03f27fc1a3d43",
+    "reviewed_task_parent": "7943fb9c629acc7b9c8ad2a41107394ec04377aa",
+    "overlapping_paths": 0,
+    "method": "New source-only commit directly above reviewed base76efd2. Preserve identical28 task source/test/workflow blobs from a31a24fe and all upstream PR2086 changes. Previous PR2085/branch preserved as superseded checkpoint; no history rewrite or guard change.",
+    "requires_new_head_ci": true,
+    "history_gate_failure": "The a31a24fe merge inherited prior intent changes in full history and correctly failed source-A transition in run45206394101/job137803163337. Endpoint trees alone were insufficient. Single-parent source transition above76 fixes ancestry without modifying release intent or gate logic."
+  },
+  "supersedes_pull_request": 2085,
+  "preserved_checkpoint": "a31a24fe7cdec6a377428a251ee73d500a4c4402"
+}

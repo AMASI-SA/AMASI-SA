@@ -1,0 +1,20 @@
+.balance-freshness{margin:0 0 16px;padding:14px 16px;border:1px solid #cbd5e1;border-radius:12px;background:#f8fafc;color:#243246;font-size:14px;line-height:1.7}
+.balance-freshness-warning{border-color:#d59a20;background:#fff7df;color:#633b06}
+.balance-freshness-heading{display:flex;align-items:center;flex-wrap:wrap;gap:10px}
+.balance-freshness-heading strong{flex:1 1 200px}
+.balance-freshness-heading button,.balance-freshness-heading a{border:1px solid currentColor;border-radius:8px;background:transparent;color:inherit;padding:5px 10px;font:inherit;text-decoration:none;cursor:pointer}
+.balance-freshness-heading button:disabled{opacity:.65;cursor:default}
+.balance-freshness p{margin:6px 0 0}
+.balance-freshness ul{margin:8px 0 0;padding-inline-start:22px}
+.balance-freshness small{display:block;overflow-wrap:anywhere}
+.balance-freshness-global{margin:12px 16px}
+/* Layout's legacy fixed bell ends at52px desktop /48px mobile. V2 uses its
+   normal-flow sticky shell and keeps the compact12px margin above. */
+.balance-freshness-legacy-controls{margin-block-start:64px}
+.balance-freshness-compact{padding:12px 14px}
+.balance-freshness-families{overflow-wrap:anywhere}
+.balance-freshness-details{margin-top:10px;border-top:1px solid #d7c9a6;padding-top:8px}
+.balance-freshness-details summary{cursor:pointer;font-weight:600;min-height:28px}
+.balance-freshness-details summary:focus-visible,.balance-freshness-details-body:focus-visible{outline:2px solid #2563eb;outline-offset:3px}
+.balance-freshness-details-body{max-height:24rem;overflow:auto;overscroll-behavior:contain;margin-top:6px}
+.balance-freshness-details-body li+li{margin-top:8px}
