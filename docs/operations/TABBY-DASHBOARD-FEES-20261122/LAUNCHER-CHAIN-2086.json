@@ -1,0 +1,18 @@
+{
+  "E": "2b08518f5448d742d1986a45c69e0fb5a66129d7",
+  "launcher_sha256": "e02d53474616d64fc42f565f4889493af795421599976006295fd5e76539be8b",
+  "launcher_bytes": 5532,
+  "launcher_path": "docs/operations/TABBY-DASHBOARD-FEES-20261122/RUN-HOST-DEPLOY-2086.sh",
+  "four_helper_sha256": {
+    "MANUAL-HOST-ISOLATED-REHEARSAL-2086.py": "5fe424bfb7ace043cd29d31b7124643bcc8f7f53f7dfff570080a2e9d74931ba",
+    "MANUAL-HOST-STAGE-2086.py": "7d2974136db042a4246bf0b30725cf575b600b837904f02d6abe45b981cd083f",
+    "MANUAL-HOST-PREPARE-PREPUBLISH-2086.py": "55900e07e8967edf427dc5e5d655b0bd7457bbfadb2b5c6ce3348ae1c2b63cf4",
+    "RUN-HOST-VERIFY-2086.sh": "4210c4c9a2e6d7cbc418154abb354c967dfc8fa44d4bd30d4bdb93d631ddc043"
+  },
+  "source_A": "1725672eeccb1272f183c376b9267e363a028325",
+  "base_N": "c2d244a3349013c06f3fb7824070bfa12bd0bfe0",
+  "intent_B": "104c6b45cd646418a719496fb8c02ee61ddf5483",
+  "deployment_D": "76efd2c3aa1563939ee3e27a9ae03f27fc1a3d43",
+  "launcher_commit": "The containing immutable L commit; exact remote SHA is recorded in PR metadata after preservation.",
+  "root_pin_validation": "PASS: exactly E and four checksums substituted; reverse equality, original E blobs, bash-n and AST checks pass; no execution."
+}
