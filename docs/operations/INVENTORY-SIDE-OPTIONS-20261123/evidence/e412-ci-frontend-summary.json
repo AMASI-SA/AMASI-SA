@@ -1,0 +1,699 @@
+{
+  "source_git_sha": "e412bc630de7d7e8eaf7dd03f6c1d09e59c18367",
+  "workflow_run_id": 45196877340,
+  "job_id": 137769571300,
+  "artifact_id": 14828262587,
+  "archive_sha256": "e5a505339a45537337fd2ccf78badda423003f1d5671517aaceb9e675b2e979b",
+  "artifact_file_sha256": "baf3080afbd24ca7030c6cb8c4e6f87fa0568b0024ac40edbf33dd74aa4db43d",
+  "counts": {
+    "numTotalTestSuites": 106,
+    "numPassedTestSuites": 106,
+    "numFailedTestSuites": 0,
+    "numTotalTests": 1699,
+    "numPassedTests": 1699,
+    "numFailedTests": 0,
+    "numPendingTests": 0
+  },
+  "affected_suites": [
+    {
+      "file": "src/pages/operational/InventoryPurchases.test.jsx",
+      "status": "passed",
+      "cases": [
+        {
+          "name": "MZ2 product picture and integer quantity produce explicit unit price and line tax invoice, no payment",
+          "status": "passed"
+        },
+        {
+          "name": "uncertain save locks payload and persists identical retry after remount",
+          "status": "passed"
+        },
+        {
+          "name": "read-only renders invoices/stock but cannot enter or pay and never loads write catalog",
+          "status": "passed"
+        },
+        {
+          "name": "write-only saves without acquiring report access",
+          "status": "passed"
+        },
+        {
+          "name": "partial payment allocates only chosen invoice using selected cash account",
+          "status": "passed"
+        },
+        {
+          "name": "invalid fractional quantity blocks POST and preserves form",
+          "status": "passed"
+        },
+        {
+          "name": "loading prevents save and rapid click has one request",
+          "status": "passed"
+        },
+        {
+          "name": "definitive rejected payload permits correction; no permission renders no entry or report",
+          "status": "passed"
+        },
+        {
+          "name": "write-only known invoice lookup permits allocated later payment without list/read access",
+          "status": "passed"
+        },
+        {
+          "name": "component identity remains distinct and exact quantity goes to receipt",
+          "status": "passed"
+        },
+        {
+          "name": "storage failure prevents financial request",
+          "status": "passed"
+        },
+        {
+          "name": "assigned default bank is selected when opening invoice payment",
+          "status": "passed"
+        },
+        {
+          "name": "initial catalog failure is recoverable without remount and prevents entry until reload",
+          "status": "passed"
+        },
+        {
+          "name": "purchase starts on its draft without history, report, lookup or unnecessary payment reads",
+          "status": "passed"
+        },
+        {
+          "name": "reports stay read-only even with both permissions",
+          "status": "passed"
+        },
+        {
+          "name": "report purchases do not reload when window focus returns",
+          "status": "passed"
+        },
+        {
+          "name": "manual purchase report refresh waits for its pending read and shows the new data",
+          "status": "passed"
+        },
+        {
+          "name": "purchase reloads entry data only by explicit refresh, not focus",
+          "status": "passed"
+        },
+        {
+          "name": "payment reloads entry data only by explicit refresh, not focus",
+          "status": "passed"
+        },
+        {
+          "name": "type toggle and search filter the selection cards without losing selected lines",
+          "status": "passed"
+        },
+        {
+          "name": "reports cannot retry a persisted financial command and never discard it",
+          "status": "passed"
+        },
+        {
+          "name": "piece unit is Arabic display only and does not alter posted identity",
+          "status": "passed"
+        },
+        {
+          "name": "changing lookup clears the prior invoice payment selection",
+          "status": "passed"
+        },
+        {
+          "name": "same product silver ten and gold twenty stay separate through save, retry and report readback in RTL",
+          "status": "passed"
+        },
+        {
+          "name": "inventory identity cannot collide across delimiter-containing product and variant IDs",
+          "status": "passed"
+        },
+        {
+          "name": "names distribute original gold10/silver5 without inflating quantity or price and retry stays frozen",
+          "status": "passed"
+        },
+        {
+          "name": "over-allocation and duplicate normalized name fail before request while removal permits save",
+          "status": "passed"
+        },
+        {
+          "name": "reports preserve original name allocations after unnamed returns, not remaining named stock",
+          "status": "passed"
+        },
+        {
+          "name": "components have no personal-name controls",
+          "status": "passed"
+        },
+        {
+          "name": "invalid name distribution rejects before persistence: 0",
+          "status": "passed"
+        },
+        {
+          "name": "invalid name distribution rejects before persistence: 1",
+          "status": "passed"
+        },
+        {
+          "name": "invalid name distribution rejects before persistence: 2",
+          "status": "passed"
+        },
+        {
+          "name": "invalid name distribution rejects before persistence: 3",
+          "status": "passed"
+        },
+        {
+          "name": "invalid name distribution rejects before persistence: 4",
+          "status": "passed"
+        },
+        {
+          "name": "invalid name distribution rejects before persistence: 5",
+          "status": "passed"
+        },
+        {
+          "name": "legacy empty distributions remain absent and canonical name whitespace is stable",
+          "status": "passed"
+        },
+        {
+          "name": "product-defined name letter and multiline note share one quantity allocation",
+          "status": "passed"
+        },
+        {
+          "name": "no generic name editor is invented for products without customization definitions",
+          "status": "passed"
+        },
+        {
+          "name": "unknown options reject, while the same name with a different letter is distinct",
+          "status": "passed"
+        },
+        {
+          "name": "canonical saved labels render in reports without substituting technical option IDs",
+          "status": "passed"
+        },
+        {
+          "name": "canonical raw gold10 and ready Abeer100 stay separate purchase lines with MZ2 location, not actual stock",
+          "status": "passed"
+        },
+        {
+          "name": "configuration requires a location and purchase reports are explicit and searchable",
+          "status": "passed"
+        },
+        {
+          "name": "configured line identity preserves exact supplier return target",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "src/pages/operational/InventoryPurchaseDraft.test.jsx",
+      "status": "passed",
+      "cases": [
+        {
+          "name": "supplier number and date are one compact group and selected kind has an explicit mark",
+          "status": "passed"
+        },
+        {
+          "name": "saving one configured item creates only a compact local draft row with its choices",
+          "status": "passed"
+        },
+        {
+          "name": "newest item is first and editing an older item preserves its position and identity",
+          "status": "passed"
+        },
+        {
+          "name": "unsaved edits prompt before switching kind and discard restores the saved row",
+          "status": "passed"
+        },
+        {
+          "name": "save-and-continue saves the current item before opening the next kind",
+          "status": "passed"
+        },
+        {
+          "name": "location may wait for receipt and review does not submit an invoice",
+          "status": "passed"
+        },
+        {
+          "name": "an open item blocks invoice review even before any edits",
+          "status": "passed"
+        },
+        {
+          "name": "choosing no clears dependent name and style while optional blank remains ready",
+          "status": "passed"
+        },
+        {
+          "name": "per-field name deferral appears in summary alongside a fixed shape",
+          "status": "passed"
+        },
+        {
+          "name": "unfinished required options block line save without creating a draft or API write",
+          "status": "passed"
+        },
+        {
+          "name": "local draft restores invoice metadata, saved rows and the unfinished editor",
+          "status": "passed"
+        },
+        {
+          "name": "restored unsaved editor still prompts before its entered information is discarded",
+          "status": "passed"
+        },
+        {
+          "name": "classification updates the open item, preserves money and blocks unchanged older draft rows until explicit review",
+          "status": "passed"
+        },
+        {
+          "name": "a restored older draft is reviewed against the current catalog without silently rewriting its fields",
+          "status": "passed"
+        },
+        {
+          "name": "staff purchase entry does not expose the owner option-classification mutation",
+          "status": "passed"
+        },
+        {
+          "name": "an older dirty-navigation prompt cannot unmount an open classification editor or leave the draft locked",
+          "status": "passed"
+        },
+        {
+          "name": "a product with incomplete cached options can open classification and apply the returned complete catalog",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "src/pages/operational/inventoryPurchaseWorkflow.test.js",
+      "status": "passed",
+      "cases": [
+        {
+          "name": "unreceived credit invoice creates only supplier invoice and can be received later",
+          "status": "passed"
+        },
+        {
+          "name": "later location can remain unset for unreceived invoice, but received quantities require a location",
+          "status": "passed"
+        },
+        {
+          "name": "new product commands bind the reviewed option policy while components omit that product contract",
+          "status": "passed"
+        },
+        {
+          "name": "partial receipt binds to saved line IDs and never resubmits client prices as receipt evidence",
+          "status": "passed"
+        },
+        {
+          "name": "uncertain invoice request resumes with the same identity and body",
+          "status": "passed"
+        },
+        {
+          "name": "uncertain receipt persists its preview and retries identical body without a second invoice",
+          "status": "passed"
+        },
+        {
+          "name": "payment retry never repeats confirmed invoice or physical receipt",
+          "status": "passed"
+        },
+        {
+          "name": "existing payment calls allocation-only endpoint and never creates a bank movement",
+          "status": "passed"
+        },
+        {
+          "name": "invalid received or paid quantity fails before creating any command",
+          "status": "passed"
+        },
+        {
+          "name": "invalid received or paid quantity fails before creating any command",
+          "status": "passed"
+        },
+        {
+          "name": "invalid received or paid quantity fails before creating any command",
+          "status": "passed"
+        },
+        {
+          "name": "invalid received or paid quantity fails before creating any command",
+          "status": "passed"
+        },
+        {
+          "name": "invalid received or paid quantity fails before creating any command",
+          "status": "passed"
+        },
+        {
+          "name": "paused receipt does not advance to payment and leaves invoice checkpoint recoverable",
+          "status": "passed"
+        },
+        {
+          "name": "a valid durable receipt checkpoint remains recoverable",
+          "status": "passed"
+        },
+        {
+          "name": "a valid durable payment checkpoint remains recoverable",
+          "status": "passed"
+        },
+        {
+          "name": "a valid durable complete checkpoint remains recoverable",
+          "status": "passed"
+        },
+        {
+          "name": "restored unknown phase is rejected before writes or checkpoints",
+          "status": "passed"
+        },
+        {
+          "name": "restored unsupported workflow version is rejected before writes or checkpoints",
+          "status": "passed"
+        },
+        {
+          "name": "restored missing saved invoice is rejected before writes or checkpoints",
+          "status": "passed"
+        },
+        {
+          "name": "restored missing obligation checkpoint is rejected before writes or checkpoints",
+          "status": "passed"
+        },
+        {
+          "name": "restored missing saved lines is rejected before writes or checkpoints",
+          "status": "passed"
+        },
+        {
+          "name": "restored receipt scope mismatch is rejected before writes or checkpoints",
+          "status": "passed"
+        },
+        {
+          "name": "restored previewed receipt scope mismatch is rejected before writes or checkpoints",
+          "status": "passed"
+        },
+        {
+          "name": "restored payment scope mismatch is rejected before writes or checkpoints",
+          "status": "passed"
+        },
+        {
+          "name": "restored invoice supplier mismatch is rejected before writes or checkpoints",
+          "status": "passed"
+        },
+        {
+          "name": "restored invoice number mismatch is rejected before writes or checkpoints",
+          "status": "passed"
+        },
+        {
+          "name": "restored saved invoice item mismatch is rejected before writes or checkpoints",
+          "status": "passed"
+        },
+        {
+          "name": "restored saved invoice quantity mismatch is rejected before writes or checkpoints",
+          "status": "passed"
+        },
+        {
+          "name": "restored payment supplier mismatch is rejected before writes or checkpoints",
+          "status": "passed"
+        },
+        {
+          "name": "recovery validation rejects a root command from a different session",
+          "status": "passed"
+        },
+        {
+          "name": "malformed receipt binding: receipt index outside the invoice",
+          "status": "passed"
+        },
+        {
+          "name": "malformed receipt binding: duplicate receipt index",
+          "status": "passed"
+        },
+        {
+          "name": "malformed receipt binding: receipt quantity above ordered quantity",
+          "status": "passed"
+        },
+        {
+          "name": "malformed receipt binding: previewed line belongs to another invoice",
+          "status": "passed"
+        },
+        {
+          "name": "malformed receipt binding: previewed quantity differs from approved quantity",
+          "status": "passed"
+        },
+        {
+          "name": "malformed receipt binding: previewed location differs from approved location",
+          "status": "passed"
+        },
+        {
+          "name": "malformed receipt binding: previewed date differs from approved date",
+          "status": "passed"
+        },
+        {
+          "name": "malformed receipt binding: previewed request identity differs",
+          "status": "passed"
+        },
+        {
+          "name": "malformed receipt binding: previewed lines omit the approved line",
+          "status": "passed"
+        },
+        {
+          "name": "malformed receipt binding: previewed lines duplicate an approved line",
+          "status": "passed"
+        },
+        {
+          "name": "malformed receipt binding: malformed preview hash",
+          "status": "passed"
+        },
+        {
+          "name": "missing checkpoint: payment before receipt confirmation",
+          "status": "passed"
+        },
+        {
+          "name": "missing checkpoint: completed workflow without receipt confirmation",
+          "status": "passed"
+        },
+        {
+          "name": "missing checkpoint: completed workflow without payment confirmation",
+          "status": "passed"
+        },
+        {
+          "name": "missing checkpoint: receipt confirmation without durable receipt identity",
+          "status": "passed"
+        },
+        {
+          "name": "an existing payment cannot be allocated before its own date",
+          "status": "passed"
+        },
+        {
+          "name": "existing allocation at or after the payment date is valid: 2025-01-03",
+          "status": "passed"
+        },
+        {
+          "name": "existing allocation at or after the payment date is valid: 2025-01-04",
+          "status": "passed"
+        },
+        {
+          "name": "allocating an existing payment retains receipt evidence while updating financial amounts",
+          "status": "passed"
+        },
+        {
+          "name": "a serialized uncertain allocation retries the exact body and never emits a cash movement",
+          "status": "passed"
+        },
+        {
+          "name": "a lost local payment checkpoint replays the same command instead of making a new payment identity",
+          "status": "passed"
+        },
+        {
+          "name": "duplicate item detection uses canonical option identities instead of selection order or text spacing",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "src/pages/operational/StandaloneInventoryEntry.test.jsx",
+      "status": "passed",
+      "cases": [
+        {
+          "name": "one save commits exact color and quantity, clears form and displays persisted table",
+          "status": "passed"
+        },
+        {
+          "name": "uncertain response survives remount and retries identical command without another preview",
+          "status": "passed"
+        },
+        {
+          "name": "double-click while save pending sends one receipt command",
+          "status": "passed"
+        },
+        {
+          "name": "default closed input only activates independent writer with its revision",
+          "status": "passed"
+        },
+        {
+          "name": "permission denial never loads catalog or activates writer",
+          "status": "passed"
+        },
+        {
+          "name": "missing warehouse keeps input disabled and links warehouse setup",
+          "status": "passed"
+        },
+        {
+          "name": "invalid quantity does not reach preview or save",
+          "status": "passed"
+        },
+        {
+          "name": "classifying gift fields as side additions preserves entered stock amounts and removes supplier deferral",
+          "status": "passed"
+        },
+        {
+          "name": "a pending inventory command locks classification until its result is known",
+          "status": "passed"
+        },
+        {
+          "name": "a policy change after preview releases only the rejected command and requires review before a fresh save",
+          "status": "passed"
+        },
+        {
+          "name": "an unrelated conflict keeps the original pending stock command for investigation",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "src/lib/inventoryProductConfiguration.test.js",
+      "status": "passed",
+      "cases": [
+        {
+          "name": "customer side questions and text do not block stock or create deferral",
+          "status": "passed"
+        },
+        {
+          "name": "explicit review prunes side answers and side deferral without changing other fixed values",
+          "status": "passed"
+        },
+        {
+          "name": "a side addition cannot conceal a real deferred engraving or missing physical option",
+          "status": "passed"
+        },
+        {
+          "name": "reclassifying deferred text as a physical specification exposes an empty required field",
+          "status": "passed"
+        },
+        {
+          "name": "new stock explicitly defers required customization but never an optional note or physical size",
+          "status": "passed"
+        },
+        {
+          "name": "changing parent to no removes name, shape and descendant deferral and never restores stale name",
+          "status": "passed"
+        },
+        {
+          "name": "one deferred field coexists with fixed choices and summary preserves both",
+          "status": "passed"
+        },
+        {
+          "name": "optional unrelated omission is ready and absence differs from fixed no",
+          "status": "passed"
+        },
+        {
+          "name": "cannot defer unproved or physical option size",
+          "status": "passed"
+        },
+        {
+          "name": "cannot defer unproved or physical option optional",
+          "status": "passed"
+        },
+        {
+          "name": "cannot defer unproved or physical option unknown",
+          "status": "passed"
+        },
+        {
+          "name": "forged hidden values and catalog cycles cannot pass validation",
+          "status": "passed"
+        },
+        {
+          "name": "new configured purchases require a unique complete physical combination",
+          "status": "passed"
+        },
+        {
+          "name": "physical requirements follow visibility for complete plain variant",
+          "status": "passed"
+        },
+        {
+          "name": "physical requirements follow visibility for complete chain variant",
+          "status": "passed"
+        },
+        {
+          "name": "hidden physical values and incomplete visible physical dimensions are rejected",
+          "status": "passed"
+        },
+        {
+          "name": "pending physical dimension requires a parent answer even without variant mappings",
+          "status": "passed"
+        },
+        {
+          "name": "not-equals does not interpret unanswered parent as no",
+          "status": "passed"
+        },
+        {
+          "name": "legacy request shape and whole-product raw validation remain compatible",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "src/components/inventory/suite/InventoryOptionRoles.test.jsx",
+      "status": "passed",
+      "cases": [
+        {
+          "name": "all choice and text fields can be classified, while a physical variant stays locked",
+          "status": "passed"
+        },
+        {
+          "name": "a side question and its dependent text are saved together with the exact revision and catalog identity",
+          "status": "passed"
+        },
+        {
+          "name": "uncertain or stale writes keep the choices for review and do not change the current stock line",
+          "status": "passed"
+        },
+        {
+          "name": "disabled and in-flight controls never submit duplicate policy saves",
+          "status": "passed"
+        },
+        {
+          "name": "canceling a classification draft leaves product metadata and source line unchanged",
+          "status": "passed"
+        },
+        {
+          "name": "unmounting an open editor releases its parent navigation and busy flags",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "src/components/inventory/suite/InventoryProductFields.test.jsx",
+      "status": "passed",
+      "cases": [
+        {
+          "name": "no immediately hides and clears conditional name; yes starts with a blank name",
+          "status": "passed"
+        },
+        {
+          "name": "individual deferred name keeps literal yes fixed and optional blank note is not deferred",
+          "status": "passed"
+        },
+        {
+          "name": "deferring parent clears child name and distinguishes it from no",
+          "status": "passed"
+        },
+        {
+          "name": "picker keyboard focus is not selection; clicking shows checked selection",
+          "status": "passed"
+        },
+        {
+          "name": "selected product card also identifies the current choice",
+          "status": "passed"
+        },
+        {
+          "name": "side questions and text are a neutral summary without stock controls",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "src/lib/inventoryOptionPolicy.test.js",
+      "status": "passed",
+      "cases": [
+        {
+          "name": "applying the saved classification changes only configuration metadata and removes a side-option deferral",
+          "status": "passed"
+        },
+        {
+          "name": "a new classification never invents a customer deferral or replaces a fixed customization",
+          "status": "passed"
+        },
+        {
+          "name": "saved draft review is required only when a product policy revision changed",
+          "status": "passed"
+        }
+      ]
+    }
+  ]
+}

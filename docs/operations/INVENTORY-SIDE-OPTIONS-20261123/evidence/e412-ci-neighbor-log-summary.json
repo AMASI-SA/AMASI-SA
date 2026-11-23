@@ -1,0 +1,93 @@
+{
+  "source_git_sha": "e412bc630de7d7e8eaf7dd03f6c1d09e59c18367",
+  "statement": "Sanitized excerpts from GitHub job logs. Counts across jobs overlap and must not be summed.",
+  "job_logs": [
+    {
+      "name": "g47",
+      "lines": [
+        "[command]/usr/bin/git checkout --progress --force e412bc630de7d7e8eaf7dd03f6c1d09e59c18367",
+        "238 passed, 2 warnings, 88 subtests passed in 23.15s",
+        "Salla projection: 238 executed cases, zero skips/failures/errors",
+        "Artifact download URL: https://github.com/AMASI-SA/AMASI-SA/actions/runs/45196878053/artifacts/14828742089",
+        "331 passed, 5 warnings, 127 subtests passed in 152.31s (0:02:32)",
+        "65 passed in 20.17s",
+        "65 native inventory cases PASS; zero skips",
+        "Artifact download URL: https://github.com/AMASI-SA/AMASI-SA/actions/runs/45196878053/artifacts/14828243127",
+        "G47: 331 executed test cases, zero skips/failures/errors",
+        "Artifact download URL: https://github.com/AMASI-SA/AMASI-SA/actions/runs/45196878053/artifacts/14828227986",
+        "436 passed, 7 warnings in 23.92s",
+        "Order cost: 436 executed cases, zero skips/failures/errors",
+        "Artifact download URL: https://github.com/AMASI-SA/AMASI-SA/actions/runs/45196878053/artifacts/14827587758"
+      ]
+    },
+    {
+      "name": "stock",
+      "lines": [
+        "[command]/usr/bin/git checkout --progress --force e412bc630de7d7e8eaf7dd03f6c1d09e59c18367",
+        "5531 passed, 8 warnings, 97 subtests passed in 704.62s (0:11:44)",
+        "Eligibility: 5531 executed test cases, zero skips/failures/errors",
+        "Artifact download URL: https://github.com/AMASI-SA/AMASI-SA/actions/runs/45196876532/artifacts/14832055074"
+      ]
+    },
+    {
+      "name": "preparation_review",
+      "lines": [
+        "[command]/usr/bin/git checkout --progress --force e412bc630de7d7e8eaf7dd03f6c1d09e59c18367",
+        "70 passed in 27.97s",
+        "35 passed, 35 subtests passed in 31.59s",
+        "Preparation refresh recovery: 35 executed cases; named contracts present; zero skips/failures/errors",
+        "349 passed, 5 warnings, 59 subtests passed in 32.34s",
+        "Android operations: 349 executed cases; zero skips/failures/errors",
+        "1081 passed, 1 warning, 596 subtests passed in 389.79s (0:06:29)",
+        "125 passed, 28 subtests passed in 74.76s (0:01:14)",
+        "1 passed in 1.99s",
+        "review-completion.xml: 1081 executed cases; zero skips/failures/errors",
+        "review-acceptance-guard.xml: 1 executed cases; zero skips/failures/errors",
+        "source-snapshot.xml: 125 executed cases; zero skips/failures/errors",
+        "Artifact download URL: https://github.com/AMASI-SA/AMASI-SA/actions/runs/45196876657/artifacts/14830351569"
+      ]
+    },
+    {
+      "name": "browser",
+      "lines": [
+        "[command]/usr/bin/git checkout --progress --force e412bc630de7d7e8eaf7dd03f6c1d09e59c18367",
+        "PASS Saved summary appears before its bound forecast without refreshing sources",
+        "PASS Every sidebar page and currency is reachable with scoped GET-only navigation",
+        "PASS Leaving the summary consumes its pending forecast and prevents late replacement",
+        "PASS A different forecast snapshot never replaces saved values or becomes zero",
+        "PASS Known balances, seven distinct orders, reasons and dialog keyboard close",
+        "PASS Mobile dialog fits the viewport and all orders remain reachable",
+        "PASS No repeat traffic while the completed page stays open",
+        "PASS An explicit source refresh failure retains saved money and a visible warning",
+        "PASS A hidden page does no request and one visible activation reads its section once",
+        "PASS Denied section GET exposes no financial content and performs no refresh",
+        "PASS Page export uses saved data and full export is explicit with all snapshot bindings",
+        "PASS One explicit delivery confirmation preserves known money and refreshes once",
+        "PASS Saved confirmation remains visible when the follow-up refresh fails",
+        "PASS Hiding during delivery preflight prevents confirmation and automatic retry",
+        "PASS Approved supplier payout fetches only the selected funding group and hides empty custody",
+        "PASS Desktop ledger uses five rows, recorder names, red له and green عليه",
+        "PASS Mobile ledger remains inside a 390px page with numbered pagination",
+        "PASS External reasons and custody source are conditional; save returns to the actual backdated page",
+        "PASS Owner sees specialized routes without deleted grant keys and exactly three primary tabs",
+        "PASS Order refund reserves a partial amount and reconciles only server provider evidence",
+        "PASS Owner applies all-resource and per-kind permissions with individual exceptions before one versioned save",
+        "PASS Mobile permission cards expose every account label and control inside the viewport",
+        "PASS Staff cannot see owner tools or fetch the owner permission catalog",
+        "PASS Automatic salary is compact and history Back preserves the ledger",
+        "PASS Period statement is explicit, complete and reauthorized before printing",
+        "PASS Scoped review proof Back keeps the draft and approved history leaves courier balance unchanged",
+        "PASS Desktop form is centered at 70% with adjacent supplier metadata",
+        "PASS Product and component choices show an explicit selected mark in one editor",
+        "PASS Conditional yes, literal no and deferred parent keep only visible option values",
+        "PASS Newest compact row is first; editing preserves its place and optional omissions stay ready",
+        "PASS Mobile single editor and compact draft fit the viewport without horizontal scrolling",
+        "PASS Approving an unreceived credit invoice does not call receiving or payment",
+        "PASS Awaiting queue receives exactly two of four units and preserves the unpaid balance on reload",
+        "Artifact download URL: https://github.com/AMASI-SA/AMASI-SA/actions/runs/45196877340/artifacts/14828787136",
+        "Artifact download URL: https://github.com/AMASI-SA/AMASI-SA/actions/runs/45196877340/artifacts/14827304992",
+        "Artifact download URL: https://github.com/AMASI-SA/AMASI-SA/actions/runs/45196877340/artifacts/14829526633"
+      ]
+    }
+  ]
+}
