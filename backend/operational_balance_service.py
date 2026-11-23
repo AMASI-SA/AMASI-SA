@@ -815,6 +815,8 @@ async def refresh(db, owner, *, clock=None):
             await run_calculation(_apply_refreshed_party_names, result, names)
         from operational_entity_freshness import FIELD, build_coverage
         result["engine"][FIELD] = await run_calculation(build_coverage, result, sources, stamp, entity_names=names)
+        from operational_balance_recovery_proof import FIELD as PROOF_FIELD, build_recovery_proof
+        result["engine"][PROOF_FIELD] = await run_calculation(build_recovery_proof, state, result, sources, stamp)
         state.update(result)
         state["engine"]["as_of"] = stamp
         await checkpoint()
@@ -877,6 +879,11 @@ def paypal_available(computed):
 def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=False, provider_balances_net=False, paypal_sar=False, workspace_provider=None):
     from operational_financial_activity_runtime import preparation_checkpoint
     preparation_checkpoint()
+    # Revision-bound health and recovery receipts have their own owner-only
+    # readers. They are not financial report data, and copying/returning them
+    # would change an otherwise identical report on every successful refresh.
+    state = {**state, "engine": {key: value for key, value in state.get("engine", {}).items()
+             if key not in {"automatic_source_coverage", "recovery_proof_v1"}}}
     state = reconcile_credits(deepcopy(state))
     from operational_provider_balance_sar import convert_claim, convert_projection, unavailable, usable_bases
     valuations = usable_bases(state) if provider_balances_sar or paypal_sar else {}

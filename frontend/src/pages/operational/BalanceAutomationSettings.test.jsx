@@ -71,3 +71,12 @@ test('hiding an in-flight setting change preserves an explicit unknown outcome u
   await act(async () => button('التحقق من حالة الجدولة').click());
   expect(button('إيقاف الجدولة').disabled).toBe(false);
 });
+test('attempt details distinguish no first row from a measured zero and never claim financial coverage', async () => {
+  http.get.mockResolvedValueOnce({ data: setting({ last_error_code: 'operational_source_setup_incomplete',
+    last_trace: { stage_timings: [{ stage: 'source_primary_reads', outcome: 'failed', duration_ms: 15000 }],
+      primary_orders_reads: [{ collection: 'unified_orders', queue_ms: 0.5, budget_ms: 15000,
+        first_row_ms: null, read_elapsed_ms: 15000, rows_retained: 0 }] } }) });
+  await render(); expect(host.textContent).toContain('لم يُثبت وصول أول سجل');
+  expect(host.textContent).toContain('السجلات المقروءة 0'); expect(host.textContent).toContain('source_primary_reads');
+  expect(host.textContent).toContain('راجع تنبيهات الجهات'); expect(http.post).not.toHaveBeenCalled();
+});

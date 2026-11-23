@@ -1358,9 +1358,13 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
     # The inventory catalogue is read on demand, not on each financial sync.
     with refresh_stage('source_primary_reads'):
         from operational_read_runtime import load_collections
+        # Start the large order cursor in the first bounded wave. Alphabetical
+        # order left it last, leaving less of the overall deadline for its read.
+        # Every collection still completes under the same concurrency/deadlines.
         source_names = sorted(ALLOWED_COLLECTIONS - BUNDLE_READ_COLLECTIONS - STATEMENT_COLLECTIONS - {TXN_COLLECTION,
             DELIVERY_HISTORY, SHIPPING_EVENT_BLOCKERS, SHIPPING_V2_BLOCKERS, 'users', 'settings', 'expense_categories',
-            'mezan_products_v2', 'mz2_opening_facts_v2', 'accounts', 'mz2_operational_bank_accounts'})
+            'mezan_products_v2', 'mz2_opening_facts_v2', 'accounts', 'mz2_operational_bank_accounts'},
+            key=lambda name: (name != 'unified_orders', name))
         data = await load_collections(db, owner, source_names, reader=refresh_source_rows,
                                       observe_primary_orders=True)
     if on_primary_reads_complete is not None:

@@ -67,3 +67,50 @@ After freezing A/B, append subsequent release evidence in the PR continuation;
 do not change governed source or rewrite the frozen pair. Preserve a truthful
 separation between provider evidence gaps, recovered original-day records,
 unknown dates and ordinary current observations.
+
+## Second verified checkpoint (before final source freeze)
+
+Draft PR #2098 preserves initial remote source
+`8397a192226219063e17ea0356841b3f7cdd5ec4`. The root's local API-adapter
+regressions now explicitly request writes and add a stale-page no-write case.
+The browser fixture likewise asserts no refresh on entry before clicking the
+explicit update button; the thirteen existing acceptance scenarios remain.
+The complete local operational frontend selection passes 1,472 cases across
+86 suites. This is not a substitute for exact final CI.
+
+The compact same-CAS recovery receipt and owner-only explicit readback are now
+implemented, including original-date versus unverified additions, changed
+previous obligations, duplicate deltas and preservation fingerprints. The
+actual bank writer test proves original-day recovery, a receipt bound to the
+committed revision, and zero new financial entries on the second pass.
+Diagnostic metadata is excluded from ordinary financial report copies/output;
+otherwise the changing receipt revision would break an unchanged business
+report and unnecessarily enlarge every response.
+
+Source reads now start unified_orders in the first four-reader wave. The exact
+same 32 primary collections, concurrency four, per-read limit and cancellation
+join remain. Saved-response JSON encoding is serialized off the HTTP loop and
+reauthorizes before returning. Synthetic measurements and their limitations
+are in SOURCE_READ_SCHEDULING.md and RESPONSE_ENCODING.md; they are not
+production before/after measurements.
+
+Initial checkpoint CI exposed seven business-report replay comparisons affected
+only by the new diagnostic revision, two old API auto-refresh assumptions and
+an old browser auto-refresh assumption. The source/fixture corrections are
+included here; no assertion or workflow acceptance gate is removed. The new
+Mongo automation fixture now uses the existing isolated operational CI URI,
+not the unrelated Qoyod fixture variable. Final exact CI remains mandatory.
+
+A further original-date risk was confirmed before any live financial write:
+new page-based provider claims and status-only shipping/COD/prepaid facts can
+use observation time. Their new confirmed financial effects require an
+original-event admission fix before activation or catch-up. Existing correct
+manual and automatic records must remain unchanged. Unsupported historical
+source evidence must stay explicit and pending rather than receive a replay
+date. This correction is still in progress at this checkpoint.
+
+Production is still unchanged by this task. Latest direct check: guard inactive,
+shared tracked tree clean at J, live identity remains the intake PR #2087 source.
+No lease, publish, provider sync, financial refresh or scheduler enable has been
+performed. Next safe action: finish and independently review original-date
+admission, execute final CI, then freeze the governed source/intent pair.

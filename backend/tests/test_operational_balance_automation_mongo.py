@@ -1,21 +1,53 @@
 """CI real-Mongo gates for opt-in, distributed fencing and saved-state CAS."""
 import asyncio
 from datetime import datetime, timedelta, timezone
+import os
+from urllib.parse import urlsplit
+from uuid import uuid4
 
+from motor.motor_asyncio import AsyncIOMotorClient
 import pytest
+import pytest_asyncio
 
 from operational_balance_store import STATES, initial, mutate
-from test_qoyod_real_mongo import real_db
+
+
+@pytest_asyncio.fixture
+async def automation_db():
+    """Use the operational CI replica only, with no app/Qoyod URI fallback."""
+    uri = os.environ.get('OPERATIONAL_TEST_MONGO_URI')
+    if not uri:
+        pytest.skip('OPERATIONAL_TEST_MONGO_URI required; no production fallback')
+    parsed = urlsplit(uri)
+    assert parsed.scheme == 'mongodb' and parsed.hostname == '127.0.0.1' and parsed.port
+    assert parsed.username is None and parsed.password is None and not parsed.fragment
+    # Stay on this explicit loopback server even if its replica advertises
+    # other members. No test database exists until the replica check succeeds.
+    client = AsyncIOMotorClient(uri, tz_aware=True, directConnection=True,
+                               serverSelectionTimeoutMS=3000)
+    name, verified = 'operational_automation_test_' + uuid4().hex, False
+    try:
+        hello = await client.admin.command('hello')
+        assert hello.get('setName') and hello.get('isWritablePrimary') is True
+        verified = True
+        yield client[name]
+    finally:
+        try:
+            if verified:
+                assert name.startswith('operational_automation_test_')
+                await client.drop_database(name)
+        finally:
+            client.close()
 
 
 @pytest.mark.asyncio
-async def test_real_mongo_owner_opt_in_serial_lease_and_single_atomic_result(real_db, monkeypatch):
+async def test_real_mongo_owner_opt_in_serial_lease_and_single_atomic_result(automation_db, monkeypatch):
     import operational_balance_automation as automatic
     import operational_balance_service
     import operational_visible_evidence
     from operational_demand_refresh import LEASES
 
-    db, _ = real_db
+    db = automation_db
     owner = 'synthetic-automation-owner'
     state = initial(owner)
     manual = {'id': 'synthetic-correct-manual-movement', 'amount': '17.50'}
@@ -75,9 +107,9 @@ async def test_real_mongo_owner_opt_in_serial_lease_and_single_atomic_result(rea
 
 
 @pytest.mark.asyncio
-async def test_real_mongo_quarantines_only_exact_malformed_config(real_db):
+async def test_real_mongo_quarantines_only_exact_malformed_config(automation_db):
     import operational_balance_automation as automatic
-    db, _ = real_db
+    db = automation_db
     await db[automatic.SETTINGS].insert_one({'_id': 'synthetic-invalid',
         'owner_id': 'synthetic-invalid', 'enabled': True,
         'next_due_at': datetime.now(timezone.utc) - timedelta(days=1)})

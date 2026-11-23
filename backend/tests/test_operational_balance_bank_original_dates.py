@@ -79,9 +79,15 @@ def test_delayed_bank_recovery_keeps_original_day_and_current_audit_then_replays
         statement = service.account_statement(result, {"kind": "bank", "id": "bank", "currency": "SAR", "name": "Bank"})
         assert statement["items"][0]["business_date"] == "2026-11-21"
         assert statement["items"][0]["occurred_at"] == EVENT_AT
+        proof = result["engine"]["recovery_proof_v1"]
+        assert proof["calculation_revision"] == result["revision"]
+        assert proof["new_automatic_movement_count"] == 1 and proof["original_dates_verified"] is True
+        actual, = proof["new_original_dated"]["automatic_movements"]
+        assert (actual["entity_id"], actual["business_date"], actual["amount"]) == ("bank", "2026-11-21", "10.00")
         repeated = await recovered(monkeypatch, db, [order])
         assert repeated["movements"] == [movement]
         assert len(refresh_fixture.claim_rows(db)) == len(repeated["audit"]) == 1
+        assert repeated["engine"]["recovery_proof_v1"]["new_automatic_movement_count"] == 0
     asyncio.run(scenario())
 
 

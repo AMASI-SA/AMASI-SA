@@ -643,6 +643,12 @@ async function capture(page, name) {
         && new URL(request.url()).pathname === '/api/operational-balances/refresh');
       const held = new Promise(resolve => { balanceRefreshStarted = resolve; });
       await page.goto(ledgerUrl);
+      await page.locator('.sb-ledger tbody tr').first().waitFor();
+      await page.locator('.balance-freshness-warning').waitFor();
+      assert.equal(calls.slice(start).filter(call => call.method === 'POST'
+        && call.path === '/api/operational-balances/refresh').length, 0,
+        'Opening a stale saved ledger must remain read-only');
+      await page.getByRole('button', { name: 'تحديث المصادر', exact: true }).click();
       await deadline(Promise.all([posted, held]), 'Freshness refresh did not reach the fixture');
       await page.locator('.sb-ledger tbody tr').first().waitFor();
       assert.equal(await page.locator('.sb-ledger tbody tr').count(), 5, 'Saved rows remain visible while refresh is pending');

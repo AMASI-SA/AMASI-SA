@@ -17,6 +17,27 @@ function checked(value, scope) {
 const showTime = value => value ? new Intl.DateTimeFormat('ar-SA', {
   timeZone: 'Asia/Riyadh', calendar: 'gregory', dateStyle: 'short', timeStyle: 'short',
 }).format(new Date(value)) : 'لم تُسجّل بعد';
+const elapsed = value => typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 300000;
+function AttemptDetails({ trace, error }) {
+  const stages = Array.isArray(trace?.stage_timings) ? trace.stage_timings.slice(-64).filter(row =>
+    row && typeof row.stage === 'string' && /^[a-z_]{1,50}$/.test(row.stage)
+    && ['complete', 'cancelled', 'failed'].includes(row.outcome) && elapsed(row.duration_ms)) : [];
+  const reads = Array.isArray(trace?.primary_orders_reads) ? trace.primary_orders_reads.slice(-12).filter(row =>
+    row?.collection === 'unified_orders' && elapsed(row.queue_ms) && elapsed(row.budget_ms)
+    && Number.isInteger(row.rows_retained) && row.rows_retained >= 0 && row.rows_retained <= 20001) : [];
+  const code = typeof error === 'string' && /^operational_[a-z_]{1,100}$/.test(error) ? error : null;
+  const outcome = { complete: 'اكتملت', cancelled: 'توقفت', failed: 'فشلت' };
+  if (!stages.length && !reads.length && !code) return null;
+  return <details><summary>تفاصيل متابعة آخر محاولة</summary>
+    {code && <p>رمز المشكلة: <bdi>{code}</bdi></p>}
+    {stages.length > 0 && <><p>مدد المراحل بالملي ثانية؛ تتداخل المراحل ولا تُجمع لتحديد المدة الكلية.</p>
+      <div className="table-wrap"><table><thead><tr><th>المرحلة</th><th>النتيجة</th><th>المدة</th></tr></thead>
+        <tbody>{stages.map((row, index) => <tr key={index}><td><bdi>{row.stage}</bdi></td><td>{outcome[row.outcome]}</td><td>{row.duration_ms}</td></tr>)}</tbody></table></div></>}
+    {reads.map((row, index) => <p key={index}>قراءة الطلبات: انتظار بدء القراءة {row.queue_ms} مللي ثانية، المهلة المتاحة {row.budget_ms} مللي ثانية،
+      {elapsed(row.first_row_ms) ? ` أول سجل بعد ${row.first_row_ms} مللي ثانية،` : ' لم يُثبت وصول أول سجل،'}
+      {elapsed(row.read_elapsed_ms) ? ` مدة القراءة ${row.read_elapsed_ms} مللي ثانية،` : ''} السجلات المقروءة {row.rows_retained}.</p>)}
+  </details>;
+}
 
 export default function BalanceAutomationSettings({ context }) {
   const scope = context?.session_scope;
@@ -83,6 +104,7 @@ export default function BalanceAutomationSettings({ context }) {
       <p>المحاولة التالية: {showTime(value.next_due_at)} · آخر محاولة: {showTime(value.last_attempt_at)}</p>
       <p>آخر احتساب انتهى بالحفظ: {showTime(value.last_success_at)}. راجع تنبيهات الجهات للتأكد من اكتمال البيانات والأيام.</p>
       {value.consecutive_failures > 0 && <p role="alert">تعذرت {value.consecutive_failures} محاولة متتالية؛ تظل آخر أرصدة محفوظة معروضة وتُعاد المحاولة بمهلة محدودة.</p>}
+      <AttemptDetails trace={value.last_trace} error={value.last_error_code}/>
       <button type="button" disabled={busy || !verified || context.status !== 'active'} onClick={() => perform(!value.enabled)}>
         {value.enabled ? 'إيقاف الجدولة' : 'تفعيل الاحتساب التلقائي'}
       </button>

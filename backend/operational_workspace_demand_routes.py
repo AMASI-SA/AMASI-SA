@@ -73,7 +73,15 @@ async def _serve_projection(db, user, request, family, *, filters=None, resource
                 else:
                     response.update(items=result["items"], total=total, page=selected_page,
                         page_size=page_size, total_pages=pages, pages=pages)
-            return JSONResponse(content=jsonable_encoder(response), headers={"Cache-Control": "no-store"})
+            from operational_response_encoding import encode_saved_response
+            from operational_financial_activity_runtime import preparation_checkpoint
+            encoded = await encode_saved_response(response)
+            # Serialization is awaited CPU work. Current permissions and the
+            # sole disconnect listener must win before any saved bytes return.
+            await authorize_spec(db, spec)
+            await asyncio.sleep(0)
+            preparation_checkpoint()
+            return encoded
         ownership.update(spec=spec, consumer=consumer)
         status = await demand(db, spec, consumer,
                               retry=request.headers.get("X-Mezan-Read-Poll") != "1")
