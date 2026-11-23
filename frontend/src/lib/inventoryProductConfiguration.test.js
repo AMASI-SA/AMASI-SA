@@ -1,4 +1,4 @@
-import {inventoryConfiguration,inventoryOptionVisibility,pruneInventoryConfiguration,validateInventoryConfiguration,inventoryConfigDescription} from './inventoryProductConfiguration';
+import {inventoryConfiguration,inventoryOptionVisibility,pruneInventoryConfiguration,validateInventoryConfiguration,inventoryConfigDescription,inventoryConfigurationLabels} from './inventoryProductConfiguration';
 
 const parent={id:'emb',name:'هل تريد تطريز الاسم',type:'radio',required:true,defer_allowed:true,values:[{id:'yes',name:'نعم'},{id:'no',name:'لا'}]};
 const rules=[{option_id:'emb',value_id:'yes',operator:'='}];
@@ -10,6 +10,46 @@ const product={configuration_contract_version:2,physical_option_ids:['size'],opt
   {id:'optional',name:'خيار إضافي',type:'select',required:false,defer_allowed:false,values:[{id:'one',name:'واحد'}]},
 ]};
 const fixed=()=>({state:'ready',selections:[{option_id:'size',value_id:'two'},{option_id:'emb',value_id:'yes'},{option_id:'shape',value_id:'heart'}],inputs:[{option_id:'name',value:'فاطمة'}],deferred_option_ids:[]});
+
+const sideProduct={...product,options:[...product.options,
+  {id:'card',name:'كرت الإهداء',type:'radio',required:true,inventory_role:'informational',defer_allowed:false,values:[{id:'yes',name:'نعم'},{id:'no',name:'لا'}]},
+  {id:'card-text',name:'نص الكرت',type:'textarea',required:true,inventory_role:'informational',defer_allowed:false,values:[],visibility_rules:[{option_id:'card',value_id:'yes',operator:'='}]},
+]};
+
+test('customer side questions and text do not block stock or create deferral',()=>{
+  expect(()=>validateInventoryConfiguration(sideProduct,fixed())).not.toThrow();
+  const initial=inventoryConfiguration(sideProduct);
+  expect(initial.deferred_option_ids).toEqual(['emb']);
+  expect(inventoryOptionVisibility(sideProduct,{selections:[{option_id:'card',value_id:'yes'}]} )['card-text']).toBe('visible');
+  expect(inventoryOptionVisibility(sideProduct,{selections:[{option_id:'card',value_id:'no'}]} )['card-text']).toBe('hidden');
+});
+
+test('explicit review prunes side answers and side deferral without changing other fixed values',()=>{
+  const old=fixed();old.selections.push({option_id:'card',value_id:'yes'});old.inputs.push({option_id:'card-text',value:'رسالة'});
+  expect(()=>validateInventoryConfiguration(sideProduct,old)).toThrow();
+  expect(pruneInventoryConfiguration(sideProduct,old)).toEqual(fixed());
+  expect(pruneInventoryConfiguration(sideProduct,{...fixed(),state:'raw',deferred_option_ids:['card']})).toEqual(fixed());
+  expect(inventoryConfigurationLabels(sideProduct,old).map(row=>row.option_id)).not.toContain('card-text');
+});
+
+test('a side addition cannot conceal a real deferred engraving or missing physical option',()=>{
+  const engraved={...fixed(),inputs:[],deferred_option_ids:['name','card']};
+  const clean=pruneInventoryConfiguration(sideProduct,engraved);
+  expect(clean.state).toBe('raw');expect(clean.deferred_option_ids).toEqual(['name']);
+  expect(()=>validateInventoryConfiguration(sideProduct,clean)).not.toThrow();
+  expect(()=>validateInventoryConfiguration(sideProduct,{...clean,selections:clean.selections.filter(row=>row.option_id!=='size')})).toThrow();
+});
+
+test('reclassifying deferred text as a physical specification exposes an empty required field',()=>{
+  const definition={...product,options:product.options.map(option=>option.id==='name'?{...option,inventory_role:'physical',stock_identity:true,defer_allowed:false}:option)};
+  const old={...fixed(),state:'raw',inputs:[],deferred_option_ids:['name']};
+  const current=pruneInventoryConfiguration(definition,old);
+  expect(current.deferred_option_ids).toEqual([]);
+  expect(current.inputs).toEqual([]);
+  expect(()=>validateInventoryConfiguration(definition,current)).toThrow();
+  current.inputs=[{option_id:'name',value:'مواصفة مطبوعة على القطعة'}];
+  expect(()=>validateInventoryConfiguration(definition,current)).not.toThrow();
+});
 
 test('new stock explicitly defers required customization but never an optional note or physical size',()=>{
   const config=inventoryConfiguration(product);

@@ -82,6 +82,14 @@ def normalize_line_configuration(line: dict, product: dict) -> dict:
     } for option in catalog["options"]], "variants": [
         {"variant_id": v["variant_id"], "selections": v["selections"]} for v in variants
     ]}
+    if product.get("mezan_inventory_option_policy") is not None:
+        # option_contract already validates the local policy. Bind its effective
+        # stock/condition semantics, not its audit revision or timestamps. Keep
+        # the legacy definition bytes unchanged when no local policy exists.
+        definition["inventory_option_policy"] = [{
+            key: option[key]
+            for key in ("id", "inventory_role", "visibility_rules", "defer_allowed", "stock_identity")
+        } for option in catalog["options"]]
     fingerprint = sha256(json.dumps(definition, sort_keys=True, ensure_ascii=False,
                                     separators=(",", ":")).encode()).hexdigest()
     return {

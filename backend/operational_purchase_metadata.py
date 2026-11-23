@@ -79,12 +79,26 @@ def _products(stored, *, opening_cached_options=False):
         identity=row.get('mezan_product_id')
         if not isinstance(identity,str) or not identity or identity in seen or not row.get('name'):fail('inventory_catalog_ambiguous','هوية المنتج غير مكتملة')
         seen.add(identity)
-        if opening_cached_options:
+        if opening_cached_options or 'mezan_inventory_option_policy' in row:
             from operational_opening_options import opening_option_source
             row=opening_option_source(row)
         options,issues=option_contract(row)
-        result.append({'id':identity,'kind':'product','name':row['name'],'image_url':image_url(row.get('main_image')),'sku':row.get('sku') or '', 'unit':row.get('unit') or 'piece','options':options,'configuration_issues':issues,'selection_combinations':combinations(row,options),'conditional_rules_verified':not issues,'configuration_contract_version':2,'physical_option_ids':[option['id'] for option in options if option.get('stock_identity')]})
+        policy = row.get('mezan_inventory_option_policy')
+        revision = policy.get('revision', 0) if isinstance(policy, dict) else 0
+        result.append({'id':identity,'kind':'product','name':row['name'],'image_url':image_url(row.get('main_image')),'sku':row.get('sku') or '', 'unit':row.get('unit') or 'piece','options':options,'configuration_issues':issues,'selection_combinations':combinations(row,options),'conditional_rules_verified':not issues,'configuration_contract_version':2,'physical_option_ids':[option['id'] for option in options if option.get('stock_identity')], 'inventory_option_policy_revision': revision})
     return result
+
+
+def require_inventory_option_policy(line, product):
+    """Do not reinterpret an in-flight stock entry after local classification."""
+    if product.get('kind') != 'product':
+        return
+    revision = product.get('inventory_option_policy_revision', 0)
+    expected = line.get('inventory_option_policy_revision')
+    if expected is None and revision == 0:
+        return  # Preserve legacy commands before the product has a local policy.
+    if type(expected) is not int or expected != revision:
+        fail('inventory_option_policy_changed', 'تغير تصنيف خيارات المنتج؛ أعد فتح الصنف وراجع مواصفاته قبل الحفظ', 409)
 
 
 def configuration(value,product):
@@ -100,6 +114,7 @@ def configuration(value,product):
             if not isinstance(entry,dict) or set(entry)!=expected or not isinstance(entry['option_id'],str):fail('inventory_purchase_configuration_invalid','بيانات الخيار غير صالحة',422)
             field=fields.get(entry['option_id'])
             if not field or field['id'] in seen:fail('inventory_purchase_option_invalid','خيار غير معتمد أو مكرر',422)
+            if field.get('inventory_role') == 'informational':fail('inventory_purchase_side_option','هذا خيار جانبي للعميل؛ أعد فتح الصنف لمراجعة مواصفات المخزون',422)
             seen.add(field['id'])
             if group=='selections':
                 choice=next((v for v in field['values'] if v['id']==entry['value_id']),None)
@@ -122,10 +137,11 @@ def configuration(value,product):
     if any(visibility.get(oid)!='visible' for oid in seen|set(deferred)):fail('inventory_purchase_hidden_option','خيار مخفي أو تابع لم يتم اختيار شرطه؛ أعد تحديد خيارات المنتج',422)
     if not explicit_deferred and value['state']=='raw' and inputs:fail('inventory_purchase_raw_customization','المنتج الخام لا يحمل تخصيصًا جاهزًا',422)
     if value['state']=='ready' or explicit_deferred:
-        if any(f['required'] and visibility.get(f['id'])=='visible' and f['id'] not in seen|set(deferred) for f in fields.values()):fail('inventory_purchase_required_option','أكمل خيارات المنتج المطلوبة أو أجّل التخصيص المتاح',422)
+        if any(f['required'] and f.get('inventory_role') != 'informational' and visibility.get(f['id'])=='visible' and f['id'] not in seen|set(deferred) for f in fields.values()):fail('inventory_purchase_required_option','أكمل خيارات المنتج المطلوبة أو أجّل التخصيص المتاح',422)
     # Only a definitively hidden physical dimension is inapplicable. An
     # unanswered parent still needs resolution before the stock is identified.
     if explicit_deferred and any(f.get('stock_identity') and
+            (f['required'] or f.get('role_locked') or 'inventory_role' not in f) and
             (visibility.get(f['id']) == 'pending' or
              visibility.get(f['id']) == 'visible' and f['id'] not in seen)
             for f in fields.values()):fail('inventory_purchase_physical_option_required','حدد اللون والمقاس الفعليين للمخزون',422)
@@ -144,6 +160,7 @@ async def describe(db,owner,line,base_products,location_rows,*,allow_missing_loc
     if line.get('personalizations'):fail('inventory_purchase_mixed_customization','استخدم خيارات المنتج دون توزيع الأسماء القديم',422)
     product=base_products.get((line['kind'],line['item_id']))
     if not product:fail('inventory_item_not_mz2','المنتج أو المكون غير متاح في ميزان 2',422)
+    require_inventory_option_policy(line, product)
     location=next((l for l in location_rows if l['id']==line.get('location_id')),None)
     if not location and (not allow_missing_location or line.get('location_id')):fail('inventory_purchase_location_invalid','اختر موقعًا معتمدًا في ميزان 2',422)
     config,labels=configuration(line['purchase_configuration'],product)
