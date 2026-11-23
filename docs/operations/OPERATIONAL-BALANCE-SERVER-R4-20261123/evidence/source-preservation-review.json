@@ -1,0 +1,101 @@
+{
+  "N": "44122bcc986bd1dff1532b9ad62c0268e899a179",
+  "N_updated_frontend_paths_exact_preserved": [
+    {
+      "path": "frontend/src/pages/CustomerRefundAccessDialog.jsx",
+      "sha256": "e2a2974ff7f0689597057b7b5f626de3f87d86bb670c3b1fd4cf36ae98279e21"
+    },
+    {
+      "path": "frontend/src/pages/CustomerRefundAccessDialog.test.jsx",
+      "sha256": "dfa23467e85db3aeb4ba5874e22c2a3192a715e5824144cbe59341d08cb45de7"
+    },
+    {
+      "path": "frontend/src/pages/EmployeesV2Management.jsx",
+      "sha256": "d9c24c5205b3e6f9043fab3b245696915f695ee0a9f31a1a18d51b843fe5617f"
+    },
+    {
+      "path": "frontend/src/pages/EmployeesV2Management.test.jsx",
+      "sha256": "d12775b832cad072bc73459d7e2787b53b2cd95a859b07756818ed2a558860b1"
+    },
+    {
+      "path": "frontend/src/pages/ProviderStatementAccessDialog.jsx",
+      "sha256": "51ce401b66ca999df27799011703cf5f678f6c35b76e53c335f0572e3c47bd54"
+    },
+    {
+      "path": "frontend/src/pages/ProviderStatementAccessDialog.test.jsx",
+      "sha256": "097115ec5eb06d041f9264f930bc664d0d52e666d009a9e607479553f69005cf"
+    },
+    {
+      "path": "frontend/src/pages/operational/ApprovedEntry.test.jsx",
+      "sha256": "21ac80f5e77bb24bd4478cd50f62111b55b7865f4bcb485845d8c4989157129f"
+    },
+    {
+      "path": "frontend/src/pages/operational/ApprovedFinance.jsx",
+      "sha256": "ceaaea9f9ad7963d2021a4689c98b81cf67103236b3128faeb4d13f60b847f78"
+    },
+    {
+      "path": "frontend/src/pages/operational/ApprovedFinance.test.jsx",
+      "sha256": "f834eddbeea7277078784c84f199cf62e0a6064febb66a1e40cf0fa702ac1123"
+    },
+    {
+      "path": "frontend/src/pages/operational/ApprovedRefund.jsx",
+      "sha256": "d31610286686ed63d742e523d15b65d440057fcd9e6e0f76a7d255c9951181f5"
+    },
+    {
+      "path": "frontend/src/pages/operational/ProviderStatements.jsx",
+      "sha256": "52a189bd2c147472abfa89df624ac1e4ac587781855ef011209143a23d86b218"
+    },
+    {
+      "path": "frontend/src/pages/operational/ProviderStatements.test.jsx",
+      "sha256": "45a55c467c470536483717c14857db560563be59e961bbe50f7ef468a98b8741"
+    },
+    {
+      "path": "frontend/src/pages/operational/SimpleOrderRefunds.jsx",
+      "sha256": "7639c9833034fd5932d6af89576303f69b77bb142cf62e4f58fe280bb3701fe4"
+    },
+    {
+      "path": "frontend/src/services/customerRefundAccess.js",
+      "sha256": "0fdfa82dd4f9f77b8c312b6648e29bd7317ad12afba0b5011f39fce1d11e6b32"
+    },
+    {
+      "path": "frontend/src/services/providerStatementAccess.js",
+      "sha256": "0045b6d550f97d95fea5a868f682a178bb86c83ff2d1daee3490ac6bccb9a114"
+    },
+    {
+      "path": "frontend/src/services/providerStatementAccess.test.js",
+      "sha256": "6332daf52ccf1d60c962f69065ce78f7f2439cc0376770ff501bd27c33785224"
+    }
+  ],
+  "frontend_path_overlap": [],
+  "kind": "r4_frontend_source_preservation_review_v1",
+  "old_A": "dd3a9ea29fce28e2fa87332cff4a6d46f776e0d3",
+  "old_base": "02cd99e5b2b68c95341c87590abcf572c885e697",
+  "package_lock_inherited_intent_exact_to_N": true,
+  "ported_frontend_paths_exact_oldA": [
+    {
+      "path": "frontend/src/pages/operational/ApprovedLedger.jsx",
+      "sha256": "f50ea0e82e3b1343d35f203a2e95e6e84d028138759660ba9ca736ca45502cd8"
+    },
+    {
+      "path": "frontend/src/pages/operational/ApprovedLedger.test.jsx",
+      "sha256": "f8ce45c66c167e4c11c7173bae0613cfd9d6d755e4c78f3e4eea0a19613cab71"
+    },
+    {
+      "path": "frontend/src/pages/operational/MovementReversal.jsx",
+      "sha256": "56b516a5d3765ac20fcd75597abb9b995b2ff26207962ab45b8b736c2cb41495"
+    },
+    {
+      "path": "frontend/src/pages/operational/SimpleBalanceAccess.jsx",
+      "sha256": "22ff6cd6d68f06077495d5e1529a713550bb32de87713aafa5383870c3766834"
+    },
+    {
+      "path": "frontend/src/pages/operational/simpleBalancesApi.js",
+      "sha256": "446f4bf7d5532ace72d68f99fac1156a99291d0de4cb05008eeb5457017135ea"
+    },
+    {
+      "path": "frontend/src/pages/operational/simpleBalancesModel.js",
+      "sha256": "ad4c18484489bb56490ef540dd486ba89259c94e901f8489e55d20a925ec6f5b"
+    }
+  ],
+  "result": "PASS_STATIC_PRESERVATION"
+}

@@ -1,0 +1,75 @@
+{
+  "A": "aec203382b387c3812509084e77c2922aa860877",
+  "N": "44122bcc986bd1dff1532b9ad62c0268e899a179",
+  "after": {
+    "head": "aec203382b387c3812509084e77c2922aa860877",
+    "inherited_intent_sha256": "1652d57d4b7162559f7e7970cc3be9e8251af624fd080c451f6b18bd31e92835",
+    "parents": [
+      "44122bcc986bd1dff1532b9ad62c0268e899a179"
+    ],
+    "tracked_status": "",
+    "tree": "f133f04fd5759c57f5cce195e35ae03ba53ef6da"
+  },
+  "artifact_id": 14815305161,
+  "before": {
+    "head": "aec203382b387c3812509084e77c2922aa860877",
+    "inherited_intent_sha256": "1652d57d4b7162559f7e7970cc3be9e8251af624fd080c451f6b18bd31e92835",
+    "parents": [
+      "44122bcc986bd1dff1532b9ad62c0268e899a179"
+    ],
+    "tracked_status": "",
+    "tree": "f133f04fd5759c57f5cce195e35ae03ba53ef6da"
+  },
+  "build_meta": {
+    "bytes": 581646,
+    "path": "build-meta.json",
+    "sha256": "c13f1ac0a7d28dbefca1fd234314521482bc3b34def126d719dc24672bd39368"
+  },
+  "candidate_bytes": 1502688,
+  "candidate_exact_to_only_safe_ZIP_member": true,
+  "candidate_git_blob": "8c705a3772f98726885ae88f0429a51bc7850c8b",
+  "candidate_sha256": "59da5ee6a86f3bfa5a1b8446c6aacb8e180144bc15ccaca3e414e1ec23b151ab",
+  "findings": [],
+  "frontend_artifact_tree_sha256": "27b7717df8a2dcc2b46868da4d103b44d33e2ad07c879da6563ecaef7e545b9a",
+  "frozen_source_and_inherited_intent_unchanged": true,
+  "kind": "r4_independent_candidate_original_validator_review_v1",
+  "limits": {
+    "B_exists_or_accepted": false,
+    "actual_CI_two_build_log_review": "separate candidate-provenance-review.json",
+    "actual_Emergent_host_rehearsal": false,
+    "all_exact_A_CI_claimed": false,
+    "candidate_ZIP_contains_full_generated_build": false,
+    "duplicate_artifact_build": false,
+    "expected_source_only_diagnostic": "Original release_identity import may log absent generated backend/release_identity.json; no output was materialized to satisfy it.",
+    "lease_or_publication": false
+  },
+  "original_backend_Git_manifest_rederivation": "PASS",
+  "original_candidate_loader": "PASS",
+  "original_embedded_two_build_proof_validator": "PASS",
+  "original_frontend_Git_source_rederivation": "PASS",
+  "original_release_control_Git_manifest_rederivation": "PASS",
+  "original_validator_sha256": {
+    "backend/frontend_build_identity.py": "7896dfa2c9b4fea8c426b47c5b75e331380c0a4a3f947028aa4f5afa101f9d87",
+    "backend/release_identity.py": "ee4c098266722c10f6d973927f25de3602081c4923f9992f1de85d71775fca4d",
+    "backend/release_protocol_v5.py": "1961ac18a5363ec425ceec4f98f96f611d378b09e19380d4756bd6776987d8ef",
+    "scripts/emergent_deployment_adapter.py": "2e09999684b329045af3cb15290e3bee3b615b8e1d9a378e903977ba9f1a8287"
+  },
+  "proof_file": {
+    "bytes": 1521,
+    "path": "frontend/.release/reproducible-build.json",
+    "sha256": "d25651371324610544e3f2de69f0bbaba41c0d9ae1f71c60e3dc4ac2b2d2469a"
+  },
+  "result": "PASS_CANDIDATE_DIGEST_PROVENANCE_AND_ORIGINAL_VALIDATORS",
+  "review_harness_note": "Initial audit compared the original full frontend manifest to a summary-only shape; corrected the audit to require full exact equality including files. Original source, candidate, and validators were unchanged; initial log retained.",
+  "reviewed_utc": "2026-11-23T11:42:19.039031+00:00",
+  "run_id": 45166179398,
+  "runtime_release_id": "rg5-12e0f132b3ee688815cd2ec401bd34c43706d193492edacc7be6c5ca6e6ade8a",
+  "source_counts": {
+    "backend": 1325,
+    "frontend": 1410,
+    "release_control": 328
+  },
+  "source_tree": "f133f04fd5759c57f5cce195e35ae03ba53ef6da",
+  "zip_bytes": 432232,
+  "zip_sha256": "8963716397b59eccdd4319be1edb8fce3288adcabd57d7a025949400fe81e3f3"
+}

@@ -1,0 +1,81 @@
+{
+  "kind": "read_only_static_R4_workflow_compatibility_review",
+  "verdict": "CLEAR_STATIC_REVIEW_NO_BLOCKER_IDENTIFIED",
+  "repository": "AMASI-SA/AMASI-SA",
+  "local_repository": "/workspace/scratch/dfe063f5aca0/mezan-server-r4",
+  "base_N": "44122bcc986bd1dff1532b9ad62c0268e899a179",
+  "old_source_base": "02cd99e5b2b68c95341c87590abcf572c885e697",
+  "old_source_A": "dd3a9ea29fce28e2fa87332cff4a6d46f776e0d3",
+  "workflow_path": ".github/workflows/operational-balance-web.yml",
+  "reviewed_staged_workflow_blob": "3fb491b98c5b922d9456fe65640764dc0f7a064d",
+  "reviewed_staged_workflow_sha256": "2162f789a6bf0753424918203db2a46aab6d194b369bcc465088d93168ee97e0",
+  "instructions_read": [
+    "AGENTS.md",
+    "docs/operations/OPERATIONAL-BALANCE-SERVER-R3-20261122/STATUS.md"
+  ],
+  "comparison": {
+    "removed_backend_suite_paths_from_N": [],
+    "removed_frontend_test_patterns_from_N": [],
+    "removed_backend_suite_paths_from_old_A": [],
+    "removed_frontend_test_patterns_from_old_A": [],
+    "trigger_permission_concurrency_header_unchanged_against_both": true,
+    "job_ids_unchanged_against_both": true,
+    "if_conditions_unchanged_against_both": true,
+    "job_ids": [
+      "backend",
+      "frontend",
+      "background-demand-only",
+      "browser-acceptance"
+    ],
+    "other_workflows_changed_in_staged_delta": false
+  },
+  "preserved_current_base_gates": {
+    "backend_suites_and_minimums": {
+      "test_customer_refund_access": 1,
+      "test_customer_refund_read_only_bridge": 2,
+      "test_mobile_customer_refund_reads": 13
+    },
+    "frontend_suite_and_presence_guard": "CustomerRefundAccessDialog.test.jsx",
+    "no_skipped_failed_error_backend_cases": true,
+    "no_failed_pending_todo_frontend_assertions": true,
+    "exact_PR_head_checkout": true,
+    "explicit_loopback_Mongo_replica_fixture": true,
+    "demand_runner_lifecycle_minimum": 3,
+    "named_actual_child_and_demand_benchmark_gates": true,
+    "background_worker_and_browser_jobs_unchanged": true
+  },
+  "inherited_feature_suites_with_explicit_collection_guards": [
+    "test_operational_workspace_account_history",
+    "test_operational_movement_reversal_effects",
+    "test_operational_movement_reversal_routes",
+    "test_operational_ad_and_entry_latency"
+  ],
+  "updated_counts": [
+    {
+      "suite": "test_customer_inventory_unified_activity",
+      "N_minimum": 3,
+      "staged_minimum": 5,
+      "source_explanation": "New allocate-first/reverse-first parametrization adds two cases."
+    },
+    {
+      "suite": "test_operational_driver_review_mongo",
+      "N_exact": 16,
+      "staged_exact": 17,
+      "source_explanation": "Existing POS settlement case is parametrized for web and mobile, adding one case."
+    },
+    {
+      "suite": "test_operational_workspace_demand_reads",
+      "N_minimum": 38,
+      "staged_minimum": 48,
+      "source_explanation": "Four new parametrized groups contribute 3+2+2+3 cases."
+    }
+  ],
+  "material_limitations": [
+    "Static staged-source review only; no pytest or Jest collection/execution and no CI pass claim.",
+    "Any later workflow or test changes require comparing their new staged identity."
+  ],
+  "tests_executed": false,
+  "source_or_git_mutations": false,
+  "installations_performed": false,
+  "host_or_browser_actions": false
+}

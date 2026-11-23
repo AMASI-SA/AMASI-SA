@@ -1,0 +1,40 @@
+{
+  "kind": "pr2082_source_candidate_original_validator_acceptance",
+  "accepted_at": "2026-11-23T11:37:46.732284+00:00",
+  "accepted": true,
+  "source_git_sha": "aec203382b387c3812509084e77c2922aa860877",
+  "source_base_git_sha": "44122bcc986bd1dff1532b9ad62c0268e899a179",
+  "source_tree": "f133f04fd5759c57f5cce195e35ae03ba53ef6da",
+  "candidate_bytes": 1502688,
+  "candidate_sha256": "59da5ee6a86f3bfa5a1b8446c6aacb8e180144bc15ccaca3e414e1ec23b151ab",
+  "candidate_git_blob": "8c705a3772f98726885ae88f0429a51bc7850c8b",
+  "runtime_release_id": "rg5-12e0f132b3ee688815cd2ec401bd34c43706d193492edacc7be6c5ca6e6ade8a",
+  "frontend_artifact_tree_sha256": "27b7717df8a2dcc2b46868da4d103b44d33e2ad07c879da6563ecaef7e545b9a",
+  "build_meta": {
+    "bytes": 581646,
+    "path": "build-meta.json",
+    "sha256": "c13f1ac0a7d28dbefca1fd234314521482bc3b34def126d719dc24672bd39368"
+  },
+  "reproducibility_proof": {
+    "bytes": 1521,
+    "path": "frontend/.release/reproducible-build.json",
+    "sha256": "d25651371324610544e3f2de69f0bbaba41c0d9ae1f71c60e3dc4ac2b2d2469a"
+  },
+  "frontend_source_records": 1410,
+  "backend_source_records": 1325,
+  "release_control_source_records": 328,
+  "original_candidate_loader": "PASS",
+  "original_git_frontend_source_rederivation": "PASS",
+  "original_backend_and_release_control_git_manifests": "PASS",
+  "original_reproducibility_proof_validator": "PASS",
+  "inherited_intent_and_full_history": "UNCHANGED",
+  "artifact": {
+    "id": 14815305161,
+    "run_id": 45166179398,
+    "zip_bytes": 432232,
+    "zip_sha256": "8963716397b59eccdd4319be1edb8fce3288adcabd57d7a025949400fe81e3f3"
+  },
+  "ci_source_gates_final": false,
+  "actual_host_rehearsal": false,
+  "lease_or_publication": false
+}

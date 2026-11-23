@@ -1,0 +1,26 @@
+# Original GitHub job log excerpts; retrieved using github_fetch_workflow_job_logs.
+# Repository AMASI-SA/AMASI-SA | run 45166179398 | job 137663593653
+# https://github.com/AMASI-SA/AMASI-SA/actions/runs/45166179398/job/137663593653
+# Source A aec203382b387c3812509084e77c2922aa860877
+# Numbers identify lines in the original decoded log; ANSI coloring removed.
+# Source-candidate CI build only. No actual Emergent host or Production deployment claim.
+[line 38] 2026-11-23T11:32:54.4848904Z   ref: aec203382b387c3812509084e77c2922aa860877
+[line 2688] 2026-11-23T11:33:01.3167198Z HEAD is now at aec203382 Integrate operational reversal and account history on Mezan86 source
+[line 2712] 2026-11-23T11:33:05.2897626Z node: v22.23.2
+[line 2714] 2026-11-23T11:33:05.2900033Z yarn: 1.22.22
+[line 3413] 2026-11-23T11:33:33.5994490Z ##[group]Run yarn build:release
+[line 3425] 2026-11-23T11:33:33.7643826Z yarn run v1.22.22
+[line 3430] 2026-11-23T11:33:34.1230792Z vite v8.2.4 building client environment for production...
+[line 3795] 2026-11-23T11:33:40.9774028Z ✓ built in 6.83s
+[line 3796] 2026-11-23T11:33:41.1879067Z Frontend build identity: 27b7717df8a2dcc2b46868da4d103b44d33e2ad07c879da6563ecaef7e545b9a
+[line 3800] 2026-11-23T11:33:41.4695761Z vite v8.2.4 building client environment for production...
+[line 4165] 2026-11-23T11:33:48.4652260Z ✓ built in 6.96s
+[line 4166] 2026-11-23T11:33:48.6210748Z Frontend build identity: 27b7717df8a2dcc2b46868da4d103b44d33e2ad07c879da6563ecaef7e545b9a
+[line 4167] 2026-11-23T11:33:48.6240760Z Frontend reproducibility proof: d25651371324610544e3f2de69f0bbaba41c0d9ae1f71c60e3dc4ac2b2d2469a
+[line 4169] 2026-11-23T11:33:48.6445172Z ##[group]Run python ../scripts/verify_frontend_build.py --expected-git-sha "$SOURCE_GIT_SHA"
+[line 8016] 2026-11-23T11:33:53.4260525Z Uploaded bytes 432232
+[line 8018] 2026-11-23T11:33:53.4399836Z SHA256 digest of uploaded artifact zip is 8963716397b59eccdd4319be1edb8fce3288adcabd57d7a025949400fe81e3f3
+[line 8020] 2026-11-23T11:33:53.7405107Z Artifact release-v5-reviewed-intent-candidate.zip successfully finalized. Artifact ID 14815305161
+[line 8021] 2026-11-23T11:33:53.7407489Z Artifact release-v5-reviewed-intent-candidate has been successfully uploaded! Final size is 432232 bytes. Artifact ID is 14815305161
+[line 8022] 2026-11-23T11:33:53.7414026Z Artifact download URL: https://github.com/AMASI-SA/AMASI-SA/actions/runs/45166179398/artifacts/14815305161
+

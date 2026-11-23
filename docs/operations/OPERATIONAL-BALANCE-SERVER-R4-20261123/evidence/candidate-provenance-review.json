@@ -1,0 +1,159 @@
+{
+  "kind": "read_only_independent_R4_candidate_provenance_audit",
+  "verdict": "PASS_WITHIN_REVIEWED_SOURCE_MANIFEST_AND_CI_PROVENANCE_SCOPE",
+  "reviewed_at_utc": "2026-11-23T11:41:49.406468+00:00",
+  "repository": "AMASI-SA/AMASI-SA",
+  "source_A": "aec203382b387c3812509084e77c2922aa860877",
+  "source_tree": "f133f04fd5759c57f5cce195e35ae03ba53ef6da",
+  "source_parent_and_base_N": "44122bcc986bd1dff1532b9ad62c0268e899a179",
+  "candidate_json": {
+    "path": "/workspace/scratch/dfe063f5aca0/r4-release-evidence/release-intent-candidate.json",
+    "bytes": 1502688,
+    "sha256": "59da5ee6a86f3bfa5a1b8446c6aacb8e180144bc15ccaca3e414e1ec23b151ab"
+  },
+  "scopes": {
+    "frontend_source": {
+      "file_count": 1410,
+      "source_tree_oid": "b824aff11e4dca9bdf90dd93846a49ef1c60c779",
+      "tree_sha256": "872a989a21e2f4fcdcc2563c4fd34681b04eda4a983ee9bc25e28d40c8c244b9",
+      "complete_path_set_and_record_bytes_match": true
+    },
+    "backend_runtime_source": {
+      "file_count": 1325,
+      "base_file_count": 1323,
+      "source_tree_oid": "d70beee4b2925e217c7dbcccbba4aeb43f5eb334",
+      "projection_tree_oid": "55ecd18789e1262a2b9000ee3d9fa8096a9ccb3d",
+      "manifest_sha256": "79852291e026a64c3c82a2ffd64b4bc9935e59bf7776ed7625cc1fe40bc96dcc",
+      "added": 2,
+      "modified": 9,
+      "deleted": 0,
+      "complete_path_set_and_record_bytes_match": true,
+      "base_delta_and_tombstones_match": true
+    },
+    "release_control_source": {
+      "file_count": 328,
+      "base_file_count": 328,
+      "source_tree_oid": "d23ba8431d252b6224e09a1ca0d44f8f33fd1e6e",
+      "projection_tree_oid": "d23ba8431d252b6224e09a1ca0d44f8f33fd1e6e",
+      "manifest_sha256": "0488fbcece4fdcaead5722ca91d64d6f3a556fe683158f92598a5542c3e53526",
+      "added": 0,
+      "modified": 1,
+      "deleted": 0,
+      "complete_path_set_and_record_bytes_match": true,
+      "base_delta_and_tombstones_match": true
+    }
+  },
+  "git_blob_audit": {
+    "unique_source_A_and_base_N_blobs": 3067,
+    "unique_blob_bytes": 43314248,
+    "git_SHA1_size_mode_SHA256_verified": true,
+    "working_tree_used_as_source": false
+  },
+  "runtime_release_id": "rg5-12e0f132b3ee688815cd2ec401bd34c43706d193492edacc7be6c5ca6e6ade8a",
+  "runtime_digest_recomputed": true,
+  "critical_file_hashes_verified": 6,
+  "frontend_artifact_tree_sha256": "27b7717df8a2dcc2b46868da4d103b44d33e2ad07c879da6563ecaef7e545b9a",
+  "frontend_build_meta": {
+    "bytes": 581646,
+    "path": "build-meta.json",
+    "sha256": "c13f1ac0a7d28dbefca1fd234314521482bc3b34def126d719dc24672bd39368"
+  },
+  "frontend_proof_file": {
+    "bytes": 1521,
+    "path": "frontend/.release/reproducible-build.json",
+    "sha256": "d25651371324610544e3f2de69f0bbaba41c0d9ae1f71c60e3dc4ac2b2d2469a"
+  },
+  "two_pass_candidate_binding_verified": true,
+  "ci_provenance": {
+    "repository": "AMASI-SA/AMASI-SA",
+    "run_id": 45166179398,
+    "source_checkout_sha": "aec203382b387c3812509084e77c2922aa860877",
+    "frontend_job_id": 137663593653,
+    "frontend_job_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45166179398/job/137663593653",
+    "frontend_job_status": "completed",
+    "frontend_job_conclusion": "success",
+    "reviewed_relevant_steps": [
+      {
+        "name": "Classify reviewed B or source candidate A",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 8
+      },
+      {
+        "name": "Build production frontend twice and retain verified build B",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 9
+      },
+      {
+        "name": "Verify retained frontend artifact and reproducibility proof",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 10
+      },
+      {
+        "name": "Freeze a candidate reviewed intent from the source commit",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 11
+      },
+      {
+        "name": "Retain the candidate reviewed intent",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 12
+      },
+      {
+        "name": "Prove install and build leave the worktree clean",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 13
+      }
+    ],
+    "two_actual_build_identity_log_events": [
+      {
+        "timestamp_utc": "2026-11-23T11:33:41.1879067Z",
+        "artifact_tree_sha256": "27b7717df8a2dcc2b46868da4d103b44d33e2ad07c879da6563ecaef7e545b9a"
+      },
+      {
+        "timestamp_utc": "2026-11-23T11:33:48.6210748Z",
+        "artifact_tree_sha256": "27b7717df8a2dcc2b46868da4d103b44d33e2ad07c879da6563ecaef7e545b9a"
+      }
+    ],
+    "proof_log_event": {
+      "timestamp_utc": "2026-11-23T11:33:48.6240760Z",
+      "sha256": "d25651371324610544e3f2de69f0bbaba41c0d9ae1f71c60e3dc4ac2b2d2469a"
+    },
+    "artifact_upload_log": {
+      "artifact_id": 14815305161,
+      "bytes": 432232,
+      "sha256": "8963716397b59eccdd4319be1edb8fce3288adcabd57d7a025949400fe81e3f3",
+      "timestamp_utc": "2026-11-23T11:33:53.4399836Z",
+      "artifact_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45166179398/artifacts/14815305161"
+    },
+    "skipped_jobs_not_claimed_passed": [
+      {
+        "id": 137664143686,
+        "name": "Emergent manual redeploy required",
+        "conclusion": "skipped"
+      },
+      {
+        "id": 137664144713,
+        "name": "Emergent Host Node ${{ matrix.host-node }} clean-clone adapter rehearsal",
+        "conclusion": "skipped"
+      }
+    ],
+    "source_candidate_scope": true,
+    "all_A_checks_reviewed_or_claimed_passed": false,
+    "actual_Emergent_host_build_or_production_publish_observed": false,
+    "original_log_excerpt_path": "/workspace/scratch/dfe063f5aca0/r4-review-frontend/candidate-frontend-job-137663593653-excerpts.log",
+    "complete_log_line_count": 8058
+  },
+  "limits": [
+    "No product tests, install, build, host adapter, lease or deployment executed by this review.",
+    "Source A candidate is not an intent-only B or production publication.",
+    "No all-A-workflow-green claim.",
+    "Archive download/extraction and original candidate validator are independently handled by parent."
+  ],
+  "source_or_git_mutations": false
+}
