@@ -1,0 +1,71 @@
+{
+  "source_git_sha": "deeefceffd9a1e37968513ac4f3833314bb415fd",
+  "source_tree": "a7317c4aa62c3d2266937bf60d4f0b2c4f62a27d",
+  "source_base_git_sha": "28f6d4ca0fc2b7ea7f140432d8e32c768823b6a4",
+  "pull_request": 2097,
+  "workflow_run_id": 45284191276,
+  "workflow_run_attempt": 1,
+  "workflow_path": ".github/workflows/operational-balance-web.yml",
+  "workflow_conclusion": "success",
+  "artifact_count": 6,
+  "artifact_records": [
+    {
+      "artifact_id": 14871662100,
+      "name": "operational-backend-results",
+      "bytes": 129205,
+      "sha256": "92570b87670b1de10c86dfed1ef7e0fccb00afe59e343583819e757c5ebd7b59",
+      "file": "raw/artifacts/operational-backend-results.zip",
+      "source_git_sha": "deeefceffd9a1e37968513ac4f3833314bb415fd"
+    },
+    {
+      "artifact_id": 14871371715,
+      "name": "inventory-purchase-browser-results",
+      "bytes": 1300430,
+      "sha256": "45b2c4050db809d2b3eecb7a1b62c74643d5de8113ec15aa83c80ff9470f61da",
+      "file": "raw/artifacts/inventory-purchase-browser-results.zip",
+      "source_git_sha": "deeefceffd9a1e37968513ac4f3833314bb415fd"
+    },
+    {
+      "artifact_id": 14871117183,
+      "name": "operational-worker-results",
+      "bytes": 747,
+      "sha256": "31d00d5044a28f8452e63479c4719cc5c16b83a1c49f3ec8fb84b6180fdc942b",
+      "file": "raw/artifacts/operational-worker-results.zip",
+      "source_git_sha": "deeefceffd9a1e37968513ac4f3833314bb415fd"
+    },
+    {
+      "artifact_id": 14870937387,
+      "name": "operational-balances-browser-results",
+      "bytes": 752637,
+      "sha256": "5cf062ae53d4ee50b9005c8815a430a3920dbab8a1d2b8e26710dc091ad663b9",
+      "file": "raw/artifacts/operational-balances-browser-results.zip",
+      "source_git_sha": "deeefceffd9a1e37968513ac4f3833314bb415fd"
+    },
+    {
+      "artifact_id": 14870209384,
+      "name": "simple-balances-browser-results",
+      "bytes": 1231137,
+      "sha256": "c857e56f8c9ec5a876303af4ad52a07f094da2cef96d7c808609e7a58500d18c",
+      "file": "raw/artifacts/simple-balances-browser-results.zip",
+      "source_git_sha": "deeefceffd9a1e37968513ac4f3833314bb415fd"
+    },
+    {
+      "artifact_id": 14869608769,
+      "name": "operational-frontend-results",
+      "bytes": 57004,
+      "sha256": "6c3a4b3ef4ea363d0853d60c82942b1fd11937732b88ffd50ad8926b9d23cce1",
+      "file": "raw/artifacts/operational-frontend-results.zip",
+      "source_git_sha": "deeefceffd9a1e37968513ac4f3833314bb415fd"
+    }
+  ],
+  "frontend_test_manifest_sha256": "46aaaaa57318cc23e540f6f8584826b1903922d28af3a6156225041856966379",
+  "candidate_sha256": "f0b6f57069abe12ff6a8720f4eaded7552a47aeeedb0973021249545d726bea3",
+  "candidate_release_id": "rg5-ffe0d4437c779b1e455f084be407f8f2d24735f5bf8e994f77c5bf4cbeb1c55f",
+  "candidate_binding_evidence": "raw/candidate/independent-candidate-review.json",
+  "scope": "Evidence only for exact source A4. This folder and evidence branch are not a deployable source or an approval to merge or deploy.",
+  "provenance": {
+    "source_commit_url": "https://github.com/AMASI-SA/AMASI-SA/commit/deeefceffd9a1e37968513ac4f3833314bb415fd",
+    "pull_request_url": "https://github.com/AMASI-SA/AMASI-SA/pull/2097",
+    "workflow_run_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45284191276"
+  }
+}

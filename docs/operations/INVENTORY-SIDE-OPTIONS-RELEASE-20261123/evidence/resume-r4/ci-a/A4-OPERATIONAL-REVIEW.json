@@ -1,0 +1,244 @@
+{
+  "source_git_sha": "deeefceffd9a1e37968513ac4f3833314bb415fd",
+  "source_tree": "a7317c4aa62c3d2266937bf60d4f0b2c4f62a27d",
+  "backend_status": "success",
+  "browser": [
+    {
+      "artifact": "inventory-purchase-browser-results",
+      "scenario_count": 8,
+      "all_pass": true,
+      "source_files_verified": 61,
+      "errors": [],
+      "scenarios": [
+        "Desktop form is centered at 70% with adjacent supplier metadata",
+        "Product and component choices show an explicit selected mark in one editor",
+        "Conditional yes, literal no and deferred parent keep only visible option values",
+        "Newest compact row is first; editing preserves its place and optional omissions stay ready",
+        "Mobile single editor and compact draft fit the viewport without horizontal scrolling",
+        "Approving an unreceived credit invoice does not call receiving or payment",
+        "Awaiting queue receives exactly two of four units and preserves the unpaid balance on reload",
+        "Owner classifies required gift fields as side options without changing physical requirements or purchase amounts"
+      ],
+      "screenshots": [
+        "purchase-desktop.png",
+        "draft-desktop.png",
+        "editor-mobile.png",
+        "draft-mobile.png",
+        "invoice-review-mobile.png",
+        "receipt-partial-mobile.png",
+        "receipt-partial-desktop.png",
+        "option-roles-desktop.png",
+        "option-roles-mobile.png",
+        "side-options-mobile.png"
+      ],
+      "horizontal_overflow": [],
+      "inventory_invariants": {
+        "physical_quantity": 2,
+        "payment_call_count": 0,
+        "option_role_write_count": 1
+      }
+    },
+    {
+      "artifact": "simple-balances-browser-results",
+      "scenario_count": 13,
+      "all_pass": true,
+      "source_files_verified": 35,
+      "errors": [],
+      "scenarios": [
+        "Approved supplier payout fetches only the selected funding group and hides empty custody",
+        "Desktop ledger uses five rows, recorder names, red له and green عليه",
+        "Mobile ledger remains inside a 390px page with numbered pagination",
+        "External reasons and custody source are conditional; save returns to the actual backdated page",
+        "Owner sees specialized routes without deleted grant keys and exactly three primary tabs",
+        "Order refund reserves a partial amount and reconciles only server provider evidence",
+        "Owner applies all-resource and per-kind permissions with individual exceptions before one versioned save",
+        "Mobile permission cards expose every account label and control inside the viewport",
+        "Staff cannot see owner tools or fetch the owner permission catalog",
+        "Automatic salary is compact and history Back preserves the ledger",
+        "Period statement is explicit, complete and reauthorized before printing",
+        "Scoped review proof Back keeps the draft and approved history leaves courier balance unchanged",
+        "Owner keeps saved balances and failed-source warning across a confirmed refresh"
+      ],
+      "screenshots": [
+        "ledger-desktop.png",
+        "ledger-mobile.png",
+        "external-form-mobile.png",
+        "external-form-desktop.png",
+        "refund-desktop.png",
+        "refund-mobile.png",
+        "access-desktop.png",
+        "access-mobile.png",
+        "salary-compact-mobile.png",
+        "salary-history-mobile.png",
+        "statement-mobile.png",
+        "reviews-approved-mobile.png",
+        "automatic-freshness-warning-mobile.png"
+      ],
+      "horizontal_overflow": []
+    },
+    {
+      "artifact": "operational-balances-browser-results",
+      "scenario_count": 14,
+      "all_pass": true,
+      "source_files_verified": 23,
+      "errors": [],
+      "scenarios": [
+        "Saved summary appears before its bound forecast without refreshing sources",
+        "Every sidebar page and currency is reachable with scoped GET-only navigation",
+        "Leaving the summary consumes its pending forecast and prevents late replacement",
+        "A different forecast snapshot never replaces saved values or becomes zero",
+        "Known balances, seven distinct orders, reasons and dialog keyboard close",
+        "Mobile dialog fits the viewport and all orders remain reachable",
+        "No repeat traffic while the completed page stays open",
+        "An explicit source refresh failure retains saved money and a visible warning",
+        "A hidden page does no request and one visible activation reads its section once",
+        "Denied section GET exposes no financial content and performs no refresh",
+        "Page export uses saved data and full export is explicit with all snapshot bindings",
+        "One explicit delivery confirmation preserves known money and refreshes once",
+        "Saved confirmation remains visible when the follow-up refresh fails",
+        "Hiding during delivery preflight prevents confirmation and automatic retry"
+      ],
+      "screenshots": [],
+      "horizontal_overflow": []
+    }
+  ],
+  "frontend": {
+    "numPassedTests": 1779,
+    "numPassedTestSuites": 111,
+    "numFailedTests": 0,
+    "numPendingTests": 0,
+    "numTodoTests": 0
+  },
+  "worker": {
+    "passed": 4,
+    "source_and_tree_match": true
+  },
+  "visual_review": {
+    "files": [
+      "option-roles-desktop.png",
+      "option-roles-mobile.png",
+      "side-options-mobile.png"
+    ],
+    "verdict": "PASS",
+    "observations": [
+      "RTL labels, role selectors, and save/cancel actions are visible on desktop and 390px mobile.",
+      "Physical size remains locked as a physical specification. Gift choice, gift text and packaging note can be side options.",
+      "After saving, side questions appear as a neutral customer-only summary and leave physical size required.",
+      "Quantity 3, unit price 79.80 and line tax 35.91 are preserved before and after classification.",
+      "No overlapping or clipped form controls observed; measured page width remains 390px on mobile."
+    ]
+  },
+  "checker_note": "Operational browser source manifest uses a direct path/hash map and has no actual_components/chromium_sandbox evidence flags; original harness source was verified, including chromiumSandbox:true. Inventory/simple manifests use sha256 wrappers and explicitly report both flags. Initial exploratory checker assumed a wrapper for every artifact; corrected to the observed schemas without any product changes.",
+  "verdict": "PASS",
+  "run_id": 45284191276,
+  "run_attempt": 1,
+  "workflow": "Operational Balance Web",
+  "workflow_conclusion": "success",
+  "jobs": [
+    {
+      "id": 138076102323,
+      "name": "Operational balances browser, mobile and visibility acceptance",
+      "conclusion": "success"
+    },
+    {
+      "id": 138076102553,
+      "name": "Operational Balance Backend",
+      "conclusion": "success"
+    },
+    {
+      "id": 138076102559,
+      "name": "Operational Balance Frontend",
+      "conclusion": "success"
+    },
+    {
+      "id": 138076102592,
+      "name": "Canonical worker excludes operational balance jobs",
+      "conclusion": "success"
+    }
+  ],
+  "archives": [
+    {
+      "artifact_id": 14871662100,
+      "name": "operational-backend-results",
+      "bytes": 129205,
+      "sha256": "92570b87670b1de10c86dfed1ef7e0fccb00afe59e343583819e757c5ebd7b59",
+      "file": "raw/artifacts/operational-backend-results.zip",
+      "source_git_sha": "deeefceffd9a1e37968513ac4f3833314bb415fd"
+    },
+    {
+      "artifact_id": 14871371715,
+      "name": "inventory-purchase-browser-results",
+      "bytes": 1300430,
+      "sha256": "45b2c4050db809d2b3eecb7a1b62c74643d5de8113ec15aa83c80ff9470f61da",
+      "file": "raw/artifacts/inventory-purchase-browser-results.zip",
+      "source_git_sha": "deeefceffd9a1e37968513ac4f3833314bb415fd"
+    },
+    {
+      "artifact_id": 14871117183,
+      "name": "operational-worker-results",
+      "bytes": 747,
+      "sha256": "31d00d5044a28f8452e63479c4719cc5c16b83a1c49f3ec8fb84b6180fdc942b",
+      "file": "raw/artifacts/operational-worker-results.zip",
+      "source_git_sha": "deeefceffd9a1e37968513ac4f3833314bb415fd"
+    },
+    {
+      "artifact_id": 14870937387,
+      "name": "operational-balances-browser-results",
+      "bytes": 752637,
+      "sha256": "5cf062ae53d4ee50b9005c8815a430a3920dbab8a1d2b8e26710dc091ad663b9",
+      "file": "raw/artifacts/operational-balances-browser-results.zip",
+      "source_git_sha": "deeefceffd9a1e37968513ac4f3833314bb415fd"
+    },
+    {
+      "artifact_id": 14870209384,
+      "name": "simple-balances-browser-results",
+      "bytes": 1231137,
+      "sha256": "c857e56f8c9ec5a876303af4ad52a07f094da2cef96d7c808609e7a58500d18c",
+      "file": "raw/artifacts/simple-balances-browser-results.zip",
+      "source_git_sha": "deeefceffd9a1e37968513ac4f3833314bb415fd"
+    },
+    {
+      "artifact_id": 14869608769,
+      "name": "operational-frontend-results",
+      "bytes": 57004,
+      "sha256": "6c3a4b3ef4ea363d0853d60c82942b1fd11937732b88ffd50ad8926b9d23cce1",
+      "file": "raw/artifacts/operational-frontend-results.zip",
+      "source_git_sha": "deeefceffd9a1e37968513ac4f3833314bb415fd"
+    }
+  ],
+  "backend": {
+    "main_pytest_passed": 6921,
+    "main_xml_testcases": 6921,
+    "main_subtests_passed_separately": 151,
+    "demand_read_pytest_passed": 106,
+    "demand_read_xml_testcases": 106,
+    "shipping_pytest_passed": 16,
+    "shipping_subtests_passed_separately": 18,
+    "shipping_step_conclusion": "success",
+    "failure_error_skipped_testcases": 0,
+    "main_raw_summary": "2026-11-23T23:07:51.4037206Z 6921 passed, 12 warnings, 151 subtests passed in 687.37s (0:11:27)",
+    "shipping_raw_summary": "2026-11-23T23:08:50.1047447Z 16 passed, 18 subtests passed in 0.40s",
+    "source_and_tree_match": true,
+    "targeted_suite_counts": {
+      "test_inventory_option_policy": 34,
+      "test_inventory_side_options": 24,
+      "test_inventory_option_binding_conflicts": 7,
+      "test_supplier_option_service_policy": 27,
+      "test_purchase_configuration_contract": 19
+    }
+  },
+  "controlled_benchmark": {
+    "scope": "isolated loopback Mongo; ASGI transport; no browser/network timing",
+    "cold_first_http_200_ms": 1384.4540239999787,
+    "home_ready_p95_ms": 5.306294000092748,
+    "first_useful_target_met": true,
+    "ready_target_met": true,
+    "register_scope": "isolated loopback Mongo; ASGI; in-process builder test seam for exact work counts; no browser/network timing",
+    "register_ready_p95_ms": 6.732234000082826,
+    "report_reduction_fraction": 0.95,
+    "financial_results_equal": true,
+    "source_unchanged": true,
+    "not_production_or_browser_latency": true
+  },
+  "limits": "Acceptance is isolated CI evidence on exact source A4. Browser journeys use synthetic API fixtures and source-bound actual components. Benchmarks use loopback Mongo/ASGI, not real browser/network or Production timing. This report does not verify B, merge, host rehearsal or deployment."
+}
