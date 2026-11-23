@@ -586,13 +586,14 @@ jobs:
           const out = process.env.INVENTORY_PURCHASE_UAT_OUTPUT;
           const evidence = JSON.parse(fs.readFileSync(path.join(out, 'browser-evidence.json')));
           if (evidence.synthetic_only !== true || evidence.actual_components !== true ||
-              evidence.chromium_sandbox !== true || evidence.results.length !== 7 ||
+              evidence.chromium_sandbox !== true || evidence.results.length !== 8 ||
               evidence.results.some(result => result.status !== 'PASS') || evidence.errors.length ||
-              evidence.payment_call_count !== 0 || evidence.physical_quantity !== 2) {
+              evidence.payment_call_count !== 0 || evidence.physical_quantity !== 2 || evidence.option_role_write_count !== 1) {
             throw Error('Inventory purchase and later receiving acceptance incomplete');
           }
           for (const name of ['purchase-desktop', 'draft-desktop', 'editor-mobile', 'draft-mobile',
-                              'invoice-review-mobile', 'receipt-partial-mobile', 'receipt-partial-desktop']) {
+                              'invoice-review-mobile', 'receipt-partial-mobile', 'receipt-partial-desktop',
+                              'option-roles-desktop', 'option-roles-mobile', 'side-options-mobile']) {
             if (!fs.statSync(path.join(out, `${name}.png`)).size) throw Error('Missing inventory screenshot: ' + name);
           }
           JS
