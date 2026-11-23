@@ -11,7 +11,34 @@
   "literal_ui_wording_note": "Current UI says Deployment finished, not the older Deployment Succeeded phrase. Independent release state review accepts the new completed successful publication state before unchanged own-lease verifier; literal wording retained.",
   "runtime_logs": "Backend started successfully and health200 observed; these are not substitutes for release-identity verification.",
   "cloud_transcript": "Current UI exposes runtime logs, not full Cloud Build transcript; argv/cwd/snapshot-order unknowns are not claimed observed.",
-  "original_verifier": "Started once through reviewed immutable own-lease wrapper and full-output capture. Still running at latest observation; no retry or manual lease clear.",
+  "original_verifier": {
+    "source_git_sha": "1725672eeccb1272f183c376b9267e363a028325",
+    "deployment_git_sha": "76efd2c3aa1563939ee3e27a9ae03f27fc1a3d43",
+    "release_id": "rg5-be6cf2196ab95412377fd5280c5ff7b6fd3204dd20dd74825b43d85e0fe77d13",
+    "frontend_artifact_tree_sha256": "9796b20cca6dd4809bcf27ff4e5cf4817b59ecc4005763c70304064850483827",
+    "verified": true,
+    "checks": 3,
+    "protocol_version": 5,
+    "boot_started_at": "2026-11-23T15:52:01.089834+00:00",
+    "final_guard_status": {
+      "active": false
+    },
+    "own_lease_status": "closed_by_original_verifier",
+    "executed_once": true,
+    "manual_lease_clear": false,
+    "stdout": {
+      "path": "ACTUAL-HOST-VERIFY-2086.stdout.json",
+      "bytes": 43301,
+      "sha256": "f4b57349a8da68c70c497ec80992c01cfab42cad4231d3b70bd1ea45297339a6",
+      "format": "Original unchanged bytes: verifier JSON followed by final guard-status JSON"
+    },
+    "stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "retained_at_utc": "2026-11-23T16:39:40.036611+00:00",
+    "capture_note": "Read and exported existing private output through the authorized actual-host terminal. The verifier was not run again."
+  },
   "ui_after_reload": {
     "date": "2026-11-23",
     "tabby_numeric": true,
@@ -20,7 +47,8 @@
     "estimated_order_count_visible": true,
     "total_payment_fees_numeric": true,
     "profit_payment_fee_block_removed": true,
-    "separate_product_cost_incompleteness": true
+    "separate_product_cost_incompleteness": true,
+    "net_profit_numeric": false
   },
   "historical_acceptance": {
     "date": "2026-11-11",
@@ -31,6 +59,23 @@
     ],
     "tabby_group_still_incomplete": true,
     "other_provider_groups_also_incomplete": true,
-    "cause": "Unresolved; inspect persisted read-model reason codes before concluding whether missing collection, conflicts, or calculation defect. No new financial writes."
+    "cause": "Exact dashboard per-order cause remains unproven. Normal saved Operational Balances ledger for the same creation date displays numeric fees for all scoped rows; it uses a later saved snapshot, not the historical dashboard evidence cutoff.",
+    "period_refresh_completed": true,
+    "still_incomplete_after_period_refresh": true,
+    "normal_ledger_observation": {
+      "from_date": "2026-11-11",
+      "to_date": "2026-11-11",
+      "all_dates": false,
+      "all_pages_read": true,
+      "all_scoped_rows_numeric": true,
+      "sample_expanded_reason": "العمولة تقديرية من كشف المنصة؛ نسبة العمولة المتغيرة قبل الضريبة، والرسم الثابت والضريبة منفصلان. يستبدلها دليل مطابق.",
+      "source_snapshot_riyadh": "2026-11-21 17:50",
+      "limit": "Current saved rows filtered by creation date; not a reproduction of the historical dashboard cutoff. No live monetary values or order identifiers retained."
+    }
+  },
+  "diagnostic_boundaries": {
+    "configured_host_read_model": "Bounded read-only exact and same-date metadata queries found no matching saved executive snapshot. Database/credential discovery stopped.",
+    "browser_developer_tools": "The organization explicitly blocks DevTools on this page. Dismissed the notice; no bypass attempted. Diagnosis continued through normal existing application views.",
+    "financial_writes": false
   }
 }

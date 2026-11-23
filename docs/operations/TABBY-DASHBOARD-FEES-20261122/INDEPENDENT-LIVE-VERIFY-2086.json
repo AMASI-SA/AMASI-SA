@@ -1,0 +1,85 @@
+{
+  "actions": {
+    "created_only": "INDEPENDENT-LIVE-VERIFY-2086.json",
+    "git_mutations": false,
+    "host_actions": false,
+    "raw_capture_modified": false,
+    "source_edits": false
+  },
+  "backend_runtime_source_summary_exact_match": true,
+  "boot_observation_after_original_prepare": true,
+  "boot_started_at": "2026-11-23T15:52:01.089834+00:00",
+  "final_original_guard_status": {
+    "active": false
+  },
+  "frontend_probe_evidence": {
+    "build_meta_json_and_wildcard_accept_variants_present": true,
+    "canonical_and_cache_busted_requests_present": true,
+    "capture_limit": "The original output is an aggregate result, not three raw HTTP transcripts. It retains the first frontend request/cache observations and deduplicated boot observations. This audit made no new live request.",
+    "checked_request_descriptors": 774,
+    "public_shell_cache_records_match_original_requirements": true,
+    "request_descriptors_exactly_match_frozen_public_file_contract": true,
+    "retirement_service_worker_records_match_original_requirements": true,
+    "source_contract_review": "The frozen original verifier performs three successful health/identity/source/critical-hash/frontend checks, verifies full public file bytes and build-meta JSON MIME for each probe, and closes only its unchanged matching lease before returning success."
+  },
+  "frozen_intent_sha256": "b56f866f5c4efc28bc40f16e9eacd42a5052d673b39a482b0b861635e9a3e54e",
+  "kind": "tabby_pr2086_independent_live_release_verification_audit_v1",
+  "limitations": [
+    "Release identity verification is complete; this audit does not establish live historical fee completeness or any financial behavior.",
+    "The original stderr emptiness and launcher exit were reported separately by the operator; this audit target is the retained stdout stream.",
+    "No additional publication, guard verification or live probe was executed."
+  ],
+  "original_own_lease_closed": true,
+  "original_stdout": {
+    "bytes": 43301,
+    "json_documents": 2,
+    "no_non_json_preamble_or_trailing_content": true,
+    "path": "ACTUAL-HOST-VERIFY-2086.stdout.json",
+    "sha256": "f4b57349a8da68c70c497ec80992c01cfab42cad4231d3b70bd1ea45297339a6",
+    "unchanged": true,
+    "utf8": true
+  },
+  "privacy_review": {
+    "all_public_path_descriptors_bound_to_frozen_frontend_manifest": true,
+    "no_business_financial_values_or_counts": true,
+    "no_customer_order_owner_identifiers": true,
+    "no_email_addresses_detected": true,
+    "no_secrets_credentials_or_credentialed_urls_detected": true,
+    "pattern_scan_results": {
+      "bearer_credential": true,
+      "cloud_access_key": true,
+      "email_address": true,
+      "github_credential": true,
+      "jwt": true,
+      "openai_key": true,
+      "private_key_pem": true
+    },
+    "raw_bytes_redacted_or_rewritten": false,
+    "safe_for_git_retention": true,
+    "status": "PASS",
+    "strict_public_release_schema_only": true
+  },
+  "release_control_source_summary_exact_match": true,
+  "reviewed_at_utc": "2026-11-23T16:42:19.546136+00:00",
+  "reviewed_original_source_sha256": {
+    "backend/frontend_build_identity.py": "7896dfa2c9b4fea8c426b47c5b75e331380c0a4a3f947028aa4f5afa101f9d87",
+    "backend/release_protocol_v5.py": "1961ac18a5363ec425ceec4f98f96f611d378b09e19380d4756bd6776987d8ef",
+    "scripts/production_release_guard.py": "4e56f1f60f5f79931658b8f95a0aeb2269471025ca84f7e5b651cd284806349a"
+  },
+  "reviewer": "independent release_state_review",
+  "scope": "Read-only audit of retained original release-verifier output and public frozen release proof; no application financial-data acceptance claim.",
+  "status": "PASS",
+  "verified_release": {
+    "checks": 3,
+    "deployment_git_sha": "76efd2c3aa1563939ee3e27a9ae03f27fc1a3d43",
+    "frontend_artifact_tree_sha256": "9796b20cca6dd4809bcf27ff4e5cf4817b59ecc4005763c70304064850483827",
+    "git_sha": "1725672eeccb1272f183c376b9267e363a028325",
+    "protocol_version": 5,
+    "release_id": "rg5-be6cf2196ab95412377fd5280c5ff7b6fd3204dd20dd74825b43d85e0fe77d13",
+    "source_base_git_sha": "c2d244a3349013c06f3fb7824070bfa12bd0bfe0",
+    "source_git_sha": "1725672eeccb1272f183c376b9267e363a028325",
+    "url": "https://mezansalla.com",
+    "verified": true
+  },
+  "wrapper_sha256": "4210c4c9a2e6d7cbc418154abb354c967dfc8fa44d4bd30d4bdb93d631ddc043"
+}

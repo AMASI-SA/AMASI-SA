@@ -1,0 +1,28 @@
+{
+  "source_git_sha": "1725672eeccb1272f183c376b9267e363a028325",
+  "deployment_git_sha": "76efd2c3aa1563939ee3e27a9ae03f27fc1a3d43",
+  "release_id": "rg5-be6cf2196ab95412377fd5280c5ff7b6fd3204dd20dd74825b43d85e0fe77d13",
+  "frontend_artifact_tree_sha256": "9796b20cca6dd4809bcf27ff4e5cf4817b59ecc4005763c70304064850483827",
+  "verified": true,
+  "checks": 3,
+  "protocol_version": 5,
+  "boot_started_at": "2026-11-23T15:52:01.089834+00:00",
+  "final_guard_status": {
+    "active": false
+  },
+  "own_lease_status": "closed_by_original_verifier",
+  "executed_once": true,
+  "manual_lease_clear": false,
+  "stdout": {
+    "path": "ACTUAL-HOST-VERIFY-2086.stdout.json",
+    "bytes": 43301,
+    "sha256": "f4b57349a8da68c70c497ec80992c01cfab42cad4231d3b70bd1ea45297339a6",
+    "format": "Original unchanged bytes: verifier JSON followed by final guard-status JSON"
+  },
+  "stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "retained_at_utc": "2026-11-23T16:39:40.036611+00:00",
+  "capture_note": "Read and exported existing private output through the authorized actual-host terminal. The verifier was not run again."
+}
