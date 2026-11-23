@@ -1,6 +1,6 @@
 {
   "task": "TABBY-HISTORICAL-FEE-CLOCK-20261123",
-  "state": "canonical_r2_intent_B_frozen_exact_B_gates_running",
+  "state": "exact_B_readiness_adapter_reviews_pass_last_backend_gate_pending",
   "branch": "codex/tabby-historical-fee-clock-r2-20261123",
   "source_A": "c464eb01f3b4201da58c664312d009617e3f1766",
   "source_tree": "767055292da465bde28908e26d6e1a1b3e493850",
@@ -25,12 +25,14 @@
   "published": false,
   "own_lease": false,
   "foreign_handoff": "PR2087 actual publication in progress; this task stays isolated until fresh verified closure.",
-  "next": "Finish all applicable exact-B gates and independently audit both original adapter outputs. Preserve foreign actual-host recovery/publication.",
+  "next": "Finish remaining exact-B backend gate; complete independent disabled-helper review; preserve foreign2087 publication until original verified closure.",
   "pr": 2091,
   "intent_B_tree": "756a1285dfe837ebdab6c6a4a65750b59952227a",
   "candidate_sha256": "ff1f5f912fc9d828d12c8aa7766018f21006ad36372c8d70caaee34d693b95f9",
   "runtime_id": "rg5-c49251181bb276063220b420205fc39aacef5d7e2f5e124192062f53f71fadce",
   "source_readiness_run": 45222262450,
   "source_candidate_artifact": 14841641946,
-  "candidate_review": "PASS original and independent full manifests/frontend/proof, CI artifact byte-identical"
+  "candidate_review": "PASS original and independent full manifests/frontend/proof, CI artifact byte-identical",
+  "readiness_run": 45223800582,
+  "independent_final_B_review": "INDEPENDENT-HISTORICAL-CLOCK-R2-FINAL-B.json"
 }

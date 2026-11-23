@@ -1,0 +1,4079 @@
+BOTH_HOSTS_IDENTICAL_PACKAGES_AND_GENERATED_BYTES
+[
+  {
+    "adapter_built_without_git": true,
+    "adapter_git_present": false,
+    "approved_environment_exact_match": true,
+    "backend_package_members": 1333,
+    "base_sha": "422fffc8fb9c381165cc76b1ded5ca595773ce8e",
+    "build_meta": {
+      "bytes": 584063,
+      "path": "build-meta.json",
+      "sha256": "b137a20f4a7b4539ef43e8a9f7c76c0fb90293c72890f2efa7250367e540579e"
+    },
+    "deployment_sha": "be0c1c67569e5fb59104ccdd43aaa44169fe0ff5",
+    "evidence_zip_sha256": "a3d556d98f115ee47f8ff1053875e4f55a2fdbaef17a65e95cda550112707336",
+    "frontend_package_members": 1806,
+    "generated_file_tree_sha256": "04e55f364dbcb0aa8c54a3e25fe98941abd7d4fba9fbcbad96c98509824b8839",
+    "generated_files": 387,
+    "generated_zip_sha256": "db87cb9de644501a4d36e8c3a82c1b47aa564068a0d2e3168052949f7dc6b5a5",
+    "host_node": "20.20.2",
+    "intent_sha256": "ff1f5f912fc9d828d12c8aa7766018f21006ad36372c8d70caaee34d693b95f9",
+    "member_modes": [
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "backend/release_identity.json"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/.release/reproducible-build.json"
+      },
+      {
+        "kind": "directory",
+        "mode": "0o755",
+        "path": "frontend/build"
+      },
+      {
+        "kind": "directory",
+        "mode": "0o755",
+        "path": "frontend/build/.well-known"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/.well-known/security.txt"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/_headers"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/_headers.json"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/amas-delivery-manifest.webmanifest"
+      },
+      {
+        "kind": "directory",
+        "mode": "0o755",
+        "path": "frontend/build/assets"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/AIControlCenter-mg7GxwNU.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/AccountDetails-BDsMe4L2.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/AccountingCutoffs-Bt-mOF2I.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/AccountingShared-CUmo5ynU.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/AccountingShared-m-pSspG8.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Accounts-pPbdpA6p.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/AdAccountForensic-BOEKemyG.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/AdAccounts-DLZmya_t.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/AdDebtDiagnostic-BRY0K58j.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/AddOperationalEntity-CxD_Iirq.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/AdsCostSettingsV2-PopfQohK.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/AdsManager-BvHhBXri.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/AdsReport-B_gd2uG8.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/AdsV2Report-wyQHPcAV.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/AdsV2Settings-BtWkWRgV.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/AdvancedDashboard-hRdFDjqO.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/AdvancedFilters-CIEii5Cx.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Advances-Bfx4GMxr.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/AdvertisingExpensesReport-ClVUFbmR.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/AlertsPage-Cc7yRx3g.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/AnalysisResult-peAB8iHd.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ApiPermissionsDiagnostic-BrjZprRx.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ApprovedCustomerCollections-DKqP3W1o.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ApprovedEntry-CobSjjjS.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ApprovedFinanceRoute-CSpbpx-q.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ApprovedFinanceUI-CqYrPVhq.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ApprovedFinanceUI-Dy0F-Fc6.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ApprovedLedger-B8ZvWOap.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ApprovedLedger-Cu5KdMXq.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ApprovedOperations-C0iv7g8q.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ApprovedOperations-CzvPD2G9.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ApprovedOrderIssues-BoOscdIj.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ApprovedRefund-DKk6eAgA.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ApprovedReports-CIdS1B9U.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ApprovedReports-DF06t7gN.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ApprovedReviewPage-CfYVtv0t.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ApprovedSpecializedPage-CVJS5KGX.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ApprovedSpecializedPage-CfDh6HAa.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/AppsIntegrationsControlCenter-C0vFNY9s.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/AppsIntegrationsControlCenter-DYfy-3eX.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ArabicDateRangePicker-D_orhf5T.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ArrowCounterClockwise.es-DC_stXrB.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ArrowUUpLeft.es-BIOgyT5N.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/BalanceDriftDiagnostic-CbcmzinE.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/BankTransferReview-CHpAjo-Q.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/BarChart-jRlH4GCw.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/BnplBalancesDiagnostic-5BBXJZah.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/BnplDiagnostics-D1vn8eYl.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/BnplIntegrations-Bu6BwKYN.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/BnplSettlements-CyRQegOh.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/BnplSettlementsRegister--dC1bGUw.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/BundleEditor-T5aRj69J.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CODDiagnostic-CtZL3znD.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Calculator.es-DBg2JfS_.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Calendar.es-C6NYinNF.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CampaignAccountAnalysis-D5xXSnJC.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CampaignRecommendations-pjzpBsLN.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CampaignResearchStatus-UPDn9_tn.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CaretLeft.es-BcRjM1oC.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CaretRight.es-Czcs5xn_.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CaretUp.es-DKv-1KUM.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CartesianChart-CLkAhnrY.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ChartBar.es-B2ArJrCv.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ChartDashboard-BFnHvIt6.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ChatCircleDots.es-eimyOk8G.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Coins.es-CkOdQLSi.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CompletedFulfillmentOrders-D4ZJppOE.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CompletedShippingFeeReview-C0iOojXY.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CopySimple.es-DpGVvBCY.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Counterparties-DQZ89AR-.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CouriersLedger-DxvWSOO1.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CreditCard.es-BMbHTrEf.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CustodyOpenBalances-IkggjRzY.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CustomAppIntegration-5XsRR-zl.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CustomerAdjustmentReceipt-DmFWaS5Q.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CustomerAdjustments-CindoEi-.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CustomerCohortReport-DhuzNKXR.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CustomerExchanges-i9-uMhLQ.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CustomerIntelligenceCenter-RqUddejV.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CustomerReturns-Ef2UyyQC.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CustomerServiceInstructionBanner-BpFaNlpZ.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CustomerWalletBalance-CADQ1EAR.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/DailyCosts-B_noUPEW.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/DailyProductCostModal-BU0kRXkr.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Dashboard-BhfsgFcW.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Dashboard-Bkv7xAVh.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/DashboardPanel-DVDbtiYP.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/DashboardPanel-DwJtN6un.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/DateInput-04a90xed.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/DeliveryTrackingOrders-DKVCKzNL.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/DeviceMobile.es-uEXCRPhZ.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/DotsThree.es-CZAj0JgK.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/DotsThreeVertical.es-D6mwPV-g.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Download.es-D02OSzHt.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/DownloadSimple.es-tjWMuCcr.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/EmployeeAdditionalPage-5L8W0HkL.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/EmployeeBalanceCard-CrDnYNCg.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/EmployeeBalanceSpecialist-If6LijGg.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/EmployeeCorrections-CMZGq3-C.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/EmployeeDetailPage-D0vhvQpZ.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/EmployeeLegacyRead-BOoMB0n8.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/EmployeeMarketingRead-DnA9vWo7.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/EmployeeMissingCosts-cW36fFxC.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/EmployeeOperationsReadPage-BJ0RyFz8.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/EmployeeOrphanDiagnostic-DY7pX1IF.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/EmployeesLedger-Zfpv_2Of.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/EmployeesV2-BUBhsfzG.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/EntityLedgerByIdPage-BOM-rdvw.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/EntityLedgerPage-CyQ7WdV7.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ExcludedOrdersModal-CKPZ_WGd.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ExpenseCategoryTreePage-Cn1Gmx77.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ExpenseReversals-DHsREy5n.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ExternalsLedger-DL7S2cMb.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/FilePdf.es-DluVWO3q.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/FileText.es-Bq_AhVF1.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/FileXls.es-D7ybkLRG.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/FinancialInputHub-Daa0S6i5.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/FinancialMovementNewPage-C7Er7B5T.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/FinancialMovementsListPage-Bg1U3lns.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/FinancialPosition-D5qt8jea.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/FinancialPositionLedger-C-1-ukT3.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/FloppyDisk.es-C0Ysnv9I.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/FulfillmentV2-BJiMyZiN.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/FulfillmentV2-CtZ_T0Pu.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Funnel.es-Cd3vyeoC.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/FunnelSimple.es-DUOm67Hw.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Ghost.es-VQwUYsYW.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/HandCoins.es-Ch6BteWq.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/History-DpDDdVKr.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Hourglass.es-D5qbuTo-.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ImageBroken.es-OwWGQV27.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ImageCatalog-B8lUh5Pv.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ImageSquare.es-DCFF5rph.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ImportJobs-ICKTfvA3.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/InstagramCustomerIntelligenceIntegration-CiQZEyXb.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/IntegrationPlaceholder-D3GBLjbs.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/InventoryProductFields-C4khi3Dm.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/InventoryProductFields-C9Xz7BVb.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/InventoryPurchases-SmjF1rZw.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/InventoryPurchases-veYHrNsP.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/InventoryReceivingWorkspace-BiukfTPH.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/InventoryReceivingWorkspace-CJ4SDdB5.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/InventorySuiteFrame-D2T1uMfs.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/InventorySuiteFrame-Dn83mjPs.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/InventoryWorkspace-BB2gkrvv.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/InventoryWorkspace-CMN_p009.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Key.es-VKTs0PDZ.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/LedgerHealthDiagnostic-DWO9OgGS.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/LedgerTransactionsPage-B2Gjb78B.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/LegacyUsageReportPage-BWFDUNSn.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Legend-_F5RYPyJ.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/LineChart-CXC1BMHB.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Link.es-DWjbUSUV.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/LinkBreak.es-zGvcMCvQ.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ListBullets.es-Cj0Gmp_x.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ListChecks.es-B7KuiVNz.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Lock.es-BX8oCBEh.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/MakeWebhook-BuOjYH4l.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/MapPin.es-Cp1xDQ8u.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/MarketingPlatformWorkspace-B-u-aWxg.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/MarketingReports-DB4mCCT6.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/MarketingReports-Ogo07Vt8.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/MezanComponents-iVdDiTnc.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/MezanProducts--OMBPXCG.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/MezanSuppliersV2-CSBUHbR7.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/MigrationWizard-CdJfdw46.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/NotePencil.es-C1wkAskx.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/OpeningBalances-BEKLUwFz.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/OperatingExpenses-D7XondF-.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/OperationAccountBindings-DMzZW3Fb.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/OperationalBalances-CDcXNqqT.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/OperationalContextRoute-CChPzVOK.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/OperationalFinancialPosition-C5kJXQd2.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/OperationalFinancialPosition-Dfvfj_1P.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/OperationalReports-CXH1iPKv.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/OperationalToolBack-CxHJu2Ns.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/OperationsDashboard-BIT4Hhxx.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/OrderCurrencyAmount-B9i3YlBp.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/OrderDetailsV2-Gx35-sQj.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/OrderReview-CzDvLPn7.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/OrderTrackingNotes-B0YtX9XB.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Orders-lU5H2yws.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/OrdersDiagnostics-BCS6s-m1.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/OrdersV2-T6WuH76h.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/PaginatedReportTable-D1E2cggY.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/PaginatedReportTable-DtpTLI9a.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Paperclip.es-Cd2TISGm.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/PaymentModeBadge-BG55ua-d.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/PaymentSettlements-BxmIvUlV.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/PaymentSourceFields-CrfKYZ6B.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/PencilSimple.es-DlO4Oj2V.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Percent.es-PvRIRG-7.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Phone.es-C3B95umW.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/PieChart-DcEOCD0f.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Plus.es-C9uON8_5.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/PostMigrationAudit-CnZ9NIae.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/PreparationEmployeeReceivingWorkspace-CrKqWzwG.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/PreparationFilesRegistry-Fg68BvuZ.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/PreparationWorkDashboard-DiTgCOD-.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Printer.es-DQAPhUsS.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ProductCosts-BlT68v4w.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ProductIntakeWorkspace-4OY4AIha.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ProductPreparation-BwwiXY11.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ProductsPage-D1vMelLp.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Profile-CaSRTCdT.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ProviderFeeSetup-CToFCsp2.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ProviderFeeSetup-qUtd8VlU.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ProviderHistoryReview-DqGxGlFa.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ProviderStatements-Cf04YQor.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ProviderStatements-Yp0tVHe-.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/PurchaseInvoices-q2N0jcfQ.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/QoyodControlCenter-Dab3Gtde.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ReadyToShipOrders-6O71zamj.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Receivables-B594AE4u.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Reconciliation-DlF87YHS.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ReconciliationDetail-DQCdS5KN.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ReconciliationReport-DfAqERgD.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/RecurringObligations-Cbc5CTzC.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/RefundAudit-7GSqeTan.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Reports--8wg-PB1.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ReviewedOrders-BY4hUvS2.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SalaryReversals-Dc51Cn03.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SallaIntegration-Bli076rS.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SallaSettlements-BzabTJvH.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SallaSourceComparison-CmDOQjqX.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SallaWebhookRecovery-B8TjO8Ox.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Scales.es-BxBU7ehT.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Settings-B8E6wvty.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SettlementDashboard-B0p2Tcyo.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Settlements-K4Fqwf4W.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SettlementsOverview-CBK3jwT3.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ShippingAccounts-BRcSbfOV.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ShippingBarcodeScanner-P3LQyfmq.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ShippingCompanySettings-BhCj-g_K.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ShippingLedger-B-L_lR8M.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ShippingLedgerStub-C3hCD0YB.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ShippingTransfers-B_C4Bdjl.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ShoppingBag.es-BWWkuCCL.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ShoppingCart.es-laB1lQqN.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SimpleBalanceAccess-Ccn5-rvX.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SimpleBalanceReviews-BlJbW0dp.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SimpleBalanceReviews-xw1K67Q-.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SimpleBalanceStatement-C8TCjrcE.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SimpleBalances-BahukwB1.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SimpleOrderRefunds-C4BkG2PW.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SnapchatCampaignManagementPanel-D8Qy_hJJ.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SnapchatPeriodDiagnosticsPage-UdxXCzzj.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SnapchatV2Page-0800s8Do.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SoldProducts-CK2gC3UF.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Spinner.es-D5bMbukH.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SpinnerGap.es-BhpXkeIW.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Stack.es-DYSM8M9P.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Stethoscope.es-BPmaQd3i.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/StocktakeWorkbench-BnXd-n6h.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/StocktakeWorkbench-DpbxVXrG.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/StoreCourierDispatchWorkspace-CmT4cnqv.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/StoreCourierMyShipments-lj760Y8h.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/StoreDeliveryCustomerService-g13D1sOP.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/StoreDeliveryPaymentReview-CytjDeoE.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/StoreDeliverySettlements-BWQZIDOg.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/StoreDriverHandover-B0Q_WPFQ.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/StoreDrivers-CW61SySl.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SupplierCreditPurchase-CpaWJV3k.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SupplierLedgerDetailPage-DpETomfw.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SupplierReceivingWorkspace-CMjgAu6O.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SuppliersLedger-Bsc3mtJT.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SuppliersPage-B3JT0tvS.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SuppliersReportPage-CQnqyHZS.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Tag.es-Bi2udoBB.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/TeamManagement-Bf5W3bxt.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Transfers-C2_UnQW5.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/TrendUp.es-CWrAKnsr.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/UnifiedEntryScreen-C03EhD3Q.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/UploadExcel-C7054Di1.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/UserCheck.es-DKIpmjOu.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/UserMinus.es--3BS5hKD.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/UserPlus.es-CJW2q1pO.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Users.es-IzD3to5W.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/WarehouseHierarchyWorkspace-B9_zWQav.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/WarehouseHierarchyWorkspace-BTZfA6ws.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Warning.es-Dz4iYgfh.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/WhatsappLogo.es-DYJJzJbp.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/WorkspaceSnapshot-C_kxcPmE.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Wrench.es-B8obuXD_.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/XCircle.es-h1Zui_PI.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/accountingOnboarding-CMm8je_y.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/aiStoreOperations-rci4RLLr.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/api-Cn6ediUw.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/axios-CRBZr4vS.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/chart-column-CGaGc9fn.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/chevron-down-C4UoVcZt.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/clsx-DB0hHKMi.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/customerIntelligence-BRbOQD8F.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/dashboardAdsSpend-Dicb6tVR.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/dates-CnmNS_0-.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/demandRead-DjQMAso2.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/dist-D0rv7Xxy.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/esm-Ca61H3iQ.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/financialPosition-9zYqx0hc.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/financialPositionDisplay-FWtsZwdn.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/financialPositionPresentation-BWwPanfJ.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/financialPositionViews-CqUP38o3.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/format-BmuT15Y2.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/fulfillmentV2-Ci0H1OxX.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/googleAdsEvidence-D9xdzWpl.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/index-BdbNyAp7.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/index-cBufTj-E.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/inventory-catalog-resources-C59ViZJL.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/inventory-catalog-resources-D5ye75Gq.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/inventoryProjectionViews-BsN6fOHm.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/jsx-runtime-BpzPEenQ.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/label-CVgIZki2.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/metaIntegrationsV2-DP96IBHu.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/mezanProductsV2-DM8FO5EN.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/mezanSuppliersV2-uVfMmx6s.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/mezanV2CostLinks-BktwNvdM.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/openCurrentCarrierLabel-fnlSk5Hu.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/operational-DCLn7_GR.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/operationalToolTheme-WaIsF-BM.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/orderActivity-SmFpeeSG.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/orderCampaignAttribution-DkVB8FSM.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/orderTrackingNotes-CJMKjFZl.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/paymentFeeRows-DLaiAl7L.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/preload-helper-Czpn1I53.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/productBundles-17gZptAZ.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/react-dom-5PB_EGoG.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/react-to-print-EoKsSM60.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/refresh-cw-C2s2Hdjf.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/rolldown-runtime-Dd_uD5pT.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/safeSpreadsheet-DEliRAO9.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/simpleBalances-Djlzuuwr.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/simpleBalancesHooks-Qw4sz3Tv.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/simpleBalancesModel-CP4X3uPl.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/simpleBalancesPending-uwFnfmqF.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/storeCourierDispatch-B2Hetv_8.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/storeCourierLabelPrint-DlgAibbg.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/storeDelivery-DuUQ9aAX.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/tabs-BOfyNmaQ.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/tiktokIntegrationsV2-Bv3elN3w.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/triangle-alert-ZcFCRsqD.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/tzUtils-BdxHQ2m4.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/workspaceReadHooks-CZ_lTD97.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/build-meta.json"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/favicon.svg"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/index.html"
+      },
+      {
+        "kind": "directory",
+        "mode": "0o755",
+        "path": "frontend/build/inventory-fonts"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/inventory-fonts/LICENSE-cairo.txt"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/inventory-fonts/LICENSE-tajawal.txt"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/inventory-fonts/fonts.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/inventory-fonts/mezan-font-1.ttf"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/inventory-fonts/mezan-font-2.ttf"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/inventory-fonts/mezan-font-3.ttf"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/inventory-fonts/mezan-font-4.ttf"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/inventory-fonts/mezan-font-5.ttf"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/inventory-fonts/mezan-font-6.ttf"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/inventory-fonts/mezan-font-7.ttf"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/inventory-fonts/mezan-font-8.ttf"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/inventory-fonts/mezan-font-9.ttf"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/operational-notifications-sw.js"
+      },
+      {
+        "kind": "directory",
+        "mode": "0o755",
+        "path": "frontend/build/operational-ui"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/operational-ui/arabic.woff2"
+      },
+      {
+        "kind": "directory",
+        "mode": "0o755",
+        "path": "frontend/build/operational-ui/brands"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/operational-ui/brands/README.md"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/operational-ui/brands/apple.png"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/operational-ui/brands/aramex.png"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/operational-ui/brands/enma.png"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/operational-ui/brands/google.png"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/operational-ui/brands/mastercard.png"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/operational-ui/brands/meta.png"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/operational-ui/brands/paypal.png"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/operational-ui/brands/rajhi.png"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/operational-ui/brands/salla.png"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/operational-ui/brands/snap.png"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/operational-ui/brands/tabby.png"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/operational-ui/brands/tamara.png"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/operational-ui/brands/tiktok.png"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/operational-ui/brands/visa.png"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/operational-ui/font-license.txt"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/operational-ui/icons-license.txt"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/operational-ui/icons.svg"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/operational-ui/kufi.woff2"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/service-worker.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/sw.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "release/release-intent-v5.json"
+      }
+    ],
+    "official_zip_digests_and_base64_round_trip_passed": true,
+    "original_readers_passed": true,
+    "package_boundary": {
+      "backend": {
+        "file_count": 1333,
+        "git_directory_present": false,
+        "health_verified": true,
+        "identity": {
+          "bytes": 497396,
+          "path": "release_identity.json",
+          "sha256": "7d3287f0f090c1644316bebabb7faa2ae9a06a8f8c212ffc1084abc56e3ee05a"
+        },
+        "isolated_verified": true,
+        "package_tree_sha256": "192bb3e53ddc17c47d17537ebc00274aa796e23b496fa3b4be2aaccfaf66e51a",
+        "runtime_root": "backend",
+        "sibling_frontend_present": false
+      },
+      "frontend": {
+        "artifact_tree_sha256": "51d24296b29281a6dc64b452c3986fbf354c3b144f5ed25491a69ee97a9ad1d9",
+        "build_meta": {
+          "bytes": 584063,
+          "path": "build/build-meta.json",
+          "sha256": "b137a20f4a7b4539ef43e8a9f7c76c0fb90293c72890f2efa7250367e540579e"
+        },
+        "content_type_contract": "application/json",
+        "file_count": 1806,
+        "isolated_runtime_artifact_verified": true,
+        "package_tree_sha256": "d3f0607858dc6dd58a62391e5fc3fd48d79c0fef3195e8898501ff6eff499eca",
+        "runtime_root": "frontend",
+        "static_root": "frontend/build"
+      },
+      "kind": "mezan_release_package_boundary_proof_v1",
+      "release_id": "rg5-c49251181bb276063220b420205fc39aacef5d7e2f5e124192062f53f71fadce",
+      "schema_version": 1,
+      "source_git_sha": "c464eb01f3b4201da58c664312d009617e3f1766"
+    },
+    "preflight_git_present": true,
+    "proof_file": {
+      "bytes": 1521,
+      "path": "frontend/.release/reproducible-build.json",
+      "sha256": "3a4f628e181920ccdae50e00cd4fd5ff31862fb685d7ea75fbf83c24cb19e9be"
+    },
+    "public_frontend_files": 381,
+    "source_sha": "c464eb01f3b4201da58c664312d009617e3f1766",
+    "tar_members": 393,
+    "tar_sha256": "1f8e3faff53de4205b61bf88e747270900804e954417393002a7479c1e65a11d",
+    "toolchain": {
+      "node": "22.23.2",
+      "vite": "8.2.4",
+      "yarn": "1.22.22"
+    }
+  },
+  {
+    "adapter_built_without_git": true,
+    "adapter_git_present": false,
+    "approved_environment_exact_match": true,
+    "backend_package_members": 1333,
+    "base_sha": "422fffc8fb9c381165cc76b1ded5ca595773ce8e",
+    "build_meta": {
+      "bytes": 584063,
+      "path": "build-meta.json",
+      "sha256": "b137a20f4a7b4539ef43e8a9f7c76c0fb90293c72890f2efa7250367e540579e"
+    },
+    "deployment_sha": "be0c1c67569e5fb59104ccdd43aaa44169fe0ff5",
+    "evidence_zip_sha256": "ab2f86db44dd948ba6526265cd58976bee944d63d67100922461c8609c7d6b97",
+    "frontend_package_members": 1806,
+    "generated_file_tree_sha256": "04e55f364dbcb0aa8c54a3e25fe98941abd7d4fba9fbcbad96c98509824b8839",
+    "generated_files": 387,
+    "generated_zip_sha256": "fcc2558ee6cefaf41081fffc09e0e6008aee29e72862c5189ee8ebe48cfd970a",
+    "host_node": "24.19.0",
+    "intent_sha256": "ff1f5f912fc9d828d12c8aa7766018f21006ad36372c8d70caaee34d693b95f9",
+    "member_modes": [
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "backend/release_identity.json"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/.release/reproducible-build.json"
+      },
+      {
+        "kind": "directory",
+        "mode": "0o755",
+        "path": "frontend/build"
+      },
+      {
+        "kind": "directory",
+        "mode": "0o755",
+        "path": "frontend/build/.well-known"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/.well-known/security.txt"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/_headers"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/_headers.json"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/amas-delivery-manifest.webmanifest"
+      },
+      {
+        "kind": "directory",
+        "mode": "0o755",
+        "path": "frontend/build/assets"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/AIControlCenter-mg7GxwNU.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/AccountDetails-BDsMe4L2.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/AccountingCutoffs-Bt-mOF2I.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/AccountingShared-CUmo5ynU.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/AccountingShared-m-pSspG8.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Accounts-pPbdpA6p.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/AdAccountForensic-BOEKemyG.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/AdAccounts-DLZmya_t.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/AdDebtDiagnostic-BRY0K58j.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/AddOperationalEntity-CxD_Iirq.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/AdsCostSettingsV2-PopfQohK.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/AdsManager-BvHhBXri.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/AdsReport-B_gd2uG8.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/AdsV2Report-wyQHPcAV.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/AdsV2Settings-BtWkWRgV.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/AdvancedDashboard-hRdFDjqO.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/AdvancedFilters-CIEii5Cx.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Advances-Bfx4GMxr.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/AdvertisingExpensesReport-ClVUFbmR.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/AlertsPage-Cc7yRx3g.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/AnalysisResult-peAB8iHd.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ApiPermissionsDiagnostic-BrjZprRx.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ApprovedCustomerCollections-DKqP3W1o.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ApprovedEntry-CobSjjjS.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ApprovedFinanceRoute-CSpbpx-q.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ApprovedFinanceUI-CqYrPVhq.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ApprovedFinanceUI-Dy0F-Fc6.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ApprovedLedger-B8ZvWOap.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ApprovedLedger-Cu5KdMXq.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ApprovedOperations-C0iv7g8q.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ApprovedOperations-CzvPD2G9.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ApprovedOrderIssues-BoOscdIj.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ApprovedRefund-DKk6eAgA.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ApprovedReports-CIdS1B9U.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ApprovedReports-DF06t7gN.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ApprovedReviewPage-CfYVtv0t.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ApprovedSpecializedPage-CVJS5KGX.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ApprovedSpecializedPage-CfDh6HAa.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/AppsIntegrationsControlCenter-C0vFNY9s.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/AppsIntegrationsControlCenter-DYfy-3eX.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ArabicDateRangePicker-D_orhf5T.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ArrowCounterClockwise.es-DC_stXrB.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ArrowUUpLeft.es-BIOgyT5N.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/BalanceDriftDiagnostic-CbcmzinE.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/BankTransferReview-CHpAjo-Q.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/BarChart-jRlH4GCw.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/BnplBalancesDiagnostic-5BBXJZah.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/BnplDiagnostics-D1vn8eYl.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/BnplIntegrations-Bu6BwKYN.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/BnplSettlements-CyRQegOh.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/BnplSettlementsRegister--dC1bGUw.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/BundleEditor-T5aRj69J.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CODDiagnostic-CtZL3znD.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Calculator.es-DBg2JfS_.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Calendar.es-C6NYinNF.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CampaignAccountAnalysis-D5xXSnJC.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CampaignRecommendations-pjzpBsLN.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CampaignResearchStatus-UPDn9_tn.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CaretLeft.es-BcRjM1oC.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CaretRight.es-Czcs5xn_.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CaretUp.es-DKv-1KUM.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CartesianChart-CLkAhnrY.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ChartBar.es-B2ArJrCv.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ChartDashboard-BFnHvIt6.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ChatCircleDots.es-eimyOk8G.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Coins.es-CkOdQLSi.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CompletedFulfillmentOrders-D4ZJppOE.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CompletedShippingFeeReview-C0iOojXY.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CopySimple.es-DpGVvBCY.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Counterparties-DQZ89AR-.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CouriersLedger-DxvWSOO1.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CreditCard.es-BMbHTrEf.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CustodyOpenBalances-IkggjRzY.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CustomAppIntegration-5XsRR-zl.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CustomerAdjustmentReceipt-DmFWaS5Q.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CustomerAdjustments-CindoEi-.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CustomerCohortReport-DhuzNKXR.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CustomerExchanges-i9-uMhLQ.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CustomerIntelligenceCenter-RqUddejV.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CustomerReturns-Ef2UyyQC.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CustomerServiceInstructionBanner-BpFaNlpZ.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/CustomerWalletBalance-CADQ1EAR.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/DailyCosts-B_noUPEW.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/DailyProductCostModal-BU0kRXkr.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Dashboard-BhfsgFcW.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Dashboard-Bkv7xAVh.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/DashboardPanel-DVDbtiYP.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/DashboardPanel-DwJtN6un.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/DateInput-04a90xed.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/DeliveryTrackingOrders-DKVCKzNL.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/DeviceMobile.es-uEXCRPhZ.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/DotsThree.es-CZAj0JgK.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/DotsThreeVertical.es-D6mwPV-g.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Download.es-D02OSzHt.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/DownloadSimple.es-tjWMuCcr.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/EmployeeAdditionalPage-5L8W0HkL.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/EmployeeBalanceCard-CrDnYNCg.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/EmployeeBalanceSpecialist-If6LijGg.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/EmployeeCorrections-CMZGq3-C.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/EmployeeDetailPage-D0vhvQpZ.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/EmployeeLegacyRead-BOoMB0n8.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/EmployeeMarketingRead-DnA9vWo7.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/EmployeeMissingCosts-cW36fFxC.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/EmployeeOperationsReadPage-BJ0RyFz8.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/EmployeeOrphanDiagnostic-DY7pX1IF.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/EmployeesLedger-Zfpv_2Of.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/EmployeesV2-BUBhsfzG.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/EntityLedgerByIdPage-BOM-rdvw.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/EntityLedgerPage-CyQ7WdV7.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ExcludedOrdersModal-CKPZ_WGd.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ExpenseCategoryTreePage-Cn1Gmx77.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ExpenseReversals-DHsREy5n.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ExternalsLedger-DL7S2cMb.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/FilePdf.es-DluVWO3q.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/FileText.es-Bq_AhVF1.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/FileXls.es-D7ybkLRG.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/FinancialInputHub-Daa0S6i5.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/FinancialMovementNewPage-C7Er7B5T.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/FinancialMovementsListPage-Bg1U3lns.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/FinancialPosition-D5qt8jea.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/FinancialPositionLedger-C-1-ukT3.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/FloppyDisk.es-C0Ysnv9I.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/FulfillmentV2-BJiMyZiN.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/FulfillmentV2-CtZ_T0Pu.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Funnel.es-Cd3vyeoC.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/FunnelSimple.es-DUOm67Hw.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Ghost.es-VQwUYsYW.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/HandCoins.es-Ch6BteWq.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/History-DpDDdVKr.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Hourglass.es-D5qbuTo-.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ImageBroken.es-OwWGQV27.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ImageCatalog-B8lUh5Pv.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ImageSquare.es-DCFF5rph.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ImportJobs-ICKTfvA3.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/InstagramCustomerIntelligenceIntegration-CiQZEyXb.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/IntegrationPlaceholder-D3GBLjbs.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/InventoryProductFields-C4khi3Dm.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/InventoryProductFields-C9Xz7BVb.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/InventoryPurchases-SmjF1rZw.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/InventoryPurchases-veYHrNsP.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/InventoryReceivingWorkspace-BiukfTPH.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/InventoryReceivingWorkspace-CJ4SDdB5.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/InventorySuiteFrame-D2T1uMfs.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/InventorySuiteFrame-Dn83mjPs.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/InventoryWorkspace-BB2gkrvv.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/InventoryWorkspace-CMN_p009.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Key.es-VKTs0PDZ.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/LedgerHealthDiagnostic-DWO9OgGS.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/LedgerTransactionsPage-B2Gjb78B.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/LegacyUsageReportPage-BWFDUNSn.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Legend-_F5RYPyJ.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/LineChart-CXC1BMHB.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Link.es-DWjbUSUV.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/LinkBreak.es-zGvcMCvQ.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ListBullets.es-Cj0Gmp_x.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ListChecks.es-B7KuiVNz.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Lock.es-BX8oCBEh.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/MakeWebhook-BuOjYH4l.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/MapPin.es-Cp1xDQ8u.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/MarketingPlatformWorkspace-B-u-aWxg.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/MarketingReports-DB4mCCT6.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/MarketingReports-Ogo07Vt8.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/MezanComponents-iVdDiTnc.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/MezanProducts--OMBPXCG.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/MezanSuppliersV2-CSBUHbR7.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/MigrationWizard-CdJfdw46.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/NotePencil.es-C1wkAskx.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/OpeningBalances-BEKLUwFz.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/OperatingExpenses-D7XondF-.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/OperationAccountBindings-DMzZW3Fb.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/OperationalBalances-CDcXNqqT.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/OperationalContextRoute-CChPzVOK.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/OperationalFinancialPosition-C5kJXQd2.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/OperationalFinancialPosition-Dfvfj_1P.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/OperationalReports-CXH1iPKv.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/OperationalToolBack-CxHJu2Ns.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/OperationsDashboard-BIT4Hhxx.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/OrderCurrencyAmount-B9i3YlBp.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/OrderDetailsV2-Gx35-sQj.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/OrderReview-CzDvLPn7.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/OrderTrackingNotes-B0YtX9XB.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Orders-lU5H2yws.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/OrdersDiagnostics-BCS6s-m1.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/OrdersV2-T6WuH76h.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/PaginatedReportTable-D1E2cggY.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/PaginatedReportTable-DtpTLI9a.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Paperclip.es-Cd2TISGm.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/PaymentModeBadge-BG55ua-d.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/PaymentSettlements-BxmIvUlV.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/PaymentSourceFields-CrfKYZ6B.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/PencilSimple.es-DlO4Oj2V.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Percent.es-PvRIRG-7.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Phone.es-C3B95umW.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/PieChart-DcEOCD0f.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Plus.es-C9uON8_5.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/PostMigrationAudit-CnZ9NIae.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/PreparationEmployeeReceivingWorkspace-CrKqWzwG.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/PreparationFilesRegistry-Fg68BvuZ.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/PreparationWorkDashboard-DiTgCOD-.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Printer.es-DQAPhUsS.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ProductCosts-BlT68v4w.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ProductIntakeWorkspace-4OY4AIha.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ProductPreparation-BwwiXY11.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ProductsPage-D1vMelLp.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Profile-CaSRTCdT.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ProviderFeeSetup-CToFCsp2.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ProviderFeeSetup-qUtd8VlU.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ProviderHistoryReview-DqGxGlFa.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ProviderStatements-Cf04YQor.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ProviderStatements-Yp0tVHe-.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/PurchaseInvoices-q2N0jcfQ.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/QoyodControlCenter-Dab3Gtde.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ReadyToShipOrders-6O71zamj.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Receivables-B594AE4u.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Reconciliation-DlF87YHS.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ReconciliationDetail-DQCdS5KN.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ReconciliationReport-DfAqERgD.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/RecurringObligations-Cbc5CTzC.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/RefundAudit-7GSqeTan.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Reports--8wg-PB1.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ReviewedOrders-BY4hUvS2.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SalaryReversals-Dc51Cn03.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SallaIntegration-Bli076rS.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SallaSettlements-BzabTJvH.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SallaSourceComparison-CmDOQjqX.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SallaWebhookRecovery-B8TjO8Ox.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Scales.es-BxBU7ehT.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Settings-B8E6wvty.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SettlementDashboard-B0p2Tcyo.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Settlements-K4Fqwf4W.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SettlementsOverview-CBK3jwT3.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ShippingAccounts-BRcSbfOV.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ShippingBarcodeScanner-P3LQyfmq.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ShippingCompanySettings-BhCj-g_K.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ShippingLedger-B-L_lR8M.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ShippingLedgerStub-C3hCD0YB.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ShippingTransfers-B_C4Bdjl.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ShoppingBag.es-BWWkuCCL.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/ShoppingCart.es-laB1lQqN.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SimpleBalanceAccess-Ccn5-rvX.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SimpleBalanceReviews-BlJbW0dp.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SimpleBalanceReviews-xw1K67Q-.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SimpleBalanceStatement-C8TCjrcE.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SimpleBalances-BahukwB1.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SimpleOrderRefunds-C4BkG2PW.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SnapchatCampaignManagementPanel-D8Qy_hJJ.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SnapchatPeriodDiagnosticsPage-UdxXCzzj.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SnapchatV2Page-0800s8Do.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SoldProducts-CK2gC3UF.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Spinner.es-D5bMbukH.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SpinnerGap.es-BhpXkeIW.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Stack.es-DYSM8M9P.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Stethoscope.es-BPmaQd3i.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/StocktakeWorkbench-BnXd-n6h.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/StocktakeWorkbench-DpbxVXrG.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/StoreCourierDispatchWorkspace-CmT4cnqv.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/StoreCourierMyShipments-lj760Y8h.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/StoreDeliveryCustomerService-g13D1sOP.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/StoreDeliveryPaymentReview-CytjDeoE.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/StoreDeliverySettlements-BWQZIDOg.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/StoreDriverHandover-B0Q_WPFQ.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/StoreDrivers-CW61SySl.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SupplierCreditPurchase-CpaWJV3k.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SupplierLedgerDetailPage-DpETomfw.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SupplierReceivingWorkspace-CMjgAu6O.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SuppliersLedger-Bsc3mtJT.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SuppliersPage-B3JT0tvS.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/SuppliersReportPage-CQnqyHZS.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Tag.es-Bi2udoBB.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/TeamManagement-Bf5W3bxt.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Transfers-C2_UnQW5.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/TrendUp.es-CWrAKnsr.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/UnifiedEntryScreen-C03EhD3Q.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/UploadExcel-C7054Di1.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/UserCheck.es-DKIpmjOu.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/UserMinus.es--3BS5hKD.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/UserPlus.es-CJW2q1pO.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Users.es-IzD3to5W.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/WarehouseHierarchyWorkspace-B9_zWQav.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/WarehouseHierarchyWorkspace-BTZfA6ws.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Warning.es-Dz4iYgfh.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/WhatsappLogo.es-DYJJzJbp.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/WorkspaceSnapshot-C_kxcPmE.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/Wrench.es-B8obuXD_.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/XCircle.es-h1Zui_PI.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/accountingOnboarding-CMm8je_y.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/aiStoreOperations-rci4RLLr.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/api-Cn6ediUw.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/axios-CRBZr4vS.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/chart-column-CGaGc9fn.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/chevron-down-C4UoVcZt.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/clsx-DB0hHKMi.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/customerIntelligence-BRbOQD8F.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/dashboardAdsSpend-Dicb6tVR.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/dates-CnmNS_0-.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/demandRead-DjQMAso2.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/dist-D0rv7Xxy.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/esm-Ca61H3iQ.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/financialPosition-9zYqx0hc.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/financialPositionDisplay-FWtsZwdn.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/financialPositionPresentation-BWwPanfJ.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/financialPositionViews-CqUP38o3.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/format-BmuT15Y2.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/fulfillmentV2-Ci0H1OxX.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/googleAdsEvidence-D9xdzWpl.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/index-BdbNyAp7.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/index-cBufTj-E.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/inventory-catalog-resources-C59ViZJL.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/inventory-catalog-resources-D5ye75Gq.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/inventoryProjectionViews-BsN6fOHm.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/jsx-runtime-BpzPEenQ.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/label-CVgIZki2.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/metaIntegrationsV2-DP96IBHu.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/mezanProductsV2-DM8FO5EN.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/mezanSuppliersV2-uVfMmx6s.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/mezanV2CostLinks-BktwNvdM.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/openCurrentCarrierLabel-fnlSk5Hu.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/operational-DCLn7_GR.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/operationalToolTheme-WaIsF-BM.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/orderActivity-SmFpeeSG.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/orderCampaignAttribution-DkVB8FSM.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/orderTrackingNotes-CJMKjFZl.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/paymentFeeRows-DLaiAl7L.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/preload-helper-Czpn1I53.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/productBundles-17gZptAZ.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/react-dom-5PB_EGoG.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/react-to-print-EoKsSM60.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/refresh-cw-C2s2Hdjf.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/rolldown-runtime-Dd_uD5pT.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/safeSpreadsheet-DEliRAO9.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/simpleBalances-Djlzuuwr.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/simpleBalancesHooks-Qw4sz3Tv.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/simpleBalancesModel-CP4X3uPl.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/simpleBalancesPending-uwFnfmqF.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/storeCourierDispatch-B2Hetv_8.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/storeCourierLabelPrint-DlgAibbg.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/storeDelivery-DuUQ9aAX.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/tabs-BOfyNmaQ.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/tiktokIntegrationsV2-Bv3elN3w.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/triangle-alert-ZcFCRsqD.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/tzUtils-BdxHQ2m4.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/assets/workspaceReadHooks-CZ_lTD97.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/build-meta.json"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/favicon.svg"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/index.html"
+      },
+      {
+        "kind": "directory",
+        "mode": "0o755",
+        "path": "frontend/build/inventory-fonts"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/inventory-fonts/LICENSE-cairo.txt"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/inventory-fonts/LICENSE-tajawal.txt"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/inventory-fonts/fonts.css"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/inventory-fonts/mezan-font-1.ttf"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/inventory-fonts/mezan-font-2.ttf"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/inventory-fonts/mezan-font-3.ttf"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/inventory-fonts/mezan-font-4.ttf"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/inventory-fonts/mezan-font-5.ttf"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/inventory-fonts/mezan-font-6.ttf"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/inventory-fonts/mezan-font-7.ttf"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/inventory-fonts/mezan-font-8.ttf"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/inventory-fonts/mezan-font-9.ttf"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/operational-notifications-sw.js"
+      },
+      {
+        "kind": "directory",
+        "mode": "0o755",
+        "path": "frontend/build/operational-ui"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/operational-ui/arabic.woff2"
+      },
+      {
+        "kind": "directory",
+        "mode": "0o755",
+        "path": "frontend/build/operational-ui/brands"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/operational-ui/brands/README.md"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/operational-ui/brands/apple.png"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/operational-ui/brands/aramex.png"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/operational-ui/brands/enma.png"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/operational-ui/brands/google.png"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/operational-ui/brands/mastercard.png"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/operational-ui/brands/meta.png"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/operational-ui/brands/paypal.png"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/operational-ui/brands/rajhi.png"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/operational-ui/brands/salla.png"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/operational-ui/brands/snap.png"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/operational-ui/brands/tabby.png"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/operational-ui/brands/tamara.png"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/operational-ui/brands/tiktok.png"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/operational-ui/brands/visa.png"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/operational-ui/font-license.txt"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/operational-ui/icons-license.txt"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/operational-ui/icons.svg"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/operational-ui/kufi.woff2"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/service-worker.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "frontend/build/sw.js"
+      },
+      {
+        "kind": "file",
+        "mode": "0o644",
+        "path": "release/release-intent-v5.json"
+      }
+    ],
+    "official_zip_digests_and_base64_round_trip_passed": true,
+    "original_readers_passed": true,
+    "package_boundary": {
+      "backend": {
+        "file_count": 1333,
+        "git_directory_present": false,
+        "health_verified": true,
+        "identity": {
+          "bytes": 497396,
+          "path": "release_identity.json",
+          "sha256": "7d3287f0f090c1644316bebabb7faa2ae9a06a8f8c212ffc1084abc56e3ee05a"
+        },
+        "isolated_verified": true,
+        "package_tree_sha256": "192bb3e53ddc17c47d17537ebc00274aa796e23b496fa3b4be2aaccfaf66e51a",
+        "runtime_root": "backend",
+        "sibling_frontend_present": false
+      },
+      "frontend": {
+        "artifact_tree_sha256": "51d24296b29281a6dc64b452c3986fbf354c3b144f5ed25491a69ee97a9ad1d9",
+        "build_meta": {
+          "bytes": 584063,
+          "path": "build/build-meta.json",
+          "sha256": "b137a20f4a7b4539ef43e8a9f7c76c0fb90293c72890f2efa7250367e540579e"
+        },
+        "content_type_contract": "application/json",
+        "file_count": 1806,
+        "isolated_runtime_artifact_verified": true,
+        "package_tree_sha256": "d3f0607858dc6dd58a62391e5fc3fd48d79c0fef3195e8898501ff6eff499eca",
+        "runtime_root": "frontend",
+        "static_root": "frontend/build"
+      },
+      "kind": "mezan_release_package_boundary_proof_v1",
+      "release_id": "rg5-c49251181bb276063220b420205fc39aacef5d7e2f5e124192062f53f71fadce",
+      "schema_version": 1,
+      "source_git_sha": "c464eb01f3b4201da58c664312d009617e3f1766"
+    },
+    "preflight_git_present": true,
+    "proof_file": {
+      "bytes": 1521,
+      "path": "frontend/.release/reproducible-build.json",
+      "sha256": "3a4f628e181920ccdae50e00cd4fd5ff31862fb685d7ea75fbf83c24cb19e9be"
+    },
+    "public_frontend_files": 381,
+    "source_sha": "c464eb01f3b4201da58c664312d009617e3f1766",
+    "tar_members": 393,
+    "tar_sha256": "81ff8c907f30e20b6aeb34ebc855e7cfa99b6fcf6a32fc3bbf14440992ebdccd",
+    "toolchain": {
+      "node": "22.23.2",
+      "vite": "8.2.4",
+      "yarn": "1.22.22"
+    }
+  }
+]

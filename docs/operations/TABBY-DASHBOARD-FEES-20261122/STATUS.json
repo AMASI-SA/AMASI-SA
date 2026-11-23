@@ -1,7 +1,7 @@
 {
   "task_id": "TABBY-DASHBOARD-FEES-20261122",
   "status": "r4_release_verified_historical_tabby_followup_in_progress",
-  "updated_at_utc": "2026-11-23T17:06:26.762038+00:00",
+  "updated_at_utc": "2026-11-23T17:21:17.705136+00:00",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tabby-weekly-fees-release-evidence-20261122",
   "production_branch": "hotfix/prod-snap-meta-final",
@@ -271,7 +271,7 @@
     "source_A": "c464eb01f3b4201da58c664312d009617e3f1766",
     "intent_B": "be0c1c67569e5fb59104ccdd43aaa44169fe0ff5",
     "intent_B_tree": "756a1285dfe837ebdab6c6a4a65750b59952227a",
-    "state": "Reviewed and frozen intent-only B; exact-B CI and adapter proofs pending; no host action",
+    "state": "Exact B readiness and both original adapters independently/root verified; final operational backend gate pending",
     "scope": "Tabby-only payment-event validation against request-pinned evidence_as_of; unchanged report/week anchor, event-date tariffs, amount/identity guards and other providers.",
     "publication": false,
     "lease_created": false,
@@ -286,7 +286,25 @@
     "runtime_id": "rg5-c49251181bb276063220b420205fc39aacef5d7e2f5e124192062f53f71fadce",
     "superseded_pr": 2090,
     "superseded_pr_closed_unmerged": true,
-    "foreign_handoff": "PR2087 actual-host capacity recovery/publication in progress. No competing sharedhost action; wait for verified closure and fresh original guard/ref/coordination checks.",
-    "raw_log_integrity_note": "Original two-clean-builds.log contains six tool-emitted trailing whitespace lines. Raw bytes are preserved to retain verified hashes; whitespace check applies to authored evidence files."
+    "foreign_handoff": "PR2087 actual host rehearsal/supplement PASS; preparing own guarded publication. Actual publication and original verify3/inactive are still pending, so no competing host action.",
+    "raw_log_integrity_note": "Original two-clean-builds.log contains six tool-emitted trailing whitespace lines. Raw bytes are preserved to retain verified hashes; whitespace check applies to authored evidence files.",
+    "final_B_readiness": 45223800582,
+    "final_B_adapter_review": "INDEPENDENT-HISTORICAL-CLOCK-R2-FINAL-B.json",
+    "final_B_adapter_review_sha256": "02e622432019ab547ca253cbaa873ae880732dcc77c6c2b7c88a4b5ac888aa7a",
+    "root_archive_and_complete_generated_bytes_verified": true,
+    "ci_latest_observed": {
+      "completed_success": 24,
+      "conditional_skips": 6,
+      "remaining": [
+        "Operational Balance Backend"
+      ],
+      "source_B": "be0c1c67569e5fb59104ccdd43aaa44169fe0ff5"
+    },
+    "security_retry": {
+      "first_attempt": "PyPI TLS/read timeout at pip_audit, before security suites completed",
+      "targeted_retry": "success",
+      "job": 137867348057,
+      "source_changed": false
+    }
   }
 }

@@ -1,0 +1,345 @@
+{
+  "archive_and_package_audit": {
+    "build_meta": {
+      "bytes": 584063,
+      "path": "build-meta.json",
+      "sha256": "b137a20f4a7b4539ef43e8a9f7c76c0fb90293c72890f2efa7250367e540579e"
+    },
+    "entire_package_boundary_proofs_equal_reconstructed_proofs": true,
+    "frontend_build_files_including_metadata": 384,
+    "frontend_public_files": 381,
+    "full_package_boundary_proof": {
+      "backend": {
+        "file_count": 1333,
+        "git_directory_present": false,
+        "health_verified": true,
+        "identity": {
+          "bytes": 497396,
+          "path": "release_identity.json",
+          "sha256": "7d3287f0f090c1644316bebabb7faa2ae9a06a8f8c212ffc1084abc56e3ee05a"
+        },
+        "isolated_verified": true,
+        "package_tree_sha256": "192bb3e53ddc17c47d17537ebc00274aa796e23b496fa3b4be2aaccfaf66e51a",
+        "runtime_root": "backend",
+        "sibling_frontend_present": false
+      },
+      "frontend": {
+        "artifact_tree_sha256": "51d24296b29281a6dc64b452c3986fbf354c3b144f5ed25491a69ee97a9ad1d9",
+        "build_meta": {
+          "bytes": 584063,
+          "path": "build/build-meta.json",
+          "sha256": "b137a20f4a7b4539ef43e8a9f7c76c0fb90293c72890f2efa7250367e540579e"
+        },
+        "content_type_contract": "application/json",
+        "file_count": 1806,
+        "isolated_runtime_artifact_verified": true,
+        "package_tree_sha256": "d3f0607858dc6dd58a62391e5fc3fd48d79c0fef3195e8898501ff6eff499eca",
+        "runtime_root": "frontend",
+        "static_root": "frontend/build"
+      },
+      "kind": "mezan_release_package_boundary_proof_v1",
+      "release_id": "rg5-c49251181bb276063220b420205fc39aacef5d7e2f5e124192062f53f71fadce",
+      "schema_version": 1,
+      "source_git_sha": "c464eb01f3b4201da58c664312d009617e3f1766"
+    },
+    "generated_content_tree_sha256": "04e55f364dbcb0aa8c54a3e25fe98941abd7d4fba9fbcbad96c98509824b8839",
+    "inner_tar": {
+      "all_member_names_bytes_modes_identical_across_hosts": true,
+      "checksum_sidecar_exact": true,
+      "directories": 6,
+      "directory_mode": "0755",
+      "host_tar_sha256": {
+        "20.20.2": "1f8e3faff53de4205b61bf88e747270900804e954417393002a7479c1e65a11d",
+        "24.19.0": "81ff8c907f30e20b6aeb34ebc855e7cfa99b6fcf6a32fc3bbf14440992ebdccd"
+      },
+      "links_devices_fifos_or_other_special_members_present": false,
+      "members": 393,
+      "regular_file_mode": "0644",
+      "regular_files": 387,
+      "unique_path_safe_expected_members": true
+    },
+    "official_download_digests_sizes_and_base64_round_trip": "PASS",
+    "package_manifests_reconstructed_from_all_frozen_source_records_and_generated_bytes": true,
+    "per_host_reports": [
+      {
+        "bytes": 51675,
+        "path": "evidence/historical-clock-r2-final-B/audit-host-20.20.2.json",
+        "sha256": "0f904dd5c9abee0e3ac03f5491e956c85e13aab64f97713173582d7efa47b5d2"
+      },
+      {
+        "bytes": 51675,
+        "path": "evidence/historical-clock-r2-final-B/audit-host-24.19.0.json",
+        "sha256": "301dac75e60a3711be68380c00a3d4f818893326c9b4b7cf1111d023620e16dd"
+      }
+    ],
+    "reproducibility_proof": {
+      "bytes": 1521,
+      "path": "frontend/.release/reproducible-build.json",
+      "sha256": "3a4f628e181920ccdae50e00cd4fd5ff31862fb685d7ea75fbf83c24cb19e9be"
+    },
+    "zip_membership": {
+      "crc_validation_passed": true,
+      "evidence_exact_members": [
+        "mezan-adapter-build-v5.log",
+        "mezan-adapter-environment-v5.json",
+        "mezan-package-boundary-v5.json",
+        "mezan-governed-runtime.log"
+      ],
+      "generated_exact_members": [
+        "mezan-generated-release-v5.tar.gz",
+        "mezan-generated-release-v5.sha256"
+      ],
+      "unique_regular_unencrypted_path_safe_members": true
+    }
+  },
+  "environment_and_rehearsal": {
+    "actual_adapter_build_git_directory_present": false,
+    "approved_client_environment_exact_match": true,
+    "approved_client_origin_sha256": "d2e055b74392bfdfcf1d64af1e88a91ab7029a49729a7ac53870bf48bfe4e5ff",
+    "configured_package_build_command": "cd frontend && yarn build",
+    "governed_build_command": "governed-toolchain exec -- yarn --cwd frontend build:release",
+    "governed_install_command": "governed-toolchain exec -- yarn --cwd frontend install --frozen-lockfile --non-interactive",
+    "governed_runtime_command_observed_in_original_runtime_log": "node scripts/start-governed-runtime.cjs",
+    "governed_toolchain": {
+      "node": "22.23.2",
+      "vite": "8.2.4",
+      "yarn": "1.22.22"
+    },
+    "host_node_versions": [
+      "20.20.2",
+      "24.19.0"
+    ],
+    "host_yarn": "1.22.22",
+    "isolated_backend_git_directory_present": false,
+    "isolated_backend_sibling_frontend_present": false,
+    "node_env": "production",
+    "outer_build_command_observed": false,
+    "outer_install_command_observed": false,
+    "platform_snapshot_workspace_shared_observed": false,
+    "preflight_git_directory_present": true,
+    "vite_prefixed_override_keys": [],
+    "vite_user_node_env_present": false
+  },
+  "github_provenance": {
+    "bytes": 30171,
+    "path": "evidence/historical-clock-r2-final-B/github-readiness-provenance.json",
+    "sha256": "687c9fa019a9ae57ec6f1f06ee1252209efec02d70c5f68ec51ba7ced11a18e9"
+  },
+  "identity": {
+    "deployment_git_sha": null,
+    "frontend_artifact_tree_sha256": "51d24296b29281a6dc64b452c3986fbf354c3b144f5ed25491a69ee97a9ad1d9",
+    "release_id": "rg5-c49251181bb276063220b420205fc39aacef5d7e2f5e124192062f53f71fadce",
+    "release_intent_bytes": 1508531,
+    "release_intent_git_blob_oid": "dd3d4fa44097acd2e2ba2127a35728e0433eab6c",
+    "release_intent_path": "release/release-intent-v5.json",
+    "release_intent_sha256": "ff1f5f912fc9d828d12c8aa7766018f21006ad36372c8d70caaee34d693b95f9",
+    "reviewed_intent_git_sha": "be0c1c67569e5fb59104ccdd43aaa44169fe0ff5",
+    "reviewed_intent_tree_oid": "756a1285dfe837ebdab6c6a4a65750b59952227a",
+    "source_base_git_sha": "422fffc8fb9c381165cc76b1ded5ca595773ce8e",
+    "source_git_sha": "c464eb01f3b4201da58c664312d009617e3f1766",
+    "source_tree_oid": "767055292da465bde28908e26d6e1a1b3e493850"
+  },
+  "independent_second_review": {
+    "all_frozen_source_record_bytes_sha256_git_blob_sha1_modes_revalidated": true,
+    "cross_host_generated_bytes_and_modes_identical": true,
+    "exact_B_A_base_relationship_and_intent_only_B_delta": true,
+    "exact_tar_member_names_bytes_modes": true,
+    "frozen_source_record_counts": {
+      "backend": 1332,
+      "frontend": 1422,
+      "release_control": 328
+    },
+    "full_frontend_backend_package_proofs": true,
+    "method": "Independent in-memory ZIP/TAR and complete package reconstruction; no extraction or writes.",
+    "official_zip_digests_base64_round_trips": true,
+    "result": "PASS",
+    "reviewer": "release_state_review/r2_final_b_archive_review",
+    "source_clean_B_before_and_after": true,
+    "source_mutations_git_mutations_ci_actions_host_actions_lease_actions": false
+  },
+  "kind": "independent_historical_clock_r2_final_B_readiness_audit",
+  "original_artifacts": [
+    {
+      "artifact_id": 14842482008,
+      "artifact_name": "release-v5-clean-clone-evidence-host-24.19.0",
+      "base64_decodes_exactly_to_original_zip": true,
+      "durable_base64": {
+        "bytes": 86103,
+        "path": "evidence/historical-clock-r2-final-B/release-v5-clean-clone-evidence-host-24.19.0.zip.base64",
+        "sha256": "841d8f38213771641fb5a89a52fc43f755cf0005a189bc73b69b8b784ce6ba00"
+      },
+      "github_digest_matches_downloaded_bytes": true,
+      "head_sha": "be0c1c67569e5fb59104ccdd43aaa44169fe0ff5",
+      "official_github_digest": "sha256:ab2f86db44dd948ba6526265cd58976bee944d63d67100922461c8609c7d6b97",
+      "official_size_in_bytes": 63737,
+      "zip": {
+        "bytes": 63737,
+        "path": "evidence/historical-clock-r2-final-B/release-v5-clean-clone-evidence-host-24.19.0.zip",
+        "sha256": "ab2f86db44dd948ba6526265cd58976bee944d63d67100922461c8609c7d6b97"
+      }
+    },
+    {
+      "artifact_id": 14842153167,
+      "artifact_name": "release-v5-generated-outputs-host-24.19.0",
+      "base64_decodes_exactly_to_original_zip": true,
+      "durable_base64": {
+        "bytes": 5202716,
+        "path": "evidence/historical-clock-r2-final-B/release-v5-generated-outputs-host-24.19.0.zip.base64",
+        "sha256": "db5e6cf4a1636d50ed64d40cb6c667ee0c88144e1f68e5cc815a8e5e3f055932"
+      },
+      "github_digest_matches_downloaded_bytes": true,
+      "head_sha": "be0c1c67569e5fb59104ccdd43aaa44169fe0ff5",
+      "official_github_digest": "sha256:fcc2558ee6cefaf41081fffc09e0e6008aee29e72862c5189ee8ebe48cfd970a",
+      "official_size_in_bytes": 3851361,
+      "zip": {
+        "bytes": 3851361,
+        "path": "evidence/historical-clock-r2-final-B/release-v5-generated-outputs-host-24.19.0.zip",
+        "sha256": "fcc2558ee6cefaf41081fffc09e0e6008aee29e72862c5189ee8ebe48cfd970a"
+      }
+    },
+    {
+      "artifact_id": 14840553470,
+      "artifact_name": "release-v5-clean-clone-evidence-host-20.20.2",
+      "base64_decodes_exactly_to_original_zip": true,
+      "durable_base64": {
+        "bytes": 86099,
+        "path": "evidence/historical-clock-r2-final-B/release-v5-clean-clone-evidence-host-20.20.2.zip.base64",
+        "sha256": "8246fb5c3f98431f147664d8954c867e12650bcd9c52e289621f62fd9f7a861f"
+      },
+      "github_digest_matches_downloaded_bytes": true,
+      "head_sha": "be0c1c67569e5fb59104ccdd43aaa44169fe0ff5",
+      "official_github_digest": "sha256:a3d556d98f115ee47f8ff1053875e4f55a2fdbaef17a65e95cda550112707336",
+      "official_size_in_bytes": 63733,
+      "zip": {
+        "bytes": 63733,
+        "path": "evidence/historical-clock-r2-final-B/release-v5-clean-clone-evidence-host-20.20.2.zip",
+        "sha256": "a3d556d98f115ee47f8ff1053875e4f55a2fdbaef17a65e95cda550112707336"
+      }
+    },
+    {
+      "artifact_id": 14840423627,
+      "artifact_name": "release-v5-generated-outputs-host-20.20.2",
+      "base64_decodes_exactly_to_original_zip": true,
+      "durable_base64": {
+        "bytes": 5199353,
+        "path": "evidence/historical-clock-r2-final-B/release-v5-generated-outputs-host-20.20.2.zip.base64",
+        "sha256": "aa6023735330ada68b77abe1586187055e09084df7548879fb20a6b15824bbb9"
+      },
+      "github_digest_matches_downloaded_bytes": true,
+      "head_sha": "be0c1c67569e5fb59104ccdd43aaa44169fe0ff5",
+      "official_github_digest": "sha256:db87cb9de644501a4d36e8c3a82c1b47aa564068a0d2e3168052949f7dc6b5a5",
+      "official_size_in_bytes": 3848871,
+      "zip": {
+        "bytes": 3848871,
+        "path": "evidence/historical-clock-r2-final-B/release-v5-generated-outputs-host-20.20.2.zip",
+        "sha256": "db87cb9de644501a4d36e8c3a82c1b47aa564068a0d2e3168052949f7dc6b5a5"
+      }
+    }
+  ],
+  "original_validator_audit": {
+    "all_original_runtime_identity_verification_flags_true": true,
+    "exact_frozen_intent_and_runtime_identity_passed": true,
+    "exit_code": 0,
+    "helper": {
+      "bytes": 14185,
+      "path": "evidence/historical-clock-r2-final-B/audit_downloaded_outputs.py",
+      "sha256": "28a28506c47ffd229e9afc6452d5318c8ef398db6ccd9c9c462d217491a9a0da"
+    },
+    "load_release_intent_passed": true,
+    "original_canonical_package_file_tree_computation_passed": true,
+    "read_frontend_build_identity_passed": true,
+    "read_frontend_reproducibility_proof_passed": true,
+    "read_release_identity_against_current_frozen_backend_source_passed": true,
+    "stderr": {
+      "bytes": 189,
+      "path": "evidence/historical-clock-r2-final-B/audit-errors.log",
+      "sha256": "bfd991fa52e4869d50f420a96aa66553c50dc183c72ae164fbe1fc421eeb38ed"
+    },
+    "stderr_diagnostic": {
+      "expected_missing_path": "backend/release_identity.json",
+      "generated_archive_identity_was_separately_validated_successfully": true,
+      "generated_source_identity_written_by_review": false,
+      "reason": "SOURCE_CHECKOUT_IGNORED_GENERATED_IDENTITY_ABSENT_AT_MODULE_IMPORT",
+      "validation_exit_code": 0
+    },
+    "stdout": {
+      "bytes": 111557,
+      "path": "evidence/historical-clock-r2-final-B/audit-output.log",
+      "sha256": "0116ce2a6a0f2e9a226bb09d4ab8fc16d897695d93b904c65bd18e69dbf38845"
+    }
+  },
+  "pull_request": 2091,
+  "readiness_jobs": {
+    "adapters": [
+      {
+        "host_node": "20.20.2",
+        "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45223800582/job/137865543978",
+        "job_id": 137865543978,
+        "result": "success"
+      },
+      {
+        "host_node": "24.19.0",
+        "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45223800582/job/137865544018",
+        "job_id": 137865544018,
+        "result": "success"
+      }
+    ],
+    "all_adapter_steps_succeeded": true,
+    "all_repository_workflows_assessed": false,
+    "both_adapter_jobs_completed_at": "2026-11-23T17:09:08Z",
+    "expected_manual_redeploy_skip": 1,
+    "governed_metadata_json_runtime_route_steps_succeeded": true,
+    "successful": 6,
+    "total": 7
+  },
+  "repository": "AMASI-SA/AMASI-SA",
+  "result": "PASS",
+  "retention": {
+    "durable_original_bytes_in_adjacent_zip_base64": true,
+    "extracted_host_directories_are_local_review_material_not_required_for_durable_retention": true,
+    "git_staging_or_commit_performed_by_reviewer": false,
+    "live_financial_values_or_customer_order_owner_identifiers_retained": false,
+    "raw_original_zip_bytes_retained_locally": true,
+    "signed_urls_or_credentials_retained": false,
+    "source_runtime_outputs_force_added": false,
+    "zip_base64_decode_exactly_to_raw_verified": true
+  },
+  "reviewed_at_utc": "2026-11-23T17:18:33.913558+00:00",
+  "reviewer": "release_state_review",
+  "schema_version": 1,
+  "scope_limits": [
+    "PASS applies to exact-B readiness CI artifacts and their public technical release proof.",
+    "No claim that all repository CI gates have passed; that review is owned by the release coordinator.",
+    "No claim that the foreign release reservation or actual-host handoff has cleared.",
+    "No actual Emergent Cloud Build transcript or production publication was observed or initiated in this audit.",
+    "No deployed merge D or live historical financial acceptance is established by these CI artifacts.",
+    "The per-host audit field deployment_sha denotes the audited B checkout only; it is not a claim of actual deployment."
+  ],
+  "source_preservation": {
+    "A_sole_parent_is_base": true,
+    "A_to_B_only_release_intent_changed": true,
+    "B_sole_parent_is_A": true,
+    "actual_host_actions_or_leases": false,
+    "ci_reruns_or_cancellations": false,
+    "clean_tracked_and_untracked_status_before_and_after_original_validator_audit": true,
+    "exact_B_and_tree_rechecked": true,
+    "git_mutations": false,
+    "intent_bytes_equal_B_git_blob": true,
+    "source_clean_at_final_report_creation": true,
+    "source_edits": false
+  },
+  "workflow": {
+    "conclusion": "success",
+    "created_at": "2026-11-23T17:05:35Z",
+    "event": "pull_request",
+    "head_branch": "codex/tabby-historical-fee-clock-r2-20261123",
+    "head_sha": "be0c1c67569e5fb59104ccdd43aaa44169fe0ff5",
+    "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45223800582",
+    "id": 45223800582,
+    "name": "Mezan Release Readiness",
+    "run_attempt": 1,
+    "run_started_at": "2026-11-23T17:05:35Z",
+    "status": "completed",
+    "updated_at": "2026-11-23T17:09:09Z"
+  }
+}

@@ -1,0 +1,84 @@
+2026-11-23T17:06:46.6009700Z Traceback (most recent call last):
+2026-11-23T17:06:46.6018896Z   File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/urllib3/connectionpool.py", line 470, in _make_request
+2026-11-23T17:06:46.6019551Z     self._validate_conn(conn)
+2026-11-23T17:06:46.6020092Z   File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/urllib3/connectionpool.py", line 1125, in _validate_conn
+2026-11-23T17:06:46.6020557Z     conn.connect()
+2026-11-23T17:06:46.6020979Z   File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/urllib3/connection.py", line 878, in connect
+2026-11-23T17:06:46.6021497Z     wrapped_socket, is_verified = _ssl_wrap_socket_and_match_hostname(
+2026-11-23T17:06:46.6021809Z                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-11-23T17:06:46.6022387Z   File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/urllib3/connection.py", line 1080, in _ssl_wrap_socket_and_match_hostname
+2026-11-23T17:06:46.6023256Z     ssl_sock = ssl_wrap_socket(
+2026-11-23T17:06:46.6023463Z                ^^^^^^^^^^^^^^^^
+2026-11-23T17:06:46.6023909Z   File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/urllib3/util/ssl_.py", line 437, in ssl_wrap_socket
+2026-11-23T17:06:46.6024445Z     ssl_sock = _ssl_wrap_socket_impl(sock, context, tls_in_tls, server_hostname)
+2026-11-23T17:06:46.6024991Z                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-11-23T17:06:46.6025548Z   File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/urllib3/util/ssl_.py", line 481, in _ssl_wrap_socket_impl
+2026-11-23T17:06:46.6026078Z     return ssl_context.wrap_socket(sock, server_hostname=server_hostname)
+2026-11-23T17:06:46.6026406Z            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-11-23T17:06:46.6026788Z   File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/ssl.py", line 517, in wrap_socket
+2026-11-23T17:06:46.6705594Z     return self.sslsocket_class._create(
+2026-11-23T17:06:46.6705992Z            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-11-23T17:06:46.6706535Z   File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/ssl.py", line 1117, in _create
+2026-11-23T17:06:46.6715706Z     self.do_handshake()
+2026-11-23T17:06:46.6716357Z   File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/ssl.py", line 1395, in do_handshake
+2026-11-23T17:06:46.6716936Z     self._sslobj.do_handshake()
+2026-11-23T17:06:46.6717334Z TimeoutError: _ssl.c:1001: The handshake operation timed out
+2026-11-23T17:06:46.6717650Z 
+2026-11-23T17:06:46.6717884Z The above exception was the direct cause of the following exception:
+2026-11-23T17:06:46.6718209Z 
+2026-11-23T17:06:46.6718343Z Traceback (most recent call last):
+2026-11-23T17:06:46.6719028Z   File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/requests/adapters.py", line 696, in send
+2026-11-23T17:06:46.6720185Z     resp = conn.urlopen(
+2026-11-23T17:06:46.6720480Z            ^^^^^^^^^^^^^
+2026-11-23T17:06:46.6721118Z   File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/urllib3/connectionpool.py", line 847, in urlopen
+2026-11-23T17:06:46.6721800Z     retries = retries.increment(
+2026-11-23T17:06:46.6722101Z               ^^^^^^^^^^^^^^^^^^
+2026-11-23T17:06:46.6722729Z   File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/urllib3/util/retry.py", line 510, in increment
+2026-11-23T17:06:46.6723447Z     raise reraise(type(error), error, _stacktrace)
+2026-11-23T17:06:46.6723824Z           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-11-23T17:06:46.6724470Z   File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/urllib3/util/util.py", line 39, in reraise
+2026-11-23T17:06:46.6725236Z     raise value
+2026-11-23T17:06:46.6725876Z   File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/urllib3/connectionpool.py", line 793, in urlopen
+2026-11-23T17:06:46.6726553Z     response = self._make_request(
+2026-11-23T17:06:46.6726864Z                ^^^^^^^^^^^^^^^^^^^
+2026-11-23T17:06:46.6727560Z   File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/urllib3/connectionpool.py", line 494, in _make_request
+2026-11-23T17:06:46.6728196Z     raise new_e
+2026-11-23T17:06:46.6728620Z   File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/urllib3/connectionpool.py", line 472, in _make_request
+2026-11-23T17:06:46.6729142Z     self._raise_timeout(err=e, url=url, timeout_value=conn.timeout)
+2026-11-23T17:06:46.6729671Z   File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/urllib3/connectionpool.py", line 373, in _raise_timeout
+2026-11-23T17:06:46.6730120Z     raise ReadTimeoutError(
+2026-11-23T17:06:46.6730545Z urllib3.exceptions.ReadTimeoutError: HTTPSConnectionPool(host='pypi.org', port=443): Read timed out. (read timeout=15)
+2026-11-23T17:06:46.6730907Z 
+2026-11-23T17:06:46.6731078Z During handling of the above exception, another exception occurred:
+2026-11-23T17:06:46.6731499Z 
+2026-11-23T17:06:46.6731596Z Traceback (most recent call last):
+2026-11-23T17:06:46.6731887Z   File "<frozen runpy>", line 198, in _run_module_as_main
+2026-11-23T17:06:46.6732199Z   File "<frozen runpy>", line 88, in _run_code
+2026-11-23T17:06:46.6732652Z   File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/pip_audit/__main__.py", line 8, in <module>
+2026-11-23T17:06:46.6733090Z     audit()
+2026-11-23T17:06:46.6733482Z   File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/pip_audit/_cli.py", line 538, in audit
+2026-11-23T17:06:46.6733913Z     for spec, vulns in auditor.audit(source):
+2026-11-23T17:06:46.6734338Z   File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/pip_audit/_audit.py", line 68, in audit
+2026-11-23T17:06:46.6734971Z     for dep, vulns in self._service.query_all(specs):
+2026-11-23T17:06:46.6735487Z   File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/pip_audit/_service/interface.py", line 156, in query_all
+2026-11-23T17:06:46.6735945Z     yield self.query(spec)
+2026-11-23T17:06:46.6736150Z           ^^^^^^^^^^^^^^^^
+2026-11-23T17:06:46.6736563Z   File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/pip_audit/_service/pypi.py", line 62, in query
+2026-11-23T17:06:46.6737111Z     response: requests.Response = self.session.get(url=url, timeout=self.timeout)
+2026-11-23T17:06:46.6737465Z                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-11-23T17:06:46.6737899Z   File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/requests/sessions.py", line 671, in get
+2026-11-23T17:06:46.6738348Z     return self.request("GET", url, params=params, **kwargs)
+2026-11-23T17:06:46.6738623Z            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-11-23T17:06:46.6739210Z   File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/requests/sessions.py", line 651, in request
+2026-11-23T17:06:46.6739660Z     resp = self.send(prep, **send_kwargs)
+2026-11-23T17:06:46.6739879Z            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-11-23T17:06:46.6740317Z   File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/requests/sessions.py", line 784, in send
+2026-11-23T17:06:46.6740740Z     r = adapter.send(request, **kwargs)
+2026-11-23T17:06:46.6740960Z         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-11-23T17:06:46.6741376Z   File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/cachecontrol/adapter.py", line 76, in send
+2026-11-23T17:06:46.6741859Z     resp = super().send(request, stream, timeout, verify, cert, proxies)
+2026-11-23T17:06:46.6742160Z            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-11-23T17:06:46.6742596Z   File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/requests/adapters.py", line 742, in send
+2026-11-23T17:06:46.6743019Z     raise ReadTimeout(e, request=request)
+2026-11-23T17:06:46.6743452Z requests.exceptions.ReadTimeout: HTTPSConnectionPool(host='pypi.org', port=443): Read timed out. (read timeout=15)
+2026-11-23T17:06:46.7264578Z ##[error]Process completed with exit code 1.

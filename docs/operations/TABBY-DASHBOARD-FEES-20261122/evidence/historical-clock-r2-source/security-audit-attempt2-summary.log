@@ -1,0 +1,10 @@
+2026-11-23T17:09:38.9389445Z (node:2283) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-11-23T17:10:25.7247897Z No known vulnerabilities found
+2026-11-23T17:10:33.7130365Z backend/tests/test_supplier_invoice_images.py::test_index_initialization_serializes_and_retries_failure
+2026-11-23T17:10:33.7131219Z backend/tests/test_supplier_invoice_images.py::test_index_initialization_serializes_and_retries_failure
+2026-11-23T17:10:33.7136121Z backend/tests/test_supplier_invoice_images.py::test_index_initialization_serializes_and_retries_failure
+2026-11-23T17:10:33.7136960Z backend/tests/test_supplier_invoice_images.py::test_index_initialization_serializes_and_retries_failure
+2026-11-23T17:10:33.7141350Z 88 passed, 1 deselected, 6 warnings in 7.22s
+2026-11-23T17:10:38.2801598Z 83 passed, 1 warning in 2.56s
+2026-11-23T17:10:52.4798464Z 216 passed, 214 warnings, 29 subtests passed in 13.48s
+2026-11-23T17:10:54.5862181Z 57 passed in 1.46s

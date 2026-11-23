@@ -1,0 +1,16 @@
+{
+  "run": 45223800374,
+  "head_sha": "be0c1c67569e5fb59104ccdd43aaa44169fe0ff5",
+  "failed_job": 137864791479,
+  "observed_stage": "python -m pip_audit -r /tmp/security-requirements.txt --strict",
+  "observed_cause": "PyPI TLS handshake/read timeout15s",
+  "retained_excerpt": "security-audit-attempt1-timeout.log",
+  "one_targeted_retry": true,
+  "retry_result": {
+    "success": true
+  },
+  "source_changed": false,
+  "retry_job": 137867348057,
+  "retry_conclusion": "success",
+  "retry_summary_excerpt": "security-audit-attempt2-summary.log"
+}

@@ -1,0 +1,883 @@
+{
+  "schema_version": 1,
+  "kind": "github_final_B_readiness_provenance",
+  "observed_at_utc": "2026-11-23 17:17:48 UTC",
+  "repository": "AMASI-SA/AMASI-SA",
+  "pull_request": 2091,
+  "api_sources": {
+    "run": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45223800582",
+    "jobs": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45223800582/jobs?per_page=100",
+    "artifacts": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/45223800582/artifacts?per_page=100"
+  },
+  "workflow": {
+    "id": 45223800582,
+    "name": "Mezan Release Readiness",
+    "head_branch": "codex/tabby-historical-fee-clock-r2-20261123",
+    "head_sha": "be0c1c67569e5fb59104ccdd43aaa44169fe0ff5",
+    "event": "pull_request",
+    "status": "completed",
+    "conclusion": "success",
+    "run_attempt": 1,
+    "created_at": "2026-11-23T17:05:35Z",
+    "updated_at": "2026-11-23T17:09:09Z",
+    "run_started_at": "2026-11-23T17:05:35Z",
+    "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45223800582"
+  },
+  "jobs": [
+    {
+      "id": 137864790911,
+      "name": "Backend preflight",
+      "head_sha": "be0c1c67569e5fb59104ccdd43aaa44169fe0ff5",
+      "status": "completed",
+      "conclusion": "success",
+      "run_attempt": 1,
+      "started_at": "2026-11-23T17:05:38Z",
+      "completed_at": "2026-11-23T17:05:58Z",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45223800582/job/137864790911",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-11-23T17:05:38Z",
+          "completed_at": "2026-11-23T17:05:39Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-11-23T17:05:39Z",
+          "completed_at": "2026-11-23T17:05:44Z"
+        },
+        {
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-11-23T17:05:44Z",
+          "completed_at": "2026-11-23T17:05:44Z"
+        },
+        {
+          "name": "Compile backend Python sources",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-11-23T17:05:44Z",
+          "completed_at": "2026-11-23T17:05:51Z"
+        },
+        {
+          "name": "Run frontend identity and release guard unit suites",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-11-23T17:05:51Z",
+          "completed_at": "2026-11-23T17:05:56Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9,
+          "started_at": "2026-11-23T17:05:56Z",
+          "completed_at": "2026-11-23T17:05:56Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10,
+          "started_at": "2026-11-23T17:05:56Z",
+          "completed_at": "2026-11-23T17:05:57Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11,
+          "started_at": "2026-11-23T17:05:57Z",
+          "completed_at": "2026-11-23T17:05:57Z"
+        }
+      ]
+    },
+    {
+      "id": 137864791234,
+      "name": "Frontend build",
+      "head_sha": "be0c1c67569e5fb59104ccdd43aaa44169fe0ff5",
+      "status": "completed",
+      "conclusion": "success",
+      "run_attempt": 1,
+      "started_at": "2026-11-23T17:05:38Z",
+      "completed_at": "2026-11-23T17:06:45Z",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45223800582/job/137864791234",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-11-23T17:05:39Z",
+          "completed_at": "2026-11-23T17:05:40Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-11-23T17:05:40Z",
+          "completed_at": "2026-11-23T17:05:47Z"
+        },
+        {
+          "name": "Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-11-23T17:05:47Z",
+          "completed_at": "2026-11-23T17:06:01Z"
+        },
+        {
+          "name": "Enable Yarn Classic",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-11-23T17:06:01Z",
+          "completed_at": "2026-11-23T17:06:01Z"
+        },
+        {
+          "name": "Record governed frontend toolchain",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-11-23T17:06:01Z",
+          "completed_at": "2026-11-23T17:06:01Z"
+        },
+        {
+          "name": "Install frontend dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-11-23T17:06:01Z",
+          "completed_at": "2026-11-23T17:06:22Z"
+        },
+        {
+          "name": "Test governed frontend build contract",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-11-23T17:06:22Z",
+          "completed_at": "2026-11-23T17:06:24Z"
+        },
+        {
+          "name": "Classify reviewed B or source candidate A",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8,
+          "started_at": "2026-11-23T17:06:24Z",
+          "completed_at": "2026-11-23T17:06:28Z"
+        },
+        {
+          "name": "Build production frontend twice and retain verified build B",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9,
+          "started_at": "2026-11-23T17:06:28Z",
+          "completed_at": "2026-11-23T17:06:40Z"
+        },
+        {
+          "name": "Verify retained frontend artifact and reproducibility proof",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10,
+          "started_at": "2026-11-23T17:06:40Z",
+          "completed_at": "2026-11-23T17:06:40Z"
+        },
+        {
+          "name": "Freeze a candidate reviewed intent from the source commit",
+          "status": "completed",
+          "conclusion": "skipped",
+          "number": 11,
+          "started_at": "2026-11-23T17:06:40Z",
+          "completed_at": "2026-11-23T17:06:40Z"
+        },
+        {
+          "name": "Retain the candidate reviewed intent",
+          "status": "completed",
+          "conclusion": "skipped",
+          "number": 12,
+          "started_at": "2026-11-23T17:06:40Z",
+          "completed_at": "2026-11-23T17:06:40Z"
+        },
+        {
+          "name": "Prove install and build leave the worktree clean",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13,
+          "started_at": "2026-11-23T17:06:40Z",
+          "completed_at": "2026-11-23T17:06:40Z"
+        },
+        {
+          "name": "Post Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 25,
+          "started_at": "2026-11-23T17:06:40Z",
+          "completed_at": "2026-11-23T17:06:40Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 26,
+          "started_at": "2026-11-23T17:06:40Z",
+          "completed_at": "2026-11-23T17:06:41Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 27,
+          "started_at": "2026-11-23T17:06:41Z",
+          "completed_at": "2026-11-23T17:06:41Z"
+        }
+      ]
+    },
+    {
+      "id": 137864791389,
+      "name": "Host Node 24.19.0 engine and dispatcher contract",
+      "head_sha": "be0c1c67569e5fb59104ccdd43aaa44169fe0ff5",
+      "status": "completed",
+      "conclusion": "success",
+      "run_attempt": 1,
+      "started_at": "2026-11-23T17:05:38Z",
+      "completed_at": "2026-11-23T17:05:54Z",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45223800582/job/137864791389",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-11-23T17:05:38Z",
+          "completed_at": "2026-11-23T17:05:41Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-11-23T17:05:41Z",
+          "completed_at": "2026-11-23T17:05:47Z"
+        },
+        {
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-11-23T17:05:47Z",
+          "completed_at": "2026-11-23T17:05:47Z"
+        },
+        {
+          "name": "Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-11-23T17:05:47Z",
+          "completed_at": "2026-11-23T17:05:51Z"
+        },
+        {
+          "name": "Enable the observed Yarn Classic version",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-11-23T17:05:51Z",
+          "completed_at": "2026-11-23T17:05:51Z"
+        },
+        {
+          "name": "Test actual host engine admission and unchanged dispatch",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-11-23T17:05:51Z",
+          "completed_at": "2026-11-23T17:05:52Z"
+        },
+        {
+          "name": "Post Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10,
+          "started_at": "2026-11-23T17:05:52Z",
+          "completed_at": "2026-11-23T17:05:52Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11,
+          "started_at": "2026-11-23T17:05:52Z",
+          "completed_at": "2026-11-23T17:05:53Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 12,
+          "started_at": "2026-11-23T17:05:53Z",
+          "completed_at": "2026-11-23T17:05:53Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13,
+          "started_at": "2026-11-23T17:05:53Z",
+          "completed_at": "2026-11-23T17:05:53Z"
+        }
+      ]
+    },
+    {
+      "id": 137864791390,
+      "name": "Host Node 20.20.2 engine and dispatcher contract",
+      "head_sha": "be0c1c67569e5fb59104ccdd43aaa44169fe0ff5",
+      "status": "completed",
+      "conclusion": "success",
+      "run_attempt": 1,
+      "started_at": "2026-11-23T17:05:38Z",
+      "completed_at": "2026-11-23T17:05:54Z",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45223800582/job/137864791390",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-11-23T17:05:39Z",
+          "completed_at": "2026-11-23T17:05:40Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-11-23T17:05:40Z",
+          "completed_at": "2026-11-23T17:05:44Z"
+        },
+        {
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-11-23T17:05:44Z",
+          "completed_at": "2026-11-23T17:05:44Z"
+        },
+        {
+          "name": "Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-11-23T17:05:44Z",
+          "completed_at": "2026-11-23T17:05:48Z"
+        },
+        {
+          "name": "Enable the observed Yarn Classic version",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-11-23T17:05:48Z",
+          "completed_at": "2026-11-23T17:05:49Z"
+        },
+        {
+          "name": "Test actual host engine admission and unchanged dispatch",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-11-23T17:05:49Z",
+          "completed_at": "2026-11-23T17:05:51Z"
+        },
+        {
+          "name": "Post Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10,
+          "started_at": "2026-11-23T17:05:51Z",
+          "completed_at": "2026-11-23T17:05:51Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11,
+          "started_at": "2026-11-23T17:05:51Z",
+          "completed_at": "2026-11-23T17:05:51Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 12,
+          "started_at": "2026-11-23T17:05:51Z",
+          "completed_at": "2026-11-23T17:05:51Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13,
+          "started_at": "2026-11-23T17:05:51Z",
+          "completed_at": "2026-11-23T17:05:51Z"
+        }
+      ]
+    },
+    {
+      "id": 137865543978,
+      "name": "Emergent Host Node 20.20.2 clean-clone adapter rehearsal",
+      "head_sha": "be0c1c67569e5fb59104ccdd43aaa44169fe0ff5",
+      "status": "completed",
+      "conclusion": "success",
+      "run_attempt": 1,
+      "started_at": "2026-11-23T17:06:47Z",
+      "completed_at": "2026-11-23T17:09:08Z",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45223800582/job/137865543978",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-11-23T17:06:48Z",
+          "completed_at": "2026-11-23T17:06:49Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-11-23T17:06:49Z",
+          "completed_at": "2026-11-23T17:06:56Z"
+        },
+        {
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-11-23T17:06:56Z",
+          "completed_at": "2026-11-23T17:06:56Z"
+        },
+        {
+          "name": "Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-11-23T17:06:56Z",
+          "completed_at": "2026-11-23T17:07:00Z"
+        },
+        {
+          "name": "Select an isolated release toolchain cache",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-11-23T17:07:00Z",
+          "completed_at": "2026-11-23T17:07:00Z"
+        },
+        {
+          "name": "Enable the runtime-observed Host Yarn version",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-11-23T17:07:00Z",
+          "completed_at": "2026-11-23T17:07:00Z"
+        },
+        {
+          "name": "Create a clean tracked-source clone",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-11-23T17:07:00Z",
+          "completed_at": "2026-11-23T17:07:04Z"
+        },
+        {
+          "name": "Prove generated release inputs are absent",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8,
+          "started_at": "2026-11-23T17:07:04Z",
+          "completed_at": "2026-11-23T17:07:05Z"
+        },
+        {
+          "name": "Record sanitized Host adapter evidence",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9,
+          "started_at": "2026-11-23T17:07:05Z",
+          "completed_at": "2026-11-23T17:07:05Z"
+        },
+        {
+          "name": "Rehearse a conservative outer Host frozen install",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10,
+          "started_at": "2026-11-23T17:07:05Z",
+          "completed_at": "2026-11-23T17:07:42Z"
+        },
+        {
+          "name": "Emulate a Cloud Build checkout without Git metadata",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11,
+          "started_at": "2026-11-23T17:07:42Z",
+          "completed_at": "2026-11-23T17:07:42Z"
+        },
+        {
+          "name": "Invoke the Emergent package adapter under the selected Host Node",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 12,
+          "started_at": "2026-11-23T17:07:42Z",
+          "completed_at": "2026-11-23T17:08:42Z"
+        },
+        {
+          "name": "Verify artifact, proof, identity, and package boundaries",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13,
+          "started_at": "2026-11-23T17:08:42Z",
+          "completed_at": "2026-11-23T17:08:45Z"
+        },
+        {
+          "name": "Prove the governed runtime returns build metadata as JSON",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 14,
+          "started_at": "2026-11-23T17:08:45Z",
+          "completed_at": "2026-11-23T17:08:45Z"
+        },
+        {
+          "name": "Archive verified generated release outputs",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 15,
+          "started_at": "2026-11-23T17:08:45Z",
+          "completed_at": "2026-11-23T17:08:46Z"
+        },
+        {
+          "name": "Retain verified generated release outputs",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 16,
+          "started_at": "2026-11-23T17:08:46Z",
+          "completed_at": "2026-11-23T17:08:48Z"
+        },
+        {
+          "name": "Retain sanitized rehearsal evidence",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 17,
+          "started_at": "2026-11-23T17:08:48Z",
+          "completed_at": "2026-11-23T17:08:49Z"
+        },
+        {
+          "name": "Post Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 32,
+          "started_at": "2026-11-23T17:08:49Z",
+          "completed_at": "2026-11-23T17:08:49Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 33,
+          "started_at": "2026-11-23T17:08:49Z",
+          "completed_at": "2026-11-23T17:08:50Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 34,
+          "started_at": "2026-11-23T17:08:50Z",
+          "completed_at": "2026-11-23T17:08:50Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 35,
+          "started_at": "2026-11-23T17:08:50Z",
+          "completed_at": "2026-11-23T17:08:50Z"
+        }
+      ]
+    },
+    {
+      "id": 137865544018,
+      "name": "Emergent Host Node 24.19.0 clean-clone adapter rehearsal",
+      "head_sha": "be0c1c67569e5fb59104ccdd43aaa44169fe0ff5",
+      "status": "completed",
+      "conclusion": "success",
+      "run_attempt": 1,
+      "started_at": "2026-11-23T17:06:47Z",
+      "completed_at": "2026-11-23T17:09:08Z",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45223800582/job/137865544018",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-11-23T17:06:47Z",
+          "completed_at": "2026-11-23T17:06:48Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-11-23T17:06:48Z",
+          "completed_at": "2026-11-23T17:06:54Z"
+        },
+        {
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-11-23T17:06:54Z",
+          "completed_at": "2026-11-23T17:06:55Z"
+        },
+        {
+          "name": "Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-11-23T17:06:55Z",
+          "completed_at": "2026-11-23T17:07:00Z"
+        },
+        {
+          "name": "Select an isolated release toolchain cache",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-11-23T17:07:00Z",
+          "completed_at": "2026-11-23T17:07:00Z"
+        },
+        {
+          "name": "Enable the runtime-observed Host Yarn version",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-11-23T17:07:00Z",
+          "completed_at": "2026-11-23T17:07:00Z"
+        },
+        {
+          "name": "Create a clean tracked-source clone",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-11-23T17:07:00Z",
+          "completed_at": "2026-11-23T17:07:03Z"
+        },
+        {
+          "name": "Prove generated release inputs are absent",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8,
+          "started_at": "2026-11-23T17:07:03Z",
+          "completed_at": "2026-11-23T17:07:04Z"
+        },
+        {
+          "name": "Record sanitized Host adapter evidence",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9,
+          "started_at": "2026-11-23T17:07:04Z",
+          "completed_at": "2026-11-23T17:07:04Z"
+        },
+        {
+          "name": "Rehearse a conservative outer Host frozen install",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10,
+          "started_at": "2026-11-23T17:07:04Z",
+          "completed_at": "2026-11-23T17:07:40Z"
+        },
+        {
+          "name": "Emulate a Cloud Build checkout without Git metadata",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11,
+          "started_at": "2026-11-23T17:07:40Z",
+          "completed_at": "2026-11-23T17:07:40Z"
+        },
+        {
+          "name": "Invoke the Emergent package adapter under the selected Host Node",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 12,
+          "started_at": "2026-11-23T17:07:40Z",
+          "completed_at": "2026-11-23T17:08:43Z"
+        },
+        {
+          "name": "Verify artifact, proof, identity, and package boundaries",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13,
+          "started_at": "2026-11-23T17:08:43Z",
+          "completed_at": "2026-11-23T17:08:46Z"
+        },
+        {
+          "name": "Prove the governed runtime returns build metadata as JSON",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 14,
+          "started_at": "2026-11-23T17:08:46Z",
+          "completed_at": "2026-11-23T17:08:47Z"
+        },
+        {
+          "name": "Archive verified generated release outputs",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 15,
+          "started_at": "2026-11-23T17:08:47Z",
+          "completed_at": "2026-11-23T17:08:47Z"
+        },
+        {
+          "name": "Retain verified generated release outputs",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 16,
+          "started_at": "2026-11-23T17:08:47Z",
+          "completed_at": "2026-11-23T17:08:48Z"
+        },
+        {
+          "name": "Retain sanitized rehearsal evidence",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 17,
+          "started_at": "2026-11-23T17:08:48Z",
+          "completed_at": "2026-11-23T17:08:49Z"
+        },
+        {
+          "name": "Post Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 32,
+          "started_at": "2026-11-23T17:08:49Z",
+          "completed_at": "2026-11-23T17:08:49Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 33,
+          "started_at": "2026-11-23T17:08:49Z",
+          "completed_at": "2026-11-23T17:08:49Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 34,
+          "started_at": "2026-11-23T17:08:49Z",
+          "completed_at": "2026-11-23T17:08:49Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 35,
+          "started_at": "2026-11-23T17:08:49Z",
+          "completed_at": "2026-11-23T17:08:49Z"
+        }
+      ]
+    },
+    {
+      "id": 137867122260,
+      "name": "Emergent manual redeploy required",
+      "head_sha": "be0c1c67569e5fb59104ccdd43aaa44169fe0ff5",
+      "status": "completed",
+      "conclusion": "skipped",
+      "run_attempt": 1,
+      "started_at": "2026-11-23T17:09:09Z",
+      "completed_at": "2026-11-23T17:09:09Z",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45223800582/job/137867122260",
+      "steps": []
+    }
+  ],
+  "artifacts": [
+    {
+      "id": 14842482008,
+      "name": "release-v5-clean-clone-evidence-host-24.19.0",
+      "size_in_bytes": 63737,
+      "digest": "sha256:ab2f86db44dd948ba6526265cd58976bee944d63d67100922461c8609c7d6b97",
+      "created_at": "2026-11-23T17:08:49Z",
+      "updated_at": "2026-11-23T17:08:49Z",
+      "expires_at": "2026-12-07T17:08:48Z",
+      "expired": false,
+      "workflow_run": {
+        "id": 45223800582,
+        "head_branch": "codex/tabby-historical-fee-clock-r2-20261123",
+        "head_sha": "be0c1c67569e5fb59104ccdd43aaa44169fe0ff5"
+      },
+      "local_zip": "release-v5-clean-clone-evidence-host-24.19.0.zip",
+      "durable_base64": "release-v5-clean-clone-evidence-host-24.19.0.zip.base64"
+    },
+    {
+      "id": 14842153167,
+      "name": "release-v5-generated-outputs-host-24.19.0",
+      "size_in_bytes": 3851361,
+      "digest": "sha256:fcc2558ee6cefaf41081fffc09e0e6008aee29e72862c5189ee8ebe48cfd970a",
+      "created_at": "2026-11-23T17:08:48Z",
+      "updated_at": "2026-11-23T17:08:48Z",
+      "expires_at": "2026-12-07T17:08:47Z",
+      "expired": false,
+      "workflow_run": {
+        "id": 45223800582,
+        "head_branch": "codex/tabby-historical-fee-clock-r2-20261123",
+        "head_sha": "be0c1c67569e5fb59104ccdd43aaa44169fe0ff5"
+      },
+      "local_zip": "release-v5-generated-outputs-host-24.19.0.zip",
+      "durable_base64": "release-v5-generated-outputs-host-24.19.0.zip.base64"
+    },
+    {
+      "id": 14840553470,
+      "name": "release-v5-clean-clone-evidence-host-20.20.2",
+      "size_in_bytes": 63733,
+      "digest": "sha256:a3d556d98f115ee47f8ff1053875e4f55a2fdbaef17a65e95cda550112707336",
+      "created_at": "2026-11-23T17:08:49Z",
+      "updated_at": "2026-11-23T17:08:49Z",
+      "expires_at": "2026-12-07T17:08:48Z",
+      "expired": false,
+      "workflow_run": {
+        "id": 45223800582,
+        "head_branch": "codex/tabby-historical-fee-clock-r2-20261123",
+        "head_sha": "be0c1c67569e5fb59104ccdd43aaa44169fe0ff5"
+      },
+      "local_zip": "release-v5-clean-clone-evidence-host-20.20.2.zip",
+      "durable_base64": "release-v5-clean-clone-evidence-host-20.20.2.zip.base64"
+    },
+    {
+      "id": 14840423627,
+      "name": "release-v5-generated-outputs-host-20.20.2",
+      "size_in_bytes": 3848871,
+      "digest": "sha256:db87cb9de644501a4d36e8c3a82c1b47aa564068a0d2e3168052949f7dc6b5a5",
+      "created_at": "2026-11-23T17:08:48Z",
+      "updated_at": "2026-11-23T17:08:48Z",
+      "expires_at": "2026-12-07T17:08:46Z",
+      "expired": false,
+      "workflow_run": {
+        "id": 45223800582,
+        "head_branch": "codex/tabby-historical-fee-clock-r2-20261123",
+        "head_sha": "be0c1c67569e5fb59104ccdd43aaa44169fe0ff5"
+      },
+      "local_zip": "release-v5-generated-outputs-host-20.20.2.zip",
+      "durable_base64": "release-v5-generated-outputs-host-20.20.2.zip.base64"
+    }
+  ],
+  "scope": {
+    "read_only_connector_queries": true,
+    "signed_download_urls_retained": false,
+    "all_repository_CI_assessed": false,
+    "actual_host_publication_assessed": false,
+    "financial_data_retained": false
+  }
+}

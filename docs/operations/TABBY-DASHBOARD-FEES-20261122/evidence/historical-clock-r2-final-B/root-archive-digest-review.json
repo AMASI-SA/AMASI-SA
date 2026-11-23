@@ -1,0 +1,115 @@
+{
+  "run": 45223800582,
+  "head_B": "be0c1c67569e5fb59104ccdd43aaa44169fe0ff5",
+  "root_independent_official_metadata_and_archive_digest_review": "PASS",
+  "artifacts": [
+    {
+      "artifact_id": 14842482008,
+      "name": "release-v5-clean-clone-evidence-host-24.19.0.zip",
+      "bytes": 63737,
+      "sha256": "ab2f86db44dd948ba6526265cd58976bee944d63d67100922461c8609c7d6b97",
+      "base64_exact": true,
+      "members": [
+        {
+          "name": "mezan-adapter-environment-v5.json",
+          "bytes": 1102,
+          "sha256": "1e19cee50e39a689ded10df5de9a9acd22203a60c44e49ce4222561b2465eb49",
+          "mode": "0o100644"
+        },
+        {
+          "name": "mezan-adapter-build-v5.log",
+          "bytes": 206830,
+          "sha256": "26f9b5eae5353beb1caf50ff95c6ff4cfd9d8756ab76bcf5b706ecbcc0e02a7c",
+          "mode": "0o100644"
+        },
+        {
+          "name": "mezan-package-boundary-v5.json",
+          "bytes": 1278,
+          "sha256": "50229a3c46b9a3fd568f3eac4937112deaf2d60c3cf39d644298e9a31fa1da5a",
+          "mode": "0o100644"
+        },
+        {
+          "name": "mezan-governed-runtime.log",
+          "bytes": 518,
+          "sha256": "e93e3ee2688f1e857b4750c45e39f6791e26097ac4d4d1340162e78db9bbad98",
+          "mode": "0o100644"
+        }
+      ]
+    },
+    {
+      "artifact_id": 14842153167,
+      "name": "release-v5-generated-outputs-host-24.19.0.zip",
+      "bytes": 3851361,
+      "sha256": "fcc2558ee6cefaf41081fffc09e0e6008aee29e72862c5189ee8ebe48cfd970a",
+      "base64_exact": true,
+      "members": [
+        {
+          "name": "mezan-generated-release-v5.tar.gz",
+          "bytes": 3856994,
+          "sha256": "81ff8c907f30e20b6aeb34ebc855e7cfa99b6fcf6a32fc3bbf14440992ebdccd",
+          "mode": "0o100644"
+        },
+        {
+          "name": "mezan-generated-release-v5.sha256",
+          "bytes": 100,
+          "sha256": "e9f1b6fc14c53ca7dc563a6e40cc5609ada2cc07389f2df8c5b82b97eea7d188",
+          "mode": "0o100644"
+        }
+      ]
+    },
+    {
+      "artifact_id": 14840553470,
+      "name": "release-v5-clean-clone-evidence-host-20.20.2.zip",
+      "bytes": 63733,
+      "sha256": "a3d556d98f115ee47f8ff1053875e4f55a2fdbaef17a65e95cda550112707336",
+      "base64_exact": true,
+      "members": [
+        {
+          "name": "mezan-adapter-environment-v5.json",
+          "bytes": 1102,
+          "sha256": "1e73ecfeeeeba38340b76533fcd76e702d270a49fa0aa198ecc52a0b778699e2",
+          "mode": "0o100644"
+        },
+        {
+          "name": "mezan-adapter-build-v5.log",
+          "bytes": 206830,
+          "sha256": "74988c330f667609ab8af4b0459fc4ed951f5d9402554314d287263cac896f1f",
+          "mode": "0o100644"
+        },
+        {
+          "name": "mezan-package-boundary-v5.json",
+          "bytes": 1278,
+          "sha256": "50229a3c46b9a3fd568f3eac4937112deaf2d60c3cf39d644298e9a31fa1da5a",
+          "mode": "0o100644"
+        },
+        {
+          "name": "mezan-governed-runtime.log",
+          "bytes": 518,
+          "sha256": "39630ed84a3efcb792f34654a317714126ac8ac74637ea04d2e4584ba2f91011",
+          "mode": "0o100644"
+        }
+      ]
+    },
+    {
+      "artifact_id": 14840423627,
+      "name": "release-v5-generated-outputs-host-20.20.2.zip",
+      "bytes": 3848871,
+      "sha256": "db87cb9de644501a4d36e8c3a82c1b47aa564068a0d2e3168052949f7dc6b5a5",
+      "base64_exact": true,
+      "members": [
+        {
+          "name": "mezan-generated-release-v5.tar.gz",
+          "bytes": 3856776,
+          "sha256": "1f8e3faff53de4205b61bf88e747270900804e954417393002a7479c1e65a11d",
+          "mode": "0o100644"
+        },
+        {
+          "name": "mezan-generated-release-v5.sha256",
+          "bytes": 100,
+          "sha256": "3b6299ac41b4f1799dbfcbc8114c624e7f7552de130d5c0e9334b2836dc394dc",
+          "mode": "0o100644"
+        }
+      ]
+    }
+  ]
+}
