@@ -1,0 +1,15 @@
+{
+  "source_git_sha": "45c8fb4ea91e5af8523971fbfa2270ee96552224",
+  "source_manifest_checked_files": 61,
+  "all_matched": true,
+  "artifact_id": 14836858244,
+  "artifact_sha256": "e894f96efd86b7c9538d600ae62c5866b4badddc00262c48d8bf7d54acf89c5f",
+  "root_visually_reviewed": [
+    "option-roles-desktop.png",
+    "option-roles-mobile.png",
+    "side-options-mobile.png"
+  ],
+  "visual_blockers": [],
+  "browser_evidence_contract": "8PASS;10screenshots;errors0;rolePUT1;payments0;physicalquantity2",
+  "production_acceptance": false
+}

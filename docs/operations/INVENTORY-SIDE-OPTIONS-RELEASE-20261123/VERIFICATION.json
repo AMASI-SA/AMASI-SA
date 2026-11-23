@@ -24,13 +24,19 @@
   "synthetic_build": {
     "exit_code": 0,
     "governed_release_artifact": false,
-    "browser_execution": "pending CI; no local sandbox bypass"
+    "browser_execution": "exact45c CI PASS; artifact14836858244 independently validated"
   },
   "ordinary_source_ci": {
     "run_id": 45213472517,
     "workflow": "Operational Balance Web",
     "head_sha": "45c8fb4ea91e5af8523971fbfa2270ee96552224",
-    "state_at_checkpoint": "in_progress"
+    "state_at_checkpoint": "in_progress",
+    "completed_jobs": {
+      "frontend": "1699 tests /106 suites PASS",
+      "canonical_worker": "4PASS",
+      "browser": "PASS; inventory8/8 and10captures"
+    },
+    "backend_status": "in_progress"
   },
   "review": {
     "integration": "accepted; source path intersection empty; upstream25 paths byte-exact",
@@ -60,5 +66,6 @@
       "bytes": 7710,
       "sha256": "7c63fa49fbe2409b1c0bfb88f516be137c9a5d0d548fa307473a7780ebcadd8e"
     }
-  ]
+  ],
+  "previous_release_boundary": "verified retained original3probes and fresh actualinactive16:18:06Z; see evidence/FOREIGN-HANDOFF-READONLY-20261123.json"
 }

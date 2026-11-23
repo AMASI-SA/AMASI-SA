@@ -1,0 +1,33 @@
+{
+  "observed_at": "2026-11-23T16:18:06.833684+00:00",
+  "actual_original_guard": {
+    "active": false
+  },
+  "host_head": "76efd2c3aa1563939ee3e27a9ae03f27fc1a3d43",
+  "production_remote": "76efd2c3aa1563939ee3e27a9ae03f27fc1a3d43",
+  "branch": "hotfix/prod-snap-meta-final",
+  "tracked_clean": true,
+  "host_changed_by_this_task": false,
+  "previous_release_evidence": {
+    "source_git_sha": "1725672eeccb1272f183c376b9267e363a028325",
+    "release_id": "rg5-be6cf2196ab95412377fd5280c5ff7b6fd3204dd20dd74825b43d85e0fe77d13",
+    "verified": true,
+    "checks": 3,
+    "guard_at_capture": {
+      "active": false
+    },
+    "stdout_sha256": "f4b57349a8da68c70c497ec80992c01cfab42cad4231d3b70bd1ea45297339a6",
+    "stderr_bytes": 0,
+    "verification_was_not_reinvoked": true,
+    "wrapper_sha256": "4210c4c9a2e6d7cbc418154abb354c967dfc8fa44d4bd30d4bdb93d631ddc043"
+  },
+  "ui_observation": {
+    "project": "salla-analytics",
+    "published_version": "7302fea",
+    "published_version_number": 100,
+    "event": "Deployment finished Nov 23, 06:52 PM",
+    "label_timezone": "Asia/Riyadh",
+    "publication_clicked_by_this_task": false
+  },
+  "inference": "Previous foreign verification completed; actual original guard independently inactive; own source build may proceed. Recheck at later release boundaries."
+}

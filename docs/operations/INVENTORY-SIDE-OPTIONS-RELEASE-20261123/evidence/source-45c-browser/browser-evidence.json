@@ -1,0 +1,679 @@
+{
+  "synthetic_only": true,
+  "actual_components": true,
+  "chromium_sandbox": true,
+  "scenario_count": 8,
+  "results": [
+    {
+      "name": "Desktop form is centered at 70% with adjacent supplier metadata",
+      "status": "PASS",
+      "request_count": 5
+    },
+    {
+      "name": "Product and component choices show an explicit selected mark in one editor",
+      "status": "PASS",
+      "request_count": 0
+    },
+    {
+      "name": "Conditional yes, literal no and deferred parent keep only visible option values",
+      "status": "PASS",
+      "request_count": 0
+    },
+    {
+      "name": "Newest compact row is first; editing preserves its place and optional omissions stay ready",
+      "status": "PASS",
+      "request_count": 0
+    },
+    {
+      "name": "Mobile single editor and compact draft fit the viewport without horizontal scrolling",
+      "status": "PASS",
+      "request_count": 0
+    },
+    {
+      "name": "Approving an unreceived credit invoice does not call receiving or payment",
+      "status": "PASS",
+      "request_count": 2
+    },
+    {
+      "name": "Awaiting queue receives exactly two of four units and preserves the unpaid balance on reload",
+      "status": "PASS",
+      "request_count": 10
+    },
+    {
+      "name": "Owner classifies required gift fields as side options without changing physical requirements or purchase amounts",
+      "status": "PASS",
+      "request_count": 12
+    }
+  ],
+  "measurements": [
+    {
+      "name": "desktop-form",
+      "width": 982.796875,
+      "parent": 1404,
+      "left": 210.609375,
+      "right": 210.59375,
+      "fields": [
+        {
+          "label": "المورد",
+          "top": 676.765625,
+          "left": 824.375,
+          "right": 1167.40625
+        },
+        {
+          "label": "رقم فاتورة المورد",
+          "top": 678.765625,
+          "left": 548.5,
+          "right": 812.375
+        },
+        {
+          "label": "تاريخ الفاتورة",
+          "top": 676.765625,
+          "left": 272.625,
+          "right": 536.5
+        }
+      ]
+    },
+    {
+      "name": "purchase-desktop",
+      "viewport": 1440,
+      "html": 1440,
+      "body": 1440,
+      "draft": {
+        "width": 936.796875,
+        "contentWidth": 936.796875,
+        "leftGap": 0,
+        "rightGap": 0,
+        "results": [
+          {
+            "direction": "row",
+            "height": 88,
+            "photoLeft": 1073.40625,
+            "copyRight": 1061.40625,
+            "centerDifference": 0,
+            "contentHeight": 63,
+            "verticalPaddingAndBorder": 25
+          },
+          {
+            "direction": "row",
+            "height": 88,
+            "photoLeft": 1073.40625,
+            "copyRight": 1061.40625,
+            "centerDifference": 0,
+            "contentHeight": 63,
+            "verticalPaddingAndBorder": 25
+          },
+          {
+            "direction": "row",
+            "height": 88,
+            "photoLeft": 1073.40625,
+            "copyRight": 1061.40625,
+            "centerDifference": 0,
+            "contentHeight": 63,
+            "verticalPaddingAndBorder": 25
+          }
+        ]
+      }
+    },
+    {
+      "name": "draft-desktop",
+      "viewport": 1440,
+      "html": 1440,
+      "body": 1440,
+      "draft": {
+        "width": 936.796875,
+        "contentWidth": 936.796875,
+        "leftGap": 0,
+        "rightGap": 0,
+        "results": [
+          {
+            "direction": "row",
+            "height": 88,
+            "photoLeft": 1073.40625,
+            "copyRight": 1061.40625,
+            "centerDifference": 0,
+            "contentHeight": 63,
+            "verticalPaddingAndBorder": 25
+          },
+          {
+            "direction": "row",
+            "height": 88,
+            "photoLeft": 1073.40625,
+            "copyRight": 1061.40625,
+            "centerDifference": 0,
+            "contentHeight": 63,
+            "verticalPaddingAndBorder": 25
+          },
+          {
+            "direction": "row",
+            "height": 88,
+            "photoLeft": 1073.40625,
+            "copyRight": 1061.40625,
+            "centerDifference": 0,
+            "contentHeight": 63,
+            "verticalPaddingAndBorder": 25
+          }
+        ]
+      }
+    },
+    {
+      "name": "mobile-form",
+      "form": 374,
+      "parent": 374
+    },
+    {
+      "name": "editor-mobile",
+      "viewport": 390,
+      "html": 390,
+      "body": 390,
+      "draft": {
+        "width": 340,
+        "contentWidth": 340,
+        "leftGap": 0,
+        "rightGap": 0,
+        "results": []
+      }
+    },
+    {
+      "name": "draft-mobile",
+      "viewport": 390,
+      "html": 390,
+      "body": 390,
+      "draft": {
+        "width": 340,
+        "contentWidth": 340,
+        "leftGap": 0,
+        "rightGap": 0,
+        "results": [
+          {
+            "direction": "row",
+            "height": 81,
+            "photoLeft": 269,
+            "copyRight": 257,
+            "centerDifference": 0,
+            "contentHeight": 56,
+            "verticalPaddingAndBorder": 25
+          },
+          {
+            "direction": "row",
+            "height": 81,
+            "photoLeft": 269,
+            "copyRight": 257,
+            "centerDifference": 0,
+            "contentHeight": 56,
+            "verticalPaddingAndBorder": 25
+          },
+          {
+            "direction": "row",
+            "height": 101,
+            "photoLeft": 269,
+            "copyRight": 257,
+            "centerDifference": 0,
+            "contentHeight": 76,
+            "verticalPaddingAndBorder": 25
+          }
+        ]
+      }
+    },
+    {
+      "name": "invoice-review-mobile",
+      "viewport": 390,
+      "html": 390,
+      "body": 390,
+      "draft": {
+        "width": 340,
+        "contentWidth": 340,
+        "leftGap": 0,
+        "rightGap": 0,
+        "results": [
+          {
+            "direction": "row",
+            "height": 81,
+            "photoLeft": 269,
+            "copyRight": 257,
+            "centerDifference": 0,
+            "contentHeight": 56,
+            "verticalPaddingAndBorder": 25
+          },
+          {
+            "direction": "row",
+            "height": 81,
+            "photoLeft": 269,
+            "copyRight": 257,
+            "centerDifference": 0,
+            "contentHeight": 56,
+            "verticalPaddingAndBorder": 25
+          },
+          {
+            "direction": "row",
+            "height": 101,
+            "photoLeft": 269,
+            "copyRight": 257,
+            "centerDifference": 0,
+            "contentHeight": 76,
+            "verticalPaddingAndBorder": 25
+          }
+        ]
+      }
+    },
+    {
+      "name": "receipt-partial-mobile",
+      "viewport": 390,
+      "html": 390,
+      "body": 390
+    },
+    {
+      "name": "receipt-partial-desktop",
+      "viewport": 1440,
+      "html": 1440,
+      "body": 1440
+    },
+    {
+      "name": "option-roles-desktop",
+      "viewport": 1440,
+      "html": 1440,
+      "body": 1440,
+      "draft": {
+        "width": 936.796875,
+        "contentWidth": 936.796875,
+        "leftGap": 0,
+        "rightGap": 0,
+        "results": []
+      },
+      "option_roles": [
+        {
+          "viewport": 1440,
+          "editor": {
+            "left": 290.609375,
+            "right": 1149.40625,
+            "width": 858.796875
+          },
+          "controls": [
+            {
+              "name": "تصنيف مقاس القطعة",
+              "left": 314.609375,
+              "right": 750.328125,
+              "width": 435.71875
+            },
+            {
+              "name": "تصنيف هل تريد كرت إهداء",
+              "left": 314.609375,
+              "right": 750.328125,
+              "width": 435.71875
+            },
+            {
+              "name": "تصنيف نص كرت الإهداء",
+              "left": 314.609375,
+              "right": 750.328125,
+              "width": 435.71875
+            },
+            {
+              "name": "تصنيف ملاحظة التغليف",
+              "left": 314.609375,
+              "right": 750.328125,
+              "width": 435.71875
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "option-roles-mobile",
+      "viewport": 390,
+      "html": 390,
+      "body": 390,
+      "draft": {
+        "width": 340,
+        "contentWidth": 340,
+        "leftGap": 0,
+        "rightGap": 0,
+        "results": []
+      },
+      "option_roles": [
+        {
+          "viewport": 390,
+          "editor": {
+            "left": 52,
+            "right": 338,
+            "width": 286
+          },
+          "controls": [
+            {
+              "name": "تصنيف مقاس القطعة",
+              "left": 74,
+              "right": 316,
+              "width": 242
+            },
+            {
+              "name": "تصنيف هل تريد كرت إهداء",
+              "left": 74,
+              "right": 316,
+              "width": 242
+            },
+            {
+              "name": "تصنيف نص كرت الإهداء",
+              "left": 74,
+              "right": 316,
+              "width": 242
+            },
+            {
+              "name": "تصنيف ملاحظة التغليف",
+              "left": 74,
+              "right": 316,
+              "width": 242
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "side-options-mobile",
+      "viewport": 390,
+      "html": 390,
+      "body": 390,
+      "draft": {
+        "width": 340,
+        "contentWidth": 340,
+        "leftGap": 0,
+        "rightGap": 0,
+        "results": []
+      }
+    }
+  ],
+  "errors": [],
+  "screenshots": [
+    "purchase-desktop.png",
+    "draft-desktop.png",
+    "editor-mobile.png",
+    "draft-mobile.png",
+    "invoice-review-mobile.png",
+    "receipt-partial-mobile.png",
+    "receipt-partial-desktop.png",
+    "option-roles-desktop.png",
+    "option-roles-mobile.png",
+    "side-options-mobile.png"
+  ],
+  "calls": [
+    {
+      "method": "GET",
+      "path": "/api/operational-balances/context",
+      "params": {},
+      "scenario": "Desktop form is centered at 70% with adjacent supplier metadata"
+    },
+    {
+      "method": "GET",
+      "path": "/api/inventory-v2/stocktakes/context",
+      "params": {},
+      "scenario": "Desktop form is centered at 70% with adjacent supplier metadata"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/me",
+      "params": {},
+      "scenario": "Desktop form is centered at 70% with adjacent supplier metadata"
+    },
+    {
+      "method": "GET",
+      "path": "/api/operational-balances/inventory-catalog",
+      "params": {
+        "configured": "true"
+      },
+      "scenario": "Desktop form is centered at 70% with adjacent supplier metadata"
+    },
+    {
+      "method": "GET",
+      "path": "/api/operational-balances/entities/supplier",
+      "params": {},
+      "scenario": "Desktop form is centered at 70% with adjacent supplier metadata"
+    },
+    {
+      "method": "GET",
+      "path": "/api/operational-balances/context",
+      "params": {},
+      "scenario": "Approving an unreceived credit invoice does not call receiving or payment"
+    },
+    {
+      "method": "POST",
+      "path": "/api/operational-balances/inventory-purchases",
+      "params": {},
+      "scenario": "Approving an unreceived credit invoice does not call receiving or payment",
+      "body": {
+        "supplier_id": "demo-supplier",
+        "invoice_number": "DEMO-INV-001",
+        "invoice_date": "2026-11-23",
+        "lines": [
+          {
+            "item_id": "demo-necklace",
+            "kind": "product",
+            "inventory_option_policy_revision": 0,
+            "purchase_configuration": {
+              "state": "ready",
+              "selections": [
+                {
+                  "option_id": "color",
+                  "value_id": "gold"
+                }
+              ],
+              "inputs": [],
+              "deferred_option_ids": []
+            },
+            "quantity": 3,
+            "unit_price": "25",
+            "tax": "0"
+          },
+          {
+            "item_id": "demo-fur",
+            "kind": "product",
+            "inventory_option_policy_revision": 0,
+            "purchase_configuration": {
+              "state": "ready",
+              "selections": [
+                {
+                  "option_id": "size",
+                  "value_id": "two"
+                },
+                {
+                  "option_id": "emb",
+                  "value_id": "yes"
+                },
+                {
+                  "option_id": "shape",
+                  "value_id": "heart"
+                }
+              ],
+              "inputs": [
+                {
+                  "option_id": "name",
+                  "value": "فاطمة"
+                }
+              ],
+              "deferred_option_ids": []
+            },
+            "quantity": 4,
+            "unit_price": "85",
+            "tax": "0"
+          }
+        ],
+        "note": "",
+        "receipt_tracking_version": 1,
+        "request_id": "f6908984-cf56-41a7-91ba-7ed3a23277b8",
+        "expected_session_scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/operational-balances/inventory-purchases",
+      "params": {},
+      "scenario": "Awaiting queue receives exactly two of four units and preserves the unpaid balance on reload"
+    },
+    {
+      "method": "GET",
+      "path": "/api/operational-balances/inventory-purchases/demo-invoice/receiving-context",
+      "params": {},
+      "scenario": "Awaiting queue receives exactly two of four units and preserves the unpaid balance on reload"
+    },
+    {
+      "method": "POST",
+      "path": "/api/operational-balances/inventory-purchases/demo-invoice/receipts/preview",
+      "params": {},
+      "scenario": "Awaiting queue receives exactly two of four units and preserves the unpaid balance on reload",
+      "body": {
+        "request_id": "06678b37-1de7-4310-b005-2c93542ef0d1",
+        "expected_session_scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "receipt_date": "2026-11-23",
+        "lines": [
+          {
+            "line_id": "demo-invoice-line-1",
+            "quantity": 2,
+            "location_id": "demo-shelf"
+          }
+        ],
+        "note": ""
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/operational-balances/inventory-purchases/demo-invoice/receipts/save",
+      "params": {},
+      "scenario": "Awaiting queue receives exactly two of four units and preserves the unpaid balance on reload",
+      "body": {
+        "request_id": "06678b37-1de7-4310-b005-2c93542ef0d1",
+        "expected_session_scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "receipt_date": "2026-11-23",
+        "lines": [
+          {
+            "line_id": "demo-invoice-line-1",
+            "quantity": 2,
+            "location_id": "demo-shelf"
+          }
+        ],
+        "note": "",
+        "preview_hash": "304ff18c70feab232a7efece54bbf2f3f7e47f7ce0da02795a84e3ec590d61d5"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/operational-balances/inventory-purchases",
+      "params": {},
+      "scenario": "Awaiting queue receives exactly two of four units and preserves the unpaid balance on reload"
+    },
+    {
+      "method": "GET",
+      "path": "/api/operational-balances/inventory-purchases/demo-invoice/receiving-context",
+      "params": {},
+      "scenario": "Awaiting queue receives exactly two of four units and preserves the unpaid balance on reload"
+    },
+    {
+      "method": "GET",
+      "path": "/api/operational-balances/context",
+      "params": {},
+      "scenario": "Awaiting queue receives exactly two of four units and preserves the unpaid balance on reload"
+    },
+    {
+      "method": "GET",
+      "path": "/api/inventory-v2/stocktakes/context",
+      "params": {},
+      "scenario": "Awaiting queue receives exactly two of four units and preserves the unpaid balance on reload"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/me",
+      "params": {},
+      "scenario": "Awaiting queue receives exactly two of four units and preserves the unpaid balance on reload"
+    },
+    {
+      "method": "GET",
+      "path": "/api/operational-balances/inventory-purchases",
+      "params": {},
+      "scenario": "Awaiting queue receives exactly two of four units and preserves the unpaid balance on reload"
+    },
+    {
+      "method": "GET",
+      "path": "/api/operational-balances/context",
+      "params": {},
+      "scenario": "Owner classifies required gift fields as side options without changing physical requirements or purchase amounts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/inventory-v2/stocktakes/context",
+      "params": {},
+      "scenario": "Owner classifies required gift fields as side options without changing physical requirements or purchase amounts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/me",
+      "params": {},
+      "scenario": "Owner classifies required gift fields as side options without changing physical requirements or purchase amounts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/operational-balances/inventory-catalog",
+      "params": {
+        "configured": "true"
+      },
+      "scenario": "Owner classifies required gift fields as side options without changing physical requirements or purchase amounts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/operational-balances/entities/supplier",
+      "params": {},
+      "scenario": "Owner classifies required gift fields as side options without changing physical requirements or purchase amounts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/operational-balances/inventory-products/demo-gift-product/option-roles",
+      "params": {},
+      "scenario": "Owner classifies required gift fields as side options without changing physical requirements or purchase amounts"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/operational-balances/inventory-products/demo-gift-product/option-roles",
+      "params": {},
+      "scenario": "Owner classifies required gift fields as side options without changing physical requirements or purchase amounts",
+      "body": {
+        "expected_revision": 0,
+        "catalog_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "roles": {
+          "size-101": "physical",
+          "gift-202": "informational",
+          "gift-text-303": "informational",
+          "note-404": "informational"
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/operational-balances/context",
+      "params": {},
+      "scenario": "Owner classifies required gift fields as side options without changing physical requirements or purchase amounts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/inventory-v2/stocktakes/context",
+      "params": {},
+      "scenario": "Owner classifies required gift fields as side options without changing physical requirements or purchase amounts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/me",
+      "params": {},
+      "scenario": "Owner classifies required gift fields as side options without changing physical requirements or purchase amounts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/operational-balances/inventory-catalog",
+      "params": {
+        "configured": "true"
+      },
+      "scenario": "Owner classifies required gift fields as side options without changing physical requirements or purchase amounts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/operational-balances/entities/supplier",
+      "params": {},
+      "scenario": "Owner classifies required gift fields as side options without changing physical requirements or purchase amounts"
+    }
+  ],
+  "physical_quantity": 2,
+  "payment_call_count": 0,
+  "option_role_write_count": 1
+}

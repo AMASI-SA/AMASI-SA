@@ -50,3 +50,11 @@ Finish and checkpoint the isolated source/acceptance changes, run proportionate 
 ## Evidence branch checkpoint
 
 This directory is evidence only on `codex/inventory-side-options-evidence-20261123`; never deploy this branch. Current recoverable source is `45c8fb4ea91e5af8523971fbfa2270ee96552224`. Ordinary source CI run45213472517 is in progress on that exact checkpoint. Final source release/Node20/24/publication verification remain pending.
+
+## Current boundary — previous blocker superseded
+
+Read-only verification of PR2086's pinned retained wrapper/stdout confirms original `verified:true`, `checks:3`, exact prior source/deployment/runtime/artifact and final inactive record, with stderr 0. Captured stdout SHA256 `f4b57349a8da68c70c497ec80992c01cfab42cad4231d3b70bd1ea45297339a6`. The original actual shared guard was separately freshly read at `2026-11-23T16:18:06.833684+00:00` and returned exactly inactive; shared HEAD and remote Production are clean J. No verifier or publication was replayed. See `evidence/FOREIGN-HANDOFF-READONLY-20261123.json`. Earlier blocked status observations remain historical.
+
+Own exact-source ordinary CI run45213472517 has passed frontend106 suites/1699 tests, canonical worker4 tests, and browser job137828193226. Inventory8/8 scenarios and10screenshots pass; all61 source hashes match45c. Independent reviewer inspected all10 images and root inspected the3 new role screens; no blocking visual issue. ZIP artifact14836858244 SHA256 `e894f96efd86b7c9538d600ae62c5866b4badddc00262c48d8bf7d54acf89c5f`. Raw browser evidence, source manifest and independent/root reviews are under `evidence/source-45c-browser/`. Backend job remains running at this checkpoint.
+
+Next: retain45c as source candidate A, execute the original two-clean-build/candidate path in the isolated release checkout, review the external intent and create intent-only B. Exact-B PR gates and Node20/24 rehearsals, normal merge and actual host publication still required. A/B must not be rewritten after freeze. Current serial publication coordination now belongs to this owner-authorized inventory release preparation; no actual own lease yet, and no shared source/output changes.

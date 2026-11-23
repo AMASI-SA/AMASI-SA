@@ -1,0 +1,319 @@
+{
+  "review_version": 1,
+  "reviewed_at": "2026-11-23T16:14:35.619320+00:00",
+  "reviewer": "side_options_browser_acceptance",
+  "source_git_sha": "45c8fb4ea91e5af8523971fbfa2270ee96552224",
+  "run_id": 45213472517,
+  "run_attempt": 1,
+  "run_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45213472517",
+  "job_id": 137828193226,
+  "job_name": "Operational balances browser, mobile and visibility acceptance",
+  "job_conclusion": "success",
+  "inventory_step_conclusion": "success",
+  "artifact_id": 14836858244,
+  "artifact_name": "inventory-purchase-browser-results",
+  "artifact_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45213472517/artifacts/14836858244",
+  "artifact_zip_sha256": "e894f96efd86b7c9538d600ae62c5866b4badddc00262c48d8bf7d54acf89c5f",
+  "artifact_zip_bytes": 1301252,
+  "artifact_digest_matches_github": true,
+  "scenario_count": 8,
+  "passed": 8,
+  "failed": 0,
+  "errors": [],
+  "scenario_results": [
+    {
+      "name": "Desktop form is centered at 70% with adjacent supplier metadata",
+      "status": "PASS",
+      "request_count": 5
+    },
+    {
+      "name": "Product and component choices show an explicit selected mark in one editor",
+      "status": "PASS",
+      "request_count": 0
+    },
+    {
+      "name": "Conditional yes, literal no and deferred parent keep only visible option values",
+      "status": "PASS",
+      "request_count": 0
+    },
+    {
+      "name": "Newest compact row is first; editing preserves its place and optional omissions stay ready",
+      "status": "PASS",
+      "request_count": 0
+    },
+    {
+      "name": "Mobile single editor and compact draft fit the viewport without horizontal scrolling",
+      "status": "PASS",
+      "request_count": 0
+    },
+    {
+      "name": "Approving an unreceived credit invoice does not call receiving or payment",
+      "status": "PASS",
+      "request_count": 2
+    },
+    {
+      "name": "Awaiting queue receives exactly two of four units and preserves the unpaid balance on reload",
+      "status": "PASS",
+      "request_count": 10
+    },
+    {
+      "name": "Owner classifies required gift fields as side options without changing physical requirements or purchase amounts",
+      "status": "PASS",
+      "request_count": 12
+    }
+  ],
+  "source_manifest_validation": {
+    "verified": true,
+    "checked_files": 61,
+    "mismatches": [],
+    "method": "SHA256 of each artifact manifest path compared with git show of the exact source commit",
+    "source_git_sha": "45c8fb4ea91e5af8523971fbfa2270ee96552224",
+    "source_manifest_sha256": "7c63fa49fbe2409b1c0bfb88f516be137c9a5d0d548fa307473a7780ebcadd8e"
+  },
+  "execution": {
+    "synthetic_only": true,
+    "actual_components": true,
+    "chromium_sandbox": true,
+    "payment_call_count": 0,
+    "option_role_write_count": 1,
+    "physical_quantity": 2
+  },
+  "viewport_measurements": [
+    {
+      "screenshot": "purchase-desktop.png",
+      "viewport_px": 1440,
+      "html_width_px": 1440,
+      "body_width_px": 1440,
+      "horizontal_page_overflow": false
+    },
+    {
+      "screenshot": "draft-desktop.png",
+      "viewport_px": 1440,
+      "html_width_px": 1440,
+      "body_width_px": 1440,
+      "horizontal_page_overflow": false
+    },
+    {
+      "screenshot": "editor-mobile.png",
+      "viewport_px": 390,
+      "html_width_px": 390,
+      "body_width_px": 390,
+      "horizontal_page_overflow": false
+    },
+    {
+      "screenshot": "draft-mobile.png",
+      "viewport_px": 390,
+      "html_width_px": 390,
+      "body_width_px": 390,
+      "horizontal_page_overflow": false
+    },
+    {
+      "screenshot": "invoice-review-mobile.png",
+      "viewport_px": 390,
+      "html_width_px": 390,
+      "body_width_px": 390,
+      "horizontal_page_overflow": false
+    },
+    {
+      "screenshot": "receipt-partial-mobile.png",
+      "viewport_px": 390,
+      "html_width_px": 390,
+      "body_width_px": 390,
+      "horizontal_page_overflow": false
+    },
+    {
+      "screenshot": "receipt-partial-desktop.png",
+      "viewport_px": 1440,
+      "html_width_px": 1440,
+      "body_width_px": 1440,
+      "horizontal_page_overflow": false
+    },
+    {
+      "screenshot": "option-roles-desktop.png",
+      "viewport_px": 1440,
+      "html_width_px": 1440,
+      "body_width_px": 1440,
+      "horizontal_page_overflow": false,
+      "option_roles": [
+        {
+          "viewport": 1440,
+          "editor": {
+            "left": 290.609375,
+            "right": 1149.40625,
+            "width": 858.796875
+          },
+          "controls": [
+            {
+              "name": "تصنيف مقاس القطعة",
+              "left": 314.609375,
+              "right": 750.328125,
+              "width": 435.71875
+            },
+            {
+              "name": "تصنيف هل تريد كرت إهداء",
+              "left": 314.609375,
+              "right": 750.328125,
+              "width": 435.71875
+            },
+            {
+              "name": "تصنيف نص كرت الإهداء",
+              "left": 314.609375,
+              "right": 750.328125,
+              "width": 435.71875
+            },
+            {
+              "name": "تصنيف ملاحظة التغليف",
+              "left": 314.609375,
+              "right": 750.328125,
+              "width": 435.71875
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "screenshot": "option-roles-mobile.png",
+      "viewport_px": 390,
+      "html_width_px": 390,
+      "body_width_px": 390,
+      "horizontal_page_overflow": false,
+      "option_roles": [
+        {
+          "viewport": 390,
+          "editor": {
+            "left": 52,
+            "right": 338,
+            "width": 286
+          },
+          "controls": [
+            {
+              "name": "تصنيف مقاس القطعة",
+              "left": 74,
+              "right": 316,
+              "width": 242
+            },
+            {
+              "name": "تصنيف هل تريد كرت إهداء",
+              "left": 74,
+              "right": 316,
+              "width": 242
+            },
+            {
+              "name": "تصنيف نص كرت الإهداء",
+              "left": 74,
+              "right": 316,
+              "width": 242
+            },
+            {
+              "name": "تصنيف ملاحظة التغليف",
+              "left": 74,
+              "right": 316,
+              "width": 242
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "screenshot": "side-options-mobile.png",
+      "viewport_px": 390,
+      "html_width_px": 390,
+      "body_width_px": 390,
+      "horizontal_page_overflow": false
+    }
+  ],
+  "screenshot_count": 10,
+  "screenshots": {
+    "purchase-desktop.png": {
+      "width": 1440,
+      "height": 2093,
+      "bytes": 117906,
+      "sha256": "86bf8ab6fafd8b32bbf9420dd1f59a760356fc9519181d256b1f5db7ecd991de",
+      "visually_inspected": true,
+      "visual_finding": "Centered purchase panel with adjacent supplier, invoice number and date; product choices remain horizontal RTL rows."
+    },
+    "draft-desktop.png": {
+      "width": 1440,
+      "height": 2336,
+      "bytes": 136543,
+      "sha256": "b405ac734bfd0c4ec5b3663fbfca65acea6e82779234a73250683f39add351a3",
+      "visually_inspected": true,
+      "visual_finding": "Two compact invoice rows show editable product descriptions, quantities, prices and total415.00; layout is legible without overlaps."
+    },
+    "editor-mobile.png": {
+      "width": 390,
+      "height": 3763,
+      "bytes": 154068,
+      "sha256": "468416f4e9ad3516f49dab0593489c15d1ef9ce0e59d2663279a31d45ba6fdb6",
+      "visually_inspected": true,
+      "visual_finding": "Single product editor, physical size, preparation choices and text fields fit390px; saved draft remains visible below."
+    },
+    "draft-mobile.png": {
+      "width": 390,
+      "height": 2693,
+      "bytes": 117099,
+      "sha256": "23fcc58a61f4fe8fa137c706ee18b0f52c1ac94d1c7d97c6447fad510b35c963",
+      "visually_inspected": true,
+      "visual_finding": "Compact invoice rows, wrapped descriptions, edit/delete actions and total415.00 fit390px."
+    },
+    "invoice-review-mobile.png": {
+      "width": 390,
+      "height": 2981,
+      "bytes": 131860,
+      "sha256": "a0a8af500f23176614ed2c1d7f733e8cab9160857b1204804e5368a24c328df3",
+      "visually_inspected": true,
+      "visual_finding": "Review card clearly shows two items, unpaid415.00 and awaiting receipt; approve/return actions remain visible."
+    },
+    "receipt-partial-mobile.png": {
+      "width": 390,
+      "height": 2433,
+      "bytes": 101137,
+      "sha256": "7117b89218b424cf3d05d551a6a412beb2a3f7f795b3c6587adcd1947af8f332",
+      "visually_inspected": true,
+      "visual_finding": "Receipt success and queue show four purchased, two received, two pending for the fur item; paid0.00/outstanding415.00 remain visible."
+    },
+    "receipt-partial-desktop.png": {
+      "width": 1440,
+      "height": 2110,
+      "bytes": 115059,
+      "sha256": "c755ff732ad4008d2f77851629ff018bc0971a6d08e067800af26779409ba770",
+      "visually_inspected": true,
+      "visual_finding": "Receipt form and queue render correctly at1440px with unchanged financial balance and partial receipt quantities."
+    },
+    "option-roles-desktop.png": {
+      "width": 1440,
+      "height": 3327,
+      "bytes": 211722,
+      "sha256": "f4d7a2b649b307bd62428ec985974cc86433f6e57cd0d9d25dbeed0bacb13bb5",
+      "visually_inspected": true,
+      "visual_finding": "Actual role editor displays the locked physical size plus three informational selections; customer-required labels, dependency guidance and save/cancel controls are clear."
+    },
+    "option-roles-mobile.png": {
+      "width": 390,
+      "height": 4452,
+      "bytes": 190910,
+      "sha256": "9eac90770cc8e20922e31bbd6fc6466b2fc649f249f85e640021983313cd98ba",
+      "visually_inspected": true,
+      "visual_finding": "Four classification rows stack vertically; all select values and save/cancel controls fit390px without clipping or overlap."
+    },
+    "side-options-mobile.png": {
+      "width": 390,
+      "height": 3239,
+      "bytes": 131112,
+      "sha256": "c9ebf03660bf6cb248c860420be5d83198198f18b2c11db1ff2f05443ed6a7fe",
+      "visually_inspected": true,
+      "visual_finding": "Saved classification shows a neutral blue customer-additions summary; gift and note inputs are absent, physical size remains selectable, and quantity3/unit79.80/tax35.91 are visible."
+    }
+  },
+  "visual_review": {
+    "status": "PASS",
+    "reviewed_screenshots": 10,
+    "blocking_findings": [],
+    "summary": "All ten screenshots inspected. Desktop and mobile role editors are legible and contained; saved informational fields appear only in the neutral summary while physical size and financial inputs remain."
+  },
+  "scope_limitations": [
+    "Synthetic UI and HTTP-contract acceptance; not a live tenant or deployment check.",
+    "Customer-answer and cost-binding database preservation relies on separate backend tests; this browser journey proves that no such changes are sent in the classification PUT and that draft amounts and customer option definitions survive.",
+    "No local browser retry, host action, production mutation or source edit was performed during this artifact review."
+  ]
+}
