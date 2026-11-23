@@ -1,0 +1,64 @@
+{
+  "kind": "inventory-side-options-release-integration-local-evidence",
+  "production_changed": false,
+  "deployable": false,
+  "reviewed_base_git_sha": "76efd2c3aa1563939ee3e27a9ae03f27fc1a3d43",
+  "tested_source_checkpoint": "d195ef4395be11fd9ee630479bb2cdfa94130e59",
+  "current_source_checkpoint": "45c8fb4ea91e5af8523971fbfa2270ee96552224",
+  "current_source_tree": "cb961c3f1bfb2a340075f193769dfa78b332b14c",
+  "source_branch": "codex/inventory-side-options-release-20261123",
+  "backend": {
+    "tests": 415,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "exit_code": 0
+  },
+  "frontend": {
+    "tests": 281,
+    "suites": 14,
+    "failed": 0,
+    "success": true,
+    "exit_code": 0
+  },
+  "synthetic_build": {
+    "exit_code": 0,
+    "governed_release_artifact": false,
+    "browser_execution": "pending CI; no local sandbox bypass"
+  },
+  "ordinary_source_ci": {
+    "run_id": 45213472517,
+    "workflow": "Operational Balance Web",
+    "head_sha": "45c8fb4ea91e5af8523971fbfa2270ee96552224",
+    "state_at_checkpoint": "in_progress"
+  },
+  "review": {
+    "integration": "accepted; source path intersection empty; upstream25 paths byte-exact",
+    "browser_harness": "independently accepted; no blocking defect; execution pending",
+    "new_harness_scenarios": 8,
+    "required_screenshots": 10
+  },
+  "limits": [
+    "Focused local test groups overlap prior runs; do not sum into unique total.",
+    "Product backend/frontend sources and tested tests were unchanged between d195 and45c; new browser harness and documentation do not inherit executed browser acceptance.",
+    "Exact45c full CI, release source A/intent B and Node20/24 clean-clone evidence remain pending.",
+    "ForeignPR2086 lease preserved; original status timeouts do not prove inactive."
+  ],
+  "files": [
+    {
+      "file": "evidence/integration-local/backend.xml",
+      "bytes": 69856,
+      "sha256": "843283e41821662b24fa2a1edc4e324882c9408c2d59dd53c179b8bf3a80a0f9"
+    },
+    {
+      "file": "evidence/integration-local/frontend.json",
+      "bytes": 76943,
+      "sha256": "c05ad5c8f3268be0f85c22d2d652ea7a1a8a504055ddecd06d39098150b3129d"
+    },
+    {
+      "file": "evidence/integration-local/synthetic-source-manifest.json",
+      "bytes": 7710,
+      "sha256": "7c63fa49fbe2409b1c0bfb88f516be137c9a5d0d548fa307473a7780ebcadd8e"
+    }
+  ]
+}
