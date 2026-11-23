@@ -6,6 +6,8 @@ changes a warehouse balance. Provider labels remain display text, not identity.
 from copy import deepcopy
 
 TEXT_TYPES = {"text", "string", "textarea"}
+INVENTORY_ROLES = {"physical", "customization", "informational"}
+POLICY_FIELD = "mezan_inventory_option_policy"
 CONDITION_KEYS = ("visibility", "visibility_condition_type",
                   "visibility_condition_option", "visibility_condition_value",
                   "show_if", "conditions", "inventory_role")
@@ -29,6 +31,23 @@ def option_metadata(row, options):
             metadata = sources.setdefault(_id(option["id"]), {})
             metadata.update({key: option[key] for key in CONDITION_KEYS if key in option})
 
+    # Mezan's local policy survives Salla refreshes and never rewrites provider
+    # definitions or customer answers. A changed option catalog needs review.
+    policy = row.get(POLICY_FIELD)
+    if policy is not None:
+        roles = policy.get("roles") if isinstance(policy, dict) else None
+        revision = policy.get("revision") if isinstance(policy, dict) else None
+        if (not isinstance(roles, dict) or type(revision) is not int or revision < 1
+                or any(not isinstance(oid, str) or not isinstance(role, str) or role not in INVENTORY_ROLES
+                       for oid, role in (roles or {}).items())):
+            issues.append("تصنيف خيارات المخزون غير صالح؛ راجع تصنيف الخيارات")
+        else:
+            if set(roles) != set(fields):
+                issues.append("تغير تعريف خيارات المنتج؛ راجع تصنيف الخيارات")
+            for oid, role in roles.items():
+                if oid in fields:
+                    sources.setdefault(oid, {})["inventory_role"] = role
+
     physical = set()
     variants = row.get("variants") or []
     for variant in variants if isinstance(variants, list) else []:
@@ -45,6 +64,8 @@ def option_metadata(row, options):
                 if len(matches) == 1:
                     physical.add(matches[0])
 
+    variant_dimensions = set(physical)
+
     graph = {oid: set() for oid in fields}
     for option in result:
         oid = option["id"]
@@ -52,6 +73,8 @@ def option_metadata(row, options):
         role = source.get("inventory_role")
         if role not in (None, "physical", "customization", "informational"):
             issues.append("دور خيار المخزون غير معروف: " + option["name"])
+        if oid in variant_dimensions and role not in (None, "physical"):
+            issues.append("خيار مرتبط بنسخة المنتج ويجب أن يبقى مواصفة للقطعة: " + option["name"])
         if role == "physical":
             physical.add(oid)
         rules = []
@@ -120,12 +143,23 @@ def option_metadata(row, options):
             component.add(oid)
             todo.extend(neighbors[oid] - component)
         remaining -= component
-        if not component & physical and any(fields[oid]["type"] in TEXT_TYPES for oid in component):
+        if not component & physical and any(fields[oid]["type"] in TEXT_TYPES
+                and sources.get(oid, {}).get("inventory_role") != "informational" for oid in component):
             inferred.update(component)
     for option in result:
         oid = option["id"]
         role = sources.get(oid, {}).get("inventory_role")
+        option["inventory_role"] = ("physical" if oid in variant_dimensions else role
+                                    or ("customization" if oid in inferred else "physical"))
+        option["role_locked"] = oid in variant_dimensions
         option["stock_identity"] = oid in physical
+    for option in result:
+        if option["inventory_role"] != "informational" and any(
+                fields[parent]["inventory_role"] == "informational" for parent in graph[option["id"]]):
+            issues.append("خيار تجهيز أو مواصفة يعتمد على خيار جانبي؛ راجع تصنيف الخيارات المرتبطة: " + option["name"])
+    for option in result:
+        oid = option["id"]
+        role = option["inventory_role"]
         option["defer_allowed"] = (not issues and oid not in physical
                                     and role != "informational"
                                     and (role == "customization" or oid in inferred))

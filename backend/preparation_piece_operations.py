@@ -591,6 +591,10 @@ async def _service_context_for_batch(
         else []
     )
     resources_by_id = {_text(row.get("id")): row for row in resources if _text(row.get("id"))}
+    from supplier_option_service_policy import supplier_service_option_bindings
+    option_bindings = await supplier_service_option_bindings(
+        db, user_id=user_id, bindings=option_bindings, resources_by_id=resources_by_id,
+    )
     links_by_product: dict[str, list[dict[str, Any]]] = defaultdict(list)
     bindings_by_product: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in product_links:

@@ -58,3 +58,17 @@ test('selected product card also identifies the current choice',async()=>{
   await render(<InventoryProductPicker items={[product]} selected={product} onPick={()=>{}}/>);
   expect(host.querySelector('.mz-product-selected-mark').textContent).toBe('مختار');
 });
+
+test('side questions and text are a neutral summary without stock controls',async()=>{
+  const definition={...product,options:[...product.options,
+    {id:'card',name:'هل تريد كرت إهداء؟',type:'radio',required:true,inventory_role:'informational',values:[{id:'yes',name:'نعم'}]},
+    {id:'card-text',name:'نص كرت الإهداء',type:'textarea',required:true,inventory_role:'informational',visibility_rules:[{option_id:'card',value_id:'yes',operator:'='}],values:[]},
+  ]};
+  await render(<InventoryProductOptions product={definition} config={initial} onChange={()=>{}}/>);
+  expect(host.querySelector('[aria-label="هل تريد كرت إهداء؟: نعم"]')).toBeNull();
+  expect(host.querySelector('[aria-label="نص كرت الإهداء · البند 1"]')).toBeNull();
+  expect(host.querySelector('.mz-product-side-options').textContent).toContain('نص كرت الإهداء');
+  expect(host.querySelector('.mz-product-side-options').textContent).toContain('لا تدخل في جاهزية المخزون');
+  expect(host.querySelector('[aria-label="الاسم · البند 1"]')).not.toBeNull();
+  expect(host.querySelector('[aria-label="المقاس: سنتان"]')).not.toBeNull();
+});

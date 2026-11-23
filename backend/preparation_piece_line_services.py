@@ -162,6 +162,10 @@ async def _line_service_context_for_batch(
         for row in resources
         if _text(row.get("id"))
     }
+    from supplier_option_service_policy import supplier_service_option_bindings
+    option_bindings = await supplier_service_option_bindings(
+        db, user_id=user_id, bindings=option_bindings, resources_by_id=resources_by_id,
+    )
     return build_line_service_plans(
         batch=batch,
         product_links=product_links,

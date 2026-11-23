@@ -47,6 +47,8 @@ export const operationalApi = {
   standaloneInventoryControl: body => data(api.post(`${base}/standalone-inventory/control`, body)),
   previewStandaloneInventory: body => data(api.post(`${base}/standalone-inventory/preview`, body)),
   saveStandaloneInventory: body => data(api.post(`${base}/standalone-inventory/save`, body)),
+  inventoryOptionRoles: (id, config = {}) => data(api.get(`${base}/inventory-products/${encodeURIComponent(id)}/option-roles`, config)),
+  saveInventoryOptionRoles: (id, body, config = {}) => data(api.put(`${base}/inventory-products/${encodeURIComponent(id)}/option-roles`, body, config)),
   inventoryCatalog: (configured = false, config = {}) => data(api.get(`${base}/inventory-catalog${configured ? '?configured=true' : ''}`, config)),
   inventoryPurchaseEntry: (supplier,number,config = {}) => data(api.get(`${base}/inventory-purchases/entry/${encodeURIComponent(supplier)}/${encodeURIComponent(number)}`, config)),
   inventoryPurchases: (config = {}) => data(api.get(`${base}/inventory-purchases`, config)),

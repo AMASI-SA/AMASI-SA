@@ -42,6 +42,70 @@ async def command(db, saved, *, quantity=2, request_id='receipt-first', location
     return {**body, 'preview_hash': result['preview_hash']}
 
 
+@pytest.mark.parametrize('legacy_metadata', [False, True])
+def test_later_side_classification_preserves_partial_invoice_stock_identity_and_retry(legacy_metadata, monkeypatch):
+    from test_inventory_option_configuration import config
+    from operational_inventory_purchase_receipts import save, context
+    from inventory_option_policy import get_policy, save_policy
+    async def scenario(db):
+        original_config = config()
+        original_config['inputs'].append({'option_id': 'note', 'value': 'وصف محفوظ قبل التصنيف'})
+        if legacy_metadata:
+            import operational_purchase_metadata as metadata
+            current_products = metadata._products
+            def legacy_products(*args, **kwargs):
+                result = current_products(*args, **kwargs)
+                for product in result:
+                    product.pop('inventory_option_policy_revision', None)
+                    for option in product['options']:
+                        option.pop('inventory_role', None)
+                        option.pop('role_locked', None)
+                return result
+            # Produce the real pre-release schema before the invoice is saved;
+            # never rewrite an approved invoice or its audit evidence.
+            with monkeypatch.context() as historical_producer:
+                historical_producer.setattr(metadata, '_products', legacy_products)
+                saved = await invoice(db, config=original_config)
+        else:
+            saved = await invoice(db, config=original_config)
+        first_command = await command(db, saved)
+        first = await save(db, OWNER, saved['id'], first_command)
+        before = await read(db, 'owner')
+        definition = await get_policy(db, OWNER, 'product')
+        await save_policy(db, OWNER, 'product', {
+            'expected_revision': definition['revision'], 'catalog_fingerprint': definition['catalog_fingerprint'],
+            'roles': {**definition['roles'], 'note': 'informational', 'optional': 'informational'},
+        })
+        assert await save(db, OWNER, saved['id'], first_command) == first
+        second = await save(db, OWNER, saved['id'], await command(db, saved, quantity=3, request_id='receipt-after-classification'))
+        assert second['lines'][0]['inventory_identity'] == first['lines'][0]['inventory_identity']
+        assert second['lines'][0]['purchase_configuration'] == first['lines'][0]['purchase_configuration']
+        assert second['lines'][0]['purchase_option_labels'] == first['lines'][0]['purchase_option_labels']
+        after = await read(db, 'owner')
+        assert before['inventory_purchases'] == after['inventory_purchases']
+        assert before['movements'] == after['movements']
+        view = (await context(db, OWNER, saved['id']))['invoice']
+        assert view['receipt_status'] == 'received' and len(view['receipt_history']) == 2
+        assert await db.mezan_inventory_receipts_v2.count_documents({}) == 2
+        assert await db.mezan_inventory_reservations_v2.count_documents({}) == 0
+    run(scenario)
+
+
+def test_receiving_missing_frozen_product_definition_cannot_use_new_catalog_silently():
+    from operational_opening_inventory import compile_preview
+    async def scenario(db):
+        await invoice(db)
+        body = {'request_id': 'missing-frozen-options', 'lines': [{'kind': 'product', 'item_id': 'product',
+                'quantity': 1, 'unit_cost': '12.50', 'location_id': 'shelf',
+                'purchase_configuration': {'state': 'ready', 'selections': [], 'inputs': []}}]}
+        with pytest.raises(HTTPException) as exc:
+            await compile_preview(db, 'owner', body, standalone=True, allow_duplicate_lines=True,
+                                  configuration_snapshots=[{'id': 'product', 'kind': 'product'}])
+        assert exc.value.detail['code'] == 'purchase_receipt_configuration_required'
+        assert await db.mezan_inventory_receipts_v2.count_documents({}) == 0
+    run(scenario)
+
+
 def test_opt_in_invoice_starts_waiting_without_stock_or_cash():
     async def scenario(db):
         saved = await invoice(db)

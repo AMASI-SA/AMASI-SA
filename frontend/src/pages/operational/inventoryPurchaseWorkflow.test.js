@@ -1,4 +1,4 @@
-import {makePurchaseCommand,purchaseSettings,purchaseToday,resumePurchase,validatePurchaseCommand,purchaseLineFingerprint} from './inventoryPurchaseWorkflow';
+import {makePurchaseCommand,purchaseSettings,purchaseToday,resumePurchase,validatePurchaseCommand,purchaseLineFingerprint,purchaseLinePayload} from './inventoryPurchaseWorkflow';
 
 const scope='a'.repeat(64);
 const previewHash='b'.repeat(64);
@@ -43,6 +43,11 @@ test('later location can remain unset for unreceived invoice, but received quant
   const draft=form();draft.lines=[{...line,location_id:''}];
   expect(()=>makePurchaseCommand(draft,purchaseSettings(),scope,[],[],()=> 'id')).not.toThrow();
   expect(()=>makePurchaseCommand(draft,{...purchaseSettings(),receipt_mode:'all'},scope,[],[],()=> 'id')).toThrow('موقع');
+});
+test('new product commands bind the reviewed option policy while components omit that product contract',()=>{
+  expect(purchaseLinePayload({...line,inventory_option_policy_revision:3}).inventory_option_policy_revision).toBe(3);
+  expect(purchaseLinePayload(line).inventory_option_policy_revision).toBe(0);
+  expect(purchaseLinePayload({...line,kind:'component'})).not.toHaveProperty('inventory_option_policy_revision');
 });
 test('partial receipt binds to saved line IDs and never resubmits client prices as receipt evidence',async()=>{
   const service=api();await resumePurchase(command({receipt_mode:'partial',receipt_quantities:{row:'2'}}),service,()=>{});
