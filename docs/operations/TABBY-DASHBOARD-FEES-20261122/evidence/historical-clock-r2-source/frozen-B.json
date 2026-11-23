@@ -1,0 +1,12 @@
+{
+  "source_A": "c464eb01f3b4201da58c664312d009617e3f1766",
+  "base": "422fffc8fb9c381165cc76b1ded5ca595773ce8e",
+  "intent_B": "be0c1c67569e5fb59104ccdd43aaa44169fe0ff5",
+  "intent_B_tree": "756a1285dfe837ebdab6c6a4a65750b59952227a",
+  "intent_blob": "dd3d4fa44097acd2e2ba2127a35728e0433eab6c",
+  "candidate_sha256": "ff1f5f912fc9d828d12c8aa7766018f21006ad36372c8d70caaee34d693b95f9",
+  "branch": "codex/tabby-historical-fee-clock-r2-20261123",
+  "pr": 2091,
+  "branch_verified": true,
+  "production_mutated": false
+}

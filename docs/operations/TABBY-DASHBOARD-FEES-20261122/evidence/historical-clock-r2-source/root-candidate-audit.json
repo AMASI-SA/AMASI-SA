@@ -1,0 +1,20 @@
+{
+  "source_A": "c464eb01f3b4201da58c664312d009617e3f1766",
+  "base": "422fffc8fb9c381165cc76b1ded5ca595773ce8e",
+  "candidate_sha256": "ff1f5f912fc9d828d12c8aa7766018f21006ad36372c8d70caaee34d693b95f9",
+  "runtime_id": "rg5-c49251181bb276063220b420205fc39aacef5d7e2f5e124192062f53f71fadce",
+  "original_candidate_validator": true,
+  "original_full_frontend_and_proof_readers": true,
+  "all_four_raw_logs_match_recorded_exit0_hashes": true,
+  "source_worktree_clean": true,
+  "candidate_ci_byte_identity": {
+    "run": 45222262450,
+    "head_sha": "c464eb01f3b4201da58c664312d009617e3f1766",
+    "artifact_id": 14841641946,
+    "artifact_digest": "sha256:c5f6e4e336c197e6fcb4558ec29a8032a5274393f71179c1fa1eaad127a7b7d2",
+    "archive_bytes": 433643,
+    "candidate_bytes": 1508531,
+    "candidate_sha256": "ff1f5f912fc9d828d12c8aa7766018f21006ad36372c8d70caaee34d693b95f9",
+    "byte_identical_to_local_candidate": true
+  }
+}

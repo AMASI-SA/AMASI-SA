@@ -1,0 +1,260 @@
+{
+  "kind": "tabby_historical_clock_r2_independent_candidate_audit_v1",
+  "status": "PASS",
+  "reviewed_at_utc": "2026-11-23 17:04:55 UTC",
+  "reviewers": [
+    "independent release_state_review",
+    "independent r2_candidate_backend"
+  ],
+  "repository": "AMASI-SA/AMASI-SA",
+  "pull_request": 2091,
+  "source_branch": "codex/tabby-historical-fee-clock-r2-20261123",
+  "source_A": "c464eb01f3b4201da58c664312d009617e3f1766",
+  "source_tree": "767055292da465bde28908e26d6e1a1b3e493850",
+  "source_base": "422fffc8fb9c381165cc76b1ded5ca595773ce8e",
+  "source_base_tree": "1173fc8303c6c498448b26f62cff7bffba321bfc",
+  "original_load_candidate_release_intent": "PASS with exact external candidate path/A/base",
+  "candidate": {
+    "path": "evidence/historical-clock-r2-source/release-intent-v5.json",
+    "bytes": 1508531,
+    "sha256": "ff1f5f912fc9d828d12c8aa7766018f21006ad36372c8d70caaee34d693b95f9",
+    "schema_version": 2,
+    "protocol_version": 5,
+    "branch": "hotfix/prod-snap-meta-final",
+    "runtime_id": "rg5-c49251181bb276063220b420205fc39aacef5d7e2f5e124192062f53f71fadce",
+    "runtime_id_independently_recomputed": true,
+    "frontend_artifact_tree_sha256": "51d24296b29281a6dc64b452c3986fbf354c3b144f5ed25491a69ee97a9ad1d9",
+    "unchanged_during_and_after_review": true
+  },
+  "source_transition": {
+    "exact_clean_HEAD_A_before_after": true,
+    "sole_parent_is_reviewed_base": true,
+    "inherited_intent_byte_identical": true,
+    "inherited_intent_sha256": "f3e6ae1f5b1a342c4e900f0b3f0fdef6b3f3e9f07195b50662b2dec9c6aa4814",
+    "no_intent_edit_history_between_base_and_A": true,
+    "tracked_changed_paths": [
+      "backend/dashboard_payment_fees.py",
+      "backend/tests/test_dashboard_weekly_payment_fees.py",
+      "docs/operations/TABBY-HISTORICAL-FEE-CLOCK-20261123/STATUS.json"
+    ],
+    "runtime_patch_sha256": "7590be5023d39ade4c54fdd2c12adf638ea12319ee41aff090da1c9ee73e402d",
+    "regression_test_file_sha256": "f89e8c9c35d7e288ffb64582f3ed04ad9758b707311cf939d7fce0273d7e3152"
+  },
+  "prior_base_reviewed_release_relationship": {
+    "source_base": "76efd2c3aa1563939ee3e27a9ae03f27fc1a3d43",
+    "source_A": "b69d438a20ae123a0c30deb5b73599551dbe9559",
+    "intent_B": "cc3a475ef46cab5438e448ca669d908890b18dc0",
+    "ordinary_merge_D": "422fffc8fb9c381165cc76b1ded5ca595773ce8e",
+    "ordered_merge_parents": [
+      "76efd2c3aa1563939ee3e27a9ae03f27fc1a3d43",
+      "cc3a475ef46cab5438e448ca669d908890b18dc0"
+    ],
+    "A_parent_is_source_base": true,
+    "B_parent_is_A": true,
+    "B_and_D_trees_equal": true,
+    "A_to_B_and_A_to_D_only_change": "release/release-intent-v5.json",
+    "B_to_D_content_difference_empty": true,
+    "prior_A_inherited_its_base_intent_unchanged_and_no_intent_edit_history": true,
+    "original_verify_release_intent_git_at_explicit_D": "PASS",
+    "actual_host_release_completion_not_inferred_from_Git_relationship": true
+  },
+  "backend_and_control_manifest_review": {
+    "independent_unique_git_blob_objects_verified": 1658,
+    "complete_paths_modes_bytes_sha256_git_blob_projection_trees_deltas_and_tombstones_checked": true,
+    "exact_equality_with_original_git_source_manifest": true,
+    "backend_runtime": {
+      "file_records": 1332,
+      "added_paths": [],
+      "modified_paths": [
+        "dashboard_payment_fees.py"
+      ],
+      "deleted_paths": [],
+      "tombstones": [],
+      "manifest_sha256": "c05db553ea9b235968120f19c6519ade71e4aa1eae5a6517d9d5703ba6f6f9dd",
+      "tree_sha256": "d2b986d162f9319a56e8ffef803082b11fa283f43ad252c57bba180525e07ec1",
+      "projection_tree_oid": "4fa4057ab8fb9fed6328f3cb97473d5498f4cd3a",
+      "runtime_embeds_exact_full_manifest": true
+    },
+    "release_control": {
+      "file_records": 328,
+      "added_paths": [],
+      "modified_paths": [],
+      "deleted_paths": [],
+      "tombstones": [],
+      "manifest_sha256": "437f98a8a73ce229c8ac53754a233d806dd73d46c1a3b427db0aec8cf5b99339",
+      "tree_sha256": "c652c533842c77b22d3d64dd4f814b60d7a7d1798102b03bd337d815a36264ab",
+      "projection_tree_oid": "3f40922f925158f6799e19ccf6a30bfdfa6a6369",
+      "runtime_embeds_exact_source_summary": true
+    }
+  },
+  "frontend_review": {
+    "complete_git_file_records": 1422,
+    "git_tree_oid": "5aa8e180aaaa6600af9efaf58b15c136eb1975bb",
+    "source_tree_sha256": "d6ca29029653122afcf5086e7cc74dcf04d95bd8aab18be57118e4779ffec581",
+    "all_modes_blobs_bytes_hashes_and_membership_independently_checked": true,
+    "frontend_source_unchanged_from_base": true,
+    "generated_files_including_metadata": 384,
+    "public_files": 381,
+    "complete_generated_tree_and_each_current_file_verified": true,
+    "original_frontend_identity_and_reproducibility_readers": "PASS",
+    "build_meta": {
+      "bytes": 584063,
+      "path": "build-meta.json",
+      "sha256": "b137a20f4a7b4539ef43e8a9f7c76c0fb90293c72890f2efa7250367e540579e"
+    },
+    "reproducibility_proof_file": {
+      "bytes": 1521,
+      "path": "frontend/.release/reproducible-build.json",
+      "sha256": "3a4f628e181920ccdae50e00cd4fd5ff31862fb685d7ea75fbf83c24cb19e9be"
+    },
+    "toolchain": {
+      "node": "22.23.2",
+      "vite": "8.2.4",
+      "yarn": "1.22.22"
+    },
+    "approved_environment_exact_match": true,
+    "approved_client_origin_sha256": "d2e055b74392bfdfcf1d64af1e88a91ab7029a49729a7ac53870bf48bfe4e5ff",
+    "production_mode_and_no_extra_VITE_overrides": true,
+    "identical_clean_passes": [
+      1,
+      2
+    ],
+    "retained_pass": 2,
+    "logs_contain_two_completed_builds": true
+  },
+  "local_execution_evidence": {
+    "run_record": "evidence/historical-clock-r2-source/local-candidate-run.json",
+    "all_four_step_exit_statuses_zero": true,
+    "all_recorded_log_bytes_and_sha256_independently_match": true,
+    "steps": [
+      {
+        "bytes": 7316,
+        "exit_status": 0,
+        "sha256": "3f5810538ccf715717c965916c734add75558d53b54a280049afe904b0cf6055",
+        "step": "frozen-install"
+      },
+      {
+        "bytes": 71990,
+        "exit_status": 0,
+        "sha256": "f3de62ce9826f12ace683e4a5365f3c70e4905e26432a70d148a20f33b89b7da",
+        "step": "two-clean-builds"
+      },
+      {
+        "bytes": 134106,
+        "exit_status": 0,
+        "sha256": "b6f98b75385a8c7afc21106940c11569e5e63f3f07f9f18c77ed7394fb8c5479",
+        "step": "verify-artifact"
+      },
+      {
+        "bytes": 1508720,
+        "exit_status": 0,
+        "sha256": "757f1b0fed0c9a348550f2619e8d5d1935510f82c1924a6f839567f16e7de3fa",
+        "step": "freeze-candidate"
+      }
+    ]
+  },
+  "github_candidate_provenance": {
+    "run_id": 45222262450,
+    "run_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45222262450",
+    "workflow": "Mezan Release Readiness",
+    "workflow_path": ".github/workflows/mezan-production-release.yml",
+    "event": "pull_request",
+    "run_attempt": 1,
+    "head_branch": "codex/tabby-historical-fee-clock-r2-20261123",
+    "head_sha": "c464eb01f3b4201da58c664312d009617e3f1766",
+    "status": "completed",
+    "conclusion": "success",
+    "updated_at": "2026-11-23T16:58:42Z",
+    "artifact_id": 14841641946,
+    "artifact_name": "release-v5-reviewed-intent-candidate",
+    "artifact_expired": false,
+    "artifact_expires_at": "2026-11-25T16:58:37Z",
+    "archive_path": "evidence/historical-clock-r2-source/github-candidate-artifact.zip",
+    "archive_bytes": 433643,
+    "official_digest": "sha256:c5f6e4e336c197e6fcb4558ec29a8032a5274393f71179c1fa1eaad127a7b7d2",
+    "archive_sha256_independently_matches_official_digest": true,
+    "archive_has_exactly_one_regular_unencrypted_member": true,
+    "member_name": "release-intent-v5.json",
+    "member_crc_read_successful": true,
+    "member_bytes": 1508531,
+    "member_sha256": "ff1f5f912fc9d828d12c8aa7766018f21006ad36372c8d70caaee34d693b95f9",
+    "member_byte_identical_to_audited_local_candidate": true,
+    "jobs": [
+      {
+        "id": 137859365850,
+        "name": "Frontend build",
+        "head_sha": "c464eb01f3b4201da58c664312d009617e3f1766",
+        "run_attempt": 1,
+        "status": "completed",
+        "conclusion": "success",
+        "completed_at": "2026-11-23T16:58:41Z"
+      },
+      {
+        "id": 137859366181,
+        "name": "Host Node 20.20.2 engine and dispatcher contract",
+        "head_sha": "c464eb01f3b4201da58c664312d009617e3f1766",
+        "run_attempt": 1,
+        "status": "completed",
+        "conclusion": "success",
+        "completed_at": "2026-11-23T16:57:33Z"
+      },
+      {
+        "id": 137859366449,
+        "name": "Backend preflight",
+        "head_sha": "c464eb01f3b4201da58c664312d009617e3f1766",
+        "run_attempt": 1,
+        "status": "completed",
+        "conclusion": "success",
+        "completed_at": "2026-11-23T16:57:45Z"
+      },
+      {
+        "id": 137859366613,
+        "name": "Host Node 24.19.0 engine and dispatcher contract",
+        "head_sha": "c464eb01f3b4201da58c664312d009617e3f1766",
+        "run_attempt": 1,
+        "status": "completed",
+        "conclusion": "success",
+        "completed_at": "2026-11-23T16:57:35Z"
+      },
+      {
+        "id": 137860243013,
+        "name": "Emergent Host Node ${{ matrix.host-node }} clean-clone adapter rehearsal",
+        "head_sha": "c464eb01f3b4201da58c664312d009617e3f1766",
+        "run_attempt": 1,
+        "status": "completed",
+        "conclusion": "skipped",
+        "completed_at": "2026-11-23T16:58:41Z"
+      },
+      {
+        "id": 137860244273,
+        "name": "Emergent manual redeploy required",
+        "head_sha": "c464eb01f3b4201da58c664312d009617e3f1766",
+        "run_attempt": 1,
+        "status": "completed",
+        "conclusion": "skipped",
+        "completed_at": "2026-11-23T16:58:41Z"
+      }
+    ],
+    "source_A_adapter_and_manual_redeploy_skips_expected": true
+  },
+  "review_notes": [
+    "The source-only original candidate validation emitted an import diagnostic for absent ignored backend/release_identity.json; the candidate validator, deterministic runtime identity re-derivation and all current frontend/proof validators completed successfully with exit 0. No backend runtime identity was materialized by this review.",
+    "An initial secondary-audit assertion expected the runtime release-control field to contain the full manifest. Original protocol specifies its summary. Only the in-memory audit assertion was corrected; the complete secondary audit then exited 0. No candidate or source correction was required."
+  ],
+  "limitations": [
+    "This is a source-A candidate audit. It does not assert final intent-only B acceptance, both final-B clean-clone adapters, actual-host rehearsal, publication or live historical dashboard acceptance.",
+    "Prior-base Git verification does not establish completion of the foreign PR2087 actual-host handoff. Parent reports that handoff in progress; this review did not inspect or modify it.",
+    "No live business observations, financial amounts or counts, customer/order/owner identifiers, or environment dumps are retained in this audit."
+  ],
+  "next_safe_action": "Use the exact accepted candidate bytes for a separately reviewed intent-only B, then obtain required fresh exact-B CI and both adapter proofs. Preserve foreign release ownership and require current coordination plus fresh original guard status before any host action.",
+  "actions": {
+    "created_only": "INDEPENDENT-HISTORICAL-CLOCK-R2-CANDIDATE.json",
+    "source_or_candidate_bytes_changed": false,
+    "git_mutations": false,
+    "build_or_freeze_executed_by_reviewers": false,
+    "CI_mutations": false,
+    "host_actions": false,
+    "lease_actions": false,
+    "live_financial_actions": false
+  }
+}

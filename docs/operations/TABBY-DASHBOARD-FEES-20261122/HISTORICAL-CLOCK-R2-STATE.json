@@ -1,0 +1,36 @@
+{
+  "task": "TABBY-HISTORICAL-FEE-CLOCK-20261123",
+  "state": "canonical_r2_intent_B_frozen_exact_B_gates_running",
+  "branch": "codex/tabby-historical-fee-clock-r2-20261123",
+  "source_A": "c464eb01f3b4201da58c664312d009617e3f1766",
+  "source_tree": "767055292da465bde28908e26d6e1a1b3e493850",
+  "base": "422fffc8fb9c381165cc76b1ded5ca595773ce8e",
+  "base_tree": "1173fc8303c6c498448b26f62cff7bffba321bfc",
+  "local_equivalent_commit": "056786e03a2f404993b4823421af470193ff3446",
+  "superseded_pr": 2090,
+  "superseded_source_A": "73e75c7fcad1a57ae0b023f4ccdb510c65f45d8d",
+  "root_tests": {
+    "passed": 244,
+    "failed": 0,
+    "skipped": 0,
+    "log_sha256": "b63fe20bf43e03eac8dad70f72aa52f56c734c29dba93d408a489223243d5c55"
+  },
+  "independent_compatibility": {
+    "pass": true,
+    "intervening_paths_preserved": 30,
+    "unchanged_critical_dependencies": 36
+  },
+  "intent_B": "be0c1c67569e5fb59104ccdd43aaa44169fe0ff5",
+  "merged": false,
+  "published": false,
+  "own_lease": false,
+  "foreign_handoff": "PR2087 actual publication in progress; this task stays isolated until fresh verified closure.",
+  "next": "Finish all applicable exact-B gates and independently audit both original adapter outputs. Preserve foreign actual-host recovery/publication.",
+  "pr": 2091,
+  "intent_B_tree": "756a1285dfe837ebdab6c6a4a65750b59952227a",
+  "candidate_sha256": "ff1f5f912fc9d828d12c8aa7766018f21006ad36372c8d70caaee34d693b95f9",
+  "runtime_id": "rg5-c49251181bb276063220b420205fc39aacef5d7e2f5e124192062f53f71fadce",
+  "source_readiness_run": 45222262450,
+  "source_candidate_artifact": 14841641946,
+  "candidate_review": "PASS original and independent full manifests/frontend/proof, CI artifact byte-identical"
+}

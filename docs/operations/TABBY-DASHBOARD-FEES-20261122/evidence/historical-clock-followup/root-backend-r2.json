@@ -1,0 +1,30 @@
+{
+  "base": "422fffc8fb9c381165cc76b1ded5ca595773ce8e",
+  "file_sha256": {
+    "backend/dashboard_payment_fees.py": "7590be5023d39ade4c54fdd2c12adf638ea12319ee41aff090da1c9ee73e402d",
+    "backend/tests/test_dashboard_weekly_payment_fees.py": "f89e8c9c35d7e288ffb64582f3ed04ad9758b707311cf939d7fce0273d7e3152"
+  },
+  "argv": [
+    "/workspace/scratch/a719d7c39de9/tabby-python-env/bin/python",
+    "-B",
+    "-m",
+    "pytest",
+    "--noconftest",
+    "-p",
+    "no:cacheprovider",
+    "-q",
+    "backend/tests/test_dashboard_weekly_payment_fees.py",
+    "backend/tests/test_provider_fee_weekly_average.py",
+    "backend/tests/test_provider_fee_weekly_sources.py",
+    "backend/tests/test_dashboard_operational_statement_fees.py",
+    "backend/tests/test_provider_fee_statement_actual_sources.py",
+    "backend/tests/test_dashboard_dated_payment_fees.py",
+    "backend/tests/test_dashboard_card_snapshots.py",
+    "backend/tests/test_dashboard_v2_ad_account_costs.py",
+    "backend/tests/test_dashboard_weekly_read_model.py",
+    "backend/tests/test_dashboard_demand_builders.py",
+    "--tb=short"
+  ],
+  "exit_status": 0,
+  "log_sha256": "b63fe20bf43e03eac8dad70f72aa52f56c734c29dba93d408a489223243d5c55"
+}

@@ -1,7 +1,7 @@
 {
   "task_id": "TABBY-DASHBOARD-FEES-20261122",
   "status": "r4_release_verified_historical_tabby_followup_in_progress",
-  "updated_at_utc": "2026-11-23T16:43:13.636617+00:00",
+  "updated_at_utc": "2026-11-23T17:06:26.762038+00:00",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tabby-weekly-fees-release-evidence-20261122",
   "production_branch": "hotfix/prod-snap-meta-final",
@@ -169,10 +169,11 @@
     "independent_live_verification": "INDEPENDENT-LIVE-VERIFY-2086.json"
   },
   "next_safe_actions": [
-    "Independently audit and remotely checkpoint the unchanged original verification capture and updated publication evidence.",
-    "Finish the isolated historical-cutoff fix, focused red/green regressions and independent review; preserve immutable PR2086 A/B/D.",
-    "Checkpoint the follow-up as a separate reviewable branch/PR, then apply its own required CI and fresh v5 handoff only if ready; never reuse this completed release lease or intent.",
-    "Require live historical UI acceptance after any independently reviewed follow-up publication before claiming the full functional task complete."
+    "Complete all applicable exact-B CI and both original Node20/24 clean-clone adapter proofs for PR2091; independently inspect the retained outputs.",
+    "Preserve foreign PR2087 actual-host recovery/publication; do not merge or start a competing rehearsal while that handoff is active.",
+    "After verified foreign closure, reread current Production/coordination and actual original guard; preserve frozen A/B if Production has advanced again.",
+    "Use a new original v5 actual-host rehearsal/prepare/prepublish/single publication/verify3-inactive handoff only for the exact reviewed current release.",
+    "Require dashboard-only live historical Tabby acceptance after publication; avoid entering the operational workspace because its new freshness lifecycle can trigger financial refresh."
   ],
   "source_branch": "codex/tabby-weekly-fee-estimates-r4-20261123",
   "source_A": "1725672eeccb1272f183c376b9267e363a028325",
@@ -264,12 +265,28 @@
     "source_temporal_inconsistency_reproduced": true
   },
   "followup": {
-    "branch": "codex/tabby-historical-fee-clock-20261123",
-    "base": "76efd2c3aa1563939ee3e27a9ae03f27fc1a3d43",
-    "state": "isolated two-file source fix passed244 integrated backend tests; final independent source review pending",
-    "scope": "Tabby-only validation against request-pinned evidence_as_of; unchanged report/week anchor, actual tariff dates, money/identity guards and other providers. No broad missing-fee or refund-normalization extension.",
+    "branch": "codex/tabby-historical-fee-clock-r2-20261123",
+    "pr": 2091,
+    "base": "422fffc8fb9c381165cc76b1ded5ca595773ce8e",
+    "source_A": "c464eb01f3b4201da58c664312d009617e3f1766",
+    "intent_B": "be0c1c67569e5fb59104ccdd43aaa44169fe0ff5",
+    "intent_B_tree": "756a1285dfe837ebdab6c6a4a65750b59952227a",
+    "state": "Reviewed and frozen intent-only B; exact-B CI and adapter proofs pending; no host action",
+    "scope": "Tabby-only payment-event validation against request-pinned evidence_as_of; unchanged report/week anchor, event-date tariffs, amount/identity guards and other providers.",
     "publication": false,
     "lease_created": false,
-    "root_verification": "evidence/historical-clock-followup/root-backend.json"
+    "production_changed_by_followup": false,
+    "root_verification": "evidence/historical-clock-followup/root-backend-r2.json",
+    "root_passed": 244,
+    "independent_candidate_audit": "INDEPENDENT-HISTORICAL-CLOCK-R2-CANDIDATE.json",
+    "candidate_sha256": "ff1f5f912fc9d828d12c8aa7766018f21006ad36372c8d70caaee34d693b95f9",
+    "source_readiness_run": 45222262450,
+    "source_candidate_artifact": 14841641946,
+    "ci_candidate_byte_identical": true,
+    "runtime_id": "rg5-c49251181bb276063220b420205fc39aacef5d7e2f5e124192062f53f71fadce",
+    "superseded_pr": 2090,
+    "superseded_pr_closed_unmerged": true,
+    "foreign_handoff": "PR2087 actual-host capacity recovery/publication in progress. No competing sharedhost action; wait for verified closure and fresh original guard/ref/coordination checks.",
+    "raw_log_integrity_note": "Original two-clean-builds.log contains six tool-emitted trailing whitespace lines. Raw bytes are preserved to retain verified hashes; whitespace check applies to authored evidence files."
   }
 }

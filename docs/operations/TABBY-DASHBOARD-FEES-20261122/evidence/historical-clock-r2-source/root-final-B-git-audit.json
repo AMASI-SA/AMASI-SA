@@ -1,0 +1,9 @@
+{
+  "intent_B": "be0c1c67569e5fb59104ccdd43aaa44169fe0ff5",
+  "tree": "756a1285dfe837ebdab6c6a4a65750b59952227a",
+  "sole_parent": "c464eb01f3b4201da58c664312d009617e3f1766",
+  "only_changed_path": "release/release-intent-v5.json",
+  "exact_candidate_bytes": true,
+  "original_load_and_git_validators_pass": true,
+  "local_clean_HEAD_B": true
+}

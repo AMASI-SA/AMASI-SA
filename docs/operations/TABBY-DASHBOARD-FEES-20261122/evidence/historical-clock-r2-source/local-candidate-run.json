@@ -1,0 +1,79 @@
+{
+  "source_A": "c464eb01f3b4201da58c664312d009617e3f1766",
+  "base": "422fffc8fb9c381165cc76b1ded5ca595773ce8e",
+  "steps": [
+    {
+      "step": "frozen-install",
+      "argv": [
+        "/workspace/scratch/a719d7c39de9/tabby-python-env/bin/python",
+        "-B",
+        "scripts/frontend_release_toolchain.py",
+        "exec",
+        "--",
+        "yarn",
+        "--cwd",
+        "frontend",
+        "install",
+        "--frozen-lockfile",
+        "--non-interactive"
+      ],
+      "exit_status": 0,
+      "log": "frozen-install.log",
+      "bytes": 7316,
+      "sha256": "3f5810538ccf715717c965916c734add75558d53b54a280049afe904b0cf6055"
+    },
+    {
+      "step": "two-clean-builds",
+      "argv": [
+        "/workspace/scratch/a719d7c39de9/tabby-python-env/bin/python",
+        "-B",
+        "scripts/frontend_release_toolchain.py",
+        "exec",
+        "--",
+        "yarn",
+        "--cwd",
+        "frontend",
+        "build:release"
+      ],
+      "exit_status": 0,
+      "log": "two-clean-builds.log",
+      "bytes": 71990,
+      "sha256": "f3de62ce9826f12ace683e4a5365f3c70e4905e26432a70d148a20f33b89b7da"
+    },
+    {
+      "step": "verify-artifact",
+      "argv": [
+        "/workspace/scratch/a719d7c39de9/tabby-python-env/bin/python",
+        "-B",
+        "scripts/verify_frontend_build.py",
+        "--expected-git-sha",
+        "c464eb01f3b4201da58c664312d009617e3f1766"
+      ],
+      "exit_status": 0,
+      "log": "verify-artifact.log",
+      "bytes": 134106,
+      "sha256": "b6f98b75385a8c7afc21106940c11569e5e63f3f07f9f18c77ed7394fb8c5479"
+    },
+    {
+      "step": "freeze-candidate",
+      "argv": [
+        "/workspace/scratch/a719d7c39de9/tabby-python-env/bin/python",
+        "-B",
+        "scripts/emergent_deployment_adapter.py",
+        "freeze-intent",
+        "--source-git-sha",
+        "c464eb01f3b4201da58c664312d009617e3f1766",
+        "--source-base-git-sha",
+        "422fffc8fb9c381165cc76b1ded5ca595773ce8e",
+        "--branch",
+        "hotfix/prod-snap-meta-final",
+        "--output",
+        "/workspace/scratch/a719d7c39de9/tabby-release-evidence/docs/operations/TABBY-DASHBOARD-FEES-20261122/evidence/historical-clock-r2-source/release-intent-v5.json"
+      ],
+      "exit_status": 0,
+      "log": "freeze-candidate.log",
+      "bytes": 1508720,
+      "sha256": "757f1b0fed0c9a348550f2619e8d5d1935510f82c1924a6f839567f16e7de3fa"
+    }
+  ]
+}
