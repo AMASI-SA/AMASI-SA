@@ -5,6 +5,8 @@ import {operationalApi as api, messageFor, requestId} from './api';
 import {Field, Notice} from './OpeningBalances';
 import {InventoryProductPicker,InventoryProductOptions,InventoryProductPhoto} from '../../components/inventory/suite/InventoryProductFields';
 import {inventoryConfiguration,inventoryConfigDescription,validateInventoryConfiguration} from '../../lib/inventoryProductConfiguration';
+import InventoryOptionRoles from '../../components/inventory/suite/InventoryOptionRoles';
+import {applyInventoryOptionDefinition,inventoryOptionPolicyRevision} from '../../lib/inventoryOptionPolicy';
 
 const unitLabel = unit => ({piece: 'قطعة', m: 'متر', kg: 'كيلوجرام'}[unit] || unit);
 
@@ -23,6 +25,8 @@ export default function StandaloneInventoryEntry({context}) {
   const [message, setMessage] = useState(''), [kind, setKind] = useState('product');
   const [search, setSearch] = useState(''), [line, setLine] = useState(null);
   const [busy, setBusy] = useState(false), [version, setVersion] = useState(0);
+  const [policyBusy, setPolicyBusy] = useState(false), [policyOpen, setPolicyOpen] = useState(false);
+  const [policyReview, setPolicyReview] = useState(false);
   const lock = useRef(false), mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => {
@@ -35,8 +39,27 @@ export default function StandaloneInventoryEntry({context}) {
     return () => { alive = false; };
   }, [allowed, version]);
   const update = patch => setLine(current => ({...current, ...patch}));
+  function applyOptionPolicy(result) {
+    setCatalog(current => ({...current, products:current.products.map(product => product.id === result.product_id ? {...product,...result.product} : product)}));
+    setLine(current => current?.id === result.product_id ? applyInventoryOptionDefinition(current, result.product) : current);
+    setPolicyReview(false);
+  }
+  async function reviewOptionPolicy() {
+    if (lock.current || policyBusy || policyOpen || !allowed || !line) return;
+    lock.current = true; setBusy(true); setError('');
+    try {
+      const result = await api.inventoryOptionRoles(line.id);
+      if (result?.product_id !== line.id || result.product?.id !== line.id || !Array.isArray(result.product.options)
+          || !Number.isSafeInteger(result.product.inventory_option_policy_revision)) throw Error();
+      if (mounted.current) {
+        applyOptionPolicy(result);
+        setMessage('طُبّق التصنيف الحالي. راجع مواصفات القطعة ثم احفظها؛ احتفظنا بالكمية والتكلفة والموقع.');
+      }
+    } catch (e) {if (mounted.current) setError(messageFor(e));}
+    finally {lock.current = false; if (mounted.current) setBusy(false);}
+  }
   async function toggleWriter() {
-    if (lock.current || !catalog || !allowed) return;
+    if (lock.current || policyBusy || policyOpen || !catalog || !allowed) return;
     lock.current = true; setBusy(true); setError('');
     try {
       await api.standaloneInventoryControl({revision: catalog.control_revision, paused: !catalog.writer_disabled});
@@ -45,10 +68,10 @@ export default function StandaloneInventoryEntry({context}) {
     finally { lock.current = false; if (mounted.current) setBusy(false); }
   }
   async function save() {
-    if (lock.current || !allowed || !catalog || catalog.writer_disabled || recovery.error) return;
+    if (lock.current || policyBusy || policyOpen || policyReview || !allowed || !catalog || catalog.writer_disabled || recovery.error) return;
     lock.current = true; setBusy(true); setError(''); setMessage('');
+    let command = pending;
     try {
-      let command = pending;
       if (!command) {
         if (!line || !line.location_id || !/^\d+(\.\d{1,2})?$/.test(line.unit_cost) || Number(line.unit_cost) <= 0
             || !/^\d+(\.\d{1,6})?$/.test(line.quantity) || Number(line.quantity) <= 0 || Number(line.quantity) > 100000
@@ -56,6 +79,7 @@ export default function StandaloneInventoryEntry({context}) {
         if(line.kind==='product')validateInventoryConfiguration(line,line.purchase_configuration);
         const body = {request_id: requestId(), lines: [{kind: line.kind, item_id: line.id,
           location_id: line.location_id, quantity: Number(line.quantity), unit_cost: line.unit_cost,
+          ...(line.kind === 'product' ? {inventory_option_policy_revision:inventoryOptionPolicyRevision(line)} : {}),
           purchase_configuration: line.purchase_configuration}]};
         const preview = await api.previewStandaloneInventory(body);
         if (!preview?.preview_hash || preview.writer_disabled || preview.fulfillment_eligible !== false) throw Error('تعذر التحقق من بيانات المخزون؛ لم يتم الحفظ.');
@@ -73,8 +97,23 @@ export default function StandaloneInventoryEntry({context}) {
         setMessage('تم تثبيت الكمية ونقل المنتج إلى جدول المخزون. يمكنك إضافة المنتج التالي.');
       }
     } catch (e) {
-      if (e.response?.status === 409 && e.response?.data?.detail?.code === 'opening_inventory_preview_changed') {
-        localStorage.removeItem(storageKey); if (mounted.current) setPending(null);
+      const code = e.response?.data?.detail?.code;
+      if (e.response?.status === 409 && ['opening_inventory_preview_changed','inventory_option_policy_changed'].includes(code)) {
+        localStorage.removeItem(storageKey);
+        if (mounted.current) {
+          setPending(null); setVersion(value => value + 1);
+          if (code === 'inventory_option_policy_changed') {
+            setPolicyReview(true);
+            setLine(current => {
+              if (current) return current;
+              const requested = command?.lines?.[0];
+              if (!requested) return null;
+              const product = catalog.products.find(item => item.id === requested.item_id);
+              return {...product,...requested,id:requested.item_id,name:product?.name || 'الصنف السابق',
+                quantity:String(requested.quantity),inventory_option_policy_revision:requested.inventory_option_policy_revision ?? 0};
+            });
+          }
+        }
       }
       if (mounted.current) setError(e.response ? messageFor(e) : e.message);
     } finally { lock.current = false; if (mounted.current) setBusy(false); }
@@ -87,23 +126,27 @@ export default function StandaloneInventoryEntry({context}) {
     <Notice error={error}/>{message && <p role="status">{message}</p>}
     {!catalog && <button disabled={busy} onClick={() => setVersion(v => v + 1)}>تحميل بيانات المخزون</button>}
     {catalog && <>
-      <div className="mz-stock-state"><strong>{catalog.writer_disabled?'إدخال المخزون المستقل متوقف.':'إدخال المخزون المستقل مفعّل.'}</strong><details><summary>إدارة الإدخال</summary><p>يخص هذا التحكم الإدخال الأولي المستقل فقط؛ الربط المحاسبي والتشغيل يبقيان وفق إعداداتهما الحالية.</p><button disabled={busy || (!!pending && !catalog.writer_disabled)} onClick={toggleWriter}>{catalog.writer_disabled ? 'تفعيل إدخال المخزون المستقل' : 'إيقاف إدخال المخزون المستقل'}</button></details></div>
+      <div className="mz-stock-state"><strong>{catalog.writer_disabled?'إدخال المخزون المستقل متوقف.':'إدخال المخزون المستقل مفعّل.'}</strong><details><summary>إدارة الإدخال</summary><p>يخص هذا التحكم الإدخال الأولي المستقل فقط؛ الربط المحاسبي والتشغيل يبقيان وفق إعداداتهما الحالية.</p><button disabled={busy || policyBusy || policyOpen || (!!pending && !catalog.writer_disabled)} onClick={toggleWriter}>{catalog.writer_disabled ? 'تفعيل إدخال المخزون المستقل' : 'إيقاف إدخال المخزون المستقل'}</button></details></div>
       {!catalog.locations.length && <p role="alert">أنشئ المخزن والدواليب أولًا من <Link to="/components-v2?workspace=warehouse">إدارة المخازن</Link>؛ تظهر هنا مواقع المخازن المستقلة فقط.</p>}
       {pending && <div role="alert">توجد عملية حفظ بانتظار تأكيد نتيجتها. إعادة المحاولة بنفس المرجع تمنع تكرار الكمية.<button disabled={busy || catalog.writer_disabled} onClick={save}>إعادة محاولة الحفظ</button></div>}
-      <fieldset className="op-stock-form" disabled={busy || !!pending || !!recovery.error || catalog.writer_disabled || !catalog.locations.length}>
+      <fieldset className="op-stock-form" disabled={busy || policyBusy || !!pending || !!recovery.error || catalog.writer_disabled || !catalog.locations.length}>
         <legend>إدخال منتج واحد</legend>
         {!line ? <>
           <Field label="نوع الصنف"><select value={kind} onChange={e => {setKind(e.target.value); setSearch('');}}><option value="product">منتجات</option><option value="component">مكونات</option></select></Field>
           <InventoryProductPicker items={matches} query={search} onQueryChange={setSearch} initialOpen label="بحث بالاسم أو الرقم المخزني" onPick={p=>setLine({...p,kind,quantity:'1',unit_cost:'',location_id:'',purchase_configuration:kind==='product'&&p.configuration_contract_version===2?inventoryConfiguration(p):{state:kind==='product'?'ready':'raw',selections:[],inputs:[]}})}/>
         </> : <div className="mz-purchase-line">
-          <div className="mz-product-selected"><InventoryProductPhoto product={line}/><div><h3>{line.name}</h3><span><Check size={14} aria-hidden="true"/> مختار · الرقم المخزني <bdi>{line.sku||'غير محدد'}</bdi></span></div><button type="button" onClick={()=>setLine(null)}>تغيير الصنف</button></div>
+          <div className="mz-product-selected"><InventoryProductPhoto product={line}/><div><h3>{line.name}</h3><span><Check size={14} aria-hidden="true"/> مختار · الرقم المخزني <bdi>{line.sku||'غير محدد'}</bdi></span></div><button type="button" disabled={policyOpen} onClick={()=>{setLine(null);setPolicyReview(false);}}>تغيير الصنف</button></div>
+          {line.kind==='product'&&(!!line.options?.length || !!line.configuration_issues?.length || policyReview)&&<InventoryOptionRoles key={line.id} product={line} disabled={busy || !!pending || catalog.writer_disabled}
+            loadPolicy={api.inventoryOptionRoles} savePolicy={api.saveInventoryOptionRoles} onApply={applyOptionPolicy}
+            onBusyChange={setPolicyBusy} onEditingChange={setPolicyOpen}/>}
+          {policyReview&&<div className="mz-option-role-review" role="alert">تغيّر تصنيف الخيارات قبل تثبيت المخزون. راجع التصنيف الحالي ثم احفظ المنتج. <button type="button" disabled={policyOpen} onClick={reviewOptionPolicy}>مراجعة التصنيف الحالي</button></div>}
           {line.kind==='product'&&<InventoryProductOptions product={line} config={line.purchase_configuration} onChange={config=>update({purchase_configuration:config})}/>}
           <Field label="موقع التخزين"><select value={line.location_id} onChange={e=>update({location_id:e.target.value})}><option value="">اختر الموقع</option>{catalog.locations.map(l=><option key={l.id} value={l.id}>{l.name||l.code}{l.warehouse_name?' · '+l.warehouse_name:''}</option>)}</select></Field>
           <div className="mz-stock-amounts">
           <Field label={`الكمية (${unitLabel(line.unit || 'piece')})`}><input inputMode="decimal" value={line.quantity} onChange={e => update({quantity: e.target.value})}/></Field>
           <Field label="تكلفة الوحدة بالريال"><input inputMode="decimal" value={line.unit_cost} onChange={e => update({unit_cost: e.target.value})}/></Field>
           <div className="mz-stock-total"><span>إجمالي التكلفة</span><strong>{Number(line.quantity)>0&&Number(line.unit_cost)>0?(Number(line.quantity)*Number(line.unit_cost)).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):'0.00'} ر.س</strong></div></div>
-          <div className="mz-stock-actions"><button className="op-primary" aria-label="حفظ المنتج في المخزون" onClick={save}>{busy?'جارٍ تأكيد الحفظ…':'حفظ المنتج في المخزون'}</button><button onClick={()=>setLine(null)}>إلغاء الإدخال</button></div>
+          <div className="mz-stock-actions"><button className="op-primary" aria-label="حفظ المنتج في المخزون" disabled={policyOpen || policyReview} onClick={save}>{busy?'جارٍ تأكيد الحفظ…':'حفظ المنتج في المخزون'}</button><button disabled={policyOpen} onClick={()=>{setLine(null);setPolicyReview(false);}}>إلغاء الإدخال</button></div>
         </div>}
       </fieldset>
       <div className="op-table"><table><caption>آخر 100 إضافة مثبتة — جميع الكميات في صفحة المخزون الحالي</caption>
