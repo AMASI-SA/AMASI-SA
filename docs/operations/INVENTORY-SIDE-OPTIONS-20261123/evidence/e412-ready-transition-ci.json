@@ -1,0 +1,99 @@
+{
+  "observed_at": "2026-11-23 15:04:25 UTC",
+  "source_git_sha": "e412bc630de7d7e8eaf7dd03f6c1d09e59c18367",
+  "event": "ready_for_review",
+  "result": "PASS",
+  "workflow_run_success_count": 24,
+  "check_success_count": 42,
+  "check_conditionally_skipped_count": 10,
+  "pending_count": 0,
+  "failure_count": 0,
+  "additional_runs": [
+    {
+      "id": 45200112788,
+      "name": "Snapchat Direct Active Publication",
+      "head_sha": "e412bc630de7d7e8eaf7dd03f6c1d09e59c18367",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45200112788"
+    },
+    {
+      "id": 45200112492,
+      "name": "Snapchat Settings Management V2",
+      "head_sha": "e412bc630de7d7e8eaf7dd03f6c1d09e59c18367",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45200112492"
+    },
+    {
+      "id": 45200112455,
+      "name": "MZ2 Accounting Module",
+      "head_sha": "e412bc630de7d7e8eaf7dd03f6c1d09e59c18367",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45200112455"
+    }
+  ],
+  "additional_checks": [
+    {
+      "id": 137781190478,
+      "name": "Frontend Snapchat settings tests and build",
+      "status": "completed",
+      "conclusion": "skipped",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45200112492/job/137781190478"
+    },
+    {
+      "id": 137781189625,
+      "name": "Backend settings and zero-write regressions",
+      "status": "completed",
+      "conclusion": "skipped",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45200112492/job/137781189625"
+    },
+    {
+      "id": 137781165665,
+      "name": "Publication backend and existing write guards",
+      "status": "completed",
+      "conclusion": "skipped",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45200112788/job/137781165665"
+    },
+    {
+      "id": 137781164665,
+      "name": "Publication frontend and existing media flow",
+      "status": "completed",
+      "conclusion": "skipped",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45200112788/job/137781164665"
+    },
+    {
+      "id": 137781039131,
+      "name": "Fail-closed settings and multi-account scope guard",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45200112492/job/137781039131"
+    },
+    {
+      "id": 137781039065,
+      "name": "scope",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45200112788/job/137781039065"
+    },
+    {
+      "id": 137781038446,
+      "name": "Accounting backend contract",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45200112455/job/137781038446"
+    },
+    {
+      "id": 137781038175,
+      "name": "Manual tax and atomic recovery (real isolated Mongo)",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45200112455/job/137781038175"
+    },
+    {
+      "id": 137781037798,
+      "name": "Accounting frontend contract",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45200112455/job/137781037798"
+    }
+  ]
+}

@@ -48,6 +48,8 @@ Store a local product policy separately from provider options. Preserve order an
 
 All 21 exact-source workflow runs succeeded. At the completed CI snapshot, 37 checks passed and 6 jobs were skipped by their explicit scope/release-intent conditions; no check failed or remained pending. The temporary CodeQL aggregate warning cleared when Python analysis completed.
 
+Marking PR2084 ready for review triggered three additional same-source workflow executions. These also succeeded: the final state is **24 successful workflow executions, 42 passed checks and 10 conditionally skipped checks**, with zero pending or failed checks. The repeated real-Mongo manual-tax/atomic-recovery gate passed. See `evidence/e412-ready-transition-ci.json` for exact IDs and observation time.
+
 The isolated MongoDB 8.0.12 Operational Balance Backend job passed **6,810 tests with 90 subtests**, followed by **106 demand-read tests** and **16 shipping tests with 18 subtests**. Downloaded artifact SHA-256 is `09c3615087f9f076bba43a19e3764645b057c61eacc9d0113b2cb9c9e601ae3f`. Its exact source and tree files match the checkpoint above. XML inspection found zero failed, errored or skipped cases; it includes all 34 role-policy API/legacy cases, 24 side-option cases, 7 service-conflict cases, 23 supplier-projection cases, 19 native purchase-contract cases, 29 linked-receipt cases and 29 payment-allocation cases.
 
 The operational frontend passed **1,699 tests across 106 suites**, including all 158 cases in the eight directly affected suites. The sandboxed CI inventory purchase/later-receiving browser flow passed all **7 desktop/mobile scenarios**. This browser flow is regression evidence for purchase and receiving, not a dedicated visual review of the new role editor.
