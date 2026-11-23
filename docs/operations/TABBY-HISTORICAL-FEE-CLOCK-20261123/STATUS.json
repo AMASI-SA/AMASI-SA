@@ -1,0 +1,140 @@
+{
+  "task_id": "TABBY-HISTORICAL-FEE-CLOCK-20261123",
+  "status": "reviewed_source_candidate_not_yet_published",
+  "updated_at_utc": "2026-11-23T16:54:58.378922+00:00",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/tabby-historical-fee-clock-r2-20261123",
+  "production_branch": "hotfix/prod-snap-meta-final",
+  "base": "422fffc8fb9c381165cc76b1ded5ca595773ce8e",
+  "base_tree": "1173fc8303c6c498448b26f62cff7bffba321bfc",
+  "source_identity": "Containing source A SHA will be recorded in PR metadata and the separate evidence branch. Keep this source record immutable after freezing A/B.",
+  "publication_authorization": "Owner explicitly requested completion and publication; authorization persists.",
+  "requirement": "Historical Tabby fees must use later known payment and accepted statement evidence while retaining the selected report cohort and previous seven completed Riyadh days.",
+  "problem": "The accepted-statement path already uses request evidence_as_of. Native capture, executed refund, dated-policy and average validation still used report as_of, rejecting otherwise valid known events after a historical report day.",
+  "changed_files": [
+    "backend/dashboard_payment_fees.py",
+    "backend/tests/test_dashboard_weekly_payment_fees.py",
+    "docs/operations/TABBY-HISTORICAL-FEE-CLOCK-20261123/STATUS.json"
+  ],
+  "file_sha256": {
+    "backend/dashboard_payment_fees.py": "7590be5023d39ade4c54fdd2c12adf638ea12319ee41aff090da1c9ee73e402d",
+    "backend/tests/test_dashboard_weekly_payment_fees.py": "f89e8c9c35d7e288ffb64582f3ed04ad9758b707311cf939d7fce0273d7e3152"
+  },
+  "implemented": [
+    "Use request-pinned evidence_as_of for all eight Tabby payment-event upper-bound checks.",
+    "Preserve the report as_of for the selected cohort and weekly source window.",
+    "Select capture and refund tariffs by their actual event dates.",
+    "Retain historical cutoff behavior for other providers and deterministic direct contexts without evidence_as_of."
+  ],
+  "preserved": [
+    "Actual statement precedence and owner/source/revision/coverage checks.",
+    "Partial-payment, provider, currency, amount, account and duplicate-identity guards.",
+    "Existing average eligibility, operational fallback period, refund economics and separate net/VAT rounding.",
+    "Read-only dashboard calculation, source documents, current frontend demand lifecycle and unrelated Production source."
+  ],
+  "excluded": [
+    "Withdrawn ledger-table restoration.",
+    "Broad fee-availability fallback expansion or native-refund normalization.",
+    "Live financial refresh/backfill, settlement upload, provider or ledger writes."
+  ],
+  "verification": [
+    {
+      "name": "Author baseline reproduction",
+      "result": "Three intended failures on unchanged base: explicit capture date invalid, complete paid metadata capture conflict, partial paid_at timestamp conflict.",
+      "exit_status": 1,
+      "expected_failure": true
+    },
+    {
+      "name": "Same reproduction after source fix",
+      "result": "3 passed;42 deselected.",
+      "exit_status": 0
+    },
+    {
+      "name": "Expanded temporal regression cases",
+      "result": "29 passed;41 deselected.",
+      "exit_status": 0
+    },
+    {
+      "name": "Author affected suites",
+      "result": "144 passed;7 existing deprecation warnings.",
+      "exit_status": 0
+    },
+    {
+      "name": "Earlier D-based root combined integration/regression",
+      "result": "244 passed;7 existing deprecation warnings;13.75 seconds;zero failed/skipped.",
+      "exit_status": 0,
+      "evidence_branch": "codex/tabby-weekly-fees-release-evidence-20261122",
+      "evidence_commit": "bff7fbd385f4b7b85b9120851c92c6267029dc67",
+      "report": "docs/operations/TABBY-DASHBOARD-FEES-20261122/evidence/historical-clock-followup/root-backend.json",
+      "log_sha256": "5af4858408f0edc6f0498c62c7f2f8bb1e0dd79d86f721445d5c902629820882"
+    },
+    {
+      "name": "Independent final source/test-oracle review",
+      "result": "PASS at both exact file hashes. All eight paths covered; event-date policy selection, weekly window and other providers preserved. No blocking finding.",
+      "kind": "Read-only review; author suite not duplicated"
+    },
+    {
+      "name": "Whitespace and scope",
+      "result": "git diff --check passed;only intended two runtime/test paths plus this status record.",
+      "exit_status": 0
+    },
+    {
+      "name": "Fresh R2 current-base integrated regression",
+      "result": "244 passed;7 existing deprecation warnings;13.71seconds;zero failed/skipped. Exact reviewed two-file hashes unchanged.",
+      "exit_status": 0,
+      "base": "422fffc8fb9c381165cc76b1ded5ca595773ce8e",
+      "log_sha256": "b63fe20bf43e03eac8dad70f72aa52f56c734c29dba93d408a489223243d5c55",
+      "evidence_path": "docs/operations/TABBY-DASHBOARD-FEES-20261122/evidence/historical-clock-followup/root-backend-r2.log"
+    }
+  ],
+  "acceptance_coverage": [
+    "Historical captures in explicit, full paid and partial paid_at forms.",
+    "Exact evidence-cutoff acceptance; microsecond-future, next-day and before-creation rejection.",
+    "Capture-date tariff despite different report/evidence-date tariffs.",
+    "Later executed refund using its refund-date policy.",
+    "Money/provider/currency/duplicate conflicts retained.",
+    "Canonical historical report repricing after later accepted statement, preserving sales, week, range and stored orders."
+  ],
+  "prior_release": {
+    "pr": 2086,
+    "published": true,
+    "verified": true,
+    "checks": 3,
+    "guard_inactive": true,
+    "evidence_commit": "bff7fbd385f4b7b85b9120851c92c6267029dc67",
+    "raw_verifier_sha256": "f4b57349a8da68c70c497ec80992c01cfab42cad4231d3b70bd1ea45297339a6"
+  },
+  "live_acceptance": {
+    "historical_tabby_complete": false,
+    "exact_live_failure_cause_proven": false,
+    "same_date_saved_operational_rows_all_numeric": true,
+    "note": "This source-proven defect is reproduced with isolated fixtures. The exact live historical cause and final historical numeric result still require verification after a separately reviewed follow-up release. No live amounts/counts or order/customer identifiers retained."
+  },
+  "release": {
+    "production_changed_by_this_followup": false,
+    "merged": false,
+    "published": false,
+    "lease_created": false,
+    "intent_frozen": false,
+    "note": "Do not reuse PR2086 intent or lease. New source A, intent-only B, exact-B CI and original actual-host v5 handoff are required.",
+    "foreign_handoff": "PR2087 owner is preparing the actual Emergent rehearsal/publication. This follow-up performs only isolated source/CI work until that original handoff is complete and fresh coordination/guard checks permit another release."
+  },
+  "next_safe_actions": [
+    "Checkpoint canonical source A and open its separate PR; verify exact remote SHA/tree.",
+    "Run governed A/B candidate build and source/intent audit, then freeze intent-only B.",
+    "Complete all applicable exact-B gates and both original clean-clone adapter proofs.",
+    "Fresh coordination/ref/actual-host guard checks before any separately authorized serial publication; preserve unrelated files and leases.",
+    "After new explicit completion run original verify once and confirm three matching probes plus inactive guard; require live historical Tabby acceptance."
+  ],
+  "integration": {
+    "previous_source": "73e75c7fcad1a57ae0b023f4ccdb510c65f45d8d",
+    "previous_pr": 2090,
+    "previous_pr_closed_unmerged": true,
+    "reason": "Production advanced via PR2087 during source checkpointing. Preserve prior source and create a fresh direct source above the current reviewed base.",
+    "intervening_paths": 30,
+    "path_overlap": [],
+    "all_intervening_paths_preserved": true,
+    "two_reviewed_runtime_test_files_preserved": true,
+    "independent_review": "PASS: exactly30 intervening paths, zero overlap, all36 checked fee/canonical-reader/demand/auth/dashboard dependencies byte-identical; new refresh instrumentation preserves existing financial and lease admission."
+  }
+}
