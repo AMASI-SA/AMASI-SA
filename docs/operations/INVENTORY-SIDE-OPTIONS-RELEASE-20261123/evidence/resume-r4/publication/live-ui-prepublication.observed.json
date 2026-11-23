@@ -1,0 +1,9 @@
+{
+  "observed_before_publication": true,
+  "url": "https://mezansalla.com/inventory-v2?tab=opening",
+  "authenticated": true,
+  "inventory_entry_page_loaded": true,
+  "standalone_writer_enabled": true,
+  "preexisting_balance_refresh_warning_visible": true,
+  "no_policy_stock_invoice_receipt_payment_writes": true
+}

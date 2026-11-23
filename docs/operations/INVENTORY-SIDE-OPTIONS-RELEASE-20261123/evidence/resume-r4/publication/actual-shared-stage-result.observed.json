@@ -1,0 +1,32 @@
+{
+  "artifact_tree_sha256": "df85c5736ec64571f44a5db506cb0daf34c1ac584ca3115e4e3ce86ebe80898c",
+  "deployment_git_sha": "5cfaac21a1775a0d0761d05aa571f94dbfc02d32",
+  "elapsed_seconds": 87.783,
+  "exit_code": 0,
+  "failed_result_sha256": "b2b630203cd266f10d2239abcad872804537f914c592dafbc5ebde744d7e5561",
+  "generated_backups_preserved": true,
+  "global_path_membership_unchanged": true,
+  "guard": {
+    "active": false
+  },
+  "intent_git_sha": "a92283678a25494c7d1870cd1675b8f30847aa6a",
+  "inventory_path_count": 48315,
+  "mongo_process": {
+    "comm": "mongod",
+    "dbpath_matches_expected": true,
+    "pid": 311,
+    "start_ticks": 9793546
+  },
+  "original_helper_sha256": "d3206d932cd34dfdced81c7ffec89c1fdf8bfcb6c92d7ca59e0f454756c35bae",
+  "original_static_hashes_preserved": true,
+  "release_id": "rg5-ffe0d4437c779b1e455f084be407f8f2d24735f5bf8e994f77c5bf4cbeb1c55f",
+  "runtime_identity_matches": true,
+  "source_git_sha": "deeefceffd9a1e37968513ac4f3833314bb415fd",
+  "static_path_count": 39615,
+  "tracked_clean": true,
+  "type_and_mode_unchanged": true,
+  "volatile_content_hashes_exempted": 8700,
+  "volatile_inode_change_count": 2,
+  "volatile_regular_file_count": 8700,
+  "volatile_size_change_count": 5
+}

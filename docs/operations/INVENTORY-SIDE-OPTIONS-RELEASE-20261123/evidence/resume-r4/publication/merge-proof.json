@@ -1,0 +1,14 @@
+{
+  "deployment_git_sha": "5cfaac21a1775a0d0761d05aa571f94dbfc02d32",
+  "tree_sha": "868b8595dfeba299bf1f2dfaf1fc32b82d357033",
+  "parents": [
+    "28f6d4ca0fc2b7ea7f140432d8e32c768823b6a4",
+    "a92283678a25494c7d1870cd1675b8f30847aa6a"
+  ],
+  "source_git_sha": "deeefceffd9a1e37968513ac4f3833314bb415fd",
+  "source_tree_sha": "a7317c4aa62c3d2266937bf60d4f0b2c4f62a27d",
+  "pull_request": 2097,
+  "merged": true,
+  "merge_method": "merge",
+  "verified_against_github_git_objects": true
+}
