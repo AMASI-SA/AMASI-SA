@@ -68,6 +68,14 @@ jobs:
           python -B -m pytest --noconftest -q
           backend/tests/test_operational_balance*.py
           backend/tests/test_inventory_option_configuration.py
+          backend/tests/test_inventory_option_policy.py
+          backend/tests/test_inventory_side_options.py
+          backend/tests/test_inventory_option_binding_conflicts.py
+          backend/tests/test_supplier_option_service_policy.py
+          backend/tests/test_purchase_configuration_contract.py
+          backend/tests/test_preparation_piece_operations.py
+          backend/tests/test_preparation_piece_line_services.py
+          backend/tests/test_product_fulfillment_rules.py
           backend/tests/test_inventory_payment_allocation_lineage.py
           backend/tests/test_customer_inventory_unified_activity.py
           backend/tests/test_operational_inventory_purchase_receipts.py
@@ -156,6 +164,13 @@ jobs:
                         'test_operational_inventory_purchase_receipts',
                         'test_operational_inventory_payment_allocation'):
               assert any(suite in c.get('classname', '') for c in cases), suite + ' not collected'
+          for suite, minimum in (('test_inventory_option_policy', 34),
+                                 ('test_inventory_side_options', 24),
+                                 ('test_inventory_option_binding_conflicts', 7),
+                                 ('test_supplier_option_service_policy', 23),
+                                 ('test_purchase_configuration_contract', 19)):
+              found = [c for c in cases if suite in c.get('classname', '').split('.')]
+              assert len(found) >= minimum, suite + ' option-role acceptance missing'
           for suite in ('test_operational_workspace_account_history',
                         'test_operational_movement_reversal_effects',
                         'test_operational_movement_reversal_routes',
@@ -340,6 +355,8 @@ jobs:
           '**/src/components/fulfillment/PreparationWorkDashboard.loading.test.jsx'
           '**/src/lib/inventoryProductConfiguration.test.js'
           '**/src/components/inventory/suite/InventoryProductFields.test.jsx'
+          '**/src/lib/inventoryOptionPolicy.test.js'
+          '**/src/components/inventory/suite/InventoryOptionRoles.test.jsx'
           --json --outputFile=operational-frontend.json
       - name: Reject missing or skipped tests
         run: |
@@ -365,6 +382,7 @@ jobs:
                                 'ApprovedEntry.test.jsx', 'ApprovedLedger.test.jsx', 'ApprovedReports.test.jsx',
                                 'ApprovedOperations.test.jsx', 'inventoryProductConfiguration.test.js',
                                 'InventoryProductFields.test.jsx', 'InventoryPurchaseDraft.test.jsx',
+                                'InventoryOptionRoles.test.jsx', 'inventoryOptionPolicy.test.js',
                                 'InventoryPurchaseReceipts.test.jsx', 'inventoryPurchaseWorkflow.test.js',
                                 'inventoryCommandStorage.test.js', 'InventoryPurchases.test.jsx',
                                 'StandaloneInventoryEntry.test.jsx']) {
@@ -374,10 +392,12 @@ jobs:
           }
           for (const [suffix, minimum] of [['demandRead.test.js', 14], ['workspaceReadHooks.test.jsx', 1],
                                           ['useDashboardCardSnapshot.test.jsx', 26],
-                                          ['PreparationWorkDashboard.loading.test.jsx', 3]]) {
+                                          ['PreparationWorkDashboard.loading.test.jsx', 3],
+                                          ['InventoryOptionRoles.test.jsx', 5],
+                                          ['inventoryOptionPolicy.test.js', 3]]) {
             const suite = r.testResults.find(s => s.name.endsWith('/' + suffix));
             if (!suite || suite.assertionResults.length < minimum)
-              throw Error('Demand lifecycle coverage missing: ' + suffix);
+              throw Error('Required UI coverage missing: ' + suffix);
           }
           JS
       - uses: actions/upload-artifact@v4

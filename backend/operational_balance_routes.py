@@ -30,6 +30,12 @@ class Input(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
 
+class InventoryOptionRoles(Input):
+    expected_revision: int = Field(ge=0, strict=True)
+    catalog_fingerprint: str = Field(pattern=r'^[a-f0-9]{64}$')
+    roles: dict[str, Literal['physical', 'customization', 'informational']] = Field(max_length=100)
+
+
 class Request(Input):
     request_id: str = Field(min_length=8, max_length=160)
 
@@ -349,6 +355,7 @@ class PurchaseConfiguration(Input):
 
 class InventoryLine(Input):
     purchase_configuration: PurchaseConfiguration | None = None
+    inventory_option_policy_revision: int | None = Field(default=None, ge=0, strict=True)
     location_id: str | None = Field(default=None, min_length=1, max_length=200)
     item_id: str = Field(min_length=1, max_length=200)
     variant_id: str | None = Field(default=None, min_length=1, max_length=200)
@@ -640,6 +647,16 @@ def make_operational_balance_router(db, current_user):
             return {'items':await catalog(db,owner,components_only=configured), 'products':await products(db,owner), 'locations':await locations(db,owner)}
 
         return await run_visible_report_read(request, read_page)
+
+    @router.get('/inventory-products/{product_id}/option-roles')
+    async def inventory_option_roles(product_id: str, user=Depends(current_user)):
+        from inventory_option_policy import get_policy
+        return await get_policy(db, user, product_id)
+
+    @router.put('/inventory-products/{product_id}/option-roles')
+    async def update_inventory_option_roles(product_id: str, payload: InventoryOptionRoles, user=Depends(current_user)):
+        from inventory_option_policy import save_policy
+        return await save_policy(db, user, product_id, payload.model_dump())
 
     @router.get('/standalone-inventory/context')
     async def standalone_inventory_context(user=Depends(current_user)):

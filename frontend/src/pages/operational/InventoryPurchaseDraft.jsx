@@ -4,6 +4,8 @@ import {Field, Notice} from './OpeningBalances';
 import {operationalApi as api, requestId, messageFor} from './api';
 import {InventoryProductPicker, InventoryProductPhoto} from '../../components/inventory/suite/InventoryProductFields';
 import {inventoryConfiguration} from '../../lib/inventoryProductConfiguration';
+import InventoryOptionRoles from '../../components/inventory/suite/InventoryOptionRoles';
+import {applyInventoryOptionDefinition,inventoryOptionPolicyChanged,inventoryOptionPolicyRevision} from '../../lib/inventoryOptionPolicy';
 import PurchaseConfiguration from './PurchaseConfiguration';
 import {inventoryIdentity} from './inventoryIdentity';
 import {assignedQuantity} from './inventoryPersonalizations';
@@ -39,8 +41,17 @@ export default function InventoryPurchaseDraft({form,onChange,catalog,locations,
   const [guard,setGuard] = useState(null), [review,setReview] = useState(false), [undo,setUndo] = useState(null);
   const [accounts,setAccounts] = useState([]), [candidates,setCandidates] = useState([]), [paymentLoading,setPaymentLoading] = useState(false);
   const [excludedPayments,setExcludedPayments] = useState([]);
+  const [optionDefinitions,setOptionDefinitions] = useState({});
+  const [policyBusy,setPolicyBusy] = useState(false), [policyOpen,setPolicyOpen] = useState(false);
   const editorRef = useRef(null), ids = useRef(0);
   const owner = context.can_manage_inventory_opening === true;
+  const currentCatalog = catalog.map(item => {
+    const saved = optionDefinitions[item.id];
+    return item.kind === 'product' && saved && inventoryOptionPolicyRevision(saved) >= inventoryOptionPolicyRevision(item) ? {...item,...saved} : item;
+  });
+  const currentDefinition = item => currentCatalog.find(product => product.kind === item?.kind && product.id === (item?.item_id || item?.id));
+  const needsPolicyReview = item => inventoryOptionPolicyChanged(item,currentDefinition(item));
+  const editorPolicyChanged = needsPolicyReview(editor);
   const initialEditor = useRef(editor ? JSON.stringify(initialDraft?.form?.lines?.find(line=>line.draft_key===editor.draft_key) || null) : '');
   const dirty = editor && JSON.stringify(editor) !== initialEditor.current;
   let total = null; try { total = purchaseTotals(form.lines); } catch {}
@@ -70,16 +81,28 @@ export default function InventoryPurchaseDraft({form,onChange,catalog,locations,
     return () => {active=false;controller.abort();};
   }, [settings.payment_mode,form.supplier_id,disabled,owner]);
   function focusEditor() {requestAnimationFrame(() => {editorRef.current?.scrollIntoView?.({block:'start',behavior:'smooth'});editorRef.current?.focus?.();});}
+  function applyOptionPolicy(result) {
+    setOptionDefinitions(current => ({...current,[result.product_id]:result.product}));
+    setEditor(current => (current?.item_id || current?.id) === result.product_id ? applyInventoryOptionDefinition(current,result.product) : current);
+    setReview(false);setError('');
+  }
+  function assertPolicyReviews() {
+    if (form.lines.some(needsPolicyReview)) throw Error('تغيّر تصنيف خيارات بعض الأصناف. افتح الأصناف المحددة وراجع مواصفاتها ثم احفظها في المسودة قبل اعتماد الفاتورة.');
+  }
   function open(item) {
     setReview(false);setError('');setMessage('');
-    const line = item.draft_key ? {...item} : {...item,item_id:item.id,quantity:'1',unit_price:'',tax:'0',location_id:'',
+    const changed = needsPolicyReview(item);
+    const source = changed ? applyInventoryOptionDefinition(item,currentDefinition(item)) : item;
+    const line = item.draft_key ? {...source} : {...source,item_id:item.id,quantity:'1',unit_price:'',tax:'0',location_id:'',
       draft_key:requestId()+':'+(++ids.current),...(Array.isArray(item.options)?{purchase_configuration:inventoryConfiguration(item)}:{})};
     setEditor(line);initialEditor.current=JSON.stringify(line);setKind(line.kind);focusEditor();
+    if (changed) setMessage('طُبّق التصنيف الحالي على الصنف المفتوح. راجع المواصفات ثم احفظ الصنف في المسودة.');
   }
-  function navigate(action) {if(dirty){setGuard({action});return;}action();}
+  function navigate(action) {if(policyOpen || policyBusy)return;if(dirty){setGuard({action});return;}action();}
   function saveLine() {
-    if (!editor) return false;
+    if (!editor || policyOpen || policyBusy) return false;
     try {
+      if (editorPolicyChanged) throw Error('تغيّر تصنيف خيارات هذا الصنف. حدّث خياراته وراجعها قبل حفظه في المسودة.');
       purchaseLinePayload(editor);
       const duplicate = form.lines.find(line => line.draft_key !== editor.draft_key && purchaseLineFingerprint(line) === purchaseLineFingerprint(editor));
       if (duplicate) throw Error('الصنف بالمواصفات نفسها موجود في المسودة؛ افتحه وعدّل كميته.');
@@ -92,11 +115,11 @@ export default function InventoryPurchaseDraft({form,onChange,catalog,locations,
   }
   function checkInvoice() {
     if (editor) {setError('احفظ الصنف المفتوح في المسودة أو ألغِ إدخاله أولًا.');focusEditor();return;}
-    try {makePurchaseCommand(form,settings,context.session_scope,accounts,candidates,()=> 'review-only');setError('');setReview(true);}
+    try {assertPolicyReviews();makePurchaseCommand(form,settings,context.session_scope,accounts,candidates,()=> 'review-only');setError('');setReview(true);}
     catch(reason) {setError(reason.message);}
   }
   return <>
-    <fieldset className="op-card mz-invoice-draft" disabled={disabled}>
+    <fieldset className="op-card mz-invoice-draft" disabled={disabled || policyBusy}>
       <legend>فاتورة شراء المخزون</legend>
       <div className="mz-invoice-meta">
         <Field label="المورد"><select value={form.supplier_id} onChange={event => {setForm({supplier_id:event.target.value});setOption({movement_id:''});}}><option value="">اختر المورد</option>{suppliers.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
@@ -106,9 +129,13 @@ export default function InventoryPurchaseDraft({form,onChange,catalog,locations,
       <Notice error={error || storageError} message={message}/>
       <section className="mz-invoice-editor" tabIndex="-1" ref={editorRef} aria-label="إضافة صنف إلى مسودة الفاتورة">
         <header><h3>{editor?'مواصفات الصنف':'إضافة صنف للفاتورة'}</h3><span>صنف واحد في كل مرة</span></header>
-        <div className="mz-invoice-kinds" aria-label="نوع المخزون">{[['product','منتج'],['component','مكوّن']].map(([value,label]) => <button type="button" key={value} aria-label={label} aria-pressed={kind===value} className={kind===value?'is-selected':''} onClick={() => navigate(() => {setKind(value);setEditor(null);setSearch('');initialEditor.current='';})}>{kind===value&&<Check size={17} aria-hidden="true"/>}{label}</button>)}</div>
-        {!editor ? <InventoryProductPicker items={catalog.filter(item=>item.kind===kind).map(item=>({...item,picker_id:inventoryIdentity(item)}))} query={search} onQueryChange={setSearch} label="بحث بالاسم أو الرمز" initialOpen optionClassName="op-tile" onPick={open}/> : <>
-          <div className="mz-product-selected"><InventoryProductPhoto product={editor}/><div><h3>{editor.name}</h3><span><Check size={14} aria-hidden="true"/> مختار · <bdi>{editor.sku || 'غير محدد'}</bdi> · {editor.unit==='piece'?'قطعة':editor.unit}</span></div><button type="button" onClick={()=>navigate(()=>{setEditor(null);initialEditor.current='';})}>تغيير الصنف</button></div>
+        <div className="mz-invoice-kinds" aria-label="نوع المخزون">{[['product','منتج'],['component','مكوّن']].map(([value,label]) => <button type="button" key={value} disabled={policyOpen} aria-label={label} aria-pressed={kind===value} className={kind===value?'is-selected':''} onClick={() => navigate(() => {setKind(value);setEditor(null);setSearch('');initialEditor.current='';})}>{kind===value&&<Check size={17} aria-hidden="true"/>}{label}</button>)}</div>
+        {!editor ? <InventoryProductPicker items={currentCatalog.filter(item=>item.kind===kind).map(item=>({...item,picker_id:inventoryIdentity(item)}))} query={search} onQueryChange={setSearch} label="بحث بالاسم أو الرمز" initialOpen optionClassName="op-tile" onPick={open}/> : <>
+          <div className="mz-product-selected"><InventoryProductPhoto product={editor}/><div><h3>{editor.name}</h3><span><Check size={14} aria-hidden="true"/> مختار · <bdi>{editor.sku || 'غير محدد'}</bdi> · {editor.unit==='piece'?'قطعة':editor.unit}</span></div><button type="button" disabled={policyOpen} onClick={()=>navigate(()=>{setEditor(null);initialEditor.current='';})}>تغيير الصنف</button></div>
+          {owner && editor.kind==='product' && (!!editor.options?.length || !!editor.configuration_issues?.length) && <InventoryOptionRoles key={editor.item_id || editor.id} product={editor} disabled={disabled}
+            loadPolicy={api.inventoryOptionRoles} savePolicy={api.saveInventoryOptionRoles} onApply={applyOptionPolicy}
+            onBusyChange={setPolicyBusy} onEditingChange={setPolicyOpen}/>}
+          {editorPolicyChanged && <div className="mz-option-role-review" role="alert">تغيّر تصنيف خيارات هذا الصنف منذ حفظ المسودة. <button type="button" disabled={policyOpen} onClick={()=>{setEditor(current=>applyInventoryOptionDefinition(current,currentDefinition(current)));setReview(false);setError('');setMessage('طُبّق التصنيف الحالي. راجع المواصفات ثم احفظ الصنف في المسودة.');}}>تحديث خيارات الصنف</button></div>}
           <PurchaseConfiguration line={editor} index={0} locations={locations} locationOptional onChange={(key,value)=>{setEditor(current=>({...current,[key]:value}));setReview(false);}}/>
           {!!editor.customization_issues?.length&&<p role="alert">خيارات المنتج غير مكتملة في ميزان 2؛ يلزم استكمال تعريف الخيارات قبل تخصيصها.</p>}
           {!editor.purchase_configuration&&editor.kind==='product'&&!!editor.customization_fields?.length&&!editor.customization_issues?.length&&<LegacyPersonalizations line={editor} onChange={setEditor}/>}
@@ -117,13 +144,13 @@ export default function InventoryPurchaseDraft({form,onChange,catalog,locations,
             <Field label={'سعر الوحدة قبل الضريبة — '+editor.name}><input inputMode="decimal" value={editor.unit_price} onChange={event=>setEditor({...editor,unit_price:event.target.value})}/></Field>
             <Field label={'ضريبة البند — '+editor.name}><input inputMode="decimal" value={editor.tax} onChange={event=>setEditor({...editor,tax:event.target.value})}/></Field>
           </div>
-          <div className="mz-invoice-actions"><button type="button" className="op-primary" onClick={saveLine}><Check size={17}/>حفظ الصنف في المسودة</button><button type="button" onClick={()=>navigate(()=>{setEditor(null);initialEditor.current='';})}>إلغاء إدخال الصنف</button></div>
+          <div className="mz-invoice-actions"><button type="button" className="op-primary" disabled={policyOpen} onClick={saveLine}><Check size={17}/>حفظ الصنف في المسودة</button><button type="button" disabled={policyOpen} onClick={()=>navigate(()=>{setEditor(null);initialEditor.current='';})}>إلغاء إدخال الصنف</button></div>
         </>}
       </section>
-      {guard&&<section className="mz-invoice-guard" role="alert"><strong>توجد تعديلات على الصنف المفتوح.</strong><div className="mz-invoice-actions"><button type="button" onClick={()=>{const action=guard.action;if(saveLine())action();}}>حفظ ومتابعة</button><button type="button" onClick={()=>{const action=guard.action;setGuard(null);action();}}>تجاهل التعديل ومتابعة</button><button type="button" onClick={()=>setGuard(null)}>البقاء في الصنف</button></div></section>}
+      {guard&&<section className="mz-invoice-guard" role="alert"><strong>توجد تعديلات على الصنف المفتوح.</strong>{policyOpen&&<p>احفظ تصنيف الخيارات أو ألغِه قبل الانتقال.</p>}<div className="mz-invoice-actions"><button type="button" disabled={policyOpen || policyBusy} onClick={()=>{if(policyOpen || policyBusy)return;const action=guard.action;if(saveLine())action();}}>حفظ ومتابعة</button><button type="button" disabled={policyOpen || policyBusy} onClick={()=>{if(policyOpen || policyBusy)return;const action=guard.action;setGuard(null);action();}}>تجاهل التعديل ومتابعة</button><button type="button" disabled={policyOpen || policyBusy} onClick={()=>setGuard(null)}>البقاء في الصنف</button></div></section>}
       <section className="mz-invoice-lines" aria-label="مسودة الفاتورة"><header><h3>مسودة الفاتورة <span>{form.lines.length} أصناف</span></h3><small>الأحدث في البداية · يمكنك فتح أي صنف لتعديله</small></header>
         {!form.lines.length&&<p className="mz-invoice-empty">أكمل مواصفات الصنف ثم احفظه هنا.</p>}
-        {form.lines.map((line,index)=><article className="mz-invoice-row" key={line.draft_key}><InventoryProductPhoto product={line}/><div className="mz-invoice-row-details"><strong>{line.name}</strong><p>{draftDescription(line)}</p><small>{line.quantity} × {line.unit_price} ر.س{line.location_id?' · '+(locations.find(item=>item.id===line.location_id)?.name || 'موقع محدد'):''}</small></div><strong className="mz-invoice-row-total">{purchaseMoney(Number(line.quantity)*purchaseCentsSafe(line.unit_price)+purchaseCentsSafe(line.tax))} ر.س</strong><div className="mz-invoice-row-actions"><button type="button" aria-label={'تعديل '+line.name+' '+(index+1)} onClick={()=>navigate(()=>open(line))}><PencilSimple size={17}/>تعديل</button><button type="button" aria-label={'حذف '+line.name+' '+(index+1)} onClick={()=>{if(editor?.draft_key===line.draft_key){setError('أغلق تعديل الصنف قبل حذفه.');return;}setUndo({line,index});setForm({lines:form.lines.filter(item=>item.draft_key!==line.draft_key)});}}><Trash size={17}/></button></div></article>)}
+        {form.lines.map((line,index)=><article className="mz-invoice-row" key={line.draft_key}><InventoryProductPhoto product={line}/><div className="mz-invoice-row-details"><strong>{line.name}</strong><p>{draftDescription(line)}</p><small>{line.quantity} × {line.unit_price} ر.س{line.location_id?' · '+(locations.find(item=>item.id===line.location_id)?.name || 'موقع محدد'):''}</small>{needsPolicyReview(line)&&<p className="mz-option-role-review" role="status">تغيّر تصنيف الخيارات؛ افتح الصنف وراجعه قبل الاعتماد.</p>}</div><strong className="mz-invoice-row-total">{purchaseMoney(Number(line.quantity)*purchaseCentsSafe(line.unit_price)+purchaseCentsSafe(line.tax))} ر.س</strong><div className="mz-invoice-row-actions"><button type="button" disabled={policyOpen} aria-label={'تعديل '+line.name+' '+(index+1)} onClick={()=>navigate(()=>open(line))}><PencilSimple size={17}/>تعديل</button><button type="button" disabled={policyOpen} aria-label={'حذف '+line.name+' '+(index+1)} onClick={()=>{if(editor?.draft_key===line.draft_key){setError('أغلق تعديل الصنف قبل حذفه.');return;}setUndo({line,index});setForm({lines:form.lines.filter(item=>item.draft_key!==line.draft_key)});}}><Trash size={17}/></button></div></article>)}
         {undo&&<p role="status">حُذف {undo.line.name}. <button type="button" onClick={()=>{const lines=[...form.lines];lines.splice(undo.index,0,undo.line);setForm({lines});setUndo(null);}}>تراجع عن الحذف</button></p>}
       </section>
       <section className="mz-invoice-settings"><h3>استلام البضاعة</h3>
@@ -141,7 +168,7 @@ export default function InventoryPurchaseDraft({form,onChange,catalog,locations,
       </section>
       <Field label="ملاحظات اختيارية"><textarea rows="2" maxLength="1000" value={form.note} onChange={event=>setForm({note:event.target.value})}/></Field>
       <div className="mz-invoice-footer"><span>{total?'الصافي '+purchaseMoney(total.net)+' · الضريبة '+purchaseMoney(total.tax)+' · الإجمالي '+purchaseMoney(total.gross)+' ريال':'أكمل أسعار الأصناف'}</span><button type="button" className="op-primary" onClick={checkInvoice} disabled={paymentLoading}>مراجعة الفاتورة</button></div>
-      {review&&<section className="mz-invoice-review" aria-label="مراجعة الفاتورة قبل الاعتماد"><h3>مراجعة واعتماد الفاتورة</h3><p>{suppliers.find(item=>item.id===form.supplier_id)?.name} · {form.invoice_number} · {form.lines.length} أصناف · {purchaseMoney(total.gross)} ر.س</p><p>{settings.receipt_mode==='none'?'بانتظار الاستلام':settings.receipt_mode==='partial'?'استلام جزئي':'استلام كامل'} · {settings.payment_mode==='credit'?'غير مسددة':settings.payment_mode==='existing'?'ربط دفعة مسجلة سابقًا':'تسجيل السداد المحدد'}</p><p>اعتماد الفاتورة يسجل التزام المورد. الاستلام والسداد ينفذان حسب اختيارك أعلاه.</p><div className="mz-invoice-actions"><button type="button" className="op-primary" onClick={()=>{try{onApprove(makePurchaseCommand(form,settings,context.session_scope,accounts,candidates,requestId));setReview(false);}catch(reason){setError(reason.message);}}}>اعتماد الفاتورة</button><button type="button" onClick={()=>setReview(false)}>العودة للتعديل</button></div></section>}
+      {review&&<section className="mz-invoice-review" aria-label="مراجعة الفاتورة قبل الاعتماد"><h3>مراجعة واعتماد الفاتورة</h3><p>{suppliers.find(item=>item.id===form.supplier_id)?.name} · {form.invoice_number} · {form.lines.length} أصناف · {purchaseMoney(total.gross)} ر.س</p><p>{settings.receipt_mode==='none'?'بانتظار الاستلام':settings.receipt_mode==='partial'?'استلام جزئي':'استلام كامل'} · {settings.payment_mode==='credit'?'غير مسددة':settings.payment_mode==='existing'?'ربط دفعة مسجلة سابقًا':'تسجيل السداد المحدد'}</p><p>اعتماد الفاتورة يسجل التزام المورد. الاستلام والسداد ينفذان حسب اختيارك أعلاه.</p><div className="mz-invoice-actions"><button type="button" className="op-primary" onClick={()=>{try{assertPolicyReviews();onApprove(makePurchaseCommand(form,settings,context.session_scope,accounts,candidates,requestId));setReview(false);}catch(reason){setError(reason.message);}}}>اعتماد الفاتورة</button><button type="button" onClick={()=>setReview(false)}>العودة للتعديل</button></div></section>}
     </fieldset>
   </>;
 }

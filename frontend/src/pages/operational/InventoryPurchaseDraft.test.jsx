@@ -5,7 +5,7 @@ import {operationalApi as api,requestId} from './api';
 import {purchaseToday} from './inventoryPurchaseWorkflow';
 
 jest.mock('./api',()=>({
-  operationalApi:{entities:jest.fn(),inventoryPurchasePaymentCandidates:jest.fn(),saveInventoryPurchase:jest.fn(),movement:jest.fn(),saveInventoryPurchaseReceipt:jest.fn()},
+  operationalApi:{entities:jest.fn(),inventoryPurchasePaymentCandidates:jest.fn(),saveInventoryPurchase:jest.fn(),movement:jest.fn(),saveInventoryPurchaseReceipt:jest.fn(),inventoryOptionRoles:jest.fn(),saveInventoryOptionRoles:jest.fn()},
   requestId:jest.fn(),messageFor:error=>error.message||'خطأ في API',
 }));
 
@@ -30,10 +30,10 @@ const locations=[{id:'shelf',name:'A-1',warehouse_name:'المخزن'}];
 const initialForm=()=>({supplier_id:'supplier',invoice_number:'INV-TEST',invoice_date:purchaseToday(),lines:[],note:''});
 let host,root,onApprove,sequence;
 
-function Harness({restore=false,disabled=false}){
+function Harness({restore=false,disabled=false,catalogItems=catalog,sessionContext=context}){
   const [saved]=useState(()=>restore?readPurchaseDraft(draftKey):null);
   const [form,setForm]=useState(()=>saved?.form||initialForm());
-  return <InventoryPurchaseDraft form={form} onChange={setForm} initialDraft={saved} catalog={catalog} locations={locations} suppliers={suppliers} disabled={disabled} context={context} draftKey={draftKey} onApprove={onApprove}/>;
+  return <InventoryPurchaseDraft form={form} onChange={setForm} initialDraft={saved} catalog={catalogItems} locations={locations} suppliers={suppliers} disabled={disabled} context={sessionContext} draftKey={draftKey} onApprove={onApprove}/>;
 }
 const render=async props=>act(async()=>root.render(<Harness {...props}/>));
 const button=label=>[...host.querySelectorAll('button')].find(element=>element.getAttribute('aria-label')===label||element.textContent===label);
@@ -185,4 +185,74 @@ test('restored unsaved editor still prompts before its entered information is di
   expect(host.querySelector('.mz-invoice-guard')).not.toBeNull();
   expect(control('الاسم على الفروة · البند 1').value).toBe('عبير');
   expect(persisted().editor.purchase_configuration.inputs[0].value).toBe('عبير');
+});
+
+function notePolicy(revision=0){
+  const roles={size:'physical',emb:'customization',shape:'customization',name:'customization',note:revision?'informational':'customization'};
+  const product={...fur,configuration_issues:[],inventory_option_policy_revision:revision,options:fur.options.map(option=>({...option,
+    inventory_role:roles[option.id],role_locked:option.id==='size',...(roles[option.id]==='informational'?{defer_allowed:false}:{})}))};
+  return {product_id:'fur',revision,catalog_fingerprint:'catalog-'+revision,roles,options:product.options,product};
+}
+
+test('classification updates the open item, preserves money and blocks unchanged older draft rows until explicit review',async()=>{
+  api.inventoryOptionRoles.mockResolvedValue(notePolicy());api.saveInventoryOptionRoles.mockResolvedValue(notePolicy(1));
+  await render();await configureFur('فاطمة');await input('ملاحظة الصنف · البند 1','ملاحظة التغليف الأولى');await click('حفظ الصنف في المسودة');
+  const oldLine=JSON.parse(JSON.stringify(persisted().form.lines[0]));
+  await configureFur('عبير');await input('ملاحظة الصنف · البند 1','ملاحظة التغليف الثانية');
+  await input('موقع تسجيل الشراء 1 — فروة','shelf');await input('ضريبة البند — فروة','25.50');
+  await click('تصنيف الخيارات');await input('تصنيف ملاحظة الصنف','informational');await click('حفظ التصنيف');
+  const current=persisted().editor;
+  expect(current).toMatchObject({quantity:'2',unit_price:'85',tax:'25.50',location_id:'shelf',inventory_option_policy_revision:1});
+  expect(current.purchase_configuration.inputs).toEqual([{option_id:'name',value:'عبير'}]);
+  expect(persisted().form.lines[0]).toEqual(oldLine);
+  expect(rows()[0].textContent).toContain('تغيّر تصنيف الخيارات');
+  await click('حفظ الصنف في المسودة');await click('مراجعة الفاتورة');
+  expect(host.querySelector('.mz-invoice-review')).toBeNull();expect(onApprove).not.toHaveBeenCalled();
+  await click('تعديل فروة 2');
+  expect(persisted().editor.purchase_configuration.inputs).toEqual([{option_id:'name',value:'فاطمة'}]);
+  await click('حفظ الصنف في المسودة');await click('مراجعة الفاتورة');await click('اعتماد الفاتورة');
+  expect(onApprove).toHaveBeenCalledTimes(1);
+  expect(persisted().form.lines.map(line=>line.inventory_option_policy_revision)).toEqual([1,1]);
+  expect(api.saveInventoryPurchase).not.toHaveBeenCalled();expect(api.saveInventoryPurchaseReceipt).not.toHaveBeenCalled();
+});
+
+test('a restored older draft is reviewed against the current catalog without silently rewriting its fields',async()=>{
+  await render();await configureFur();await input('ملاحظة الصنف · البند 1','تعليمات جانبية');await click('حفظ الصنف في المسودة');
+  const before=JSON.parse(JSON.stringify(persisted().form.lines));
+  await act(async()=>root.unmount());root=createRoot(host);
+  await render({restore:true,catalogItems:[notePolicy(1).product,necklace,component]});
+  expect(persisted().form.lines).toEqual(before);
+  await click('مراجعة الفاتورة');expect(host.querySelector('.mz-invoice-review')).toBeNull();
+  await click('تعديل فروة 1');expect(persisted().editor.purchase_configuration.inputs).toEqual([{option_id:'name',value:'فاطمة'}]);
+  await click('حفظ الصنف في المسودة');await click('مراجعة الفاتورة');expect(host.querySelector('.mz-invoice-review')).not.toBeNull();
+});
+
+test('staff purchase entry does not expose the owner option-classification mutation',async()=>{
+  await render({sessionContext:{...context,can_manage_inventory_opening:false}});await configureFur();
+  expect(button('تصنيف الخيارات')).toBeUndefined();expect(api.inventoryOptionRoles).not.toHaveBeenCalled();
+});
+
+test('an older dirty-navigation prompt cannot unmount an open classification editor or leave the draft locked',async()=>{
+  api.inventoryOptionRoles.mockResolvedValue(notePolicy());
+  await render();await configureFur();await click('مكوّن');
+  expect(host.querySelector('.mz-invoice-guard')).not.toBeNull();
+  await click('تصنيف الخيارات');
+  expect(button('تجاهل التعديل ومتابعة').disabled).toBe(true);
+  await click('تجاهل التعديل ومتابعة');expect(persisted().editor.id).toBe('fur');
+  await click('إلغاء التصنيف');await click('تجاهل التعديل ومتابعة');
+  expect(persisted().editor).toBeNull();expect(button('مكوّن').getAttribute('aria-pressed')).toBe('true');
+  await click('منتج');await addNecklace();expect(rows()).toHaveLength(1);
+});
+
+test('a product with incomplete cached options can open classification and apply the returned complete catalog',async()=>{
+  const incomplete={...fur,options:[],configuration_issues:['خيارات المنتج غير مكتملة في ميزان 2']};
+  api.inventoryOptionRoles.mockResolvedValue(notePolicy());api.saveInventoryOptionRoles.mockResolvedValue(notePolicy(1));
+  await render({catalogItems:[incomplete]});await click('اختيار فروة');
+  await input('الكمية — فروة','8');await input('سعر الوحدة قبل الضريبة — فروة','37.50');
+  expect(button('تصنيف الخيارات')).toBeDefined();
+  await click('تصنيف الخيارات');await input('تصنيف ملاحظة الصنف','informational');await click('حفظ التصنيف');
+  expect(persisted().editor.configuration_issues).toEqual([]);
+  expect(persisted().editor).toMatchObject({quantity:'8',unit_price:'37.50',inventory_option_policy_revision:1});
+  expect(host.querySelector('[aria-label="المقاس: سنتان"]')).not.toBeNull();
+  expect(api.saveInventoryPurchase).not.toHaveBeenCalled();
 });

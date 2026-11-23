@@ -68,6 +68,9 @@ class OpeningLine(BaseModel):
     quantity: int | float = Field(gt=0, le=100000)
     unit_cost: str = Field(min_length=1, max_length=30)
     purchase_configuration: dict
+    # Omitting this field must retain old command hashes and retry evidence.
+    inventory_option_policy_revision: int | None = Field(default=None, ge=0, strict=True,
+                                                         exclude_if=lambda value: value is None)
 
     @field_validator('quantity', mode='before')
     @classmethod
@@ -188,7 +191,14 @@ def _require_empty_locations(locs):
             fail('opening_inventory_existing_stock', 'يوجد مخزون سابق؛ يلزم مطابقته قبل تسجيل افتتاحية')
 
 
-async def compile_preview(db, owner, request, *, standalone=False, allow_duplicate_lines=False):
+async def compile_preview(db, owner, request, *, standalone=False, allow_duplicate_lines=False,
+                          configuration_snapshots=None):
+    # Only the linked-receipt service supplies these from stored invoice lines.
+    # This keyword is never accepted by an HTTP request schema.
+    if configuration_snapshots is not None and (not standalone or not allow_duplicate_lines
+            or not isinstance(configuration_snapshots, list)
+            or len(configuration_snapshots) != len(request['lines'])):
+        fail('purchase_receipt_configuration_required', 'مواصفات بنود الفاتورة غير مثبتة للاستلام', 409)
     if not standalone and await db[BATCHES].find_one({'_id': owner, 'user_id': owner}):
         fail('opening_inventory_already_approved', 'اعتمد المخزون الافتتاحي مسبقًا؛ يلزم مسار تسوية مستقل')
     locs = await records(db, owner, LOCATIONS)
@@ -210,19 +220,36 @@ async def compile_preview(db, owner, request, *, standalone=False, allow_duplica
             definitions[line['item_id']] = await db['mezan_bundle_definitions_v2'].find_one(
                 {'user_id': owner, 'product_id': line['item_id']})
     return await prepare_in_thread(_compile_preview_rows, owner, request, standalone, locs,
-        candidates, raw_products, raw_components, raw_warehouses, available, definitions, allow_duplicate_lines)
+        candidates, raw_products, raw_components, raw_warehouses, available, definitions, allow_duplicate_lines,
+        configuration_snapshots)
 
 
 def _compile_preview_rows(owner, request, standalone, locs, candidates, raw_products,
-                          raw_components, raw_warehouses, available, definitions, allow_duplicate_lines=False):
+                          raw_components, raw_warehouses, available, definitions, allow_duplicate_lines=False,
+                          configuration_snapshots=None):
     preparation_checkpoint()
     rows = []; used = set(); capacity = {}; snapshots = []
-    for line in checked_rows(request['lines']):
+    for index, line in enumerate(checked_rows(request['lines'])):
         option_snapshot = {}
         product = candidates.get((line['kind'], line['item_id']))
         location = available.get(line['location_id'])
         if not product or not location:
             fail('opening_inventory_identity_invalid', 'اختر منتجًا وموقعًا متاحين من ميزان 2', 422)
+        frozen = configuration_snapshots[index] if configuration_snapshots is not None else None
+        if configuration_snapshots is not None and line['kind'] == 'product':
+            required = {'options', 'configuration_issues', 'selection_combinations'}
+            if (not isinstance(frozen, dict) or frozen.get('id') != product['id']
+                    or frozen.get('kind') != line['kind'] or not required.issubset(frozen)
+                    or not isinstance(frozen['options'], list)
+                    or not isinstance(frozen['selection_combinations'], list)):
+                fail('purchase_receipt_configuration_required', 'مواصفات هذا البند غير مثبتة للاستلام؛ يلزم مطابقته أولًا', 409)
+            # Preserve the actual purchased description. Current product/type,
+            # variants, location, capacity and valuation checks still apply.
+            keys = (*required, 'configuration_contract_version', 'physical_option_ids',
+                    'conditional_rules_verified', 'inventory_option_policy_revision')
+            product = {**{key: value for key, value in product.items() if key not in keys},
+                       **{key: deepcopy(frozen[key]) for key in keys if key in frozen},
+                       'inventory_option_policy_revision': frozen.get('inventory_option_policy_revision', 0)}
         # Resolve against the full tenant catalog, not only visible metadata.
         # An archived/disabled duplicate is still an ambiguous physical identity
         # and would be excluded by the inventory projection after approval.
@@ -263,6 +290,8 @@ def _compile_preview_rows(owner, request, standalone, locs, candidates, raw_prod
             if (raw.get('product_type') in {'service', 'digital', 'composite', 'bundle'}
                     or raw.get('type') in {'service', 'digital'} or definition and definition.get('product_type') == 'composite'):
                 fail('opening_inventory_nonphysical_product', 'هذا المنتج يتطلب مسار مكونات أو منتج غير مخزني', 422)
+            from operational_purchase_metadata import require_inventory_option_policy
+            require_inventory_option_policy(line, product)
             config, labels = configuration(line['purchase_configuration'], product)
             if 'deferred_option_ids' not in config:
                 normalized_names = [next(iter(canonical_specifications({v['name']: 'x'})), '') for v in labels]
@@ -331,6 +360,8 @@ def _compile_preview_rows(owner, request, standalone, locs, candidates, raw_prod
                      'preparation_state': state, 'specifications': specs, 'purchase_configuration': config,
                      **option_snapshot})
         snapshots.append([raw, stored, definition, location, warehouse])
+        if frozen is not None:
+            snapshots[-1].append(frozen)
     by_unit = {}
     for row in checked_rows(rows):
         by_unit[row['unit']] = by_unit.get(row['unit'], Decimal(0)) + Decimal(str(row['quantity']))

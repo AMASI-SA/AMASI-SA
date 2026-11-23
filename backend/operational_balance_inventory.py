@@ -263,12 +263,17 @@ async def save_purchase(db, owner, actor, payload, *, source='mezan2', clock=Non
         # variant labels are not their identity and must not block this path.
         available = {line_identity(r):r for r in await catalog(db, owner,
             components_only=all(line.get('purchase_configuration') for line in lines))}
-        from operational_purchase_metadata import products, locations, describe
+        from operational_purchase_metadata import products, locations, describe, require_inventory_option_policy
         bases={(p['kind'],p['id']):p for p in await products(db,owner)}
         bases.update({(p['kind'],p['id']):p for p in available.values() if p['kind']=='component'})
         location_rows=await locations(db,owner)
         normalized = []; identities=set(); totals = {key:Decimal(0) for key in ('net','tax','gross')}
         for line in lines:
+            base_product = bases.get((line['kind'], line['item_id']))
+            if base_product and line['kind'] == 'product':
+                require_inventory_option_policy(line, base_product)
+                if base_product.get('inventory_option_policy_revision', 0) > 0 and not line.get('purchase_configuration'):
+                    fail('inventory_option_policy_changed', 'صُنفت خيارات هذا المنتج؛ أعد فتح الصنف وراجع مواصفاته قبل الحفظ', 409)
             item = await describe(db,owner,line,bases,location_rows,
                 allow_missing_location=payload.get('receipt_tracking_version') == 1) if line.get('purchase_configuration') else available.get(line_identity(line))
             if not line.get('purchase_configuration') and line.get('location_id'):
