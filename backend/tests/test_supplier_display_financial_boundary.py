@@ -53,6 +53,26 @@ def test_approved_close_posting_and_service_linkage_are_unchanged():
             assert segment.count(current_lock_check) == 1
             assert original_lock_check not in segment
             segment = segment.replace(current_lock_check, original_lock_check, 1)
+            # Supplier bundles attach physical receipt proofs inside the SAME
+            # transaction, strictly after the persisted native invoice is
+            # verified. Pin that exact extension and preserve the original
+            # financial core hash; no posting, amount, rollback or identity
+            # check is normalized. Real route tests cover partial receipt,
+            # concurrent close/replay, rollback and complete Ready at qty2.
+            bridge_hook = '''                if any(piece.get("bundle_supplier_reference") is not None for piece in current_pieces):
+                    from bundle_supplier_pieces import finalize_supplier_leaf_receipts
+                    await finalize_supplier_leaf_receipts(db, merchant_id, current_pieces, session=mongo_session)
+'''
+            verified_invoice = '''            if not is_experiment:
+                invoice = await verify_persisted_supplier_invoice(
+                    db, user_id=merchant_id, invoice_id=invoice_id, session_id=session_id,
+                    supplier_id=fresh_session["supplier_id"], expected_total=draft["total_halalas"],
+                    actor_id=context["actor_id"], mongo_session=mongo_session,
+                )
+'''
+            assert segment.count(bridge_hook) == 1
+            assert segment.count(verified_invoice + bridge_hook + "            return {") == 1
+            segment = segment.replace(bridge_hook, "", 1)
         actual[node.name] = hashlib.sha256(segment.encode()).hexdigest()
     assert actual==FUNCTION_HASHES
     for path,expected in FILE_HASHES.items():

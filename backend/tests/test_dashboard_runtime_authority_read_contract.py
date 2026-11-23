@@ -54,6 +54,102 @@ def test_exact_cost_and_traffic_reads_preserve_the_raw_evidence_and_original_ora
     assert (runtime, baseline) == original
 
 
+@pytest.mark.asyncio
+async def test_live_empty_authority_readers_match_exact_supplier_bundle_proof_projections():
+    from order_cost_authority import load_order_cost_authority
+    from supplier_invoice_reporting_costs import load_supplier_invoice_reporting_costs
+
+    orders = [{'user_id': 'owner', 'order_number': 'A', 'products': [
+        {'canonical_order_item_id': 'salla:A:line', 'source_item_id': 'line', 'quantity': 4},
+    ]}]
+    runtime, baseline = evidence_pair(orders)
+    audit = runtime['cost_authority_audit']
+    observed = []
+
+    class Cursor:
+        async def to_list(self, length):
+            assert type(length) is int and length > 0
+            return []
+
+    class Collection:
+        def __init__(self, name):
+            self.name = name
+
+        def record(self, operation, **fields):
+            command = _authority_command(operation, {
+                operation: self.name, '$db': audit['database'], **copy.deepcopy(fields),
+            }, database_name=audit['database'])
+            assert command is not None, 'Unexpected database read outside authority'
+            observed.append(command)
+            return Cursor()
+
+        def find(self, query, projection):
+            return self.record('find', filter=query, projection=projection)
+
+        def aggregate(self, pipeline):
+            return self.record('aggregate', pipeline=pipeline, cursor={})
+
+    class DB:
+        def __getitem__(self, name):
+            return Collection(name)
+
+    # The real loaders decide all queries and projections. Only the empty
+    # cursor transport is substituted; no production helper is patched.
+    db = DB()
+    await load_order_cost_authority(db, 'owner', orders, current_profitability_estimate=False)
+    await load_supplier_invoice_reporting_costs(db, 'owner', orders)
+    assert observed == audit['commands']
+    assert len(observed) == 8
+    assert Counter(row['operation'] for row in observed) == {'find': 6, 'aggregate': 2}
+    audit['commands'] = observed
+    assert_runtime_read_contract(runtime, baseline)
+
+
+@pytest.mark.parametrize('collection,field', [
+    ('mezan_component_consumption_plans_v1', 'user_id'),
+    ('mezan_component_consumption_plans_v1', 'state'),
+    ('mezan_component_consumption_units_v1', '_id'),
+    ('mezan_component_consumption_units_v1', 'user_id'),
+    ('mezan_component_consumption_units_v1', 'order_id'),
+    ('mezan_component_consumption_units_v1', 'product_id'),
+    ('mezan_component_consumption_units_v1', 'variant_id'),
+    ('mezan_component_consumption_units_v1', 'bundle_revision'),
+    ('mezan_component_consumption_units_v1', 'bundle_supplier_bridge_version'),
+    ('mezan_preparation_pieces_v1', 'bundle_supplier_reference'),
+    ('mezan_supplier_receiving_events_v1', 'bundle_supplier_reference'),
+])
+def test_supplier_bundle_proof_projection_fields_are_required_exactly(collection, field):
+    runtime, baseline = evidence_pair()
+    command = next(row for row in runtime['cost_authority_audit']['commands']
+                   if row['collection'] == collection)
+    projection = command['pipeline'][-1]['$project'] if command['operation'] == 'aggregate' else command['projection']
+    assert projection[field] == 1
+    if field == '_id':
+        projection[field] = 0
+    else:
+        del projection[field]
+    with pytest.raises(AssertionError):
+        assert_runtime_read_contract(runtime, baseline)
+
+
+@pytest.mark.parametrize('collection', [
+    'mezan_component_consumption_plans_v1', 'mezan_component_consumption_units_v1',
+])
+@pytest.mark.parametrize('defect', ['extra_field', 'extra_query'])
+def test_supplier_bundle_projection_extension_does_not_allow_other_reads(collection, defect):
+    runtime, baseline = evidence_pair()
+    commands = runtime['cost_authority_audit']['commands']
+    command = next(row for row in commands if row['collection'] == collection)
+    if defect == 'extra_field':
+        projection = command['pipeline'][-1]['$project'] if command['operation'] == 'aggregate' else command['projection']
+        projection['unreviewed_supplier_payload'] = 1
+    else:
+        commands.append(copy.deepcopy(command))
+        runtime['commands'][command['operation']] += 1
+    with pytest.raises(AssertionError):
+        assert_runtime_read_contract(runtime, baseline)
+
+
 def test_empty_cohort_and_permission_failure_permit_no_authority_queries():
     runtime, baseline = evidence_pair([])
     assert runtime['cost_authority_audit']['commands'] == []

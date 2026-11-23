@@ -55,6 +55,13 @@ def leaf_fingerprint(leaf):
     return _digest({key: leaf.get(key) for key in _FROZEN_FIELDS})
 
 
+def supplier_leaf_unit(unit):
+    return "bundle_supplier_bridge_version" in unit or any(
+        "supplier_receiving_channel" in leaf or "supplier_receipt_proofs" in leaf
+        or leaf.get("cost_policy") == "posted_supplier_invoice"
+        for leaf in unit.get("bundle_leaves") or [] if isinstance(leaf, dict))
+
+
 def supported_supplier_leaves(unit):
     """The first bridge supports only finished same-product supplier pieces."""
     leaves = unit.get("bundle_leaves")
@@ -412,8 +419,8 @@ async def supplier_bundle_print_preview(db, owner, lines, batch_id):
 async def supplier_leaf_receipts(db, owner, unit, leaf, *, session=None):
     """Read verified finalized invoices, without trusting cached leaf amounts."""
     from supplier_invoice_integrity import verify_persisted_supplier_invoice
-    from supplier_invoice_reporting_costs import _invoice_amounts
-    from supplier_native_invoice_v2 import invoice_digest
+    from supplier_invoice_reporting_costs import _invoice_amounts, _journal_id
+    from supplier_native_invoice_v2 import CONTRACT, invoice_digest
     kw = {"session": session} if session is not None else {}
     proofs, total = [], Decimal(0)
     for index in range(1, int(_number(leaf["quantity"])) + 1):
@@ -445,7 +452,8 @@ async def supplier_leaf_receipts(db, owner, unit, leaf, *, session=None):
         invoice = await verify_persisted_supplier_invoice(db, user_id=owner,
             invoice_id=event.get("supplier_invoice_id"), session_id=event.get("session_id"),
             supplier_id=leaf["supplier_id"], mongo_session=session)
-        if (invoice.get("status") != "payable_posted" or not invoice.get("approved_at")
+        if (invoice.get("mz2_financial_contract") != CONTRACT or not _journal_id(invoice.get("mz2_txn_group_id"))
+                or invoice.get("status") != "payable_posted" or not invoice.get("approved_at")
                 or invoice.get("financial_invoice_created") is not True
                 or invoice.get("liability_created") is not True
                 or invoice.get("financial_integrity_verified") is not True
@@ -544,9 +552,8 @@ async def verify_reporting_supplier_units(db, owner, units, plans, *, read, budg
     """
     from accounting_ledger_v2 import read_supplier_invoice_journal_evidence_v2
     from supplier_invoice_reporting_costs import INVOICE_FIELDS, _invoice_amounts, _instant, _journal_id
-    from supplier_native_invoice_v2 import invoice_digest
-    candidates = [unit for unit in units if unit.get("state") == "consumed"
-        and any(leaf.get("supplier_receiving_channel") == CHANNEL for leaf in unit.get("bundle_leaves") or [])]
+    from supplier_native_invoice_v2 import CONTRACT, invoice_digest
+    candidates = [unit for unit in units if unit.get("state") == "consumed" and supplier_leaf_unit(unit)]
     if not candidates:
         return
     plan_groups = defaultdict(list)
@@ -630,12 +637,12 @@ async def verify_reporting_supplier_units(db, owner, units, plans, *, read, budg
                     fail("receipt_evidence_mismatch")
                 digest = invoice_digest(invoice)
                 gid = _journal_id(invoice.get("mz2_txn_group_id"))
-                if invoice.get("mz2_financial_contract") or invoice.get("mz2_txn_group_id"):
-                    headers = groups[("journal", gid)]
-                    if (not gid or gid in reversed_ids or len(headers) != 1 or headers[0].get("status") != "posted"
-                            or (headers[0].get("metadata") or {}).get("invoice_digest") != digest
-                            or (headers[0].get("metadata") or {}).get("supplier_invoice_id") != identity):
-                        fail("receipt_evidence_mismatch")
+                headers = groups[("journal", gid)]
+                if (invoice.get("mz2_financial_contract") != CONTRACT or not gid or gid in reversed_ids
+                        or len(headers) != 1 or headers[0].get("status") != "posted"
+                        or (headers[0].get("metadata") or {}).get("invoice_digest") != digest
+                        or (headers[0].get("metadata") or {}).get("supplier_invoice_id") != identity):
+                    fail("receipt_evidence_mismatch")
                 invoice_cache[identity] = (digest, _invoice_amounts(invoice))
             digest, amounts = invoice_cache[identity]
             if (proof["invoice_digest"] != digest or proof["event_id"] != event.get("id")

@@ -335,6 +335,10 @@ jobs:
           src/pages/PurchaseInvoices.test.jsx src/pages/InventoryReceivingWorkspace.test.jsx
           src/services/productBundles.test.js
           src/services/bundleSupplierAdoption.test.js
+          src/services/supplierBundlePreparation.test.js
+          src/services/orderReviewEngine.bundle.test.js
+          src/components/fulfillment/SupplierBundlePreparationRecovery.test.jsx
+          src/reviewPreparationFileScheduleSync.test.js
           src/components/products/BundleEditor.test.jsx
           src/components/products/CurrentProductSlots.test.jsx
           src/components/products/BundleProductPolicy.test.jsx

@@ -526,9 +526,8 @@ def _bundle_cost(snapshot: dict, quantity: Any, units: list[dict] | None = None)
         if Decimal(len(units)) != q or len(set(indexes)) != len(indexes):
             return _unknown(quantity, "bundle_unit_quantity_mismatch")
         leaves = [leaf for unit in units for leaf in unit.get("bundle_leaves") or []]
-        if any(unit.get("state") == "consumed" and any(
-                leaf.get("supplier_receiving_channel") == "supplier_receiving_v1"
-                for leaf in unit.get("bundle_leaves") or [])
+        from bundle_supplier_pieces import supplier_leaf_unit
+        if any(unit.get("state") == "consumed" and supplier_leaf_unit(unit)
                 and unit.get("_supplier_invoice_actual_verified") is not True for unit in units):
             return _unknown(quantity, "bundle_supplier_invoice_evidence_unverified")
         actual = [decimal(leaf.get("actual_cost")) for leaf in leaves]

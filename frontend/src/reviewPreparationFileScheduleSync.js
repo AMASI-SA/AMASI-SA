@@ -5,6 +5,8 @@ import { updatePreparationFileSchedule } from "./services/preparationWorkService
 const ROOT_ID = "mezan-preparation-file-schedule-sync-root";
 
 export function preparationFileCreatedSchedule(detail, pending) {
+  // The verified assignment receipt already committed the schedule with the file.
+  if (detail?.assignment_contract === "preparation_assignment_v2" && detail?.schedule_committed === true) return null;
   const fileNumber = String(detail?.file_number || "").trim();
   const mode = pending?.mode === "required" ? "required" : "automatic";
   const requiredDueAt = mode === "required"

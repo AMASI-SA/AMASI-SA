@@ -2,6 +2,68 @@
 
 ## State
 
+### Supplier intake and recovery acceptance checkpoint — 2026-11-24
+
+Previous remote source is `f9a68efe6a6652a5a62ffb81f9c44f644772b04d`
+(tree `02ca69b06a73bae4c8003105b33bc87bcbcfdbfd`) in Draft PR #2093.
+This checkpoint completes the bounded web adapter for eligible supplier bundle
+cards. It uses one modern atomic assignment command, preserves one commercial
+card and its separate physical piece count, requires visible consent to defer
+supplier dispatch, retains the existing employee/title/schedule form, and
+persists exact request identity before sending. Recovery checks the original
+scoped request before an explicit replay. Ordinary-only publication is unchanged.
+Verified modern receipts suppress only the redundant legacy schedule write.
+
+The supplier reporting proof now always requires the native invoice contract,
+journal identity/digest and absence of reversal. A surviving unit bridge marker
+cannot be used with a removed leaf channel to bypass proof validation. Public
+tests cover new assign/defer intake, distinct printable leaf identities,
+historical alias refusal, mixed readiness, adoption, concurrency, rollback and
+actual reporting cost. Raw cached actuals are deliberately unavailable until the
+real loader has revalidated the invoice evidence.
+
+Observed verification milestones (overlapping counts are not additive):
+
+- Independent combined bridge/adoption/assignment/native invoice/readiness
+  run: **194 passed, zero skips**, isolated Mongo7.0.28 replica and standalone,
+  106.55 seconds; owned children stopped.
+- Ordinary catalog, selection, order-cost, supplier-reporting, barcode and
+  readiness regressions: **298 passed, zero skips**.
+- Root cost-authority/reporting selection: **189 passed, four Mongo-prerequisite
+  skips**. Those skips are not evidence of executed Mongo tests.
+- Dashboard exact read contract, adapter and financial boundary: **105 passed,
+  zero skips**. The gate permits only the four independently reviewed proof
+  projection changes, preserving owner filters, query counts, batch size, JSON
+  oracle and write refusal. Negative tests still reject extra fields/queries.
+- Web adapter plus adjacent ordinary UI regressions: **88 passed in9 suites**;
+  owner adoption/transport/layout milestone remains **39 passed in5 suites**.
+- Additional ordinary catalog/dispatch/print selection:149 passed and two
+  Arabic PDF extraction failures which reproduce identically with baseline
+  print/barcode modules. The assertions were not weakened or modified.
+
+The prior remote checkpoint has four failing gates: two hit the unchanged
+financial-core source hash, one hit the new strict invoice-proof requirement
+in a raw-cache test, and one hit exact dashboard projection expectations.
+This checkpoint preserves the original financial hash after removing only the
+exact three-line hook immediately after native-invoice verification, tests
+actual cost through the real loader, and explicitly pins the additional proof
+fields. Fresh remote Mongo8 and frozen-runtime gates remain mandatory; local
+results do not establish their success. Independent final source reviews are
+in progress. Do not merge or publish before resolving remaining findings/CI.
+
+The urgent mobile recovery fix is independently saved in `AMASI-SA/amasi-mobile`
+Draft PR #380, source `3146dcfd7abb5f69691c392a44b01580622b0976`, tree
+`07064f390944bd5fa16d07360dbf44669049c63f`. Its118 behavior cases were rerun
+by the coordinator. It restores pending scan membership with GET only and
+refreshes costs only after explicit NOT_COMMITTED proof. Its fresh CI reports
+failed jobs with no executed steps returned by the connector; cause and full
+app/device verification remain unresolved. No APK/OTA publication is claimed.
+
+No Production source, release lease, live catalog, order, receiving session,
+invoice or financial data was changed. Next: inspect exact checkpoint CI and
+independent reviews, resolve concrete findings, freeze source A only after
+acceptance, then follow the current-base v5 rehearsal/intent/publication rules.
+
 ### Supplier execution source checkpoint — WIP, 2026-11-24
 
 The preceding UI milestone is remotely recoverable at
