@@ -90,6 +90,10 @@ jobs:
           backend/tests/test_operational_workspace_customer_collections.py
           backend/tests/test_operational_customer_*.py
           backend/tests/test_operational_workspace_statements.py
+          backend/tests/test_operational_workspace_account_history.py
+          backend/tests/test_operational_movement_reversal_effects.py
+          backend/tests/test_operational_movement_reversal_routes.py
+          backend/tests/test_operational_ad_and_entry_latency.py
           backend/tests/test_operational_completed_shipping*.py
           backend/tests/test_operational_read_runtime.py
           backend/tests/test_operational_financial_review_groups.py
@@ -152,9 +156,14 @@ jobs:
                         'test_operational_inventory_purchase_receipts',
                         'test_operational_inventory_payment_allocation'):
               assert any(suite in c.get('classname', '') for c in cases), suite + ' not collected'
+          for suite in ('test_operational_workspace_account_history',
+                        'test_operational_movement_reversal_effects',
+                        'test_operational_movement_reversal_routes',
+                        'test_operational_ad_and_entry_latency'):
+              assert any(c.get('classname', '').rsplit('.', 1)[-1] == suite for c in cases), suite + ' not collected'
           assert len([c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_workspace_refunds']) >= 23, 'Scoped financial-only refund contracts missing'
           for suite, minimum in (('test_operational_customer_payment_basis', 10),
-                                 ('test_customer_inventory_unified_activity', 3),
+                                 ('test_customer_inventory_unified_activity', 5),
                                  ('test_customer_refund_access', 1),
                                  ('test_customer_refund_read_only_bridge', 2),
                                  ('test_mobile_customer_refund_reads', 13),
@@ -188,7 +197,7 @@ jobs:
                         'test_operational_balance_provider_settlement_guard'):
               assert any(suite in c.get('classname', '') for c in cases), suite + ' not collected'
           assert len([c for c in cases if 'test_operational_balance_salary_start_mongo' in c.get('classname', '')]) == 5
-          assert len([c for c in cases if 'test_operational_driver_review_mongo' in c.get('classname', '')]) == 16
+          assert len([c for c in cases if 'test_operational_driver_review_mongo' in c.get('classname', '')]) == 17
           for suite, minimum in (
               ('test_operational_completed_shipping_admission', 23),
               ('test_operational_completed_shipping_expansion', 10),
@@ -228,7 +237,7 @@ jobs:
               ('test_demand_read_store', 13),
               ('test_demand_read_jobs', 14),
               ('test_demand_read_runner_lifecycle', 3),
-              ('test_operational_workspace_demand_reads', 38),
+              ('test_operational_workspace_demand_reads', 48),
               ('test_operational_workspace_demand_http', 6),
               ('test_dashboard_demand_builders', 7),
               ('test_assembly_demand_builders', 13),
