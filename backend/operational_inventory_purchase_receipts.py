@@ -173,7 +173,7 @@ async def compile_receipt(db, owner, invoice_id, request):
     requested = request['lines']
     if len({row['line_id'] for row in requested}) != len(requested):
         fail('purchase_receipt_duplicate_line', 'حدد كل بند مرة واحدة في الاستلام', 422)
-    opening_lines = []
+    opening_lines = []; configuration_snapshots = []
     for row in requested:
         original = available.get(row['line_id'])
         if original is None or row['quantity'] > original['pending_receipt_quantity']:
@@ -185,9 +185,13 @@ async def compile_receipt(db, owner, invoice_id, request):
             config = {'state': 'raw', 'selections': [], 'inputs': []}
         opening_lines.append({'kind': original['kind'], 'item_id': original['item_id'],
             'location_id': row['location_id'], 'quantity': row['quantity'], 'unit_cost': original['unit_price'],
-            'purchase_configuration': deepcopy(config)})
+            'purchase_configuration': deepcopy(config),
+            **({'inventory_option_policy_revision': original.get('inventory_option_policy_revision', 0)}
+               if original['kind'] == 'product' else {})})
+        configuration_snapshots.append(deepcopy(original) if original['kind'] == 'product' else None)
     compiled = await compile_preview(db, owner, {'request_id': request['request_id'], 'lines': opening_lines},
-                                     standalone=True, allow_duplicate_lines=True)
+                                     standalone=True, allow_duplicate_lines=True,
+                                     configuration_snapshots=configuration_snapshots)
     for row, requested_line in zip(compiled['lines'], requested):
         row['invoice_line_id'] = requested_line['line_id']
     receipt_hash = digest([SCHEMA, owner, invoice_id, request, invoice,
