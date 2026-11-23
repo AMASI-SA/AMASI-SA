@@ -1,0 +1,62 @@
+{
+  "task": "AUTO-BALANCE-RECOVERY-20261123",
+  "repository": "AMASI-SA/AMASI-SA",
+  "task_branch": "codex/automatic-balance-recovery-20261123",
+  "reviewed_production_base": "422fffc8fb9c381165cc76b1ded5ca595773ce8e",
+  "status": "WIP_SOURCE_CORRECTION_VERIFIED_HISTORICAL_RECALCULATION_BLOCKED",
+  "authorization": "Owner authorized guarded web/backend publication and canonical past-day reconciliation. Preserve financial rules, admission, deadlines, idempotency, foreign files and leases; no paid-resource or APK-gate bypass.",
+  "published_release": {
+    "pull_request": 2087,
+    "deployment_git_sha": "422fffc8fb9c381165cc76b1ded5ca595773ce8e",
+    "source_git_sha": "b69d438a20ae123a0c30deb5b73599551dbe9559",
+    "intent_git_sha": "cc3a475ef46cab5438e448ca669d908890b18dc0",
+    "platform_version": "7f4dc33",
+    "platform_result": "Deployment finished, 23Nov20:29 Asia/Aden",
+    "original_guard_verify": "exit0, verified=true, checks=3; matching lease closed, active=false",
+    "verify_evidence_sha256": "a95a43a95eec83f3a75568a90b6202923f5dd38bd162744adbbc72e71a7a3e97"
+  },
+  "historical_recalculation": {
+    "complete": false,
+    "last_successful_saved_calculation": "2026-11-21 17:50 Asia/Riyadh",
+    "attempts": [
+      {"finished_at": "2026-11-23T17:52:04.202Z", "outcome": "operational_refresh_timeout", "phase": "reconciliation cancelled after source collection"},
+      {"finished_at": "2026-11-23T18:01:02.392Z", "outcome": "source_read_timeout", "source": "orders"}
+    ],
+    "retry_policy": "No more blind retries. Existing GET-only status confirmed the first attempt finished/failed; one explicit retry occurred after more than eight minutes. Need material diagnostic or performance change before another canonical attempt.",
+    "financial_rules_changed": false,
+    "manual_financial_entries_created": false
+  },
+  "verified_source_correction": {
+    "problem": "Source health reads raw native bindings only, omitting canonically approved inline operational ad_funding used by financial collection.",
+    "behavior": "Merge both authorities through the existing pure binding function before status filtering; bounded metadata-only projection; fail unknown for malformed, foreign, unconfirmed, future-approved, conflicting or mismatched currency/timezone metadata.",
+    "changed_files": ["backend/operational_source_freshness.py", "backend/tests/test_operational_source_freshness.py"],
+    "source_sha256": "a07a35e8064724701e059f7bfb3c8024ce72badc06df49c66d6a0d9b23460f6f",
+    "tests_sha256": "0f3d564f7d1c4cbf53f905bccf2b4f57ca0c3199f49ede294786e00c6bd9cd31",
+    "regression": "New operational-authority cases fail against immutable D (exit1); affected suites pass after correction (exit0):88 tests +61 subtests.",
+    "independent_review": "APPROVED exact two-file hashes; independent44 tests +61 subtests PASS. Review found and corrected future approval falsely-current case.",
+    "live_origin_of_saved_ad_bindings": "not independently verified; source parity defect is proven in regression",
+    "no_financial_archive_hydration": true,
+    "no_database_or_provider_write": true
+  },
+  "performance_diagnosis": {
+    "orders_query": "Owner-only full evidence projection over unified_orders, cumulative15-second read deadline and20000-row cap plus overflow sentinel; no evidence/date pruning permitted.",
+    "cause": "Not established beyond orders source-read timeout and previous overall deadline; need DB/query/delivery evidence or finer bounded instrumentation.",
+    "existing_runtime_diagnostics": "18:11:53.840883UTC existing-config check CONFIG_UNAVAILABLE; request_sent=false. No credentials exposed, new token or setting created.",
+    "production_query_plan": "unavailable; no production database credential imported",
+    "resource_configuration_changed": false
+  },
+  "release_state_for_this_followup": {
+    "source_head_ci": "not yet run",
+    "reviewed_intent": "not frozen",
+    "merged": false,
+    "published": false,
+    "guard_lease_created": false
+  },
+  "native_companion": {
+    "pull_request": "AMASI-SA/amasi-mobile#379",
+    "head": "3548b7f96a871578ae4a17ddb15cf60fa47102ea",
+    "gate": "Required Mobile CI45202060677 retry137818142381 failed before runner assignment; cause unexposed, local PASS does not replace remote gate.",
+    "apk_published": false
+  },
+  "continuation": "Issue1006 owned AUTO-BALANCE-FRESHNESS-20261123 section holds live status. Freeze the final reviewed source only after any scoped diagnostic correction is complete; preserve intent unchanged until intent-only B. Require latest-source and latest-B gates, normal protected merge and original Emergent guard. After verified publication, one materially informed canonical refresh, then actual business-dated payroll22/23 and eligible ads/shipping21/22 ledger verification. Never label saved timestamp or green health as historical completeness."
+}

@@ -9,6 +9,8 @@ import asyncio
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
+from operational_ad_funding import bindings as funding_bindings
+
 
 SOURCE_TIMEOUT_SECONDS = 2.0
 QUERY_TIMEOUT_MS = 1200
@@ -69,10 +71,24 @@ def _projection(*fields):
 
 
 BINDING_FIELDS = _projection("user_id", "platform", "integration_account_id", "platform_account_id",
-    "confirmed_by", "confirmed_at", "funding_mode", "status", "active", "is_active",
+    "confirmed_by", "confirmed_at", "funding_mode", "funding_policy", "currency", "timezone", "status", "active", "is_active",
     "archived", "deleted", "is_archived", "is_deleted")
+# Operational funding is inline even when engine history is archived. Reduce
+# the dynamic map on the server; never fetch evidence or the financial state.
+FUNDING_FIELDS = {
+    "_id": 0, "owner_id": 1, "funding_type": {"$type": "$ad_funding"},
+    "funding_entries": {"$map": {
+        "input": {"$slice": [{"$objectToArray": {"$cond": [
+            {"$eq": [{"$type": "$ad_funding"}, "object"]}, "$ad_funding", {}]}}, MAX_BINDINGS + 1]},
+        "as": "funding", "in": {"identity": "$$funding.k", "type": {"$type": "$$funding.v"},
+            "setting": {field: "$$funding.v." + field for field in (
+                "mode", "platform", "integration_account_id", "platform_account_id", "confirmed_by",
+                "confirmed_at", "currency", "timezone", "active", "is_active",
+                "archived", "deleted", "is_archived", "is_deleted")}},
+    }},
+}
 ACCOUNT_FIELDS = _projection("user_id", "provider", "mezan_integration_account_id", "external_account_id",
-    "ad_account_id", "connection_status", "connection_provenance", "mezan_selected", "last_sync_at",
+    "ad_account_id", "currency", "timezone", "connection_status", "connection_provenance", "mezan_selected", "last_sync_at",
     "last_observed_at", "source_mode", "financial_last_sync_at", "financial_last_observed_at",
     "financial_data_quality", "financial_coverage.status", "financial_coverage.data_state",
     "financial_coverage.expected_requests", "financial_coverage.completed_requests")
@@ -154,6 +170,35 @@ def _usable(row):
             and not any(row.get(key) for key in ("archived", "deleted", "is_archived", "is_deleted")))
 
 
+def _funding_state(records, owner, now):
+    if not records:
+        return None  # An initial owner state legitimately has no funding map.
+    if len(records) != 1:
+        raise ValueError("ambiguous_operational_funding")
+    record = records[0]
+    entries = record.get("funding_entries")
+    if (record.get("owner_id") != owner or record.get("funding_type") not in {"object", "missing"}
+            or type(entries) is not list or record.get("funding_type") == "missing" and entries):
+        raise ValueError("invalid_operational_funding")
+    if len(entries) > MAX_BINDINGS:
+        raise OverflowError("operational_funding_limit")
+    settings = {}
+    for entry in entries:
+        if type(entry) is not dict or entry.get("type") != "object" or type(entry.get("setting")) is not dict:
+            raise ValueError("invalid_operational_funding_entry")
+        identity, setting = entry.get("identity"), entry["setting"]
+        identifiers = [identity, *(setting.get(key) for key in (
+            "platform", "integration_account_id", "platform_account_id", "currency", "timezone"))]
+        if (any(type(item) is not str or not 0 < len(item) <= 200 for item in identifiers)
+                or identity in settings
+                or _known_time(setting.get("confirmed_at"), now) is None
+                or any(key in setting and type(setting[key]) is not bool for key in (
+                    "active", "is_active", "archived", "deleted", "is_archived", "is_deleted"))):
+            raise ValueError("invalid_operational_funding_metadata")
+        settings[identity] = setting
+    return {"owner_id": owner, "ad_funding": settings}
+
+
 def _coverage(proof):
     if type(proof) is not dict:
         return False
@@ -226,6 +271,9 @@ async def _advertising(db, owner, key, bindings, now):
         if len(candidates) != 1:
             return _row(key, "unknown", "metadata_invalid")
         row = candidates[0]
+        if (binding.get("funding_policy") == "wallet_first"
+                and (binding.get("currency") != row.get("currency") or binding.get("timezone") != row.get("timezone"))):
+            return _row(key, "unknown", "metadata_invalid")
         if (row.get("connection_status") != "connected"
                 or key in {"snapchat", "meta"} and row.get("mezan_selected") is not True
                 or key != "snapchat" and row.get("connection_provenance") != "api_connection"
@@ -317,11 +365,23 @@ async def _ads_sources(db, owner, now):
     try:
         async with asyncio.timeout(SOURCE_TIMEOUT_SECONDS):
             bindings = await _rows(db, "mz2_ad_account_bindings_v2", {"user_id": owner}, BINDING_FIELDS, limit=MAX_BINDINGS + 1)
+            if len(bindings) > MAX_BINDINGS:
+                raise OverflowError("native_funding_limit")
+            records = await _rows(db, "operational_balance_states_v1", {"_id": owner}, FUNDING_FIELDS, limit=2)
+        # Merge before _usable: even a disabled native row can conflict with
+        # operational authority under the financial collector's binding rules.
+        bindings, conflicts = funding_bindings(_funding_state(records, owner, now), owner, bindings)
+        if conflicts:
+            raise ValueError("operational_ad_funding_authority_conflict")
         if len(bindings) > MAX_BINDINGS:
-            return [_row(key, "unknown", "metadata_limit") for key in ADS]
+            raise OverflowError("combined_funding_limit")
         selected = [row for row in bindings if _usable(row) and row.get("confirmed_by") and row.get("confirmed_at")]
         if any(row.get("platform") not in ADS or row.get("funding_mode") not in {"prepaid", "postpaid", "hybrid"} for row in selected):
             return [_row(key, "unknown", "metadata_invalid") for key in ADS]
+    except OverflowError:
+        return [_row(key, "unknown", "metadata_limit") for key in ADS]
+    except ValueError:
+        return [_row(key, "unknown", "metadata_invalid") for key in ADS]
     except Exception:
         return [_row(key, "unknown", "metadata_unavailable") for key in ADS]
 

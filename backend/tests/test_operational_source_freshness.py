@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 import unittest
 from unittest.mock import patch
 
+from operational_ad_funding import bindings as funding_bindings, party_id
 from operational_source_freshness import read_source_freshness
 
 
@@ -16,11 +17,11 @@ def at(minutes=0):
     return (NOW - timedelta(minutes=minutes)).isoformat()
 
 
-def value(row, path):
+def value(row, path, default=None):
     current = row
     for key in path.split("."):
         if not isinstance(current, dict) or key not in current:
-            return None
+            return default
         current = current[key]
     return current
 
@@ -47,13 +48,55 @@ def matches(row, query):
     return True
 
 
+MISSING = object()
+
+
+def expression(row, spec, variables=None):
+    """Evaluate the bounded Mongo projection subset, not a financial state read."""
+    variables = variables or {}
+    if isinstance(spec, str) and spec.startswith("$$"):
+        return value(variables, spec[2:], MISSING)
+    if isinstance(spec, str) and spec.startswith("$"):
+        return value(row, spec[1:], MISSING)
+    if isinstance(spec, list):
+        return [expression(row, item, variables) for item in spec]
+    if not isinstance(spec, dict):
+        return spec
+    if "$type" in spec:
+        item = expression(row, spec["$type"], variables)
+        if item is MISSING:
+            return "missing"
+        return {dict: "object", list: "array", str: "string", bool: "bool", int: "int",
+                float: "double", type(None): "null", datetime: "date"}[type(item)]
+    if "$eq" in spec:
+        left, right = expression(row, spec["$eq"], variables)
+        return left == right
+    if "$cond" in spec:
+        condition, yes, no = spec["$cond"]
+        return expression(row, yes if expression(row, condition, variables) else no, variables)
+    if "$objectToArray" in spec:
+        item = expression(row, spec["$objectToArray"], variables)
+        assert type(item) is dict
+        return [{"k": key, "v": entry} for key, entry in item.items()]
+    if "$slice" in spec:
+        items, count = expression(row, spec["$slice"], variables)
+        return items[:count]
+    if "$map" in spec:
+        item = spec["$map"]
+        return [expression(row, item["in"], {**variables, item["as"]: entry})
+                for entry in expression(row, item["input"], variables)]
+    assert not any(key.startswith("$") for key in spec), spec
+    return {key: item for key, field in spec.items()
+            if (item := expression(row, field, variables)) is not MISSING}
+
+
 def projected(row, projection):
     result = {}
     for path, include in projection.items():
         if not include:
             continue
-        item = value(row, path)
-        if item is None:
+        item = expression(row, include) if isinstance(include, dict) else value(row, path, MISSING)
+        if item is MISSING:
             continue
         target = result
         pieces = path.split(".")
@@ -122,6 +165,7 @@ class DB:
             "mz2_ad_account_bindings_v2", "mezan_integration_accounts_v2", "mezan_integrations_v2",
             "mezan_integration_sync_runs_v2", "mezan_integration_errors_v2",
             "mezan_ads_auto_sync_scheduler_v2", "salla_integrations", "salla_scheduled_reconciliation",
+            "operational_balance_states_v1",
         }, name
         return Collection(self, name)
 
@@ -396,6 +440,175 @@ class SourceFreshnessTests(unittest.TestCase):
                    "salla_scheduled_reconciliation": [{"_id": OWNER, "schedule_version": "daily_10_riyadh_update_v1",
                        "status": "completed", "completed_slot": "2026-11-23", "last_success_at": "2026-11-23T07:05:00+00:00",
                        "last_result": {"errors_count": 0, "incomplete_count": 0, "truncated": False, "coverage_complete": True}}]})
+
+
+class OperationalAdFundingFreshnessTests(unittest.TestCase):
+    @staticmethod
+    def configured(platform="meta", minutes=1):
+        db = configured(platform, minutes=minutes)
+        binding = db.rows["mz2_ad_account_bindings_v2"].pop()
+        setting = {key: binding[key] for key in ("platform", "integration_account_id", "platform_account_id")}
+        setting.update(mode="wallet_first", confirmed_by=OWNER, confirmed_at=at(100),
+                       currency="USD", timezone="Asia/Riyadh")
+        identity = party_id(OWNER, setting["integration_account_id"])
+        db.rows["operational_balance_states_v1"] = [{
+            "_id": OWNER, "owner_id": OWNER, "status": "active", "revision": 5,
+            "ad_funding": {identity: setting},
+        }]
+        db.rows["mezan_integration_accounts_v2"][0].update(currency="USD", timezone="Asia/Riyadh")
+        return db, db.rows["operational_balance_states_v1"][0], identity
+
+    def test_operational_only_approved_binding_is_configured_for_each_provider(self):
+        for platform in ("snapchat", "meta", "tiktok", "google_ads"):
+            with self.subTest(platform=platform):
+                db, state, identity = self.configured(platform)
+                canonical, conflicts = funding_bindings(state, OWNER, [])
+                self.assertFalse(conflicts)
+                self.assertEqual(canonical[0]["_id"], identity)
+                result = read(db)
+                self.assertEqual(result[platform]["state"], "current")
+                self.assertEqual(result[platform]["last_success_at"], at(1))
+                self.assertNotIn(identity, str(result))
+                self.assertIsNone(result[platform]["data_through"])
+
+    def test_operational_binding_preserves_stale_failed_disabled_and_missing_proof(self):
+        for reason in ("stale", "provider_error", "disabled", "missing_account"):
+            with self.subTest(reason=reason):
+                db, _, _ = self.configured(minutes=180 if reason == "stale" else 1)
+                if reason == "provider_error":
+                    db.rows["mezan_integration_errors_v2"] = [{"user_id": OWNER, "provider": "meta_ads",
+                        "occurred_at": at(0), "code": "meta_rate_limited"}]
+                if reason == "disabled":
+                    db.rows["mezan_ads_auto_sync_scheduler_v2"][0]["enabled"] = False
+                if reason == "missing_account":
+                    db.rows["mezan_integration_accounts_v2"] = []
+                expected = {"stale": "ad_source_stale", "provider_error": "ad_source_rate_limited",
+                            "disabled": "automatic_sync_disabled", "missing_account": "metadata_invalid"}
+                self.assertEqual(read(db)["meta"]["code"], expected[reason])
+
+    def test_native_only_behavior_survives_missing_or_empty_operational_settings(self):
+        for state in (None, {"owner_id": OWNER}, {"owner_id": OWNER, "ad_funding": {}}):
+            with self.subTest(state=state):
+                db = configured()
+                if state is not None:
+                    db.rows["operational_balance_states_v1"] = [{"_id": OWNER, **state}]
+                self.assertEqual(read(db)["meta"]["state"], "current")
+
+    def test_foreign_unconfirmed_and_malformed_operational_authority_is_unknown(self):
+        mutations = [lambda state, identity: state.update(owner_id="foreign-owner"),
+                     lambda state, identity: state["ad_funding"][identity].update(confirmed_by="foreign-owner"),
+                     lambda state, identity: state["ad_funding"][identity].pop("confirmed_at"),
+                     lambda state, identity: state["ad_funding"][identity].update(confirmed_at={"time": at(100)}),
+                     lambda state, identity: state["ad_funding"][identity].update(confirmed_at="invalid"),
+                     lambda state, identity: state["ad_funding"][identity].update(confirmed_at="2099-01-01T00:00:00Z"),
+                     lambda state, identity: state["ad_funding"][identity].update(archived="false"),
+                     lambda state, identity: state["ad_funding"][identity].update(mode="unapproved"),
+                     lambda state, identity: state["ad_funding"].update(wrong=state["ad_funding"].pop(identity)),
+                     lambda state, identity: state["ad_funding"][identity].update(integration_account_id="x" * 201),
+                     lambda state, identity: state["ad_funding"].update({identity: []}),
+                     lambda state, identity: state.update(ad_funding=None),
+                     lambda state, identity: state.update(ad_funding=[]),
+                     lambda state, identity: state.update(ad_funding={"archive_marker": {"packed": "not-inline"}})]
+        for index, mutate in enumerate(mutations):
+            with self.subTest(index=index):
+                db, state, identity = self.configured()
+                mutate(state, identity)
+                self.assertEqual(read(db)["meta"]["state"], "unknown")
+
+    def test_another_owners_document_cannot_configure_this_owner(self):
+        db, state, _ = self.configured()
+        state.update(_id="foreign-owner", owner_id="foreign-owner")
+        self.assertEqual(read(db)["meta"]["state"], "inactive")
+
+    def test_native_conflict_is_checked_before_health_inactive_flags(self):
+        for flags in ({}, {"active": False}, {"is_active": False}, {"archived": True}):
+            with self.subTest(flags=flags):
+                db, state, _ = self.configured()
+                native = configured().rows["mz2_ad_account_bindings_v2"][0]
+                native.update(flags)
+                db.rows["mz2_ad_account_bindings_v2"] = [native]
+                self.assertTrue(funding_bindings(state, OWNER, [native])[1])
+                self.assertEqual(read(db)["meta"]["state"], "unknown")
+
+    def test_operational_reconnect_duplicate_is_not_silently_inactive(self):
+        db, state, identity = self.configured()
+        second = {**state["ad_funding"][identity], "integration_account_id": "reconnected-account"}
+        state["ad_funding"][party_id(OWNER, second["integration_account_id"])] = second
+        self.assertTrue(funding_bindings(state, OWNER, [])[1])
+        self.assertEqual(read(db)["meta"]["state"], "unknown")
+
+    def test_unconfirmed_or_inactive_native_binding_does_not_override_approved_operational(self):
+        for change in ({"confirmed_by": None}, {"status": "inactive"}):
+            with self.subTest(change=change):
+                db, state, _ = self.configured()
+                native = {**configured().rows["mz2_ad_account_bindings_v2"][0], **change}
+                db.rows["mz2_ad_account_bindings_v2"] = [native]
+                self.assertFalse(funding_bindings(state, OWNER, [native])[1])
+                self.assertEqual(read(db)["meta"]["state"], "current")
+
+    def test_inactive_operational_flags_remain_inactive(self):
+        for key, flag in (("active", False), ("is_active", False), ("archived", True),
+                          ("deleted", True), ("is_archived", True), ("is_deleted", True)):
+            with self.subTest(key=key):
+                db, state, identity = self.configured()
+                state["ad_funding"][identity][key] = flag
+                self.assertEqual(read(db)["meta"]["state"], "inactive")
+
+    def test_wallet_first_account_currency_and_timezone_must_match(self):
+        for field, wrong in (("currency", "SAR"), ("timezone", "UTC")):
+            with self.subTest(field=field):
+                db, _, _ = self.configured()
+                db.rows["mezan_integration_accounts_v2"][0][field] = wrong
+                self.assertEqual(read(db)["meta"]["code"], "metadata_invalid")
+
+    def test_operational_and_combined_binding_limits_fail_closed(self):
+        for count, native_count in ((80, 0), (26, 25)):
+            with self.subTest(count=count, native_count=native_count):
+                db, state, identity = self.configured()
+                example = state["ad_funding"].pop(identity)
+                for index in range(count):
+                    identifier = "operational-" + str(index)
+                    state["ad_funding"][party_id(OWNER, identifier)] = {
+                        **example, "integration_account_id": identifier, "platform_account_id": identifier}
+                db.rows["mz2_ad_account_bindings_v2"] = [
+                    {**configured().rows["mz2_ad_account_bindings_v2"][0],
+                     "integration_account_id": "native-" + str(i), "platform_account_id": "native-" + str(i)}
+                    for i in range(native_count)]
+                self.assertEqual(read(db)["meta"]["code"], "metadata_limit")
+                call = next(call for call in db.reads if call["collection"] == "operational_balance_states_v1")
+                bounded = projected(state, call["projection"])
+                self.assertLessEqual(len(bounded["funding_entries"]), 51)
+
+    def test_operational_projection_never_hydrates_financial_state_or_archive(self):
+        db, state, identity = self.configured()
+        secret = "financial-or-credential-content-must-not-be-read"
+        state.update(engine={"packed_financial_snapshot_v1": {"data": secret}},
+                     engine_audit_archive={"data": secret}, openings={"amount": secret},
+                     movements=[{"amount": secret}], requests={"request": secret})
+        state["ad_funding"][identity].update(evidence=secret, amount=secret, access_token=secret)
+        with patch("operational_balance_store.read", side_effect=AssertionError("full state read")), \
+             patch("operational_balance_archive.unpack", side_effect=AssertionError("archive hydration")), \
+             patch("operational_ad_funding.catalog", side_effect=AssertionError("financial catalog")):
+            self.assertEqual(read(db)["meta"]["state"], "current")
+        call = next(call for call in db.reads if call["collection"] == "operational_balance_states_v1")
+        self.assertEqual(call["query"], {"_id": OWNER})
+        self.assertEqual(call["limit"], 2)
+        metadata = projected(state, call["projection"])
+        self.assertNotIn(secret, str(metadata))
+        self.assertNotIn("engine", metadata)
+        self.assertEqual(set(metadata), {"owner_id", "funding_type", "funding_entries"})
+
+    def test_operational_metadata_failure_and_deadline_do_not_report_inactive(self):
+        db, _, _ = self.configured()
+        db.broken.add("operational_balance_states_v1")
+        result = read(db)
+        self.assertEqual(result["meta"]["code"], "metadata_unavailable")
+        self.assertNotIn("secret", str(result))
+        db, _, _ = self.configured()
+        db.delayed.add("operational_balance_states_v1")
+        with patch("operational_source_freshness.SOURCE_TIMEOUT_SECONDS", 0.01):
+            self.assertEqual(read(db)["meta"]["state"], "unknown")
+        self.assertIn("operational_balance_states_v1", db.cancelled)
 
 
 if __name__ == "__main__":
