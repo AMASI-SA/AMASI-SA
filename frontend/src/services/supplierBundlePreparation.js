@@ -11,6 +11,12 @@ function failure(code, message) {
     return error;
 }
 
+function requireCurrentAction(isCurrent) {
+    if (typeof isCurrent === "function" && !isCurrent()) {
+        throw failure("context_changed", "تغيّرت شاشة التحقق أو الحساب. احتُفظ بالمحاولة الأصلية للتحقق منها لاحقًا.");
+    }
+}
+
 const validText = (value, max = 160) => typeof value === "string" && value.length > 0
     && value.length <= max && value === value.trim();
 const same = (left, right) => JSON.stringify(canonical(left)) === JSON.stringify(canonical(right));
@@ -185,24 +191,28 @@ function verifiedResponse(data, record, ctx) {
             assignment_contract: CONTRACT, schedule_committed: true } };
 }
 
-async function post(record, ctx) {
+async function post(record, ctx, isCurrent) {
     try {
+        requireCurrentAction(isCurrent);
         const { data } = await api.post(`${PATH}/requests`, record.body);
+        requireCurrentAction(isCurrent);
         const result = verifiedResponse(data, record, ctx);
         if (result.state === "COMMITTED") remove(record);
         return result;
     } catch (error) {
+        requireCurrentAction(isCurrent);
         const detail = error?.response?.data?.detail;
         if (detail?.not_applied === true) {
             // These two errors can precede the server's original-scope check.
             // A different signed-in account cannot discard the saved request.
             if (["preparation_assignment_session_scope_changed", "preparation_assignment_command_invalid"].includes(detail.code)) {
                 let original;
-                try { original = await status(record, ctx); }
+                try { original = await status(record, ctx, isCurrent); }
                 catch (_) { throw failure("pending", "تعذّر التحقق من المحاولة في حسابها الأصلي. احتُفظ بالمحاولة؛ أعد فتح التحقق من المحاولات السابقة."); }
                 if (original.state === "COMMITTED") return original;
                 if (original.state !== "ABSENT") throw failure("pending", "المحاولة الأصلية ما زالت محفوظة لدى الخادم. تحقّق من نتيجتها قبل إنشاء ملف جديد.");
             }
+            requireCurrentAction(isCurrent);
             remove(record);
             const rejected = failure("not_applied", detail.message || "لم يكتمل إنشاء الملف. حدّث القائمة وراجع الاختيار ثم أعد المحاولة.");
             rejected.notApplied = true;
@@ -233,16 +243,19 @@ export async function listPendingSupplierBundlePreparations() {
     return { sessionScope: ctx.scope, requests: records(ctx).map(pendingSummary) };
 }
 
-async function loadRequest({ sessionScope, clientRequestId }) {
+async function loadRequest({ sessionScope, clientRequestId, isCurrent }) {
     const ctx = await context();
+    requireCurrentAction(isCurrent);
     if (ctx.scope !== sessionScope) throw failure("scope_changed", "تغيّر الحساب المفتوح. أعد فتح قائمة المحاولات لهذا الحساب.");
     const record = records(ctx).find((row) => row.body.client_request_id === clientRequestId);
     if (!record) throw failure("not_found", "لا توجد محاولة محفوظة لهذا الملف في الحساب الحالي. حدّث قائمة المحاولات.");
     return { ctx, record };
 }
 
-async function status(record, ctx) {
+async function status(record, ctx, isCurrent) {
+    requireCurrentAction(isCurrent);
     const { data } = await api.get(`${PATH}/requests/${encodeURIComponent(record.body.client_request_id)}`);
+    requireCurrentAction(isCurrent);
     const result = verifiedResponse(data, record, ctx);
     if (result.state === "COMMITTED") remove(record);
     return result;
@@ -250,15 +263,15 @@ async function status(record, ctx) {
 
 export async function inspectSupplierBundlePreparation(args) {
     const { ctx, record } = await loadRequest(args);
-    return status(record, ctx);
+    return status(record, ctx, args.isCurrent);
 }
 
 export async function retrySupplierBundlePreparation(args) {
     const { ctx, record } = await loadRequest(args);
-    const current = await status(record, ctx);
+    const current = await status(record, ctx, args.isCurrent);
     if (current.state === "COMMITTED") return current;
     // This explicit retry uses only the frozen original command and request ID.
-    return post(record, ctx);
+    return post(record, ctx, args.isCurrent);
 }
 
 export function notifySupplierBundlePreparationCommitted(batch) {

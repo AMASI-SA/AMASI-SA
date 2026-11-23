@@ -2,6 +2,54 @@
 
 ## State
 
+### Independent review corrections complete — source candidate, 2026-11-24
+
+The preceding remote checkpoint is
+`d28806b9e123fb4691e0d850332a941273f929b2`, tree
+`ed318310186f69d675dfeba4b980611dab084fdf`. Its previously failing G47 Mongo8,
+supplier-contract, display-mongo and frozen-reference/runtime gates now pass.
+One Store Delivery job failed an untouched concurrent bank-import replay test
+(417 passed, one failed); no unrelated bank code or assertion was changed.
+The final exact source must still pass its fresh required CI before release.
+
+Both independently reproduced blockers are corrected and independently
+rechecked:
+
+1. A sealed committed assignment now uses a historical frozen-identity reader.
+   Later source changes or cancellation can block execution without converting
+   the original committed receipt into PENDING. All original ownership,
+   allocation, reference, fingerprint, product/variant, supplier and specification
+   checks remain. Only committed receipt readback uses this helper; publication,
+   scan, receiving, Ready and actual-cost verification retain strict live gates.
+   Fresh real-Mongo bridge suite: **69 passed, zero skips**, 50.18 seconds.
+   It includes actual GET/POST replay after source change and release/cancel,
+   tamper refusals, cancel/new-session/rescan/one-payable flow, and full rollback
+   after both native invoice posting and leaf-proof writes. Children stopped.
+2. Web recovery now invalidates pending actions on navigation, account/context
+   changes and newer generations. Stale responses retain their durable record
+   and cannot notify, download, reload or call parent completion handlers.
+   A verified modern event cannot consume another attempt's pending deadline;
+   initial creation clears only the exact modal objects it captured. The actual
+   component/service/global-listener regression was red before and green after.
+   Independent replay confirmed zero late callbacks/events and preservation of
+   the newer ordinary required deadline. Final frontend selection: **102 tests
+   in9 suites passed**, 2.915 seconds, with no further source edits.
+
+The owner reports cancelling the old mobile draft on the first device and
+successfully saving the invoices on a second device. This supports a local
+session-state issue and is distinct from independently verified Production
+invoice evidence. The original close response/current APK remain unavailable.
+Mobile PR #380 remains a separate reviewed source checkpoint with118 passing
+local behavior cases and unresolved CI job-start evidence; no mobile release.
+
+All source writers are paused. Independent review has no remaining confirmed
+blocker in this candidate. An isolated governed worktree and copied dependencies
+are prepared; no source intent has yet been frozen and no actual-host source,
+lease, deployment, catalog/order, receiving or financial state was changed.
+Next: checkpoint this exact source, run its immutable CI and governed A/B build,
+then freeze intent B and perform the actual-host clean-clone adapter rehearsal.
+Merge/publication remains subject to required checks and the v5 guard contract.
+
 ### Supplier intake and recovery acceptance checkpoint — 2026-11-24
 
 Previous remote source is `f9a68efe6a6652a5a62ffb81f9c44f644772b04d`

@@ -256,3 +256,33 @@ test("pending publication remains recoverable and does not automatically retry",
     await expect(createSupplierBundlePreparation(args())).rejects.toHaveProperty("code", "bundle_preparation_pending");
     expect(localStorage.length).toBe(1); expect(api.post).toHaveBeenCalledTimes(1);
 });
+
+test.each(["ABSENT", "PENDING", "COMMITTED"])("an invalidated recovery action retains its record and cannot retry after held %s status", async (state) => {
+    const body = await loseReply();
+    let active = true; let resolveStatus;
+    const held = new Promise((resolve) => { resolveStatus = resolve; });
+    api.get.mockImplementation(async (path) => path.endsWith("/options") ? { data: options } : held);
+    const retry = retrySupplierBundlePreparation({ ...recoveryArgs(), isCurrent: () => active });
+    await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+    expect(api.get.mock.calls.some(([path]) => path.includes("/requests/"))).toBe(true);
+    active = false; resolveStatus({ data: response(body, state) });
+    await expect(retry).rejects.toHaveProperty("code", "bundle_preparation_context_changed");
+    expect(api.post).toHaveBeenCalledTimes(1); expect(localStorage.length).toBe(1);
+    expect(saved().body).toEqual(body);
+});
+
+test.each(["COMMITTED", "not_applied"])("invalidation during retry publication keeps the original command after %s", async (outcome) => {
+    const body = await loseReply();
+    let active = true; let resolvePost; let rejectPost;
+    const held = new Promise((resolve, reject) => { resolvePost = resolve; rejectPost = reject; });
+    api.get.mockImplementation(async (path) => ({ data: path.endsWith("/options") ? options : response(body, "PENDING") }));
+    api.post.mockReturnValue(held);
+    const retry = retrySupplierBundlePreparation({ ...recoveryArgs(), isCurrent: () => active });
+    for (let index = 0; index < 6; index += 1) await Promise.resolve();
+    expect(api.post).toHaveBeenCalledTimes(2);
+    active = false;
+    if (outcome === "COMMITTED") resolvePost({ data: response(body) });
+    else rejectPost({ response: { data: { detail: { code: "reviewed_selection_stale", not_applied: true } } } });
+    await expect(retry).rejects.toHaveProperty("code", "bundle_preparation_context_changed");
+    expect(localStorage.length).toBe(1); expect(saved().body).toEqual(body);
+});

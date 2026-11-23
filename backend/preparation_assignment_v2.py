@@ -451,7 +451,7 @@ async def _verified_receipt(db, owner, row):
     if (len(allocations) != commercial_count or len(pieces) != count or len(facts(pieces)) != commercial_count
             or facts(allocations) != facts(pieces) or {piece["piece_id"] for piece in pieces} != set(ids)):
         return None
-    from bundle_supplier_pieces import validate_supplier_leaf_piece, supplier_leaf_reference, supplier_leaf_piece_id
+    from bundle_supplier_pieces import validate_committed_supplier_leaf_identity, supplier_leaf_reference, supplier_leaf_piece_id
     by_commercial = {}
     refs = {}
     for piece in pieces:
@@ -463,7 +463,7 @@ async def _verified_receipt(db, owner, row):
                 return None
             continue
         try:
-            authorities = [await validate_supplier_leaf_piece(db, owner, piece) for piece in members]
+            authorities = [await validate_committed_supplier_leaf_identity(db, owner, piece) for piece in members]
             if any(authority is None for authority in authorities):
                 return None
             unit = authorities[0][0]

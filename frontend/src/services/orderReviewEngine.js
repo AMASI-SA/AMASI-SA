@@ -139,9 +139,11 @@ export async function createReviewedPreparationBatch({ clientRequestId, selectio
             throw new Error("أكمل اسم الملف والموظف المسؤول قبل إنشاء PDF.");
         }
         if (supplierBundle === true) {
+            const pendingSchedule = window.__mezanPreparationFileSchedulePending;
             const batch = await createSupplierBundlePreparation({ clientRequestId, selections, metadata,
                 physicalQuantity, deferSupplierConfirmed });
-            delete window.__mezanPreparationFileMetadata;
+            if (window.__mezanPreparationFileMetadata === metadata) delete window.__mezanPreparationFileMetadata;
+            if (window.__mezanPreparationFileSchedulePending === pendingSchedule) delete window.__mezanPreparationFileSchedulePending;
             notifySupplierBundlePreparationCommitted(batch);
             return batch;
         }

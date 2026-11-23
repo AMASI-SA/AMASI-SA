@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
+import { useOptionalAuth } from "../../context/AuthContext";
 import {
     inspectSupplierBundlePreparation,
     listPendingSupplierBundlePreparations,
@@ -7,6 +8,15 @@ import {
 } from "../../services/supplierBundlePreparation";
 
 export default function SupplierBundlePreparationRecovery({ onCommitted, onNotApplied, disabled = false, onBusyChange }) {
+    const auth = useOptionalAuth();
+    const accountKey = JSON.stringify([auth?.authStatus, auth?.user?.id, auth?.user?.created_by,
+        auth?.user?.role, auth?.user?.is_owner]);
+    const accountReady = auth?.authStatus === "authenticated" && Boolean(auth.user?.id);
+    const mounted = useRef(false);
+    const generation = useRef(0);
+    const busyRef = useRef(false);
+    const context = useRef(null);
+    context.current = { accountKey, accountReady, disabled, onCommitted, onNotApplied, onBusyChange };
     const [opened, setOpened] = useState(false);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState("");
@@ -14,39 +24,58 @@ export default function SupplierBundlePreparationRecovery({ onCommitted, onNotAp
     const [requests, setRequests] = useState([]);
     const [states, setStates] = useState({});
 
+    useLayoutEffect(() => {
+        const wasBusy = busyRef.current;
+        mounted.current = true; generation.current += 1; busyRef.current = false;
+        setBusy(false); setError(""); setOpened(false); setScope(""); setRequests([]); setStates({});
+        if (wasBusy && context.current.accountKey === accountKey) context.current.onBusyChange?.(false);
+        return () => { mounted.current = false; generation.current += 1; };
+    }, [accountKey, disabled]);
+
     const run = async (action) => {
-        if (busy || disabled) return;
-        setBusy(true); setError(""); onBusyChange?.(true);
-        try { await action(); }
-        catch (cause) { setError(cause?.message || "تعذّر التحقق من المحاولة. احتفظ بالمحاولة الأصلية وأعد التحقق لاحقًا."); }
-        finally { setBusy(false); onBusyChange?.(false); }
+        if (!mounted.current || busyRef.current || disabled || !accountReady) return;
+        const current = ++generation.current;
+        const isCurrent = () => mounted.current && current === generation.current
+            && context.current.accountKey === accountKey && context.current.accountReady && !context.current.disabled;
+        busyRef.current = true; setBusy(true); setError("");
+        if (isCurrent()) context.current.onBusyChange?.(true);
+        try { if (isCurrent()) await action(isCurrent); }
+        catch (cause) {
+            if (isCurrent()) setError(cause?.message || "تعذّر التحقق من المحاولة. احتفظ بالمحاولة الأصلية وأعد التحقق لاحقًا.");
+        } finally {
+            if (isCurrent()) { busyRef.current = false; setBusy(false); context.current.onBusyChange?.(false); }
+        }
     };
-    const open = () => run(async () => {
+    const open = () => run(async (isCurrent) => {
         const result = await listPendingSupplierBundlePreparations();
+        if (!isCurrent()) return;
         setScope(result.sessionScope); setRequests(result.requests); setStates({}); setOpened(true);
     });
-    const check = (row, retry = false) => run(async () => {
+    const check = (row, retry = false) => run(async (isCurrent) => {
         const action = retry ? retrySupplierBundlePreparation : inspectSupplierBundlePreparation;
         let result;
-        try { result = await action({ sessionScope: scope, clientRequestId: row.clientRequestId }); }
+        try { result = await action({ sessionScope: scope, clientRequestId: row.clientRequestId, isCurrent }); }
         catch (cause) {
+            if (!isCurrent()) return;
             if (cause?.notApplied === true) {
                 setRequests((current) => current.filter((item) => item.clientRequestId !== row.clientRequestId));
-                onNotApplied?.();
+                if (isCurrent()) context.current.onNotApplied?.();
             }
             throw cause;
         }
+        if (!isCurrent()) return;
         if (result.state === "COMMITTED") {
             notifySupplierBundlePreparationCommitted(result.batch);
+            if (!isCurrent()) return;
             setRequests((current) => current.filter((item) => item.clientRequestId !== row.clientRequestId));
-            await onCommitted?.(result.batch);
+            if (isCurrent()) await context.current.onCommitted?.(result.batch, isCurrent);
         } else {
             setStates((current) => ({ ...current, [row.clientRequestId]: result.state }));
         }
     });
 
     return <div className="rounded-2xl border border-slate-200 bg-white p-4" data-testid="supplier-bundle-preparation-recovery">
-        <button type="button" onClick={open} disabled={busy || disabled}
+        <button type="button" onClick={open} disabled={busy || disabled || !accountReady}
             className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-extrabold text-violet-900 disabled:opacity-50">
             {busy ? "جارٍ التحقق…" : "التحقق من محاولات البكج السابقة"}
         </button>

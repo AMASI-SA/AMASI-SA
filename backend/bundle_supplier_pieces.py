@@ -234,7 +234,7 @@ async def ensure_supplier_piece_identity_index(db):
                 raise
 
 
-def _validate_loaded_piece(owner, piece, unit, plan):
+def _validate_frozen_piece_identity(owner, piece, unit, plan):
     if piece.get("bundle_supplier_retired"):
         fail("parent_retired")
     ref = piece.get(REFERENCE_FIELD)
@@ -245,10 +245,9 @@ def _validate_loaded_piece(owner, piece, unit, plan):
             or type(piece.get("unit_index")) is not int or piece["unit_index"] < 1
             or piece.get("user_id") != owner):
         fail("identity_invalid")
-    if (not unit or not plan or plan.get("state") != "accepted" or plan.get("reconciliation_required")
+    if (not unit or not plan
             or unit.get("user_id") != owner or plan.get("user_id") != owner
             or unit.get("_id") != ref["unit_id"] or plan.get("_id") != ref["plan_id"]
-            or unit.get("state") not in {"reserved", "consumed"}
             or type(unit.get("bundle_supplier_bridge_version")) is not int or unit.get("bundle_supplier_bridge_version") != 1
             or type(unit.get("unit_index")) is not int or unit["unit_index"] < 1
             or unit.get("plan_id") != plan.get("_id") or unit.get("order_id") != plan.get("order_id")
@@ -274,6 +273,32 @@ def _validate_loaded_piece(owner, piece, unit, plan):
             or piece.get("services")):
         fail("piece_evidence_mismatch")
     return unit, leaf
+
+
+def _validate_loaded_piece(owner, piece, unit, plan):
+    result = _validate_frozen_piece_identity(owner, piece, unit, plan)
+    if result is not None and (plan.get("state") != "accepted" or plan.get("reconciliation_required")
+            or unit.get("state") not in {"reserved", "consumed"}):
+        fail("frozen_authority_mismatch")
+    return result
+
+
+async def validate_committed_supplier_leaf_identity(db, owner, piece):
+    """Readback of a sealed assignment, never execution or actual-cost proof.
+
+    Cancellation can release the unit and later source edits can block its
+    execution. Those mutable conditions cannot erase an already committed
+    assignment. Its caller must separately verify the sealed receipt, original
+    request/allocations/assignment ownership, and exact piece/reference sets.
+    """
+    ref = piece.get(REFERENCE_FIELD)
+    if ref is None:
+        return None
+    if not isinstance(ref, dict) or any(not isinstance(ref.get(key), str) for key in ("unit_id", "plan_id")):
+        fail("identity_invalid")
+    unit = await db[UNITS].find_one({"user_id": owner, "_id": ref["unit_id"]})
+    plan = await db[PLANS].find_one({"user_id": owner, "_id": ref["plan_id"]})
+    return _validate_frozen_piece_identity(owner, piece, unit, plan)
 
 
 async def assert_supplier_source_current(db, owner, plan, line_id, *, session=None):

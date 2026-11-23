@@ -225,11 +225,14 @@ export default function ReviewedOrders() {
     const [recoveringBundle, setRecoveringBundle] = useState(false);
     const requestIdRef = useRef("");
 
-    const load = useCallback(async ({ silent = false } = {}) => {
+    const load = useCallback(async ({ silent = false, isCurrent } = {}) => {
+        const active = () => typeof isCurrent !== "function" || isCurrent();
+        if (!active()) return;
         if (!silent) setLoading(true);
         setError("");
         try {
             const nextCatalog = await listReviewedProductCatalog({ limit: 2000, reviewedDate });
+            if (!active()) return;
             if (!reviewedDate && nextCatalog.selectionGrain !== "physical_piece") {
                 throw new Error("تعذّر تحميل بطاقات القطع المنفصلة بأمان. لم يتم عرض كميات مجمعة.");
             }
@@ -239,9 +242,9 @@ export default function ReviewedOrders() {
                 nextCatalog.products,
             ));
         } catch (loadError) {
-            setError(loadError.message);
+            if (active()) setError(loadError.message);
         } finally {
-            if (!silent) setLoading(false);
+            if (!silent && active()) setLoading(false);
         }
     }, [reviewedDate]);
 
@@ -286,23 +289,25 @@ export default function ReviewedOrders() {
         setSelectedCategoryIds((current) => toggleReviewedCategory(current, categoryId));
     };
 
-    const downloadBatch = useCallback(async (batch) => {
-        if (!batch?.batch_id) return;
+    const downloadBatch = useCallback(async (batch, { isCurrent } = {}) => {
+        const active = () => typeof isCurrent !== "function" || isCurrent();
+        if (!batch?.batch_id || !active()) return;
         setDownloadingBatch(true);
         setBatchError("");
         try {
             await downloadReviewedPreparationBatchPdf(batch.batch_id, batch.file_name);
         } catch (downloadError) {
-            setBatchError(downloadError.message);
+            if (active()) setBatchError(downloadError.message);
         } finally {
-            setDownloadingBatch(false);
+            if (active()) setDownloadingBatch(false);
         }
     }, []);
 
-    const recoveredBundle = useCallback(async (batch) => {
+    const recoveredBundle = useCallback(async (batch, isCurrent = () => true) => {
+        if (!isCurrent()) return;
         setLastBatch(batch); setSelectedQuantities({}); requestIdRef.current = "";
-        await load({ silent: true });
-        await downloadBatch(batch);
+        await load({ silent: true, isCurrent });
+        if (isCurrent()) await downloadBatch(batch, { isCurrent });
     }, [load, downloadBatch]);
 
     const createBatch = async () => {

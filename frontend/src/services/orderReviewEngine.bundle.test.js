@@ -3,9 +3,13 @@ import { createReviewedPreparationBatch } from "./orderReviewEngine";
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import ReviewedOrders from "../pages/ReviewedOrders";
+import SupplierBundlePreparationRecovery from "../components/fulfillment/SupplierBundlePreparationRecovery";
+import { createSupplierBundlePreparation } from "./supplierBundlePreparation";
+import { persistPreparationFileSchedule } from "../reviewPreparationFileScheduleSync";
 
 jest.mock("../lib/api", () => ({ __esModule: true, API_BASE: "https://synthetic.test/api",
-    default: { get: jest.fn(), post: jest.fn() } }));
+    default: { get: jest.fn(), post: jest.fn(), put: jest.fn() } }));
+jest.mock("../context/AuthContext", () => ({ useOptionalAuth: () => ({ authStatus: "authenticated", user: { id: "owner", role: "owner" } }) }));
 
 const scope = "a".repeat(64);
 const selections = [{ group_key: "bundle-card", quantity: 1, revision: "b".repeat(64), order_number: "synthetic-order" }];
@@ -13,7 +17,8 @@ const options = { schema: 2, contract: "preparation_assignment_v2", session_scop
     actor: { id: "owner" }, capabilities: { atomic_publication: true, defer: true } };
 
 beforeEach(() => {
-    api.get.mockReset(); api.post.mockReset(); localStorage.clear();
+    api.get.mockReset(); api.post.mockReset(); api.put.mockReset().mockResolvedValue({ data: {} }); localStorage.clear();
+    delete window.__mezanPreparationFileSchedulePending;
     window.__mezanPreparationFileMetadata = { fileTitle: "دفعة البكج", responsibleEmployeeId: "employee",
         expectedQuantity: 2, selectedProductCount: 1, scheduleMode: "required", requiredDueAt: "2026-12-01T10:00:00.000Z" };
 });
@@ -112,4 +117,83 @@ test("a catalog outage does not hide explicit recovery or trigger assignment loo
         expect(api.get.mock.calls.map(([path]) => path)).toEqual(["/reviewed-products-v1/catalog"]);
         expect(api.post).not.toHaveBeenCalled();
     });
+});
+
+test("unmounted recovery cannot notify, reload, download or consume a newer ordinary required schedule", async () => {
+    api.get.mockResolvedValue({ data: options });
+    api.post.mockRejectedValueOnce(new Error("lost reply"));
+    await expect(createSupplierBundlePreparation({ clientRequestId: "request-bundle-late", selections,
+        metadata: window.__mezanPreparationFileMetadata, physicalQuantity: 2, deferSupplierConfirmed: true }))
+        .rejects.toHaveProperty("code", "bundle_preparation_pending");
+    const body = JSON.parse(localStorage.getItem(localStorage.key(0))).body;
+    let resolveStatus; let statusStarted = false;
+    const heldStatus = new Promise((resolve) => { resolveStatus = resolve; });
+    api.get.mockImplementation(async (path) => {
+        if (path.endsWith("/options")) return { data: options };
+        statusStarted = true; return heldStatus;
+    });
+    const reload = jest.fn(); const download = jest.fn(); const busy = jest.fn();
+    const committed = jest.fn(async () => { reload(); download(); }); const created = jest.fn();
+    const container = document.createElement("div"); document.body.appendChild(container);
+    const root = createRoot(container); const previousAct = globalThis.IS_REACT_ACT_ENVIRONMENT;
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    window.addEventListener("mezan:preparation-file-created", persistPreparationFileSchedule);
+    window.addEventListener("mezan:preparation-file-created", created);
+    try {
+        await act(async () => root.render(<SupplierBundlePreparationRecovery onCommitted={committed} onBusyChange={busy} />));
+        const button = (text) => [...container.querySelectorAll("button")].find((node) => node.textContent === text);
+        await act(async () => button("التحقق من محاولات البكج السابقة").click());
+        await act(async () => button("التحقق من نتيجة الملف").click());
+        expect(statusStarted).toBe(true);
+        await act(async () => root.unmount());
+        busy.mockClear();
+        const newerPending = { mode: "required", requiredDueAt: "2026-12-02T10:00:00.000Z" };
+        window.__mezanPreparationFileSchedulePending = newerPending;
+        await act(async () => resolveStatus(commit(body)));
+        expect(committed).not.toHaveBeenCalled(); expect(reload).not.toHaveBeenCalled(); expect(download).not.toHaveBeenCalled();
+        expect(busy).not.toHaveBeenCalled(); expect(created).not.toHaveBeenCalled();
+        expect(localStorage.length).toBe(1);
+        expect(window.__mezanPreparationFileSchedulePending).toBe(newerPending);
+        await act(async () => window.dispatchEvent(new CustomEvent("mezan:preparation-file-created", {
+            detail: { file_number: "PF-NEW-ORDINARY" },
+        })));
+        expect(api.put).toHaveBeenCalledTimes(1);
+        expect(api.put).toHaveBeenCalledWith("/preparation-work-v1/files/PF-NEW-ORDINARY/schedule", {
+            mode: "required", required_due_at: newerPending.requiredDueAt,
+        });
+    } finally {
+        window.removeEventListener("mezan:preparation-file-created", persistPreparationFileSchedule);
+        window.removeEventListener("mezan:preparation-file-created", created);
+        container.remove(); globalThis.IS_REACT_ACT_ENVIRONMENT = previousAct;
+        delete window.__mezanPreparationFileSchedulePending;
+    }
+});
+
+test("a late modern creation clears only its captured metadata and leaves a newer ordinary deadline intact", async () => {
+    api.get.mockResolvedValue({ data: options });
+    let resolveCreation; let originalBody;
+    const held = new Promise((resolve) => { resolveCreation = resolve; });
+    api.post.mockImplementation(async (_path, body) => { originalBody = body; return held; });
+    window.__mezanPreparationFileSchedulePending = { mode: "required", requiredDueAt: "2026-12-01T10:00:00.000Z" };
+    window.addEventListener("mezan:preparation-file-created", persistPreparationFileSchedule);
+    try {
+        const creation = createReviewedPreparationBatch({ clientRequestId: "request-bundle-old-create", selections,
+            supplierBundle: true, physicalQuantity: 2, deferSupplierConfirmed: true });
+        await act(async () => { await Promise.resolve(); });
+        expect(originalBody).toBeDefined();
+        const newerMetadata = { ...window.__mezanPreparationFileMetadata, fileTitle: "ملف عادي جديد" };
+        const newerPending = { mode: "required", requiredDueAt: "2026-12-02T10:00:00.000Z" };
+        window.__mezanPreparationFileMetadata = newerMetadata; window.__mezanPreparationFileSchedulePending = newerPending;
+        resolveCreation(commit(originalBody)); await creation;
+        expect(window.__mezanPreparationFileMetadata).toBe(newerMetadata);
+        expect(window.__mezanPreparationFileSchedulePending).toBe(newerPending);
+        expect(api.put).not.toHaveBeenCalled();
+        await act(async () => window.dispatchEvent(new CustomEvent("mezan:preparation-file-created", { detail: { file_number: "PF-NEW-ORDINARY" } })));
+        expect(api.put).toHaveBeenCalledWith("/preparation-work-v1/files/PF-NEW-ORDINARY/schedule", {
+            mode: "required", required_due_at: newerPending.requiredDueAt,
+        });
+    } finally {
+        window.removeEventListener("mezan:preparation-file-created", persistPreparationFileSchedule);
+        delete window.__mezanPreparationFileSchedulePending;
+    }
 });

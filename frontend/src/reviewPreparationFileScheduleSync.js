@@ -17,7 +17,11 @@ export function preparationFileCreatedSchedule(detail, pending) {
   return { fileNumber, mode, requiredDueAt };
 }
 
-async function persistSchedule(event) {
+export async function persistPreparationFileSchedule(event) {
+  // A recovery notification owns no pending modal state. It must not consume a
+  // newer ordinary attempt's deadline, even when that event arrives late.
+  if (event?.detail?.assignment_contract === "preparation_assignment_v2"
+      && event?.detail?.schedule_committed === true) return;
   const pending = window.__mezanPreparationFileSchedulePending;
   const payload = preparationFileCreatedSchedule(event?.detail, pending);
   if (!payload) {
@@ -48,7 +52,7 @@ function start() {
   marker.id = ROOT_ID;
   marker.hidden = true;
   document.body.appendChild(marker);
-  window.addEventListener("mezan:preparation-file-created", persistSchedule);
+  window.addEventListener("mezan:preparation-file-created", persistPreparationFileSchedule);
 }
 
 if (typeof window !== "undefined" && process.env.NODE_ENV !== "test") {

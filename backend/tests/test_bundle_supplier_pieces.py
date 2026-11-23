@@ -91,14 +91,14 @@ async def seed_bundle(db, *, materialized=True):
     return unit, snapshot, physical, source, workflow
 
 
-async def open_and_scan(http, physical):
+async def open_and_scan(http, physical, *, attempt=""):
     response = await http.post("/supplier-receiving-v1/sessions", json={
-        "supplier_id": "supplier", "client_request_id": "session-" + physical[0]["piece_id"]})
+        "supplier_id": "supplier", "client_request_id": "session-" + physical[0]["piece_id"] + attempt})
     assert response.status_code == 201, response.text
     session = response.json()["session"]
     for piece in physical:
         response = await http.post(f'/supplier-receiving-v1/sessions/{session["id"]}/scan', json={
-            "barcode": piece["barcode"], "client_request_id": "scan-" + piece["piece_id"]})
+            "barcode": piece["barcode"], "client_request_id": "scan-" + piece["piece_id"] + attempt})
         assert response.status_code == 200, response.text
         assert response.json().get("requires_quantity_selection") is not True
     return session
@@ -268,6 +268,88 @@ async def test_public_pair_scan_close_concurrency_one_payable_and_actual_100(env
 
 
 @pytest.mark.asyncio
+async def test_public_cancelled_leaf_draft_can_rescan_and_close_one_payable(env, http):
+    db, _ = env
+    await identities(db); await mapping(db)
+    unit, _, physical, _, _ = await seed_bundle(db)
+    original = {piece["piece_id"]: (deepcopy(piece[bridge.REFERENCE_FIELD]),
+        deepcopy(piece["bundle_supplier_specifications"])) for piece in physical}
+    first = await open_and_scan(http, physical)
+    cancelled = await http.post(f'/supplier-receiving-v1/sessions/{first["id"]}/cancel',
+        json={"note": "Synthetic cancelled draft"})
+    assert cancelled.status_code == 200, cancelled.text
+    assert cancelled.json()["cancelled"] is True
+    assert await db[bridge.INVOICES].count_documents({}) == 0 and not await legs(db)
+    for piece in await db[bridge.PIECES].find({"user_id": OWNER}).to_list(3):
+        assert (piece[bridge.REFERENCE_FIELD], piece["bundle_supplier_specifications"]) == original[piece["piece_id"]]
+        assert piece["supplier_dispatch_status"] == "sent"
+    second = await open_and_scan(http, physical, attempt="-after-cancel")
+    assert second["id"] != first["id"]
+    path = f'/supplier-receiving-v1/sessions/{second["id"]}/close'
+    closed = await http.post(path, json=close_payload(physical))
+    assert closed.status_code == 200, closed.text
+    assert closed.json()["supplier_invoice"]["piece_count"] == 2
+    assert closed.json()["supplier_invoice"]["total_halalas"] == 10000
+    replay = await http.post(path, json=close_payload(physical))
+    assert replay.status_code == 200 and replay.json()["idempotent"] is True
+    assert await db[bridge.INVOICES].count_documents({}) == 1 and len(await legs(db)) == 2
+    events = await db[bridge.EVENTS].find({"piece_id": {"$in": list(original)}}).to_list(20)
+    old = [event for event in events if event.get("event_type") == "supplier_piece_scan_cancelled"]
+    received = [event for event in events if event.get("event_type") == "supplier_piece_service_recorded"]
+    assert len(old) == len(received) == 2
+    assert all(not event.get("finalized_at") for event in old)
+    assert all(event.get("finalized_at") and event["session_id"] == second["id"] for event in received)
+    current = await db[bridge.UNITS].find_one({"_id": unit["_id"]})
+    assert sum(Decimal(leaf["actual_cost"]) for leaf in current["bundle_leaves"]) == Decimal(100)
+    assert {proof["event_id"] for leaf in current["bundle_leaves"] for proof in leaf["supplier_receipt_proofs"]} == {
+        event["id"] for event in received}
+
+
+@pytest.mark.asyncio
+async def test_close_leaf_finalization_failure_rolls_back_native_invoice_journal_and_proofs(env, http, monkeypatch):
+    from accounting_ledger_v2 import GROUPS_COLLECTION
+    db, _ = env
+    await identities(db); await mapping(db)
+    unit, _, physical, _, _ = await seed_bundle(db)
+    session = await open_and_scan(http, physical)
+    before_unit = await db[bridge.UNITS].find_one({"_id": unit["_id"]})
+    before_pieces = await db[bridge.PIECES].find({"user_id": OWNER}).sort("piece_id", 1).to_list(3)
+    before_events = await db[bridge.EVENTS].find({"event_type": "supplier_piece_service_recorded"}).sort("id", 1).to_list(3)
+    finalize = bridge.finalize_supplier_leaf_receipts
+    reached = []
+
+    async def fail_after_leaf_finalization(database, owner, members, *, session=None):
+        await finalize(database, owner, members, session=session)
+        invoice = await database[bridge.INVOICES].find_one({"user_id": owner}, session=session)
+        journal = await database[GROUPS_COLLECTION].find_one({"user_id": owner,
+            "txn_group_id": invoice["mz2_txn_group_id"]}, session=session)
+        changed = await database[bridge.UNITS].find_one({"_id": unit["_id"]}, session=session)
+        assert invoice["status"] == "payable_posted" and journal["status"] == "posted"
+        assert sum(Decimal(leaf["actual_cost"]) for leaf in changed["bundle_leaves"]) == Decimal(100)
+        reached.append(True)
+        raise HTTPException(503, detail={"code": "synthetic_after_leaf_finalization"})
+
+    path = f'/supplier-receiving-v1/sessions/{session["id"]}/close'
+    with monkeypatch.context() as patch:
+        patch.setattr(bridge, "finalize_supplier_leaf_receipts", fail_after_leaf_finalization)
+        response = await http.post(path, json=close_payload(physical))
+    assert response.status_code == 503, response.text
+    assert response.json()["detail"]["code"] == "synthetic_after_leaf_finalization" and reached == [True]
+    assert await db[bridge.INVOICES].count_documents({}) == 0 and not await legs(db)
+    assert await db[GROUPS_COLLECTION].count_documents({"txn_type": "supplier_invoice"}) == 0
+    assert await db[bridge.UNITS].find_one({"_id": unit["_id"]}) == before_unit
+    assert await db[bridge.PIECES].find({"user_id": OWNER}).sort("piece_id", 1).to_list(3) == before_pieces
+    assert await db[bridge.EVENTS].find({"event_type": "supplier_piece_service_recorded"}).sort("id", 1).to_list(3) == before_events
+    current_session = await db[receiving.SESSIONS].find_one({"id": session["id"]})
+    assert current_session["status"] == "open" and not current_session.get("supplier_invoice_id")
+    assert await db.mezan_purchase_invoices_v2.count_documents({}) == 0
+    assert await db.mezan_inventory_receipts_v2.count_documents({}) == 0
+    retry = await http.post(path, json=close_payload(physical))
+    assert retry.status_code == 200, retry.text
+    assert await db[bridge.INVOICES].count_documents({}) == 1 and len(await legs(db)) == 2
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("tamper", ["amount_cache", "proof_digest", "missing_event", "event_specs", "invoice_status",
     "native_fields_removed", "native_contract_changed", "leaf_channel_removed", "journal_reversal"])
 async def test_reporting_revalidates_consumed_supplier_proof_in_batches(env, http, tamper):
@@ -415,7 +497,11 @@ async def test_new_intake_rejects_historical_parent_aliases(env, kind):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("mode", ["assign", "defer"])
-async def test_new_intake_public_assignment_prints_and_materializes_two_leaves_once(env, monkeypatch, mode):
+@pytest.mark.parametrize("after_publication", [
+    "unchanged", "source_watermark", "source_line", "cancelled", "receipt",
+    "leaf_reference", "leaf_specifications", "frozen_leaf", "allocation",
+])
+async def test_new_intake_public_assignment_prints_and_materializes_two_leaves_once(env, monkeypatch, mode, after_publication):
     import httpx
     from fastapi import FastAPI
     import preparation_assignment_v2 as assignment
@@ -471,10 +557,61 @@ async def test_new_intake_public_assignment_prints_and_materializes_two_leaves_o
         assert batches.render_preparation_batch_pdf(batch).startswith(b"%PDF")
         for printed in printable:
             assert printed.quantity == 1 and len(printed.file_spec_fields) == 2
+        if after_publication == "source_watermark":
+            await db.unified_orders.update_one({"user_id": OWNER, "order_number": NUMBER},
+                {"$set": {"g47_salla_snapshot.component_pending": True}})
+        elif after_publication == "source_line":
+            await db.unified_orders.update_one({"user_id": OWNER, "order_number": NUMBER},
+                {"$set": {"raw_by_source.salla_direct.items.0.quantity": 2}})
+            await db[bridge.PLANS].update_one({"_id": unit["plan_id"]}, {"$set": {"reconciliation_required": True}})
+        elif after_publication == "cancelled":
+            await stock.release_component_stock(db, merchant_id=OWNER, order_id=NUMBER,
+                source_version=8, actor_id=OWNER)
+            assert (await db[bridge.UNITS].find_one({"_id": unit["_id"]}))["state"] == "released"
+            assert (await db[bridge.PLANS].find_one({"_id": unit["plan_id"]}))["state"] == "cancelled"
+        elif after_publication == "receipt":
+            await db[assignment.REQUESTS].update_one({"user_id": OWNER},
+                {"$set": {"receipt.piece_ids": ["forged-a", "forged-b"]}})
+        elif after_publication == "leaf_reference":
+            await db[bridge.PIECES].update_one({"piece_id": receipt["piece_ids"][0]},
+                {"$set": {bridge.REFERENCE_FIELD + ".leaf_unit_index": 2}})
+        elif after_publication == "leaf_specifications":
+            await db[bridge.PIECES].update_one({"piece_id": receipt["piece_ids"][0]},
+                {"$set": {"bundle_supplier_specifications": {"forged": "choice"}}})
+        elif after_publication == "frozen_leaf":
+            await db[bridge.UNITS].update_one({"_id": unit["_id"]},
+                {"$set": {"bundle_leaves.0.customization": {"forged": "choice"}}})
+        elif after_publication == "allocation":
+            await db[catalog.PREPARATION_UNIT_ALLOCATIONS].update_one({"user_id": OWNER},
+                {"$set": {"unit_index": 2}})
+        tampered = after_publication in {"receipt", "leaf_reference", "leaf_specifications", "frozen_leaf", "allocation"}
+        status = await client.get("/preparation-assignment-v2/requests/" + command["client_request_id"])
+        assert status.status_code == 200, status.text
         replay = await client.post("/preparation-assignment-v2/requests", json=command)
-        assert replay.status_code == 200 and replay.json() == response.json()
+        assert replay.status_code == 200, replay.text
+        if tampered:
+            assert status.json()["state"] == replay.json()["state"] == "PENDING"
+            assert status.json()["receipt"] is replay.json()["receipt"] is None
+        else:
+            assert status.json() == replay.json() == response.json()
         assert await db[bridge.PIECES].count_documents({}) == 2
-        if mode == "assign":
+        assert await db[assignment.REQUESTS].count_documents({}) == 1
+        assert await db[catalog.PREPARATION_UNIT_ALLOCATIONS].count_documents({}) == 1
+        if after_publication in {"source_watermark", "source_line", "cancelled"}:
+            physical = await db[bridge.PIECES].find({"user_id": OWNER}).to_list(3)
+            with pytest.raises(HTTPException):
+                await bridge.validate_supplier_leaf_piece(db, OWNER, physical[0])
+            assert not await ready.supplier_completion_covered_current(db, source,
+                await db.order_review_workflows.find_one({"user_id": OWNER}), physical, owner=OWNER, number=NUMBER)
+            if mode == "assign":
+                opened = await client.post("/supplier-receiving-v1/sessions", json={
+                    "supplier_id": "supplier", "client_request_id": "changed-source-session"})
+                assert opened.status_code == 201, opened.text
+                scan = await client.post(f'/supplier-receiving-v1/sessions/{opened.json()["session"]["id"]}/scan', json={
+                    "barcode": physical[0]["barcode"], "client_request_id": "changed-source-scan"})
+                assert scan.status_code == 409, scan.text
+                assert scan.json()["detail"]["code"].startswith("bundle_supplier_")
+        elif after_publication == "unchanged" and mode == "assign":
             physical = await db[bridge.PIECES].find({"user_id": OWNER}).to_list(3)
             await open_and_scan(client, physical)
 
