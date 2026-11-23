@@ -1,16 +1,28 @@
 # CUSTOMER-INVENTORY-UNIFIED-20261122
 
-## Follow-up — page functionality review, 23 November 2026 Riyadh
+## Follow-up — live page recheck, 23 November 2026 Riyadh
 
-The owner subsequently requested a read-only check of the published customer refund/collection and inventory/purchase/receiving pages. **Live page verdict: INCONCLUSIVE because browser access failed.** This follow-up does not reopen the completed PR2074 release or hold any subsequent publication.
+**Authenticated browser access succeeded on retry. The pages load and the bounded read-only checks completed, with one confirmed inventory-options UI finding. Do not describe all option cases as passed.** The previous browser-access blocker is superseded; its historical record remains in POST-PUBLISH-PAGES-20261123.json. This follow-up does not reopen the completed PR2074 release or hold a subsequent publication.
 
-Cloud Browser tab creation timed out after 40 seconds; recovery inventory timed out after 20 seconds. The documented native fallback exposed a browser privacy interstitial for mezansalla.com, **NET::ERR_CERT_AUTHORITY_INVALID**, which was not bypassed. No authenticated page data or forms were observed; no live business write, publication or guard change occurred. These browser/environment errors do not establish a site outage.
+The live Backend and Frontend both identify source **e9d80ff2e7a3b21fb25221516bb05e02819fd902**, runtime **rg5-9796a26af755f49224fe1787bc922eb669b69f2a63a28192e2a84a0d320fc03f**, protocol 5. Health reported all verification flags true; the separately rendered /build-meta.json source and artifact digest match the Backend's embedded Frontend metadata. This bounded read is not a new original verify3, MIME/cache/file-byte verification or lease observation. Current Git ref **c2d244a3349013c06f3fb7824070bfa12bd0bfe0** was read separately; deployment and runtime-source identities must not be conflated.
 
-A read-only source review mapped the pages and existing tests at frozen B. Root independently reread InventorySuiteFrame.jsx and InventoryWorkspace.jsx at the current Git Production head **02cd99e5b2b68c95341c87590abcf572c885e697**. The generic suite links still route purchases to /purchase-invoices and receiving to /inventory-receiving-v2; this update's inventory invoice/receiving pages are local tabs **/inventory-v2?tab=purchases** and **/inventory-v2?tab=receipts**, with the latter labeled **استلام مشتريات المخزون**. This is a confirmed source navigation difference and potential usability confusion, not a live receiving failure.
+### Live results
 
-The current Git head belongs to subsequent PR2076. Its owner-run deployment handoff is preserved; the Git reference is not being presented as a newly observed runtime identity. Prior original verify3 and completed PR2074 evidence remain valid historical release evidence, and are not substituted for a fresh interactive page check.
+- Refund and collection pages loaded actual pending lists and distinct colored summaries. Existing-order lookups proposed the displayed differences while keeping confirmed paid amounts separate. Source/bank/provider/receipt controls and empty confirmed histories rendered. Refund pagination advanced successfully.
+- Inventory and purchase invoice lists loaded explicit empty states. Purchase form loaded supplier choices and separate receiving/payment choices; no form content was intentionally changed. Its own normal mount effect can persist the restored/default local draft.
+- The new **استلام مشتريات المخزون** tab at /inventory-v2?tab=receipts loaded, defaulted to pending and switched to all invoices. Both lists were empty, so an existing receiving form/history could not be inspected.
+- Yes/no dependency display and clearing of hidden names worked on the tested inventory samples. All temporary inventory input was canceled.
+- Provider report and review-reasons dialog opened. The displayed report is still a saved **21 November 2026** snapshot, not proof of a post-release recalculation. The shared update action was not run.
 
-Full bounded checklist and evidence: [POST-PUBLISH-PAGES-20261123.json](POST-PUBLISH-PAGES-20261123.json). Next safe step: resume the listed read-only page checks in a working authenticated browser, preserving existing local drafts and without saving financial or stock test records. No source repair or deployment was performed by this review.
+### Open finding — INV-PHYSICAL-DEFER-01
+
+**Conditional size/colour can be offered as deferred customization.** A live clothing item's size and colour displayed selectable “يُحدد عند طلب العميل” after choosing its parent item type, despite guidance requiring those physical dimensions now. Selecting size deferral succeeded in temporary UI state. A second item's independent size correctly had no deferral. No stock was saved.
+
+Root and independent read-only review traced the exact live source: backend/inventory_option_configuration.py marks physical options through variant selections or explicit physical roles; an entire connected condition group containing text and no recognized physical identity becomes inferred customization. InventoryProductFields.jsx renders the resulting defer_allowed flag. The precise live metadata omission was not inspected, and backend acceptance of an incorrect saved entry is not claimed. Next safe engineering work is an isolated correction and targeted regression for mixed groups with missing physical designation.
+
+Full sanitized evidence, per-page coverage and boundaries: [LIVE-PAGE-RECHECK-20261123.json](LIVE-PAGE-RECHECK-20261123.json). Observed at 16:46 Riyadh. No financial confirmation, stock save, invoice, receipt, supplier-payment allocation, source edit, guard invocation or publication occurred. No customer records/raw DOM/screenshots were committed. The browser's captured application error/warn entries were empty after excluding extension metadata errors.
+
+The read-only review is complete with the stated finding and coverage limits. Do not substitute these UI observations for proof of financial posting or full/partial receipt persistence. Preserve every foreign task/lease and the immutable PR2074 completion below.
 
 ## Current state — COMPLETED; combined release published and verified; serial handoff RELEASED
 

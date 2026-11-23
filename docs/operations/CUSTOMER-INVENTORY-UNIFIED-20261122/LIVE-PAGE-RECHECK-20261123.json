@@ -1,0 +1,218 @@
+{
+  "task_id": "CUSTOMER-INVENTORY-UNIFIED-20261122",
+  "review_id": "LIVE-PAGE-RECHECK-20261123",
+  "recorded_at_utc": "2026-11-23T13:46:46Z",
+  "user_timezone": "Asia/Riyadh",
+  "recorded_at_riyadh": "2026-11-23T16:46:46+03:00",
+  "request": "Retry read-only functional checks of the published customer and inventory pages.",
+  "verdict": "live_pages_accessible_with_one_confirmed_ui_finding_and_coverage_limits",
+  "supersedes_browser_blocker_in": "POST-PUBLISH-PAGES-20261123.json",
+  "historical_release_completion_unchanged": true,
+  "historical_completion_commit": "b46798fab681471a0fdf9450c30d6446a4f55ffa",
+  "observation_method": {
+    "browser": "Cloud Browser via cua_repl; existing authenticated Mezan session",
+    "security_warning_bypassed": false,
+    "new_credentials_entered": false,
+    "forms_submitted": false,
+    "live_business_records_written": false
+  },
+  "runtime": {
+    "health_url": "https://mezansalla.com/api/health",
+    "frontend_metadata_url": "https://mezansalla.com/build-meta.json",
+    "source_git_sha": "e9d80ff2e7a3b21fb25221516bb05e02819fd902",
+    "source_base_git_sha": "02cd99e5b2b68c95341c87590abcf572c885e697",
+    "release_id": "rg5-9796a26af755f49224fe1787bc922eb669b69f2a63a28192e2a84a0d320fc03f",
+    "protocol_version": 5,
+    "health_ok": true,
+    "reported_checks": {
+      "verified_identity_available": true,
+      "backend_runtime_source_verified": true,
+      "release_control_source_bound": true,
+      "critical_file_hashes_match": true,
+      "frontend_build_verified": true
+    },
+    "frontend_backend_source_match": true,
+    "frontend_backend_artifact_digest_match": true,
+    "artifact_tree_sha256": "b028bb03162b540c49929431bbaa763a14968310b931af5d78dc291da2164434",
+    "scope_limit": "Read public rendered JSON and compare source/artifact fields. This is not a new three-probe production_release_guard verify or a fresh MIME/cache/public-file verification.",
+    "production_git_ref_observed": "c2d244a3349013c06f3fb7824070bfa12bd0bfe0",
+    "git_ref_note": "Deployment commit and runtime source are distinct identities. No assertion about current foreign release lease or publication ownership is made."
+  },
+  "checks": [
+    {
+      "page": "Refund",
+      "url": "https://mezansalla.com/operational-balances?view=refund",
+      "result": "pass_read_only",
+      "observed": [
+        "Pending refunds and collections appear in separate colored summaries.",
+        "List retains confirmed paid amount separately from current order total and pending difference.",
+        "Existing-order review loaded; suggested refund equaled the displayed difference.",
+        "Original provider and bank-transfer source choices present; selecting bank transfer exposed bank selector and optional receipt.",
+        "Pending-request and confirmed-refund history loaded with explicit empty states.",
+        "Pagination advanced from first to second page."
+      ],
+      "limits": [
+        "No refund confirmation, pending refund creation, receipt upload or money movement tested."
+      ]
+    },
+    {
+      "page": "Customer collection",
+      "url": "https://mezansalla.com/operational-balances?view=customer-collections",
+      "result": "pass_read_only",
+      "observed": [
+        "Pending collection list loaded.",
+        "Existing-order review showed confirmed paid amount, current total and remaining amount separately.",
+        "Suggested collection equaled displayed remaining amount.",
+        "Bank/payment-provider account choices, reference, timestamp and receipt inputs present.",
+        "Confirmed-history tab loaded with explicit empty state."
+      ],
+      "limits": [
+        "No fee-preview submission or confirmed collection written."
+      ]
+    },
+    {
+      "page": "Inventory stock",
+      "url": "https://mezansalla.com/inventory-v2?tab=stock",
+      "result": "pass_empty_state",
+      "observed": [
+        "Inventory overview and stock page loaded.",
+        "Search/filter controls present.",
+        "Explicit no-stock state within current scope."
+      ],
+      "limits": [
+        "No existing stock record available in this scope for detail assertions."
+      ]
+    },
+    {
+      "page": "Inventory entry options",
+      "url": "https://mezansalla.com/inventory-v2?tab=opening",
+      "result": "partial_confirmed_finding",
+      "observed": [
+        "Catalog and selected-item marker loaded.",
+        "Selecting yes revealed dependent customization inputs; no hid them.",
+        "After returning to yes, the previously entered temporary name was empty.",
+        "Changing product-type parent hid size/name children and cleared their prior values/deferral when reopened.",
+        "Optional blank and explicit defer controls were distinct.",
+        "Temporary input was canceled without saving."
+      ],
+      "finding_id": "INV-PHYSICAL-DEFER-01"
+    },
+    {
+      "page": "Inventory purchase editor",
+      "url": "https://mezansalla.com/inventory-v2?tab=purchase",
+      "result": "pass_load_only",
+      "observed": [
+        "Supplier options loaded and form became enabled.",
+        "Supplier, invoice number and date inputs present.",
+        "Single-item editor, empty compact draft, receiving choices and supplier-payment choices present.",
+        "Previous-payment allocation choice present."
+      ],
+      "limits": [
+        "No supplier/item/settings fields changed and no invoice saved.",
+        "The component automatically persists its restored/default local draft on mount; the reviewer did not intentionally modify a pre-existing draft.",
+        "Observed viewport width 674 pixels; 70-percent desktop layout above 1000 pixels was not exercised live."
+      ]
+    },
+    {
+      "page": "Inventory purchase invoices",
+      "url": "https://mezansalla.com/inventory-v2?tab=purchases",
+      "result": "pass_empty_state",
+      "observed": [
+        "Invoice list, search/date filters and separation-of-receiving/payment explanation loaded.",
+        "Explicit no-invoices and no-purchased-quantities states."
+      ],
+      "limits": [
+        "No existing invoice available to open."
+      ]
+    },
+    {
+      "page": "Later inventory receiving",
+      "url": "https://mezansalla.com/inventory-v2?tab=receipts",
+      "result": "pass_empty_state",
+      "observed": [
+        "Correct local inventory receiving tab loaded.",
+        "Pending filter selected by default.",
+        "All-invoices filter switched successfully.",
+        "Explicit empty state in pending and all filters."
+      ],
+      "limits": [
+        "No existing invoice available for read-only full/partial receiving-form or receipt-history inspection.",
+        "No receipt or supplier payment was created."
+      ]
+    },
+    {
+      "page": "Payment-provider report",
+      "url": "https://mezansalla.com/operational-balances/financial-position?view=providers",
+      "result": "pass_load_with_stale_snapshot_limit",
+      "observed": [
+        "Provider report and commission explanations loaded.",
+        "Opening a provider's review count displayed the order-reason dialog; dialog closed normally.",
+        "Report explicitly states it reads the latest saved calculation."
+      ],
+      "data_freshness": {
+        "displayed_as_of_date": "2026-11-21",
+        "displayed_last_saved_calculation": "21/11/2026, 17:50",
+        "review_local_date": "2026-11-23",
+        "recalculation_triggered": false
+      },
+      "limits": [
+        "Fresh post-release recalculation of provider totals is not established by this page check.",
+        "The shared update-sources/balances action was not run because the live check is read-only."
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "INV-PHYSICAL-DEFER-01",
+      "severity": "medium",
+      "status": "confirmed_live_ui_failure",
+      "title": "Conditional size and colour are offered as deferred customer customization",
+      "affected_route": "https://mezansalla.com/inventory-v2?tab=opening",
+      "observed": "On a clothing item whose product-type choice controls size, colour and name fields, selecting the item type exposed selectable 'المقاس: يُحدد عند طلب العميل' and equivalent colour deferral. Selecting size deferral succeeded and displayed the deferred-size status despite explanatory text requiring size/colour now. A second item's independent size had no deferral.",
+      "source_git_sha": "e9d80ff2e7a3b21fb25221516bb05e02819fd902",
+      "source_files": [
+        "backend/inventory_option_configuration.py",
+        "frontend/src/components/inventory/suite/InventoryProductFields.jsx",
+        "frontend/src/lib/inventoryProductConfiguration.js",
+        "backend/operational_purchase_metadata.py"
+      ],
+      "root_cause_review": "Backend establishes physical identity from variant selections or explicit inventory_role=physical. A visibility-connected component containing a text field and no recognized physical identity is inferred entirely as customization. The UI renders defer controls from defer_allowed. Missing physical designation on a conditional size/colour can therefore expose deferral.",
+      "confirmed_by_root": [
+        "Live selectable size deferral and inconsistent guidance.",
+        "Exact-live-source classifier and UI rendering logic reread."
+      ],
+      "independent_review": "live_page_contracts reviewed same live SHA and validator paths; no source edits or live requests by reviewer.",
+      "uncertainty": "Live item metadata was not read directly. The precise missing/incorrect physical designation is not established. No save was attempted; acceptance of an invalid inventory entry by the backend is not claimed.",
+      "existing_test_gap": "Existing customization-inference test covers a proven physical variant dimension, not conditional size/colour in a text-connected component without physical evidence.",
+      "next_safe_action": "Prepare an isolated code correction and regression cases for mixed option groups with missing physical metadata. Preserve required physical dimensions and rerun targeted frontend/backend configuration gates before any separately coordinated release.",
+      "source_changed": false
+    }
+  ],
+  "console_observation": {
+    "captured_error_warn_entries": 87,
+    "application_entries_after_excluding_chrome_extension_sources": 0,
+    "excluded_source_kind": "chrome-extension:// metadata transport errors",
+    "scope": "Captured log window during this browser review; not a claim about all production logs."
+  },
+  "preserved_boundaries": {
+    "production_source_changed": false,
+    "production_ref_changed": false,
+    "release_guard_invoked": false,
+    "publish_clicked": false,
+    "business_records_changed": false,
+    "temporary_inventory_form_canceled": true,
+    "purchase_draft_content_intentionally_changed": false,
+    "paid_emergent_chat_used": false,
+    "foreign_tasks_and_leases_preserved": true,
+    "raw_customer_records_screenshots_or_dom_committed": false
+  },
+  "final_review_tab": "https://mezansalla.com/operational-balances?view=refund",
+  "remaining_limits": [
+    "Correct physical-option deferral finding before treating all inventory option cases as passed.",
+    "Full and partial receiving and supplier-payment allocation could not be exercised without existing invoices or live writes.",
+    "Financial posting, provider fees and balances after confirmation were not mutated/tested live.",
+    "Provider report is a saved snapshot predating this review."
+  ],
+  "historical_release_handoff": "PR2074 remains completed and released. This page review does not reopen its publication hold or authorize replay of old staging/prepare/verify.",
+  "review_changes": "Evidence and owned coordination section only."
+}
