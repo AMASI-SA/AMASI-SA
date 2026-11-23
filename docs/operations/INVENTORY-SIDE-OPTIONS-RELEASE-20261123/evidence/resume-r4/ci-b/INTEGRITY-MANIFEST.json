@@ -134,5 +134,5 @@
   ],
   "retained_raw_zip_count": 15,
   "omitted_generated_zip_count": 2,
-  "scope": "Evidence only; no source or GitHub write and no live deployment attestation."
+  "scope": "Evidence only; source A/B/D remain unchanged. Publication of this packet to an evidence branch does not attest to live deployment."
 }
