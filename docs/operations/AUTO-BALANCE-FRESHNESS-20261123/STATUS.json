@@ -1,0 +1,55 @@
+{
+  "task": "AUTO-BALANCE-FRESHNESS-20261123",
+  "status": "IMPLEMENTATION_IN_PROGRESS_NOT_RELEASED",
+  "repository": "AMASI-SA/AMASI-SA",
+  "task_branch": "codex/automatic-balance-freshness-20261123",
+  "base_commit": "c2d244a3349013c06f3fb7824070bfa12bd0bfe0",
+  "mobile_repository": "AMASI-SA/amasi-mobile",
+  "mobile_base_commit": "6634949641c4ca87b002bfcb13434e5a57bc3d21",
+  "problem": "Owner web/native workspace reads saved balances but does not request shared financial source reconciliation; newer manual movements can coexist with old automatic obligations.",
+  "observed_on": "2026-11-23",
+  "timezone": "Asia/Riyadh",
+  "read_only_live_evidence": {
+    "last_saved_calculation": "2026-11-21 17:50 Asia/Riyadh",
+    "report_generation": "2026-11-23 17:24 Asia/Riyadh",
+    "backend_source_git_sha": "aec203382b387c3812509084e77c2922aa860877",
+    "frontend_source_git_sha": "aec203382b387c3812509084e77c2922aa860877",
+    "release_id": "rg5-12e0f132b3ee688815cd2ec401bd34c43706d193492edacc7be6c5ca6e6ade8a",
+    "backend_boot_started_at": "2026-11-23T14:01:49.979996+00:00",
+    "verified_identity_available": true,
+    "critical_file_hashes_match": true,
+    "frontend_build_verified": true,
+    "frontend_artifact_tree_sha256": "27b7717df8a2dcc2b46868da4d103b44d33e2ad07c879da6563ecaef7e545b9a",
+    "shared_workspace_head": "c2d244a3349013c06f3fb7824070bfa12bd0bfe0",
+    "tracked_changes": 0,
+    "release_guard_active": false,
+    "full_release_guard_verification_run": false
+  },
+  "confirmed_source_findings": [
+    "Periodic operational balance worker is intentionally inert; its disablement predates the latest releases.",
+    "GET workspace/report demand preparation does not run financial refresh.",
+    "Native pull-to-refresh currently reloads GET data only.",
+    "POST /operational-balances/refresh is a financial writer: it can persist source evidence, accruals and eligible automatic bank collection movements.",
+    "Calculation freshness is saved engine.as_of, not report generated_at or state revision.",
+    "No production refresh or historical backfill was executed for this incident."
+  ],
+  "planned_scope": [
+    "Owner-only visible-workspace refresh when saved calculation exceeds two hours or crosses a Riyadh business day.",
+    "Render saved balances immediately with truthful calculation time and in-progress/error state.",
+    "Session-bound single-flight; no scheduled worker, hidden retry, polling or background finance.",
+    "Read saved metadata after success or unknown outcome; never infer financial success from HTTP 200 alone.",
+    "Preserve all existing salary, advertising, shipping, fee and accounting rules."
+  ],
+  "verification": {
+    "diagnosis": "source and read-only live UI/identity verified",
+    "source_tests": "pending",
+    "independent_review": "pending",
+    "release_gates": "not run"
+  },
+  "production_changed": false,
+  "production_financial_writes": 0,
+  "apk_published": false,
+  "merge_or_deployment_performed": false,
+  "hold": "Do not execute live financial refresh or enable the candidate in Production while the owner's prior no-financial-entry-change restriction remains unresolved. Complete and review isolated source/tests first.",
+  "next_safe_action": "Implement and test web/native candidates in separate local directories, persist exact patches on dedicated branches, and review current-head CI. Preserve all foreign work and leases."
+}
