@@ -1,5 +1,7 @@
 export const inventoryChoiceTypes=['select','radio','color','image'];
 export const inventoryTextTypes=['text','string','textarea'];
+export const isInventorySideOption=option=>option?.inventory_role==='informational';
+export const isInventoryPhysicalRequired=option=>option?.stock_identity&&(option.required||option.role_locked||!option.inventory_role);
 
 export function inventoryOptionVisibility(product,config){
   const fields=new Map((product?.options||[]).map(option=>[String(option.id),option]));
@@ -36,17 +38,21 @@ export function pruneInventoryConfiguration(product,config,changedOptionId=''){
     }
   }
   const visibility=inventoryOptionVisibility(product,result);
-  const keep=id=>visibility[id]==='visible'&&!descendants.has(id);
+  const sideIds=new Set((product?.options||[]).filter(isInventorySideOption).map(option=>option.id));
+  const keep=id=>visibility[id]==='visible'&&!descendants.has(id)&&!sideIds.has(id);
   result.selections=result.selections.filter(row=>keep(row.option_id));
   result.inputs=result.inputs.filter(row=>keep(row.option_id));
-  if('deferred_option_ids' in result){result.deferred_option_ids=result.deferred_option_ids.filter(keep);result.state=result.deferred_option_ids.length?'raw':'ready';}
+  if('deferred_option_ids' in result){result.deferred_option_ids=result.deferred_option_ids.filter(id=>{
+    const option=product?.options?.find(field=>field.id===id);
+    return keep(id)&&option?.defer_allowed&&!option.stock_identity;
+  });result.state=result.deferred_option_ids.length?'raw':'ready';}
   return result;
 }
 
 export function inventoryConfiguration(product,variantId=''){
   const variant=product?.variants?.find(v=>String(v.variant_id)===String(variantId));
   const config={state:'raw',selections:(variant?.selections||[]).map(v=>({...v})),inputs:[]};
-  if(product?.configuration_contract_version===2){config.deferred_option_ids=(product.options||[]).filter(option=>option.defer_allowed&&option.required).map(option=>option.id);return pruneInventoryConfiguration(product,config);}
+  if(product?.configuration_contract_version===2){config.deferred_option_ids=(product.options||[]).filter(option=>!isInventorySideOption(option)&&option.defer_allowed&&option.required).map(option=>option.id);return pruneInventoryConfiguration(product,config);}
   return config;
 }
 export function inventoryVariantFor(product,config,fallback=''){
@@ -65,23 +71,25 @@ export function validateInventoryConfiguration(product,config,variantId=''){
   const seen=new Set();
   for(const selection of config.selections){
     const option=options.find(o=>String(o.id)===String(selection.option_id));
+    if(isInventorySideOption(option))throw Error('هذا خيار جانبي للعميل؛ أعد فتح الصنف لمراجعة مواصفات المخزون.');
     if(!option||!inventoryChoiceTypes.includes(option.type)||!option.values?.some(v=>String(v.id)===String(selection.value_id))||seen.has(option.id))throw Error('أعد اختيار خيارات المنتج الحالية؛ توجد قيمة غير متاحة.');
     seen.add(option.id);
   }
   for(const input of config.inputs){
     const option=options.find(o=>String(o.id)===String(input.option_id));
+    if(isInventorySideOption(option))throw Error('هذا خيار جانبي للعميل؛ أعد فتح الصنف لمراجعة مواصفات المخزون.');
     if(!option||!inventoryTextTypes.includes(option.type)||seen.has(option.id)||typeof input.value!=='string')throw Error('حقل التخصيص لا ينتمي لتعريف المنتج.');
     if(!input.value.trim()||Array.from(input.value).length>(option.type==='textarea'?1000:100)||/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(input.value))throw Error(`راجع ${option.name}؛ القيمة فارغة أو غير صالحة أو طويلة.`);
     seen.add(option.id);
   }
-  for(const id of deferred){const option=options.find(row=>row.id===id);if(!option?.defer_allowed||option.stock_identity||(product.physical_option_ids||[]).includes(id)||seen.has(id))throw Error('يمكن تأجيل التخصيص فقط؛ اللون والمقاس يحددان الآن.');}
+  for(const id of deferred){const option=options.find(row=>row.id===id);if(isInventorySideOption(option)||!option?.defer_allowed||option.stock_identity||(product.physical_option_ids||[]).includes(id)||seen.has(id))throw Error('يمكن تأجيل التخصيص فقط؛ اللون والمقاس يحددان الآن.');}
   const visibility=inventoryOptionVisibility(product,config);
   if([...seen,...deferred].some(id=>visibility[id]!=='visible'))throw Error('أعد تحديد الخيارات التابعة؛ توجد قيمة لخيار مخفي.');
   if(!explicit&&config.state==='raw'&&config.inputs.length)throw Error('التخصيص حسب طلب العميل لا يحتفظ بنص جاهز.');
-  if((explicit||config.state==='ready')&&options.some(o=>o.required&&visibility[o.id]==='visible'&&!seen.has(o.id)&&!deferred.includes(o.id)))throw Error('أكمل خيارات المنتج المطلوبة أو أجّل التخصيص المتاح.');
+  if((explicit||config.state==='ready')&&options.some(o=>!isInventorySideOption(o)&&o.required&&visibility[o.id]==='visible'&&!seen.has(o.id)&&!deferred.includes(o.id)))throw Error('أكمل خيارات المنتج المطلوبة أو أجّل التخصيص المتاح.');
   // Hidden physical children do not belong to this variant; pending ones must
   // still be resolved by answering their parent before the stock can be saved.
-  if(explicit&&options.some(o=>o.stock_identity&&(visibility[o.id]==='pending'||visibility[o.id]==='visible'&&!seen.has(o.id))))throw Error('حدد اللون والمقاس الفعليين للمخزون.');
+  if(explicit&&options.some(o=>isInventoryPhysicalRequired(o)&&(visibility[o.id]==='pending'||visibility[o.id]==='visible'&&!seen.has(o.id))))throw Error('حدد اللون والمقاس الفعليين للمخزون.');
   if(product?.variants?.length){const variant=inventoryVariantFor(product,config,variantId);if(!variant||String(variant.variant_id)!==String(variantId))throw Error('حدد اللون والمقاس المطابقين لنسخة المنتج.');}
   const combinations=product?.selection_combinations||[],represented=new Set(combinations.flatMap(combination=>combination.map(row=>row.option_id)));
   const comparable=config.selections.filter(row=>represented.has(row.option_id));
@@ -89,7 +97,7 @@ export function validateInventoryConfiguration(product,config,variantId=''){
   if(explicit&&combinations.length&&combinations.filter(combination=>combination.length===comparable.length&&comparable.every(row=>combination.some(value=>value.option_id===row.option_id&&value.value_id===row.value_id))).length!==1)throw Error('حدد تركيبة واحدة كاملة للون والمقاس.');
 }
 export function inventoryConfigurationLabels(product,config){
-  return (product?.options||[]).flatMap(option=>{const selection=config?.selections?.find(row=>row.option_id===option.id),input=config?.inputs?.find(row=>row.option_id===option.id),value=selection?option.values?.find(row=>row.id===selection.value_id)?.name:input?.value;return value?[{option_id:option.id,name:option.name,value,...(selection?{value_id:selection.value_id}:{})}]:[];});
+  return (product?.options||[]).filter(option=>!isInventorySideOption(option)).flatMap(option=>{const selection=config?.selections?.find(row=>row.option_id===option.id),input=config?.inputs?.find(row=>row.option_id===option.id),value=selection?option.values?.find(row=>row.id===selection.value_id)?.name:input?.value;return value?[{option_id:option.id,name:option.name,value,...(selection?{value_id:selection.value_id}:{})}]:[];});
 }
 export function inventoryConfigDescription(line){
   const config=line.purchase_configuration;if(!config)return '';

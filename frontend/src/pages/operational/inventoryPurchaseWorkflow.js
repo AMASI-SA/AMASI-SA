@@ -1,6 +1,7 @@
 import {inventoryVariant} from './inventoryIdentity';
 import {inventoryPersonalizations} from './inventoryPersonalizations';
 import {purchaseConfigurationPayload} from './PurchaseConfiguration';
+import {inventoryOptionPolicyRevision} from '../../lib/inventoryOptionPolicy';
 
 export function purchaseToday() {
   const parts = new Intl.DateTimeFormat('en-CA', {timeZone:'Asia/Riyadh', year:'numeric', month:'2-digit', day:'2-digit'}).formatToParts(new Date());
@@ -28,6 +29,7 @@ export function purchaseTotals(lines) {
 export function purchaseLinePayload(line) {
   purchaseTotals([line]);
   return {item_id:line.item_id || line.id,kind:line.kind,...inventoryVariant(line),
+    ...(line.kind === 'product' ? {inventory_option_policy_revision:inventoryOptionPolicyRevision(line)} : {}),
     ...inventoryPersonalizations(line),...purchaseConfigurationPayload(line,{allowMissingLocation:true}),
     quantity:Number(line.quantity),unit_price:line.unit_price,tax:line.tax};
 }

@@ -124,6 +124,70 @@ def test_saved_specifications_and_preparation_must_survive_receipt_without_chang
     validate_receipt_configuration(saved, changed, receipt)
 
 
+def product_with_option_policy():
+    result = product()
+    result["options"].append({
+        "id": "gift", "name": "كرت إهداء", "type": "radio", "required": False,
+        "values": [{"id": "yes", "name": "نعم"}, {"id": "no", "name": "لا"}],
+        "visibility": "on_condition", "visibility_condition_type": "=",
+        "visibility_condition_option": "color", "visibility_condition_value": "green",
+    })
+    result["mezan_inventory_option_policy"] = {
+        "roles": {"color": "physical", "size": "physical", "letters": "customization",
+                  "gift": "informational"},
+        "revision": 1, "updated_at": "2026-11-23T00:00:00Z", "updated_by": "owner",
+    }
+    return result
+
+
+def test_no_policy_keeps_the_existing_native_definition_fingerprint():
+    # Captured from the approved source before adding the local-role contract.
+    assert normalize_line_configuration(line(), product())["purchase_configuration_definition_hash"] == (
+        "14cc3d0e599db9b560381248332647cd2fd1ff507434ad2f850b83b0ca8b6a2a"
+    )
+
+
+@pytest.mark.parametrize("change", ["role", "visibility", "remove_policy", "add_policy"])
+def test_policy_definition_changes_reject_pending_native_receipt_even_when_values_match(change):
+    original = product_with_option_policy()
+    if change == "add_policy":
+        original.pop("mezan_inventory_option_policy")
+    saved = {**line(), **normalize_line_configuration(line(), original)}
+    receipt = {"preparation_state": "ready_complete", "specifications": {
+        value["name"]: value["value"] for value in saved["purchase_option_labels"]}}
+    validate_receipt_configuration(saved, original, receipt)
+    changed = product_with_option_policy()
+    if change == "role":
+        changed["mezan_inventory_option_policy"]["roles"]["gift"] = "customization"
+    elif change == "visibility":
+        changed["options"][-1]["visibility_condition_value"] = "red"
+    elif change == "remove_policy":
+        changed.pop("mezan_inventory_option_policy")
+    current = normalize_line_configuration(saved, changed)
+    assert current["purchase_configuration"] == saved["purchase_configuration"]
+    assert current["purchase_option_labels"] == saved["purchase_option_labels"]
+    assert_code("purchase_configuration_definition_changed",
+                lambda: validate_receipt_configuration(saved, changed, receipt), 409)
+
+
+def test_policy_audit_fields_do_not_change_native_configuration_identity():
+    original = product_with_option_policy()
+    saved = {**line(), **normalize_line_configuration(line(), original)}
+    changed = deepcopy(original)
+    changed["mezan_inventory_option_policy"].update(
+        revision=2, updated_at="2026-11-24T00:00:00Z", updated_by="another-owner-login")
+    assert normalize_line_configuration(line(), changed) == normalize_line_configuration(line(), original)
+    validate_receipt_configuration(saved, changed, {"preparation_state": "ready_complete", "specifications": {
+        value["name"]: value["value"] for value in saved["purchase_option_labels"]}})
+
+
+def test_malformed_local_policy_cannot_fall_back_to_a_legacy_native_fingerprint():
+    invalid = product_with_option_policy()
+    invalid["mezan_inventory_option_policy"]["roles"].pop("gift")
+    assert_code("purchase_configuration_definition_incomplete",
+                lambda: normalize_line_configuration(line(), invalid))
+
+
 def test_invoice_schema_accepts_only_new_optional_config_not_server_labels_or_hash():
     InvoiceLine.model_validate(line())
     for extra in ("purchase_option_labels", "purchase_configuration_definition_hash"):
