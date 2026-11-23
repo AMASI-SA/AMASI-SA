@@ -51,6 +51,19 @@ def paid_order(**changes):
                  order_date="2026-11-22", _dashboard_fee_source=raw, **changes)
 
 
+def captured_order(proof, captured_at):
+    current = paid_order()
+    if proof == "capture":
+        payment = {"captures": [{"id": "native-reference", "amount": 150,
+                                 "currency": "SAR", "captured_at": captured_at}]}
+    elif proof == "paid":
+        payment = {"status": "paid", "paid_amount": 150, "paid_at": captured_at}
+    else:
+        payment = {"paid_at": captured_at}
+    current["_dashboard_fee_source"]["payment"] = payment
+    return current
+
+
 async def seed_accepted(db, document=None, owner="owner"):
     document = deepcopy(document or accepted_document())
     proof = document.pop("accepted_summary")
@@ -108,6 +121,144 @@ async def test_partial_capture_metadata_never_hides_future_or_conflicting_observ
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("capture_proof", ["capture", "paid", "paid_at"])
+@pytest.mark.parametrize("captured_at", ["2026-11-23T09:00:00+03:00", "2026-11-24T12:00:00+03:00"])
+async def test_historical_tabby_capture_uses_known_evidence_without_moving_week(capture_proof, captured_at):
+    current = captured_order(capture_proof, captured_at)
+    context = weekly_context(evidence_as_of="2026-11-24T12:00:00+03:00")
+    original = deepcopy((current, context))
+
+    result = await dashboard_fee_breakdown([current], [], context)
+
+    assert result["payment_fees_complete"] is True, result["fee_review_reasons"]
+    assert result["total_payment_fees"] == 12.51
+    row = result["payment_breakdown"][0]
+    assert row["fee_sources"] == ["weekly_statement_average"]
+    assert row["estimated_orders_count"] == 1
+    assert (row["fee_estimate_sources"][0]["window_start"],
+            row["fee_estimate_sources"][0]["window_end"]) == ("2026-11-15", "2026-11-21")
+    assert (current, context) == original
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("capture_proof", ["capture", "paid", "paid_at"])
+@pytest.mark.parametrize("captured_at", [
+    "2026-11-24T12:00:00.000001+03:00", "2026-11-25T09:00:00+03:00", "2026-11-22T07:59:59+03:00",
+])
+async def test_historical_tabby_capture_rejects_events_outside_evidence_interval(capture_proof, captured_at):
+    current = captured_order(capture_proof, captured_at)
+    result = await dashboard_fee_breakdown(
+        [current], [], weekly_context(evidence_as_of="2026-11-24T12:00:00+03:00"))
+    assert result["payment_fees_complete"] is False
+    assert result["fee_review_reasons"]
+    assert not result.get("payment_fees_estimated")
+
+
+@pytest.mark.asyncio
+async def test_historical_tabby_known_plan_uses_capture_date_not_report_or_evidence_date():
+    current = captured_order("capture", "2026-11-23T09:00:00+03:00")
+    current["_dashboard_fee_source"]["payment"]["plan_id"] = "Installments3Months"
+    current["_dashboard_fee_source"]["updated_at"] = "2026-11-24T10:00:00+03:00"
+    old, other_plan = tabby_policies()
+    old["effective_to"] = "2026-11-22"
+    capture_terms = {**deepcopy(old), "id": "capture-day", "effective_from": "2026-11-23",
+                     "effective_to": "2026-11-23"}
+    capture_terms["components"][0].update(percentage="10", fixed_amount="2")
+    latest = {**deepcopy(capture_terms), "id": "evidence-day", "effective_from": "2026-11-24", "effective_to": None}
+    latest["components"][0]["percentage"] = "20"
+    context = weekly_context(evidence_as_of="2026-11-24T12:00:00+03:00",
+                             policies=[old, other_plan, capture_terms, latest])
+
+    result = await dashboard_fee_breakdown([current], [], context)
+
+    assert result["payment_fees_complete"] is True, result["fee_review_reasons"]
+    assert result["total_payment_fees"] == 19.55  # (150 * 10% + 2) * 1.15.
+    assert result["payment_breakdown"][0]["fee_sources"] == ["dated_provider_policy"]
+    assert not result.get("payment_fees_estimated")
+
+
+def refunded_order(refunded_at):
+    current = captured_order("capture", "2026-11-22T09:00:00+03:00")
+    payment = current["_dashboard_fee_source"]["payment"]
+    payment.update(plan_id="Installments3Months", refunds=[{
+        "id": "executed-refund", "amount": 50, "currency": "SAR", "status": "executed",
+        "refunded_at": refunded_at,
+    }])
+    current["actual_refund_amount"] = 50
+    current["_dashboard_fee_source"]["payment_actions"]["refund_action"]["refund_amount"]["amount"] = 50
+    return current
+
+
+@pytest.mark.asyncio
+async def test_historical_tabby_executed_refund_uses_its_dated_fee_before_evidence_cutoff():
+    current = refunded_order("2026-11-23T10:00:00+03:00")
+    refund_terms = policy(id="refund-day", provider="tabby", plan_id="Installments3Months",
+                          event_type="refund", effective_from="2026-11-23", effective_to="2026-11-23")
+    refund_terms["components"][0].update(percentage="0", fixed_amount="2")
+    later_terms = {**deepcopy(refund_terms), "id": "later-refund", "effective_from": "2026-11-24", "effective_to": None}
+    later_terms["components"][0]["fixed_amount"] = "9"
+    context = weekly_context(evidence_as_of="2026-11-24T12:00:00+03:00",
+                             policies=[*tabby_policies(), refund_terms, later_terms])
+    original = deepcopy((current, context))
+
+    result = await dashboard_fee_breakdown([current], [], context)
+
+    assert result["payment_fees_complete"] is True, result["fee_review_reasons"]
+    assert result["total_payment_fees"] == 16.09  # Capture net11.99 + VAT1.80 + refund fee2.30.
+    assert result["payment_breakdown"][0]["fee_sources"] == ["dated_provider_policy"]
+    assert (current, context) == original
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("refunded_at", [
+    "2026-11-24T12:00:00.000001+03:00", "2026-11-25T09:00:00+03:00", "2026-11-22T07:59:59+03:00",
+])
+async def test_historical_tabby_refund_rejects_events_outside_evidence_interval(refunded_at):
+    result = await dashboard_fee_breakdown(
+        [refunded_order(refunded_at)], [], weekly_context(evidence_as_of="2026-11-24T12:00:00+03:00"))
+    assert result["payment_fees_complete"] is False
+    assert result["fee_review_reasons"] == ["provider_refund_timestamp_conflict"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("defect,reason", [
+    ("amount", "provider_capture_original_basis_required"),
+    ("currency", "provider_capture_evidence_incomplete"),
+    ("duplicate_identity", "provider_capture_conflict"),
+    ("provider", "provider_payment_method_conflict"),
+])
+async def test_historical_tabby_evidence_clock_preserves_payment_conflicts(defect, reason):
+    current = captured_order("capture", "2026-11-23T09:00:00+03:00")
+    payment = current["_dashboard_fee_source"]["payment"]
+    if defect == "amount":
+        payment["captures"][0]["amount"] = 149
+    elif defect == "currency":
+        payment["captures"][0]["currency"] = "USD"
+    elif defect == "duplicate_identity":
+        payment["captures"].append({**payment["captures"][0], "amount": 149})
+    else:
+        payment["method"] = "tamara"
+    result = await dashboard_fee_breakdown(
+        [current], [], weekly_context(evidence_as_of="2026-11-24T12:00:00+03:00"))
+    assert result["payment_fees_complete"] is False
+    assert result["fee_review_reasons"] == [reason]
+    assert not result.get("payment_fees_estimated")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("provider,method", [("emkan", "emkan_installment"), ("tamara", "tamara"), ("salla", "mada")])
+async def test_tabby_evidence_clock_keeps_other_provider_report_cutoffs(provider, method):
+    current = captured_order("capture", "2026-11-23T09:00:00+03:00")
+    current["payment_method"] = method
+    raw = current["_dashboard_fee_source"]
+    raw["payment_method"] = raw["payment_methods"][0]["payment_method"] = method
+    context = weekly_context(evidence_as_of="2026-11-24T12:00:00+03:00", policies=[policy(provider=provider)])
+    result = await dashboard_fee_breakdown([current], [], context)
+    assert result["payment_fees_complete"] is False
+    assert result["fee_review_reasons"] == ["provider_fee_transaction_date_invalid"]
+
+
+@pytest.mark.asyncio
 async def test_actual_and_known_plan_supersede_average_and_mixed_count_is_precise():
     actual = paid_order(payment_fee_status="actual", actual_payment_fee=1, actual_payment_vat=.15)
     actual["order_number"] = "actual"
@@ -149,7 +300,8 @@ async def test_empty_week_uses_exact_operational_profile_and_marks_its_own_perio
 
 
 @pytest.mark.asyncio
-async def test_historical_report_reprices_after_later_uploaded_statement_changes_average():
+@pytest.mark.parametrize("later_capture", [False, True])
+async def test_historical_report_reprices_after_later_uploaded_statement_changes_average(later_capture):
     db = AsyncMongoMockClient().weekly_history
     old = source("old-accepted", [sale("first", "2026-11-14", variable="10.00", vat="1.65")],
         uploaded="2026-11-21T12:00:00+03:00")
@@ -159,9 +311,13 @@ async def test_historical_report_reprices_after_later_uploaded_statement_changes
     current = paid_order()
     raw = current.pop("_dashboard_fee_source")
     raw["created_at"] = raw["updated_at"] = "2026-11-15T08:00:00+03:00"
+    if later_capture:
+        raw["payment"] = {"status": "paid", "paid_amount": 150, "paid_at": "2026-11-16T09:00:00+03:00"}
     current.update(user_id="owner", total_product_cost=10, order_date="2026-11-15", raw_by_source={"salla_direct": raw})
     await db.unified_orders.insert_one(current)
-    setup = {"complete": True, "source_mode": "mz2_policies", "policies": tabby_policies()}
+    orders_before = await db.unified_orders.find({}).to_list(10)
+    setup = {"complete": True, "source_mode": "mz2_policies", "policies": tabby_policies(),
+             "evidence_as_of": "2026-11-22T12:00:00+03:00"}
     kwargs = dict(database=db, owner_id="owner", from_date="2026-11-01", to_date="2026-11-15",
         include_legacy_analyses=False, allow_self_heal=False, persist_settings=False, fee_context=setup)
     before = await canonical_dashboard(**kwargs)
@@ -178,7 +334,10 @@ async def test_historical_report_reprices_after_later_uploaded_statement_changes
     assert after["totals"]["total_sales"] == before["totals"]["total_sales"] == 150
     assert after["totals"]["total_payment_fees"] == 14.95  # Latest known week:8%, plus1, plus15% VAT.
     assert after["totals"]["net_profit"] == 125.05
-    assert after["payment_fee_authority"]["payment_fee_estimate_sources"][0]["eligible_sale_rows"] == 2
+    evidence = after["payment_fee_authority"]["payment_fee_estimate_sources"][0]
+    assert evidence["eligible_sale_rows"] == 2
+    assert (evidence["window_start"], evidence["window_end"]) == ("2026-11-08", "2026-11-14")
+    assert await db.unified_orders.find({}).to_list(10) == orders_before
 
 
 def actual_context_and_order(refunded="0.00"):
