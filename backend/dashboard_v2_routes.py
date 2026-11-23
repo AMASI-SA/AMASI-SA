@@ -1898,6 +1898,12 @@ async def _compute_dashboard_v2(
     # dashboard callers retain their existing JSON and hydration shape.
     cost_collector = DashboardAdsCostCollector() if include_account_results else None
     cost_observer = {"cost_collector": cost_collector} if cost_collector is not None else {}
+    if fee_context is not None:
+        # Share accepted evidence across this calculation's selected-cohort
+        # readers. Tasks and the current knowledge cutoff stay out of saved
+        # bindings, tariff identity and future computations.
+        fee_context = {**fee_context, "_request_fee_reads": {},
+                       "evidence_as_of": datetime.now(timezone.utc)}
     settings_options = {} if persist_settings else {"persist_settings": False}
     initial_reads = [
         legacy_dashboard(
@@ -2178,7 +2184,7 @@ async def _compute_dashboard_v2(
             "employee_salaries": "mezan_employee_salary_contracts_v2",
             "recurring_obligations": "operating_recurring_obligations_v2",
             "shipping_partners": "legacy_shipping_cost_ssot",
-            "payment_gateway_fees": PAYMENT_FEE_BASIS + " + mezan_ad_account_cost_settings_v2",
+            "payment_gateway_fees": (response.get("payment_fee_authority", {}).get("basis") or PAYMENT_FEE_BASIS) + " + mezan_ad_account_cost_settings_v2",
         },
         "source_only": True,
         "accounting_write_reached": False,

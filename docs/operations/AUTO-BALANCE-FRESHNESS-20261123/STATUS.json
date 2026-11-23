@@ -1,9 +1,9 @@
 {
   "task": "AUTO-BALANCE-FRESHNESS-20261123",
-  "status": "WIP_CI_FIXES_READY_NOT_RELEASED",
+  "status": "WIP_BASE_INTEGRATED_RECHECK_REQUIRED_NOT_RELEASED",
   "repository": "AMASI-SA/AMASI-SA",
   "task_branch": "codex/automatic-balance-freshness-20261123",
-  "base_commit": "c2d244a3349013c06f3fb7824070bfa12bd0bfe0",
+  "base_commit": "76efd2c3aa1563939ee3e27a9ae03f27fc1a3d43",
   "mobile_repository": "AMASI-SA/amasi-mobile",
   "mobile_base_commit": "6634949641c4ca87b002bfcb13434e5a57bc3d21",
   "problem": "Owner web/native workspace reads saved balances but does not request shared financial source reconciliation; newer manual movements can coexist with old automatic obligations.",
@@ -45,17 +45,35 @@
     "backend_command": "PYTHONPATH=backend python -m pytest --noconftest -q --tb=short backend/tests/test_operational_balance_freshness.py backend/tests/test_operational_balance_freshness_routes.py backend/tests/test_operational_balance_freshness_attempts.py backend/tests/test_operational_source_freshness.py backend/tests/test_operational_balance_demand_refresh.py backend/tests/test_operational_balance_demand_refresh_routes.py",
     "web_focused": "5 new suites65 tests PASS under actual react-scripts5 transforms and repository Jest resolver; final HEAD whole-repository CI still required.",
     "independent_review": "Web lifecycle/unknown-outcome and native form/running fencing reviewed. Native33+62 tests and strict manager TypeScript independently PASS; baseline dependency closure Git blob hashes88/88 match c2d244.",
-    "full_repo_ci": "Parent21b5c: Operational Backend and CodeQL/builds passed; frontend3 mock-identity regressions and browser missing-fixture request blocked. Actual resolver fix and new fixture prepared; older results are not final-head acceptance.",
+    "full_repo_ci": "Previous task head7943fb9 fully passed; new integration head must pass independently before readiness. No older result authorizes the new head.",
     "release_gates": "not run; no A/B intent for this source",
-    "browser_acceptance": "Strict synthetic fixture extended to13 cases: saved balances during held POST, failed-source warning retained after receipt and readback, exactly one refresh. Full sandboxed Chromium execution required on latest HEAD.",
-    "browser_review": "Independent static review found no blocker in held-POST synchronization, retained-warning assertions, strict request rejection, hashes or13-scenario CI gate. Explicit390px screenshot viewport."
+    "browser_acceptance": "Parent7943fb9:13/13 strict synthetic browser scenarios PASS; source warning visible after held refresh and saved-metadata readback.",
+    "browser_review": "Independent static review found no blocker in held-POST synchronization, retained-warning assertions, strict request rejection, hashes or13-scenario CI gate. Explicit390px screenshot viewport.",
+    "previous_head_ci": {
+      "head": "7943fb9c629acc7b9c8ad2a41107394ec04377aa",
+      "success": 28,
+      "conditional_skips": 6,
+      "failed": 0,
+      "operational_backend": [
+        6696,
+        106,
+        16
+      ],
+      "operational_frontend": {
+        "suites": 109,
+        "tests": 1740
+      },
+      "browser_scenarios": 13,
+      "browser_errors": 0,
+      "warning_screenshot": "PASS: visually inspected390px view; archive digest and9 changed source hashes verified."
+    }
   },
   "production_changed": false,
   "production_financial_writes": 0,
   "apk_published": false,
   "merge_or_deployment_performed": false,
   "hold": "Do not execute live financial refresh or enable the candidate in Production while the owner's prior no-financial-entry-change restriction remains unresolved. Complete and review isolated source/tests first.",
-  "next_safe_action": "Push reviewed follow-up and inspect latest PR2085 HEAD CI. NativePR379 required Mobile CI fails before runner/checkout and needs job-start diagnosis. No gate weakening, merge, deployment or financial refresh.",
+  "next_safe_action": "Inspect exact integration HEAD CI after preserving upstream PR2086. Native PR379 full isolated Node22 verification in progress; required GitHub Mobile CI fails before runner/checkout and needs job-start diagnosis. No merge to production, deployment or financial refresh.",
   "scope_update": "Persistent owner-visible source freshness alarm in Mezan web/native, including stalled/failed/unknown source updates and saved calculation age; separate read-only global health from financial refresh.",
   "implemented_backend": [
     "Owner-only GET /operational-balances/freshness with no-store metadata-only bounded reads and authorization recheck.",
@@ -69,22 +87,11 @@
     "Foreground one-shot expiry changes warning only, without network or financial calls.",
     "Page/form/session/visibility fencing; unresolved source warning survives successful aggregate."
   ],
-  "checkpoint_parent_sha": "21b5c949720607387da12788ffc942592293bbaa",
+  "checkpoint_parent_sha": "7943fb9c629acc7b9c8ad2a41107394ec04377aa",
   "pull_request": 2085,
   "mobile_pull_request": 379,
   "mobile_source_checkpoint": "3548b7f96a871578ae4a17ddb15cf60fa47102ea",
   "last_observed_blockers": [
-    {
-      "repository": "AMASI-SA/AMASI-SA",
-      "head": "21b5c949720607387da12788ffc942592293bbaa",
-      "kind": "test_fixture",
-      "jobs": [
-        137780144128,
-        137780142895,
-        137780141780
-      ],
-      "cause": "Virtual mocks used a different module identity under full CRA resolver; strict browser fixture lacked GET/freshness. Fixes prepared without dropping assertions."
-    },
     {
       "repository": "AMASI-SA/amasi-mobile",
       "head": "3548b7f96a871578ae4a17ddb15cf60fa47102ea",
@@ -93,5 +100,14 @@
       "job": 137787860535,
       "cause": "Required frontend-checks fails before source execution. Exact annotation reason unavailable; must not infer billing or source failure."
     }
-  ]
+  ],
+  "initial_base_commit": "c2d244a3349013c06f3fb7824070bfa12bd0bfe0",
+  "integration": {
+    "base_pr": 2086,
+    "base_commit": "76efd2c3aa1563939ee3e27a9ae03f27fc1a3d43",
+    "reviewed_task_parent": "7943fb9c629acc7b9c8ad2a41107394ec04377aa",
+    "overlapping_paths": 0,
+    "method": "Merge task head with new production base, preserving all25 upstream changed paths and all29 task blobs. Only task STATUS metadata additionally updated.",
+    "requires_new_head_ci": true
+  }
 }

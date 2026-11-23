@@ -1,3 +1,5 @@
+import { paymentFeeEstimateLabel } from "./paymentFeeRows";
+
 /** An explicit incomplete fee total must never become a zero-fee profit. */
 export function paymentFeeCompleteness(totals = {}) {
     const complete = totals.payment_fees_complete !== false;
@@ -9,7 +11,11 @@ export function paymentFeeCompleteness(totals = {}) {
         : awaitingCollection && otherReasons ? "بانتظار تحصيل بعض الطلبات واستكمال بيانات عمولات الدفع"
             : awaitingCollection ? "بانتظار تحصيل بعض الطلبات"
                 : "بانتظار اكتمال بيانات عمولات الدفع";
-    return { complete, hint };
+    const estimated = totals.payment_fees_estimated === true;
+    const estimateSources = estimated && Array.isArray(totals.payment_fee_estimate_sources)
+        ? totals.payment_fee_estimate_sources : [];
+    return { complete, hint, estimated, estimateSources,
+        estimateLabel: estimated ? paymentFeeEstimateLabel(estimateSources) : null };
 }
 
 /** Cohort review blocks final profit without inventing a missing commission. */

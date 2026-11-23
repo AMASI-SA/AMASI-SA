@@ -1,4 +1,4 @@
-import { buildPaymentFeeRows } from "../lib/paymentFeeRows";
+import { buildPaymentFeeRows, paymentFeeEstimateLabel, paymentFeeSourceNotes } from "../lib/paymentFeeRows";
 import { financialCohortCompleteness, paymentFeeCompleteness } from "../lib/paymentFeeCompleteness";
 export { buildPaymentFeeRows } from "../lib/paymentFeeRows";
 /**
@@ -88,7 +88,23 @@ function HeaderKpi({ icon: Icon, label, value, hint, tone = "emerald", testid, b
     );
 }
 
-function Line({ icon: Icon, label, value, share = null, color = "amber", isFirst = false, isLast = false, onClick = null, testid = null, tooltip = null, expanded = false, expandable = false }) {
+export function PaymentFeeEstimateDetails({ sources = [] }) {
+    const notes = paymentFeeSourceNotes(sources);
+    if (!notes.length) return null;
+    return <div className="mb-2 rounded-lg bg-violet-50 p-2 text-[10px] leading-relaxed text-violet-800" data-testid="payment-fee-estimate-sources" dir="rtl">
+        {notes.map((note, index) => <p key={index}>{note}</p>)}
+    </div>;
+}
+
+export function PaymentFeeEstimateRowNote({ row }) {
+    if (!row.feesEstimated) return null;
+    return <span className="mt-1 block text-[9px] font-semibold text-violet-700">
+        <span className="block">{paymentFeeEstimateLabel(row.feeEstimateSources)}</span>
+        {row.estimatedOrdersCount != null && <span className="block">الطلبات المقدّرة: {fmtInt(row.estimatedOrdersCount)}{row.ordersCount != null ? ` من ${fmtInt(row.ordersCount)}` : ""}</span>}
+    </span>;
+}
+
+function Line({ icon: Icon, label, value, share = null, color = "amber", isFirst = false, isLast = false, onClick = null, testid = null, tooltip = null, expanded = false, expandable = false, estimateLabel = null }) {
     // Color palette for each row — tuned for clarity on a soft gradient bg.
     const palettes = {
         green:   { tile: "bg-emerald-600",      icon: "text-white",      amount: "text-emerald-700",   bar: "bg-emerald-200/60" },
@@ -147,7 +163,10 @@ function Line({ icon: Icon, label, value, share = null, color = "amber", isFirst
                         {fmtPct(share)}
                     </span>
                 )}
-                <span>{value}</span>
+                <span>
+                    {value}
+                    {estimateLabel && <span className="block text-[10px] font-semibold" data-testid={`${testid}-estimate`}>{estimateLabel}</span>}
+                </span>
             </div>
         </Comp>
         {/* iter-256 — Inline expandable accordion section. Stays
@@ -375,6 +394,7 @@ export default function ProfitSummaryCard({
                     {paymentFeeRows.length} طريقة / حساب
                 </span>
             </div>
+            {paymentFeesState.estimated && <PaymentFeeEstimateDetails sources={paymentFeesState.estimateSources.length ? paymentFeesState.estimateSources : paymentFeeRows.filter((row) => row.feesEstimated).flatMap((row) => row.feeEstimateSources)} />}
             {paymentFeeRows.length === 0 ? (
                 <div className="text-xs text-slate-500 py-2 text-center">
                     {paymentFeesState.complete ? "لا توجد رسوم طرق دفع في هذه الفترة" : paymentFeesState.hint}
@@ -401,6 +421,7 @@ export default function ProfitSummaryCard({
                                         {row.parentName && row.parentName !== row.name && (
                                             <div className="mt-0.5 text-[9px] text-slate-400">{row.parentName}</div>
                                         )}
+                                        <PaymentFeeEstimateRowNote row={row} />
                                         {row.kind === "ad_bank_commission" && (
                                             <div className="mt-1 flex flex-wrap items-center gap-1 text-[9px]">
                                                 <span className="rounded bg-violet-50 px-1 py-0.5 text-violet-700">عمولة سحب إعلاني</span>
@@ -576,7 +597,7 @@ export default function ProfitSummaryCard({
                 <Line icon={Package}    label="− تكاليف المنتجات"             value={fmtSar(productCost)}    share={sharePct(productCost, sales)}     color="amber"  onClick={() => setProductCostOpen(true)} testid="profit-line-product-cost" />
                 <Line icon={Megaphone}  label="− إجمالي تكاليف الإعلانات"      value={fmtSar(adsCost)}        share={sharePct(adsCost, sales)}         color="rose"   tooltip={adsExecutiveTooltip} expandable={hasAdsExecutiveBreakdown} expanded={adsExpanded} onClick={() => hasAdsExecutiveBreakdown ? setAdsExpanded((value) => !value) : setAdsBreakdownOpen(true)} testid="profit-line-ads-cost" />
                 <Line icon={Truck}      label="− إجمالي تكاليف الشحن (مقدم + آجل)" value={fmtSar(shippingTotal)}  share={sharePct(shippingTotal, sales)}   color="sky"    tooltip={shippingTooltip} testid="profit-line-shipping" expandable expanded={shippingExpanded} onClick={() => setShippingExpanded(v => !v)} />
-                <Line icon={Receipt}    label="− إجمالي رسوم جميع طرق الدفع"    value={paymentFeesState.complete ? fmtSar(allPaymentFees) : "غير مكتمل"} share={paymentFeesState.complete ? sharePct(allPaymentFees, sales) : null} color="violet" tooltip={paymentFeesTooltip} testid="profit-line-payment-fees" expandable expanded={paymentFeesExpanded} onClick={() => setPaymentFeesExpanded((value) => !value)} />
+                <Line icon={Receipt}    label="− إجمالي رسوم جميع طرق الدفع"    value={paymentFeesState.complete ? fmtSar(allPaymentFees) : "غير مكتمل"} share={paymentFeesState.complete ? sharePct(allPaymentFees, sales) : null} color="violet" tooltip={paymentFeesTooltip} testid="profit-line-payment-fees" expandable expanded={paymentFeesExpanded} onClick={() => setPaymentFeesExpanded((value) => !value)} estimateLabel={paymentFeesState.complete ? paymentFeesState.estimateLabel : null} />
                 {cohortState.excludedOrders > 0 && <p data-testid="profit-financial-cohort-excluded-note" className="mx-3 my-2 rounded-lg bg-slate-50 p-2 text-xs text-slate-600">طلبات بانتظار الدفع: {fmtInt(cohortState.excludedOrders)} مستبعدة من المجاميع المالية، وتبقى ضمن عدد الطلبات.</p>}
                 {!cohortState.complete && <p data-testid="profit-financial-cohort-incomplete-hint" className="mx-3 my-2 rounded-lg bg-amber-50 p-2 text-xs text-amber-800">{cohortState.hint}؛ لم يُحسم صافي الربح بعد.</p>}
                 {!paymentFeesState.complete && <p data-testid="profit-payment-fees-incomplete-hint" className="mx-3 my-2 rounded-lg bg-amber-50 p-2 text-xs text-amber-800">{paymentFeesState.hint}؛ لم يُحسم صافي الربح بعد.</p>}
@@ -591,7 +612,9 @@ export default function ProfitSummaryCard({
                             <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center">
                                 <Equals size={18} weight="bold" />
                             </div>
-                            <span className="text-sm sm:text-base font-extrabold">صافي الأرباح</span>
+                            <span className="text-sm sm:text-base font-extrabold">صافي الأرباح
+                                {finalProfitComplete && paymentFeesState.estimated && <span className="block text-[10px] font-semibold text-emerald-100" data-testid="profit-summary-net-estimate">{paymentFeesState.estimateLabel}</span>}
+                            </span>
                         </div>
                         <div
                             className="flex items-center gap-2 num text-xl sm:text-2xl font-extrabold"
