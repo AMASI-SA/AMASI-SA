@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "kind": "frontend_two_clean_builds_v1",
+  "git_sha": "45c8fb4ea91e5af8523971fbfa2270ee96552224",
+  "source": {
+    "scope": "git_head_frontend_tree_v1",
+    "git_tree_oid": "7837173b1fa99f76460c3daf569a56100c07ec53",
+    "file_count": 1415,
+    "tree_sha256": "52caf7792d80c7d6796f5b239db530ccdc56b7c9ec78cb0f5f9dde1fd2be8642"
+  },
+  "toolchain": {
+    "node": "22.23.2",
+    "yarn": "1.22.22",
+    "vite": "8.2.4"
+  },
+  "environment": {
+    "mode": "production",
+    "effective": {
+      "NODE_ENV": "production",
+      "VITE_USER_NODE_ENV_present": false,
+      "VITE_prefixed_keys": []
+    },
+    "allowed_client_keys": [
+      "REACT_APP_BACKEND_URL"
+    ],
+    "values": {
+      "REACT_APP_BACKEND_URL": {
+        "present": true,
+        "sha256": "d2e055b74392bfdfcf1d64af1e88a91ab7029a49729a7ac53870bf48bfe4e5ff"
+      }
+    }
+  },
+  "passes": [
+    {
+      "ordinal": 1,
+      "build_meta": {
+        "path": "build-meta.json",
+        "bytes": 583064,
+        "sha256": "e9ba47b4ad955ad3381d150eae8bb3a079324a97085684b2c02bd3499f017452"
+      },
+      "artifact_tree_sha256": "5895551a52ba294d373076988d0d1ba75e39855ab28cbd7a7a76c0a4038834e4"
+    },
+    {
+      "ordinal": 2,
+      "build_meta": {
+        "path": "build-meta.json",
+        "bytes": 583064,
+        "sha256": "e9ba47b4ad955ad3381d150eae8bb3a079324a97085684b2c02bd3499f017452"
+      },
+      "artifact_tree_sha256": "5895551a52ba294d373076988d0d1ba75e39855ab28cbd7a7a76c0a4038834e4"
+    }
+  ],
+  "retained_pass": 2
+}

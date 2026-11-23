@@ -1,0 +1,72 @@
+{
+  "source_A": "45c8fb4ea91e5af8523971fbfa2270ee96552224",
+  "production_J": "76efd2c3aa1563939ee3e27a9ae03f27fc1a3d43",
+  "intent_B": "499b98735b5cc4eae79d380e4f8d5ec5477175e5",
+  "intent_B_tree": "4816e3468b3fcbcde78ab799760201fcfb2e7171",
+  "intent_blob": "5111041b1b1bd7c7f919f13ddcf9dc1f25f71df7",
+  "intent_sha256": "ae25d2846eadb9e512508d5658d33e49e7c4a43222d8393b605ca0e52842487b",
+  "intent_bytes": 1507974,
+  "release_id": "rg5-a762a47336e81b005a6fdfe509695c01a46b991478e27d6dc421913e94c94762",
+  "frontend_artifact_tree_sha256": "5895551a52ba294d373076988d0d1ba75e39855ab28cbd7a7a76c0a4038834e4",
+  "reproducibility_proof_sha256": "70005346d66a7b82ad9d59e5211524e070ad5b08c2a2115abe58fc7b6bb3942d",
+  "governed_build_exit": 0,
+  "original_frontend_verify_exit": 0,
+  "original_freeze_exit": 0,
+  "independent_candidate_review": "PASS",
+  "original_B_loader_and_git_validation": "PASS",
+  "A_to_B_only_changed_path": "release/release-intent-v5.json",
+  "J_to_A_full_history_intent_changes": [],
+  "PR": "https://github.com/AMASI-SA/AMASI-SA/pull/2089",
+  "PR_state": "open, ready for review, unmerged; remaining exact-B gates running",
+  "exact_B_readiness_run": 45216427337,
+  "exact_B_operational_run": 45216427435,
+  "production_changed": false,
+  "lease_created": false,
+  "A_ordinary_CI": {
+    "run_id": 45213472517,
+    "conclusion": "success",
+    "backend": {
+      "tests": 6810,
+      "subtests": 90,
+      "job_id": 137828193181
+    },
+    "demand": 106,
+    "shipping": {
+      "tests": 16,
+      "subtests": 18
+    },
+    "frontend": {
+      "suites": 106,
+      "tests": 1699,
+      "job_id": 137828192732
+    },
+    "canonical_worker": 4,
+    "inventory_browser": {
+      "scenarios": 8,
+      "screenshots": 10
+    }
+  },
+  "files": {
+    "governed-A-build.log.gz": {
+      "bytes": 17928,
+      "sha256": "30d1b26c1e03d9d43d1665fa7899fbeb1dd98a09f425f654b9a1cde305d532c9",
+      "uncompressed_bytes": 72385,
+      "uncompressed_sha256": "6c8f0878143a9a9e2bfce2b970162b232dc536671746cfa83f7cf26261cfa4cd"
+    },
+    "governed-A-verify.log.gz": {
+      "bytes": 46311,
+      "sha256": "4d1817d729a167bfc7de31478cf1a371d161b923a4d233a85d9b773d2604d2db",
+      "uncompressed_bytes": 134814,
+      "uncompressed_sha256": "2d130db70c5ab77fafe9872373e0ac4c53ffb9c232ed63e2e65f2f391af83309"
+    },
+    "independent-candidate-review.json": {
+      "bytes": 2187,
+      "sha256": "a3c8c1e338d7bbe1091ad4addb114611076e37c7255d995471b6b9725bac00a8"
+    },
+    "reproducible-build.json": {
+      "bytes": 1521,
+      "sha256": "70005346d66a7b82ad9d59e5211524e070ad5b08c2a2115abe58fc7b6bb3942d"
+    }
+  },
+  "log_archives": "Deterministic gzip archives preserve exact compiler/verifier stdout bytes, including their original whitespace."
+}

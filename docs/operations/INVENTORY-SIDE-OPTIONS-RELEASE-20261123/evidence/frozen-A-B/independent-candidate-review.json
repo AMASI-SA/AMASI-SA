@@ -1,0 +1,41 @@
+{
+  "kind": "mezan_independent_external_candidate_review_v1",
+  "reviewer": "side_options_release_protocol",
+  "verified": true,
+  "reviewed_at_utc": "2026-11-23T16:23:45.823570+00:00",
+  "checkout": "/workspace/scratch/36b1bc151c92/mezan-side-options-release",
+  "candidate": "/workspace/scratch/36b1bc151c92/mezan-side-options-release-proof/release-intent-v5-45c8fb4e.json",
+  "candidate_bytes": 1507974,
+  "candidate_sha256": "ae25d2846eadb9e512508d5658d33e49e7c4a43222d8393b605ca0e52842487b",
+  "candidate_git_blob": "5111041b1b1bd7c7f919f13ddcf9dc1f25f71df7",
+  "source_git_sha": "45c8fb4ea91e5af8523971fbfa2270ee96552224",
+  "source_base_git_sha": "76efd2c3aa1563939ee3e27a9ae03f27fc1a3d43",
+  "protocol_version": 5,
+  "schema_version": 2,
+  "release_id": "rg5-a762a47336e81b005a6fdfe509695c01a46b991478e27d6dc421913e94c94762",
+  "frontend_artifact_tree_sha256": "5895551a52ba294d373076988d0d1ba75e39855ab28cbd7a7a76c0a4038834e4",
+  "reproducibility_proof_sha256": "70005346d66a7b82ad9d59e5211524e070ad5b08c2a2115abe58fc7b6bb3942d",
+  "toolchain": {
+    "node": "22.23.2",
+    "yarn": "1.22.22"
+  },
+  "manifest_file_counts": {
+    "backend_runtime_source": 1332,
+    "release_control_source": 328
+  },
+  "checks": [
+    "Original load_candidate_release_intent accepted external candidate with HEAD=A",
+    "J..A full-history intent changes absent",
+    "Original Git backend and release-control manifests independently rederived and exactly equal",
+    "Original retained frontend reader with require_git_source=True exactly matched candidate",
+    "Original retained reproducibility reader exactly matched candidate",
+    "Full frontend build metadata source manifest exactly matched candidate",
+    "Production branch/origin and governed Node22.23.2/Yarn1.22.22 matched",
+    "Candidate bytes, digest, Git blob, runtime ID, artifact and proof digest matched announced freeze",
+    "Source HEAD and clean checkout unchanged before and after review"
+  ],
+  "source_changed": false,
+  "materialization_performed": false,
+  "host_or_guard_action_performed": false,
+  "scope": "candidate acceptance only; intent commit, CI adapter rehearsals and publication remain separate gates"
+}
