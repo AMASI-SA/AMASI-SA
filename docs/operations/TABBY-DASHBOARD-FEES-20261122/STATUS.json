@@ -1,7 +1,7 @@
 {
   "task_id": "TABBY-DASHBOARD-FEES-20261122",
-  "status": "r4_final_B_adapter_proofs_accepted_two_long_CI_jobs_still_running",
-  "updated_at_utc": "2026-11-23T15:20:31.614217+00:00",
+  "status": "r4_immutable_final_helper_bundle_reviewed_ready_for_launcher_pinning",
+  "updated_at_utc": "2026-11-23T15:32:56.045881+00:00",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tabby-weekly-fees-release-evidence-20261122",
   "production_branch": "hotfix/prod-snap-meta-final",
@@ -129,7 +129,7 @@
   },
   "release": {
     "production_changed_by_this_task": false,
-    "merged": false,
+    "merged": true,
     "published": false,
     "lease_created": false,
     "actual_host_evidence": "Owner supplied clean actual /app at c2d244a3349013c06f3fb7824070bfa12bd0bfe0, branch hotfix/prod-snap-meta-final, upstream +0 -0, original guard exactly active:false. Fresh bounded status remains required at shared action boundaries.",
@@ -142,13 +142,17 @@
     "host_access": "Verified actual signed-in Emergent VS Code terminal; original guard/Git/disk bounded read-only check passed. HOST-ACCESS-READ-2086.json retains observations.",
     "historical_hold_superseded": true,
     "live_UI_before_publication": "Root read-only existing dashboard session showed Tabby row and payment total incomplete on2026-11-23, while other provider fee rows were numeric. Use same report for post-publication comparison; no customer data or financial amounts retained here.",
-    "latest_coordination": "Issue1006 canonical comment updated2026-11-23T15:16:16Z: current Production unchangedN; PR2084 explicitly no publication reservation, PR2085 isolated WIP with only its own hold; no substantiated foreign release reservation."
+    "latest_coordination": "Issue1006 canonical comment updated2026-11-23T15:16:16Z: current Production unchangedN; PR2084 explicitly no publication reservation, PR2085 isolated WIP with only its own hold; no substantiated foreign release reservation.",
+    "production_branch_changed_by_this_task": true,
+    "production_runtime_changed_by_this_task": false,
+    "merge_proof": "MERGE-PROOF-2086.json",
+    "actual_host_latest_boundary": "Root reran bounded original guard/Git/disk check around2026-11-23T15:26UTC: cleanN/upstream+0-0,exactinactive; no host source mutation.",
+    "current_handoff": "Authorized serial publication of mergedD2086 is underway. Host remainsN until reviewed immutable helper execution; original isolated rehearsal precedes any lease."
   },
   "next_safe_actions": [
-    "Preserve reviewed R4 source A remotely and open its dedicated Draft PR; record exact identity in PR and separate evidence branch.",
-    "Read exact-head required/focused source checks and audit the fresh governed candidate with original validators and full manifests; freeze only release/release-intent-v5.json as B.",
-    "Complete final exact-B CI and both original clean-clone adapter/package proofs, confirm unchanged Production base and coordination, then normal merge preserving A/B.",
-    "Port separately reviewed numbered host helpers; require actual clean expected host and fresh inactive guard; isolated original adapter rehearsal before any lease; preserve unrelated outputs/backups; prepare/prepublish, authorized publication and original three-probe verification."
+    "Finish independent exactD helper pin review; preserve immutable fourhelperbundleE, then set only launcherE/checksums in separateL.",
+    "Run cryptographically verified launcher from actualhostterminal; original guard preflight, isolated adapter, preserved staging, prepare/prepublish.",
+    "Publish once in Emergent, observe newer explicit DeploymentSucceeded, run exactownlease originalverify3 toinactive; compare liveTabbyrow/profit and finalize durable evidence."
   ],
   "source_branch": "codex/tabby-weekly-fee-estimates-r4-20261123",
   "source_A": "1725672eeccb1272f183c376b9267e363a028325",
@@ -175,19 +179,20 @@
   "historical_r3_status_archive": "HISTORICAL-R3-STATUS-at-a7d56d4.json",
   "final_B_ci": {
     "readiness_run": 45202221084,
-    "state": "running",
-    "complete": false,
-    "checks_observed": 54,
-    "success_observed": 46,
-    "expected_skips_observed": 6,
-    "in_progress_observed": 2,
+    "state": "PASS",
+    "complete": true,
+    "checks_observed": 62,
+    "success_observed": 52,
+    "expected_skips_observed": 10,
+    "in_progress_observed": 0,
     "focused_run": 45202221194,
     "focused_backend": "2+214 tests passed from exact job log137788402068",
     "focused_frontend": "123 tests/six suites plus frontend build passed from exact job log137788401472",
-    "remaining_jobs": [
-      137788593035,
-      137788594170
-    ]
+    "remaining_jobs": [],
+    "workflow_executions": 30,
+    "workflow_success": 29,
+    "workflow_expected_skip": 1,
+    "report": "FINAL-B-CI-2086.json"
   },
   "candidate_audit": {
     "verdict": "PASS root and independent",
@@ -210,5 +215,18 @@
       14830703235,
       14832167945
     ]
+  },
+  "deployment_D": "76efd2c3aa1563939ee3e27a9ae03f27fc1a3d43",
+  "deployment_tree": "72659c9adcd5fcf3880c4ef4332245a65b620fe3",
+  "host_helper_bundle": {
+    "state": "fourhelpersfullypinned; launcher E/checksums unset",
+    "deployment_D": "76efd2c3aa1563939ee3e27a9ae03f27fc1a3d43",
+    "independent_pin_review": "PASS exact fiveD substitutions only",
+    "four_helper_sha256": {
+      "MANUAL-HOST-ISOLATED-REHEARSAL-2086.py": "5fe424bfb7ace043cd29d31b7124643bcc8f7f53f7dfff570080a2e9d74931ba",
+      "MANUAL-HOST-STAGE-2086.py": "7d2974136db042a4246bf0b30725cf575b600b837904f02d6abe45b981cd083f",
+      "MANUAL-HOST-PREPARE-PREPUBLISH-2086.py": "55900e07e8967edf427dc5e5d655b0bd7457bbfadb2b5c6ce3348ae1c2b63cf4",
+      "RUN-HOST-VERIFY-2086.sh": "4210c4c9a2e6d7cbc418154abb354c967dfc8fa44d4bd30d4bdb93d631ddc043"
+    }
   }
 }

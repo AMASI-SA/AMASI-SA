@@ -1,0 +1,18 @@
+{
+  "verdict": "PASS",
+  "source_A": "1725672eeccb1272f183c376b9267e363a028325",
+  "source_base_N": "c2d244a3349013c06f3fb7824070bfa12bd0bfe0",
+  "intent_B": "104c6b45cd646418a719496fb8c02ee61ddf5483",
+  "deployment_D": "76efd2c3aa1563939ee3e27a9ae03f27fc1a3d43",
+  "ordered_parents": [
+    "c2d244a3349013c06f3fb7824070bfa12bd0bfe0",
+    "104c6b45cd646418a719496fb8c02ee61ddf5483"
+  ],
+  "tree": "72659c9adcd5fcf3880c4ef4332245a65b620fe3",
+  "A_to_D_changed_paths": [
+    "release/release-intent-v5.json"
+  ],
+  "normal_merge": true,
+  "source_checkout_clean_at_B": true,
+  "production_runtime_changed": false
+}

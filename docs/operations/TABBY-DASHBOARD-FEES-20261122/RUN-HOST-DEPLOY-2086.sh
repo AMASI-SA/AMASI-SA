@@ -16,7 +16,7 @@ from pathlib import Path
 APP = Path('/app')
 BASE = 'c2d244a3349013c06f3fb7824070bfa12bd0bfe0'
 B = '104c6b45cd646418a719496fb8c02ee61ddf5483'
-D = None
+D = '76efd2c3aa1563939ee3e27a9ae03f27fc1a3d43'
 EVIDENCE = None
 PREFIX = 'docs/operations/TABBY-DASHBOARD-FEES-20261122/'
 FILES = (

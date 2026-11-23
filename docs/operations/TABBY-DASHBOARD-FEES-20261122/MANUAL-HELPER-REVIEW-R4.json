@@ -1,18 +1,18 @@
 {
-  "state": "candidate pins reviewed; merge/evidence/checksums disabled",
+  "state": "all deployment pins independently reviewed; launcher evidence/checksums remain disabled",
   "source_A": "1725672eeccb1272f183c376b9267e363a028325",
   "base_N": "c2d244a3349013c06f3fb7824070bfa12bd0bfe0",
   "intent_B": "104c6b45cd646418a719496fb8c02ee61ddf5483",
   "tree": "72659c9adcd5fcf3880c4ef4332245a65b620fe3",
-  "D": null,
+  "D": "76efd2c3aa1563939ee3e27a9ae03f27fc1a3d43",
   "EVIDENCE": null,
   "launcher_helper_checksums": "all None",
   "file_sha256": {
-    "MANUAL-HOST-ISOLATED-REHEARSAL-2086.py": "dacd3060d5e02f81bcbde65c71581b92939f1eab9e99fa1617c878ff4fd8e4dd",
-    "MANUAL-HOST-STAGE-2086.py": "304fe45c800b390d2df17a8d488cbf884249eb58d6ec28c907dc5fec3b3b1442",
-    "MANUAL-HOST-PREPARE-PREPUBLISH-2086.py": "83b90eec0e4675a8cbd7289a10746530556119c7b8015cf0edfb26dcd472be4f",
-    "RUN-HOST-DEPLOY-2086.sh": "f7eb88962f5969172e88129470cafef96cac6da144dcff5ca0699ddaf813dcdc",
-    "RUN-HOST-VERIFY-2086.sh": "52a879f9b4a33ea00fb13536a4e235fee83f767d824bce8f771619ce81962eab",
+    "MANUAL-HOST-ISOLATED-REHEARSAL-2086.py": "5fe424bfb7ace043cd29d31b7124643bcc8f7f53f7dfff570080a2e9d74931ba",
+    "MANUAL-HOST-STAGE-2086.py": "7d2974136db042a4246bf0b30725cf575b600b837904f02d6abe45b981cd083f",
+    "MANUAL-HOST-PREPARE-PREPUBLISH-2086.py": "55900e07e8967edf427dc5e5d655b0bd7457bbfadb2b5c6ce3348ae1c2b63cf4",
+    "RUN-HOST-VERIFY-2086.sh": "4210c4c9a2e6d7cbc418154abb354c967dfc8fa44d4bd30d4bdb93d631ddc043",
+    "RUN-HOST-DEPLOY-2086.sh": "8c047382dddc1a7f7fc2533f063388a0a758d49ec2f768186535ab9f4177f1df",
     "MANUAL-HOST-SELF-TEST-2086.py": "cdf5918cade892b64af37820440aaa766abac3b6a6889b9177170b23b420d10f"
   },
   "scope": "Six new PR2086 files only; old2079 unchanged. Four operational copies retain approved original protections. Isolated rehearsal adds reviewed PR2082 bounded owned-process-group cleanup.",
@@ -24,5 +24,6 @@
     "post_pin_disabled_test_exit": 0,
     "post_pin_bash_n_exit": 0
   },
-  "actual_host_execution": false
+  "actual_host_execution": false,
+  "final_D_activation_review": "PASS independent frontend reviewer; exact five None-to-D substitutions against d554801b; selftestunchanged; wholefile comparisons and nonexecutingAST checks pass."
 }

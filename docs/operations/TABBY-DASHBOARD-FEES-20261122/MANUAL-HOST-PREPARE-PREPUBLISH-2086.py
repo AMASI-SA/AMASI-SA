@@ -8,7 +8,7 @@ from pathlib import Path
 
 APP = Path('/app')
 EXPECTED = {
-    'deployment_git_sha': None,
+    'deployment_git_sha': '76efd2c3aa1563939ee3e27a9ae03f27fc1a3d43',
     'source_git_sha': '1725672eeccb1272f183c376b9267e363a028325',
     'release_id': 'rg5-be6cf2196ab95412377fd5280c5ff7b6fd3204dd20dd74825b43d85e0fe77d13',
     'protocol_version': 5,

@@ -17,7 +17,7 @@ APP = Path('/app')
 URL = 'https://mezansalla.com'
 ACTOR = 'codex-tabby-weekly-fees-2086-20261123'
 EXPECTED = {
-    'deployment_git_sha': None,
+    'deployment_git_sha': '76efd2c3aa1563939ee3e27a9ae03f27fc1a3d43',
     'source_git_sha': '1725672eeccb1272f183c376b9267e363a028325',
     'source_base_git_sha': 'c2d244a3349013c06f3fb7824070bfa12bd0bfe0',
     'git_sha': '1725672eeccb1272f183c376b9267e363a028325',
