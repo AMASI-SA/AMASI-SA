@@ -138,6 +138,7 @@ export function visibleOperationalRead(read, callbacks = {}, lane = {}, policy =
 const REFRESH_TIMING_STAGES = new Set([
     "native_evidence", "aggregate", "source_collection", "source_collision", "reconciliation", "profit_snapshot",
     "bank_claims", "party_catalogs", "snapshot_load", "snapshot_compare", "snapshot_pack", "snapshot_commit",
+    "snapshot_raw_read", "snapshot_unpack", "snapshot_copy_prepare", "orders_cursor_build", "orders_cursor_read", "orders_rows_validate",
     "source_primary_reads", "source_fee_settings", "source_setup", "source_statements", "source_delivery_history",
     "source_transactions", "source_native_links", "source_bundles", "source_option_catalog", "source_orders",
     "source_order_indexes", "source_bank_catalog", "source_invoices", "source_other_sources", "source_native_overlaps", "source_finalize",
@@ -146,13 +147,38 @@ const REFRESH_TIMING_STAGES = new Set([
 // Local diagnostic evidence only. Nested stages overlap; their durations must
 // not be added. Reconstruct the fixed fields instead of logging response data.
 function logOperationalRefreshTimings(detail, label) {
-    if (!Array.isArray(detail?.stage_timings)) return;
-    const timings = detail.stage_timings.filter(row => row && REFRESH_TIMING_STAGES.has(row.stage)
-        && typeof row.duration_ms === "number" && Number.isFinite(row.duration_ms)
-        && row.duration_ms >= 0 && row.duration_ms <= 300000
-        && ["complete", "cancelled", "failed"].includes(row.outcome))
-        .slice(-64).map(({ stage, duration_ms, outcome }) => ({ stage, duration_ms, outcome }));
-    if (timings.length) console.info(label + " " + JSON.stringify(timings));
+    try {
+        const timings = (Array.isArray(detail?.stage_timings) ? detail.stage_timings : []).filter(row => row && REFRESH_TIMING_STAGES.has(row.stage)
+            && typeof row.duration_ms === "number" && Number.isFinite(row.duration_ms)
+            && row.duration_ms >= 0 && row.duration_ms <= 300000
+            && ["complete", "cancelled", "failed"].includes(row.outcome))
+            .slice(-64).map(({ stage, duration_ms, outcome }) => ({ stage, duration_ms, outcome }));
+        if (timings.length) console.info(label + " " + JSON.stringify(timings));
+        const reads = (Array.isArray(detail?.primary_orders_reads) ? detail.primary_orders_reads : [])
+            .slice(-12).map(safePrimaryOrdersRead).filter(Boolean);
+        if (reads.length) console.info(label.replace(/_stage_timings$/, "_primary_orders_reads") + " " + JSON.stringify(reads));
+    } catch (_) {
+        // A local diagnostic failure must not replace the refresh outcome.
+    }
+}
+
+function safePrimaryOrdersRead(row) {
+    if (!row || row.collection !== "unified_orders" || !["complete", "cancelled", "failed"].includes(row.outcome)
+        || !["motor", "coroutine", "unknown"].includes(row.cursor_kind)) return null;
+    const result = {collection: "unified_orders", outcome: row.outcome, cursor_kind: row.cursor_kind};
+    for (const key of ["rows_retained", "last_checkpoint_rows"]) {
+        if (!Number.isInteger(row[key]) || row[key] < 0 || row[key] > 20001) return null;
+        result[key] = row[key];
+    }
+    if (result.last_checkpoint_rows > result.rows_retained) return null;
+    const nullable = new Set(["first_row_ms", "last_checkpoint_ms", "read_elapsed_ms", "close_ms"]);
+    for (const key of ["queue_ms", "budget_ms", "first_row_ms", "last_checkpoint_ms", "read_elapsed_ms", "cancel_join_ms", "close_ms"]) {
+        const value = row[key];
+        if (value === null && nullable.has(key)) result[key] = null;
+        else if (typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 300000) result[key] = value;
+        else return null;
+    }
+    return result;
 }
 
 export function logOperationalRefreshTimeoutTimings(detail) {

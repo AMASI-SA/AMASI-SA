@@ -1,0 +1,48 @@
+{
+  "base_git_sha": "422fffc8fb9c381165cc76b1ded5ca595773ce8e",
+  "created_at": "2026-11-23T18:27:57.297065+00:00",
+  "files": [
+    {
+      "path": "backend/operational_demand_refresh.py",
+      "bytes": 17247,
+      "sha256": "e3eae95b059209d8365044d5e5bed05f25a78e668671eb0d3e2c25ac3e11563d",
+      "base_blob_sha": "5798c4cece3a670c9a30fedb541230703c960696"
+    },
+    {
+      "path": "backend/operational_read_runtime.py",
+      "bytes": 15289,
+      "sha256": "813b62bb2afabd447a527b7c262fcf15a280a0c86746d9f4e8cb0e5987fe7c90",
+      "base_blob_sha": "ba0ad613e57633eb3b6d4f8641bf6d10747168c2"
+    },
+    {
+      "path": "backend/operational_balance_sources.py",
+      "bytes": 165116,
+      "sha256": "b9e10ef40ade5fd67369b266b75fa24ebe9696ac3951632aec1d2c19246e637a",
+      "base_blob_sha": "f4df90e25a727c44f848110be866182c08a8570c"
+    },
+    {
+      "path": "backend/operational_balance_store.py",
+      "bytes": 8583,
+      "sha256": "0c702206368bb919c0e57fa93841023126753cdbf861c65d361e379062311a83",
+      "base_blob_sha": "71077cca24a2cb03a98ca022a08c2462722d9b9d"
+    },
+    {
+      "path": "frontend/src/pages/operational/visibleOperationalRead.js",
+      "bytes": 20909,
+      "sha256": "865b93aafed038e48d6456469b56caf4ab77fa287ce092ca45b576f10cbbd221",
+      "base_blob_sha": "66e84ccb236eb6e46567288c1e9f430ce2e7e87c"
+    },
+    {
+      "path": "backend/tests/test_operational_refresh_read_diagnostics.py",
+      "bytes": 14159,
+      "sha256": "10785edec5c756ee964c48081cdf5941c61c94a6a9e98c4b4552c72c53dd4fd0",
+      "base_blob_sha": null
+    },
+    {
+      "path": "frontend/src/pages/operational/visibleOperationalRead.test.js",
+      "bytes": 29670,
+      "sha256": "801dfff16079ea8820481cbcb92f17151d1cde9033680e6c828fb4852a553b28",
+      "base_blob_sha": "e2fb3d1cf55e9c864b750e3de27ed47341c8c37e"
+    }
+  ]
+}

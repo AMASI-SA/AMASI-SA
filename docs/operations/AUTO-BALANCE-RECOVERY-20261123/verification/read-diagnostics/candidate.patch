@@ -1,0 +1,807 @@
+--- a/backend/operational_demand_refresh.py
++++ b/backend/operational_demand_refresh.py
+@@ -36,6 +36,8 @@
+     "native_evidence", "aggregate", "source_collection", "source_collision",
+     "reconciliation", "profit_snapshot", "bank_claims", "party_catalogs",
+     "snapshot_load", "snapshot_compare", "snapshot_pack", "snapshot_commit",
++    "snapshot_raw_read", "snapshot_unpack", "snapshot_copy_prepare",
++    "orders_cursor_build", "orders_cursor_read", "orders_rows_validate",
+     "source_primary_reads", "source_fee_settings", "source_setup",
+     "source_statements", "source_delivery_history", "source_transactions",
+     "source_native_links", "source_bundles", "source_option_catalog",
+@@ -46,6 +48,51 @@
+ TIMING_OUTCOMES = frozenset({"complete", "cancelled", "failed"})
+ TIMING_LIMIT = 64
+ TIMING_MAX_MS = 300000
++PRIMARY_ORDERS_READ_LIMIT = 12
++PRIMARY_ORDERS_ROW_LIMIT = 20001
++PRIMARY_ORDERS_READ_TIMES = (
++    "queue_ms", "budget_ms", "first_row_ms", "last_checkpoint_ms",
++    "read_elapsed_ms", "cancel_join_ms", "close_ms",
++)
++PRIMARY_ORDERS_NULLABLE_TIMES = frozenset({
++    "first_row_ms", "last_checkpoint_ms", "read_elapsed_ms", "close_ms",
++})
++
++
++def _safe_primary_orders_read(value):
++    """Reconstruct a bounded observation; never serialize a cursor or row.
++
++    Read/first-row timings include driver scheduling and delivery. Queue time
++    is the existing source semaphore, not Mongo pool wait. Join/close overlap
++    read elapsed time. Rows/first-row describe retained rows, excluding a row
++    delivered after stop. Coroutine adapters expose no per-row boundaries.
++    None means that boundary was not observed.
++    """
++    if (type(value) is not dict or value.get("collection") != "unified_orders"
++            or type(value.get("collection")) is not str
++            or type(value.get("outcome")) is not str
++            or value["outcome"] not in TIMING_OUTCOMES
++            or type(value.get("cursor_kind")) is not str
++            or value["cursor_kind"] not in {"motor", "coroutine", "unknown"}):
++        return None
++    result = {key: value[key] for key in ("collection", "outcome", "cursor_kind")}
++    for key in ("rows_retained", "last_checkpoint_rows"):
++        count = value.get(key)
++        if type(count) is not int or not 0 <= count <= PRIMARY_ORDERS_ROW_LIMIT:
++            return None
++        result[key] = count
++    if result["last_checkpoint_rows"] > result["rows_retained"]:
++        return None
++    for key in PRIMARY_ORDERS_READ_TIMES:
++        number = value.get(key)
++        if number is None and key in PRIMARY_ORDERS_NULLABLE_TIMES:
++            result[key] = None
++        elif (type(number) in (int, float) and math.isfinite(number)
++              and 0 <= number <= TIMING_MAX_MS):
++            result[key] = round(number, 3)
++        else:
++            return None
++    return result
+ 
+ 
+ async def _join(task):
+@@ -74,6 +121,7 @@
+         self.lease_attempted = False
+         self.leased = False
+         self.stage_timings = deque(maxlen=TIMING_LIMIT)
++        self.primary_orders_reads = deque(maxlen=PRIMARY_ORDERS_READ_LIMIT)
+         self.read_deadline = None
+ 
+     def record_stage(self, stage, duration_ms, outcome):
+@@ -89,6 +137,23 @@
+         self.stage_timings.append({"stage": stage,
+                                    "duration_ms": round(duration_ms, 3),
+                                    "outcome": outcome})
++
++    def record_primary_orders_read(self, value):
++        # Diagnostics must never replace the source/financial outcome.
++        try:
++            safe = _safe_primary_orders_read(value)
++            if safe is not None:
++                self.primary_orders_reads.append(safe)
++        except Exception:
++            pass
++
++    def primary_read_details(self):
++        try:
++            rows = [_safe_primary_orders_read(value) for value in self.primary_orders_reads]
++            rows = [row for row in rows if row is not None]
++            return {"primary_orders_reads": rows} if rows else {}
++        except Exception:
++            return {}
+ 
+     def cancel(self, *, disconnected=False):
+         self.disconnected = self.disconnected or disconnected
+@@ -187,10 +252,13 @@
+         outcome = "failed"
+         raise
+     finally:
+-        duration_ms = (time.monotonic() - started) * 1000
+-        context.record_stage(stage, duration_ms, outcome)
+-        _LOG.info("operational_refresh_stage stage=%s duration_ms=%.3f outcome=%s",
+-                  stage, duration_ms, outcome)
++        try:
++            duration_ms = (time.monotonic() - started) * 1000
++            context.record_stage(stage, duration_ms, outcome)
++            _LOG.info("operational_refresh_stage stage=%s duration_ms=%.3f outcome=%s",
++                      stage, duration_ms, outcome)
++        except Exception:
++            pass  # Evidence failure cannot change the observed operation.
+ 
+ 
+ async def checkpoint():
+@@ -278,6 +346,7 @@
+                     "code": "operational_refresh_timeout",
+                     "message": "انتهت مهلة التحديث؛ احتُفظ بآخر لقطة ناجحة",
+                     "stage_timings": list(context.stage_timings),
++                    **context.primary_read_details(),
+                 })
+             except HTTPException as error:
+                 detail = error.detail
+@@ -289,7 +358,8 @@
+                                 for key, value in detail.items())
+                         and detail == source_failure_detail(detail.get("cause"), detail.get("source_collection"))):
+                     raise HTTPException(status_code=error.status_code, headers=error.headers,
+-                                        detail={**detail, "stage_timings": list(context.stage_timings)}) from None
++                                        detail={**detail, "stage_timings": list(context.stage_timings),
++                                                **context.primary_read_details()}) from None
+                 raise
+ 
+         context.work = asyncio.create_task(work())
+--- a/backend/operational_read_runtime.py
++++ b/backend/operational_read_runtime.py
+@@ -24,6 +24,53 @@
+ 
+ _DEADLINE = ContextVar('operational_source_read_deadline', default=None)
+ _OWNED_SOURCE_READ = ContextVar('operational_owned_source_read', default=False)
++_PRIMARY_ORDERS_READ = ContextVar('operational_primary_orders_read_observation', default=None)
++
++
++def _observation_clock(observation):
++    if observation is not None:
++        try:
++            return time.monotonic()
++        except Exception:
++            pass
++    return None
++
++
++def _observe(observation, **values):
++    if observation is not None:
++        try:
++            observation.update(values)
++        except Exception:
++            pass
++
++
++def _observe_elapsed(observation, key, started):
++    if observation is not None and started is not None:
++        try:
++            observation[key] = (time.monotonic() - started) * 1000
++        except Exception:
++            pass
++
++
++def _primary_orders_observation(enabled, name):
++    # Only the primary financial source reader opts in. No owner, query, row,
++    # cursor identity or exception text belongs in this request-local record.
++    if not enabled or name != 'unified_orders':
++        return None, None
++    try:
++        context = demand_context()
++        if context is None:
++            return None, None
++        observation = {
++            'collection': 'unified_orders', 'outcome': 'complete', 'cursor_kind': 'unknown',
++            'queue_ms': None, 'budget_ms': 0, 'first_row_ms': None,
++            'rows_retained': 0, 'last_checkpoint_rows': 0, 'last_checkpoint_ms': None,
++            'read_elapsed_ms': None, 'cancel_join_ms': 0, 'close_ms': None,
++            '_queued_at': time.monotonic(),
++        }
++        return context, observation
++    except Exception:
++        return None, None
+ 
+ 
+ class SourceReadError(ValueError):
+@@ -60,6 +107,8 @@
+     it. Keep iteration shielded instead; cancellation requests a stop before
+     another advance and waits for the active read and sequential close.
+     """
++    observation = _PRIMARY_ORDERS_READ.get()
++    read_started = _observation_clock(observation)
+     if not isinstance(cursor, AgnosticBaseCursor):
+         # Deliberately non-Motor, coroutine-based adapters used by offline
+         # readers own their awaited work directly. Do not silently accept a
+@@ -67,9 +116,17 @@
+         to_list = getattr(cursor, 'to_list', None)
+         if not inspect.iscoroutinefunction(to_list):
+             raise ValueError('operational_source_cursor_unsupported')
+-        return await to_list(count)
++        _observe(observation, cursor_kind='coroutine')
++        try:
++            result = await to_list(count)
++            if type(result) is list:
++                _observe(observation, rows_retained=len(result))
++            return result
++        finally:
++            _observe_elapsed(observation, 'read_elapsed_ms', read_started)
+     if not callable(getattr(cursor, '__anext__', None)) or not callable(getattr(cursor, 'close', None)):
+         raise ValueError('operational_source_cursor_unsupported')
++    _observe(observation, cursor_kind='motor')
+ 
+     stop = asyncio.Event()
+ 
+@@ -84,28 +141,45 @@
+                 if stop.is_set():
+                     break
+                 result.append(row)
++                if observation is not None and len(result) == 1:
++                    _observe_elapsed(observation, 'first_row_ms', read_started)
+                 if len(result) % 256 == 0:
++                    _observe(observation, last_checkpoint_rows=len(result))
++                    _observe_elapsed(observation, 'last_checkpoint_ms', read_started)
+                     # Buffered rows can be synchronous. Let request timeout
+                     # and disconnect callbacks run before advancing again.
+                     await asyncio.sleep(0)
+             return result
+         finally:
++            _observe(observation, rows_retained=len(result))
+             # Never race killCursors/session cleanup with an active getMore.
+-            await cursor.close()
++            close_started = _observation_clock(observation)
++            try:
++                await cursor.close()
++            finally:
++                _observe_elapsed(observation, 'close_ms', close_started)
+ 
+     task = asyncio.create_task(consume())
+     try:
+         return await asyncio.shield(task)
+     except asyncio.CancelledError:
+         stop.set()
++        join_started = _observation_clock(observation)
+         try:
+             await join_task(task)
+         except (asyncio.CancelledError, Exception):
+             pass  # Preserve cancellation after observing the owned read.
++        finally:
++            # This is the existing owned-task join, including sequential close;
++            # it overlaps read_elapsed_ms and is not exclusive driver/DB time.
++            _observe_elapsed(observation, 'cancel_join_ms', join_started)
+         raise
+-
+-
+-async def load_collections(db, owner, names, *, reader, concurrency=4, per_read_timeout=15, on_source_error=None):
++    finally:
++        _observe_elapsed(observation, 'read_elapsed_ms', read_started)
++
++
++async def load_collections(db, owner, names, *, reader, concurrency=4, per_read_timeout=15,
++                           on_source_error=None, observe_primary_orders=False):
+     names = tuple(names)
+     if len(names) != len(set(names)):
+         raise ValueError('operational_source_duplicate_collection')
+@@ -114,12 +188,17 @@
+ 
+     async def load(name):
+         async with semaphore:
++            observation = _PRIMARY_ORDERS_READ.get()
++            if observation is not None:
++                _observe_elapsed(observation, 'queue_ms', observation['_queued_at'])
+             remaining = per_read_timeout
+             if _DEADLINE.get() is not None:
+                 remaining = min(remaining, _DEADLINE.get() - time.monotonic())
+             context = demand_context()
+             if context is not None and context.read_deadline is not None:
+                 remaining = min(remaining, context.read_deadline - time.monotonic())
++            if observation is not None:
++                _observe(observation, budget_ms=max(remaining, 0) * 1000)
+             if remaining <= 0:
+                 raise SourceReadError('operational_source_read_timeout', name)
+             try:
+@@ -157,15 +236,33 @@
+                 raise SourceReadError(code, name) from None
+ 
+     async def collect(name):
++        context, observation = _primary_orders_observation(observe_primary_orders, name)
++        observation_token = _PRIMARY_ORDERS_READ.set(observation)
+         try:
+             return await load(name)
+         except SourceReadError as error:
++            _observe(observation, outcome='failed')
+             if on_source_error is None:
+                 raise
+             # Independent report components may finish within the remaining
+             # budget. Financial source collections still fail as a group.
+             on_source_error(name, error)
+             return name, None
++        except asyncio.CancelledError:
++            _observe(observation, outcome='cancelled')
++            raise
++        except BaseException:
++            _observe(observation, outcome='failed')
++            raise
++        finally:
++            _PRIMARY_ORDERS_READ.reset(observation_token)
++            if observation is not None:
++                if observation['queue_ms'] is None:
++                    _observe_elapsed(observation, 'queue_ms', observation['_queued_at'])
++                try:
++                    context.record_primary_orders_read(observation)
++                except Exception:
++                    pass  # Diagnostics cannot replace a financial exception.
+ 
+     tasks = [asyncio.create_task(collect(name)) for name in names]
+     try:
+--- a/backend/operational_balance_sources.py
++++ b/backend/operational_balance_sources.py
+@@ -424,8 +424,17 @@
+ async def refresh_source_rows(db, owner, collection):
+     """Own each primary read; preserve its cohort, proof projection and cap."""
+     from operational_read_runtime import read_source_cursor
+-    cursor = _source_cursor(db, owner, collection, refresh=True)
+-    return _checked_source_rows(await read_source_cursor(cursor, MAX_ROWS + 1), owner)
++    if collection != 'unified_orders':
++        cursor = _source_cursor(db, owner, collection, refresh=True)
++        return _checked_source_rows(await read_source_cursor(cursor, MAX_ROWS + 1), owner)
++    # Construction is synchronous; the find is delivered by the existing
++    # cursor iteration. These observations do not change the query or cap.
++    with refresh_stage('orders_cursor_build'):
++        cursor = _source_cursor(db, owner, collection, refresh=True)
++    with refresh_stage('orders_cursor_read'):
++        result = await read_source_cursor(cursor, MAX_ROWS + 1)
++    with refresh_stage('orders_rows_validate'):
++        return _checked_source_rows(result, owner)
+ 
+ 
+ async def entities(db, owner, kind, *, include_unready=False, operational_state=None, selected_ids=None):
+@@ -1352,7 +1361,8 @@
+         source_names = sorted(ALLOWED_COLLECTIONS - BUNDLE_READ_COLLECTIONS - STATEMENT_COLLECTIONS - {TXN_COLLECTION,
+             DELIVERY_HISTORY, SHIPPING_EVENT_BLOCKERS, SHIPPING_V2_BLOCKERS, 'users', 'settings', 'expense_categories',
+             'mezan_products_v2', 'mz2_opening_facts_v2', 'accounts', 'mz2_operational_bank_accounts'})
+-        data = await load_collections(db, owner, source_names, reader=refresh_source_rows)
++        data = await load_collections(db, owner, source_names, reader=refresh_source_rows,
++                                      observe_primary_orders=True)
+     if on_primary_reads_complete is not None:
+         on_primary_reads_complete()
+     with refresh_stage('source_fee_settings'):
+--- a/backend/operational_balance_store.py
++++ b/backend/operational_balance_store.py
+@@ -85,9 +85,14 @@
+     for _ in range(12):
+         await check_authorization()
+         with refresh_stage("snapshot_load"):
+-            stored = await _raw_state(db, owner)
+-            before = await logical_state(db, owner, stored)
+-            after = await prepare_change(deepcopy, before)
++            with refresh_stage("snapshot_raw_read"):
++                stored = await _raw_state(db, owner)
++            with refresh_stage("snapshot_unpack"):
++                before = await logical_state(db, owner, stored)
++            # This includes the existing authorization/thread handoff and
++            # joined cleanup around deepcopy; it is not exclusive CPU time.
++            with refresh_stage("snapshot_copy_prepare"):
++                after = await prepare_change(deepcopy, before)
+         result = await operation(after)
+         await check_authorization()
+         with refresh_stage("snapshot_compare"):
+--- a/frontend/src/pages/operational/visibleOperationalRead.js
++++ b/frontend/src/pages/operational/visibleOperationalRead.js
+@@ -138,6 +138,7 @@
+ const REFRESH_TIMING_STAGES = new Set([
+     "native_evidence", "aggregate", "source_collection", "source_collision", "reconciliation", "profit_snapshot",
+     "bank_claims", "party_catalogs", "snapshot_load", "snapshot_compare", "snapshot_pack", "snapshot_commit",
++    "snapshot_raw_read", "snapshot_unpack", "snapshot_copy_prepare", "orders_cursor_build", "orders_cursor_read", "orders_rows_validate",
+     "source_primary_reads", "source_fee_settings", "source_setup", "source_statements", "source_delivery_history",
+     "source_transactions", "source_native_links", "source_bundles", "source_option_catalog", "source_orders",
+     "source_order_indexes", "source_bank_catalog", "source_invoices", "source_other_sources", "source_native_overlaps", "source_finalize",
+@@ -146,13 +147,38 @@
+ // Local diagnostic evidence only. Nested stages overlap; their durations must
+ // not be added. Reconstruct the fixed fields instead of logging response data.
+ function logOperationalRefreshTimings(detail, label) {
+-    if (!Array.isArray(detail?.stage_timings)) return;
+-    const timings = detail.stage_timings.filter(row => row && REFRESH_TIMING_STAGES.has(row.stage)
+-        && typeof row.duration_ms === "number" && Number.isFinite(row.duration_ms)
+-        && row.duration_ms >= 0 && row.duration_ms <= 300000
+-        && ["complete", "cancelled", "failed"].includes(row.outcome))
+-        .slice(-64).map(({ stage, duration_ms, outcome }) => ({ stage, duration_ms, outcome }));
+-    if (timings.length) console.info(label + " " + JSON.stringify(timings));
++    try {
++        const timings = (Array.isArray(detail?.stage_timings) ? detail.stage_timings : []).filter(row => row && REFRESH_TIMING_STAGES.has(row.stage)
++            && typeof row.duration_ms === "number" && Number.isFinite(row.duration_ms)
++            && row.duration_ms >= 0 && row.duration_ms <= 300000
++            && ["complete", "cancelled", "failed"].includes(row.outcome))
++            .slice(-64).map(({ stage, duration_ms, outcome }) => ({ stage, duration_ms, outcome }));
++        if (timings.length) console.info(label + " " + JSON.stringify(timings));
++        const reads = (Array.isArray(detail?.primary_orders_reads) ? detail.primary_orders_reads : [])
++            .slice(-12).map(safePrimaryOrdersRead).filter(Boolean);
++        if (reads.length) console.info(label.replace(/_stage_timings$/, "_primary_orders_reads") + " " + JSON.stringify(reads));
++    } catch (_) {
++        // A local diagnostic failure must not replace the refresh outcome.
++    }
++}
++
++function safePrimaryOrdersRead(row) {
++    if (!row || row.collection !== "unified_orders" || !["complete", "cancelled", "failed"].includes(row.outcome)
++        || !["motor", "coroutine", "unknown"].includes(row.cursor_kind)) return null;
++    const result = {collection: "unified_orders", outcome: row.outcome, cursor_kind: row.cursor_kind};
++    for (const key of ["rows_retained", "last_checkpoint_rows"]) {
++        if (!Number.isInteger(row[key]) || row[key] < 0 || row[key] > 20001) return null;
++        result[key] = row[key];
++    }
++    if (result.last_checkpoint_rows > result.rows_retained) return null;
++    const nullable = new Set(["first_row_ms", "last_checkpoint_ms", "read_elapsed_ms", "close_ms"]);
++    for (const key of ["queue_ms", "budget_ms", "first_row_ms", "last_checkpoint_ms", "read_elapsed_ms", "cancel_join_ms", "close_ms"]) {
++        const value = row[key];
++        if (value === null && nullable.has(key)) result[key] = null;
++        else if (typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 300000) result[key] = value;
++        else return null;
++    }
++    return result;
+ }
+ 
+ export function logOperationalRefreshTimeoutTimings(detail) {
+--- /dev/null
++++ b/backend/tests/test_operational_refresh_read_diagnostics.py
+@@ -0,0 +1,291 @@
++"""Request-local read evidence must not alter source admission or ownership."""
++import asyncio
++from copy import deepcopy
++import json
++
++from fastapi import HTTPException
++import pytest
++
++import operational_demand_refresh as demand
++from operational_balance_store import STATES, mutate
++from operational_source_diagnostics import source_failure_detail
++from test_operational_balance_demand_refresh import DB, Request, allowed
++from test_operational_read_runtime import MotorSourceDB, ThreadedMotorCursor
++
++
++class SourceDB(DB):
++    def __init__(self, cursor):
++        super().__init__()
++        self.source = MotorSourceDB(cursor)
++
++    def __getitem__(self, name):
++        return self.source[name] if name == 'unified_orders' else super().__getitem__(name)
++
++
++async def source_refresh(database, captured, *, observed=True, timeout=15):
++    from operational_balance_sources import refresh_source_rows
++    from operational_read_runtime import load_collections, SourceReadError
++
++    async def operation():
++        captured.append(demand.demand_context())
++        try:
++            return await load_collections(database, 'owner', ['unified_orders'],
++                reader=refresh_source_rows, per_read_timeout=timeout,
++                observe_primary_orders=observed)
++        except SourceReadError as error:
++            raise HTTPException(409, source_failure_detail(error.code, error.collection)) from None
++
++    return await demand.run_visible_refresh(Request(), database, 'owner', 'staff', allowed, operation)
++
++
++def sample_observation():
++    return {
++        'collection': 'unified_orders', 'outcome': 'failed', 'cursor_kind': 'motor',
++        'queue_ms': 1.25, 'budget_ms': 15000, 'first_row_ms': None,
++        'rows_retained': 0, 'last_checkpoint_rows': 0, 'last_checkpoint_ms': None,
++        'read_elapsed_ms': 17000, 'cancel_join_ms': 1990, 'close_ms': 1,
++    }
++
++
++def test_snapshot_failure_reports_existing_read_unpack_and_copy_boundaries():
++    async def scenario():
++        database = DB()
++        saved = deepcopy(database.data)
++
++        async def reject_after_load(state):
++            raise HTTPException(409, source_failure_detail(
++                'operational_source_read_timeout', 'unified_orders'))
++
++        with pytest.raises(HTTPException) as raised:
++            await demand.run_visible_refresh(Request(), database, 'owner', 'staff', allowed,
++                lambda: mutate(database, 'owner', reject_after_load))
++
++        assert raised.value.status_code == 409
++        assert raised.value.detail['cause'] == 'operational_source_read_timeout'
++        timings = raised.value.detail['stage_timings']
++        names = [row['stage'] for row in timings]
++        assert names[:4] == [
++            'snapshot_raw_read', 'snapshot_unpack', 'snapshot_copy_prepare', 'snapshot_load']
++        assert all(row['outcome'] == 'complete' and row['duration_ms'] >= 0 for row in timings)
++        assert database.data[STATES] == saved[STATES]
++        assert not database.data[demand.LEASES]
++        assert not any(operation in {'insert', 'replace'} for _, operation, _ in database.writes)
++        assert database.writes[-1][1] == 'release'
++
++    asyncio.run(scenario())
++
++
++@pytest.mark.asyncio
++async def test_observed_primary_read_preserves_query_full_evidence_and_owned_operations():
++    rows = [{'user_id': 'owner', 'order_id': 'SYNTHETIC-ORDER',
++             'raw_by_source': {'salla': {'private_payload': 'SYNTHETIC-PRIVATE'}},
++             'salla_paid_sar_evidence': {'contradictory_shape': ['retained', {'all': 'fields'}]}}]
++    executions = []
++    for observed in (False, True):
++        cursor = ThreadedMotorCursor(deepcopy([rows]), block=False)
++        database, captured = SourceDB(cursor), []
++        result = await source_refresh(database, captured, observed=observed)
++        assert result == {'unified_orders': rows}
++        assert cursor.close_calls == 1 and not cursor.closed_during_read
++        assert len(cursor.operations) == 1 and cursor.consumed == 1
++        assert all(operation.done() for operation in cursor.operations)
++        assert not database.data[demand.LEASES]
++        executions.append((database.source.queries,
++                           [(name, operation) for name, operation, _ in database.writes],
++                           list(captured[0].primary_orders_reads)))
++    assert executions[0][:2] == executions[1][:2]
++    query, projection = executions[1][0][0]
++    assert query == {'user_id': 'owner'}
++    assert projection['raw_by_source'] == 1 and projection['salla_paid_sar_evidence'] == 1
++    assert not any('.' in field for field in projection)
++    assert executions[0][2] == []
++    observed = executions[1][2]
++    assert len(observed) == 1
++    assert observed[0]['cursor_kind'] == 'motor' and observed[0]['outcome'] == 'complete'
++    assert observed[0]['rows_retained'] == 1 and observed[0]['first_row_ms'] >= 0
++    assert observed[0]['cancel_join_ms'] == 0
++    assert 'SYNTHETIC' not in json.dumps(observed)
++
++
++@pytest.mark.asyncio
++@pytest.mark.parametrize('timeout_kind', ['source', 'request'])
++async def test_first_row_timeout_reports_only_after_owned_driver_and_close_finish(monkeypatch, timeout_kind):
++    if timeout_kind == 'request':
++        monkeypatch.setattr(demand, 'REQUEST_SECONDS', .01)
++    cursor = ThreadedMotorCursor([[{'user_id': 'owner'}], [{'user_id': 'owner'}]], block_close=True)
++    database, captured = SourceDB(cursor), []
++    saved = deepcopy(database.data[STATES])
++    task = asyncio.create_task(source_refresh(database, captured, timeout=.01 if timeout_kind == 'source' else 15))
++    try:
++        await asyncio.wait_for(cursor.entered.wait(), 1)
++        await asyncio.sleep(.03)
++        assert not task.done() and cursor.close_calls == 0
++        assert len(cursor.operations) == 1
++        cursor.release.set()
++        await asyncio.wait_for(cursor.close_entered.wait(), 1)
++        assert not task.done() and cursor.close_calls == 1
++        assert not cursor.closed_during_read
++        cursor.close_release.set()
++        with pytest.raises(HTTPException) as raised:
++            await asyncio.wait_for(task, 1)
++        if timeout_kind == 'source':
++            assert raised.value.status_code == 409
++            assert raised.value.detail['cause'] == 'operational_source_read_timeout'
++            assert raised.value.detail['source_collection'] == 'unified_orders'
++        else:
++            assert raised.value.status_code == 408
++            assert raised.value.detail['code'] == 'operational_refresh_timeout'
++        record, = raised.value.detail['primary_orders_reads']
++        assert record['outcome'] == ('failed' if timeout_kind == 'source' else 'cancelled')
++        assert record['cursor_kind'] == 'motor'
++        assert record['rows_retained'] == 0 and record['first_row_ms'] is None
++        assert 0 < record['budget_ms'] <= 10
++        assert record['read_elapsed_ms'] >= record['cancel_join_ms'] > 0
++        assert record['close_ms'] >= 0
++        assert database.data[STATES] == saved and not database.data[demand.LEASES]
++        assert all(operation.done() for operation in cursor.operations)
++        assert len(cursor.operations) == 1
++    finally:
++        cursor.release.set()
++        cursor.close_release.set()
++        if not task.done():
++            task.cancel()
++            await asyncio.gather(task, return_exceptions=True)
++
++
++@pytest.mark.asyncio
++async def test_cancelled_partial_iteration_retains_progress_without_starting_another_batch():
++    class SecondBatchCursor(ThreadedMotorCursor):
++        def __init__(self):
++            super().__init__([[{'user_id': 'owner'} for _ in range(256)],
++                              [{'user_id': 'owner'}], [{'user_id': 'owner'}]],
++                             block=False, block_close=True)
++            self.second_started = asyncio.Event()
++
++        def _refresh(self):
++            if self.index == 1:
++                self.release.clear()
++                self.second_started.set()
++            return super()._refresh()
++
++    cursor = SecondBatchCursor()
++    database, captured = SourceDB(cursor), []
++    task = asyncio.create_task(source_refresh(database, captured))
++    try:
++        await asyncio.wait_for(cursor.second_started.wait(), 1)
++        task.cancel()
++        for _ in range(12):
++            await asyncio.sleep(0)
++        assert not task.done() and cursor.close_calls == 0
++        cursor.release.set()
++        await asyncio.wait_for(cursor.close_entered.wait(), 1)
++        assert not task.done() and not cursor.closed_during_read
++        cursor.close_release.set()
++        with pytest.raises(asyncio.CancelledError):
++            await asyncio.wait_for(task, 1)
++        record, = captured[0].primary_orders_reads
++        assert record['outcome'] == 'cancelled'
++        assert record['rows_retained'] == record['last_checkpoint_rows'] == 256
++        assert record['first_row_ms'] <= record['last_checkpoint_ms'] <= record['read_elapsed_ms']
++        assert record['cancel_join_ms'] > 0
++        assert cursor.consumed == 257  # The already-owned late row was discarded.
++        assert len(cursor.operations) == 2 and cursor.close_calls == 1
++        assert all(operation.done() for operation in cursor.operations)
++        assert not database.data[demand.LEASES]
++    finally:
++        cursor.release.set()
++        cursor.close_release.set()
++        if not task.done():
++            task.cancel()
++            await asyncio.gather(task, return_exceptions=True)
++
++
++@pytest.mark.asyncio
++@pytest.mark.parametrize('violation', ['overflow', 'owner'])
++async def test_observation_cannot_prune_overflow_or_foreign_evidence(violation):
++    rows = ([{'user_id': 'owner'} for _ in range(20002)] if violation == 'overflow'
++            else [{'user_id': 'SYNTHETIC-FOREIGN'}])
++    cursor = ThreadedMotorCursor([rows], block=False)
++    database, captured = SourceDB(cursor), []
++    with pytest.raises(HTTPException) as raised:
++        await source_refresh(database, captured)
++    expected = 'operational_source_scope_too_large' if violation == 'overflow' else 'operational_source_owner_mismatch'
++    assert raised.value.detail['cause'] == expected
++    record, = raised.value.detail['primary_orders_reads']
++    assert record['rows_retained'] == (20001 if violation == 'overflow' else 1)
++    assert record['outcome'] == 'failed'
++    stages = {row['stage']: row['outcome'] for row in raised.value.detail['stage_timings']}
++    assert stages['orders_cursor_read'] == 'complete' and stages['orders_rows_validate'] == 'failed'
++    assert cursor.close_calls == 1 and len(cursor.operations) == 1
++    assert cursor.consumed == record['rows_retained']
++    assert 'SYNTHETIC-FOREIGN' not in json.dumps(raised.value.detail)
++
++
++def test_primary_read_records_are_fixed_schema_bounded_and_request_local():
++    first = demand.DemandRefreshContext(Request(), DB(), 'PRIVATE-OWNER', 'PRIVATE-ACTOR', allowed)
++    other = demand.DemandRefreshContext(Request(), DB(), 'OTHER-OWNER', 'OTHER-ACTOR', allowed)
++    for index in range(20):
++        first.record_primary_orders_read({**sample_observation(), 'queue_ms': index,
++                                         'query': {'user_id': 'PRIVATE-OWNER'}, 'token': 'PRIVATE-TOKEN'})
++    records = first.primary_read_details()['primary_orders_reads']
++    assert len(records) == 12 and records[0]['queue_ms'] == 8 and records[-1]['queue_ms'] == 19
++    assert all(set(record) == set(sample_observation()) for record in records)
++    assert 'PRIVATE' not in json.dumps(records) and other.primary_read_details() == {}
++    for key, invalid in [('budget_ms', float('nan')), ('read_elapsed_ms', float('inf')),
++                         ('queue_ms', True), ('close_ms', -1), ('rows_retained', 20002),
++                         ('rows_retained', '1'), ('collection', 'PRIVATE-COLLECTION'),
++                         ('cursor_kind', 'PRIVATE'), ('outcome', 'PRIVATE')]:
++        first.record_primary_orders_read({**sample_observation(), key: invalid})
++    assert first.primary_read_details()['primary_orders_reads'] == records
++
++
++@pytest.mark.asyncio
++async def test_diagnostic_failure_does_not_replace_canonical_source_exception(monkeypatch):
++    def broken(*args, **kwargs):
++        raise RuntimeError('SYNTHETIC-DIAGNOSTIC-FAILURE')
++
++    monkeypatch.setattr(demand.DemandRefreshContext, 'record_primary_orders_read', broken)
++    monkeypatch.setattr(demand._LOG, 'info', broken)
++    cursor = ThreadedMotorCursor([[{'user_id': 'SYNTHETIC-FOREIGN'}]], block=False)
++    with pytest.raises(HTTPException) as raised:
++        await source_refresh(SourceDB(cursor), [])
++    assert raised.value.detail['cause'] == 'operational_source_owner_mismatch'
++    assert 'SYNTHETIC' not in json.dumps(raised.value.detail)
++    assert cursor.close_calls == 1 and not cursor.closed_during_read
++
++
++@pytest.mark.asyncio
++async def test_unrelated_http_failure_retains_its_exact_contract():
++    async def fail():
++        context = demand.demand_context()
++        context.record_primary_orders_read(sample_observation())
++        raise HTTPException(409, {'code': 'unrelated', 'message': 'unchanged'})
++
++    with pytest.raises(HTTPException) as raised:
++        await demand.run_visible_refresh(Request(), DB(), 'owner', 'staff', allowed, fail)
++    assert raised.value.detail == {'code': 'unrelated', 'message': 'unchanged'}
++
++
++@pytest.mark.asyncio
++@pytest.mark.parametrize(('visible', 'collection', 'enabled'), [
++    (True, 'unified_orders', False),
++    (True, 'mezan_employees_v2', True),
++    (False, 'unified_orders', True),
++])
++async def test_primary_observation_requires_visible_context_opt_in_and_orders(visible, collection, enabled):
++    import operational_read_runtime as runtime
++    context = demand.DemandRefreshContext(Request(), DB(), 'owner', 'staff', allowed)
++    token = demand._CURRENT.set(context if visible else None)
++    calls = []
++
++    async def reader(database, owner, name):
++        calls.append(name)
++        return []
++
++    try:
++        assert await runtime.load_collections(object(), 'owner', [collection], reader=reader,
++            observe_primary_orders=enabled) == {collection: []}
++        assert calls == [collection] and list(context.primary_orders_reads) == []
++        assert runtime._PRIMARY_ORDERS_READ.get() is None
++    finally:
++        demand._CURRENT.reset(token)
+--- a/frontend/src/pages/operational/visibleOperationalRead.test.js
++++ b/frontend/src/pages/operational/visibleOperationalRead.test.js
+@@ -1,4 +1,11 @@
+ import {visibleOperationalRead, refreshVisibleSnapshot, logOperationalRefreshTimeoutTimings, courierRecoveryMessage} from './visibleOperationalRead';
++
++const primaryReadSample = () => ({
++  collection: 'unified_orders', outcome: 'failed', cursor_kind: 'motor',
++  queue_ms: 1, budget_ms: 15000, first_row_ms: null, rows_retained: 0,
++  last_checkpoint_rows: 0, last_checkpoint_ms: null, read_elapsed_ms: 17000,
++  cancel_join_ms: 1990, close_ms: 1,
++});
+ 
+ const flush = async () => { for (let index = 0; index < 8; index += 1) await Promise.resolve(); };
+ const deferred = () => { let resolve, reject; const promise = new Promise((a, b) => {resolve = a; reject = b;}); return {promise, resolve, reject}; };
+@@ -374,3 +381,73 @@
+     expect(jest.getTimerCount()).toBe(0);
+   });
+ });
++
++test.each([[408, 'operational_refresh_timeout', 'timeout'], [409, 'operational_source_setup_incomplete', 'source']])(
++  'primary read evidence survives the canonical %s failure without changing recovery behavior', async (status, code, label) => {
++    const logged = jest.spyOn(console, 'info').mockImplementation(() => {});
++    const stage_timings = ['snapshot_raw_read', 'snapshot_unpack', 'snapshot_copy_prepare',
++      'orders_cursor_build', 'orders_cursor_read', 'orders_rows_validate'].map(stage => ({
++      stage, duration_ms: 1, outcome: 'complete', owner_id: 'PRIVATE-OWNER',
++    }));
++    const detail = {code, cause: 'operational_source_read_timeout', source_collection: 'unified_orders',
++      message: 'احتُفظ بآخر لقطة ناجحة', stage_timings,
++      primary_orders_reads: [{...primaryReadSample(), owner_id: 'PRIVATE-OWNER', token: 'PRIVATE-TOKEN',
++        query: {user_id: 'PRIVATE-OWNER'}, rows: [{amount: 'PRIVATE-AMOUNT'}]}]};
++    const api = {refreshBalances: jest.fn().mockRejectedValue({response: {status, data: {detail}}})};
++    const result = await refreshVisibleSnapshot(api, {});
++    expect(result.refresh_warning).toContain(detail.message);
++    expect(api.refreshBalances).toHaveBeenCalledTimes(1);
++    expect(detail.code).toBe(code);
++    const lines = logged.mock.calls.map(([line]) => line);
++    expect(lines).toHaveLength(2);
++    expect(JSON.parse(lines[0].split(' ').slice(1).join(' '))).toEqual(
++      stage_timings.map(({stage, duration_ms, outcome}) => ({stage, duration_ms, outcome})));
++    expect(lines[1].startsWith(`operational_refresh_${label}_primary_orders_reads `)).toBe(true);
++    expect(JSON.parse(lines[1].split(' ').slice(1).join(' '))).toEqual([primaryReadSample()]);
++    expect(lines.join(' ')).not.toContain('PRIVATE');
++    expect(result.primary_orders_reads).toBeUndefined();
++  });
++
++test('primary read evidence is limited to twelve records even without stage timings', () => {
++  const logged = jest.spyOn(console, 'info').mockImplementation(() => {});
++  logOperationalRefreshTimeoutTimings({primary_orders_reads: Array.from({length: 20},
++    (_, index) => ({...primaryReadSample(), queue_ms: index}))});
++  expect(logged).toHaveBeenCalledTimes(1);
++  const records = JSON.parse(logged.mock.calls[0][0].split(' ').slice(1).join(' '));
++  expect(records).toHaveLength(12);
++  expect(records[0].queue_ms).toBe(8);
++  expect(records[11].queue_ms).toBe(19);
++});
++
++test.each([
++  ['collection', 'PRIVATE-COLLECTION'], ['cursor_kind', 'PRIVATE'], ['outcome', 'PRIVATE'],
++  ['queue_ms', true], ['budget_ms', NaN], ['read_elapsed_ms', Infinity], ['close_ms', -1],
++  ['rows_retained', 20002], ['rows_retained', '1'], ['last_checkpoint_rows', 256],
++])('invalid primary read field %s is omitted from diagnostic evidence', (key, value) => {
++  const logged = jest.spyOn(console, 'info').mockImplementation(() => {});
++  logOperationalRefreshTimeoutTimings({primary_orders_reads: [{...primaryReadSample(), [key]: value}]});
++  expect(logged).not.toHaveBeenCalled();
++});
++
++test('a failed diagnostic logger cannot replace the saved-balance failure warning', async () => {
++  jest.spyOn(console, 'info').mockImplementation(() => { throw new Error('PRIVATE-LOGGER'); });
++  const api = {refreshBalances: jest.fn().mockRejectedValue({response: {status: 409, data: {detail: {
++    code: 'operational_source_setup_incomplete', message: 'تظل اللقطة السابقة محفوظة',
++    stage_timings: [{stage: 'orders_cursor_read', duration_ms: 10, outcome: 'cancelled'}],
++    primary_orders_reads: [primaryReadSample()],
++  }}}})};
++  const result = await refreshVisibleSnapshot(api, {});
++  expect(result.refresh_warning).toContain('تظل اللقطة السابقة محفوظة');
++  expect(api.refreshBalances).toHaveBeenCalledTimes(1);
++});
++
++test('unrelated failures do not gain read diagnostics or a recovery retry', async () => {
++  const logged = jest.spyOn(console, 'info').mockImplementation(() => {});
++  const failure = {response: {status: 403, data: {detail: {
++    code: 'unrelated_access_denied', primary_orders_reads: [primaryReadSample()],
++  }}}};
++  const api = {refreshBalances: jest.fn().mockRejectedValue(failure)};
++  await expect(refreshVisibleSnapshot(api, {})).rejects.toBe(failure);
++  expect(logged).not.toHaveBeenCalled();
++  expect(api.refreshBalances).toHaveBeenCalledTimes(1);
++});

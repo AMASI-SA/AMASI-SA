@@ -1,5 +1,12 @@
 import {visibleOperationalRead, refreshVisibleSnapshot, logOperationalRefreshTimeoutTimings, courierRecoveryMessage} from './visibleOperationalRead';
 
+const primaryReadSample = () => ({
+  collection: 'unified_orders', outcome: 'failed', cursor_kind: 'motor',
+  queue_ms: 1, budget_ms: 15000, first_row_ms: null, rows_retained: 0,
+  last_checkpoint_rows: 0, last_checkpoint_ms: null, read_elapsed_ms: 17000,
+  cancel_join_ms: 1990, close_ms: 1,
+});
+
 const flush = async () => { for (let index = 0; index < 8; index += 1) await Promise.resolve(); };
 const deferred = () => { let resolve, reject; const promise = new Promise((a, b) => {resolve = a; reject = b;}); return {promise, resolve, reject}; };
 let visibility, online;
@@ -373,4 +380,74 @@ describe('a bounded financial read owns only one visible attempt', () => {
     expect(onData).toHaveBeenCalledTimes(1); expect(onError).not.toHaveBeenCalled(); expect(onPaused).not.toHaveBeenCalled();
     expect(jest.getTimerCount()).toBe(0);
   });
+});
+
+test.each([[408, 'operational_refresh_timeout', 'timeout'], [409, 'operational_source_setup_incomplete', 'source']])(
+  'primary read evidence survives the canonical %s failure without changing recovery behavior', async (status, code, label) => {
+    const logged = jest.spyOn(console, 'info').mockImplementation(() => {});
+    const stage_timings = ['snapshot_raw_read', 'snapshot_unpack', 'snapshot_copy_prepare',
+      'orders_cursor_build', 'orders_cursor_read', 'orders_rows_validate'].map(stage => ({
+      stage, duration_ms: 1, outcome: 'complete', owner_id: 'PRIVATE-OWNER',
+    }));
+    const detail = {code, cause: 'operational_source_read_timeout', source_collection: 'unified_orders',
+      message: 'احتُفظ بآخر لقطة ناجحة', stage_timings,
+      primary_orders_reads: [{...primaryReadSample(), owner_id: 'PRIVATE-OWNER', token: 'PRIVATE-TOKEN',
+        query: {user_id: 'PRIVATE-OWNER'}, rows: [{amount: 'PRIVATE-AMOUNT'}]}]};
+    const api = {refreshBalances: jest.fn().mockRejectedValue({response: {status, data: {detail}}})};
+    const result = await refreshVisibleSnapshot(api, {});
+    expect(result.refresh_warning).toContain(detail.message);
+    expect(api.refreshBalances).toHaveBeenCalledTimes(1);
+    expect(detail.code).toBe(code);
+    const lines = logged.mock.calls.map(([line]) => line);
+    expect(lines).toHaveLength(2);
+    expect(JSON.parse(lines[0].split(' ').slice(1).join(' '))).toEqual(
+      stage_timings.map(({stage, duration_ms, outcome}) => ({stage, duration_ms, outcome})));
+    expect(lines[1].startsWith(`operational_refresh_${label}_primary_orders_reads `)).toBe(true);
+    expect(JSON.parse(lines[1].split(' ').slice(1).join(' '))).toEqual([primaryReadSample()]);
+    expect(lines.join(' ')).not.toContain('PRIVATE');
+    expect(result.primary_orders_reads).toBeUndefined();
+  });
+
+test('primary read evidence is limited to twelve records even without stage timings', () => {
+  const logged = jest.spyOn(console, 'info').mockImplementation(() => {});
+  logOperationalRefreshTimeoutTimings({primary_orders_reads: Array.from({length: 20},
+    (_, index) => ({...primaryReadSample(), queue_ms: index}))});
+  expect(logged).toHaveBeenCalledTimes(1);
+  const records = JSON.parse(logged.mock.calls[0][0].split(' ').slice(1).join(' '));
+  expect(records).toHaveLength(12);
+  expect(records[0].queue_ms).toBe(8);
+  expect(records[11].queue_ms).toBe(19);
+});
+
+test.each([
+  ['collection', 'PRIVATE-COLLECTION'], ['cursor_kind', 'PRIVATE'], ['outcome', 'PRIVATE'],
+  ['queue_ms', true], ['budget_ms', NaN], ['read_elapsed_ms', Infinity], ['close_ms', -1],
+  ['rows_retained', 20002], ['rows_retained', '1'], ['last_checkpoint_rows', 256],
+])('invalid primary read field %s is omitted from diagnostic evidence', (key, value) => {
+  const logged = jest.spyOn(console, 'info').mockImplementation(() => {});
+  logOperationalRefreshTimeoutTimings({primary_orders_reads: [{...primaryReadSample(), [key]: value}]});
+  expect(logged).not.toHaveBeenCalled();
+});
+
+test('a failed diagnostic logger cannot replace the saved-balance failure warning', async () => {
+  jest.spyOn(console, 'info').mockImplementation(() => { throw new Error('PRIVATE-LOGGER'); });
+  const api = {refreshBalances: jest.fn().mockRejectedValue({response: {status: 409, data: {detail: {
+    code: 'operational_source_setup_incomplete', message: 'تظل اللقطة السابقة محفوظة',
+    stage_timings: [{stage: 'orders_cursor_read', duration_ms: 10, outcome: 'cancelled'}],
+    primary_orders_reads: [primaryReadSample()],
+  }}}})};
+  const result = await refreshVisibleSnapshot(api, {});
+  expect(result.refresh_warning).toContain('تظل اللقطة السابقة محفوظة');
+  expect(api.refreshBalances).toHaveBeenCalledTimes(1);
+});
+
+test('unrelated failures do not gain read diagnostics or a recovery retry', async () => {
+  const logged = jest.spyOn(console, 'info').mockImplementation(() => {});
+  const failure = {response: {status: 403, data: {detail: {
+    code: 'unrelated_access_denied', primary_orders_reads: [primaryReadSample()],
+  }}}};
+  const api = {refreshBalances: jest.fn().mockRejectedValue(failure)};
+  await expect(refreshVisibleSnapshot(api, {})).rejects.toBe(failure);
+  expect(logged).not.toHaveBeenCalled();
+  expect(api.refreshBalances).toHaveBeenCalledTimes(1);
 });

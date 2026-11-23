@@ -85,9 +85,14 @@ async def mutate(db, owner, operation, *, threaded_preparation=False):
     for _ in range(12):
         await check_authorization()
         with refresh_stage("snapshot_load"):
-            stored = await _raw_state(db, owner)
-            before = await logical_state(db, owner, stored)
-            after = await prepare_change(deepcopy, before)
+            with refresh_stage("snapshot_raw_read"):
+                stored = await _raw_state(db, owner)
+            with refresh_stage("snapshot_unpack"):
+                before = await logical_state(db, owner, stored)
+            # This includes the existing authorization/thread handoff and
+            # joined cleanup around deepcopy; it is not exclusive CPU time.
+            with refresh_stage("snapshot_copy_prepare"):
+                after = await prepare_change(deepcopy, before)
         result = await operation(after)
         await check_authorization()
         with refresh_stage("snapshot_compare"):

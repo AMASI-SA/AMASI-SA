@@ -1,0 +1,90 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+____ test_snapshot_failure_reports_existing_read_unpack_and_copy_boundaries ____
+
+    def test_snapshot_failure_reports_existing_read_unpack_and_copy_boundaries():
+        async def scenario():
+            database = DB()
+            saved = deepcopy(database.data)
+    
+            async def reject_after_load(state):
+                raise HTTPException(409, source_failure_detail(
+                    'operational_source_read_timeout', 'unified_orders'))
+    
+            with pytest.raises(HTTPException) as raised:
+                await demand.run_visible_refresh(Request(), database, 'owner', 'staff', allowed,
+                    lambda: mutate(database, 'owner', reject_after_load))
+    
+            assert raised.value.status_code == 409
+            assert raised.value.detail['cause'] == 'operational_source_read_timeout'
+            timings = raised.value.detail['stage_timings']
+            names = [row['stage'] for row in timings]
+            assert names[:4] == [
+                'snapshot_raw_read', 'snapshot_unpack', 'snapshot_copy_prepare', 'snapshot_load']
+            assert all(row['outcome'] == 'complete' and row['duration_ms'] >= 0 for row in timings)
+            assert database.data[STATES] == saved[STATES]
+            assert not database.data[demand.LEASES]
+            assert not any(operation in {'insert', 'replace'} for _, operation, _ in database.writes)
+            assert database.writes[-1][1] == 'release'
+    
+>       asyncio.run(scenario())
+
+backend/tests/test_operational_refresh_read_diagnostics.py:75: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    async def scenario():
+        database = DB()
+        saved = deepcopy(database.data)
+    
+        async def reject_after_load(state):
+            raise HTTPException(409, source_failure_detail(
+                'operational_source_read_timeout', 'unified_orders'))
+    
+        with pytest.raises(HTTPException) as raised:
+            await demand.run_visible_refresh(Request(), database, 'owner', 'staff', allowed,
+                lambda: mutate(database, 'owner', reject_after_load))
+    
+        assert raised.value.status_code == 409
+        assert raised.value.detail['cause'] == 'operational_source_read_timeout'
+        timings = raised.value.detail['stage_timings']
+        names = [row['stage'] for row in timings]
+>       assert names[:4] == [
+            'snapshot_raw_read', 'snapshot_unpack', 'snapshot_copy_prepare', 'snapshot_load']
+E       AssertionError: assert ['snapshot_load'] == ['snapshot_ra...napshot_load']
+E         
+E         At index 0 diff: 'snapshot_load' != 'snapshot_raw_read'
+E         Right contains 3 more items, first extra item: 'snapshot_unpack'
+E         
+E         Full diff:
+E           [
+E         -     'snapshot_raw_read',
+E         -     'snapshot_unpack',
+E         -     'snapshot_copy_prepare',
+E               'snapshot_load',
+E           ]
+
+backend/tests/test_operational_refresh_read_diagnostics.py:67: AssertionError
+=========================== short test summary info ============================
+FAILED backend/tests/test_operational_refresh_read_diagnostics.py::test_snapshot_failure_reports_existing_read_unpack_and_copy_boundaries - AssertionError: assert ['snapshot_load'] == ['snapshot_ra...napshot_load']
+  
+  At index 0 diff: 'snapshot_load' != 'snapshot_raw_read'
+  Right contains 3 more items, first extra item: 'snapshot_unpack'
+  
+  Full diff:
+    [
+  -     'snapshot_raw_read',
+  -     'snapshot_unpack',
+  -     'snapshot_copy_prepare',
+        'snapshot_load',
+    ]
+1 failed, 12 deselected in 0.73s

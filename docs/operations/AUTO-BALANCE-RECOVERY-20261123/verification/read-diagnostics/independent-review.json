@@ -1,0 +1,129 @@
+{
+  "status": "APPROVED",
+  "reviewer": "/root/historical_recalculation_contract",
+  "recorded_at": "2026-11-23T18:31:39.288219+00:00",
+  "scope": "Independent review of bounded request-local recovery read diagnostics; no runtime edits or live actions.",
+  "base_git_sha": "422fffc8fb9c381165cc76b1ded5ca595773ce8e",
+  "patch": {
+    "path": "local-results/candidate.patch",
+    "sha256": "887b2cdf1ec505876fe6d6d8db1d7ec5e1cdad0758be2381774d024c9fafbebf",
+    "exact_seven_paths_verified": true,
+    "apply_check_exit_code": 0
+  },
+  "files": [
+    {
+      "path": "backend/operational_demand_refresh.py",
+      "bytes": 17247,
+      "sha256": "e3eae95b059209d8365044d5e5bed05f25a78e668671eb0d3e2c25ac3e11563d",
+      "base_blob_sha": "5798c4cece3a670c9a30fedb541230703c960696"
+    },
+    {
+      "path": "backend/operational_read_runtime.py",
+      "bytes": 15289,
+      "sha256": "813b62bb2afabd447a527b7c262fcf15a280a0c86746d9f4e8cb0e5987fe7c90",
+      "base_blob_sha": "ba0ad613e57633eb3b6d4f8641bf6d10747168c2"
+    },
+    {
+      "path": "backend/operational_balance_sources.py",
+      "bytes": 165116,
+      "sha256": "b9e10ef40ade5fd67369b266b75fa24ebe9696ac3951632aec1d2c19246e637a",
+      "base_blob_sha": "f4df90e25a727c44f848110be866182c08a8570c"
+    },
+    {
+      "path": "backend/operational_balance_store.py",
+      "bytes": 8583,
+      "sha256": "0c702206368bb919c0e57fa93841023126753cdbf861c65d361e379062311a83",
+      "base_blob_sha": "71077cca24a2cb03a98ca022a08c2462722d9b9d"
+    },
+    {
+      "path": "frontend/src/pages/operational/visibleOperationalRead.js",
+      "bytes": 20909,
+      "sha256": "865b93aafed038e48d6456469b56caf4ab77fa287ce092ca45b576f10cbbd221",
+      "base_blob_sha": "66e84ccb236eb6e46567288c1e9f430ce2e7e87c"
+    },
+    {
+      "path": "backend/tests/test_operational_refresh_read_diagnostics.py",
+      "bytes": 14159,
+      "sha256": "10785edec5c756ee964c48081cdf5941c61c94a6a9e98c4b4552c72c53dd4fd0",
+      "base_blob_sha": null
+    },
+    {
+      "path": "frontend/src/pages/operational/visibleOperationalRead.test.js",
+      "bytes": 29670,
+      "sha256": "801dfff16079ea8820481cbcb92f17151d1cde9033680e6c828fb4852a553b28",
+      "base_blob_sha": "e2fb3d1cf55e9c864b750e3de27ed47341c8c37e"
+    }
+  ],
+  "specification_verdict": "PASS",
+  "engineering_verdict": "PASS",
+  "blocking_findings": [],
+  "backend_execution": {
+    "reviewer": "/root/historical_recalculation_contract",
+    "cwd": "/workspace/scratch/bc2035025680/recovery-read-diagnostics-20261123",
+    "argv": [
+      "/workspace/scratch/bc2035025680/backend-freshness-venv/bin/python",
+      "-B",
+      "-m",
+      "pytest",
+      "--noconftest",
+      "-p",
+      "no:cacheprovider",
+      "-q",
+      "backend/tests/test_operational_refresh_read_diagnostics.py",
+      "backend/tests/test_operational_balance_demand_refresh.py",
+      "backend/tests/test_operational_read_runtime.py",
+      "backend/tests/test_operational_balance_source_diagnostics.py"
+    ],
+    "environment": {
+      "PYTHONDONTWRITEBYTECODE": "1",
+      "PYTHONPATH": "backend"
+    },
+    "exit_code": 0,
+    "summary": "238 passed in 3.33s",
+    "manifest_hashes_unchanged_before_after": true
+  },
+  "frontend_execution": {
+    "reviewer": "/root/historical_recalculation_contract/source_date_rules",
+    "status": "APPROVED",
+    "cwd": "/workspace/scratch/bc2035025680/recovery-read-diagnostics-20261123",
+    "argv": [
+      "node",
+      "../web-freshness-deps/node_modules/jest/bin/jest.js",
+      "--config",
+      "local-results/jest.config.cjs",
+      "--runInBand",
+      "--no-cache"
+    ],
+    "exit_code": 0,
+    "summary": "73 passed, 73 total; one suite passed; Jest 1.776s",
+    "source_sha256": "865b93aafed038e48d6456469b56caf4ab77fa287ce092ca45b576f10cbbd221",
+    "test_sha256": "801dfff16079ea8820481cbcb92f17151d1cde9033680e6c828fb4852a553b28",
+    "source_and_test_hashes_unchanged_before_after": true,
+    "immutable_baseline_blobs_verified": true
+  },
+  "static_checks": [
+    "Critical admission, lease, cancellation, CAS and unchanged source-read functions are AST-identical to immutable D.",
+    "operational_balance_store.py is AST-identical to D after removing only refresh_stage wrappers.",
+    "No added asyncio create_task or sleep calls: read runtime remains 4/1 and demand refresh remains 5/2.",
+    "15-second source limit, 85-second request limit, 12 snapshot retries, full primary-order evidence projection and 20,000-row cap plus overflow sentinel are preserved.",
+    "Canonical 408/409 recognition and unrelated HTTP error details are preserved.",
+    "Primary observations are opt-in, request-local, at most 12 records, and reconstructed from fixed enum/bounded numeric fields without owner, query, row, token or exception text."
+  ],
+  "behavioral_checks": [
+    "Controlled Motor first-row source/request timeouts remain joined through active executor completion and held sequential close.",
+    "Cancellation after 256 retained rows does not admit another batch; an already-owned late row is discarded.",
+    "Observed/unobserved reads preserve query,complete source evidence and operations.",
+    "Overflow sentinel and foreign-owner rejection remain authoritative.",
+    "Malformed/oversized diagnostics are rejected and recorder/logger failure cannot replace the canonical operational exception."
+  ],
+  "limits": [
+    "Approval covers the frozen seven-file diagnostics candidate against D; combined health/diagnostic review awaits the root-provided final source SHA.",
+    "read_elapsed_ms, cancel_join_ms and close_ms overlap and must not be added or interpreted as exclusive database/CPU cost.",
+    "No live database, provider, application, GitHub, publication or financial actions were performed.",
+    "No claim of recovered historical balances; current-HEAD CI, A/B, merge and deployment verification remain separate gates."
+  ],
+  "combined_final_source_review": {
+    "status": "PENDING_FINAL_SOURCE_SHA",
+    "repeat_broad_tests": false
+  }
+}

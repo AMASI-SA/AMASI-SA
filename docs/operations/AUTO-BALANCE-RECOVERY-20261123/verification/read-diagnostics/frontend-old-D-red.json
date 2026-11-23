@@ -1,0 +1,22 @@
+{
+  "case": "frontend-old-D-red",
+  "command": [
+    "/opt/codex/runtimes/codex-primary-runtime/dependencies/node/bin/node",
+    "/workspace/scratch/bc2035025680/web-freshness-deps/node_modules/jest/bin/jest.js",
+    "--runInBand",
+    "--config",
+    "local-results/old-D/jest.config.cjs",
+    "--testNamePattern",
+    "primary read evidence survives the canonical"
+  ],
+  "cwd": "/workspace/scratch/bc2035025680/recovery-read-diagnostics-20261123",
+  "pythonpath": "/workspace/scratch/bc2035025680/recovery-read-diagnostics-20261123/backend",
+  "started_at": "2026-11-23T18:29:12.532959+00:00",
+  "duration_seconds": 2.421,
+  "exit_code": 1,
+  "expected_exit_code": 1,
+  "expected_evidence_found": true,
+  "candidate_unchanged": true,
+  "log_sha256": "a9c388585e4a0b17a5435be9794ec2ac511443595c174f61e903640e7fd7ee7c",
+  "status": "PASS"
+}

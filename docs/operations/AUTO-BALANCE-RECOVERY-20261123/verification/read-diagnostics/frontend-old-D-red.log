@@ -1,0 +1,117 @@
+FAIL local-results/old-D/frontend/src/pages/operational/visibleOperationalRead.test.js
+  ✕ primary read evidence survives the canonical 408 failure without changing recovery behavior (6 ms)
+  ✕ primary read evidence survives the canonical 409 failure without changing recovery behavior (1 ms)
+  ○ skipped aggregate success does not claim native matching from incomplete outcome {"status":"completed","selected":0,"outcomes":[]}
+  ○ skipped aggregate success does not claim native matching from incomplete outcome {"status":"deferred","reason":"native_evidence_budget_exhausted"}
+  ○ skipped aggregate success does not claim native matching from incomplete outcome {"status":"completed","selected":1,"outcomes":[{"order_id":"8101","status":"blocked","reason":"courier_native_shipment_mismatch"}]}
+  ○ skipped aggregate success does not claim native matching from incomplete outcome {"status":"completed","selected":1,"outcomes":[{"order_id":"8101","status":"source_changed"}]}
+  ○ skipped aggregate success does not claim native matching from incomplete outcome {"status":"completed","selected":1,"outcomes":[{"order_id":"8101","status":"unavailable"}]}
+  ○ skipped aggregate success does not claim native matching from incomplete outcome {"status":"completed","selected":1,"outcomes":[{"order_id":"another-order","status":"saved"}]}
+  ○ skipped unknown blocked reason text is not rendered from the native response
+  ○ skipped saved execution evidence and unchanged evidence are reported without asserting delivery
+  ○ skipped a failed aggregate preserves the saved native result without claiming recalculation
+  ○ skipped a failed aggregate preserves the unchanged native result without claiming recalculation
+  ○ skipped a failed aggregate preserves the already_eligible native result without claiming recalculation
+  ○ skipped a failed aggregate preserves the blocked native result without claiming recalculation
+  ○ skipped a failed aggregate preserves the unavailable native result without claiming recalculation
+  ○ skipped a failed aggregate preserves the source_changed native result without claiming recalculation
+  ○ skipped a scoped 409 failure retains only the selected native receipt
+  ○ skipped a scoped 408 failure retains only the selected native receipt
+  ○ skipped an error receipt with scope_changed cannot become selected-order evidence
+  ○ skipped an error receipt with scope_missing cannot become selected-order evidence
+  ○ skipped an error receipt with not_targeted cannot become selected-order evidence
+  ○ skipped an error receipt with other_order cannot become selected-order evidence
+  ○ skipped an error receipt with duplicate cannot become selected-order evidence
+  ○ skipped an error receipt with unknown_status cannot become selected-order evidence
+  ○ skipped an error receipt with unknown_failure cannot become selected-order evidence
+  ○ skipped a scoped unavailable receipt explains native_evidence_access_denied without exposing provider text
+  ○ skipped a scoped unavailable receipt explains native_evidence_request_timeout without exposing provider text
+  ○ skipped hidden mount does no work; one visible completion never polls or refreshes on focus/visibility
+  ○ skipped hiding aborts a pending read and its result; cleanup prevents later visibility work
+  ○ skipped replacing a pending read waits for its cancellation and never displays its old scope
+  ○ skipped offline reads wait for a user page to become active
+  ○ skipped recoverable operational_refresh_in_progress keeps a warning for the saved snapshot without retry
+  ○ skipped recoverable operational_capacity_requires_archive keeps a warning for the saved snapshot without retry
+  ○ skipped recoverable operational_source_setup_incomplete keeps a warning for the saved snapshot without retry
+  ○ skipped permission failure 401 never falls back to financial data
+  ○ skipped permission failure 403 never falls back to financial data
+  ○ skipped abort during refresh blocks any subsequent report fetch
+  ○ skipped refresh timeout evidence logs only allowed finite stage fields, once for that request
+  ○ skipped source failure evidence uses its own label and preserves the saved-report warning without retry
+  ○ skipped timing evidence keeps at most the final 64 valid stages, including terminal cancellation
+  ○ skipped status 500 and code operational_refresh_timeout do not log refresh timing evidence
+  ○ skipped status 408 and code operational_source_read_timeout do not log refresh timing evidence
+  ○ skipped status 500 and code operational_source_setup_incomplete do not log refresh timing evidence
+  ○ skipped status 408 and code operational_source_setup_incomplete do not log refresh timing evidence
+  ○ skipped status 409 and code operational_refresh_in_progress do not log refresh timing evidence
+  ○ skipped status 409 and code operational_refresh_lease_lost do not log refresh timing evidence
+  ○ skipped late failure after hidden with status 408 is not logged or converted to saved-read permission
+  ○ skipped late failure after hidden with status 409 is not logged or converted to saved-read permission
+  ○ skipped late failure after aborted with status 408 is not logged or converted to saved-read permission
+  ○ skipped late failure after aborted with status 409 is not logged or converted to saved-read permission
+  ○ skipped late failure after offline with status 408 is not logged or converted to saved-read permission
+  ○ skipped late failure after offline with status 409 is not logged or converted to saved-read permission
+  ○ skipped primary read evidence is limited to twelve records even without stage timings
+  ○ skipped invalid primary read field collection is omitted from diagnostic evidence
+  ○ skipped invalid primary read field cursor_kind is omitted from diagnostic evidence
+  ○ skipped invalid primary read field outcome is omitted from diagnostic evidence
+  ○ skipped invalid primary read field queue_ms is omitted from diagnostic evidence
+  ○ skipped invalid primary read field budget_ms is omitted from diagnostic evidence
+  ○ skipped invalid primary read field read_elapsed_ms is omitted from diagnostic evidence
+  ○ skipped invalid primary read field close_ms is omitted from diagnostic evidence
+  ○ skipped invalid primary read field rows_retained is omitted from diagnostic evidence
+  ○ skipped invalid primary read field rows_retained is omitted from diagnostic evidence
+  ○ skipped invalid primary read field last_checkpoint_rows is omitted from diagnostic evidence
+  ○ skipped a failed diagnostic logger cannot replace the saved-balance failure warning
+  ○ skipped unrelated failures do not gain read diagnostics or a recovery retry
+  a bounded financial read owns only one visible attempt
+    ○ skipped an initially hidden page defers without spending its active budget
+    ○ skipped visibility interruption consumes the attempt rather than restarting it repeatedly
+    ○ skipped connection interruption consumes the attempt rather than restarting it repeatedly
+    ○ skipped a promise that ignores abort cannot keep presentation loading past the deadline
+    ○ skipped waiting for cancelled physical work has the same deadline and never releases its reservation early
+    ○ skipped lane waiting and the subsequent request share one auth-chain deadline
+    ○ skipped a hidden confirmation follow-up is consumed immediately instead of deferred
+    ○ skipped success and cleanup leave no timer or activity-triggered requests
+
+  ● primary read evidence survives the canonical 408 failure without changing recovery behavior
+
+    expect(received).toHaveLength(expected)
+
+    Expected length: 2
+    Received length: 0
+    Received array:  []
+
+    [0m [90m 400 |[39m     expect(detail[33m.[39mcode)[33m.[39mtoBe(code)[33m;[39m
+     [90m 401 |[39m     [36mconst[39m lines [33m=[39m logged[33m.[39mmock[33m.[39mcalls[33m.[39mmap(([line]) [33m=>[39m line)[33m;[39m
+    [31m[1m>[22m[39m[90m 402 |[39m     expect(lines)[33m.[39mtoHaveLength([35m2[39m)[33m;[39m
+     [90m     |[39m                   [31m[1m^[22m[39m
+     [90m 403 |[39m     expect([33mJSON[39m[33m.[39mparse(lines[[35m0[39m][33m.[39msplit([32m' '[39m)[33m.[39mslice([35m1[39m)[33m.[39mjoin([32m' '[39m)))[33m.[39mtoEqual(
+     [90m 404 |[39m       stage_timings[33m.[39mmap(({stage[33m,[39m duration_ms[33m,[39m outcome}) [33m=>[39m ({stage[33m,[39m duration_ms[33m,[39m outcome})))[33m;[39m
+     [90m 405 |[39m     expect(lines[[35m1[39m][33m.[39mstartsWith([32m`operational_refresh_${label}_primary_orders_reads `[39m))[33m.[39mtoBe([36mtrue[39m)[33m;[39m[0m
+
+      at frontend/src/pages/operational/visibleOperationalRead.test.js:402:19
+
+  ● primary read evidence survives the canonical 409 failure without changing recovery behavior
+
+    expect(received).toHaveLength(expected)
+
+    Expected length: 2
+    Received length: 0
+    Received array:  []
+
+    [0m [90m 400 |[39m     expect(detail[33m.[39mcode)[33m.[39mtoBe(code)[33m;[39m
+     [90m 401 |[39m     [36mconst[39m lines [33m=[39m logged[33m.[39mmock[33m.[39mcalls[33m.[39mmap(([line]) [33m=>[39m line)[33m;[39m
+    [31m[1m>[22m[39m[90m 402 |[39m     expect(lines)[33m.[39mtoHaveLength([35m2[39m)[33m;[39m
+     [90m     |[39m                   [31m[1m^[22m[39m
+     [90m 403 |[39m     expect([33mJSON[39m[33m.[39mparse(lines[[35m0[39m][33m.[39msplit([32m' '[39m)[33m.[39mslice([35m1[39m)[33m.[39mjoin([32m' '[39m)))[33m.[39mtoEqual(
+     [90m 404 |[39m       stage_timings[33m.[39mmap(({stage[33m,[39m duration_ms[33m,[39m outcome}) [33m=>[39m ({stage[33m,[39m duration_ms[33m,[39m outcome})))[33m;[39m
+     [90m 405 |[39m     expect(lines[[35m1[39m][33m.[39mstartsWith([32m`operational_refresh_${label}_primary_orders_reads `[39m))[33m.[39mtoBe([36mtrue[39m)[33m;[39m[0m
+
+      at frontend/src/pages/operational/visibleOperationalRead.test.js:402:19
+
+Test Suites: 1 failed, 1 total
+Tests:       2 failed, 71 skipped, 73 total
+Snapshots:   0 total
+Time:        1.627 s
+Ran all test suites with tests matching "primary read evidence survives the canonical".
