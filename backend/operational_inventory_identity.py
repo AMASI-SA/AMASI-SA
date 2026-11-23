@@ -19,5 +19,5 @@ def compatible_payload(payload):
     return {**payload, 'lines':[
         {k:v for k,v in line.items() if not (k == 'variant_id' and v is None)
          and not (k == 'personalizations' and v == [])
-         and not (k in ('purchase_configuration','location_id','purchase_line_key') and v is None)}
+         and not (k in ('purchase_configuration','location_id','purchase_line_key','inventory_option_policy_revision') and v is None)}
         for line in payload.get('lines', [])]}

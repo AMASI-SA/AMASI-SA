@@ -28,7 +28,7 @@ async function submitPurchase(){
 }
 beforeEach(()=>{global.IS_REACT_ACT_ENVIRONMENT=true;localStorage.clear();jest.resetAllMocks();host=document.createElement('div');document.body.appendChild(host);root=createRoot(host);requestId.mockReturnValue('stable-request');api.context.mockResolvedValue(context);api.inventoryCatalog.mockResolvedValue({items:[product]});api.inventoryPurchases.mockResolvedValue({items:[],stock:[]});api.entities.mockImplementation(k=>Promise.resolve({items:[{id:k,name:k}]}));api.saveInventoryPurchase.mockImplementation(async body=>({...invoice,invoice_number:body.invoice_number,invoice_date:body.invoice_date,lines:body.lines.map((line,index)=>({...line,line_id:'saved-line-'+index}))}));api.inventoryPurchaseEntry.mockResolvedValue(invoice);api.movement.mockResolvedValue({id:'movement'});api.inventoryPurchasePaymentCandidates.mockResolvedValue({items:[]});});
 afterEach(async()=>{await act(async()=>root.unmount());host.remove();});
-test('MZ2 product picture and integer quantity produce explicit unit price and line tax invoice, no payment',async()=>{await render();await fill();expect(host.querySelector('img').getAttribute('src')).toBe('/test-product.png');await click('حفظ الصنف في المسودة');expect(host.textContent).toContain('الصافي 30.00 · الضريبة 4.50 · الإجمالي 34.50');await submitPurchase();expect(api.saveInventoryPurchase).toHaveBeenCalledWith(expect.objectContaining({supplier_id:'supplier',invoice_number:'INV1',lines:[{item_id:'p',kind:'product',quantity:3,unit_price:'10',tax:'4.50'}],request_id:'stable-request',expected_session_scope:scope}));expect(api.movement).not.toHaveBeenCalled();expect(host.querySelector('section').dir).toBe('rtl');});
+test('MZ2 product picture and integer quantity produce explicit unit price and line tax invoice, no payment',async()=>{await render();await fill();expect(host.querySelector('img').getAttribute('src')).toBe('/test-product.png');await click('حفظ الصنف في المسودة');expect(host.textContent).toContain('الصافي 30.00 · الضريبة 4.50 · الإجمالي 34.50');await submitPurchase();expect(api.saveInventoryPurchase).toHaveBeenCalledWith(expect.objectContaining({supplier_id:'supplier',invoice_number:'INV1',lines:[{item_id:'p',kind:'product',inventory_option_policy_revision:0,quantity:3,unit_price:'10',tax:'4.50'}],request_id:'stable-request',expected_session_scope:scope}));expect(api.movement).not.toHaveBeenCalled();expect(host.querySelector('section').dir).toBe('rtl');});
 test('uncertain save locks payload and persists identical retry after remount',async()=>{api.saveInventoryPurchase.mockRejectedValueOnce({response:{status:503}}).mockResolvedValue(invoice);await render();await fill();await submitPurchase();const sent=api.saveInventoryPurchase.mock.calls[0][0];expect(host.querySelector('fieldset').disabled).toBe(true);await act(async()=>root.unmount());root=createRoot(host);await render();await click('إعادة محاولة الحفظ');expect(api.saveInventoryPurchase.mock.calls[1][0]).toEqual(sent);expect(localStorage.getItem(pendingKey)).toBeNull();expect(savedDraft().form.lines).toEqual([]);});
 test('read-only renders invoices/stock but cannot enter or pay and never loads write catalog',async()=>{api.inventoryPurchases.mockResolvedValue({items:[invoice],stock:[{...product,item_id:'p',quantity:3}]});await render({...context,permissions:{reports:true,move:false}},'reports');expect(host.textContent).toContain('INV1');expect(host.textContent).not.toContain('اعتماد الفاتورة');expect(host.textContent).not.toContain('سداد الفاتورة');expect(api.inventoryCatalog).not.toHaveBeenCalled();expect(api.entities).not.toHaveBeenCalled();});
 test('write-only saves without acquiring report access',async()=>{await render({...context,permissions:{reports:false,move:true}});await fill();await submitPurchase();expect(api.saveInventoryPurchase).toHaveBeenCalledTimes(1);expect(api.inventoryPurchases).not.toHaveBeenCalled();expect(host.textContent).not.toContain('المشتريات المسجلة');});
@@ -116,7 +116,7 @@ test('piece unit is Arabic display only and does not alter posted identity',asyn
   await render();await fill();
   expect(host.textContent).toContain('قطعة');expect(host.textContent).not.toContain('piece');
   await submitPurchase();
-  expect(api.saveInventoryPurchase.mock.calls[0][0].lines[0]).toEqual({item_id:'p',kind:'product',quantity:3,unit_price:'10',tax:'4.50'});
+  expect(api.saveInventoryPurchase.mock.calls[0][0].lines[0]).toEqual({item_id:'p',kind:'product',inventory_option_policy_revision:0,quantity:3,unit_price:'10',tax:'4.50'});
   api.inventoryPurchases.mockResolvedValue({items:[{...invoice,lines:[{...invoice.lines[0],unit:'piece'}]}],stock:[{...product,item_id:'p',unit:'piece',quantity:3}]});
   await render(context,'reports');
   expect(host.textContent).not.toContain('piece');
@@ -152,8 +152,8 @@ test('same product silver ten and gold twenty stay separate through save, retry 
   await submitPurchase();
   const payload=api.saveInventoryPurchase.mock.calls[0][0];
   expect(payload.lines).toEqual([
-    {item_id:'p',kind:'product',variant_id:'gold',quantity:20,unit_price:'6',tax:'0'},
-    {item_id:'p',kind:'product',variant_id:'silver',quantity:10,unit_price:'5',tax:'0'}
+    {item_id:'p',kind:'product',inventory_option_policy_revision:0,variant_id:'gold',quantity:20,unit_price:'6',tax:'0'},
+    {item_id:'p',kind:'product',inventory_option_policy_revision:0,variant_id:'silver',quantity:10,unit_price:'5',tax:'0'}
   ]);
   await act(async()=>root.unmount());root=createRoot(host);await render();await click('إعادة محاولة الحفظ');
   expect(api.saveInventoryPurchase.mock.calls[1][0]).toEqual(payload);
@@ -190,8 +190,8 @@ test('names distribute original gold10/silver5 without inflating quantity or pri
   api.saveInventoryPurchase.mockRejectedValueOnce({response:{status:503}});
   await submitPurchase();const body=api.saveInventoryPurchase.mock.calls[0][0];
   expect(body.lines).toEqual([
-    {item_id:'p',kind:'product',variant_id:'silver',quantity:5,unit_price:'10',tax:'0',personalizations:[{values:[{option_id:'name',value:'عبير'}],quantity:1},{values:[{option_id:'name',value:'روان'}],quantity:3}]},
-    {item_id:'p',kind:'product',variant_id:'gold',quantity:10,unit_price:'10',tax:'0',personalizations:[{values:[{option_id:'name',value:'عبير'}],quantity:4}]}
+    {item_id:'p',kind:'product',inventory_option_policy_revision:0,variant_id:'silver',quantity:5,unit_price:'10',tax:'0',personalizations:[{values:[{option_id:'name',value:'عبير'}],quantity:1},{values:[{option_id:'name',value:'روان'}],quantity:3}]},
+    {item_id:'p',kind:'product',inventory_option_policy_revision:0,variant_id:'gold',quantity:10,unit_price:'10',tax:'0',personalizations:[{values:[{option_id:'name',value:'عبير'}],quantity:4}]}
   ]);
   expect(host.querySelector('fieldset').disabled).toBe(true);
   await act(async()=>root.unmount());root=createRoot(host);await render();await click('إعادة محاولة الحفظ');

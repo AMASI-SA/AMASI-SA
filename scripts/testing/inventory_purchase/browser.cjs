@@ -20,6 +20,8 @@ const invoiceRequests = new Map(), previews = new Map(), receipts = new Map();
 const base = '/api/operational-balances';
 const clone = value=>structuredClone(value);
 const hash = value=>crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
+const optionRolePath = base+'/inventory-products/'+f.sideProduct.id+'/option-roles';
+let sidePolicy = clone(f.sidePolicyBefore);
 const dist = path.join(out,'dist');
 const server = http.createServer(async (request,response)=>{
   const url = new URL(request.url,'http://127.0.0.1');
@@ -37,16 +39,32 @@ const server = http.createServer(async (request,response)=>{
     if (request.method !== 'GET') {
       let raw='';for await (const chunk of request) raw+=chunk;
       body=JSON.parse(raw);call.body=clone(body);
-      assert.equal(body.expected_session_scope,f.scope);
+      // This owner-only API uses revision/fingerprint concurrency. Financial
+      // and receiving commands must still supply the original session scope.
+      if (url.pathname!==optionRolePath) assert.equal(body.expected_session_scope,f.scope);
     }
     if (request.method==='GET' && url.pathname==='/api/auth/me') return send(200,f.owner);
     if (request.method==='GET' && url.pathname==='/api/inventory-v2/stocktakes/context') return send(200,{schema_version:'g47-stocktake-v1',capabilities:{view:false}});
     if (request.method==='GET' && url.pathname===base+'/context') return send(200,f.context);
     if (request.method==='GET' && url.pathname===base+'/inventory-catalog') {
       assert.equal(url.searchParams.get('configured'),'true');
-      return send(200,{products:[f.product,f.necklace],items:[f.component],locations:f.locations});
+      return send(200,{products:[f.product,f.necklace,sidePolicy.product],items:[f.component],locations:f.locations});
     }
     if (request.method==='GET' && url.pathname===base+'/entities/supplier') return send(200,{items:f.suppliers});
+    if (url.pathname===optionRolePath) {
+      if (request.method==='GET') return send(200,sidePolicy);
+      if (request.method==='PUT') {
+        // Customer answers, prices, cost bindings and stock commands cannot
+        // ride along with classification. Real-Mongo tests prove persistence;
+        // this boundary proves only the actual client's request contract.
+        assert.deepEqual(Object.keys(body).sort(),['catalog_fingerprint','expected_revision','roles']);
+        if (body.expected_revision!==sidePolicy.revision || body.catalog_fingerprint!==sidePolicy.catalog_fingerprint) {
+          return send(409,{detail:{message:'تغيّر التصنيف؛ أعد تحميله قبل الحفظ.'}});
+        }
+        assert.deepEqual(body.roles,f.sidePolicyAfter.roles,'Role choices must use stable option IDs');
+        sidePolicy=clone(f.sidePolicyAfter);return send(200,sidePolicy);
+      }
+    }
     if (url.pathname===base+'/inventory-purchases') {
       if (request.method==='GET') return send(200,{items:savedInvoice?[savedInvoice]:[],stock:[]});
       if (request.method==='POST') {
@@ -134,13 +152,25 @@ async function capture(page,name) {
       assert(row.height<=row.contentHeight+row.verticalPaddingAndBorder+2,'Product result has excessive vertical space '+detail);
     }
   }
-  measurements.push({name,...size,...(draftLayout?{draft:draftLayout}:{})});
+  const roleLayout=await page.locator('.mz-option-role-editor').evaluateAll(editors=>editors.flatMap(editor=>{
+    const controls=[...editor.querySelectorAll('.mz-option-role-row select')];
+    if (!controls.length) return [];
+    const bounds=node=>{const r=node.getBoundingClientRect();return {left:r.left,right:r.right,width:r.width};};
+    return [{viewport:innerWidth,editor:bounds(editor),controls:controls.map(control=>({name:control.getAttribute('aria-label'),...bounds(control)}))}];
+  }));
+  for(const layout of roleLayout){
+    for(const box of [layout.editor,...layout.controls]){
+      assert(box.left>=-1 && box.right<=layout.viewport+1 && box.width>0,'Option role control outside viewport '+name+': '+JSON.stringify(layout));
+    }
+  }
+  measurements.push({name,...size,...(draftLayout?{draft:draftLayout}:{}),...(roleLayout.length?{option_roles:roleLayout}:{})});
   const filename=name+'.png';await page.screenshot({path:path.join(out,filename),fullPage:true});screenshots.push(filename);
 }
 const paymentCalls=()=>calls.filter(call=>call.path.endsWith('/movements') || call.path.endsWith('/allocate-payment'));
 const writes=()=>calls.filter(call=>call.method!=='GET');
 const evidence=()=>({synthetic_only:true,actual_components:true,chromium_sandbox:true,scenario_count:results.length,
-  results,measurements,errors,screenshots,calls,physical_quantity:physicalQuantity,payment_call_count:paymentCalls().length});
+  results,measurements,errors,screenshots,calls,physical_quantity:physicalQuantity,payment_call_count:paymentCalls().length,
+  option_role_write_count:calls.filter(call=>call.method==='PUT'&&call.path===optionRolePath).length});
 (async()=>{
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
   const origin='http://127.0.0.1:'+server.address().port;
@@ -266,7 +296,78 @@ const evidence=()=>({synthetic_only:true,actual_components:true,chromium_sandbox
       assert.match(await page.locator('.mz-receipt-list').innerText(),/المشتراة 4 · المستلمة 2 · المتبقية للاستلام 2/);
       assert.equal(writes().length,previousWrites);assert.equal(paymentCalls().length,0);assert.equal(physicalQuantity,2);
     });
-    assert.deepEqual(errors,[]);assert.equal(results.length,7);assert.equal(screenshots.length,7);
+    await check('Owner classifies required gift fields as side options without changing physical requirements or purchase amounts',async()=>{
+      const previousWrites=writes().length,invoiceBefore=clone(savedInvoice);
+      await page.goto(origin+'/inventory-v2?tab=purchase');
+      await pick(f.sideProduct);
+      await field('هل تريد كرت إهداء: نعم').check();
+      await field('نص كرت الإهداء · البند 1').fill('نص مؤقت في إدخال المخزون');
+      await field('ملاحظة التغليف · البند 1').fill('ورق جانبي');
+      await field('الكمية — '+f.sideProduct.name).fill('3');
+      await field('سعر الوحدة قبل الضريبة — '+f.sideProduct.name).fill('79.80');
+      await field('ضريبة البند — '+f.sideProduct.name).fill('35.91');
+      await button('تصنيف الخيارات').click();
+      const editor=page.getByRole('region',{name:'تصنيف خيارات '+f.sideProduct.name,exact:true});
+      const role=name=>editor.getByRole('combobox',{name:'تصنيف '+name,exact:true});
+      await role('هل تريد كرت إهداء').waitFor();
+      assert.equal(await role('مقاس القطعة').inputValue(),'physical');
+      assert.equal(await role('مقاس القطعة').isDisabled(),true);
+      await role('هل تريد كرت إهداء').selectOption('informational');
+      await editor.getByRole('alert').filter({hasText:'نص كرت الإهداء'}).waitFor();
+      assert.equal(await button('حفظ التصنيف').isDisabled(),true,'A preparation child cannot depend on an informational parent');
+      await role('نص كرت الإهداء').selectOption('informational');
+      await role('ملاحظة التغليف').selectOption('informational');
+      assert.equal(await button('حفظ التصنيف').isEnabled(),true);
+      assert.equal(await button('حفظ الصنف في المسودة').isDisabled(),true);
+      assert.match(await editor.innerText(),/مطلوب في طلب العميل/);
+      await capture(page,'option-roles-desktop');
+      await page.setViewportSize({width:390,height:844});
+      await capture(page,'option-roles-mobile');
+      const response=page.waitForResponse(value=>value.request().method()==='PUT'&&value.url()===origin+optionRolePath);
+      await button('حفظ التصنيف').click();assert.equal((await response).status(),200);
+      await editor.getByRole('status').filter({hasText:'حُفظ التصنيف لهذا المنتج'}).waitFor();
+      const summary=page.locator('.mz-product-side-options');
+      await summary.getByText('إضافات جانبية للعميل',{exact:true}).waitFor();
+      for(const name of ['هل تريد كرت إهداء','نص كرت الإهداء','ملاحظة التغليف']) assert.match(await summary.innerText(),new RegExp(name));
+      assert.match(await summary.innerText(),/تُحفظ إجاباتها مع طلب العميل/);
+      assert.equal(await field('هل تريد كرت إهداء: نعم').count(),0);
+      assert.equal(await field('هل تريد كرت إهداء: لا').count(),0);
+      assert.equal(await field('نص كرت الإهداء · البند 1').count(),0);
+      assert.equal(await field('ملاحظة التغليف · البند 1').count(),0);
+      assert.equal(await field('الكمية — '+f.sideProduct.name).inputValue(),'3');
+      assert.equal(await field('سعر الوحدة قبل الضريبة — '+f.sideProduct.name).inputValue(),'79.80');
+      assert.equal(await field('ضريبة البند — '+f.sideProduct.name).inputValue(),'35.91');
+      await capture(page,'side-options-mobile');
+      await button('حفظ الصنف في المسودة').click();
+      await page.getByRole('alert').filter({hasText:'أكمل خيارات المنتج المطلوبة'}).waitFor();
+      assert.equal((await draft()).form.lines.length,0,'Physical size must still be supplied before saving');
+      assert.equal(await field('مقاس القطعة: متوسط').isChecked(),false);
+      await field('مقاس القطعة: متوسط').check();
+      await saveLine();
+      const line=(await draft()).form.lines[0];
+      assert.equal(line.item_id,f.sideProduct.id);assert.equal(line.quantity,'3');
+      assert.equal(line.unit_price,'79.80');assert.equal(line.tax,'35.91');
+      assert.equal(line.inventory_option_policy_revision,1);
+      assert.equal(line.purchase_configuration.state,'ready');
+      assert.deepEqual(line.purchase_configuration.selections,[{option_id:'size-101',value_id:'medium-101'}]);
+      assert.deepEqual(line.purchase_configuration.inputs,[]);assert.deepEqual(line.purchase_configuration.deferred_option_ids,[]);
+      assert.match(await page.locator('.mz-invoice-row-total').innerText(),/275[.,]31/);
+      // Keep the customer question definition: required yes/no choices and the
+      // text's dependency survive the inventory-only role overlay.
+      const question=line.options.find(option=>option.id==='gift-202'),text=line.options.find(option=>option.id==='gift-text-303');
+      assert.equal(question.required,true);assert.deepEqual(question.values,f.sideProduct.options[1].values);
+      assert.equal(text.required,true);assert.deepEqual(text.visibility_rules,f.sideProduct.options[2].visibility_rules);
+      await page.reload();await button('تعديل '+f.sideProduct.name+' 1').click();
+      await page.locator('.mz-product-side-options').waitFor();
+      assert.equal(await field('مقاس القطعة: متوسط').isChecked(),true);
+      assert.equal(await field('نص كرت الإهداء · البند 1').count(),0);
+      assert.equal(await field('سعر الوحدة قبل الضريبة — '+f.sideProduct.name).inputValue(),'79.80');
+      const roleWrites=writes().slice(previousWrites);
+      assert.equal(roleWrites.length,1);assert.equal(roleWrites[0].method,'PUT');assert.equal(roleWrites[0].path,optionRolePath);
+      assert.deepEqual(roleWrites[0].body,{expected_revision:0,catalog_fingerprint:f.sidePolicyBefore.catalog_fingerprint,roles:f.sidePolicyAfter.roles});
+      assert.deepEqual(savedInvoice,invoiceBefore);assert.equal(physicalQuantity,2);assert.equal(paymentCalls().length,0);
+    });
+    assert.deepEqual(errors,[]);assert.equal(results.length,8);assert.equal(screenshots.length,10);
     await context.close();
   } finally {
     fs.writeFileSync(path.join(out,'browser-evidence.json'),JSON.stringify(evidence(),null,2));
