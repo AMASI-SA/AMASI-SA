@@ -1,0 +1,119 @@
+{
+  "schema_version": 1,
+  "kind": "independent_r4_candidate_audit",
+  "result": "PASS",
+  "source_git_sha": "1725672eeccb1272f183c376b9267e363a028325",
+  "source_base_git_sha": "c2d244a3349013c06f3fb7824070bfa12bd0bfe0",
+  "source_tree": "75f2e72041db79a806b404eb78744afb5c827472",
+  "production_branch": "hotfix/prod-snap-meta-final",
+  "provenance": {
+    "repository": "AMASI-SA/AMASI-SA",
+    "pr": 2086,
+    "run_id": 45200570017,
+    "run_attempt": 1,
+    "event": "pull_request",
+    "workflow_path": ".github/workflows/mezan-production-release.yml",
+    "head_sha": "1725672eeccb1272f183c376b9267e363a028325",
+    "conclusion": "success",
+    "frontend_job_id": 137782625723,
+    "frontend_job_conclusion": "success",
+    "artifact_id": 14832316895,
+    "artifact_name": "release-v5-reviewed-intent-candidate",
+    "artifact_expired": false,
+    "artifact_size_bytes": 432977,
+    "artifact_digest": "sha256:bb55d443a25a1956acfbef7052ead4dafbd787c49df4457a42218a35f49f98b3",
+    "artifact_head_sha": "1725672eeccb1272f183c376b9267e363a028325",
+    "artifact_created_at": "2026-11-23T15:03:29Z",
+    "artifact_expires_at": "2026-11-25T15:03:28Z"
+  },
+  "archive": {
+    "path": "candidate.zip",
+    "bytes": 432977,
+    "sha256": "bb55d443a25a1956acfbef7052ead4dafbd787c49df4457a42218a35f49f98b3",
+    "member_count": 1,
+    "member": "release-intent-v5.json",
+    "member_regular": true,
+    "member_bytes_equal_json": true,
+    "crc_check": "PASS"
+  },
+  "candidate": {
+    "path": "release-intent-v5.json",
+    "bytes": 1504910,
+    "sha256": "b56f866f5c4efc28bc40f16e9eacd42a5052d673b39a482b0b861635e9a3e54e"
+  },
+  "validation": {
+    "original_load_candidate_release_intent": "PASS",
+    "exact_candidate_source_base_bindings": "PASS",
+    "original_full_backend_control_git_manifests": "PASS",
+    "full_frontend_git_and_worktree_membership": "PASS",
+    "inherited_intent_bytes_and_full_history": "PASS",
+    "previous_deployment_exact_source_intent_pair": "PASS",
+    "previous_deployment_manifests_frontend_and_critical_hashes": "PASS",
+    "deterministic_release_identity": "PASS",
+    "approved_client_origin_and_environment_hash": "PASS",
+    "exact_node_yarn_vite_versions": "PASS",
+    "reconstructed_artifact_tree_from_public_records_and_governed_header_bytes": "PASS",
+    "reconstructed_build_meta_json_bytes_and_sha256": "PASS",
+    "reconstructed_reproducibility_proof_bytes_and_sha256": "PASS",
+    "unmodified_clean_A_checkout_before_and_after": "PASS"
+  },
+  "frontend_source": {
+    "file_count": 1410,
+    "git_tree_oid": "da66b9650c4dc1e36d3f0057577341f22ac57e2f",
+    "tree_sha256": "5ab7f4838b920642b70f2f6bc5f849b45ddb782ab7bb35ace7b8ab3c4816e66f"
+  },
+  "backend_runtime_source": {
+    "file_count": 1329,
+    "added_count": 4,
+    "modified_count": 5,
+    "deleted_count": 0,
+    "tombstone_count": 0,
+    "tree_sha256": "02d43fe091417a61ed8a1ef72ed8bd1e8a014eb200fbb724552204e203f10df7",
+    "manifest_sha256": "bc259e1531d432301f72f4f6276853699c02c92874c95ed4dcae0916c7c52846"
+  },
+  "release_control_source": {
+    "file_count": 328,
+    "added_count": 0,
+    "modified_count": 1,
+    "deleted_count": 0,
+    "tombstone_count": 0,
+    "tree_sha256": "a34ebccafaefee447f3a71ac38ce21a27b278fdb7361f430f28ced74fdbf3c85",
+    "manifest_sha256": "5f10b72e1e556254de175c6cead7a4508f73ea2b20ec59ad36e02f0c09915cf9"
+  },
+  "previous_source": "aec203382b387c3812509084e77c2922aa860877",
+  "previous_base": "44122bcc986bd1dff1532b9ad62c0268e899a179",
+  "frontend_build": {
+    "toolchain": {
+      "node": "22.23.2",
+      "yarn": "1.22.22",
+      "vite": "8.2.4"
+    },
+    "artifact_record_count": 385,
+    "public_file_count": 383,
+    "asset_count": 344,
+    "entrypoint_count": 2,
+    "artifact_tree_sha256": "9796b20cca6dd4809bcf27ff4e5cf4817b59ecc4005763c70304064850483827",
+    "build_meta": {
+      "bytes": 581648,
+      "sha256": "a7dfdaac6084e38c4075da9a1c6e21aa6f5233bdb4236ae1d67234b91df755e6"
+    },
+    "reproducibility_proof": {
+      "bytes": 1521,
+      "sha256": "82c64c78437e7fc943ad43898354b5263454991b2398d9bf7bdd8d9160c2eed3"
+    }
+  },
+  "release_id": "rg5-be6cf2196ab95412377fd5280c5ff7b6fd3204dd20dd74825b43d85e0fe77d13",
+  "limitations": [
+    "Audited the candidate intent and CI provenance; no local install or build was performed.",
+    "Generated build output bytes are to be audited in fresh B artifacts and original adapter rehearsal.",
+    "Candidate A's clean-clone adapter rehearsal and manual redeploy jobs correctly skipped; this verdict is not Production verification.",
+    "The original validator logs absence of ignored backend/release_identity.json on source A, then successfully validates the candidate's embedded identity."
+  ],
+  "side_effects": {
+    "source_edits": false,
+    "git_mutations": false,
+    "dependency_installs": false,
+    "host_actions": false,
+    "report_only": "/workspace/scratch/a719d7c39de9/r4-candidate/independent-audit-r4.json"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "recorded_at_utc": "2026-11-23T15:12:50.400174+00:00",
+  "source": "Root operated existing signed-in Emergent VS Code terminal through browser; bounded read-only original guard/Git/disk command and visible output.",
+  "git_status": [
+    "# branch.oid c2d244a3349013c06f3fb7824070bfa12bd0bfe0",
+    "# branch.head hotfix/prod-snap-meta-final",
+    "# branch.upstream origin/hotfix/prod-snap-meta-final",
+    "# branch.ab +0 -0"
+  ],
+  "guard": {
+    "active": false
+  },
+  "app_git_free_bytes": 299569152,
+  "tmp_free_bytes": 264693329920,
+  "shared_source_mutations": false,
+  "lease_created": false,
+  "newer_production_release_not_started": true,
+  "note": "This is observed pre-release state, not a continuing reservation. Original guard and disk are rechecked at action boundaries."
+}

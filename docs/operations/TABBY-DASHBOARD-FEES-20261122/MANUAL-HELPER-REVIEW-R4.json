@@ -1,0 +1,28 @@
+{
+  "state": "candidate pins reviewed; merge/evidence/checksums disabled",
+  "source_A": "1725672eeccb1272f183c376b9267e363a028325",
+  "base_N": "c2d244a3349013c06f3fb7824070bfa12bd0bfe0",
+  "intent_B": "104c6b45cd646418a719496fb8c02ee61ddf5483",
+  "tree": "72659c9adcd5fcf3880c4ef4332245a65b620fe3",
+  "D": null,
+  "EVIDENCE": null,
+  "launcher_helper_checksums": "all None",
+  "file_sha256": {
+    "MANUAL-HOST-ISOLATED-REHEARSAL-2086.py": "dacd3060d5e02f81bcbde65c71581b92939f1eab9e99fa1617c878ff4fd8e4dd",
+    "MANUAL-HOST-STAGE-2086.py": "304fe45c800b390d2df17a8d488cbf884249eb58d6ec28c907dc5fec3b3b1442",
+    "MANUAL-HOST-PREPARE-PREPUBLISH-2086.py": "83b90eec0e4675a8cbd7289a10746530556119c7b8015cf0edfb26dcd472be4f",
+    "RUN-HOST-DEPLOY-2086.sh": "f7eb88962f5969172e88129470cafef96cac6da144dcff5ca0699ddaf813dcdc",
+    "RUN-HOST-VERIFY-2086.sh": "52a879f9b4a33ea00fb13536a4e235fee83f767d824bce8f771619ce81962eab",
+    "MANUAL-HOST-SELF-TEST-2086.py": "cdf5918cade892b64af37820440aaa766abac3b6a6889b9177170b23b420d10f"
+  },
+  "scope": "Six new PR2086 files only; old2079 unchanged. Four operational copies retain approved original protections. Isolated rehearsal adds reviewed PR2082 bounded owned-process-group cleanup.",
+  "verification": {
+    "independent_review": "PASS; independent reviewer reran full selftest and bash -n",
+    "full_selftest_exit": 0,
+    "full_selftest": "Disabled entrypoints; receipts/private paths/log digest; backup bytes/modes; original full package-proof equality; staging mutex/foreign lease; ignored-file collision; seven real-process cases including repeated signals and unrelated sentinel survival.",
+    "pin_only_update": "14 exact constant occurrences across five files; reverse-substitution exact equality verified",
+    "post_pin_disabled_test_exit": 0,
+    "post_pin_bash_n_exit": 0
+  },
+  "actual_host_execution": false
+}
