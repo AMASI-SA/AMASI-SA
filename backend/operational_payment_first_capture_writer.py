@@ -116,6 +116,7 @@ async def post_first_salla_capture(db, owner, merchant_id, order_id, order_numbe
                 "preexisting_order_financial_effect",
                 "already_scanned_order_requires_refresh",
                 "settled_provider_requires_review",
+                "provider_pooled_settlement_review_required",
                 "provider_fee_policy_missing",
                 "provider_fee_policy_ambiguous",
                 "provider_fee_projection_invalid",
