@@ -1,0 +1,61 @@
+{
+  "task_id": "OPERATIONAL-COST-SOURCE-DIAGNOSTICS-20261124",
+  "status": "WIP: local diagnostic-only checkpoint tested; independent review pending before push",
+  "repository": "AMASI-SA/AMASI-SA",
+  "task_branch": "codex/operational-cost-source-diagnostics-20261124",
+  "source_base_commit": "20fc28f3432a78996f1d70f3356a38bd78b0309e",
+  "checkpoint_identity": "The task branch commit and Draft PR record the exact full SHA containing this status file.",
+  "scope": "Name the sanitized source collection and error code when the first open-cost load_collections call fails. Preserve the same exception, arguments, string, HTTP failure, source reads, cancellation and deadlines.",
+  "observed_problem": "A live legacy cost report failed inside load_collections before the catalogue-index stage. SourceReadError retains the collection attribute, but its existing traceback string exposes only the failure code. The platform log view retains only its last 100 lines. The responsible collection is not yet observed.",
+  "changed_files": [
+    "backend/operational_open_cost_exposure.py",
+    "backend/operational_source_diagnostics.py",
+    "backend/tests/test_operational_balance_cost_source_diagnostics.py",
+    "docs/operations/OPERATIONAL-COST-SOURCE-DIAGNOSTICS-20261124/STATUS.json"
+  ],
+  "behavior": [
+    "Catch only SourceReadError from the initial collection load; use the existing strict allowlist sanitizer for cause and collection, then re-raise the original exception.",
+    "Emit one bounded warning and append the same sanitized note to the exception when note support is available. The note stays at the end of a long traceback; logger or note failures cannot replace the source failure.",
+    "Recognize the static mezan_products_v2 collection name, the only source in this report's READS missing from the existing presentation allowlist.",
+    "Do not record owner IDs, documents, query values, credentials, exception attributes or raw exception text in the new diagnostic. Unknown diagnostic fields remain unknown.",
+    "Make no projection, query, index, caching, financial, timeout, permission or release changes. This is diagnosis, not a fix for the source timeout."
+  ],
+  "verification": [
+    {
+      "kind": "red_on_unchanged_base_runtime",
+      "command": "PYTHONPATH=backend:backend/tests PYTHON_DOTENV_DISABLED=1 python -B -m pytest --noconftest -p no:cacheprovider -q 'backend/tests/test_operational_balance_cost_source_diagnostics.py::test_failed_cost_read_names_source_in_log_and_trace_preserving_exception[mezan_products_v2]' backend/tests/test_operational_balance_cost_source_diagnostics.py::test_every_cost_source_has_a_fixed_safe_name backend/tests/test_operational_balance_cost_source_diagnostics.py::test_note_survives_a_long_traceback_tail --tb=short",
+      "exit_code": 1,
+      "result": "3 expected failures in 2.02 seconds: missing collection in the traceback, missing safe catalogue name, and missing source note at the end of a traceback longer than 100 lines."
+    },
+    {
+      "kind": "focused_green",
+      "command": "PYTHONPATH=backend:backend/tests PYTHON_DOTENV_DISABLED=1 python -B -m pytest --noconftest -p no:cacheprovider -q backend/tests/test_operational_balance_cost_source_diagnostics.py --tb=short",
+      "exit_code": 0,
+      "result": "22 passed in 1.62 seconds, no skips. Covers all 12 source names; same exception identity/type/args/string; sanitized log and final traceback note; unknown/hostile fields; logger/note failure injection; actual read deadline and joined cleanup; caller cancellation; unchanged non-debug ASGI 500 status/body/content type."
+    },
+    {
+      "kind": "affected_and_adjacent",
+      "command": "PYTHONPATH=backend:backend/tests PYTHON_DOTENV_DISABLED=1 python -B -m pytest --noconftest -p no:cacheprovider -q backend/tests/test_operational_balance_cost_source_diagnostics.py backend/tests/test_operational_balance_source_diagnostics.py backend/tests/test_operational_open_cost_exposure.py backend/tests/test_operational_balance_cost_exposure_catalog_index.py backend/tests/test_operational_read_runtime.py --tb=short",
+      "exit_code": 0,
+      "result": "357 passed in 14.87 seconds, no skips. Existing cost results, catalogue-index parity, source diagnostics and owned-read deadline/cancellation contracts remain passing."
+    },
+    {
+      "kind": "whitespace",
+      "command": "git diff --check",
+      "exit_code": 0
+    }
+  ],
+  "review_state": "Root reviewed the runtime diff with no visible blocker; independent review of this exact local checkpoint is pending before push.",
+  "ci_state": "Not pushed; this source has no CI evidence yet. Earlier M2 checks are base evidence only.",
+  "merge_state": "Not merged; root exclusively integrates",
+  "release_state": "No new intent, release lease, production file changes or publication by this task. Root is publishing the previously reviewed M2 release separately.",
+  "production_changed": false,
+  "limitations": [
+    "The collection which caused the observed production timeout remains unknown until a matching failure emits the new diagnostic.",
+    "A logger line may leave the platform's last-100-line view. On runtimes supporting exception notes, the same sanitized data remains at the end of the traceback; otherwise logging is the fallback.",
+    "This local check used real asyncio read ownership and non-debug ASGI middleware with isolated source readers. It did not query production or rerun the separate real-Mongo HTTP suite.",
+    "No runtime latency reduction, source completeness or financial recovery is claimed.",
+    "Issue 1006 has reached its comment limit; this task status and the forthcoming Draft PR are the recoverable ledger."
+  ],
+  "next_safe_action": "Obtain independent review on the exact local SHA/tree, then push only the isolated task branch and open a Draft PR. Before any future freeze, root must recheck the actual published base, active release lease, exact source/intent identity and required CI. No merge or release action belongs to this agent."
+}

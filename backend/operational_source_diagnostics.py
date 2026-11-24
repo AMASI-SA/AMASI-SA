@@ -19,6 +19,7 @@ _SOURCE_NAMES = MappingProxyType({
     "mezan_product_cost_profiles_v2": "تكاليف المنتجات",
     "mezan_product_option_cost_bindings_v2": "تكاليف خيارات المنتجات",
     "mezan_product_resource_bindings_v2": "موارد المنتجات",
+    "mezan_products_v2": "كتالوج المنتجات",
     "mezan_snapchat_daily_projections_v2": "بيانات إعلانات Snapchat",
     "mezan_supplier_invoices_v2": "فواتير الموردين",
     "mezan_suppliers_v2": "بيانات الموردين",
