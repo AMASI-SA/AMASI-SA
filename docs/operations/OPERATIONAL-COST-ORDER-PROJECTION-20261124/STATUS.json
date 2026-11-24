@@ -1,6 +1,6 @@
 {
   "task_id": "OPERATIONAL-COST-ORDER-PROJECTION-20261124",
-  "recorded_at": "2026-11-24T22:29:36.315Z",
+  "recorded_at": "2026-11-24T22:33:49.755Z",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/operational-cost-order-projection-20261124",
   "source_base": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
@@ -137,6 +137,15 @@
       "sparse_entries": 0,
       "worktree_unchanged": true,
       "evidence": "pr2123-b-original-intent-validation.json"
+    },
+    "independent_b_handoff": {
+      "result": "PASS",
+      "review": "pr2123-frozen-B-independent-review.json",
+      "review_sha256": "19f02b962ca58a58af8f89bbc6d4480bc39856eb04d8d21ee18598593f0ea0ee",
+      "all_6598_nonintent_tracked_entries_identical": true,
+      "intent_matches_candidate_and_original_zip_member_byte_for_byte": true,
+      "remote_commit_trees_and_artifact_metadata_verified": true,
+      "no_host_or_source_write": true
     }
   },
   "files": [
@@ -185,7 +194,18 @@
     "pr": 2120,
     "deployment_git_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
     "latest_read_checkpoint": "Root read existing original rehearsal receipt through idle own Terminal2 at2026-11-24T22:23:02.125269Z: PASS, receiptmtime22:17:54.757656; sourceb236f51b,deploymentf199a471; cloneandcanonicalappadaptersPASS. No publication in rehearsalreceipt. WrittenE9stillbehindthisread; no originalstatus,foreignleaseorhostsourceoperation bythis task.",
-    "constraint": "Do not merge or mutate shared/app, preparelease or publish before preceding owner's actual publication, original3probeverification and closed lease. Preserve every other task's files/processes/lease; no takeover."
+    "constraint": "Do not merge or mutate shared/app, preparelease or publish before preceding owner's actual publication, original3probeverification and closed lease. Preserve every other task's files/processes/lease; no takeover.",
+    "lease_metadata_observation": {
+      "observed_at": "2026-11-24T22:30:07.472639+00:00",
+      "lease_file_exists": true,
+      "lease_directory_exists": true,
+      "actor": "chatgpt-inventory-cabinet-archive-20261124-pr2120",
+      "source_git_sha": "b236f51bb6c52e6f5d14a136db92f7474e4f5873",
+      "deployment_git_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+      "release_id": "rg5-6cfb0e514bb3c65c229a9d224c329f24136bd0ce483bed1af3b74b05e848ca42",
+      "prepared_at": "2026-11-24T22:29:50.804025+00:00",
+      "provenance": "Transcribed bounded read-only lease metadata in existing root-owned Terminal2; no original guard/status/verify call and no lease mutation. Not publication proof."
+    }
   },
   "next_safe_action": "Complete exact-B CI and independent immutable handoff review. Keep sourceA2/B frozen and all further docs on evidence branch. Confirm preceding2120 publication/originalverify/inactiveguard and freshGitbasef199; then normal protectedmerge with expectedB, validateDparents/tree andpushCI, final reviewed operator/envelope, originalrehearsal, prepare/prepublish, oneauthorizedpublication, originalverify3+inactive, oneboundedlivecostacceptance.",
   "completion_limit": "Local payload/financial/HTTP parity is confirmed. Live timeout resolution and latency improvement remain unverified.",

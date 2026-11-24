@@ -1,0 +1,106 @@
+{
+  "result": "PASS_EXACT_B_IDENTITY_BYTES_ARTIFACT_AND_COMPLETE_UNCHANGED_SOURCE",
+  "recorded_at": "2026-11-24T22:29:43.002457+00:00",
+  "repository": "AMASI-SA/AMASI-SA",
+  "pr": 2123,
+  "J": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+  "A": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+  "B": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+  "A_tree": "66f5c117ab2a8af5fca87e6de92b37f2acd2ff2b",
+  "B_tree": "2db384dde8a84d0945fceee9cd5be81638d5bb2d",
+  "B_parents": [
+    "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe"
+  ],
+  "github_verification": {
+    "commit_tree_parent_verified_directly": true,
+    "PR_ready_unmerged_head_B": true,
+    "compare_A_to_B": {
+      "ahead_by": 1,
+      "total_commits": 1,
+      "changed_files": [
+        "release/release-intent-v5.json"
+      ]
+    },
+    "complete_remote_merkle_comparison": {
+      "root_entries": 23,
+      "unchanged_root_entries": 22,
+      "only_different_root_entry": "release",
+      "release_subtree_contains_only": "release-intent-v5.json",
+      "truncated": false
+    }
+  },
+  "local_complete_source_comparison": {
+    "A_tracked_entries": 6599,
+    "B_tracked_entries": 6599,
+    "source_entries_outside_intent": 6598,
+    "identical_path_mode_type_object_sha": true,
+    "only_changed_path": "release/release-intent-v5.json",
+    "source_manifest_sha256": "116d1920080bc85b44d42161f28cb510a28b9ab2708eb8d02ae3d05ec18a3e2f",
+    "source_manifest_encoding": "sha256 of UTF-8 json.dumps(path->{mode,type,oid}, ensure_ascii=False, sort_keys=True, separators=(comma,colon)); excludes only release/release-intent-v5.json",
+    "J_to_A_intent_history_empty": true,
+    "J_to_A_intent_bytes_unchanged": true
+  },
+  "intent": {
+    "bytes": 1531177,
+    "sha256": "7c9d109354ed98f6a014028319b6e3f1cdab4c3f6a749cce439008fb6113428e",
+    "git_blob": "57815f976f9bd6ed711024568f0acfa2d79bfcf6",
+    "git_mode": "100644",
+    "release_id": "rg5-d5df5e9536258c2d3b76d750715bafae8fa9b6b76f6971899bd7f8c6e0e54328",
+    "source_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+    "source_base_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+    "tracked_B_equals_standalone_candidate_equals_ZIP_entry_byte_for_byte": true
+  },
+  "artifact": {
+    "id": 14969581484,
+    "run_id": 45498009508,
+    "source_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+    "bytes": 440056,
+    "sha256": "89ee196176efe4c9981f4667ea94ae6ec41db1576007f9b963c81e9fec1928d3",
+    "digest_matches_fresh_GitHub_metadata": true,
+    "entries": [
+      "release-intent-v5.json"
+    ],
+    "CRC_check_passed": true
+  },
+  "key_source_files": {
+    "backend/operational_open_cost_exposure.py": {
+      "mode": "100644",
+      "type": "blob",
+      "oid": "fffc08c8748c6f4204ca0b767a598103667d4671",
+      "sha256": "7aa0a26d3a2374b76e084df30b2c1cfe2f4a90305adcff0bec448fae6ff9eafd"
+    },
+    "backend/tests/test_operational_balance_cost_order_projection.py": {
+      "mode": "100644",
+      "type": "blob",
+      "oid": "792dc9b9294e631c834f0f34d1bd9f9073196f57",
+      "sha256": "63ca04aa9b40f6022f89109a628362061f588f38b2886773605b974c96a25737"
+    },
+    "backend/tests/test_operational_balance_cost_source_diagnostics.py": {
+      "mode": "100644",
+      "type": "blob",
+      "oid": "e9b6c8a9a404dd6935c107da8eb909809763d2c3",
+      "sha256": "f6f73c8f186cc62e4b600ad25143eb8756d36166705eac57b27bd5b14ca74f12"
+    },
+    "docs/operations/OPERATIONAL-COST-ORDER-PROJECTION-20261124/STATUS.json": {
+      "mode": "100644",
+      "type": "blob",
+      "oid": "f5a429a104728d3cebb4702f0fdc8d8a91ffa39f",
+      "sha256": "792c45b7827b9e70a5077fd30ca994b87e23bed3874695045b548ab0e4cc7cc3"
+    }
+  },
+  "remote_evidence": {
+    "path": "/workspace/scratch/39c6dec7c37f/release-preparation/pr2123-frozen-B-independent-github.json",
+    "sha256": "d453f621935716c28de407ee0a7353f2cef62d334dd619841e19f02ec567612b"
+  },
+  "boundaries": {
+    "tests_or_builds_run": false,
+    "original_intent_validator_executed_by_reviewer": false,
+    "host_accessed": false,
+    "lease_created": false,
+    "branch_or_worktree_changed_by_reviewer": false,
+    "github_writes": false,
+    "local_HEAD_observed": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+    "local_tracked_status_clean": true
+  },
+  "remaining_gates": "Root owns original load_release_intent validation and exact-B CI; no merge/host/lease until the prior release owner finishes original verification and closes its guard. This review does not claim B CI or publication success."
+}
