@@ -1,0 +1,22 @@
+name: Operational Payment Event Policy
+
+on:
+  pull_request:
+    paths:
+      - "backend/operational_payment_event_policy.py"
+      - "backend/tests/test_operational_payment_event_policy.py"
+      - ".github/workflows/operational-payment-event-policy.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  payment-policy-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run isolated payment policy tests
+        working-directory: backend
+        run: python3 -m unittest discover -s tests -p 'test_operational_payment_event_policy.py' -v
