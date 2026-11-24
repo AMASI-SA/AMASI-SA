@@ -9,7 +9,6 @@ tokens or raw order payload.
 from __future__ import annotations
 
 import asyncio
-import pymongo
 
 from operational_payment_native_capture_candidate import recovered_dated_native_capture
 from operational_provider_capture_batches import FIELD as BATCH_FIELD
@@ -37,7 +36,7 @@ async def preview_one_native_capture(db, owner, order_number, *, as_of):
     if type(owner) is not str or not owner or len(owner) > 200:
         raise ValueError("payment_owner_scope_invalid")
     number = _bounded_order_number(order_number)
-    from operational_payment_native_capture_candidate import recovered_dated_native_capture
+    import pymongo
 
     # Independently bounded owner reads; duplicate or over-limit results are
     # unknown, NEVER interpreted as a single valid payment.
