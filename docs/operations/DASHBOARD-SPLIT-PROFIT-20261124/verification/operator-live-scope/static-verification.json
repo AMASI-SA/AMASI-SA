@@ -1,0 +1,53 @@
+{
+  "upstream_commit": "a6853cf13af7a64fe2443eea588de12f43744066",
+  "upstream_helper_sha256": "1c366e6add99c1560243e53660a34df8c4121ead56c1246656dfb9afc0a7f14f",
+  "helper_sha256": "62e545a2b11520f121aebf0a985b0854134052070ff7355892fcec0f95eb72c7",
+  "helper_bytes": 43582,
+  "literal_replacements": 9,
+  "only_reviewed_literal_changes": true,
+  "normalized_AST_identical": true,
+  "LIVE_SCOPE_source_identical": true,
+  "AST_parse": "PASS",
+  "execution_envelope_created": false,
+  "main_invoked": false,
+  "host_operations": false,
+  "diff_sha256": "4cb85f29a7600860cf1f27e48138b43501c656c96d3721818a45935e786ebc90",
+  "replacements": [
+    {
+      "before": "Cabinet archive release: owned clone rehearsal, then guarded /app FF and adapter.",
+      "after": "PR2122 dashboard profit release: owned clone rehearsal, then guarded /app FF and adapter."
+    },
+    {
+      "before": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
+      "after": "f199a471f8bc6e05b475bb9b65a12107cbdc946b"
+    },
+    {
+      "before": "b236f51bb6c52e6f5d14a136db92f7474e4f5873",
+      "after": "10bb33957c8c2994814a76ba5feed1182336ebda"
+    },
+    {
+      "before": "bdebc069ea5fa980cd16725e422ca70e79dadd17",
+      "after": "c3fd1d1a4e3e7fc590b1f5b82d1bf0a091c54bf7"
+    },
+    {
+      "before": "74946da23e059283f49de2b04baf9860c8ee972d",
+      "after": "fa0f36e01d3c3a706a0cbdb23aa1cfcd0b8f09a1"
+    },
+    {
+      "before": "rg5-6cfb0e514bb3c65c229a9d224c329f24136bd0ce483bed1af3b74b05e848ca42",
+      "after": "rg5-71a053d9aff1c8c4dec4f5b5e9171630b8c53bf6fea6d3516427bd7836c4ba9c"
+    },
+    {
+      "before": "cabinet_archive_owned_clone_and_app_rehearsal",
+      "after": "pr2122_dashboard_profit_owned_clone_and_app_rehearsal"
+    },
+    {
+      "before": "mezan-cabinet-archive-release-live-",
+      "after": "mezan-pr2122-profit-release-live-"
+    },
+    {
+      "before": "cabinet_archive_original_release_guard",
+      "after": "pr2122_dashboard_profit_original_release_guard"
+    }
+  ]
+}

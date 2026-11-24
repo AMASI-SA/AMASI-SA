@@ -1,0 +1,13 @@
+{
+  "helper_sha256": "62e545a2b11520f121aebf0a985b0854134052070ff7355892fcec0f95eb72c7",
+  "test_sha256": "542caccd37acecfa1bc13f15bef9765f164c083c2131158f3ed1a3e398c24b83",
+  "log_sha256": "a5b716c0c1cc3020fc324c3b65bb7d49f8c1cddf4f07e249d87f8c941561f099",
+  "exit_code": 0,
+  "duration_seconds": 0.366,
+  "groups": 6,
+  "main_invoked": false,
+  "adapter_invoked": false,
+  "git_or_network_invoked": false,
+  "actual_app_or_database_access": false,
+  "execution_envelope_created": false
+}

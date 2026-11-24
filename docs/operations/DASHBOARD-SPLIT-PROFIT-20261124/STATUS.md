@@ -574,3 +574,70 @@ D, unchanged B/D tree, runtime identity and current host observations. Retain
 Production changed by this evidence checkpoint: **no**. No main-checkout or
 source edit, release-branch update, PR mutation, merge, host action, lease,
 publication, sync or accounting write is included.
+
+## Reviewed live-scope operator checkpoint E5 — 25 November 2026, Asia/Riyadh
+
+This checkpoint extends E4
+`f07abdaf0c2639514319ea05098a35c99b0b4574` on the separate evidence branch.
+All earlier STATUS bytes, E1 helper/tests and E2–E4 artifacts remain unchanged.
+The historical E1 `pr2122_guarded_rehearsal.py` still **MUST NOT RUN**.
+
+The new `operators/pr2122_release_operator_live_scope.py` is minimally adapted
+from the predecessor's immutable, independently reviewed E7 helper at
+`a6853cf13af7a64fe2443eea588de12f43744066`. The exact upstream bytes and hashes
+were checked. Only nine literals changed: five reviewed A/J/B/tree/runtime
+identities and four task-description/receipt/stage/import labels. The normalized
+AST and complete live-scope source remain identical. No guard, lock, capacity,
+owned-clone, backup/fsync, timeout, lineage, adapter, package/proof or preservation
+logic changed.
+
+The adapted helper is 43,582 bytes, SHA256
+`62e545a2b11520f121aebf0a985b0854134052070ff7355892fcec0f95eb72c7`.
+The complete diff and review packet are retained under
+`verification/operator-live-scope/`. Independent adaptation review passed with
+no additional code blockers; the root also reviewed the diff and main flow.
+AST/static restriction checks and all **six isolated fixture groups passed**,
+exit 0, in 0.366 seconds. Those checks cover the exact unaccessed DB subtree,
+strict sibling preservation, append-only log prefix and identity, lexical and
+resolved write collisions, synthetic process/root identity mismatches, all four
+capacity-checked generated backups, and the owned adapter environment. They did
+not invoke main, the protected rehearsal, Git/network, the adapter, actual
+`/app`, services or a database. This is not a completed host rehearsal.
+
+The preserved v2 implementation pins the existing Mongo process/start,
+executable/command-line and real parent/root identities. It permits only that
+specific data subtree's own descendants to change without traversing or reading
+them. The independent sibling log retains its exact file identity and complete
+original prefix. The E6-observed supervisord PID/start/fd is **not revalidated
+by this implementation**; no supervisor-writer binding is claimed. All other
+foreign records remain exact and every incoming/operator/adapter write target
+must remain disjoint.
+
+**Invocation correction:** the unchanged v2 gate rejects any presence of
+`PYTHONOPTIMIZE`, including `0`. This supersedes the earlier E1/E3/E4 invocation
+advice. Any eventual reviewed invocation must use
+`env -u PYTHONOPTIMIZE PYTHONDONTWRITEBYTECODE=1 python -B`, with the exact helper
+and a separately reviewed final envelope. The ten-field schema is documented
+in the new README; no dashboard D or execution envelope exists yet.
+
+Source A3 `10bb33957c8c2994814a76ba5feed1182336ebda`, base J
+`f199a471f8bc6e05b475bb9b65a12107cbdc946b`, and intent-only B
+`c3fd1d1a4e3e7fc590b1f5b82d1bf0a091c54bf7` remain frozen. B tree is
+`fa0f36e01d3c3a706a0cbdb23aa1cfcd0b8f09a1`, with runtime ID
+`rg5-71a053d9aff1c8c4dec4f5b5e9171630b8c53bf6fea6d3516427bd7836c4ba9c`.
+The E4 final exact-B result remains 36 successful checks and ten reviewed
+conditional skips, with no failures or pending checks at that observation.
+
+The preceding publisher's immutable E8 checkpoint
+`ed0ee0db9ef120c58ba9a5f763c6dbaf55855f3b` records that its v2 run started in its
+own stage. That is not successful publication or lease-closure proof. Wait for
+that owner's complete rehearsal, successful publication, original verification
+and closure; do not run a duplicate helper or call its lock-taking guard while
+its operation is running. Root must then recheck the production base and final
+exact-B CI before merging this task, verify exact-D CI and prepare a fresh
+reviewed envelope with matching current preservation identities and count.
+
+Production changed by this evidence checkpoint: **no**. No source-checkout
+edit, release-branch update, PR mutation, merge, shared-host action, lease,
+publication, service change or database read/write was performed. Evidence
+persistence does not authorize bypassing any remaining deployment prerequisite.
