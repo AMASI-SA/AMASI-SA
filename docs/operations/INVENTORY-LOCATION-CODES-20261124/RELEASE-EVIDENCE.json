@@ -1,5 +1,5 @@
 {
-  "observed_at_utc": "2026-11-24 18:11:59 UTC",
+  "observed_at_utc": "2026-11-24 18:18:54 UTC",
   "scope": "private source-A2 focused tests, bootstrap two-clean-build, original verifier, external freeze and candidate validation only",
   "repo_root": "/workspace/scratch/021675d08c11/location-codes-release/bootstrap",
   "source_git_sha": "a611477be8d52b18f9ad851f44facf9c78be2905",
@@ -363,7 +363,7 @@
   ],
   "out_of_scope_actions_performed": [],
   "task_id": "INVENTORY-LOCATION-CODES-20261124",
-  "state": "STRICT_D_RECOVERY_REHEARSAL_RUNNING",
+  "state": "HOST_RECOVERY_BLOCKED_ENOSPC",
   "release_branch": "codex/inventory-location-short-codes-release2-20261124",
   "evidence_branch": "codex/inventory-location-codes-evidence-20261124",
   "pr": 2113,
@@ -434,7 +434,7 @@
   "live_cabinet_creation_or_deletion": false,
   "own_lease_created": false,
   "publication_authorized": true,
-  "next_safe_action": "Read the existing recovery receipt/process without rerunning. Require final PASS and independently review proof/package/identity/preservation before own lease and one authorized publication.",
+  "next_safe_action": "Preserve failed-run evidence and verified backups. Diagnose a capacity recovery confined to proven task-owned generated outputs or an explicitly supported original adapter path; no blind retry, foreign cleanup, source/guard weakening, lease or publication.",
   "normal_tracked_B2_validation": {
     "observed_at_utc": "2026-11-24T17:04:06.170883+00:00",
     "started_at_utc": "2026-11-24T17:04:03.508062+00:00",
@@ -1475,7 +1475,7 @@
     "preservation_scope": "Lost pre-interruption snapshots cannot prove before/after byte preservation. New recovery must use a fresh current baseline."
   },
   "host_recovery": {
-    "state": "RUNNING",
+    "state": "FAILED_INSTALL_OBSERVED_ENOSPC",
     "helper": {
       "path": "docs/operations/INVENTORY-LOCATION-CODES-20261124/operators/pr2113_recover_d_rehearsal.py",
       "bytes": 23977,
@@ -1547,6 +1547,17 @@
       ],
       "own_lease_created": false,
       "published": false
+    },
+    "failure": {
+      "observed_at_utc": "2026-11-24T18:12:52.986352+00:00",
+      "phase": "original canonical adapter / frozen yarn install",
+      "message": "ENOSPC no space left on device while copying dependency to /app/frontend/node_modules",
+      "adapter_exit": 2,
+      "outer_yarn_exit": 1,
+      "receipt_on_disk_status": "RUNNING",
+      "receipt_bytes": 5847,
+      "receipt_limitation": "Final receipt write did not persist after filesystem became full; terminal returned to shell and adapter log records failure. No successful rehearsal is claimed.",
+      "no_matching_helper_adapter_build_processes_at_utc": "2026-11-24T18:15:28.209458+00:00"
     }
   },
   "recovery_preflight": {
@@ -1570,5 +1581,26 @@
       "oom_group_kill": 0
     },
     "limitation": "Current cgroup readings do not establish the prior disconnection cause."
+  },
+  "capacity_diagnostic": {
+    "observed_at_utc": "2026-11-24T18:13:53.265448+00:00",
+    "app_device": 66338,
+    "app_bytes_available": 0,
+    "app_inodes_free": 147432,
+    "app_inodes_total": 655360,
+    "tmp_device": 3145862,
+    "tmp_bytes_available": 236479553536,
+    "own_partial_node_modules_disk_bytes": 561577984,
+    "own_persistent_recovery_stage_disk_bytes": 102825984,
+    "tmp_uid_release_cache_disk_bytes": 42766336,
+    "top_usage": {
+      "app_worktrees": 4119187456,
+      "app_git": 574709760,
+      "app_root": 5572866048,
+      "root_release_toolchain_cache": 246018048
+    },
+    "numbering_related_host_worktrees": [],
+    "capacity_changes_performed": false,
+    "foreign_cleanup_performed": false
   }
 }
