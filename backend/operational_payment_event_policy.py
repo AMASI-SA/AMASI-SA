@@ -50,6 +50,7 @@ class PaymentEvent:
     delivered: bool = False
     cod_collection_method: Optional[str] = None  # cash | bank | pos
     statement_match_verified: bool = False
+    captured_at: Optional[str] = None  # Original source instant; never infer from webhook arrival
 
 
 @dataclass(frozen=True)
