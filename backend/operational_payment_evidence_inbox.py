@@ -43,13 +43,14 @@ def event_record(event: PaymentEvent, *, owner: str, source: str, source_ref: st
         "kind": event.kind.value, "currency": event.currency, "amount": amount,
         "transaction_key": decision.idempotency_key,
         "native_ref": (event.refund_id if event.kind == Kind.REFUND else (event.transaction_id or event.installment_id)),
+        "captured_at": event.captured_at,
         "target": decision.balance_bucket, "status": "evidence_received",
     }
 
 
 def _financial_identity(record):
     return tuple(record.get(key) for key in (
-        "order_id", "provider", "kind", "currency", "amount", "transaction_key", "target",
+        "order_id", "provider", "kind", "currency", "amount", "transaction_key", "captured_at", "target",
     ))
 
 
