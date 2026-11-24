@@ -1,0 +1,411 @@
+{
+  "schema_version": 1,
+  "task": "PR2123 source A2 CI and candidate audit",
+  "result": "SOURCE_A2_CI_AND_CANDIDATE_PASS",
+  "repository": "AMASI-SA/AMASI-SA",
+  "pr": {
+    "head_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+    "base_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+    "draft": true,
+    "merged": false
+  },
+  "source_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+  "source_tree": "66f5c117ab2a8af5fca87e6de92b37f2acd2ff2b",
+  "source_parent": "de066be78e3209bb56ef9281ab81367b3104c0a9",
+  "base_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+  "observed_at_utc": "2026-11-24 22:22:52 UTC",
+  "source_delta_from_a1": [
+    {
+      "path": "backend/tests/test_operational_balance_cost_order_projection.py",
+      "previous_path": "backend/tests/test_operational_open_cost_order_projection.py",
+      "status": "renamed",
+      "blob": "792dc9b9294e631c834f0f34d1bd9f9073196f57",
+      "additions": 0,
+      "deletions": 0
+    },
+    {
+      "path": "docs/operations/OPERATIONAL-COST-ORDER-PROJECTION-20261124/STATUS.json",
+      "previous_path": null,
+      "status": "modified",
+      "blob": "f5a429a104728d3cebb4702f0fdc8d8a91ffa39f",
+      "additions": 17,
+      "deletions": 9
+    }
+  ],
+  "check_count": 27,
+  "check_counts": {
+    "success": 21,
+    "skipped": 6
+  },
+  "checks": [
+    {
+      "name": "CodeQL",
+      "id": 138814964836,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/runs/138814964836",
+      "completed_at": "2026-11-24T22:10:54Z"
+    },
+    {
+      "name": "Emergent manual redeploy required",
+      "id": 138814124561,
+      "status": "completed",
+      "conclusion": "skipped",
+      "head_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45498009508/job/138814124561",
+      "completed_at": "2026-11-24T22:09:19Z"
+    },
+    {
+      "name": "Emergent Host Node ${{ matrix.host-node }} clean-clone adapter rehearsal",
+      "id": 138814124135,
+      "status": "completed",
+      "conclusion": "skipped",
+      "head_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45498009508/job/138814124135",
+      "completed_at": "2026-11-24T22:09:19Z"
+    },
+    {
+      "name": "Operational Balance Frontend",
+      "id": 138813703318,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45498009712/job/138813703318",
+      "completed_at": "2026-11-24T22:10:45Z"
+    },
+    {
+      "name": "Canonical worker excludes operational balance jobs",
+      "id": 138813703240,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45498009712/job/138813703240",
+      "completed_at": "2026-11-24T22:10:03Z"
+    },
+    {
+      "name": "Operational balances browser, mobile and visibility acceptance",
+      "id": 138813702993,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45498009712/job/138813702993",
+      "completed_at": "2026-11-24T22:10:52Z"
+    },
+    {
+      "name": "Operational Balance Backend",
+      "id": 138813702593,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45498009712/job/138813702593",
+      "completed_at": "2026-11-24T22:21:06Z"
+    },
+    {
+      "name": "Stock eligibility, reservation and consumption on isolated Mongo",
+      "id": 138813692263,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45498009901/job/138813692263",
+      "completed_at": "2026-11-24T22:21:30Z"
+    },
+    {
+      "name": "Publication backend and existing write guards",
+      "id": 138813657801,
+      "status": "completed",
+      "conclusion": "skipped",
+      "head_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45498009887/job/138813657801",
+      "completed_at": "2026-11-24T22:08:30Z"
+    },
+    {
+      "name": "Publication frontend and existing media flow",
+      "id": 138813656883,
+      "status": "completed",
+      "conclusion": "skipped",
+      "head_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45498009887/job/138813656883",
+      "completed_at": "2026-11-24T22:08:30Z"
+    },
+    {
+      "name": "Frontend Snapchat settings tests and build",
+      "id": 138813655406,
+      "status": "completed",
+      "conclusion": "skipped",
+      "head_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45498009551/job/138813655406",
+      "completed_at": "2026-11-24T22:08:30Z"
+    },
+    {
+      "name": "Backend settings and zero-write regressions",
+      "id": 138813655098,
+      "status": "completed",
+      "conclusion": "skipped",
+      "head_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45498009551/job/138813655098",
+      "completed_at": "2026-11-24T22:08:30Z"
+    },
+    {
+      "name": "Backend security contracts",
+      "id": 138813536494,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45498010089/job/138813536494",
+      "completed_at": "2026-11-24T22:09:58Z"
+    },
+    {
+      "name": "Frontend dependency and CSP checks",
+      "id": 138813535804,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45498010089/job/138813535804",
+      "completed_at": "2026-11-24T22:12:35Z"
+    },
+    {
+      "name": "backend-unit",
+      "id": 138813535477,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45498009626/job/138813535477",
+      "completed_at": "2026-11-24T22:08:43Z"
+    },
+    {
+      "name": "scope",
+      "id": 138813535449,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45498009887/job/138813535449",
+      "completed_at": "2026-11-24T22:08:30Z"
+    },
+    {
+      "name": "G47 real Mongo purchase, payment, opening and component lifecycle",
+      "id": 138813535127,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45498009584/job/138813535127",
+      "completed_at": "2026-11-24T22:13:05Z"
+    },
+    {
+      "name": "G47 purchase and receiving UI tests and build",
+      "id": 138813534610,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45498009584/job/138813534610",
+      "completed_at": "2026-11-24T22:09:32Z"
+    },
+    {
+      "name": "employee-contract",
+      "id": 138813534576,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45498009966/job/138813534576",
+      "completed_at": "2026-11-24T22:10:45Z"
+    },
+    {
+      "name": "Backend preflight",
+      "id": 138813534219,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45498009508/job/138813534219",
+      "completed_at": "2026-11-24T22:08:40Z"
+    },
+    {
+      "name": "Host Node 20.20.2 engine and dispatcher contract",
+      "id": 138813534161,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45498009508/job/138813534161",
+      "completed_at": "2026-11-24T22:08:33Z"
+    },
+    {
+      "name": "Frontend build",
+      "id": 138813534152,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45498009508/job/138813534152",
+      "completed_at": "2026-11-24T22:09:19Z"
+    },
+    {
+      "name": "Fail-closed settings and multi-account scope guard",
+      "id": 138813533969,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45498009551/job/138813533969",
+      "completed_at": "2026-11-24T22:08:30Z"
+    },
+    {
+      "name": "CodeQL (python)",
+      "id": 138813533909,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45498009527/job/138813533909",
+      "completed_at": "2026-11-24T22:17:01Z"
+    },
+    {
+      "name": "real-mongo-tracking",
+      "id": 138813533895,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45498009670/job/138813533895",
+      "completed_at": "2026-11-24T22:10:19Z"
+    },
+    {
+      "name": "Host Node 24.19.0 engine and dispatcher contract",
+      "id": 138813533744,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45498009508/job/138813533744",
+      "completed_at": "2026-11-24T22:08:37Z"
+    },
+    {
+      "name": "CodeQL (javascript-typescript)",
+      "id": 138813533443,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/45498009527/job/138813533443",
+      "completed_at": "2026-11-24T22:10:57Z"
+    }
+  ],
+  "required_new_case_evidence": {
+    "module": "test_operational_balance_cost_order_projection",
+    "minimum_cases": 61,
+    "suites": [
+      "Operational Balance Backend",
+      "Stock eligibility, reservation and consumption on isolated Mongo"
+    ],
+    "status": "PASS_ACTUAL_JUNIT",
+    "actual_count_per_job": 61,
+    "zero_skips_failures_errors": true,
+    "same_61_unique_names_in_both_jobs": true,
+    "review_file": "pr2123-a-ci-a2-junit-review.json",
+    "review_sha256": "4d1044c18f72e7df61f73a5ce702a0e6389be1845c7f53fdfcaddeb44a161c31"
+  },
+  "release_candidate_artifact": {
+    "result": "CANDIDATE_ARTIFACT_PROVENANCE_PASS",
+    "zip_sha256": "89ee196176efe4c9981f4667ea94ae6ec41db1576007f9b963c81e9fec1928d3",
+    "intent_bytes": 1531177,
+    "intent_sha256": "7c9d109354ed98f6a014028319b6e3f1cdab4c3f6a749cce439008fb6113428e",
+    "intent_git_blob": "57815f976f9bd6ed711024568f0acfa2d79bfcf6",
+    "release_id": "rg5-d5df5e9536258c2d3b76d750715bafae8fa9b6b76f6971899bd7f8c6e0e54328",
+    "verified_after_artifact_upload": true,
+    "ci_original_candidate_validator_pass": true,
+    "local_original_candidate_validator_executed": false,
+    "artifact_id": 14969581484,
+    "run_id": 45498009508,
+    "frontend_job_id": 138813534152,
+    "review_file": "pr2123-a-ci-a2-candidate-review.json"
+  },
+  "scope": "Read-only GitHub, no reruns/dispatches/repository writes/host actions. Owned audit files only.",
+  "progress": {
+    "status": "Completed",
+    "new_tests_coverage_gap_resolved": true
+  },
+  "production_ref_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+  "legacy_status_contexts": {
+    "count": 0,
+    "statuses": [],
+    "state_returned_for_empty_set": "pending"
+  },
+  "job_log_excerpts": {
+    "stock": [
+      "2026-11-24T22:08:43.5118911Z HEAD is now at e072603 test: include cost order projection regressions in required CI",
+      "2026-11-24T22:08:43.5211377Z e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+      "2026-11-24T22:08:43.5557013Z e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+      "2026-11-24T22:21:23.5434841Z 6339 passed, 8 warnings, 97 subtests passed in 735.78s (0:12:15)",
+      "2026-11-24T22:21:25.0033663Z Eligibility: 6339 executed test cases, zero skips/failures/errors"
+    ],
+    "backend": [
+      "2026-11-24T22:08:41.2976102Z HEAD is now at e072603 test: include cost order projection regressions in required CI",
+      "2026-11-24T22:08:41.3041321Z e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+      "2026-11-24T22:20:09.5834125Z 7666 passed, 12 warnings, 151 subtests passed in 659.62s (0:10:59)",
+      "2026-11-24T22:21:00.9855844Z 106 passed, 5 warnings in 49.45s",
+      "2026-11-24T22:21:02.1228564Z 16 passed, 18 subtests passed in 0.39s",
+      "2026-11-24T22:21:02.3255494Z Demand-read acceptance: 106 executed cases; zero skips/failures/errors"
+    ]
+  },
+  "other_owner_written_checkpoint": {
+    "path": "docs/operations/INVENTORY-CABINET-ARCHIVE-20261124/STATUS.md",
+    "blob": "544822e1942a04231602618f2221874fe6b3b326",
+    "checkpoint": "E9",
+    "observed_at_utc": "2026-11-24 22:20:29 UTC",
+    "publication_proven": false
+  },
+  "superseded_in_pr_by_intent_only_b": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+  "junit_artifacts": [
+    {
+      "kind": "stock",
+      "artifact_id": 14970926876,
+      "run_id": 45498009901,
+      "job_id": 138813692263,
+      "zip_sha256": "7aedada3a1261b13033b4542e9ade5246538a218b0e8db9a812630fbc7461320",
+      "junit_counts": {
+        "eligibility-backend.xml": {
+          "executed": 6339,
+          "rejected": 0,
+          "selected_modules": {
+            "test_operational_balance_cost_order_projection": 61,
+            "test_operational_balance_cost_exposure_http": 6,
+            "test_operational_balance_cost_source_diagnostics": 22
+          }
+        }
+      }
+    },
+    {
+      "kind": "backend",
+      "artifact_id": 14970976204,
+      "run_id": 45498009712,
+      "job_id": 138813702593,
+      "zip_sha256": "3b706d280ae0d714ee729ccd090cbd5a91c6e91c3cbaf0ff6881465c3d4b6be4",
+      "junit_counts": {
+        "operational-backend.xml": {
+          "executed": 7666,
+          "rejected": 0,
+          "selected_modules": {
+            "test_operational_balance_cost_order_projection": 61,
+            "test_operational_balance_cost_exposure_http": 6,
+            "test_operational_balance_cost_source_diagnostics": 22
+          }
+        },
+        "operational-demand-read.xml": {
+          "executed": 106,
+          "rejected": 0,
+          "selected_modules": {}
+        }
+      }
+    }
+  ],
+  "parent_local_original_validator_receipt": {
+    "file": "pr2123-a2-original-candidate-validation.json",
+    "sha256": "cd0c043a3ab3fc4542158d5182c72907e791c3647bc8f721b967c6f61f0a99a4",
+    "result": "PASS",
+    "elapsed_seconds": 2.526,
+    "tracked_files": 6599,
+    "sparse_entries": 0,
+    "source_and_candidate_unchanged": true,
+    "auditor_read_receipt_only": true
+  },
+  "source_ci_completed": true,
+  "release_readiness_claimed": false,
+  "limits": [
+    "Source A2 CI and candidate provenance only; no reviewed-B CI, shared-host rehearsal or publication claimed.",
+    "Six conditional skips: four unrelated Snapchat scope jobs, reviewed-B adapter rehearsal and push-only manual handoff.",
+    "Empty legacy commit-status set reports pending but contains zero actual status contexts.",
+    "CI audit agent made no GitHub mutations, reruns, host or lease actions."
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "source_a": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+  "base_j": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+  "intent_b": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+  "tree": "2db384dde8a84d0945fceee9cd5be81638d5bb2d",
+  "intent_blob": "57815f976f9bd6ed711024568f0acfa2d79bfcf6",
+  "intent_sha256": "7c9d109354ed98f6a014028319b6e3f1cdab4c3f6a749cce439008fb6113428e",
+  "release_id": "rg5-d5df5e9536258c2d3b76d750715bafae8fa9b6b76f6971899bd7f8c6e0e54328",
+  "at": "2026-11-24T22:24:41.898Z",
+  "scope": "Isolated intent-only B for CI; no merge, shared-host mutation, lease or publication. Prior2120 live verification is pending."
+}

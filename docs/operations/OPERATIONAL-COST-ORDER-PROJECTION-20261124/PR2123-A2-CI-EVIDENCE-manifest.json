@@ -1,0 +1,53 @@
+{
+  "path": "release-preparation/PR2123-A2-CI-EVIDENCE.zip",
+  "bytes": 269011,
+  "sha256": "93c386ea796a7a7a8f0d2a91a81775652518fade833e0753f60818bf444bb3a0",
+  "git_blob": "189659ceb6f0c2f1bf5af412c63db378332e3cd8",
+  "members": 11,
+  "member_hashes_verified": true,
+  "scope": "ExactA2 CI originals and audits; isolated frozenB and original validator. No host/live deployment proof. Independent candidate reviewer did not run local validator; root separately did, with its own receipt included.",
+  "source_a": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+  "intent_b": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+  "files": {
+    "pr2123-a-ci-a2-backend.zip": {
+      "bytes": 141015,
+      "sha256": "3b706d280ae0d714ee729ccd090cbd5a91c6e91c3cbaf0ff6881465c3d4b6be4"
+    },
+    "pr2123-a-ci-a2-stock.zip": {
+      "bytes": 108074,
+      "sha256": "7aedada3a1261b13033b4542e9ade5246538a218b0e8db9a812630fbc7461320"
+    },
+    "pr2123-a-ci-a2.json": {
+      "bytes": 16294,
+      "sha256": "9b65c4cc51ec5945412141f9c6c41f8720b3ed3305e22fe37a13637d6741d559"
+    },
+    "pr2123-a-ci-a2-junit-review.json": {
+      "bytes": 26181,
+      "sha256": "4d1044c18f72e7df61f73a5ce702a0e6389be1845c7f53fdfcaddeb44a161c31"
+    },
+    "pr2123-a-ci-a2-candidate-review.json": {
+      "bytes": 10920,
+      "sha256": "817da3b718f67bfab06ccd2d844708a2862c1b4888fc108229238b9af508fe07"
+    },
+    "pr2123-a2-root-final-ci.json": {
+      "bytes": 144259,
+      "sha256": "a9b5666c5441251cdf672017eafdb7c59d5fb7d962e3c5e04b56c4f02edefb58"
+    },
+    "pr2123-a2-original-candidate-validation.json": {
+      "bytes": 1118,
+      "sha256": "cd0c043a3ab3fc4542158d5182c72907e791c3647bc8f721b967c6f61f0a99a4"
+    },
+    "pr2123-collection-only-verification.json": {
+      "bytes": 3041,
+      "sha256": "6e4efaceaa8d76d1b4496d7fcf1e505837be8b1b1563eadfccd6ebb733e0b4f9"
+    },
+    "pr2123-frozen-B.json": {
+      "bytes": 640,
+      "sha256": "ae3a1316adbd568fb38bb76a926c871a37b8d76bb2c49eee3f77d492e8de5daa"
+    },
+    "pr2123-b-original-intent-validation.json": {
+      "bytes": 1510,
+      "sha256": "f27084f05775be609c95f09857f316ae995ef12fea6e0c050cfdfe54ef5af737"
+    }
+  }
+}

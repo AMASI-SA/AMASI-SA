@@ -1,0 +1,387 @@
+{
+  "schema_version": 1,
+  "result": "PASS",
+  "source_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+  "source_tree": "66f5c117ab2a8af5fca87e6de92b37f2acd2ff2b",
+  "required_module": "test_operational_balance_cost_order_projection",
+  "required_count_per_job": 61,
+  "both_jobs_execute_same_61_unique_cases": true,
+  "zero_skips_failures_errors": true,
+  "artifacts": [
+    {
+      "kind": "stock",
+      "result": "PASS",
+      "artifact": {
+        "id": 14970926876,
+        "name": "eligibility-backend-e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+        "size_in_bytes": 108074,
+        "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14970926876",
+        "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14970926876/zip",
+        "expired": false,
+        "created_at": "2026-11-24T22:21:26Z",
+        "expires_at": "2027-02-22T22:08:17Z",
+        "updated_at": "2026-11-24T22:21:26Z",
+        "digest": "sha256:7aedada3a1261b13033b4542e9ade5246538a218b0e8db9a812630fbc7461320",
+        "workflow_run": {
+          "id": 45498009901,
+          "repository_id": 1250664189,
+          "head_repository_id": 1250664189,
+          "head_branch": "codex/operational-cost-order-projection-20261124",
+          "head_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe"
+        }
+      },
+      "job_id": 138813692263,
+      "zip_sha256": "7aedada3a1261b13033b4542e9ade5246538a218b0e8db9a812630fbc7461320",
+      "files": {
+        "eligibility-backend.xml": {
+          "local_file": "pr2123-a-ci-a2-stock.eligibility-backend.xml",
+          "bytes": 1105558,
+          "sha256": "eb361c75b6510b9a9e5e6c3cd09c45b35d42e2a915c38621b736eb7d7073a2b5"
+        }
+      },
+      "junit": {
+        "eligibility-backend.xml": {
+          "executed_cases": 6339,
+          "rejected_count": 0,
+          "selected_modules": {
+            "test_operational_balance_cost_order_projection": {
+              "count": 61,
+              "skipped": 0,
+              "failures": 0,
+              "errors": 0,
+              "case_names": [
+                "test_cost_cursor_joins_active_motor_worker_before_failure_or_cancellation[caller_cancel]",
+                "test_cost_cursor_joins_active_motor_worker_before_failure_or_cancellation[reader_deadline]",
+                "test_cost_read_omits_unused_payload_without_narrowing_the_owner_cohort",
+                "test_cost_source_keeps_motor_owner_scope_and_original_overflow_sentinel[20000]",
+                "test_cost_source_keeps_motor_owner_scope_and_original_overflow_sentinel[20001]",
+                "test_cost_source_keeps_motor_owner_scope_and_original_overflow_sentinel[20002]",
+                "test_cost_source_rejects_returned_foreign_or_missing_owner_after_cursor_cleanup[invalid_owner0]",
+                "test_cost_source_rejects_returned_foreign_or_missing_owner_after_cursor_cleanup[invalid_owner1]",
+                "test_courier_forecast_keeps_nested_shipment_payment_and_currency_evidence[QAR]",
+                "test_courier_forecast_keeps_nested_shipment_payment_and_currency_evidence[SAR]",
+                "test_duplicate_outer_identity_without_raw_still_withholds_customer_forecast[order_number]",
+                "test_duplicate_outer_identity_without_raw_still_withholds_customer_forecast[salla_order_id]",
+                "test_full_outputs_match_for_saved_snapshot_forecast_and_legacy_read[2026-11-02T00:00:00+00:00]",
+                "test_full_outputs_match_for_saved_snapshot_forecast_and_legacy_read[2026-11-02T00:00:01+00:00]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[archived-True]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[awb-old-waybill]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[awb_number-old-waybill]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[deleted-True]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[delivered_at-2026-11-01T15:00:00+00:00]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[is_deleted-True]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[label_url-synthetic-label]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[returned-True]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[shipment-value14]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[shipment_id-old-shipment]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[shipping_label_url-synthetic-label]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[source_kind-shipment]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[status-returned]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[store_delivery_assignment_id-conflicting-assignment]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[store_delivery_collection_amount-1.00]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[store_delivery_delivered_at-2026-11-01T15:00:00+00:00]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[store_delivery_driver_id-conflicting-driver]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[store_delivery_payment_status-paid]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[store_delivery_status-delivered]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[superseded-True]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[superseded_shipment_ids-value15]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[tracking-value23]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[tracking_url-synthetic-tracking]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[type-return]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[waybill-old-waybill]",
+                "test_projection_does_not_change_shared_order_reader_or_other_cost_sources",
+                "test_whole_evidence_containers_keep_falsy_and_malformed_shapes[-g47_salla_snapshot]",
+                "test_whole_evidence_containers_keep_falsy_and_malformed_shapes[-raw_by_source]",
+                "test_whole_evidence_containers_keep_falsy_and_malformed_shapes[-salla_shipping_current]",
+                "test_whole_evidence_containers_keep_falsy_and_malformed_shapes[0-g47_salla_snapshot]",
+                "test_whole_evidence_containers_keep_falsy_and_malformed_shapes[0-raw_by_source]",
+                "test_whole_evidence_containers_keep_falsy_and_malformed_shapes[0-salla_shipping_current]",
+                "test_whole_evidence_containers_keep_falsy_and_malformed_shapes[False-g47_salla_snapshot]",
+                "test_whole_evidence_containers_keep_falsy_and_malformed_shapes[False-raw_by_source]",
+                "test_whole_evidence_containers_keep_falsy_and_malformed_shapes[False-salla_shipping_current]",
+                "test_whole_evidence_containers_keep_falsy_and_malformed_shapes[None-g47_salla_snapshot]",
+                "test_whole_evidence_containers_keep_falsy_and_malformed_shapes[None-raw_by_source]",
+                "test_whole_evidence_containers_keep_falsy_and_malformed_shapes[None-salla_shipping_current]",
+                "test_whole_evidence_containers_keep_falsy_and_malformed_shapes[value4-g47_salla_snapshot]",
+                "test_whole_evidence_containers_keep_falsy_and_malformed_shapes[value4-raw_by_source]",
+                "test_whole_evidence_containers_keep_falsy_and_malformed_shapes[value4-salla_shipping_current]",
+                "test_whole_evidence_containers_keep_falsy_and_malformed_shapes[value5-g47_salla_snapshot]",
+                "test_whole_evidence_containers_keep_falsy_and_malformed_shapes[value5-raw_by_source]",
+                "test_whole_evidence_containers_keep_falsy_and_malformed_shapes[value5-salla_shipping_current]",
+                "test_whole_evidence_containers_keep_falsy_and_malformed_shapes[value6-g47_salla_snapshot]",
+                "test_whole_evidence_containers_keep_falsy_and_malformed_shapes[value6-raw_by_source]",
+                "test_whole_evidence_containers_keep_falsy_and_malformed_shapes[value6-salla_shipping_current]"
+              ]
+            },
+            "test_operational_balance_cost_exposure_http": {
+              "count": 6,
+              "skipped": 0,
+              "failures": 0,
+              "errors": 0,
+              "case_names": [
+                "test_cost_exposure_http_old_orders_are_owner_scoped_and_do_not_alter_openings",
+                "test_cost_exposure_http_rejects_unauthenticated_and_disabled_actor",
+                "test_cost_exposure_http_requires_report_permission_without_financial_writes[permissions0]",
+                "test_cost_exposure_http_requires_report_permission_without_financial_writes[permissions1]",
+                "test_cost_exposure_http_requires_report_permission_without_financial_writes[permissions2]",
+                "test_cost_exposure_http_requires_report_permission_without_financial_writes[permissions3]"
+              ]
+            },
+            "test_operational_balance_cost_source_diagnostics": {
+              "count": 22,
+              "skipped": 0,
+              "failures": 0,
+              "errors": 0,
+              "case_names": [
+                "test_actual_read_deadline_and_cleanup_are_preserved",
+                "test_cancellation_does_not_become_a_source_failure",
+                "test_diagnostic_note_does_not_change_http_failure_body",
+                "test_every_cost_source_has_a_fixed_safe_name",
+                "test_failed_cost_read_names_source_in_log_and_trace_preserving_exception[mezan_cost_resources_v2]",
+                "test_failed_cost_read_names_source_in_log_and_trace_preserving_exception[mezan_preparation_pieces_v1]",
+                "test_failed_cost_read_names_source_in_log_and_trace_preserving_exception[mezan_product_cost_profiles_v2]",
+                "test_failed_cost_read_names_source_in_log_and_trace_preserving_exception[mezan_product_option_cost_bindings_v2]",
+                "test_failed_cost_read_names_source_in_log_and_trace_preserving_exception[mezan_product_resource_bindings_v2]",
+                "test_failed_cost_read_names_source_in_log_and_trace_preserving_exception[mezan_products_v2]",
+                "test_failed_cost_read_names_source_in_log_and_trace_preserving_exception[mezan_supplier_invoices_v2]",
+                "test_failed_cost_read_names_source_in_log_and_trace_preserving_exception[mezan_suppliers_v2]",
+                "test_failed_cost_read_names_source_in_log_and_trace_preserving_exception[mz2_shipping_setup_v2]",
+                "test_failed_cost_read_names_source_in_log_and_trace_preserving_exception[store_delivery_assignments]",
+                "test_failed_cost_read_names_source_in_log_and_trace_preserving_exception[store_drivers]",
+                "test_failed_cost_read_names_source_in_log_and_trace_preserving_exception[unified_orders]",
+                "test_note_survives_a_long_traceback_tail",
+                "test_observability_failure_cannot_replace_source_exception[False-True]",
+                "test_observability_failure_cannot_replace_source_exception[True-False]",
+                "test_observability_failure_cannot_replace_source_exception[True-True]",
+                "test_unknown_exception_fields_are_sanitized_without_changing_args[log-injection]",
+                "test_unknown_exception_fields_are_sanitized_without_changing_args[untrusted-object]"
+              ]
+            }
+          },
+          "suite_attributes": [
+            {
+              "name": "pytest",
+              "errors": "0",
+              "failures": "0",
+              "skipped": "0",
+              "tests": "6436",
+              "time": "735.750",
+              "timestamp": "2026-11-24T22:09:06.514048+00:00",
+              "hostname": "runnervm0hi8g"
+            }
+          ]
+        }
+      },
+      "source_binding": "artifact metadata plus actual checkout log"
+    },
+    {
+      "kind": "backend",
+      "result": "PASS",
+      "artifact": {
+        "id": 14970976204,
+        "name": "operational-backend-results",
+        "size_in_bytes": 141015,
+        "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14970976204",
+        "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14970976204/zip",
+        "expired": false,
+        "created_at": "2026-11-24T22:21:03Z",
+        "expires_at": "2027-02-22T22:08:17Z",
+        "updated_at": "2026-11-24T22:21:03Z",
+        "digest": "sha256:3b706d280ae0d714ee729ccd090cbd5a91c6e91c3cbaf0ff6881465c3d4b6be4",
+        "workflow_run": {
+          "id": 45498009712,
+          "repository_id": 1250664189,
+          "head_repository_id": 1250664189,
+          "head_branch": "codex/operational-cost-order-projection-20261124",
+          "head_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe"
+        }
+      },
+      "job_id": 138813702593,
+      "zip_sha256": "3b706d280ae0d714ee729ccd090cbd5a91c6e91c3cbaf0ff6881465c3d4b6be4",
+      "files": {
+        "operational-backend.xml": {
+          "local_file": "pr2123-a-ci-a2-backend.operational-backend.xml",
+          "bytes": 1387542,
+          "sha256": "f5d0fa49b334219b894818b38eefacfb6245400301e7bf052dafd4009d71510e"
+        },
+        "operational-demand-read-benchmark.json": {
+          "local_file": "pr2123-a-ci-a2-backend.operational-demand-read-benchmark.json",
+          "bytes": 13767,
+          "sha256": "18e842ed5d9405ed91da289511ea75a0c29f0db8b07c381d8bd36909e0908cc5"
+        },
+        "operational-demand-read.xml": {
+          "local_file": "pr2123-a-ci-a2-backend.operational-demand-read.xml",
+          "bytes": 18155,
+          "sha256": "88052a343013bb4df929e4cd69e07d7b7a6dcd98a2d7e0cb30543b557a8a55e0"
+        },
+        "operational-demand-register-benchmark.json": {
+          "local_file": "pr2123-a-ci-a2-backend.operational-demand-register-benchmark.json",
+          "bytes": 1746,
+          "sha256": "cdb5521fbff7f2a8a3e1d62bb703a81ae8fa8eb776414109933848f03d80894e"
+        },
+        "operational-source-sha.txt": {
+          "local_file": "pr2123-a-ci-a2-backend.operational-source-sha.txt",
+          "bytes": 41,
+          "sha256": "484775513d6e6ea65234b4b83cffb862710f14e161d4e3237558c493faf7f9c0"
+        },
+        "operational-source-tree.txt": {
+          "local_file": "pr2123-a-ci-a2-backend.operational-source-tree.txt",
+          "bytes": 41,
+          "sha256": "4713737d4d8e4b4f5d2b41c1767d2337b33c3adb2a9f2b516b856636d97f40a8"
+        }
+      },
+      "junit": {
+        "operational-backend.xml": {
+          "executed_cases": 7666,
+          "rejected_count": 0,
+          "selected_modules": {
+            "test_operational_balance_cost_order_projection": {
+              "count": 61,
+              "skipped": 0,
+              "failures": 0,
+              "errors": 0,
+              "case_names": [
+                "test_cost_cursor_joins_active_motor_worker_before_failure_or_cancellation[caller_cancel]",
+                "test_cost_cursor_joins_active_motor_worker_before_failure_or_cancellation[reader_deadline]",
+                "test_cost_read_omits_unused_payload_without_narrowing_the_owner_cohort",
+                "test_cost_source_keeps_motor_owner_scope_and_original_overflow_sentinel[20000]",
+                "test_cost_source_keeps_motor_owner_scope_and_original_overflow_sentinel[20001]",
+                "test_cost_source_keeps_motor_owner_scope_and_original_overflow_sentinel[20002]",
+                "test_cost_source_rejects_returned_foreign_or_missing_owner_after_cursor_cleanup[invalid_owner0]",
+                "test_cost_source_rejects_returned_foreign_or_missing_owner_after_cursor_cleanup[invalid_owner1]",
+                "test_courier_forecast_keeps_nested_shipment_payment_and_currency_evidence[QAR]",
+                "test_courier_forecast_keeps_nested_shipment_payment_and_currency_evidence[SAR]",
+                "test_duplicate_outer_identity_without_raw_still_withholds_customer_forecast[order_number]",
+                "test_duplicate_outer_identity_without_raw_still_withholds_customer_forecast[salla_order_id]",
+                "test_full_outputs_match_for_saved_snapshot_forecast_and_legacy_read[2026-11-02T00:00:00+00:00]",
+                "test_full_outputs_match_for_saved_snapshot_forecast_and_legacy_read[2026-11-02T00:00:01+00:00]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[archived-True]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[awb-old-waybill]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[awb_number-old-waybill]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[deleted-True]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[delivered_at-2026-11-01T15:00:00+00:00]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[is_deleted-True]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[label_url-synthetic-label]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[returned-True]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[shipment-value14]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[shipment_id-old-shipment]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[shipping_label_url-synthetic-label]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[source_kind-shipment]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[status-returned]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[store_delivery_assignment_id-conflicting-assignment]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[store_delivery_collection_amount-1.00]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[store_delivery_delivered_at-2026-11-01T15:00:00+00:00]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[store_delivery_driver_id-conflicting-driver]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[store_delivery_payment_status-paid]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[store_delivery_status-delivered]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[superseded-True]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[superseded_shipment_ids-value15]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[tracking-value23]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[tracking_url-synthetic-tracking]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[type-return]",
+                "test_outer_negative_evidence_never_promotes_a_customer_due[waybill-old-waybill]",
+                "test_projection_does_not_change_shared_order_reader_or_other_cost_sources",
+                "test_whole_evidence_containers_keep_falsy_and_malformed_shapes[-g47_salla_snapshot]",
+                "test_whole_evidence_containers_keep_falsy_and_malformed_shapes[-raw_by_source]",
+                "test_whole_evidence_containers_keep_falsy_and_malformed_shapes[-salla_shipping_current]",
+                "test_whole_evidence_containers_keep_falsy_and_malformed_shapes[0-g47_salla_snapshot]",
+                "test_whole_evidence_containers_keep_falsy_and_malformed_shapes[0-raw_by_source]",
+                "test_whole_evidence_containers_keep_falsy_and_malformed_shapes[0-salla_shipping_current]",
+                "test_whole_evidence_containers_keep_falsy_and_malformed_shapes[False-g47_salla_snapshot]",
+                "test_whole_evidence_containers_keep_falsy_and_malformed_shapes[False-raw_by_source]",
+                "test_whole_evidence_containers_keep_falsy_and_malformed_shapes[False-salla_shipping_current]",
+                "test_whole_evidence_containers_keep_falsy_and_malformed_shapes[None-g47_salla_snapshot]",
+                "test_whole_evidence_containers_keep_falsy_and_malformed_shapes[None-raw_by_source]",
+                "test_whole_evidence_containers_keep_falsy_and_malformed_shapes[None-salla_shipping_current]",
+                "test_whole_evidence_containers_keep_falsy_and_malformed_shapes[value4-g47_salla_snapshot]",
+                "test_whole_evidence_containers_keep_falsy_and_malformed_shapes[value4-raw_by_source]",
+                "test_whole_evidence_containers_keep_falsy_and_malformed_shapes[value4-salla_shipping_current]",
+                "test_whole_evidence_containers_keep_falsy_and_malformed_shapes[value5-g47_salla_snapshot]",
+                "test_whole_evidence_containers_keep_falsy_and_malformed_shapes[value5-raw_by_source]",
+                "test_whole_evidence_containers_keep_falsy_and_malformed_shapes[value5-salla_shipping_current]",
+                "test_whole_evidence_containers_keep_falsy_and_malformed_shapes[value6-g47_salla_snapshot]",
+                "test_whole_evidence_containers_keep_falsy_and_malformed_shapes[value6-raw_by_source]",
+                "test_whole_evidence_containers_keep_falsy_and_malformed_shapes[value6-salla_shipping_current]"
+              ]
+            },
+            "test_operational_balance_cost_exposure_http": {
+              "count": 6,
+              "skipped": 0,
+              "failures": 0,
+              "errors": 0,
+              "case_names": [
+                "test_cost_exposure_http_old_orders_are_owner_scoped_and_do_not_alter_openings",
+                "test_cost_exposure_http_rejects_unauthenticated_and_disabled_actor",
+                "test_cost_exposure_http_requires_report_permission_without_financial_writes[permissions0]",
+                "test_cost_exposure_http_requires_report_permission_without_financial_writes[permissions1]",
+                "test_cost_exposure_http_requires_report_permission_without_financial_writes[permissions2]",
+                "test_cost_exposure_http_requires_report_permission_without_financial_writes[permissions3]"
+              ]
+            },
+            "test_operational_balance_cost_source_diagnostics": {
+              "count": 22,
+              "skipped": 0,
+              "failures": 0,
+              "errors": 0,
+              "case_names": [
+                "test_actual_read_deadline_and_cleanup_are_preserved",
+                "test_cancellation_does_not_become_a_source_failure",
+                "test_diagnostic_note_does_not_change_http_failure_body",
+                "test_every_cost_source_has_a_fixed_safe_name",
+                "test_failed_cost_read_names_source_in_log_and_trace_preserving_exception[mezan_cost_resources_v2]",
+                "test_failed_cost_read_names_source_in_log_and_trace_preserving_exception[mezan_preparation_pieces_v1]",
+                "test_failed_cost_read_names_source_in_log_and_trace_preserving_exception[mezan_product_cost_profiles_v2]",
+                "test_failed_cost_read_names_source_in_log_and_trace_preserving_exception[mezan_product_option_cost_bindings_v2]",
+                "test_failed_cost_read_names_source_in_log_and_trace_preserving_exception[mezan_product_resource_bindings_v2]",
+                "test_failed_cost_read_names_source_in_log_and_trace_preserving_exception[mezan_products_v2]",
+                "test_failed_cost_read_names_source_in_log_and_trace_preserving_exception[mezan_supplier_invoices_v2]",
+                "test_failed_cost_read_names_source_in_log_and_trace_preserving_exception[mezan_suppliers_v2]",
+                "test_failed_cost_read_names_source_in_log_and_trace_preserving_exception[mz2_shipping_setup_v2]",
+                "test_failed_cost_read_names_source_in_log_and_trace_preserving_exception[store_delivery_assignments]",
+                "test_failed_cost_read_names_source_in_log_and_trace_preserving_exception[store_drivers]",
+                "test_failed_cost_read_names_source_in_log_and_trace_preserving_exception[unified_orders]",
+                "test_note_survives_a_long_traceback_tail",
+                "test_observability_failure_cannot_replace_source_exception[False-True]",
+                "test_observability_failure_cannot_replace_source_exception[True-False]",
+                "test_observability_failure_cannot_replace_source_exception[True-True]",
+                "test_unknown_exception_fields_are_sanitized_without_changing_args[log-injection]",
+                "test_unknown_exception_fields_are_sanitized_without_changing_args[untrusted-object]"
+              ]
+            }
+          },
+          "suite_attributes": [
+            {
+              "name": "pytest",
+              "errors": "0",
+              "failures": "0",
+              "skipped": "0",
+              "tests": "7817",
+              "time": "659.579",
+              "timestamp": "2026-11-24T22:09:09.361946+00:00",
+              "hostname": "runnervm0hi8g"
+            }
+          ]
+        },
+        "operational-demand-read.xml": {
+          "executed_cases": 106,
+          "rejected_count": 0,
+          "selected_modules": {},
+          "suite_attributes": [
+            {
+              "name": "pytest",
+              "errors": "0",
+              "failures": "0",
+              "skipped": "0",
+              "tests": "106",
+              "time": "49.448",
+              "timestamp": "2026-11-24T22:20:11.325844+00:00",
+              "hostname": "runnervm0hi8g"
+            }
+          ]
+        }
+      },
+      "source_binding": "artifact metadata plus retained exact source SHA/tree plus actual checkout log"
+    }
+  ],
+  "scope": "Downloaded existing CI evidence only; no tests executed or rerun locally."
+}

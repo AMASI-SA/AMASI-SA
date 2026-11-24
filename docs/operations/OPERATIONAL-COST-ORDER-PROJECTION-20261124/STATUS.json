@@ -1,10 +1,10 @@
 {
   "task_id": "OPERATIONAL-COST-ORDER-PROJECTION-20261124",
-  "recorded_at": "2026-11-24T22:18:18.522Z",
+  "recorded_at": "2026-11-24T22:29:36.315Z",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/operational-cost-order-projection-20261124",
   "source_base": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
-  "status": "Source A2 content-identical test rename corrects required CI collection; governed A2 candidate independently reviewed and original local candidate validator PASS. Required full-A2 CI and actual61case JUnit execution pending; not merged/published.",
+  "status": "A2 all required CI and actual61case JUnit PASS. Exact original candidate frozen into isolated intent-only B; original local B validator PASS. Ready PR2123, B CI running. Not merged or published; awaiting preceding release completion.",
   "problem": {
     "evidence_commit": "d39b55563de8165f6fb99e177ada55e8482afaf7",
     "path": "docs/operations/OPERATIONAL-COST-SOURCE-DIAGNOSTICS-20261124/PR2118-FORECAST-SOURCE-DIAGNOSTIC.json",
@@ -128,6 +128,15 @@
       "worktree_and_candidate_unchanged": true,
       "evidence": "pr2123-a2-original-candidate-validation.json",
       "limit": "Not B validation or host/live proof."
+    },
+    "original_intent_b": {
+      "result": "PASS",
+      "validator": "original load_release_intent including verify_release_intent_git",
+      "elapsed_seconds": 2.868,
+      "tracked_files": 6599,
+      "sparse_entries": 0,
+      "worktree_unchanged": true,
+      "evidence": "pr2123-b-original-intent-validation.json"
     }
   },
   "files": [
@@ -147,22 +156,38 @@
       "sha256": "f6f73c8f186cc62e4b600ad25143eb8756d36166705eac57b27bd5b14ca74f12"
     }
   ],
-  "ci": "2026-11-24T22:17:25Z:19success,6conditional skips,2running(Operational Backend andStock); actual61case JUnit execution not yet proved.",
+  "ci": {
+    "source_a2": {
+      "result": "PASS",
+      "success": 21,
+      "conditional_skips": 6,
+      "pending": 0,
+      "failed": 0,
+      "root_final_read": "pr2123-a2-root-final-ci.json",
+      "independent_review": "pr2123-a-ci-a2.json",
+      "actual_61cases_each": [
+        "Operational Backend",
+        "Stock Eligibility"
+      ],
+      "junit_review": "pr2123-a-ci-a2-junit-review.json"
+    },
+    "intent_b": "RUNNING, including actual Host20/24 adapter rehearsals; Ready event superseded old scoped runs, no manual rerun."
+  },
   "pr": {
     "number": 2123,
     "state": "Draft, exact-head CI in progress",
     "url": "https://github.com/AMASI-SA/AMASI-SA/pull/2123"
   },
   "merge": "not merged",
-  "intent": "Inherited base intent unchanged; no new frozen intent yet.",
+  "intent": "Frozen original A2 candidate1531177bytes/blob57815f976f9bd6ed711024568f0acfa2d79bfcf6 into intent-only B, soleparentA2; no squash/rebase allowed.",
   "production_changed_by_this_candidate": false,
   "preceding_release": {
     "pr": 2120,
     "deployment_git_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
-    "latest_read_checkpoint": "E9: scoped clone adapter, foreign preservation and four backups passed; original canonical /app adapter and publication still pending. Other owner's operation remains protected.",
-    "constraint": "Preserve other owner lease/lock. Do not run its status while operation lock is owned; no shared host changes by this candidate."
+    "latest_read_checkpoint": "Root read existing original rehearsal receipt through idle own Terminal2 at2026-11-24T22:23:02.125269Z: PASS, receiptmtime22:17:54.757656; sourceb236f51b,deploymentf199a471; cloneandcanonicalappadaptersPASS. No publication in rehearsalreceipt. WrittenE9stillbehindthisread; no originalstatus,foreignleaseorhostsourceoperation bythis task.",
+    "constraint": "Do not merge or mutate shared/app, preparelease or publish before preceding owner's actual publication, original3probeverification and closed lease. Preserve every other task's files/processes/lease; no takeover."
   },
-  "next_safe_action": "Complete exact-A2 CI/JUnit and retain evidence. Original AGENTS requires inactive guard before /app mutation/rehearsal. An isolated intent-only B may be prepared after all A2 gates and fresh unchanged Git base; no merge, shared-host action, lease or publication until preceding owner completed original verification and closed its lease. Preserve the original v5 protocol and recheck production ref before merge.",
+  "next_safe_action": "Complete exact-B CI and independent immutable handoff review. Keep sourceA2/B frozen and all further docs on evidence branch. Confirm preceding2120 publication/originalverify/inactiveguard and freshGitbasef199; then normal protectedmerge with expectedB, validateDparents/tree andpushCI, final reviewed operator/envelope, originalrehearsal, prepare/prepublish, oneauthorizedpublication, originalverify3+inactive, oneboundedlivecostacceptance.",
   "completion_limit": "Local payload/financial/HTTP parity is confirmed. Live timeout resolution and latency improvement remain unverified.",
   "source_git_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
   "source_tree": "66f5c117ab2a8af5fca87e6de92b37f2acd2ff2b",
@@ -212,5 +237,16 @@
     "live_scope_currentness_unverified": true,
     "nonignored_entries_expected": 432,
     "scope": "No helper execution/import, host read, lease, publication, service action or financial write."
+  },
+  "intent_b": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+  "intent_b_tree": "2db384dde8a84d0945fceee9cd5be81638d5bb2d",
+  "ci_evidence_archive": {
+    "path": "PR2123-A2-CI-EVIDENCE.zip",
+    "bytes": 269011,
+    "sha256": "93c386ea796a7a7a8f0d2a91a81775652518fade833e0753f60818bf444bb3a0",
+    "blob": "189659ceb6f0c2f1bf5af412c63db378332e3cd8",
+    "members": 11,
+    "crc_and_all_member_hashes_verified": true,
+    "contents": "Original backend/stock CI ZIPs, complete JUnit review, CI/provenance, root validators and isolatedB identity."
   }
 }

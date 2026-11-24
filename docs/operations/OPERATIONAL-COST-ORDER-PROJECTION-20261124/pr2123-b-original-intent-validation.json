@@ -1,0 +1,27 @@
+{
+  "result": "PASS",
+  "validator": "original load_release_intent including verify_release_intent_git",
+  "source_a": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+  "intent_b": "c71a0ba71e36a2306a0c4bce1822f39073e6984f",
+  "base_j": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+  "tree": "2db384dde8a84d0945fceee9cd5be81638d5bb2d",
+  "sole_parent": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+  "changed_after_a": [
+    "release/release-intent-v5.json"
+  ],
+  "no_intent_change_anywhere_in_J_to_A": true,
+  "tracked_paths": 6599,
+  "sparse_entries": 0,
+  "missing_files": 0,
+  "intent_bytes": 1531177,
+  "intent_sha256": "7c9d109354ed98f6a014028319b6e3f1cdab4c3f6a749cce439008fb6113428e",
+  "intent_blob": "57815f976f9bd6ed711024568f0acfa2d79bfcf6",
+  "runtime_id": "rg5-d5df5e9536258c2d3b76d750715bafae8fa9b6b76f6971899bd7f8c6e0e54328",
+  "started_at": "2026-11-24T22:26:32.011221+00:00",
+  "finished_at": "2026-11-24T22:26:34.879508+00:00",
+  "seconds": 2.868,
+  "worktree_and_identity_unchanged": true,
+  "no_host_or_lease_operation": true,
+  "first_local_attempt": "Partial clone fetched B metadata but lazy promisor blob fetch was refused403. HEAD stayed clean A2; validator precondition stopped before running. Imported the previously reviewed candidate bytes as the exact already-reviewed Git blob with git hash-object -w, then completed ordinary FF. No source/control changes or reset.",
+  "limit": "Original B validator only; shared-host rehearsal, publication and live verification remain pending."
+}
