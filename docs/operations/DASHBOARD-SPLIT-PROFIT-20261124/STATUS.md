@@ -513,3 +513,64 @@ exact-D CI. Only afterward may a fresh, reviewed v2 execution envelope bind
 the final identities and current host preservation observations. Any eventual
 invocation must retain `PYTHONOPTIMIZE=0` and the unchanged original guard and
 adapter gates. Production changed by this evidence checkpoint: **no**.
+
+
+## Exact-B CI and packet review checkpoint E4 — 25 November 2026, Asia/Riyadh
+
+This checkpoint extends E3
+`da68f358e26488917138a98a3300afa47e72b663` on the separate evidence branch.
+All preceding STATUS bytes and evidence artifacts remain unchanged. The
+recorded E3 pending-CI observation is superseded by the results below.
+
+The independent immutable review record is
+`verification/pr2122-B-final-review.json` (168,719 bytes; SHA256
+`468a89e28f9bbca2f364ba711c21a91a97b8a66db5490deeea3c9377ae6970e3`).
+It observed the exact-B checks at 2026-11-24 21:59:48 UTC and the final
+refs at 22:00:20 UTC. All 46 checks were completed: 36 succeeded and 10 were
+reviewed conditional skips, with zero queued, running, failed, neutral or
+cancelled checks and no legacy commit statuses. The skips follow the
+documented workflow event, branch or unchanged-scope conditions; both scope
+guard runs succeeded. The coordinator's independent 22:03 recheck also
+reported all checks green.
+
+At those observations, PR #2122 was open, ready for review, mergeable and
+clean, with exact head B and base J:
+
+- A3: `10bb33957c8c2994814a76ba5feed1182336ebda`.
+- J: `f199a471f8bc6e05b475bb9b65a12107cbdc946b`.
+- B: `c3fd1d1a4e3e7fc590b1f5b82d1bf0a091c54bf7`.
+- B tree: `fa0f36e01d3c3a706a0cbdb23aa1cfcd0b8f09a1`.
+
+The tested synthetic merge
+`93225ab99ba7e21c4a0c75cf95114c7d80573953` has ordered parents [J, B]
+and exactly the frozen B tree. It is CI review evidence; this checkpoint
+does not claim an actual production merge D.
+
+Independent packet verification passed for all 3,138 governed source
+records, all 383 artifact files excluding build-meta, all six critical
+hashes, the exact build metadata, both reproducibility proof passes and the
+independently derived runtime identity:
+
+`rg5-71a053d9aff1c8c4dec4f5b5e9171630b8c53bf6fea6d3516427bd7836c4ba9c`.
+
+The review also confirmed source/base tree bindings, recorded source deltas,
+empty intent history throughout J-to-A3, exact frozen intent bytes and the
+intent-only B transition. It made no source or host writes and reran no tests.
+
+**The historical E1 `pr2122_guarded_rehearsal.py` MUST NOT RUN.**
+The frontend owner is adapting the predecessor's immutable, independently
+reviewed E7 live-service-scope v2 packet. This checkpoint does not approve or
+execute that adaptation. Preserve E1, E2 and E3 as history and wait for the
+separate adapted v2 helper, envelope schema, tests and independent review.
+
+The preceding publisher must complete its successful publication, original
+verification and lease closure **before this task merges**, as well as before
+any shared-host guard, rehearsal or publication. The root owner must then
+recheck the production base and exact-B checks before the normal reviewed
+merge, verify exact-D CI and bind a fresh reviewed v2 envelope to the actual
+D, unchanged B/D tree, runtime identity and current host observations. Retain
+`PYTHONOPTIMIZE=0` and every original guard and adapter gate.
+
+Production changed by this evidence checkpoint: **no**. No main-checkout or
+source edit, release-branch update, PR mutation, merge, host action, lease,
+publication, sync or accounting write is included.
