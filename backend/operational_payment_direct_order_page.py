@@ -50,8 +50,6 @@ def apply_first_paid_order_page(state, *, raw, source, owner, order_number, as_o
     if not isinstance(engine, dict) or not engine.get("as_of"):
         raise FirstPageHold("source_snapshot_incomplete")
     last = _time(engine["as_of"])
-    if created <= last:
-        raise FirstPageHold("historical_page_requires_reconciliation")
     if not all(isinstance(engine.get(key), dict) for key in
                ("facts", "obligations", "provider_reports", "provider_fee_inputs")):
         raise FirstPageHold("canonical_payment_engine_incomplete")
@@ -74,6 +72,10 @@ def apply_first_paid_order_page(state, *, raw, source, owner, order_number, as_o
             return {"status":"already_posted","provider":provider,
                     "reference":page["transaction_reference"]}
         raise FirstPageHold("paid_page_reference_conflict")
+    # Existing exact receipts may replay after a later successful refresh,
+    # whereas a NEW historical first receipt must never bypass the cutoff.
+    if created <= last:
+        raise FirstPageHold("historical_page_requires_reconciliation")
     if key in obligations or key in reports or engine.get("order_versions", {}).get(oid):
         raise FirstPageHold("preexisting_order_provider_effect")
     if any(str(fact_key).startswith("capture:") and isinstance(fact,dict)
