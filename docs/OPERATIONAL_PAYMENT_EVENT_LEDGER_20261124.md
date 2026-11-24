@@ -185,3 +185,19 @@ Additional changes:
 4. `Operational Payment Event Policy` CI PASS on code SHA `d06edaabb2b65165838090b7f2a310e45be83c1d`, run `45467422164`. This is isolated/unit-only proof; not integrated Preview UAT.
 
 **Still required:** identify why Salla scheduled reconciliation reports failed, separately from the operational aggregate timeout, and measure Preview bundle substages. Avoid suppressing alerts, extending timeouts, altering cost eligibility, skipping historical orders, or enabling payment flags until sources are current and direct-versus-refresh zero-difference checks pass.
+
+
+## 2026-11-24 — Actual Salla daily coverage contract discovered
+Read of current GitHub source `backend/salla_integration/sync.py::_run_existing_orders_refresh` showed the daily existing-only order refresh always returns:
+- `coverage_complete: False`
+- `coverage_reason: provider_modified_since_filter_unavailable`
+- `discovery: recent_creations_and_verified_local_source_activity`
+- `truncated`/errors/incomplete counts and an explicit 500-candidate cap
+
+This is by design: Salla's documented list API does not offer a provider modified-since filter that proves all historical updates. `backend/salla_integration/scheduled_reconciliation.py::run_due` therefore sets `status=partial` whenever `coverage_complete is False`, even if no individual order failed, and `backend/operational_source_freshness.py::_salla` correctly reports this as NOT current.
+
+**Important consequence:** Do NOT mark the Salla daily source as `current` or change `coverage_complete` to True merely to release payment posting. This is a coverage guarantee, not just a technical retry. Re-running the same bounded discovery does not establish complete historical coverage. The experimental payment writers' global Salla-current gate will continue blocking in this architecture until an independently safe **event-scoped proof policy** is defined and proven against opening/payout/history, or full-provider update coverage is genuinely available.
+
+New owner-only read endpoint `GET /api/operational-balances/payment-events/salla-schedule-health` reads only saved scheduler metadata, never triggers a sync or returns customer/order content. `operational_salla_schedule_diagnostics.diagnose_salla_daily_cycle` distinguishes the fixed known historical-coverage limitation (`state=partial_coverage`, `reason=salla_modified_history_coverage_unprovable`) from a real failed attempt with errors, unknown sources, or incomplete metadata. Both remain `eligible_for_financial_posting=False`. Sanitized diagnostic evidence includes status, attempt counts, last success times, coverage counters, and allowlisted error class; no raw IDs, amounts, tokens, or exception text.
+
+Isolated Operational Payment Event Policy CI PASS at SHA `e47cbc6097178a5e4ebac5350314358126748bc0`, workflow `45470826597`. All payment posting flags remain OFF; no merge/deploy or money mutation. **Next**: Preview/real owner scheduler metadata review, determine any independent technical failures beyond this structural coverage gap, implement exact event-level admission only with signed Salla capture and strong source/settlement overlap guards, prove zero-diff re-computation; do not relax the global freshness state.
