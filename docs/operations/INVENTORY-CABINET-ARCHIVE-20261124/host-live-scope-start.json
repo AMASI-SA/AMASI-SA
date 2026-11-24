@@ -1,0 +1,20 @@
+{
+  "task": "INVENTORY-CABINET-ARCHIVE-20261124",
+  "attempt": 2,
+  "status": "RUNNING",
+  "operator_commit": "a6853cf13af7a64fe2443eea588de12f43744066",
+  "operator_sha256": "1c366e6add99c1560243e53660a34df8c4121ead56c1246656dfb9afc0a7f14f",
+  "envelope_sha256": "b06bd5ecb519f4f485e959c0006ad6baf31e77dd911f6599382ef82c8113c9c5",
+  "download_dir": "/tmp/mezan-cabinet-archive-operator-live-1c_0ba3x",
+  "stage": "/tmp/mezan-cabinet-archive-release-live-e7l6f9wi",
+  "original_public_guard": {
+    "active": false
+  },
+  "latest_observed_phase": "initial foreign snapshot",
+  "source_start": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
+  "intended_deployment": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+  "lease_created": false,
+  "publish_submitted": false,
+  "live_cabinet_mutated": false,
+  "resume": "Read this existing process and receipt first; do not launch a duplicate. Do not call public guard status while the helper holds its operation lock. Await successful canonical adapter and final receipt before any lease."
+}

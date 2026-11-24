@@ -2,7 +2,7 @@
 
 ## Current state
 
-**READY FOR FRESH HOST REHEARSAL — scoped live-service preservation reviewed twice; original source and release gates unchanged.** No live cabinet has been archived, deleted, disabled or restored by this follow-up. Production has not changed for this task.
+**SECOND HOST REHEARSAL RUNNING — E7 pair hash-verified; fresh original guard inactive; canonical rehearsal and publish still pending.** No live cabinet has been archived, deleted, disabled or restored by this follow-up. Production has not changed for this task.
 
 Repository: `AMASI-SA/AMASI-SA`.
 Task branch: `codex/inventory-cabinet-archive-20261124`.
@@ -138,3 +138,9 @@ The separate helper `cabinet_archive_release_operator_live_scope.py` is 43,560 b
 The scope exclusion uses the exact slash-delimited Mongo data subtree only. It cannot include sibling files or `mongo.log*` names. The independent log keeps its original prefix through bounded reads with O_NOFOLLOW and stable dev/inode/mode/ownership; truncation, replacement or rotation rejects the run. Non-live inventory/record sets and bytes remain exact. Both lexical and resolved path checks reject overlaps with source changes, adapter cleanup targets, Git metadata and owned stage writes. Root confirmed the live scope is under ignored `.worktrees`, not a nonignored tracked-candidate path, and the actual command has a separate `--dbpath` argument. No original release controls, A/B/D source, tests or CI gates changed.
 
 The latest remote production ref still equals D. E7 is not execution or publication proof. Next: download only this commit's new pair into a new owned /tmp directory, verify exact hashes, run from /app and require fresh original inactive guard, current identities and complete clone/canonical adapter receipts. Preserve v1 and its owned stage. No lease may be prepared until the new canonical rehearsal completes successfully.
+
+## Release checkpoint E8 — fresh scoped run started
+
+Root downloaded the exact E7 pair into owned `/tmp/mezan-cabinet-archive-operator-live-1c_0ba3x`, verified both reviewed SHA-256 values, and executed it once from /app. Its separate owned stage is `/tmp/mezan-cabinet-archive-release-live-e7l6f9wi`. The current receipt reports RUNNING, the fresh original public guard reports active:false, expected tracked-source checks and foreign-inventory enumeration passed, and the initial fingerprint snapshot is in progress. The E7 live-process/root identity checks passed before the stage was created. No lease, publication or live cabinet action has been submitted.
+
+The v1 stage and BLOCKED receipt remain preserved. Observe the existing second process through its `receipt.json`; do not start a duplicate, run a blocking public guard command while its lock is held, or reuse v1 as final rehearsal proof. Next is the successful second owned-clone and canonical /app original adapter receipt, followed by independent receipt review and original prepare/prepublish for one authorized publication.
