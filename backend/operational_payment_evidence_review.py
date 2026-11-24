@@ -19,6 +19,7 @@ PENDING_KEY = "payment_evidence_review_inbox"
 # runtime into the pure review model or disclose a raw third-party exception.
 ALLOWED_REASONS = frozenset({
     "provider_capture_evidence_incomplete",
+    "provider_payment_method_unknown",
     "provider_payment_method_conflict",
     "provider_payment_shape_invalid",
     "provider_payment_currency_conflict",
