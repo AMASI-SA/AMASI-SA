@@ -174,7 +174,8 @@ class SyncComponentSnapshotTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(sync, "call_salla", provider), \
              patch.object(sync, "_now", return_value=end), \
              patch.object(sync, "_enrich_order_receiving_bank", AsyncMock(side_effect=lambda db, owner, raw: raw)), \
-             patch.object(sync, "_refresh_plan_b_status_snapshot", AsyncMock()), \
+             patch.object(sync, "_refresh_plan_b_status_snapshot", AsyncMock(return_value={
+                 "trace_id": "synthetic-component-snapshot", "no_qoyod_send": True})), \
              patch.object(paid_sar_sync, "observe_list_evidence", AsyncMock()), \
              patch.object(governor, "peek", return_value=("allowed", None)), \
              patch.object(sync.asyncio, "sleep", AsyncMock()), \
@@ -219,6 +220,273 @@ class SyncComponentSnapshotTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_manual_clock_recovery_imports_new_order_once_without_stock_work(self):
         await self.assert_native_clock_fallback_repeat_is_noop(manual=True, new=True)
+
+
+    async def _run_installed_completion(self, payload, *, manual=True, broken=False):
+        from datetime import datetime, timedelta, timezone
+        from integrations.qoyod_manual import auto_send
+        from resource_governor import governor
+        installed = sync._refresh_plan_b_status_snapshot
+        self.assertTrue(auto_send._unified_source_patch_installed)
+        self.assertTrue(installed.__qualname__.endswith(".refresh_status_snapshot_complete"))
+        end = datetime(2026, 9, 26, 14, tzinfo=timezone.utc)
+        light = {k: deepcopy(v) for k, v in payload.items() if k != "updated_at"}
+
+        async def provider(_db, owner, method, route, **kwargs):
+            self.assertEqual(owner, "owner")
+            self.assertEqual(method, "GET")
+            if route == "/orders":
+                return {"data": [light], "pagination": {"currentPage": 1, "totalPages": 1}}
+            if route == "/orders/" + payload["id"]:
+                return {"data": deepcopy(payload)}
+            self.assertEqual(route, "/orders/items")
+            return {"data": deepcopy(payload["items"])}
+
+        async def old_four_argument_wrapper(db, owner, number, doc):
+            self.fail("Python must reject the recovery keyword before entering the old wrapper")
+
+        kwargs = ({"from_date": "2026-09-26", "to_date": "2026-09-26",
+                   "recover_missing_order_clock": True} if manual else
+                  {"refresh_window": (end-timedelta(days=1), end), "existing_only": True})
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(sync, "call_salla", provider))
+            stack.enter_context(patch.object(sync, "_now", return_value=end))
+            stack.enter_context(patch.object(sync.asyncio, "sleep", AsyncMock()))
+            stack.enter_context(patch.object(governor, "peek", return_value=("allowed", None)))
+            handoff = stack.enter_context(patch.object(sync, "advance_carrier_handoff_from_salla_status", AsyncMock()))
+            observer = stack.enter_context(patch("accounting_shipping_native_observer.observe_delivery", AsyncMock()))
+            if broken:
+                stack.enter_context(patch.object(sync, "_refresh_plan_b_status_snapshot", old_four_argument_wrapper))
+            result = await sync.run_orders_sync(self.db, "owner", **kwargs)
+            handoff.assert_not_awaited()
+            observer.assert_not_awaited()
+            return result
+
+    async def _assert_committed_source_retry_completes_snapshot(self, *, manual):
+        payload = await self.seed()
+        payload["updated_at"] = "2026-09-26T12:00:10+00:00"
+        protected = ("operational_balance_states_v1", "accounting_journal_groups_v2",
+            "accounting_general_ledger_v2", "accounting_audit_log_v2", "mz2_shipping_accounting_events",
+            "warehouse_location_events", "mezan_preparation_piece_events_v1", "order_activity_events_v2",
+            "mezan_component_prebuilt_claims_v1", "mezan_inventory_receipts_v2", "payment_transactions")
+        before = {name: await self.db[name].find({}).to_list(100) for name in protected}
+        first = await self._run_installed_completion(payload, manual=manual, broken=True)
+        self.assertEqual(first["errors_count"], 1, first)
+        self.assertEqual(first["updated"], 0, first)
+        persisted = await self.db.unified_orders.find_one({"user_id": "owner"})
+        self.assertEqual(persisted["g47_salla_snapshot"]["source_updated_at"],
+                         fulfillment.component_provider_version(payload))
+        self.assertFalse(persisted["g47_salla_snapshot"]["component_pending"])
+        self.assertEqual(await self.db.integration_inbox.count_documents(
+            {"user_id": "owner", "connector_key": "salla_direct_status_resync"}), 0)
+        components = await self.db[fulfillment.COMPONENT_LIFECYCLES].find({}).to_list(100)
+
+        second = await self._run_installed_completion(payload, manual=manual)
+        self.assertEqual(second["errors_count"], 0, second)
+        self.assertEqual(second["unchanged"], 1, second)
+        self.assertEqual(second["updated"], 0, second)
+        snapshot = await self.db.integration_inbox.find_one(
+            {"user_id": "owner", "connector_key": "salla_direct_status_resync"})
+        self.assertTrue(snapshot["no_qoyod_send"])
+        self.assertFalse(snapshot["manual_send_allowed"])
+        self.assertFalse(snapshot["auto_send_allowed"])
+        self.assertEqual(snapshot["canonical_payload"]["order_status"], "completed")
+        third = await self._run_installed_completion(payload, manual=manual)
+        self.assertEqual(third["unchanged"], 1, third)
+        self.assertEqual(third["errors_count"], 0, third)
+        rows = await self.db.integration_inbox.find(
+            {"user_id": "owner", "connector_key": "salla_direct_status_resync"}).to_list(10)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["id"], snapshot["id"])
+        current = await self.db.unified_orders.find_one({"user_id": "owner"})
+        for key in ("raw_by_source", "g47_salla_snapshot", "products", "order_number"):
+            self.assertEqual(current.get(key), persisted.get(key), key)
+        self.assertEqual(await self.db[fulfillment.COMPONENT_LIFECYCLES].find({}).to_list(100), components)
+        self.assertEqual(await self.db.unified_orders.count_documents({"user_id": "owner"}), 1)
+        for name, saved in before.items():
+            self.assertEqual(await self.db[name].find({}).to_list(100), saved, name)
+        await self.assert_inventory_unchanged()
+
+    async def test_manual_installed_wrapper_completes_committed_source_after_keyword_failure(self):
+        await self._assert_committed_source_retry_completes_snapshot(manual=True)
+
+    async def test_scheduled_installed_wrapper_completes_committed_source_after_keyword_failure(self):
+        await self._assert_committed_source_retry_completes_snapshot(manual=False)
+
+    async def test_installed_completion_never_accepts_pending_components_on_replay(self):
+        payload = await self.seed()
+        payload["updated_at"] = "2026-09-26T12:00:10+00:00"
+        payload["items"][0]["quantity"] = 3
+        for _ in range(2):
+            result = await self._run_installed_completion(payload)
+            self.assertEqual(result["errors_count"], 0, result)
+            self.assertEqual(result["pending_component_count"], 1, result)
+            self.assertFalse(result["coverage_complete"], result)
+            current = await self.db.unified_orders.find_one({"user_id": "owner"})
+            self.assertTrue(current["g47_salla_snapshot"]["component_pending"])
+        self.assertEqual(await self.db.integration_inbox.count_documents(
+            {"user_id": "owner", "connector_key": "salla_direct_status_resync"}), 1)
+        await self.assert_inventory_unchanged()
+
+    async def _accepted_completion_result(self):
+        payload = await self.seed()
+        payload["updated_at"] = "2026-09-26T12:00:10+00:00"
+        result = await sync._persist_sync_component_snapshot(
+            self.db, "owner", sync._salla_order_to_doc(payload), payload, existing_only=True)
+        self.assertTrue(result["component_revalidation"]["accepted"], result)
+        return payload, result
+
+    async def test_completion_rechecks_newer_native_source_before_any_snapshot_write(self):
+        from salla_integration.status_snapshot_completion import complete_status_snapshot
+        payload, result = await self._accepted_completion_result()
+        await self.db.unified_orders.update_one({"user_id": "owner"}, {"$inc": {"g47_salla_snapshot.revision": 1},
+            "$set": {"raw_by_source.salla_direct.updated_at": "2026-09-26T12:00:20+00:00",
+                     "g47_salla_snapshot.cancelled": True, "g47_salla_snapshot.component_pending": True}})
+        before = await self.db.unified_orders.find_one({"user_id": "owner"})
+        with self.assertRaisesRegex(ValueError, "source_changed_before_status_completion"):
+            await complete_status_snapshot(self.db, "owner", payload["reference_id"], result)
+        self.assertEqual(await self.db.unified_orders.find_one({"user_id": "owner"}), before)
+        self.assertEqual(await self.db.integration_inbox.count_documents({}), 0)
+
+    async def test_concurrent_newer_source_rolls_back_stale_installed_completion(self):
+        from integrations.qoyod_manual import auto_send
+        from salla_integration.status_snapshot_completion import complete_status_snapshot
+        payload, result = await self._accepted_completion_result()
+        installed = sync._refresh_plan_b_status_snapshot
+        concurrent = {}
+        async def change_after_transaction_read(scoped, owner, number, doc, **kwargs):
+            self.assertFalse(concurrent, "Retried transaction must reject before entering the wrapper")
+            self.assertIs(kwargs["allow_handoff_transition"], False)
+            newer = deepcopy(payload)
+            newer["updated_at"] = "2026-09-26T12:00:20+00:00"
+            newer["status"] = {"slug": "canceled", "name": "canceled"}
+            await self.db.unified_orders.update_one({"user_id": "owner", "order_number": number},
+                {"$inc": {"g47_salla_snapshot.revision": 1}, "$set": {
+                    "raw_by_source.salla_direct": newer, "payment_method": "newer-payment",
+                    "g47_salla_snapshot.source_updated_at": fulfillment.component_provider_version(newer),
+                    "g47_salla_snapshot.cancelled": True, "g47_salla_snapshot.component_pending": True}})
+            concurrent["source"] = await self.db.unified_orders.find_one({"user_id": "owner"})
+            return await installed(scoped, owner, number, doc, **kwargs)
+        with patch.object(sync, "_refresh_plan_b_status_snapshot", change_after_transaction_read):
+            with self.assertRaisesRegex(ValueError, "source_changed_before_status_completion"):
+                await complete_status_snapshot(self.db, "owner", payload["reference_id"], result)
+        self.assertEqual(await self.db.unified_orders.find_one({"user_id": "owner"}), concurrent["source"])
+        self.assertEqual(await self.db.integration_inbox.count_documents({}), 0)
+
+    async def test_completion_cancellation_rolls_back_snapshot_and_payment_enrichment(self):
+        import asyncio
+        from integrations.qoyod_manual import auto_send
+        from salla_integration import status_snapshot_completion as completion
+        payload, result = await self._accepted_completion_result()
+        before = await self.db.unified_orders.find_one({"user_id": "owner"})
+        validator = completion.validate_update
+        async def cancel_unified(*args):
+            allowed = await validator(*args)
+            if args[2] == "unified_orders":
+                raise asyncio.CancelledError()
+            return allowed
+        with patch.object(completion, "validate_update", cancel_unified):
+            with self.assertRaises(asyncio.CancelledError):
+                await completion.complete_status_snapshot(self.db, "owner", payload["reference_id"], result)
+        self.assertEqual(await self.db.unified_orders.find_one({"user_id": "owner"}), before)
+        self.assertEqual(await self.db.integration_inbox.count_documents({}), 0)
+
+    async def test_status_snapshot_profile_denies_other_writes_and_rolls_back(self):
+        from fastapi import HTTPException
+        from operational_atomic import operational_owner
+        from salla_integration.status_snapshot_completion import CONNECTOR, NO_SEND
+        payload, _ = await self._accepted_completion_result()
+        before = await self.db.unified_orders.find_one({"user_id": "owner"})
+        number = payload["reference_id"]
+        identity = f"salla:order:{number}:order.updated:completed"
+        snapshot_query = {"user_id": "owner", "connector_key": CONNECTOR, "idempotency_key": identity}
+        snapshot_values = {
+            "trace_id": "synthetic-denied-trace", "user_id": "owner", "connector_key": CONNECTOR,
+            "idempotency_key": identity, "salla_order_number": number, "source": CONNECTOR,
+            "received_at": "synthetic-time", "updated_at": "synthetic-time",
+            "canonical_payload": {"order_number": number, "order_status": "completed"},
+            "pipeline_stage": "STATUS_SNAPSHOT", **NO_SEND, "salla_direct_status_resync": {},
+        }
+        cases = [
+            ("accounting_general_ledger_v2", {"user_id": "owner"}, {"$set": {"amount": 1}}),
+            (fulfillment.WORKFLOWS, {"user_id": "owner"}, {"$set": {"state": "handed_off"}}),
+            ("unified_orders", {"user_id": "other", "order_number": payload["reference_id"]},
+                {"$set": {"paid_amount": 1}}),
+            ("integration_inbox", {"user_id": "owner", "connector_key": "foreign", "trace_id": "x"},
+                {"$set": {"canonical_payload.paid_amount": 1}}),
+            ("unified_orders", {"user_id": "owner", "order_number": payload["reference_id"]},
+                {"$set": {"g47_salla_snapshot.component_pending": False}}),
+            *[("integration_inbox", snapshot_query, {"$set": snapshot_values, "$setOnInsert": malformed})
+              for malformed in (None, 7, ["id", "created_at"])],
+        ]
+        for name, query, update in cases:
+            with self.subTest(collection=name, query=query):
+                async def attempted(scoped):
+                    await scoped.unified_orders.update_one(
+                        {"user_id": "owner", "order_number": payload["reference_id"]},
+                        {"$set": {"customer_name": "must roll back", "qoyod_live_preflight_source": "salla_order_details"}})
+                    try:
+                        await scoped[name].update_one(query, update)
+                    except HTTPException:
+                        pass  # Catching a refusal must not permit the first write to commit.
+                with self.assertRaises(HTTPException):
+                    await operational_owner(self.db, "owner", attempted, profile="salla_status_snapshot")
+                self.assertEqual(await self.db.unified_orders.find_one({"user_id": "owner"}), before)
+        self.assertEqual(await self.db.integration_inbox.count_documents({}), 0)
+        await self.assert_inventory_unchanged()
+
+
+    async def test_missing_native_status_cannot_claim_read_model_completion(self):
+        from integrations.qoyod_manual import auto_send
+        from salla_integration.status_snapshot_completion import complete_status_snapshot
+        payload = self.source_payload(status="")
+        result = await sync._persist_sync_component_snapshot(
+            self.db, "owner", sync._salla_order_to_doc(payload), payload)
+        before = await self.db.unified_orders.find_one({"user_id": "owner"})
+        with self.assertRaisesRegex(ValueError, "source_status_completion_incomplete"):
+            await complete_status_snapshot(self.db, "owner", payload["reference_id"], result)
+        self.assertEqual(await self.db.unified_orders.find_one({"user_id": "owner"}), before)
+        self.assertEqual(await self.db.integration_inbox.count_documents({}), 0)
+
+    async def test_completion_rechecks_owner_before_entry_and_after_snapshot_writes(self):
+        from fastapi import HTTPException
+        from integrations.qoyod_manual import auto_send
+        from salla_integration.status_snapshot_completion import complete_status_snapshot
+        payload, result = await self._accepted_completion_result()
+        before = await self.db.unified_orders.find_one({"user_id": "owner"})
+        await self.db.users.update_one({"id": "owner"}, {"$set": {"disabled": True}})
+        with self.assertRaises(HTTPException):
+            await complete_status_snapshot(self.db, "owner", payload["reference_id"], result)
+        self.assertEqual(await self.db.integration_inbox.count_documents({}), 0)
+        await self.db.users.update_one({"id": "owner"}, {"$unset": {"disabled": ""}})
+        installed = sync._refresh_plan_b_status_snapshot
+        async def revoke_after_snapshot(scoped, owner, number, doc, **kwargs):
+            snapshot = await installed(scoped, owner, number, doc, **kwargs)
+            await self.db.users.update_one({"id": owner}, {"$set": {"disabled": True}})
+            return snapshot
+        with patch.object(sync, "_refresh_plan_b_status_snapshot", revoke_after_snapshot):
+            with self.assertRaises(HTTPException):
+                await complete_status_snapshot(self.db, "owner", payload["reference_id"], result)
+        self.assertEqual(await self.db.unified_orders.find_one({"user_id": "owner"}), before)
+        self.assertEqual(await self.db.integration_inbox.count_documents({}), 0)
+
+    async def test_unchanged_completion_rejects_new_pending_or_cancellation_fence(self):
+        from salla_integration.status_snapshot_completion import complete_status_snapshot
+        payload, _ = await self._accepted_completion_result()
+        unchanged = await sync._persist_sync_component_snapshot(
+            self.db, "owner", sync._salla_order_to_doc(payload), payload, existing_only=True)
+        self.assertTrue(unchanged.get("unchanged"), unchanged)
+        for flag in ("component_pending", "cancelled"):
+            with self.subTest(flag=flag):
+                await self.db.unified_orders.update_one({"user_id": "owner"},
+                    {"$set": {"g47_salla_snapshot.component_pending": False, "g47_salla_snapshot.cancelled": False}})
+                await self.db.unified_orders.update_one({"user_id": "owner"},
+                    {"$set": {"g47_salla_snapshot." + flag: True}})
+                before = await self.db.unified_orders.find_one({"user_id": "owner"})
+                with self.assertRaisesRegex(ValueError, "source_changed_before_status_completion"):
+                    await complete_status_snapshot(self.db, "owner", payload["reference_id"], unchanged)
+                self.assertEqual(await self.db.unified_orders.find_one({"user_id": "owner"}), before)
+        self.assertEqual(await self.db.integration_inbox.count_documents({}), 0)
 
     async def test_single_resync_cancellation_stays_blocked_without_stock_work(self):
         payload = await self.seed()

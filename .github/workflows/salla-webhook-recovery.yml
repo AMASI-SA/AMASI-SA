@@ -5,6 +5,11 @@ on:
     branches: [hotfix/prod-snap-meta-final]
     paths:
       - 'backend/salla_integration/**'
+      - 'backend/qoyod_auto_unified/**'
+      - 'backend/qoyod_auto_payment_freshness.py'
+      - 'backend/operational_atomic.py'
+      - 'backend/tests/test_qoyod_auto_send_authoritative_payment.py'
+      - 'backend/tests/test_qoyod_auto_send_keyword_forwarding.py'
       - 'backend/orders_db.py'
       - 'backend/product_v2_routes.py'
       - 'backend/background_worker_runtime.py'
@@ -94,6 +99,10 @@ jobs:
             tests/test_salla_manual_sync_serialization.py \
             tests/test_salla_scheduled_reconciliation.py \
             tests/test_salla_sync_component_snapshot.py \
+            tests/test_salla_status_snapshot_runtime.py \
+            tests/test_qoyod_auto_send_authoritative_payment.py \
+            tests/test_qoyod_auto_send_keyword_forwarding.py \
+            tests/test_salla_status_resync_plan_b.py \
             tests/test_salla_orders_sync_pagination_evidence.py \
             tests/test_salla_source_window_repair.py \
             tests/test_salla_raw_snapshot_preservation.py \
@@ -106,7 +115,11 @@ jobs:
           python - <<'PY'
           import xml.etree.ElementTree as ET
           root = ET.parse('../evidence/salla-recovery.xml').getroot()
-          assert len(root.findall('.//testcase')) >= 200, 'Focused acceptance cases did not execute'
+          cases = root.findall('.//testcase')
+          assert len(cases) >= 200, 'Focused acceptance cases did not execute'
+          for module, minimum in [('test_salla_status_snapshot_runtime', 20), ('test_salla_sync_component_snapshot', 34)]:
+              executed = [case for case in cases if module in case.get('classname', '').split('.')]
+              assert len(executed) >= minimum, f'{module}: required runtime cases did not execute'
           assert not root.findall('.//skipped'), 'Real Mongo acceptance must not be skipped'
           assert not root.findall('.//failure') and not root.findall('.//error')
           PY

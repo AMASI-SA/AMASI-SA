@@ -28,7 +28,7 @@
     "Other task branches and worktrees",
     "Pending source admission and manual financial records"
   ],
-  "next_safe_action": "Fetch this WIP into the isolated Emergent worktree, run the three new owned real-Mongo tests and adjacent demand suites; integrate the separately reviewed Salla completion fix and diagnostics.",
+  "next_safe_action": "Fetch this WIP into the isolated Emergent worktree and run the composed normal-import and actual-Mongo transaction suites. Integrate numeric read diagnostics only after separate review. No release freeze or financial source retry until all exact integrated gates pass.",
   "checkpoint_at_utc": "2026-11-24T13:45:53.993907+00:00",
   "integrated_candidates": [
     {
@@ -39,8 +39,26 @@
         "backend/demand_read_jobs.py",
         "backend/tests/test_operational_balance_demand_metadata_reads.py"
       ],
-      "review": "Root and independent static review passed; only three Mongo result projections change. Runtime tests pending.",
-      "runtime_test_count": 3
+      "review": "Root and independent static review passed; actual owned-loopback Mongo regression 3/3 passed (2.75s), adjacent five demand suites 84/84 passed (40.49s), zero skips.",
+      "runtime_test_count": 3,
+      "verification_limit": "Emergent development interpreter dependencies differ from production pins. Exact c3d5030 GitHub checks completed with no failures; final integrated-head CI remains mandatory."
+    },
+    {
+      "name": "source-bound Salla no-send status completion",
+      "patch_sha256": "35d12df25cb45f47b9dc352959a2d73f10e17355125817f6870bb7701bb0901a",
+      "files": [
+        "backend/operational_atomic.py",
+        "backend/qoyod_auto_unified/installer.py",
+        "backend/qoyod_auto_unified/live_source.py",
+        "backend/salla_integration/status_snapshot_completion.py",
+        "backend/salla_integration/sync.py",
+        "backend/tests/test_salla_scheduled_reconciliation.py",
+        "backend/tests/test_salla_source_window_repair.py",
+        "backend/tests/test_salla_status_snapshot_runtime.py",
+        "backend/tests/test_salla_sync_component_snapshot.py"
+      ],
+      "review": "Independent frozen static/adversarial review passed. Baseline composition reproduced five keyword failures; corrected composition passed six cases.",
+      "runtime_acceptance": "Pending normal installed bootstrap 20 cases, component transaction 34 cases and adjacent suites on owned Mongo. Existing Salla CI selection and no-skip gates strengthened."
     }
   ]
 }

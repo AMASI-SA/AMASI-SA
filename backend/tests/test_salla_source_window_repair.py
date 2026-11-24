@@ -47,6 +47,9 @@ async def harness(monkeypatch, *, details=None, known=True):
     monkeypatch.setattr(sync, "_salla_order_to_doc", lambda raw: {"order_number": raw["reference_id"]})
     monkeypatch.setattr(sync, "_enrich_order_receiving_bank", AsyncMock(side_effect=lambda db, owner, raw: raw))
     monkeypatch.setattr(sync, "_refresh_plan_b_status_snapshot", status)
+    async def complete(db_, owner, reference, result):
+        return await status(db_, owner, reference, {}, allow_handoff_transition=False)
+    monkeypatch.setattr(sync, "_complete_status_snapshot", complete)
     monkeypatch.setattr(paid_sar_sync, "observe_list_evidence", AsyncMock())
     monkeypatch.setattr(governor, "peek", lambda: ("allowed", None))
     monkeypatch.setattr(sync.asyncio, "sleep", AsyncMock())

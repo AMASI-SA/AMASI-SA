@@ -45,6 +45,7 @@ _PROFILES = {
     }),
     "physical_receipt": frozenset({"warehouse_locations", "mezan_inventory_receipts_v2", "warehouse_location_events"}),
     "fulfillment": _OWNED | {"warehouse_locations", "mezan_inventory_receipts_v2", "products", "payment_transactions", "tamara_attribution_log", "order_review_auth_sessions_v2"},
+    "salla_status_snapshot": frozenset({"unified_orders", "integration_inbox"}),
     "employee_setup": frozenset({
         "mezan_employees_v2", "mezan_employee_salary_contracts_v2",
         "mezan_employee_events_v2",
@@ -363,6 +364,8 @@ class _Collection:
                     _reject(self.__state, "operational_review_session_scope_conflict")
                 # A caller cannot backdate this fence to reuse an expired row.
                 args = ({**query, "expires_at": {"$gt": max(cutoff, datetime.now(timezone.utc))}}, args[1])
+            if self.__state["profile"] == "salla_status_snapshot" and (method != "update_one" or len(args) != 2):
+                _reject(self.__state)
             if self.__state["profile"] == "driver_cash_reconciliation" and method != "insert_one":
                 _reject(self.__state)
             if self.__state["profile"] == "driver_late_delivery_evidence" and method != "insert_one":
@@ -601,6 +604,11 @@ class _Collection:
             _reject(self.__state)
 
     async def _update(self, name, query, update, kwargs):
+        if self.__state["profile"] == "salla_status_snapshot":
+            from salla_integration.status_snapshot_completion import validate_update
+            if not await validate_update(self.__state["db"], self.__owner, name, query, update, kwargs):
+                _reject(self.__state)
+            return
         if self.__state["profile"] == "bundle_supplier_adoption":
             from bundle_supplier_adoption import validate_adoption_update
             if kwargs or not await validate_adoption_update(self.__state["db"], self.__owner, name, query, update):
