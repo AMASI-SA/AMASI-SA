@@ -43,6 +43,11 @@ def normalized_webhook_capture(event, *, as_of=None):
     from operational_payment_evidence import normalize_payment
     as_of = as_of or datetime.now(timezone.utc).isoformat()
     normalized, diagnostics = normalize_payment(raw, currency, total, created, as_of)
+    # The canonical provider recognition policy requires that a financial
+    # capture follows the source order's ORIGINAL creation instant. Retain
+    # that trusted clock (never substituted by webhook arrival or order update).
+    if isinstance(normalized, dict):
+        normalized = {**normalized, "order_created_at": created}
     return (order_id, normalized, diagnostics)
 
 
