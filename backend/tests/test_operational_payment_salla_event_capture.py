@@ -4,7 +4,7 @@ import os
 import sys
 import types
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, AsyncMock
 
 from operational_payment_salla_event_capture import (
     FLAG, enabled, normalized_webhook_capture, stage_verified_payment_update,
@@ -62,10 +62,14 @@ class SallaEventCaptureTests(unittest.TestCase):
         self.assertIsNone(normalized_webhook_capture({"event":"order.payment.updated", "data":{}}))
 
     def test_enabled_incomplete_proof_no_money(self):
+        review = types.ModuleType("operational_payment_evidence_review")
+        review.stage_unverified_review = AsyncMock(return_value={"status":"pending_evidence"})
         with patch.dict(os.environ, {FLAG:"1"}):
             with patch("operational_payment_salla_event_capture.normalized_webhook_capture",
                        return_value=("o1", {"provider":"tabby","captures":[]}, [])):
-                self.assertTrue(asyncio.run(stage_verified_payment_update(None, source_item())))
+                with patch.dict(sys.modules, {"operational_payment_evidence_review":review}):
+                    self.assertTrue(asyncio.run(stage_verified_payment_update(None, source_item())))
+        review.stage_unverified_review.assert_awaited_once()
 
     def test_enabled_staging_invoked_once_for_complete_capture(self):
         calls = []
