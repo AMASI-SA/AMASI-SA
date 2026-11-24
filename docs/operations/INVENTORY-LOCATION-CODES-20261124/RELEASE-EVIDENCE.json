@@ -1,5 +1,5 @@
 {
-  "observed_at_utc": "2026-11-24T19:03:30Z",
+  "observed_at_utc": "2026-11-24T19:06:00Z",
   "scope": "private source-A2 focused tests, bootstrap two-clean-build, original verifier, external freeze and candidate validation only",
   "repo_root": "/workspace/scratch/021675d08c11/location-codes-release/bootstrap",
   "source_git_sha": "a611477be8d52b18f9ad851f44facf9c78be2905",
@@ -363,7 +363,7 @@
   ],
   "out_of_scope_actions_performed": [],
   "task_id": "INVENTORY-LOCATION-CODES-20261124",
-  "state": "PACK_PREPARATION_TEMP_LOCATION_FIXED_REVIEWED",
+  "state": "PACK_PREPARATION_PASS_CAPACITY_APPLY_REVIEWED",
   "release_branch": "codex/inventory-location-short-codes-release2-20261124",
   "evidence_branch": "codex/inventory-location-codes-evidence-20261124",
   "pr": 2113,
@@ -434,7 +434,7 @@
   "live_cabinet_creation_or_deletion": false,
   "own_lease_created": false,
   "publication_authorized": true,
-  "next_safe_action": "Stage/run corrected 33351c helper in private /tmp, review actual PASS/space gain, then independently reviewed capacity APPLY and original /app canonical rehearsal. No source/intent/CI changes.",
+  "next_safe_action": "Run reviewed capacity APPLY once after exact staging; inspect actual space and PASS. Then original canonical /app recovery rehearsal and review, own prepare/prepublish, authorized Republish, newer platform success, original three-probe verify, live form preview/cancel.",
   "normal_tracked_B2_validation": {
     "observed_at_utc": "2026-11-24T17:04:06.170883+00:00",
     "started_at_utc": "2026-11-24T17:04:03.508062+00:00",
@@ -1697,7 +1697,7 @@
     "actual_space_gain": "not yet measured"
   },
   "pack_preparation": {
-    "state": "CORRECTED_HELPER_INDEPENDENT_REVIEW_PASS_NOT_EXECUTED",
+    "state": "PASS",
     "helper": {
       "path": "docs/operations/INVENTORY-LOCATION-CODES-20261124/operators/pr2113_prepare_loose_pack.py",
       "bytes": 21425,
@@ -1753,6 +1753,62 @@
       "status": "PASS",
       "reviewer": "numbering_release_review/b_ci_review",
       "method": "Exact diff and Git v2.39.5 primary source verification: temporary writes follow private --git-dir; source alternate reads do not freshen objects. AST passed."
+    },
+    "execution": {
+      "status": "PASS",
+      "task": "PR2113_prepare_loose_pack",
+      "stage": "/tmp/mezan-pr2113-pack-hcsmx8wl",
+      "started_at_utc": "2026-11-24T19:04:53Z",
+      "receipt": {
+        "bytes": 2337,
+        "sha256": "27e0888953903d71320ca0f9fce802636a0dc426f00bc6516c36837f9690403e"
+      },
+      "helper_sha256": "33351c1bce52e9c9a0463131806505363290a83b9de6df30440893e2f190270b",
+      "before_snapshot_sha256": "63781da811ce69f503ffd4e1e026f7e9317c15c81e8ea2b1241963a87e3bb1e3",
+      "after_snapshot_sha256": "63781da811ce69f503ffd4e1e026f7e9317c15c81e8ea2b1241963a87e3bb1e3",
+      "logical_object_count": 82750,
+      "object_count": 5760,
+      "loose_allocated_bytes": 117936128,
+      "estimated_gain_bytes": 104968192,
+      "pack": {
+        "hash": "c1353d8e6a0a6caf52480432ddbad5e01e17df48",
+        "pack_bytes": 12797333,
+        "pack_sha256": "a4a5878af734e372aa3ca30d35fb0372154cac92fa7a47d463afac96010ed53e",
+        "index_bytes": 162352,
+        "index_sha256": "98b654b021a1a29877029c6fc4b93e519f3e0211bbca3503eaef7806106ac6ad"
+      },
+      "isolated_logical_proof": {
+        "alternates": false,
+        "only_new_pack_pair": true,
+        "logical_types_and_sizes_match": true,
+        "object_count": 5760,
+        "inventory_sha256": "680fbe82dca8baf313fe63df1377d55ff1dcd4a794460c8ba3afedac8252af13"
+      },
+      "private_packing_scope": {
+        "git_directory": "/tmp/mezan-pr2113-pack-hcsmx8wl/packing.git",
+        "primary_object_directory": "/tmp/mezan-pr2113-pack-hcsmx8wl/packing.git/objects",
+        "read_only_alternate": "/app/.git/objects",
+        "pack_and_index_temporary_files_confined_to_private_database": true
+      },
+      "app_writes": false,
+      "objects_deleted": false,
+      "pack_installed": false
     }
+  },
+  "capacity_apply": {
+    "state": "INDEPENDENT_REVIEW_PASS_NOT_EXECUTED",
+    "helper": {
+      "path": "docs/operations/INVENTORY-LOCATION-CODES-20261124/operators/pr2113_apply_capacity.py",
+      "bytes": 26580,
+      "sha256": "2226db71ad93d7819ecee3480178d0618cd93c58a9975e088bb100b8abfdf080",
+      "git_blob": "d1f9ec57921f96a4720b4d7aedbb1fb6c36dc8a7"
+    },
+    "reviewer": "numbering_release_review",
+    "scope": "Only archived owned failed partial and durably archived original raw backup; new keep-protected verified pack; exact reviewed duplicate loose pruning. Full logical objects/refs/metadata/old packs/foreign paths retained. No build/fetch/reset/gc/publication.",
+    "arguments": [
+      "/tmp/mezan-pr2113-pack-hcsmx8wl",
+      "27e0888953903d71320ca0f9fce802636a0dc426f00bc6516c36837f9690403e",
+      "/tmp/mezan-pr2113-capacity-operator-4qx59frr/pr2113_prepare_capacity_archives.py"
+    ]
   }
 }
