@@ -56,6 +56,11 @@ class PaymentReviewInboxTests(unittest.TestCase):
         self.assertEqual(result["status"], "pending_evidence")
         self.assertNotIn("movements", state)
 
+    def test_unknown_method_diagnostic_is_preserved_without_raw_details(self):
+        record = self.record(provider="unknown",
+                             reasons=["provider_payment_method_unknown"])
+        self.assertEqual(record["reason_codes"], ["provider_payment_method_unknown"])
+
     def test_unrecognized_provider_fails_closed(self):
         with self.assertRaises(ValueError):
             self.record(provider="cash_on_delivery")
