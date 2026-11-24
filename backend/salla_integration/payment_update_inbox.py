@@ -39,6 +39,13 @@ async def enqueue_verified_payment(db, event):
 async def _apply(db, item):
     if await _resolve_user_id(db, item["merchant_id"]) != item["user_id"]:
         return "paused"
+    # order.created enters this inbox ONLY after the signed canonical order
+    # handler has persisted (or classified stale) its snapshot. Do not replay
+    # that full sync from the evidence worker: it may re-run fulfillment and
+    # create unnecessary work. The proof stage itself is idempotent.
+    if item["event"].get("event") == "order.created":
+        from operational_payment_salla_event_capture import stage_verified_payment_update
+        return "done" if await stage_verified_payment_update(db, item) else "pending"
     result = await sync_order_from_verified_webhook(db, item["event"])
     if result.get("synced") or result.get("reason") == "stale_salla_snapshot":
         # A signed payment event may supply original capture proof even when
