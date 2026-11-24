@@ -18,7 +18,14 @@
     "Operational report latency remains material; metadata reads can unnecessarily return stale large headers."
   ],
   "verification": {
-    "before_branch_creation": "Original guard inactive; shared tracked tree clean; fetched production branch and shared HEAD equal exact base; no active publication observed."
+    "before_branch_creation": "Original guard inactive; shared tracked tree clean; fetched production branch and shared HEAD equal exact base; no active publication observed.",
+    "b11_adjacent": {
+      "passed": 206,
+      "failed": 2,
+      "seconds": 57.43,
+      "completed_at_utc": "2026-11-24T14:42:59.191287+00:00",
+      "cause": "Partial mocked make_spec omitted owner_id/actor_id; encoder tests did not reach encoder. No assertion weakened."
+    }
   },
   "production_changed_by_this_followup": false,
   "financial_recovery_claim": false,
@@ -28,7 +35,7 @@
     "Other task branches and worktrees",
     "Pending source admission and manual financial records"
   ],
-  "next_safe_action": "Fetch this integrated WIP into the isolated Emergent worktree; execute diagnostics HTTP/child/Mongo tests and affected demand/report-copy/encoding suites. Require final exact-head CI, then freeze source A and an intent-only B through the unchanged governed release protocol.",
+  "next_safe_action": "Execute same-view eight-case real-Mongo suite plus all208 affected tests with realistic fixture; complete bounded legacy cost/inventory candidate reviews. No release A/B frozen yet.",
   "checkpoint_at_utc": "2026-11-24T13:45:53.993907+00:00",
   "integrated_candidates": [
     {
@@ -62,7 +69,7 @@
     },
     {
       "name": "bounded numeric owner read diagnostics",
-      "patch_sha256": "b4b205f66a6fea2cd0a7fe1f7da7d04a0d3263575d5cd58c6dbb7e946c130999",
+      "patch_sha256": "1ba3bbf3ba3fd23ed1f37d2aeb459d1c83f7f36b5e9d333d4ea40c4b179b3730",
       "files": [
         "backend/demand_read_diagnostics.py",
         "backend/demand_read_jobs.py",
@@ -77,9 +84,20 @@
         "backend/tests/test_operational_balance_owner_read_diagnostics.py"
       ],
       "review": "Root and independent static review passed; all11 hashes bound. Independent20 assertions and two real-driver stalled-socket checks passed. Actual production AcceptanceConfigDatabase route chain confirmed.",
-      "runtime_acceptance": "New diagnostic execution is underway; both preserved original and renamed new suites must pass together before release.",
+      "runtime_acceptance": "New21 diagnostic cases passed alone in Emergent. b11 direct affected combined run:206 passed,2 failed because existing mocked spec omitted required owner/actor keys before encoding. One-line fixture correction preserves all revocation/disconnect assertions; combined rerun remains mandatory.",
       "limits": "The 200ms driver deadline is not a strict wall-clock ceiling; independent joined socket observations were about504ms. Telemetry does not itself repair cold report latency.",
       "integration_correction": "Release review caught a test filename collision in WIP3ae42e3a. Restore the pre-existing 13-case primary-source diagnostic suite byte-for-byte from633a; retain all21 new owner-trace cases in a distinct, verified-absent module. All10 reviewed runtime files remain unchanged. Both suites stay selected by existing CI globs."
+    },
+    {
+      "name": "identical same-view snapshot binding",
+      "patch_sha256": "5be1002cbdc208f3006dfed881153809757e6d42db7c286fb8489b47f308bca7",
+      "files": [
+        "backend/operational_workspace_read_builders.py",
+        "backend/tests/test_operational_balance_report_demand_binding.py"
+      ],
+      "review": "Root and independent static review passed. Nine runtime lines canonicalize only already validated complete active same-view anchors, after mandatory forecast/supplied-anchor checks; no source/scope/permission widening.",
+      "runtime_acceptance": "Eight new real-Mongo/HTTP cases plus adjacent suites pending actual execution.",
+      "limits": "Avoids a duplicate unanchored-to-bound job for an identical view. Does not fix cold different-view computation by itself."
     }
   ]
 }

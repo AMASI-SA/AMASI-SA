@@ -240,6 +240,15 @@ async def make_spec(db, principal, request, family, *, filters=None, resource=No
         from operational_financial_position_state import require_snapshot_binding
         require_snapshot_binding(header, revision=filters.get("expected_revision"),
             as_of=filters.get("expected_as_of"), started_at=filters.get("expected_started_at"))
+    if (family == "operational_report" and header.get("status") == "active"
+            and isinstance(header.get("started_at"), str) and header["started_at"]
+            and isinstance(header.get("engine", {}).get("as_of"), str) and header["engine"]["as_of"]):
+        # Supplied anchors (and forecast's mandatory anchors) were checked above.
+        # The same validated snapshot/view has one descriptor, whether its
+        # caller already knew those anchors or acquired them on its first read.
+        filters = {**filters, "expected_revision": header["revision"],
+                   "expected_as_of": header["engine"]["as_of"],
+                   "expected_started_at": header["started_at"]}
     spec = {"schema": 1, "family": family, "owner_id": owner, "actor_id": actor["id"],
         "client_kind": "mobile" if principal.get("_session_client") == "amasi_mobile" or principal.get("_mobile_actor_id") else "web",
         "request": {"path": request.url.path, "method": "GET", "query": dict(filters)},

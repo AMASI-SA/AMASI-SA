@@ -129,7 +129,7 @@ def ready_route(monkeypatch, *, authorize):
     request = Request()
     request.headers = {}
     async def make_spec(*args, **kwargs):
-        return {'source_revision': {'revision': 7}}
+        return {'owner_id': 'owner', 'actor_id': 'owner', 'source_revision': {'revision': 7}}
     async def read_ready(*args, **kwargs):
         return {'total': 0, 'items': None, 'header': {'private': 'authorized-owner-only'},
                 'snapshot': 'saved-generation', 'generated_at': '2026-11-24T12:00:00+00:00'}
