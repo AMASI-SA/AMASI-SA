@@ -1,7 +1,7 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter, Link, Route, Routes } from 'react-router-dom';
-import ApprovedReports from './ApprovedReports';
+import ApprovedReports, { REPORT_TABS } from './ApprovedReports';
 import { operationalApi } from './api';
 
 jest.mock('react-router-dom',()=>{global.TextEncoder=require('util').TextEncoder;return jest.requireActual('react-router');});
@@ -351,5 +351,23 @@ it('leaves a pending financial report immediately and ignores its late response'
   await act(async()=>resolveRead(snapshot('summary')));
   expect(host.textContent).toContain('الصفحة التالية جاهزة');
   expect(host.textContent).not.toContain('1,234.56');
+  expect(operationalApi.refreshBalances).not.toHaveBeenCalled();
+});
+
+it('navigates all twelve report tabs without triggering source refresh or leaking stale rows',async()=>{
+  await show();
+  expect(REPORT_TABS).toHaveLength(12);
+  for(const [key,label,view] of REPORT_TABS){
+    await tab(label);
+    const active = host.querySelector('.report-tabs [aria-current=page]');
+    expect(active).not.toBeNull();
+    expect(active.textContent).toBe(label);
+    expect(host.querySelector('[role=alert]')).toBeNull();
+    // A report tab may reuse its already verified summary but must not
+    // start an operational source reconciliation or financial write.
+    expect(operationalApi.refreshBalances).not.toHaveBeenCalled();
+    if(view !== 'summary') expect(host.querySelector('[data-testid=report-table-cod_expected]')).not.toBeNull();
+  }
+  expect(operationalApi.financialPosition.mock.calls.length).toBeGreaterThanOrEqual(9);
   expect(operationalApi.refreshBalances).not.toHaveBeenCalled();
 });
