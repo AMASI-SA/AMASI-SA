@@ -19,7 +19,7 @@ def enabled():
 
 def normalized_webhook_capture(event, *, as_of=None):
     """Conservative adapter; no inference from order status or totals alone."""
-    if not isinstance(event, dict) or event.get("event") != "order.payment.updated":
+    if not isinstance(event, dict) or event.get("event") not in {"order.created", "order.payment.updated"}:
         return None
     raw = event.get("data")
     if not isinstance(raw, dict):
