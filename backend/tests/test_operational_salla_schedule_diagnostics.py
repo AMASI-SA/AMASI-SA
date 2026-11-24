@@ -47,6 +47,34 @@ class ScheduleDiagnosticsTests(unittest.TestCase):
         result=diagnose_salla_daily_cycle(row(status="partial"),now=NOW)
         self.assertEqual(result["state"],"failed")
 
+    def test_partial_due_to_missing_modified_since_is_not_outage_or_success(self):
+        result=diagnose_salla_daily_cycle(row(
+            status="partial",
+            last_result={
+                "errors_count":0, "incomplete_count":0, "truncated":False,
+                "coverage_complete":False,
+                "coverage_reason":"provider_modified_since_filter_unavailable",
+                "discovery":"recent_creations_and_verified_local_source_activity",
+                "raw_order_ids":["PRIVATE"],
+            }),now=NOW)
+        self.assertEqual(result["state"],"partial_coverage")
+        self.assertEqual(result["reason"],"salla_modified_history_coverage_unprovable")
+        self.assertEqual(result["coverage_limitation"],
+                         "provider_modified_since_filter_unavailable")
+        self.assertFalse(result["eligible_for_financial_posting"])
+        self.assertNotIn("PRIVATE",str(result))
+
+    def test_unknown_provider_error_does_not_claim_coverage_limitation(self):
+        result=diagnose_salla_daily_cycle(row(
+            status="failed",
+            last_result={
+                "errors_count":7, "incomplete_count":4, "truncated":False,
+                "coverage_complete":False, "coverage_reason":"sensitive_private_error",
+                "discovery":"another",
+            }),now=NOW)
+        self.assertEqual(result["state"],"failed")
+        self.assertIsNone(result["coverage_limitation"])
+
     def test_unknown_exception_details_are_never_returned(self):
         record=row(status="failed",last_error_type="secret://salla-token",
                    log_id="private-log", merchant_id="private", last_result={
