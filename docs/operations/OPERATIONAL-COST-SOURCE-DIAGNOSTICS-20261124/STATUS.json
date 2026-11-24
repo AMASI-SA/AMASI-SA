@@ -1,6 +1,6 @@
 {
   "task_id": "OPERATIONAL-COST-SOURCE-DIAGNOSTICS-20261124",
-  "status": "WIP: local diagnostic-only checkpoint tested; independent review pending before push",
+  "status": "WIP: reviewed diagnostic-only source; release verification and runtime observation remain root-owned",
   "repository": "AMASI-SA/AMASI-SA",
   "task_branch": "codex/operational-cost-source-diagnostics-20261124",
   "source_base_commit": "20fc28f3432a78996f1d70f3356a38bd78b0309e",
@@ -43,12 +43,26 @@
       "kind": "whitespace",
       "command": "git diff --check",
       "exit_code": 0
+    },
+    {
+      "kind": "independent_focused_validation",
+      "reviewed_local_commit": "6f8b1bddfffb4acc57b9aff05b722ee4ca8891d6",
+      "reviewed_local_tree": "08fa6895962cc9b7f23ed4b98c371081d2f3fc3a",
+      "command": "PYTHONPATH=backend:backend/tests PYTHON_DOTENV_DISABLED=1 python -B -m pytest --noconftest -p no:cacheprovider -q backend/tests/test_operational_balance_cost_source_diagnostics.py --tb=short",
+      "exit_code": 0,
+      "result": "Independent reviewer observed 22 passed in 1.71 seconds, zero skips, and confirmed the exact three runtime/test blobs. No blocker. Only this status document changed after the reviewed source checkpoint."
+    },
+    {
+      "kind": "independent_actual_router_parity",
+      "reviewed_local_commit": "6f8b1bddfffb4acc57b9aff05b722ee4ca8891d6",
+      "exit_code": 0,
+      "result": "A second reviewer compared base M2 and the candidate in memory through make_operational_balance_router, native/page guards, run_visible_report_read and SnapshotReadCache, using ReadOnlyDB. Both returned identical 500 status, Internal Server Error body and text/plain;charset=utf-8 content type, made identical reads and preserved exception identity/args/string. No data writes, remaining tasks or cache entries; only the candidate emitted the safe note/warning. Private fixture absent. Python 3.12.14, 4.43 seconds; no blocker."
     }
   ],
-  "review_state": "Root reviewed the runtime diff with no visible blocker; independent review of this exact local checkpoint is pending before push.",
-  "ci_state": "Not pushed; this source has no CI evidence yet. Earlier M2 checks are base evidence only.",
+  "review_state": "Two independent reviews passed on the exact local runtime/test blobs and checkpoint recorded above. Root reviewed the runtime diff. This final status update changes no runtime or tests; the Draft PR links the canonical remote SHA/tree.",
+  "ci_state": "No current-source CI result is claimed in this checkpoint; the Draft PR records later checks. Earlier M2 checks are base evidence only.",
   "merge_state": "Not merged; root exclusively integrates",
-  "release_state": "No new intent, release lease, production file changes or publication by this task. Root is publishing the previously reviewed M2 release separately.",
+  "release_state": "No new intent, release lease, production file changes or publication by this task. Root handles the previously reviewed M2 release separately.",
   "production_changed": false,
   "limitations": [
     "The collection which caused the observed production timeout remains unknown until a matching failure emits the new diagnostic.",
@@ -57,5 +71,5 @@
     "No runtime latency reduction, source completeness or financial recovery is claimed.",
     "Issue 1006 has reached its comment limit; this task status and the forthcoming Draft PR are the recoverable ledger."
   ],
-  "next_safe_action": "Obtain independent review on the exact local SHA/tree, then push only the isolated task branch and open a Draft PR. Before any future freeze, root must recheck the actual published base, active release lease, exact source/intent identity and required CI. No merge or release action belongs to this agent."
+  "next_safe_action": "Push only the reviewed isolated task branch and open a Draft PR with exact canonical source/tree and review linkage. Before any future freeze, root must recheck the actual published base, active release lease, exact source/intent identity and required CI. No merge or release action belongs to this agent."
 }
