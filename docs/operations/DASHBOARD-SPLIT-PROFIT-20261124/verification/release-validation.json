@@ -1,0 +1,163 @@
+{
+  "schema_version": 1,
+  "task": "DASHBOARD-SPLIT-PROFIT-20261124",
+  "checkpoint": "E2",
+  "previous_evidence_commit": "e71a46281a4d61c5235abf1a8ba26f8c5dad3a97",
+  "source_git_sha": "10bb33957c8c2994814a76ba5feed1182336ebda",
+  "source_base_git_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+  "intent_git_sha": "c3fd1d1a4e3e7fc590b1f5b82d1bf0a091c54bf7",
+  "intent_git_tree": "fa0f36e01d3c3a706a0cbdb23aa1cfcd0b8f09a1",
+  "intent_parent_git_sha": "10bb33957c8c2994814a76ba5feed1182336ebda",
+  "intent_changed_paths": [
+    "release/release-intent-v5.json"
+  ],
+  "release_id": "rg5-71a053d9aff1c8c4dec4f5b5e9171630b8c53bf6fea6d3516427bd7836c4ba9c",
+  "intent_bytes": 1531723,
+  "intent_sha256": "0140731cf2c829fcae31c4901e4385ce043982473ca682337c1fbc2a825365c5",
+  "intent_git_blob": "c806310a8e7666aa2bbf96a36dc1ae984309425f",
+  "frontend_artifact_tree_sha256": "3c51000b2a0c0f86bb01a5d29726170c47137db286a82d4a49a7cc19580f7690",
+  "frontend_reproducibility_proof_sha256": "ce4f71126eb00c1df3af1c40c8ab00ec10e5b0deaa770be4e33703386e0fb1b7",
+  "build_meta_sha256": "cbc7262feade041d99916e13d2a51a6fe13791aa50e935793f843df335f40db1",
+  "toolchain": {
+    "node": "22.23.2",
+    "yarn": "1.22.22",
+    "vite": "8.2.4"
+  },
+  "clean_build_passes": 2,
+  "retained_pass": 2,
+  "verification_commands": [
+    {
+      "check": "governed_source_build",
+      "entrypoint": [
+        "yarn",
+        "--cwd",
+        "frontend",
+        "build:release"
+      ],
+      "toolchain_entrypoint": "scripts/frontend_release_toolchain.py exec",
+      "exit_code": 0,
+      "exit_evidence": "coordinator-observed process result; successful completion and both identity digests independently read from build log"
+    },
+    {
+      "check": "source_frontend_verification",
+      "entrypoint": [
+        "scripts/verify_frontend_build.py",
+        "--expected-git-sha",
+        "10bb33957c8c2994814a76ba5feed1182336ebda"
+      ],
+      "exit_code": 0,
+      "exit_evidence": "coordinator-observed process result; resulting full contract independently compared with tracked B"
+    },
+    {
+      "check": "freeze_intent",
+      "entrypoint": [
+        "scripts/emergent_deployment_adapter.py",
+        "freeze-intent"
+      ],
+      "arguments": {
+        "source_git_sha": "10bb33957c8c2994814a76ba5feed1182336ebda",
+        "source_base_git_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+        "branch": "hotfix/prod-snap-meta-final",
+        "output_basename": "profit-a3-intent-v5.json"
+      },
+      "exit_code": 0,
+      "exit_evidence": "coordinator-observed process result; frozen output bytes independently matched to tracked B"
+    },
+    {
+      "check": "original_external_candidate_validation",
+      "function": "scripts.emergent_deployment_adapter.load_candidate_release_intent",
+      "arguments": {
+        "path_basename": "profit-a3-intent-v5.json",
+        "source_git_sha": "10bb33957c8c2994814a76ba5feed1182336ebda",
+        "source_base_git_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b"
+      },
+      "python_flags": [
+        "-B"
+      ],
+      "exit_code": 0,
+      "exit_evidence": "validation owner reported original read-only invocation; tool session 84546, final chunk 034953; no standalone archived log"
+    },
+    {
+      "check": "original_B_reviewed_intent_verification",
+      "argv": [
+        "python",
+        "-B",
+        "scripts/frontend_release_toolchain.py",
+        "exec",
+        "--",
+        "python",
+        "-B",
+        "scripts/verify_frontend_build.py",
+        "--expected-git-sha",
+        "10bb33957c8c2994814a76ba5feed1182336ebda",
+        "--reviewed-intent-v5"
+      ],
+      "cwd": "repository root",
+      "required_public_environment": {
+        "PYTHONOPTIMIZE": "0",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "REACT_APP_BACKEND_URL": "https://mezansalla.com"
+      },
+      "exit_code": 0,
+      "exit_evidence": "coordinator-observed process result; full output independently matches both source verification and tracked B"
+    }
+  ],
+  "verification_details": "Command entrypoints and substantive arguments are retained; private cache, interpreter installation and output directory paths are omitted.",
+  "independent_content_checks": {
+    "source_and_B_verification_bytes_identical": true,
+    "full_frontend_and_proof_contracts_match_tracked_B": true,
+    "two_pass_artifacts_and_build_meta_identical": true,
+    "frozen_output_bytes_match_tracked_B": true,
+    "remote_B_is_one_intent_only_commit_after_A3": true,
+    "immutable_B_object_sha_tree_and_parent_verified": true
+  },
+  "independent_packet_review": {
+    "status": "PASS",
+    "exit_code": 0,
+    "provenance": "independent reviewer result reported by coordinator",
+    "read_only": true,
+    "governed_source_records": 3138,
+    "frontend_source_records": 1450,
+    "backend_source_records": 1359,
+    "release_control_records": 329,
+    "critical_hashes": 6,
+    "artifact_files_excluding_build_meta": 383,
+    "public_files": 381,
+    "exact_build_meta_verified": true,
+    "two_proof_passes_verified": true,
+    "runtime_identity_rederived": true,
+    "J_to_A3_full_history_intent_unchanged": true
+  },
+  "input_evidence": [
+    {
+      "basename": "profit-a3-source-build.log",
+      "bytes": 71987,
+      "sha256": "f4622226f5deb800e536b8fa9b3091c5e962d664523d51b939e6034073b95e51",
+      "retained_here": false
+    },
+    {
+      "basename": "profit-a3-source-verification.json",
+      "bytes": 134106,
+      "sha256": "8e6dfe2376549b72074d22db684956522d857c65be927e9ad0922dabef5380c0",
+      "retained_here": false
+    },
+    {
+      "basename": "profit-b-reviewed-verification.json",
+      "bytes": 134106,
+      "sha256": "8e6dfe2376549b72074d22db684956522d857c65be927e9ad0922dabef5380c0",
+      "retained_here": false
+    }
+  ],
+  "release_state_at_coordinator_checkpoint": {
+    "pull_request": 2122,
+    "draft": false,
+    "exact_B_final_CI": "running; all-green not claimed",
+    "merged": false,
+    "shared_host_touched_by_this_task": false,
+    "lease_created_by_this_task": false,
+    "published_by_this_task": false,
+    "execution_envelope_created": false,
+    "prior_publisher": "PR2120 E5 stopped on FOREIGN_ENTRY_CHANGED; its owner is resolving preserved state"
+  },
+  "production_changed_by_this_evidence_work": false
+}

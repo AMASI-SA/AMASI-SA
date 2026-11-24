@@ -404,3 +404,59 @@ remaining prerequisites and mandatory invocation. Root owns the PR and Issue
 #1006 continuation-ledger updates. Production changed by this evidence work:
 **no**. No source-checkout edit, release-branch update, PR metadata change,
 merge, host action, lease, publication, sync or accounting write is included.
+
+## Build and intent checkpoint E2 — 25 November 2026, Asia/Riyadh
+
+This checkpoint extends evidence commit
+`e71a46281a4d61c5235abf1a8ba26f8c5dad3a97` on the same separate evidence branch;
+it does not rewrite E1 or change the release source/intent branch. The pending
+build/B statements in the preceding E1 checkpoint and operator README describe
+that earlier milestone and are superseded by the results below.
+
+The governed A3 two-pass build, source verification, external intent freeze,
+original candidate validation and B reviewed-intent frontend verification
+completed successfully, exit 0. The unchanged pinned toolchain was Node
+22.23.2 and Yarn 1.22.22. The compact record is
+`verification/release-validation.json`; full verifier manifests are not copied
+into this evidence checkpoint.
+
+- Source A3: `10bb33957c8c2994814a76ba5feed1182336ebda`.
+- Source base J: `f199a471f8bc6e05b475bb9b65a12107cbdc946b`.
+- Intent-only B: `c3fd1d1a4e3e7fc590b1f5b82d1bf0a091c54bf7`.
+- B tree: `fa0f36e01d3c3a706a0cbdb23aa1cfcd0b8f09a1`.
+- Runtime ID:
+  `rg5-71a053d9aff1c8c4dec4f5b5e9171630b8c53bf6fea6d3516427bd7836c4ba9c`.
+- Frozen intent SHA256:
+  `0140731cf2c829fcae31c4901e4385ce043982473ca682337c1fbc2a825365c5`.
+- Frontend artifact tree SHA256:
+  `3c51000b2a0c0f86bb01a5d29726170c47137db286a82d4a49a7cc19580f7690`.
+- Reproducibility proof SHA256:
+  `ce4f71126eb00c1df3af1c40c8ab00ec10e5b0deaa770be4e33703386e0fb1b7`.
+
+Independent evidence checks confirmed remote B is exactly one intent-only
+commit after A3. Its immutable local Git object has the stated SHA/tree and
+sole parent A3. The frozen intent bytes match the stated SHA256 and source/base
+identities. Source and B verification JSON bytes are identical; their full
+frontend/proof contracts match the tracked B intent. Both clean passes have
+the same artifact tree and build-meta SHA256, with pass 2 retained.
+
+The independent final A3/B packet review also passed, exit 0, without writes.
+It verified all 3,138 governed source records (1,450 frontend, 1,359 backend and
+329 release controls), six critical hashes, 383 artifact files excluding
+build-meta (381 public files), exact build-meta bytes, both identical proof
+passes and the rederived runtime ID. It also confirmed the remote ancestry,
+intent-only B, frozen bytes/hash and empty intent history throughout J-to-A3.
+
+The coordinator reports PR #2122 ready for review, with final CI for exact B
+still running. Merge D does not yet exist for this task, so no execution
+envelope is created. The preceding PR #2120 publisher's E5 operator stopped on
+`FOREIGN_ENTRY_CHANGED`; that owner is resolving its own preserved state. This
+task has not touched the shared host or borrowed/cleared another owner's lock
+or lease.
+
+Next safe action: the root owner waits for all required exact-B CI and the
+preceding publisher's verified completion, then independently rechecks the
+production base before a normal merge. The reviewed operator remains unchanged
+and requires `PYTHONOPTIMIZE=0` during any eventual invocation. Production
+changed by this evidence work: **no**. No source edit, PR metadata change,
+release-branch mutation, merge, host action, lease or publication was performed.
