@@ -1,0 +1,195 @@
+{
+  "started_at": "2026-11-24T19:52:27.760767+00:00",
+  "duration_seconds": 2.6713452140029403,
+  "exit_code": 0,
+  "head": "a0f5bd77f91b85b2d75885aa4173c4e48aa16ad7",
+  "sole_parent": "6e25a762b17ad87ce8efeb37f2952a478ae9427b",
+  "source_base": "cb98e5660380d362e78f937d60abc7139cd1c462",
+  "tree": "8f131ad2a92d8fb70bfd29f314491d8a3ab9adda",
+  "intent_git_blob": "d13a4b630cbde2e1016ec27eb836409723ca1f82",
+  "intent_bytes": 1530059,
+  "intent_sha256": "9234bb310d165533151fb360a1c9e67c2e1cf80ddabcc3c54cfd47a200e9e08e",
+  "only_changed_path": "release/release-intent-v5.json",
+  "J_to_A_intent_full_history_empty": true,
+  "tracked_paths": 6590,
+  "skip_worktree_entries": 0,
+  "missing_paths": 0,
+  "clean_before_after": true,
+  "source_and_intent_unchanged": true,
+  "validator_result": {
+    "result": "PASS",
+    "validator": "load_release_intent (includes verify_release_intent_git)",
+    "source_git_sha": "6e25a762b17ad87ce8efeb37f2952a478ae9427b",
+    "source_base_git_sha": "cb98e5660380d362e78f937d60abc7139cd1c462",
+    "release_id": "rg5-b7cabd1d3fb44fd96dee501e461a869b40872100213fd64c55665539fe9ab97e",
+    "python": "3.12.14"
+  },
+  "stdout_sha256": "66299623fb6c03ed1b353b817064d959c9ebd5327818d3f95636b6714a1f2e40",
+  "stderr_bytes": 196,
+  "stderr_sha256": "aa4c334a21fe46cad98a4aff54f28f12bc0d11ad2a9b93ff24209654bdd9064e",
+  "scope": "Original tracked B validator only. No build, host, lease or publication.",
+  "checkout_materialization": {
+    "initial_clone_missing_paths": 26,
+    "original_validator_run_before_materialization": false,
+    "restored_files": [
+      {
+        "path": "frontend/public/inventory-fonts/LICENSE-cairo.txt",
+        "git_blob": "d9712a6630a8f28c6a10ea11099a759ced7a86b5",
+        "bytes": 4380,
+        "sha256": "ce39edb04b690f144cd40dc59a1be26dcb089e539c8118289d1081cde4449d6f"
+      },
+      {
+        "path": "frontend/public/inventory-fonts/LICENSE-tajawal.txt",
+        "git_blob": "8cdc82238348c313ac810bd8a749a47d5d09b2e3",
+        "bytes": 4371,
+        "sha256": "184de01d11c016e7d7bb2f2f81db9a036171acb5374f006e74a36828faca1f12"
+      },
+      {
+        "path": "frontend/public/inventory-fonts/fonts.css",
+        "git_blob": "40d2a3791fe815dc96177034c03cd11064bcd6fd",
+        "bytes": 1439,
+        "sha256": "69b4a0b4cfe5326f61be3337701506c419fcf03aebe17007a472c625a134544d"
+      },
+      {
+        "path": "frontend/public/inventory-fonts/mezan-font-1.ttf",
+        "git_blob": "81c3544e9ee799350e1f81c29d9819d701fe3697",
+        "bytes": 91500,
+        "sha256": "7ecb9b6a465072bce7b0e2a6d2d0355add8151fa9f8f342b516b57b26a2914c6"
+      },
+      {
+        "path": "frontend/public/inventory-fonts/mezan-font-2.ttf",
+        "git_blob": "957811e23bff4450dfcdaaa845a2def9a284f22c",
+        "bytes": 91676,
+        "sha256": "361766f154ae7cab731b8aef8ee4470b64d7c8d1a4c9ad25b91a85b7bd2f1a1d"
+      },
+      {
+        "path": "frontend/public/inventory-fonts/mezan-font-5.ttf",
+        "git_blob": "ab852a80afdbfe154121f6b0bdb60dfd31708e70",
+        "bytes": 91748,
+        "sha256": "accb750bc74f1b44d0f915868596740eac91bfb98f2fde93253185a7e80cd24d"
+      },
+      {
+        "path": "frontend/public/inventory-fonts/mezan-font-6.ttf",
+        "git_blob": "fe8e477a601fcfd8e1881ee1ff02f29ea963cf16",
+        "bytes": 55072,
+        "sha256": "ce4e98e477f2a36cc7a28bee546f736d67090afaa32073ceef1b7b4cdd076f21"
+      },
+      {
+        "path": "frontend/public/inventory-fonts/mezan-font-7.ttf",
+        "git_blob": "53726d6f000e9816a6829dd4cf87905398f747da",
+        "bytes": 56284,
+        "sha256": "268bd626bf7738c1d963458fe27961c8314e95f6f449c401a9b15d04210bcc26"
+      },
+      {
+        "path": "frontend/public/inventory-fonts/mezan-font-8.ttf",
+        "git_blob": "7aeee4722488f480ece14de183ace621970a670c",
+        "bytes": 55520,
+        "sha256": "7edc53d44b612e72d3d6d01940a14a96f970047c0a37c537be4d4b3806d3ba53"
+      },
+      {
+        "path": "frontend/public/inventory-fonts/mezan-font-9.ttf",
+        "git_blob": "dfff8e07dbfaa50970d6c661cd836409b5a98de3",
+        "bytes": 55244,
+        "sha256": "271b1ca523a1823154fa55f059f9233d3db9c2d17079dcab3cd916926f5aba1c"
+      },
+      {
+        "path": "frontend/public/operational-ui/brands/README.md",
+        "git_blob": "c379da9554169790bd8b21c08bc6709ea122a659",
+        "bytes": 1984,
+        "sha256": "0022ac129d190d91e276f6a5e22965abb0b32b5313354f79d1f25dde396a1590"
+      },
+      {
+        "path": "frontend/public/operational-ui/brands/apple.png",
+        "git_blob": "6a4e38146ae2573a9a9eeaf7a75f0cda1db979a8",
+        "bytes": 2468,
+        "sha256": "eb7f4b32c3d7492e9a0f47a27743924428009dc41d3605a0c59a98a154fc52ad"
+      },
+      {
+        "path": "frontend/public/operational-ui/brands/aramex.png",
+        "git_blob": "f9a1f0ab961cf847d5cdab6b95e4d2f00e8e5c0e",
+        "bytes": 350,
+        "sha256": "741ca2ce354d26cbd1b1493064bcd6b22c90a9d5837ad806128b74762be87753"
+      },
+      {
+        "path": "frontend/public/operational-ui/brands/enma.png",
+        "git_blob": "18330d6ce67248052bed5e2e83f8d4411ecee579",
+        "bytes": 1236,
+        "sha256": "a7bc57181ee56a369a384720a1eca31433279f82c7a2d6ca6e50c6e235773e5c"
+      },
+      {
+        "path": "frontend/public/operational-ui/brands/google.png",
+        "git_blob": "b96fb18ebad2713157259cd6a2c8793876d90696",
+        "bytes": 13639,
+        "sha256": "386e8e3f85ef4786ff39887c17e595b6ac1614bbc9bc1d9a4ea5fd6b41fa14c1"
+      },
+      {
+        "path": "frontend/public/operational-ui/brands/mastercard.png",
+        "git_blob": "a2a896b067d7ec783ccc45284f19ab1229a00f4a",
+        "bytes": 1253,
+        "sha256": "498845d6ab3d4996021ee23a5466f044a39f350fd947e9476fe7789264af66aa"
+      },
+      {
+        "path": "frontend/public/operational-ui/brands/meta.png",
+        "git_blob": "611b30e814b589ea47508791956b87eb51f5bc6b",
+        "bytes": 9522,
+        "sha256": "410d902a401d98a38465306f8f86584d9575ef35f8c647fb2cd36e05e8be0ce9"
+      },
+      {
+        "path": "frontend/public/operational-ui/brands/paypal.png",
+        "git_blob": "eb6ee9c9631a5f86f877d3f39d872ed96d649b54",
+        "bytes": 1367,
+        "sha256": "e3850303cebe7f8a89ae58c425ff67407eda65e58e157d0ef40109caa24caa60"
+      },
+      {
+        "path": "frontend/public/operational-ui/brands/rajhi.png",
+        "git_blob": "2acecfa3371fe5dd2d3d0acdd20e65346950e7de",
+        "bytes": 1473,
+        "sha256": "734d2af47efeb67f458084c05940c15cedf2c68891abca39fd63ce208de1b6f5"
+      },
+      {
+        "path": "frontend/public/operational-ui/brands/salla.png",
+        "git_blob": "65f8f73be0386f8a36384368889b2e9d13e2c923",
+        "bytes": 3021,
+        "sha256": "a41b5cdbe62e3273bdee697f26abca34a70de1d56fd048c3e90776ac4f77a37b"
+      },
+      {
+        "path": "frontend/public/operational-ui/brands/snap.png",
+        "git_blob": "6dbe78015983a25ab5a53ad68ec712ccb29ef9a9",
+        "bytes": 1313,
+        "sha256": "f03f8fac7b334ffa354339f4481ea4b8196d7cc95dc47d18b39d66430de5b370"
+      },
+      {
+        "path": "frontend/public/operational-ui/brands/tabby.png",
+        "git_blob": "78c16af256ab8d68765110d251e9bb8770dc626f",
+        "bytes": 862,
+        "sha256": "6e979374774ae6bfc28eef7fac0a234a4f10ebfe574713523a71beefc46fd46d"
+      },
+      {
+        "path": "frontend/public/operational-ui/brands/tamara.png",
+        "git_blob": "df425540b875eb48fc12c3b3c9feb118cee0590e",
+        "bytes": 5360,
+        "sha256": "110e172dfbe17077140070ad341ebc392064d7650ee35e06d39c7c4876d79a2e"
+      },
+      {
+        "path": "frontend/public/operational-ui/brands/tiktok.png",
+        "git_blob": "ab55dd0f5076b1e7ce61e5ab5572a81416d6e55d",
+        "bytes": 953,
+        "sha256": "e421a9daf1ebd712bab3febecb1f93b765fbfc2b22d2c3b4231efe3203de2381"
+      },
+      {
+        "path": "frontend/public/operational-ui/brands/visa.png",
+        "git_blob": "39f1c24d0246f7a3e4b19e166495bd9337056c54",
+        "bytes": 1432,
+        "sha256": "915b09da039c2df8a9d3cc7b4494366689486b02d81fe4dbf9f16a80160b1df6"
+      },
+      {
+        "path": "release/release-intent-v5.json",
+        "git_blob": "d13a4b630cbde2e1016ec27eb836409723ca1f82",
+        "bytes": 1530059,
+        "sha256": "9234bb310d165533151fb360a1c9e67c2e1cf80ddabcc3c54cfd47a200e9e08e"
+      }
+    ],
+    "historical_intent_blob_restored": "e5b2870da4cd713d8c98fb80d8a1ad91c72219b7",
+    "method": "Verified existing full-A asset bytes and original candidate bytes against exact B Git blob IDs; restored only absent files and required blob objects."
+  }
+}
