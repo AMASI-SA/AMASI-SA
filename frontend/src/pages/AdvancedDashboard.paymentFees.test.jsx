@@ -78,6 +78,19 @@ test("unresolved commission evidence does not claim waiting for customer payment
     expect(hint).not.toContain("تحصيل");
 });
 
+test.each([null, 830])("unreconciled split payments explain the blocker and hide stale profit %s", (netProfit) => {
+    renderTotals({ payment_fees_complete: false,
+        payment_fee_review_reasons: ["provider_split_payment_review_required"],
+        total_payment_fees: null, net_profit: netProfit });
+    const hint = container.querySelector('[data-testid="advanced-profit-payment-fees-incomplete-hint"]').textContent;
+    expect(hint).toContain("بانتظار مطابقة الدفعات المتعددة لبعض الطلبات");
+    expect(hint).not.toContain("اكتمال بيانات عمولات");
+    const hero = container.querySelector('[data-testid="advanced-profit-net-hero"]');
+    expect(hero.textContent).toContain("غير مكتمل");
+    expect(hero.textContent).not.toContain("830.00");
+    expect(container.querySelector('[data-testid="advanced-profit-net-margin"]')).toBeNull();
+});
+
 test.each([undefined, true])("legacy or complete fee authority %s preserves authoritative profit", (complete) => {
     renderTotals({ payment_fees_complete: complete });
     expect(container.querySelector('[data-testid="advanced-profit-net-hero"]').textContent).toContain("830.00");
