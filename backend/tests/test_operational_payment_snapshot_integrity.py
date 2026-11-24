@@ -86,6 +86,16 @@ class IntegrityTests(unittest.TestCase):
         self.assertEqual(result["counts"]["payment_evidence_already_recognized"], 1)
         self.assertFalse(result["safe_for_automatic_posting"])
 
+    def test_conflicted_payment_evidence_appears_as_review_issue(self):
+        original = state()
+        original["payment_event_evidence_inbox"] = {
+            "ref1": {"status": "conflict"},
+        }
+        result = audit_payment_snapshot(original)
+        self.assertEqual(result["counts"]["payment_evidence_conflict"], 1)
+        self.assertIn({"code": "payment_evidence_conflict"}, result["issues"])
+        self.assertFalse(result["safe_for_automatic_posting"])
+
     def test_invalid_scope_fails_closed(self):
         with self.assertRaises(ValueError):
             audit_payment_snapshot({"engine": {}, "customer_collections": "not a list"})
