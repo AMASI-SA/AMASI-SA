@@ -144,6 +144,35 @@ class SallaEventCaptureTests(unittest.TestCase):
                 with patch.dict(sys.modules, {"operational_payment_evidence_review":review}):
                     self.assertFalse(asyncio.run(stage_verified_payment_update(None, source)))
 
+    def test_historical_direct_post_goes_to_review_and_does_not_retry_forever(self):
+        item = source_item()
+        item["merchant_id"] = "store1"
+        item["order_number"] = "30001"
+        inbox = types.ModuleType("operational_payment_evidence_inbox")
+        inbox.stage_normalized_captures = AsyncMock(return_value=[{"status":"evidence_received"}])
+        direct = types.ModuleType("operational_payment_first_capture_writer")
+        direct.enabled = lambda: True
+        direct.post_first_salla_capture = AsyncMock(return_value={
+            "status":"review_required", "reason_code":"historical_capture_requires_reconciliation"})
+        review = types.ModuleType("operational_payment_evidence_review")
+        review.stage_unverified_review = AsyncMock(return_value={"status":"pending_evidence"})
+        verified = {"provider":"tabby", "currency":"SAR", "gross":"300.00",
+                    "captures":[{"id":"t1", "amount":"300.00", "captured_at":"2026-11-24T12:01:00Z"}],
+                    "refunds":[]}
+        with patch.dict(os.environ, {FLAG:"1"}):
+            with patch("operational_payment_salla_event_capture.normalized_webhook_capture",
+                       return_value=("o1",verified,[])):
+                with patch.dict(sys.modules, {
+                    "operational_payment_evidence_inbox":inbox,
+                    "operational_payment_first_capture_writer":direct,
+                    "operational_payment_evidence_review":review,
+                }):
+                    self.assertTrue(asyncio.run(stage_verified_payment_update(None,item)))
+        direct.post_first_salla_capture.assert_awaited_once()
+        review.stage_unverified_review.assert_awaited_once()
+        self.assertEqual(review.stage_unverified_review.await_args.args[-1],
+                         ["historical_capture_requires_reconciliation"])
+
     def test_failed_staging_retries(self):
         stub = types.ModuleType("operational_payment_evidence_inbox")
         async def stage(*args, **kwargs):
