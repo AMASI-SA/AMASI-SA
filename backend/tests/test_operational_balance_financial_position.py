@@ -7,6 +7,7 @@ import pytest
 from operational_balance_engine import reconcile
 from operational_balance_store import initial
 from operational_financial_position import build_financial_position
+from operational_test_delivery import native_delivery
 
 
 START = "2026-11-01T00:00:00+03:00"
@@ -255,14 +256,17 @@ def test_empty_complete_stage_snapshot_is_proven_zero_only_for_its_cost_scope():
     assert table(result, "cod_expected")["totals"]["amount"] is None
 
 
-def delivery_state(method="cash", *, confirmed=True, delivered=True, courier=False, prepaid=False):
+def delivery_state(method="cash", *, confirmed=True, delivered=True, courier=False, prepaid=False,
+                   identity="order-one"):
     state = state_for()
     opening(state, "bank", "bank", "1000.00")
     carrier = {"id": "carrier" if courier else "driver", "party_type": "courier" if courier else "store_driver",
                "cost": "12.00", "fee_components": [
                    {"id": "base_shipping", "amount": "10.00", "complete": True},
                    {"id": "cod_commission", "amount": "2.00", "complete": True}]}
-    order = source_order(status="delivered" if delivered else "in_progress", carrier=carrier)
+    order = source_order(identity, status="delivered" if delivered else "in_progress", carrier=carrier)
+    if delivered:
+        native_delivery(order, "2026-11-01T02:00:00+03:00")
     if not prepaid:
         cash = method == "cash"
         collection_proven = delivered and (cash or confirmed) and not courier
@@ -284,6 +288,8 @@ def delivery(result):
 
 def test_driver_cash_responsibility_is_separate_from_delivered_fee_and_bank():
     state, _ = delivery_state()
+    # Saved money remains readable when its public order label is unavailable.
+    state["engine"]["facts"]["delivery_event:order-one"].pop("order_number")
     result = build_financial_position(state)
     row = delivery(result)
     assert row["shipping_confirmed"] == row["shipping_outstanding"] == "12.00"
@@ -426,8 +432,7 @@ def synthetic_report_fixture():
                                     {"method": "bank_transfer"}, {"method": "card_terminal", "confirmed": False},
                                     {"method": "card_terminal"}, {"courier": True}, {"prepaid": True},
                                     {"delivered": False}), 1):
-        _, order = delivery_state(**options)
-        order["id"] = "test-order-" + str(index)
+        _, order = delivery_state(identity="test-order-" + str(index), **options)
         if order.get("cod", {}).get("evidence_ids"):
             order["cod"]["evidence_ids"] = ["test-collection-" + str(index)]
         orders.append(order)

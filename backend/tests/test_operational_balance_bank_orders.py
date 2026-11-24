@@ -5,7 +5,17 @@ import json
 from decimal import Decimal
 import pytest
 from fastapi import HTTPException
+from operational_bank_order_milestone import HISTORY_MISSING, PROOF_FIELD, history_proof
 from test_operational_balance_integration import run, started, refresh, read, report, movement, create_movement, NOW
+
+
+def with_bank_history(document):
+    raw = document['raw_by_source']['salla_direct']
+    document[PROOF_FIELD] = history_proof(raw, document, [{
+        'id': 'bank-qualification-' + str(raw['id']), 'type': 'status_changed',
+        'new_status': raw['status'], 'created_at': raw.get('date') or raw['created_at']}],
+        owner=document['user_id'], order_number=document['order_number'], provider_order_id=str(raw['id']), as_of=NOW)
+    return document
 
 
 async def seed(db, status='in_progress', method='تحويل بنكي مصرف تجريبي'):
@@ -14,10 +24,13 @@ async def seed(db, status='in_progress', method='تحويل بنكي مصرف ت
         'user_id':'owner','upstream_source':'salla.payment_method_bank','upstream_value':'مصرف تجريبي',
         'financial_account_id':'bank','status':'active','confirmed':True,'identity_contract_version':1,
         'bank_account_source':'mz2_financial_accounts'})
-    await db.unified_orders.insert_one({'user_id':'owner','order_number':'new-bank-order','raw_by_source':{'salla_direct':{
+    document = {'user_id':'owner','order_number':'new-bank-order','raw_by_source':{'salla_direct':{
         'id':'salla-bank-id','reference_id':'new-bank-order','created_at':'2026-10-06T10:00:00+00:00',
         'updated_at':'2026-10-06T10:00:00+00:00','status':status,'payment_method':method,'currency':'SAR',
-        'total':{'amount':'300','currency':'SAR'},'items':[]}}})
+        'total':{'amount':'300','currency':'SAR'},'items':[]}}}
+    if status not in {'reviewed', 'تم المراجعة', 'pending'}:
+        with_bank_history(document)
+    await db.unified_orders.insert_one(document)
 
 
 @pytest.mark.parametrize('status', ['reviewed', 'in_progress', 'تم المراجعة', 'قيد التنفيذ',
@@ -29,6 +42,8 @@ def test_bank_order_credit_without_receipt_once_across_retries_and_states(status
         initial = await read(db, 'owner')
         assert len(initial['movements']) == int(status not in {'reviewed', 'تم المراجعة'})
         await db.unified_orders.update_one({'user_id':'owner'},{'$set':{'raw_by_source.salla_direct.status':'in_progress'}})
+        current = await db.unified_orders.find_one({'user_id': 'owner'})
+        await db.unified_orders.update_one({'user_id': 'owner'}, {'$set': {PROOF_FIELD: with_bank_history(current)[PROOF_FIELD]}})
         await refresh(db,'owner',clock=NOW)
         state=await read(db,'owner');assert len(state['movements'])==1
         assert state['movements'][0]['receipt_id'] is None
@@ -89,6 +104,8 @@ def test_same_order_cannot_credit_again_after_owner_change():
         binding.update(user_id='other',_id=hashlib.sha256(json.dumps(['other','salla.payment_method_bank','مصرف تجريبي'],ensure_ascii=False).encode()).hexdigest())
         await db.mz2_bank_transfer_bindings.insert_one(binding)
         await db.unified_orders.update_one({'user_id':'owner'},{'$set':{'user_id':'other'}})
+        transferred = await db.unified_orders.find_one({'user_id': 'other'})
+        await db.unified_orders.update_one({'user_id': 'other'}, {'$set': {PROOF_FIELD: with_bank_history(transferred)[PROOF_FIELD]}})
         with pytest.raises(HTTPException) as error:
             await refresh(db,'other',clock=NOW)
         assert error.value.detail['code']=='operational_request_scope_conflict'
@@ -107,7 +124,7 @@ def native_bank_order(number, *, name='مصرف الراجحي', paid='100.00', 
     raw['payment_actions']['refund_action'] = {
         'paid_amount': {'amount': paid, 'currency': 'SAR'}, 'refund_amount': {'amount': '0.00', 'currency': 'SAR'}}
     document['g47_salla_snapshot'] = {'component_pending': True, 'source_updated_at': raw['updated_at']}
-    return document
+    return with_bank_history(document)
 
 
 def test_native_bank_waits_even_with_paid_fields_and_a_receipt_then_books_once():
@@ -147,11 +164,12 @@ def test_native_bank_waits_even_with_paid_fields_and_a_receipt_then_books_once()
 
 
 @pytest.mark.parametrize("status", ["in_progress", "completed", "delivering", "delivered"])
-def test_first_qualifying_salla_status_posts_without_history_and_survives_cancellation(status):
+def test_first_qualifying_salla_status_waits_for_original_history_then_survives_cancellation(status):
     async def scenario(db):
         await started(db)
         await native_accounts(db)
         doc = native_bank_order("998820")
+        doc.pop(PROOF_FIELD)
         raw = doc["raw_by_source"]["salla_direct"]
         raw["status"] = {"slug": "cancelled", "name": "ملغي"}
         raw["is_cancelled"] = True
@@ -165,6 +183,13 @@ def test_first_qualifying_salla_status_posts_without_history_and_survives_cancel
         assert (hold["order_number"], hold["order_status"], hold["party_id"]) == ("998820", "ملغي", "account:rajhi")
         await db.unified_orders.update_one({"order_number": "998820"}, {"$set": {
             "raw_by_source.salla_direct.status": {"slug": status}, "raw_by_source.salla_direct.is_cancelled": False}})
+        await refresh(db, "owner", clock=NOW)
+        missing = await read(db, "owner")
+        assert not missing["movements"]
+        assert any(issue["code"] == HISTORY_MISSING for issue in missing["engine"]["issues"])
+        current = await db.unified_orders.find_one({"order_number": "998820"})
+        await db.unified_orders.update_one({"order_number": "998820"}, {
+            "$set": {PROOF_FIELD: with_bank_history(current)[PROOF_FIELD]}})
         await asyncio.gather(refresh(db, "owner", clock=NOW), refresh(db, "owner", clock=NOW))
         approved = await read(db, "owner")
         entry, = approved["movements"]
@@ -180,7 +205,7 @@ def test_first_qualifying_salla_status_posts_without_history_and_survives_cancel
     run(scenario)
 
 
-def test_mixed_and_partial_bank_receipts_require_proof_and_book_only_the_bank_amount_once():
+def test_partial_bank_posts_once_and_mixed_bank_waits_for_its_own_original_date():
     from test_operational_balance_bank_tender_proof import order as tender
 
     async def scenario(db):
@@ -205,9 +230,10 @@ def test_mixed_and_partial_bank_receipts_require_proof_and_book_only_the_bank_am
             {'$set': {'raw_by_source.salla_direct.receipt_image': 'https://example.test/bank.png'}})
         await asyncio.gather(refresh(db, 'owner', clock=NOW), refresh(db, 'owner', clock=NOW))
         final = await read(db, 'owner')
-        assert sorted((m['order_number'], m['amount']) for m in final['movements']) == [
-            ('998201', '150.66'), ('998202', '202.50')]
-        assert all(m['bank_preparation_evidence']['source'] == 'salla_order_status' for m in final['movements'])
+        assert [(m['order_number'], m['amount']) for m in final['movements']] == [('998202', '202.50')]
+        assert any(i.get('order_number') == '998201' and i['code'] == 'operational_order_bank_occurrence_unproven'
+                   and i['status'] == 'pending' for i in final['engine']['issues'])
+        assert all(m['bank_preparation_evidence']['source'] == 'salla_order_history' for m in final['movements'])
         assert final['engine']['obligations'] == first['engine']['obligations']
     run(scenario)
 
@@ -272,7 +298,7 @@ def test_native_alinma_partial_paid_amount_never_credits_the_unpaid_order_total(
     run(scenario)
 
 
-def test_native_bank_wallet_split_posts_only_the_explicit_bank_leg():
+def test_native_bank_wallet_split_retains_amount_coverage_but_waits_for_bank_leg_date():
     async def scenario(db):
         await started(db)
         await native_accounts(db)
@@ -285,10 +311,11 @@ def test_native_bank_wallet_split_posts_only_the_explicit_bank_leg():
         for _ in range(2):
             await refresh(db, 'owner', clock=NOW)
         state = await read(db, 'owner')
-        credit, = state['movements']
-        assert credit['bank_id'] == 'account:rajhi' and credit['amount'] == '85.00'
+        assert state['movements'] == []
+        held, = [i for i in state['engine']['issues'] if i['code'] == 'operational_order_bank_occurrence_unproven']
+        assert held['party_id'] == 'account:rajhi' and held['status'] == 'pending'
         projection = report(state)
-        assert projection['summary']['actual_liquidity'] == '1085.00'
+        assert projection['summary']['actual_liquidity'] == '1000.00'
         coverage = projection['details']['customer_tender_coverage']['sar']
         assert coverage['paid'] == '100.00' and coverage['missing_orders'] == 0
         assert {row['method']: row['paid'] for row in coverage['by_method']} == {'bank': '85.00', 'wallet': '15.00'}

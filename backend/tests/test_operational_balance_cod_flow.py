@@ -12,9 +12,11 @@ async def native_order(db, method=None):
         rate = data['mz2_shipping_setup_v2'][0]['contracts'][0]
         rate.update(party_type='store_driver', party_id='driver')
         data['store_drivers'] = [{'user_id':'owner','id':'driver','name':'Driver','status':'active'}]
-        data['store_delivery_assignments'] = [{'user_id':'owner','id':'assignment','order_number':'10','driver_id':'driver','status':'delivered'}]
+        data['store_delivery_assignments'] = [{'user_id':'owner','id':'assignment','order_id':'100','order_number':'10',
+            'driver_id':'driver','status':'delivered','delivered_at':NOW}]
         data['store_delivery_collections'] = [{'user_id':'owner','id':'collection','assignment_id':'assignment','order_number':'10',
-            'driver_id':'driver','amount':'200','amount_source':'unified_orders.remaining_amount','payment_method':method,'cod_custody_amount':'200' if method=='cash' else '0','collected_at':NOW}]
+            'order_id':'100','driver_id':'driver','amount':'200','amount_source':'unified_orders.remaining_amount','payment_method':method,
+            'cod_custody_amount':'200' if method=='cash' else '0','collected_at':NOW}]
     for collection, documents in data.items():
         await db[collection].insert_many(documents)
 
@@ -26,9 +28,7 @@ def test_cod_native_remaining_or_cash_custody_settles_once_without_double_bank(m
         await native_order(db, method)
         before = report(await refresh(db,'owner',clock=NOW))
         if method:
-            # The legacy collection contract does not invent the canonical
-            # order identity required by the newer delivery-status proof.
-            assert 'delivery_event:100' not in before['details']['facts']
+            assert before['details']['facts']['delivery_event:100']['delivered_at'] == NOW
         key, cod = next(iter(before['details']['cod_reports'].items()))
         assert (cod['gross'],cod['collected'],cod['customer_outstanding'],cod['confirmed_custody'],cod['settled'],cod['outstanding']) == ('300','300' if method else '100','0' if method else '200','200.00','0.00','200.00')
         assert before['summary']['actual_liquidity']=='1000.00'
@@ -51,7 +51,7 @@ def test_driver_non_cash_proof_creates_no_driver_custody_or_implicit_bank_cash(m
         await started(db)
         await native_order(db,method)
         result=report(await refresh(db,'owner',clock=NOW))
-        assert 'delivery_event:100' not in result['details']['facts']
+        assert result['details']['facts']['delivery_event:100']['delivered_at'] == NOW
         cod=next(iter(result['details']['cod_reports'].values()))
         assert cod['payment_method']==method
         assert (cod['custody_amount'],cod['confirmed_custody'],cod['settled'],cod['outstanding'])==('0','0.00','0.00','0.00')
@@ -186,9 +186,11 @@ def test_held_delivery_evidence_preserves_the_established_independent_collection
 
 
 def test_recorded_status_delivery_cannot_downgrade_to_the_legacy_assignment_contract():
-    from test_operational_balance_delivery_start_rule import calculate, undated
+    from test_operational_balance_delivery_start_rule import calculate, legacy_observed_state, undated
     data = undated('contract_driver')
-    first = calculate(data)
+    # Exercise a stored pre-upgrade delivery fact. A new status-only observation
+    # can no longer create this financial record without its original date.
+    first = calculate(data, legacy_observed_state(data))
     assert first['engine']['facts']['delivery_event:100']['delivered_at'] is None
     data['store_delivery_assignments'][0].pop('order_id')
     held = calculate(data, first)

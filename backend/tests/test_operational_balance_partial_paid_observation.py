@@ -1,4 +1,4 @@
-"""A proved partial tender stays money even when Salla omits due/capture time."""
+"""Partial paid observations retain their amounts without inventing posting dates."""
 from copy import deepcopy
 from decimal import Decimal
 
@@ -9,7 +9,7 @@ from operational_customer_payment_sar import value_customer_payment
 from operational_provider_transaction_evidence import normalize_operational_payment
 from salla_payment_collection import provider_order_page_balance
 from test_operational_balance_order_page_recognition import (
-    BORN, FACT, KEY, T1, T2, apply, normalize, raw_document, source_txn, state,
+    BORN, FACT, KEY, T1, T2, apply, legacy_page_state, normalize, raw_document, source_txn, state,
 )
 
 
@@ -17,7 +17,7 @@ def partial_document(**changes):
     return {**raw_document(), "remaining_amount": None, "updated_at": T1, **changes}
 
 
-def test_partial_paid_without_due_or_capture_time_is_one_claim_and_keeps_due_unknown():
+def test_partial_paid_without_capture_time_is_held_and_keeps_due_unknown():
     raw = partial_document()
     assert provider_order_page_balance(raw, "SAR", "100.00") is None
     payment, issues = normalize(raw)
@@ -29,30 +29,36 @@ def test_partial_paid_without_due_or_capture_time_is_one_claim_and_keeps_due_unk
     first = apply(state(), raw, T1)
     second = apply(first, raw, T1)
     assert first == second
-    assert first["engine"]["obligations"][KEY]["confirmed"] == "45.00"
-    assert first["engine"]["facts"][FACT]["remaining"] is None
+    assert KEY not in first["engine"]["obligations"] and FACT not in first["engine"]["facts"]
+    assert any(i["code"] == "provider_original_capture_date_unproven" for i in first["engine"]["issues"])
     assert not first["movements"] and not first["openings"]
     projection = report(first)
-    assert projection["details"]["provider_paid_totals"]["SAR"][0]["paid"] == "45.00"
-    assert projection["details"]["provider_order_payments"]["SAR"][0]["remaining"] is None
+    assert not projection["details"]["provider_paid_totals"]["SAR"]
+    assert not projection["details"]["provider_order_payments"]["SAR"]
+    assert payment["order_page_balance"]["paid"] == "45.00" and payment["order_page_balance"]["remaining"] is None
 
 
 def test_later_transaction_corroborates_partial_without_double_counting_or_backdating():
     first = apply(state(), partial_document(), T1)
     no_time = apply(first, partial_document(), T2, rows=[source_txn(paid_at=None)])
     assert not any(key.startswith("capture:") for key in no_time["engine"]["facts"])
+    assert KEY not in no_time["engine"]["obligations"]
     captured = apply(no_time, partial_document(), T2, rows=[source_txn()])
     assert captured["engine"]["obligations"][KEY]["confirmed"] == "45.00"
-    assert captured["engine"]["facts"][FACT]["observed_at"] == T1
+    assert FACT not in captured["engine"]["facts"]
+    assert captured["engine"]["obligations"][KEY]["business_date"] == "2026-10-05"
     assert captured["engine"]["facts"]["capture:capture-A"]["amount"] == "45.00"
     assert report(captured)["details"]["provider_paid_totals"]["SAR"][0]["paid"] == "45.00"
     assert not captured["movements"]
+    assert apply(captured, partial_document(), T2, rows=[source_txn()]) == captured
 
 
 def test_partial_newer_cumulative_paid_preserves_previous_claim_without_adding_twice():
-    first = apply(state(), partial_document(), T1)
+    first = legacy_page_state(due=None)
     second = apply(first, partial_document(paid_amount="70.00"), T2)
-    assert second["engine"]["obligations"][KEY]["confirmed"] == "70.00"
+    assert second["engine"]["obligations"][KEY]["confirmed"] == "45.00"
+    assert second["engine"]["obligations"][KEY]["business_date"] == "2026-10-05"
+    assert any(i["code"] == "provider_original_capture_date_unproven" for i in second["engine"]["issues"])
     assert second["engine"]["facts"][FACT]["remaining"] is None
     assert apply(second, partial_document(paid_amount="70.00"), T2) == second
 
@@ -113,7 +119,9 @@ def test_native_partial_fee_policy_prices_the_paid_share_and_never_relabels_a_sa
 
     raw = {**partial_document(), "currency": "KWD", "total": {"amount": "100.00", "currency": "KWD"}}
     payment, issues = normalize_operational_payment(raw, "KWD", "100.00", BORN, T2, owner="shop",
-        order_number="123", provider_order_id="1001", rows=[], source={"user_id": "shop", "order_number": "123"})
+        order_number="123", provider_order_id="1001",
+        rows=[source_txn(total={"amount": "45.00", "currency": "KWD"})],
+        source={"user_id": "shop", "order_number": "123"})
     assert not issues
     policy = {"id": "native-fee", "provider": "tamara", "currency": "KWD", "status": "active",
         "effective_from": "2026-01-01", "percentage": "10", "fixed_amount": "0", "vat_treatment": "exempt",

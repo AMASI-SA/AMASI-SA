@@ -1,12 +1,18 @@
-"""Current delivered status is sufficient for orders created after opening."""
+"""Current status identifies a delivery candidate but cannot date new money."""
 from copy import deepcopy
 
 import pytest
 
 from operational_courier_transitions import WEBHOOK_PROOF
 from operational_delivery_evidence import STATUS_BASIS, STATUS_SCHEMA, resolve_delivery_event
-from test_operational_balance_delivery_cutover import DELIVERED, NOW, START, courier_data, driver_data, fee_total, row, run
-from test_operational_balance_delivery_start_rule import CREATED, LATER, calculate, party, undated
+from test_operational_balance_delivery_cutover import DELIVERED, NOW, START, courier_data, driver_data, fee_total, row, run, active, HardBoundaryDB
+from test_operational_balance_delivery_start_rule import CREATED, LATER, calculate, party, undated, legacy_observed_state
+from operational_balance_sources import collect_sources
+
+
+def candidate(data):
+    sources = run(collect_sources(HardBoundaryDB(data), 'owner', START, NOW, operational_state=active()))
+    return next(order.get('delivery_event') for order in sources['orders'] if order.get('delivery_event'))
 
 
 @pytest.mark.parametrize('gap', [
@@ -41,17 +47,18 @@ def test_poststart_delivery_is_independent_of_optional_history_and_shipment_date
         raw['shipping']['delivered_at'] = DELIVERED
         raw['shipments'][0]['actual_delivered_at'] = NOW
     result = calculate(data)
-    event = result['engine']['facts']['delivery_event:100']
+    event = candidate(data)
     assert event['schema'] == STATUS_SCHEMA and event['recognition_basis'] == STATUS_BASIS
     assert event['delivered_at'] is None and event['recorded_at'] == NOW
     assert event['party_id'] == 'carrier' and event['waybill'] == 'TEST-AWB'
     assert not any(key in event for key in ('native_delivery_at', 'source_history_id', 'timestamp_source'))
-    assert fee_total(result) == 10
+    assert fee_total(result) == 0
+    assert 'delivery_event:100' not in result['engine']['facts']
+    assert any(issue['code'] == 'operational_shipping_original_date_unproven' for issue in result['engine']['issues'])
     assert not any(issue['code'].startswith('operational_delivery_') for issue in result['engine']['issues'])
     assert 'cod_collection:100' not in result['engine']['facts']
     assert not any(value['kind'] == 'cod' and value['confirmed'] != '0.00'
                    for value in result['engine']['obligations'].values())
-    assert party(result, 'courier')['delivered_orders'] == 1
     assert result['movements'] == []
 
 
@@ -105,10 +112,13 @@ def test_only_a_valid_actual_date_selects_a_tariff_within_the_observation_interv
     contracts.append({**contracts[0], 'id': 'later-price', 'delivery_fee': '25',
                       'effective_from': boundary, 'effective_to': None})
     result = calculate(data)
-    event = result['engine']['facts']['delivery_event:100']
+    event = candidate(data)
     assert event['delivered_at'] == (DELIVERED if valid_date else None)
     assert fee_total(result) == (25 if valid_date else 0)
-    assert party(result, 'courier')['delivered_orders'] == 1
+    if valid_date:
+        assert party(result, 'courier')['delivered_orders'] == 1
+    else:
+        assert 'delivery_event:100' not in result['engine']['facts']
     assert ('shipping:100:base_shipping' in result['engine']['obligations']) is valid_date
 
 
@@ -119,11 +129,12 @@ def test_rejected_partial_carrier_provenance_does_not_leak_into_status_proof():
     raw = source['raw_by_source']['salla_direct']
     raw.update(created_at=CREATED, status_changed_at=NOW)
     result = calculate(data)
-    event = result['engine']['facts']['delivery_event:100']
+    event = candidate(data)
     assert event['schema'] == STATUS_SCHEMA and event['delivered_at'] is None
     assert not any(key.startswith('source_') and key != 'source_carrier_key' for key in event)
     assert 'native_delivery_at' not in event and 'timestamp_source' not in event
-    assert fee_total(result) == 10
+    assert fee_total(result) == 0
+    assert 'delivery_event:100' not in result['engine']['facts']
 
 
 @pytest.mark.parametrize('fault,reason', [
@@ -156,14 +167,14 @@ def test_current_executor_conflicts_cannot_fall_back_to_a_status_fee(fault, reas
 @pytest.mark.parametrize('kind', ['courier', 'native_driver'])
 def test_later_optional_timestamp_cannot_disqualify_or_redate_a_frozen_status(kind):
     data = undated(kind)
-    first = calculate(data)
+    first = legacy_observed_state(data)
     raw = data['unified_orders'][0]['raw_by_source']['salla_direct']
     raw['updated_at'] = raw['status_changed_at'] = LATER
     if kind == 'native_driver':
         data['store_delivery_assignments'][0]['delivered_at'] = LATER
     result = calculate(data, first, at=LATER)
     assert result['engine']['facts'] == first['engine']['facts']
-    assert result['engine']['obligations'] == first['engine']['obligations']
+    assert {key: result['engine']['obligations'][key] for key in first['engine']['obligations']} == first['engine']['obligations']
     assert result['movements'] == first['movements']
     assert not any(issue['code'].startswith('operational_delivery_') for issue in result['engine']['issues'])
 
@@ -172,14 +183,16 @@ def test_later_optional_timestamp_cannot_disqualify_or_redate_a_frozen_status(ki
 def test_legacy_paid_delivery_keeps_its_dated_diagnostic_and_collection(method):
     data = undated('contract_driver', cash_proof=True)
     assignment = data['store_delivery_assignments'][0]
-    assignment.pop('order_id')
-    assignment.pop('active')
+    assignment['delivered_at'] = DELIVERED
     collection = data['store_delivery_collections'][0]
     collection.update(payment_method=method, cod_custody_amount='200' if method == 'cash' else '0')
     first = calculate(data)
+    # Represent a previously recorded legacy row whose financial source clock
+    # was valid but whose separate event-provenance field was not retained.
+    first['engine']['facts'].pop('delivery_event:100')
     assert first['engine']['facts']['cod_collection:100']['amount'] == ('200.00' if method == 'cash' else '0.00')
     assert 'delivery_event:100' not in first['engine']['facts']
-    assignment.update(order_id='100', active=True)
+    assignment.update(order_id='100', active=True, delivered_at=START)
     data['unified_orders'][0]['raw_by_source']['salla_direct'].update(status_changed_at=START, paid_amount='200')
     held = calculate(data, first)
     assert any(issue['code'] == 'operational_delivery_timestamp_before_order' for issue in held['engine']['issues'])
@@ -200,8 +213,9 @@ def test_effective_customized_status_controls_poststart_eligibility(delivered):
         'slug': 'delivered' if delivered else 'returned',
         'name': 'تم التوصيل' if delivered else 'مسترجع'}}
     result = calculate(data)
-    assert ('delivery_event:100' in result['engine']['facts']) is delivered
-    assert fee_total(result) == (10 if delivered else 0)
+    assert 'delivery_event:100' not in result['engine']['facts']
+    assert fee_total(result) == 0
+    assert any(issue['code'] == 'operational_shipping_original_date_unproven' for issue in result['engine']['issues']) is delivered
 
 
 @pytest.mark.parametrize('gap', [

@@ -5,6 +5,7 @@ import pytest
 
 from operational_balance_engine import reconcile, provider_projection
 from datetime import date
+from operational_test_delivery import native_delivery
 
 
 START = "2026-10-05T09:00:00+00:00"
@@ -42,7 +43,7 @@ def test_duplicate_order_state_and_atomic_carrier_replacement_freeze_after_deliv
     second = reconcile(first, source, NOW)
     shipping = second["engine"]["obligations"]["shipping:o1"]
     assert (shipping["party_id"], shipping["expected"], shipping["confirmed"]) == ("driver1", "20.00", "0.00")
-    source["orders"][0]["status"] = "delivered"
+    native_delivery(source["orders"][0], "2026-10-07T11:00:00+00:00")
     third = reconcile(second, source, NOW)
     source["orders"][0].update(status="cancelled", carrier={"id": "another", "cost": "99"}, cod_amount="0")
     final = reconcile(third, source, NOW)["engine"]["obligations"]

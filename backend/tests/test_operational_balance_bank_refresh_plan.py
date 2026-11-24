@@ -53,8 +53,11 @@ def movement(identity="a", number="A", **changes):
 
 
 def order(identity="a", number="A", *, amount="10.00", bank="bank"):
-    return {"id": identity, "order_number": number, "currency": "SAR",
-            "bank_credit": {"bank_id": bank, "amount": amount, "bank_name": "Bank"}}
+    original = "2026-11-11T10:00:00+00:00"
+    return {"id": identity, "order_number": number, "currency": "SAR", "created_at": original,
+            "bank_credit": {"bank_id": bank, "amount": amount, "bank_name": "Bank", "occurred_at": original,
+                            "preparation_evidence": {"source": "salla_order_history", "status": "in_progress",
+                                                     "observed_at": original, "event_id": "event-" + identity}}}
 
 
 def isolate_sources(monkeypatch, orders):

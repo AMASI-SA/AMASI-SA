@@ -13,6 +13,7 @@ import pymongo
 
 from operational_balance_store import STATES, digest
 from operational_source_diagnostics import source_failure_detail
+from operational_entity_freshness import FIELD as COVERAGE_FIELD, MAX_ENTITIES, coverage_rows
 
 
 HEALTH = "operational_balance_refresh_health_v1"
@@ -24,7 +25,10 @@ RIYADH = ZoneInfo("Asia/Riyadh")
 _LOG = logging.getLogger(__name__)
 _STATES = {"current", "stale", "failed", "updating", "unknown", "inactive"}
 _SOURCE_KEYS = {"payroll", "recurring", "salla", "snapchat", "meta", "tiktok", "google_ads"}
-_HEADER = {"_id": 0, "owner_id": 1, "status": 1, "revision": 1, "engine.as_of": 1}
+_HEADER = {"_id": 0, "owner_id": 1, "status": 1, "revision": 1, "engine.as_of": 1,
+    **{f'engine.{COVERAGE_FIELD}.{key}': 1 for key in
+       ('schema_version', 'owner_id', 'as_of', 'calculation_revision', 'complete', 'total_entities')},
+    f'engine.{COVERAGE_FIELD}.rows': {'$slice': MAX_ENTITIES + 1}}
 _ERROR_MESSAGES = {
     "operational_refresh_timeout": "انتهت مهلة تحديث الأرصدة؛ تظهر آخر نتيجة محفوظة ولم يثبت اكتمال التحديث.",
     "operational_refresh_cancelled": "انقطع تحديث الأرصدة قبل وصول تأكيد نهائي؛ يلزم التحقق من آخر احتساب محفوظ.",
@@ -38,6 +42,7 @@ _FAMILIES = {
     "bank": ("bank", "التحصيلات البنكية"),
     "courier": ("shipping", "شركات الشحن"),
     "sar": ("payments", "تحصيلات منصات الدفع"),
+    "provider": ("payments", "تحصيلات منصات الدفع"),
     "return_waybills": ("shipping", "شركات الشحن"),
     "delivery_history": ("shipping", "شركات الشحن"),
 }
@@ -46,7 +51,15 @@ _CALCULATION_ISSUES = {
     "salary_contract_missing": ("payroll", "الموظفون", "يوجد استحقاق راتب لا يغطيه عقد صالح؛ يلزم مراجعة عقود الموظفين."),
     "salary_source_changed": ("payroll", "الموظفون", "تغير مصدر راتب سبق احتسابه؛ يحتاج إلى مراجعة موثقة."),
     "operational_order_bank_credit_conflict": ("bank", "التحصيلات البنكية", "تعارض دليل تحصيل بنكي؛ لم يُعتمد كتحصيل جديد."),
+    "operational_order_bank_occurrence_unproven": ("bank", "التحصيلات البنكية", "لم يثبت التاريخ الأصلي للتحصيل البنكي؛ لم تُسجل حركة بتاريخ إعادة الاحتساب."),
+    "operational_order_bank_in_progress_history_missing": ("bank", "التحصيلات البنكية", "سجل حالة طلب بنكي غير مكتمل؛ لم يثبت تاريخ التحصيل الأصلي."),
+    "operational_order_bank_in_progress_unproven": ("bank", "التحصيلات البنكية", "لم يثبت تاريخ انتقال الطلب إلى حالة مؤهلة للتحصيل البنكي."),
     "operational_obligation_entity_incomplete": ("parties", "الجهات التلقائية", "يوجد استحقاق مرتبط بجهة غير مكتملة الإعداد."),
+    "provider_original_capture_date_unproven": ("payments", "منصات الدفع", "لم يثبت تاريخ التحصيل الأصلي لمنصة دفع؛ أُوقف تأكيد المبلغ الجديد حتى وصول دليل التحصيل."),
+    "provider_capture_multiple_business_dates": ("payments", "منصات الدفع", "يتوزع تحصيل منصة الدفع على أيام مختلفة؛ يلزم إثبات مستقل لكل يوم قبل تأكيد الزيادة."),
+    "provider_capture_acquisition_pending": ("payments", "منصات الدفع", "لم يثبت اكتمال جلب أدلة التحصيل الأصلية؛ أُوقف تأكيد مبالغ جديدة حتى اكتمال التحقق من المصدر."),
+    "operational_shipping_original_date_unproven": ("shipping", "شركات الشحن والموصلون", "لم يثبت وقت التوصيل أو الإكمال الأصلي؛ لم يُسجل استحقاق شحن جديد بتاريخ إعادة الاحتساب."),
+    "operational_prepaid_shipping_original_date_unproven": ("shipping", "شركات الشحن", "لم يثبت وقت التنفيذ الأصلي للشحن المدفوع مسبقًا؛ يلزم دليل من المصدر قبل تسجيل الاستحقاق."),
 }
 
 
@@ -290,10 +303,30 @@ def compose_freshness(owner, actor, header, health, lease, sources, *, now, unav
             "تعذر التحقق من حالة بعض التحديثات؛ لا يوجد تأكيد بأن جميع المصادر محدثة.", as_of))
         if aggregate in {"current", "inactive"}:
             aggregate = "unknown"
+    saved_coverage = engine.get(COVERAGE_FIELD) if type(engine) is dict else None
+    entity_coverage = (coverage_rows(saved_coverage, owner, engine.get('as_of') if type(engine) is dict else None,
+        now=now, revision=revision) if status == 'active' else
+        {'state': 'inactive', 'rows': [], 'omitted_entities': 0, 'message': ''})
+    # Native acquisition may still be deferred after a successful calculation.
+    # Its family warning also prevents a compact entity row claiming recovery.
+    family = {'employee': 'payroll', 'recurring': 'recurring', 'courier': 'shipping',
+              'store_driver': 'shipping', 'provider': 'payments', 'bank': 'bank', 'supplier': 'salla'}
+    for row in entity_coverage['rows']:
+        keys = {row.get('platform') or family.get(row['entity_type'])}
+        if row['entity_type'] in {'courier', 'store_driver', 'provider', 'bank', 'supplier'}:
+            keys.add('salla')
+        source = next((source for source in safe_sources if source['key'] in keys
+                       and source['state'] not in {'current', 'inactive'}), None)
+        if source and row['state'] == 'current':
+            row.update(state='unknown', message=source['message'])
+            entity_coverage['state'] = 'unknown'
+    if saved_coverage is not None and aggregate == 'current' and entity_coverage['state'] in {'stale', 'unknown'}:
+        aggregate = entity_coverage['state']
     return {"schema_version": 1, "status": status, "actor": {"id": actor, "is_owner": True},
             "session_scope": digest([owner, actor]), "as_of": iso(as_of), "revision": revision,
             "generated_at": now.isoformat(), "freshness": {"state": aggregate, "max_age_seconds": MAX_AGE_SECONDS},
-            "last_attempt": safe_attempt, "sources": safe_sources, "issues": issues[:100]}
+            "last_attempt": safe_attempt, "sources": safe_sources, "issues": issues[:100],
+            "entity_coverage": entity_coverage}
 
 
 async def read_freshness(db, owner, actor, *, now=None):

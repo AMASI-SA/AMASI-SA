@@ -28,7 +28,8 @@ if (!out || !path.isAbsolute(out) || path.resolve(out) === root || path.resolve(
     ...['ApprovedFinance.jsx','ApprovedEntry.jsx','ApprovedLedger.jsx','PaymentSourceFields.jsx','PendingEntryActions.jsx',
       'workspaceReadHooks.js','WorkspaceResourcePicker.jsx','WorkspaceSnapshot.jsx']
       .map(file => `frontend/src/pages/operational/${file}`),
-    ...['BalanceFreshnessNotice.jsx', 'balanceFreshness.css', 'balanceFreshnessApi.js',
+    ...['BalanceFreshnessNotice.jsx', 'BalanceAutomationSettings.jsx', 'BalanceRecoveryProof.jsx',
+      'balanceFreshness.css', 'balanceFreshnessApi.js',
       'useBalanceFreshnessExpiry.js', 'useVisibleBalanceFreshness.js', 'visibleBalanceFreshness.js']
       .map(file => `frontend/src/pages/operational/${file}`),
     'frontend/src/pages/operational/SimpleBalances.jsx', 'frontend/src/pages/operational/SimpleBalanceAccess.jsx',

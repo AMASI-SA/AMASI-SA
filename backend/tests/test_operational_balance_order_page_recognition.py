@@ -46,8 +46,26 @@ def payout(allocated, allocation_key=KEY):
             "amount":"43.00", "actual_fee_amount":"2.00", "allocations":[{"obligation_id":allocation_key,"amount":allocated}]}
 
 
+def legacy_page_state(paid="45.00", due="55.00"):
+    """A pre-upgrade saved claim; recovery must preserve its historical posting.
+
+    This fixture represents stored data, not permission for new page-only money.
+    """
+    payment, issues = normalize({**raw_document(paid, due), "updated_at": T1})
+    assert not issues
+    saved = state()
+    saved["engine"] = {
+        "as_of": T1, "order_versions": {"1001": T1},
+        "facts": {FACT: {**payment["order_page_balance"], "observed_at": T1}},
+        "obligations": {KEY: {"id": KEY, "kind": "provider", "party_id": "tamara",
+            "party_type": "provider", "currency": "SAR", "expected": "0.00", "confirmed": paid,
+            "direction": "receivable", "business_date": "2026-10-05", "fee_estimate_complete": False}},
+    }
+    return saved
+
+
 def test_capture_after_page_corroborates_without_rebooking_same_claim():
-    s=apply(state(),raw_document(),T1)
+    s=legacy_page_state()
     before=s["engine"]["facts"][FACT].copy()
     r=apply(s,raw_document(),T2,rows=[source_txn()])
     assert r["engine"]["facts"][FACT] == before
@@ -57,35 +75,38 @@ def test_capture_after_page_corroborates_without_rebooking_same_claim():
     assert not r["movements"]
 
 
-def test_capture_first_then_higher_order_balance_after_an_allocated_payout():
+def test_capture_first_then_undated_increase_is_held_after_an_allocated_payout():
     s=apply(state(),raw_document(),T1,rows=[source_txn()])
     assert FACT not in s["engine"]["facts"]
     assert s["engine"]["obligations"][KEY]["confirmed"]=="45.00"
     s["movements"]=[payout("45.00")]
     full = apply(s,raw_document("100.00","0.00"),T2)
-    assert full["engine"]["obligations"][KEY]["confirmed"]=="100.00"
+    assert full["engine"]["obligations"][KEY]["confirmed"]=="45.00"
     assert full["engine"]["facts"]["capture:capture-A"]["amount"]=="45.00"
-    assert full["engine"]["facts"][FACT]["paid"]=="100.00" and full["movements"] == s["movements"]
-    assert full["engine"]["obligations"][KEY]["business_date"] == "2026-10-06"
+    assert FACT not in full["engine"]["facts"] and full["movements"] == s["movements"]
+    assert full["engine"]["obligations"][KEY]["business_date"] == "2026-10-05"
+    assert any(i["code"] == "provider_original_capture_date_unproven" for i in full["engine"]["issues"])
 
 
 @pytest.mark.parametrize("allocated,key,held", [
     ("45.00",KEY,False),("45.00","opening:provider",False),
     ("42.00",KEY,True),("45.00","credit:"+KEY,True),("99.00",KEY,True)])
 def test_partial_order_amount_then_new_full_does_not_add_or_allocate_bank_money(allocated,key,held):
-    s=apply(state(),raw_document(),T1)
+    s=legacy_page_state()
     s["movements"]=[payout(allocated,key)]
     full=apply(s,raw_document("100.00","0.00"),T2)
     assert full["movements"]==s["movements"]
-    assert full["engine"]["obligations"][KEY]["confirmed"] == ("45.00" if held else "100.00")
+    assert full["engine"]["obligations"][KEY]["confirmed"] == "45.00"
     if held:
         candidate=next(i for i in full["engine"]["issues"] if i["code"]=="provider_settled_capture_review_required")
         assert candidate["order_page_balance_review"]["paid"]=="100.00"
+    else:
+        assert any(i["code"] == "provider_original_capture_date_unproven" for i in full["engine"]["issues"])
 
 
 @pytest.mark.parametrize("amount,due,version", [("30.00","70.00",T2),("100.00","0.00",T1)])
 def test_reduced_or_conflicting_same_version_page_never_reverses_a_receivable(amount,due,version):
-    s=apply(state(),raw_document(),T1)
+    s=legacy_page_state()
     r=apply(s,raw_document(amount,due),version,stamp=T2)
     assert r["engine"]["facts"][FACT]==s["engine"]["facts"][FACT]
     assert r["engine"]["obligations"][KEY]["confirmed"]=="45.00"
@@ -116,13 +137,16 @@ def test_optional_transaction_may_corroborate_or_block_but_never_add_to_page(cha
         assert payment is None and issues
 
 
-def test_post_start_payment_discovered_after_a_later_snapshot_is_recognized_once():
+def test_post_start_payment_waits_for_its_original_capture_date_then_is_recognized_once():
     s = state()
     s["engine"] = {"as_of": T1}
     result = apply(s, raw_document(), T2)
-    assert result["engine"]["facts"][FACT]["paid"] == "45.00"
+    assert FACT not in result["engine"]["facts"] and KEY not in result["engine"]["obligations"]
+    assert any(i["code"] == "provider_original_capture_date_unproven" for i in result["engine"]["issues"])
+    result = apply(result, raw_document(), T2, rows=[source_txn()])
     assert result["engine"]["obligations"][KEY]["confirmed"] == "45.00"
-    assert apply(result, raw_document(), T2) == result
+    assert result["engine"]["obligations"][KEY]["business_date"] == "2026-10-05"
+    assert apply(result, raw_document(), T2, rows=[source_txn()]) == result
 
 
 @pytest.mark.parametrize("source_changes", [{"user_id":"other"},{"order_number":"999"},{"salla_order_id":"999"},
@@ -139,7 +163,7 @@ def test_inconsistent_unified_snapshot_cannot_establish_money(source_changes):
     {"effective_from":"??"}, {"vat_treatment":"unsupported"}])
 def test_fee_contract_damage_withholds_only_the_fee_estimate(policy_change):
     from test_operational_balance_native_payment_evidence import policy
-    p, issues=normalize({**raw_document(),"updated_at":T1})
+    p, issues=normalize({**raw_document(),"updated_at":T1}, [source_txn()])
     assert not issues
     config = {**policy("tamara"), **policy_change}
     config = {k:v for k,v in config.items() if v is not None}
@@ -154,7 +178,7 @@ def test_separately_recorded_provider_refund_uses_corroborated_real_capture_afte
     from operational_customer_returns import attach_returns
     from test_operational_balance_native_payment_evidence import policy
 
-    initial=apply(state(),raw_document(),T1)
+    initial=legacy_page_state()
     captured=apply(initial,raw_document(),T2,rows=[source_txn()])
     payment, problems=normalize({**raw_document(),"updated_at":T2},[source_txn()])
     assert not problems and payment["captures"]
@@ -207,7 +231,7 @@ def test_saved_split_reference_prevents_single_claim_on_a_later_different_order(
 
 
 def test_reference_learned_after_page_booking_enriches_only_the_existing_fact():
-    first = apply(state(), raw_document("65", "35"), T1)
+    first = legacy_page_state("65.00", "35.00")
     raw = raw_document("65", "35")
     raw["payment_methods"] = [{"payment_method": "tamara", "amount": "65", "transaction_reference": "page-A"}]
     second = apply(first, raw, T2)
@@ -233,7 +257,9 @@ def test_first_claim_checks_target_and_pooled_payout_even_after_last_snapshot(da
     if dated:
         doc["payment"] = {"method": "tamara", "status": "paid", "paid_at": BORN, "reference": "ref"}
     result = apply(start, doc, T2)
-    assert (KEY in result["engine"]["obligations"]) == allowed
+    assert (KEY in result["engine"]["obligations"]) == (allowed and dated)
     if not allowed:
         assert any(i["code"] == "provider_settled_capture_review_required" for i in result["engine"]["issues"])
+    elif not dated:
+        assert any(i["code"] == "provider_original_capture_date_unproven" for i in result["engine"]["issues"])
     assert result["movements"] == start["movements"]

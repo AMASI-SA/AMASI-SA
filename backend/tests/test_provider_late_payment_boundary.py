@@ -57,9 +57,11 @@ def test_prestart_order_is_not_released_by_earlier_payout():
     assert late_payment_blocks(state, order, payment, through=NOW)
 
 
-def test_late_observation_is_booked_once_without_rewriting_old_payout():
+def test_late_native_capture_is_booked_once_without_rewriting_old_payout():
     from operational_balance_engine import reconcile
     state, order, payment = fixture()
+    payment['captures'] = [{'id': 'late-native-capture', 'amount': '100.00',
+                            'captured_at': '2026-11-16T12:00:00+00:00'}]
     state.update(status='active', revision=1)
     before = deepcopy(state)
     result = reconcile(state, {'orders':[order]}, NOW)
