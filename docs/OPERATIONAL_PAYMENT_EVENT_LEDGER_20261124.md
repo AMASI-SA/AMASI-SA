@@ -116,3 +116,31 @@ This is **durable EVIDENCE delivery**, not a live bank/platform ledger posting. 
 - Operational Payment Event Policy CI **PASS** on commit `02cc7eef78c351758504afc4d5559d7ff3b25a15` (run `45453801639`).
 
 Remaining: the review is not yet an actionable accountant approval page; collection and refund flows still need integration to canonical identity, and the event-driven direct balance posting plus production refresh repair and Preview UAT are still incomplete. Keep payment evidence feature flag OFF in production and DO NOT DEPLOY.
+
+
+## 2026-11-24 — First-payment direct canonical posting implementation (feature OFF)
+
+A production-like read-only check of the merchant's current Salla orders exposed a material contract:
+- Actual `بانتظار المراجعة` orders can be paid electronically by `tamara_installment` or `mada`, **and also exist for `bank` transfers**. The Salla status alone therefore cannot prove a bank receipt.
+- Online order details may contain one `payment_methods[].transaction_reference`, exact `remaining_action.paid_amount`, and `has_remaining_amount=false`, but no `payment.paid_at`. A transfer order can also show a nonzero `paid_amount` even though its bank receipt remains unconfirmed.
+- The original native-page payment timestamp must NOT be fabricated from the order creation date or webhook receipt.
+
+Two strictly gated *canonical* provider claim writers have been added to the draft branch:
+
+1. `operational_payment_direct_provider.apply_first_provider_capture` and `operational_payment_first_capture_writer.post_first_salla_capture`: one FULL original dated capture, exact reference, existing saved fee policy, no prior order claim/settlement, timestamp newer than operational cutoff and last successful source refresh; CAS commit, owner-scoped merchant recheck and audit.
+2. `operational_payment_salla_order_page.native_paid_order_page`, `operational_payment_direct_order_page.apply_first_paid_order_page`, and `operational_payment_first_order_page_writer.post_first_paid_page`: when there is no original gateway `paid_at`, read the current owner-scoped Salla-direct order page; require native online provider, exact transaction reference and full cleared balance, source watermark match, genuine `بإنتظار المراجعة` status, and reuse `operational_order_page_payment.observed_balance` to create the **same canonical `provider_order_balance:<order_id>` fact / `provider:<order_id>` claim** already recognized by the normal reconciliation engine. The financial timestamp is explicitly a source-observation timestamp, not a gateway captured_at.
+3. Both writers use the existing operational CAS, reject cutover/history collisions, existing claims, split payments, refunds and uncertain fee terms, never add bank money or a second accounting ledger. A normal source refresh can recognize their same immutable keys. Permanent history/fee conflicts go to the separate no-money review inbox. The source version and merchant ownership are reverified immediately before CAS commit.
+
+**Flags remain OFF:**
+- `OPERATIONAL_PAYMENT_EVIDENCE_CAPTURE_ENABLED=0`
+- `OPERATIONAL_PAYMENT_DIRECT_POST_ENABLED=0`
+- `OPERATIONAL_PAYMENT_ORDER_PAGE_POST_ENABLED=0`
+
+The full isolated `Operational Payment Event Policy` CI PASS at `3039bd61d0690d5abe386e919faca9288e431d83` (workflow run `45461812392`). It covers pure first payment posting, replay, provider fee and cutoff guards, native paid page vs bank transfer, mocked operational CAS and owner/source change fencing. The order-page policy tests isolate the full production provider-history runtime because the tiny CI job does not install FastAPI; full historical/settlement integration still requires Preview UAT.
+
+**Do NOT enable flags or release to Production yet.** Mandatory next gates:
+- Integration/UAT on Preview with the actual Salla native source document/watermark schema and real fee-policy settings, including a new Tamara order and an online card/Mada order.
+- Compare provider receivable totals before/after the direct write and after the subsequent full refresh; no additional gross money or duplicate fees; ensure all bank movement totals unchanged.
+- Prove payout/opening overlaps, refund/additional installments and historical replay under production-like data.
+- Resolve the current production `operational_source_setup_incomplete` condition and confirm current deployment/base SHA and release guard; ensure source refresh as_of is reliable (direct posting requires recent source within 3h).
+- Confirm general-accounting activation gate remains isolated and does not cross-write GL/Qoyod.
