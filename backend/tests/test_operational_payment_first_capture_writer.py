@@ -93,6 +93,7 @@ class WriterTests(unittest.TestCase):
         snapshot, native = staged()
         store = types.ModuleType("operational_balance_store")
         store.fail = lambda code,msg,status: (_ for _ in ()).throw(InitialCaptureHold(code))
+        store.audit = lambda *args, **kwargs: None
         store.now = lambda: STAMP
         store.mutate = AsyncMock(side_effect=AssertionError("should never write"))
         service = types.ModuleType("operational_balance_service")
