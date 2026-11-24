@@ -2,7 +2,7 @@
 
 ## Current state
 
-**SOURCE FROZEN — 189 integrated backend tests and 26 frontend tests passed; governed release pending.** No live cabinet has been archived, deleted, disabled or restored by this follow-up. Production has not changed for this task.
+**FROZEN A/B — source and immutable release-packet review passed; PR #2120 is Ready; one final CI job is still running.** No live cabinet has been archived, deleted, disabled or restored by this follow-up. Production has not changed for this task.
 
 Repository: `AMASI-SA/AMASI-SA`.
 Task branch: `codex/inventory-cabinet-archive-20261124`.
@@ -69,11 +69,11 @@ Independent review of the final backend, frontend and new `.github/workflows/war
 | `backend/tests/test_warehouse_cabinet_archive.py` | `f39ccc99e251b6c1c68802c29bba0e056ca0681267af23eb495a07d2cce869d8` |
 | `backend/tests/test_warehouse_cabinet_archive_mongo.py` | `2ea8b852c32b2bba0bc59e35b128dee96723c56b19c71007d5b4dfc2d1a92268` |
 
-The new workflow checks the actual PR head, uses a checksum-pinned owned Mongo binary with no external URI fallback, and rejects skipped/failing archive tests. It also runs the two frontend suites on the required Node version. Existing gates are unchanged. All source writers have stopped. Final-head CI, the governed build/intent and original release guard remain pending; there has been no lease, publish or live mutation for this follow-up.
+The new workflow checks the actual PR head, uses a checksum-pinned owned Mongo binary with no external URI fallback, and rejects skipped/failing archive tests. It also runs the two frontend suites on the required Node version. Existing gates are unchanged. All source writers have stopped. The original governed build and intent verification now pass. Final-head CI has no failures; its current state is recorded in checkpoint E2 below. There has been no lease, publish or live mutation for this follow-up.
 
 ## Next safe action
 
-Checkpoint this reviewed source, run the relevant existing regression contracts and final-head CI, and complete the original two-commit release protocol. Do not archive live data until publication and three-probe identity verification succeed. Then use the manager UI to archive only old d1 and verify the replacement d2 and warehouse/section structure. If a live reference blocks d1, preserve it and report the concrete blocker. Source review is not evidence of publication or absence of live links.
+Finish the remaining applicable final-head CI job and independently review the new guarded operator, then merge normally with expected B and verify tree-equivalent D. Complete the original release protocol from the reviewed immutable packet. Do not archive live data until publication and three-probe identity verification succeed. Then use the manager UI to archive only old d1 and verify the replacement d2 and warehouse/section structure. If a live reference blocks d1, preserve it and report the concrete blocker. Source review is not evidence of publication or absence of live links.
 
 ## Release checkpoint E1 — 2026-11-24 21:01 UTC
 
@@ -82,3 +82,15 @@ Reviewed source A: `b236f51bb6c52e6f5d14a136db92f7474e4f5873`; tree `0f86e247f16
 Root ran the archive and numbering Mongo tests, short-code and warehouse generation tests, existing bundle catalog tests, and product receipt tests on this exact clean A: **189 passed in 18.82 seconds, exit 0**. The JUnit XML confirms 189 cases with zero skips/errors/failures. Logs, XML, exact commands and the 27-path source snapshot are retained beside this document. The original `/app` release guard `status` command completed and displayed `active:false` before release bootstrap. No lease was created and no `/app` source or production data was changed by this task.
 
 Next: original governed A/B artifact build, freeze an external intent against J/A, create intent-only B, final-head CI and review, normal merge, clean adapter rehearsal, then prepare/prepublish only for the authorized publish. Keep all later status updates on this separate evidence branch; source A is frozen and the deployment task branch may change only its release intent after A.
+
+## Release checkpoint E2 — 2026-11-24
+
+Intent-only B: `bdebc069ea5fa980cd16725e422ca70e79dadd17`; tree `74946da23e059283f49de2b04baf9860c8ee972d`. Remote and local A..B comparison contains exactly `release/release-intent-v5.json`. B has A as its sole parent. PR [#2120](https://github.com/AMASI-SA/AMASI-SA/pull/2120) is Ready. Production branch still points to J at the latest read; no D has been created.
+
+The original governed build completed two identical clean passes, exit 0. Original A verification, external intent freeze, candidate-intent validation, and original B verification with `--reviewed-intent-v5` all passed. Runtime identity is `rg5-6cfb0e514bb3c65c229a9d224c329f24136bd0ce483bed1af3b74b05e848ca42`. Intent SHA-256 is `f27abedb9ff7ecf9cc8a3c92ec127628a6091842db522e81e1f79b40cdd2a57e`. The original build and B-verification logs are retained beside this document; exact artifact/meta/proof identities and all log hashes are recorded in `release-validation.json`.
+
+Independent immutable-packet review passed: all 3,137 governed source records and 382 public artifact files plus metadata/proof match, critical backend hashes are unchanged, runtime identity was independently rederived, and B changes only intent. Original CI adapter rehearsals on host Node 20 and 24 both passed (jobs 138780195796 and 138780195566, run 45487964006), including clean deterministic builds and isolated package proofs. The new archive backend and frontend jobs passed. Connected-source, stock, accounting and Mongo gates passed; the latest root read has 53 successes, 10 conditional skips, and only Operational Balance Backend still running. Do not treat this checkpoint as all-green or production evidence.
+
+Fresh read-only host inspection showed tracked-clean J, /app available space 422,457,344 bytes, and /tmp available space 236,544,008,192 bytes. Use an independently reviewed operator with owned staging under /tmp and measured space checks; preserve all foreign files/worktrees. The operator is still being prepared. Original guard status must be read again before host mutation/rehearsal. No /app source, service, database, lease, or live warehouse mutation has been made by this task.
+
+Next: remaining CI, reviewed operator, normal merge and D/tree verification, clean original adapter rehearsal, original prepare/prepublish for authorized publication, explicit new Deployment Succeeded, original three-probe verification and closed lease, then archive only d1 through the manager UI if the live reference guards allow it.
