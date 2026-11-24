@@ -431,7 +431,34 @@ def _order_steps(source: dict, workflow: dict, activity: list[dict], reviews: li
     rows = [_step("إنشاء الطلب في سلة", at=created, source="salla")] if created else []
     status_rows = []
     for event in activity:
-        if event.get("source") != "salla_history" or event.get("event_type") != "status_changed":
+        if event.get("source") != "salla_history":
+            continue
+        # Salla carrier activity may be stored as a generic history event.
+        # Only its typed, order-bound native observation can supply a stage.
+        carrier_proofs = [proof for proof in _rows(event.get("native_status_transition"))
+                          if proof.get("source") == "salla_carrier_activity"]
+        if carrier_proofs:
+            proof = carrier_proofs[0]
+            provider_id = _text(raw.get("id"))
+            actor = _dict(proof.get("actor"))
+            at = _iso(proof.get("at"), provider=True)
+            if (not provider_id or event.get("provider_order_id") != provider_id
+                    or not _text(event.get("source_event_id"))
+                    or any(other != proof for other in carrier_proofs)
+                    or proof.get("history_id") != event.get("source_event_id")
+                    or proof.get("order_id") != provider_id or proof.get("native_type") != "activity"
+                    or not _text(actor.get("id")) or not _text(actor.get("name"))
+                    or not at or at != _iso(proof.get("created_at"), provider=True)):
+                continue
+            status = _status_key(proof.get("status"))
+            label = _STATUS_LABELS.get(status, "")
+            if not label:
+                continue
+            row = _step(label, actor["name"], at, source="salla")
+            status_rows.append({**row, "status": status})
+            rows.append(row)
+            continue
+        if event.get("event_type") != "status_changed":
             continue
         at = _iso(event.get("occurred_at"), provider=True)
         if not at:
@@ -523,7 +550,7 @@ _LEGACY_COURIER_LABELS = {
 async def _delivery_steps(db, owner, number, source):
     """Read committed, order-bound delivery milestones only; no provider calls."""
     raw = _dict(_dict(source.get("raw_by_source")).get("salla_direct"))
-    identity = _text(source.get("order_id") or raw.get("id"))
+    identity = _text(source.get("order_id") or number)
     selector = {"user_id": owner, "order_number": number}
     if identity:
         selector["order_id"] = identity
@@ -623,8 +650,10 @@ async def read_order_tracking(db: Any, *, owner: str, number: str) -> dict:
         raise HTTPException(404, detail={"code": "mobile_order_tracking_not_found", "message": "لم يُعثر على الطلب."})
     workflow = await db[WORKFLOWS].find_one(selector, {"_id": 0}) or {}
     activity = await db.order_activity_events_v2.find({**selector, "source": "salla_history",
-        "event_type": "status_changed"}, {"_id": 0, "source": 1, "event_type": 1, "occurred_at": 1,
-        "title": 1, "actor_name": 1, "status": 1, "new_status": 1, "to_status": 1}
+        "$or": [{"event_type": "status_changed"}, {"native_status_transition.source": "salla_carrier_activity"}]},
+        {"_id": 0, "source": 1, "event_type": 1, "occurred_at": 1,
+        "title": 1, "actor_name": 1, "status": 1, "new_status": 1, "to_status": 1,
+        "provider_order_id": 1, "source_event_id": 1, "native_status_transition": 1}
         ).sort("occurred_at", -1).limit(MAX_ORDER_EVENTS + 1).to_list(MAX_ORDER_EVENTS + 1)
     reviews = await db.order_review_events.find({**selector, "event_type": "order_review_completed"},
         {"_id": 0, "event_type": 1, "occurred_at": 1, "actor_id": 1, "actor_name": 1}
