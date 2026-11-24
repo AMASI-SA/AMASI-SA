@@ -24,6 +24,11 @@ on:
       - "backend/operational_payment_first_order_page_writer.py"
       - "backend/operational_payment_refresh_health_gate.py"
       - "backend/operational_refresh_failure_trace.py"
+      - "backend/operational_salla_schedule_diagnostics.py"
+      - "backend/operational_salla_schedule_health_routes.py"
+      - "backend/operational_source_freshness.py"
+      - "backend/salla_integration/scheduled_reconciliation.py"
+      - "backend/tests/test_operational_salla_schedule_diagnostics.py"
       - "backend/operational_balance_freshness.py"
       - "backend/operational_remaining_bundle_sources.py"
       - "backend/operational_demand_refresh.py"
@@ -78,4 +83,5 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_operational_payment_first_order_page_writer.py' -v
           python3 -m unittest discover -s tests -p 'test_operational_payment_refresh_health_gate.py' -v
           python3 -m unittest discover -s tests -p 'test_operational_refresh_failure_trace.py' -v
+          python3 -m unittest discover -s tests -p 'test_operational_salla_schedule_diagnostics.py' -v
           python3 -m unittest discover -s tests -p 'test_operational_payment_initial_order_inbox.py' -v
