@@ -1,6 +1,6 @@
 """Direct financial posting requires independently confirmed refresh health."""
 import unittest
-from operational_payment_refresh_health_gate import RefreshHealthHold, require_healthy_source
+from operational_payment_refresh_health_gate import RefreshHealthHold, require_healthy_source, require_salla_current
 
 STAMP = "2026-11-24T21:44:00+03:00"
 ASOF = "2026-11-24T20:27:00+03:00"
@@ -15,6 +15,17 @@ def health(*,outcome="success",started="2026-11-24T20:20:00+03:00",
                             "finished_at":"2026-11-24T20:27:00+03:00"}}
 
 class FinancialHealthTests(unittest.TestCase):
+    def test_successful_aggregate_does_not_override_failed_salla_source(self):
+        self.assertTrue(require_healthy_source(state(), health(), at=STAMP))
+        with self.assertRaisesRegex(RefreshHealthHold, "payment_salla_source_unverified"):
+            require_salla_current({"key":"salla", "state":"failed",
+                                   "code":"salla_source_failed"})
+        with self.assertRaisesRegex(RefreshHealthHold, "payment_salla_source_unverified"):
+            require_salla_current({"key":"salla", "state":"unknown",
+                                   "code":"metadata_unavailable"})
+        self.assertTrue(require_salla_current({"key":"salla","state":"current",
+                                              "code":"salla_source_current"}))
+
     def test_matching_success(self):
         self.assertTrue(require_healthy_source(state(),health(),at=STAMP))
     def test_latest_timeout_blocks_despite_recent_saved_balance(self):
