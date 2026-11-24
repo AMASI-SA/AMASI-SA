@@ -32,6 +32,7 @@ def state():
 def normalized(*, ref="native1", amount="300.00", gross="300.00",
                captured_at=CAPTURE, provider="tabby"):
     return {"provider": provider, "currency": "SAR", "gross": gross,
+            "order_created_at": "2026-11-24T20:55:00+03:00",
             "captures": [{"id": ref, "amount": amount, "captured_at": captured_at}],
             "refunds": []}
 
@@ -125,6 +126,30 @@ class DirectProviderTests(unittest.TestCase):
             post(s, {**normalized(), "currency":"QAR"})
         with self.assertRaisesRegex(InitialCaptureHold, "currency"):
             post(s, normalized(provider="unknown"))
+
+    def test_source_capture_before_original_order_is_not_recognized(self):
+        s = state()
+        payment = normalized()
+        payment["order_created_at"] = "2026-11-24T21:05:00+03:00"
+        with self.assertRaisesRegex(InitialCaptureHold,"outside_operational"):
+            post(s,payment)
+        self.assertEqual(s["engine"]["facts"],{})
+
+    def test_pre_cutover_order_with_recent_capture_is_not_initial_order(self):
+        s = state()
+        payment = normalized()
+        payment["order_created_at"] = "2026-10-02T23:40:00+03:00"
+        with self.assertRaisesRegex(InitialCaptureHold,"outside_operational"):
+            post(s,payment)
+        self.assertFalse(s["engine"]["obligations"])
+
+    def test_missing_original_order_timestamp_is_not_inferred_from_webhook(self):
+        s = state()
+        payment = normalized()
+        payment.pop("order_created_at")
+        with self.assertRaisesRegex(InitialCaptureHold,"capture_clock_invalid"):
+            post(s,payment)
+        self.assertEqual(s["engine"]["facts"],{})
 
     def test_future_capture_blocked(self):
         s = state()
