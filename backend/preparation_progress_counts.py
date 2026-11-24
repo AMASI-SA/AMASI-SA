@@ -32,11 +32,11 @@ def _member_ids(row):
     ])
 
 
-def _current_member(piece, dispatch, employee):
+def _current_member(piece, dispatch, employee, members):
     return (piece.get("responsible_employee_id") == employee
             and piece.get("supplier_dispatch_id") == dispatch.get("id")
             and piece.get("supplier_id") == dispatch.get("supplier_id")
-            and piece.get("piece_id") in _member_ids(dispatch))
+            and piece.get("piece_id") in members)
 
 
 def _chunks(values):
@@ -67,13 +67,14 @@ async def _directory(db, owner, employee):
                 "status": {"$ne": "building"},
             }, _projection(DISPATCH_FIELDS)).to_list(None)
             by_dispatch = {row["id"]: row for row in rows}
+            membership = {key: _member_ids(row) for key, row in by_dispatch.items()}
             eligible = await _nonterminal_numbers(db, owner, sorted({
                 p["order_number"] for p in candidates if p.get("order_number")
             }))
             grouped = {}
             for piece in candidates:
                 row = by_dispatch.get(piece.get("supplier_dispatch_id"))
-                if row and _current_member(piece, row, employee):
+                if row and _current_member(piece, row, employee, membership[row["id"]]):
                     grouped.setdefault(row["id"], []).append(piece)
             for identity, members in grouped.items():
                 row = by_dispatch[identity]
@@ -109,22 +110,30 @@ async def _received_by_day(db, owner, employee, keys):
     }, _projection(DISPATCH_FIELDS)).batch_size(CHUNK)
     result = {key: set() for key in keys}
     try:
-        async for row in cursor:
-            key = progress_day(row.get("sent_at"))
-            if key not in result:
+        while True:
+            rows = await cursor.to_list(CHUNK)
+            if not rows:
+                break
+            by_dispatch = {row["id"]: row for row in rows
+                           if progress_day(row.get("sent_at")) in result}
+            membership = {identity: _member_ids(row)
+                          for identity, row in by_dispatch.items()}
+            if not by_dispatch:
                 continue
-            for ids in _chunks(_member_ids(row)):
-                pieces = db[PIECES].find({
-                    "user_id": owner, "responsible_employee_id": employee,
-                    "piece_id": {"$in": ids},
-                    "supplier_dispatch_id": row["id"],
-                    "supplier_id": row.get("supplier_id"),
-                }, _projection(PIECE_FIELDS))
+            pieces = db[PIECES].find({
+                "user_id": owner, "responsible_employee_id": employee,
+                "supplier_dispatch_id": {"$in": list(by_dispatch)},
+            }, _projection(PIECE_FIELDS)).batch_size(CHUNK)
+            try:
                 async for piece in pieces:
-                    if (_current_member(piece, row, employee)
+                    identity = piece.get("supplier_dispatch_id")
+                    row = by_dispatch.get(identity)
+                    if (row and _current_member(piece, row, employee, membership[identity])
                             and not piece.get("experiment_archived_at")
                             and _piece_received_from_dispatch_supplier(piece, row)):
-                        result[key].add(piece["piece_id"])
+                        result[progress_day(row.get("sent_at"))].add(piece["piece_id"])
+            finally:
+                await pieces.close()
     finally:
         await cursor.close()
     return result
