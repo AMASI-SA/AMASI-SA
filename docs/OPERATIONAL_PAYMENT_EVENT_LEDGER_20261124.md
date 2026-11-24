@@ -231,3 +231,21 @@ Correction implemented:
 This reduces automatic coverage for Salla online orders without original `paid_at`: they require an independently dated native transaction or accountant-reviewed evidence; do not claim that all under-review online orders are automatically posted. The source event-only daily coverage gate remains fail-closed by default.
 
 **Current release state:** no merge/deploy, all flags OFF, no operational production balances changed. The new complete parity test suite is queued in GitHub CI at code SHA `9adb53853882ea26734195e6bf5a6fa87d8d3c8a` and must pass before treating this as validated.
+
+
+## 2026-11-24 — Original captured_at recovery from Salla native transactions and pooled payout gate
+
+Existing native transaction bridge `backend/operational_provider_transaction_evidence.py` can match owner-scoped, independently authenticated `order_payment_transactions_v2` evidence from Salla `/transactions` to current order/payment principal. A fully matched bound transaction may supply an original `paid_at` missing from Salla's ordinary order page. This is the correct source of original capture date; do NOT substitute order.created_at / updated_at.
+
+Added pure read-only helper `backend/operational_payment_native_capture_candidate.py::recovered_dated_native_capture`. It requires:
+- current original owner-scoped Salla order with verified source watermark, exact order number and native order identity;
+- all provided rows owned by the same tenant/order and marked `source=salla_transactions`;
+- complete validated source envelopes via `expand_batches` (max 32 rows in this preview), exact canonical transaction status paid/captured, reference, original timestamp, currency SAR and full paid principal;
+- no refund, partial/split or conflicting native transaction evidence.
+It returns `status=verified_native_capture` with **posting_permitted=False**; it performs no writes and does not claim global source reference uniqueness or opening/payout reconciliation. The bridge is not yet wired to the signed worker or activated in production. CI tests cover missing date, mismatched source/merchant, foreign currency, different reference, partial amount and malformed native proof.
+
+**Additional real financial correction:** direct first-capture writer previously guarded same-order allocations but did not call the full canonical `operational_provider_history.late_payment_blocks` gate used by full reconciliation to detect pooled settlements and opening overlaps. It now invokes this exact guard whenever operational movements exist, before adding a new capture fact or provider obligation. A pooled provider incoming settlement without complete allocation returns fixed `provider_pooled_settlement_review_required` and is queued as a no-money accountant exception, never credited. A fully allocated unrelated legitimate payout can pass without blocking an independent newly proved order. Added tests using the REAL canonical `late_payment_blocks` function with isolated driver stubs, not merely a mocked boolean.
+
+**CI:** Operational Payment Event Policy **PASS** on source SHA `d9b8a35647ddf3bc3baa5e38b1b62555f1e61aa3`, workflow run `45475354071`. Contains direct-vs-canonical original booking-date checks, no-money undated page tests, transaction proof recovery tests, pooled settlement and opening-overlap guard tests.
+
+**Remaining blockers:** the native transaction date candidate is read-only until owner order/source cross-reference, global duplicate/reference proof and CAS/refresh no-double-post integration are validated; no full original paid_at for all orders guaranteed. Existing 85s refresh + source coverage warnings and divergent Draft PR still prevent direct merge. All feature flags OFF, no production financial writes.
