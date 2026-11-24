@@ -48,6 +48,8 @@ on:
       - "backend/operational_provider_dates.py"
       - "backend/operational_payment_native_capture_candidate.py"
       - "backend/operational_payment_native_capture_read.py"
+      - "backend/operational_payment_full_refresh_parity.py"
+      - "backend/tests/test_operational_payment_full_refresh_parity.py"
       - "backend/operational_payment_native_capture_routes.py"
       - "backend/tests/test_operational_payment_native_capture_read.py"
       - "backend/tests/test_operational_payment_native_capture_candidate.py"
@@ -93,6 +95,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_operational_payment_pooled_history_parity.py' -v
           python3 -m unittest discover -s tests -p 'test_operational_payment_native_capture_candidate.py' -v
           python3 -m unittest discover -s tests -p 'test_operational_payment_native_capture_read.py' -v
+          python3 -m unittest discover -s tests -p 'test_operational_payment_full_refresh_parity.py' -v
           python3 -m unittest discover -s tests -p 'test_operational_payment_first_capture_writer.py' -v
           python3 -m unittest discover -s tests -p 'test_operational_payment_salla_order_page.py' -v
           python3 -m unittest discover -s tests -p 'test_operational_payment_direct_order_page.py' -v
