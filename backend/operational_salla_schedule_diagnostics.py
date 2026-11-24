@@ -18,6 +18,8 @@ STATUSES = frozenset({
     "scheduled", "running", "failed", "partial", "completed",
     "interrupted", "incomplete",
 })
+COVERAGE_REASON = "provider_modified_since_filter_unavailable"
+DISCOVERY_MODE = "recent_creations_and_verified_local_source_activity"
 ERROR_CLASSES = frozenset({
     "TimeoutError", "RuntimeError", "CancelledError", "ValueError",
     "ConnectionError", "HTTPException", "AutoReconnect",
@@ -81,7 +83,16 @@ def diagnose_salla_daily_cycle(row, *, now):
     successful = (status == "completed" and counters_complete
                   and errors == incomplete == 0 and truncated is False
                   and coverage is True and completed is not None and last is not None)
-    if status in {"failed", "partial", "interrupted", "incomplete"}:
+    unprovable_history = (
+        result.get("coverage_complete") is False
+        and result.get("coverage_reason") == COVERAGE_REASON
+        and result.get("discovery") == DISCOVERY_MODE
+    )
+    if status == "partial" and unprovable_history:
+        # The bounded native Salla API discovery did not prove a complete
+        # modified-order cohort. Retrying is not evidence of full coverage.
+        state, reason = "partial_coverage", "salla_modified_history_coverage_unprovable"
+    elif status in {"failed", "partial", "interrupted", "incomplete"}:
         state, reason = "failed", "scheduled_salla_reconciliation_failed"
     elif status == "running":
         state, reason = "running", "scheduled_salla_reconciliation_running"
@@ -94,6 +105,8 @@ def diagnose_salla_daily_cycle(row, *, now):
         "status": status, "started_at": started, "last_success_at": last,
         "completed_slot": completed, "attempts": attempts,
         "last_error_class": error_class,
+        "coverage_limitation": ("provider_modified_since_filter_unavailable"
+                                if unprovable_history else None),
         "coverage": {
             "errors_count": errors, "incomplete_count": incomplete,
             "truncated": truncated if type(truncated) is bool else None,
