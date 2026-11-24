@@ -1,5 +1,5 @@
 """Owner-only automation settings; these routes never calculate balances."""
-from fastapi import Depends, HTTPException, Response
+from fastapi import Depends, HTTPException, Query, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from operational_balance_store import digest, fail
@@ -19,14 +19,26 @@ def attach_automation_routes(router, db, current_user, scope):
         return owner
 
     @router.get('/automation')
-    async def status(response: Response, user=Depends(current_user)):
+    async def status(response: Response, user=Depends(current_user),
+                     read_key: str | None = Query(None, pattern=r"^[a-f0-9]{64}$"),
+                     read_generation: str | None = Query(None, pattern=r"^[a-f0-9]{32}$")):
         from operational_balance_automation import read_status
         response.headers['Cache-Control'] = 'no-store'
         owner = await owner_scope(user)
+        if (read_key is None) != (read_generation is None):
+            fail("operational_read_diagnostics_reference_required", "يلزم مرجع القراءة وجيلها لعرض قياساتها", 422)
         try:
             result = await read_status(db, owner)
         except Exception:
             fail('operational_automation_unavailable', 'تعذر قراءة حالة الاحتساب التلقائي', 503)
+        if read_key is not None:
+            trace = {"available": False}
+            try:
+                from demand_read_diagnostics import read_owner_trace
+                trace = await read_owner_trace(db, owner, read_key, read_generation)
+            except Exception:
+                pass  # Telemetry cannot make the existing automation status fail.
+            result = {**result, "read_diagnostics": trace}
         if await owner_scope(user) != owner:
             fail('operational_actor_scope_changed', 'تغير ارتباط الحساب؛ أعد فتح الصفحة', 403)
         return result
@@ -51,3 +63,4 @@ def attach_automation_routes(router, db, current_user, scope):
             fail('operational_automation_unavailable', 'تعذر حفظ إعداد الاحتساب التلقائي؛ تحقق من الحالة قبل تكراره', 503)
         await verify()
         return result
+

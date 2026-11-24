@@ -437,6 +437,9 @@ async def test_update_only_orders_fetch_items_only_for_existing_owner_rows(monke
     monkeypatch.setattr(sync, '_enrich_order_receiving_bank', AsyncMock(side_effect=lambda db,u,row: row))
     monkeypatch.setattr(sync, '_persist_sync_component_snapshot', persist)
     monkeypatch.setattr(sync, '_refresh_plan_b_status_snapshot', snapshot)
+    async def complete(db_, owner, reference, result):
+        return await snapshot(db_, owner, reference, {}, allow_handoff_transition=False)
+    monkeypatch.setattr(sync, '_complete_status_snapshot', complete)
     monkeypatch.setattr(paid_sar_sync, 'observe_list_evidence', AsyncMock())
     monkeypatch.setattr(governor, 'peek', lambda: ('allowed', None))
     monkeypatch.setattr(sync.asyncio, 'sleep', AsyncMock())
@@ -569,6 +572,7 @@ async def test_older_created_order_needs_verified_provider_update_in_window(monk
     monkeypatch.setattr(sync, '_persist_sync_component_snapshot', persist)
     monkeypatch.setattr(sync, '_enrich_order_receiving_bank', AsyncMock(side_effect=lambda db,u,row: row))
     monkeypatch.setattr(sync, '_refresh_plan_b_status_snapshot', AsyncMock())
+    monkeypatch.setattr(sync, '_complete_status_snapshot', AsyncMock())
     monkeypatch.setattr(paid_sar_sync, 'observe_list_evidence', AsyncMock())
     monkeypatch.setattr(governor, 'peek', lambda: ('allowed', None))
     monkeypatch.setattr(sync.asyncio, 'sleep', AsyncMock())

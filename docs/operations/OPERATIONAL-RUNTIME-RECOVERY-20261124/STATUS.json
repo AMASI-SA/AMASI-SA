@@ -1,0 +1,137 @@
+{
+  "task_id": "OPERATIONAL-RUNTIME-RECOVERY-20261124",
+  "status": "SOURCE_VERIFIED_RELEASE_PREPARATION",
+  "base_commit": "80341983cf7e89145e4101b408ab68bb45f379cf",
+  "branch": "codex/operational-runtime-recovery-20261124",
+  "root_responsibility": "Sole integrator, merger, deployer and live financial writer",
+  "prior_release": {
+    "pr": 2102,
+    "deployment": "9ff36c3",
+    "source": "b5c13c4147abbd3444a18c57f288145efcf42ce2",
+    "original_guard_verified": true,
+    "three_consecutive_probes": true,
+    "lease_active": false
+  },
+  "findings": [
+    "The installed Qoyod payment-freshness wrapper rejects allow_handoff_transition during bounded Salla recovery after source persistence.",
+    "Identical source retry currently skips incomplete followups; safe source-bound completion requires review.",
+    "Operational report latency remains material; metadata reads can unnecessarily return stale large headers."
+  ],
+  "verification": {
+    "before_branch_creation": "Original guard inactive; shared tracked tree clean; fetched production branch and shared HEAD equal exact base; no active publication observed.",
+    "b11_adjacent": {
+      "passed": 206,
+      "failed": 2,
+      "seconds": 57.43,
+      "completed_at_utc": "2026-11-24T14:42:59.191287+00:00",
+      "cause": "Partial mocked make_spec omitted owner_id/actor_id; encoder tests did not reach encoder. No assertion weakened."
+    },
+    "combined_4713": {
+      "source_sha": "4713d0d41f80f823aafcddd096e3d9d56b4c4317",
+      "passed": 216,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 55.294,
+      "confirmed_from_existing_junit_on_resume": true
+    },
+    "github_4713": {
+      "check_runs": 43,
+      "success": 37,
+      "conditional_skipped": 6,
+      "failed": 0,
+      "pending": 0,
+      "operational_run": 45417936791,
+      "operational_passed": 7454,
+      "operational_subtests": 151,
+      "demand_passed": 106,
+      "salla_run": 45417935937,
+      "salla_passed": 560,
+      "salla_subtests": 53,
+      "skip_floor_gates_passed": true,
+      "release_rehearsal": "Not executed for source-only candidate; mandatory for intent-only B"
+    },
+    "independent_review": "No material blocker found on exact4713 source. Runtime acceptance after publication remains required.",
+    "resume_live_state": "Production shared checkout clean at base80341983; task checkout clean at4713 before documentation checkpoint; original guard inactive. No publication or financial mutation by this continuation yet."
+  },
+  "production_changed_by_this_followup": false,
+  "financial_recovery_claim": false,
+  "preserved": [
+    "Prior merged release and immutable intent",
+    "All shared untracked files",
+    "Other task branches and worktrees",
+    "Pending source admission and manual financial records"
+  ],
+  "next_safe_action": "Freeze immutable release source after this documentation-only checkpoint; build twice with governed toolchain and origin, create intent-only B, require exact-B gates and official clean rehearsal before publication.",
+  "checkpoint_at_utc": "2026-11-24T15:13:17.490Z",
+  "integrated_candidates": [
+    {
+      "name": "bounded demand metadata projections",
+      "patch_sha256": "6a4f7e7142f3df934c3e7f952b40a5d195538a9834763bd8418bba1f6f117000",
+      "files": [
+        "backend/demand_read_store.py",
+        "backend/demand_read_jobs.py",
+        "backend/tests/test_operational_balance_demand_metadata_reads.py"
+      ],
+      "review": "Root and independent static review passed; actual owned-loopback Mongo regression 3/3 passed (2.75s), adjacent five demand suites 84/84 passed (40.49s), zero skips.",
+      "runtime_test_count": 3,
+      "verification_limit": "Emergent development interpreter dependencies differ from production pins. Exact c3d5030 GitHub checks completed with no failures; final integrated-head CI remains mandatory."
+    },
+    {
+      "name": "source-bound Salla no-send status completion",
+      "patch_sha256": "35d12df25cb45f47b9dc352959a2d73f10e17355125817f6870bb7701bb0901a",
+      "files": [
+        "backend/operational_atomic.py",
+        "backend/qoyod_auto_unified/installer.py",
+        "backend/qoyod_auto_unified/live_source.py",
+        "backend/salla_integration/status_snapshot_completion.py",
+        "backend/salla_integration/sync.py",
+        "backend/tests/test_salla_scheduled_reconciliation.py",
+        "backend/tests/test_salla_source_window_repair.py",
+        "backend/tests/test_salla_status_snapshot_runtime.py",
+        "backend/tests/test_salla_sync_component_snapshot.py"
+      ],
+      "review": "Independent frozen static/adversarial review passed. Baseline composition reproduced five keyword failures; corrected composition passed six cases.",
+      "runtime_acceptance": "Normal installed bootstrap and owned real-Mongo execution passed: 167 cases plus 10 subtests in 24.24s, zero skips/failures/errors. Required runtime20 and component34 executed. Exact633a Salla CI passed560 cases plus53 subtests with strict gates; final integrated CI remains mandatory."
+    },
+    {
+      "name": "bounded numeric owner read diagnostics",
+      "patch_sha256": "1ba3bbf3ba3fd23ed1f37d2aeb459d1c83f7f36b5e9d333d4ea40c4b179b3730",
+      "files": [
+        "backend/demand_read_diagnostics.py",
+        "backend/demand_read_jobs.py",
+        "backend/demand_read_runner.py",
+        "backend/demand_read_store.py",
+        "backend/operational_balance_automation_routes.py",
+        "backend/operational_financial_position_state.py",
+        "backend/operational_financial_report_read.py",
+        "backend/operational_report_copy.py",
+        "backend/operational_response_encoding.py",
+        "backend/operational_workspace_demand_routes.py",
+        "backend/tests/test_operational_balance_owner_read_diagnostics.py"
+      ],
+      "review": "Root and independent static review passed; all11 hashes bound. Independent20 assertions and two real-driver stalled-socket checks passed. Actual production AcceptanceConfigDatabase route chain confirmed.",
+      "runtime_acceptance": "Combined216-case actual Mongo suite passed after realistic owner/actor fixture correction; exact4713 operational CI passed. No skipped failures or errors.",
+      "limits": "The 200ms driver deadline is not a strict wall-clock ceiling; independent joined socket observations were about504ms. Telemetry does not itself repair cold report latency.",
+      "integration_correction": "Release review caught a test filename collision in WIP3ae42e3a. Restore the pre-existing 13-case primary-source diagnostic suite byte-for-byte from633a; retain all21 new owner-trace cases in a distinct, verified-absent module. All10 reviewed runtime files remain unchanged. Both suites stay selected by existing CI globs."
+    },
+    {
+      "name": "identical same-view snapshot binding",
+      "patch_sha256": "5be1002cbdc208f3006dfed881153809757e6d42db7c286fb8489b47f308bca7",
+      "files": [
+        "backend/operational_workspace_read_builders.py",
+        "backend/tests/test_operational_balance_report_demand_binding.py"
+      ],
+      "review": "Root and independent static review passed. Nine runtime lines canonicalize only already validated complete active same-view anchors, after mandatory forecast/supplied-anchor checks; no source/scope/permission widening.",
+      "runtime_acceptance": "Eight new real-Mongo/HTTP cases and adjacent suites executed in combined216 passing run, and exact4713 CI passed.",
+      "limits": "Avoids a duplicate unanchored-to-bound job for an identical view. Does not fix cold different-view computation by itself."
+    }
+  ],
+  "remaining_acceptance": [
+    "Immutable source/intent A/B and complete exact-B CI",
+    "Clean official adapter and isolated package rehearsal without lease",
+    "Normal merge preserving immutable pair; original guard publish and three consecutive probes",
+    "Bounded Salla retry and receipt comparison against prior16938 without duplicate recovery claims",
+    "Cold-report latency and legacy cost/inventory errors remain to be diagnosed from actual runtime stages"
+  ]
+}

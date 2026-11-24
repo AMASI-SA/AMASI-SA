@@ -46,6 +46,9 @@ _CONSUMER = re.compile(r"[A-Za-z0-9_-]{8,128}\Z")
 METRIC_PREFIX = "mezan_demand_read_metrics "
 _METRIC_NUMBERS = frozenset({"pid", "wall_ms", "build_ms", "materialize_ms", "check_ms", "check_calls",
                             "authorize_ms", "process_cpu_ms", "peak_rss_kib", "queue_ms",
+                            "startup_ms", "runner_import_ms", "builder_import_ms", "state_read_ms", "state_decode_ms", "state_decode_cpu_ms",
+                            "report_build_ms", "report_build_cpu_ms", "report_copy_cpu_ms", "forecast_sources_ms",
+                            "order_labels_ms", "response_encode_ms", "response_encode_cpu_ms", "response_prepare_ms",
                             "mongo_driver_command_p50_ms", "mongo_driver_command_p95_ms", "mongo_driver_command_p99_ms",
                             "mongo_driver_checkout_p95_ms", "mongo_driver_command_timeouts", "mongo_driver_checkout_timeouts"})
 
@@ -213,6 +216,8 @@ async def demand(db, spec, consumer_id, *, refresh=False, retry=False):
     ]}
     for slot in range(MAX_OWNER_PENDING):
         try:
+            # A rebuilding job can retain its previous large result. Status
+            # polling needs no financial header from that expired generation.
             row = await db[JOBS].find_one_and_update(scope, [
                 {"$set": {"_requeue": requeue, "consumers": consumers,
                     "owner_id": {"$literal": spec["owner_id"]}, "actor_id": {"$literal": spec["actor_id"]},
@@ -226,7 +231,8 @@ async def demand(db, spec, consumer_id, *, refresh=False, retry=False):
                     "retry_at": {"$cond": ["$_requeue", "$$NOW", {"$ifNull": ["$retry_at", "$$NOW"]}]},
                     "error_code": {"$cond": ["$_requeue", None, "$error_code"]}}},
                 {"$unset": "_requeue"},
-            ], upsert=True, return_document=ReturnDocument.AFTER)
+            ], upsert=True, return_document=ReturnDocument.AFTER,
+                projection={"_id": 1, "status": 1, "error_code": 1})
             return public_status(row)
         except DuplicateKeyError:
             # Another exact request may have won _id, or this owner's bounded
@@ -342,3 +348,4 @@ async def materialize(db, claim, result, checkpoint):
         await db[ROWS].insert_many(batch, ordered=True)
     await checkpoint()
     return {"header": header, "paged": rows is not None, "total": len(rows) if rows is not None else 0}
+

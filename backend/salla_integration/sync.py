@@ -40,6 +40,7 @@ from order_currency import salla_order_currency_fields
 from salla_marketing_attribution import promoted_salla_attribution
 
 from .service import SallaError, call_salla
+from .status_snapshot_completion import complete_status_snapshot as _complete_status_snapshot
 
 # orders_db is imported at module top-level to keep `salla_direct` writes
 # routed through the same merge logic Make/Excel use.
@@ -191,7 +192,7 @@ async def _refresh_plan_b_status_snapshot(
 
     latest = await db.integration_inbox.find_one(
         {
-            "user_id": {"$in": [user_id, "main"]},
+            "user_id": {"$in": [user_id, "main"]} if allow_handoff_transition else str(user_id),
             "$or": [
                 {"salla_order_number": order_number},
                 {"canonical_payload.order_number": order_number},
@@ -1023,17 +1024,15 @@ async def _run_existing_orders_refresh(db, user_id, *, refresh_window, log_id=No
                 if result.get("skipped") or result.get("stale"):
                     counts["skipped"] += 1
                     continue
-                if result.get("unchanged"):
-                    counts["unchanged"] += 1
-                    continue
+                # An identical accepted source may still owe the read-model
+                # completion that failed after its earlier source commit.
                 if (result.get("component_revalidation") or {}).get("accepted") is False:
                     counts["pending_component_count"] += 1
                     counts["incomplete_count"] += 1
                 from .paid_sar_sync import observe_list_evidence
                 await observe_list_evidence(db, user_id, source_row)
-                await _refresh_plan_b_status_snapshot(db, user_id, reference, doc,
-                                                      allow_handoff_transition=False)
-                counts["updated"] += 1
+                await _complete_status_snapshot(db, user_id, reference, result)
+                counts["unchanged" if result.get("unchanged") else "updated"] += 1
                 await asyncio.sleep(0.25)
             except ResourcePressure:
                 raise
@@ -1388,7 +1387,7 @@ async def run_orders_sync(
                         if res.get("blocked") or res.get("skipped"):
                             incomplete_count += 1
                         continue
-                    if res.get("unchanged"):
+                    if res.get("unchanged") and not recover_missing_order_clock:
                         unchanged += 1
                         continue
                     if (res.get("component_revalidation") or {}).get("accepted") is False:
@@ -1396,11 +1395,13 @@ async def run_orders_sync(
                         incomplete_count += 1
                     from .paid_sar_sync import observe_list_evidence
                     await observe_list_evidence(db, user_id, list_row)
-                    await _refresh_plan_b_status_snapshot(
-                        db, user_id, doc["order_number"], doc,
-                        **({"allow_handoff_transition": False} if recover_missing_order_clock else {})
-                    )
-                    if res.get("created"):
+                    if recover_missing_order_clock:
+                        await _complete_status_snapshot(db, user_id, doc["order_number"], res)
+                    else:
+                        await _refresh_plan_b_status_snapshot(db, user_id, doc["order_number"], doc)
+                    if res.get("unchanged"):
+                        unchanged += 1
+                    elif res.get("created"):
                         created += 1
                     else:
                         updated += 1

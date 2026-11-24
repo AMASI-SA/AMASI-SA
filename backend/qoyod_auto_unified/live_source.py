@@ -12,9 +12,13 @@ async def _refresh_snapshot_with_complete_payment(
     user_id: str,
     order_number: str,
     order_doc: dict[str, Any],
+    *, allow_handoff_transition: bool = True,
 ) -> dict[str, Any]:
     """Persist live Salla payment and customer facts before Qoyod sending."""
-    result = await original(db, user_id, order_number, order_doc)
+    result = await original(
+        db, user_id, order_number, order_doc,
+        allow_handoff_transition=allow_handoff_transition,
+    )
     if not result.get("trace_id"):
         return result
     payment_fields = (

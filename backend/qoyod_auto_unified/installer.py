@@ -120,10 +120,12 @@ def install_auto_send_payment_freshness_patch() -> None:
     original_status_snapshot = salla_sync_module._refresh_plan_b_status_snapshot
 
     async def refresh_status_snapshot_complete(
-        db: Any, user_id: str, order_number: str, order_doc: dict[str, Any]
+        db: Any, user_id: str, order_number: str, order_doc: dict[str, Any],
+        *, allow_handoff_transition: bool = True,
     ) -> dict[str, Any]:
         return await _refresh_snapshot_with_complete_payment(
-            original_status_snapshot, db, user_id, order_number, order_doc
+            original_status_snapshot, db, user_id, order_number, order_doc,
+            allow_handoff_transition=allow_handoff_transition,
         )
 
     async def authoritative_manual_send_one(
