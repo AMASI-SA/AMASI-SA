@@ -75,6 +75,7 @@ async def post_first_salla_capture(db, owner, merchant_id, order_id, order_numbe
     from operational_balance_store import audit, fail, mutate, now
     from operational_balance_service import active_gate
     from operational_payment_cas_reconciliation import reconcile_staged_payment_evidence
+    from operational_payment_refresh_health_gate import require_current_refresh_health
 
     stamp = clock or now()
     if not isinstance(source_ref, str) or not source_ref.strip() or not isinstance(merchant_id, str) or not merchant_id.strip():
@@ -89,6 +90,7 @@ async def post_first_salla_capture(db, owner, merchant_id, order_id, order_numbe
 
     async def apply(state):
         await active_gate(db, owner, state)
+        await require_current_refresh_health(db, owner, state, at=stamp)
         if not _recent_source_snapshot(state, stamp):
             fail("payment_source_snapshot_stale",
                  "تحديث مصادر الأرصدة قديم؛ لا يمكن ترحيل الدفعة قبل التحقق", 409)
@@ -127,5 +129,10 @@ async def post_first_salla_capture(db, owner, merchant_id, order_id, order_numbe
                   "salla_verified_payment", stamp)
         return result
 
+    async def before_commit(before, after):
+        await verify_merchant()
+        # A newer failed source attempt may arrive during preparation.
+        await require_current_refresh_health(db, owner, after, at=stamp)
+
     await verify_merchant()
-    return await mutate(db, owner, apply, before_commit=lambda before, after: verify_merchant())
+    return await mutate(db, owner, apply, before_commit=before_commit)
