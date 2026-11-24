@@ -374,7 +374,8 @@
     "source": "PASS: sole parent J2, exact 20 owned paths, 19 non-status blobs byte-identical A1, inherited intent/full history unchanged; Frontend/control inputs identical",
     "candidate": "PASS: original candidate validator, manifests, raw double-build evidence, retained artifact/build-meta/proof hashes and bytes",
     "intent_commit": "PASS: sole parent A2, exactly one changed intent path, exact reviewed candidate Git blob",
-    "focused_tests": "PASS: independent raw log/result hashes; backend56 in5.35s and real Mongo10 in8.25s, exit0/no skips"
+    "focused_tests": "PASS: independent raw log/result hashes; backend56 in5.35s and real Mongo10 in8.25s, exit0/no skips",
+    "normal_tracked_intent": "PASS: original load_release_intent at clean B2, bootstrap absent, exact candidate bytes/source unchanged"
   },
   "host_helper": {
     "path": "operators/pr2113_guarded_rehearsal.py",
@@ -433,5 +434,77 @@
   "live_cabinet_creation_or_deletion": false,
   "own_lease_created": false,
   "publication_authorized": true,
-  "next_safe_action": "Wait applicable exact-B2 gates and both host rehearsals; preserve foreign PR2109 lease/publication. Refresh J2 and original guard before normal tree-preserving merge. Require exact-D CI, original guarded helper rehearsal on clean J2, prepare/prepublish, one authorized Republish, newer successful platform deployment and original 3-probe verify/final inactive guard. No live cabinet mutations."
+  "next_safe_action": "Wait applicable exact-B2 gates and both host rehearsals; preserve foreign PR2109 lease/publication. Refresh J2 and original guard before normal tree-preserving merge. Require exact-D CI, original guarded helper rehearsal on clean J2, prepare/prepublish, one authorized Republish, newer successful platform deployment and original 3-probe verify/final inactive guard. No live cabinet mutations.",
+  "normal_tracked_B2_validation": {
+    "observed_at_utc": "2026-11-24T17:04:06.170883+00:00",
+    "started_at_utc": "2026-11-24T17:04:03.508062+00:00",
+    "elapsed_seconds": 2.663,
+    "scope": "fetch reviewed B2, clean fast-forward A2 to B2, exact intent equality, original normal tracked B validator only",
+    "repo_root": "/workspace/scratch/021675d08c11/location-codes-release/bootstrap",
+    "task_branch": "codex/inventory-location-short-codes-release2-20261124",
+    "source_base_git_sha": "20fc28f3432a78996f1d70f3356a38bd78b0309e",
+    "source_git_sha": "a611477be8d52b18f9ad851f44facf9c78be2905",
+    "deployment_git_sha": "6005a1be25a7a9402442a389f3052ffab8664e07",
+    "deployment_tree_oid": "abcdea0a41cb694cdd229492a96a7b68e25d8a3a",
+    "deployment_sole_parent": "a611477be8d52b18f9ad851f44facf9c78be2905",
+    "changed_paths_A_to_B": [
+      "release/release-intent-v5.json"
+    ],
+    "fast_forward": {
+      "argv": [
+        "git",
+        "merge",
+        "--ff-only",
+        "6005a1be25a7a9402442a389f3052ffab8664e07"
+      ],
+      "exit_code": 0
+    },
+    "validation": {
+      "method": "scripts.emergent_deployment_adapter.load_release_intent",
+      "argv": [
+        "python",
+        "-B",
+        "-c",
+        "from scripts.emergent_deployment_adapter import load_release_intent;import json;p=load_release_intent();assert p['source_git_sha']=='a611477be8d52b18f9ad851f44facf9c78be2905';assert p['source_base_git_sha']=='20fc28f3432a78996f1d70f3356a38bd78b0309e';assert p['runtime_identity']['release_id']=='rg5-1a6146f1c27f7bf287f7185591bcbfa1f88ea0ecc066ae398b4bbb3c4259b72e';print(json.dumps({'accepted':True,'validator':'original load_release_intent','source_git_sha':p['source_git_sha'],'source_base_git_sha':p['source_base_git_sha'],'release_id':p['runtime_identity']['release_id']}))"
+      ],
+      "bootstrap_variable_present": false,
+      "exit_code": 0,
+      "result": "accepted by original normal tracked-intent validator at B2"
+    },
+    "candidate": {
+      "path": "/workspace/scratch/021675d08c11/location-codes-release/candidate-refresh2.json",
+      "bytes": 1530059,
+      "sha256": "cdc7a0d5af053b63f57b65fc896c133377fa8bb9892f260f94b28bcfde5546a0",
+      "git_blob_sha1": "e5b2870da4cd713d8c98fb80d8a1ad91c72219b7"
+    },
+    "tracked_intent": {
+      "path": "/workspace/scratch/021675d08c11/location-codes-release/bootstrap/release/release-intent-v5.json",
+      "bytes": 1530059,
+      "sha256": "cdc7a0d5af053b63f57b65fc896c133377fa8bb9892f260f94b28bcfde5546a0",
+      "git_blob_sha1": "e5b2870da4cd713d8c98fb80d8a1ad91c72219b7"
+    },
+    "release_id": "rg5-1a6146f1c27f7bf287f7185591bcbfa1f88ea0ecc066ae398b4bbb3c4259b72e",
+    "postconditions": {
+      "head": "6005a1be25a7a9402442a389f3052ffab8664e07",
+      "git_status_porcelain": "",
+      "git_diff_check_exit_code": 0,
+      "tracked_intent_matches_candidate_exact_bytes": true,
+      "all_preflight_non_intent_source_hashes_unchanged": true,
+      "no_backend_runtime_identity_materialized": true
+    },
+    "new_build_performed": false,
+    "out_of_scope_actions_performed": [],
+    "log": {
+      "path": "/workspace/scratch/021675d08c11/location-codes-release/evidence/candidate-refresh2-tracked-intent.log",
+      "bytes": 807,
+      "sha256": "f95bea164ec1c9ad17a111926fdff03d42394ffeb840f2e2d44457e167bb99f2"
+    }
+  },
+  "predecessor_platform_observation": {
+    "observed_at_utc": "2026-11-24T17:05:00Z",
+    "platform_version": "d0a7e31",
+    "publish_ordinal": 100,
+    "visible_status": "Deployment finished Nov 24, 08:05 PM",
+    "interpretation": "Foreign PR2109 platform publication finished; its original guard verification/lease closure has not yet been observed by this task."
+  }
 }
