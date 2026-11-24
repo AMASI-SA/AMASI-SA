@@ -65,8 +65,13 @@ def run(db):
     fake_mongo.timeout=Timeout
     budget=types.ModuleType("operational_demand_refresh")
     budget.calculation_checkpoint=lambda:None
+    reader=types.ModuleType("operational_read_runtime")
+    async def read_source_cursor(cursor,count):
+        return await cursor.to_list(length=count)
+    reader.read_source_cursor=read_source_cursor
     with patch.dict(sys.modules,{
-        "pymongo":fake_mongo,"operational_demand_refresh":budget
+        "pymongo":fake_mongo,"operational_demand_refresh":budget,
+        "operational_read_runtime":reader,
     }):
         return asyncio.run(preview_one_native_capture(
             db,"merchant1","301556476",as_of=NOW))
