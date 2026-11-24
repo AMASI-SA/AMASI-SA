@@ -95,19 +95,19 @@ async def require_current_refresh_health(db, owner, state, *, at, event_proof_bo
             )
             if event_proof_bound is not True:
                 raise RefreshHealthHold("payment_salla_source_unverified")
-            from operational_salla_schedule_health_routes import FIELDS
+            from operational_salla_schedule_diagnostics import SCHEDULE_PROJECTION
             import asyncio
             import pymongo
             try:
                 with pymongo.timeout(1.5):
                     async with asyncio.timeout(2):
                         row = await db["salla_scheduled_reconciliation"].find_one(
-                            {"_id": owner}, FIELDS, max_time_ms=1500)
+                            {"_id": owner}, SCHEDULE_PROJECTION, max_time_ms=1500)
                 require_verified_event_source(
                     row, now=source_now, event_proof_bound=event_proof_bound)
             except EventSourceHold as exc:
                 raise RefreshHealthHold(str(exc)) from None
-            except (TimeoutError, ValueError, TypeError):
+            except Exception:
                 raise RefreshHealthHold("payment_salla_event_source_unavailable") from None
     except RefreshHealthHold as exc:
         fail(str(exc), "نتيجة تحديث المصادر غير سليمة؛ أوقف الترحيل المالي حتى نجاح التحديث", 409)
