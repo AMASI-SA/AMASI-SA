@@ -18,6 +18,8 @@ on:
       - "backend/operational_payment_salla_event_capture.py"
       - "backend/operational_payment_evidence_review.py"
       - "backend/operational_payment_direct_provider.py"
+      - "backend/operational_payment_first_capture_writer.py"
+      - "backend/tests/test_operational_payment_first_capture_writer.py"
       - "backend/tests/test_operational_payment_direct_provider.py"
       - "backend/tests/test_operational_payment_evidence_review.py"
       - "backend/salla_integration/payment_update_inbox.py"
@@ -57,4 +59,5 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_operational_payment_salla_event_capture.py' -v
           python3 -m unittest discover -s tests -p 'test_operational_payment_evidence_review.py' -v
           python3 -m unittest discover -s tests -p 'test_operational_payment_direct_provider.py' -v
+          python3 -m unittest discover -s tests -p 'test_operational_payment_first_capture_writer.py' -v
           python3 -m unittest discover -s tests -p 'test_operational_payment_initial_order_inbox.py' -v
