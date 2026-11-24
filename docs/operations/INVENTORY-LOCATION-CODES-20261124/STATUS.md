@@ -150,3 +150,8 @@ The unchanged strict-D helper passed in `/app/.git/mezan-pr2113-recover-d-vb9syv
 Exact frozen artifact matches: build-meta591,784 bytes SHA256 `b8aad6fcdd48f782ff9e8deaf57e1b701bedf567b7dfa2b27f532638e5323433`; reproducibility proof1,521 bytes SHA256 `8f582c809003c06d706e5a9513fb449638cf96731aa03f211e3e59bd72a36e58`. Frontend package1833 files and Backend1358 files passed isolated runtime/health and application/json checks. Artifact tree remains `20bb37b904e519478211c634321272a4a293c5e44f3b3e0c77fc90e8cb3c9cc6`. Original adapter log216,985 bytes SHA256 `b98c9bcda6fbf43845c021ddeb8cf6b22d915f60861d0c02e7669bc97e659dac` retained in the durable stage. Final available260,780,032 bytes.
 
 Next is original prepare, then prepublish immediately before the already authorized numbering-only Republish; require newer explicit platform success and original three-probe production verification. Live cabinet creation/deletion remains excluded.
+
+
+## 2026-11-24 19:16:56 UTC — own release lease prepared
+
+Original `prepare` passed for actor `chatgpt-inventory-location-codes-20261124-pr2113`, protocol5, exact A2/J2/D/RID. **Own lease is now active.** Publication stage `/app/.git/mezan-pr2113-publication-o4xyp2sz`; prepare log667,927 bytes SHA256 `bdd879a64c533ce93327af986902e6920df728eba5e9eb5e27a2816514e21ba8`. No Republish click yet. Next is original prepublish immediately before the authorized click, then newer platform success and original three-probe verify; successful verify must close this matching lease.
