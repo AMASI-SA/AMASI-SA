@@ -1,6 +1,6 @@
 {
   "task_id": "OPERATIONAL-COST-SOURCE-DIAGNOSTICS-20261124",
-  "status": "WIP: exact B/M CI PASS; canonical /app rehearsal44/44PASS; original own prepare PASS; publication not started",
+  "status": "WIP: exact B/M CI and canonical host rehearsal PASS; original prepare/prepublish PASS; one platform publication running",
   "repository": "AMASI-SA/AMASI-SA",
   "task_branch": "codex/operational-cost-report-release-20261124",
   "source_base_commit": "cb98e5660380d362e78f937d60abc7139cd1c462",
@@ -65,7 +65,7 @@
   "review_state": "Both isolated runtime slices passed independent review; the combined staged tree passed independent mode/blob comparison. Root reviewed the exact runtime changes and ran all 613 combined affected tests. Only this continuity document changed afterwards. External candidate provenance, full clean canonical-A checkout and original load_candidate_release_intent independently passed without mutation.",
   "ci_state": "PASS: exact B25success/10conditional skips; exact M11success/0skip, no pending/failure/neutral. All applicable gates executed.",
   "merge_state": "PR2118 normally merged20:08:54UTC as c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe; parents[J,B],treeB preserved.",
-  "release_state": "Shared host is exact M with verified build/packages/proof and432identical foreign entries. Original prepare created this task's reviewed lease. Prepublish/publication/live verification pending.",
+  "release_state": "Original own lease active for reviewed A/M/RID. Platform explicitly records Deployment Started Nov24 11:30PM Riyadh and Building your website. No new success or live verification yet.",
   "production_changed": false,
   "limitations": [
     "The collection which caused the observed production timeout remains unknown until a matching failure emits the new diagnostic.",
@@ -74,7 +74,7 @@
     "No runtime latency reduction, source completeness or financial recovery is claimed.",
     "Issue 1006 has reached its comment limit; this task status and the forthcoming Draft PR are the recoverable ledger."
   ],
-  "next_safe_action": "Run the original prepublish immediately before one Manage Republish; require explicit newer platform success, then original three-probe verify and inactive guard before any bounded cost diagnostic/financial continuation.",
+  "next_safe_action": "Wait for this publication's explicit newer success and new version; run the original three-probe verify once against https://mezansalla.com, then original status inactive. Preserve own lease until verification completes. No cost read or financial refresh yet.",
   "integration": {
     "coordinator": "/root",
     "production_branch_base": "cb98e5660380d362e78f937d60abc7139cd1c462",
@@ -113,7 +113,7 @@
     "history_gate": "The initial unpushed integration attempt b9675bea83bd2881cdf8fbd828a1f2a6562ac873 retained both earlier branches as parents but was rejected by the original full-history intent-path condition despite equal final intent bytes. It remains local only and will not be released. This fresh linear source avoids bringing old-intent branch history into J..A; keep the validator unchanged."
   },
   "continuation_evidence": {
-    "recorded_at_utc": "2026-11-24T20:27:26.133466+00:00",
+    "recorded_at_utc": "2026-11-24T20:32:00Z",
     "source_pr": 2118,
     "source_branch": "codex/operational-cost-report-release-20261124",
     "source_git_sha": "6e25a762b17ad87ce8efeb37f2952a478ae9427b",
@@ -229,7 +229,7 @@
         "app_available_bytes": 428056576
       }
     },
-    "next_safe_action": "Run the original prepublish immediately before one Manage Republish; require explicit newer platform success, then original three-probe verify and inactive guard before any bounded cost diagnostic/financial continuation.",
+    "next_safe_action": "Wait for this publication's explicit newer success and new version; run the original three-probe verify once against https://mezansalla.com, then original status inactive. Preserve own lease until verification completes. No cost read or financial refresh yet.",
     "production_changed_by_this_candidate": false,
     "preceding_publisher_history": [
       {
@@ -377,7 +377,7 @@
       "app_available_bytes_before": 425648128,
       "tmp_available_bytes_before": 238907887616,
       "own_lease_prepared": true,
-      "publication_started": false,
+      "publication_started": true,
       "result_observed_at": "2026-11-24T20:24:30.461715+00:00",
       "receipt_path": "PR2118-HOST-REHEARSAL.json",
       "receipt_git_blob": "b2cf55c203a83fb04cdf62ac94764783f1936280",
@@ -438,8 +438,27 @@
         "deployment_git_sha": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
         "prepared_at": "2026-11-24T20:27:24.900360+00:00"
       },
-      "prepublish": "pending",
-      "platform_publication": "not started",
+      "prepublish": {
+        "started_at": "2026-11-24T20:29:39.267255+00:00",
+        "finished_at": "2026-11-24T20:29:43.042243+00:00",
+        "exit_code": 0,
+        "bytes": 333,
+        "sha256": "c00995357903f69f6e27bbeccce5606170b985ae6f4db6b1aabc1df5de4cbbbd",
+        "ready_to_publish": true,
+        "source_git_sha": "6e25a762b17ad87ce8efeb37f2952a478ae9427b",
+        "deployment_git_sha": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
+        "release_id": "rg5-b7cabd1d3fb44fd96dee501e461a869b40872100213fd64c55665539fe9ab97e"
+      },
+      "platform_publication": {
+        "attempts": 1,
+        "state": "Building your website...",
+        "started_ui": "Deployment Started Nov24 11:30PM",
+        "timezone": "Asia/Riyadh",
+        "previous_version": "7fe1672",
+        "new_version": null,
+        "success_observed": false,
+        "paid_chat_used": false
+      },
       "verify": "pending",
       "lease": "active; own actor"
     }
