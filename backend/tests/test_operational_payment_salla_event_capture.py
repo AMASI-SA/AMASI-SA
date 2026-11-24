@@ -27,6 +27,37 @@ class SallaEventCaptureTests(unittest.TestCase):
     def test_wrong_event_never_captures(self):
         self.assertIsNone(normalized_webhook_capture({"event":"order.status.updated", "data":{}}))
 
+    def test_initial_order_created_is_supported_as_payment_evidence_trigger(self):
+        initial = source_item()["event"].copy()
+        initial["event"] = "order.created"
+        stub = types.ModuleType("operational_payment_evidence")
+        calls = []
+        def normalize_payment(raw, currency, total, created, as_of):
+            calls.append((raw.get("id"), currency))
+            return {"provider": "tabby", "currency": "SAR", "gross": "300.00",
+                    "captures": [{"id": "tabby-native-001", "amount": "300.00",
+                                  "captured_at": "2026-11-24T12:01:00+03:00"}]}, []
+        stub.normalize_payment = normalize_payment
+        with patch.dict(sys.modules, {"operational_payment_evidence":stub}):
+            proof = normalized_webhook_capture(initial)
+        self.assertEqual(proof[0], "o1")
+        self.assertEqual(proof[1]["captures"][0]["id"], "tabby-native-001")
+        self.assertEqual(calls, [("o1", "SAR")])
+
+    def test_initial_order_with_status_only_is_not_a_paid_capture(self):
+        initial = source_item()["event"].copy()
+        initial["event"] = "order.created"
+        stub = types.ModuleType("operational_payment_evidence")
+        def normalize_payment(raw, currency, total, created, as_of):
+            return {"provider": "tabby", "currency": "SAR",
+                    "gross": "300.00", "captures": []}, [
+                    {"code":"provider_capture_evidence_incomplete"}]
+        stub.normalize_payment = normalize_payment
+        with patch.dict(os.environ, {FLAG:"1"}):
+            with patch.dict(sys.modules, {"operational_payment_evidence":stub}):
+                self.assertTrue(asyncio.run(stage_verified_payment_update(None, {
+                    **source_item(), "event":initial})))
+
     def test_no_order_or_amount_never_captures(self):
         self.assertIsNone(normalized_webhook_capture({"event":"order.payment.updated", "data":{}}))
 
