@@ -78,7 +78,12 @@ async def stage_verified_payment_update(db, item):
             if not provider:
                 provider = next((row.get("provider") for row in diagnostics
                                  if isinstance(row, dict) and row.get("provider")), None)
-            if provider in {"salla", "tabby", "tamara", "emkan", "paypal"} and (
+            if not provider and apparent_success:
+                # The merchant must be told that the successful payment
+                # cannot be assigned to a platform. Keep it under unknown,
+                # never invent a platform or post to a default account.
+                provider = "unknown"
+            if provider in {"salla", "tabby", "tamara", "emkan", "paypal", "unknown"} and (
                     apparent_success or payment_update):
                 from operational_payment_evidence_review import stage_unverified_review
                 reasons = [row.get("code") for row in diagnostics if isinstance(row, dict)]
