@@ -291,3 +291,22 @@ The prior `operational_payment_full_refresh_parity` tests copied a synthetic dir
 The isolated policy CI initially failed *before test execution* because importing `operational_balance_engine` transitively imports `operational_balance_store`, requiring FastAPI not installed in the pure standalone workflow. Test updated to load the real engine source with a test-only minimal `operational_balance_store.digest`/calculation checkpoint stub; **the engine/reconciliation implementation was NOT modified**. Latest test-only fix commit: `dba2acecbe581da027760dbb3ff802f28831d023`. No GitHub Actions result was yet available for this SHA during the latest check; **do not claim real reducer parity PASS** until the CI runner independently executes and completes it.
 
 This test uses synthetic source evidence, not actual live Mezan owner data and cannot replace Preview E2E reconciliation. All financial flags remain OFF, PR is Draft, no merge/deployment or production money changes.
+
+
+## 2026-11-25 — Exact real-reducer CI traceback diagnosed and test harness corrected
+
+The GitHub **push** run for SHA `a816266fab3974a8e0b525afa4bb0afa9a266050` was found on the GitHub Actions site: workflow run `45481896321`, job `138756949461`, conclusion FAILED, while sibling `payment-policy-tests` PASSED.
+
+The real job's RAW logs were retrieved using GitHub connector `fetch_workflow_job_logs` for the exact job ID. Both reducer-parity cases failed **at Python import time**, not on any monetary assertion:
+```
+ImportError: cannot import name 'fail' from 'operational_balance_store' (unknown location)
+  operational_balance_engine.py -> operational_provider_history.py ->
+  operational_financial_activity_runtime.py -> operational_balance_store.fail
+```
+Root cause: `backend/tests/test_operational_payment_real_reducer_parity.py::run_actual_reconcile` had injected a synthetic `operational_balance_store` module exposing just `digest`, although the full reducer also imports `fail` indirectly. This fake module wrongly masked the actual installed store despite the dedicated CI job installing FastAPI/Motor/PyMongo.
+
+**Fix committed** to Draft branch at `9ca63688742f9ac96bee25881d43e489c3d5f862`: remove the partial `operational_balance_store` stub altogether; load the REAL store and unchanged `operational_balance_engine`, keeping only a test-only cooperative calculation checkpoint shim. No production backend accounting code changed for this fix.
+
+GitHub connector's `fetch_commit_workflow_runs` only lists PR-triggered runs, while these newest tests are push-triggered on branch `codex/operational-payment-events-current-20261124`. A follow-up attempt to inspect the new push CI run via TinyFish was blocked by insufficient connected browser credit; **there is no verified GREEN reducer-parity result yet**. This must remain a release blocker. Never claim amount/fees parity passed solely from correcting the import.
+
+All payment/posting flags OFF, PR Draft, no deploy, no real money changed.
