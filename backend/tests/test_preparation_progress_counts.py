@@ -63,3 +63,71 @@ def test_piece_membership_is_current_and_unique():
     for key, value in (("supplier_dispatch_id", "old"), ("supplier_id", "other"),
                        ("responsible_employee_id", "foreign"), ("piece_id", "missing")):
         assert not counts._current_member({**piece, key: value}, dispatch, "e", members)
+
+
+@pytest.mark.asyncio
+async def test_real_mongo_counts_include_received_files_and_exclude_old_scope():
+    import os
+    import uuid
+    from datetime import datetime, timezone
+    from motor.motor_asyncio import AsyncIOMotorClient
+    from preparation_supplier_dispatch import DISPATCHES, PIECES
+
+    uri = os.environ.get("TEST_PROGRESS_MONGO_URI")
+    if not uri:
+        pytest.skip("real Mongo fixture not configured")
+    client = AsyncIOMotorClient(uri, serverSelectionTimeoutMS=3000)
+    db = client["test_progress_" + uuid.uuid4().hex]
+    try:
+        await client.admin.command("ping")
+        for day in range(10, 18):
+            key = str(day)
+            await db[DISPATCHES].insert_one({
+                "user_id": "owner", "sent_by_id": "employee", "id": "d" + key,
+                "supplier_id": "s", "status": "sent",
+                "sent_at": datetime(2026, 11, day, 9, tzinfo=timezone.utc),
+                "piece_ids": ["p" + key, "p" + key],
+            })
+            await db[PIECES].insert_one({
+                "user_id": "owner", "responsible_employee_id": "employee",
+                "piece_id": "p" + key, "supplier_dispatch_id": "d" + key,
+                "supplier_id": "s", "status": "in_progress",
+                "supplier_dispatch_status": "sent",
+                "order_number": "o" + key, "image_b64": "not-needed",
+            })
+        # A separate file was fully received on a date that remains active.
+        # Custody moved to the receiving employee, but the file sender owns
+        # the historical receipt count.
+        await db[DISPATCHES].insert_one({
+            "user_id": "owner", "sent_by_id": "employee", "id": "received-file",
+            "supplier_id": "s", "status": "received",
+            "sent_at": datetime(2026, 11, 10, 10, tzinfo=timezone.utc),
+            "piece_ids": ["received"],
+        })
+        await db[PIECES].insert_one({
+            "user_id": "owner", "responsible_employee_id": "receiver",
+            "piece_id": "received", "supplier_dispatch_id": "received-file",
+            "supplier_id": "s", "status": "received",
+            "supplier_dispatch_status": "received",
+        })
+        await db[PIECES].insert_many([
+            {"user_id": "foreign", "responsible_employee_id": "employee",
+             "piece_id": "p10", "supplier_dispatch_id": "d10",
+             "supplier_id": "s", "status": "in_progress", "supplier_dispatch_status": "sent"},
+            {"user_id": "owner", "responsible_employee_id": "employee",
+             "piece_id": "not-a-member", "supplier_dispatch_id": "d10",
+             "supplier_id": "s", "status": "in_progress", "supplier_dispatch_status": "sent"},
+        ])
+        total = await counts.progress_count(db, user_id="owner", employee_id="employee")
+        assert total["remaining"] == 8
+        first = await counts.progress_day_counts(db, user_id="owner", employee_id="employee")
+        assert len(first["days"]) == 7
+        assert first["days"][0] == {"key": "2026-11-10", "assigned": 2, "received": 1, "remaining": 1}
+        second = await counts.progress_day_counts(db, user_id="owner", employee_id="employee",
+                                                   after=first["next_cursor"])
+        assert second["days"] == [{"key": "2026-11-17", "assigned": 1, "received": 0, "remaining": 1}]
+        assert second["next_cursor"] is None
+        assert (await counts.progress_count(db, user_id="owner", employee_id="receiver"))["remaining"] == 0
+    finally:
+        await client.drop_database(db.name)
+        client.close()
