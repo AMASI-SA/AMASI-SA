@@ -1,4 +1,4 @@
-"""The approved post-start Aramex status policy pays one exact wallet charge."""
+"""Status observations identify candidates; new cash needs an original event time."""
 from copy import deepcopy
 
 import pytest
@@ -8,34 +8,86 @@ from operational_aramex_status_shipping import status_reference_conflicts
 from operational_courier_tariffs import with_tariffs
 from operational_delivery_evidence import _instant
 from operational_prepaid_shipping import source_event, apply_events
-from test_operational_balance_prepaid_shipping import fixture, calculate
+from test_operational_balance_prepaid_shipping import fixture, calculate, COMPLETED
 from test_operational_balance_delivery_cutover import START, NOW
 from test_operational_completed_shipping_expansion import without_label
 
 
+def status_candidate(data, state):
+    """Inspect the read-only source candidate, independently of financial admission."""
+    data = deepcopy(data)
+    data.setdefault('store_delivery_assignments', [])
+    setup, conflicts = with_tariffs({}, 'owner', state)
+    assert not conflicts
+    source = data['unified_orders'][0]
+    _, event = source_event(data, setup, source, source['raw_by_source']['salla_direct'], state,
+        'owner', _instant(START), _instant(NOW), (), (),
+        status_shipment_conflicts=status_reference_conflicts(data['unified_orders'], state))
+    return event
+
+
+def assert_date_hold(result):
+    assert result['movements'] == []
+    assert 'prepaid_shipping:100' not in result['engine']['facts']
+    assert 'shipping-prepaid:100' not in result['engine']['obligations']
+    issue = next(i for i in result['engine']['issues']
+                 if i['code'] == 'operational_prepaid_shipping_original_date_unproven')
+    assert (issue['party_type'], issue['party_id']) == ('courier', 'aramex')
+
+
+def legacy_status_state(data, state):
+    """An explicit saved pre-upgrade expense/payment pair, never newly generated."""
+    saved = deepcopy(state)
+    event = status_candidate(data, state)
+    metadata = {'payment_mode': 'prepaid', 'recognition_event': 'aramex_status_eligible',
+        'order_id': '100', 'order_number': '10', 'completed_at': None,
+        'tariff_version_id': event['tariff_version_id'], 'cash_account_id': 'salla-cash',
+        'recognition_basis': event['recognition_basis'], 'recorded_at': NOW,
+        'observed_order_status': event['observed_order_status']}
+    saved['engine']['facts'] = {'prepaid_shipping:100': deepcopy(event)}
+    saved['engine']['obligations'] = {'shipping-prepaid:100': {
+        'id': 'shipping-prepaid:100', 'kind': 'shipping', 'party_type': 'courier', 'party_id': 'aramex',
+        'currency': 'SAR', 'direction': 'payable', 'expected': '0.00', 'confirmed': '34.50',
+        'business_date': '2026-10-07', 'net_amount': '30.00', 'tax_amount': '4.50', **metadata}}
+    saved['movements'] = [{'id': 'shipping-prepaid-payment:100', 'request_id': 'shipping-prepaid-payment:100',
+        'party_type': 'courier', 'party_id': 'aramex', 'currency': 'SAR', 'amount': '34.50',
+        'direction': 'outgoing', 'kind': 'payment', 'bank_kind': 'cash', 'bank_id': 'salla-cash',
+        'allocations': [{'obligation_id': 'shipping-prepaid:100', 'amount': '34.50'}],
+        'actual_fee_amount': '0.00', 'occurred_at': NOW, 'business_date': '2026-10-07',
+        'automatic_prepaid_shipping': True, **metadata}]
+    return saved
+
+
 @pytest.mark.parametrize('status', ['completed', 'out_for_delivery', 'delivered'])
-def test_post_start_current_aramex_status_pays_once_without_inventing_completion(status):
+def test_existing_legacy_status_pair_keeps_its_original_cash_claim_and_fact(status):
+    data, state = fixture(old=False, current=status, at=None)
+    saved = legacy_status_state(data, state)
+    before = deepcopy(saved)
+    result = calculate(data, saved)
+    assert result['movements'] == before['movements']
+    assert result['engine']['obligations']['shipping-prepaid:100'] == before['engine']['obligations']['shipping-prepaid:100']
+    assert result['engine']['facts']['prepaid_shipping:100'] == before['engine']['facts']['prepaid_shipping:100']
+    assert result['openings'] == before['openings']
+    assert saved == before
+    assert calculate(data, result)['movements'] == before['movements']
+
+
+@pytest.mark.parametrize('status', ['completed', 'out_for_delivery', 'delivered'])
+def test_post_start_current_aramex_status_stays_pending_without_inventing_completion(status):
     data, state = fixture(old=False, current=status, at=None)
     result = calculate(data, state)
-    movement, = result['movements']
-    fact = result['engine']['facts']['prepaid_shipping:100']
-    charge = result['engine']['obligations']['shipping-prepaid:100']
+    fact = status_candidate(data, state)
     assert fact['recognition_basis'] == 'aramex_status_created_after_start'
     assert fact['identity_scope'] == 'order_status'
     assert fact['observed_order_status'] == status
     assert fact['recorded_at'] == fact['source_updated_at'] == NOW
     assert fact['order_created_at'] == '2026-10-05T01:00:00+00:00'
     assert fact['completed_at'] is None
-    assert charge['recognition_event'] == movement['recognition_event'] == 'aramex_status_eligible'
-    assert charge['confirmed'] == movement['amount'] == '34.50'
-    assert charge['completed_at'] is None and movement['completed_at'] is None
-    assert movement['bank_id'] == 'salla-cash' and movement['bank_kind'] == 'cash'
-    assert movement['occurred_at'] == NOW and charge['business_date'] == '2026-10-07'
-    assert movement['allocations'] == [{'obligation_id': 'shipping-prepaid:100', 'amount': '34.50'}]
+    assert fact['amount'] == '34.50' and fact['cash_account']['id'] == 'salla-cash'
+    assert_date_hold(result)
     assert 'cod:100' not in result['engine']['obligations']
     assert not any(row['kind'] == 'provider' for row in result['engine']['obligations'].values())
-    wallet = next(row for row in report(result)['parties'] if row['party_type'] == 'cash')
-    assert wallet['actual'] == '-34.50'
+    assert report(result)['summary']['actual_liquidity'] == '0.00'
     assert calculate(data, result) == result
 
 
@@ -46,10 +98,10 @@ def test_explicit_status_policy_binds_the_order_and_carrier_without_requiring_a_
     prior = deepcopy(state)
     result = calculate(data, state)
     assert state == prior
-    assert len(result['movements']) == 1
-    assert result['movements'][0]['amount'] == '34.50'
-    assert result['engine']['facts']['prepaid_shipping:100']['identity_scope'] == 'order_status'
-    assert result['engine']['facts']['prepaid_shipping:100']['completed_at'] is None
+    candidate = status_candidate(data, state)
+    assert candidate['amount'] == '34.50'
+    assert candidate['identity_scope'] == 'order_status' and candidate['completed_at'] is None
+    assert_date_hold(result)
     assert result['openings'] == prior['openings']
 
 
@@ -61,8 +113,9 @@ def test_explicit_status_policy_binds_the_order_and_carrier_without_requiring_a_
 def test_native_status_aliases_share_the_explicit_policy(status, canonical):
     data, state = fixture(old=False, current=status, at=None)
     result = calculate(data, state)
-    assert result['movements'][0]['amount'] == '34.50'
-    assert result['engine']['facts']['prepaid_shipping:100']['observed_order_status'] == canonical
+    candidate = status_candidate(data, state)
+    assert candidate['amount'] == '34.50' and candidate['observed_order_status'] == canonical
+    assert_date_hold(result)
 
 
 @pytest.mark.parametrize('status', ['pending', 'cancelled', 'returned', 'shipped', 'تم الشحن', 'processing'])
@@ -79,7 +132,14 @@ def test_unrequested_current_states_do_not_receive_the_new_charge(status):
 def test_the_new_policy_has_a_strict_order_creation_boundary(created, eligible):
     data, state = fixture(old=False, at=None)
     data['unified_orders'][0]['raw_by_source']['salla_direct']['created_at'] = created
-    assert bool(calculate(data, state)['movements']) is eligible
+    result = calculate(data, state)
+    assert not result['movements']
+    if eligible:
+        assert status_candidate(data, state)
+        assert_date_hold(result)
+    else:
+        assert not any(i['code'] == 'operational_prepaid_shipping_original_date_unproven'
+                       for i in result['engine']['issues'])
 
 
 @pytest.mark.parametrize('failure', ['customized_pending', 'status_conflict', 'mixed_labels', 'stale_watermark',
@@ -128,8 +188,9 @@ def test_customized_current_delivery_state_overrides_its_completed_parent():
     data['unified_orders'][0]['raw_by_source']['salla_direct']['status'] = {
         'slug': 'completed', 'customized': {'slug': 'in_delivery', 'name': 'جاري التوصيل'}}
     result = calculate(data, state)
-    assert result['engine']['facts']['prepaid_shipping:100']['observed_order_status'] == 'out_for_delivery'
-    assert result['movements'][0]['amount'] == '34.50'
+    candidate = status_candidate(data, state)
+    assert candidate['observed_order_status'] == 'out_for_delivery' and candidate['amount'] == '34.50'
+    assert_date_hold(result)
 
 
 @pytest.mark.parametrize('conflict', ['root_shipment', 'root_waybill', 'nested_waybill', 'carrier_code',
@@ -170,7 +231,8 @@ def test_approved_aramex_code_accepts_native_company_name_variants(name, label):
     if label != 'full':
         without_label(data, ('tracking_number',) if label == 'partial' else ('shipment_id', 'tracking_number'))
     data['unified_orders'][0]['raw_by_source']['salla_direct']['shipping']['company'] = name
-    assert calculate(data, state)['movements'][0]['amount'] == '34.50'
+    assert status_candidate(data, state)['amount'] == '34.50'
+    assert_date_hold(calculate(data, state))
 
 
 @pytest.mark.parametrize('shape', ['named_current', 'coded_current'])
@@ -186,11 +248,12 @@ def test_code_only_and_name_only_shapes_must_resolve_to_the_same_approved_courie
         raw['shipping'].pop('company_code')
         raw['shipments'][0]['company'] = {'name': 'Aramex'}
     result = calculate(data, state)
-    assert result['movements'][0]['amount'] == '34.50'
+    assert status_candidate(data, state)['amount'] == '34.50'
+    assert_date_hold(result)
 
 
 def test_customer_currency_does_not_change_the_approved_sar_shipping_contract():
-    data, state = fixture(old=False, at=None)
+    data, state = fixture(old=False, at=COMPLETED)
     raw = data['unified_orders'][0]['raw_by_source']['salla_direct']
     raw['currency'] = 'USD'
     result = calculate(data, state)
@@ -240,7 +303,7 @@ def test_present_raw_reference_is_frozen_and_still_protects_a_later_order():
     without_label(data)
     first = data['unified_orders'][0]
     first['raw_by_source']['salla_direct']['tracking_number'] = 'original-waybill'
-    saved = calculate(data, state)
+    saved = legacy_status_state(data, state)
     fact = saved['engine']['facts']['prepaid_shipping:100']
     assert fact['waybill'] == 'original-waybill' and fact['shipment_id'] is None
     second = deepcopy(first)
@@ -255,14 +318,15 @@ def test_present_raw_reference_is_frozen_and_still_protects_a_later_order():
 
 
 def test_explicit_accounting_time_selects_and_freezes_its_approved_tariff_and_wallet_once():
-    data, state = fixture(old=False, at=None)
+    data, state = fixture(old=False, at=COMPLETED)
     later = deepcopy(state['courier_tariffs'][0])
     later.update(version_id='later-approved', effective_from='2026-10-06T00:00:00+00:00')
     later['terms']['cost_per_order'] = '40.00'
     state['courier_tariffs'].append(later)
     saved = calculate(data, state)
     assert saved['movements'][0]['amount'] == '46.00'
-    assert saved['movements'][0]['occurred_at'] == NOW
+    assert saved['movements'][0]['occurred_at'] == COMPLETED
+    assert saved['engine']['obligations']['shipping-prepaid:100']['business_date'] == '2026-10-06'
     assert saved['engine']['facts']['prepaid_shipping:100']['tariff_version_id'] == 'later-approved'
     for status in ('out_for_delivery', 'delivered', 'cancelled'):
         data['unified_orders'][0]['raw_by_source']['salla_direct']['status'] = status
@@ -318,12 +382,12 @@ def sparse_order_fixture(status='completed'):
 def test_trusted_separate_current_shipment_does_not_require_a_duplicate_order_envelope(status):
     data, state = sparse_order_fixture(status)
     saved = calculate(data, state)
-    movement, = saved['movements']
-    fact = saved['engine']['facts']['prepaid_shipping:100']
-    assert movement['amount'] == '34.50' and movement['bank_id'] == 'salla-cash'
+    fact = status_candidate(data, state)
+    assert fact['amount'] == '34.50' and fact['cash_account']['id'] == 'salla-cash'
     assert fact['completed_at'] is None and fact['recorded_at'] == NOW
     assert (fact['shipment_id'], fact['waybill']) == ('shipment', 'TEST-AWB')
     assert fact['source_carrier_key'] == 'synthetic-aramex-code'
+    assert_date_hold(saved)
     assert calculate(data, saved)['movements'] == saved['movements']
 
 
@@ -341,7 +405,8 @@ def test_sparse_present_raw_evidence_can_agree_without_repeating_the_complete_cu
         raw['shipments'] = [{'id': 'shipment', 'company': {'code': 'synthetic-aramex-code'}}]
     else:
         raw.update(salla_shipment_id='shipment', tracking_number='TEST-AWB')
-    assert calculate(data, state)['movements'][0]['amount'] == '34.50'
+    assert status_candidate(data, state)['amount'] == '34.50'
+    assert_date_hold(calculate(data, state))
 
 
 @pytest.mark.parametrize('conflict', ['raw_carrier', 'raw_waybill', 'raw_shipment', 'raw_inactive',
@@ -381,4 +446,5 @@ def test_independent_current_shipment_clock_can_follow_the_order_clock():
     source = data['unified_orders'][0]
     source['raw_by_source']['salla_direct']['updated_at'] = '2026-10-07T09:00:00+00:00'
     source['g47_salla_snapshot']['source_updated_at'] = '2026-10-07T09:00:00+00:00'
-    assert calculate(data, state)['movements'][0]['amount'] == '34.50'
+    assert status_candidate(data, state)['amount'] == '34.50'
+    assert_date_hold(calculate(data, state))

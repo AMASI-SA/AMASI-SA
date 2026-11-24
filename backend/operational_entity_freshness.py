@@ -247,6 +247,16 @@ def source_entities(data, state, normalized=None):
     # and aggregate. A pending original-date proof must remain visible by bank.
     candidates = []
     for order in _checked((normalized or {}).get('orders', [])):
+        payment = order.get('payment') if type(order) is dict else None
+        if type(payment) is dict:
+            provider_ids = {payment['provider']} if type(payment.get('provider')) is str else set()
+            split = payment.get('split')
+            if type(split) is dict and type(split.get('tenders')) is list:
+                provider_ids.update(leg['provider'] for leg in split['tenders']
+                    if type(leg) is dict and type(leg.get('provider')) is str)
+            for provider in provider_ids & PROVIDERS.keys():
+                enabled_providers.add(provider)
+                add('provider', provider, PROVIDERS[provider], order.get('currency'), available=True)
         credit = order.get('bank_credit') if type(order) is dict else None
         if type(credit) is dict:
             candidates.append({'party_type': 'bank', 'party_id': credit.get('bank_id'),
@@ -291,7 +301,9 @@ def _has_issue(row, issues):
         code = issue.get("code")
         if type(code) is not str:
             return True
-        if any(token in code for token in tokens):
+        if (any(token in code for token in tokens)
+                or code == "operational_shipping_original_date_unproven"
+                and issue.get("party_type") == row["entity_type"] == "store_driver"):
             # Source errors often carry order identities, not party identities.
             # Retain the family warning unless an explicit different party is
             # proven. A missing mapping cannot turn a failed source green.

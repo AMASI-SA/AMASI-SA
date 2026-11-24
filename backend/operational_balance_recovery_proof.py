@@ -129,6 +129,7 @@ def _source_indexes(sources, state):
                           lambda row: (str(row.get("account_id", "")), str(row.get("date", "")))),
             "recurring": _index(sources.get("recurring", sources.get("recurring_obligations", [])),
                                 lambda row: str(row.get("id", ""))),
+            "completed_shipping": _index(sources.get("completed_shipping_events", []), lambda row: str(row.get("order_id", ""))),
             "prepaid": _index(sources.get("prepaid_shipping_events", []), lambda row: str(row.get("order_id", "")))}
 
 
@@ -191,6 +192,46 @@ def _original_date(state, sources, identity, row, stamp, *, movement=False):
             return False, "movement_date_unproven"
         if row.get("derived_credit") is True:
             return False, "derived_adjustment"
+        if row.get("kind") == "provider":
+            from operational_provider_dates import verified_original_obligation
+            order_id = identity.removeprefix("provider:").split(":", 1)[0]
+            valid = verified_original_obligation(state, sources["orders"].get(order_id), identity, row, stamp)
+            return valid, "provider_capture_event" if valid else "provider_observation_or_aggregate"
+        if row.get("business_date_basis") == "native_driver_earned_at":
+            from operational_driver_original_dates import PREFIX, earning_fact
+            order_id = identity.removeprefix("shipping:").removesuffix(":base_shipping")
+            source = sources["deliveries"].get(order_id)
+            event = earning_fact(state.get("owner_id"), source, source.get("native_driver_earning"))
+            at = _instant(event["earned_at"])
+            valid = (identity == "shipping:" + order_id + ":base_shipping"
+                     and event == engine.get("facts", {}).get(PREFIX + order_id)
+                     and _instant(state.get("started_at")) <= at <= stamp and at.astimezone(RIYADH).date() == day
+                     and _instant(row.get("earned_at")) == at and row.get("kind") == "shipping"
+                     and event["party_id"] == row.get("party_id") and row.get("party_type") == "store_driver"
+                     and event["earning_id"] == row.get("source_earning_id") and row.get("currency") == "SAR"
+                     and _money(event["amount"]) == _money(row.get("confirmed")) and _money(row.get("expected")) == 0
+                     and row.get("direction") == "payable")
+            return valid, "native_driver_earning" if valid else "driver_earning_date_unproven"
+        if identity.startswith("shipping-completed:"):
+            order_id = identity.removeprefix("shipping-completed:")
+            event = sources["completed_shipping"].get(order_id)
+            recorded = engine.get("facts", {}).get("completed_shipping:" + order_id)
+            at = _instant(event.get("completed_at"))
+            valid = (event == recorded and event.get("schema") == "operational_completed_shipping_v1"
+                     and event.get("owner_id") == state.get("owner_id") and event.get("order_id") == order_id
+                     and event.get("payment_mode") == row.get("payment_mode") == "deferred"
+                     and event.get("recognition_event") == row.get("recognition_event") == "order_completed"
+                     and event.get("component") == row.get("component") == "base_shipping"
+                     and not event.get("recognition_basis") and at is not None
+                     and _instant(state.get("started_at")) <= at <= stamp and at.astimezone(RIYADH).date() == day
+                     and _instant(row.get("completed_at")) == at and row.get("kind") == "shipping"
+                     and row.get("direction") == "payable" and _money(row.get("expected")) == 0
+                     and event.get("currency") == row.get("currency") == "SAR"
+                     and event.get("party_type") == row.get("party_type") == "courier"
+                     and event.get("party_id") == row.get("party_id")
+                     and _money(event.get("amount")) == _money(row.get("confirmed"))
+                     and _money(row.get("confirmed")) is not None)
+            return valid, "shipping_completion_event" if valid else "shipping_completion_date_unproven"
         if row.get("kind") == "salary":
             from operational_salary_projection import candidates
             from operational_salary_start import select_first_day
@@ -221,6 +262,25 @@ def _original_date(state, sources, identity, row, stamp, *, movement=False):
                      and source.get("currency") == row.get("currency")
                      and _money(source["amount"]) == _money(row["confirmed"]) + _money(row["expected"]))
             return valid, "recurring_due_date" if valid else "recurring_date_unproven"
+        if row.get("kind") == "cod" and identity.startswith("cod:"):
+            order_id = identity.removeprefix("cod:")
+            source = sources["deliveries"].get(order_id)
+            event = source.get("delivery_event")
+            frozen = engine.get("facts", {}).get("shipping:" + order_id)
+            collected = engine.get("facts", {}).get("cod_collection:" + order_id)
+            at = _instant(event.get("delivered_at"))
+            valid = (event.get("schema") == "operational_delivery_event_v1"
+                     and event == engine.get("facts", {}).get("delivery_event:" + order_id)
+                     and not frozen.get("recognition_basis") and at is not None
+                     and at == _instant(frozen.get("delivered_at")) and at.astimezone(RIYADH).date() == day
+                     and event.get("party_id") == frozen.get("id") == collected.get("party_id") == row.get("party_id")
+                     and event.get("party_type") == frozen.get("party_type") == row.get("party_type")
+                     and event.get("currency") == source.get("currency") == row.get("currency")
+                     and source.get("cod") == collected.get("evidence") and source["cod"].get("evidence_complete") is True
+                     and _money(source.get("cod_amount")) == _money(collected.get("amount")) == _money(row.get("confirmed"))
+                     and _money(row.get("confirmed")) is not None and _money(row.get("expected")) == 0
+                     and row.get("direction") == "receivable")
+            return valid, "delivery_collection_event" if valid else "collection_date_unproven"
         if row.get("kind") == "shipping":
             from operational_workspace_projection import automatic_source
             family, key = automatic_source(state, row)

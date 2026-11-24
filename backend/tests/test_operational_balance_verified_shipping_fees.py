@@ -343,12 +343,13 @@ def test_no_carrier_confirmation_from_order_updated_or_workflow_timestamp(old):
         table=next(t for t in build_financial_position(state)['currencies']['SAR']['tables'] if t['id']=='courier_fee_review')
         assert table['rows'][0]['samples']=='10'
     else:
-        # Creation after opening plus delivered status is now sufficient. The
-        # update/workflow clock still cannot become an actual delivery time.
-        assert fee_total(state) == 10
-        proof = state['engine']['facts']['delivery_event:100']
-        assert proof['recognition_basis'] == 'delivered_order_created_after_start'
-        assert proof['delivered_at'] is state['engine']['facts']['shipping:100']['delivered_at'] is None
+        # Present delivery status cannot date a historical fee. Keep its
+        # original-source gap explicit instead of posting at refresh time.
+        assert fee_total(state) == 0
+        assert 'delivery_event:100' not in state['engine']['facts']
+        assert 'shipping:100' not in state['engine']['facts']
+        assert any(issue['code'] == 'operational_shipping_original_date_unproven'
+                   for issue in state['engine']['issues'])
         assert 'cod_collection:100' not in state['engine']['facts']
 
 

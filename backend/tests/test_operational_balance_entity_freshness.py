@@ -230,6 +230,33 @@ def test_bank_history_and_occurrence_gaps_cannot_be_green(code):
     assert row['missing_days_count'] is None  # Daily bank income is not an entitlement.
 
 
+def test_driver_original_date_hold_is_scoped_to_its_named_driver():
+    state = base()
+    for identity in ('held-driver', 'other-driver'):
+        state['engine']['obligations']['shipping:' + identity] = {
+            'id': 'shipping:' + identity, 'kind': 'shipping', 'party_type': 'store_driver',
+            'party_id': identity, 'currency': 'SAR', 'confirmed': '10.00', 'expected': '0.00',
+            'direction': 'payable', 'business_date': '2026-11-21'}
+    state['engine']['issues'] = [{'code': 'operational_shipping_original_date_unproven',
+        'party_type': 'store_driver', 'party_id': 'held-driver'}]
+    rows = render(state, sources(*(descriptor(kind='store_driver', identity=value)
+        for value in ('held-driver', 'other-driver'))))['rows']
+    assert {row['entity_id']: row['state'] for row in rows} == {'held-driver': 'unknown', 'other-driver': 'current'}
+
+
+def test_unbooked_provider_date_hold_is_named_unknown_before_its_first_claim():
+    state = base()
+    state['engine']['issues'] = [{'code': 'provider_original_capture_date_unproven',
+        'party_type': 'provider', 'party_id': 'tabby'}]
+    catalog = source_entities({}, state, {'orders': [{'id': 'new', 'currency': 'USD',
+        'payment': {'provider': 'tabby'}}]})
+    result = render(state, {'automatic_source_entities': catalog})
+    row = next(row for row in result['rows'] if row['entity_type'] == 'provider'
+        and row['entity_id'] == 'tabby' and row['currency'] == 'USD')
+    assert row['label'] == 'تابي' and row['state'] == 'unknown'
+    assert row['missing_days_count'] is None and row['last_financial_day'] is None
+
+
 def test_catalog_keeps_unbound_ads_settings_carriers_and_pending_banks_named():
     state = base()
     data = {'settings': [{'user_id': 'owner', 'shipping_companies': [{'name': 'Aramex'}],

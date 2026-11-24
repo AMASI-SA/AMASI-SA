@@ -18,7 +18,8 @@ from .service import SallaError, call_salla
 
 ISSUE_CODES = {"operational_delivery_shipment_not_delivered", "operational_delivery_timestamp_missing",
                "operational_delivery_shipment_source_missing", "operational_delivery_order_waybill_unproven",
-               "operational_prepaid_shipping_completion_timestamp_missing"}
+               "operational_prepaid_shipping_completion_timestamp_missing",
+               "operational_shipping_original_date_unproven", "operational_prepaid_shipping_original_date_unproven"}
 _RETRY = "salla_courier_delivery_retry_after"
 _RAW = "raw_by_source.salla_direct"
 _FENCED = ("order_id", "salla_order_id", "merchant", "merchant_id", "store_id", "g47_salla_snapshot", "order_status", "order_status_slug",
@@ -177,7 +178,8 @@ async def acquire_missing(db, owner, issues, *, started_at, limit=4, status_excl
             target_codes.setdefault(str(row['source_id']), set()).add(row['code'])
     targets = set(target_codes)
     completed_targets = {str(row['source_id']) for row in issues
-                         if row.get('code') == 'operational_prepaid_shipping_completion_timestamp_missing' and row.get('source_id')}
+                         if row.get('code') in {'operational_prepaid_shipping_completion_timestamp_missing',
+                                               'operational_prepaid_shipping_original_date_unproven'} and row.get('source_id')}
     if not targets:
         return result
     identities = list(targets) + [int(value) for value in targets if value.isascii() and value.isdigit()]
@@ -223,6 +225,7 @@ async def acquire_missing(db, owner, issues, *, started_at, limit=4, status_excl
             if any(source[key] != value for key, value in shipping_root_fields(current).items() if key in source):
                 raise ValueError("courier_native_source_conflict")
             if (not completed and identity not in status_excluded_order_ids
+                    and 'operational_shipping_original_date_unproven' not in target_codes.get(identity, ())
                     and created_after_start_delivery(raw, start, now)):
                 # Saved delivery-only gaps from the earlier contract cannot
                 # require provider history for an already delivered new order.

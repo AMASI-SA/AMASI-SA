@@ -194,6 +194,15 @@ def apply_events(state, events, start, now, issue):
                 if facts[fact_id] != event:
                     raise ValueError('operational_prepaid_shipping_recorded_evidence_changed')
                 continue
+            # An observation proves a present status, not when the expense and
+            # cash payment happened. Keep the entire new pair pending until a
+            # native completion time is available; existing immutable pairs
+            # were handled above and are never removed or redated.
+            if event.get('recognition_basis') or not event.get('completed_at'):
+                issue('operational_prepaid_shipping_original_date_unproven', oid,
+                      party_type=event.get('party_type'), party_id=event.get('party_id'),
+                      missing_fields=['completion_timestamp'])
+                continue
             require_admission(state, event, review_index=review_index)
             if event.get('recognition_basis') == OWNER_STATUS_BASIS and not owner_rule_active(state, state['owner_id']):
                 raise ValueError('operational_prepaid_shipping_owner_rule_required')

@@ -135,12 +135,14 @@ def test_new_or_prior_status_delivery_does_not_buy_optional_history(packed, kind
 
 
 @pytest.mark.parametrize("frozen", [False, True])
-def test_poststart_delivered_status_never_replaces_separate_completion_proof(frozen, monkeypatch):
+@pytest.mark.parametrize("code", ["operational_prepaid_shipping_completion_timestamp_missing",
+                                  "operational_prepaid_shipping_original_date_unproven"])
+def test_poststart_delivered_status_never_replaces_separate_completion_proof(frozen, code, monkeypatch):
     data, _ = completed_fixture(old=False, current="delivered", at=None)
     source = data["unified_orders"][0]
     state = history_state("dated-event" if frozen else "new")
     state["engine"]["issues"] = [{"source_id": "100",
-        "code": "operational_prepaid_shipping_completion_timestamp_missing"}]
+        "code": code}]
     calls = []
     async def provider(db, owner, method, path, *, params):
         calls.append((owner, method, path))
@@ -158,4 +160,29 @@ def test_poststart_delivered_status_never_replaces_separate_completion_proof(fro
         assert saved[CURRENT_SHIPPING][COMPLETED_PROOF]["at"] == COMPLETED
         assert WEBHOOK_PROOF not in saved[CURRENT_SHIPPING]
         assert await db[STATES].find_one({"_id": "owner"}) == financial
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("packed", [False, True])
+def test_original_date_hold_acquires_native_history_instead_of_status_shortcut(packed, monkeypatch):
+    _, source, shipment, histories = binding_gap()
+    source["raw_by_source"]["salla_direct"]["created_at"] = CREATED
+    state = history_state("new")
+    state["engine"]["issues"] = [{"source_id": "100", "code": "operational_shipping_original_date_unproven",
+                                    "party_type": "courier", "party_id": "carrier"}]
+    calls = []
+    native_provider(monkeypatch, {"100": (shipment, histories)}, calls)
+
+    async def scenario():
+        db = await prepared(state, source, packed=packed)
+        financial = await db[STATES].find_one({"_id": "owner"})
+        result = await visible(db)
+        assert result["courier_candidates"] == result["courier"]["saved"] == result["courier"]["selected"] == 1
+        assert result["courier"]["outcomes"] == [{"order_id": "100", "status": "saved"}]
+        assert calls == [("100", "/orders/100/histories"), ("100", "/shipments")]
+        saved = await db.unified_orders.find_one({"user_id": "owner"})
+        assert saved[CURRENT_SHIPPING][WEBHOOK_PROOF]["at"] == DELIVERED
+        assert await db[STATES].find_one({"_id": "owner"}) == financial
+        assert (await visible(db))["courier"]["selected"] == 0
+        assert len(calls) == 2
     asyncio.run(scenario())

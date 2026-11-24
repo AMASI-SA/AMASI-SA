@@ -42,6 +42,7 @@ _FAMILIES = {
     "bank": ("bank", "التحصيلات البنكية"),
     "courier": ("shipping", "شركات الشحن"),
     "sar": ("payments", "تحصيلات منصات الدفع"),
+    "provider": ("payments", "تحصيلات منصات الدفع"),
     "return_waybills": ("shipping", "شركات الشحن"),
     "delivery_history": ("shipping", "شركات الشحن"),
 }
@@ -54,6 +55,10 @@ _CALCULATION_ISSUES = {
     "operational_order_bank_in_progress_history_missing": ("bank", "التحصيلات البنكية", "سجل حالة طلب بنكي غير مكتمل؛ لم يثبت تاريخ التحصيل الأصلي."),
     "operational_order_bank_in_progress_unproven": ("bank", "التحصيلات البنكية", "لم يثبت تاريخ انتقال الطلب إلى حالة مؤهلة للتحصيل البنكي."),
     "operational_obligation_entity_incomplete": ("parties", "الجهات التلقائية", "يوجد استحقاق مرتبط بجهة غير مكتملة الإعداد."),
+    "provider_original_capture_date_unproven": ("payments", "منصات الدفع", "لم يثبت تاريخ التحصيل الأصلي لمنصة دفع؛ أُوقف تأكيد المبلغ الجديد حتى وصول دليل التحصيل."),
+    "provider_capture_multiple_business_dates": ("payments", "منصات الدفع", "يتوزع تحصيل منصة الدفع على أيام مختلفة؛ يلزم إثبات مستقل لكل يوم قبل تأكيد الزيادة."),
+    "operational_shipping_original_date_unproven": ("shipping", "شركات الشحن والموصلون", "لم يثبت وقت التوصيل أو الإكمال الأصلي؛ لم يُسجل استحقاق شحن جديد بتاريخ إعادة الاحتساب."),
+    "operational_prepaid_shipping_original_date_unproven": ("shipping", "شركات الشحن", "لم يثبت وقت التنفيذ الأصلي للشحن المدفوع مسبقًا؛ يلزم دليل من المصدر قبل تسجيل الاستحقاق."),
 }
 
 

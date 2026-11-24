@@ -21,6 +21,7 @@ from operational_external_advances import ACTIONS as EXTERNAL_ACTIONS, CREATION 
 from operational_ad_wallet_pool import enabled as wallet_pool_enabled, project_pool
 
 _LOG = logging.getLogger(__name__)
+_REPORT_PARTY_KEY_CACHE_LIMIT = 4096
 
 DEFINITIVE_MOVEMENT_REJECTIONS = {
     "operational_workspace_source_insufficient", "operational_prepaid_source_invalid", "operational_pos_bank_confirmation_required",
@@ -901,8 +902,20 @@ def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=Fa
             key = entry["obligation_id"]
             allocated[key] = allocated.get(key, Decimal(0)) + Decimal(entry["amount"])
     parties = {}
+    # Saved histories revisit the same parties on every money movement. Keep
+    # only canonical string identities in this bounded, report-local memo;
+    # all output keys still use the original digest and the original ordering.
+    party_keys = {}
     def get(kind, identity, currency, name=None):
-        key = party_key(kind, identity, currency)
+        if type(kind) is str and type(identity) is str and type(currency) is str:
+            components = (kind, identity, currency)
+            key = party_keys.get(components)
+            if key is None:
+                key = party_key(kind, identity, currency)
+                if len(party_keys) < _REPORT_PARTY_KEY_CACHE_LIMIT:
+                    party_keys[components] = key
+        else:
+            key = party_key(kind, identity, currency)
         if key not in parties:
             parties[key] = {"party_type": kind, "party_id": identity, "currency": currency,
                             "name": name or identity, **{f: Decimal(0) for f in (

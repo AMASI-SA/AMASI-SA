@@ -16,7 +16,7 @@ from operational_demand_refresh import calculation_checkpoint, checkpoint, deman
 ACQUISITION_SECONDS = 25
 LIMIT_PER_SOURCE = 4
 _COLLECTIONS = frozenset({STATES, "unified_orders", "salla_integrations", "salla_payment_banks",
-                          "salla_webhook_event_captures"})
+                          "salla_webhook_event_captures", "order_payment_transactions_v2"})
 _LOCAL_PROOF_READS = frozenset({'mz2_shipping_setup_v2', 'store_delivery_assignments', 'order_activity_events_v2'})
 _PROJECTION = {"_id": 0, "owner_id": 1, "status": 1, "started_at": 1,
                "engine.issues": 1, "engine.customer_tender_coverage": 1, 'engine.facts': 1,
@@ -42,6 +42,12 @@ def _courier_status_exclusions(state, issues):
         if not identity or identity in seen:
             continue
         seen.add(identity)
+        if row.get('code') == 'operational_shipping_original_date_unproven':
+            # A current delivered status cannot replace the original clock
+            # required by the financial writer. Buy bounded native history
+            # instead of treating this new gap as already eligible.
+            excluded.add(identity)
+            continue
         frozen_event = facts.get('delivery_event:' + identity)
         # A prior status event remains eligible even after its fee was saved.
         if not status_delivery(frozen_event) and (
@@ -163,6 +169,8 @@ async def acquire_visible_evidence(db, owner, *, courier_order_id=None):
     from salla_integration.bank_payment_sync import acquire_missing as acquire_bank
     from salla_integration.courier_delivery_sync import ISSUE_CODES, acquire_missing as acquire_courier
     from salla_integration.paid_sar_sync import acquire_missing as acquire_sar
+    from salla_integration.provider_capture_sync import acquire_missing as acquire_provider
+    from operational_provider_dates import UNPROVEN as PROVIDER_DATE_UNPROVEN
     from salla_integration.service import SallaError
 
     issues = state.get("engine", {}).get("issues", [])
@@ -170,16 +178,20 @@ async def acquire_visible_evidence(db, owner, *, courier_order_id=None):
     bank = [issue for issue in issues if issue.get("code") in {"operational_order_bank_binding_incomplete", HISTORY_MISSING}]
     courier = [issue for issue in issues if issue.get("code") in ISSUE_CODES]
     sar = (state.get("engine", {}).get("customer_tender_coverage", {}).get("sar", {}).get("proof_lookups") or [])
+    provider = [issue for issue in issues if issue.get("code") == PROVIDER_DATE_UNPROVEN]
     if courier_order_id is not None:
         # The explicit target is an intersection with this owner's saved gaps,
         # never a request to inspect an arbitrary provider order or all orders.
         courier = [issue for issue in courier if str(issue.get("source_id") or "") == courier_order_id]
         if not courier:
             fail("operational_courier_target_not_pending", "لم يعد الطلب ضمن حالات مطابقة الشحن في التقرير المحفوظ؛ حدّث الصفحة", 409)
-        bank, sar = [], []
+        bank, sar, provider = [], [], []
     result = {"status": "attempted", "bank_candidates": len(bank), "courier_candidates": len(courier),
               "sar_candidates": len(sar)}
     jobs = [(name, pending) for name, pending in (("bank", bank), ("courier", courier), ("sar", sar)) if pending]
+    if provider:
+        result["provider_candidates"] = len(provider)
+        jobs.append(("provider", provider))
     if courier_order_id is None:
         from operational_return_waybills import MISSING
         returns = [i for i in issues if i.get("code") == MISSING]
@@ -211,6 +223,10 @@ async def acquire_visible_evidence(db, owner, *, courier_order_id=None):
                     async with asyncio.timeout(source_budget):
                         if name == "bank":
                             await acquire_bank(guarded, owner, pending, limit=LIMIT_PER_SOURCE)
+                        elif name == "provider":
+                            result[name] = await acquire_provider(guarded, owner, pending, limit=LIMIT_PER_SOURCE)
+                            if result[name].get("status") != "completed":
+                                result.update(status="deferred", reason="native_evidence_unavailable")
                         elif name == "return_waybills":
                             from salla_integration.return_waybill_sync import acquire
                             result[name] = await acquire(guarded, owner, pending, limit=LIMIT_PER_SOURCE)

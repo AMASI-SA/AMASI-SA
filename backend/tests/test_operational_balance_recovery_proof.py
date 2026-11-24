@@ -169,6 +169,29 @@ def test_delivery_date_needs_current_native_event_paired_with_immutable_fact():
     assert "private-order" not in json.dumps(result)
 
 
+@pytest.mark.parametrize("fault", [None, "missing_source", "wrong_day", "wrong_amount", "wrong_party", "observation"])
+def test_completed_shipping_uses_paired_native_completion_evidence(fault):
+    before, after = state(), state()
+    at, key = "2026-11-20T22:30:00+00:00", "shipping-completed:private-order"
+    event = {"schema": "operational_completed_shipping_v1", "owner_id": "owner", "order_id": "private-order",
+        "party_type": "courier", "party_id": "carrier", "currency": "SAR", "amount": "12.50",
+        "completed_at": at, "payment_mode": "deferred", "recognition_event": "order_completed", "component": "base_shipping"}
+    row = {"id": key, "kind": "shipping", "party_type": "courier", "party_id": "carrier", "currency": "SAR",
+        "direction": "payable", "business_date": "2026-11-21", "confirmed": "12.50", "expected": "0.00",
+        "completed_at": at, "payment_mode": "deferred", "recognition_event": "order_completed", "component": "base_shipping"}
+    if fault == "wrong_day": row["business_date"] = "2026-11-24"
+    if fault == "wrong_amount": row["confirmed"] = "13.00"
+    if fault == "wrong_party": row["party_id"] = "other-carrier"
+    if fault == "observation": event["recognition_basis"] = "aramex_status_created_after_start"
+    after["engine"]["facts"]["completed_shipping:private-order"] = deepcopy(event)
+    after["engine"]["obligations"][key] = row
+    inputs = {"completed_shipping_events": [] if fault == "missing_source" else [event]}
+    result = receipt(before, after, inputs)
+    assert result["original_dates_verified"] is (fault is None)
+    assert bool(result["new_original_dated"]["obligations"]) is (fault is None)
+    assert "private-order" not in json.dumps(result)
+
+
 def test_demand_cancellation_interrupts_receipt_and_is_never_converted_to_unknown(monkeypatch):
     def cancelled():
         raise asyncio.CancelledError

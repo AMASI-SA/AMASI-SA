@@ -9,7 +9,7 @@ The root coordinator alone owns commits, integration, publication and runtime
 mutations. Three reviewers own bank dates, source coverage and isolated
 automation respectively.
 
-Reviewed source base J is the already merged production branch commit
+Initial reviewed source base was the already merged production branch commit
 `28f6d4ca0fc2b7ea7f140432d8e32c768823b6a4` (PR #2096). It contains merged PR #2092.
 Neither merged PR will be merged again. The separate draft PR #2095 is left
 untouched. At intake, direct production identity remained PR #2087 source
@@ -114,3 +114,72 @@ shared tracked tree clean at J, live identity remains the intake PR #2087 source
 No lease, publish, provider sync, financial refresh or scheduler enable has been
 performed. Next safe action: finish and independently review original-date
 admission, execute final CI, then freeze the governed source/intent pair.
+
+## Original-date admission and base-integration checkpoint
+
+While this task was running, approved PR #2097 advanced the production branch
+to `5cfaac21a1775a0d0761d05aa571f94dbfc02d32`. This is the reviewed J for the
+next source freeze. Normal merge `67438372eb4bc8da063e470f0d1dd43a980e8f08`
+preserves the complete inventory change and its stronger workflow coverage.
+No production source was overwritten or merged twice. At 23:43 UTC on
+23 November (02:43 Riyadh on 24 November), the shared checkout was tracked-clean
+at new J, the guard was inactive, and the verified live identity still matched
+the intake PR #2087. No publication by this task has occurred.
+
+New provider money now requires the complete normalized native capture
+principal on a proved original financial day. Untimestamped paid-page increases
+remain pending, including increases over existing forecasts. Existing confirmed
+claims, correct manual money and immutable saved evidence remain intact. Split
+tenders carry separate authenticated capture dates; a persisted additive date
+map keeps fee-policy selection identical on replay without changing the frozen
+split-page evidence schema. Multiple original dates that cannot be represented
+by the existing claim identity remain explicitly unresolved.
+
+A bounded source-only adapter selects at most four saved provider date gaps,
+uses the existing authenticated native transaction endpoint with complete
+three-page pagination, rechecks owner/order/source binding, and appends native
+observations to the existing isolated transaction source. Conflicting and
+negative observations are retained. A 15-minute retry marker and the shared
+evidence time budget remain in force. It never writes the financial aggregate.
+New shipping/COD/prepaid effects likewise require original native event proof;
+their new date-gap codes are routed into the existing bounded history reader.
+Native driver earning-date admission and the final broad compatibility sweep
+are still under review at this WIP checkpoint.
+
+Local focused results: 175 provider compatibility tests passed (two real-Mongo
+cases remain required in CI); 108 Aramex status/legacy-preservation/projection
+cases passed; 65 provider-date/acquisition/coverage cases passed after the
+strict proof helper; wider provider evidence selection passed 173 cases.
+These selections overlap and must not be summed. The former status-only
+payment tests now verify source candidates plus a named hold, while actual
+payment/tariff tests use an explicit original event time. Stored pre-upgrade
+pairs are tested as saved fixtures and must not be rewritten.
+
+The bounded report-local party-key memo removes repeated identical digest
+work. Its 15 new tests and related selection pass (67 cases); exact JSON output
+and unchanged inputs were checked for all twelve report views. Measured
+synthetic 20,000-movement median improved from 454.177 ms to 359.470 ms across
+five paired runs. See REPORT_PARTY_LOOKUP.md for limitations. This is not a live
+page speed claim or a substitute for the requested production measurements.
+
+Checkpoint `7059150265364aef072421929f644f8d13b5cd97` passed 1,773 UI cases,
+frontend build and security selections. Its three operational gate failures
+were due to the new base workflow requiring inventory files absent from that
+older task head. The normal base merge supplies those files; no gate was
+removed. Exact final-head CI, real Mongo, independent review, final A/B intent,
+official Emergent rehearsal, original guard publication and financial recovery
+verification are still mandatory. Next safe action: finish the source review
+and compatibility sweep, preserve another candidate checkpoint, run all gates,
+then freeze the immutable source/intent pair. Production changed by this task:
+no. Financial backfill and automation enable by this task: no.
+
+### WIP blocker discovered by independent adversarial review
+
+Do not activate or publish this checkpoint. A cancellation during sequential
+native provider proof writes can expose a positive prefix before a later
+contradictory observation is saved. The reviewer reproduced a split capture
+being accepted from that incomplete prefix. The adapter requires atomic
+complete-batch publication/admission, including a cancellation-after-positive
+and negative-last reconciliation regression, before release approval. The
+author is implementing the correction; this remote checkpoint deliberately
+preserves the work and the unresolved finding without claiming readiness.

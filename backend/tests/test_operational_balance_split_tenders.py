@@ -7,6 +7,8 @@ import pytest
 from operational_balance_engine import reconcile
 from operational_provider_report_coverage import provider_customer_payments
 from operational_provider_transaction_evidence import normalize_operational_payment
+from operational_payment_evidence import provider_for
+from order_activity_v1 import normalize_transaction_row
 from test_operational_balance_order_page_payment_flow import CREATED, T1, T2, T3, order_document
 from test_operational_balance_engine import START, policy
 
@@ -27,8 +29,33 @@ def normalize(doc, rows=()):
         order_number=doc["order_number"], provider_order_id=str(raw["id"]), rows=rows, source=doc)
 
 
+def native_capture_rows(doc):
+    """Financial scenarios carry explicit, order-bound original paid times.
+
+    Page normalization-only tests deliberately keep their unproved snapshots.
+    """
+    raw = doc["raw_by_source"]["salla_direct"]
+    rows = []
+    for leg in raw["payment_methods"]:
+        method = leg["payment_method"]
+        if not provider_for(method):
+            continue
+        ref = leg["transaction_reference"]
+        native = {"id": "native-" + ref,
+            "references": {"order_id": str(raw["id"]), "transaction": ref},
+            "status": {"slug": "captured"}, "payment_method": {"slug": method},
+            "total": {"amount": leg["amount"], "currency": "SAR"},
+            "paid_at": CREATED, "created_at": CREATED}
+        row = normalize_transaction_row(native, order_number=doc["order_number"],
+                                        provider_order_id=str(raw["id"]))
+        row["user_id"] = doc["user_id"]
+        row["native_transaction_evidence"] = [row["native_transaction_evidence"]]
+        rows.append(row)
+    return rows
+
+
 def normalized(doc):
-    payment, errors = normalize(doc)
+    payment, errors = normalize(doc, native_capture_rows(doc))
     assert not errors
     return {"id": doc["salla_order_id"], "order_number": doc["order_number"],
             "created_at": CREATED, "updated_at": CREATED, "currency": "SAR", "payment": payment}
@@ -190,6 +217,7 @@ def test_actual_provider_payout_allocates_to_one_split_share_only_and_replay_is_
         await refresh(db, "owner", clock=T1)
         doc, _ = source()
         await db.unified_orders.insert_one(doc)
+        await db.order_payment_transactions_v2.insert_many(native_capture_rows(doc))
         first = await refresh(db, "owner", clock=T2)
         assert amounts(first) == {"tabby":"65.00", "salla":"35.00"}
         key = "provider:" + doc["salla_order_id"] + ":tabby"
@@ -244,6 +272,7 @@ def test_frozen_split_order_does_not_turn_into_a_second_bank_receipt_or_cod_coll
         await db.unified_orders.delete_one({"order_number":"new-bank-order"})
         doc, raw = source()
         await db.unified_orders.insert_one(doc)
+        await db.order_payment_transactions_v2.insert_many(native_capture_rows(doc))
         first = await refresh(db, "owner", clock=T1)
         assert amounts(first) == {"tabby":"65.00","salla":"35.00"}
         raw.pop("payment_methods")

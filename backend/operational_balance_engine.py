@@ -51,10 +51,15 @@ def day(value):
     return date.fromisoformat(str(value)[:10])
 
 
-def shipping_day(frozen):
+def shipping_day(frozen, previous=None):
+    # A recovery may add a newly proved fee, but it cannot silently redate a
+    # previously recorded financial row. New rows use the source event's local
+    # business day, including UTC events after Riyadh midnight.
+    if previous and money(previous.get("confirmed", "0")) > ZERO:
+        return day(previous["business_date"])
     if frozen.get("recognition_basis") in {STATUS_BASIS, OWNER_DELIVERY_BASIS}:
         return instant(frozen["recorded_at"]).astimezone(RIYADH).date()
-    return day(frozen["delivered_at"])
+    return instant(frozen["delivered_at"]).astimezone(RIYADH).date()
 
 
 def shipping_recording(frozen):
@@ -110,6 +115,7 @@ from operational_split_payment import apply_split_payment, split_reference_owner
 from operational_provider_transaction_evidence import VERSION as NATIVE_TRANSACTION_EVIDENCE_VERSION, CANONICAL_WITH_UNBOUND_ACTIVITY
 from operational_product_cost_policy import unreceived_eligible
 from operational_order_page_payment import corroborated_refund_basis, observed_balance
+from operational_provider_dates import DATE_ISSUES as PROVIDER_DATE_ISSUES, recognition_day as provider_recognition_day
 from operational_reconciliation_state import ReconciliationMap
 
 
@@ -211,8 +217,8 @@ def reconcile(state, sources, as_of):
     issue_scope = {"issues": issues}
     enable_issue_index(issue_scope)
 
-    def issue(code, identity):
-        entry = {"code": str(code), "source_id": str(identity)}
+    def issue(code, identity, **details):
+        entry = {"code": str(code), "source_id": str(identity), **details}
         issue_scope["issues"] = issues
         append_unique_issue(issue_scope, entry)
 
@@ -457,6 +463,7 @@ def reconcile(state, sources, as_of):
         checkpoint = {name: mapping.checkpoint() for name, mapping in order_maps.items()}
         try:
             created = instant(order["created_at"])
+            original_delivery_date = False
             registered_service = bool(delivery_only and order.get("registered_service_only")
                                       and PREFIX + oid in engine.get("delivery_register", {}) and start < created <= now)
             if delivery_only or order.get("delivery_event"):
@@ -502,7 +509,9 @@ def reconcile(state, sources, as_of):
                     raise ValueError("operational_delivery_confirmed_evidence_changed")
                 # Separate provenance preserves the payload of existing shipping
                 # facts and the obligation IDs used by recorded settlements.
-                fact("delivery_event:" + oid, deepcopy(event))
+                original_delivery_date = not undated
+                if original_delivery_date:
+                    fact("delivery_event:" + oid, deepcopy(event))
             elif not start <= created <= now:
                 continue
             updated = instant(order.get("updated_at", order["created_at"]))
@@ -548,6 +557,20 @@ def reconcile(state, sources, as_of):
             carrier = order.get("carrier")
             service_key = "shipping:" + oid
             frozen = facts.get(service_key)
+            original_date_held = bool((frozen or carrier and order.get("status") in DELIVERED)
+                                      and not original_delivery_date)
+            if original_date_held:
+                issue("operational_shipping_original_date_unproven", oid,
+                      party_type=(frozen or {}).get("party_type") or (carrier or {}).get("party_type", (carrier or {}).get("kind", "courier")),
+                      party_id=(frozen or {}).get("id") or (carrier or {}).get("id"),
+                      missing_fields=["delivery_timestamp"])
+                from operational_driver_original_dates import apply_undated_fee
+                apply_undated_fee(result, order, start, now, put, fact, issue, shipping_allocations)
+                # Hold only this source family. Do not freeze an observation as
+                # delivery, create new COD/fee evidence, promote a forecast, or
+                # touch an already recorded row. Supplier/provider processing
+                # continues below and a later native event can use the same IDs.
+                carrier, frozen = None, None
             completed_fee = facts.get('completed_shipping:' + oid)
             base_managed = bool(completed_fee or order.get('completed_shipping_base_managed'))
             if base_managed and carrier:
@@ -592,7 +615,7 @@ def reconcile(state, sources, as_of):
                                               (carrier.get("cost") is not None or recording and carrier.get("currency")) else {})})
             cod_fact = facts.get("cod_collection:" + oid)
             cod_evidence = deepcopy(order.get("cod") or {})
-            delivery_held = order.get('shipping_evidence_held') is True
+            delivery_held = order.get('shipping_evidence_held') is True or original_date_held
             if frozen:
                 original_evidence = frozen.get("cod_evidence", {})
                 # Delivery freezes the executor, not an absent cash collection.
@@ -680,19 +703,19 @@ def reconcile(state, sources, as_of):
                             component_fact = fact(component_key, {"cost": amount(money(component["amount"])), "currency": fee_currency})
                         if component_fact is not None:
                             put(component_key, "shipping", frozen["id"], frozen["party_type"], fee_currency,
-                                confirmed=money(component_fact["cost"]), business_date=shipping_day(frozen),
+                                confirmed=money(component_fact["cost"]), business_date=shipping_day(frozen, obligations.get(component_key)),
                                 fee_component=component["id"], **shipping_recording(frozen))
                         elif component_key in obligations:
                             obligations[component_key] = {**obligations[component_key], "expected": "0.00"}
                 elif fee is not None:
                     put(service_key, "shipping", frozen["id"], frozen["party_type"], fee_currency,
-                        confirmed=money(fee["cost"]), business_date=shipping_day(frozen), **shipping_recording(frozen))
+                        confirmed=money(fee["cost"]), business_date=shipping_day(frozen, obligations.get(service_key)), **shipping_recording(frozen))
                 elif service_key in obligations:
                     obligations[service_key] = {**obligations[service_key], "expected": "0.00"}
             if frozen:
                 if not delivery_held and (confirmed_cod or cod_evidence or "cod:" + oid in obligations):
                     put("cod:" + oid, "cod", frozen["id"], frozen["party_type"], currency,
-                        confirmed=confirmed_cod, direction="receivable", business_date=shipping_day(frozen),
+                        confirmed=confirmed_cod, direction="receivable", business_date=shipping_day(frozen, obligations.get("cod:" + oid)),
                         **cod_metadata, **shipping_recording(frozen))
             elif carrier:
                 if fee_currency and carrier.get("fee_components"):
@@ -710,7 +733,7 @@ def reconcile(state, sources, as_of):
                     obligations[service_key] = {**obligations[service_key], "expected": "0.00"}
                 put("cod:" + oid, "cod", carrier["id"], carrier.get("party_type", carrier.get("kind", "courier")), currency,
                     expected=ZERO if cancelled else money(order.get("cod_amount", "0")), direction="receivable", business_date=created.date(), **cod_metadata)
-            else:
+            elif not original_date_held:
                 prior_shipping = (obligations.items() if ':' in oid else obligations.ordered_items(
                     {*shipping_keys.get(service_key, ()), "cod:" + oid}))
                 for key, obligation in prior_shipping:
@@ -750,7 +773,6 @@ def reconcile(state, sources, as_of):
                         page_mode = False
                     page_fact = observed_balance(page, payment, order, result, now=now, start=start,
                         fact_items=facts.facts_for(("capture:", "refund:"), oid)) if page_mode else None
-                    recognition_day = instant(page_fact["observed_at"]).astimezone(RIYADH).date() if page_mode else created.date()
                     policy_day = created.astimezone(RIYADH).date()
                     try:
                         earliest_date = None
@@ -827,6 +849,8 @@ def reconcile(state, sources, as_of):
                             or (captures and paid_total is not None and captured != money(paid_total))):
                         raise ValueError("provider_capture_amount_conflict")
                     confirmed = max(captured - refunded, ZERO)
+                    recognition_day = provider_recognition_day(obligations.get(provider_key), captures,
+                        currency=currency, confirmed=confirmed, captured=captured, created_at=created, as_of=now)
                     if projection is None:
                         # Store only the proved gross claim. The absence of a fee
                         # projection keeps fee/net forecasts explicitly unavailable.
@@ -850,21 +874,27 @@ def reconcile(state, sources, as_of):
                             reference_owners.setdefault(ref, set()).add(oid)
                 except (ValueError, KeyError) as error:
                     facts.rollback(provider_facts)
-                    if provider_key in obligations:
-                        obligations[provider_key] = {**obligations[provider_key], "expected": "0.00", "incomplete": True}
-                    if page and str(error) in {"provider_historical_capture_review_required", "provider_settled_capture_review_required"}:
-                        balance_review = {k: page[k] for k in
-                                          ("order_id", "order_number", "provider", "currency", "gross", "paid", "remaining")}
-                        if page.get("source") in {"canonical_salla_closed_tender", "canonical_salla_partial_tender",
-                                                   "canonical_salla_adjusted_payment"}:
-                            balance_review["source"] = page["source"]
-                            if page.get("transaction_reference"):
-                                balance_review["transaction_reference"] = page["transaction_reference"]
-                        issues.append({"code": str(error), "source_id": provider_key, "provider": payment["provider"],
-                                       "history_proof_hash": proof_hash(order, payment), "history_created_at": order["created_at"],
-                                       "order_page_balance_review": balance_review})
+                    if str(error) in PROVIDER_DATE_ISSUES:
+                        # A newly observed paid balance cannot change any prior
+                        # financial claim until its original date is proved.
+                        issue(str(error), provider_key, provider=payment["provider"], party_type="provider",
+                              party_id=payment["provider"], missing_fields=["capture_timestamp"])
                     else:
-                        issue(str(error), provider_key)
+                        if provider_key in obligations:
+                            obligations[provider_key] = {**obligations[provider_key], "expected": "0.00", "incomplete": True}
+                        if page and str(error) in {"provider_historical_capture_review_required", "provider_settled_capture_review_required"}:
+                            balance_review = {k: page[k] for k in
+                                              ("order_id", "order_number", "provider", "currency", "gross", "paid", "remaining")}
+                            if page.get("source") in {"canonical_salla_closed_tender", "canonical_salla_partial_tender",
+                                                       "canonical_salla_adjusted_payment"}:
+                                balance_review["source"] = page["source"]
+                                if page.get("transaction_reference"):
+                                    balance_review["transaction_reference"] = page["transaction_reference"]
+                            issues.append({"code": str(error), "source_id": provider_key, "provider": payment["provider"],
+                                           "history_proof_hash": proof_hash(order, payment), "history_created_at": order["created_at"],
+                                           "order_page_balance_review": balance_review})
+                        else:
+                            issue(str(error), provider_key)
             if not registered_service:
                 versions[oid] = updated.isoformat()
         except (ValueError, KeyError, TypeError, InvalidOperation) as error:
