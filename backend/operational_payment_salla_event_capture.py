@@ -114,11 +114,18 @@ async def stage_verified_payment_update(db, item):
             except (TypeError, ValueError, InvalidOperation, KeyError):
                 first_full = False
             if first_full:
-                await post_first_salla_capture(
+                outcome = await post_first_salla_capture(
                     db, item["user_id"], item["merchant_id"],
                     order_id, item["order_number"], normalized,
                     source_ref=item["_id"],
                 )
+                if outcome.get("status") == "review_required":
+                    from operational_payment_evidence_review import stage_unverified_review
+                    await stage_unverified_review(
+                        db, item["user_id"], order_id, item["_id"],
+                        normalized["provider"], source["event"],
+                        [outcome["reason_code"]],
+                    )
     except Exception:
         # The worker owns retry/structured diagnostics. Never log financial
         # payloads, tokens, source refs or customer identifiers.
