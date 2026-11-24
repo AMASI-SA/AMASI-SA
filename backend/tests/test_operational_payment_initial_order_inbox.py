@@ -39,7 +39,7 @@ def load_worker():
 class InitialOrderEvidenceTests(unittest.TestCase):
     def test_created_event_is_staged_without_resyncing_order(self):
         worker, sync = load_worker()
-        item = {"user_id":"owner-1", "event":{"event":"order.created","merchant":"m1"}}
+        item = {"user_id":"owner-1", "merchant_id":"m1", "event":{"event":"order.created","merchant":"m1"}}
         evidence = types.ModuleType("operational_payment_salla_event_capture")
         evidence.stage_verified_payment_update = AsyncMock(return_value=True)
         with patch.dict(sys.modules, {"operational_payment_salla_event_capture":evidence}):
@@ -50,7 +50,7 @@ class InitialOrderEvidenceTests(unittest.TestCase):
 
     def test_created_event_retries_staging_failure(self):
         worker, sync = load_worker()
-        item = {"user_id":"owner-1", "event":{"event":"order.created","merchant":"m1"}}
+        item = {"user_id":"owner-1", "merchant_id":"m1", "event":{"event":"order.created","merchant":"m1"}}
         evidence = types.ModuleType("operational_payment_salla_event_capture")
         evidence.stage_verified_payment_update = AsyncMock(return_value=False)
         with patch.dict(sys.modules, {"operational_payment_salla_event_capture":evidence}):
@@ -60,7 +60,7 @@ class InitialOrderEvidenceTests(unittest.TestCase):
 
     def test_payment_update_keeps_existing_sync_contract(self):
         worker, sync = load_worker()
-        item = {"user_id":"owner-1", "event":{"event":"order.payment.updated","merchant":"m1"}}
+        item = {"user_id":"owner-1", "merchant_id":"m1", "event":{"event":"order.payment.updated","merchant":"m1"}}
         evidence = types.ModuleType("operational_payment_salla_event_capture")
         evidence.stage_verified_payment_update = AsyncMock(return_value=True)
         with patch.dict(sys.modules, {"operational_payment_salla_event_capture":evidence}):
@@ -72,7 +72,7 @@ class InitialOrderEvidenceTests(unittest.TestCase):
     def test_wrong_owner_blocks_both_paths(self):
         worker, sync = load_worker()
         sync._resolve_user_id = AsyncMock(return_value="another-owner")
-        item = {"user_id":"owner-1", "event":{"event":"order.created","merchant":"m1"}}
+        item = {"user_id":"owner-1", "merchant_id":"m1", "event":{"event":"order.created","merchant":"m1"}}
         self.assertEqual(asyncio.run(worker._apply(None, item)), "paused")
         sync.sync_order_from_verified_webhook.assert_not_awaited()
 
