@@ -15,7 +15,7 @@ log = logging.getLogger(__name__)
 
 
 async def enqueue_verified_payment(db, event):
-    if event.get("event") != "order.payment.updated":
+    if event.get("event") not in {"order.created", "order.payment.updated"}:
         return None
     merchant = str(event.get("merchant") or "").strip()
     if not merchant or is_attribution_pilot_store(merchant):
@@ -25,7 +25,7 @@ async def enqueue_verified_payment(db, event):
     if not owner or not payload.get("reference_id") or not payload.get("id"):
         return None
     # Only the verified order payload needed for replay, no headers or secrets.
-    safe_event = {"event": "order.payment.updated", "merchant": merchant, "data": deepcopy(payload)}
+    safe_event = {"event": event["event"], "merchant": merchant, "data": deepcopy(payload)}
     key = hashlib.sha256(json.dumps(safe_event, sort_keys=True, default=str).encode()).hexdigest()
     now = datetime.now(timezone.utc)
     await db[COLLECTION].update_one({"_id": key}, {"$setOnInsert": {
