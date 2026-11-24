@@ -23,6 +23,18 @@
       "result": "same generic UI failure",
       "limits": "A browser wait operation timed out while the same request remained loading; resumed waiting without a further click. Therefore elapsed interval is an observation upper bound.",
       "log_view": "Fresh snapshot timestamps21:12:11..21:12:20UTC, no safe diagnostic note or operational source code."
+    },
+    {
+      "kind": "one final explicit bounded legacy cost refresh, continuously observed",
+      "started_at": "2026-11-24T21:16:58.013Z",
+      "loading_observed_at": "2026-11-24T21:16:58.367Z",
+      "result_observed_at": "2026-11-24T21:17:20.743Z",
+      "log_opened_at": "2026-11-24T21:17:23.988Z",
+      "elapsed_ui_ms": 22730,
+      "result": "same generic UI failure",
+      "wait_handling": "Two timeout/deadline observations handled within the same CUA call while awaiting the same request; no additional refresh click.",
+      "log_view": "Platform logs still showed21:12:11..21:12:20UTC, and remained stale at21:19:00.639Z. No note captured for this request.",
+      "limits": "Continuous UI duration is not an isolated Mongo or HTTP measurement; source cause for this legacy attempt remains unproven."
     }
   ],
   "cause": "unknown",
@@ -34,5 +46,6 @@
     "No cause or collection attribution from the generic UI error.",
     "Retained logs are limited to100records; absent note does not prove source-read success or a different stage.",
     "No production latency improvement claimed."
-  ]
+  ],
+  "legacy_retries_stopped": true
 }

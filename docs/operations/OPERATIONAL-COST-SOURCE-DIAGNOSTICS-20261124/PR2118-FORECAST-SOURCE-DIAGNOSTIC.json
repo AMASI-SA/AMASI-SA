@@ -1,0 +1,46 @@
+{
+  "schema": "mezan_postrelease_cost_diagnostic_v1",
+  "request_kind": "new independent read-only forecast attempt; not retrospective correlation of three legacy failures",
+  "summary_request_started_at": "2026-11-24T21:32:42.777Z",
+  "summary_response_observed_at": "2026-11-24T21:33:01.798Z",
+  "forecast_request_started_at": "2026-11-24T21:33:07.073Z",
+  "forecast_result_observed_at": "2026-11-24T21:33:39.882Z",
+  "snapshot": {
+    "revision": 16942,
+    "as_of": "2026-11-24T20:55:07.335525+00:00",
+    "started_at": "2026-10-31T21:30:01.284707+00:00"
+  },
+  "route": "GET /api/operational-balances/financial-position?view=forecast with exact expected_revision, expected_as_of and expected_started_at from summary",
+  "result": {
+    "view": "forecast",
+    "status": "active",
+    "generated_at": "2026-11-24T21:33:23.914162+00:00",
+    "cost_issues": [
+      {
+        "code": "operational_source_read_timeout",
+        "source_collection": "unified_orders",
+        "count": 1
+      }
+    ],
+    "open_cost_exposure": "incomplete"
+  },
+  "source_identity_followup": {
+    "observed_at": "2026-11-24T21:36:41.393Z",
+    "surface": "GET /build-meta.json",
+    "git_sha": "6e25a762b17ad87ce8efeb37f2952a478ae9427b",
+    "artifact_tree_sha256": "20bb37b904e519478211c634321272a4a293c5e44f3b3e0c77fc90e8cb3c9cc6",
+    "limitation": "One frontend metadata read, not another three-probe backend release verification."
+  },
+  "preserved": {
+    "no_financial_refresh": true,
+    "no_source_sync": true,
+    "saved_snapshot_retained": true,
+    "no_token_extraction": true,
+    "normal_browser_cookie_authorization": true
+  },
+  "timing_limits": [
+    "Navigation hit browser protocol deadlines; subsequent DOM observation read the same pending request without another navigation.",
+    "Timestamps are observation evidence, not an isolated Mongo duration or before/after speed comparison."
+  ],
+  "interpretation": "The supported forecast route directly identified a unified_orders source timeout. It does not identify query plan, payload size, network timing or server contention, and does not prove the cause of the earlier legacy attempts."
+}

@@ -1,12 +1,12 @@
 {
   "task_id": "OPERATIONAL-COST-SOURCE-DIAGNOSTICS-20261124",
-  "status": "WIP: PR2118 published and original3probe verification PASS; guard inactive; cost report still fails and fresh retained logs do not identify source",
+  "status": "WIP: PR2118 published and original three-probe verification PASS; original guard inactive. New supported forecast read directly identifies unified_orders source timeout. Safe optimization under review.",
   "repository": "AMASI-SA/AMASI-SA",
   "task_branch": "codex/operational-cost-report-release-20261124",
   "source_base_commit": "cb98e5660380d362e78f937d60abc7139cd1c462",
   "checkpoint_identity": "The task branch commit and Draft PR record the exact full SHA containing this status file.",
   "scope": "Name the sanitized source collection and error code when the first open-cost load_collections call fails. Preserve the same exception, arguments, string, HTTP failure, source reads, cancellation and deadlines.",
-  "observed_problem": "A live legacy cost report failed inside load_collections before the catalogue-index stage. SourceReadError retains the collection attribute, but its existing traceback string exposes only the failure code. The platform log view retains only its last 100 lines. The responsible collection is not yet observed.",
+  "observed_problem": "A live legacy cost report failed inside load_collections before the catalogue-index stage. SourceReadError retains the collection attribute, but its existing traceback string exposes only the failure code. The platform log view retains only its last 100 lines. The responsible collection is not yet observed. A distinct supported forecast read on snapshot16942 at21:33UTC now directly returned operational_source_read_timeout/source_collection unified_orders. This does not retrospectively correlate the three legacy failures or establish a query-plan/payload root cause.",
   "changed_files": [
     "backend/operational_open_cost_exposure.py",
     "backend/operational_source_diagnostics.py",
@@ -65,16 +65,16 @@
   "review_state": "Both isolated runtime slices passed independent review; the combined staged tree passed independent mode/blob comparison. Root reviewed the exact runtime changes and ran all 613 combined affected tests. Only this continuity document changed afterwards. External candidate provenance, full clean canonical-A checkout and original load_candidate_release_intent independently passed without mutation.",
   "ci_state": "PASS: exact B25success/10conditional skips; exact M11success/0skip, no pending/failure/neutral. All applicable gates executed.",
   "merge_state": "PR2118 normally merged20:08:54UTC as c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe; parents[J,B],treeB preserved.",
-  "release_state": "Original verifier completed successfully at20:58:44.300370UTC for exactA/M/RID; original status inactive21:01:19.329863UTC. Two bounded post-release cost observations failed; collection/cause remain unproven.",
+  "release_state": "Original own verifier PASS20:58:44.300370UTC for exactA/M/RID and original status inactive21:01:19.329863UTC. Three bounded legacy cost observations failed. New forecast diagnostic identifies unified_orders timeout. Git Production subsequently advanced via another owner's PR2120; no action on its lease.",
   "production_changed": true,
   "limitations": [
-    "The collection which caused the observed production timeout remains unknown until a matching failure emits the new diagnostic.",
+    "All three legacy UI failures remain uncorrelated. The new supported forecast read directly identifies unified_orders timeout for that request only; query plan, payload and contention are not measured.",
     "A logger line may leave the platform's last-100-line view. On runtimes supporting exception notes, the same sanitized data remains at the end of the traceback; otherwise logging is the fallback.",
     "This local check used real asyncio read ownership and non-debug ASGI middleware with isolated source readers. It did not query production or rerun the separate real-Mongo HTTP suite.",
     "No runtime latency reduction, source completeness or financial recovery is claimed.",
     "Issue 1006 has reached its comment limit; this task status and the forthcoming Draft PR are the recoverable ledger."
   ],
-  "next_safe_action": "Preserve successful release evidence and failure observations. Resolve limited live diagnostic visibility before choosing a source fix; keep financial proof separate and read the latest original receipt before any further recalculation.",
+  "next_safe_action": "Review a cost-local projection of only consumed unified_orders fields, prove complete output/negative-evidence/cancellation parity, and preserve PR2120 changes if a new source candidate is warranted. No further legacy retries or financial refresh needed for this diagnosis.",
   "integration": {
     "coordinator": "/root",
     "production_branch_base": "cb98e5660380d362e78f937d60abc7139cd1c462",
@@ -113,7 +113,7 @@
     "history_gate": "The initial unpushed integration attempt b9675bea83bd2881cdf8fbd828a1f2a6562ac873 retained both earlier branches as parents but was rejected by the original full-history intent-path condition despite equal final intent bytes. It remains local only and will not be released. This fresh linear source avoids bringing old-intent branch history into J..A; keep the validator unchanged."
   },
   "continuation_evidence": {
-    "recorded_at_utc": "2026-11-24T21:12:50.145Z",
+    "recorded_at_utc": "2026-11-24T21:38:42.435Z",
     "source_pr": 2118,
     "source_branch": "codex/operational-cost-report-release-20261124",
     "source_git_sha": "6e25a762b17ad87ce8efeb37f2952a478ae9427b",
@@ -229,7 +229,7 @@
         "app_available_bytes": 428056576
       }
     },
-    "next_safe_action": "Preserve successful release evidence and failure observations. Resolve limited live diagnostic visibility before choosing a source fix; keep financial proof separate and read the latest original receipt before any further recalculation.",
+    "next_safe_action": "Review a cost-local projection of only consumed unified_orders fields, prove complete output/negative-evidence/cancellation parity, and preserve PR2120 changes if a new source candidate is warranted. No further legacy retries or financial refresh needed for this diagnosis.",
     "production_changed_by_this_candidate": true,
     "preceding_publisher_history": [
       {
@@ -487,7 +487,8 @@
           "observed_at": "2026-11-24T21:01:19.329863+00:00",
           "exit_code": 0,
           "active": false
-        }
+        },
+        "original_stdout_preserved_path": "PR2118-ORIGINAL-LIVE-VERIFICATION.json"
       },
       "lease": "inactive; original status exit0 after own verified release"
     },
@@ -516,6 +517,18 @@
           "result": "same generic UI failure",
           "limits": "A browser wait operation timed out while the same request remained loading; resumed waiting without a further click. Therefore elapsed interval is an observation upper bound.",
           "log_view": "Fresh snapshot timestamps21:12:11..21:12:20UTC, no safe diagnostic note or operational source code."
+        },
+        {
+          "kind": "one final explicit bounded legacy cost refresh, continuously observed",
+          "started_at": "2026-11-24T21:16:58.013Z",
+          "loading_observed_at": "2026-11-24T21:16:58.367Z",
+          "result_observed_at": "2026-11-24T21:17:20.743Z",
+          "log_opened_at": "2026-11-24T21:17:23.988Z",
+          "elapsed_ui_ms": 22730,
+          "result": "same generic UI failure",
+          "wait_handling": "Two timeout/deadline observations handled within the same CUA call while awaiting the same request; no additional refresh click.",
+          "log_view": "Platform logs still showed21:12:11..21:12:20UTC, and remained stale at21:19:00.639Z. No note captured for this request.",
+          "limits": "Continuous UI duration is not an isolated Mongo or HTTP measurement; source cause for this legacy attempt remains unproven."
         }
       ],
       "cause": "unknown",
@@ -527,7 +540,64 @@
         "No cause or collection attribution from the generic UI error.",
         "Retained logs are limited to100records; absent note does not prove source-read success or a different stage.",
         "No production latency improvement claimed."
-      ]
+      ],
+      "legacy_retries_stopped": true
+    },
+    "supported_forecast_source_observation": {
+      "schema": "mezan_postrelease_cost_diagnostic_v1",
+      "request_kind": "new independent read-only forecast attempt; not retrospective correlation of three legacy failures",
+      "summary_request_started_at": "2026-11-24T21:32:42.777Z",
+      "summary_response_observed_at": "2026-11-24T21:33:01.798Z",
+      "forecast_request_started_at": "2026-11-24T21:33:07.073Z",
+      "forecast_result_observed_at": "2026-11-24T21:33:39.882Z",
+      "snapshot": {
+        "revision": 16942,
+        "as_of": "2026-11-24T20:55:07.335525+00:00",
+        "started_at": "2026-10-31T21:30:01.284707+00:00"
+      },
+      "route": "GET /api/operational-balances/financial-position?view=forecast with exact expected_revision, expected_as_of and expected_started_at from summary",
+      "result": {
+        "view": "forecast",
+        "status": "active",
+        "generated_at": "2026-11-24T21:33:23.914162+00:00",
+        "cost_issues": [
+          {
+            "code": "operational_source_read_timeout",
+            "source_collection": "unified_orders",
+            "count": 1
+          }
+        ],
+        "open_cost_exposure": "incomplete"
+      },
+      "source_identity_followup": {
+        "observed_at": "2026-11-24T21:36:41.393Z",
+        "surface": "GET /build-meta.json",
+        "git_sha": "6e25a762b17ad87ce8efeb37f2952a478ae9427b",
+        "artifact_tree_sha256": "20bb37b904e519478211c634321272a4a293c5e44f3b3e0c77fc90e8cb3c9cc6",
+        "limitation": "One frontend metadata read, not another three-probe backend release verification."
+      },
+      "preserved": {
+        "no_financial_refresh": true,
+        "no_source_sync": true,
+        "saved_snapshot_retained": true,
+        "no_token_extraction": true,
+        "normal_browser_cookie_authorization": true
+      },
+      "timing_limits": [
+        "Navigation hit browser protocol deadlines; subsequent DOM observation read the same pending request without another navigation.",
+        "Timestamps are observation evidence, not an isolated Mongo duration or before/after speed comparison."
+      ],
+      "interpretation": "The supported forecast route directly identified a unified_orders source timeout. It does not identify query plan, payload size, network timing or server contention, and does not prove the cause of the earlier legacy attempts."
+    },
+    "subsequent_production_git": {
+      "observed_at_utc": "2026-11-24T21:38:42.435Z",
+      "sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+      "pr": 2120,
+      "merged_at": "2026-11-24T21:23:10Z",
+      "own_M_is_first_parent": true,
+      "scope": "inventory cabinet archive",
+      "lease_action_by_this_task": false,
+      "live_publication_state": "not independently established"
     }
   },
   "production_git_changed": true,
