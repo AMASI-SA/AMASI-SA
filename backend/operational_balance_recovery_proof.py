@@ -205,7 +205,8 @@ def _original_date(state, sources, identity, row, stamp, *, movement=False):
             at = _instant(event["earned_at"])
             valid = (identity == "shipping:" + order_id + ":base_shipping"
                      and event == engine.get("facts", {}).get(PREFIX + order_id)
-                     and _instant(state.get("started_at")) <= at <= stamp and at.astimezone(RIYADH).date() == day
+                     and max(_instant(state.get("started_at")), _instant(source.get("created_at"))) <= at <= stamp
+                     and at.astimezone(RIYADH).date() == day
                      and _instant(row.get("earned_at")) == at and row.get("kind") == "shipping"
                      and event["party_id"] == row.get("party_id") and row.get("party_type") == "store_driver"
                      and event["earning_id"] == row.get("source_earning_id") and row.get("currency") == "SAR"
@@ -293,7 +294,9 @@ def _original_date(state, sources, identity, row, stamp, *, movement=False):
                      and at.astimezone(RIYADH).date() == day and event.get("schema") == "operational_delivery_event_v1"
                      and event == engine.get("facts", {}).get("delivery_event:" + order_id)
                      and event.get("party_id") == row.get("party_id") and event.get("party_type") == row.get("party_type")
-                     and event.get("currency") == row.get("currency") and _instant(event.get("delivered_at")) == at)
+                     and event.get("currency") == source.get("currency", event.get("currency"))
+                     and frozen.get("fee_currency", row.get("currency")) == row.get("currency")
+                     and _instant(event.get("delivered_at")) == at)
             return valid, "delivery_event" if valid else "delivery_date_unproven"
         return False, "provider_observation_or_aggregate" if row.get("kind") == "provider" else "source_date_unproven"
     except (ValueError, KeyError, TypeError, AttributeError, ArithmeticError):

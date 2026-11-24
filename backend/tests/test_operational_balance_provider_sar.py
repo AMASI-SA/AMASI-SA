@@ -149,7 +149,9 @@ def test_foreign_order_sar_pool_holds_its_first_claim_only_and_preserves_source_
     def apply(s):
         raw = {"id":"foreign","reference_id":"r","currency":"KWD","total":{"amount":"12.00","currency":"KWD"},
                "payment_method":"tabby_installment","paid_amount":"12.00","remaining_amount":"0.00",
-               "status":"under_review","updated_at": T1}
+               "status":"under_review","updated_at": T1,
+               "payment": {"method":"tabby_installment", "status":"captured", "paid_amount":"12.00",
+                           "paid_at":T1, "reference":"foreign-native-capture"}}
         payment, issues = normalize_operational_payment(raw,"KWD","12.00",BORN,T2,owner="shop",order_number="r",
             provider_order_id="foreign",rows=[],source={"user_id":"shop","order_number":"r"})
         assert not issues and payment

@@ -256,6 +256,13 @@ def test_unbooked_provider_date_hold_is_named_unknown_before_its_first_claim():
     assert row['label'] == 'تابي' and row['state'] == 'unknown'
     assert row['missing_days_count'] is None and row['last_financial_day'] is None
 
+    pending = {'issues': [{'code': 'provider_capture_acquisition_pending', 'provider': 'tabby', 'currency': 'USD'}]}
+    state['engine']['issues'] = pending['issues']
+    catalog = source_entities({}, state, pending)
+    rows = render(state, {'automatic_source_entities': catalog})['rows']
+    assert next(row for row in rows if row['entity_id'] == 'tabby' and row['currency'] == 'USD')['state'] == 'unknown'
+    assert next(row for row in rows if row['entity_id'] == 'tabby' and row['currency'] == 'SAR')['state'] == 'inactive'
+
 
 def test_catalog_keeps_unbound_ads_settings_carriers_and_pending_banks_named():
     state = base()

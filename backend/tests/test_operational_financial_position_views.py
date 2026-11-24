@@ -68,8 +68,7 @@ def rich_state():
     }}
     orders = []
     for courier in (False, True):
-        _, order = delivery_state(courier=courier)
-        order["id"] = "courier-order" if courier else "driver-order"
+        _, order = delivery_state(courier=courier, identity="courier-order" if courier else "driver-order")
         orders.append(order)
     state = reconcile(state, {"orders": orders}, NOW)
     evidence = _evidence({"merchant_id": "synthetic-store", "currency": "SAR", "as_of": START,

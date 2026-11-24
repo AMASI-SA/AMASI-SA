@@ -178,7 +178,7 @@ def test_scoped_native_transaction_source_to_gross_claim_does_not_touch_order_or
     cut="2026-10-05T00:00:00+00:00"
     inputs=run(collect_sources(db,"owner",cut,NOW))
     assert inputs["orders"][0]["payment"]["captures"]==[{"id":"capture-A","amount":"57.19","captured_at":PAID}]
-    assert db.reads.count("order_payment_transactions_v2")==1
+    assert db.reads.count("order_payment_transactions_v2")==2  # Disjoint legacy and atomic envelope reads.
     initial={"status":"active","started_at":cut,"movements":[],"openings":{}}
     out=reconcile(initial,inputs,NOW)
     assert out["engine"]["obligations"]["provider:"+ORDER]["confirmed"]=="57.19"

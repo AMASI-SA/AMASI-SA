@@ -1,5 +1,6 @@
 """A historical shipping replay admits money only with the original event day."""
 from copy import deepcopy
+from decimal import Decimal
 
 import pytest
 
@@ -129,3 +130,81 @@ def test_prepaid_observation_is_pending_then_native_completion_posts_original_pa
     assert movement["occurred_at"] == COMPLETED and movement["amount"] == "34.50"
     assert restored["engine"]["obligations"]["shipping-prepaid:100"]["business_date"] == "2026-10-06"
     assert calculate(data, restored)["movements"] == restored["movements"]
+
+
+def test_owner_aramex_status_policy_cannot_hide_later_original_completion_evidence():
+    from test_operational_balance_prepaid_shipping import fixture, calculate, COMPLETED
+    data, before = fixture(old=False, at=None)
+    before["aramex_order_status_rule"] = {"approved_by": "owner", "approved_at": before["started_at"],
+                                        "started_at": before["started_at"], "version": 1}
+    held = calculate(data, before)
+    assert held["movements"] == []
+    data["unified_orders"][0]["raw_by_source"]["salla_direct"]["status_changed_at"] = COMPLETED
+    recovered = calculate(data, held)
+    movement, = recovered["movements"]
+    assert movement["occurred_at"] == COMPLETED and movement["amount"] == "34.50"
+    assert not recovered["engine"]["facts"]["prepaid_shipping:100"].get("recognition_basis")
+    assert calculate(data, recovered)["movements"] == recovered["movements"]
+
+
+def test_native_driver_earning_restores_original_fee_without_manufacturing_delivery_or_cod():
+    from test_operational_balance_delivery_start_rule import undated
+    from test_operational_balance_delivery_cutover import START as opened, NOW as clock, DELIVERED as earned, active, run, HardBoundaryDB
+    from operational_balance_sources import collect_sources
+    data, before = undated("native_driver", cash_proof=True), active()
+    before.update(revision=2, engine={"as_of": opened})
+    inputs = run(collect_sources(HardBoundaryDB(data), "owner", opened, clock, operational_state=before))
+    after = reconcile(before, inputs, clock)
+    key = "shipping:100:base_shipping"
+    row = after["engine"]["obligations"][key]
+    assert (row["confirmed"], row["business_date"], row["business_date_basis"]) == ("10.00", "2026-10-06", "native_driver_earned_at")
+    assert row["earned_at"] == earned and row["delivered_at"] is None
+    assert all(identity not in after["engine"]["facts"] for identity in ("shipping:100", "delivery_event:100", "cod_collection:100"))
+    assert after["movements"] == before["movements"] == []
+    proof = build_recovery_proof(before, after, inputs, clock)
+    assert proof["new_original_dated"]["obligations"][0]["confirmed"] == "10.00"
+    assert proof["new_original_dated"]["obligations"][0]["business_date"] == "2026-10-06"
+    poisoned = deepcopy(inputs)
+    poisoned["orders"][0]["created_at"] = clock
+    assert build_recovery_proof(before, after, poisoned, clock)["original_dates_verified"] is False
+    repeated_inputs = run(collect_sources(HardBoundaryDB(data), "owner", opened, clock, operational_state=after))
+    repeated = reconcile(after, repeated_inputs, clock)
+    receipt = build_recovery_proof(after, repeated, repeated_inputs, clock)
+    assert receipt["new_obligation_count"] == receipt["changed_existing"]["count"] == receipt["new_automatic_movement_count"] == 0
+    assert repeated["engine"]["facts"] == after["engine"]["facts"]
+    data["store_delivery_assignments"][0]["delivered_at"] = earned
+    dated_inputs = run(collect_sources(HardBoundaryDB(data), "owner", opened, clock, operational_state=repeated))
+    dated = reconcile(repeated, dated_inputs, clock)
+    assert dated["engine"]["obligations"][key]["confirmed"] == "10.00"
+    assert dated["engine"]["obligations"][key]["business_date"] == "2026-10-06"
+    assert sum(Decimal(value["confirmed"]) for value in dated["engine"]["obligations"].values() if value["kind"] == "shipping") == Decimal("10.00")
+    assert dated["movements"] == []
+
+
+@pytest.mark.parametrize("fault", ["earned_at", "amount", "party", "assignment", "allocated"])
+def test_native_driver_original_fee_admission_preserves_prior_money_on_conflict(fault):
+    from test_operational_balance_delivery_start_rule import undated, calculate
+    from test_operational_balance_delivery_cutover import active, DELIVERED as earned
+    data = undated("native_driver")
+    previous = active() if fault == "allocated" else calculate(data)
+    if fault != "allocated":
+        data["store_delivery_assignments"][0]["delivered_at"] = earned
+    if fault == "earned_at":
+        data["store_delivery_driver_earnings"][0]["earned_at"] = earned.replace("12:00", "13:00")
+    elif fault == "amount":
+        data["store_delivery_driver_earnings"][0]["amount"] = "11.00"
+        data["store_delivery_assignments"][0]["delivery_fee_snapshot"] = "11.00"
+    elif fault == "party":
+        data["store_delivery_driver_earnings"][0]["driver_id"] = "different"
+    elif fault == "assignment":
+        data["store_delivery_driver_earnings"][0]["assignment_id"] = "different"
+    else:
+        previous["movements"].append({"id": "manual", "amount": "4.00", "currency": "SAR",
+            "party_type": "store_driver", "party_id": "driver", "kind": "payment", "direction": "outgoing",
+            "allocations": [{"obligation_id": "shipping:100:base_shipping", "amount": "4.00"}]})
+    before = deepcopy(previous)
+    result = calculate(data, previous)
+    assert result["movements"] == before["movements"]
+    assert {k: v for k, v in result["engine"]["obligations"].items() if k.startswith("shipping:")} == {
+        k: v for k, v in before.get("engine", {}).get("obligations", {}).items() if k.startswith("shipping:")}
+    assert any(row["code"].startswith("driver_fee_") for row in result["engine"]["issues"])

@@ -167,6 +167,13 @@ def test_delivery_date_needs_current_native_event_paired_with_immutable_fact():
     result = receipt(before, after, inputs)
     assert result["original_dates_verified"] is True
     assert "private-order" not in json.dumps(result)
+    # Delivery belongs to the sale currency; the separately authenticated fee
+    # remains in its own contract currency.
+    event["currency"] = "KWD"
+    inputs["delivery_events"][0]["currency"] = "KWD"
+    assert receipt(before, after, inputs)["original_dates_verified"] is True
+    inputs["delivery_events"][0]["currency"] = "USD"
+    assert receipt(before, after, inputs)["original_dates_verified"] is False
 
 
 @pytest.mark.parametrize("fault", [None, "missing_source", "wrong_day", "wrong_amount", "wrong_party", "observation"])

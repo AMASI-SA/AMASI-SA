@@ -90,6 +90,10 @@ def test_page_increase_cannot_change_a_prior_forecast_or_confirmed_money_or_cash
     for field in ("movements", "openings", "requests"):
         assert result[field] == before[field]
     assert any(row["code"] == UNPROVEN for row in result["engine"]["issues"])
+    assert result['engine']['order_versions'] == before['engine']['order_versions']
+    replay = reconcile(result, {"orders": [order(page_payment())]}, NOW)
+    for field in ('obligations', 'facts', 'provider_reports', 'issues', 'order_versions'):
+        assert replay['engine'][field] == result['engine'][field]
     assert initial == before
 
 

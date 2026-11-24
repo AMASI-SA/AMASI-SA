@@ -57,6 +57,7 @@ _CALCULATION_ISSUES = {
     "operational_obligation_entity_incomplete": ("parties", "الجهات التلقائية", "يوجد استحقاق مرتبط بجهة غير مكتملة الإعداد."),
     "provider_original_capture_date_unproven": ("payments", "منصات الدفع", "لم يثبت تاريخ التحصيل الأصلي لمنصة دفع؛ أُوقف تأكيد المبلغ الجديد حتى وصول دليل التحصيل."),
     "provider_capture_multiple_business_dates": ("payments", "منصات الدفع", "يتوزع تحصيل منصة الدفع على أيام مختلفة؛ يلزم إثبات مستقل لكل يوم قبل تأكيد الزيادة."),
+    "provider_capture_acquisition_pending": ("payments", "منصات الدفع", "لم يثبت اكتمال جلب أدلة التحصيل الأصلية؛ أُوقف تأكيد مبالغ جديدة حتى اكتمال التحقق من المصدر."),
     "operational_shipping_original_date_unproven": ("shipping", "شركات الشحن والموصلون", "لم يثبت وقت التوصيل أو الإكمال الأصلي؛ لم يُسجل استحقاق شحن جديد بتاريخ إعادة الاحتساب."),
     "operational_prepaid_shipping_original_date_unproven": ("shipping", "شركات الشحن", "لم يثبت وقت التنفيذ الأصلي للشحن المدفوع مسبقًا؛ يلزم دليل من المصدر قبل تسجيل الاستحقاق."),
 }

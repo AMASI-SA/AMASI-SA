@@ -255,12 +255,21 @@ def source_entities(data, state, normalized=None):
                 provider_ids.update(leg['provider'] for leg in split['tenders']
                     if type(leg) is dict and type(leg.get('provider')) is str)
             for provider in provider_ids & PROVIDERS.keys():
-                enabled_providers.add(provider)
+                if order.get('currency') == 'SAR':
+                    enabled_providers.add(provider)
                 add('provider', provider, PROVIDERS[provider], order.get('currency'), available=True)
         credit = order.get('bank_credit') if type(order) is dict else None
         if type(credit) is dict:
             candidates.append({'party_type': 'bank', 'party_id': credit.get('bank_id'),
                 'name': credit.get('bank_name'), 'currency': credit.get('currency') or 'SAR'})
+    for problem in _checked((normalized or {}).get('issues', [])):
+        if (type(problem) is dict and problem.get('code') == 'provider_capture_acquisition_pending'
+                and type(problem.get('provider')) is str and problem['provider'] in PROVIDERS
+                and type(problem.get('currency')) is str):
+            provider, currency = problem['provider'], problem['currency']
+            if currency == 'SAR':
+                enabled_providers.add(provider)
+            add('provider', provider, PROVIDERS[provider], currency, available=False)
     for value in _checked(chain((state.get('openings') or {}).values(), state.get('movements') or [])):
         if type(value) is dict and value.get('party_type') == 'bank':
             candidates.append(value)

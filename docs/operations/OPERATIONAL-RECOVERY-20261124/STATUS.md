@@ -183,3 +183,70 @@ complete-batch publication/admission, including a cancellation-after-positive
 and negative-last reconciliation regression, before release approval. The
 author is implementing the correction; this remote checkpoint deliberately
 preserves the work and the unresolved finding without claiming readiness.
+
+## Complete-batch correction and final candidate preparation
+
+The incomplete positive-prefix blocker above is resolved in the working tree.
+Provider acquisition publishes one complete, digest-bound atomic envelope,
+including contradictory/negative observations. A pending source fence is
+reserved before acquisition and cleared only after acknowledged publication
+and current owner/order binding verification. An uncertain before/after-commit
+outcome cannot authorize a new claim from cached positives. Ordinary legacy
+source rows retain normal Motor batching; only envelopes use bounded streamed
+batches. Both disjoint reads share the expanded-row limit and cancellation
+ownership. Independent reviews found no remaining blocker in this path.
+
+The checkpoint must explicitly include the three new runtime modules
+`operational_driver_original_dates.py`, `operational_provider_capture_batches.py`
+and `operational_provider_capture_cursor.py`, plus both new cursor test files.
+The first module was not yet complete at checkpoint
+`026c0aa8833e40b85930ca690b2ff7e7a7f4c2ac`, causing 151 missing-module failures
+in that checkpoint's real-Mongo operational CI. That checkpoint is deliberately
+not releasable. Final-head real-Mongo gates remain mandatory.
+
+Native earned-driver fees now retain their actual earning date independently
+of delivery and COD. New shipping, prepaid and COD effects require an actual
+original native event; existing saved confirmed records remain unchanged.
+Provider date-held observations no longer advance the financial order version,
+so exact replay preserves the prior claim, evidence, report and version.
+Positive fixture cases now supply original authenticated captures; undated
+cases assert a named hold. Financial, idempotency, manual-preservation and
+capacity assertions are retained, and no CI acceptance gate is removed.
+
+Focused verification after the correction includes 179 provider acquisition,
+source and financial cases; 25 independent cursor/split-reader cases; 152 root
+compatibility cases (five real-Mongo cases reserved for CI); 176 financial
+position/reconciliation/statement cases; and independent shipping/date/proof
+selections. These selections overlap and must not be summed. One broad pure
+follow-up is running with local-only exclusion of unavailable real-Mongo
+harnesses. Actual Mongo verification will run on the final candidate in GitHub.
+
+### Concurrent production and immutable release graph
+
+The other conversation published the approved PR #2097 during this task.
+Direct health now identifies source
+`deeefceffd9a1e37968513ac4f3833314bb415fd`, release
+`rg5-ffe0d4437c779b1e455f084be407f8f2d24735f5bf8e994f77c5bf4cbeb1c55f`,
+with all source/backend/frontend verification flags true. Emergent shows
+deployment `8a74712` succeeded at approximately 03:03 Riyadh on 24 November.
+At 00:20:36 UTC the shared guard reported `active: false` and tracked `/app`
+remained clean at reviewed J
+`5cfaac21a1775a0d0761d05aa571f94dbfc02d32`. These observations must be refreshed
+before any shared mutation or rehearsal. This task still has not published,
+enabled automation, refreshed financial balances, or run provider backfill.
+
+The reviewed release gate correctly rejects using the existing WIP ancestry as
+final source A: its normal base integration includes an intent-file touch in
+full history even though final intent bytes match J. Preserve draft PR #2098
+and its WIP history. Create the final candidate on a new branch rooted directly
+at the latest reviewed J, applying the exact reviewed J-to-final source tree
+while retaining J's unchanged intent. Confirm no full-history intent touch
+between J and A, preserve concurrent inventory work, and open a superseding PR.
+This is preparation before A/B freezing; no frozen pair may be rebased or
+squashed. After all gates pass, freeze a new intent-only B, run exact-B CI and
+normal merge, rehearse the official adapter, then use the original guard.
+
+Issue #1006 reached its comment limit and rejected another append. The status
+document and draft PR continuation preserve this checkpoint without overwriting
+another task's existing ledger comment. Production recovery amounts and private
+statement baselines are kept outside this repository.

@@ -171,6 +171,7 @@ async def acquire_visible_evidence(db, owner, *, courier_order_id=None):
     from salla_integration.paid_sar_sync import acquire_missing as acquire_sar
     from salla_integration.provider_capture_sync import acquire_missing as acquire_provider
     from operational_provider_dates import UNPROVEN as PROVIDER_DATE_UNPROVEN
+    from operational_provider_capture_batches import PENDING_CODE as PROVIDER_ACQUISITION_PENDING
     from salla_integration.service import SallaError
 
     issues = state.get("engine", {}).get("issues", [])
@@ -178,7 +179,7 @@ async def acquire_visible_evidence(db, owner, *, courier_order_id=None):
     bank = [issue for issue in issues if issue.get("code") in {"operational_order_bank_binding_incomplete", HISTORY_MISSING}]
     courier = [issue for issue in issues if issue.get("code") in ISSUE_CODES]
     sar = (state.get("engine", {}).get("customer_tender_coverage", {}).get("sar", {}).get("proof_lookups") or [])
-    provider = [issue for issue in issues if issue.get("code") == PROVIDER_DATE_UNPROVEN]
+    provider = [issue for issue in issues if issue.get("code") in {PROVIDER_DATE_UNPROVEN, PROVIDER_ACQUISITION_PENDING}]
     if courier_order_id is not None:
         # The explicit target is an intersection with this owner's saved gaps,
         # never a request to inspect an arbitrary provider order or all orders.

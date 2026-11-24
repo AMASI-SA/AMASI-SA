@@ -10,6 +10,7 @@ from operational_balance_store import STATES
 from operational_demand_refresh import LEASES, run_visible_refresh
 from operational_provider_dates import UNPROVEN
 from operational_provider_transaction_evidence import COLLECTION
+from operational_provider_capture_batches import FIELD as BATCH_FIELD, PENDING_FIELD, PENDING_CODE, build_batch, expand_batches
 import operational_visible_evidence as visible
 from salla_integration import courier_delivery_sync, provider_capture_sync as adapter
 from test_operational_balance_demand_refresh import DB, Request, allowed
@@ -51,6 +52,12 @@ class SourceCollection:
         return previous
 
     async def update_one(self, query, update, *, upsert=False):
+        if self.name == 'unified_orders':
+            assert not upsert and update == {'$set': {PENDING_FIELD: None}}
+            self.db.writes.append((self.name, 'complete', deepcopy(query)))
+            row = next((row for row in self.db.sources[self.name] if matches(row, query)), None)
+            if row is not None: row.update(update['$set'])
+            return SimpleNamespace(matched_count=int(row is not None))
         assert self.name == COLLECTION and upsert
         self.db.writes.append((self.name, 'proof', deepcopy(query)))
         row = next((row for row in self.db.sources[self.name] if matches(row, query)), None)
@@ -116,7 +123,7 @@ def test_owner_order_bound_source_only_and_idempotent_native_append(monkeypatch)
         assert first['provider']['status'] == 'completed' and first['provider']['selected'] == 1
         assert db.data[STATES] == original and db.data[LEASES] == {}
         assert len(db.sources[COLLECTION]) == 1
-        proof = db.sources[COLLECTION][0]['native_transaction_evidence']
+        proof = expand_batches(db.sources[COLLECTION])[0]['native_transaction_evidence']
         assert proof[0]['paid_at'] == CAPTURED and proof[0]['provider_order_id'] == '1001'
         assert adapter._RETRY not in foreign
         await run(db)
@@ -124,7 +131,7 @@ def test_owner_order_bound_source_only_and_idempotent_native_append(monkeypatch)
         db.sources['unified_orders'][1].pop(adapter._RETRY)
         await run(db)
         assert len(calls) == 2 and len(db.sources[COLLECTION]) == 1
-        assert db.sources[COLLECTION][0]['native_transaction_evidence'] == proof
+        assert expand_batches(db.sources[COLLECTION])[0]['native_transaction_evidence'] == proof
         assert not any(name == STATES for name, *_ in db.writes)
     asyncio.run(scenario())
 
@@ -256,3 +263,121 @@ def test_shared_budget_cancels_native_provider_read_and_keeps_unknown_financial_
         assert stopped.is_set() and db.sources[COLLECTION] == [] and db.data[STATES] == before
         assert not [task for task in asyncio.all_tasks() if task is not asyncio.current_task()]
     asyncio.run(scenario())
+
+
+@pytest.mark.parametrize('publication', ['before_commit', 'after_commit', 'complete'])
+@pytest.mark.parametrize('cached_positive', [False, True])
+def test_negative_last_is_never_omitted_by_partial_or_uncertain_publication(monkeypatch, publication, cached_positive):
+    from operational_balance_engine import reconcile
+    from operational_provider_transaction_evidence import normalize_operational_payment
+    from order_activity_v1 import normalize_transaction_row
+    from test_operational_balance_provider_original_dates import NOW, order, claim, KEY
+
+    async def scenario():
+        db = SourceDB()
+        initial = deepcopy(db.data[STATES]['owner'])
+        initial['engine']['obligations'] = {KEY + ':tabby': {**claim('65.00', '0.00', '2026-11-22'), 'id': KEY + ':tabby'}}
+        second = native(txn='native-2')
+        second.update(payment_method={'slug': 'mada'}, total={'amount': '35.00', 'currency': 'SAR'},
+            references={'order_id': '1001', 'transaction': 'ref-B'})
+        negative = native(txn='native-refund', status='refunded')
+        raw_rows = [native(), second, negative]
+        if cached_positive:
+            saved = normalize_transaction_row(native(), order_number='88001', provider_order_id='1001')
+            saved.update(user_id='owner', native_transaction_evidence=[saved['native_transaction_evidence']])
+            db.sources[COLLECTION].append(saved)
+        async def fetch(*args, **kwargs): return page(raw_rows)
+        monkeypatch.setattr(courier_delivery_sync, 'call_salla', fetch)
+        original_write = SourceCollection.update_one
+        publications = []
+        async def interrupt(self, query, update, **options):
+            if self.name == COLLECTION:
+                publications.append(update)
+                assert len(update['$setOnInsert'][BATCH_FIELD]['rows']) == 3
+                if publication == 'before_commit': raise TimeoutError()
+                result = await original_write(self, query, update, **options)
+                if publication == 'after_commit': raise TimeoutError()
+                return result
+            return await original_write(self, query, update, **options)
+        monkeypatch.setattr(SourceCollection, 'update_one', interrupt)
+        result = await run(db)
+        assert len(publications) == 1  # No first/second positive write exists separately.
+        source = db.sources['unified_orders'][0]
+        raw = source['raw_by_source']['salla_direct']
+        payment, problems = normalize_operational_payment(raw, 'SAR', '100.00', CREATED, NOW,
+            owner='owner', order_number='88001', provider_order_id='1001', rows=db.sources[COLLECTION], source=source)
+        assert payment is None and problems
+        assert problems[0]['code'] == (PENDING_CODE if publication != 'complete' else 'provider_transaction_binding_conflict')
+        if publication != 'complete':
+            assert result['provider']['status'] == 'deferred' and source[PENDING_FIELD]
+        else:
+            assert source[PENDING_FIELD] is None
+        final = reconcile(initial, {'orders': [order(payment)], 'issues': problems}, NOW)
+        assert final['engine']['obligations'] == initial['engine']['obligations']
+        assert final['movements'] == initial['movements']
+        batches = [row for row in db.sources[COLLECTION] if BATCH_FIELD in row]
+        assert len(batches) == (0 if publication == 'before_commit' else 1)
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize('fault', ['digest', 'count', 'incomplete', 'owner', 'order', 'nested'])
+def test_corrupt_atomic_batch_blocks_prior_cached_positive_instead_of_ignoring_it(fault):
+    from operational_provider_transaction_evidence import normalize_operational_payment
+    from order_activity_v1 import normalize_transaction_row
+    from test_operational_balance_provider_original_dates import NOW
+    doc, raw = split_source()
+    value = normalize_transaction_row(native(), order_number='88001', provider_order_id='1001')
+    batch = build_batch([value], owner='owner', order_number='88001', provider_order_id='1001')
+    body = batch[BATCH_FIELD]
+    if fault == 'digest': body['digest'] = '0' * 64
+    elif fault == 'count': body['count'] = 2
+    elif fault == 'incomplete': body['complete'] = False
+    elif fault == 'owner': body['owner_id'] = 'foreign'
+    elif fault == 'order': body['provider_order_id'] = '999'
+    else: body['rows'][0][BATCH_FIELD] = {}
+    saved = {**value, 'user_id': 'owner', 'native_transaction_evidence': [value['native_transaction_evidence']]}
+    payment, problems = normalize_operational_payment(raw, 'SAR', '100.00', CREATED, NOW,
+        owner='owner', order_number='88001', provider_order_id='1001', rows=[saved, batch], source=doc)
+    assert payment is None and problems[0]['code'] == 'provider_transaction_binding_conflict'
+
+
+def test_activity_display_excludes_internal_batches_without_exposing_envelope():
+    from order_activity_v1 import read_order_activity
+    class Cursor:
+        def sort(self, *args): return self
+        async def to_list(self, **kwargs): return []
+    class Collection:
+        def __init__(self, name): self.name = name
+        def find(self, query, projection):
+            if self.name == COLLECTION:
+                assert query == {'user_id': 'owner', 'order_number': '88001', BATCH_FIELD: {'$exists': False}}
+            return Cursor()
+    class DisplayDB:
+        def __getattr__(self, name): return Collection(name)
+    result = asyncio.run(read_order_activity(DisplayDB(), user_id='owner', order_number='88001'))
+    assert result['payments'] == [] and result['payments_count'] == 0
+
+
+def test_atomic_batch_is_order_independent_and_expands_only_within_remaining_row_limit():
+    from order_activity_v1 import normalize_transaction_row
+    rows = [normalize_transaction_row(native(txn='native-'+str(index)), order_number='88001', provider_order_id='1001')
+        for index in range(3)]
+    one = build_batch(rows, owner='owner', order_number='88001', provider_order_id='1001')
+    assert one == build_batch(list(reversed(rows)), owner='owner', order_number='88001', provider_order_id='1001')
+    assert len(expand_batches([one], max_rows=3)) == 3
+    with pytest.raises(ValueError, match='operational_source_scope_too_large'):
+        expand_batches([one], max_rows=2)
+    with pytest.raises(ValueError, match='operational_source_scope_too_large'):
+        expand_batches([{}, one], max_rows=3)
+
+
+def test_large_untrusted_batch_is_bounded_and_fails_closed():
+    from order_activity_v1 import normalize_transaction_row
+    from operational_provider_capture_batches import MAX_BYTES
+    row = normalize_transaction_row(native(), order_number='88001', provider_order_id='1001')
+    batch = build_batch([row], owner='owner', order_number='88001', provider_order_id='1001')
+    batch[BATCH_FIELD]['rows'][0]['untrusted'] = 'x' * (MAX_BYTES+1)
+    expanded = expand_batches([batch], max_rows=1)
+    assert len(expanded) == 1 and expanded[0]['native_transaction_evidence'] == []
+    with pytest.raises(ValueError, match='provider_native_batch_limit'):
+        build_batch([{**row, 'untrusted': 'x'*(MAX_BYTES+1)}], owner='owner', order_number='88001', provider_order_id='1001')

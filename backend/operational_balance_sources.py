@@ -83,7 +83,7 @@ MAX_ROWS = 20000
 # whole: dotted projections could hide malformed shapes or conflicting proof.
 REFRESH_ORDER_FIELDS = (
     'user_id', 'raw_by_source', 'g47_salla_snapshot', 'salla_shipping_current',
-    'salla_paid_sar_evidence', 'salla_bank_in_progress_proof', 'order_id', 'salla_order_id', 'order_number',
+    'salla_paid_sar_evidence', 'salla_bank_in_progress_proof', 'salla_provider_capture_pending', 'order_id', 'salla_order_id', 'order_number',
     'order_status', 'order_status_slug', 'last_salla_direct_status_source_updated_at', 'is_cancelled', 'cancelled',
     'merchant', 'merchant_id', 'store_id', 'salla_shipment_id', 'tracking_number',
     'shipping_number', 'shipping_company_code', 'shipping_company',

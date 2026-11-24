@@ -740,6 +740,7 @@ def reconcile(state, sources, as_of):
                     if (fee_currency and not order.get('prepaid_shipping') and not order.get('shipping_evidence_held')
                             and (key == service_key or key.startswith(service_key + ":"))) or key == "cod:" + oid:
                         obligations[key] = {**obligation, "expected": "0.00"}
+            provider_date_held = False
             if (not delivery_only and order.get("payment") and
                     apply_split_payment(result, order, now, put, issue, sources.get("fee_policies", []), reference_owners)):
                 versions[oid] = updated.isoformat()
@@ -875,6 +876,7 @@ def reconcile(state, sources, as_of):
                 except (ValueError, KeyError) as error:
                     facts.rollback(provider_facts)
                     if str(error) in PROVIDER_DATE_ISSUES:
+                        provider_date_held = True
                         # A newly observed paid balance cannot change any prior
                         # financial claim until its original date is proved.
                         issue(str(error), provider_key, provider=payment["provider"], party_type="provider",
@@ -895,7 +897,7 @@ def reconcile(state, sources, as_of):
                                            "order_page_balance_review": balance_review})
                         else:
                             issue(str(error), provider_key)
-            if not registered_service:
+            if not registered_service and not provider_date_held:
                 versions[oid] = updated.isoformat()
         except (ValueError, KeyError, TypeError, InvalidOperation) as error:
             for name, mapping in order_maps.items():
