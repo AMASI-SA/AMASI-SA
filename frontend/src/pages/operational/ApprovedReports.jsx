@@ -98,7 +98,16 @@ function SourceTable({ table, currency, snapshot }) {
     {table.totals_basis === 'known_subtotals' && <p className="report-caption">الإجماليات أدناه تجمع الجزء المعلوم فقط؛ ليست إجماليًا نهائيًا.</p>}
     <PaginatedReportTable rows={rows} label={table.title} resetKey={snapshot + currency} pageSize={12}>{pageRows => <div className="report-scroll" tabIndex={0} role="region" aria-label={table.title}>
       <table><thead><tr>{columns.map(column => <th key={column.key} scope="col">{column.label}</th>)}</tr></thead>
-        <tbody>{pageRows.map((row, index) => <tr key={row.id || index}>{columns.map(column => <td key={column.key}><Cell row={row} column={column} currency={currency} tableId={table.id}/></td>)}</tr>)}</tbody>
+        <tbody>{pageRows.map((row, index) => {
+          // The shipping tables can contain large order cohorts. Format only
+          // the visible page (12 rows), not the entire source on every tab
+          // change or financial-snapshot render.
+          const display = (table.id === 'delivery_shipping' || table.id === 'delivery_collections')
+            ? {...row, order_label: deliveryOrderLabel(row), payment_label: paymentLabel(row.payment_method),
+              collection_label: collectionLabel(row.collection_status),
+              destination_label: destinationLabel(row.collection_destination)} : row;
+          return <tr key={row.id || index}>{columns.map(column => <td key={column.key}><Cell row={display} column={column} currency={currency} tableId={table.id}/></td>)}</tr>;
+        })}</tbody>
         {table.show_totals !== false && Object.keys(table.totals || {}).length > 0 && <tfoot><tr>{columns.map((column, index) => <td key={column.key}>
           {index === 0 ? table.totals_basis === 'known_subtotals' ? 'مجموع الجزء المعلوم' : 'إجمالي المصدر' : <Cell row={table.totals} column={column} currency={currency}/>}</td>)}</tr></tfoot>}
       </table>{!rows.length && <p className="empty">{table.complete === true ? 'لا توجد بنود ضمن نطاق هذا المصدر.' : 'لا توجد تفاصيل موثقة كافية؛ لا يعني ذلك أن المبلغ صفر.'}</p>}
@@ -108,9 +117,9 @@ function SourceTable({ table, currency, snapshot }) {
 }
 function DeliveryTables({ deliveries, currency, snapshot }) {
   if (!deliveries) return null;
-  const rows=filterDeliveries(list(deliveries.rows)).map(row=>({...row,
-    order_label:deliveryOrderLabel(row),payment_label:paymentLabel(row.payment_method),
-    collection_label:collectionLabel(row.collection_status),destination_label:destinationLabel(row.collection_destination)}));
+  // Keep the original rows immutable. Per-row presentation labels are computed
+  // by SourceTable only for the current paginated window.
+  const rows=filterDeliveries(list(deliveries.rows));
   const field=(key,label,type='money')=>({key,label,type});
   const base={kind:'actual',complete:deliveries.complete,rows,show_totals:false,notes:deliveries.notes};
   const identity=[field('order_label','الطلب','text'),field('party_name','الجهة','text')];
