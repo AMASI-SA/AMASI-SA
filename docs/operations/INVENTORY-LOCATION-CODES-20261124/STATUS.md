@@ -14,7 +14,9 @@ No live cabinet, warehouse, location, inventory quantity, historical record, bar
 - Baseline tree: `51e06077c65d99db02088ab441e1908118feb1d1`.
 - Task branch: `codex/inventory-location-short-codes-20261124`.
 - Prior read-only checkpoint: `b3111de5716709c354521580bfdda4cfe4d06099`.
-- The implementation checkpoint and PR are recorded in this task's bounded Issue #1006 section after the commit is created.
+- Verified implementation source: `e34016484da1ee43409a1e61b632a30b72f81c0e`.
+- Draft PR: [#2106](https://github.com/AMASI-SA/AMASI-SA/pull/2106), open against `hotfix/prod-snap-meta-final`.
+- The final documentation checkpoint is recorded in this task's bounded Issue #1006 section. It changes documentation only after the verified implementation source.
 
 Production still matched the baseline on the fresh pre-checkpoint read. Prior PR2097 is complete and unrelated. Concurrent balance-recovery work, other workspaces and leases remain outside this task.
 
@@ -75,7 +77,23 @@ CI=true XDG_CACHE_HOME=/workspace/scratch/021675d08c11/location-codes-testenv/ca
 
 Governed Node 22.23.2 / Yarn 1.22.22. Tests cover map/list/search/details/printing, actual-code fallback, delegated printing, explicit override inside a legacy warehouse, user-chosen dimensions, unchanged IDs/full scanner values, warehouse context, and no mutation when opening/cancelling creation. Three consumer assertions failed before the corresponding fixes, then passed.
 
-`git diff --check`: clean. Independent source review resolved missing opening-catalog passthrough, purchase warehouse context and stored-code print fallback. No source-review blocker remained. Source-only build/PR/CI state will be appended after the durable implementation checkpoint.
+`git diff --check`: clean. Independent source review resolved missing opening-catalog passthrough, purchase warehouse context and stored-code print fallback. No source-review blocker remained.
+
+### Fixed-source Vite build: passed, exit 0
+
+A fresh owned clone checked out `e34016484da1ee43409a1e61b632a30b72f81c0e` detached. Its dependency symlink points only to the owned test environment, whose package/lockfile match the source. The command follows the source-only build precedent in `.github/workflows/mz2-onboarding-integration.yml` and does not invoke the deployment adapter:
+
+```bash
+CI=false REACT_APP_BACKEND_URL=https://mezansalla.com XDG_CACHE_HOME=/workspace/scratch/021675d08c11/location-codes-testenv/cache PYTHONDONTWRITEBYTECODE=1 python -B scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend node node_modules/vite/bin/vite.js build
+```
+
+Governed Node 22.23.2 / Yarn 1.22.22; Vite 8.2.4 transformed 7,853 modules and completed in 10.73 seconds (18.15 seconds with launcher). Output contained 383 files and `index.html`. The clone's tracked status and diff remained clean. The release-intent SHA256 remained `58a66e394c4dd50a8f9a00affb8f677bfc88910224b5135de330ebf7c7c2f75c` before and after. This proves source compilation, not a Protocol v5 deployment artifact.
+
+Non-blocking build warnings concerned the environment's experimental proxy agent, Vite's future native config loading, an existing font-import position, mixed static/dynamic sidebar import, and chunks over 500 kB. They did not fail the build and were not expanded into this numbering change. The first invocation stopped before Vite due to the launcher's repository-root working directory; the final command above uses `yarn --cwd frontend node` and passed.
+
+### PR and CI state
+
+PR #2106 is draft/open and mergeable without source conflicts; it has not been merged. GitHub CI was still running/queued at the handoff snapshot. On implementation SHA `e34016484da1ee43409a1e61b632a30b72f81c0e`, Page and operational read performance and MZ2 Accounting UI Phase 2 had succeeded; the other 14 workflows were pending/in progress. No complete-CI or deployment-readiness claim is made. Inspect the latest PR-head checks before merge or release; do not substitute these local results for an unresolved required check.
 
 ## Deferred deletion and historical research
 
@@ -91,6 +109,6 @@ Odoo documents recognizable location names, parent hierarchy and barcodes, not a
 
 ## Next safe action
 
-Push the verified source checkpoint, update only this task's marked Issue #1006 section, run the documented source-only Vite build from a fixed checkout, and open a reviewable PR against `hotfix/prod-snap-meta-final`. A source-only build is not a deployment artifact or release approval.
+Read the final branch checkpoint from this task's Issue #1006 section, verify the PR head, and inspect the remaining checks on PR #2106. Resolve any failure attributable to this change before proceeding. The verified implementation and source build are remotely recoverable. No further naming/layout clarification is needed.
 
 Publication is a separately authorized Protocol v5 action. No release intent has been created for this feature. Before a later release, refresh refs and original guard status and preserve other conversations' leases/workspaces.
