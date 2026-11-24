@@ -1,0 +1,43 @@
+{
+  "task": "DASHBOARD-SPLIT-PROFIT-20261124",
+  "milestone": "predecessor_publication_observed_pending_lease_closure",
+  "recorded_at": "2026-11-24 22:54:12 UTC",
+  "source_sha": "10bb33957c8c2994814a76ba5feed1182336ebda",
+  "base_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+  "intent_sha": "c3fd1d1a4e3e7fc590b1f5b82d1bf0a091c54bf7",
+  "deployment_sha": null,
+  "tree": "fa0f36e01d3c3a706a0cbdb23aa1cfcd0b8f09a1",
+  "exact_B_checks": {
+    "success": 36,
+    "skipped": 10,
+    "failed": 0,
+    "pending": 0,
+    "total": 46
+  },
+  "pr": {
+    "number": 2122,
+    "state": "open",
+    "draft": false,
+    "mergeable": true,
+    "mergeable_state": "clean"
+  },
+  "predecessor": {
+    "pr": 2120,
+    "evidence_sha": "3ca93d49b1c0071824a374bb7b1d1ee33a814a9f",
+    "platform_version": "7191418",
+    "platform_finished_display": "Nov 25, 01:42 AM",
+    "display_timezone": "Asia/Riyadh",
+    "live_build_meta_source": "b236f51bb6c52e6f5d14a136db92f7474e4f5873",
+    "lease_observed_present": true,
+    "lease_actor": "chatgpt-inventory-cabinet-archive-20261124-pr2120",
+    "lease_prepared_at": "2026-11-24T22:29:50.804025+00:00",
+    "original_verification_result": "not_yet_available",
+    "closure": "pending"
+  },
+  "observations_scope": "Read-only GitHub, platform management UI, live build metadata, and selected lease/process metadata; no other owner's guard invocation or mutation.",
+  "own_host_changed": false,
+  "own_lease_created": false,
+  "own_published": false,
+  "production_changed_by_task": false,
+  "next_action": "Wait for predecessor original verification and closed lease, then recheck original guard, host state and production base before the authorized normal merge and exact-D CI. Use only E5 reviewed live-scope helper with a fresh reviewed ten-field envelope."
+}

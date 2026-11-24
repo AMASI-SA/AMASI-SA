@@ -641,3 +641,15 @@ Production changed by this evidence checkpoint: **no**. No source-checkout
 edit, release-branch update, PR mutation, merge, shared-host action, lease,
 publication, service change or database read/write was performed. Evidence
 persistence does not authorize bypassing any remaining deployment prerequisite.
+
+## Predecessor publication observation E6 — 25 November 2026, Asia/Riyadh
+
+This evidence checkpoint extends E5 `0beba15679fed2ada56896a4847b0368040e8edd` and preserves the frozen source/intent and all earlier artifacts. The compact current record is `verification/predecessor-publication-wait.json`.
+
+The root's management UI now shows new published version `7191418`, with Deployment finished displayed at 25 November 01:42 Riyadh. A fresh live `/build-meta.json` page shows predecessor source `b236f51bb6c52e6f5d14a136db92f7474e4f5873`. These establish a newer platform/front-end publication observation, not completion of the predecessor's original three-probe verification.
+
+The predecessor evidence branch still ends at E11 `3ca93d49b1c0071824a374bb7b1d1ee33a814a9f`. A read-only observation of its exact lease file shows its own actor and 22:29:50 UTC preparation still present. The root did not invoke its guard, close or reuse its lease, modify its files, or perform its business action. No current original verification result or closure has been recorded yet.
+
+Fresh exact-B CI remains 36 successful checks and ten reviewed conditional skips, with no pending or failed checks. PR #2122 remains ready, mergeable and clean at B `c3fd1d1a4e3e7fc590b1f5b82d1bf0a091c54bf7`; production remains J `f199a471f8bc6e05b475bb9b65a12107cbdc946b`. D and our execution envelope do not yet exist. The reviewed E5 helper remains ready, unchanged, and unexecuted; historical E1 must not run.
+
+Next safe action remains predecessor original verification and closed lease, then fresh original guard/host/base checks, the already authorized normal merge, exact-D CI and independently reviewed final envelope. Production changed by this task: **no**. No own shared-host source change, lease or publication, and no financial/settings/sync/backfill write.
