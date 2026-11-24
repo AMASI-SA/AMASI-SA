@@ -15,7 +15,8 @@ MAX_DURATION_MS = 300000
 STAGES = frozenset({
     "native_evidence", "aggregate", "source_collection", "source_collision",
     "reconciliation", "profit_snapshot", "bank_claims", "party_catalogs",
-    "payment_evidence_link", "snapshot_load", "snapshot_compare", "snapshot_pack",
+    "payment_evidence_link",
+    "bundle_order_normalization", "bundle_cost_authority", "snapshot_load", "snapshot_compare", "snapshot_pack",
     "snapshot_commit", "snapshot_raw_read", "snapshot_unpack",
     "snapshot_copy_prepare", "orders_cursor_build", "orders_cursor_read",
     "orders_rows_validate", "source_primary_reads", "source_fee_settings",
