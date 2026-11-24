@@ -108,6 +108,35 @@ class DirectProviderTests(unittest.TestCase):
             post(s)
         self.assertNotIn("capture:native1",s["engine"]["facts"])
 
+    def test_confirmed_manual_provider_collection_same_reference_blocks_capture(self):
+        for other_order in ("order1", "other-order"):
+            s = state()
+            s["customer_collections"] = [{
+                "status": "confirmed", "destination_type": "provider",
+                "destination_id": "tabby", "reference": "native1",
+                "order_id": other_order, "amount": "300.00",
+                "currency": "SAR",
+            }]
+            before = copy.deepcopy(s)
+            with self.assertRaisesRegex(InitialCaptureHold, "manual_collection_overlap"):
+                post(s)
+            self.assertEqual(s, before)
+
+    def test_nonmatching_manual_collection_does_not_block_capture(self):
+        s = state()
+        s["customer_collections"] = [{
+            "status": "confirmed", "destination_type": "provider",
+            "destination_id": "tabby", "reference": "different-native-ref",
+            "order_id": "other-order", "amount": "300.00", "currency": "SAR",
+        }]
+        self.assertEqual(post(s)["status"], "posted")
+
+    def test_malformed_manual_collection_scope_fails_closed(self):
+        s = state()
+        s["customer_collections"] = {"unexpected": "mapping"}
+        with self.assertRaisesRegex(InitialCaptureHold, "collection_scope_invalid"):
+            post(s)
+
     def test_historical_capture_prior_to_last_refresh_denied(self):
         s = state()
         previous = normalized(captured_at="2026-11-24T20:49:00+03:00")
