@@ -65,6 +65,32 @@ class CanonicalPooledSettlementTests(unittest.TestCase):
                 first(s)
         self.assertEqual(s,before)
 
+    def test_multiple_provider_openings_without_movements_are_held(self):
+        s=state()
+        for n in (1,2):
+            s["openings"][f"tabby-{n}"]={
+                "id":f"tabby-{n}","party_type":"provider",
+                "party_id":"tabby","currency":"SAR",
+                "direction":"for_us","amount":"100.00",
+            }
+        prior=copy.deepcopy(s)
+        with patch.dict(sys.modules,{"operational_provider_history":actual_history()}):
+            with self.assertRaisesRegex(InitialCaptureHold,"pooled_settlement"):
+                first(s)
+        self.assertEqual(s,prior)
+
+    def test_single_valid_opening_without_payout_does_not_block_new_order(self):
+        s=state()
+        s["openings"]["tabby-opening"]={
+            "id":"tabby-opening","party_type":"provider",
+            "party_id":"tabby","currency":"SAR",
+            "direction":"for_us","amount":"200.00",
+        }
+        with patch.dict(sys.modules,{"operational_provider_history":actual_history()}):
+            result=first(s)
+        self.assertEqual(result["status"],"posted")
+        self.assertEqual(s["openings"]["tabby-opening"]["amount"],"200.00")
+
     def test_fully_allocated_unrelated_payout_does_not_invent_overlap(self):
         s=state()
         s["engine"]["obligations"]["provider:other-order"]={
