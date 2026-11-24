@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "document_kind": "observed_read_only_live_UI_acceptance",
+  "status": "PASS",
+  "recorded_at_utc": "2026-11-24 00:25:58 UTC",
+  "observed_on_utc_date": "2026-11-24",
+  "observation_window": "After the new platform success and before the production verifier finished.",
+  "mode": "read_only",
+  "production_release_id": "rg5-ffe0d4437c779b1e455f084be407f8f2d24735f5bf8e994f77c5bf4cbeb1c55f",
+  "views": [
+    {
+      "name": "inventory entry",
+      "url": "https://mezansalla.com/inventory-v2?tab=opening",
+      "status": "PASS",
+      "observations": [
+        "Opening inventory loaded after publication.",
+        "An existing catalog product was selected locally to inspect the classification editor.",
+        "Required physical size remained required; no size defer choice was introduced.",
+        "Customization retained its customer-order defer choice."
+      ]
+    },
+    {
+      "name": "option classification",
+      "url": "https://mezansalla.com/inventory-v2?tab=opening",
+      "status": "PASS",
+      "roles": [
+        "مواصفة للقطعة",
+        "تخصيص يحتاج تجهيز",
+        "إضافة جانبية لا تحتاج تجهيز مورد"
+      ],
+      "observations": [
+        "The classification editor loaded five existing option-role dropdowns.",
+        "The existing size role remained physical and embroidery roles remained customization.",
+        "An optional note retained its existing customization role; its classification was not changed.",
+        "The guide explains that a gift question and its dependent text both need informational classification.",
+        "Arabic RTL guide and dropdown layout were visually inspected in a 674 by 463 viewport."
+      ],
+      "role_dropdown_changes": 0,
+      "classification_saves": 0,
+      "tab_left_open_unmodified_and_marked_deliverable": true
+    },
+    {
+      "name": "purchase",
+      "url": "https://mezansalla.com/inventory-v2?tab=purchase",
+      "status": "PASS",
+      "observations": [
+        "The purchase page, catalog and empty draft loaded.",
+        "Supplier and invoice-date controls, receipt choices and payment choices were visible."
+      ],
+      "purchase_approval_or_payment_actions": 0
+    },
+    {
+      "name": "receiving",
+      "url": "https://mezansalla.com/inventory-v2?tab=receipts",
+      "status": "PASS",
+      "observations": [
+        "The receiving page loaded its filters and search.",
+        "The selected list finished loading and showed no invoices."
+      ],
+      "receipt_actions": 0
+    }
+  ],
+  "real_product_policies_changed": false,
+  "real_business_writes_for_tests": false,
+  "excluded_test_writes": [
+    "policy",
+    "stock",
+    "invoice",
+    "receipt",
+    "payment"
+  ],
+  "preexisting_warning": {
+    "text": "تحديث الأرصدة يحتاج إلى متابعة",
+    "visible_before_publication": true,
+    "visible_after_publication": true,
+    "resolution_established": false,
+    "financial_refresh_or_recalculation_triggered": false
+  },
+  "technical_observation": {
+    "receiving_native_accessibility_read_stalled": true,
+    "documented_DOM_snapshot_confirmed_loaded_page": true,
+    "browsing_issue_id": "0450e39f-ae1f-4507-8a37-d2cf9b5ffc5c",
+    "site_failure_or_bot_block_established": false
+  },
+  "limitations": [
+    "This is live read-only acceptance, not a production transaction test.",
+    "Existing catalog policies were not automatically reclassified.",
+    "Balance-refresh warning remains a separate observed issue."
+  ],
+  "provenance": "Root transcription of visible live UI observations and screenshot inspection through CUA. No customer details, financial amounts, private request logs or raw screenshots are published."
+}

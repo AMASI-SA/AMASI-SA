@@ -1,16 +1,18 @@
 {
   "schema_version": 1,
   "task": "INVENTORY-SIDE-OPTIONS-20261123",
-  "document_kind": "release_checkpoint",
-  "overall_status": "PLATFORM_FINISHED_PRODUCTION_VERIFIER_RUNNING",
-  "completion_claimed": false,
-  "completed_at_utc": null,
+  "document_kind": "final_release_checkpoint",
+  "overall_status": "COMPLETE_MERGED_PUBLISHED_AND_VERIFIED",
+  "completion_claimed": true,
+  "completed_at_utc": "2026-11-24T00:20:05.996685+00:00",
   "source_checkpoint": {
-    "evidence_commit": "8a1d00fa6f4699b42c1753af429eeca344dabc4c",
-    "evidence_tree": "c6c836d52d2d9b3458de25ce233b02b20149b8e7",
+    "previous_evidence_commit": "5a188f4cb0a6888840403a073190d54181532e41",
+    "previous_evidence_tree": "aa658f6e18edc78864a06ff051e334f7eb9b4e0e",
     "repository": "AMASI-SA/AMASI-SA",
+    "evidence_branch": "codex/inventory-side-options-r4-evidence-20261124",
     "evidence_folder": "docs/operations/INVENTORY-SIDE-OPTIONS-RELEASE-20261123/evidence/resume-r4",
-    "evidence_branch_is_deployable": false
+    "evidence_branch_is_deployable": false,
+    "final_report": "FINAL-RELEASE.md"
   },
   "identity": {
     "base_J4": "28f6d4ca0fc2b7ea7f140432d8e32c768823b6a4",
@@ -35,7 +37,7 @@
     "merge_proof": "publication/merge-proof.json"
   },
   "scope": {
-    "delivered": "Stable-ID physical, customization and informational option roles; customer-side gifts/text/notes do not block stock identity/readiness or supplier preparation.",
+    "delivered": "Stable-ID physical, customization and informational option roles. Fields explicitly classified as informational do not determine physical stock identity/readiness or supplier preparation. Existing product policies were not automatically reclassified.",
     "preserved": [
       "Required physical dimensions and customer answers/costs",
       "Policy revisions, stale-draft review and command replay",
@@ -51,7 +53,8 @@
       "invoice",
       "receipt",
       "payment"
-    ]
+    ],
+    "real_product_policies_changed_for_acceptance": false
   },
   "ci": {
     "source_A": {
@@ -148,68 +151,17 @@
     }
   },
   "publication_request": {
-    "status": "REQUESTED_ONCE",
+    "status": "COMPLETED_ONCE",
     "authorized_click_count": 1,
     "platform_event_text": "Deployment Started Nov 24, 02:52 AM",
     "platform_event_timezone": "Asia/Riyadh",
     "observed_at_utc": "2026-11-23T23:53:15Z",
     "url": "https://mezansalla.com",
     "evidence": "publication/deployment-start.observed.json",
-    "last_root_reported_state": "Deployment finished",
-    "last_root_reported_approximate_elapsed_minutes": null,
-    "error_observed_in_that_root_report": false,
-    "is_success_confirmation": true,
+    "is_success_confirmation": false,
     "billing_change": false,
-    "paid_chat": false
-  },
-  "pending_final_receipts": {
-    "platform_success": {
-      "status": "PASS",
-      "exact_success_message": "Deployment finished Nov 24, 03:03 AM",
-      "deployment_identity": "d0561df2-7853-517d-bea1-eaeba2390333",
-      "provider_version": "8a74712",
-      "success_event_time": "2026-11-24 03:03 Asia/Riyadh",
-      "observed_at_utc": "2026-11-24 00:07:03 UTC",
-      "evidence_path": "publication/deployment-success.observed.json",
-      "evidence_sha256": null
-    },
-    "original_production_verifier": {
-      "status": "RUNNING",
-      "exit_code": null,
-      "required_matching_probe_count": 3,
-      "actual_matching_probe_count": null,
-      "exact_A_D_release_artifact_proof_match": null,
-      "json_bytes_and_MIME_verified": null,
-      "observed_at_utc": null,
-      "evidence_path": null,
-      "evidence_sha256": null,
-      "runner": "publication/run_production_verify.py",
-      "pid": 69494
-    },
-    "final_original_guard": {
-      "status": "PENDING",
-      "active": null,
-      "required_active_value": false,
-      "owned_lease_closed": null,
-      "observed_at_utc": null,
-      "evidence_path": null,
-      "evidence_sha256": null
-    },
-    "live_UI_acceptance": {
-      "status": "PENDING",
-      "mode": "read_only",
-      "required_views": [
-        "inventory entry",
-        "option classification",
-        "purchase",
-        "receiving"
-      ],
-      "observations": null,
-      "screenshots_or_receipts": [],
-      "observed_at_utc": null,
-      "limitations": null,
-      "business_writes_permitted_for_tests": false
-    }
+    "paid_chat": false,
+    "success_evidence": "publication/deployment-success.observed.json"
   },
   "prepublication_baseline": {
     "inventory_entry_page_loaded": true,
@@ -234,14 +186,81 @@
       "ci-b/",
       "release/",
       "publication/"
-    ]
+    ],
+    "remaining_release_work": [],
+    "next_safe_action": "Release complete. Use the product classification editor when the owner chooses a product policy; do not repeat publication or production verification for this completed release."
   },
   "provenance": {
     "observed_json_files_are_raw_host_exports": false,
-    "description": "Files ending .observed.json are root transcriptions of authorized actual-host terminal or visible UI observations. Private inventories and full original host outputs remain on the host.",
+    "description": "Files ending .observed.json are root transcriptions of authorized actual-host terminal or visible UI observations. Private inventories and full original host outputs remain on the actual host.",
     "evidence": "publication/PROVENANCE.md",
-    "new_tests_for_template": false,
-    "GitHub_writes_for_template": false,
-    "host_or_browser_operations_for_template": false
+    "original_local_evidence_STATUS_md_is_historical_and_unchanged": true,
+    "full_cloud_build_argv_cwd_transcript_available": false,
+    "platform_runtime_sample_published": false
+  },
+  "recorded_at_utc": "2026-11-24 00:25:58 UTC",
+  "final_receipts": {
+    "platform_success": {
+      "status": "PASS",
+      "exact_success_message": "Deployment finished Nov 24, 03:03 AM",
+      "deployment_identity": "d0561df2-7853-517d-bea1-eaeba2390333",
+      "success_event_time": "2026-11-24 03:03",
+      "event_timezone": "Asia/Riyadh",
+      "observed_at_utc": "2026-11-24 00:07:03 UTC",
+      "provider_published_version_label": "8a74712",
+      "provider_label_is_repository_deployment_SHA": false,
+      "evidence_path": "publication/deployment-success.observed.json",
+      "evidence_sha256": "877811d4a2fd0bcef957c1c569487ef6a01aa8e8b433209dda6c223ac697d7fa"
+    },
+    "original_production_verifier": {
+      "status": "PASS",
+      "exit_code": 0,
+      "verified": true,
+      "required_matching_probe_count": 3,
+      "actual_matching_probe_count": 3,
+      "frontend_checked_requests_per_probe": 770,
+      "exact_A_D_release_artifact_proof_match": true,
+      "json_bytes_and_MIME_verified": true,
+      "started_at_utc": "2026-11-24T00:06:02.815061+00:00",
+      "finished_at_utc": "2026-11-24T00:20:05.996685+00:00",
+      "elapsed_seconds": 843.182,
+      "evidence_path": "publication/production-verification.observed.json",
+      "evidence_sha256": "066eb8c5fdcb864a81d12e4057f8fcb9fd3ec481f29b4997852cdfbbdc5c93a8",
+      "original_stdout_bytes": 43130,
+      "original_stdout_sha256": "49e2a33c00be146fe42f5102de06b96ea705471523c394531eac580fe1a96e88",
+      "runner": "publication/run_production_verify.py"
+    },
+    "final_original_guard": {
+      "status": "PASS",
+      "active": false,
+      "required_active_value": false,
+      "owned_lease_closed": true,
+      "captured_before_wrapper_finished_at_utc": "2026-11-24T00:20:05.996685+00:00",
+      "evidence_path": "publication/production-verification.observed.json",
+      "evidence_sha256": "066eb8c5fdcb864a81d12e4057f8fcb9fd3ec481f29b4997852cdfbbdc5c93a8"
+    },
+    "live_UI_acceptance": {
+      "status": "PASS",
+      "mode": "read_only",
+      "views": [
+        "inventory entry",
+        "option classification",
+        "purchase",
+        "receiving"
+      ],
+      "observed_on_utc_date": "2026-11-24",
+      "observation_window": "After the new platform success and before the production verifier finished.",
+      "evidence_path": "publication/live-ui-acceptance.observed.json",
+      "evidence_sha256": "2bb7ded027b2284c674747ffc76881d528962cbde36af8f5bd08eac0165c5854",
+      "business_writes_performed": false,
+      "real_product_policies_changed": false,
+      "preexisting_balance_refresh_warning_remains": true
+    }
+  },
+  "remaining_observed_issue": {
+    "name": "Preexisting balance-refresh warning",
+    "visible_before_and_after_publication": true,
+    "resolution_established": false,
+    "financial_recalculation_triggered": false
   }
 }

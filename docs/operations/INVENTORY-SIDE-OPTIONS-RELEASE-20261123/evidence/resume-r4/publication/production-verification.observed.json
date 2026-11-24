@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "document_kind": "observed_original_production_verifier_receipt",
+  "recorded_at_utc": "2026-11-24 00:25:58 UTC",
+  "url": "https://mezansalla.com",
+  "command": "python -B scripts/production_release_guard.py verify --url https://mezansalla.com",
+  "original_guard_and_validator_unmodified": true,
+  "runner_sha256": "f0b7ebb5964d70f5667eb5720728ceb3671718edb1f7ec641cf48e4eaa352ecf",
+  "receipt": {
+    "exit_code": 0,
+    "verified": true,
+    "checks": 3,
+    "source_git_sha": "deeefceffd9a1e37968513ac4f3833314bb415fd",
+    "source_base_git_sha": "28f6d4ca0fc2b7ea7f140432d8e32c768823b6a4",
+    "deployment_git_sha": "5cfaac21a1775a0d0761d05aa571f94dbfc02d32",
+    "release_id": "rg5-ffe0d4437c779b1e455f084be407f8f2d24735f5bf8e994f77c5bf4cbeb1c55f",
+    "frontend_artifact_tree_sha256": "df85c5736ec64571f44a5db506cb0daf34c1ac584ca3115e4e3ce86ebe80898c",
+    "frontend_checked_requests_per_probe": 770,
+    "boot_started_at": "2026-11-24T00:03:10.194004+00:00",
+    "boot_started_at_observations": [
+      "2026-11-24T00:03:10.194004+00:00",
+      "2026-11-24T00:03:10.194052+00:00"
+    ],
+    "original_verify_stdout_bytes": 43130,
+    "original_verify_stdout_sha256": "49e2a33c00be146fe42f5102de06b96ea705471523c394531eac580fe1a96e88",
+    "guard": {
+      "active": false
+    },
+    "elapsed_seconds": 843.182,
+    "started_at": "2026-11-24T00:06:02.815061+00:00",
+    "finished_at": "2026-11-24T00:20:05.996685+00:00"
+  },
+  "original_verifier_contract": {
+    "canonical_and_cache_busted_build_meta_exact_JSON_bytes_and_MIME": true,
+    "governed_frontend_public_bytes_and_cache_behavior": true,
+    "service_worker_retirement_payloads": true,
+    "source_release_artifact_and_runtime_identity": true,
+    "owned_lease_closed_by_original_successful_verify": true,
+    "derived_from": "Successful unchanged original guard verification and the reviewed capture runner; no substitute health check."
+  },
+  "host_receipts": {
+    "result": "/tmp/mezan-inventory-side-options-r4-20261124/publication/verify-result.json",
+    "original_stdout": "/tmp/mezan-inventory-side-options-r4-20261124/publication/verify.stdout.json",
+    "original_stderr": "/tmp/mezan-inventory-side-options-r4-20261124/publication/verify.stderr.log",
+    "original_final_status": "/tmp/mezan-inventory-side-options-r4-20261124/publication/after-verify.stdout.json"
+  },
+  "original_stderr_bytes_observed": 0,
+  "provenance": "Root transcription of the compact final receipt visibly printed by the authorized actual-host VS Code terminal through CUA. Not a raw host-file export. Full original outputs remain on the actual host.",
+  "boundary": "No second publication, no replacement production verifier, and no real policy, stock, invoice, receipt or payment writes for acceptance."
+}
