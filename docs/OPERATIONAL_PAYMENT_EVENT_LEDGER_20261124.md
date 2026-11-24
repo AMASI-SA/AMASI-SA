@@ -144,3 +144,18 @@ The full isolated `Operational Payment Event Policy` CI PASS at `3039bd61d0690d5
 - Prove payout/opening overlaps, refund/additional installments and historical replay under production-like data.
 - Resolve the current production `operational_source_setup_incomplete` condition and confirm current deployment/base SHA and release guard; ensure source refresh as_of is reliable (direct posting requires recent source within 3h).
 - Confirm general-accounting activation gate remains isolated and does not cross-write GL/Qoyod.
+
+
+## 2026-11-24 read-only production audit + direct-posting hardening
+Authenticated browser read-only inspection (no refresh/write) at `https://mezansalla.com/operational-balances`:
+- Last successful saved source snapshot: **2026-11-24 20:27 Asia/Riyadh**.
+- Most recent full refresh: started **21:35**, finished **21:37**, outcome **FAILED**, `operational_refresh_timeout`.
+- Balance page shows the last saved result; Salla/shipping/payment sources have failed/unknown source coverage, including provider native capture-date alerts. No conclusion that any individual paid order is uncollected is justified by these warnings.
+
+**Safety defect discovered and fixed:** prior first-payment CAS writers accepted a snapshot whose `engine.as_of` was under 3h old even after a newer full refresh had timed out. A new owner-scoped `operational_payment_refresh_health_gate.py` requires the independent persisted refresh receipt to match the canonical `engine.as_of`, have known success, and have no newer failed/unknown/running attempt. Both dated-capture and native-paid-page writers recheck the receipt **within the candidate CAS and at the before-commit gate**. Absence/ambiguous metadata fails closed. This blocks the source-timeout state seen in production until a verified newer refresh succeeds.
+
+**Duplicate reference defect fixed:** direct Salla order-page path must reject reuse of the same native `transaction_reference` by any other order's saved `provider_order_balance:` fact, canonical `capture:` fact, or confirmed manual provider customer collection. Such conflicts remain no-money accountant reviews. Added explicit cross-order collision tests and status-code allowlist.
+
+**CI:** `Operational Payment Event Policy` success on code SHA `0493e0096b490cb267f083e14b57c9892a3f443d`, run `45463539027`. Unit tests validate latest failed/unknown refresh blocks money despite a saved recent as_of, still-successful source passage, owner mismatch, cutover and cross-order identity conflicts.
+
+**Unresolved blocker:** Actual production `operational_refresh_timeout` is not fixed by the admission gate. Root cause must be diagnosed from bounded source-stage timings, primary-orders cursor acquisition and worker health, with a read-only Preview reproduction. No direct payment flags enabled, no merge/deploy, and no production financial write attempted.
