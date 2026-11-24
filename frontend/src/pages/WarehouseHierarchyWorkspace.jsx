@@ -18,6 +18,7 @@ import {
     CaretLeft,
     LockKey,
     ArrowClockwise,
+    Archive,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
@@ -221,6 +222,7 @@ const locationStateLabel=(row)=>!row?"غير مقروءة":row.state==="disabled
 
 export default function WarehouseHierarchyWorkspace({ accessMode = null }) {
     const canWrite = accessMode !== "read";
+    const canManageCabinets = canWrite && !accessMode;
     const [catalog, setCatalog] = useState(FALLBACK_CATALOG);
     const [capabilityOptions, setCapabilityOptions] = useState(FALLBACK_CAPABILITIES);
     const [templates, setTemplates] = useState(FALLBACK_TEMPLATES);
@@ -238,8 +240,12 @@ export default function WarehouseHierarchyWorkspace({ accessMode = null }) {
     const [initialLoading,setInitialLoading]=useState(true),[readError,setReadError]=useState(""),[formError,setFormError]=useState("");
     const [locations,setLocations]=useState([]),[locationLoading,setLocationLoading]=useState(false),[locationError,setLocationError]=useState("");
     const [query,setQuery]=useState(""),[mapView,setMapView]=useState("map"),[binIndex,setBinIndex]=useState(0),[page,setPage]=useState(0);
+    const [archiveTarget,setArchiveTarget]=useState(null);
+    const [archivedCabinets,setArchivedCabinets]=useState([]);
+    const [archiveLoading,setArchiveLoading]=useState(false),[archiveError,setArchiveError]=useState("");
+    const archiveLane=useRef(0),lifecyclePending=useRef(false),mounted=useRef(true);
     const sectionLane=useRef(0);
-    const closeDialog=()=>{if(!loading){setDialog(null);setFormError("");setResetConfirmation("");}};
+    const closeDialog=()=>{if(!loading&&!lifecyclePending.current){setDialog(null);setFormError("");setResetConfirmation("");setArchiveTarget(null);archiveLane.current+=1;setArchiveLoading(false);}};
     const openDialog=(value)=>{setFormError("");setDialog(value);};
 
     const selectedBranch = useMemo(() => branches.find((row) => row.id === branchId) || null, [branches, branchId]);
@@ -268,7 +274,9 @@ export default function WarehouseHierarchyWorkspace({ accessMode = null }) {
     async function loadSections(id,preferredSectionId="",preferredCabinetId="") {
         const lane=++sectionLane.current;
         if(!id){setSections([]);setSectionId("");setCabinetId("");return;}
-        const response=await api.get("/warehouse-locations-v2/warehouses/"+id+"/sections");
+        let response;
+        try{response=await api.get("/warehouse-locations-v2/warehouses/"+id+"/sections");}
+        catch(error){if(lane===sectionLane.current)throw error;return;}
         if(lane!==sectionLane.current)return;
         const items=response.data?.items||[];
         setSections(items);
@@ -277,6 +285,73 @@ export default function WarehouseHierarchyWorkspace({ accessMode = null }) {
         const nextCabinet=nextSection?.cabinets?.find(row=>row.id===preferredCabinetId)||nextSection?.cabinets?.[0];
         setCabinetId(nextCabinet?.id||"");
     }
+
+    async function loadArchivedCabinets(id) {
+        const lane=++archiveLane.current;
+        setArchiveError("");setArchivedCabinets([]);
+        if(!canManageCabinets||!id){setArchiveLoading(false);return;}
+        setArchiveLoading(true);
+        try {
+            const response=await api.get(`/warehouse-locations-v2/warehouses/${encodeURIComponent(id)}/archived-cabinets`);
+            if(lane===archiveLane.current&&mounted.current)setArchivedCabinets(response.data?.items||[]);
+        } catch(error) {
+            if(lane===archiveLane.current&&mounted.current)setArchiveError(error?.response?.data?.detail?.message||"تعذر تحميل الدواليب المؤرشفة. أعد المحاولة.");
+        } finally {
+            if(lane===archiveLane.current&&mounted.current)setArchiveLoading(false);
+        }
+    }
+
+    function openArchivedCabinets() {
+        if(!canManageCabinets||!branchId||loading||lifecyclePending.current)return;
+        setArchiveTarget(null);openDialog("archived");loadArchivedCabinets(branchId);
+    }
+
+    function openArchiveConfirmation() {
+        if(!canManageCabinets||!selectedCabinet||loading||lifecyclePending.current)return;
+        setArchiveTarget({
+            id:selectedCabinet.id,name:selectedCabinet.name,cabinet_number:selectedCabinet.cabinet_number,
+            total_locations:selectedCabinet.total_locations,warehouse_id:branchId,room_id:sectionId,
+            warehouse_name:selectedBranch?.name,section_name:selectedSection?.name,
+        });
+        openDialog("archive");
+    }
+
+    async function changeCabinetLifecycle(action,target) {
+        if(!canManageCabinets||!target||loading||lifecyclePending.current)return;
+        lifecyclePending.current=true;setLoading(true);setFormError("");setArchiveError("");
+        try {
+            await api.post(`/warehouse-locations-v2/cabinets/${encodeURIComponent(target.id)}/${action}`);
+        } catch(error) {
+            if(mounted.current){
+                const message=error?.response?.data?.detail?.message||(action==="archive"?"تعذر أرشفة الدولاب. تحقق من خلو خاناته ثم أعد المحاولة.":"تعذر استعادة الدولاب. أعد المحاولة.");
+                if(action==="archive")setFormError(message);else setArchiveError(message);
+                toast.error(message);setLoading(false);
+            }
+            lifecyclePending.current=false;return;
+        }
+        if(!mounted.current){lifecyclePending.current=false;return;}
+        // The write has succeeded. A subsequent reader failure must not be
+        // presented as a failed mutation or leave the old cabinet actionable.
+        setDialog(null);setArchiveTarget(null);setLocations([]);setLocationError("");setCabinetId("");setSections([]);setReadError("");
+        const successMessage=action==="archive"?"تمت أرشفة الدولاب. يمكنك استعادته من الدواليب المؤرشفة.":"تمت استعادة الدولاب وخاناته.";
+        toast.success(successMessage);
+        await Promise.all([
+            loadSections(target.warehouse_id,target.room_id||target.section_id||"",action==="restore"?target.id:"")
+                .catch(()=>{if(mounted.current)setReadError("تم حفظ التغيير، لكن تعذر تحديث هيكل المستودع. أعد القراءة لعرض حالته الحالية.");}),
+            loadArchivedCabinets(target.warehouse_id),
+        ]);
+        lifecyclePending.current=false;
+        if(mounted.current)setLoading(false);
+    }
+
+    function archiveCabinet(event) {
+        event.preventDefault();
+        return changeCabinetLifecycle("archive",archiveTarget);
+    }
+
+    function restoreCabinet(cabinet) {
+        return changeCabinetLifecycle("restore",{...cabinet,warehouse_id:branchId});
+    }
     async function refreshHierarchy(){
         setInitialLoading(true);setReadError("");
         try{const id=await loadBranches(branchId);await loadSections(id,sectionId,cabinetId);}
@@ -284,13 +359,13 @@ export default function WarehouseHierarchyWorkspace({ accessMode = null }) {
         finally{setInitialLoading(false);}
     }
     useEffect(()=>{
-        let active=true;
+        let active=true;mounted.current=true;
         Promise.all([
             api.get("/warehouse-locations-v2/catalog").then(response=>{if(active)setCatalog(response.data||FALLBACK_CATALOG);}).catch(()=>null),
             api.get("/warehouse-locations-v2/section-capabilities").then(response=>{if(active){setCapabilityOptions(response.data?.items||FALLBACK_CAPABILITIES);setTemplates(response.data?.recommended||FALLBACK_TEMPLATES);}}).catch(()=>null),
             loadBranches().then(id=>{if(active)return loadSections(id);}),
         ]).catch(()=>{if(active)setReadError("تعذر تحميل الفروع والمخازن.");}).finally(()=>{if(active)setInitialLoading(false);});
-        return ()=>{active=false;sectionLane.current+=1;};
+        return ()=>{active=false;mounted.current=false;sectionLane.current+=1;archiveLane.current+=1;};
         // eslint-disable-next-line react-hooks/exhaustive-deps
     },[]);
     useEffect(()=>{
@@ -306,7 +381,10 @@ export default function WarehouseHierarchyWorkspace({ accessMode = null }) {
         return ()=>{active=false;};
     },[cabinetId,accessMode]);
     function chooseBranch(id){
-        if(loading)return;setBranchId(id);setSections([]);setSectionId("");setCabinetId("");setReadError("");
+        if(loading||lifecyclePending.current)return;
+        archiveLane.current+=1;setArchivedCabinets([]);setArchiveError("");setArchiveLoading(false);setArchiveTarget(null);
+        if(dialog==="archive"||dialog==="archived")setDialog(null);
+        setBranchId(id);setSections([]);setSectionId("");setCabinetId("");setReadError("");
         loadSections(id).catch(()=>setReadError("تعذر تحميل أقسام الفرع."));
     }
     function chooseSection(id){if(loading)return;setSectionId(id);setCabinetId(sections.find(row=>row.id===id)?.cabinets?.[0]?.id||"");}
@@ -442,7 +520,7 @@ export default function WarehouseHierarchyWorkspace({ accessMode = null }) {
     const empty=(title,description,action,buttonLabel)=><div className="mz-wh-empty"><Warehouse size={43}/><h2>{title}</h2><p>{description}</p>{action&&canWrite&&<button type="button" className="mz-inventory-button is-primary" onClick={action}><Plus size={18}/>{buttonLabel}</button>}</div>;
     const mainContent=initialLoading?<p role="status" className="mz-wh-loading">جارٍ تحميل هيكل المستودعات…</p>:readError?<p className="mz-wh-loading">تعذر عرض الهيكل. أعد القراءة قبل إنشاء فرع أو قسم جديد.</p>:!selectedBranch?empty("ابدأ بإضافة فرع","فرع ثم قسم ثم دولاب، وتُنشأ الخانات بأكوادها تلقائيًا.",()=>openDialog("branch"),"إضافة أول فرع"):selectedCabinet&&selectedSection?<>
         <nav className="mz-wh-breadcrumb" aria-label="مسار المستودع"><button onClick={()=>{setSectionId("");setCabinetId("");}}>{selectedBranch.name}</button><CaretLeft size={13}/><button onClick={()=>setCabinetId("")}>{selectedSection.name}</button><CaretLeft size={13}/><strong>{"د"+selectedCabinet.cabinet_number}</strong></nav>
-        <div className="mz-wh-cabinet-header"><div><h2>{selectedCabinet.name||"دولاب "+selectedCabinet.cabinet_number}<span>{"د"+selectedCabinet.cabinet_number}</span></h2><p><MapPin size={15}/>{selectedBranch.city} · {PURPOSES.find(row=>row[0]===selectedCabinet.purpose)?.[1]||"غير محدد"}</p></div><button type="button" className="mz-inventory-button" onClick={()=>printCabinetPack(selectedBranch,selectedSection,selectedCabinet,locations)}><Printer size={17}/>طباعة ملصقات الدولاب</button></div>
+        <div className="mz-wh-cabinet-header"><div><h2>{selectedCabinet.name||"دولاب "+selectedCabinet.cabinet_number}<span>{"د"+selectedCabinet.cabinet_number}</span></h2><p><MapPin size={15}/>{selectedBranch.city} · {PURPOSES.find(row=>row[0]===selectedCabinet.purpose)?.[1]||"غير محدد"}</p></div><div className="mz-wh-cabinet-actions"><button type="button" className="mz-inventory-button" disabled={loading} onClick={()=>printCabinetPack(selectedBranch,selectedSection,selectedCabinet,locations)}><Printer size={17}/>طباعة ملصقات الدولاب</button>{canManageCabinets&&<button type="button" className="mz-inventory-button" disabled={loading||initialLoading||!!readError} onClick={openArchiveConfirmation}><Archive size={17}/>أرشفة الدولاب</button>}</div></div>
         <div className="mz-wh-stats"><div><strong>{selectedCabinet.total_locations}</strong><span>خانة</span></div><div><strong>{selectedCabinet.length}</strong><span>{shortCoordinates?"صفوف":"رفوف"}</span></div><div><strong>{selectedCabinet.width}</strong><span>{shortCoordinates?"أعمدة":"خانات لكل رف"}</span></div><div><strong>{accessMode?"—":locations.length}</strong><span>حالة مقروءة</span></div></div>
         <div className="mz-wh-map-toolbar"><label className="mz-wh-search"><MagnifyingGlass size={19}/><input aria-label="بحث خانات المستودع" value={query} onChange={event=>{setQuery(event.target.value);setPage(0);}} placeholder="رمز الخانة، الصنف أو الرقم المخزني…"/></label><div className="mz-wh-view-switch" aria-label="عرض الخانات"><button type="button" aria-pressed={mapView==="map"} onClick={()=>setMapView("map")}><SquaresFour size={17}/>خريطة</button><button type="button" aria-pressed={mapView==="list"} onClick={()=>setMapView("list")}><ListBullets size={17}/>قائمة</button></div></div>
         {locationLoading&&<p role="status" className="mz-wh-note">جارٍ قراءة إشغال الخانات…</p>}
@@ -454,13 +532,35 @@ export default function WarehouseHierarchyWorkspace({ accessMode = null }) {
         {selectedBin&&<section className="mz-wh-bin-details" aria-label="تفاصيل الخانة المحددة"><div className="mz-wh-bin-details-heading"><div><small>الخانة المحددة</small><h3>{selectedBin.label}</h3></div><span>{locationStateLabel(selectedBin.record)}</span></div>{selectedItems.length?<div className="mz-wh-occupancy">{selectedItems.map((item,index)=><article key={item.receipt_id||item.product_id||index}><Package size={22}/><div><strong>{item.product_name||item.name||item.sku||"صنف مخزني"}</strong><small>{item.sku}{item.preparation_state?" · "+({ready_complete:"جاهز",requires_preparation:"يحتاج تجهيزًا"}[item.preparation_state]||item.preparation_state):""}</small>{item.specifications&&<small>{Object.entries(item.specifications).map(([name,value])=>name+": "+value).join(" · ")}</small>}</div><span>{item.quantity==null?"—":item.quantity}{item.unit?" "+({piece:"قطعة",gram:"غرام",g:"غرام",kilogram:"كجم",kg:"كجم",meter:"متر",m:"متر",liter:"لتر",l:"لتر"}[item.unit]||item.unit):""}</span></article>)}</div>:<p>{selectedBin.record?.state==="empty"?"الخانة فارغة حسب آخر قراءة للمستودع.":selectedBin.record?"راجع حالة الخانة عند الاستلام قبل وضع أي صنف.":"الإشغال غير مثبت في هذا العرض؛ لا يعني ذلك أن الخانة فارغة."}</p>}<footer><span>{selectedBranch.name+" · "+selectedSection.name+" · "+selectedCabinet.name}</span>{selectedBin.record&&<bdi>{selectedBin.record.barcode_value||selectedBin.record.code}</bdi>}</footer></section>}
     </>:selectedSection?<><div className="mz-wh-section-heading"><div><h2>{selectedSection.name}</h2><CapabilityPills values={selectedSection.capabilities} options={capabilityOptions}/></div>{canWrite&&<button type="button" className="mz-inventory-button is-primary" onClick={()=>{setCabinetForm(EMPTY_CABINET);openDialog("cabinet");}}><Plus size={18}/>إضافة دولاب</button>}</div>{!selectedSection.cabinets?.length?empty("القسم جاهز لاستقبال الدواليب","حدد عدد الصفوف والأعمدة لإنشاء الخانات دفعة واحدة.",()=>openDialog("cabinet"),"إضافة أول دولاب"):<div className="mz-wh-cards">{selectedSection.cabinets.map(cabinet=><button type="button" key={cabinet.id} onClick={()=>setCabinetId(cabinet.id)}><Cube size={25}/><h3>{cabinet.name}</h3><strong>{"د"+cabinet.cabinet_number}</strong><small>{cabinet.total_locations+" خانة · "+cabinet.length+(cabinet.location_numbering==="cabinet-column-row"?" صفوف":" رفوف")}</small></button>)}</div>}</>:<><div className="mz-wh-section-heading"><div><h2>{selectedBranch.name}</h2><p>{address}</p></div>{canWrite&&<button type="button" className="mz-inventory-button is-primary" onClick={()=>openDialog("section")}><Plus size={18}/>إضافة قسم</button>}</div>{!sections.length?empty("أضف أول قسم","كل دولاب يرتبط بقسم؛ اختر قالبًا للتخزين أو التجهيز أو الشحن.",()=>openDialog("section"),"إضافة أول قسم"):<div className="mz-wh-cards">{sections.map(section=><button type="button" key={section.id} onClick={()=>chooseSection(section.id)}><Wrench size={25}/><h3>{section.name}</h3><small>{(section.cabinet_count||0)+" دواليب"}</small><CapabilityPills values={section.capabilities} options={capabilityOptions}/></button>)}</div>}</>;
     return <InventorySuiteFrame active="warehouses"><div className="mz-warehouse" data-testid="warehouse-hierarchy-workspace">
-        <InventoryPageHeader title="المستودعات" description="كل صنف في مكانه. من الفرع إلى أصغر خانة."><button type="button" className="mz-inventory-button" disabled={initialLoading||loading} onClick={refreshHierarchy} aria-label="تحديث المستودعات"><ArrowClockwise size={18}/>تحديث</button>{canWrite&&<button type="button" className="mz-inventory-button is-primary" disabled={loading||initialLoading||!!readError} onClick={()=>{if(selectedSection){setCabinetForm(EMPTY_CABINET);openDialog("cabinet");}else if(selectedBranch)openDialog("section");else openDialog("branch");}}><Plus size={18}/>{selectedSection?"إضافة دولاب":selectedBranch?"إضافة قسم":"إضافة فرع"}</button>}</InventoryPageHeader>
+        <InventoryPageHeader title="المستودعات" description="كل صنف في مكانه. من الفرع إلى أصغر خانة."><button type="button" className="mz-inventory-button" disabled={initialLoading||loading} onClick={refreshHierarchy} aria-label="تحديث المستودعات"><ArrowClockwise size={18}/>تحديث</button>{canManageCabinets&&<button type="button" className="mz-inventory-button" disabled={initialLoading||loading||!branchId} onClick={openArchivedCabinets}><Archive size={18}/>الدواليب المؤرشفة</button>}{canWrite&&<button type="button" className="mz-inventory-button is-primary" disabled={loading||initialLoading||!!readError} onClick={()=>{if(selectedSection){setCabinetForm(EMPTY_CABINET);openDialog("cabinet");}else if(selectedBranch)openDialog("section");else openDialog("branch");}}><Plus size={18}/>{selectedSection?"إضافة دولاب":selectedBranch?"إضافة قسم":"إضافة فرع"}</button>}</InventoryPageHeader>
         {!canWrite&&<p className="mz-wh-readonly"><LockKey size={17}/>للعرض فقط · تظهر الفروع والأقسام المسموح لك بقراءتها.</p>}
         {readError&&<div className="mz-wh-error" role="alert">{readError}<button type="button" onClick={refreshHierarchy}>إعادة المحاولة</button></div>}
         <div className="mz-wh-layout"><aside className="mz-wh-tree" aria-label="هيكل المستودعات"><div className="mz-wh-tree-title"><Warehouse size={25}/><div><h2>مستودعات ميزان</h2><small>{branches.length+" فروع في هذا العرض"}</small></div></div><div className="mz-wh-mobile-branch"><label>الفرع<Select aria-label="اختيار الفرع" value={branchId} onChange={event=>chooseBranch(event.target.value)}>{branches.map(branch=><option key={branch.id} value={branch.id}>{branch.name}</option>)}</Select></label></div><div className="mz-wh-branches">{branches.map(branch=><div className={"mz-wh-branch-group "+(branch.id===branchId?"is-current":"")} key={branch.id}><button type="button" className={"mz-wh-tree-node mz-wh-branch "+(branch.id===branchId?"is-current":"")} disabled={loading} aria-expanded={branch.id===branchId} onClick={()=>chooseBranch(branch.id)}><Warehouse size={19}/><span>{branch.name}</span>{branch.id===branchId?<CaretDown size={14}/>:<CaretLeft size={14}/>}</button>{branch.id===branchId&&<div className="mz-wh-section-tree">{sections.map(section=><div key={section.id}><button type="button" className={"mz-wh-tree-node mz-wh-section "+(section.id===sectionId?"is-current":"")} disabled={loading} onClick={()=>chooseSection(section.id)}><Wrench size={16}/><span>{section.name}</span><small>{section.cabinet_count||0}</small></button>{section.id===sectionId&&<div className="mz-wh-cabinet-tree">{(section.cabinets||[]).map(cabinet=><button type="button" className={"mz-wh-tree-node mz-wh-cabinet "+(cabinet.id===cabinetId?"is-selected":"")} key={cabinet.id} disabled={loading} aria-current={cabinet.id===cabinetId?"true":undefined} onClick={()=>setCabinetId(cabinet.id)}><SquaresFour size={16}/><strong>{"د"+cabinet.cabinet_number}</strong><span>{cabinet.name}</span></button>)}</div>}</div>)}</div>}</div>)}</div>{canWrite&&<div className="mz-wh-tree-actions"><button type="button" disabled={loading||initialLoading||!!readError} onClick={()=>openDialog("branch")}><Plus size={16}/>فرع جديد</button><button type="button" disabled={loading||initialLoading||!!readError||!branchId} onClick={()=>openDialog("section")}><Plus size={16}/>قسم جديد</button></div>}<div className="mz-wh-tree-foot"><CheckCircle size={18}/><span>{!selectedCabinet||shortCoordinates?"دولاب ← عمود ← صف":"دولاب ← رف ← خانة"}<small>تسميات صغيرة، ومكان واضح.</small></span></div>{!accessMode&&!!branches.length&&<details className="mz-wh-advanced"><summary>إعدادات متقدمة</summary><button type="button" disabled={loading} onClick={()=>openDialog("reset")}><Trash size={15}/>بدء من الصفر</button></details>}</aside><main className="mz-wh-workspace" aria-label="مساحة المستودع">{mainContent}</main></div>
         {canWrite&&<><InventorySheet open={dialog==="branch"} onClose={closeDialog} busy={loading} title="إضافة فرع" description="الرقم والكود تلقائيان؛ اختر الدولة والمدينة وحدد عنوان الفرع." footer={<button type="submit" form="warehouse-branch-form" disabled={loading} className="mz-inventory-button is-primary">{loading?"جارٍ الحفظ…":"إنشاء الفرع"}</button>}><form id="warehouse-branch-form" onSubmit={createBranch} className="mz-wh-form">{formError&&<p role="alert" className="mz-wh-error">{formError}</p>}<fieldset disabled={loading}><Field label="اسم الفرع"><Input required value={branchForm.name} onChange={event=>setBranchForm({...branchForm,name:event.target.value})} placeholder="مثال: فرع الرياض"/></Field><div className="mz-wh-form-grid"><Field label="الدولة"><Select value={branchForm.country} onChange={event=>changeCountry(event.target.value)}>{catalog.countries.map(row=><option key={row.name}>{row.name}</option>)}</Select></Field><Field label="المدينة"><Select value={branchForm.city} onChange={event=>setBranchForm({...branchForm,city:event.target.value})}>{(countryRow?.cities||[]).map(city=><option key={city}>{city}</option>)}</Select></Field><Field label="الحي"><Input required value={branchForm.district} onChange={event=>setBranchForm({...branchForm,district:event.target.value})}/></Field><Field label="الشارع"><Input required value={branchForm.street} onChange={event=>setBranchForm({...branchForm,street:event.target.value})}/></Field></div><details><summary>إعدادات المخزن</summary><Field label="استخدام المخزن"><Select value={branchForm.inventory_scope} onChange={event=>setBranchForm({...branchForm,inventory_scope:event.target.value})}><option value="standalone">مخزون مستقل — ربط الطلبات مؤجل</option><option value="shared">مخزن للمسار الحالي</option></Select></Field><p className="mz-wh-note">ترتيب رقم الخانة: دولاب، عمود، صف. مثال: 121 للدولاب 1 والعمود 2 والصف 1.</p></details></fieldset></form></InventorySheet>
         <InventorySheet open={dialog==="section"} onClose={closeDialog} busy={loading} title="إضافة قسم" description={"داخل "+(selectedBranch?.name||"الفرع")+". كل قسم يدعم الدواليب ويمكن أن يجمع عدة وظائف."} footer={<button type="submit" form="warehouse-section-form" disabled={loading} className="mz-inventory-button is-primary">{loading?"جارٍ الحفظ…":"إنشاء القسم"}</button>}><form id="warehouse-section-form" onSubmit={createSection} className="mz-wh-form">{formError&&<p role="alert" className="mz-wh-error">{formError}</p>}<fieldset disabled={loading}><Field label="اسم القسم"><Input required value={sectionForm.name} onChange={event=>setSectionForm({...sectionForm,name:event.target.value})} placeholder="مثال: قسم التخزين"/></Field><Field label="قالب سريع"><Select value={sectionForm.template} onChange={event=>applyTemplate(event.target.value)}>{Object.entries(TEMPLATE_LABELS).map(([value,label])=><option value={value} key={value}>{label}</option>)}</Select></Field><div className="mz-wh-capability-options"><h3>وظائف القسم</h3>{capabilityOptions.map(item=><label key={item.value}><input type="checkbox" checked={item.value==="cabinets"||sectionForm.capabilities.includes(item.value)} disabled={item.value==="cabinets"} onChange={()=>toggleCapability(item.value)}/>{item.label}{item.value==="cabinets"&&<small>إلزامي</small>}</label>)}</div><Field label="ملاحظات (اختياري)"><Input value={sectionForm.notes} onChange={event=>setSectionForm({...sectionForm,notes:event.target.value})}/></Field></fieldset></form></InventorySheet>
         <InventorySheet open={dialog==="cabinet"} onClose={closeDialog} busy={loading} title="إضافة دولاب" description={(selectedBranch?.name||"")+" · "+(selectedSection?.name||"")+". تُنشأ الخانات والترقيم والباركود تلقائيًا."} footer={<button type="submit" form="warehouse-cabinet-form" disabled={loading||cabinetTotal<1||cabinetTotal>5000} className="mz-inventory-button is-primary">{loading?"جارٍ الإنشاء…":"إنشاء الدولاب والخانات"}</button>}><form id="warehouse-cabinet-form" onSubmit={createCabinet} className="mz-wh-form">{formError&&<p role="alert" className="mz-wh-error">{formError}</p>}<fieldset disabled={loading}><Field label="اسم الدولاب (اختياري)" hint="الرقم والكود تلقائيان"><Input value={cabinetForm.cabinet_name} onChange={event=>setCabinetForm({...cabinetForm,cabinet_name:event.target.value})} placeholder="مثال: دولاب الملابس"/></Field><div className="mz-wh-form-grid"><Field label="عدد الصفوف"><Input required type="number" min="1" max="100" value={cabinetForm.slots_per_column} onChange={event=>setCabinetForm({...cabinetForm,slots_per_column:event.target.value})}/></Field><Field label="عدد الأعمدة"><Input required type="number" min="1" max="100" value={cabinetForm.columns} onChange={event=>setCabinetForm({...cabinetForm,columns:event.target.value})}/></Field></div><div className="mz-wh-generation"><strong>{cabinetTotal}</strong><span>خانة ستُنشأ تلقائيًا</span><small>{cabinetForm.slots_per_column+" صفوف × "+cabinetForm.columns+" أعمدة"}</small></div><p className="mz-wh-note">ترتيب رقم الخانة: دولاب، عمود، صف. مثال: <bdi>121</bdi> للدولاب 1 والعمود 2 والصف 1. تفصل شرطات بين الأرقام عندما يتجاوز أحدها 9.</p><Field label="نوع الاستخدام"><Select value={cabinetForm.purpose} onChange={event=>setCabinetForm({...cabinetForm,purpose:event.target.value})}>{PURPOSES.map(([value,label])=><option value={value} key={value}>{label}</option>)}</Select></Field><Field label="سعة كل خانة (اختياري)"><Input type="number" min="1" max="100000" value={cabinetForm.max_items_per_location} onChange={event=>setCabinetForm({...cabinetForm,max_items_per_location:event.target.value})}/></Field></fieldset></form></InventorySheet></>}
+        {canManageCabinets&&<>
+            <InventorySheet open={dialog==="archive"&&!!archiveTarget} onClose={closeDialog} busy={loading} title="أرشفة الدولاب" description="ستختفي خانات هذا الدولاب من الاختيار. يمكنك استعادته من الدواليب المؤرشفة." footer={<button type="submit" form="warehouse-archive-form" disabled={loading||!archiveTarget} className="mz-inventory-button is-primary"><Archive size={17}/>{loading?"جارٍ الأرشفة…":"أرشفة الدولاب"}</button>}>
+                <form id="warehouse-archive-form" onSubmit={archiveCabinet} className="mz-wh-form">
+                    {formError&&<p role="alert" className="mz-wh-error">{formError}</p>}
+                    <dl className="mz-wh-lifecycle-summary">
+                        <div><dt>الدولاب</dt><dd>{archiveTarget?.name||"دولاب "+archiveTarget?.cabinet_number}<strong>{"د"+archiveTarget?.cabinet_number}</strong></dd></div>
+                        <div><dt>عدد الخانات</dt><dd>{archiveTarget?.total_locations}</dd></div>
+                        <div><dt>الموقع</dt><dd>{archiveTarget?.warehouse_name+" · "+archiveTarget?.section_name}</dd></div>
+                    </dl>
+                    <p className="mz-wh-note">يمكن أرشفة الدولاب عندما تكون جميع خاناته خالية ولا ترتبط بمخزون أو حجوزات نشطة. تبقى أرقام الخانات وسجلاتها محفوظة للاستعادة.</p>
+                </form>
+            </InventorySheet>
+            <InventorySheet open={dialog==="archived"} onClose={closeDialog} busy={loading} title="الدواليب المؤرشفة" description={"دواليب "+(selectedBranch?.name||"الفرع")+" التي أوقفت عن الاستخدام. استعد الدولاب للعودة إلى خاناته بأرقامها نفسها."}>
+                {archiveLoading&&<p role="status" className="mz-wh-note">جارٍ تحميل الدواليب المؤرشفة…</p>}
+                {archiveError&&<div role="alert" className="mz-wh-error">{archiveError}<button type="button" disabled={loading||archiveLoading} onClick={()=>loadArchivedCabinets(branchId)}>إعادة المحاولة</button></div>}
+                {!archiveLoading&&!archiveError&&!archivedCabinets.length&&<p className="mz-wh-note">لا توجد دواليب مؤرشفة في هذا الفرع.</p>}
+                {!archiveLoading&&archivedCabinets.length>0&&<ul className="mz-wh-archived-list">{archivedCabinets.map(cabinet=><li key={cabinet.id}>
+                    <div><strong>{cabinet.name||"دولاب "+cabinet.cabinet_number}</strong><small>{"د"+cabinet.cabinet_number+" · "+cabinet.total_locations+" خانة"}</small></div>
+                    <button type="button" className="mz-inventory-button" disabled={loading||archiveLoading} aria-label={"استعادة "+(cabinet.name||"دولاب")+"، د"+cabinet.cabinet_number} onClick={()=>restoreCabinet(cabinet)}><ArrowClockwise size={17}/>استعادة</button>
+                </li>)}</ul>}
+            </InventorySheet>
+        </>}
         {!accessMode&&<InventorySheet open={dialog==="reset"} onClose={closeDialog} busy={loading} title="بدء الفروع والمخازن من الصفر" description="إجراء حذف نهائي للفروع والأقسام والدواليب والخانات. لا يُنفذ قبل التأكيد الصريح." footer={<button type="submit" form="warehouse-reset-form" disabled={loading||resetConfirmation!=="حذف"} className="mz-wh-danger-button"><Trash size={17}/>حذف بيانات التجربة والبدء من الصفر</button>}><form id="warehouse-reset-form" onSubmit={resetWorkspace} className="mz-wh-form"><p className="mz-wh-error">سيُحذف هيكل المخازن وبيانات التجربة وتبدأ أرقامها من 1. لا يحذف هذا الإجراء الطلبات أو المنتجات أو بيانات سلة وقيود.</p><Field label="اكتب كلمة حذف للتأكيد"><Input value={resetConfirmation} onChange={event=>setResetConfirmation(event.target.value)} placeholder="حذف" disabled={loading}/></Field></form></InventorySheet>}
     </div></InventorySuiteFrame>;
 }

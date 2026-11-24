@@ -32,6 +32,8 @@ async def place_inventory_receipt(
             "id": location_id,
             "user_id": merchant_id,
             "occupancy": None,
+            "state": {"$ne": "disabled"},
+            "cabinet_archive": {"$exists": False},
         },
         {
             "$set": {
@@ -48,6 +50,7 @@ async def place_inventory_receipt(
             "user_id": merchant_id,
             "state": {"$ne": "disabled"},
             "occupancy.items.receipt_id": {"$ne": receipt_id},
+            "cabinet_archive": {"$exists": False},
             "$expr": {
                 "$lte": [
                     {

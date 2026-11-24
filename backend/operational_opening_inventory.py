@@ -467,7 +467,7 @@ async def validate_update(db, owner, name, query, update, *, source=SOURCE):
     if maximum is None:
         maximum = 1000000000
     total = occupancy.get('total_quantity', 0)
-    if (not location or location.get('state') == 'disabled' or type(maximum) not in (int, float)
+    if (not location or location.get('state') == 'disabled' or 'cabinet_archive' in location or type(maximum) not in (int, float)
             or not math.isfinite(maximum) or type(total) not in (int, float) or not math.isfinite(total)
             or total < 0 or Decimal(str(total)).quantize(Decimal('.000001')) + Decimal(str(item['quantity'])) > Decimal(str(maximum))
             or any(row.get('receipt_id') == item['receipt_id'] for row in occupancy.get('items', []))):
@@ -529,10 +529,11 @@ async def place_compiled(scoped, owner, compiled, timestamp, batch_id, *, source
                 **(configuration_snapshot(line) if 'deferred_option_ids' in line['purchase_configuration'] else {})}
         # Explicit owner selection is not a barcode scan. Preserve scan
         # evidence rather than manufacturing last_verified_scan metadata.
-        await scoped[LOCATIONS].update_one({'id': line['location_id'], 'user_id': owner, 'occupancy': None},
+        await scoped[LOCATIONS].update_one({'id': line['location_id'], 'user_id': owner, 'occupancy': None,
+            'state': {'$ne': 'disabled'}, 'cabinet_archive': {'$exists': False}},
             {'$set': {'occupancy': {'items': [], 'total_quantity': 0}}})
         placed = await scoped[LOCATIONS].update_one({'id': line['location_id'], 'user_id': owner,
-            'state': {'$ne': 'disabled'}, 'occupancy.items.receipt_id': {'$ne': rid}},
+            'state': {'$ne': 'disabled'}, 'cabinet_archive': {'$exists': False}, 'occupancy.items.receipt_id': {'$ne': rid}},
             {'$push': {'occupancy.items': item}, '$inc': {'occupancy.total_quantity': line['quantity']},
              '$set': {'state': 'occupied', 'updated_at': timestamp}})
         if placed.matched_count != 1:

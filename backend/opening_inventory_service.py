@@ -189,7 +189,7 @@ async def compile_plan(db, owner, document, locations):
                 fail("product_quantity_must_be_integral", 422)
             allocated += qty
             location = by_location.get(allocation["location_id"])
-            if not location or location.get("state") == "disabled" or not location.get("warehouse_id"):
+            if not location or location.get("state") == "disabled" or "cabinet_archive" in location or not location.get("warehouse_id"):
                 fail("location_unavailable")
             if location["id"] in target_locations:
                 fail("duplicate_or_mixed_location")

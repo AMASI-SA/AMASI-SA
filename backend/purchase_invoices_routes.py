@@ -171,7 +171,7 @@ def attach_purchase_invoice_routes(parent_router: APIRouter, db):
             {"user_id": owner}, {"_id": 0, "id": 1, "name": 1, "code": 1},
         ).to_list(10001) if row.get("id")}
         locations = []
-        for loc in await db.warehouse_locations.find({"user_id": owner, "state": {"$ne": "disabled"}}).to_list(20001):
+        for loc in await db.warehouse_locations.find({"user_id": owner, "state": {"$ne": "disabled"}, "cabinet_archive": {"$exists": False}}).to_list(20001):
             if (loc.get("purpose") or cabinets.get(loc.get("cabinet_id"), {}).get("purpose")) != "permanent_storage":
                 continue
             if loc.get("warehouse_id") and _warehouse_allowed(context, [loc["warehouse_id"]]):

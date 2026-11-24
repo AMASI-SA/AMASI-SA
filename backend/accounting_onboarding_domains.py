@@ -138,7 +138,7 @@ async def onboarding_inventory_catalog(db, owner):
     cabinets = {row["id"]: row for row in await _rows(db, "warehouse_locations_cabinets", owner, {"id": 1, "purpose": 1}) if row.get("id")}
     locations = await _rows(db, "warehouse_locations", owner,
         {key: 1 for key in ("id", "code", "display_code", "warehouse_id", "cabinet_id", "purpose", "max_items", "barcode_value")},
-        {"state": {"$ne": "disabled"}}, maximum=20000)
+        {"state": {"$ne": "disabled"}, "cabinet_archive": {"$exists": False}}, maximum=20000)
     # Both V1 and V2 call generate_location_rows and write these collections.
     # Neither persists producer identity: collection/number/barcode is no proof.
     locations = [{**row, "provenance": "AMBIGUOUS", "physical_approval_verified": False}

@@ -227,7 +227,8 @@ def make_warehouse_location_router(db: Any, current_user: Callable[..., Any]) ->
         if not warehouse:
             raise HTTPException(status_code=404, detail={"code": "warehouse_not_found"})
         cabinets = await db[CABINETS].find(
-            {"warehouse_id": warehouse_id, "user_id": user_id}, {"_id": 0}
+            {"warehouse_id": warehouse_id, "user_id": user_id,
+             "status": {"$ne": "archived"}, "archive": {"$exists": False}}, {"_id": 0}
         ).sort("created_at", 1).to_list(length=1000)
         return {"warehouse": warehouse, "cabinets": cabinets, "cabinet_count": len(cabinets)}
 
@@ -322,7 +323,8 @@ def make_warehouse_location_router(db: Any, current_user: Callable[..., Any]) ->
         actor = _require_manager(user)
         user_id = _merchant_user_id(actor)
         items = await db[CABINETS].find(
-            {"user_id": user_id, "warehouse_id": warehouse_id}, {"_id": 0}
+            {"user_id": user_id, "warehouse_id": warehouse_id,
+             "status": {"$ne": "archived"}, "archive": {"$exists": False}}, {"_id": 0}
         ).sort("created_at", 1).to_list(length=1000)
         return {"items": items, "total": len(items)}
 
@@ -336,7 +338,7 @@ def make_warehouse_location_router(db: Any, current_user: Callable[..., Any]) ->
     ) -> dict[str, Any]:
         actor = _require_manager(user)
         user_id = _merchant_user_id(actor)
-        query: dict[str, Any] = {"user_id": user_id}
+        query: dict[str, Any] = {"user_id": user_id, "cabinet_archive": {"$exists": False}}
         if warehouse_id:
             query["warehouse_id"] = warehouse_id
         if cabinet_id:
@@ -363,16 +365,19 @@ def make_warehouse_location_router(db: Any, current_user: Callable[..., Any]) ->
         location = await db[LOCATIONS].find_one({"id": location_id, "user_id": user_id}, {"_id": 0})
         if not location:
             raise HTTPException(status_code=404, detail={"code": "location_not_found"})
-        if location.get("state") != "empty" or location.get("occupancy"):
+        if location.get("state") != "empty" or location.get("occupancy") or "cabinet_archive" in location:
             raise HTTPException(
                 status_code=409,
                 detail={"code": "occupied_location_cannot_be_disabled", "message": "يجب تفريغ الخانة قبل تعطيلها."},
             )
         now = _now()
-        await db[LOCATIONS].update_one(
-            {"id": location_id, "user_id": user_id, "state": "empty"},
+        changed = await db[LOCATIONS].update_one(
+            {"id": location_id, "user_id": user_id, "state": "empty",
+             "occupancy": location.get("occupancy"), "cabinet_archive": {"$exists": False}},
             {"$set": {"state": "disabled", "updated_at": now, "updated_by": _text(actor.get("id"))}},
         )
+        if changed.matched_count != 1:
+            raise HTTPException(409, detail={"code": "location_state_changed", "message": "تغيرت حالة الخانة؛ حدّث الصفحة وأعد المحاولة."})
         return {"ok": True, "location_id": location_id, "state": "disabled"}
 
     return router

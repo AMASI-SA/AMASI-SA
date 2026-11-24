@@ -186,7 +186,7 @@ def _product_id(item: Any) -> str:
 
 INVENTORY_LOCATION_ELIGIBILITY_FIELDS = {key: 1 for key in (
     "purpose", "condition", "quality_status", "inspection_status",
-    "saleability_status", "valuation_status", "receipt_confirmed",
+    "saleability_status", "valuation_status", "receipt_confirmed", "cabinet_archive",
 )}
 
 
@@ -315,7 +315,7 @@ def _inventory_receipt_matches(location: dict, item: dict, receipt: dict) -> boo
 
 def _inventory_eligibility(location: dict, item: dict, evidence: dict) -> str | None:
     """Fail closed unless current receipt or original opening adoption proves it."""
-    if location.get("state") == "disabled":
+    if location.get("state") == "disabled" or "cabinet_archive" in location:
         return "location_disabled"
     if location.get("purpose") in {"returns", "damaged"}:
         return "location_stock_held"
@@ -417,7 +417,7 @@ async def _pin_inventory_locations(db: Any, owner: str, locations: list[dict]) -
 def _inventory_rows(locations: list[dict[str, Any]], evidence: dict | None = None) -> list[dict[str, Any]]:
     rows = []
     for location in locations:
-        if location.get("state") == "disabled":
+        if location.get("state") == "disabled" or "cabinet_archive" in location:
             continue
         warehouse_id = _text(location.get("warehouse_id"))
         if not warehouse_id:
@@ -991,6 +991,7 @@ async def build_order_fulfillment_decision(
             "user_id": user_id,
             "state": {"$ne": "disabled"},
             "occupancy": {"$ne": None},
+            "cabinet_archive": {"$exists": False},
         },
         {"_id": 0, "id": 1, "code": 1, "warehouse_id": 1, "state": 1, "occupancy": 1, **INVENTORY_LOCATION_ELIGIBILITY_FIELDS},
     ).to_list(length=20000)

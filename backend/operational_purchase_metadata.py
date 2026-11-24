@@ -12,7 +12,7 @@ CHOICE={'select','radio','color','image'}
 
 async def locations(db,owner):
     warehouses=await db.warehouse_locations_warehouses.find({'user_id':owner,'status':{'$ne':'disabled'}},{'_id':0}).to_list(20001)
-    stored=await db.warehouse_locations.find({'user_id':owner,'state':{'$ne':'disabled'}},{'_id':0}).to_list(20001)
+    stored=await db.warehouse_locations.find({'user_id':owner,'state':{'$ne':'disabled'},'cabinet_archive':{'$exists':False}},{'_id':0}).to_list(20001)
     return await prepare_in_thread(_locations, warehouses, stored)
 
 

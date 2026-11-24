@@ -1336,7 +1336,7 @@ def make_stock_preparation_order_router(
                 status_code=404,
                 detail={"code": "inventory_location_not_found"},
             )
-        if location.get("state") == "disabled":
+        if location.get("state") == "disabled" or "cabinet_archive" in location:
             raise HTTPException(
                 status_code=409,
                 detail={"code": "inventory_location_disabled"},

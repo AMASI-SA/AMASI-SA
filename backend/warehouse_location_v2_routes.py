@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import uuid
+from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, Callable, Literal
 
@@ -107,6 +108,8 @@ async def ensure_v2_indexes(db: Any) -> None:
 
 def make_warehouse_location_v2_router(db: Any, current_user: Callable[..., Any]) -> APIRouter:
     router = APIRouter(prefix="/warehouse-locations-v2", tags=["Mezan OS V2 Warehouses"])
+    from warehouse_cabinet_lifecycle import attach_cabinet_lifecycle_routes
+    attach_cabinet_lifecycle_routes(router, db, current_user)
 
     @router.get("/catalog")
     async def catalog(user: dict = Depends(current_user)) -> dict[str, Any]:
@@ -261,10 +264,11 @@ def make_warehouse_location_v2_router(db: Any, current_user: Callable[..., Any])
                     "expected_location_code": expected_barcode,
                 },
             )
-        if location.get("state") == "disabled":
+        if location.get("state") == "disabled" or "cabinet_archive" in location:
             raise HTTPException(status_code=409, detail={"code": "location_disabled"})
 
-        occupancy = location.get("occupancy") or {"items": [], "total_quantity": 0}
+        previous_occupancy = deepcopy(location.get("occupancy"))
+        occupancy = deepcopy(previous_occupancy) or {"items": [], "total_quantity": 0}
         items = list(occupancy.get("items") or [])
         existing = next((item for item in items if item.get("product_id") == payload.product_id), None)
         if existing:
@@ -289,8 +293,9 @@ def make_warehouse_location_v2_router(db: Any, current_user: Callable[..., Any])
             )
         now = _now()
         next_occupancy = {"items": items, "total_quantity": total_quantity}
-        await db[LOCATIONS].update_one(
-            {"id": location_id, "user_id": user_id},
+        placed = await db[LOCATIONS].update_one(
+            {"id": location_id, "user_id": user_id, "state": location.get("state"),
+             "occupancy": previous_occupancy, "cabinet_archive": {"$exists": False}},
             {"$set": {
                 "occupancy": next_occupancy,
                 "state": "occupied",
@@ -299,6 +304,9 @@ def make_warehouse_location_v2_router(db: Any, current_user: Callable[..., Any])
                 "updated_at": now,
             }},
         )
+        if placed.matched_count != 1:
+            raise HTTPException(status_code=409, detail={"code": "location_state_changed",
+                "message": "تغيرت حالة الخانة؛ أعد مسحها قبل وضع المنتج."})
         await db[EVENTS].insert_one({
             "id": str(uuid.uuid4()), "user_id": user_id,
             "event_type": "product_placed_after_scan", "location_id": location_id,

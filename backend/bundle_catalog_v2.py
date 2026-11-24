@@ -877,6 +877,15 @@ async def save_bundle(db, owner, product_id, payload, actor_id):
                 reject("bundle_duplicate_item")
             seen.add(identity)
             cleaned.append(row)
+        # Check new configuration only: frozen/history expansion must retain
+        # access to the same physical identities after reversible retirement.
+        for location_id in {text_id(row.get("location_id")) for row in cleaned} - {None, ""}:
+            location = await scoped["warehouse_locations"].find_one({"user_id": owner, "id": location_id})
+            if not location:
+                reject("bundle_location_not_found")
+            if location.get("state") == "disabled" or "cabinet_archive" in location:
+                raise HTTPException(409, detail={"code": "bundle_location_unavailable",
+                    "message": "الخانة المحددة غير متاحة أو مؤرشفة؛ اختر خانة فعالة لإعداد المنتج."})
         doc = {"user_id": owner, "product_id": key, "revision": expected + 1,
                "schema_version": schema_version,
                "product_type": kind, "items": cleaned, "component_scopes": deepcopy(payload.get("component_scopes", {})), "updated_by": actor_id,

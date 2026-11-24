@@ -308,7 +308,7 @@ def _lot(item: dict) -> str:
 
 
 async def _available(db: Any, owner: str, warehouse_ids: list[str]) -> list[dict]:
-    query: dict[str, Any] = {"user_id": owner, "state": {"$ne": "disabled"}}
+    query: dict[str, Any] = {"user_id": owner, "state": {"$ne": "disabled"}, "cabinet_archive": {"$exists": False}}
     if warehouse_ids:
         query["warehouse_id"] = {"$in": warehouse_ids}
     locations = await _rows(db[LOCATIONS], query)
@@ -594,7 +594,7 @@ async def _plan_deductions(db: Any, owner: str, allocations: list[dict]) -> list
     grouped: dict[str, list[dict]] = {}
     for allocation in allocations:
         grouped.setdefault(allocation["location_id"], []).append(allocation)
-    locations = await _rows(db[LOCATIONS], {"user_id": owner, "id": {"$in": list(grouped)}, "state": {"$ne": "disabled"}})
+    locations = await _rows(db[LOCATIONS], {"user_id": owner, "id": {"$in": list(grouped)}, "state": {"$ne": "disabled"}, "cabinet_archive": {"$exists": False}})
     by_id = {location["id"]: location for location in locations}
     evidence = await _load_inventory_evidence(db, owner, locations)
     deductions = []
@@ -714,7 +714,7 @@ async def consume_component_stock(db: Any, *, merchant_id: str, order_id: str,
             # source, stock, bundle-cost and deduction check has passed.
             locations = None
             if defer_unavailable:
-                locations = await _rows(scoped[LOCATIONS], {"user_id": owner, "state": {"$ne": "disabled"}})
+                locations = await _rows(scoped[LOCATIONS], {"user_id": owner, "state": {"$ne": "disabled"}, "cabinet_archive": {"$exists": False}})
                 await _availability_at_locations(scoped, owner, locations, warehouse_ids=[], pin=False)
             else:
                 await _available(scoped, owner, [])

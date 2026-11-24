@@ -281,7 +281,7 @@ def make_warehouse_room_router(db: Any, current_user: Callable[..., Any]) -> API
         cabinets = []
         if section_ids:
             cabinets = await db[CABINETS].find(
-                {"user_id": user_id, "room_id": {"$in": section_ids}, "status": "active"},
+                {"user_id": user_id, "room_id": {"$in": section_ids}, "status": "active", "archive": {"$exists": False}},
                 {"_id": 0},
             ).sort([("room_id", 1), ("cabinet_number", 1)]).to_list(length=2000)
         grouped = {section_id: [] for section_id in section_ids}
