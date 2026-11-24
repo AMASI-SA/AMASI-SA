@@ -49,13 +49,11 @@ def run_actual_reconcile(snapshot, source, clock):
     # module, which is not installed by this tiny policy-only CI job.
     runtime=types.ModuleType("operational_demand_refresh")
     runtime.calculation_checkpoint=lambda:None
-    store=types.ModuleType("operational_balance_store")
-    import hashlib, json
-    store.digest=lambda value:hashlib.sha256(json.dumps(
-        value,sort_keys=True,ensure_ascii=False,default=str).encode()).hexdigest()
+    # This job installs the actual FastAPI/Motor/PyMongo runtime needed by
+    # operational_balance_store. Do not substitute a partial fake store:
+    # real engine imports provider history, which itself requires store.fail.
     with patch.dict(sys.modules,{
         "operational_demand_refresh":runtime,
-        "operational_balance_store":store,
     }):
         spec=importlib.util.spec_from_file_location(
             "operational_balance_engine_isolated",
