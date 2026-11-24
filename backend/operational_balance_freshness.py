@@ -163,9 +163,13 @@ async def finish_attempt(db, owner, attempt, *, result=None, error=None, warning
               "error_code": None if success else failure["code"]}}
     if success:
         values.update(last_success_at=as_of.isoformat(), last_success_revision=receipt["revision"],
-                      source_warnings=warnings or [], last_failure=None)
+                      source_warnings=warnings or [], last_failure=None, last_failure_trace=None)
     else:
         values["last_failure"] = failure
+        # Preserve only allowlisted stages and timings, never raw error details.
+        # The refresh timeout boundary already emitted this bounded trace.
+        from operational_refresh_failure_trace import safe_failure_trace
+        values["last_failure_trace"] = safe_failure_trace(getattr(error, "detail", None))
     try:
         with pymongo.timeout(WRITE_SECONDS):
             async with asyncio.timeout(WRITE_SECONDS):
@@ -322,6 +326,11 @@ def compose_freshness(owner, actor, header, health, lease, sources, *, now, unav
             entity_coverage['state'] = 'unknown'
     if saved_coverage is not None and aggregate == 'current' and entity_coverage['state'] in {'stale', 'unknown'}:
         aggregate = entity_coverage['state']
+    if safe_attempt is not None and safe_attempt["outcome"] in {"failed", "unknown"}:
+        # The latest persisted timeout is independently inspectable; it cannot
+        # turn a failed health receipt into a successful financial snapshot.
+        from operational_refresh_failure_trace import safe_failure_trace
+        safe_attempt["diagnostics"] = safe_failure_trace(health.get("last_failure_trace"))
     return {"schema_version": 1, "status": status, "actor": {"id": actor, "is_owner": True},
             "session_scope": digest([owner, actor]), "as_of": iso(as_of), "revision": revision,
             "generated_at": now.isoformat(), "freshness": {"state": aggregate, "max_age_seconds": MAX_AGE_SECONDS},
@@ -357,7 +366,7 @@ async def read_freshness(db, owner, actor, *, now=None):
             header, health, lease, marker, settings = await owned_reads(
                 one(STATES, {"_id": owner, "owner_id": owner}, _HEADER),
                 one(HEALTH, {"_id": owner, "owner_id": owner}, {"_id": 0, "last_attempt": 1,
-                    "last_failure": 1, "last_success_at": 1, "source_warnings": 1}),
+                    "last_failure": 1, "last_failure_trace": 1, "last_success_at": 1, "source_warnings": 1}),
                 one(LEASES, {"_id": owner, "owner_id": owner}, {"_id": 0, "expires_at": 1}),
                 one("mz2_atomic_owners", {"_id": owner}, {"_id": 0, "ledger_backend_state": 1}),
                 one("settings", {"user_id": owner}, {"_id": 0, "mezan2_financial_cutover.status": 1}),
