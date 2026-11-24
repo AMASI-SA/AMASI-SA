@@ -1,6 +1,9 @@
 """First-capture canonical provider posting: no double counts or historical replay."""
 import copy
+import sys
+import types
 import unittest
+from unittest.mock import patch
 from operational_payment_direct_provider import (
     InitialCaptureHold, apply_first_provider_capture,
 )
@@ -11,6 +14,7 @@ CAPTURE = "2026-11-24T21:01:00+03:00"
 
 def state():
     return {
+        "owner_id": "merchant1",
         "status": "active", "started_at": "2026-10-03T00:00:00+03:00",
         "openings": {"existing-balance": {"amount": "500.00"}},
         "movements": [],
@@ -168,8 +172,32 @@ class DirectProviderTests(unittest.TestCase):
         s = state()
         s["movements"] = [{"id":"bank-1","amount":"400.00","direction":"incoming"}]
         before = copy.deepcopy(s["movements"])
-        post(s)
+        history = types.ModuleType("operational_provider_history")
+        calls = []
+        def block(*args, **kwargs):
+            calls.append((args, kwargs))
+            return False
+        history.late_payment_blocks = block
+        with patch.dict(sys.modules, {"operational_provider_history":history}):
+            post(s)
         self.assertEqual(s["movements"], before)
+        self.assertEqual(len(calls),1)
+        self.assertEqual(calls[0][1]["obligation_key"],"provider:order1")
+
+    def test_pooled_provider_settlement_refuses_direct_capture(self):
+        s = state()
+        s["movements"] = [{
+            "kind":"settlement","party_type":"provider","party_id":"tabby",
+            "currency":"SAR","direction":"incoming","amount":"900.00",
+            "allocations":[],
+        }]
+        history = types.ModuleType("operational_provider_history")
+        history.late_payment_blocks = lambda *args, **kwargs: True
+        before = copy.deepcopy(s)
+        with patch.dict(sys.modules, {"operational_provider_history":history}):
+            with self.assertRaisesRegex(InitialCaptureHold,"pooled_settlement"):
+                post(s)
+        self.assertEqual(s,before)
 
 
 if __name__ == "__main__":
