@@ -98,7 +98,24 @@ async def post_first_salla_capture(db, owner, merchant_id, order_id, order_numbe
                 state, order_id=order_id, order_number=order_number,
                 normalized=normalized, as_of=stamp)
         except InitialCaptureHold as exc:
-            fail(str(exc), "تعذر اعتماد الدفعة آليًا؛ يلزم مطابقة إثبات المصدر", 409)
+            reason = str(exc)
+            # A permanent financial-history or fee-policy hold is not a
+            # transient Salla delivery failure. Return a review decision;
+            # the caller persists it separately as a no-money exception.
+            if reason in {
+                "historical_capture_requires_reconciliation",
+                "initial_capture_refund_requires_review",
+                "initial_capture_partial_requires_review",
+                "preexisting_order_financial_effect",
+                "already_scanned_order_requires_refresh",
+                "settled_provider_requires_review",
+                "provider_fee_policy_missing",
+                "provider_fee_policy_ambiguous",
+                "provider_fee_projection_invalid",
+                "capture_identity_conflict",
+            }:
+                return {"status": "review_required", "reason_code": reason}
+            fail(reason, "تعذر اعتماد الدفعة آليًا؛ يلزم مطابقة إثبات المصدر", 409)
         if result["status"] == "posted":
             reconcile_staged_payment_evidence(state)
             audit(state, "operational_salla_payment_worker",
