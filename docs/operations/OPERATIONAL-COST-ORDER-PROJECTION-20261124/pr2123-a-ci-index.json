@@ -1,0 +1,13 @@
+{
+  "current_source": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+  "current_audit": "pr2123-a-ci-a2.json",
+  "historical": [
+    {
+      "source_sha": "de066be78e3209bb56ef9281ab81367b3104c0a9",
+      "audit": "pr2123-a-ci.json",
+      "reason": "Superseded by content-identical test rename plus STATUS update to include all new projection regressions in required CI",
+      "candidate": "pr2123-a-ci-candidate.intent.json",
+      "candidate_must_not_be_used_for_a2": true
+    }
+  ]
+}

@@ -1,0 +1,285 @@
+{
+  "artifact": {
+    "id": 14969581484,
+    "name": "release-v5-reviewed-intent-candidate",
+    "size_in_bytes": 440056,
+    "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14969581484",
+    "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14969581484/zip",
+    "expired": false,
+    "created_at": "2026-11-24T22:09:16Z",
+    "expires_at": "2026-11-26T22:09:16Z",
+    "updated_at": "2026-11-24T22:09:16Z",
+    "digest": "sha256:89ee196176efe4c9981f4667ea94ae6ec41db1576007f9b963c81e9fec1928d3",
+    "workflow_run": {
+      "id": 45498009508,
+      "repository_id": 1250664189,
+      "head_repository_id": 1250664189,
+      "head_branch": "codex/operational-cost-order-projection-20261124",
+      "head_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe"
+    }
+  },
+  "frontend_job": {
+    "id": 138813534152,
+    "name": "Frontend build",
+    "status": "completed",
+    "conclusion": "success",
+    "run_id": 45498009508,
+    "logs_url": null,
+    "steps": [
+      {
+        "name": "Set up job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 1
+      },
+      {
+        "name": "Run actions/checkout@v4",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 2
+      },
+      {
+        "name": "Run actions/setup-node@v4",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 3
+      },
+      {
+        "name": "Enable Yarn Classic",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 4
+      },
+      {
+        "name": "Record governed frontend toolchain",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 5
+      },
+      {
+        "name": "Install frontend dependencies",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 6
+      },
+      {
+        "name": "Test governed frontend build contract",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 7
+      },
+      {
+        "name": "Classify reviewed B or source candidate A",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 8
+      },
+      {
+        "name": "Build production frontend twice and retain verified build B",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 9
+      },
+      {
+        "name": "Verify retained frontend artifact and reproducibility proof",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 10
+      },
+      {
+        "name": "Freeze a candidate reviewed intent from the source commit",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 11
+      },
+      {
+        "name": "Retain the candidate reviewed intent",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 12
+      },
+      {
+        "name": "Prove install and build leave the worktree clean",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 13
+      },
+      {
+        "name": "Post Run actions/setup-node@v4",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 25
+      },
+      {
+        "name": "Post Run actions/checkout@v4",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 26
+      },
+      {
+        "name": "Complete job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 27
+      }
+    ]
+  },
+  "exact_checkout_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+  "source_tree": "66f5c117ab2a8af5fca87e6de92b37f2acd2ff2b",
+  "base_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+  "ci_original_candidate_validator_pass": true,
+  "local_original_candidate_validator_executed": false,
+  "verified_after_artifact_upload": true,
+  "chronology": {
+    "upload_step_number": 12,
+    "upload_finished_utc": "2026-11-24T22:09:17.0057775Z",
+    "clean_step_number": 13,
+    "clean_command_observed_utc": "2026-11-24T22:09:17.0179328Z",
+    "clean_step_conclusion": "success"
+  },
+  "log_excerpts": [
+    "2026-11-24T22:08:28.8280318Z HEAD is now at e0726036b test: include cost order projection regressions in required CI",
+    "2026-11-24T22:08:28.8377651Z e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+    "2026-11-24T22:09:03.9746019Z \u2713 built in 7.32s",
+    "2026-11-24T22:09:11.8002689Z \u2713 built in 7.37s",
+    "2026-11-24T22:09:11.9340123Z Frontend reproducibility proof: dc2adb828b97f076237c66c9c85ec462d6e5e5d8d74d118f7f680da9a85c576e",
+    "2026-11-24T22:09:16.5856089Z SHA256 digest of uploaded artifact zip is 89ee196176efe4c9981f4667ea94ae6ec41db1576007f9b963c81e9fec1928d3",
+    "2026-11-24T22:09:17.0055733Z Artifact release-v5-reviewed-intent-candidate.zip successfully finalized. Artifact ID 14969581484",
+    "2026-11-24T22:09:17.0057775Z Artifact release-v5-reviewed-intent-candidate has been successfully uploaded! Final size is 440056 bytes. Artifact ID is 14969581484",
+    "2026-11-24T22:09:17.0179328Z worktree_status=\"$(git status --short)\"",
+    "2026-11-24T22:09:17.0179662Z test -z \"$worktree_status\""
+  ],
+  "result": "CANDIDATE_ARTIFACT_PROVENANCE_PASS",
+  "zip_bytes": 440056,
+  "zip_sha256": "89ee196176efe4c9981f4667ea94ae6ec41db1576007f9b963c81e9fec1928d3",
+  "intent_bytes": 1531177,
+  "intent_sha256": "7c9d109354ed98f6a014028319b6e3f1cdab4c3f6a749cce439008fb6113428e",
+  "intent_git_blob": "57815f976f9bd6ed711024568f0acfa2d79bfcf6",
+  "release_id": "rg5-d5df5e9536258c2d3b76d750715bafae8fa9b6b76f6971899bd7f8c6e0e54328",
+  "source_manifest_consistency_verified": true,
+  "runtime_patch_entry": {
+    "bytes": 34244,
+    "git_blob": "fffc08c8748c6f4204ca0b767a598103667d4671",
+    "mode": "100644",
+    "path": "operational_open_cost_exposure.py",
+    "sha256": "7aa0a26d3a2374b76e084df30b2c1cfe2f4a90305adcff0bec448fae6ff9eafd"
+  },
+  "backend_manifest_summary": {
+    "added_count": 0,
+    "deleted_count": 0,
+    "file_count": 1358,
+    "manifest_sha256": "d2b5f3b78b6209c895f81447673498f117217160d8e46f507dfb5baebb3bc912",
+    "modified_count": 1,
+    "projection_tree_oid": "3fd203e7febcb4ff64a384e4ce3cc59696ea28bd",
+    "scope": "backend_runtime_package_v1",
+    "scope_tree_oid": "a76f3d7113e025042609f29a30699e15181c1456",
+    "source_base_git_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+    "source_base_root_tree_oid": "74946da23e059283f49de2b04baf9860c8ee972d",
+    "source_base_scope_tree_oid": "28f3a0916dd6143aee0a5488e0f172b62843cd4e",
+    "source_git_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+    "source_root_tree_oid": "66f5c117ab2a8af5fca87e6de92b37f2acd2ff2b",
+    "tombstone_count": 0,
+    "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "tree_sha256": "4c9d32e0dc471288a5775d8468a10f47bd6407cb79d9c8e1307a0988370a3f68"
+  },
+  "control_manifest_summary": {
+    "added_count": 0,
+    "deleted_count": 0,
+    "file_count": 329,
+    "manifest_sha256": "3ae4b9b3486caf552346565143d51d382e962d29d438cab4e81d09fff1385b24",
+    "modified_count": 0,
+    "projection_tree_oid": "f099f8710a449b1c3b3f16facd56d2c44f3eedd9",
+    "scope": "release_control_source_v1",
+    "scope_tree_oid": "f099f8710a449b1c3b3f16facd56d2c44f3eedd9",
+    "source_base_git_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+    "source_base_root_tree_oid": "74946da23e059283f49de2b04baf9860c8ee972d",
+    "source_base_scope_tree_oid": "f099f8710a449b1c3b3f16facd56d2c44f3eedd9",
+    "source_git_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+    "source_root_tree_oid": "66f5c117ab2a8af5fca87e6de92b37f2acd2ff2b",
+    "tombstone_count": 0,
+    "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "tree_sha256": "48775721c55257d4a033810ffe51fef18b142a8ab9c63b699742e35804828620"
+  },
+  "frontend_build_summary": {
+    "artifact_tree_sha256": "7bfb3895de006c8ba651b0a64b4c0c3522c1117f733f57a8d9772531b5b76a6b",
+    "git_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+    "toolchain": {
+      "node": "22.23.2",
+      "vite": "8.2.4",
+      "yarn": "1.22.22"
+    },
+    "source": {
+      "file_count": 1450,
+      "git_tree_oid": "cec438fdef096e17c8b6436dc38a7a5b934373c9",
+      "scope": "git_head_frontend_tree_v1",
+      "tree_sha256": "b57097c1b8826d98ce741270dd33f6875fcbf5f9e9e4e0fbef46c7b44f564e0d"
+    },
+    "build_meta": {
+      "bytes": 592074,
+      "path": "build-meta.json",
+      "sha256": "25a4326aa50b3feb7a249e3b26674238868f606fac22ec28b9839e89c9b391d0"
+    }
+  },
+  "frontend_reproducibility": {
+    "environment": {
+      "allowed_client_keys": [
+        "REACT_APP_BACKEND_URL"
+      ],
+      "effective": {
+        "NODE_ENV": "production",
+        "VITE_USER_NODE_ENV_present": false,
+        "VITE_prefixed_keys": []
+      },
+      "mode": "production",
+      "values": {
+        "REACT_APP_BACKEND_URL": {
+          "present": true,
+          "sha256": "d2e055b74392bfdfcf1d64af1e88a91ab7029a49729a7ac53870bf48bfe4e5ff"
+        }
+      }
+    },
+    "git_sha": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+    "kind": "frontend_two_clean_builds_v1",
+    "passes": [
+      {
+        "artifact_tree_sha256": "7bfb3895de006c8ba651b0a64b4c0c3522c1117f733f57a8d9772531b5b76a6b",
+        "build_meta": {
+          "bytes": 592074,
+          "path": "build-meta.json",
+          "sha256": "25a4326aa50b3feb7a249e3b26674238868f606fac22ec28b9839e89c9b391d0"
+        },
+        "ordinal": 1
+      },
+      {
+        "artifact_tree_sha256": "7bfb3895de006c8ba651b0a64b4c0c3522c1117f733f57a8d9772531b5b76a6b",
+        "build_meta": {
+          "bytes": 592074,
+          "path": "build-meta.json",
+          "sha256": "25a4326aa50b3feb7a249e3b26674238868f606fac22ec28b9839e89c9b391d0"
+        },
+        "ordinal": 2
+      }
+    ],
+    "proof_file": {
+      "bytes": 1521,
+      "path": "frontend/.release/reproducible-build.json",
+      "sha256": "dc2adb828b97f076237c66c9c85ec462d6e5e5d8d74d118f7f680da9a85c576e"
+    },
+    "retained_pass": 2,
+    "schema_version": 1,
+    "source": {
+      "file_count": 1450,
+      "git_tree_oid": "cec438fdef096e17c8b6436dc38a7a5b934373c9",
+      "scope": "git_head_frontend_tree_v1",
+      "tree_sha256": "b57097c1b8826d98ce741270dd33f6875fcbf5f9e9e4e0fbef46c7b44f564e0d"
+    },
+    "toolchain": {
+      "node": "22.23.2",
+      "vite": "8.2.4",
+      "yarn": "1.22.22"
+    }
+  },
+  "runtime_and_control_file_lists_and_frontend_source_unchanged_from_a1": true,
+  "source_ci_complete": false,
+  "release_readiness_claimed": false
+}

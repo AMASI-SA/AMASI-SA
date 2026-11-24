@@ -1,0 +1,22 @@
+{
+  "result": "PASS",
+  "validator": "original scripts.emergent_deployment_adapter.load_candidate_release_intent",
+  "started_at": "2026-11-24T22:11:15.001763+00:00",
+  "finished_at": "2026-11-24T22:11:17.528181+00:00",
+  "elapsed_seconds": 2.526,
+  "source": "e0726036bbfaa524d55f80dfea9f2a8f9facdbfe",
+  "base": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+  "tree": "66f5c117ab2a8af5fca87e6de92b37f2acd2ff2b",
+  "tracked_files": 6599,
+  "sparse_entries": 0,
+  "worktree_and_candidate_unchanged": true,
+  "candidate_bytes": 1531177,
+  "candidate_sha256": "7c9d109354ed98f6a014028319b6e3f1cdab4c3f6a749cce439008fb6113428e",
+  "candidate_blob": "57815f976f9bd6ed711024568f0acfa2d79bfcf6",
+  "runtime_id": "rg5-d5df5e9536258c2d3b76d750715bafae8fa9b6b76f6971899bd7f8c6e0e54328",
+  "artifact_tree_sha256": "7bfb3895de006c8ba651b0a64b4c0c3522c1117f733f57a8d9772531b5b76a6b",
+  "inherited_intent_blob": "ba1de70733b798225dd8aa39a4c7569b55df3a4c",
+  "lease_created": false,
+  "production_changed": false,
+  "limit": "External source-A candidate validation; not an intent-B validation, host rehearsal or publication proof."
+}

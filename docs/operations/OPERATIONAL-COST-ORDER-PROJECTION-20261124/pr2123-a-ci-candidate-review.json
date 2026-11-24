@@ -1,0 +1,433 @@
+{
+  "zip_sha256": "2bce9a39b3620f62a91317f0c6e662859202f4abe55444ee960e7b7cc4db349e",
+  "zip_bytes": 440059,
+  "intent_bytes": 1531177,
+  "intent_sha256": "d1cb73d70b43c4633404299c618471912921b96b3e1a1b8267553d5e287fc888",
+  "intent_git_blob": "d5cddf530020c7ac2c67cf4df78c22e8a2b31bf8",
+  "top_keys": [
+    "backend_runtime_source",
+    "branch",
+    "client_environment",
+    "critical_file_hashes",
+    "frontend_build",
+    "frontend_reproducibility",
+    "frontend_source",
+    "kind",
+    "protocol_version",
+    "release_control_source",
+    "runtime_identity",
+    "schema_version",
+    "source_base_git_sha",
+    "source_git_sha"
+  ],
+  "top_scalars": {
+    "branch": "hotfix/prod-snap-meta-final",
+    "kind": "mezan_emergent_release_intent_v1",
+    "protocol_version": 5,
+    "schema_version": 2,
+    "source_base_git_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+    "source_git_sha": "de066be78e3209bb56ef9281ab81367b3104c0a9"
+  },
+  "object_shapes": {
+    "backend_runtime_source": [
+      "added_count",
+      "deleted_count",
+      "file_count",
+      "files",
+      "manifest_sha256",
+      "modified_count",
+      "projection_tree_oid",
+      "scope",
+      "scope_tree_oid",
+      "source_base_git_sha",
+      "source_base_root_tree_oid",
+      "source_base_scope_tree_oid",
+      "source_git_sha",
+      "source_root_tree_oid",
+      "tombstone_count",
+      "tombstones",
+      "tombstones_sha256",
+      "tree_sha256"
+    ],
+    "client_environment": [
+      "REACT_APP_BACKEND_URL"
+    ],
+    "critical_file_hashes": [
+      "frontend_build_identity.py",
+      "integrations/qoyod_manual/routes.py",
+      "integrations/qoyod_manual/send.py",
+      "release_identity.py",
+      "release_protocol_v5.py",
+      "server.py"
+    ],
+    "frontend_build": [
+      "artifact_tree_sha256",
+      "assets",
+      "build_meta",
+      "entrypoints",
+      "environment",
+      "git_sha",
+      "index",
+      "public_files",
+      "schema_version",
+      "source",
+      "toolchain"
+    ],
+    "frontend_reproducibility": [
+      "environment",
+      "git_sha",
+      "kind",
+      "passes",
+      "proof_file",
+      "retained_pass",
+      "schema_version",
+      "source",
+      "toolchain"
+    ],
+    "frontend_source": [
+      "file_count",
+      "files",
+      "git_tree_oid",
+      "scope",
+      "tree_sha256"
+    ],
+    "release_control_source": [
+      "added_count",
+      "deleted_count",
+      "file_count",
+      "files",
+      "manifest_sha256",
+      "modified_count",
+      "projection_tree_oid",
+      "scope",
+      "scope_tree_oid",
+      "source_base_git_sha",
+      "source_base_root_tree_oid",
+      "source_base_scope_tree_oid",
+      "source_git_sha",
+      "source_root_tree_oid",
+      "tombstone_count",
+      "tombstones",
+      "tombstones_sha256",
+      "tree_sha256"
+    ],
+    "runtime_identity": [
+      "backend_runtime_source",
+      "branch",
+      "critical_file_hashes",
+      "frontend_build",
+      "frontend_reproducibility",
+      "kind",
+      "protocol_version",
+      "release_control_source",
+      "release_id",
+      "schema_version",
+      "source_base_git_sha",
+      "source_git_sha"
+    ]
+  },
+  "runtime_identity_summary": {
+    "branch": "hotfix/prod-snap-meta-final",
+    "kind": "mezan_runtime_release_identity_v5",
+    "protocol_version": 5,
+    "release_id": "rg5-c8fa5d98d9b8d6d4281c2d86ba51e7c291f6208b930e32c09d6e1929d8d91f67",
+    "schema_version": 2,
+    "source_base_git_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+    "source_git_sha": "de066be78e3209bb56ef9281ab81367b3104c0a9"
+  },
+  "backend_manifest_summary": {
+    "added_count": 0,
+    "deleted_count": 0,
+    "file_count": 1358,
+    "manifest_sha256": "349b2595a1d186a8343cffcc3b5eeb0ab8b639f1b1279297a7628954319371e3",
+    "modified_count": 1,
+    "projection_tree_oid": "3fd203e7febcb4ff64a384e4ce3cc59696ea28bd",
+    "scope": "backend_runtime_package_v1",
+    "scope_tree_oid": "1c4a33876355f0d08d3d88787a1cf16c4942eae9",
+    "source_base_git_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+    "source_base_root_tree_oid": "74946da23e059283f49de2b04baf9860c8ee972d",
+    "source_base_scope_tree_oid": "28f3a0916dd6143aee0a5488e0f172b62843cd4e",
+    "source_git_sha": "de066be78e3209bb56ef9281ab81367b3104c0a9",
+    "source_root_tree_oid": "7a60a0150621e36bb8b455a247ac6a09dba325ee",
+    "tombstone_count": 0,
+    "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "tree_sha256": "4c9d32e0dc471288a5775d8468a10f47bd6407cb79d9c8e1307a0988370a3f68"
+  },
+  "control_manifest_summary": {
+    "added_count": 0,
+    "deleted_count": 0,
+    "file_count": 329,
+    "manifest_sha256": "775fbf567f0e2183a2366524e8e98a7c498e0112eafb33e7f7923de7baf94c48",
+    "modified_count": 0,
+    "projection_tree_oid": "f099f8710a449b1c3b3f16facd56d2c44f3eedd9",
+    "scope": "release_control_source_v1",
+    "scope_tree_oid": "f099f8710a449b1c3b3f16facd56d2c44f3eedd9",
+    "source_base_git_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+    "source_base_root_tree_oid": "74946da23e059283f49de2b04baf9860c8ee972d",
+    "source_base_scope_tree_oid": "f099f8710a449b1c3b3f16facd56d2c44f3eedd9",
+    "source_git_sha": "de066be78e3209bb56ef9281ab81367b3104c0a9",
+    "source_root_tree_oid": "7a60a0150621e36bb8b455a247ac6a09dba325ee",
+    "tombstone_count": 0,
+    "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "tree_sha256": "48775721c55257d4a033810ffe51fef18b142a8ab9c63b699742e35804828620"
+  },
+  "frontend_build_summary": {
+    "artifact_tree_sha256": "7bfb3895de006c8ba651b0a64b4c0c3522c1117f733f57a8d9772531b5b76a6b",
+    "git_sha": "de066be78e3209bb56ef9281ab81367b3104c0a9",
+    "toolchain": {
+      "node": "22.23.2",
+      "vite": "8.2.4",
+      "yarn": "1.22.22"
+    },
+    "source": {
+      "file_count": 1450,
+      "git_tree_oid": "cec438fdef096e17c8b6436dc38a7a5b934373c9",
+      "scope": "git_head_frontend_tree_v1",
+      "tree_sha256": "b57097c1b8826d98ce741270dd33f6875fcbf5f9e9e4e0fbef46c7b44f564e0d"
+    },
+    "build_meta": {
+      "bytes": 592074,
+      "path": "build-meta.json",
+      "sha256": "be326cf8e0e61e2007b48d31bbfe2437d26a1b1d6374c8aebb7c586f71768e7b"
+    }
+  },
+  "frontend_reproducibility": {
+    "environment": {
+      "allowed_client_keys": [
+        "REACT_APP_BACKEND_URL"
+      ],
+      "effective": {
+        "NODE_ENV": "production",
+        "VITE_USER_NODE_ENV_present": false,
+        "VITE_prefixed_keys": []
+      },
+      "mode": "production",
+      "values": {
+        "REACT_APP_BACKEND_URL": {
+          "present": true,
+          "sha256": "d2e055b74392bfdfcf1d64af1e88a91ab7029a49729a7ac53870bf48bfe4e5ff"
+        }
+      }
+    },
+    "git_sha": "de066be78e3209bb56ef9281ab81367b3104c0a9",
+    "kind": "frontend_two_clean_builds_v1",
+    "passes": [
+      {
+        "artifact_tree_sha256": "7bfb3895de006c8ba651b0a64b4c0c3522c1117f733f57a8d9772531b5b76a6b",
+        "build_meta": {
+          "bytes": 592074,
+          "path": "build-meta.json",
+          "sha256": "be326cf8e0e61e2007b48d31bbfe2437d26a1b1d6374c8aebb7c586f71768e7b"
+        },
+        "ordinal": 1
+      },
+      {
+        "artifact_tree_sha256": "7bfb3895de006c8ba651b0a64b4c0c3522c1117f733f57a8d9772531b5b76a6b",
+        "build_meta": {
+          "bytes": 592074,
+          "path": "build-meta.json",
+          "sha256": "be326cf8e0e61e2007b48d31bbfe2437d26a1b1d6374c8aebb7c586f71768e7b"
+        },
+        "ordinal": 2
+      }
+    ],
+    "proof_file": {
+      "bytes": 1521,
+      "path": "frontend/.release/reproducible-build.json",
+      "sha256": "22eee6284001c8316e1b57c66606ec75eddf2d1ba6b1e640db62f805504a3bbb"
+    },
+    "retained_pass": 2,
+    "schema_version": 1,
+    "source": {
+      "file_count": 1450,
+      "git_tree_oid": "cec438fdef096e17c8b6436dc38a7a5b934373c9",
+      "scope": "git_head_frontend_tree_v1",
+      "tree_sha256": "b57097c1b8826d98ce741270dd33f6875fcbf5f9e9e4e0fbef46c7b44f564e0d"
+    },
+    "toolchain": {
+      "node": "22.23.2",
+      "vite": "8.2.4",
+      "yarn": "1.22.22"
+    }
+  },
+  "client_environment": {
+    "REACT_APP_BACKEND_URL": {
+      "present": true,
+      "value": "https://mezansalla.com"
+    }
+  },
+  "observed_at_utc": "2026-11-24 22:05:28 UTC",
+  "source_sha": "de066be78e3209bb56ef9281ab81367b3104c0a9",
+  "source_tree": "7a60a0150621e36bb8b455a247ac6a09dba325ee",
+  "base_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+  "frontend_job": {
+    "id": 138807967506,
+    "name": "Frontend build",
+    "status": "completed",
+    "conclusion": "success",
+    "run_id": 45496404314,
+    "logs_url": null,
+    "steps": [
+      {
+        "name": "Set up job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 1
+      },
+      {
+        "name": "Run actions/checkout@v4",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 2
+      },
+      {
+        "name": "Run actions/setup-node@v4",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 3
+      },
+      {
+        "name": "Enable Yarn Classic",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 4
+      },
+      {
+        "name": "Record governed frontend toolchain",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 5
+      },
+      {
+        "name": "Install frontend dependencies",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 6
+      },
+      {
+        "name": "Test governed frontend build contract",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 7
+      },
+      {
+        "name": "Classify reviewed B or source candidate A",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 8
+      },
+      {
+        "name": "Build production frontend twice and retain verified build B",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 9
+      },
+      {
+        "name": "Verify retained frontend artifact and reproducibility proof",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 10
+      },
+      {
+        "name": "Freeze a candidate reviewed intent from the source commit",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 11
+      },
+      {
+        "name": "Retain the candidate reviewed intent",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 12
+      },
+      {
+        "name": "Prove install and build leave the worktree clean",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 13
+      },
+      {
+        "name": "Post Run actions/setup-node@v4",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 25
+      },
+      {
+        "name": "Post Run actions/checkout@v4",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 26
+      },
+      {
+        "name": "Complete job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 27
+      }
+    ]
+  },
+  "ci_original_candidate_validator_pass": true,
+  "local_original_candidate_validator_executed": false,
+  "artifact": {
+    "id": 14969150768,
+    "name": "release-v5-reviewed-intent-candidate",
+    "size_in_bytes": 440059,
+    "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14969150768",
+    "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14969150768/zip",
+    "expired": false,
+    "created_at": "2026-11-24T21:59:32Z",
+    "expires_at": "2026-11-26T21:59:31Z",
+    "updated_at": "2026-11-24T21:59:32Z",
+    "digest": "sha256:2bce9a39b3620f62a91317f0c6e662859202f4abe55444ee960e7b7cc4db349e",
+    "workflow_run": {
+      "id": 45496404314,
+      "repository_id": 1250664189,
+      "head_repository_id": 1250664189,
+      "head_branch": "codex/operational-cost-order-projection-20261124",
+      "head_sha": "de066be78e3209bb56ef9281ab81367b3104c0a9"
+    }
+  },
+  "verified_after_artifact_upload": true,
+  "chronology": {
+    "artifact_uploaded": "2026-11-24T21:59:32.3052170Z",
+    "clean_step_started": "2026-11-24T21:59:32.3243363Z",
+    "clean_step_number": 13,
+    "upload_step_number": 12,
+    "clean_step_conclusion": "success"
+  },
+  "log_excerpts": [
+    "2026-11-24T21:58:49.0766244Z HEAD is now at de066be78 perf: bound open-cost order payload to consumed evidence",
+    "2026-11-24T21:58:49.0874697Z de066be78e3209bb56ef9281ab81367b3104c0a9",
+    "2026-11-24T21:59:17.6872018Z   MEZAN_RELEASE_BOOTSTRAP_INTENT: 1",
+    "2026-11-24T21:59:22.7017018Z \u2713 built in 4.63s",
+    "2026-11-24T21:59:27.9643583Z \u2713 built in 4.86s",
+    "2026-11-24T21:59:28.1052601Z Frontend reproducibility proof: 22eee6284001c8316e1b57c66606ec75eddf2d1ba6b1e640db62f805504a3bbb",
+    "2026-11-24T21:59:28.1308155Z   MEZAN_RELEASE_BOOTSTRAP_INTENT: 1",
+    "2026-11-24T21:59:28.3543699Z   MEZAN_RELEASE_BOOTSTRAP_INTENT: 1",
+    "2026-11-24T21:59:31.1696229Z   MEZAN_RELEASE_BOOTSTRAP_INTENT: 1",
+    "2026-11-24T21:59:31.9300579Z SHA256 digest of uploaded artifact zip is 2bce9a39b3620f62a91317f0c6e662859202f4abe55444ee960e7b7cc4db349e",
+    "2026-11-24T21:59:32.3050827Z Artifact release-v5-reviewed-intent-candidate.zip successfully finalized. Artifact ID 14969150768",
+    "2026-11-24T21:59:32.3052170Z Artifact release-v5-reviewed-intent-candidate has been successfully uploaded! Final size is 440059 bytes. Artifact ID is 14969150768",
+    "2026-11-24T21:59:32.3243747Z worktree_status=\"$(git status --short)\"",
+    "2026-11-24T21:59:32.3243947Z test -z \"$worktree_status\"",
+    "2026-11-24T21:59:32.3272125Z   MEZAN_RELEASE_BOOTSTRAP_INTENT: 1"
+  ],
+  "coverage_blocker": {
+    "kind": "new_source_regression_file_not_collected_by_ci",
+    "file": "backend/tests/test_operational_open_cost_order_projection.py",
+    "expected_new_cases": 61,
+    "operational_collection": "backend/tests/test_operational_balance*.py plus backend/tests/test_operational_open_cost_exposure.py",
+    "stock_collection": "tests/test_operational_balance*.py",
+    "workflow_contains_new_test_file": false,
+    "proposed_minimal_remedy": "Rename to test_operational_balance_cost_order_projection.py; create new source A and use new automatic CI/candidate."
+  },
+  "result": "ARTIFACT_PROVENANCE_PASS_WITH_SOURCE_CI_COVERAGE_BLOCKER",
+  "source_manifest_consistency_verified": true,
+  "runtime_patch_entry": {
+    "bytes": 34244,
+    "git_blob": "fffc08c8748c6f4204ca0b767a598103667d4671",
+    "mode": "100644",
+    "path": "operational_open_cost_exposure.py",
+    "sha256": "7aa0a26d3a2374b76e084df30b2c1cfe2f4a90305adcff0bec448fae6ff9eafd"
+  }
+}
