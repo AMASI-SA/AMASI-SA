@@ -107,3 +107,26 @@ def plan(rows: Iterable[ReconciliationRow]) -> list[ReconciliationAction]:
             provider=event.provider, amount=event.amount,
         ))
     return results
+
+
+def exception_summary(actions: Iterable[ReconciliationAction]) -> dict:
+    """A bounded summary suitable for a daily operational exception job.
+
+    No private identifiers or amounts are emitted in the summary. The scheduler
+    and notifications remain outside this pure module until tenant/role
+    scoping and access-control tests exist.
+    """
+    statuses = {}
+    phases = {1: {}, 2: {}, 3: {}}
+    for action in actions:
+        if action.phase not in phases:
+            raise ValueError("invalid_phase")
+        statuses[action.status] = statuses.get(action.status, 0) + 1
+        group = phases[action.phase]
+        group[action.status] = group.get(action.status, 0) + 1
+    review = sum(statuses.get(key, 0) for key in (
+        "pending_accountant", "pending_evidence", "conflict", "requires_reconciliation", "reject"
+    ))
+    return {"total": sum(statuses.values()), "requires_review": review,
+            "by_status": dict(sorted(statuses.items())),
+            "by_phase": {phase: dict(sorted(counts.items())) for phase, counts in phases.items()}}
