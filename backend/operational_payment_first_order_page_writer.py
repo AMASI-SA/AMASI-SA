@@ -64,6 +64,7 @@ async def post_first_paid_page(db, owner, merchant_id, order_number, *,
     from operational_balance_service import active_gate
     from operational_payment_first_capture_writer import _recent_source_snapshot
     from operational_payment_salla_order_page import native_paid_order_page
+    from operational_payment_refresh_health_gate import require_current_refresh_health
     from salla_integration.webhook_order_sync import _resolve_user_id
 
     if not all(isinstance(v, str) and v.strip() for v in (owner, merchant_id, str(order_number), source_ref)):
@@ -82,6 +83,7 @@ async def post_first_paid_page(db, owner, merchant_id, order_number, *,
 
     async def apply(state):
         await active_gate(db, owner, state)
+        await require_current_refresh_health(db, owner, state, at=stamp)
         if not _recent_source_snapshot(state, stamp):
             fail("paid_page_source_snapshot_stale",
                  "احتساب المصادر قديم ولا يسمح بتسجيل مالي جديد", 409)
@@ -115,6 +117,7 @@ async def post_first_paid_page(db, owner, merchant_id, order_number, *,
         return result
 
     async def final_source_check(before, after):
+        await require_current_refresh_health(db, owner, after, at=stamp)
         if await _resolve_user_id(db, merchant_id) != owner:
             fail("paid_page_merchant_owner_changed", "تغير ارتباط متجر سلة", 409)
         fresh = await _canonical_source(db, owner, order_number)
