@@ -10,7 +10,9 @@ import types
 import unittest
 from unittest.mock import patch
 
-from operational_balance_engine import reconcile
+from pathlib import Path
+import importlib.util
+
 from operational_payment_direct_provider import apply_first_provider_capture
 from operational_payment_full_refresh_parity import compare_first_provider_capture
 from test_operational_payment_direct_provider import state, normalized
@@ -39,11 +41,25 @@ def source_snapshot(payment):
 
 
 def run_actual_reconcile(snapshot, source, clock):
-    # The reducer's pure calculation checkpoint does not require a web server.
+    # Use the actual pure reducer code while stubbing ONLY its web/DB runtime
+    # module, which is not installed by this tiny policy-only CI job.
     runtime=types.ModuleType("operational_demand_refresh")
     runtime.calculation_checkpoint=lambda:None
-    with patch.dict(sys.modules, {"operational_demand_refresh":runtime}):
-        return reconcile(snapshot,source,clock)
+    store=types.ModuleType("operational_balance_store")
+    import hashlib, json
+    store.digest=lambda value:hashlib.sha256(json.dumps(
+        value,sort_keys=True,ensure_ascii=False,default=str).encode()).hexdigest()
+    with patch.dict(sys.modules,{
+        "operational_demand_refresh":runtime,
+        "operational_balance_store":store,
+    }):
+        spec=importlib.util.spec_from_file_location(
+            "operational_balance_engine_isolated",
+            Path(__file__).resolve().parents[1] / "operational_balance_engine.py",
+        )
+        module=importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module.reconcile(snapshot,source,clock)
 
 
 class RealReducerParityTests(unittest.TestCase):
