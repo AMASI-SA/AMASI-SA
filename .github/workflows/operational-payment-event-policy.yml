@@ -8,6 +8,8 @@ on:
       - "backend/tests/test_operational_source_validation_diagnostics.py"
       - "backend/operational_source_diagnostics.py"
       - "backend/operational_payment_reconciliation_plan.py"
+      - "backend/operational_payment_capture_adapter.py"
+      - "backend/tests/test_operational_payment_capture_adapter.py"
       - "backend/tests/test_operational_payment_reconciliation_plan.py"
       - "backend/operational_balance_service.py"
       - ".github/workflows/operational-payment-event-policy.yml"
@@ -28,3 +30,4 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_operational_payment_event_policy.py' -v
           python3 -m unittest discover -s tests -p 'test_operational_source_validation_diagnostics.py' -v
           python3 -m unittest discover -s tests -p 'test_operational_payment_reconciliation_plan.py' -v
+          python3 -m unittest discover -s tests -p 'test_operational_payment_capture_adapter.py' -v
