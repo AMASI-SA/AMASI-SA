@@ -57,25 +57,24 @@ All **11 actual D check records passed**, across three automatic push workflows:
 Original read-only host preflight at17:34:56 UTC: guard inactive, app J2 on the Production branch, tracked clean,432non-ignored untracked entries, zero cleanup overlaps, no collisions for five incoming new paths or symlinked parents, Python optimization0, bootstrap flag absent, real .git directory and sufficient free space. These are preliminary readings; repeat applicable conditions immediately before staging/execution. The helper also rechecks under the original operation lock.
 
 ## Host coordination and publication boundary
-**Live Production changed by this task: no. The Production Git branch advanced to D through the approved PR merge. The reviewed host rehearsal has started. No own lease, prepare, prepublish or publication has occurred.**
+**Live Production changed by this task: no. The Production Git branch and host checkout are exact D. The first host rehearsal was interrupted before an observed result. No own lease, prepare, prepublish or publication has occurred.**
 
 The predecessor PR2109 owner acquired the original guard for J2. The host was tracked-clean on J2 at 16:58:59 UTC. Its 100th platform version `d0a7e31` showed `Deployment finished Nov 24, 08:05 PM` (17:05 UTC). Our read-only original-status request at17:15 waited on an existing operation lock; the subsequent original status request began at17:19:35 and returned **active:false at17:25:38.667753 UTC** after the predecessor operation ended. This task did not clear, verify or reuse the foreign lease. A fresh original check at **17:28:11 UTC** again returned `active:false`, with `/app` tracked-clean on J2. Repeat these checks before host work.
 
-[Reviewed helper](operators/pr2113_guarded_rehearsal.py): 23,356 bytes; SHA256 `cdcf838b2f754c83984906148b2c50e144c9b68005b643f7d2f766e23e3b5ccb`. It is preserved remotely and has not been executed. Only expected J/PR identity substitutions differ from the already reviewed helper. Original operation lock, full verified cleanup-target backups, foreign untracked preservation and all fail-closed checks remain intact.
+[Reviewed helper](operators/pr2113_guarded_rehearsal.py): 23,356 bytes; SHA256 `cdcf838b2f754c83984906148b2c50e144c9b68005b643f7d2f766e23e3b5ccb`. It is preserved remotely. It was executed once; its final result was not observed and its temporary receipt is no longer available after the host editor reconnected. Only expected J/PR identity substitutions differ from the already reviewed helper. Original operation lock, full verified cleanup-target backups, foreign untracked preservation and all fail-closed checks remain intact.
 
-## Active host process
-The original guard was freshly inactive, app J2 clean, Production ref D and untracked count432 at staging. Exact helper/envelope bytes were fetched from evidence commit `9f70905566ef4ae7ce4938dcd78fa5ce6d29f8ac` under the original operation lock and verified before execution.
+## Interrupted host rehearsal and recovery
+The original helper was staged and launched with reviewed bytes from evidence commit `9f70905566ef4ae7ce4938dcd78fa5ce6d29f8ac`. Its only observed stdout was `STAGE_PATH=/tmp/mezan-pr2113-rehearsal-sbyjrhil`. Code-server then disconnected. After reconnect/reload, the previous terminal and task paths under /tmp were absent. The cause is not established; no PASS is claimed for that interrupted run.
 
-- Operator staging: `/tmp/mezan-pr2113-operator-2fvu2mqn`, created17:46:23 UTC.
-- Active rehearsal stage: `/tmp/mezan-pr2113-rehearsal-sbyjrhil`.
-- Receipt: `/tmp/mezan-pr2113-rehearsal-sbyjrhil/receipt.json`.
-- Existing process: owned code-server Terminal8, running the reviewed helper from `/app` with bootstrap/optimization absent.
-- Observed stdout: `STAGE_PATH=/tmp/mezan-pr2113-rehearsal-sbyjrhil`. No final result observed yet.
-- **Do not rerun the helper, reset the workspace, or clear any lock.** Inspect the existing receipt/process. The tracked source may already have advanced under the helper; its exact phase is in the receipt. No platform publication or live cabinet operation has occurred.
+At **17:55:33 UTC**, /app was exact D on the Production branch, tracked-clean, with432 non-ignored untracked entries and original guard inactive. At **18:04:26 UTC**, read-only checks found frontend/build, frontend/.release and backend/release_identity.json missing; frontend/node_modules remained a real0755 directory. No matching old helper, original adapter, Vite or yarn build process remained.
+
+The old J2-only helper must not be rerun on D. No reset or rollback is planned. A separate strict-D recovery operator is being implemented and independently reviewed. It retains J2 as the reviewed source base, all original operation-lock, verified-backup, foreign-file preservation, canonical adapter and identity/proof/package checks, and omits only the already completed FF step. Its private stage and backups will be beneath the real /app/.git rather than /tmp.
+
+The interrupted run's pre-change snapshot/backups are unavailable. We will not claim historical byte preservation from the surviving count alone. Recovery will preserve and verify a fresh current non-ignored-file baseline. No source, candidate or CI change is needed: the exact A/B/D identities and successful gates above remain frozen.
 
 ## Exact next safe actions
-1. Observe the already running helper and its receipt. Public guard status may wait on its operation lock; do not create a lease while it runs.
-2. After final PASS, independently review receipt, verified backups, exact identity/build/proof/package results and foreign-file preservation; verify source D and original guard inactive.
+1. Finish independent recovery-operator review, persist the operator on this separate evidence branch and stage exact verified bytes after fresh original guard/source/precondition checks.
+2. Run the original canonical adapter build at exact D under the original operation lock with fresh verified cleanup-target backups and foreign-file preservation. Require final PASS and independently review the receipt.
 3. Prepare this task's own lease, prepublish immediately before one authorized Republish, require a newer explicit successful deployment, run original three-probe production verification and confirm final inactive guard.
 4. Read-only live cabinet form check: verify row/column labels and short-number guidance, preview one row without saving, cancel. No creation/deletion.
-If the helper reports BLOCKED, preserve its stage/backups and diagnose that exact error. Never automatically rerun or roll back. Publication authorization persists; no new approval is pending.
+Publication authorization persists; no new approval is pending. Do not reset source, weaken guard checks, delete foreign data or record the interrupted run as successful.

@@ -1,5 +1,5 @@
 {
-  "observed_at_utc": "2026-11-24T17:01:37.426457+00:00",
+  "observed_at_utc": "2026-11-24T18:04:26.354148+00:00",
   "scope": "private source-A2 focused tests, bootstrap two-clean-build, original verifier, external freeze and candidate validation only",
   "repo_root": "/workspace/scratch/021675d08c11/location-codes-release/bootstrap",
   "source_git_sha": "a611477be8d52b18f9ad851f44facf9c78be2905",
@@ -363,7 +363,7 @@
   ],
   "out_of_scope_actions_performed": [],
   "task_id": "INVENTORY-LOCATION-CODES-20261124",
-  "state": "HOST_REHEARSAL_RUNNING",
+  "state": "HOST_REHEARSAL_INTERRUPTED_AFTER_HOST_RECONNECT",
   "release_branch": "codex/inventory-location-short-codes-release2-20261124",
   "evidence_branch": "codex/inventory-location-codes-evidence-20261124",
   "pr": 2113,
@@ -434,7 +434,7 @@
   "live_cabinet_creation_or_deletion": false,
   "own_lease_created": false,
   "publication_authorized": true,
-  "next_safe_action": "Observe the existing helper process/receipt; do not rerun or reset. Public status waits on the operation lock while helper runs. If PASS, read complete receipt and proof/preservation, confirm original guard inactive, then prepare own lease/prepublish/one authorized Republish. If BLOCKED preserve backups/receipts and diagnose the exact failure; no automatic rollback. Live three-probe verification and read-only form preview/cancel remain pending.",
+  "next_safe_action": "Independently review and persist separate strict-D recovery operator, fresh host preflight, execute canonical original adapter under original lock with verified current backups and fresh foreign-file preservation baseline; then own prepare/prepublish, one authorized Republish, new explicit platform success, original three-probe verification and live form preview/cancel.",
   "normal_tracked_B2_validation": {
     "observed_at_utc": "2026-11-24T17:04:06.170883+00:00",
     "started_at_utc": "2026-11-24T17:04:03.508062+00:00",
@@ -1427,7 +1427,7 @@
   },
   "host_work_started": true,
   "host_rehearsal": {
-    "state": "RUNNING_OBSERVED",
+    "state": "INTERRUPTED_OUTCOME_UNOBSERVED",
     "observed_at_utc": "2026-11-24 17:49:50 UTC",
     "operator_stage": "/tmp/mezan-pr2113-operator-2fvu2mqn",
     "stage": "/tmp/mezan-pr2113-rehearsal-sbyjrhil",
@@ -1443,6 +1443,42 @@
     "observed_stdout": "STAGE_PATH=/tmp/mezan-pr2113-rehearsal-sbyjrhil",
     "terminal": "code-server tab5, owned Terminal8",
     "own_lease_created": false,
-    "published": false
+    "published": false,
+    "last_known_stdout": "STAGE_PATH=/tmp/mezan-pr2113-rehearsal-sbyjrhil",
+    "final_receipt_available": false,
+    "success_claimed": false,
+    "interruption": {
+      "observed": "Code-server disconnected; after reconnect/reload the /tmp task stages and terminal session were absent.",
+      "cause": "not established",
+      "reconnected_host_observation_at_utc": "2026-11-24T17:55:33.903134+00:00",
+      "head": "cb98e5660380d362e78f937d60abc7139cd1c462",
+      "branch": "hotfix/prod-snap-meta-final",
+      "tracked_clean": true,
+      "nonignored_untracked_count": 432,
+      "original_guard_active": false,
+      "own_operator_stage_exists": false,
+      "own_rehearsal_receipt_exists": false
+    }
+  },
+  "recovery_diagnostic": {
+    "observed_at_utc": "2026-11-24T18:04:26.354148+00:00",
+    "frontend_build": "MISSING",
+    "frontend_build_meta": "MISSING",
+    "frontend_release_directory": "MISSING",
+    "backend_runtime_identity": "MISSING",
+    "frontend_node_modules": {
+      "type": "real directory",
+      "mode": "0755"
+    },
+    "relevant_old_operator_adapter_vite_yarn_build_processes": [],
+    "conclusion": "Canonical adapter build required at existing exact D. Original J2-only helper must not be rerun; no reset/rollback.",
+    "preservation_scope": "Lost pre-interruption snapshots cannot prove before/after byte preservation. New recovery must use a fresh current baseline."
+  },
+  "host_recovery": {
+    "state": "NARROW_OPERATOR_IMPLEMENTATION_AND_INDEPENDENT_REVIEW",
+    "plan": "Create separate strict-D recovery operator, retain J2 identity base and all original lock/backup/preservation/build/verification checks; omit FF; keep private stage/backups under real /app/.git so IDE /tmp loss does not erase evidence.",
+    "source_changed": false,
+    "new_candidate_required": false,
+    "new_ci_required": false
   }
 }
