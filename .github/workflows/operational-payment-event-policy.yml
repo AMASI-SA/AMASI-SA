@@ -23,6 +23,9 @@ on:
       - "backend/operational_payment_direct_order_page.py"
       - "backend/operational_payment_first_order_page_writer.py"
       - "backend/operational_payment_refresh_health_gate.py"
+      - "backend/operational_refresh_failure_trace.py"
+      - "backend/operational_balance_freshness.py"
+      - "backend/tests/test_operational_refresh_failure_trace.py"
       - "backend/tests/test_operational_payment_refresh_health_gate.py"
       - "backend/tests/test_operational_payment_first_order_page_writer.py"
       - "backend/tests/test_operational_payment_direct_order_page.py"
@@ -72,4 +75,5 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_operational_payment_direct_order_page.py' -v
           python3 -m unittest discover -s tests -p 'test_operational_payment_first_order_page_writer.py' -v
           python3 -m unittest discover -s tests -p 'test_operational_payment_refresh_health_gate.py' -v
+          python3 -m unittest discover -s tests -p 'test_operational_refresh_failure_trace.py' -v
           python3 -m unittest discover -s tests -p 'test_operational_payment_initial_order_inbox.py' -v
