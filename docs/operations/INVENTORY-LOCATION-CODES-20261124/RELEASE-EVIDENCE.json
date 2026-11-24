@@ -363,7 +363,7 @@
   ],
   "out_of_scope_actions_performed": [],
   "task_id": "INVENTORY-LOCATION-CODES-20261124",
-  "state": "B2_ALL_GATES_PASS_READY_FOR_NORMAL_MERGE",
+  "state": "MERGED_WAITING_EXACT_D_CI",
   "release_branch": "codex/inventory-location-short-codes-release2-20261124",
   "evidence_branch": "codex/inventory-location-codes-evidence-20261124",
   "pr": 2113,
@@ -434,7 +434,7 @@
   "live_cabinet_creation_or_deletion": false,
   "own_lease_created": false,
   "publication_authorized": true,
-  "next_safe_action": "Original guard returned inactive at17:25:38. Fresh-check Production still J2 and B2 required checks. Merge PR2113 normally with D tree equal B2 and parents [J2,B2]. Wait exact-D automatic Release Readiness, Security Gate and CodeQL. Then reviewed /app helper with fresh seven-field envelope, own prepare/prepublish, one authorized Republish, newer successful platform deployment, original three-probe verification and inactive guard. No cabinet creation/deletion.",
+  "next_safe_action": "Wait all applicable exact-D automatic push gates and independent review. Fresh-check Production still D, original guard inactive and clean app HEAD J2. Obtain fresh untracked count/incoming collision/optimization/bootstrap checks, review seven-field envelope, then execute preserved PR2113 helper. After matched rehearsal prepare own lease, prepublish, Republish once, require newer explicit successful platform deployment, run original three-probe verify and confirm inactive guard. Read-only one-row form preview/cancel; no live cabinet creation/deletion.",
   "normal_tracked_B2_validation": {
     "observed_at_utc": "2026-11-24T17:04:06.170883+00:00",
     "started_at_utc": "2026-11-24T17:04:03.508062+00:00",
@@ -1139,20 +1139,23 @@
   "pr_state": {
     "number": 2113,
     "draft": false,
-    "merged": false,
+    "merged": true,
     "head": "6005a1be25a7a9402442a389f3052ffab8664e07",
     "base": "20fc28f3432a78996f1d70f3356a38bd78b0309e",
-    "mergeable_state": "clean"
+    "mergeable_state": "clean",
+    "merge_commit_sha": "cb98e5660380d362e78f937d60abc7139cd1c462",
+    "state": "closed"
   },
   "current_host_coordination": {
     "status": "ORIGINAL_GUARD_INACTIVE",
-    "observed_at_utc": "2026-11-24T17:25:38.667753+00:00",
+    "observed_at_utc": "2026-11-24T17:28:11.452757+00:00",
     "active": false,
     "actor": null,
+    "app_head": "20fc28f3432a78996f1d70f3356a38bd78b0309e",
+    "tracked_clean": true,
     "own_host_mutation": false,
     "own_lease_created": false,
-    "foreign_lease_not_modified": true,
-    "note": "Original read-only status queued behind predecessor operation, then returned inactive. Fresh premerge observation is still required."
+    "foreign_lease_not_modified": true
   },
   "exact_deployment_ci_expected": {
     "automatic_workflows": [
@@ -1225,5 +1228,32 @@
       ]
     },
     "extra_ready_for_review": "Accounting module and Snapchat ready_for_review triggers completed automatically; no manual rerun."
+  },
+  "deployment_commit": "cb98e5660380d362e78f937d60abc7139cd1c462",
+  "deployment_tree": "abcdea0a41cb694cdd229492a96a7b68e25d8a3a",
+  "merge": {
+    "pr": 2113,
+    "merged": true,
+    "merged_at_utc": "2026-11-24T17:30:16Z",
+    "commit_timestamp_utc": "2026-11-24T17:30:15Z",
+    "sha": "cb98e5660380d362e78f937d60abc7139cd1c462",
+    "parents": [
+      "20fc28f3432a78996f1d70f3356a38bd78b0309e",
+      "6005a1be25a7a9402442a389f3052ffab8664e07"
+    ],
+    "tree": "abcdea0a41cb694cdd229492a96a7b68e25d8a3a",
+    "review": "Root and independent review PASS: D tree equals B2; parents[J2,B2]; A2..D changes only exact reviewed intent blob"
+  },
+  "production_branch_changed_by_this_task": true,
+  "live_publication_performed": false,
+  "deployment_ci": {
+    "head": "cb98e5660380d362e78f937d60abc7139cd1c462",
+    "event": "push",
+    "state": "RUNNING",
+    "expected_workflows": [
+      "Mezan Release Readiness",
+      "Security Gate",
+      "CodeQL"
+    ]
   }
 }
