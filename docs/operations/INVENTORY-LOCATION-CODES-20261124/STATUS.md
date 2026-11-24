@@ -111,3 +111,8 @@ Archive helper executed once with exactbytes from E13, staged at/tmp/mezan-pr211
 The original backup archive must be copied, hash-verified and fsynced durably inside/app/.git before any raworiginal-backup removal. The failed generated-install archive may remain in/tmp; its pre-build original backup remains preserved independently. No foreign worktree cleanup is authorized by this plan.
 
 At18:39:32 UTC a fresh read showed85,327,872bytes available on/app without any task capacity mutation; the cause is not established. Apply fresh checks and measure actualheadroom before retrying the unchanged/appcanonicaladapter.
+
+## Reviewed pack preparation
+[Pack preparation helper](operators/pr2113_prepare_loose_pack.py):19,572bytes,SHA256`c37ba9fcbc599aaee265a3ce1d139349fcd84a2cd1933ca7789ab05fabe243d6`, independent fullreviewPASS. It creates a new nonthin pack and index only in private/tmp and requires unchanged app object/metadata/foreign snapshots. No install/prune/appwrites.
+
+A local two-object check confirmed that verify-pack delta rows report delta representation sizes; the corrected helper separately reconstructs all logical objects using an isolated bare object database containing only the new pair and no alternates. FullCRC/checksum verification and allOID/type/size equality remain required. Confirm Python temporary default/tmp before execution. This approval covers preparation only, not capacity APPLY or another build.

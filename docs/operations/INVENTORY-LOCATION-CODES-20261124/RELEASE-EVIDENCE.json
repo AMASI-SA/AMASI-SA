@@ -1,5 +1,5 @@
 {
-  "observed_at_utc": "2026-11-24 18:44:29 UTC",
+  "observed_at_utc": "2026-11-24 18:53:26 UTC",
   "scope": "private source-A2 focused tests, bootstrap two-clean-build, original verifier, external freeze and candidate validation only",
   "repo_root": "/workspace/scratch/021675d08c11/location-codes-release/bootstrap",
   "source_git_sha": "a611477be8d52b18f9ad851f44facf9c78be2905",
@@ -363,7 +363,7 @@
   ],
   "out_of_scope_actions_performed": [],
   "task_id": "INVENTORY-LOCATION-CODES-20261124",
-  "state": "CAPACITY_ARCHIVES_VERIFIED_PACK_PREPARATION_PENDING",
+  "state": "PACK_PREPARATION_REVIEWED_READY",
   "release_branch": "codex/inventory-location-short-codes-release2-20261124",
   "evidence_branch": "codex/inventory-location-codes-evidence-20261124",
   "pr": 2113,
@@ -434,7 +434,7 @@
   "live_cabinet_creation_or_deletion": false,
   "own_lease_created": false,
   "publication_authorized": true,
-  "next_safe_action": "Complete independent pack-preparation review and run read-only preparation under original lock. Measure exact new pack size, then independently review narrow capacity application preserving archives/all logical Git objects and metadata. No blind build retry or publication.",
+  "next_safe_action": "Stage exact reviewed pack preparation helper through private/tmp bare loader, confirm tempfiledefault/tmp, execute once from/app. Read verified pack size/estimated gain. Independently review separate capacity APPLY operator before any reclamation; no automatic build or publication.",
   "normal_tracked_B2_validation": {
     "observed_at_utc": "2026-11-24T17:04:06.170883+00:00",
     "started_at_utc": "2026-11-24T17:04:03.508062+00:00",
@@ -1695,5 +1695,23 @@
     "observed_loose_objects": 5760,
     "observed_loose_kib": 115172,
     "actual_space_gain": "not yet measured"
+  },
+  "pack_preparation": {
+    "state": "INDEPENDENT_REVIEW_PASS_NOT_EXECUTED",
+    "helper": {
+      "path": "docs/operations/INVENTORY-LOCATION-CODES-20261124/operators/pr2113_prepare_loose_pack.py",
+      "bytes": 19572,
+      "sha256": "c37ba9fcbc599aaee265a3ce1d139349fcd84a2cd1933ca7789ab05fabe243d6",
+      "git_blob": "33933cf93cce38f8e81ea8aab9aa5dd0609931d9"
+    },
+    "reviewer": "numbering_release_review",
+    "scope": "Only private /tmp preparation; all5760loose OIDs including unreachable, nonthin pack+idx, full verify-pack CRC/checksum, isolated new-pair-only logical object reconstruction, exact app object/metadata/foreign snapshot equality. No installation/pruning/source/refs/index/worktree mutation.",
+    "execution_precondition": "Python tempfile.gettempdir()==/tmp; bootstrap absent and optimization0",
+    "semantic_correction": {
+      "issue": "verify-pack delta rows report representation size, not logical object size",
+      "validation": "Local isolated two-object test confirmed the mismatch and passed corrected membership/type/base/non-delta checks plus isolated logical reconstruction.",
+      "helper_bytes_unchanged": true
+    },
+    "app_mutation_performed": false
   }
 }
