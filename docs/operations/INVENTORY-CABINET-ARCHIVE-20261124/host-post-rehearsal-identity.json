@@ -1,0 +1,27 @@
+{
+  "observed_at": "2026-11-24T22:24:29.012065+00:00",
+  "guard_status": {
+    "active": false
+  },
+  "head": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+  "branch": "hotfix/prod-snap-meta-final",
+  "tracked_status": "",
+  "outputs": [
+    {
+      "path": "backend/release_identity.json",
+      "bytes": 504391,
+      "sha256": "ea81c0571b05bf9263f1fdb0f69ffd82385128fcbc5fb683dac383626983a97b"
+    },
+    {
+      "path": "frontend/build/build-meta.json",
+      "bytes": 592074,
+      "sha256": "b2e828e01da0de58924dba940e13759ce0e26de36741b7c131d8456fafc36aa2"
+    },
+    {
+      "path": "frontend/.release/reproducible-build.json",
+      "bytes": 1521,
+      "sha256": "bf0913d7c43a19332e0e786547e696ff17d68e77d6dacef7263f9d1011a83ff8"
+    }
+  ],
+  "status": "PASS"
+}

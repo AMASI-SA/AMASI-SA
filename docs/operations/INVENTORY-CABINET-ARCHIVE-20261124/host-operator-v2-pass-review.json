@@ -1,0 +1,331 @@
+{
+  "blockers": [],
+  "envelope": {
+    "all_expected_values_match": true,
+    "bytes": 1366,
+    "live_foreign_scope_exact_match": true,
+    "path": "/workspace/scratch/021675d08c11/location-codes-release/cabinet_archive_release_envelope_live_scope.json",
+    "sha256": "b06bd5ecb519f4f485e959c0006ad6baf31e77dd911f6599382ef82c8113c9c5"
+  },
+  "expected_release_bindings": {
+    "deployment_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+    "initial_head": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
+    "intent_sha": "bdebc069ea5fa980cd16725e422ca70e79dadd17",
+    "release_id": "rg5-6cfb0e514bb3c65c229a9d224c329f24136bd0ce483bed1af3b74b05e848ca42",
+    "source_base_sha": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
+    "source_sha": "b236f51bb6c52e6f5d14a136db92f7474e4f5873",
+    "tree": "74946da23e059283f49de2b04baf9860c8ee972d"
+  },
+  "frozen_checkpoint": "a6853cf13af7a64fe2443eea588de12f43744066",
+  "helper": {
+    "bytes": 43560,
+    "path": "/workspace/scratch/021675d08c11/location-codes-release/cabinet_archive_release_operator_live_scope.py",
+    "sha256": "1c366e6add99c1560243e53660a34df8c4121ead56c1246656dfb9afc0a7f14f"
+  },
+  "limitations": [
+    "Preservation uses this run's fresh baseline. It does not retroactively certify the interrupted or blocked earlier attempts.",
+    "The exact pinned live Mongo directory identity and process are preserved; its actively written descendant bytes and path set are intentionally not compared under the explicit reviewed live_foreign_scope.",
+    "Mongo log and runtime metadata are the two explicit append-only exceptions. Existing prefixes and required identities are retained; all other foreign records remain exact.",
+    "Capacity estimates acknowledge concurrent/OverlayFS uncertainty. Both actual original adapters and all subsequent verifiers completed successfully.",
+    "The receipt and this review prove completed rehearsal, not public deployment or a live cabinet archive. Original prepare/prepublish, publication success, original public verification, and a fresh inactive final guard remain separate steps.",
+    "Backups are in the owned temporary stage and are not an automatic rollback or a permanent recovery promise. Durable receipts must be retained by root."
+  ],
+  "observed": {
+    "adapter_runs": [
+      {
+        "finished_capacity": {
+          "owned_stage": {
+            "bytes": 231619080192,
+            "device": 3145862,
+            "fragment_bytes": 4096,
+            "inodes": 15938480
+          },
+          "repo": {
+            "bytes": 231619080192,
+            "device": 3145862,
+            "fragment_bytes": 4096,
+            "inodes": 15938480
+          }
+        },
+        "label": "owned-clone",
+        "repo": "/tmp/mezan-cabinet-archive-release-live-e7l6f9wi/rehearsal",
+        "started_capacity": {
+          "owned_stage": {
+            "bytes": 233764708352,
+            "device": 3145862,
+            "fragment_bytes": 4096,
+            "inodes": 16102249
+          },
+          "repo": {
+            "bytes": 233764708352,
+            "device": 3145862,
+            "fragment_bytes": 4096,
+            "inodes": 16102249
+          }
+        },
+        "status": "PASS"
+      },
+      {
+        "finished_capacity": {
+          "owned_stage": {
+            "bytes": 230765363200,
+            "device": 3145862,
+            "fragment_bytes": 4096,
+            "inodes": 15860648
+          },
+          "repo": {
+            "bytes": 418365440,
+            "device": 66338,
+            "fragment_bytes": 4096,
+            "inodes": 170576
+          }
+        },
+        "label": "canonical-app",
+        "repo": "/app",
+        "started_capacity": {
+          "owned_stage": {
+            "bytes": 230726733824,
+            "device": 3145862,
+            "fragment_bytes": 4096,
+            "inodes": 15859843
+          },
+          "repo": {
+            "bytes": 418402304,
+            "device": 66338,
+            "fragment_bytes": 4096,
+            "inodes": 170576
+          }
+        },
+        "status": "PASS"
+      }
+    ],
+    "append_policy_enabled": true,
+    "automatic_rollback": false,
+    "backups": [
+      {
+        "available_bytes": 231671889920,
+        "bytes": 11403687,
+        "destination": "/tmp/mezan-cabinet-archive-release-live-e7l6f9wi/backups/frontend--build",
+        "entries": 390,
+        "present": true,
+        "required_copy_bytes": 12271616,
+        "source": "frontend/build",
+        "state": "COPY_VERIFIED"
+      },
+      {
+        "available_bytes": 231659540480,
+        "bytes": 1521,
+        "destination": "/tmp/mezan-cabinet-archive-release-live-e7l6f9wi/backups/frontend--.release",
+        "entries": 2,
+        "present": true,
+        "required_copy_bytes": 8192,
+        "source": "frontend/.release",
+        "state": "COPY_VERIFIED"
+      },
+      {
+        "available_bytes": 231659528192,
+        "bytes": 504124,
+        "destination": "/tmp/mezan-cabinet-archive-release-live-e7l6f9wi/backups/backend--release_identity.json",
+        "entries": 1,
+        "present": true,
+        "required_copy_bytes": 507904,
+        "source": "backend/release_identity.json",
+        "state": "COPY_VERIFIED"
+      },
+      {
+        "available_bytes": 231657168896,
+        "bytes": 405526531,
+        "destination": "/tmp/mezan-cabinet-archive-release-live-e7l6f9wi/backups/frontend--node_modules",
+        "entries": 76640,
+        "present": true,
+        "required_copy_bytes": 645877760,
+        "source": "frontend/node_modules",
+        "state": "COPY_VERIFIED"
+      }
+    ],
+    "capacity_checks": [
+      {
+        "available_after_adapter_cleanup_estimate_bytes": 1075732480,
+        "estimated_margin_bytes": 414650368,
+        "phase": "before-ff",
+        "required_bytes": 661082112
+      },
+      {
+        "available_after_adapter_cleanup_estimate_bytes": 1075462144,
+        "estimated_margin_bytes": 416800768,
+        "phase": "before-app-adapter",
+        "required_bytes": 658661376
+      }
+    ],
+    "final_capacity": {
+      "app": {
+        "bytes": 418258944,
+        "device": 66338,
+        "fragment_bytes": 4096,
+        "inodes": 170576
+      },
+      "owned_stage": {
+        "bytes": 230769217536,
+        "device": 3145862,
+        "fragment_bytes": 4096,
+        "inodes": 15860444
+      }
+    },
+    "foreign_preservation": {
+      "append_only_path": ".emergent/stripped_env_names",
+      "identical_entries": 185028,
+      "ignored_paths": 47,
+      "live_db_descendant_bytes_or_paths_compared": false,
+      "live_db_root_identity_preserved": ".worktrees/p01-acceptance-state-20260919/mongo",
+      "live_log_identity_and_original_prefix_preserved": ".worktrees/p01-acceptance-state-20260919/mongo.log",
+      "live_log_latest_observed_bytes": 19307746,
+      "live_log_original_prefix_bytes": 19298866,
+      "live_log_original_prefix_sha256": "118dc34225f6df08454af22e0d66092ed9ee560f3071fbb85f70b903e8d23ed6",
+      "nonignored_paths": 432,
+      "records": 185030
+    },
+    "initial_public_status": {
+      "active": false
+    },
+    "lease_created": false,
+    "owned_rehearsal": {
+      "deployment_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+      "generated_storage": {
+        "allocated_bytes": 656953344,
+        "entries": 77033,
+        "reclaimable_bytes": 0,
+        "reclaimable_inodes": 0,
+        "required_bytes": 658661376,
+        "target_fragment_bytes": 4096
+      },
+      "path": "/tmp/mezan-cabinet-archive-release-live-e7l6f9wi/rehearsal",
+      "release_id": "rg5-6cfb0e514bb3c65c229a9d224c329f24136bd0ce483bed1af3b74b05e848ca42",
+      "source_sha": "b236f51bb6c52e6f5d14a136db92f7474e4f5873",
+      "status": "PASS"
+    },
+    "published": false,
+    "recalculated": false,
+    "stage": "/tmp/mezan-cabinet-archive-release-live-e7l6f9wi",
+    "steps": {
+      "all_exit_codes_zero": true,
+      "count": 95,
+      "failures": 0,
+      "passed": 95
+    },
+    "verification_steps": [
+      {
+        "elapsed_seconds": 1.317,
+        "exit_code": 0,
+        "status": "PASS",
+        "step": "validate-intent",
+        "timeout_seconds": 120
+      },
+      {
+        "elapsed_seconds": 1.518,
+        "exit_code": 0,
+        "status": "PASS",
+        "step": "owned-clone-verify-frontend",
+        "timeout_seconds": 180
+      },
+      {
+        "elapsed_seconds": 2.688,
+        "exit_code": 0,
+        "status": "PASS",
+        "step": "owned-clone-verify-packages",
+        "timeout_seconds": 240
+      },
+      {
+        "elapsed_seconds": 1.517,
+        "exit_code": 0,
+        "status": "PASS",
+        "step": "owned-clone-full-proof",
+        "timeout_seconds": 180
+      },
+      {
+        "elapsed_seconds": 0.189,
+        "exit_code": 0,
+        "status": "PASS",
+        "step": "fast-forward",
+        "timeout_seconds": 120
+      },
+      {
+        "elapsed_seconds": 3.872,
+        "exit_code": 0,
+        "status": "PASS",
+        "step": "validate-intent",
+        "timeout_seconds": 120
+      },
+      {
+        "elapsed_seconds": 1.568,
+        "exit_code": 0,
+        "status": "PASS",
+        "step": "canonical-app-verify-frontend",
+        "timeout_seconds": 180
+      },
+      {
+        "elapsed_seconds": 2.77,
+        "exit_code": 0,
+        "status": "PASS",
+        "step": "canonical-app-verify-packages",
+        "timeout_seconds": 240
+      },
+      {
+        "elapsed_seconds": 1.568,
+        "exit_code": 0,
+        "status": "PASS",
+        "step": "canonical-app-full-proof",
+        "timeout_seconds": 180
+      }
+    ]
+  },
+  "prior_exact_head_ci_review_reused": {
+    "B": {
+      "checks": 64,
+      "explained_skips": 10,
+      "path": "/workspace/scratch/021675d08c11/location-codes-release/evidence/pr2120-exact-b-ci-review.json",
+      "sha256": "fd335feb80744742f018a9faca4fb50fd4a71a34197e88ff5bc572cb6642e909",
+      "success": 54
+    },
+    "D": {
+      "checks": 11,
+      "path": "/workspace/scratch/021675d08c11/location-codes-release/evidence/pr2120-exact-d-push-ci-review.json",
+      "sha256": "ae3c4ec285201b1dd2e746f91aac3b22e466690f8652003fe9c3bf877d2a5ef4",
+      "success": 11,
+      "workflows": 3
+    },
+    "note": "These completed immutable-head reviews were already read and hash-verified; no CI was rerun for this receipt review."
+  },
+  "receipt": {
+    "bytes": 24058,
+    "path": "/workspace/scratch/021675d08c11/location-codes-release/evidence/host-operator-v2-pass-receipt.json",
+    "sha256": "9cac2d230262596f1c7ae2a067bde25803c4b7d9bacc5181aaae8c1aae8f3fc6",
+    "status": "PASS"
+  },
+  "reviewed_at_utc": "2026-11-24T22:28:11.703940+00:00",
+  "reviewer": "/root/numbering_release_review",
+  "root_reported_post_rehearsal_observation": {
+    "branch": "production",
+    "guard_active": false,
+    "head": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+    "materialized_files": {
+      "backend/release_identity.json": {
+        "bytes": 504391,
+        "sha256": "ea81c0571b05bf9263f1fdb0f69ffd82385128fcbc5fb683dac383626983a97b"
+      },
+      "frontend/.release/reproducible-build.json": {
+        "bytes": 1521,
+        "sha256": "bf0913d7c43a19332e0e786547e696ff17d68e77d6dacef7263f9d1011a83ff8"
+      },
+      "frontend/build/build-meta.json": {
+        "bytes": 592074,
+        "sha256": "b2e828e01da0de58924dba940e13759ce0e26de36741b7c131d8456fafc36aa2"
+      }
+    },
+    "observed_at_utc": "2026-11-24T22:24:29Z",
+    "source": "Parent message; no independent host access by reviewer in this task.",
+    "tracked_clean": true
+  },
+  "schema": "independent-host-rehearsal-review-v1",
+  "scope": "Read-only review of the final receipt against the already-reviewed immutable E7 helper and envelope. No helper execution, tests, builds, source edits, host access or release mutations by reviewer.",
+  "verdict": "PASS_COMPLETED_HOST_REHEARSAL"
+}

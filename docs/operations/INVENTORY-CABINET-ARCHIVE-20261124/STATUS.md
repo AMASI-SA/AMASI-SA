@@ -2,7 +2,7 @@
 
 ## Current state
 
-**SECOND HOST REHEARSAL RUNNING — clone, foreign preservation, generated backups and measured capacity passed; canonical adapter and publish remain pending.** No live cabinet has been archived, deleted, disabled or restored by this follow-up. Production has not changed for this task.
+**HOST REHEARSAL COMPLETE / INDEPENDENT REVIEW PASS — both original adapters, final preservation and exact materialized identity passed. Original prepare/prepublish and production publication remain pending.** No live cabinet has been archived, deleted, disabled or restored by this follow-up. Production has not changed for this task.
 
 Repository: `AMASI-SA/AMASI-SA`.
 Task branch: `codex/inventory-cabinet-archive-20261124`.
@@ -152,3 +152,16 @@ The second owned clean-clone original adapter passed. The first complete foreign
 All four inherited generated-output backups are now COPY_VERIFIED: frontend/build (390 entries), frontend/.release (2), backend/release_identity.json (1), and frontend/node_modules (76,640). The fresh pre-fast-forward capacity check passed: required 661,082,112 bytes versus estimated available after original adapter cleanup 1,075,732,480 bytes. No capacity cleanup or foreign service changes were used. The next fresh foreign snapshot was running at this observation; the reviewed helper will proceed to FF and the canonical /app adapter only if its remaining checks pass. See `host-live-scope-midpoint.json`.
 
 The run is still the single E8 process at `/tmp/mezan-cabinet-archive-release-live-e7l6f9wi`. Do not restart it or prepare a lease from this midpoint. Full canonical adapter completion, final preservation/identity checks, independent receipt review and original publication protocol remain pending. Production publication and live cabinet mutation have not occurred.
+
+
+## Release checkpoint E10 — complete host rehearsal and independent review PASS
+
+The single E8 scoped operator completed with visible `FINAL_STATUS=PASS` and `OPERATOR_EXIT=0`. Its complete `host-operator-v2-pass-receipt.json` is exactly 24,058 bytes, SHA-256 `9cac2d230262596f1c7ae2a067bde25803c4b7d9bacc5181aaae8c1aae8f3fc6`. The editor-copy transfer was decoded and checked against the host size/hash. All 95 recorded subprocess steps exited zero; both the owned clean-clone and canonical /app original adapters and their frontend/package/full-proof validation passed. No duplicate operator was launched.
+
+All four generated-output backups remain COPY_VERIFIED. The before-FF capacity check required 661,082,112 bytes versus 1,075,732,480 available after original adapter cleanup; the before-canonical check required 658,661,376 versus 1,075,462,144. Final foreign preservation covers 185,030 records, 185,028 identical records, 432 nonignored paths and 47 ignored roots. Both declared append-only files retained their original prefixes; the live log was 19,307,746 bytes at the final observation. The pinned Mongo process/root remained bound; live database descendants were intentionally neither read nor compared. This is not a claim that a running database's bytes stayed frozen.
+
+Independent final receipt review PASS checked the complete receipt against the unchanged E7 helper/envelope and all A/B/D/J/tree/RID identities. No lease, publication, rollback or recalculation occurred in the rehearsal. The earlier v1 BLOCKED receipt remains preserved and is not reclassified.
+
+The original public guard subsequently returned `active:false`; fresh host HEAD is D on hotfix/prod-snap-meta-final with no tracked changes. At 22:24:29 UTC the three materialized files matched exact expected sizes/hashes: backend/release_identity.json 504,391 bytes / `ea81c0571b05bf9263f1fdb0f69ffd82385128fcbc5fb683dac383626983a97b`; frontend/build/build-meta.json 592,074 / `b2e828e01da0de58924dba940e13759ce0e26de36741b7c131d8456fafc36aa2`; frontend/.release/reproducible-build.json 1,521 / `bf0913d7c43a19332e0e786547e696ff17d68e77d6dacef7263f9d1011a83ff8`. See `host-post-rehearsal-identity.json`. A supplemental read-only check first used a mistaken proof filename and returned FileNotFound; it was corrected from the original adapter constant. No generated artifact or source was edited.
+
+The observed platform baseline remains the 100th publish eeecd3f, last finished Nov24 11:41PM Riyadh. No publication has been submitted for PR2120 and no cabinet mutation has occurred. Next: original prepare with task actor, fresh original prepublish, one authorized platform publication, a newer explicit Deployment Succeeded, then original three-probe production verify and closed-lease status before guarded live d1 archive. Do not rerun completed tests or alter frozen source.

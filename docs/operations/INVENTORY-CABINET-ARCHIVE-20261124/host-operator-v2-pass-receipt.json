@@ -1,0 +1,968 @@
+{
+  "adapter_runs": [
+    {
+      "finished_capacity": {
+        "owned_stage": {
+          "bytes": 231619080192,
+          "device": 3145862,
+          "fragment_bytes": 4096,
+          "inodes": 15938480
+        },
+        "repo": {
+          "bytes": 231619080192,
+          "device": 3145862,
+          "fragment_bytes": 4096,
+          "inodes": 15938480
+        }
+      },
+      "label": "owned-clone",
+      "repo": "/tmp/mezan-cabinet-archive-release-live-e7l6f9wi/rehearsal",
+      "started_capacity": {
+        "owned_stage": {
+          "bytes": 233764708352,
+          "device": 3145862,
+          "fragment_bytes": 4096,
+          "inodes": 16102249
+        },
+        "repo": {
+          "bytes": 233764708352,
+          "device": 3145862,
+          "fragment_bytes": 4096,
+          "inodes": 16102249
+        }
+      },
+      "status": "PASS"
+    },
+    {
+      "finished_capacity": {
+        "owned_stage": {
+          "bytes": 230765363200,
+          "device": 3145862,
+          "fragment_bytes": 4096,
+          "inodes": 15860648
+        },
+        "repo": {
+          "bytes": 418365440,
+          "device": 66338,
+          "fragment_bytes": 4096,
+          "inodes": 170576
+        }
+      },
+      "label": "canonical-app",
+      "repo": "/app",
+      "started_capacity": {
+        "owned_stage": {
+          "bytes": 230726733824,
+          "device": 3145862,
+          "fragment_bytes": 4096,
+          "inodes": 15859843
+        },
+        "repo": {
+          "bytes": 418402304,
+          "device": 66338,
+          "fragment_bytes": 4096,
+          "inodes": 170576
+        }
+      },
+      "status": "PASS"
+    }
+  ],
+  "append_policy_enabled": true,
+  "automatic_rollback": false,
+  "backups": [
+    {
+      "available_bytes": 231671889920,
+      "bytes": 11403687,
+      "destination": "/tmp/mezan-cabinet-archive-release-live-e7l6f9wi/backups/frontend--build",
+      "entries": 390,
+      "present": true,
+      "required_copy_bytes": 12271616,
+      "source": "frontend/build",
+      "state": "COPY_VERIFIED"
+    },
+    {
+      "available_bytes": 231659540480,
+      "bytes": 1521,
+      "destination": "/tmp/mezan-cabinet-archive-release-live-e7l6f9wi/backups/frontend--.release",
+      "entries": 2,
+      "present": true,
+      "required_copy_bytes": 8192,
+      "source": "frontend/.release",
+      "state": "COPY_VERIFIED"
+    },
+    {
+      "available_bytes": 231659528192,
+      "bytes": 504124,
+      "destination": "/tmp/mezan-cabinet-archive-release-live-e7l6f9wi/backups/backend--release_identity.json",
+      "entries": 1,
+      "present": true,
+      "required_copy_bytes": 507904,
+      "source": "backend/release_identity.json",
+      "state": "COPY_VERIFIED"
+    },
+    {
+      "available_bytes": 231657168896,
+      "bytes": 405526531,
+      "destination": "/tmp/mezan-cabinet-archive-release-live-e7l6f9wi/backups/frontend--node_modules",
+      "entries": 76640,
+      "present": true,
+      "required_copy_bytes": 645877760,
+      "source": "frontend/node_modules",
+      "state": "COPY_VERIFIED"
+    }
+  ],
+  "capacity_checks": [
+    {
+      "available_after_adapter_cleanup_estimate_bytes": 1075732480,
+      "calculation": "fresh free + measured reclaimable inherited outputs versus measured clone output allocation + changed-source bound",
+      "clone_measured_generated": {
+        "allocated_bytes": 656953344,
+        "entries": 77033,
+        "reclaimable_bytes": 0,
+        "reclaimable_inodes": 0,
+        "required_bytes": 658661376,
+        "target_fragment_bytes": 4096
+      },
+      "current_generated": {
+        "allocated_bytes": 656957440,
+        "entries": 77033,
+        "reclaimable_bytes": 656957440,
+        "reclaimable_inodes": 77033,
+        "required_bytes": 658665472,
+        "target_fragment_bytes": 4096
+      },
+      "fresh_free": {
+        "bytes": 418775040,
+        "device": 66338,
+        "fragment_bytes": 4096,
+        "inodes": 170586
+      },
+      "limitations": "No assumed old capacity; shared/OverlayFS extents and concurrent activity can affect actual free space; adapter must still pass.",
+      "phase": "before-ff",
+      "required_bytes": 661082112,
+      "source_install_upper_bound_bytes": 2420736
+    },
+    {
+      "available_after_adapter_cleanup_estimate_bytes": 1075462144,
+      "calculation": "fresh free + measured reclaimable inherited outputs versus measured clone output allocation + changed-source bound",
+      "clone_measured_generated": {
+        "allocated_bytes": 656953344,
+        "entries": 77033,
+        "reclaimable_bytes": 0,
+        "reclaimable_inodes": 0,
+        "required_bytes": 658661376,
+        "target_fragment_bytes": 4096
+      },
+      "current_generated": {
+        "allocated_bytes": 656957440,
+        "entries": 77033,
+        "reclaimable_bytes": 656957440,
+        "reclaimable_inodes": 77033,
+        "required_bytes": 658665472,
+        "target_fragment_bytes": 4096
+      },
+      "fresh_free": {
+        "bytes": 418504704,
+        "device": 66338,
+        "fragment_bytes": 4096,
+        "inodes": 170576
+      },
+      "limitations": "No assumed old capacity; shared/OverlayFS extents and concurrent activity can affect actual free space; adapter must still pass.",
+      "phase": "before-app-adapter",
+      "required_bytes": 658661376,
+      "source_install_upper_bound_bytes": 0
+    }
+  ],
+  "deployment_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+  "envelope_sha256": "b06bd5ecb519f4f485e959c0006ad6baf31e77dd911f6599382ef82c8113c9c5",
+  "external_precondition": "operator verified completed successful exact-D CI",
+  "final_capacity": {
+    "app": {
+      "bytes": 418258944,
+      "device": 66338,
+      "fragment_bytes": 4096,
+      "inodes": 170576
+    },
+    "owned_stage": {
+      "bytes": 230769217536,
+      "device": 3145862,
+      "fragment_bytes": 4096,
+      "inodes": 15860444
+    }
+  },
+  "foreign_preservation": {
+    "append_only_path": ".emergent/stripped_env_names",
+    "identical_entries": 185028,
+    "ignored_paths": 47,
+    "live_db_descendant_bytes_or_paths_compared": false,
+    "live_db_root_identity_preserved": ".worktrees/p01-acceptance-state-20260919/mongo",
+    "live_log_identity_and_original_prefix_preserved": ".worktrees/p01-acceptance-state-20260919/mongo.log",
+    "live_log_latest_observed_bytes": 19307746,
+    "live_log_original_prefix_bytes": 19298866,
+    "live_log_original_prefix_sha256": "118dc34225f6df08454af22e0d66092ed9ee560f3071fbb85f70b903e8d23ed6",
+    "nonignored_paths": 432,
+    "records": 185030
+  },
+  "helper_sha256": "1c366e6add99c1560243e53660a34df8c4121ead56c1246656dfb9afc0a7f14f",
+  "initial_capacity": {
+    "app": {
+      "bytes": 418942976,
+      "device": 66338,
+      "fragment_bytes": 4096,
+      "inodes": 170584
+    },
+    "owned_stage": {
+      "bytes": 233948143616,
+      "device": 3145862,
+      "fragment_bytes": 4096,
+      "inodes": 16109426
+    }
+  },
+  "initial_head": "c6d05c7814e27e2f22a8c82b5bfe4cf177c17fbe",
+  "initial_public_status": {
+    "active": false
+  },
+  "intent_sha": "bdebc069ea5fa980cd16725e422ca70e79dadd17",
+  "lease_created": false,
+  "live_foreign_scope": {
+    "db_descendants_policy": "live_writer_managed_no_operator_access",
+    "dbpath": ".worktrees/p01-acceptance-state-20260919/mongo",
+    "directory_identities": {
+      ".worktrees": [
+        66338,
+        394231,
+        493,
+        0,
+        0
+      ],
+      ".worktrees/p01-acceptance-state-20260919": [
+        66338,
+        396081,
+        448,
+        0,
+        0
+      ],
+      ".worktrees/p01-acceptance-state-20260919/mongo": [
+        66338,
+        396082,
+        493,
+        0,
+        0
+      ]
+    },
+    "log_identity": [
+      66338,
+      121637,
+      420,
+      0,
+      0
+    ],
+    "log_policy": "independent_same_inode_append_only",
+    "logpath": ".worktrees/p01-acceptance-state-20260919/mongo.log",
+    "process": {
+      "cmdline_sha256": "3afd2534eb5355d9b66e77ed088d8d3db819115b34d0e8d2901e052468cd2832",
+      "exe": "/usr/bin/mongod",
+      "exe_identity": [
+        3145868,
+        85851,
+        493,
+        0,
+        0
+      ],
+      "pid": 96507,
+      "start_ticks": 106766690
+    }
+  },
+  "owned_rehearsal": {
+    "deployment_sha": "f199a471f8bc6e05b475bb9b65a12107cbdc946b",
+    "generated_storage": {
+      "allocated_bytes": 656953344,
+      "entries": 77033,
+      "reclaimable_bytes": 0,
+      "reclaimable_inodes": 0,
+      "required_bytes": 658661376,
+      "target_fragment_bytes": 4096
+    },
+    "path": "/tmp/mezan-cabinet-archive-release-live-e7l6f9wi/rehearsal",
+    "release_id": "rg5-6cfb0e514bb3c65c229a9d224c329f24136bd0ce483bed1af3b74b05e848ca42",
+    "source_sha": "b236f51bb6c52e6f5d14a136db92f7474e4f5873",
+    "status": "PASS"
+  },
+  "preservation_claim": "Fresh baseline only; live DB descendants are not accessed or compared. All other foreign paths retain exact equality except the two explicit append-only paths.",
+  "published": false,
+  "recalculated": false,
+  "release_id": "rg5-6cfb0e514bb3c65c229a9d224c329f24136bd0ce483bed1af3b74b05e848ca42",
+  "source_sha": "b236f51bb6c52e6f5d14a136db92f7474e4f5873",
+  "stage": "/tmp/mezan-cabinet-archive-release-live-e7l6f9wi",
+  "status": "PASS",
+  "steps": [
+    {
+      "elapsed_seconds": 0.008,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "git-root",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.003,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "git-directory",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.01,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "current-head",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.004,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "current-branch",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.213,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "tracked-status",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.014,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "original-guard-bytes",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.126,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "initial-public-status",
+      "timeout_seconds": 45
+    },
+    {
+      "elapsed_seconds": 0.004,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "current-head",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.003,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "current-branch",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.008,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "tracked-status",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.082,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "foreign-paths",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.025,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "foreign-paths",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 1.042,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "fetch-production",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.003,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "remote-head",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.003,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "fetched-head",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.005,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "deployment-tree",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.004,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "intent-tree",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.01,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "intent-parents",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.028,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "deployment-parents",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.004,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "base-ancestry",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.081,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "intent-ancestry",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.004,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "initial-base-ancestry",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.006,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "source-intent-history",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.004,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "source-intent-diff",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.005,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "intent-only-diff",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.004,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "unchanged-release-controls",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.004,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "tracked-generated-targets",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.004,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "current-tracked-paths",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.006,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "incoming-paths",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.003,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "origin-url",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 8.517,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "clone-deployment",
+      "timeout_seconds": 600
+    },
+    {
+      "elapsed_seconds": 0.003,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "current-head",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.003,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "current-branch",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.226,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "tracked-status",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.003,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "deployment-tree",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.003,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "intent-tree",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.003,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "intent-parents",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.004,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "deployment-parents",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.003,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "base-ancestry",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.003,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "intent-ancestry",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.003,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "initial-base-ancestry",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.003,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "source-intent-history",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.003,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "source-intent-diff",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.003,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "intent-only-diff",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.003,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "unchanged-release-controls",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.003,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "tracked-generated-targets",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.016,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "clone-untracked",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 1.317,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "validate-intent",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 98.14,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "owned-clone-adapter",
+      "timeout_seconds": 2400
+    },
+    {
+      "elapsed_seconds": 1.518,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "owned-clone-verify-frontend",
+      "timeout_seconds": 180
+    },
+    {
+      "elapsed_seconds": 2.688,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "owned-clone-verify-packages",
+      "timeout_seconds": 240
+    },
+    {
+      "elapsed_seconds": 1.517,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "owned-clone-full-proof",
+      "timeout_seconds": 180
+    },
+    {
+      "elapsed_seconds": 0.004,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "current-head",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.003,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "current-branch",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.218,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "tracked-status",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.011,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "current-head",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.003,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "current-branch",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.075,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "tracked-status",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.264,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "foreign-paths",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.03,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "foreign-paths",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 1.094,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "fetch-production",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.003,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "remote-head",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.003,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "fetched-head",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.004,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "current-tracked-paths",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.024,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "incoming-paths",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.018,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "source-install-paths",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.004,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "current-head",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.003,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "current-branch",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.013,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "tracked-status",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.014,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "foreign-paths",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.014,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "foreign-paths",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.006,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "current-tracked-paths",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.006,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "incoming-paths",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.189,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "fast-forward",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.003,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "current-head",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.003,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "current-branch",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.013,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "tracked-status",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 3.872,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "validate-intent",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.019,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "foreign-paths",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.014,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "foreign-paths",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 77.832,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "canonical-app-adapter",
+      "timeout_seconds": 2400
+    },
+    {
+      "elapsed_seconds": 1.568,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "canonical-app-verify-frontend",
+      "timeout_seconds": 180
+    },
+    {
+      "elapsed_seconds": 2.77,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "canonical-app-verify-packages",
+      "timeout_seconds": 240
+    },
+    {
+      "elapsed_seconds": 1.568,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "canonical-app-full-proof",
+      "timeout_seconds": 180
+    },
+    {
+      "elapsed_seconds": 0.004,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "current-head",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.006,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "current-branch",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.015,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "tracked-status",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.049,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "foreign-paths",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.027,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "foreign-paths",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 1.002,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "fetch-production",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.004,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "remote-head",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.003,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "fetched-head",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.004,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "current-head",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.004,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "current-branch",
+      "timeout_seconds": 120
+    },
+    {
+      "elapsed_seconds": 0.018,
+      "exit_code": 0,
+      "status": "PASS",
+      "step": "tracked-status",
+      "timeout_seconds": 120
+    }
+  ],
+  "task": "cabinet_archive_owned_clone_and_app_rehearsal",
+  "temporary_stage_retention": "No automatic cleanup; root must persist receipts. Interruption is not resumable proof.",
+  "tree": "74946da23e059283f49de2b04baf9860c8ee972d"
+}
