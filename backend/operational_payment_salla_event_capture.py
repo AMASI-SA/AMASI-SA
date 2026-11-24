@@ -65,6 +65,27 @@ async def stage_verified_payment_update(db, item):
             return True
         order_id, normalized, diagnostics = proof
         if not normalized or not normalized.get("captures") or diagnostics:
+            # Persist only genuinely indicated electronic-payment exceptions,
+            # never a pending-payment order based on fulfillment status alone.
+            raw = source.get("data") or {}
+            if not isinstance(raw, dict):
+                return True
+            raw = raw.get("order") if isinstance(raw.get("order"), dict) else raw
+            payment = raw.get("payment") if isinstance(raw.get("payment"), dict) else {}
+            apparent_success = payment.get("status") in {"paid", "captured"}
+            payment_update = source.get("event") == "order.payment.updated"
+            provider = (normalized or {}).get("provider")
+            if not provider:
+                provider = next((row.get("provider") for row in diagnostics
+                                 if isinstance(row, dict) and row.get("provider")), None)
+            if provider in {"salla", "tabby", "tamara", "emkan", "paypal"} and (
+                    apparent_success or payment_update):
+                from operational_payment_evidence_review import stage_unverified_review
+                reasons = [row.get("code") for row in diagnostics if isinstance(row, dict)]
+                await stage_unverified_review(
+                    db, item["user_id"], order_id, item["_id"], provider,
+                    source["event"], reasons,
+                )
             return True
         from operational_payment_evidence_inbox import stage_normalized_captures
         await stage_normalized_captures(
