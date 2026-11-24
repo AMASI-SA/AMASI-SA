@@ -12,17 +12,8 @@ import pymongo
 from operational_balance_store import fail
 from operational_visible_report_read import run_visible_report_read
 
-FIELDS = {
-    "_id": 0, "schedule_version": 1, "status": 1,
-    "started_at": 1, "last_success_at": 1, "completed_slot": 1,
-    "attempts": 1, "last_error_type": 1,
-    "last_result.errors_count": 1,
-    "last_result.incomplete_count": 1,
-    "last_result.truncated": 1,
-    "last_result.coverage_complete": 1,
-    "last_result.coverage_reason": 1,
-    "last_result.discovery": 1,
-}
+from operational_salla_schedule_diagnostics import SCHEDULE_PROJECTION
+
 
 
 def attach_salla_schedule_diagnostics(router, db, current_user, scope):
@@ -37,7 +28,7 @@ def attach_salla_schedule_diagnostics(router, db, current_user, scope):
                 with pymongo.timeout(1.5):
                     async with asyncio.timeout(2):
                         row = await db["salla_scheduled_reconciliation"].find_one(
-                            {"_id": owner}, FIELDS, max_time_ms=1500)
+                            {"_id": owner}, SCHEDULE_PROJECTION, max_time_ms=1500)
             except Exception:
                 # Only a fixed code; database and Salla driver diagnostics
                 # must never leak through this owner-only endpoint.
