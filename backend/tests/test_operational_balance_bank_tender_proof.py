@@ -43,6 +43,27 @@ def read(raw, source=SOURCE, **kwargs):
     return bank_ledger_paid_amount(raw, source, total=raw['amounts']['total'], **CONTEXT, **kwargs)
 
 
+def native_provider_captures(document, *, paid_at):
+    """Explicit original provider capture proof, independent of a bank receipt."""
+    from operational_payment_evidence import provider_for
+    from order_activity_v1 import normalize_transaction_row
+
+    raw = document['raw_by_source']['salla_direct']
+    rows = []
+    for leg in raw['payment_methods']:
+        if not provider_for(leg['payment_method']):
+            continue
+        reference = leg['transaction_reference']
+        row = normalize_transaction_row({'id': 'native-' + reference,
+            'references': {'order_id': str(raw['id']), 'transaction': reference},
+            'payment_method': {'slug': leg['payment_method']}, 'status': {'slug': 'captured'},
+            'total': money(leg['amount']), 'paid_at': paid_at},
+            order_number=document['order_number'], provider_order_id=str(raw['id']))
+        row.update(user_id=document['user_id'], native_transaction_evidence=[row['native_transaction_evidence']])
+        rows.append(row)
+    return rows
+
+
 class BankTenderProofTests(unittest.TestCase):
     def test_confirmed_closed_partial_posts_only_observed_tender(self):
         raw = order()
@@ -331,7 +352,7 @@ class MixedBankTransactionTests(unittest.IsolatedAsyncioTestCase):
 
 
 
-def test_replayed_refresh_of_bank_and_bnpl_moves_only_bank_share():
+def test_replayed_refresh_of_bank_and_bnpl_waits_for_original_bank_leg_date():
     import asyncio
 
     from operational_balance_service import refresh
@@ -345,10 +366,16 @@ def test_replayed_refresh_of_bank_and_bnpl_moves_only_bank_share():
         await native_accounts(db)
         pure = order_document('tabby_installment', '100.00', '0.00', number='pytest-tabby',
                               created='2026-10-06T10:00:00+00:00')
+        pure['raw_by_source']['salla_direct']['payment_methods'] = [
+            {'payment_method':'tabby_installment', 'amount':'100.00', 'transaction_reference':'pytest-tabby-paid'}]
         await db.unified_orders.insert_one(pure)
+        await db.order_payment_transactions_v2.insert_many(native_provider_captures(
+            pure, paid_at='2026-10-06T10:00:00+00:00'))
         await refresh(db, 'owner', clock=NOW)
         obligations = (await read(db, 'owner'))['engine']['obligations']
-        assert obligations
+        assert len(obligations) == 1
+        claim, = obligations.values()
+        assert (claim['party_id'], claim['confirmed'], claim['business_date']) == ('tabby', '100.00', '2026-10-06')
 
         doc = native_bank_order('998301')
         raw = doc['raw_by_source']['salla_direct']
@@ -360,8 +387,9 @@ def test_replayed_refresh_of_bank_and_bnpl_moves_only_bank_share():
         await asyncio.gather(refresh(db, 'owner', clock=NOW), refresh(db, 'owner', clock=NOW))
         state = await read(db, 'owner')
         assert state['engine']['obligations'] == obligations
-        assert [(m['order_number'], m['bank_id'], m['amount']) for m in state['movements']] == [
-            ('998301', 'account:rajhi', '150.66')]
+        assert state['movements'] == []
+        pending, = [i for i in state['engine']['issues'] if i['code'] == 'operational_order_bank_occurrence_unproven']
+        assert (pending['order_number'], pending['party_id'], pending['status']) == ('998301', 'account:rajhi', 'pending')
         await refresh(db, 'owner', clock=NOW)
         assert (await read(db, 'owner'))['movements'] == state['movements']
 
@@ -389,11 +417,16 @@ def test_existing_provider_share_can_coexist_only_when_proved_same_payment():
                 raw['payment_methods'].append({'payment_method':'customer_wallet',
                                               'transaction_reference':number+'-wallet', 'amount':'314.15'})
             await db.unified_orders.insert_one(doc)
+            await db.order_payment_transactions_v2.insert_many(native_provider_captures(
+                doc, paid_at='2026-10-06T10:00:00+00:00'))
         await refresh(db, 'owner', clock=NOW)
         prior = await read(db, 'owner')
         assert len(prior['engine']['obligations']) == 3
         assert 'provider_split:51998312' in prior['engine']['facts']
-        assert prior['engine']['facts']['provider_order_balance:51998311']['transaction_reference'] == '998311-bnpl'
+        assert prior['engine']['facts']['capture:998311-bnpl'] == {
+            'order_id':'51998311', 'provider':'tabby', 'amount':'1314.15'}
+        assert sorted((row['confirmed'], row['business_date']) for row in prior['engine']['obligations'].values()) == [
+            ('1000.00', '2026-10-06'), ('1314.15', '2026-10-06'), ('1314.15', '2026-10-06')]
 
         for number in ('998311', '998312', '998313'):
             doc = await db.unified_orders.find_one({'order_number':number})
@@ -409,8 +442,9 @@ def test_existing_provider_share_can_coexist_only_when_proved_same_payment():
                 'raw_by_source.salla_direct':raw, 'g47_salla_snapshot.source_updated_at':raw['updated_at']}})
         await asyncio.gather(refresh(db, 'owner', clock=NOW), refresh(db, 'owner', clock=NOW))
         result = await read(db, 'owner')
-        assert sorted((m['order_number'], m['amount']) for m in result['movements']) == [
-            ('998311','150.66'), ('998312','150.66')], result['engine']['issues']
+        assert result['movements'] == []
+        assert sorted(i['order_number'] for i in result['engine']['issues']
+                      if i['code'] == 'operational_order_bank_occurrence_unproven') == ['998311', '998312']
         assert any(i['code'] == 'operational_order_bank_credit_conflict' and i.get('order_number') == '998313'
                    for i in result['engine']['issues'])
         assert result['engine']['obligations'] == prior['engine']['obligations']

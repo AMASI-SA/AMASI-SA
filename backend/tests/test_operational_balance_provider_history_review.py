@@ -46,13 +46,18 @@ def authorize(state):
 
 
 @pytest.mark.parametrize("captures",[False, True])
-def test_unambiguous_post_start_payment_leaves_historical_review_and_is_booked_once(captures):
+def test_post_start_payment_requires_original_capture_before_leaving_historical_review(captures):
     state,order = history(captures=captures)
     before = deepcopy(state)
     assert KEY not in state["engine"]["obligations"]
     result = reconcile(state,{"orders":[order]},T2)
-    assert result["engine"]["obligations"][KEY]["confirmed"] == "100.00"
-    assert result["engine"]["obligations"][KEY]["fee_estimate_complete"] is False
+    if captures:
+        assert result["engine"]["obligations"][KEY]["confirmed"] == "100.00"
+        assert result["engine"]["obligations"][KEY]["fee_estimate_complete"] is False
+        assert result["engine"]["obligations"][KEY]["business_date"] == "2026-10-05"
+    else:
+        assert KEY not in result["engine"]["obligations"]
+        assert any(i["code"] == "provider_original_capture_date_unproven" for i in result["engine"]["issues"])
     assert (not _candidates(result) and result["openings"] == before["openings"] and result["movements"] == [])
     assert reconcile(result,{"orders":[order]},T2) == result
 
@@ -110,7 +115,12 @@ def test_post_start_payment_can_follow_an_explicitly_settled_prestart_opening(ca
     ]
     before = deepcopy(state)
     result = reconcile(state, {"orders": [order]}, T2)
-    assert result["engine"]["obligations"][KEY]["confirmed"] == "100.00"
+    if captures:
+        assert result["engine"]["obligations"][KEY]["confirmed"] == "100.00"
+        assert result["engine"]["obligations"][KEY]["business_date"] == "2026-10-05"
+    else:
+        assert KEY not in result["engine"]["obligations"]
+        assert any(i["code"] == "provider_original_capture_date_unproven" for i in result["engine"]["issues"])
     assert result["openings"] == before["openings"] and result["movements"] == before["movements"]
     assert reconcile(result, {"orders": [order]}, T2) == result
 
@@ -156,13 +166,15 @@ def test_post_start_payment_stays_held_for_partial_or_excess_opening_allocation(
     assert KEY not in result["engine"]["obligations"]
 
 
-def test_pending_legacy_approval_survives_enrichment_with_a_nonconflicting_reference():
+def test_pending_legacy_approval_does_not_supply_a_missing_original_capture_date():
     state, order = history()
     authorize(state)
     order["payment"]["order_page_balance"]["transaction_reference"] = "newly-preserved-reference"
     result = reconcile(state, {"orders": [order]}, T2)
-    assert result["engine"]["obligations"][KEY]["confirmed"] == "100.00"
-    assert result["engine"]["facts"]["provider_order_balance:" + OID]["transaction_reference"] == "newly-preserved-reference"
+    assert KEY not in result["engine"]["obligations"]
+    assert "provider_order_balance:" + OID not in result["engine"]["facts"]
+    assert result[REVIEWS] == state[REVIEWS]
+    assert any(i["code"] == "provider_original_capture_date_unproven" for i in result["engine"]["issues"])
 
 
 def test_foreign_pending_approval_cannot_release_late_payment():
@@ -175,7 +187,7 @@ def test_foreign_pending_approval_cannot_release_late_payment():
 
 
 def test_prepaid_delivery_zero_custody_marker_is_not_a_cash_collection():
-    state, order = history()
+    state, order = history(captures=True)
     state["engine"]["facts"]["cod_collection:" + OID] = {"amount": "0.00", "evidence": {}}
     result = reconcile(state, {"orders": [order]}, T2)
     assert result["engine"]["obligations"][KEY]["confirmed"] == "100.00"
@@ -183,7 +195,7 @@ def test_prepaid_delivery_zero_custody_marker_is_not_a_cash_collection():
 
 def test_http_review_requires_owner_scoped_evidence_and_only_writes_idempotent_metadata():
     async def scenario(db):
-        s,order=history()
+        s,order=history(captures=True)
         await db[STATES].insert_one(s)
         app=FastAPI()
         async def user(x_test_user: str=Header(default="owner")):
@@ -209,5 +221,13 @@ def test_http_review_requires_owner_scoped_evidence_and_only_writes_idempotent_m
             assert updated["openings"]==s["openings"] and updated["movements"]==s["movements"] and updated["engine"]==s["engine"]
             assert len(updated["audit"])==1
             assert (await c.get(url)).json()["items"][0]["awaiting_refresh"]
-            assert reconcile(updated,{"orders":[order]},T2)["engine"]["obligations"][KEY]["confirmed"]=="100.00"
+            # Approval remains bound to the reviewed original capture evidence.
+            # Removing that evidence cannot reuse the approval for another source.
+            _, undated = history()
+            held = reconcile(updated,{"orders":[undated]},T2)
+            assert KEY not in held["engine"]["obligations"]
+            assert any(i["code"] == HISTORICAL for i in held["engine"]["issues"])
+            confirmed = reconcile(updated,{"orders":[order]},T2)
+            assert confirmed["engine"]["obligations"][KEY]["confirmed"] == "100.00"
+            assert confirmed["engine"]["obligations"][KEY]["business_date"] == "2026-10-05"
     run(scenario)

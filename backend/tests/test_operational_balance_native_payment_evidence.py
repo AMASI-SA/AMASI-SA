@@ -60,13 +60,15 @@ def test_native_alias_is_known_but_observation_is_not_a_dated_capture(method,pro
 
 
 @pytest.mark.parametrize('method', ['tamara_installment','tabby_installment','credit_card','emkan_installment','paypal'])
-def test_real_native_page_amount_reaches_confirmed_balance_without_invented_transaction(method):
+def test_real_native_page_amount_without_original_capture_date_stays_pending(method):
     s=source(native(method));assert s['orders'][0]['payment']['provider']==provider_for(method)
     assert not any(i['code']=='provider_capture_evidence_incomplete' for i in s['issues'])
     assert s['orders'][0]['payment']['order_page_balance']['paid']=='300.00'
     result=reconcile(state(),s,NOW)
-    obligation=result['engine']['obligations']['provider:100']
-    assert obligation['expected']=='0.00' and obligation['confirmed']=='300.00'
+    assert 'provider:100' not in result['engine']['obligations']
+    assert 'provider_order_balance:100' not in result['engine']['facts']
+    assert any(i['code']=='provider_original_capture_date_unproven'
+               for i in result['engine']['issues'])
     assert not any(k.startswith('capture:') for k in result['engine']['facts'])
     assert result['openings']=={} and result['movements']==[]
     assert reconcile(result,s,NOW)['engine']['obligations']==result['engine']['obligations']

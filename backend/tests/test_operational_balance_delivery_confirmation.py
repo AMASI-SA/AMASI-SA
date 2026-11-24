@@ -9,7 +9,7 @@ from operational_balance_store import digest
 from operational_delivery_confirmation import (BASIS, EVENT_SCHEMA, PREFIX, candidate_event,
     confirmed_event, record_confirmation, public_record, validate_record)
 from test_operational_balance_delivery_cutover import OLD, DELIVERED, NOW, START, HardBoundaryDB, active, fee_total, run
-from test_operational_balance_delivery_start_rule import undated, calculate, party, table, LATER
+from test_operational_balance_delivery_start_rule import undated, calculate, party, table, LATER, legacy_observed_state
 from test_operational_balance_delivery_start_rule import CREATED
 from test_operational_balance_sources import row
 
@@ -48,19 +48,19 @@ def test_manual_old_delivery_is_delivery_only_and_never_fabricates_date_or_cash(
     assert event['schema'] == EVENT_SCHEMA and event['recognition_basis'] == BASIS
     assert event['delivered_at'] is None and event['recorded_at'] == NOW and event['order_created_at'] == OLD
     result = reconcile(state, sources, NOW)
-    # The contract-only fixture also proves its pre-existing fixed COD service
-    # commission; that fee is independent of actual customer cash custody.
-    assert fee_total(result) == (12 if kind == 'contract_driver' else 10)
+    # The attestation preserves the owner's statement but does not establish
+    # an original delivery date. Only a separately dated native earning posts.
+    assert fee_total(result) == (10 if kind == 'native_driver' else 0)
     assert result['engine']['facts'][PREFIX + '100'] == record
-    assert public_record(result, record)['state'] == 'applied'
+    assert public_record(result, record)['state'] == 'pending_reconciliation'
     assert result['openings'] == active()['openings'] and result['movements'] == []
     assert not any(row['kind'] in {'provider', 'supplier'} for row in result['engine']['obligations'].values())
     assert 'cod_collection:100' not in result['engine']['facts']
     assert all(row['confirmed'] == '0.00' for row in result['engine']['obligations'].values() if row['kind'] == 'cod')
-    fee = result['engine']['obligations']['shipping:100:base_shipping']
-    assert fee['delivered_at'] is None and fee['recorded_at'] == NOW and 'occurred_at' not in fee
-    details = party(result, 'courier' if kind == 'courier' else 'store_driver')
-    assert details['delivered_orders'] == details['confirmed_orders'] == 1
+    if kind == 'native_driver':
+        fee = result['engine']['obligations']['shipping:100:base_shipping']
+        assert fee['delivered_at'] is None and fee['earned_at'] == DELIVERED and fee['business_date'] == '2026-10-06'
+    assert any(row['code'] == 'operational_shipping_original_date_unproven' for row in result['engine']['issues'])
     assert calculate(data, result, at=LATER)['engine']['obligations'] == result['engine']['obligations']
 
 
@@ -119,14 +119,89 @@ def test_later_arriving_actual_date_can_agree_but_never_redates_saved_record(kin
     else:
         data['store_delivery_assignments'][0]['delivered_at'] = DELIVERED
     second = calculate(data, first, at=LATER)
-    assert second['engine']['facts'] == first['engine']['facts']
-    assert second['engine']['obligations'] == first['engine']['obligations']
-    assert second['engine']['facts'][PREFIX + '100']['confirmed_at'] == record['confirmed_at']
+    assert fee_total(first) == (10 if kind == 'native_driver' else 0)
+    assert fee_total(second) == (10 if kind == 'native_driver' else 12)
+    assert second['engine']['obligations']['shipping:100:base_shipping']['confirmed'] == '10.00'
+    assert second['engine']['obligations']['shipping:100:base_shipping']['business_date'] == '2026-10-06'
+    assert second['engine']['facts'][PREFIX + '100'] == record
+    event = second['engine']['facts']['delivery_event:100']
+    assert event['schema'] == 'operational_delivery_event_v1' and event['delivered_at'] == DELIVERED
+    assert event['confirmation_id'] == record['id'] and event['confirmation_seal'] == record['seal']
+    assert public_record(second, record)['state'] == 'applied'
+    assert second['movements'] == first['movements'] and second['openings'] == first['openings']
+    assert calculate(data, second, at=LATER) == second
     raw['status_changed_at'] = LATER
-    contradicted = calculate(data, first, at=LATER)
-    assert contradicted['engine']['facts'] == first['engine']['facts']
-    assert contradicted['engine']['obligations'] == first['engine']['obligations']
+    contradicted = calculate(data, second, at=LATER)
+    assert contradicted['engine']['facts'] == second['engine']['facts']
+    assert contradicted['engine']['obligations'] == second['engine']['obligations']
     assert any(row['code'].startswith('operational_delivery_') for row in contradicted['engine']['issues'])
+
+
+@pytest.mark.parametrize('kind', ['courier', 'native_driver'])
+@pytest.mark.parametrize('fault', ['before_start', 'after_confirmation', 'ambiguous', 'party'])
+def test_pending_owner_attestation_never_admits_conflicting_later_native_proof(kind, fault):
+    data = data_for(kind)
+    state, record = confirmed(data)
+    first = calculate(data, state)
+    raw = data['unified_orders'][0]['raw_by_source']['salla_direct']
+    at = '2026-10-04T23:59:59+00:00' if fault == 'before_start' else LATER if fault == 'after_confirmation' else DELIVERED
+    if kind == 'courier':
+        raw['status_changed_at'] = at
+        raw['shipping']['delivered_at'] = at
+        raw['shipments'][0]['delivered_at'] = NOW if fault == 'ambiguous' else at
+        if fault == 'party':
+            data['unified_orders'][0]['salla_shipping_current']['company_code'] = 'replacement'
+    else:
+        data['store_delivery_assignments'][0]['delivered_at'] = at
+        if fault == 'ambiguous':
+            raw['status_changed_at'] = NOW
+        if fault == 'party':
+            data['store_delivery_assignments'][0]['driver_id'] = 'replacement'
+    held = calculate(data, first, at=LATER)
+    assert 'delivery_event:100' not in held['engine']['facts']
+    assert held['engine']['facts'] == first['engine']['facts']
+    assert held['engine']['obligations'] == first['engine']['obligations']
+    assert held['movements'] == first['movements'] and held['openings'] == first['openings']
+    assert public_record(held, record)['state'] == 'pending_reconciliation'
+    assert any(row['code'].startswith('operational_delivery_') for row in held['engine']['issues'])
+
+
+@pytest.mark.parametrize('kind', ['courier', 'native_driver'])
+def test_later_native_date_preserves_already_posted_undated_owner_financial_snapshot(kind):
+    data = data_for(kind)
+    state, record = confirmed(data)
+    legacy = legacy_observed_state(data, state)
+    first = calculate(data, legacy)
+    raw = data['unified_orders'][0]['raw_by_source']['salla_direct']
+    if kind == 'courier':
+        raw['status_changed_at'] = DELIVERED
+        raw['shipping']['delivered_at'] = DELIVERED
+        raw['shipments'][0]['delivered_at'] = DELIVERED
+    else:
+        data['store_delivery_assignments'][0]['delivered_at'] = DELIVERED
+    replay = calculate(data, first, at=LATER)
+    assert replay['engine']['facts'] == first['engine']['facts']
+    assert replay['engine']['obligations'] == first['engine']['obligations']
+    assert replay['movements'] == first['movements'] and replay['openings'] == first['openings']
+    assert replay['engine']['facts'][PREFIX + '100'] == record
+    assert replay['engine']['facts']['delivery_event:100']['delivered_at'] is None
+    assert public_record(replay, record)['state'] == 'applied'
+
+
+@pytest.mark.parametrize('patch', [
+    {'delivered_at': '2026-10-04T23:59:59+00:00'}, {'delivered_at': '2026-10-01T08:59:59+00:00'},
+    {'delivered_at': LATER}, {'delivered_at': None},
+    {'confirmation_id': 'wrong'}, {'confirmation_seal': 'wrong'},
+    {'party_id': 'other'}, {'order_created_at': NOW}, {'assignment_id': 'other'},
+])
+def test_applied_native_confirmation_requires_exact_binding_seal_and_time(patch):
+    data = data_for('native_driver')
+    state, record = confirmed(data)
+    data['store_delivery_assignments'][0]['delivered_at'] = DELIVERED
+    applied = calculate(data, state, at=LATER)
+    assert public_record(applied, record)['state'] == 'applied'
+    applied['engine']['facts']['delivery_event:100'].update(patch)
+    assert public_record(applied, record)['state'] == 'pending_reconciliation'
 
 
 @pytest.mark.parametrize('change', ['party', 'assignment', 'start', 'seal', 'owner'])
@@ -165,16 +240,15 @@ def test_manual_tariff_window_starts_at_opening_not_at_old_order_creation():
     current['effective_from'] = START
     setup['contracts'].append(old)
     state, _ = confirmed(data)
-    assert fee_total(calculate(data, state)) == 10
+    first = calculate(data, state)
+    assert fee_total(first) == 0
+    assert any(row['code'] == 'operational_shipping_original_date_unproven' for row in first['engine']['issues'])
     current['effective_to'] = DELIVERED
     setup['contracts'].append({**current, 'id': 'changed-price', 'delivery_fee': '20',
                                'effective_from': DELIVERED, 'effective_to': None})
     result = calculate(data, state)
     assert fee_total(result) == 0
-    row = party(result, 'courier')
-    assert row['delivered_orders'] == 1 and row['confirmed_orders'] == 0
-    assert any(reason['code'] == 'shipping_delivery_tariff_period_unproven'
-               for detail in row['pending_order_details'] for reason in detail['reasons'])
+    assert any(reason['code'] == 'shipping_delivery_tariff_period_unproven' for reason in result['engine']['issues'])
 
 
 def test_unallocated_old_courier_payout_holds_money_but_retains_delivery_count():
@@ -184,7 +258,7 @@ def test_unallocated_old_courier_payout_holds_money_but_retains_delivery_count()
         'party_type': 'courier', 'party_id': 'carrier', 'currency': 'SAR', 'amount': '9.00', 'allocations': []}]
     result = calculate(data, state)
     assert fee_total(result) == 0 and result['movements'] == state['movements']
-    assert party(result, 'courier')['delivered_orders'] == 1
+    assert party(result, 'courier')['delivered_orders'] == 0
     assert any(row['code'] == 'courier_fee_historical_review_required' for row in result['engine']['issues'])
 
 
@@ -201,8 +275,8 @@ def test_manual_saved_proof_rechecks_local_negative_history_for_both_executors(k
     data['order_activity_events_v2'] = [row(order_number='10', provider_order_id='100', source='salla_history',
         source_event_id='negative', native_status_transition=[{'delivered': False, 'at': at}])]
     result = calculate(data, state)
-    assert ('delivery_event:100' not in result['engine']['facts']) is blocked
-    assert fee_total(result) == (0 if blocked else 10)
+    assert 'delivery_event:100' not in result['engine']['facts']
+    assert fee_total(result) == (10 if kind == 'native_driver' and not blocked else 0)
     if blocked:
         item = party(result, 'courier' if kind == 'courier' else 'store_driver')['pending_order_details'][0]
         assert item['delivery_after_start_confirmation']['state'] == 'pending_reconciliation'
@@ -221,11 +295,11 @@ def test_missing_canonical_source_keeps_saved_proof_visible_without_inventing_se
                for reason in info['pending_order_details'][0]['reasons'])
 
 
-def test_actual_projection_exposes_positive_applied_evidence_with_unknown_delivery_time():
+def test_legacy_saved_projection_preserves_applied_attestation_with_unknown_delivery_time():
     from operational_financial_position import build_financial_position
     data = data_for()
     state, record = confirmed(data)
-    result = calculate(data, state)
+    result = legacy_observed_state(data, state)
     projection = build_financial_position(result)
     detail = next(row for row in projection['currencies']['SAR']['deliveries']['rows'] if row['order_id'] == '100')
     assert detail['order_number'] == '10' and detail['party_type'] == 'courier' and detail['party_id'] == 'carrier'
@@ -244,7 +318,7 @@ def test_stale_saved_delivery_cannot_fall_back_after_status_and_identity_downgra
     state, _ = confirmed(data)
     if saved_kind == 'automatic':
         data = undated('contract_driver')
-        event = calculate(data)['engine']['facts']['delivery_event:100']
+        event = legacy_observed_state(data)['engine']['facts']['delivery_event:100']
         state = {**active(), 'engine': {'facts': {'delivery_event:100': event}}}
     elif saved_kind in {'manual_empty', 'manual_null'}:
         state['engine']['facts'][PREFIX + '100'] = {} if saved_kind == 'manual_empty' else None
@@ -269,13 +343,13 @@ def test_stale_saved_delivery_cannot_fall_back_after_status_and_identity_downgra
 
 def test_stale_saved_automatic_delivery_keeps_the_original_booked_fee_without_new_effect():
     data = undated('contract_driver')
-    state = calculate(data)
+    state = legacy_observed_state(data)
     source = data['unified_orders'][0]
     source['raw_by_source']['salla_direct']['status'] = 'cancelled'
     data['store_delivery_assignments'][0].pop('order_id')
     result = calculate(data, state, at=LATER)
     assert result['engine']['facts'] == state['engine']['facts']
-    assert result['engine']['obligations'] == state['engine']['obligations']
+    assert {key: result['engine']['obligations'][key] for key in state['engine']['obligations']} == state['engine']['obligations']
     assert fee_total(result) == fee_total(state) == 12
     assert result['engine']['obligations']['shipping:100:base_shipping']['confirmed'] == '10.00'
     assert result['engine']['obligations']['shipping:100:cod_commission']['confirmed'] == '2.00'

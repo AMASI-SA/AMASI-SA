@@ -7,6 +7,7 @@ import pytest
 from operational_balance_engine import instant, reconcile
 from operational_order_page_payment import observed_balance
 from operational_reconciliation_state import ReconciliationMap
+from operational_test_delivery import native_delivery
 from test_operational_balance_engine import NOW, initial, order, policy
 
 
@@ -32,7 +33,20 @@ def _replay_work(count, without_carrier=False, page_mode=False):
                 "source_updated_at": row["updated_at"],
             }}
     sources = {"orders": orders, "fee_policies": [policy()]}
-    saved = reconcile({**initial(), "owner_id": "owner"}, sources, NOW)
+    base = {**initial(), "owner_id": "owner"}
+    if page_mode:
+        # Exercise replay of existing page-only history. New undated paid
+        # observations cannot create money under the original-date contract.
+        base["engine"] = {"facts": {}, "obligations": {}}
+        for row in orders:
+            key = "provider:" + row["id"]
+            base["engine"]["facts"]["provider_order_balance:" + row["id"]] = {
+                **row["payment"]["order_page_balance"], "observed_at": NOW}
+            base["engine"]["obligations"][key] = {"id": key, "kind": "provider",
+                "party_type": "provider", "party_id": "tabby", "currency": "SAR",
+                "confirmed": "1000.00", "expected": "0.00", "direction": "receivable",
+                "business_date": "2026-10-08"}
+    saved = reconcile(base, sources, NOW)
     assert len(saved["engine"]["provider_reports"]) == count
     assert all(saved["engine"]["obligations"]["provider:" + row["id"]]["confirmed"] == "1000.00"
                for row in orders)
@@ -97,7 +111,8 @@ def test_provider_failure_discards_only_its_facts_and_next_order_can_use_referen
     payment = {"provider": "tabby", "gross": "1000", "captures": [
         {"id": "retry-reference", "amount": "500", "captured_at": NOW},
         {"id": "bad-reference", "amount": "600", "captured_at": NOW}]}
-    failed = order(id="failed", status="delivered", payment=payment)
+    failed = native_delivery(order(id="failed", status="delivered", payment=payment),
+                             "2026-10-07T11:00:00+00:00")
     good = order(id="good", payment={"provider": "tabby", "gross": "1000", "captures": [
         {"id": "retry-reference", "amount": "500", "captured_at": NOW}]})
     output = reconcile(initial(), {"orders": [failed, good], "fee_policies": [policy()]}, NOW)

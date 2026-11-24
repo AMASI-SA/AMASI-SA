@@ -10,6 +10,7 @@ from operational_payment_evidence import (
     PaymentEvidenceError, _amount, _identity, _instant, _method_rows, _single,
     normalize_payment, provider_for,
 )
+from operational_provider_capture_batches import FIELD as BATCH_FIELD, PENDING_CODE, PENDING_FIELD, expand_batches
 
 COLLECTION = "order_payment_transactions_v2"
 VERSION = "salla_transaction_evidence_v1"
@@ -57,6 +58,7 @@ def native_transaction_evidence(row, provider_order_id):
 
 def normalize_transaction_payment(raw, currency, total, created_at, as_of, *, owner,
                                   order_number, provider_order_id, rows, page_balance=None):
+    rows = expand_batches(rows)
     payment, issues = normalize_payment(raw, currency, total, created_at, as_of, page_balance=page_balance is not None)
     if not rows or payment is None:
         return payment, issues
@@ -249,9 +251,18 @@ def normalize_operational_payment(raw, currency, total, created_at, as_of, *, ow
                                   provider_order_id, rows, source):
     """Use the order detail's final documented amounts, retaining transaction conflicts."""
     from salla_payment_collection import provider_order_page_current, provider_order_page_balance, settled_payment_snapshot
+    rows = expand_batches(rows)
 
     payment_raw = raw.get("payment") or {}
     provider = provider_for(raw.get("payment_method") or (payment_raw.get("method") if isinstance(payment_raw, dict) else None))
+    if source.get(PENDING_FIELD) is not None:
+        parties = {provider} if provider else set()
+        methods = raw.get("payment_methods")
+        if isinstance(methods, list) and len(methods) <= 100:
+            parties.update(party for method in methods if isinstance(method, dict)
+                if (party := provider_for(method.get("payment_method"))))
+        return None, [{"code": PENDING_CODE, "provider": party, "currency": currency,
+                       "missing_fields": ["capture_timestamp"]} for party in sorted(parties)] or [{"code": PENDING_CODE}]
     if not provider:
         methods = raw.get("payment_methods")
         if isinstance(methods, list) and any(isinstance(m, dict) and provider_for(m.get("payment_method")) for m in methods):
@@ -329,8 +340,10 @@ def normalize_operational_payment(raw, currency, total, created_at, as_of, *, ow
 
 
 async def load_transaction_rows(db, owner, orders, start, now, *, to_instant, max_rows):
-    """One bounded order-index query per batch. No foreign, uncapped, or per-order read."""
+    """Bounded legacy/envelope order-index reads. No foreign or per-order read."""
     from operational_balance_bank_orders import is_bank_split
+    from operational_provider_capture_cursor import read_capture_rows
+    from operational_read_runtime import read_source_cursor
 
     if not isinstance(owner, str) or not owner.strip() or owner != owner.strip():
         raise ValueError("operational_source_owner_mismatch")
@@ -381,11 +394,23 @@ async def load_transaction_rows(db, owner, orders, start, now, *, to_instant, ma
             continue  # main reader reports malformed canonical orders
     numbers, groups, count = sorted(keys), defaultdict(list), 0
     projection = {"_id":0, **{k:1 for k in ("user_id","source","order_number","provider_order_id",
-                                               "transaction_id","native_transaction_evidence")}}
+                                               "transaction_id","native_transaction_evidence", "fingerprint", BATCH_FIELD)}}
+    legacy_projection = {key: value for key, value in projection.items() if key != BATCH_FIELD}
     for offset in range(0, len(numbers), 250):
         batch = numbers[offset:offset+250]
         query = {"user_id":owner, "order_number":{"$in":batch}, "source":"salla_transactions"}
-        matches = await db[COLLECTION].find(query, projection).to_list(max_rows-count+1)
+        remaining = max_rows - count
+        # Ordinary observations retain normal driver batches. Only the new
+        # potentially large atomic envelopes need the small streaming batch.
+        legacy = await read_source_cursor(db[COLLECTION].find(
+            {**query, BATCH_FIELD: {"$exists": False}}, legacy_projection), remaining + 1)
+        if type(legacy) is not list:
+            raise ValueError("operational_source_read_invalid")
+        if len(legacy) > remaining:
+            raise ValueError("operational_source_scope_too_large")
+        envelopes = await read_capture_rows(db[COLLECTION].find(
+            {**query, BATCH_FIELD: {"$exists": True}}, projection), max_rows=remaining-len(legacy))
+        matches = legacy + envelopes
         count += len(matches)
         if count > max_rows:
             raise ValueError("operational_source_scope_too_large")

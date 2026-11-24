@@ -73,15 +73,18 @@ class Collection:
                            and "native_status_transition" in r and ("native_status_transition.delivered" not in query
                            or any(proof.get("delivered") is True for proof in r["native_status_transition"]))])
         if self.name == "order_payment_transactions_v2":
-            assert set(query) == {"user_id", "order_number", "source"}
+            assert set(query) == {"user_id", "order_number", "source", "native_transaction_batch"}
             assert query["user_id"] == "owner" and query["source"] == "salla_transactions"
+            assert query["native_transaction_batch"] in ({"$exists": False}, {"$exists": True})
+            envelopes = query["native_transaction_batch"]["$exists"]
             numbers = query["order_number"]["$in"]
             assert 0 < len(numbers) <= 250
             assert projection and set(projection) == {"_id","user_id","source","order_number",
-                "provider_order_id","transaction_id","native_transaction_evidence"} and projection["_id"] == 0
+                "provider_order_id","transaction_id","native_transaction_evidence", "fingerprint"} | ({"native_transaction_batch"} if envelopes else set()) and projection["_id"] == 0
             self.db.reads.append(self.name)
             return Cursor([r for r in self.db.data.get(self.name, []) if r.get("user_id") == query["user_id"]
-                           and r.get("source") == query["source"] and r.get("order_number") in numbers])
+                           and r.get("source") == query["source"] and r.get("order_number") in numbers
+                           and ("native_transaction_batch" in r) is envelopes])
         if self.name in HARD_BUNDLE_READ_ALLOWLIST:
             check_bundle_query(self.name, query)
             assert not self.db.data.get(self.name), 'Use a real Mongo fixture for populated native bundle sources'
@@ -98,7 +101,7 @@ class Collection:
             identity_fields = {'_id', 'user_id', 'shipping_companies.name', 'shipping_companies.salla_carrier_key',
                 *('shipping_companies.' + key for key in ('status', 'active', 'is_active', 'archived', 'deleted', 'is_deleted', 'is_archived'))}
             fee_fields = {'_id', 'user_id', 'payment_methods', 'updated_at'}
-            assert set(projection) in (identity_fields, fee_fields)
+            assert set(projection) in (identity_fields, fee_fields, identity_fields | fee_fields)
         if self.name == 'users':
             assert query == {'$or': [{'id': 'owner', 'role': 'owner'}, {'created_by': 'owner', 'role': 'admin'}]}
             self.db.reads.append(self.name)

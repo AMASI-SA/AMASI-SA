@@ -54,6 +54,8 @@ def test_shipping_exception_does_not_hide_possible_customer_money(invalid):
 def test_shipping_expense_and_provider_receivable_survive_repeated_reconciliation():
     from operational_balance_engine import reconcile
     state, order, payment = with_shipping()
+    payment['captures'] = [{'id': 'native-provider-receipt', 'amount': '100.00',
+                            'captured_at': '2026-11-16T12:00:00+00:00'}]
     state.update(status='active', revision=1)
     before = deepcopy(state)
     result = reconcile(state, {'orders': [order]}, NOW)

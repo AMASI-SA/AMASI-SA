@@ -488,6 +488,9 @@ async def read_order_activity(
             {
                 "user_id": str(user_id),
                 "order_number": order_number,
+                # Internal atomic source batches are consumed only by the
+                # financial evidence reader, never displayed as transactions.
+                "native_transaction_batch": {"$exists": False},
             },
             {"_id": 0},
         )

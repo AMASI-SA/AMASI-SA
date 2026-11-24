@@ -13,17 +13,48 @@ def _positive(value):
         return False
 
 
+def _index_review_movements(state, requested):
+    """One local pass; retain only requested string IDs and a duplicate marker.
+
+    Nonstring saved IDs keep the original equality lookup, including None,
+    unhashable values and bool/int equality. No malformed row is normalized.
+    """
+    if not requested:
+        return {}
+    movements = state.get('movements', [])
+    if not isinstance(movements, (list, tuple)):
+        return None
+    index = {}
+    for movement in movements:
+        identity = movement.get('id')
+        if type(identity) is not str:
+            return None
+        if identity in requested:
+            index[identity] = (2, None) if identity in index else (1, movement)
+    return index
+
+
 def validated_review_facts(state):
-    valid, issues = [], []
+    valid, issues, candidates, requested = [], [], [], set()
     for identity, row in (state.get('driver_payment_review_facts') or {}).items():
         ok = (isinstance(row, dict) and row.get('id') == identity and row.get('financial_source') == 'operational'
               and row.get('seal') == digest({k: v for k, v in row.items() if k != 'seal'})
               and _positive(row.get('amount')) and row.get('currency') == 'SAR' and row.get('order_id') and row.get('driver_id')
               and state.get('owner_id') and identity == digest([state['owner_id'], 'operational-driver-review',
                   row.get('review_id'), row.get('review_revision')]))
+        candidates.append((identity, row, ok))
+        if ok and row.get('payment_method') == 'bank_transfer' and type(row.get('movement_id')) is str:
+            requested.add(row['movement_id'])
+    indexed = _index_review_movements(state, requested)
+    for identity, row, ok in candidates:
         if ok and row.get('payment_method') == 'bank_transfer':
-            matches = [m for m in state.get('movements', []) if m.get('id') == row.get('movement_id')]
-            effect = matches[0] if len(matches) == 1 else {}
+            movement_id = row.get('movement_id')
+            if indexed is not None and type(movement_id) is str:
+                count, first = indexed.get(movement_id, (0, None))
+                effect = first if count == 1 else {}
+            else:
+                matches = [m for m in state.get('movements', []) if m.get('id') == movement_id]
+                effect = matches[0] if len(matches) == 1 else {}
             ok = (row.get('destination_type') == 'bank' and effect.get('driver_review_event_id') == identity
                   and effect.get('direction') == 'incoming' and effect.get('bank_id') == row.get('destination_id')
                   and effect.get('party_type') == effect.get('bank_kind') == 'bank' and effect.get('allocations') == []

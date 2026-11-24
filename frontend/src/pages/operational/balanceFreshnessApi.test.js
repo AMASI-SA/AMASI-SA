@@ -33,7 +33,7 @@ test('actual API adapter preserves the server visible/scope body and 90-second r
   http.post.mockResolvedValueOnce({ data: { status: 'refreshed', session_scope: scope, as_of: CURRENT, revision: 11 } });
   const onConfirmed = jest.fn();
   const client = balanceFreshnessManager.attach({ actor: 'owner', scope, canRefresh: true, onChange: jest.fn(), onConfirmed });
-  await client.check();
+  await client.check(true);
   expect(http.post).toHaveBeenCalledTimes(1);
   expect(http.post).toHaveBeenCalledWith('/operational-balances/refresh', { visible: true, expected_session_scope: scope },
     expect.objectContaining({ timeout: 90000, signal: expect.any(AbortSignal) }));
@@ -44,7 +44,15 @@ test('existing refresh helper lease-warning resolution cannot report success', a
   http.post.mockRejectedValueOnce({ response: { status: 409, data: { detail: { code: 'operational_refresh_in_progress' } } } });
   const onConfirmed = jest.fn(), onChange = jest.fn();
   const client = balanceFreshnessManager.attach({ actor: 'owner', scope, canRefresh: true, onChange, onConfirmed });
-  await client.check();
+  await client.check(true);
   expect(http.post).toHaveBeenCalledTimes(1); expect(http.get).toHaveBeenCalledTimes(1);
   expect(onConfirmed).not.toHaveBeenCalled(); expect(onChange.mock.calls.at(-1)[0].phase).toBe('unknown'); client.close();
+});
+test('a stale page check through the real adapter remains a read-only operation', async () => {
+  const scope = 'api-stale-read'; http.get.mockResolvedValueOnce({ data: health(scope) });
+  const onConfirmed = jest.fn(), onChange = jest.fn();
+  const client = balanceFreshnessManager.attach({ actor: 'owner', scope, canRefresh: true, onChange, onConfirmed });
+  await client.check();
+  expect(http.get).toHaveBeenCalledTimes(1); expect(http.post).not.toHaveBeenCalled();
+  expect(onConfirmed).not.toHaveBeenCalled(); expect(onChange.mock.calls.at(-1)[0].phase).toBe('stale'); client.close();
 });

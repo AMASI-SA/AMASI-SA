@@ -5,6 +5,7 @@ import pytest
 
 from operational_balance_access import normalized_policy
 from operational_balance_store import STATES, digest, initial
+from operational_test_delivery import native_delivery
 from tests.test_operational_balance_workspace import BASE, entry, grant, resource, run
 
 
@@ -275,6 +276,9 @@ def test_real_engine_delivery_history_and_direct_bank_evidence_do_not_double_dri
             "cod_amount": "100.00" if day == "2026-11-09" else "0.00"} for i, day in enumerate(days)]
         orders += [{**orders[-1], "id": "pending-" + str(i), "status": "in_progress", "cod_amount": value}
                    for i, value in enumerate(["200.00", "300.00", "400.00"])]
+        for order in orders:
+            if order["status"] == "delivered":
+                native_delivery(order, order["delivered_at"])
         state = reconcile(state, {"orders": orders}, "2026-11-18T12:00:00+00:00")
         evidence, _ = recorded("bank_transfer")
         fact = next(iter(evidence["driver_payment_review_facts"].values()))
@@ -322,6 +326,7 @@ def test_multi_component_delivery_counts_once_without_fabricated_summary_balance
              "cod_amount": "0.00", "carrier": {"id": "courier", "party_type": "courier", "currency": "SAR",
              "cost": "25.00", "fee_components": [{"id": "base_shipping", "amount": "20.00", "complete": True},
                  {"id": "cod_commission", "amount": "5.00", "complete": True}]}}
+    native_delivery(order, order["delivered_at"])
     state = reconcile(state, {"orders": [order]}, "2026-11-18T12:00:00+00:00")
     computed = report(state)
     current = next(row for row in computed["parties"] if row["party_type"] == "courier")

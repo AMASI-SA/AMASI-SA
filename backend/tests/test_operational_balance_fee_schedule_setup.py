@@ -74,7 +74,8 @@ def test_dated_capture_uses_riyadh_payment_date_and_undated_page_rejects_a_rate_
     order["payment"] = page
     unknown = reconcile(state(), {"orders": [order], "fee_policies": rates}, T2)
     assert KEY not in unknown["engine"]["provider_reports"]
-    assert unknown["engine"]["obligations"][KEY]["confirmed"] == "100.00"
+    assert KEY not in unknown["engine"]["obligations"]
+    assert any(i["code"] == "provider_original_capture_date_unproven" for i in unknown["engine"]["issues"])
     # A temporary specific tariff wholly inside a wider window also precludes choosing the broad rate.
     broad = {**old, "provider": "salla", "effective_to": None}
     narrow = {**new, "provider": "salla", "payment_method": "mada", "effective_from":"2026-10-03", "effective_to":"2026-10-04"}

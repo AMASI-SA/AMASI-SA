@@ -11,7 +11,7 @@ jest.mock('./api', () => ({
 }));
 jest.mock('./OpeningBalances', () => ({OpeningBalances: () => null,
   Notice: ({error}) => error ? <p role="alert">{error}</p> : null}));
-jest.mock('./DailyMovements', () => () => null);
+jest.mock('./DailyMovements', () => ({onSaved}) => <button onClick={onSaved}>تم حفظ حركة</button>);
 jest.mock('./SupplierReturn', () => () => null);
 jest.mock('./InventoryPurchases', () => () => null);
 jest.mock('./InventoryAvailability', () => () => null);
@@ -29,7 +29,7 @@ const report = (value = '123.45') => ({parties: [], obligations: [], details: {}
   as_of: '2026-11-11T20:00:00Z', summaries: {SAR: {actual_liquidity: value}}});
 const deferred = () => {let resolve, reject; const promise = new Promise((a, b) => {resolve = a; reject = b;}); return {promise, resolve, reject};};
 let host, root, visible, online;
-const render = async () => {await act(async () => root.render(<OperationalBalances/>));};
+const render = async (props = {}) => {await act(async () => root.render(<OperationalBalances {...props}/>));};
 const advance = async duration => {await act(async () => jest.advanceTimersByTime(duration));};
 const audit = () => [...host.querySelectorAll('details')].find(element => element.querySelector('summary')?.textContent === 'سجل التدقيق');
 const toggleAudit = async open => {await act(async () => {
@@ -296,4 +296,82 @@ test('detailed Reports reached through the approved directory reads saved balanc
     await advance(90000);
     expect(api.refreshBalances).toHaveBeenCalledTimes(1);
   } finally { window.history.replaceState(null, '', previous); }
+});
+
+test.each([
+  ['legacy direct mount', undefined, '/operational-balances'],
+  ['non-specialized report link', 'mezan2', '/operational-balances?section=reports'],
+  ['employee app', 'employee_app', '/operational-balances?source=employee_app'],
+])('%s reads saved balances on entry, tab return and visibility; only its explicit button refreshes sources', async (_name, source, path) => {
+  const previous = window.location.href;
+  try {
+    window.history.replaceState(null, '', path);
+    api.context.mockResolvedValue({...context(), permissions: {...context().permissions, move: true}});
+    await render({source});
+    if (source === 'employee_app') await click('الأرصدة والتقارير التشغيلية');
+    expect(api.reports).toHaveBeenCalledTimes(1);
+    expect(api.refreshBalances).not.toHaveBeenCalled();
+    expect(host.textContent).toContain('آخر أرصدة محفوظة بتاريخها');
+    expect(host.textContent).not.toContain('تُحتسب أثناء فتح التقرير');
+    await click('الحركات المالية اليومية');
+    await click('الأرصدة والتقارير التشغيلية');
+    expect(api.reports).toHaveBeenCalledTimes(2);
+    visible.mockReturnValue('hidden');
+    await act(async () => document.dispatchEvent(new Event('visibilitychange')));
+    visible.mockReturnValue('visible');
+    await act(async () => document.dispatchEvent(new Event('visibilitychange')));
+    await advance(300000);
+    expect(api.refreshBalances).not.toHaveBeenCalled();
+    await click('تحديث الأرصدة');
+    expect(api.context).toHaveBeenCalledTimes(2);
+    expect(api.refreshBalances).toHaveBeenCalledTimes(1);
+    expect(api.reports).toHaveBeenCalledTimes(3);
+    await advance(300000);
+    expect(api.refreshBalances).toHaveBeenCalledTimes(1);
+  } finally { window.history.replaceState(null, '', previous); }
+});
+
+test.each(['', '?view=specialized&section=reports'])('successful wallet source mutation retains one deliberate refresh for %s', async search => {
+  const previous = window.location.href;
+  try {
+    window.history.replaceState(null, '', '/operational-balances' + search);
+    await render();
+    expect(api.refreshBalances).not.toHaveBeenCalled();
+    await click('تم حفظ المصدر');
+    expect(api.refreshBalances).toHaveBeenCalledTimes(1);
+    expect(api.reports).toHaveBeenCalledTimes(2);
+    await advance(300000);
+    expect(api.refreshBalances).toHaveBeenCalledTimes(1);
+  } finally { window.history.replaceState(null, '', previous); }
+});
+
+test.each([undefined, 'employee_app'])('committed movement in %s rereads its saved report without calculating sources', async source => {
+  api.context.mockResolvedValue({...context(), permissions: {...context().permissions, move: true}});
+  await render({source});
+  await click('الحركات المالية اليومية');
+  const priorReads = api.reports.mock.calls.length;
+  await click('تم حفظ حركة');
+  expect(api.reports).toHaveBeenCalledTimes(priorReads);
+  await click('الأرصدة والتقارير التشغيلية');
+  expect(api.reports).toHaveBeenCalledTimes(priorReads + 1);
+  expect(api.refreshBalances).not.toHaveBeenCalled();
+});
+
+test('hiding an active explicit source refresh aborts it and visibility only resumes a saved read', async () => {
+  const updating = deferred();
+  await render();
+  expect(api.refreshBalances).not.toHaveBeenCalled();
+  api.refreshBalances.mockReturnValueOnce(updating.promise);
+  await click('تحديث الأرصدة');
+  expect(api.refreshBalances).toHaveBeenCalledTimes(1);
+  const signal = api.refreshBalances.mock.calls[0][0].signal;
+  visible.mockReturnValue('hidden');
+  await act(async () => document.dispatchEvent(new Event('visibilitychange')));
+  expect(signal.aborted).toBe(true);
+  visible.mockReturnValue('visible');
+  await act(async () => document.dispatchEvent(new Event('visibilitychange')));
+  expect(api.refreshBalances).toHaveBeenCalledTimes(1);
+  await act(async () => updating.resolve({status: 'refreshed'}));
+  expect(api.refreshBalances).toHaveBeenCalledTimes(1);
+  expect(api.reports).toHaveBeenCalledTimes(2);
 });

@@ -14,6 +14,7 @@ import { useOptionalAuth } from "../context/AuthContext";
 import CapabilityMatrix from "../components/integrationsV2/CapabilityMatrix";
 import IntegrationActivityPanel from "../components/integrationsV2/IntegrationActivityPanel";
 import IntegrationCard from "../components/integrationsV2/IntegrationCard";
+import HistoricalAdSpendRefreshControl from "../components/integrationsV2/HistoricalAdSpendRefreshControl";
 import FinancialProviderAppsWorkspace from "./FinancialProviderAppsWorkspace";
 import {
     focusedIntegrationProvider,
@@ -93,7 +94,7 @@ function PageSkeleton() {
 
 export default function AppsIntegrationsControlCenter() {
     const navigate = useNavigate();
-    const { user } = useOptionalAuth() || {};
+    const { user, authStatus } = useOptionalAuth() || {};
     const isMetaReviewer = user?.role === "meta_reviewer";
     const [searchParams] = useSearchParams();
     const [overview, setOverview] = useState(() => normalizeIntegrationOverview({}));
@@ -505,6 +506,9 @@ export default function AppsIntegrationsControlCenter() {
 
             {activeTab === "apps" && (
                 <>
+                    {(accountsWorkspace || ["google_ads", "meta_ads", "tiktok_ads"].includes(focusedProvider)) && (
+                        <HistoricalAdSpendRefreshControl user={user} sessionReady={authStatus === "authenticated"} />
+                    )}
                     <section className="grid gap-3 rounded-xl border border-slate-200 bg-white p-3 lg:grid-cols-[minmax(260px,1fr)_auto] lg:items-center">
                         <div className="relative">
                             <MagnifyingGlass

@@ -14,7 +14,7 @@ OPENING = '2026-11-01T00:30:01.284707+03:00'
 AS_OF = '2026-11-07T12:00:00+00:00'
 
 
-def november_order(data):
+def november_order(data, *, dated=False):
     source = data['unified_orders'][0]
     raw = source['raw_by_source']['salla_direct']
     raw.update(created_at='2026-11-02T01:00:00+00:00', updated_at=AS_OF)
@@ -22,6 +22,12 @@ def november_order(data):
         source['g47_salla_snapshot']['source_updated_at'] = AS_OF
     for row in data.get('store_delivery_driver_earnings', []):
         row['earned_at'] = '2026-11-04T12:00:00+00:00'
+    if dated:
+        raw['status_changed_at'] = '2026-11-04T12:00:00+00:00'
+        for shipment in [raw.get('shipping', {}), *raw.get('shipments', [])]:
+            shipment['delivered_at'] = raw['status_changed_at']
+        for assignment in data.get('store_delivery_assignments', []):
+            assignment['delivered_at'] = raw['status_changed_at']
     return data
 
 
@@ -34,7 +40,7 @@ def calculate(data, prior=None):
 
 @pytest.mark.parametrize(('fixture_kind', 'view'), [('courier', 'couriers'), ('native_driver', 'drivers')])
 def test_later_status_preserves_count_original_fee_and_custody(fixture_kind, view):
-    data = november_order(undated(fixture_kind))
+    data = november_order(undated(fixture_kind), dated=True)
     source = data['unified_orders'][0]
     original = calculate(data)
     key = 'salla_delivered_order:100'
@@ -64,7 +70,8 @@ def test_salla_status_and_creation_survive_stale_snapshot_missing_waybill():
     source['salla_shipping_current'].pop('tracking_number', None)
     first = calculate(data)
     assert first['engine']['delivery_register']['salla_delivered_order:100']['party_type'] == 'courier'
-    assert first['engine']['obligations']['shipping:100:base_shipping']['confirmed'] == '10.00'
+    assert 'shipping:100:base_shipping' not in first['engine']['obligations']
+    assert any(row['code'] == 'operational_shipping_original_date_unproven' for row in first['engine']['issues'])
     second = calculate(deepcopy(data), prior=first)
     assert fee_total(second) == fee_total(first)
     assert second['movements'] == first['movements']
@@ -82,8 +89,8 @@ def test_aramex_completion_and_later_delivery_keep_one_wallet_debit():
     data, state = fixture(old=False, current='completed', at=None)
     november_order(data)
     source = data['unified_orders'][0]
-    source['g47_salla_snapshot']['requires_authoritative_refresh'] = True
     raw = source['raw_by_source']['salla_direct']
+    raw['status_changed_at'] = '2026-11-04T12:00:00+00:00'
     for status in ('completed', 'delivered', 'canceled', 'restored'):
         raw['status'] = status
         state = calculate(data, state)

@@ -83,7 +83,7 @@ MAX_ROWS = 20000
 # whole: dotted projections could hide malformed shapes or conflicting proof.
 REFRESH_ORDER_FIELDS = (
     'user_id', 'raw_by_source', 'g47_salla_snapshot', 'salla_shipping_current',
-    'salla_paid_sar_evidence', 'salla_bank_in_progress_proof', 'order_id', 'salla_order_id', 'order_number',
+    'salla_paid_sar_evidence', 'salla_bank_in_progress_proof', 'salla_provider_capture_pending', 'order_id', 'salla_order_id', 'order_number',
     'order_status', 'order_status_slug', 'last_salla_direct_status_source_updated_at', 'is_cancelled', 'cancelled',
     'merchant', 'merchant_id', 'store_id', 'salla_shipment_id', 'tracking_number',
     'shipping_number', 'shipping_company_code', 'shipping_company',
@@ -1358,16 +1358,25 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
     # The inventory catalogue is read on demand, not on each financial sync.
     with refresh_stage('source_primary_reads'):
         from operational_read_runtime import load_collections
+        # Start the large order cursor in the first bounded wave. Alphabetical
+        # order left it last, leaving less of the overall deadline for its read.
+        # Every collection still completes under the same concurrency/deadlines.
         source_names = sorted(ALLOWED_COLLECTIONS - BUNDLE_READ_COLLECTIONS - STATEMENT_COLLECTIONS - {TXN_COLLECTION,
             DELIVERY_HISTORY, SHIPPING_EVENT_BLOCKERS, SHIPPING_V2_BLOCKERS, 'users', 'settings', 'expense_categories',
-            'mezan_products_v2', 'mz2_opening_facts_v2', 'accounts', 'mz2_operational_bank_accounts'})
+            'mezan_products_v2', 'mz2_opening_facts_v2', 'accounts', 'mz2_operational_bank_accounts'},
+            key=lambda name: (name != 'unified_orders', name))
         data = await load_collections(db, owner, source_names, reader=refresh_source_rows,
                                       observe_primary_orders=True)
     if on_primary_reads_complete is not None:
         on_primary_reads_complete()
     with refresh_stage('source_fee_settings'):
         fee_settings = await db['settings'].find({'user_id': owner}, {
-            '_id': 0, 'user_id': 1, 'payment_methods': 1, 'updated_at': 1}).to_list(2)
+            '_id': 0, 'user_id': 1, 'payment_methods': 1, 'updated_at': 1,
+            **{'shipping_companies.' + key: 1 for key in ('name', 'salla_carrier_key', 'status',
+                'active', 'is_active', 'archived', 'deleted', 'is_archived', 'is_deleted')}}).to_list(2)
+        # Identity-only additions share the existing bounded owner settings read.
+        # They authorize no rate, charge or financial movement.
+        data['settings'] = fee_settings
         out['provider_fee_settings'] = {}
         modes = {row.get('fee_source_mode') for row in data['mz2_provider_fee_policies_v2'] if row.get('fee_source_mode')}
         out['provider_fee_source_mode'] = 'mz2_policies' if 'mz2_policies' in modes else 'legacy_settings'
@@ -2146,6 +2155,8 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                   order_id=oid, order_number=record['order_number'], party_type=record['party_type'], party_id=record['party_id'])
         finish_coverage(customer_tenders, counted_order_ids - inspected_order_ids)
         finish_issue_index(out)
+        from operational_entity_freshness import source_entities
+        out['automatic_source_entities'] = await prepare_in_thread(source_entities, data, operational_state or {}, out)
         return out
 
 

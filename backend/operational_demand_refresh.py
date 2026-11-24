@@ -1,9 +1,11 @@
-"""Visible-page refresh lifetime; no scheduler, polling or detached work.
+"""Owned refresh lifetimes; the visible HTTP contract remains request-owned.
 
 The HTTP request owns reads, calculation, a short distributed lease, and its
 disconnect listener. Cancellation joins each owned task. Once an aggregate
 commit starts, its exact result is observed before releasing the lease.
 Ordinary operational writers never enter this context and retain their gates.
+An explicitly enabled owner scheduler has a separate non-HTTP lifecycle below;
+it shares the same lease, deadline, source limits, and joined calculation/CAS.
 """
 import asyncio
 from collections import deque
@@ -395,6 +397,117 @@ async def run_visible_refresh(request, db, owner, actor, verify, operation):
             await _join(cleanup)
         except (PyMongoError, asyncio.TimeoutError):
             _LOG.warning("Operational refresh lease cleanup unavailable; lease will expire")
+        finally:
+            AUTHORIZATION_GUARD.reset(guard_token)
+            _CURRENT.reset(token)
+
+
+class ScheduledRefreshContext(DemandRefreshContext):
+    """An enabled owner capability, never an invented HTTP Request.
+
+    ``verify`` must refresh the persisted opt-in generation, current owner and
+    accounting gate. The supervising child owns cancellation and all cleanup.
+    """
+    def __init__(self, db, owner, actor, verify, *, stop_event=None):
+        super().__init__(None, db, owner, actor, verify)
+        self.stop_event = stop_event
+
+    def require_connected(self):
+        if self.stop_event is not None and self.stop_event.is_set():
+            self.cancelled.set()
+        super().require_connected()
+
+    async def checkpoint(self):
+        self.require_connected()
+        await self.verify()
+        await asyncio.sleep(0)
+        self.require_connected()
+        if self.leased:
+            from pymongo import timeout as mongo_timeout
+            stamp = self.clock()
+            with mongo_timeout(3):
+                async with asyncio.timeout(3):
+                    changed = await self.db[LEASES].update_one(
+                        {"_id": self.owner, "owner_id": self.owner, "actor_id": self.actor,
+                         "token": self.token, "expires_at": {"$gt": stamp}},
+                        {"$set": {"expires_at": stamp + timedelta(seconds=LEASE_SECONDS)}})
+            if changed.matched_count != 1:
+                fail("operational_refresh_lease_lost", "انتهت مهلة حجز الاحتساب التلقائي", 409)
+        self.require_connected()
+
+    async def listen(self):
+        # This event is set by SIGTERM or the real parent pipe's EOF. No HTTP
+        # receive emulation and no page/session lifetime is involved.
+        await self.stop_event.wait()
+        self.cancel()
+
+
+async def run_scheduled_refresh(db, owner, actor, verify, operation, *, stop_event=None):
+    """Run one opted-in owner job with the unchanged 85s/120s boundaries.
+
+    This is a private worker seam. Its caller supplies current persisted owner
+    authorization at every checkpoint; it cannot confer permission by itself.
+    A cancelled source is joined, while an already admitted atomic commit is
+    observed before releasing the same lease used by visible manual refresh.
+    """
+    if not isinstance(owner, str) or not owner or actor != owner:
+        fail("operational_automation_owner_required", "الاحتساب التلقائي متاح للمالك فقط", 403)
+    context = ScheduledRefreshContext(db, owner, actor, verify, stop_event=stop_event)
+    token = _CURRENT.set(context)
+    guard_token = AUTHORIZATION_GUARD.set(context.checkpoint)
+    try:
+        context.require_connected()
+
+        async def work():
+            try:
+                context.read_deadline = time.monotonic() + REQUEST_SECONDS
+                async with asyncio.timeout(REQUEST_SECONDS):
+                    await context.acquire()
+                    return await operation()
+            except TimeoutError:
+                context.cancelled.set()
+                raise HTTPException(408, {
+                    "code": "operational_refresh_timeout",
+                    "message": "انتهت مهلة الاحتساب التلقائي؛ احتُفظ بآخر لقطة ناجحة",
+                    "stage_timings": list(context.stage_timings),
+                    **context.primary_read_details(),
+                }) from None
+            except HTTPException as error:
+                detail = error.detail
+                if (error.status_code == 409 and type(detail) is dict and len(detail) == 4
+                        and all(type(key) is str and type(value) is str for key, value in detail.items())
+                        and detail == source_failure_detail(detail.get("cause"), detail.get("source_collection"))):
+                    raise HTTPException(error.status_code, {
+                        **detail, "stage_timings": list(context.stage_timings),
+                        **context.primary_read_details(),
+                    }, headers=error.headers) from None
+                raise
+
+        context.work = asyncio.create_task(work())
+        if stop_event is not None:
+            context.listener = asyncio.create_task(context.listen())
+        try:
+            result = await asyncio.shield(context.work)
+        except asyncio.CancelledError:
+            context.cancel()
+            result = await _join(context.work)
+            if not context.committed:
+                raise
+        if context.cancelled.is_set() and not context.committed:
+            raise asyncio.CancelledError
+        return result
+    finally:
+        if context.listener is not None:
+            context.listener.cancel()
+            try:
+                await _join(context.listener)
+            except asyncio.CancelledError:
+                pass
+        cleanup = asyncio.create_task(asyncio.wait_for(context.release(), timeout=5))
+        try:
+            await _join(cleanup)
+        except (PyMongoError, asyncio.TimeoutError):
+            _LOG.warning("Operational scheduled lease cleanup unavailable; lease will expire")
         finally:
             AUTHORIZATION_GUARD.reset(guard_token)
             _CURRENT.reset(token)

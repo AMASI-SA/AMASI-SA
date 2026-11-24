@@ -15,7 +15,7 @@ from operational_balance_store import STATES, digest, initial, read
 from operational_delivery_confirmation import PREFIX
 from operational_delivery_confirmation_service import preview
 from test_operational_balance_integration import run
-from test_operational_balance_delivery_confirmation import data_for, active, NOW, START, LATER, fee_total, party, HardBoundaryDB
+from test_operational_balance_delivery_confirmation import data_for, active, NOW, START, LATER, DELIVERED, fee_total, party, HardBoundaryDB
 
 BASE = '/api/operational-balances'
 
@@ -102,13 +102,51 @@ def test_real_preview_confirm_saved_get_and_refresh_preserve_money_and_replay(ki
             await db[STATES].replace_one({'_id': 'owner'}, compact_financial_snapshot(once, 12 * 1024 * 1024))
             again = await client.post(BASE + '/delivery-after-start/preview', json=body)
             assert again.status_code == 200 and again.json()['confirmation_state'] == 'pending_reconciliation'
+            held = await refresh(db, 'owner', clock=LATER)
+            # The owner's after-start attestation has no original event date.
+            # Only the driver's independent native earned_at can post a fee.
+            assert fee_total(held) == (10 if kind == 'native_driver' else 0)
+            assert 'delivery_event:100' not in held['engine']['facts']
+            assert 'cod_collection:100' not in held['engine']['facts']
+            assert held['engine']['facts'][PREFIX + '100'] == once['engine']['facts'][PREFIX + '100']
+            assert held['openings'] == once['openings'] and held['movements'] == once['movements']
+            pending_again = await client.post(BASE + '/delivery-after-start/preview', json=body)
+            assert pending_again.status_code == 200 and pending_again.json()['confirmation_state'] == 'pending_reconciliation'
+
+            # A later authenticated source enrichment supplies the actual
+            # delivery time. It must not be hidden by the saved attestation.
+            if kind == 'courier':
+                raw = data['unified_orders'][0]['raw_by_source']['salla_direct']
+                raw['status_changed_at'] = DELIVERED
+                raw['shipping']['delivered_at'] = DELIVERED
+                raw['shipments'][0]['delivered_at'] = DELIVERED
+                await db.unified_orders.update_one({'user_id': 'owner'}, {
+                    '$set': {'raw_by_source': data['unified_orders'][0]['raw_by_source']}})
+            else:
+                await db.store_delivery_assignments.update_one({'user_id': 'owner'}, {'$set': {'delivered_at': DELIVERED}})
             refreshed = await refresh(db, 'owner', clock=LATER)
-            assert fee_total(refreshed) == 10
+            base_fee = refreshed['engine']['obligations']['shipping:100:base_shipping']
+            assert base_fee['confirmed'] == '10.00' and base_fee['business_date'] == '2026-10-06'
+            # Native courier delivery also proves its separate COD commission.
+            assert fee_total(refreshed) == (10 if kind == 'native_driver' else 12)
+            if kind == 'native_driver':
+                previous_fee = held['engine']['obligations']['shipping:100:base_shipping']
+                for field in ('id', 'party_type', 'party_id', 'currency', 'direction', 'confirmed', 'expected', 'business_date'):
+                    assert base_fee[field] == previous_fee[field]
+            else:
+                assert refreshed['engine']['obligations']['shipping:100:cod_commission']['confirmed'] == '2.00'
+                assert refreshed['engine']['obligations']['cod:100']['confirmed'] == '200.00'
+                assert refreshed['engine']['obligations']['cod:100']['business_date'] == '2026-10-06'
             assert refreshed['engine']['facts'][PREFIX + '100'] == once['engine']['facts'][PREFIX + '100']
-            assert refreshed['engine']['facts']['delivery_event:100']['delivered_at'] is None
+            assert refreshed['engine']['facts']['delivery_event:100']['delivered_at'] == DELIVERED
             assert refreshed['engine']['facts']['retained-proof'] == previous['engine']['facts']['retained-proof']
             applied = await client.post(BASE + '/delivery-after-start/preview', json=body)
             assert applied.status_code == 200 and applied.json()['confirmation_state'] == 'applied'
+            replayed = await refresh(db, 'owner', clock=LATER)
+            assert replayed['engine']['facts'] == refreshed['engine']['facts']
+            assert replayed['engine']['obligations'] == refreshed['engine']['obligations']
+            assert replayed['openings'] == once['openings'] and replayed['movements'] == once['movements']
+            assert len([key for key in replayed['engine']['obligations'] if key == 'shipping:100:base_shipping']) == 1
             assert await db.general_ledger.count_documents({}) == 0
             assert await db[STATES].count_documents({}) == 1
             source = await db.unified_orders.find_one({'user_id': 'owner'})

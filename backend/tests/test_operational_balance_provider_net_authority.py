@@ -5,6 +5,7 @@ import pytest
 
 from operational_balance_service import create_movement, refresh, report
 from operational_balance_store import read
+from test_operational_balance_engine import policy
 from test_operational_balance_integration import NOW, START, movement, run, started
 from test_operational_balance_order_page_payment_flow import order_document
 
@@ -17,9 +18,18 @@ def test_provider_net_display_preserves_gross_settlement_and_collection_once(kin
     async def scenario(db):
         await started(db)
         document = order_document("tamara_installment", "100.00", None, number="provider-net-synthetic")
+        raw = document["raw_by_source"]["salla_direct"]
+        raw["payment"] = {"method": "tamara_installment", "status": "captured",
+                          "reference": "native-provider-net-" + document["order_number"],
+                          "paid_amount": "100.00", "paid_at": "2026-10-05T12:00:00+00:00"}
         await db.unified_orders.insert_one(document)
         await db.settings.insert_one({"user_id": "owner", "updated_at": START,
             "payment_methods": [{"name": "تمارا", "commission_percent": "10", "fixed_fee": "0", "vat_percent": "0"}]})
+        # Native capture fees must be priced by a policy valid on its actual day;
+        # the legacy display settings alone do not authorize the settled replay.
+        await db.mz2_provider_fee_policies_v2.insert_one({"user_id": "owner", "policies": [
+            policy(provider="tamara", percentage="10", fixed_amount="0", effective_from="2026-10-05"),
+        ]})
         before = await refresh(db, "owner", clock=NOW)
         claim_id = "provider:" + document["salla_order_id"]
         assert before["engine"]["obligations"][claim_id]["confirmed"] == "100.00"

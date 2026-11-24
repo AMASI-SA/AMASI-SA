@@ -15,6 +15,15 @@ from test_operational_balance_order_page_payment_flow import (
 )
 
 
+def captured_order():
+    order = order_document("tamara_installment", "100.00", "0.00")
+    raw = order["raw_by_source"]["salla_direct"]
+    raw["payment"] = {"method": "tamara_installment", "status": "captured",
+                      "reference": "native-capacity-" + order["order_number"],
+                      "paid_amount": "100.00", "paid_at": "2026-10-05T12:00:00+00:00"}
+    return order
+
+
 async def seed_legacy_history(db):
     limit = store.MAX_STATE_BYTES
     await start(db, "tamara")
@@ -39,7 +48,7 @@ async def seed_legacy_history(db):
 def test_large_legacy_state_refreshes_and_pays_a_new_claim_once():
     async def scenario(db):
         legacy = await seed_legacy_history(db)
-        order = order_document("tamara_installment", "100.00", "0.00")
+        order = captured_order()
         await db.unified_orders.insert_one(order)
 
         await refresh(db, "owner", clock=T1)
@@ -83,7 +92,7 @@ def test_damaged_or_missing_archive_blocks_reads_and_writes(monkeypatch):
 
     async def scenario(db):
         await seed_legacy_history(db)
-        await db.unified_orders.insert_one(order_document("tamara_installment", "100.00", "0.00"))
+        await db.unified_orders.insert_one(captured_order())
         await refresh(db, "owner", clock=T1)
         head = await db[STATES].find_one({"_id": "owner"})
         page_id = head["engine_audit_archive"]["pages"][0]["id"]
@@ -120,7 +129,7 @@ def test_interrupted_archive_publication_keeps_previous_snapshot_readable(monkey
 
     async def scenario(db):
         before = await seed_legacy_history(db)
-        await db.unified_orders.insert_one(order_document("tamara_installment", "100.00", "0.00"))
+        await db.unified_orders.insert_one(captured_order())
         collection_type = type(db[STATES])
         replace = collection_type.replace_one
 
@@ -201,7 +210,7 @@ def test_second_overflow_reuses_the_archived_prefix_in_order(monkeypatch):
 
     async def scenario(db):
         await seed_legacy_history(db)
-        await db.unified_orders.insert_one(order_document("tamara_installment", "100.00", "0.00"))
+        await db.unified_orders.insert_one(captured_order())
         await refresh(db, "owner", clock=T1)
         previous = await read(db, "owner")
         first_head = await db[STATES].find_one({"_id": "owner"})

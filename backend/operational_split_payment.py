@@ -7,6 +7,7 @@ from operational_fee_methods import fee_rail
 from operational_payment_evidence import PaymentEvidenceError, _amount, _identity, _instant, provider_for, resolve_provider
 from operational_provider_fees import provider_projection
 from operational_provider_history import late_payment_blocks
+from operational_provider_dates import DATE_ISSUES, UNPROVEN, recognition_day
 
 
 REVIEW = "provider_split_payment_review_required"
@@ -44,6 +45,31 @@ def _transaction_conflicts(rows, tenders, owner, number, oid, currency, created_
             if ev.get("paid_at") is not None and not _instant(created_at) <= _instant(ev["paid_at"]) <= _instant(as_of):
                 return True
     return False
+
+
+def _bound_capture_evidence(rows, tenders, owner, number, oid, currency):
+    """Keep actual native paid times outside the immutable split page shape.
+
+    An unbound activity row may corroborate a displayed amount, but cannot date
+    a payment.  Neither transaction creation nor order/page update time is used.
+    The preceding conflict check has validated amounts, states and time bounds.
+    """
+    dated = {}
+    for row in rows:
+        if (row.get("user_id"), row.get("order_number"), row.get("provider_order_id"), row.get("source")) != (
+                owner, number, oid, "salla_transactions"):
+            continue
+        for ev in row.get("native_transaction_evidence") or []:
+            if ev.get("provider_order_id") != oid or "unbound_order" in ev or not ev.get("paid_at"):
+                continue
+            ref = ev["reference"]
+            observation = {"id": ref, "provider": tenders[ref]["provider"], "currency": currency,
+                "amount": tenders[ref]["amount"], "captured_at": _instant(ev["paid_at"]).isoformat()}
+            candidate = (ev["transaction_id"], observation)
+            if ref in dated and dated[ref] != candidate:
+                raise PaymentEvidenceError("provider_capture_timestamp_conflict")
+            dated[ref] = candidate
+    return [dated[key][1] for key in sorted(dated)]
 
 
 def split_payment_evidence(raw, currency, total, amounts, *, owner, order_number, provider_order_id,
@@ -100,9 +126,11 @@ def split_payment_evidence(raw, currency, total, amounts, *, owner, order_number
             stamp = _instant(raw.get("updated_at") or raw["date_updated"])
             if not _instant(created_at) <= stamp <= _instant(as_of):
                 raise PaymentEvidenceError("provider_order_page_version_conflict")
+        dated = _bound_capture_evidence(rows, tenders, owner, order_number, provider_order_id, currency)
         return {"split": {"order_id": provider_order_id, "order_number": order_number, "owner_id": owner,
                           "currency": currency, "gross": format(_amount(total, currency), ".2f"),
-                          "tenders": [tenders[key] for key in sorted(tenders)]}}, []
+                          "tenders": [tenders[key] for key in sorted(tenders)]},
+                **({"split_captures": dated} if dated else {})}, []
     except (ValueError, TypeError, KeyError, ArithmeticError) as exc:
         code = str(exc) if isinstance(exc, PaymentEvidenceError) else REVIEW
         return None, [{"code": code}]
@@ -186,6 +214,8 @@ def apply_split_payment(state, order, now, put, issue, fee_policies, reference_o
         observation = {"evidence": split, "booked_providers": [], "observed_at": now.isoformat()}
     else:
         observation = {**saved, "booked_providers": list(saved["booked_providers"])}
+        if "capture_business_dates" in saved:
+            observation["capture_business_dates"] = dict(saved["capture_business_dates"])
     observed = _instant(observation["observed_at"])
     for party, legs in provider_shares(split).items():
         key = parent + ":" + party
@@ -197,8 +227,31 @@ def apply_split_payment(state, order, now, put, issue, fee_policies, reference_o
                     "gross":paid, "order_page_balance":page}, obligation_key=key, through=now)):
             issue("provider_settled_capture_review_required", key)
             continue
+        try:
+            legs_by_ref = {leg["reference"]: leg for leg in legs}
+            captures = []
+            for capture in order["payment"].get("split_captures", []):
+                if capture.get("provider") != party:
+                    continue
+                leg = legs_by_ref.get(capture.get("id"))
+                if (not leg or capture.get("currency") != split["currency"]
+                        or _amount(capture.get("amount"), split["currency"]) != Decimal(leg["amount"])):
+                    raise ValueError(UNPROVEN)
+                captures.append(capture)
+            effective = recognition_day(obligations.get(key), captures, currency=split["currency"],
+                confirmed=paid, captured=paid, created_at=created, as_of=now)
+        except (ValueError, KeyError, TypeError, AttributeError) as exc:
+            code = str(exc) if str(exc) in DATE_ISSUES else UNPROVEN
+            issue(code, key, provider=party, party_type="provider", party_id=party,
+                  missing_fields=["capture_timestamp"])
+            continue
+        newly_booked = Decimal(paid) > Decimal(obligations.get(key, {}).get("confirmed", "0"))
+        if newly_booked:
+            observation.setdefault("capture_business_dates", {})[party] = effective.isoformat()
+        capture_dated = observation.get("capture_business_dates", {}).get(party) == effective.isoformat()
         projection = _share_projection(party, legs, paid, split["currency"], fee_policies,
-            created.astimezone(RIYADH).date(), observed.astimezone(RIYADH).date())
+            effective if capture_dated else created.astimezone(RIYADH).date(),
+            effective if capture_dated else observed.astimezone(RIYADH).date())
         metadata = {"order_id": oid, "evidence_ids": [fact_key]}
         if projection is not None:
             engine["provider_reports"][key] = projection
@@ -208,7 +261,7 @@ def apply_split_payment(state, order, now, put, issue, fee_policies, reference_o
             metadata["fee_estimate_complete"] = False
             issue("provider_fee_estimate_unavailable", key)
         put(key, "provider", party, "provider", split["currency"], confirmed=Decimal(paid), direction="receivable",
-            business_date=observed.astimezone(RIYADH).date(), **metadata)
+            business_date=effective, **metadata)
         if party not in observation["booked_providers"]:
             observation["booked_providers"].append(party)
     facts[fact_key] = observation

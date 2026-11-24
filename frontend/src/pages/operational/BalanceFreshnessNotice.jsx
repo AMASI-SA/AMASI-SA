@@ -14,6 +14,13 @@ const familyLabels = { calculation: 'احتساب الأرصدة', health: 'ال
   snapchat: 'إعلانات Snapchat', meta: 'إعلانات Meta', tiktok: 'إعلانات TikTok', google_ads: 'إعلانات Google',
   bank: 'التحصيلات البنكية', shipping: 'شركات الشحن', payments: 'منصات الدفع', parties: 'الجهات التلقائية', sources: 'مصادر الأرصدة' };
 const messageKey = message => (message || '').trim().replace(/\s+/g, ' ');
+const durationLabel = seconds => {
+  if (!Number.isFinite(seconds) || seconds < 0) return 'غير متاحة؛ لا يوجد نجاح مالي مثبت سابق';
+  const minutes = Math.floor(seconds / 60);
+  const days = Math.floor(minutes / 1440), hours = Math.floor(minutes % 1440 / 60);
+  return `${days} يوم، ${hours} ساعة، ${minutes % 60} دقيقة`;
+};
+const entityRows = value => Array.isArray(value?.entity_coverage?.rows) ? value.entity_coverage.rows : [];
 
 function briefStatus(state) {
   if (state.phase === 'refreshing') return 'يجري تحديث المصادر؛ الأرقام الظاهرة من آخر احتساب محفوظ.';
@@ -29,6 +36,8 @@ function briefStatus(state) {
   if (health === 'unknown') return 'لم تكتمل أدلة حداثة المصادر.';
   if (health === 'updating') return 'يجري تحديث بعض المصادر؛ لم يثبت اكتمالها بعد.';
   if (health === 'inactive') return 'الاحتساب التلقائي غير نشط حالياً.';
+  if (state.snapshot?.entity_coverage?.state === 'unknown') return 'لم يثبت اكتمال المطابقة المالية لجميع الجهات؛ راجع تفاصيل الحسابات.';
+  if (state.snapshot?.entity_coverage?.state === 'stale') return 'توجد جهات متأخرة أو أيام لم يثبت تسجيل حركاتها المالية كاملة.';
   return 'توجد ملاحظات على حالة المصادر تحتاج إلى متابعة.';
 }
 
@@ -56,7 +65,8 @@ export function hasBalanceFreshnessWarning(state) {
     || ['failed', 'unknown', 'running'].includes(value?.last_attempt?.outcome)
     || value && (value.stale || !['current', 'inactive'].includes(value.freshness.state)
       || value.sources.some(source => !['current', 'inactive'].includes(source.state))
-      || value.issues.some(issue => issue.severity !== 'info')));
+      || value.issues.some(issue => issue.severity !== 'info')
+      || value.entity_coverage && !['current', 'inactive'].includes(value.entity_coverage.state)));
 }
 
 export default function BalanceFreshnessNotice({ state: sourceState, compact = false, globalNotice = false, legacyControls = false, onCheck, canUpdate = false, href }) {
@@ -67,15 +77,18 @@ export default function BalanceFreshnessNotice({ state: sourceState, compact = f
   if (compact && !warning && !value?.issues?.length) return null;
   if (!value && !state.message && !busy) return null;
   const allSources = value?.sources || [];
+  const entities = entityRows(value);
   const label = key => allSources.find(source => source.key === key)?.label || familyLabels[key] || 'مصادر أخرى';
   const affected = [...new Set([
     ...allSources.filter(source => !['current', 'inactive'].includes(source.state)).map(source => source.label),
     ...(value?.issues || []).map(issue => label(issue.source)),
+    ...entities.filter(row => !['current', 'inactive'].includes(row.state)).map(row => `${row.label} (${row.currency})`),
   ])];
   const details = detailGroups(value);
   const detailMessage = compact && state.message && !allSources.some(source => messageKey(source.message) === messageKey(state.message))
     && !details.issues.some(issue => messageKey(issue.message) === messageKey(state.message)) ? state.message : '';
-  const hasDetails = Boolean(value?.last_attempt || details.sources.length || details.issues.length || detailMessage);
+  const hasDetails = Boolean(value?.last_attempt || details.sources.length || details.issues.length || detailMessage
+    || value?.entity_coverage);
   return <section className={'balance-freshness' + (warning ? ' balance-freshness-warning' : '')
     + (compact ? ' balance-freshness-compact' : '') + (globalNotice ? ' balance-freshness-global' : '')
     + (globalNotice && legacyControls ? ' balance-freshness-legacy-controls' : '')}
@@ -92,7 +105,8 @@ export default function BalanceFreshnessNotice({ state: sourceState, compact = f
       {value && warning && <p>حالة المصادر: {healthLabels[value.freshness.state]}.</p>}
       {state.message && <p>{state.message}</p>}
     </>}
-    {affected.length > 0 && <p className="balance-freshness-families"><strong>{warning ? 'المصادر التي تحتاج متابعة: ' : 'المصادر المعنية: '}</strong>{affected.join('، ')}.</p>}
+    {affected.length > 0 && <p className="balance-freshness-families"><strong>{warning ? 'المصادر التي تحتاج متابعة: ' : 'المصادر المعنية: '}</strong>{affected.slice(0, 8).join('، ')}
+      {affected.length > 8 && <>، و{affected.length - 8} جهات أخرى في التفاصيل</>}.</p>}
     {hasDetails && <details className="balance-freshness-details">
       <summary>تفاصيل المصادر والمحاولات</summary>
       <div className="balance-freshness-details-body" role="region" aria-label="تفاصيل حالة تحديث الأرصدة" tabIndex={0}>
@@ -111,6 +125,25 @@ export default function BalanceFreshnessNotice({ state: sourceState, compact = f
           <strong>{label(issue.source)}: </strong>{issue.message}
           <small>{issue.last_success_at && <>آخر نجاح: {dateLabel(issue.last_success_at)} · </>}رموز المتابعة للدعم: <bdi>{issue.codes.join('، ')}</bdi></small>
         </li>)}</ul>}
+        {value?.entity_coverage && <section aria-label="المطابقة المالية لكل جهة">
+          <h3>المطابقة المالية لكل جهة</h3>
+          {value.entity_coverage.message && <p>{value.entity_coverage.message}</p>}
+          {value.entity_coverage.omitted_entities > 0 && <p>لم تُعرض {value.entity_coverage.omitted_entities} جهات بسبب حد العرض؛ اكتمالها غير متحقق.</p>}
+          {entities.length > 0 && <ul>{entities.map(row => <li key={row.key}>
+            <strong>{row.label} (<bdi>{row.currency}</bdi>): {healthLabels[row.state] || 'غير متحقق'}</strong>
+            <div>آخر مطابقة مالية مكتملة: {dateLabel(row.last_success_at)}
+              {row.last_financial_day && <> · آخر يوم مثبت ماليًا: <bdi>{row.last_financial_day}</bdi></>}
+              {row.expected_through && <> · المطلوب حتى: <bdi>{row.expected_through}</bdi></>}</div>
+            {!['current', 'inactive'].includes(row.state) && <div>المدة منذ آخر نجاح: {durationLabel(row.stale_for_seconds)}.</div>}
+            {row.calendar !== 'events' && <div>{row.missing_days_count === null
+              ? 'الأيام الناقصة غير متحققة؛ لا يعني ذلك عدم وجود أيام ناقصة.'
+              : <>أيام لم يثبت اكتمالها: {row.missing_days_count}.
+                {Array.isArray(row.missing_days) && row.missing_days.length > 0 && <> <bdi>{row.missing_days.join('، ')}</bdi>.</>}
+                {row.missing_days_truncated && <> عُرض أول {row.missing_days.length} يومًا؛ آخر يوم ناقص: <bdi>{row.last_missing_day}</bdi>.</>}</>}</div>}
+            {row.calendar === 'events' && <div>هذا المصدر يعتمد على الحركات؛ لا يُفترض وجود حركة يومية أو مبلغ صفري دون دليل.</div>}
+            <span>{row.message}</span>
+          </li>)}</ul>}
+        </section>}
       </div>
     </details>}
   </section>;
