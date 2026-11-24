@@ -22,6 +22,8 @@ from preparation_piece_barcode import parse_preparation_piece_barcode
 from preparation_supplier_dispatch import piece_is_available_for_supplier_dispatch
 from review_local_policy import LOCAL_COMPLETION_MODE, load_local_review_workflows, local_review_stage_eligible
 from review_completion_readback import committed_proof
+from pymongo.errors import PyMongoError
+from store_courier_domain import current_carrier
 
 TRACKING_PERMISSION = "app.action.orders.track"
 MAX_ITEMS = 200
@@ -453,6 +455,7 @@ def _order_steps(source: dict, workflow: dict, activity: list[dict], reviews: li
         ("store_courier_picked_up_at", "استلم مندوب المتجر الشحنة", "store_courier_assignee_name"),
         ("delivering_at", "جاري توصيل الشحنة", None),
         ("delivered_at", "تم توصيل الشحنة", None),
+        ("store_courier_delivered_at", "تم توصيل الشحنة", "store_courier_assignee_name"),
     )
     for field, label, actor in fields:
         if workflow.get(field):
@@ -489,10 +492,95 @@ def _route_notice(piece: dict, status: str, label: str, location: dict, steps: l
     return f"آخر مرحلة مسجلة للقطعة: {last}. حالة الطلب في سلة الآن «{label}»؛ {suffix}"
 
 
+_DELIVERY_EVENT_LABELS = {
+    "store_delivery_customer_unreachable": "العميل لا يرد",
+    "store_delivery_customer_requested_delay": "العميل طلب تأجيل التوصيل",
+    "store_delivery_customer_requested_cancel": "العميل طلب إلغاء الطلب",
+    "store_delivery_resumed": "استؤنف التوصيل",
+    "store_delivery_out_for_delivery": "جاري توصيل الشحنة",
+    "store_delivery_delivered": "تم توصيل الشحنة",
+}
+_DELIVERY_ASSIGNMENT_FIELDS = {
+    "assigned_at": "أُسند الطلب إلى مندوب المتجر",
+    "out_for_delivery_at": "جاري توصيل الشحنة",
+    "delivered_at": "تم توصيل الشحنة",
+    "unassigned_at": "أُلغي إسناد الطلب إلى المندوب",
+    "reassigned_at": "نُقل الطلب من المندوب",
+}
+_LEGACY_COURIER_LABELS = {
+    "store_courier_shipment_assigned": "أُسند الطلب إلى مندوب المتجر",
+    "store_courier_shipment_picked_up": "استلم مندوب المتجر الشحنة",
+    "store_courier_shipment_delivered": "تم توصيل الشحنة",
+}
+
+
+async def _delivery_steps(db, owner, number, source):
+    """Read committed, order-bound delivery milestones only; no provider calls."""
+    raw = _dict(_dict(source.get("raw_by_source")).get("salla_direct"))
+    identity = _text(source.get("order_id") or raw.get("id"))
+    selector = {"user_id": owner, "order_number": number}
+    if identity:
+        selector["order_id"] = identity
+    assignment_projection = {"_id": 0, "id": 1, "driver_id": 1, "driver_name_snapshot": 1,
+        "delivery_exception_code": 1, "delivery_exception_at": 1,
+        **{field: 1 for field in _DELIVERY_ASSIGNMENT_FIELDS}}
+    assignments = await db.store_delivery_assignments.find(selector, assignment_projection
+        ).sort("assigned_at", -1).limit(MAX_HISTORY + 1).max_time_ms(1500).to_list(MAX_HISTORY + 1)
+    events = await db.store_delivery_events.find({**selector, "event_type": {"$in": list(_DELIVERY_EVENT_LABELS)}},
+        {"_id": 0, "assignment_id": 1, "driver_id": 1, "driver_name_snapshot": 1,
+         "event_type": 1, "occurred_at": 1}
+        ).sort("occurred_at", -1).limit(MAX_ORDER_EVENTS + 1).max_time_ms(1500).to_list(MAX_ORDER_EVENTS + 1)
+    legacy = await db.mezan_fulfillment_events_v2.find(
+        {"user_id": owner, "order_number": number, "event_type": {"$in": list(_LEGACY_COURIER_LABELS)}},
+        {"_id": 0, "event_type": 1, "courier_name": 1, "occurred_at": 1}
+        ).sort("occurred_at", -1).limit(MAX_HISTORY + 1).max_time_ms(1500).to_list(MAX_HISTORY + 1)
+    cut = len(assignments) > MAX_HISTORY or len(events) > MAX_ORDER_EVENTS or len(legacy) > MAX_HISTORY
+    assignments = assignments[:MAX_HISTORY]
+    counts = Counter(_text(row.get("id")) for row in assignments)
+    by_id = {_text(row.get("id")): row for row in assignments
+             if _text(row.get("id")) and counts[_text(row.get("id"))] == 1}
+    result = []
+
+    def add(label, actor, timestamp):
+        at = _iso(timestamp)
+        if at:
+            result.append(_step(label, actor, at))
+
+    for row in by_id.values():
+        name = row.get("driver_name_snapshot")
+        for field, label in _DELIVERY_ASSIGNMENT_FIELDS.items():
+            add(label, name, row.get(field))
+        code = _text(row.get("delivery_exception_code"))
+        label = _DELIVERY_EVENT_LABELS.get("store_delivery_" + code)
+        if label and code.startswith("customer_"):
+            add(label, name, row.get("delivery_exception_at"))
+    for event in events[:MAX_ORDER_EVENTS]:
+        assignment = by_id.get(_text(event.get("assignment_id")))
+        if not assignment or not _text(event.get("driver_id")) or event.get("driver_id") != assignment.get("driver_id"):
+            continue
+        add(_DELIVERY_EVENT_LABELS[event["event_type"]],
+            event.get("driver_name_snapshot") or assignment.get("driver_name_snapshot"), event.get("occurred_at"))
+    for event in legacy[:MAX_HISTORY]:
+        add(_LEGACY_COURIER_LABELS[event["event_type"]], event.get("courier_name"), event.get("occurred_at"))
+    return result, cut
+
+
+def _merge_delivery_steps(original, delivery):
+    # Prefer the named immutable delivery fact over a duplicate workflow
+    # projection. Different drivers or repeated timestamps remain distinct.
+    rows = {(row["source"], row["label"], row["at"], row.get("actor_name")): row for row in original + delivery}
+    named = {(row["source"], row["label"], row["at"]) for row in rows.values() if row.get("actor_name")}
+    result = [row for row in rows.values() if row.get("actor_name")
+              or (row["source"], row["label"], row["at"]) not in named]
+    return sorted(result, key=lambda row: row["at"] or "", reverse=True)
+
+
 async def read_order_tracking(db: Any, *, owner: str, number: str) -> dict:
     selector = {"user_id": owner, "order_number": number}
     source = await db.unified_orders.find_one(selector, {"_id": 0, "order_number": 1,
-        "order_date": 1, "order_status": 1, "order_status_slug": 1, "order_status_changed_at": 1,
+        "order_date": 1, "order_id": 1, "order_status": 1, "order_status_slug": 1, "order_status_changed_at": 1,
+        "shipping_company": 1, "shipping_company_code": 1, "salla_shipping_current.company_name": 1,
+        "salla_shipping_current.company_code": 1, "raw_by_source.salla_direct.id": 1,
         "g47_salla_snapshot.requires_authoritative_refresh": 1,
         "raw_by_source.salla_direct.items": 1, "raw_by_source.salla_direct.status": 1,
         "raw_by_source.salla_direct.status_slug": 1, "raw_by_source.salla_direct.date": 1,
@@ -594,6 +682,16 @@ async def read_order_tracking(db: Any, *, owner: str, number: str) -> dict:
     dispatch_by_id = {_text(row.get("id")): row for row in dispatches if dispatch_counts[_text(row.get("id"))] == 1}
     status, label, changed = _status_facts(source)
     order_steps, status_steps = _order_steps(source, workflow, activity, reviews, names)
+    delivery_notice = None
+    try:
+        delivery_steps, delivery_cut = await _delivery_steps(db, owner, number, source)
+        order_steps = _merge_delivery_steps(order_steps, delivery_steps)
+        if delivery_cut:
+            delivery_notice = "سجل التوصيل جزئي؛ بعض الأحداث القديمة غير معروضة."
+        truncated |= delivery_cut
+    except PyMongoError:
+        delivery_notice = "تعذّر تحميل سجل الموصل؛ أعد تحديث التتبع."
+    carrier_name, _ = current_carrier(source)
     if status_steps and status_steps[0]["status"] == status:
         changed = status_steps[0]["at"]
     local_contract = workflow.get("completion_mode") is not None
@@ -691,6 +789,7 @@ async def read_order_tracking(db: Any, *, owner: str, number: str) -> dict:
     elif unconfirmed_review:
         order_notice = "تعذّر تأكيد صلاحية اعتماد المراجعة الحالي في ميزان؛ تُعرض المراحل المثبتة دون افتراض مكان حالي للقطع."
     return {"schema_version": 1, "order_number": number, "status": status, "status_label": label,
+            "carrier_name": carrier_name or None, "delivery_notice": delivery_notice,
             "order_created_at": _iso(raw.get("date") or raw.get("created_at") or source.get("order_date"), provider=True),
             "status_changed_at": changed, "observed_at": datetime.now(timezone.utc).isoformat(),
             "order_route_steps": order_steps, "route_notice": order_notice,
