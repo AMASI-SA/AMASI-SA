@@ -541,3 +541,34 @@ other conversations and prior release pairs remain preserved. Next safe action:
 push this verified WIP tree and update the PR continuation, resolve the actual
 automatic-cycle timeout, run all final gates, then freeze a new governed A/B
 pair and follow the unchanged original-guard release procedure.
+
+## Independent scheduled commit and retained performance work
+
+The third live scheduled attempt completed and committed while the accounting
+pages were closed. Its new receipt has been privately archived, and the actual
+bank statement confirms an original-date automatic movement while previous
+manual corrections remain intact. All new duplicate counters are zero. This
+does not establish complete native source coverage. The attempt remained close
+to the configured lifetime; the previous two failures are retained as evidence
+that additional performance headroom is still required.
+
+Reviewed commit `138e091eef3c9036ac6a96af9ce6bd48105d7af1` retains every
+historical bundle authority, allocation, receipt and invoice witness read, but
+omits the final unused cost expansion only for orders provably at or before
+the operational start. Ordinary callers remain unchanged. Invalid/unknown
+dates remain in the full computation. Shared historical/current allocation
+and receipt conflicts cannot be hidden by the optimization.
+
+The author passed 449 adjacent tests without skips. Independent acceptance
+passed all 20 focused cases with a fresh owned real-Mongo replica, including
+complete source/reconciliation/report parity and exact replay. Synthetic
+paired projection timing improved from 441.812 to 276.435 ms; it does not
+predict production improvement. See BUNDLE_PROJECTION_HEADROOM.md.
+
+Additional bounded archive-read work and an explicit owner-approved closed-day
+advertising correction path are isolated and not yet integrated. The existing
+engine correctly holds unapproved platform restatements, and no manual
+compensating movement or native source write is substituted for approval.
+Root still owns all integration and deployment. No new intent or lease exists.
+Next safe action: preserve this reviewed checkpoint, complete those independent
+reviews, then execute the final exact-source and two-commit release gates.

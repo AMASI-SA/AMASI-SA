@@ -208,7 +208,34 @@ def _remaining(unit, leaf, allocations, receipts, invoices, stamp):
     return wanted - allocated, received
 
 
-async def load_remaining_bundles(db, owner, raw_orders, as_of, *, preparation_pieces=None, operational_state=None, native_matches=None):
+def _preperiod_cost_orders(raw_orders, started_at):
+    """Omit costs only when the main source reader proves the sale is old.
+
+    This set must never narrow authority, allocation or receipt reads: an old
+    order can still contradict a current order's physical evidence. Uncertain
+    timestamps and unusual identities retain their existing cost projection.
+    """
+    from operational_balance_sources import instant
+    start = instant(started_at)
+    result = set()
+    for raw in raw_orders:
+        calculation_checkpoint()
+        if type(raw) is not dict:
+            continue
+        number = raw.get('reference_id') or raw.get('order_number') or ''
+        if type(number) not in (str, int):
+            continue
+        try:
+            created = instant(raw.get('date') or raw.get('created_at') or raw.get('order_date'))
+        except (ValueError, TypeError, KeyError, OverflowError):
+            continue
+        if created <= start:
+            result.add(str(number))
+    return result
+
+
+async def load_remaining_bundles(db, owner, raw_orders, as_of, *, preparation_pieces=None, operational_state=None,
+                                 native_matches=None, cost_started_at=None):
     """One bounded authority load, then batched units/receipts/invoices only.
 
     Reporting-only cost corrections do not constitute a physical recipe or a
@@ -305,7 +332,13 @@ async def load_remaining_bundles(db, owner, raw_orders, as_of, *, preparation_pi
     if native_matches is None:
         from operational_native_purchase_link_service import verified_saved_links
         native_matches = await verified_saved_links(db, owner, operational_state, as_of=as_of)
+    # All historical authority rows and shared physical witnesses above remain
+    # fully in scope. Only the final unused cost expansion may be omitted for
+    # the financial refresh; full-history exposure keeps the default behavior.
+    preperiod = _preperiod_cost_orders(raw_orders, cost_started_at) if cost_started_at is not None else set()
     for key, (order, item, record) in selected.items():
+        if key[0] in preperiod:
+            continue
         problems, normalized = [], []
         result[key] = {'items': normalized, 'issues': problems, 'complete': False}
         native = units.get(key)
