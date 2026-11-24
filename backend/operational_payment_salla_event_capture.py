@@ -65,6 +65,27 @@ async def stage_verified_payment_update(db, item):
             return True
         order_id, normalized, diagnostics = proof
         if not normalized or not normalized.get("captures") or diagnostics:
+            # Strong, currently scoped Salla order-page evidence is a separate
+            # cumulative paid observation. It is NOT a fabricated captured_at
+            # and never applies to bank transfers or COD.
+            from operational_payment_first_order_page_writer import (
+                enabled as paid_page_post_enabled, post_first_paid_page,
+            )
+            if paid_page_post_enabled():
+                outcome = await post_first_paid_page(
+                    db, item["user_id"], item["merchant_id"],
+                    item["order_number"], source_ref=item["_id"],
+                )
+                if outcome.get("status") in {"posted", "already_posted"}:
+                    return True
+                if outcome.get("status") == "review_required":
+                    from operational_payment_evidence_review import stage_unverified_review
+                    await stage_unverified_review(
+                        db, item["user_id"], outcome["order_id"],
+                        item["_id"], outcome["provider"],
+                        source["event"], [outcome["reason_code"]],
+                    )
+                    return True
             # Persist only genuinely indicated electronic-payment exceptions,
             # never a pending-payment order based on fulfillment status alone.
             raw = source.get("data") or {}
